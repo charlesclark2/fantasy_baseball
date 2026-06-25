@@ -8,7 +8,6 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { CalendarIcon, ChevronDown, ChevronUp, ChevronsUpDown, ExternalLink } from "lucide-react"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { AuthGuard } from "@/components/auth-guard"
 import { useAuth } from "@/lib/auth-context"
 import { Nav } from "@/components/nav"
@@ -503,6 +502,7 @@ export default function EVTrackerPage() {
   const router = useRouter()
   const { selectedDate, setSelectedDate, isoDate } = useSelectedDate()
   const [calOpen, setCalOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<"ev" | "line-shopping">("ev")
   const [bankroll, setBankroll] = useLocalStorage<number>("ev_bankroll", 1000)
   const [maxKelly, setMaxKelly] = useLocalStorage<number>("ev_kelly_cap", 5)
 
@@ -545,11 +545,9 @@ export default function EVTrackerPage() {
   ) {
     return (col: SortKey) => {
       if (col === currentKey) {
-        // Toggle direction on repeated click — no reset to a different column
         setDir(currentDir === "asc" ? "desc" : "asc")
       } else {
         setKey(col)
-        // Time-based columns default asc (earliest first); numeric columns default desc (highest first)
         setDir(col === "game" ? "asc" : "desc")
       }
     }
@@ -570,8 +568,6 @@ export default function EVTrackerPage() {
     return `/bet-log?${params.toString()}`
   }
 
-  // Render rows for a table, inserting the "Not Recommended" divider between
-  // qualified and unqualified rows.
   function renderTableBody(
     sorted: ComputedRow[],
     renderRow: (row: ComputedRow) => React.ReactNode,
@@ -777,7 +773,6 @@ export default function EVTrackerPage() {
           !isQualified && "opacity-60",
         )}
       >
-        {/* Game header */}
         <div className="mb-2 flex items-start justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-sm font-medium text-white">{row.game}</span>
@@ -787,11 +782,9 @@ export default function EVTrackerPage() {
           </div>
           <span className="shrink-0 text-xs text-gray-500">{row.time}</span>
         </div>
-        {/* Pick badge */}
         <div className="mb-3">
           <MarketBadge type={row.marketType} label={row.market} />
         </div>
-        {/* Stat grid */}
         <div className="mb-3 grid grid-cols-2 gap-x-6 gap-y-2">
           <div>
             <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Edge</p>
@@ -816,7 +809,6 @@ export default function EVTrackerPage() {
             </p>
           </div>
         </div>
-        {/* Action */}
         <div className="flex justify-end">
           <LogBetAction row={row} onLog={() => { posthog.capture("ev_tracker_log_bet_initiated", { game_pk: row.game_pk, market_type: row.marketType, side: row.side, qualified: row.qualified }); router.push(buildLogBetUrl(row)) }} />
         </div>
@@ -836,7 +828,6 @@ export default function EVTrackerPage() {
           !isQualified && "opacity-60",
         )}
       >
-        {/* Game header */}
         <div className="mb-2 flex items-start justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-sm font-medium text-white">{row.game}</span>
@@ -846,7 +837,6 @@ export default function EVTrackerPage() {
           </div>
           <span className="shrink-0 text-xs text-gray-500">{row.time}</span>
         </div>
-        {/* Pick badge + projected runs inline */}
         <div className="mb-3 flex items-center gap-2">
           <MarketBadge type={row.marketType} label={row.market} />
           {row.predTotalRuns != null && (
@@ -855,7 +845,6 @@ export default function EVTrackerPage() {
             </span>
           )}
         </div>
-        {/* Stat grid */}
         <div className="mb-3 grid grid-cols-2 gap-x-6 gap-y-2">
           <div>
             <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Edge</p>
@@ -880,7 +869,6 @@ export default function EVTrackerPage() {
             </p>
           </div>
         </div>
-        {/* Action */}
         <div className="flex justify-end">
           <LogBetAction row={row} onLog={() => { posthog.capture("ev_tracker_log_bet_initiated", { game_pk: row.game_pk, market_type: row.marketType, side: row.side, qualified: row.qualified }); router.push(buildLogBetUrl(row)) }} />
         </div>
@@ -908,6 +896,8 @@ export default function EVTrackerPage() {
     )
   }
 
+  const lsPlayCount = lsData?.plays?.length ?? 0
+
   return (
     <AuthGuard>
     <div className="min-h-screen bg-[#0a0a0a] font-sans text-white">
@@ -915,7 +905,7 @@ export default function EVTrackerPage() {
 
       <main className="mx-auto max-w-6xl px-4 py-8">
         {/* ----------------------------------------------------------------
-            Page header + controls
+            Page header + controls — always visible
         ---------------------------------------------------------------- */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -943,7 +933,7 @@ export default function EVTrackerPage() {
               </PopoverContent>
             </Popover>
 
-            {/* Bankroll — label inside border for consistent alignment */}
+            {/* Bankroll */}
             <div className="flex h-9 items-center rounded-md border border-[#262626] bg-[#141414] px-2.5">
               <span className="mr-1.5 text-xs text-gray-500">Bankroll</span>
               <span className="text-sm text-gray-500">$</span>
@@ -954,7 +944,7 @@ export default function EVTrackerPage() {
               />
             </div>
 
-            {/* Max Kelly cap — label inside border */}
+            {/* Max Kelly cap */}
             <div className="flex h-9 items-center rounded-md border border-[#262626] bg-[#141414] px-2.5">
               <TooltipProvider delayDuration={150}>
                 <Tooltip>
@@ -974,7 +964,7 @@ export default function EVTrackerPage() {
               <span className="text-sm text-gray-500">%</span>
             </div>
 
-            {/* Book (Bovada only — DraftKings/FanDuel require separate data modeling) */}
+            {/* Book */}
             <div className="flex h-9 items-center rounded-md border border-[#262626] bg-[#141414] px-2.5">
               <span className="mr-1.5 text-xs text-gray-500">Book</span>
               <span className="text-sm text-gray-400">Bovada</span>
@@ -983,390 +973,433 @@ export default function EVTrackerPage() {
         </div>
 
         {/* ----------------------------------------------------------------
-            Summary bar
+            Tab bar
         ---------------------------------------------------------------- */}
-        <div className="mb-6 rounded-xl border border-[#262626] bg-[#141414] px-5 py-3.5">
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
-            <span>
-              <span className="font-semibold text-[#10b981]">{qualifiedCount}</span>
-              <span className="text-gray-500"> qualified markets</span>
-            </span>
-            <span className="text-gray-700">·</span>
-            <span>
-              <span className="font-semibold text-gray-300">{totalCount}</span>
-              <span className="text-gray-500"> total markets</span>
-            </span>
-            <span className="text-gray-700">·</span>
-            <span>
-              <TooltipProvider delayDuration={150}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="cursor-help text-gray-500 border-b border-dotted border-gray-700">Est. daily EV</span>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-[260px] text-center text-xs text-white border-[#262626] bg-[#1a1a1a]">
-                  Sum of (EV × Stake) across all qualified bets. If the model is accurate over many bets, this is the expected dollar gain today at your bankroll size.
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <span className="text-gray-700">: </span>
-              <span className={cn("font-semibold", estDailyEV >= 0 ? "text-[#10b981]" : "text-[#ef4444]")}>
-                {estDailyEV >= 0 ? "+" : ""}${estDailyEV.toFixed(2)}
-              </span>
-            </span>
+        <div className="border-b border-[#262626] mb-6">
+          <div className="flex gap-1">
+            <button
+              onClick={() => setActiveTab("ev")}
+              className={cn(
+                "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+                activeTab === "ev"
+                  ? "border-[#10b981] text-white"
+                  : "border-transparent text-gray-500 hover:text-gray-300"
+              )}
+            >
+              EV Plays
+            </button>
+            <button
+              onClick={() => setActiveTab("line-shopping")}
+              className={cn(
+                "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-2",
+                activeTab === "line-shopping"
+                  ? "border-[#a78bfa] text-white"
+                  : "border-transparent text-gray-500 hover:text-gray-300"
+              )}
+            >
+              Line Shopping
+              {lsPlayCount > 0 && (
+                <Badge variant="outline" className={cn(
+                  "text-[10px] font-medium px-1.5 py-0",
+                  activeTab === "line-shopping"
+                    ? "border-[#a78bfa]/40 bg-[#a78bfa]/10 text-[#a78bfa]"
+                    : "border-[#262626] bg-[#1a1a1a] text-gray-500"
+                )}>
+                  {lsPlayCount}
+                </Badge>
+              )}
+            </button>
           </div>
         </div>
 
         {/* ----------------------------------------------------------------
-            Preliminary banner
+            EV Plays tab
         ---------------------------------------------------------------- */}
-        {data?.is_preliminary && (
-          <div className="mb-6 flex items-start gap-2.5 rounded-lg border border-amber-800 bg-amber-950 px-4 py-3 text-sm text-amber-300">
-            <span className="mt-0.5 shrink-0 font-bold">⚠</span>
-            <span>
-              <span className="font-semibold">Preliminary predictions</span> — lineups not yet confirmed.
-              These picks are based on probable pitchers only. Do not bet until confirmed lineups are posted (~90 min before first pitch).
-            </span>
-          </div>
-        )}
-
-        {/* ----------------------------------------------------------------
-            Moneyline
-        ---------------------------------------------------------------- */}
-        <div className="mb-8">
-          <div className="mb-3 flex items-center gap-3">
-            <h2 className="text-base font-semibold text-white">Moneyline</h2>
-            <Badge variant="outline" className="border-blue-800 bg-blue-950 text-blue-400 text-[10px] font-medium px-2 py-0">
-              {sortedH2h.length}
-            </Badge>
-          </div>
-
-          {/* Desktop table */}
-          <div className="hidden md:block rounded-xl border border-[#262626] bg-[#141414]">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader className="sticky top-0 z-20 bg-[#141414]">
-                  <TableRow className="border-b border-[#262626] hover:bg-transparent">
-                    <TableHead className={thCls} onClick={() => handleH2hSort("game")}>Game <SortIcon col="game" sortKey={h2hSort} sortDir={h2hDir} /></TableHead>
-                    <TableHead className={thCls} onClick={() => handleH2hSort("market")}>Pick <SortIcon col="market" sortKey={h2hSort} sortDir={h2hDir} /></TableHead>
-                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("modelProb")}>
-                      <ColHeaderTip label="Model%" tip="Model's win probability for the picked team, shown as ±% from 50%." /> <SortIcon col="modelProb" sortKey={h2hSort} sortDir={h2hDir} />
-                    </TableHead>
-                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("bovadaProb")}>
-                      <ColHeaderTip label="Book%" tip="Bovada's de-vigged (fair) implied probability for the picked team, shown as ±% from 50%." /> <SortIcon col="bovadaProb" sortKey={h2hSort} sortDir={h2hDir} />
-                    </TableHead>
-                    <TableHead className={cn(thNoCls, "text-right")}>Line</TableHead>
-                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("edge")}>
-                      <ColHeaderTip label="Edge" tip="Model probability minus book implied probability for the picked side. Larger = stronger model-vs-market disagreement." /> <SortIcon col="edge" sortKey={h2hSort} sortDir={h2hDir} />
-                    </TableHead>
-                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("ev")}>
-                      <ColHeaderTip label="EV" tip="Expected value per dollar bet. +5% means you expect to gain $0.05 per $1 wagered on average if the model is accurate over many bets." /> <SortIcon col="ev" sortKey={h2hSort} sortDir={h2hDir} />
-                    </TableHead>
-                    <TableHead className={cn(thCls, "text-right hidden xl:table-cell")} onClick={() => handleH2hSort("rawKelly")}>
-                      <ColHeaderTip label="Kelly%" tip="Full Kelly criterion — the mathematically optimal stake as % of bankroll. Can be volatile; higher values carry more risk." /> <SortIcon col="rawKelly" sortKey={h2hSort} sortDir={h2hDir} />
-                    </TableHead>
-                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("cappedKelly")}>
-                      <ColHeaderTip label={`Capped%`} tip={`Kelly% capped at your max (${maxKelly}%). This is the recommended stake size — it limits downside if the model is temporarily wrong.`} /> <SortIcon col="cappedKelly" sortKey={h2hSort} sortDir={h2hDir} />
-                    </TableHead>
-                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("stake")}>Stake <SortIcon col="stake" sortKey={h2hSort} sortDir={h2hDir} /></TableHead>
-                    <TableHead className={cn(thNoCls, "text-center")}>Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="[&>tr:last-child>td]:border-b-0">
-                  {renderTableBody(sortedH2h, renderH2hRow, 11, "No moneyline markets for this date", 11)}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-
-          {/* Mobile cards */}
-          <div className="md:hidden">
-            <MobileSortPills
-              sortKey={h2hSort} sortDir={h2hDir} onSort={handleH2hSort}
-              options={[
-                { key: "game", label: "Time" },
-                { key: "edge", label: "Edge" },
-                { key: "ev", label: "EV" },
-                { key: "stake", label: "Stake" },
-              ]}
-            />
-            {renderMobileSection(sortedH2h, renderH2hCard, "No moneyline markets for this date")}
-          </div>
-        </div>
-
-        {/* ----------------------------------------------------------------
-            Total Runs
-        ---------------------------------------------------------------- */}
-        <div>
-          <div className="mb-3 flex items-center gap-3">
-            <h2 className="text-base font-semibold text-white">Total Runs</h2>
-            <Badge variant="outline" className="border-teal-800 bg-teal-950 text-teal-400 text-[10px] font-medium px-2 py-0">
-              {sortedTotals.length}
-            </Badge>
-          </div>
-
-          {/* Desktop table */}
-          <div className="hidden md:block rounded-xl border border-[#262626] bg-[#141414]">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader className="sticky top-0 z-20 bg-[#141414]">
-                  <TableRow className="border-b border-[#262626] hover:bg-transparent">
-                    <TableHead className={thCls} onClick={() => handleTotalsSort("game")}>Game <SortIcon col="game" sortKey={totalsSort} sortDir={totalsDir} /></TableHead>
-                    <TableHead className={thCls} onClick={() => handleTotalsSort("market")}>Pick <SortIcon col="market" sortKey={totalsSort} sortDir={totalsDir} /></TableHead>
-                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("predRuns")}>
-                      <ColHeaderTip label="Proj. Runs" tip="Model's predicted total combined runs for the game. Compare to the book line in the Pick badge." /> <SortIcon col="predRuns" sortKey={totalsSort} sortDir={totalsDir} />
-                    </TableHead>
-                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("edge")}>
-                      <ColHeaderTip label="Edge" tip="Model probability minus book implied probability for the picked side (Over or Under). Larger = stronger disagreement." /> <SortIcon col="edge" sortKey={totalsSort} sortDir={totalsDir} />
-                    </TableHead>
-                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("ev")}>
-                      <ColHeaderTip label="EV" tip="Expected value per dollar bet. +5% means you expect to gain $0.05 per $1 wagered on average if the model is accurate over many bets." /> <SortIcon col="ev" sortKey={totalsSort} sortDir={totalsDir} />
-                    </TableHead>
-                    <TableHead className={cn(thCls, "text-right hidden xl:table-cell")} onClick={() => handleTotalsSort("rawKelly")}>
-                      <ColHeaderTip label="Kelly%" tip="Full Kelly criterion — the mathematically optimal stake as % of bankroll. Can be volatile; higher values carry more risk." /> <SortIcon col="rawKelly" sortKey={totalsSort} sortDir={totalsDir} />
-                    </TableHead>
-                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("cappedKelly")}>
-                      <ColHeaderTip label="Capped%" tip={`Kelly% capped at your max (${maxKelly}%). This is the recommended stake size — it limits downside if the model is temporarily wrong.`} /> <SortIcon col="cappedKelly" sortKey={totalsSort} sortDir={totalsDir} />
-                    </TableHead>
-                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("stake")}>Stake <SortIcon col="stake" sortKey={totalsSort} sortDir={totalsDir} /></TableHead>
-                    <TableHead className={cn(thNoCls, "text-center")}>Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="[&>tr:last-child>td]:border-b-0">
-                  {renderTableBody(sortedTotals, renderTotalsRow, 9, "No total runs markets for this date", 9)}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-
-          {/* Mobile cards */}
-          <div className="md:hidden">
-            <MobileSortPills
-              sortKey={totalsSort} sortDir={totalsDir} onSort={handleTotalsSort}
-              options={[
-                { key: "game", label: "Time" },
-                { key: "predRuns", label: "Proj. Runs" },
-                { key: "edge", label: "Edge" },
-                { key: "ev", label: "EV" },
-                { key: "stake", label: "Stake" },
-              ]}
-            />
-            {renderMobileSection(sortedTotals, renderTotalsCard, "No total runs markets for this date")}
-          </div>
-        </div>
-
-        {/* ----------------------------------------------------------------
-            E9.11 — Line Shopping: best price across books for model-positive plays
-        ---------------------------------------------------------------- */}
-        <div className="mt-8">
-          <Collapsible defaultOpen={true}>
-            <CollapsibleTrigger asChild>
-              <button className="w-full flex items-center justify-between mb-3 group">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-base font-semibold text-white">Line Shopping</h2>
-                  <Badge variant="outline" className="border-[#a78bfa]/40 bg-[#a78bfa]/10 text-[#a78bfa] text-[10px] font-medium px-2 py-0">
-                    {lsData?.plays?.length ?? 0}
-                  </Badge>
+        {activeTab === "ev" && (
+          <>
+            {/* Summary bar */}
+            <div className="mb-6 rounded-xl border border-[#262626] bg-[#141414] px-5 py-3.5">
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+                <span>
+                  <span className="font-semibold text-[#10b981]">{qualifiedCount}</span>
+                  <span className="text-gray-500"> qualified markets</span>
+                </span>
+                <span className="text-gray-700">·</span>
+                <span>
+                  <span className="font-semibold text-gray-300">{totalCount}</span>
+                  <span className="text-gray-500"> total markets</span>
+                </span>
+                <span className="text-gray-700">·</span>
+                <span>
                   <TooltipProvider delayDuration={150}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-help text-[10px] font-medium uppercase tracking-wide text-gray-600 border-b border-dotted border-gray-700">
-                          Model-relative
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-[280px] text-center text-xs text-white border-[#262626] bg-[#1a1a1a]">
-                        "+EV" here means the model estimates a higher probability than the book&apos;s de-vigged price. Our models have no demonstrated market edge (best_alpha=0). This is a line-shopping transparency tool — if you&apos;re going to bet this side, here&apos;s the best number and where to find it. Not a bet recommendation.
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <ChevronDown className="h-4 w-4 text-gray-500 transition-transform duration-200 group-data-[state=open]:rotate-180" />
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="cursor-help text-gray-500 border-b border-dotted border-gray-700">Est. daily EV</span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[260px] text-center text-xs text-white border-[#262626] bg-[#1a1a1a]">
+                      Sum of (EV × Stake) across all qualified bets. If the model is accurate over many bets, this is the expected dollar gain today at your bankroll size.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <span className="text-gray-700">: </span>
+                  <span className={cn("font-semibold", estDailyEV >= 0 ? "text-[#10b981]" : "text-[#ef4444]")}>
+                    {estDailyEV >= 0 ? "+" : ""}${estDailyEV.toFixed(2)}
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            {/* Preliminary banner */}
+            {data?.is_preliminary && (
+              <div className="mb-6 flex items-start gap-2.5 rounded-lg border border-amber-800 bg-amber-950 px-4 py-3 text-sm text-amber-300">
+                <span className="mt-0.5 shrink-0 font-bold">⚠</span>
+                <span>
+                  <span className="font-semibold">Preliminary predictions</span> — lineups not yet confirmed.
+                  These picks are based on probable pitchers only. Do not bet until confirmed lineups are posted (~90 min before first pitch).
+                </span>
+              </div>
+            )}
+
+            {/* Moneyline */}
+            <div className="mb-8">
+              <div className="mb-3 flex items-center gap-3">
+                <h2 className="text-base font-semibold text-white">Moneyline</h2>
+                <Badge variant="outline" className="border-blue-800 bg-blue-950 text-blue-400 text-[10px] font-medium px-2 py-0">
+                  {sortedH2h.length}
+                </Badge>
+              </div>
+
               {/* Desktop table */}
               <div className="hidden md:block rounded-xl border border-[#262626] bg-[#141414]">
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader className="sticky top-0 z-20 bg-[#141414]">
                       <TableRow className="border-b border-[#262626] hover:bg-transparent">
-                        <TableHead className={thNoCls}>Game</TableHead>
-                        <TableHead className={thNoCls}>Pick</TableHead>
-                        <TableHead className={cn(thNoCls, "text-right")}>Best Book</TableHead>
-                        <TableHead className={cn(thNoCls, "text-right")}>
-                          <ColHeaderTip label="Best Price" tip="Best available American odds for this side across all tracked US books (Pinnacle excluded — not US-bettable)." />
+                        <TableHead className={thCls} onClick={() => handleH2hSort("game")}>Game <SortIcon col="game" sortKey={h2hSort} sortDir={h2hDir} /></TableHead>
+                        <TableHead className={thCls} onClick={() => handleH2hSort("market")}>Pick <SortIcon col="market" sortKey={h2hSort} sortDir={h2hDir} /></TableHead>
+                        <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("modelProb")}>
+                          <ColHeaderTip label="Model%" tip="Model's win probability for the picked team, shown as ±% from 50%." /> <SortIcon col="modelProb" sortKey={h2hSort} sortDir={h2hDir} />
                         </TableHead>
-                        <TableHead className={cn(thNoCls, "text-right")}>
-                          <ColHeaderTip label="Mkt %" tip="The best book's de-vigged implied probability for this side." />
+                        <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("bovadaProb")}>
+                          <ColHeaderTip label="Book%" tip="Bovada's de-vigged (fair) implied probability for the picked team, shown as ±% from 50%." /> <SortIcon col="bovadaProb" sortKey={h2hSort} sortDir={h2hDir} />
                         </TableHead>
-                        <TableHead className={cn(thNoCls, "text-right")}>
-                          <ColHeaderTip label="Model %" tip="The model's estimated probability for this side (model-relative; no demonstrated market edge)." />
+                        <TableHead className={cn(thNoCls, "text-right")}>Line</TableHead>
+                        <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("edge")}>
+                          <ColHeaderTip label="Edge" tip="Model probability minus book implied probability for the picked side. Larger = stronger model-vs-market disagreement." /> <SortIcon col="edge" sortKey={h2hSort} sortDir={h2hDir} />
                         </TableHead>
-                        <TableHead className={cn(thNoCls, "text-right")}>
-                          <ColHeaderTip label="Edge" tip="Model probability minus best book de-vigged probability. Always positive in this view." />
+                        <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("ev")}>
+                          <ColHeaderTip label="EV" tip="Expected value per dollar bet. +5% means you expect to gain $0.05 per $1 wagered on average if the model is accurate over many bets." /> <SortIcon col="ev" sortKey={h2hSort} sortDir={h2hDir} />
                         </TableHead>
-                        <TableHead className={cn(thNoCls, "text-right")}>
-                          <ColHeaderTip label="Breakeven" tip="American odds at which the model's EV = 0 (E9.1 model breakeven). If the best price is better than this, the model calls it +EV." />
+                        <TableHead className={cn(thCls, "text-right hidden xl:table-cell")} onClick={() => handleH2hSort("rawKelly")}>
+                          <ColHeaderTip label="Kelly%" tip="Full Kelly criterion — the mathematically optimal stake as % of bankroll. Can be volatile; higher values carry more risk." /> <SortIcon col="rawKelly" sortKey={h2hSort} sortDir={h2hDir} />
                         </TableHead>
-                        <TableHead className={cn(thNoCls, "text-right")}>
-                          <ColHeaderTip label="Pinnacle" tip="Pinnacle's de-vigged fair-value probability — the sharpest, lowest-vig reference. More honest than our model as a market anchor." />
+                        <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("cappedKelly")}>
+                          <ColHeaderTip label={`Capped%`} tip={`Kelly% capped at your max (${maxKelly}%). This is the recommended stake size — it limits downside if the model is temporarily wrong.`} /> <SortIcon col="cappedKelly" sortKey={h2hSort} sortDir={h2hDir} />
                         </TableHead>
-                        <TableHead className={cn(thNoCls, "text-center")}>Detail</TableHead>
+                        <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("stake")}>Stake <SortIcon col="stake" sortKey={h2hSort} sortDir={h2hDir} /></TableHead>
+                        <TableHead className={cn(thNoCls, "text-center")}>Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody className="[&>tr:last-child>td]:border-b-0">
-                      {lsLoading ? (
-                        <SkeletonRows cols={10} />
-                      ) : !lsData?.plays?.length ? (
-                        <TableRow>
-                          <TableCell colSpan={10} className="py-12 text-center text-sm text-gray-500">
-                            No model-positive plays vs. best book price for this date
-                          </TableCell>
-                        </TableRow>
-                      ) : (lsData.plays).map((play) => {
-                        const homeTeam = normalizeTeam(play.home_team ?? "Home")
-                        const awayTeam = normalizeTeam(play.away_team ?? "Away")
-                        const game = `${awayTeam} @ ${homeTeam}`
-                        const isTotal = play.market_type === "totals"
-                        const sideLabel = isTotal
-                          ? (play.side === "over" ? "Over" : "Under")
-                          : (play.side === "home" ? homeTeam : awayTeam)
-                        const marketLabel = isTotal ? `${sideLabel} ML` : `${sideLabel} ML`
-                        const gameTime = formatGameTime(play.game_start_utc)
-                        const gameDate = play.game_date ? format(new Date(play.game_date + "T12:00:00"), "MMM d") : "—"
-                        const timeLabel = gameTime ? `${gameDate} · ${gameTime}` : gameDate
-                        return (
-                          <TableRow
-                            key={`ls-${play.game_pk}-${play.market_type}-${play.side}`}
-                            onClick={() => router.push(`/picks/${play.game_pk}`)}
-                            className="border-b border-[#262626] transition-colors cursor-pointer hover:bg-[#a78bfa08]"
-                          >
-                            <TableCell className="py-3 pl-4 pr-3">
-                              <p className="text-sm font-medium text-white">{game}</p>
-                              <p className="text-xs text-gray-500">{timeLabel}</p>
-                            </TableCell>
-                            <TableCell className="px-3 py-3">
-                              <MarketBadge type={play.market_type} label={`${sideLabel}${isTotal ? "" : " ML"}`} />
-                            </TableCell>
-                            <TableCell className="px-3 py-3 text-right">
-                              <span className="text-sm font-semibold text-[#a78bfa]">
-                                {LS_BOOK_LABELS[play.best_book_key] ?? play.best_book_name}
-                              </span>
-                            </TableCell>
-                            <TableCell className="px-3 py-3 text-right text-sm font-bold text-[#10b981]">
-                              {fmtAmerican(play.best_american)}
-                            </TableCell>
-                            <TableCell className="px-3 py-3 text-right text-sm text-gray-400">
-                              {pctRaw(play.best_devigged_prob)}
-                            </TableCell>
-                            <TableCell className="px-3 py-3 text-right text-sm font-medium text-[#10b981]">
-                              {pctRaw(play.model_prob)}
-                            </TableCell>
-                            <TableCell className="px-3 py-3 text-right text-sm font-semibold text-[#10b981]">
-                              {fmtEdge(play.edge)}
-                            </TableCell>
-                            <TableCell className="px-3 py-3 text-right text-sm text-gray-500">
-                              {play.breakeven_american != null ? fmtAmerican(play.breakeven_american) : "—"}
-                            </TableCell>
-                            <TableCell className="px-3 py-3 text-right text-sm text-[#a78bfa]">
-                              {play.pinnacle_devigged_prob != null ? pctRaw(play.pinnacle_devigged_prob) : "—"}
-                            </TableCell>
-                            <TableCell className="px-3 py-3 text-center">
-                              <Link
-                                href={`/picks/${play.game_pk}`}
-                                onClick={(e) => e.stopPropagation()}
-                                className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
-                              >
-                                <ExternalLink className="h-3 w-3" />
-                              </Link>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
+                      {renderTableBody(sortedH2h, renderH2hRow, 11, "No moneyline markets for this date", 11)}
                     </TableBody>
                   </Table>
                 </div>
               </div>
 
               {/* Mobile cards */}
-              <div className="md:hidden space-y-3">
-                {lsLoading ? (
-                  <SkeletonCards />
-                ) : !lsData?.plays?.length ? (
-                  <p className="py-8 text-center text-sm text-gray-500">No model-positive plays vs. best book price for this date</p>
-                ) : lsData.plays.map((play) => {
-                  const homeTeam = normalizeTeam(play.home_team ?? "Home")
-                  const awayTeam = normalizeTeam(play.away_team ?? "Away")
-                  const isTotal = play.market_type === "totals"
-                  const sideLabel = isTotal
-                    ? (play.side === "over" ? "Over" : "Under")
-                    : (play.side === "home" ? homeTeam : awayTeam)
-                  const gameTime = formatGameTime(play.game_start_utc)
-                  const gameDate = play.game_date ? format(new Date(play.game_date + "T12:00:00"), "MMM d") : "—"
-                  const timeLabel = gameTime ? `${gameDate} · ${gameTime}` : gameDate
-                  return (
-                    <div
-                      key={`ls-card-${play.game_pk}-${play.market_type}-${play.side}`}
-                      onClick={() => router.push(`/picks/${play.game_pk}`)}
-                      className="rounded-xl border border-[#262626] bg-[#141414] p-4 transition-colors cursor-pointer active:bg-[#a78bfa08]"
-                    >
-                      <div className="mb-2 flex items-start justify-between gap-2">
-                        <span className="text-sm font-medium text-white">{`${awayTeam} @ ${homeTeam}`}</span>
-                        <span className="shrink-0 text-xs text-gray-500">{timeLabel}</span>
-                      </div>
-                      <div className="mb-3">
-                        <MarketBadge type={play.market_type} label={`${sideLabel}${isTotal ? "" : " ML"}`} />
-                      </div>
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-2 mb-3">
-                        <div>
-                          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Best Book</p>
-                          <p className="mt-0.5 text-sm font-semibold text-[#a78bfa]">
-                            {LS_BOOK_LABELS[play.best_book_key] ?? play.best_book_name}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Best Price</p>
-                          <p className="mt-0.5 text-sm font-bold text-[#10b981]">{fmtAmerican(play.best_american)}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Edge</p>
-                          <p className="mt-0.5 text-sm font-semibold text-[#10b981]">{fmtEdge(play.edge)}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Breakeven</p>
-                          <p className="mt-0.5 text-sm text-gray-400">
-                            {play.breakeven_american != null ? fmtAmerican(play.breakeven_american) : "—"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Pinnacle</p>
-                          <p className="mt-0.5 text-sm text-[#a78bfa]">
-                            {play.pinnacle_devigged_prob != null ? pctRaw(play.pinnacle_devigged_prob) : "—"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Model %</p>
-                          <p className="mt-0.5 text-sm font-medium text-[#10b981]">{pctRaw(play.model_prob)}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
+              <div className="md:hidden">
+                <MobileSortPills
+                  sortKey={h2hSort} sortDir={h2hDir} onSort={handleH2hSort}
+                  options={[
+                    { key: "game", label: "Time" },
+                    { key: "edge", label: "Edge" },
+                    { key: "ev", label: "EV" },
+                    { key: "stake", label: "Stake" },
+                  ]}
+                />
+                {renderMobileSection(sortedH2h, renderH2hCard, "No moneyline markets for this date")}
+              </div>
+            </div>
+
+            {/* Total Runs */}
+            <div>
+              <div className="mb-3 flex items-center gap-3">
+                <h2 className="text-base font-semibold text-white">Total Runs</h2>
+                <Badge variant="outline" className="border-teal-800 bg-teal-950 text-teal-400 text-[10px] font-medium px-2 py-0">
+                  {sortedTotals.length}
+                </Badge>
               </div>
 
-              <p className="mt-3 text-xs text-gray-600">
-                Line Shopping shows plays where the model is above the best US book&apos;s de-vigged price.
-                Sorted by edge (largest first). Pinnacle is the sharpest fair-value anchor — not US-bettable.
-                <span className="ml-1 text-gray-700">best_alpha=0 — no demonstrated edge over the market.</span>
-              </p>
-            </CollapsibleContent>
-          </Collapsible>
-        </div>
+              {/* Desktop table */}
+              <div className="hidden md:block rounded-xl border border-[#262626] bg-[#141414]">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="sticky top-0 z-20 bg-[#141414]">
+                      <TableRow className="border-b border-[#262626] hover:bg-transparent">
+                        <TableHead className={thCls} onClick={() => handleTotalsSort("game")}>Game <SortIcon col="game" sortKey={totalsSort} sortDir={totalsDir} /></TableHead>
+                        <TableHead className={thCls} onClick={() => handleTotalsSort("market")}>Pick <SortIcon col="market" sortKey={totalsSort} sortDir={totalsDir} /></TableHead>
+                        <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("predRuns")}>
+                          <ColHeaderTip label="Proj. Runs" tip="Model's predicted total combined runs for the game. Compare to the book line in the Pick badge." /> <SortIcon col="predRuns" sortKey={totalsSort} sortDir={totalsDir} />
+                        </TableHead>
+                        <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("edge")}>
+                          <ColHeaderTip label="Edge" tip="Model probability minus book implied probability for the picked side (Over or Under). Larger = stronger disagreement." /> <SortIcon col="edge" sortKey={totalsSort} sortDir={totalsDir} />
+                        </TableHead>
+                        <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("ev")}>
+                          <ColHeaderTip label="EV" tip="Expected value per dollar bet. +5% means you expect to gain $0.05 per $1 wagered on average if the model is accurate over many bets." /> <SortIcon col="ev" sortKey={totalsSort} sortDir={totalsDir} />
+                        </TableHead>
+                        <TableHead className={cn(thCls, "text-right hidden xl:table-cell")} onClick={() => handleTotalsSort("rawKelly")}>
+                          <ColHeaderTip label="Kelly%" tip="Full Kelly criterion — the mathematically optimal stake as % of bankroll. Can be volatile; higher values carry more risk." /> <SortIcon col="rawKelly" sortKey={totalsSort} sortDir={totalsDir} />
+                        </TableHead>
+                        <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("cappedKelly")}>
+                          <ColHeaderTip label="Capped%" tip={`Kelly% capped at your max (${maxKelly}%). This is the recommended stake size — it limits downside if the model is temporarily wrong.`} /> <SortIcon col="cappedKelly" sortKey={totalsSort} sortDir={totalsDir} />
+                        </TableHead>
+                        <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("stake")}>Stake <SortIcon col="stake" sortKey={totalsSort} sortDir={totalsDir} /></TableHead>
+                        <TableHead className={cn(thNoCls, "text-center")}>Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody className="[&>tr:last-child>td]:border-b-0">
+                      {renderTableBody(sortedTotals, renderTotalsRow, 9, "No total runs markets for this date", 9)}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
 
-        {/* Footer */}
-        <p className="mt-4 text-center text-xs text-gray-600">
-          Kelly stakes capped at {maxKelly}% per bet. EV and Kelly calculated from model vs. Bovada implied probabilities.
-          HC = High Conviction (strong multi-signal agreement). Not financial advice.
-        </p>
+              {/* Mobile cards */}
+              <div className="md:hidden">
+                <MobileSortPills
+                  sortKey={totalsSort} sortDir={totalsDir} onSort={handleTotalsSort}
+                  options={[
+                    { key: "game", label: "Time" },
+                    { key: "predRuns", label: "Proj. Runs" },
+                    { key: "edge", label: "Edge" },
+                    { key: "ev", label: "EV" },
+                    { key: "stake", label: "Stake" },
+                  ]}
+                />
+                {renderMobileSection(sortedTotals, renderTotalsCard, "No total runs markets for this date")}
+              </div>
+            </div>
+
+            {/* EV footer */}
+            <p className="mt-4 text-center text-xs text-gray-600">
+              Kelly stakes capped at {maxKelly}% per bet. EV and Kelly calculated from model vs. Bovada implied probabilities.
+              HC = High Conviction (strong multi-signal agreement). Not financial advice.
+            </p>
+          </>
+        )}
+
+        {/* ----------------------------------------------------------------
+            Line Shopping tab
+        ---------------------------------------------------------------- */}
+        {activeTab === "line-shopping" && (
+          <div>
+            {/* Subtitle + disclaimer */}
+            <div className="mb-5 flex flex-wrap items-center gap-2">
+              <p className="text-sm text-gray-500">
+                Plays where the model estimates higher probability than the best available US book price — sorted by edge.
+              </p>
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help text-[10px] font-medium uppercase tracking-wide text-gray-600 border-b border-dotted border-gray-700 shrink-0">
+                      Model-relative
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[280px] text-center text-xs text-white border-[#262626] bg-[#1a1a1a]">
+                    &ldquo;+EV&rdquo; here means the model estimates a higher probability than the book&apos;s de-vigged price. Our models have no demonstrated market edge (best_alpha=0). This is a line-shopping transparency tool — if you&apos;re going to bet this side, here&apos;s the best number and where to find it. Not a bet recommendation.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+
+            {/* Preliminary banner */}
+            {lsData?.is_preliminary && (
+              <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-amber-800 bg-amber-950 px-4 py-3 text-sm text-amber-300">
+                <span className="mt-0.5 shrink-0 font-bold">⚠</span>
+                <span>
+                  <span className="font-semibold">Preliminary</span> — based on probable pitchers only. Prices may shift after lineup confirmation.
+                </span>
+              </div>
+            )}
+
+            {/* Desktop table */}
+            <div className="hidden md:block rounded-xl border border-[#262626] bg-[#141414]">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="sticky top-0 z-20 bg-[#141414]">
+                    <TableRow className="border-b border-[#262626] hover:bg-transparent">
+                      <TableHead className={thNoCls}>Game</TableHead>
+                      <TableHead className={thNoCls}>Pick</TableHead>
+                      <TableHead className={cn(thNoCls, "text-right")}>Best Book</TableHead>
+                      <TableHead className={cn(thNoCls, "text-right")}>
+                        <ColHeaderTip label="Best Price" tip="Best available American odds for this side across all tracked US books (Pinnacle excluded — not US-bettable)." />
+                      </TableHead>
+                      <TableHead className={cn(thNoCls, "text-right")}>
+                        <ColHeaderTip label="Mkt %" tip="The best book's de-vigged implied probability for this side." />
+                      </TableHead>
+                      <TableHead className={cn(thNoCls, "text-right")}>
+                        <ColHeaderTip label="Model %" tip="The model's estimated probability for this side (model-relative; no demonstrated market edge)." />
+                      </TableHead>
+                      <TableHead className={cn(thNoCls, "text-right")}>
+                        <ColHeaderTip label="Edge" tip="Model probability minus best book de-vigged probability. Always positive in this view." />
+                      </TableHead>
+                      <TableHead className={cn(thNoCls, "text-right")}>
+                        <ColHeaderTip label="Breakeven" tip="American odds at which the model's EV = 0 (E9.1 model breakeven). If the best price is better than this, the model calls it +EV." />
+                      </TableHead>
+                      <TableHead className={cn(thNoCls, "text-right")}>
+                        <ColHeaderTip label="Pinnacle" tip="Pinnacle's de-vigged fair-value probability — the sharpest, lowest-vig reference. More honest than our model as a market anchor." />
+                      </TableHead>
+                      <TableHead className={cn(thNoCls, "text-center")}>Detail</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody className="[&>tr:last-child>td]:border-b-0">
+                    {lsLoading ? (
+                      <SkeletonRows cols={10} />
+                    ) : !lsData?.plays?.length ? (
+                      <TableRow>
+                        <TableCell colSpan={10} className="py-12 text-center text-sm text-gray-500">
+                          No model-positive plays vs. best book price for this date
+                        </TableCell>
+                      </TableRow>
+                    ) : (lsData.plays).map((play) => {
+                      const homeTeam = normalizeTeam(play.home_team ?? "Home")
+                      const awayTeam = normalizeTeam(play.away_team ?? "Away")
+                      const game = `${awayTeam} @ ${homeTeam}`
+                      const isTotal = play.market_type === "totals"
+                      const sideLabel = isTotal
+                        ? (play.side === "over" ? "Over" : "Under")
+                        : (play.side === "home" ? homeTeam : awayTeam)
+                      const gameTime = formatGameTime(play.game_start_utc)
+                      const gameDate = play.game_date ? format(new Date(play.game_date + "T12:00:00"), "MMM d") : "—"
+                      const timeLabel = gameTime ? `${gameDate} · ${gameTime}` : gameDate
+                      return (
+                        <TableRow
+                          key={`ls-${play.game_pk}-${play.market_type}-${play.side}`}
+                          onClick={() => router.push(`/picks/${play.game_pk}`)}
+                          className="border-b border-[#262626] transition-colors cursor-pointer hover:bg-[#a78bfa08]"
+                        >
+                          <TableCell className="py-3 pl-4 pr-3">
+                            <p className="text-sm font-medium text-white">{game}</p>
+                            <p className="text-xs text-gray-500">{timeLabel}</p>
+                          </TableCell>
+                          <TableCell className="px-3 py-3">
+                            <MarketBadge type={play.market_type} label={`${sideLabel}${isTotal ? "" : " ML"}`} />
+                          </TableCell>
+                          <TableCell className="px-3 py-3 text-right">
+                            <span className="text-sm font-semibold text-[#a78bfa]">
+                              {LS_BOOK_LABELS[play.best_book_key] ?? play.best_book_name}
+                            </span>
+                          </TableCell>
+                          <TableCell className="px-3 py-3 text-right text-sm font-bold text-[#10b981]">
+                            {fmtAmerican(play.best_american)}
+                          </TableCell>
+                          <TableCell className="px-3 py-3 text-right text-sm text-gray-400">
+                            {pctRaw(play.best_devigged_prob)}
+                          </TableCell>
+                          <TableCell className="px-3 py-3 text-right text-sm font-medium text-[#10b981]">
+                            {pctRaw(play.model_prob)}
+                          </TableCell>
+                          <TableCell className="px-3 py-3 text-right text-sm font-semibold text-[#10b981]">
+                            {fmtEdge(play.edge)}
+                          </TableCell>
+                          <TableCell className="px-3 py-3 text-right text-sm text-gray-500">
+                            {play.breakeven_american != null ? fmtAmerican(play.breakeven_american) : "—"}
+                          </TableCell>
+                          <TableCell className="px-3 py-3 text-right text-sm text-[#a78bfa]">
+                            {play.pinnacle_devigged_prob != null ? pctRaw(play.pinnacle_devigged_prob) : "—"}
+                          </TableCell>
+                          <TableCell className="px-3 py-3 text-center">
+                            <Link
+                              href={`/picks/${play.game_pk}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-3">
+              {lsLoading ? (
+                <SkeletonCards />
+              ) : !lsData?.plays?.length ? (
+                <p className="py-8 text-center text-sm text-gray-500">No model-positive plays vs. best book price for this date</p>
+              ) : lsData.plays.map((play) => {
+                const homeTeam = normalizeTeam(play.home_team ?? "Home")
+                const awayTeam = normalizeTeam(play.away_team ?? "Away")
+                const isTotal = play.market_type === "totals"
+                const sideLabel = isTotal
+                  ? (play.side === "over" ? "Over" : "Under")
+                  : (play.side === "home" ? homeTeam : awayTeam)
+                const gameTime = formatGameTime(play.game_start_utc)
+                const gameDate = play.game_date ? format(new Date(play.game_date + "T12:00:00"), "MMM d") : "—"
+                const timeLabel = gameTime ? `${gameDate} · ${gameTime}` : gameDate
+                return (
+                  <div
+                    key={`ls-card-${play.game_pk}-${play.market_type}-${play.side}`}
+                    onClick={() => router.push(`/picks/${play.game_pk}`)}
+                    className="rounded-xl border border-[#262626] bg-[#141414] p-4 transition-colors cursor-pointer active:bg-[#a78bfa08]"
+                  >
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                      <span className="text-sm font-medium text-white">{`${awayTeam} @ ${homeTeam}`}</span>
+                      <span className="shrink-0 text-xs text-gray-500">{timeLabel}</span>
+                    </div>
+                    <div className="mb-3">
+                      <MarketBadge type={play.market_type} label={`${sideLabel}${isTotal ? "" : " ML"}`} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-2 mb-3">
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Best Book</p>
+                        <p className="mt-0.5 text-sm font-semibold text-[#a78bfa]">
+                          {LS_BOOK_LABELS[play.best_book_key] ?? play.best_book_name}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Best Price</p>
+                        <p className="mt-0.5 text-sm font-bold text-[#10b981]">{fmtAmerican(play.best_american)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Edge</p>
+                        <p className="mt-0.5 text-sm font-semibold text-[#10b981]">{fmtEdge(play.edge)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Breakeven</p>
+                        <p className="mt-0.5 text-sm text-gray-400">
+                          {play.breakeven_american != null ? fmtAmerican(play.breakeven_american) : "—"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Pinnacle</p>
+                        <p className="mt-0.5 text-sm text-[#a78bfa]">
+                          {play.pinnacle_devigged_prob != null ? pctRaw(play.pinnacle_devigged_prob) : "—"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Model %</p>
+                        <p className="mt-0.5 text-sm font-medium text-[#10b981]">{pctRaw(play.model_prob)}</p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Line Shopping footer */}
+            <p className="mt-4 text-xs text-gray-600">
+              Best price = highest American odds across BetMGM, Caesars, FanDuel, DraftKings, Fanatics, and Bovada.
+              Pinnacle shown as fair-value anchor only — not US-bettable.
+              <span className="ml-1 text-gray-700">best_alpha=0 — no demonstrated edge over the market.</span>
+            </p>
+          </div>
+        )}
       </main>
     </div>
     </AuthGuard>
