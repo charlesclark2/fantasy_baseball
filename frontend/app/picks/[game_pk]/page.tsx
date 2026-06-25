@@ -65,6 +65,30 @@ type BookOddsTotals = {
   breakeven_american_under: number | null
 }
 
+type BestPriceH2H = {
+  book_key: string
+  book_name: string
+  american: number
+  decimal: number | null
+  market_bet_pct: number | null
+  ev: number | null
+  edge: number | null
+  breakeven_american: number | null
+}
+
+type BestPriceTotals = {
+  book_key: string
+  book_name: string
+  line: number
+  american: number
+  decimal: number | null
+  market_bet_pct: number | null
+  model_prob: number | null
+  ev: number | null
+  edge: number | null
+  breakeven_american: number | null
+}
+
 type BookOddsComparison = {
   game_pk: number
   home_team: string | null
@@ -73,6 +97,11 @@ type BookOddsComparison = {
   totals_r: number | null
   h2h: BookOddsH2H[]
   totals: BookOddsTotals[]
+  // E9.11 — best US-bettable price per side (Pinnacle excluded)
+  best_h2h_home: BestPriceH2H | null
+  best_h2h_away: BestPriceH2H | null
+  best_totals_over: BestPriceTotals | null
+  best_totals_under: BestPriceTotals | null
 }
 
 const PickExplanationSection = dynamic(
@@ -421,27 +450,52 @@ function BookOddsSection({
             </div>
           </div>
 
-          {/* Book selector */}
-          <div className="flex flex-wrap gap-2">
-            {availableBooks.map((key) => (
-              <button
-                key={key}
-                onClick={() => setSelectedBook(key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
-                  selectedBook === key
-                    ? key === "pinnacle"
-                      ? "bg-[#a78bfa]/20 text-[#a78bfa] border-[#a78bfa]/40"
-                      : "bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30"
-                    : "bg-transparent text-gray-500 border-[#262626] hover:border-[#333] hover:text-gray-300"
-                }`}
-              >
-                {BOOK_LABELS[key] ?? key}
-                {key === "pinnacle" && (
-                  <span className="ml-1 text-[9px] font-bold uppercase tracking-widest opacity-70">sharp</span>
-                )}
-              </button>
-            ))}
-          </div>
+          {/* Book selector — E9.11: BEST badge on best-price book for active pick side */}
+          {(() => {
+            const bestH2HHomeKey = bookOdds.best_h2h_home?.book_key ?? null
+            const bestH2HAwayKey = bookOdds.best_h2h_away?.book_key ?? null
+            const bestTotalsOverKey = bookOdds.best_totals_over?.book_key ?? null
+            const bestTotalsUnderKey = bookOdds.best_totals_under?.book_key ?? null
+            let activeBestKey: string | null = null
+            if (effectiveH2HPickSide === "home") activeBestKey = bestH2HHomeKey
+            else if (effectiveH2HPickSide === "away") activeBestKey = bestH2HAwayKey
+            if (!activeBestKey) {
+              if (effectiveTotalsPickSide === "over") activeBestKey = bestTotalsOverKey
+              else if (effectiveTotalsPickSide === "under") activeBestKey = bestTotalsUnderKey
+            }
+            return (
+              <div className="flex flex-wrap gap-2">
+                {availableBooks.map((key) => {
+                  const isBest = key !== "pinnacle" && key === activeBestKey
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setSelectedBook(key)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                        selectedBook === key
+                          ? key === "pinnacle"
+                            ? "bg-[#a78bfa]/20 text-[#a78bfa] border-[#a78bfa]/40"
+                            : "bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30"
+                          : isBest
+                          ? "text-[#10b981] border-[#10b981]/35 bg-transparent hover:border-[#10b981]/60"
+                          : "bg-transparent text-gray-500 border-[#262626] hover:border-[#333] hover:text-gray-300"
+                      }`}
+                    >
+                      {BOOK_LABELS[key] ?? key}
+                      {key === "pinnacle" && (
+                        <span className="ml-1 text-[9px] font-bold uppercase tracking-widest opacity-70">sharp</span>
+                      )}
+                      {isBest && (
+                        <span className="ml-1.5 inline-flex items-center rounded px-1 py-0 text-[8px] font-bold uppercase tracking-wide bg-[#10b981] text-[#0a0a0a]">
+                          BEST
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })()}
 
           {/* Cross-book +EV summary — shows "N of M books +EV" or "No book +EV" per pick side */}
           {(effectiveH2HPickSide || effectiveTotalsPickSide) && (() => {

@@ -36,6 +36,7 @@ from app.backend.models.picks import (
     HistoryPicksResponse,
     LineMovement,
     LineupPlayer,
+    LineshoppingResponse,
     Pick,
     PickDriver,
     PickExplanationPayload,
@@ -1948,6 +1949,40 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     set_cache(_game_cache_key, _payload, permanent=_is_final)
 
     return result
+
+
+@router.get("/line-shopping", response_model=LineshoppingResponse)
+def get_line_shopping(
+    date: str = Query(default=None, description="YYYY-MM-DD; defaults to today"),
+) -> LineshoppingResponse:
+    """E9.11 — Best price across books for model-positive plays (line-shopping view).
+
+    Returns plays where model_prob > best US book de-vigged price, sorted by
+    edge (biggest first).  Each row includes the best book + price, the E9.1
+    model breakeven, and the Pinnacle fair-value anchor.
+
+    This is a LINE-SHOPPING / market-transparency tool — our models have no
+    demonstrated market edge (best_alpha=0). Treat as informational only.
+    All bets are manual.
+    """
+    today_str = datetime.now(_ET).date().isoformat()
+    _date = today_str if not date else date
+
+    if date and date != today_str:
+        try:
+            datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+
+    pg_hit = pg.get_cache("picks/line-shopping", _date)
+    if pg_hit is not None:
+        try:
+            return LineshoppingResponse(**pg_hit)
+        except Exception:
+            logger.warning("PG picks/line-shopping invalid for %s — returning empty", _date)
+
+    logger.info("No line-shopping cache for %s — returning empty payload", _date)
+    return LineshoppingResponse()
 
 
 @router.get("/{game_pk}/odds-comparison", response_model=BookOddsComparison)

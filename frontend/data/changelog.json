@@ -3,6 +3,10 @@
     "week": "2026-06-25",
     "items": [
       {
+        "tag": "new",
+        "text": "Line Shopping is now on the EV Tracker. A new 'Line Shopping' section shows model-positive plays ranked by edge, with the best available US price highlighted per play — including which book offers it, the American odds, the model's breakeven price (E9.1), and Pinnacle's fair-value anchor. On each pick's Book Comparison, the best-priced US book for the active pick side is now marked with a 'BEST' badge. This is a line-shopping transparency tool — if you're going to bet this side, here's the best number and where to find it. Our models have no demonstrated market edge (best_alpha=0); the Pinnacle anchor is more truthful than implying our breakeven is the market's."
+      },
+      {
         "tag": "improvement",
         "text": "The CLV confidence bar on each pick's detail page now shows a hover/tap tooltip labeling every visual element: the purple line is the model's P(CLV positive) estimate, the shaded band is its 80% confidence interval, and the gray center line marks 50% (no-signal baseline). The tooltip also shows a plain-English explanation of what the bar means — and for the low-information totals bar, explicitly says the model has no demonstrated signal."
       },
