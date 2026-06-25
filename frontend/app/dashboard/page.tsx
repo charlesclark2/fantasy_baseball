@@ -275,6 +275,9 @@ function PickRow({ pick, router }: { pick: Pick; router: ReturnType<typeof useRo
           const mkProb = flip ? 1 - pick.bovada_devig_prob : pick.bovada_devig_prob
           const ciLow = flip && pick.win_prob_ci_high != null ? 1 - pick.win_prob_ci_high : pick.win_prob_ci_low
           const ciHigh = flip && pick.win_prob_ci_low != null ? 1 - pick.win_prob_ci_low : pick.win_prob_ci_high
+          const teamLabel = pick.market_type === "h2h"
+            ? (flip ? pick.away_team : pick.home_team) ?? null
+            : null
           return (
             <ProbabilityBar
               ciLow={ciLow}
@@ -284,6 +287,7 @@ function PickRow({ pick, router }: { pick: Pick; router: ReturnType<typeof useRo
               showLabels={true}
               showCiLabels={false}
               showHighConviction={false}
+              teamLabel={teamLabel}
             />
           )
         })()}

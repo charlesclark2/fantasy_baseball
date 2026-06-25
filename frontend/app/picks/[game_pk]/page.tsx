@@ -1334,47 +1334,105 @@ export default function PickDetailPage() {
                         const ciHigh = isAway ? 1 - pick.win_prob_ci_low! : pick.win_prob_ci_high!
                         const modelP = isAway ? 1 - (pick.model_prob ?? 0) : (pick.model_prob ?? 0)
                         const mktP = isAway ? 1 - (pick.bovada_devig_prob ?? 0) : (pick.bovada_devig_prob ?? 0)
-                        const halfWidth = pick.win_prob_ci_width != null ? (pick.win_prob_ci_width * 50).toFixed(1) : null
+                        const teamLbl = isAway ? (pick.away_team ?? "Away") : (pick.home_team ?? "Home")
+                        const ciLowPct = (ciLow * 100).toFixed(1)
+                        const ciHighPct = (ciHigh * 100).toFixed(1)
+                        const modelPct = (modelP * 100).toFixed(1)
+                        const mktPct = (mktP * 100).toFixed(1)
+                        const leanDiff = Math.abs(modelP - 0.5)
+                        const leanLabel = leanDiff < 0.02 ? "near even-odds toss-up" : leanDiff < 0.06 ? "slight lean" : "moderate lean"
                         return (
                           <div className="border-t border-[#1e1e1e] pt-2 mt-1">
                             <div className="flex items-center justify-between mb-1.5">
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <span className="text-xs font-medium text-gray-500 cursor-help inline-flex items-center gap-1">
-                                    80% win-probability CI
+                                    Win-prob lean · 80% CI
                                     <Info className="h-3 w-3" />
                                   </span>
                                 </TooltipTrigger>
-                                <TooltipContent side="top" className="max-w-[260px] text-xs leading-relaxed">
-                                  Green bar = 80% credible interval for the model&apos;s win-probability estimate. White line = model point estimate. Orange marker = Bovada implied probability. Narrower bar = higher model confidence. Morning rows may show a narrower CI (imputed pre-lineup matrix) — prefer the post-lineup row when available.
+                                <TooltipContent side="top" className="max-w-[280px] text-xs leading-relaxed">
+                                  This is a lean, not a prediction of certainty. The calibrated model spreads H2H probabilities across a narrow band (~43–57%) — single MLB games are near coin-flips. Green bar = 80% credible range. White line = model point estimate. Orange marker = Bovada implied probability. Gray center = even odds (50%).
                                 </TooltipContent>
                               </Tooltip>
-                              <span className="text-xs font-mono text-gray-500">
-                                {(ciLow * 100).toFixed(1)}%–{(ciHigh * 100).toFixed(1)}%
-                                {halfWidth && <span className="ml-1.5 text-gray-600">±{halfWidth}pp</span>}
+                              {/* Attributed range: "54% (51–57%) — STL · slight lean" */}
+                              <span className="text-xs font-mono text-gray-400">
+                                {modelPct}%{" "}
+                                <span className="text-gray-600">({ciLowPct}–{ciHighPct}%)</span>
+                                {" "}— {teamLbl}
+                                <span className="ml-1 text-gray-600 font-sans font-normal">· {leanLabel}</span>
                               </span>
                             </div>
-                            <div className="relative h-4 bg-[#1e1e1e] rounded-full overflow-hidden">
-                              <div
-                                className="absolute top-0 bottom-0 bg-[#10b981]/30 rounded-sm"
-                                style={{ left: `${ciLow * 100}%`, width: `${(ciHigh - ciLow) * 100}%` }}
-                              />
-                              <div
-                                className="absolute top-0 bottom-0 w-0.5 bg-[#f59e0b]"
-                                style={{ left: `${mktP * 100}%` }}
-                              />
-                              <div
-                                className="absolute top-0 bottom-0 w-0.5 bg-white"
-                                style={{ left: `${modelP * 100}%` }}
-                              />
-                            </div>
-                            <div className="flex items-center gap-4 mt-1.5">
+                            {/* Bar track — wrapped in Tooltip for hover/focus/tap legend */}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div
+                                  className="relative h-4 bg-[#1e1e1e] rounded-full overflow-hidden cursor-help"
+                                  tabIndex={0}
+                                  role="img"
+                                  aria-label={`Win probability bar: model ${modelPct}%, market ${mktPct}%, 80% range ${ciLowPct}%–${ciHighPct}%`}
+                                >
+                                  {/* CI fill */}
+                                  <div
+                                    className="absolute top-0 bottom-0 bg-[#10b981]/30 rounded-sm"
+                                    style={{ left: `${ciLow * 100}%`, width: `${(ciHigh - ciLow) * 100}%` }}
+                                  />
+                                  {/* 50% even-odds reference line */}
+                                  <div className="absolute top-0 bottom-0 w-px bg-[#808080]/60" style={{ left: "50%" }} />
+                                  {/* Bovada market line — orange */}
+                                  <div
+                                    className="absolute top-0 bottom-0 w-0.5 bg-[#f59e0b]"
+                                    style={{ left: `${mktP * 100}%` }}
+                                  />
+                                  {/* Model line — white */}
+                                  <div
+                                    className="absolute top-0 bottom-0 w-0.5 bg-white"
+                                    style={{ left: `${modelP * 100}%` }}
+                                  />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="min-w-[240px] max-w-[300px] p-3 text-xs space-y-1.5">
+                                {/* Marker legend */}
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-block h-3 w-0.5 shrink-0 rounded-full bg-white" />
+                                  <span className="text-gray-300 font-medium">Model estimate</span>
+                                  <span className="ml-auto font-mono text-white">{modelPct}%</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-block h-3 w-0.5 shrink-0 rounded-full bg-[#f59e0b]" />
+                                  <span className="text-gray-400">Bovada (market)</span>
+                                  <span className="ml-auto font-mono text-gray-300">{mktPct}%</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-block h-1.5 w-3 shrink-0 rounded-sm bg-[#10b981]/40" />
+                                  <span className="text-gray-400">80% credible range</span>
+                                  <span className="ml-auto font-mono text-[#10b981]">{ciLowPct}–{ciHighPct}%</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-block h-3 w-px shrink-0 rounded-full bg-[#808080]/60" />
+                                  <span className="text-gray-500">Even odds / coin-flip</span>
+                                  <span className="ml-auto font-mono text-gray-600">50.0%</span>
+                                </div>
+                                {/* Summary + lean framing */}
+                                <div className="border-t border-white/10 pt-1.5 mt-0.5 space-y-1">
+                                  <p className="text-gray-300 font-medium text-[11px]">
+                                    {modelPct}% ({ciLowPct}–{ciHighPct}%) — {teamLbl} · {leanLabel}
+                                  </p>
+                                  <p className="text-gray-500 text-[10px] leading-snug">
+                                    Single MLB games are high-variance. Treat as a lean, not a lock.
+                                  </p>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                            {/* Legend row */}
+                            <div className="flex flex-wrap items-center gap-4 mt-1.5">
                               <span className="text-xs text-gray-500 inline-flex items-center gap-1">
-                                <span className="inline-block h-1.5 w-3 bg-white rounded-full" /> Model {(modelP * 100).toFixed(1)}%
+                                <span className="inline-block h-1.5 w-3 bg-white rounded-full" /> Model {modelPct}%
                               </span>
                               <span className="text-xs text-gray-500 inline-flex items-center gap-1">
-                                <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#f59e0b]" /> Bovada {(mktP * 100).toFixed(1)}%
+                                <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#f59e0b]" /> Bovada {mktPct}%
                               </span>
+                              <span className="text-xs text-gray-600 italic ml-auto">lean, not a lock</span>
                             </div>
                           </div>
                         )
