@@ -1,0 +1,151 @@
+{
+  "story": "E5.2",
+  "served_model": "poisson_glm_k",
+  "fit_at": "2026-06-25",
+  "min_year": 2021,
+  "max_year": 2026,
+  "market_blind": true,
+  "selection": "won the E5.2 bake-off (bakeoff_strikeouts.py) on CRPS + at-the-line ECE, PBO-deflated",
+  "strikeout_calibration": {
+    "model_kind": "poisson_glm_k",
+    "n_eligible": 26062,
+    "n_total": 26320,
+    "calib_80": 0.8104,
+    "pit": {
+      "mean": 0.4862,
+      "std": 0.3074,
+      "decile_freqs": [
+        0.1505,
+        0.0807,
+        0.09,
+        0.093,
+        0.0957,
+        0.0991,
+        0.1025,
+        0.0909,
+        0.0753,
+        0.1224
+      ],
+      "max_decile_dev": 0.0505,
+      "mean_dev_from_half": 0.0138,
+      "is_flat": false
+    },
+    "ece_by_line": {
+      "3.5": 0.0285,
+      "4.5": 0.0149,
+      "5.5": 0.0162,
+      "6.5": 0.0128,
+      "7.5": 0.0256,
+      "8.5": 0.0262,
+      "9.5": 0.0169
+    },
+    "mean_ece": 0.0202,
+    "per_season": [
+      {
+        "eval_year": 2023,
+        "n": 4734,
+        "calib_80": 0.7455
+      },
+      {
+        "eval_year": 2024,
+        "n": 4757,
+        "calib_80": 0.8528
+      },
+      {
+        "eval_year": 2025,
+        "n": 4766,
+        "calib_80": 0.8556
+      },
+      {
+        "eval_year": 2026,
+        "n": 2296,
+        "calib_80": 0.7622
+      }
+    ],
+    "features": [
+      "eb_pitcher_k",
+      "league_k_rate",
+      "opp_lineup_k_pct",
+      "framing_z",
+      "reach_rate_trailing",
+      "starter_ip_mu",
+      "starter_ip_dispersion",
+      "k_career",
+      "bf_career",
+      "k_season",
+      "bf_season",
+      "k_pct_7d",
+      "k_pct_30d",
+      "whiff_rate_30d",
+      "csw_pct_3start",
+      "velo_delta_3start",
+      "fastball_velo_trend"
+    ],
+    "served_lambda": 0.85,
+    "artifact": "betting_ml/models/sub_models/prop_pricing_v1/strikeout_glm_v1.pkl"
+  },
+  "pitcher_outs": {
+    "n": 26062,
+    "calib_80": 0.9016,
+    "lines": [
+      13.5,
+      14.5,
+      15.5,
+      16.5,
+      17.5,
+      18.5,
+      19.5,
+      20.5,
+      21.5
+    ],
+    "note": "pitcher_outs priced directly off starter_ip_v1 NegBin (no new model)."
+  },
+  "book_lines": {
+    "skipped": false,
+    "n_book_line_player_dates": 7774,
+    "n_eligible_starts": 26062,
+    "k_lines_priced": [
+      3.5,
+      4.5,
+      5.5,
+      6.5,
+      7.5,
+      8.5,
+      9.5
+    ],
+    "note": "S3 closing lines loaded (player_name \u00d7 game_date). The name\u2192pitcher_id bridge (ref_players) + the per-line P(over)/P(under) + ECE are the E5.3 join; this run confirms line availability + shape. Model PIT/calib_80 is line-independent."
+  },
+  "ac": {
+    "strikeout_calib_80": 0.8104,
+    "strikeout_calib_80_ok": true,
+    "pit_max_decile_dev": 0.0505,
+    "mean_ece": 0.0202,
+    "pitcher_outs_calib_80": 0.9016,
+    "market_blind": true
+  },
+  "served_params": {
+    "model_kind": "poisson_glm_k",
+    "artifact": "betting_ml/models/sub_models/prop_pricing_v1/strikeout_glm_v1.pkl",
+    "features": [
+      "eb_pitcher_k",
+      "league_k_rate",
+      "opp_lineup_k_pct",
+      "framing_z",
+      "reach_rate_trailing",
+      "starter_ip_mu",
+      "starter_ip_dispersion",
+      "k_career",
+      "bf_career",
+      "k_season",
+      "bf_season",
+      "k_pct_7d",
+      "k_pct_30d",
+      "whiff_rate_30d",
+      "csw_pct_3start",
+      "velo_delta_3start",
+      "fastball_velo_trend"
+    ],
+    "spread_scale": 0.85
+  },
+  "note": "Served the poisson_glm_k bake-off winner (learned count model; beats the compound on CRPS + at-the-line ECE). best_alpha=0 \u2014 calibration is product value; edge gate = E5.4. Compound remains the interpretable fallback (--model compound)."
+}

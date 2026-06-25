@@ -166,6 +166,7 @@ class TestGrid:
 # PIT + calib_80 — the E2.3 calibration gate
 # ---------------------------------------------------------------------------
 
+@pytest.mark.slow  # E11.13: 6k-game × 2k-draw Monte-Carlo PIT/coverage guards (~75s each).
 class TestCalibration:
     def test_pit_uniform_when_correctly_specified(self):
         """Realised totals drawn from the SAME predictive the PIT is computed against → uniform."""

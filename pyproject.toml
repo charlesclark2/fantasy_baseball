@@ -44,6 +44,7 @@ dependencies = [
     "h5netcdf>=1.3",
     "h5py>=3.11",
     "psycopg2-binary>=2.9",
+    "pytest-xdist>=3.5",
 ]
 
 [build-system]
@@ -56,3 +57,13 @@ packages = ["betting_ml"]
 [tool.pytest.ini_options]
 testpaths = ["betting_ml/tests", "scripts/tests"]
 pythonpath = [".", "scripts"]
+# --durations=10 keeps ongoing slow-test visibility (drop -v in CI for quiet logs);
+# --strict-markers makes a typo'd/unregistered marker an ERROR, so the slow/fast
+# split can't silently rot. Parallelism (-n auto) is passed per-invocation by the
+# CI jobs and the local fast gate, NOT here — a single-file targeted run shouldn't
+# pay worker-spawn overhead.
+addopts = "--durations=10 --strict-markers"
+markers = [
+    "slow: heavy Monte-Carlo / long-running tests (>5s). EXCLUDED from the fast gate; run via `-m slow`. The fast gate is `-m 'not slow' -n auto` and is the per-push handoff gate.",
+    "integration: tests that exercise real external IO (Snowflake/S3/network). Currently NONE — all external IO in the suite is mocked; reserved so future genuinely-networked tests get quarantined from the fast gate.",
+]
