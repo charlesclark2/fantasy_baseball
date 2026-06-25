@@ -1,0 +1,379 @@
+{
+  "story": "E5.3",
+  "fit_at": "2026-06-25",
+  "served": {
+    "bundle_version": "strikeout_glm_v1",
+    "model_kind": "poisson_glm_k",
+    "served_lambda": 0.85,
+    "n_draws": 10000,
+    "n_eligible_starts": 26062,
+    "n_pitcher_dates": 26062,
+    "n_doubleheader_dupes_dropped": 0
+  },
+  "honest_framing": "Transparency / model-vs-market comparison, NOT a bet rec. best_alpha=0. Edge is model-relative + UNPROVEN until E5.4 (PBO/DSR + forward CLV net of the large prop vig).",
+  "join_coverage": {
+    "n_player_date_keys": 7774,
+    "n_resolved": 7351,
+    "resolved_frac": 0.9456,
+    "by_status": {
+      "resolved": 7351,
+      "unresolved_no_start_that_date": 302,
+      "unresolved_name_not_modelled": 112,
+      "unresolved_ambiguous_no_start_that_date": 6,
+      "ambiguous_same_name_same_date": 3
+    },
+    "resolved_via": {
+      "full_name": 7073,
+      "last_initial": 278
+    },
+    "n_book_line_rows_total": 66124,
+    "n_book_line_rows_resolved": 63765,
+    "top_unresolved_names": [
+      {
+        "player_name": "Yoshinobu Yamamoto",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 9
+      },
+      {
+        "player_name": "Walbert Urena",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 8
+      },
+      {
+        "player_name": "Anthony Gonsolin",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 7
+      },
+      {
+        "player_name": "Tatsuya Imai",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 7
+      },
+      {
+        "player_name": "Carlos Rodon",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 6
+      },
+      {
+        "player_name": "Noah Schultz",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 6
+      },
+      {
+        "player_name": "Max Scherzer",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 6
+      },
+      {
+        "player_name": "Kenneth Kelly",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 6
+      },
+      {
+        "player_name": "Zac Gallen",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 6
+      },
+      {
+        "player_name": "John Ober",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 5
+      },
+      {
+        "player_name": "Andrew Painter",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 5
+      },
+      {
+        "player_name": "Michael Lynn",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 5
+      },
+      {
+        "player_name": "George Kirby",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 5
+      },
+      {
+        "player_name": "Jacob Lugo",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 5
+      },
+      {
+        "player_name": "Shane Bieber",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 4
+      },
+      {
+        "player_name": "Tarik Skubal",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 4
+      },
+      {
+        "player_name": "Trey Yesavage",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 4
+      },
+      {
+        "player_name": "Jared Triolo",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 4
+      },
+      {
+        "player_name": "Nathan Eovaldi",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 4
+      },
+      {
+        "player_name": "Shohei Ohtani",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 4
+      },
+      {
+        "player_name": "Brandon Pfaadt",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 4
+      },
+      {
+        "player_name": "Jack Flaherty",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 4
+      },
+      {
+        "player_name": "Todd Smyly",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 4
+      },
+      {
+        "player_name": "Blake Snell",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 4
+      },
+      {
+        "player_name": "Connor Prielipp",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 4
+      },
+      {
+        "player_name": "Gerrit Cole",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 4
+      },
+      {
+        "player_name": "Robert Miller",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 4
+      },
+      {
+        "player_name": "Edward Lively",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 4
+      },
+      {
+        "player_name": "Robert Anderson",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 4
+      },
+      {
+        "player_name": "Osvaldo Bido",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 3
+      },
+      {
+        "player_name": "Donald Zackary Greinke",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 3
+      },
+      {
+        "player_name": "Douglas Ashcraft",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 3
+      },
+      {
+        "player_name": "Miles Mikolas",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 3
+      },
+      {
+        "player_name": "Gage Jump",
+        "resolution": "unresolved_name_not_modelled",
+        "n": 3
+      },
+      {
+        "player_name": "Dylan Cease",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 3
+      },
+      {
+        "player_name": "Zack Wheeler",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 3
+      },
+      {
+        "player_name": "Matthew Boyd",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 3
+      },
+      {
+        "player_name": "Merrill Kelly",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 3
+      },
+      {
+        "player_name": "Aaron Nola",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 3
+      },
+      {
+        "player_name": "Walker Buehler",
+        "resolution": "unresolved_no_start_that_date",
+        "n": 3
+      }
+    ]
+  },
+  "edge_table_summary": {
+    "n_rows": 63765,
+    "n_pitcher_dates": 7076,
+    "n_books": 14,
+    "books": [
+      "barstool",
+      "betmgm",
+      "betonlineag",
+      "betrivers",
+      "bovada",
+      "draftkings",
+      "fanatics",
+      "fanduel",
+      "mybookieag",
+      "pinnacle",
+      "pointsbetus",
+      "superbook",
+      "unibet_us",
+      "williamhill_us"
+    ],
+    "n_one_sided_no_devig": 159,
+    "n_integer_lines": 2,
+    "n_pinnacle_anchored_rows": 51824,
+    "pinnacle_anchor_frac": 0.8127,
+    "book_hold": {
+      "n": 63606,
+      "mean": 0.0702,
+      "std": 0.0092,
+      "p05": 0.0587,
+      "median": 0.0693,
+      "p95": 0.0919,
+      "min": 0.0194,
+      "max": 0.1777
+    },
+    "edge_over_two_sided": {
+      "n": 63606,
+      "mean": -0.0126,
+      "std": 0.1052,
+      "p05": -0.1906,
+      "median": -0.0101,
+      "p95": 0.1529,
+      "min": -0.5004,
+      "max": 0.5389
+    },
+    "abs_disagreement": {
+      "n": 63606,
+      "mean": 0.0842,
+      "std": 0.0642,
+      "p05": 0.0067,
+      "median": 0.0716,
+      "p95": 0.206,
+      "min": 0.0,
+      "max": 0.5389
+    },
+    "ev_over_two_sided": {
+      "n": 63606,
+      "mean": -0.087,
+      "std": 0.2128,
+      "p05": -0.434,
+      "median": -0.0852,
+      "p95": 0.2484,
+      "min": -0.9729,
+      "max": 1.4972
+    },
+    "best_ev": {
+      "n": 63606,
+      "mean": 0.0992,
+      "std": 0.1359,
+      "p05": -0.0534,
+      "median": 0.0698,
+      "p95": 0.3556,
+      "min": -0.128,
+      "max": 1.4972
+    },
+    "frac_best_ev_positive": 0.7382,
+    "edge_vs_pinnacle": {
+      "n": 51824,
+      "mean": -0.0096,
+      "std": 0.107,
+      "p05": -0.192,
+      "median": -0.0067,
+      "p95": 0.1577,
+      "min": -0.4638,
+      "max": 0.5389
+    },
+    "per_book_hold_median": {
+      "barstool": 0.0736,
+      "betmgm": 0.0678,
+      "betonlineag": 0.064,
+      "betrivers": 0.0721,
+      "bovada": 0.0671,
+      "draftkings": 0.0651,
+      "fanatics": 0.068,
+      "fanduel": 0.0603,
+      "mybookieag": 0.0796,
+      "pinnacle": 0.0707,
+      "pointsbetus": 0.0699,
+      "superbook": 0.1,
+      "unibet_us": 0.0714,
+      "williamhill_us": 0.0784
+    }
+  },
+  "outputs": {
+    "full_table_parquet": "quant_sports_intel_models/baseball/edge_program/ablation_results/e5_3_prop_edge_table.parquet (gitignored)",
+    "sample_csv": "ablation_results/e5_3_prop_edge_sample.csv"
+  },
+  "e5_4_contract": {
+    "grain": "one row per (pitcher_id, game_date, bookmaker_key, line)",
+    "key_cols": [
+      "pitcher_id",
+      "player_name",
+      "game_date",
+      "game_year",
+      "bookmaker_key",
+      "line"
+    ],
+    "model_cols": [
+      "model_p_over",
+      "model_p_under",
+      "model_p_push",
+      "model_p_over_cond",
+      "model_p_under_cond",
+      "pred_mean_k"
+    ],
+    "market_cols": [
+      "over_price",
+      "under_price",
+      "book_devig_over",
+      "book_devig_under",
+      "book_hold",
+      "devig_valid"
+    ],
+    "edge_cols": [
+      "edge_over",
+      "edge_under",
+      "ev_over",
+      "ev_under",
+      "best_side",
+      "best_edge",
+      "best_ev",
+      "pinnacle_devig_over_same_line",
+      "edge_vs_pinnacle",
+      "is_pinnacle"
+    ]
+  }
+}

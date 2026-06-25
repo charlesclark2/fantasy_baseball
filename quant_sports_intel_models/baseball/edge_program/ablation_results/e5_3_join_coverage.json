@@ -1,0 +1,220 @@
+{
+  "n_player_date_keys": 7774,
+  "n_resolved": 7351,
+  "resolved_frac": 0.9456,
+  "by_status": {
+    "resolved": 7351,
+    "unresolved_no_start_that_date": 302,
+    "unresolved_name_not_modelled": 112,
+    "unresolved_ambiguous_no_start_that_date": 6,
+    "ambiguous_same_name_same_date": 3
+  },
+  "resolved_via": {
+    "full_name": 7073,
+    "last_initial": 278
+  },
+  "n_book_line_rows_total": 66124,
+  "n_book_line_rows_resolved": 63765,
+  "top_unresolved_names": [
+    {
+      "player_name": "Yoshinobu Yamamoto",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 9
+    },
+    {
+      "player_name": "Walbert Urena",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 8
+    },
+    {
+      "player_name": "Anthony Gonsolin",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 7
+    },
+    {
+      "player_name": "Tatsuya Imai",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 7
+    },
+    {
+      "player_name": "Carlos Rodon",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 6
+    },
+    {
+      "player_name": "Noah Schultz",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 6
+    },
+    {
+      "player_name": "Max Scherzer",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 6
+    },
+    {
+      "player_name": "Kenneth Kelly",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 6
+    },
+    {
+      "player_name": "Zac Gallen",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 6
+    },
+    {
+      "player_name": "John Ober",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 5
+    },
+    {
+      "player_name": "Andrew Painter",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 5
+    },
+    {
+      "player_name": "Michael Lynn",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 5
+    },
+    {
+      "player_name": "George Kirby",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 5
+    },
+    {
+      "player_name": "Jacob Lugo",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 5
+    },
+    {
+      "player_name": "Shane Bieber",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 4
+    },
+    {
+      "player_name": "Tarik Skubal",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 4
+    },
+    {
+      "player_name": "Trey Yesavage",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 4
+    },
+    {
+      "player_name": "Jared Triolo",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 4
+    },
+    {
+      "player_name": "Nathan Eovaldi",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 4
+    },
+    {
+      "player_name": "Shohei Ohtani",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 4
+    },
+    {
+      "player_name": "Brandon Pfaadt",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 4
+    },
+    {
+      "player_name": "Jack Flaherty",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 4
+    },
+    {
+      "player_name": "Todd Smyly",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 4
+    },
+    {
+      "player_name": "Blake Snell",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 4
+    },
+    {
+      "player_name": "Connor Prielipp",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 4
+    },
+    {
+      "player_name": "Gerrit Cole",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 4
+    },
+    {
+      "player_name": "Robert Miller",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 4
+    },
+    {
+      "player_name": "Edward Lively",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 4
+    },
+    {
+      "player_name": "Robert Anderson",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 4
+    },
+    {
+      "player_name": "Osvaldo Bido",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 3
+    },
+    {
+      "player_name": "Donald Zackary Greinke",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 3
+    },
+    {
+      "player_name": "Douglas Ashcraft",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 3
+    },
+    {
+      "player_name": "Miles Mikolas",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 3
+    },
+    {
+      "player_name": "Gage Jump",
+      "resolution": "unresolved_name_not_modelled",
+      "n": 3
+    },
+    {
+      "player_name": "Dylan Cease",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 3
+    },
+    {
+      "player_name": "Zack Wheeler",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 3
+    },
+    {
+      "player_name": "Matthew Boyd",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 3
+    },
+    {
+      "player_name": "Merrill Kelly",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 3
+    },
+    {
+      "player_name": "Aaron Nola",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 3
+    },
+    {
+      "player_name": "Walker Buehler",
+      "resolution": "unresolved_no_start_that_date",
+      "n": 3
+    }
+  ]
+}
