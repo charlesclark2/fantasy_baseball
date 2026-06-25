@@ -247,6 +247,11 @@ function FeaturedPickCard({ pick }: { pick: FeaturedPick }) {
                       modelProb={displayModelProb}
                       marketProb={displayMarketProb}
                       showHighConviction={false}
+                      teamLabel={
+                        pick.market_type === "h2h"
+                          ? (pick.pick_side === "away" ? pick.away_team : pick.home_team) ?? null
+                          : null
+                      }
                     />
                   </div>
                 )}
