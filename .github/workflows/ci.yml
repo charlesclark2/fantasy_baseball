@@ -7,8 +7,11 @@ on:
     branches: [main]
 
 jobs:
+  # E11.13 — fast gate: every test EXCEPT the `slow` Monte-Carlo calibration guards,
+  # run in parallel (-n auto). This is the per-push handoff gate; ~15s vs the old ~4.5min
+  # serial run. Both this job AND `slow-tests` are required for merge (see branch protection).
   unit-tests:
-    name: Unit Tests
+    name: Unit Tests (fast gate)
     runs-on: ubuntu-latest
 
     steps:
@@ -27,8 +30,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --no-dev-packages || uv sync
 
-      - name: Run unit tests
-        run: uv run pytest -v --tb=short
+      - name: Run unit tests (fast gate — excludes slow MC calibration tests)
+        run: uv run pytest -m "not slow" -n auto --tb=short
 
       - name: predict_today.py syntax check
         run: uv run python -m py_compile scripts/predict_today.py
@@ -41,6 +44,33 @@ jobs:
             exit 1
           fi
           echo "OK — no MERGE patterns found in ingest scripts"
+
+  # E11.13 — slow gate: the heavy `slow`-marked Monte-Carlo PIT/coverage calibration guards.
+  # Parallelised (-n auto) so the 3 ~75s totals tests overlap across workers (~96s vs ~250s
+  # serial). Separate job so a slow-MC run never blocks the fast per-push gate, but it is
+  # still REQUIRED for merge — these pin E2.3 totals + E5.2 strikeout calibration discipline.
+  slow-tests:
+    name: Unit Tests (slow — Monte-Carlo calibration)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --no-dev-packages || uv sync
+
+      - name: Run slow tests (Monte-Carlo calibration guards)
+        run: uv run pytest -m slow -n auto --tb=short
 
   model-smoke-test:
     name: Model Artifact Smoke Test

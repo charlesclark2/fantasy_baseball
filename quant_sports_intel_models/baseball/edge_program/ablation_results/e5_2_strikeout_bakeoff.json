@@ -1,0 +1,296 @@
+{
+  "story": "E5.2-bakeoff",
+  "fit_at": "2026-06-25",
+  "smoke": false,
+  "n_starts": 26062,
+  "grid": {
+    "results": {
+      "compound|rate=career_only": {
+        "name": "compound|rate=career_only",
+        "ok": true,
+        "n": 16553,
+        "crps": 1.2845,
+        "coverage_80": 0.855,
+        "pit_ks": 0.0823,
+        "bias": 0.348,
+        "mean_ece": 0.0376,
+        "ece_by_line": {
+          "3.5": 0.0205,
+          "4.5": 0.0172,
+          "5.5": 0.0391,
+          "6.5": 0.0584,
+          "7.5": 0.0579,
+          "8.5": 0.0401,
+          "9.5": 0.0297
+        },
+        "fold_crps": [
+          1.2985,
+          1.2725,
+          1.2786,
+          1.2929
+        ],
+        "model": "compound",
+        "feat": "rate=career_only"
+      },
+      "compound|rate=season_career": {
+        "name": "compound|rate=season_career",
+        "ok": true,
+        "n": 16553,
+        "crps": 1.2703,
+        "coverage_80": 0.8601,
+        "pit_ks": 0.0918,
+        "bias": 0.2944,
+        "mean_ece": 0.0347,
+        "ece_by_line": {
+          "3.5": 0.0266,
+          "4.5": 0.0122,
+          "5.5": 0.0322,
+          "6.5": 0.0527,
+          "7.5": 0.0532,
+          "8.5": 0.0377,
+          "9.5": 0.0284
+        },
+        "fold_crps": [
+          1.2868,
+          1.2595,
+          1.2629,
+          1.274
+        ],
+        "model": "compound",
+        "feat": "rate=season_career"
+      },
+      "compound|rate=recency_30d": {
+        "name": "compound|rate=recency_30d",
+        "ok": true,
+        "n": 16553,
+        "crps": 1.2946,
+        "coverage_80": 0.8539,
+        "pit_ks": 0.0913,
+        "bias": 0.3009,
+        "mean_ece": 0.0426,
+        "ece_by_line": {
+          "3.5": 0.0412,
+          "4.5": 0.025,
+          "5.5": 0.0357,
+          "6.5": 0.0591,
+          "7.5": 0.0596,
+          "8.5": 0.0435,
+          "9.5": 0.0341
+        },
+        "fold_crps": [
+          1.3129,
+          1.2894,
+          1.2802,
+          1.2974
+        ],
+        "model": "compound",
+        "feat": "rate=recency_30d"
+      },
+      "compound|rate=recency_7d": {
+        "name": "compound|rate=recency_7d",
+        "ok": true,
+        "n": 16553,
+        "crps": 1.2892,
+        "coverage_80": 0.8559,
+        "pit_ks": 0.086,
+        "bias": 0.327,
+        "mean_ece": 0.0395,
+        "ece_by_line": {
+          "3.5": 0.0305,
+          "4.5": 0.0187,
+          "5.5": 0.0363,
+          "6.5": 0.0589,
+          "7.5": 0.058,
+          "8.5": 0.0419,
+          "9.5": 0.0322
+        },
+        "fold_crps": [
+          1.3072,
+          1.2846,
+          1.2765,
+          1.2883
+        ],
+        "model": "compound",
+        "feat": "rate=recency_7d"
+      },
+      "compound|rate=recency_blend": {
+        "name": "compound|rate=recency_blend",
+        "ok": true,
+        "n": 16553,
+        "crps": 1.3049,
+        "coverage_80": 0.8505,
+        "pit_ks": 0.0905,
+        "bias": 0.3012,
+        "mean_ece": 0.0454,
+        "ece_by_line": {
+          "3.5": 0.0457,
+          "4.5": 0.0298,
+          "5.5": 0.0372,
+          "6.5": 0.0612,
+          "7.5": 0.063,
+          "8.5": 0.0451,
+          "9.5": 0.0359
+        },
+        "fold_crps": [
+          1.3247,
+          1.3028,
+          1.2885,
+          1.3021
+        ],
+        "model": "compound",
+        "feat": "rate=recency_blend"
+      },
+      "compound|rate=recency_blend|no_framing": {
+        "name": "compound|rate=recency_blend|no_framing",
+        "ok": true,
+        "n": 16553,
+        "crps": 1.3034,
+        "coverage_80": 0.8518,
+        "pit_ks": 0.0929,
+        "bias": 0.2961,
+        "mean_ece": 0.0443,
+        "ece_by_line": {
+          "3.5": 0.045,
+          "4.5": 0.0279,
+          "5.5": 0.036,
+          "6.5": 0.0603,
+          "7.5": 0.0622,
+          "8.5": 0.0437,
+          "9.5": 0.0347
+        },
+        "fold_crps": [
+          1.3219,
+          1.3024,
+          1.2879,
+          1.2993
+        ],
+        "model": "compound",
+        "feat": "rate=recency_blend|no_framing"
+      },
+      "compound|rate=recency_blend|no_lineup": {
+        "name": "compound|rate=recency_blend|no_lineup",
+        "ok": true,
+        "n": 16553,
+        "crps": 1.2875,
+        "coverage_80": 0.8563,
+        "pit_ks": 0.1034,
+        "bias": 0.1477,
+        "mean_ece": 0.0285,
+        "ece_by_line": {
+          "3.5": 0.0378,
+          "4.5": 0.0175,
+          "5.5": 0.0192,
+          "6.5": 0.0408,
+          "7.5": 0.0416,
+          "8.5": 0.025,
+          "9.5": 0.0174
+        },
+        "fold_crps": [
+          1.2934,
+          1.3034,
+          1.278,
+          1.2619
+        ],
+        "model": "compound",
+        "feat": "rate=recency_blend|no_lineup"
+      },
+      "lgbm_poisson_k": {
+        "name": "lgbm_poisson_k",
+        "ok": true,
+        "n": 16553,
+        "crps": 1.2265,
+        "coverage_80": 0.8696,
+        "pit_ks": 0.1042,
+        "bias": -0.017,
+        "mean_ece": 0.0069,
+        "ece_by_line": {
+          "3.5": 0.008,
+          "4.5": 0.0111,
+          "5.5": 0.0118,
+          "6.5": 0.0072,
+          "7.5": 0.0057,
+          "8.5": 0.003,
+          "9.5": 0.0012
+        },
+        "fold_crps": [
+          1.2348,
+          1.2291,
+          1.2248,
+          1.2074
+        ],
+        "model": "lgbm_poisson_k",
+        "feat": "recency(raw)"
+      },
+      "poisson_glm_k": {
+        "name": "poisson_glm_k",
+        "ok": true,
+        "n": 16553,
+        "crps": 1.2358,
+        "coverage_80": 0.8666,
+        "pit_ks": 0.0813,
+        "bias": 0.0871,
+        "mean_ece": 0.0095,
+        "ece_by_line": {
+          "3.5": 0.0159,
+          "4.5": 0.0112,
+          "5.5": 0.0132,
+          "6.5": 0.0086,
+          "7.5": 0.0088,
+          "8.5": 0.0039,
+          "9.5": 0.0046
+        },
+        "fold_crps": [
+          1.2524,
+          1.2363,
+          1.2295,
+          1.2135
+        ],
+        "model": "poisson_glm_k",
+        "feat": "recency(raw)"
+      }
+    },
+    "winner": "poisson_glm_k",
+    "winner_basis": "none well-calibrated \u2192 best PIT-KS; calibration bar unmet (the finding)",
+    "pbo": {
+      "pbo": 0.0,
+      "n_configs": 9,
+      "n_folds": 4,
+      "deflated_over": "full model\u00d7feature grid (not just model classes)"
+    },
+    "mechanisms": {
+      "recency_vs_flat": {
+        "mean_delta_crps": 0.0337,
+        "sem": 0.0042,
+        "n_folds": 4,
+        "ci95": [
+          0.0254,
+          0.042
+        ],
+        "excludes_zero": true
+      },
+      "framing_effect": {
+        "mean_delta_crps": 0.0016,
+        "sem": 0.0007,
+        "n_folds": 4,
+        "ci95": [
+          0.0003,
+          0.003
+        ],
+        "excludes_zero": true
+      },
+      "lineup_log5_effect": {
+        "mean_delta_crps": 0.0203,
+        "sem": 0.0094,
+        "n_folds": 4,
+        "ci95": [
+          0.0016,
+          0.0391
+        ],
+        "excludes_zero": true
+      }
+    }
+  },
+  "primary_metric": "CRPS (lower=better; proper, distribution-free)",
+  "deflation": "PBO (CSCV) over EVERY model\u00d7feature config \u2014 the full pre-registered grid",
+  "note": "Forward-CV (fit prior seasons, eval next) is fixed for leak-honesty; recency is in the FEATURES; nuisance params fit IN-FOLD; grid pre-registered (no reactive expansion). best_alpha=0 \u2014 calibration/CRPS is product value; edge gate = E5.4."
+}

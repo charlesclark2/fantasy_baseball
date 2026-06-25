@@ -1,6 +1,6 @@
 [
   {
-    "week": "2026-06-25",
+    "week": "2026-06-22",
     "items": [
       {
         "tag": "new",
@@ -17,12 +17,7 @@
       {
         "tag": "improvement",
         "text": "The win-probability bar on every pick now shows a hover/tap legend that labels each marker: the white line is the model's point estimate, the orange marker is the market implied probability (Pinnacle on the game detail page; consensus on the dashboard), the green band is the 80% credible range, and the gray center line is even odds (50% coin-flip). The tooltip also surfaces concrete numbers attributed to the favored team — e.g. '54% (51–57%) — STL · slight lean' — using the asymmetric CI bounds rather than a symmetric ±. On the game detail page, the CI header now reads 'Win-prob lean' and shows the full attributed range inline; the bar itself is tappable/keyboard-focusable. Accessibility: the bar has a tab stop and aria-label. Single MLB games are high-variance; the calibrated model output spans roughly 43–57% — treat every pick as a lean, not a lock."
-      }
-    ]
-  },
-  {
-    "week": "2026-06-22",
-    "items": [
+      },
       {
         "tag": "new",
         "text": "Fanatics is now included in the Book Comparison on each pick's detail page. Where Fanatics offers a line, you'll see its moneyline and total prices alongside its de-vigged market probability, model EV, edge, and breakeven price — the same full treatment every other US book receives. Fanatics is also counted in the cross-book '+EV' pill ('N of M books +EV')."

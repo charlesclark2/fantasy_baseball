@@ -222,6 +222,7 @@ class TestStrikeoutPriceCalibration:
         k_true = rng.binomial(bf_true, pp).astype(float)
         return mu_outs, p_k, reach, bf_true, k_true
 
+    @pytest.mark.slow  # E11.13: 6k-game × 4k-draw Monte-Carlo PIT guard (~8.5s).
     def test_correctly_specified_price_is_pit_flat(self):
         rng = np.random.default_rng(11)
         mu_outs, p_k, reach, _bf, k_true = self._truth_and_inputs(rng, s_true=45.0)
@@ -229,6 +230,7 @@ class TestStrikeoutPriceCalibration:
         u = randomized_pit(k_true, samp, rng)
         assert pit_flatness(u)["is_flat"]
 
+    @pytest.mark.slow  # E11.13: 6k-game × 4k-draw Monte-Carlo PIT guard (~8.5s).
     def test_overconfident_price_fails_flatness(self):
         rng = np.random.default_rng(12)
         mu_outs, p_k, reach, _bf, k_true = self._truth_and_inputs(rng, s_true=12.0)
