@@ -8,7 +8,7 @@
       },
       {
         "tag": "improvement",
-        "text": "On the game detail page, the win-probability bar now has a book selector. Row of compact pills above the bar lets you switch the orange market reference line between Pinnacle, BetMGM, Caesars, FanDuel, DraftKings, Fanatics, and Bovada — wherever a line is available. The selection stays in sync with the Book Comparison panel. The tooltip and legend update to name whichever book is active. Dashboard and homepage show a consensus market reference (the gray tick is labeled "Market")."
+        "text": "On the game detail page, the win-probability bar now has a book selector. Row of compact pills above the bar lets you switch the orange market reference line between Pinnacle, BetMGM, Caesars, FanDuel, DraftKings, Fanatics, and Bovada — wherever a line is available. The selection stays in sync with the Book Comparison panel. The tooltip and legend update to name whichever book is active. Dashboard and homepage show a consensus market reference (the gray tick is labeled Market)."
       },
       {
         "tag": "improvement",
