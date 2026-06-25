@@ -891,10 +891,13 @@ These three master-guide stories are the app side of the Edge Program. **A0.4 is
 **Build:** `betting_ml/utils/prop_pricing.py` (pure, 35 unit tests) + `fit_prop_pricing.py` + `bakeoff_strikeouts.py` (operator-run). E5.1 K-prop data in S3 (2023–25 + 2026). HONEST: calibration ≠ edge (`best_alpha = 0`); the edge is gated at E5.4.
 **AC:** per-prop P(over/under) at the book's line; PIT-calibrated under E1.1 CV. *(machinery + harness met; numbers pending the operator run.)*
 
-### E5.3 — Edge, de-vig & per-book comparison  ⬜
+### E5.3 — Edge, de-vig & per-book comparison  ✅  **[DONE 2026-06-25 · market-AWARE; feeds E5.4]**
 **Tasks:**
-- [ ] Per prop × book: de-vig (reuse `betting_ml/utils`), compute `model_prob`, `edge`, EV; show Pinnacle as the sharp reference (extends A0.4.32 to props).
-**AC:** per-prop per-book edge table; transparency framing (no bet-rec).
+- [x] Per prop × book: de-vig (reuse `betting_ml/utils`), compute `model_prob`, `edge`, EV; show Pinnacle as the sharp reference (extends A0.4.32 to props).
+**Build:** `betting_ml/utils/prop_edge.py` (pure, 24 unit tests — de-vig, half/integer-line PUSH, EV-with-refund, name-bridge normalisation) + `betting_ml/scripts/prop_pricing/edge_devig_props.py` (orchestration: scores the E5.2 served `strikeout_glm_v1.pkl` distribution, S3-first DuckDB line read, the `ref_players` name→id bridge, the edge/EV table). **NAME→ID bridge** = `normalize_name` (accents/punctuation/Jr.–Sr.) + a **(last-name, first-initial) fallback** for the feed's full-legal-name vs ref's common-name mismatch ("Matthew Boyd"↔"Matt Boyd"), resolved against a **±1-day UTC window** (S3 `commence_time` is UTC; US night games roll to the next UTC date vs the local prediction date). **JOIN COVERAGE: 7,351/7,774 player×date keys resolved (94.6%)** — full-name 7,073 + last-initial 278; the rest are flagged (302 no-start-that-date = scratch/IL/cold-start, 112 not-a-modelled-starter = relievers/openers, 9 ambiguous). Pinnacle anchors 81.3% of rows (NOT thin here).
+**Outputs:** `ablation_results/e5_3_{prop_edge_summary,join_coverage}.{json,md}` + `e5_3_prop_edge_sample.csv` (committed) + `e5_3_prop_edge_table.parquet` (the full per-(pitcher×date×book×line) table E5.4 reads; gitignored, regenerable).
+**HONEST (best_alpha=0):** median book hold ≈ 6.9% (large prop vig); two-sided `edge_over` ≈ 0 (model neither over- nor under-shoots the K market on average); **blind-over EV ≈ −8.7%/$1 (net of vig)** — favourable-side EV>0 fraction is large but is line-selection-biased + UNPROVEN. The edge verdict is gated at **E5.4**.
+**AC:** per-prop per-book edge table; per-book two-way de-vig (integer-line push handled); name→id join-coverage report with unresolved flagged; Pinnacle anchor where available; transparency framing (no bet-rec). ✅ ALL MET.
 
 ### E5.4 — Validation gates  ⬜  **[hard gate — props overfit easily]**
 - [ ] Calibration `calib_80 ≥ 0.80` per prop type (E1.1 CV).

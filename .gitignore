@@ -62,6 +62,9 @@ mlflow.db
 betting_ml/data/*.parquet
 betting_ml/data/**/*.parquet
 
+# E5.3 full prop edge/EV table (large, regenerated via edge_devig_props.py; committed: summary+coverage+sample)
+quant_sports_intel_models/baseball/edge_program/ablation_results/*.parquet
+
 # Next.js frontend
 frontend/.next/
 frontend/out/
