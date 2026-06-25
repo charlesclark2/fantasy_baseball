@@ -7,7 +7,8 @@ import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
-import { CalendarIcon, ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react"
+import { CalendarIcon, ChevronDown, ChevronUp, ChevronsUpDown, ExternalLink } from "lucide-react"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { AuthGuard } from "@/components/auth-guard"
 import { useAuth } from "@/lib/auth-context"
 import { Nav } from "@/components/nav"
@@ -70,6 +71,32 @@ interface EVPick {
 
 interface EVPicksResponse {
   picks: EVPick[]
+  total: number
+  is_preliminary?: boolean
+}
+
+// E9.11 — line-shopping types
+interface LineshoppingPlay {
+  game_pk: number
+  game_date: string
+  game_start_utc: string | null
+  home_team: string | null
+  away_team: string | null
+  market_type: string
+  side: string         // "home" | "away" | "over" | "under"
+  model_prob: number
+  best_book_key: string
+  best_book_name: string
+  best_american: number
+  best_devigged_prob: number
+  edge: number
+  ev: number | null
+  breakeven_american: number | null
+  pinnacle_devigged_prob: number | null
+}
+
+interface LineshoppingResponse {
+  plays: LineshoppingPlay[]
   total: number
   is_preliminary?: boolean
 }
@@ -159,6 +186,15 @@ function americanOdds(prob: number): string {
   if (prob <= 0 || prob >= 1) return "—"
   if (prob >= 0.5) return String(Math.round(-(prob / (1 - prob)) * 100))
   return `+${Math.round(((1 - prob) / prob) * 100)}`
+}
+
+function fmtAmerican(am: number): string {
+  return am >= 0 ? `+${am}` : String(am)
+}
+
+const LS_BOOK_LABELS: Record<string, string> = {
+  betmgm: "BetMGM", caesars: "Caesars", fanduel: "FanDuel",
+  draftkings: "DraftKings", fanatics: "Fanatics", bovada: "Bovada",
 }
 
 function formatGameTime(isoString: string | null): string {
@@ -481,6 +517,12 @@ export default function EVTrackerPage() {
   const { data, isLoading } = useQuery<EVPicksResponse>({
     queryKey: ["picks-ev", isoDate],
     queryFn: () => apiFetch(`/picks/ev?date=${isoDate}`, {}, accessToken),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: lsData, isLoading: lsLoading } = useQuery<LineshoppingResponse>({
+    queryKey: ["picks-line-shopping", isoDate],
+    queryFn: () => apiFetch(`/picks/line-shopping?date=${isoDate}`, {}, accessToken),
     staleTime: 5 * 60 * 1000,
   })
 
@@ -1110,6 +1152,214 @@ export default function EVTrackerPage() {
             />
             {renderMobileSection(sortedTotals, renderTotalsCard, "No total runs markets for this date")}
           </div>
+        </div>
+
+        {/* ----------------------------------------------------------------
+            E9.11 — Line Shopping: best price across books for model-positive plays
+        ---------------------------------------------------------------- */}
+        <div className="mt-8">
+          <Collapsible defaultOpen={true}>
+            <CollapsibleTrigger asChild>
+              <button className="w-full flex items-center justify-between mb-3 group">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-base font-semibold text-white">Line Shopping</h2>
+                  <Badge variant="outline" className="border-[#a78bfa]/40 bg-[#a78bfa]/10 text-[#a78bfa] text-[10px] font-medium px-2 py-0">
+                    {lsData?.plays?.length ?? 0}
+                  </Badge>
+                  <TooltipProvider delayDuration={150}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help text-[10px] font-medium uppercase tracking-wide text-gray-600 border-b border-dotted border-gray-700">
+                          Model-relative
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[280px] text-center text-xs text-white border-[#262626] bg-[#1a1a1a]">
+                        "+EV" here means the model estimates a higher probability than the book&apos;s de-vigged price. Our models have no demonstrated market edge (best_alpha=0). This is a line-shopping transparency tool — if you&apos;re going to bet this side, here&apos;s the best number and where to find it. Not a bet recommendation.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <ChevronDown className="h-4 w-4 text-gray-500 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              {/* Desktop table */}
+              <div className="hidden md:block rounded-xl border border-[#262626] bg-[#141414]">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="sticky top-0 z-20 bg-[#141414]">
+                      <TableRow className="border-b border-[#262626] hover:bg-transparent">
+                        <TableHead className={thNoCls}>Game</TableHead>
+                        <TableHead className={thNoCls}>Pick</TableHead>
+                        <TableHead className={cn(thNoCls, "text-right")}>Best Book</TableHead>
+                        <TableHead className={cn(thNoCls, "text-right")}>
+                          <ColHeaderTip label="Best Price" tip="Best available American odds for this side across all tracked US books (Pinnacle excluded — not US-bettable)." />
+                        </TableHead>
+                        <TableHead className={cn(thNoCls, "text-right")}>
+                          <ColHeaderTip label="Mkt %" tip="The best book's de-vigged implied probability for this side." />
+                        </TableHead>
+                        <TableHead className={cn(thNoCls, "text-right")}>
+                          <ColHeaderTip label="Model %" tip="The model's estimated probability for this side (model-relative; no demonstrated market edge)." />
+                        </TableHead>
+                        <TableHead className={cn(thNoCls, "text-right")}>
+                          <ColHeaderTip label="Edge" tip="Model probability minus best book de-vigged probability. Always positive in this view." />
+                        </TableHead>
+                        <TableHead className={cn(thNoCls, "text-right")}>
+                          <ColHeaderTip label="Breakeven" tip="American odds at which the model's EV = 0 (E9.1 model breakeven). If the best price is better than this, the model calls it +EV." />
+                        </TableHead>
+                        <TableHead className={cn(thNoCls, "text-right")}>
+                          <ColHeaderTip label="Pinnacle" tip="Pinnacle's de-vigged fair-value probability — the sharpest, lowest-vig reference. More honest than our model as a market anchor." />
+                        </TableHead>
+                        <TableHead className={cn(thNoCls, "text-center")}>Detail</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody className="[&>tr:last-child>td]:border-b-0">
+                      {lsLoading ? (
+                        <SkeletonRows cols={10} />
+                      ) : !lsData?.plays?.length ? (
+                        <TableRow>
+                          <TableCell colSpan={10} className="py-12 text-center text-sm text-gray-500">
+                            No model-positive plays vs. best book price for this date
+                          </TableCell>
+                        </TableRow>
+                      ) : (lsData.plays).map((play) => {
+                        const homeTeam = normalizeTeam(play.home_team ?? "Home")
+                        const awayTeam = normalizeTeam(play.away_team ?? "Away")
+                        const game = `${awayTeam} @ ${homeTeam}`
+                        const isTotal = play.market_type === "totals"
+                        const sideLabel = isTotal
+                          ? (play.side === "over" ? "Over" : "Under")
+                          : (play.side === "home" ? homeTeam : awayTeam)
+                        const marketLabel = isTotal ? `${sideLabel} ML` : `${sideLabel} ML`
+                        const gameTime = formatGameTime(play.game_start_utc)
+                        const gameDate = play.game_date ? format(new Date(play.game_date + "T12:00:00"), "MMM d") : "—"
+                        const timeLabel = gameTime ? `${gameDate} · ${gameTime}` : gameDate
+                        return (
+                          <TableRow
+                            key={`ls-${play.game_pk}-${play.market_type}-${play.side}`}
+                            onClick={() => router.push(`/picks/${play.game_pk}`)}
+                            className="border-b border-[#262626] transition-colors cursor-pointer hover:bg-[#a78bfa08]"
+                          >
+                            <TableCell className="py-3 pl-4 pr-3">
+                              <p className="text-sm font-medium text-white">{game}</p>
+                              <p className="text-xs text-gray-500">{timeLabel}</p>
+                            </TableCell>
+                            <TableCell className="px-3 py-3">
+                              <MarketBadge type={play.market_type} label={`${sideLabel}${isTotal ? "" : " ML"}`} />
+                            </TableCell>
+                            <TableCell className="px-3 py-3 text-right">
+                              <span className="text-sm font-semibold text-[#a78bfa]">
+                                {LS_BOOK_LABELS[play.best_book_key] ?? play.best_book_name}
+                              </span>
+                            </TableCell>
+                            <TableCell className="px-3 py-3 text-right text-sm font-bold text-[#10b981]">
+                              {fmtAmerican(play.best_american)}
+                            </TableCell>
+                            <TableCell className="px-3 py-3 text-right text-sm text-gray-400">
+                              {pctRaw(play.best_devigged_prob)}
+                            </TableCell>
+                            <TableCell className="px-3 py-3 text-right text-sm font-medium text-[#10b981]">
+                              {pctRaw(play.model_prob)}
+                            </TableCell>
+                            <TableCell className="px-3 py-3 text-right text-sm font-semibold text-[#10b981]">
+                              {fmtEdge(play.edge)}
+                            </TableCell>
+                            <TableCell className="px-3 py-3 text-right text-sm text-gray-500">
+                              {play.breakeven_american != null ? fmtAmerican(play.breakeven_american) : "—"}
+                            </TableCell>
+                            <TableCell className="px-3 py-3 text-right text-sm text-[#a78bfa]">
+                              {play.pinnacle_devigged_prob != null ? pctRaw(play.pinnacle_devigged_prob) : "—"}
+                            </TableCell>
+                            <TableCell className="px-3 py-3 text-center">
+                              <Link
+                                href={`/picks/${play.game_pk}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </Link>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              {/* Mobile cards */}
+              <div className="md:hidden space-y-3">
+                {lsLoading ? (
+                  <SkeletonCards />
+                ) : !lsData?.plays?.length ? (
+                  <p className="py-8 text-center text-sm text-gray-500">No model-positive plays vs. best book price for this date</p>
+                ) : lsData.plays.map((play) => {
+                  const homeTeam = normalizeTeam(play.home_team ?? "Home")
+                  const awayTeam = normalizeTeam(play.away_team ?? "Away")
+                  const isTotal = play.market_type === "totals"
+                  const sideLabel = isTotal
+                    ? (play.side === "over" ? "Over" : "Under")
+                    : (play.side === "home" ? homeTeam : awayTeam)
+                  const gameTime = formatGameTime(play.game_start_utc)
+                  const gameDate = play.game_date ? format(new Date(play.game_date + "T12:00:00"), "MMM d") : "—"
+                  const timeLabel = gameTime ? `${gameDate} · ${gameTime}` : gameDate
+                  return (
+                    <div
+                      key={`ls-card-${play.game_pk}-${play.market_type}-${play.side}`}
+                      onClick={() => router.push(`/picks/${play.game_pk}`)}
+                      className="rounded-xl border border-[#262626] bg-[#141414] p-4 transition-colors cursor-pointer active:bg-[#a78bfa08]"
+                    >
+                      <div className="mb-2 flex items-start justify-between gap-2">
+                        <span className="text-sm font-medium text-white">{`${awayTeam} @ ${homeTeam}`}</span>
+                        <span className="shrink-0 text-xs text-gray-500">{timeLabel}</span>
+                      </div>
+                      <div className="mb-3">
+                        <MarketBadge type={play.market_type} label={`${sideLabel}${isTotal ? "" : " ML"}`} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-2 mb-3">
+                        <div>
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Best Book</p>
+                          <p className="mt-0.5 text-sm font-semibold text-[#a78bfa]">
+                            {LS_BOOK_LABELS[play.best_book_key] ?? play.best_book_name}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Best Price</p>
+                          <p className="mt-0.5 text-sm font-bold text-[#10b981]">{fmtAmerican(play.best_american)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Edge</p>
+                          <p className="mt-0.5 text-sm font-semibold text-[#10b981]">{fmtEdge(play.edge)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Breakeven</p>
+                          <p className="mt-0.5 text-sm text-gray-400">
+                            {play.breakeven_american != null ? fmtAmerican(play.breakeven_american) : "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Pinnacle</p>
+                          <p className="mt-0.5 text-sm text-[#a78bfa]">
+                            {play.pinnacle_devigged_prob != null ? pctRaw(play.pinnacle_devigged_prob) : "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Model %</p>
+                          <p className="mt-0.5 text-sm font-medium text-[#10b981]">{pctRaw(play.model_prob)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <p className="mt-3 text-xs text-gray-600">
+                Line Shopping shows plays where the model is above the best US book&apos;s de-vigged price.
+                Sorted by edge (largest first). Pinnacle is the sharpest fair-value anchor — not US-bettable.
+                <span className="ml-1 text-gray-700">best_alpha=0 — no demonstrated edge over the market.</span>
+              </p>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
 
         {/* Footer */}

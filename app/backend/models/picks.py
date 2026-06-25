@@ -386,6 +386,35 @@ class BookOddsTotals(BaseModel):
     breakeven_american_under: int | None = None
 
 
+class BestPriceH2H(BaseModel):
+    """Best US-bettable price for one h2h side (home or away). Pinnacle excluded."""
+    book_key: str
+    book_name: str
+    american: int
+    decimal: float | None = None
+    # De-vigged implied probability for this side
+    market_bet_pct: float | None = None
+    ev: float | None = None
+    # model_prob - market_bet_pct
+    edge: float | None = None
+    # E9.1 breakeven American price at which EV=0
+    breakeven_american: int | None = None
+
+
+class BestPriceTotals(BaseModel):
+    """Best US-bettable price for one totals side (over or under). Pinnacle excluded."""
+    book_key: str
+    book_name: str
+    line: float
+    american: int
+    decimal: float | None = None
+    market_bet_pct: float | None = None
+    model_prob: float | None = None
+    ev: float | None = None
+    edge: float | None = None
+    breakeven_american: int | None = None
+
+
 class BookOddsComparison(BaseModel):
     """Full per-book comparison for one game (h2h + totals, all seven books)."""
     game_pk: int
@@ -396,3 +425,46 @@ class BookOddsComparison(BaseModel):
     pred_total_runs_scale: float | None = None
     h2h: list[BookOddsH2H] = []
     totals: list[BookOddsTotals] = []
+    # E9.11 — best US-bettable price per side (Pinnacle excluded; sorted highest American first)
+    best_h2h_home: BestPriceH2H | None = None
+    best_h2h_away: BestPriceH2H | None = None
+    best_totals_over: BestPriceTotals | None = None
+    best_totals_under: BestPriceTotals | None = None
+
+
+# ---------------------------------------------------------------------------
+# E9.11 — Line-shopping / +EV plays view
+# ---------------------------------------------------------------------------
+
+class LineshoppingPlay(BaseModel):
+    """One play in the E9.11 best-price / line-shopping view.
+
+    A play is model-relative: model_prob > best US book de-vigged prob.
+    This is a line-shopping transparency aid — not a bet recommendation.
+    best_alpha=0; no demonstrated market edge.
+    """
+    game_pk: int
+    game_date: str
+    game_start_utc: str | None = None
+    home_team: str | None = None
+    away_team: str | None = None
+    market_type: str          # "h2h" or "totals"
+    side: str                 # "home" | "away" | "over" | "under"
+    model_prob: float
+    best_book_key: str
+    best_book_name: str
+    best_american: int
+    best_devigged_prob: float
+    # model_prob - best_devigged_prob (always > 0 — negative-edge plays are excluded)
+    edge: float
+    ev: float | None = None
+    breakeven_american: int | None = None  # E9.1
+    # Pinnacle de-vigged fair value anchor (not US-bettable)
+    pinnacle_devigged_prob: float | None = None
+
+
+class LineshoppingResponse(BaseModel):
+    """Response for GET /picks/line-shopping — sorted by edge desc."""
+    plays: list[LineshoppingPlay] = []
+    total: int = 0
+    is_preliminary: bool = False

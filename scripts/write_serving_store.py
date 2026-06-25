@@ -1385,6 +1385,98 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
                     "breakeven_american_over": None, "breakeven_american_under": None,
                 })
 
+        # ── E9.11 — best US price per side (Pinnacle excluded) ───────────────
+        # "Best" = highest American odds for that side (most favorable payout).
+        # For negative lines, e.g. -110 > -120; for positive, +150 > +130.
+
+        def _best_h2h_side(rows: list[dict], am_key: str, dec_key: str,
+                           mkt_key: str, ev_key: str, edge_key: str, be_key: str):
+            us_rows = [r for r in rows if not r.get("is_sharp_reference") and r.get(am_key) is not None]
+            if not us_rows:
+                return None
+            best = max(us_rows, key=lambda r: r.get(am_key) or -9999)
+            am = best.get(am_key)
+            if am is None:
+                return None
+            return {
+                "book_key": best["book_key"],
+                "book_name": best["book_name"],
+                "american": am,
+                "decimal": best.get(dec_key),
+                "market_bet_pct": best.get(mkt_key),
+                "ev": best.get(ev_key),
+                "edge": best.get(edge_key),
+                "breakeven_american": best.get(be_key),
+            }
+
+        best_h2h_home = _best_h2h_side(
+            h2h_rows, "home_american", "home_decimal",
+            "market_bet_pct_home", "ev_home", "edge_home", "breakeven_american_home",
+        )
+        best_h2h_away = _best_h2h_side(
+            h2h_rows, "away_american", "away_decimal",
+            "market_bet_pct_home", "ev_home", "edge_home", "breakeven_american_away",
+        )
+        # Away side: market_bet_pct, ev, edge must be recomputed for the away perspective.
+        if best_h2h_away is not None and calib_win_prob is not None:
+            away_dec = best_h2h_away.get("decimal")
+            away_mkt_pct_home = best_h2h_away.get("market_bet_pct")
+            away_mkt_pct = (1.0 - away_mkt_pct_home) if away_mkt_pct_home is not None else None
+            away_model_prob = 1.0 - calib_win_prob
+            away_ev = None
+            away_edge = None
+            if away_dec is not None and away_model_prob is not None:
+                away_ev = round(away_model_prob * (away_dec - 1.0) - (1.0 - away_model_prob), 4)
+            if away_mkt_pct is not None:
+                away_edge = round(away_model_prob - away_mkt_pct, 4)
+            best_h2h_away.update({
+                "market_bet_pct": round(away_mkt_pct, 4) if away_mkt_pct is not None else None,
+                "ev": away_ev,
+                "edge": away_edge,
+                "breakeven_american": best_h2h_away.get("breakeven_american"),
+            })
+
+        best_totals_over = None
+        best_totals_under = None
+        us_tot_rows = [r for r in totals_rows if not r.get("is_sharp_reference") and r.get("over_american") is not None]
+        if us_tot_rows:
+            best_over_row = max(us_tot_rows, key=lambda r: r.get("over_american") or -9999)
+            if best_over_row.get("over_american") is not None:
+                best_totals_over = {
+                    "book_key": best_over_row["book_key"],
+                    "book_name": best_over_row["book_name"],
+                    "line": best_over_row["line"],
+                    "american": best_over_row["over_american"],
+                    "decimal": best_over_row.get("over_decimal"),
+                    "market_bet_pct": best_over_row.get("market_bet_pct_over"),
+                    "model_prob": best_over_row.get("model_prob_over"),
+                    "ev": best_over_row.get("ev_over"),
+                    "edge": best_over_row.get("edge_over"),
+                    "breakeven_american": best_over_row.get("breakeven_american_over"),
+                }
+            us_tot_under = [r for r in us_tot_rows if r.get("under_american") is not None]
+            if us_tot_under:
+                best_under_row = max(us_tot_under, key=lambda r: r.get("under_american") or -9999)
+                if best_under_row.get("under_american") is not None:
+                    under_mkt = best_under_row.get("market_bet_pct_over")
+                    under_mkt_pct = (1.0 - under_mkt) if under_mkt is not None else None
+                    best_totals_under = {
+                        "book_key": best_under_row["book_key"],
+                        "book_name": best_under_row["book_name"],
+                        "line": best_under_row["line"],
+                        "american": best_under_row["under_american"],
+                        "decimal": best_under_row.get("under_decimal"),
+                        "market_bet_pct": round(under_mkt_pct, 4) if under_mkt_pct is not None else None,
+                        "model_prob": best_under_row.get("model_prob_under"),
+                        "ev": best_under_row.get("ev_under"),
+                        "edge": best_under_row.get("edge_over") * -1 if best_under_row.get("edge_over") is not None else None,
+                        "breakeven_american": best_under_row.get("breakeven_american_under"),
+                    }
+                    # Recompute edge for under: model_prob_under - market_bet_pct_under
+                    under_model_p = best_under_row.get("model_prob_under")
+                    if under_model_p is not None and under_mkt_pct is not None:
+                        best_totals_under["edge"] = round(under_model_p - under_mkt_pct, 4)
+
         result[gp] = {
             "game_pk": gp,
             "home_team": home_team,
@@ -1393,9 +1485,176 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
             "pred_total_runs_scale": round(pred_scale, 4) if pred_scale is not None else None,
             "h2h": h2h_rows,
             "totals": totals_rows,
+            "best_h2h_home": best_h2h_home,
+            "best_h2h_away": best_h2h_away,
+            "best_totals_over": best_totals_over,
+            "best_totals_under": best_totals_under,
         }
 
     return result
+
+
+def _compute_line_shopping_payload(
+    book_odds_map: dict[int, dict],
+    ev_rows: list[dict],
+) -> dict:
+    """E9.11 — assemble the +EV line-shopping view from pre-computed book-odds payloads.
+
+    Returns a dict matching LineshoppingResponse schema:
+    { plays: [...], total: int, is_preliminary: bool }
+
+    Filters to plays where model_prob > best US book de-vigged prob (positive edge).
+    Sorted by edge descending (largest first).
+    is_preliminary=True when any ev_row has prediction_type='morning'.
+    """
+    # Index ev metadata by game_pk for game_date, game_start_utc, is_preliminary
+    ev_meta: dict[int, dict] = {}
+    is_preliminary = False
+    for r in ev_rows:
+        gp = r.get("GAME_PK")
+        if gp is None:
+            continue
+        ev_meta.setdefault(gp, r)
+        if (r.get("PREDICTION_TYPE") or "") == "morning":
+            is_preliminary = True
+
+    plays = []
+
+    for gp, payload in book_odds_map.items():
+        meta = ev_meta.get(gp, {})
+        game_date = str(meta.get("GAME_DATE") or "")
+        game_start_utc = _ts(meta.get("GAME_START_UTC"))
+        home_team = payload.get("home_team")
+        away_team = payload.get("away_team")
+
+        # Pinnacle de-vigged fair values for the anchor column
+        pinnacle_h2h = next(
+            (r for r in (payload.get("h2h") or []) if r.get("book_key") == "pinnacle"), {}
+        )
+        pinnacle_totals_over = next(
+            (r for r in (payload.get("totals") or []) if r.get("book_key") == "pinnacle"), {}
+        )
+
+        pinn_h2h_home = pinnacle_h2h.get("market_bet_pct_home")
+        pinn_h2h_away = (1.0 - pinn_h2h_home) if pinn_h2h_home is not None else None
+        pinn_totals_over = pinnacle_totals_over.get("market_bet_pct_over")
+        pinn_totals_under = (1.0 - pinn_totals_over) if pinn_totals_over is not None else None
+
+        # H2H home side
+        bph = payload.get("best_h2h_home")
+        if bph and (bph.get("edge") or 0) > 0 and bph.get("best_devigged_prob") is None:
+            # market_bet_pct is the de-vigged prob for this side
+            plays.append({
+                "game_pk": gp,
+                "game_date": game_date,
+                "game_start_utc": game_start_utc,
+                "home_team": home_team,
+                "away_team": away_team,
+                "market_type": "h2h",
+                "side": "home",
+                "model_prob": round(bph["edge"] + (bph.get("market_bet_pct") or 0), 4),
+                "best_book_key": bph["book_key"],
+                "best_book_name": bph["book_name"],
+                "best_american": bph["american"],
+                "best_devigged_prob": round(bph.get("market_bet_pct") or 0, 4),
+                "edge": round(bph["edge"], 4),
+                "ev": bph.get("ev"),
+                "breakeven_american": bph.get("breakeven_american"),
+                "pinnacle_devigged_prob": round(pinn_h2h_home, 4) if pinn_h2h_home is not None else None,
+            })
+        elif bph and (bph.get("edge") or 0) > 0:
+            # Already has best_devigged_prob from a prior path; rebuild correctly
+            model_prob = round((bph.get("edge") or 0) + (bph.get("market_bet_pct") or 0), 4)
+            plays.append({
+                "game_pk": gp,
+                "game_date": game_date,
+                "game_start_utc": game_start_utc,
+                "home_team": home_team,
+                "away_team": away_team,
+                "market_type": "h2h",
+                "side": "home",
+                "model_prob": model_prob,
+                "best_book_key": bph["book_key"],
+                "best_book_name": bph["book_name"],
+                "best_american": bph["american"],
+                "best_devigged_prob": round(bph.get("market_bet_pct") or 0, 4),
+                "edge": round(bph["edge"], 4),
+                "ev": bph.get("ev"),
+                "breakeven_american": bph.get("breakeven_american"),
+                "pinnacle_devigged_prob": round(pinn_h2h_home, 4) if pinn_h2h_home is not None else None,
+            })
+
+        # H2H away side
+        bpa = payload.get("best_h2h_away")
+        if bpa and (bpa.get("edge") or 0) > 0:
+            model_prob = round((bpa.get("edge") or 0) + (bpa.get("market_bet_pct") or 0), 4)
+            plays.append({
+                "game_pk": gp,
+                "game_date": game_date,
+                "game_start_utc": game_start_utc,
+                "home_team": home_team,
+                "away_team": away_team,
+                "market_type": "h2h",
+                "side": "away",
+                "model_prob": model_prob,
+                "best_book_key": bpa["book_key"],
+                "best_book_name": bpa["book_name"],
+                "best_american": bpa["american"],
+                "best_devigged_prob": round(bpa.get("market_bet_pct") or 0, 4),
+                "edge": round(bpa["edge"], 4),
+                "ev": bpa.get("ev"),
+                "breakeven_american": bpa.get("breakeven_american"),
+                "pinnacle_devigged_prob": round(pinn_h2h_away, 4) if pinn_h2h_away is not None else None,
+            })
+
+        # Totals over
+        bto = payload.get("best_totals_over")
+        if bto and (bto.get("edge") or 0) > 0:
+            model_prob = round((bto.get("edge") or 0) + (bto.get("market_bet_pct") or 0), 4)
+            plays.append({
+                "game_pk": gp,
+                "game_date": game_date,
+                "game_start_utc": game_start_utc,
+                "home_team": home_team,
+                "away_team": away_team,
+                "market_type": "totals",
+                "side": "over",
+                "model_prob": model_prob,
+                "best_book_key": bto["book_key"],
+                "best_book_name": bto["book_name"],
+                "best_american": bto["american"],
+                "best_devigged_prob": round(bto.get("market_bet_pct") or 0, 4),
+                "edge": round(bto["edge"], 4),
+                "ev": bto.get("ev"),
+                "breakeven_american": bto.get("breakeven_american"),
+                "pinnacle_devigged_prob": round(pinn_totals_over, 4) if pinn_totals_over is not None else None,
+            })
+
+        # Totals under
+        btu = payload.get("best_totals_under")
+        if btu and (btu.get("edge") or 0) > 0:
+            model_prob = round((btu.get("edge") or 0) + (btu.get("market_bet_pct") or 0), 4)
+            plays.append({
+                "game_pk": gp,
+                "game_date": game_date,
+                "game_start_utc": game_start_utc,
+                "home_team": home_team,
+                "away_team": away_team,
+                "market_type": "totals",
+                "side": "under",
+                "model_prob": model_prob,
+                "best_book_key": btu["book_key"],
+                "best_book_name": btu["book_name"],
+                "best_american": btu["american"],
+                "best_devigged_prob": round(btu.get("market_bet_pct") or 0, 4),
+                "edge": round(btu["edge"], 4),
+                "ev": btu.get("ev"),
+                "breakeven_american": btu.get("breakeven_american"),
+                "pinnacle_devigged_prob": round(pinn_totals_under, 4) if pinn_totals_under is not None else None,
+            })
+
+    plays.sort(key=lambda p: -(p.get("edge") or 0))
+    return {"plays": plays, "total": len(plays), "is_preliminary": is_preliminary}
 
 
 def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[int]) -> dict[int, tuple[dict, bool]]:
@@ -2058,6 +2317,10 @@ def main() -> int:
                     cache_key = f"picks/book-odds/{gp}"
                     _pg_set_cache(pg, cache_key, today, payload, is_permanent=False)
                 log.info("PG: book-odds written for %d games", len(book_odds_map))
+                # E9.11 — write line-shopping payload (best price per play, sorted by edge)
+                ls_payload = _compute_line_shopping_payload(book_odds_map, ev_rows)
+                _pg_set_cache(pg, "picks/line-shopping", today, ls_payload, is_permanent=False)
+                log.info("PG: line-shopping written (%d plays)", ls_payload["total"])
             except Exception:
                 log.exception("Failed to write book-odds")
                 errors += 1
