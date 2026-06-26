@@ -2133,7 +2133,7 @@ models:
         tests:
           - not_null:
               config:
-                severity: warn
+                severity: error
 
       - name: error_type
         description: >
@@ -2338,7 +2338,7 @@ models:
         tests:
           - not_null:
               config:
-                severity: warn
+                severity: error
 
       - name: is_hard_hit
         description: >
@@ -2347,7 +2347,7 @@ models:
         tests:
           - not_null:
               config:
-                severity: warn
+                severity: error
 
       - name: is_sweet_spot
         description: >
@@ -2356,7 +2356,7 @@ models:
         tests:
           - not_null:
               config:
-                severity: warn
+                severity: error
 
       - name: is_hard_hit_sweet_spot
         description: >
@@ -2365,7 +2365,7 @@ models:
         tests:
           - not_null:
               config:
-                severity: warn
+                severity: error
 
       - name: hit_coord_x
         description: >
@@ -2607,7 +2607,7 @@ models:
         tests:
           - not_null:
               config:
-                severity: warn
+                severity: error
 
       - name: is_infield_shade
         description: >
@@ -2617,7 +2617,7 @@ models:
         tests:
           - not_null:
               config:
-                severity: warn
+                severity: error
 
       - name: is_infield_strategic
         description: >
@@ -2627,7 +2627,7 @@ models:
         tests:
           - not_null:
               config:
-                severity: warn
+                severity: error
 
       - name: is_infield_non_standard
         description: >
@@ -2637,7 +2637,7 @@ models:
         tests:
           - not_null:
               config:
-                severity: warn
+                severity: error
 
       - name: is_outfield_extreme_shift
         description: >
@@ -2647,7 +2647,7 @@ models:
         tests:
           - not_null:
               config:
-                severity: warn
+                severity: error
 
       - name: is_fourth_outfielder
         description: >
@@ -2657,7 +2657,7 @@ models:
         tests:
           - not_null:
               config:
-                severity: warn
+                severity: error
 
       - name: is_outfield_strategic
         description: >
@@ -2667,7 +2667,7 @@ models:
         tests:
           - not_null:
               config:
-                severity: warn
+                severity: error
 
       - name: is_outfield_non_standard
         description: >
@@ -2677,7 +2677,7 @@ models:
         tests:
           - not_null:
               config:
-                severity: warn
+                severity: error
 
       - name: is_any_shade_or_shift
         description: >
@@ -2689,7 +2689,7 @@ models:
         tests:
           - not_null:
               config:
-                severity: warn
+                severity: error
 
       - name: catcher_id
         description: MLB Player ID for the catcher. Renamed from fielder_2.
