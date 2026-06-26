@@ -12,40 +12,26 @@
 -- Join keys: pitcher_id, game_date
 -- =============================================================================
 
+-- E11.1-W2: dual-branch lakehouse model (was incremental on Snowflake; the
+-- duckdb branch is a full rebuild — the daily run rewrites the parquet, like the
+-- W1 marts). Upstream stg_batter_pitches is lakehouse parquet, registered as a
+-- view by run_w1_lakehouse.py before this model builds.
 {{
     config(
-        materialized = 'incremental',
-        unique_key = ['game_pk', 'pitcher_id'],
-        on_schema_change = 'sync_all_columns'
+        materialized = 'view',
+        tags         = ['w2_lakehouse']
     )
 }}
 
+{% if target.name == 'duckdb' %}
+
 with
-
-{% if is_incremental() %}
-
-new_game_pitchers as (
-    select distinct pitcher_id
-    from {{ ref('stg_batter_pitches') }}
-    where game_type = 'R'
-      and game_date > (select max(game_date) from {{ this }})
-),
-
-{% endif %}
 
 pitches as (
 
     select p.*
-    from {{ ref('stg_batter_pitches') }} p
-    {% if is_incremental() %}
-    join new_game_pitchers ngp on p.pitcher_id = ngp.pitcher_id
+    from stg_batter_pitches p
     where p.game_type = 'R'
-      and p.game_date >= (
-          select date_trunc('year', max(game_date)) from {{ this }}
-      )
-    {% else %}
-    where p.game_type = 'R'
-    {% endif %}
 
 ),
 
@@ -57,7 +43,10 @@ pitches_tagged as (
 
     select
         game_pk,
-        game_date,
+        -- game_date is VARCHAR (ISO) in lakehouse parquet; cast to DATE so the
+        -- RANGE … INTERVAL rolling windows bind and the output matches the prior
+        -- Snowflake CTAS (DATE). [E11.1-W2]
+        game_date::date as game_date,
         game_year,
         at_bat_number,
         pitch_number,
@@ -534,7 +523,10 @@ rolling as (
 )
 
 select * from rolling
-{% if is_incremental() %}
-where game_date > (select max(game_date) from {{ this }})
-{% endif %}
 order by pitcher_id, game_date
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_pitcher_rolling_stats
+
+{% endif %}

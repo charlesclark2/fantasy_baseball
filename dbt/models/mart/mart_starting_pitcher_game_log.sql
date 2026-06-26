@@ -1,19 +1,33 @@
-{{
-    config(
-        materialized='table'
-    )
-}}
-
+-- =============================================================================
+-- mart_starting_pitcher_game_log.sql   (E11.1-W2 lakehouse decommission)
+-- Grain: one row per (pitcher_id, game_pk) — starters only
+--
 -- Starter definition: the pitcher who threw the first pitch for their team in
 -- the game, AND who meets at least one of these thresholds:
 --   • threw ≥ 20 pitches, OR
 --   • appeared in ≥ 3 distinct innings
 -- The thresholds distinguish true starters from openers used for one- or
 -- two-batter platoon matchups before handing to a bulk reliever.
+--
+-- E11.1-W2: dual-branch lakehouse model. Upstreams stg_batter_pitches and
+-- mart_pitch_game_context are lakehouse parquet (stg = ingest_statcast_to_s3;
+-- mart_pitch_game_context = W1). run_w1_lakehouse.py registers both as views
+-- before this model builds. (Was incremental on Snowflake; full-rebuild here —
+-- the daily DuckDB run rewrites the parquet, like the W1 marts.)
+-- =============================================================================
+
+{{
+    config(
+        materialized = 'view',
+        tags         = ['w2_lakehouse']
+    )
+}}
+
+{% if target.name == 'duckdb' %}
 
 with pitches as (
     select *
-    from {{ ref('stg_batter_pitches') }}
+    from stg_batter_pitches
     where game_type = 'R'
 ),
 
@@ -47,7 +61,9 @@ game_first_pitcher as (
 pitcher_game as (
     select
         p.game_pk,
-        p.game_date,
+        -- game_date is VARCHAR (ISO) in lakehouse parquet; cast to DATE to match
+        -- the prior Snowflake CTAS output type. [E11.1-W2]
+        p.game_date::date                                          as game_date,
         p.game_year,
         p.pitcher_id,
         p.pitching_team,
@@ -133,7 +149,7 @@ runs_allowed_agg as (
         pgc.game_pk,
         pgc.pitcher_id,
         sum(pgc.post_pitch_bat_score - pgc.pre_pitch_bat_score) as runs_allowed
-    from {{ ref('mart_pitch_game_context') }} pgc
+    from mart_pitch_game_context pgc
     where pgc.game_type = 'R'
     group by pgc.game_pk, pgc.pitcher_id
 ),
@@ -202,3 +218,9 @@ select
     )                                                               as cumulative_season_pitches
 
 from final
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_starting_pitcher_game_log
+
+{% endif %}

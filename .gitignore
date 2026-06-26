@@ -77,3 +77,6 @@ frontend/.env.sentry-build-plugin
 betting_ml/models/layer3/oos_signals/*.parquet
 .lambda_build/
 betting_ml/models/sub_models/bullpen_v3/*.parquet
+
+# E11.16 — local dbt State manifest baseline (downloaded by scripts/dbt_state.sh)
+dbt/state/

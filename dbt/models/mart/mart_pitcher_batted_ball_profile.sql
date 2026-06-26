@@ -1,5 +1,5 @@
 -- =============================================================================
--- mart_pitcher_batted_ball_profile.sql
+-- mart_pitcher_batted_ball_profile.sql   (E11.1-W2 lakehouse decommission)
 -- Grain: one row per (pitcher_id, game_year)
 -- Purpose: Starter batted-ball profile — GB%, FB%, LD%, Popup% — derived from
 --          Statcast pitch data.  Used to construct gb_pct × eb_so_factor and
@@ -14,9 +14,20 @@
 -- LEAKAGE GUARD: feature consumers join on game_year - 1 so a 2026 game uses
 --   season=2025 batted-ball rates — no current-season data crosses the feature
 --   boundary.  Do NOT join on game_year directly.
+--
+-- E11.1-W2: dual-branch lakehouse model (mirrors mart_pitch_* / W1d).
+--   • duckdb branch  → run_w1_lakehouse.py renders this SQL and writes S3 parquet.
+--   • Snowflake branch → thin view over baseball_data.lakehouse_ext external table.
 -- =============================================================================
 
-{{ config(materialized='table') }}
+{{
+    config(
+        materialized = 'view',
+        tags         = ['w2_lakehouse']
+    )
+}}
+
+{% if target.name == 'duckdb' %}
 
 with terminal_pa as (
     -- One row per plate appearance (terminal pitch only).
@@ -26,7 +37,7 @@ with terminal_pa as (
         pitcher_id,
         game_year,
         batted_ball_type
-    from {{ ref('stg_batter_pitches') }}
+    from stg_batter_pitches
     where game_type = 'R'
       and game_year >= 2015
       and plate_appearance_event is not null
@@ -71,3 +82,9 @@ select
     round(popup_count::float / nullif(total_batted_balls, 0), 4) as popup_pct
 
 from agg
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_pitcher_batted_ball_profile
+
+{% endif %}

@@ -1,5 +1,5 @@
 -- =============================================================================
--- mart_starter_pitch_mix_rolling.sql
+-- mart_starter_pitch_mix_rolling.sql   (E11.1-W2 lakehouse decommission)
 -- Grain: one row per pitcher_id × game_pk (regular-start games only)
 -- Purpose: Within-season pitch mix percentages for starting pitchers, used to
 --          compute arsenal drift (trailing 5-start mix vs. season-to-date mix).
@@ -27,9 +27,19 @@
 -- drift to 0.0 for these cases.
 --
 -- Card 8.M.
+--
+-- E11.1-W2: dual-branch lakehouse model. Upstream mart_pitch_characteristics is a
+-- W1 lakehouse parquet (registered as a view by run_w1_lakehouse.py before build).
 -- =============================================================================
 
-{{ config(materialized='table') }}
+{{
+    config(
+        materialized = 'view',
+        tags         = ['w2_lakehouse']
+    )
+}}
+
+{% if target.name == 'duckdb' %}
 
 with
 
@@ -37,12 +47,12 @@ pitch_events as (
     select
         pitcher_id,
         game_pk,
-        game_date,
+        game_date::date as game_date,   -- VARCHAR (ISO) in parquet → DATE for parity [E11.1-W2]
         game_year,
         case when pitch_type in ('FF', 'SI', 'FC')      then 1 else 0 end as is_fastball,
         case when pitch_type in ('SL', 'CU', 'SV', 'KC') then 1 else 0 end as is_breaking,
         case when pitch_type in ('CH', 'FS', 'FO')      then 1 else 0 end as is_offspeed
-    from {{ ref('mart_pitch_characteristics') }}
+    from mart_pitch_characteristics
     where game_year >= 2015
 ),
 
@@ -177,3 +187,9 @@ final as (
 )
 
 select * from final
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_starter_pitch_mix_rolling
+
+{% endif %}

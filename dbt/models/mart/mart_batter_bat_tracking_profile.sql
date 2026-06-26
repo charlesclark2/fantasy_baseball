@@ -1,5 +1,5 @@
 -- =============================================================================
--- mart_batter_bat_tracking_profile.sql
+-- mart_batter_bat_tracking_profile.sql   (E11.1-W2 lakehouse decommission)
 -- Grain: one row per batter_id × game_date (regular season, 2023-07-14+ only)
 -- Purpose: 30-day rolling bat tracking averages per batter from Hawk-Eye bat
 --          sensors. bat_speed_30d, swing_length_30d, attack_angle_30d.
@@ -8,20 +8,33 @@
 --          in feature_pregame_lineup_features.
 -- Join key: batter_id + game_date (apply game_date < official_date leakage
 --           guard in the consuming model)
+--
+-- E11.1-W2: dual-branch lakehouse model. Upstream stg_batter_pitches is lakehouse
+-- parquet (ingest_statcast_to_s3); run_w1_lakehouse.py registers it as a view.
 -- =============================================================================
 
-{{ config(materialized='table') }}
+{{
+    config(
+        materialized = 'view',
+        tags         = ['w2_lakehouse']
+    )
+}}
+
+{% if target.name == 'duckdb' %}
 
 with
 
 swing_events as (
     select
-        game_date,
+        -- game_date is VARCHAR (ISO) in lakehouse parquet; cast to DATE so the
+        -- RANGE … INTERVAL window frames bind and the output type matches the
+        -- prior Snowflake CTAS (DATE). [E11.1-W2]
+        game_date::date     as game_date,
         batter_id,
         bat_speed_mph,
         swing_length_ft,
         attack_angle_degrees
-    from {{ ref('stg_batter_pitches') }}
+    from stg_batter_pitches
     where game_type = 'R'
       and bat_speed_mph is not null
       and pitch_description in (
@@ -99,3 +112,9 @@ rolling as (
 )
 
 select * from rolling
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_batter_bat_tracking_profile
+
+{% endif %}
