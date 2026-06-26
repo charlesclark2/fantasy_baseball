@@ -87,7 +87,13 @@ export function Nav({
         </Link>
 
         <div className="flex items-center gap-3">
-          {/* Blog — desktop only */}
+          {/* About + Blog — desktop only */}
+          <Link
+            href="/about"
+            className="hidden text-xs text-gray-500 hover:text-gray-300 transition-colors sm:block"
+          >
+            About
+          </Link>
           <Link
             href="/blog"
             className="hidden text-xs text-gray-500 hover:text-gray-300 transition-colors sm:block"
