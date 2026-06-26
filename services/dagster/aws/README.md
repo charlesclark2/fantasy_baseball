@@ -131,10 +131,17 @@ cd ~/app && git pull origin dev
 docker compose -f services/dagster/aws/docker-compose.yml --profile capture build
 # smoke-test one (should connect to Snowflake + write):
 docker compose -f services/dagster/aws/docker-compose.yml run --rm odds-capture
+# AL2023 minimal ships NO cron — install + start the daemon first:
+sudo dnf install -y cronie && sudo systemctl enable --now crond
 # install the schedule:
 crontab services/dagster/aws/capture.crontab && crontab -l
 tail -f ~/capture-cron.log   # watch a couple of fires
 ```
+
+> **`crontab: command not found` on a fresh box** → AL2023 has no cron by default.
+> Run the `dnf install -y cronie && systemctl enable --now crond` line above, then
+> re-run the `crontab …` install. cron inherits `ec2-user`'s `docker` group, so the
+> `docker compose run` lines work; the crontab's `PATH` covers `docker`'s location.
 
 ### Odds backfill (P3 task 2 — run at deploy with the live gap)
 Compute the gap (last capture → now): `MAX(captured_at)` in

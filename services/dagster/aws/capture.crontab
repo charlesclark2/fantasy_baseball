@@ -7,6 +7,8 @@
 # data sources / ingest frequency grow (the images are already standalone).
 #
 # INSTALL (on the box, as ec2-user):
+#   0. AL2023 minimal ships NO cron — install + start it first:
+#        sudo dnf install -y cronie && sudo systemctl enable --now crond
 #   1. build the images once:
 #        docker compose -f ~/app/services/dagster/aws/docker-compose.yml --profile capture build
 #   2. install this crontab:
@@ -39,4 +41,4 @@ SHELL=/bin/bash
 # prices track live BEFORE P4, uncomment this chain: rebuild the odds marts via the
 # dbt-runner, then re-write the serving cache. REMOVE it at P4 (the sensor takes
 # over — running both is redundant, though write_serving_store is idempotent).
-# */30 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e SNOWFLAKE_PRIVATE_KEY_PATH=/tmp/snowflake_rsa_key.pem dagster-codeloc bash -lc 'python scripts/odds_api_ingestion.py odds --markets h2h totals --regions us us2 eu && python services/schedule_capture/trigger_dbt.py run --select stg_oddsapi_odds mart_odds_outcomes --target baseball_betting_and_fantasy && python scripts/write_serving_store.py' >> /home/ec2-user/capture-cron.log 2>&1
+# */30 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e SNOWFLAKE_PRIVATE_KEY_PATH=/tmp/snowflake_rsa_key.pem dagster-codeloc bash -lc 'python scripts/odds_api_ingestion.py odds --markets h2h totals --regions us us2 eu && python services/schedule_capture/trigger_dbt.py run --select stg_oddsapi_odds mart_odds_outcomes --target baseball_betting_and_fantasy && python scripts/write_serving_store.py --picks --book-odds' >> /home/ec2-user/capture-cron.log 2>&1
