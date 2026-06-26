@@ -1,0 +1,172 @@
+# =============================================================================
+# INC-16-P1 — AWS re-host of the Railway Dagster stack onto ONE EC2 box.
+#
+# Replaces the four Railway services (railway.codeloc/daemon/webserver.toml +
+# the dbt-runner railway.toml) and co-locates flaresolverr + a small metadata
+# Postgres on the same instance. This is a RE-DEPLOY of the existing OSS config,
+# not a rebuild — dagster.yaml + the start commands are ported verbatim.
+#
+#   Bring up:   docker compose -f services/dagster/aws/docker-compose.yml up -d --build
+#   Logs:       docker compose -f services/dagster/aws/docker-compose.yml logs -f dagster-codeloc
+#   Health:     docker compose -f services/dagster/aws/docker-compose.yml ps
+#
+# Six services, one Docker bridge network ("default" — created by compose):
+#   dagster-postgres   metadata-only run/event/schedule storage (NOT the serving cache)
+#   dagster-codeloc    gRPC code server + run worker (DefaultRunLauncher subprocesses)
+#   dagster-daemon     scheduler + sensor daemon + run queue + run-monitoring
+#   dagster-webserver  dagit UI / GraphQL (operator console)
+#   dbt-runner         out-of-process dbt (pipeline/ops/_dbt_exec POSTs /run here)
+#   flaresolverr       Cloudflare challenge solver for FanGraphs (IP-shared w/ codeloc)
+#
+# 🔑 EGRESS-IP SHARING (the whole reason flaresolverr lives here): all containers
+# NAT out through the EC2 instance's single public IP (use an Elastic IP for
+# stability). So flaresolverr's headless-Chrome requests and any other agent
+# traffic present the SAME source IP to FanGraphs — which is what its IP-bound
+# cf_clearance cookie requires. Co-location on one box satisfies this exactly as
+# Railway's private-network co-location did.
+#
+# 🔒 SCHEDULES OFF: dagster-postgres starts EMPTY and no schedule/sensor sets
+# default_status=RUNNING in pipeline/, so every schedule + sensor boots STOPPED.
+# Standing this stack up fires NOTHING. Cutover (turning them ON) is Phase 4.
+# =============================================================================
+
+name: credence-dagster
+
+# Reusable env + restart anchors -------------------------------------------------
+x-dagster-env: &dagster-env
+  DAGSTER_HOME: /app/services/dagster
+  DAGSTER_PG_URL: postgresql://dagster:${DAGSTER_PG_PASSWORD}@dagster-postgres:5432/dagster
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  # --- Metadata Postgres (Dagster's OWN run/event/schedule storage) ------------
+  # NOT the serving cache (that → DynamoDB in INC-16-P2). Fully regenerable;
+  # losing it only resets run history + schedule on/off state.
+  dagster-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: dagster
+      POSTGRES_PASSWORD: ${DAGSTER_PG_PASSWORD}
+      POSTGRES_DB: dagster
+    volumes:
+      - dagster_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dagster -d dagster"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    <<: *restart
+
+  # --- Code location gRPC server + RUN WORKER ---------------------------------
+  # Heaviest service: holds the loaded Definitions and executes every run as a
+  # subprocess (DefaultRunLauncher). Binds 0.0.0.0 (compose bridge is IPv4) —
+  # the Railway config used [::] for dual-stack private DNS; not needed here.
+  # Needs the FULL op env → env_file: .env (Snowflake / AWS / serving DATABASE_URL
+  # for write_serving_store until P2 / API keys / DBT_RUNNER_URL / FLARESOLVERR_URL).
+  dagster-codeloc:
+    build:
+      context: ../../..
+      dockerfile: Dockerfile
+    image: credence-dagster:latest
+    command:
+      - dagster
+      - api
+      - grpc
+      - --host
+      - 0.0.0.0
+      - --port
+      - "4000"
+      - --python-file
+      - pipeline/__init__.py
+      - --attribute
+      - defs
+      - --working-directory
+      - /app
+    env_file: [.env]
+    environment:
+      <<: *dagster-env
+      # In-cluster service DNS — override whatever points at Railway/public hosts.
+      DBT_RUNNER_URL: http://dbt-runner:8080
+      FLARESOLVERR_URL: http://flaresolverr:8191/v1
+    depends_on:
+      dagster-postgres:
+        condition: service_healthy
+    <<: *restart
+
+  # --- Daemon: scheduler + sensors + run queue + run-monitoring (heartbeat) -----
+  dagster-daemon:
+    image: credence-dagster:latest
+    command:
+      - dagster-daemon
+      - run
+      - --workspace
+      - /app/services/dagster/aws/workspace.yaml
+    env_file: [.env]
+    environment:
+      <<: *dagster-env
+    depends_on:
+      dagster-postgres:
+        condition: service_healthy
+      dagster-codeloc:
+        condition: service_started
+    <<: *restart
+
+  # --- Webserver: dagit UI / GraphQL (operator console) ------------------------
+  # Bound to the box; reachable only from the operator IP (security group) on
+  # :3000. For extra hardening prefer an SSH tunnel and change ports to
+  # "127.0.0.1:3000:3000" (see README).
+  dagster-webserver:
+    image: credence-dagster:latest
+    command:
+      - dagster-webserver
+      - --host
+      - 0.0.0.0
+      - --port
+      - "3000"
+      - --workspace
+      - /app/services/dagster/aws/workspace.yaml
+    env_file: [.env]
+    environment:
+      <<: *dagster-env
+    ports:
+      - "3000:3000"
+    depends_on:
+      dagster-postgres:
+        condition: service_healthy
+      dagster-codeloc:
+        condition: service_started
+    <<: *restart
+
+  # --- dbt-runner: out-of-process dbt (the _dbt_exec contract) -----------------
+  # Same Dockerfile as Railway; entrypoint.sh generates dbt/profiles.yml from the
+  # Snowflake env vars at boot. Reached by codeloc at http://dbt-runner:8080.
+  dbt-runner:
+    build:
+      context: ../../..
+      dockerfile: services/dbt_runner/Dockerfile
+    image: credence-dbt-runner:latest
+    env_file: [.env]
+    environment:
+      PORT: "8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    <<: *restart
+
+  # --- flaresolverr: FanGraphs Cloudflare proxy (~1 GB Chromium) ---------------
+  # ghcr image is multi-arch (arm64 OK on t4g/Graviton). No host port — only
+  # codeloc reaches it on the compose network at http://flaresolverr:8191/v1.
+  # Shares the instance's egress IP (see header) → satisfies cf_clearance.
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    environment:
+      LOG_LEVEL: info
+      TZ: America/New_York
+    <<: *restart
+
+volumes:
+  dagster_pg_data:

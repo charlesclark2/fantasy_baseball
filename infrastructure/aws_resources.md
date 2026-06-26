@@ -362,6 +362,56 @@ Set via Lambda console → credence-prod-lambda-execution-role → Configuration
 
 ---
 
+## EC2 — Dagster Orchestration (INC-16 re-host)
+
+Re-homes the Railway orchestration onto AWS after the Railway workspace was
+restricted (see `quant_sports_intel_models/baseball/edge_program/INC16_AWS_REHOST_RECOVERY.md`).
+One box runs the full stack as Docker Compose — config + runbook in
+`services/dagster/aws/`. **Phase 1 (compute) provisioned 2026-06-26.**
+
+| Resource | Value |
+|---|---|
+| Instance ID | `i-07594af1679f81c38` |
+| Elastic IP (stable egress — FanGraphs `cf_clearance` is IP-bound) | `100.57.225.242` |
+| Instance type | `t4g.medium` (arm64 / Graviton, 4 GB) |
+| Region / subnet | `us-east-1`, default VPC public subnet |
+| AMI | Amazon Linux 2023 arm64 (latest via SSM) |
+| Root volume | 30 GB gp3 |
+| Key pair | `credence-dagster-key` (private key at `~/.ssh/credence-dagster-key.pem`) |
+| Security group | `credence-dagster-sg` — ingress SSH 22 + dagit 3000 from operator IP only; egress all |
+| IAM role / instance profile | `credence-dagster-ec2-role` / `credence-dagster-ec2-profile` — S3 access to `baseball-betting-ml-artifacts` (no static keys on the box) |
+| S3 access | **S3 gateway VPC endpoint** (no NAT — cost trap avoided) |
+| SSH | `ssh -i ~/.ssh/credence-dagster-key.pem ec2-user@100.57.225.242` |
+
+### Containers (Docker Compose — `services/dagster/aws/docker-compose.yml`)
+
+| Container | Role | Port |
+|---|---|---|
+| `dagster-postgres` | Dagster run/event/schedule storage (metadata only — NOT the serving cache) | 5432 (internal) |
+| `dagster-codeloc` | gRPC code server + run worker | 4000 (internal) |
+| `dagster-daemon` | scheduler + sensors + run queue + run-monitoring | — |
+| `dagster-webserver` | dagit UI / GraphQL | 3000 (operator IP) |
+| `dbt-runner` | out-of-process dbt | 8080 (internal) |
+| `flaresolverr` | FanGraphs Cloudflare solver (shares EIP egress) | 8191 (internal) |
+
+dagit: `http://100.57.225.242:3000` (security-group-locked to the operator IP).
+**Schedules boot STOPPED** — turning them on is INC-16 Phase 4.
+
+### Provisioned via
+
+```bash
+AWS_PROFILE=default REGION=us-east-1 KEY_NAME=credence-dagster-key \
+  ./services/dagster/aws/provision-ec2.sh
+```
+
+### Cost notes
+
+~$15–35/mo target (t4g.medium + EIP + gp3 + S3 endpoint). NAT Gateway, Aurora,
+and MWAA deliberately avoided. Dagster+ Cloud stays as the idle rollback until a
+clean multi-day window (Phase 4), then is decommissioned.
+
+---
+
 ## Railway PostgreSQL Serving Store (A2.12)
 
 Primary OLTP read path for all FastAPI endpoints. Dagster reverse-ETLs prediction
