@@ -151,7 +151,8 @@ export default function PrivacyPage() {
 
         </div>
 
-        <div className="mt-12 pt-8 border-t border-[#262626] flex gap-6 text-sm text-muted-foreground">
+        <div className="mt-12 pt-8 border-t border-[#262626] flex flex-wrap gap-6 text-sm text-muted-foreground">
+          <Link href="/about" className="hover:text-foreground transition-colors">About</Link>
           <Link href="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
           <Link href="/login" className="hover:text-foreground transition-colors">Sign In</Link>
         </div>
