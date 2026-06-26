@@ -52,7 +52,7 @@
       },
       {
         "tag": "new",
-        "text": "New public About page at /about. The founding philosophy — why we built Credence, what the penumbra means, why Bayesian statistics, and what we do and don't claim — is now a permanent, publicly accessible page linked from the nav and site footer. No login required."
+        "text": "New public About page at /about — editorial layout with a POV headline, a principles list, and a one-sentence 'who it's for'. No login required; linked from the nav and site footers."
       }
     ]
   },
