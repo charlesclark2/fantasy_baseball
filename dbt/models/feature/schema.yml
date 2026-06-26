@@ -364,11 +364,14 @@ models:
       game-date rows yet in rolling stats) and for 2015 games (no 2014 platoon data).
 
     tests:
+      # INC-14 RESOLVED: was warn while a postponed-game dual-is_current SCD-2 row
+      # fanned (game_pk, side) out in feature_pregame_lineup_features. Fixed by the
+      # latest-valid_from dedup in the model's lineup_state CTE; now enforced.
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns: [game_pk, side]
           config:
-            severity: warn
+            severity: error
 
     columns:
       - name: game_pk
