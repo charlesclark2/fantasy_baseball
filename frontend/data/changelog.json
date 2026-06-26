@@ -53,6 +53,10 @@
       {
         "tag": "new",
         "text": "New public About page at /about — editorial layout with a POV headline, a principles list, and a one-sentence 'who it's for'. No login required; linked from the nav and site footers."
+      },
+      {
+        "tag": "new",
+        "text": "Matchup Zone Analysis is now on each game's detail page. A new collapsible section shows a batter × pitcher zone heatmap: the selected batter's historical performance by zone (red = their hot zone, blue = cold zone), overlaid with circles showing where the pitcher actually locates pitches (circle size = frequency). The rulebook strike zone is drawn on top, adjusted to each batter's height. Toggle between All pitches, Fastball, Breaking, and Offspeed to see how the pitcher's location tendencies shift by pitch type. Hover any cell for exact numbers (run value per pitch, pitcher location frequency, whiff rate, xwOBA on contact). Select different lineup slots to explore the full matchup card. This is a 'show your work' transparency feature — the underlying zone signal tested null for predictive edge, so this is explanatory context, not a bet signal."
       }
     ]
   },

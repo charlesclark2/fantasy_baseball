@@ -112,6 +112,10 @@ const ServedTierBadge = dynamic(
   () => import("@/components/pick-explanation").then((m) => ({ default: m.ServedTierBadge })),
   { ssr: false, loading: () => null },
 )
+const ZoneHeatmap = dynamic(
+  () => import("@/components/zone-heatmap").then((m) => ({ default: m.ZoneHeatmap })),
+  { ssr: false, loading: () => null },
+)
 
 // ---------------------------------------------------------------------------
 // Types matching GameDetailResponse
@@ -1134,6 +1138,175 @@ function CompareRow({
 }
 
 // ---------------------------------------------------------------------------
+// E9.31 — Matchup Zone Section
+// ---------------------------------------------------------------------------
+
+type ZoneOverlayData = import("@/components/zone-heatmap").ZoneOverlayData
+
+function MatchupZoneSection({
+  homePitcher,
+  awayPitcher,
+  homeLineup,
+  awayLineup,
+  homeTeamName,
+  awayTeamName,
+  accessToken,
+}: {
+  homePitcher: StarterStats | null
+  awayPitcher: StarterStats | null
+  homeLineup: LineupPlayer[]
+  awayLineup: LineupPlayer[]
+  homeTeamName: string
+  awayTeamName: string
+  accessToken: string | null | undefined
+}) {
+  // Two views: home batters vs away pitcher, away batters vs home pitcher
+  const [side, setSide] = useState<"home_bats" | "away_bats">("home_bats")
+  const [homeBatterIdx, setHomeBatterIdx] = useState(0)
+  const [awayBatterIdx, setAwayBatterIdx] = useState(0)
+
+  const pitcher = side === "home_bats" ? awayPitcher : homePitcher
+  const lineup = side === "home_bats" ? homeLineup : awayLineup
+  const batterIdx = side === "home_bats" ? homeBatterIdx : awayBatterIdx
+  const setIdx = side === "home_bats" ? setHomeBatterIdx : setAwayBatterIdx
+  const batter = lineup[batterIdx] ?? null
+
+  const battingTeam = side === "home_bats" ? homeTeamName : awayTeamName
+  const pitchingTeam = side === "home_bats" ? awayTeamName : homeTeamName
+
+  const enabled = !!(batter?.player_id && pitcher?.pitcher_id && accessToken)
+
+  const { data: overlay, isLoading, isError } = useQuery<ZoneOverlayData>({
+    queryKey: ["zone-overlay", batter?.player_id, pitcher?.pitcher_id],
+    queryFn: () =>
+      apiFetch(
+        `/players/${batter!.player_id}/zone-overlay?pitcher_id=${pitcher!.pitcher_id}`,
+        {},
+        accessToken,
+      ),
+    enabled,
+    staleTime: 30 * 60 * 1000,
+    retry: 0,
+  })
+
+  const homeBatters = homeLineup.filter((p) => p.player_id && p.player_name)
+  const awayBatters = awayLineup.filter((p) => p.player_id && p.player_name)
+  const currentBatters = side === "home_bats" ? homeBatters : awayBatters
+
+  if (!homePitcher?.pitcher_id && !awayPitcher?.pitcher_id) return null
+  if (homeLineup.length === 0 && awayLineup.length === 0) return null
+
+  return (
+    <Collapsible
+      defaultOpen={false}
+      className="rounded-xl border border-[#262626] bg-[#141414] overflow-hidden"
+    >
+      <CollapsibleTrigger asChild>
+        <button className="w-full flex items-center justify-between px-6 py-4 hover:bg-[#1a1a1a] transition-colors text-left">
+          <span className="flex items-center gap-2.5">
+            <span className="w-1 h-5 rounded-full bg-[#10b981] shrink-0" />
+            <span className="text-base font-bold text-white">Matchup Zone Analysis</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info className="h-3.5 w-3.5 text-gray-600 cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-[260px] text-xs leading-relaxed">
+                Batter hot/cold zones (EB-shrunk run value per pitch) overlaid with the pitcher&apos;s location tendencies. Explanatory transparency only — zone profiles tested null for predictive edge (E13.10 Track B).
+              </TooltipContent>
+            </Tooltip>
+          </span>
+          <ChevronDown className="h-4 w-4 text-gray-500 transition-transform duration-200 group-data-[state=open]:rotate-180 shrink-0" />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="px-6 pb-5 space-y-4">
+          {/* Side toggle: which lineup is batting */}
+          <div className="flex flex-wrap gap-2 items-center">
+            {homePitcher?.pitcher_id && awayLineup.length > 0 && (
+              <button
+                onClick={() => setSide("away_bats")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  side === "away_bats"
+                    ? "bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30"
+                    : "bg-transparent text-gray-500 border-[#262626] hover:border-[#333] hover:text-gray-300"
+                }`}
+              >
+                {awayTeamName} bats vs {homePitcher.name ?? "Home SP"}
+              </button>
+            )}
+            {awayPitcher?.pitcher_id && homeLineup.length > 0 && (
+              <button
+                onClick={() => setSide("home_bats")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  side === "home_bats"
+                    ? "bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30"
+                    : "bg-transparent text-gray-500 border-[#262626] hover:border-[#333] hover:text-gray-300"
+                }`}
+              >
+                {homeTeamName} bats vs {awayPitcher.name ?? "Away SP"}
+              </button>
+            )}
+          </div>
+
+          {/* Batter selector */}
+          {currentBatters.length > 0 && (
+            <div>
+              <p className="text-[10px] text-gray-600 uppercase tracking-widest font-semibold mb-2">
+                Select batter · {battingTeam} vs {pitchingTeam} SP
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {currentBatters.map((p, i) => (
+                  <button
+                    key={p.player_id}
+                    onClick={() => setIdx(i)}
+                    className={`px-2 py-1 rounded text-xs border transition-colors ${
+                      batterIdx === i
+                        ? "bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30"
+                        : "bg-transparent text-gray-500 border-[#1e1e1e] hover:border-[#333] hover:text-gray-300"
+                    }`}
+                  >
+                    <span className="text-gray-600 mr-1">{p.slot}.</span>
+                    {p.player_name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Heatmap content */}
+          {!pitcher?.pitcher_id ? (
+            <p className="text-xs text-gray-600">Starter not yet announced for the {pitchingTeam}.</p>
+          ) : !batter ? (
+            <p className="text-xs text-gray-600">Lineup not yet announced for the {battingTeam}.</p>
+          ) : isLoading ? (
+            <div className="space-y-2 animate-pulse">
+              <div className="h-4 w-48 rounded bg-[#262626]" />
+              <div className="flex gap-2">
+                {["All","FB","BR","OS"].map(l => (
+                  <div key={l} className="h-7 w-16 rounded-lg bg-[#262626]" />
+                ))}
+              </div>
+              <div className="h-[250px] w-full max-w-[260px] rounded-lg bg-[#262626]" />
+            </div>
+          ) : isError || !overlay ? (
+            <div className="rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-4 py-4">
+              <p className="text-xs text-gray-500">
+                Zone profile not yet available for this matchup.
+              </p>
+              <p className="text-[10px] text-gray-600 mt-1">
+                Overlay data is generated daily for today&apos;s slate.
+              </p>
+            </div>
+          ) : (
+            <ZoneHeatmap overlay={overlay} />
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -1939,6 +2112,21 @@ export default function PickDetailPage() {
                     })}
                   </div>
                 </CollapsibleSection>
+              )}
+
+              {/* ============================================================
+                  3b. E9.31 — Matchup Zone Analysis
+              ============================================================ */}
+              {starters && lineups && (
+                <MatchupZoneSection
+                  homePitcher={starters.home}
+                  awayPitcher={starters.away}
+                  homeLineup={lineups.home}
+                  awayLineup={lineups.away}
+                  homeTeamName={homeFullName}
+                  awayTeamName={awayFullName}
+                  accessToken={accessToken}
+                />
               )}
 
               {/* ============================================================
