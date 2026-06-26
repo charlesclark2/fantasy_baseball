@@ -109,9 +109,9 @@ final as (
         ), false)                                               as is_out_event,
 
         -- ── Error detection from plate_appearance_description ─────────────────────
-        (
-            lower(plate_appearance_description) like '%error%'
-        )::boolean                                              as error_on_play,
+        coalesce(
+            lower(plate_appearance_description) like '%error%', false
+        )                                                       as error_on_play,
 
         case
             when lower(plate_appearance_description) like '%throwing error%'   then 'throwing'

@@ -59,17 +59,19 @@ final as (
         hit_distance_ft,
 
         -- ── Derived contact quality flags ─────────────────────────────────────────
-        (launch_speed_angle_zone = 6)::boolean                  as is_barrel,
-        (exit_velocity_mph >= 95)::boolean                      as is_hard_hit,
+        coalesce(launch_speed_angle_zone = 6, false)            as is_barrel,
+        coalesce(exit_velocity_mph >= 95, false)                as is_hard_hit,
 
-        (
-            launch_angle_degrees between 8 and 32
-        )::boolean                                              as is_sweet_spot,
+        coalesce(
+            launch_angle_degrees between 8 and 32,
+            false
+        )                                                       as is_sweet_spot,
 
-        (
+        coalesce(
             launch_angle_degrees between 8 and 32
-            and exit_velocity_mph >= 95
-        )::boolean                                              as is_hard_hit_sweet_spot,
+            and exit_velocity_mph >= 95,
+            false
+        )                                                       as is_hard_hit_sweet_spot,
 
         -- ── Hit location ─────────────────────────────────────────────────────────
         hit_coord_x,

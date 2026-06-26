@@ -41,28 +41,29 @@ final as (
         if_fielding_alignment,
         of_fielding_alignment,
 
-        (if_fielding_alignment = 'Infield shift')::boolean      as is_infield_shift,
-        (if_fielding_alignment = 'Infield shade')::boolean      as is_infield_shade,
-        (if_fielding_alignment = 'Strategic')::boolean          as is_infield_strategic,
+        coalesce(if_fielding_alignment = 'Infield shift', false)   as is_infield_shift,
+        coalesce(if_fielding_alignment = 'Infield shade', false)   as is_infield_shade,
+        coalesce(if_fielding_alignment = 'Strategic', false)       as is_infield_strategic,
 
-        (if_fielding_alignment in (
+        coalesce(if_fielding_alignment in (
             'Infield shift', 'Infield shade', 'Strategic'
-        ))::boolean                                             as is_infield_non_standard,
+        ), false)                                                  as is_infield_non_standard,
 
-        (of_fielding_alignment = 'Extreme outfield shift')::boolean
-                                                                as is_outfield_extreme_shift,
+        coalesce(of_fielding_alignment = 'Extreme outfield shift', false)
+                                                                   as is_outfield_extreme_shift,
 
-        (of_fielding_alignment = '4th outfielder')::boolean     as is_fourth_outfielder,
-        (of_fielding_alignment = 'Strategic')::boolean          as is_outfield_strategic,
+        coalesce(of_fielding_alignment = '4th outfielder', false)  as is_fourth_outfielder,
+        coalesce(of_fielding_alignment = 'Strategic', false)       as is_outfield_strategic,
 
-        (of_fielding_alignment in (
+        coalesce(of_fielding_alignment in (
             'Extreme outfield shift', '4th outfielder', 'Strategic'
-        ))::boolean                                             as is_outfield_non_standard,
+        ), false)                                                  as is_outfield_non_standard,
 
-        (
+        coalesce(
             if_fielding_alignment in ('Infield shift', 'Infield shade')
-            or of_fielding_alignment in ('Extreme outfield shift', '4th outfielder')
-        )::boolean                                             as is_any_shade_or_shift,
+            or of_fielding_alignment in ('Extreme outfield shift', '4th outfielder'),
+            false
+        )                                                         as is_any_shade_or_shift,
 
         -- ── Fielder IDs by position ───────────────────────────────────────────────
         catcher_id,
