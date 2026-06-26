@@ -168,5 +168,63 @@ services:
       TZ: America/New_York
     <<: *restart
 
+  # ── Capture crons (INC-16-P3) ────────────────────────────────────────────────
+  # Re-home of the 4 Railway capture cron services onto this box. They are NOT
+  # long-running: each runs once and exits, fired on a schedule by the HOST crontab
+  # (`services/dagster/aws/capture.crontab`) via `docker compose run --rm <svc>`.
+  # `profiles: [capture]` keeps them OUT of `docker compose up` — they only run when
+  # the crontab (or you) invoke them. `restart: "no"` so a run-once exit isn't retried.
+  # All four reuse their existing lean Dockerfiles + the now-fixed key-normalizing
+  # entrypoints; env_file: .env supplies SNOWFLAKE_* / ODDS_API_KEY / OPENWEATHERMAP_*.
+  #   build once:  docker compose -f services/dagster/aws/docker-compose.yml --profile capture build
+  #   run one:     docker compose -f services/dagster/aws/docker-compose.yml run --rm odds-capture
+  # 🔭 FUTURE (operator decision 2026-06-26): when data sources or ingest frequency
+  # grow, rearchitect these to Lambda + EventBridge (serverless, decoupled from the
+  # box). The images are already standalone, so that lift is mechanical.
+  odds-capture:
+    build:
+      context: ../../..
+      dockerfile: services/odds_capture/Dockerfile
+    image: credence-odds-capture:latest
+    env_file: [.env]
+    environment:
+      AWS_DEFAULT_REGION: us-east-1
+    profiles: [capture]
+    restart: "no"
+
+  schedule-capture:
+    build:
+      context: ../../..
+      dockerfile: services/schedule_capture/Dockerfile
+    image: credence-schedule-capture:latest
+    env_file: [.env]
+    environment:
+      AWS_DEFAULT_REGION: us-east-1
+      DBT_RUNNER_URL: http://dbt-runner:8080   # triggers the lineup-staging rebuild
+    profiles: [capture]
+    restart: "no"
+
+  derivative-capture:
+    build:
+      context: ../../..
+      dockerfile: services/derivative_capture/Dockerfile
+    image: credence-derivative-capture:latest
+    env_file: [.env]
+    environment:
+      AWS_DEFAULT_REGION: us-east-1
+    profiles: [capture]
+    restart: "no"
+
+  weather-capture:
+    build:
+      context: ../../..
+      dockerfile: services/weather_capture/Dockerfile
+    image: credence-weather-capture:latest
+    env_file: [.env]
+    environment:
+      AWS_DEFAULT_REGION: us-east-1
+    profiles: [capture]
+    restart: "no"
+
 volumes:
   dagster_pg_data:

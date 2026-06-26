@@ -1,0 +1,42 @@
+# =============================================================================
+# INC-16-P3 — host crontab for the AWS capture crons (re-home off Railway).
+#
+# EC2-host-cron (operator decision 2026-06-26): fire the 4 run-once capture images
+# (defined under the `capture` profile in docker-compose.yml) on schedule via
+# `docker compose run --rm`. Interim — rearchitect to Lambda + EventBridge when
+# data sources / ingest frequency grow (the images are already standalone).
+#
+# INSTALL (on the box, as ec2-user):
+#   1. build the images once:
+#        docker compose -f ~/app/services/dagster/aws/docker-compose.yml --profile capture build
+#   2. install this crontab:
+#        crontab ~/app/services/dagster/aws/capture.crontab
+#   3. verify:  crontab -l   ·   tail -f ~/capture-cron.log
+#
+# Times are UTC (the box clock is UTC). schedule-capture + weather-capture
+# self-guard their active windows inside their entrypoints, so firing them all-day
+# is correct (they exit 0 immediately when off-window). `--rm` cleans up each run.
+# =============================================================================
+PATH=/usr/bin:/bin:/usr/local/bin
+SHELL=/bin/bash
+
+# Live odds (h2h/totals across us/us2/eu, all books incl. Bovada+Pinnacle) → mlb_odds_raw.
+*/30 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml run --rm odds-capture >> /home/ec2-user/capture-cron.log 2>&1
+
+# Intraday schedule re-ingest + lineup-staging dbt rebuild (entrypoint self-guards 14:00-03:00 UTC).
+*/30 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml run --rm schedule-capture >> /home/ec2-user/capture-cron.log 2>&1
+
+# Derivative odds (team_totals / *_1st_5_innings F5 / etc.) → oddsapi schema.
+*/30 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml run --rm derivative-capture >> /home/ec2-user/capture-cron.log 2>&1
+
+# Weather forecast checkpoints T-24/6/3/1h + observed-at-first-pitch (entrypoint self-guards 10:00-02:00 UTC).
+0 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml run --rm weather-capture >> /home/ec2-user/capture-cron.log 2>&1
+
+# ── OPTIONAL (interim, until P4): refresh SERVED odds prices ──────────────────
+# P3 restores the RAW odds feed (above) → mlb_odds_raw is current. But DISPLAYED
+# prices read mart_odds_outcomes, which only refreshes when the odds marts rebuild
+# — normally the `odds_current_rebuild_sensor` (enabled at P4). To make served
+# prices track live BEFORE P4, uncomment this chain: rebuild the odds marts via the
+# dbt-runner, then re-write the serving cache. REMOVE it at P4 (the sensor takes
+# over — running both is redundant, though write_serving_store is idempotent).
+# */30 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e SNOWFLAKE_PRIVATE_KEY_PATH=/tmp/snowflake_rsa_key.pem dagster-codeloc bash -lc 'python scripts/odds_api_ingestion.py odds --markets h2h totals --regions us us2 eu && python services/schedule_capture/trigger_dbt.py run --select stg_oddsapi_odds mart_odds_outcomes --target baseball_betting_and_fantasy && python scripts/write_serving_store.py' >> /home/ec2-user/capture-cron.log 2>&1

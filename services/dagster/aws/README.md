@@ -103,9 +103,59 @@ Dagster+ Cloud + the Railway `railway.*.toml` configs are untouched — they rem
 the rollback target. Decommission only after AWS serves a clean multi-day window
 (INC-16-P4).
 
-## Next phases (not in P1)
+## Capture crons (INC-16-P3 — EC2 host-cron)
 
-- **P2** — serving cache → DynamoDB (drop the serving `DATABASE_URL`; add a
-  DynamoDB statement to the IAM policy in `provision-ec2.sh`).
-- **P3** — capture crons (odds/schedule/derivative) → Lambda + EventBridge.
-- **P4** — enable schedules, run a full daily cycle, cancel Railway.
+The 4 Railway capture crons are re-homed onto **this box** as run-once images under
+the `capture` profile in `docker-compose.yml`, fired by the host crontab
+`capture.crontab`. (Operator decision 2026-06-26: EC2-host-cron now; rearchitect to
+Lambda + EventBridge when data sources / ingest frequency grow — the images are
+already standalone, so that lift is mechanical.)
+
+| Service | Script | Cadence (UTC) | Tier |
+|---------|--------|---------------|------|
+| `odds-capture` | `odds_api_ingestion.py odds` → `mlb_odds_raw` | `*/30` | live-price feed |
+| `schedule-capture` | `ingest_statsapi.py schedule` + `trigger_dbt.py` | `*/30` (self-guards 14-03 UTC) | dbt trigger = ALERT-on-skip |
+| `derivative-capture` | `derivative_odds_backfill.py capture` | `*/30` | EVAL/CLV-only |
+| `weather-capture` | `ingest_weather.py` (T-24/6/3/1h + observed) | hourly (self-guards 10-02 UTC) | WARN |
+
+**Key-handling fix (same root cause as the P2 Snowflake-key bug):** all 4 capture
+entrypoints materialized the PEM with `printf '%s\n' "$SNOWFLAKE_PRIVATE_KEY"` —
+which breaks on a single-line `\n`-escaped/base64 env value. Fixed to normalize
+(`\n`-escaped checked first, then base64, raw PEM passthrough). Verify after build:
+`docker compose ... run --rm odds-capture` should land rows in `mlb_odds_raw`.
+
+### Deploy (on the box)
+```bash
+cd ~/app && git pull origin dev
+# build the 4 capture images once:
+docker compose -f services/dagster/aws/docker-compose.yml --profile capture build
+# smoke-test one (should connect to Snowflake + write):
+docker compose -f services/dagster/aws/docker-compose.yml run --rm odds-capture
+# install the schedule:
+crontab services/dagster/aws/capture.crontab && crontab -l
+tail -f ~/capture-cron.log   # watch a couple of fires
+```
+
+### Odds backfill (P3 task 2 — run at deploy with the live gap)
+Compute the gap (last capture → now): `MAX(captured_at)` in
+`baseball_data.oddsapi.mlb_odds_raw`. The Odds API's **historical** endpoint (paid
+tier, `?date=<ISO>`) can retrieve missed snapshots — check
+`odds_api_ingestion.py --help` for a historical mode; if available, pull the gap
+window for today's games. If intraday history isn't retrievable, **log the gap
+explicitly** (today's CLV / line-movement features are holed) and resume forward
+capture — pick *side* is unaffected (model's), only *prices* were stale.
+
+### Served-price freshness (P3 task 3)
+Restoring capture makes **raw** odds (`mlb_odds_raw`) current. **Displayed** prices
+read `mart_odds_outcomes`, which refreshes only when the odds marts rebuild
+(`dbt run --select stg_oddsapi_odds mart_odds_outcomes`) — driven by the
+`odds_current_rebuild_sensor`, **enabled at P4**. To refresh served prices *before*
+P4, uncomment the optional chain at the bottom of `capture.crontab` (capture → odds-
+mart rebuild via dbt-runner → `write_serving_store`); remove it at P4 when the sensor
+takes over.
+
+## Next phases
+
+- **P4** — dev→main cutover: enable AWS dagit schedules + sensors (incl.
+  `odds_current_rebuild_sensor`) while turning Dagster+ OFF in the same window,
+  run a full daily cycle, cancel Railway, decommission Dagster+ (~$275/mo saved).

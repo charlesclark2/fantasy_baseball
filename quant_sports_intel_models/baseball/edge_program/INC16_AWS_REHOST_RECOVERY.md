@@ -81,19 +81,45 @@ The whole stack is now a single Docker Compose box (re-deploy, not rebuild):
 - Port the `is_permanent` semantics + the **E9.28 bulk-permanent-invalidation** (`invalidate_permanent_picks`) to a DynamoDB query+batch-delete.
 - **AC:** picks/game-detail/book-odds/performance all read from DynamoDB; `write_serving_store` writes DynamoDB + S3; permanent-cache invalidation works; latency acceptable; a full read path validated.
 
-## PHASE 3 — Capture crons → Lambda + EventBridge
+## PHASE 3 — Capture crons → EC2 host-cron (→ Lambda/EventBridge later)
 **Goal:** restore ALL the Railway capture feeds (odds / schedule / derivative / weather) off Railway.
+
+> **✅ CODE-COMPLETE 2026-06-26 — approach: EC2 host-cron (operator decision; Lambda/EventBridge
+> deferred until data sources / ingest frequency grow).** The 4 capture crons are re-homed as
+> run-once images under the `capture` profile in `services/dagster/aws/docker-compose.yml`, fired
+> by the host crontab `services/dagster/aws/capture.crontab` via `docker compose run --rm`.
+> **🔑 Same key bug as P2 fixed in all 4 entrypoints:** they materialized the PEM with
+> `printf '%s\n' "$SNOWFLAKE_PRIVATE_KEY"` → broke on a single-line `\n`-escaped/base64 value;
+> now normalized (`\n`-escaped first, then base64, raw passthrough). `schedule`+`weather`
+> entrypoints self-guard their UTC windows. **Served-price freshness (task 3):** P3 makes RAW
+> odds (`mlb_odds_raw`) current; DISPLAYED prices (`mart_odds_outcomes`) refresh via the odds-mart
+> rebuild (`stg_oddsapi_odds mart_odds_outcomes`) — the `odds_current_rebuild_sensor`, enabled at
+> P4; an optional interim refresh chain is in `capture.crontab` (commented). **OPERATOR DEPLOY:**
+> on the box — `git pull` → `docker compose --profile capture build` → smoke-test one capture →
+> `crontab services/dagster/aws/capture.crontab` → run the odds **backfill** for the live gap
+> (`MAX(captured_at)` in `mlb_odds_raw` → now; historical pull if the provider tier supports it,
+> else log the gap). Full steps: `services/dagster/aws/README.md`.
 - ⚠️ **FIRST enumerate every cron that lived on Railway** (cross-check the old Railway cron/service config + the Dagster schedules in `pipeline/` + the CLAUDE.md op→tier map) so none are missed.
 - Re-host as **Lambda functions on EventBridge schedules** (serverless, ~$0) writing to S3/Snowflake — `odds_capture`, `schedule_capture` (schedule/probables), `derivative_capture`, **`ingest_weather` (pregame) + `intraday_weather_capture`**. (Or run on the EC2 box via cron — Lambda is cheaper + more reliable.)
 - ⚠️ `derivative_capture`: keep the corrected F5 keys (`*_1st_5_innings`) from E2.0b-fix.
 - Preserve each op's tier: weather = **WARN** (non-critical; predictions run without it), `schedule_capture`'s dbt trigger = **ALERT-loud-on-skip**.
 - **AC:** odds / schedule / derivative / weather feeds all flowing again to S3/Snowflake on schedule.
 
-## PHASE 4 — Cut over, validate, decommission Railway
-- Enable the schedules on the AWS Dagster; run a FULL daily cycle end-to-end (compute_elo → dbt_daily_build → predict_today → write_serving_store → DynamoDB/S3); validate picks served.
+## PHASE 4 — dev→main cutover, validate, decommission Railway
+- The box tracks **`dev`** → **merge `dev`→`main`** (carries P2 + the PEM key-normalization + P3), repoint the box to `main`, `docker compose up -d --build`.
+- **PRE-CUTOVER CHECKLIST (from the P2/P3 findings — all green before enabling schedules):** dbt-runner key loads (`head -1 /tmp/snowflake_rsa_key.pem` = `-----BEGIN`, the `_normalize_pem` fix); IMDSv2 hop-limit=2 persists + `AWS_DEFAULT_REGION=us-east-1` in container env; Lambda still has the `DynamoServingCacheRead` + `S3ArtifactsZoneOverlayRead` grants after any redeploy; `DATABASE_URL` absent on box + Lambda.
+- Run a FULL daily cycle end-to-end (compute_elo → dbt_daily_build → predict_today → write_serving_store → DynamoDB/S3); validate picks served + the 4 backend surfaces + the E9.31 heatmap.
+- **Flip schedules in ONE window:** enable the AWS-box dagit schedules WHILE turning Dagster+ Cloud schedules OFF — never both on (no double-serve). Restores `lineup_monitor` re-scoring → post-lineup predictions render again.
 - Keep **Dagster+ Cloud as the emergency rollback** until AWS proves stable for a few days.
-- Then **cancel the Railway plan** (everything on it is regenerable; a `pg_dump` of the serving PG is optional insurance only — it's a cache).
-- **AC:** a clean multi-day daily cycle on AWS; Railway cancelled; Dagster+ decommissioned after; the ~$275/mo Dagster+ saving banked; total AWS infra ~$15–35/mo.
+- Then **cancel the Railway plan** (everything on it is regenerable; the serving PG is fully replaced by DynamoDB; a `pg_dump` is optional insurance only).
+- **AC:** dev→main merged + box on main; pre-cutover checklist green; a clean multi-day daily cycle on AWS; lineup re-scoring live; Railway cancelled; Dagster+ decommissioned after; the ~$275/mo Dagster+ saving banked; total AWS infra ~$15–35/mo.
+
+## PHASE 5 — Orchestration CI/CD (GitHub) — guard + auto-deploy future orchestration merges
+**Why (the recurring footgun):** "a pipeline change isn't live until the codeloc redeploys off main" is a MANUAL step that already bit a session (CI compile-only let the W1d runtime break through → INC-15). Once the box owns live orchestration, any future merge touching `pipeline/`, `services/dagster/aws/`, the dbt-runner, or the capture Lambdas must be (a) GATED by CI before merge and (b) auto-DEPLOYED to the box on merge to `main` — no silent drift between `main` and the running box.
+**Scope = a GitHub Actions workflow (specced as INC-16-P5 in story_prompts.md):**
+- **CI gate** (on PRs touching orchestration paths): Dagster `definitions validate` (defs load — catches the boot `_InactiveRpcError`/import breaks), `docker compose config` + a build of the changed images, a smoke that the PEM `_normalize_pem` + `AWS_DEFAULT_REGION` wiring is present, plus the existing Python fast gate + dbt jobs.
+- **CD** (on merge to `main`, orchestration paths): deploy to the box (SSH/SSM `git pull` + `docker compose up -d --build` + a post-deploy `/health` + defs-loaded check), so `main` == running box automatically.
+- **AC:** orchestration-affecting PRs are CI-gated; merges to `main` auto-deploy to the box + self-verify; the "manual codeloc redeploy" step is gone.
 
 ## Strategic upside
 Consolidating orchestration + serving onto AWS (where Lambda/S3/DynamoDB/Cognito/SES already live) **removes the single-provider single-point-of-failure that just bricked everything** — no separate restrictable account can take the whole stack down again. The lakehouse (S3/duckdb) + Snowflake-minimization work continues unchanged (the dbt-runner just runs on EC2 now); end-state Snowflake-touch is still only the Cortex narrative.
