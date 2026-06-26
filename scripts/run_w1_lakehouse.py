@@ -93,30 +93,37 @@ def extract_duckdb_sql(model_name: str) -> str:
         )
 
     else:
-        # Layout B: mart_pitch_* models have {{ config() }} at the top level
-        # (NOT inside a {% if target.name %} conditional — strip it directly).
-        sql = text
+        # Layout B: mart_pitch_* models (E11.1-W1d dual-branch structure).
+        # {{ config() }} at top level, then:
+        #   {% if target.name == 'duckdb' %} ... transformation SQL ...
+        #   {% else %} ... thin Snowflake view ... {% endif %}
+        # Extract the duckdb branch; discard the Snowflake branch.
 
-        # Strip {{ config(...) }} — multi-line block at the top of each model
-        sql = re.sub(r'\{\{\s*config\(.*?\)\s*\}\}', '', sql, flags=re.DOTALL)
+        # Strip {{ config(...) }} first
+        stripped = re.sub(r'\{\{\s*config\(.*?\)\s*\}\}', '', text, flags=re.DOTALL)
 
-        # Strip any remaining {% if target.name == 'duckdb' %} … {% endif %} blocks
-        sql = re.sub(
+        # Extract duckdb branch (content between the if and else)
+        m = re.search(
             r'\{%-?\s*if\s+target\.name\s*==\s*[\'"]duckdb[\'"]\s*-?%\}'
-            r'.*?'
-            r'\{%-?\s*endif\s*-?%\}',
-            '', sql, flags=re.DOTALL,
+            r'(.*?)'
+            r'\{%-?\s*else\s*-?%\}',
+            stripped, re.DOTALL,
         )
+        if not m:
+            raise ValueError(
+                f"No {{% if target.name == 'duckdb' %}} branch found in {model_name}.sql. "
+                "mart_pitch_* models must have a dual-branch structure (E11.1-W1d)."
+            )
+        sql = m.group(1)
 
-        # Resolve {{ ref('model') }} → model
+        # Safety-net resolvers (the duckdb branch uses plain table names, not Jinja,
+        # but these are kept as a guard against accidental {{ ref() }} / {{ source() }}).
         sql = re.sub(r"\{\{\s*ref\(['\"](\w+)['\"]\)\s*\}\}", r'\1', sql)
-
-        # Resolve {{ source('schema', 'table') }} → table
         sql = re.sub(
             r"\{\{\s*source\(['\"][^'\"]+['\"],\s*['\"](\w+)['\"]\)\s*\}\}", r'\1', sql
         )
 
-        # Strip {% if is_incremental() %} … {% endif %} blocks (removes {{ this }})
+        # Strip {% if is_incremental() %} … {% endif %} blocks (safety net)
         sql = re.sub(
             r'\{%-?\s*if\s+is_incremental\(\)\s*-?%\}.*?\{%-?\s*endif\s*-?%\}',
             '', sql, flags=re.DOTALL,
