@@ -34,6 +34,7 @@ RUN pip install --no-cache-dir \
     dagster-pipes \
     dagster-dbt \
     dagster-snowflake \
+    dagster-postgres \
     pandas \
     numpy \
     scikit-learn \
@@ -70,6 +71,9 @@ RUN pip install --no-cache-dir \
 # writes fail at runtime without h5py, so we must check both explicitly.
 RUN python -c "import pymc; import pytensor; import arviz; import h5netcdf; import h5py; print('Bayesian deps OK')"
 RUN python -c "import duckdb; print('duckdb OK')"
+# E11.15 — OSS self-host stores run/event/schedule state in Postgres; the storage class
+# dagster_postgres.DagsterPostgresStorage must import or the instance won't load.
+RUN python -c "from dagster_postgres import DagsterPostgresStorage; print('dagster_postgres OK')"
 
 # Install dbt-fusion AFTER pip so it overwrites dbt-core's `dbt` CLI entry point.
 # The pip install of dagster-dbt pulls in dbt-core which places its own `dbt`

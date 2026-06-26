@@ -194,6 +194,13 @@ Dagster+. Reconcile the FULL list against the Dagster Cloud env/secrets export.
 > image's `collation-refresh` helper assumes the default `postgres` superuser; we use a
 > least-privilege `dagster` role instead. PG is healthy and accepting connections. Ignore it.
 
+> **Build dependency (fixed 2026-06-26):** the OSS Postgres storage needs the `dagster-postgres`
+> Python package (`dagster_postgres.DagsterPostgresStorage`). The first push crashed all three
+> services with `Couldn't import module dagster_postgres` because the root `Dockerfile` installed
+> dagster + the other extras but not `-postgres`. Fixed by adding `dagster-postgres` to the root
+> `Dockerfile` pip install + `pyproject.toml`, plus a build-time `import` smoke-check so a bad
+> resolve fails the build instead of crashing at boot. Re-push `main` to rebuild.
+
 > **gRPC bind:** `dagster-codeloc` binds `[::]:4000` so Railway's dual-stack private DNS (AAAA for
 > `dagster-codeloc.railway.internal`) resolves. The PG already listens on `::` too. If a future
 > Dagster version rejects `[::]`, fall back to `0.0.0.0` (Railway private net is dual-stack).
