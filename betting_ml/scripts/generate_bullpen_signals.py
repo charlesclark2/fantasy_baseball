@@ -466,7 +466,7 @@ def main() -> None:
     v1_artifact = None
     avail_params = None
     if emit_v1:
-        artifact_path = _ARTIFACT_S3_URI_V1 if os.environ.get("AWS_ACCESS_KEY_ID") else _ARTIFACT_LOCAL_V1
+        artifact_path = _ARTIFACT_S3_URI_V1 if (os.environ.get("AWS_ACCESS_KEY_ID") or os.environ.get("ARTIFACTS_FROM_S3")) else _ARTIFACT_LOCAL_V1
         print(f"\nLoading v1 artifact from {artifact_path}...")
         if isinstance(artifact_path, Path) and not artifact_path.exists():
             print(f"ERROR: {artifact_path} not found. Run train_bullpen_quality_v1.py first.")
@@ -486,7 +486,7 @@ def main() -> None:
     # --- Load v2 artifact ----------------------------------------------------
     v2_artifact = None
     if emit_v2:
-        artifact_path_v2 = _ARTIFACT_S3_URI_V2 if os.environ.get("AWS_ACCESS_KEY_ID") else _ARTIFACT_LOCAL_V2
+        artifact_path_v2 = _ARTIFACT_S3_URI_V2 if (os.environ.get("AWS_ACCESS_KEY_ID") or os.environ.get("ARTIFACTS_FROM_S3")) else _ARTIFACT_LOCAL_V2
         print(f"\nLoading v2 artifact from {artifact_path_v2}...")
         if isinstance(artifact_path_v2, Path) and not artifact_path_v2.exists():
             print(f"ERROR: {artifact_path_v2} not found. Run train_bullpen_distributional.py first.")

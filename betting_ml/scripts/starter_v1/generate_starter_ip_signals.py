@@ -468,7 +468,7 @@ def main() -> None:
         start_date = end_date = args.date
 
     # Load artifact — prefer S3 when AWS credentials present
-    artifact_path = _ARTIFACT_S3_URI if os.environ.get("AWS_ACCESS_KEY_ID") else str(_ARTIFACT_LOCAL)
+    artifact_path = _ARTIFACT_S3_URI if (os.environ.get("AWS_ACCESS_KEY_ID") or os.environ.get("ARTIFACTS_FROM_S3")) else str(_ARTIFACT_LOCAL)
     print(f"Loading artifact from {artifact_path} ...")
     artifact = load_artifact(artifact_path)
     print(f"  model_type={artifact['model_type']}  cv_nll={artifact['cv_nll']:.4f}  "
