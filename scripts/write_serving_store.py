@@ -84,7 +84,11 @@ def _load_private_key() -> bytes:
         key_val = os.environ.get("SNOWFLAKE_PRIVATE_KEY", "").strip()
         if not key_val:
             raise RuntimeError("Neither SNOWFLAKE_PRIVATE_KEY_PATH nor SNOWFLAKE_PRIVATE_KEY is set")
-        if not key_val.startswith("-----"):
+        # INC-16-P2: a Compose env_file can't carry real newlines. Check the
+        # \n-escaped form FIRST (it still starts with "-----BEGIN"), then base64.
+        if "\\n" in key_val:
+            key_val = key_val.replace("\\n", "\n").strip()
+        elif not key_val.startswith("-----"):
             key_val = base64.b64decode(key_val).decode("utf-8")
         pem_bytes = key_val.encode("utf-8")
     p_key = serialization.load_pem_private_key(pem_bytes, password=None, backend=default_backend())
