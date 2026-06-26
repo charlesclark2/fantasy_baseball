@@ -347,7 +347,11 @@ final as (
         -- has_odds: event_id matched in mart_game_odds_bridge (does not guarantee
         -- price columns are populated — Card 3 backfill is partial).
         -- Intentionally excluded from has_full_data: odds are an optional block.
-        od.has_odds,
+        -- coalesce(...,false): has_odds is a never-null boolean by design (already
+        -- coalesced in feature_pregame_odds_features); honor that on the LEFT JOIN
+        -- miss so the not_null test holds even when the odds upstream isn't present
+        -- (e.g. a partial `state:modified+` CI build without deferral). No-op in prod.
+        coalesce(od.has_odds, false)::boolean   as has_odds,
 
         -- ── Home lineup ───────────────────────────────────────────────────────
         h_ln.has_full_lineup                    as home_has_full_lineup,

@@ -360,6 +360,26 @@ function fmtOddsTime(isoTs: string | null | undefined): string | null {
   }
 }
 
+// E9.32 — hold (overround/vig) computation from decimal odds, with American fallback
+function americanToDecimal(american: number | null): number | null {
+  if (american == null) return null
+  return american > 0 ? american / 100 + 1 : 100 / Math.abs(american) + 1
+}
+
+function computeH2HHold(book: BookOddsH2H): number | null {
+  const homeDec = book.home_decimal ?? americanToDecimal(book.home_american)
+  const awayDec = book.away_decimal ?? americanToDecimal(book.away_american)
+  if (homeDec == null || awayDec == null || homeDec <= 1 || awayDec <= 1) return null
+  return 1 / homeDec + 1 / awayDec - 1
+}
+
+function computeTotalsHold(book: BookOddsTotals): number | null {
+  const overDec = book.over_decimal ?? americanToDecimal(book.over_american)
+  const underDec = book.under_decimal ?? americanToDecimal(book.under_american)
+  if (overDec == null || underDec == null || overDec <= 1 || underDec <= 1) return null
+  return 1 / overDec + 1 / underDec - 1
+}
+
 function BookOddsSection({
   bookOdds,
   homeFullName,
@@ -394,6 +414,16 @@ function BookOddsSection({
     const t = bookOdds.totals.find((b) => b.book_key === k)
     return (h?.home_american != null) || (t?.line != null)
   })
+
+  // E9.32 — compute hold per book per market; find lowest-hold book for each
+  const holdByBookH2H = new Map<string, number>()
+  bookOdds.h2h.forEach((b) => { const h = computeH2HHold(b); if (h != null) holdByBookH2H.set(b.book_key, h) })
+  const holdByBookTotals = new Map<string, number>()
+  bookOdds.totals.forEach((b) => { const h = computeTotalsHold(b); if (h != null) holdByBookTotals.set(b.book_key, h) })
+  let minHoldH2HKey: string | null = null; let _minH2HVal = Infinity
+  holdByBookH2H.forEach((v, k) => { if (v < _minH2HVal) { _minH2HVal = v; minHoldH2HKey = k } })
+  let minHoldTotalsKey: string | null = null; let _minTotalsVal = Infinity
+  holdByBookTotals.forEach((v, k) => { if (v < _minTotalsVal) { _minTotalsVal = v; minHoldTotalsKey = k } })
 
   // When layer4 abstains, pick_side is null but we can still show EV direction by
   // deriving which side the model thinks is undervalued (model_prob > market_bet_pct).
@@ -467,6 +497,7 @@ function BookOddsSection({
               <div className="flex flex-wrap gap-2">
                 {availableBooks.map((key) => {
                   const isBest = key !== "pinnacle" && key === activeBestKey
+                  const isTightest = (key === minHoldH2HKey || key === minHoldTotalsKey) && (holdByBookH2H.has(key) || holdByBookTotals.has(key))
                   return (
                     <button
                       key={key}
@@ -478,6 +509,8 @@ function BookOddsSection({
                             : "bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30"
                           : isBest
                           ? "text-[#10b981] border-[#10b981]/35 bg-transparent hover:border-[#10b981]/60"
+                          : isTightest && !isBest
+                          ? "text-[#0ea5e9] border-[#0ea5e9]/35 bg-transparent hover:border-[#0ea5e9]/60"
                           : "bg-transparent text-gray-500 border-[#262626] hover:border-[#333] hover:text-gray-300"
                       }`}
                     >
@@ -490,12 +523,69 @@ function BookOddsSection({
                           BEST
                         </span>
                       )}
+                      {isTightest && !isBest && (
+                        <span className="ml-1.5 inline-flex items-center rounded px-1 py-0 text-[8px] font-bold uppercase tracking-wide bg-[#0ea5e9] text-[#0a0a0a]">
+                          LOW VIG
+                        </span>
+                      )}
                     </button>
                   )
                 })}
               </div>
             )
           })()}
+
+          {/* E9.32 — Cross-book hold (overround/vig) summary */}
+          {(holdByBookH2H.size > 0 || holdByBookTotals.size > 0) && (
+            <div className="rounded-lg bg-[#111] border border-[#1e1e1e] px-4 py-3">
+              <div className="flex items-center gap-2 mb-2.5">
+                <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Hold (vig) by book</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3 w-3 text-gray-600 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[280px] text-xs leading-relaxed">
+                    Hold = (implied prob side A) + (implied prob side B) − 1. It&apos;s the book&apos;s built-in margin across both sides — lower hold means tighter lines. ★ marks the tightest (lowest-hold) book. Pinnacle typically runs ~2% hold; US books run 4–8%. Tighter hold = better price to shop — not a bet recommendation.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <div className="space-y-2">
+                {holdByBookH2H.size > 0 && (
+                  <div>
+                    <p className="text-[10px] text-gray-600 mb-1.5">Moneyline</p>
+                    <div className="flex flex-wrap gap-x-5 gap-y-1">
+                      {BOOK_ORDER.filter((k) => holdByBookH2H.has(k)).map((k) => {
+                        const hold = holdByBookH2H.get(k)!
+                        const isTightest = k === minHoldH2HKey
+                        return (
+                          <span key={k} className={`text-xs font-mono ${isTightest ? "text-[#10b981] font-semibold" : "text-gray-500"}`}>
+                            {BOOK_LABELS[k] ?? k} {(hold * 100).toFixed(1)}%{isTightest && <span className="ml-0.5 text-[9px]">★</span>}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+                {holdByBookTotals.size > 0 && (
+                  <div>
+                    <p className="text-[10px] text-gray-600 mb-1.5">Totals</p>
+                    <div className="flex flex-wrap gap-x-5 gap-y-1">
+                      {BOOK_ORDER.filter((k) => holdByBookTotals.has(k)).map((k) => {
+                        const hold = holdByBookTotals.get(k)!
+                        const isTightest = k === minHoldTotalsKey
+                        return (
+                          <span key={k} className={`text-xs font-mono ${isTightest ? "text-[#10b981] font-semibold" : "text-gray-500"}`}>
+                            {BOOK_LABELS[k] ?? k} {(hold * 100).toFixed(1)}%{isTightest && <span className="ml-0.5 text-[9px]">★</span>}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+                <p className="text-[10px] text-gray-600 pt-0.5">★ Tightest (lowest hold) = least book margin = better price to shop. Not a bet recommendation.</p>
+              </div>
+            </div>
+          )}
 
           {/* Cross-book +EV summary — shows "N of M books +EV" or "No book +EV" per pick side */}
           {(effectiveH2HPickSide || effectiveTotalsPickSide) && (() => {

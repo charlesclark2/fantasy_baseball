@@ -46,6 +46,16 @@ lineups as (
         slot_9_position
     from {{ source('betting_features', 'feature_pregame_lineup_state') }}
     where is_current = true
+    -- INC-14 fix: a postponed/rescheduled game can leave is_current=true on BOTH the
+    -- original and the rescheduled official_date (the SCD-2 writer fails to close the
+    -- superseded row — valid_to stays NULL on both). Those two rows carry different
+    -- official_dates that cartesian-fan-out through the date-keyed downstream joins
+    -- (observed: game 823613 → 16 away / 4 home rows, breaking the (game_pk, side)
+    -- grain and the offense-signal MERGE). Keep only the latest-asserted lineup per
+    -- game-side. No-op for normal games (single is_current row). Upstream root cause:
+    -- the SCD-2 writer should set valid_to / is_current=false on the old official_date
+    -- when a game is rescheduled (tracked separately as the SCD-2-writer fix).
+    qualify row_number() over (partition by game_pk, home_away order by valid_from desc) = 1
 
     union all
 

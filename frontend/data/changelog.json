@@ -45,6 +45,10 @@
       {
         "tag": "fix",
         "text": "The Book Comparison on each pick's detail page was showing odds captured after the game started, which can't be bet. Lines now freeze at the last pre-game snapshot, so every price displayed is one that was actually available before first pitch."
+      },
+      {
+        "tag": "improvement",
+        "text": "Book Comparison now shows each bookmaker's hold (overround/vig) — the book's built-in margin computed as the sum of both sides' implied probabilities minus 1. A new 'Hold (vig) by book' section lists every available book with its hold percentage for both moneyline and totals markets, with the tightest (lowest-hold) book marked with a ★. The book with the lowest hold also gets a 'LOW VIG' badge in the book selector. Lower hold means less margin built into the price — a tighter, more competitive book to shop. Pinnacle typically runs ~2% hold; US books typically run 4–8%. This is a market-structure fact, not a bet recommendation."
       }
     ]
   },
