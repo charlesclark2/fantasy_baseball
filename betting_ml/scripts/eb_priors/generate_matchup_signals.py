@@ -182,7 +182,7 @@ def _joint_entropy(batter_probs: np.ndarray, pitcher_probs: np.ndarray) -> float
 # ── Artifact loading ───────────────────────────────────────────────────────────
 
 def _load_artifacts() -> tuple[dict, dict]:
-    artifact_path = _ARTIFACT_S3_URI if os.environ.get("AWS_ACCESS_KEY_ID") else _ARTIFACT_LOCAL
+    artifact_path = _ARTIFACT_S3_URI if (os.environ.get("AWS_ACCESS_KEY_ID") or os.environ.get("ARTIFACTS_FROM_S3")) else _ARTIFACT_LOCAL
     if isinstance(artifact_path, Path) and not artifact_path.exists():
         print(f"ERROR: {artifact_path} not found. Run train_matchup_v1.py first.")
         sys.exit(1)

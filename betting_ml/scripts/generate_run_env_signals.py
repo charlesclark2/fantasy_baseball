@@ -281,7 +281,7 @@ def main() -> None:
     env_label = f"[{args.env.upper()}]"
     print(f"{env_label} target={target_table}")
 
-    artifact_path = _ARTIFACT_S3_URI if os.environ.get("AWS_ACCESS_KEY_ID") else _ARTIFACT_LOCAL
+    artifact_path = _ARTIFACT_S3_URI if (os.environ.get("AWS_ACCESS_KEY_ID") or os.environ.get("ARTIFACTS_FROM_S3")) else _ARTIFACT_LOCAL
     print(f"\nLoading artifact from {artifact_path}...")
     artifact = load_artifact(artifact_path)
     print(
