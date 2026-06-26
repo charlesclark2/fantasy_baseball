@@ -1,0 +1,75 @@
+# =============================================================================
+# E11.15 — OSS Dagster instance config (self-hosted on Railway).
+#
+# Shared by all THREE Dagster services (code-server, daemon, webserver) via
+#   DAGSTER_HOME=/app/services/dagster
+# This REPLACES the Dagster+ agent config in dagster_home/dagster.yaml at runtime.
+# dagster_home/dagster.yaml stays in the repo, untouched, as the INSTANT ROLLBACK
+# path (re-enable Dagster+) until the clean-window decommission (Phase 4).
+#
+# WHY a separate dir (not editing dagster_home/): the live Dagster+ build still
+# COPYs and uses dagster_home/dagster.yaml. Touching it would break the rollback
+# target. The OSS config is fully isolated here.
+# =============================================================================
+
+# --- Run / event / schedule storage -----------------------------------------
+# Points at the DEDICATED Dagster Postgres (Railway service "dagster-postgres"),
+# which is SEPARATE from the serving PG (service "Postgres" → daily_picks/api_cache).
+# Schedule/sensor on/off state lives here too: a fresh DB => every schedule &
+# sensor STOPPED (no default_status=RUNNING anywhere in pipeline/), which is what
+# makes parallel standup safe — nothing fires until we toggle it ON at cutover.
+storage:
+  postgres:
+    postgres_url:
+      env: DAGSTER_PG_URL
+
+# --- Run queue (server-side concurrency) -------------------------------------
+# Ports the A2.16 caps that lived in Dagster+ deployment_settings.yaml:
+#   * each sensor job (concurrency_group RUN tag) capped at 1 concurrent run
+#     (lineup_monitor / statcast_catchup / etc. queue behind themselves, never stack)
+#   * max_concurrent_runs bounds total RAM on the single code-server box, where
+#     runs execute as subprocesses (DefaultRunLauncher). 5 is comfortably above the
+#     real peak (daily + a sensor catch-up + the odd weekly) without letting the
+#     heavy weekly PyMC retrain overlap the daily build into an OOM.
+run_coordinator:
+  module: dagster._core.run_coordinator
+  class: QueuedRunCoordinator
+  config:
+    max_concurrent_runs: 5
+    tag_concurrency_limits:
+      - key: "concurrency_group"
+        limit: 1
+        value:
+          applyLimitPerUniqueValue: true
+
+# --- Run launcher ------------------------------------------------------------
+# DefaultRunLauncher = each run executes as a subprocess INSIDE the code-server
+# (gRPC) container — the "default single-box" model the story calls for. No
+# per-run container spin-up, so execution cost ≈ $0; cost is the held RAM only.
+# dbt still runs OUT-OF-PROCESS on the existing dbt-runner (pipeline/ops/_dbt_exec
+# posts to DBT_RUNNER_URL) — we never run dbt in a Dagster subprocess.
+run_launcher:
+  module: dagster._core.launcher
+  class: DefaultRunLauncher
+
+# --- Run monitoring (global hard timeout, A2.16) -----------------------------
+# Terminate any run — defined job OR ad-hoc materialization — over 4h, so a hung
+# or runaway run can't silently hold a subprocess (the Dagster+ trial's single
+# biggest compute event was a ~16h stuck manual run). A single run can override
+# via the `dagster/max_runtime` tag.
+run_monitoring:
+  enabled: true
+  max_runtime_seconds: 14400
+
+# --- Hygiene -----------------------------------------------------------------
+# No phone-home; this is a private single-tenant instance.
+telemetry:
+  enabled: false
+nux:
+  enabled: false
+
+# Compute-log capture (raw op stdout/stderr) uses the default LocalComputeLogManager
+# (ephemeral disk). The STRUCTURED event log + full run history persist in Postgres
+# (above) and render permanently in dagit; raw stdout also surfaces in Railway's own
+# log viewer for the code-server. S3ComputeLogManager (persistent raw logs across
+# restarts) is a follow-on — it needs `dagster-aws` added to the image.

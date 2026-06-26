@@ -1,0 +1,22 @@
+# E11.15 — Railway config for the Dagster CODE-LOCATION (gRPC) server.
+# Service name MUST be "dagster-codeloc" (workspace.yaml + the daemon/webserver
+# reach it at dagster-codeloc.railway.internal:4000).
+#
+# Reuses the repo-ROOT Dockerfile (full ML + Dagster stack already built there) so
+# there is ZERO image drift vs the live Dagster+ build. The Dockerfile's
+# CMD (dagster-cloud agent run) is overridden by startCommand below.
+#
+# This is the WORKER: with DefaultRunLauncher, every job run executes as a
+# subprocess in THIS container, so it needs the full op env (Snowflake, AWS, the
+# serving DATABASE_URL, the API keys, DBT_RUNNER_URL, …) wired via reference vars.
+# Bind [::] so Railway's dual-stack private DNS (AAAA) can reach the gRPC port.
+# No public domain — private networking only.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "dagster api grpc --host '[::]' --port 4000 --python-file pipeline/__init__.py --attribute defs --working-directory /app"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

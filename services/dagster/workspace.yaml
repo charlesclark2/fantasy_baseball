@@ -1,0 +1,18 @@
+# =============================================================================
+# E11.15 — workspace for the OSS daemon + webserver.
+#
+# Both load the code location from the gRPC code-server (Railway service
+# "dagster-codeloc") over PRIVATE networking (free, never egresses). The
+# code-server runs:
+#   dagster api grpc --host '[::]' --port 4000 \
+#       --python-file pipeline/__init__.py --attribute defs --working-directory /app
+#
+# host MUST be the code-server's Railway private domain. If the code-server is
+# created under a different service name, update the host below (it is the one
+# value coupled to the service name). Port 4000 matches the start command.
+# =============================================================================
+load_from:
+  - grpc_server:
+      host: dagster-codeloc.railway.internal
+      port: 4000
+      location_name: baseball_betting
