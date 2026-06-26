@@ -1,0 +1,18 @@
+# E11.15 — Railway config for the Dagster WEBSERVER (dagit UI).
+# UI + GraphQL only — NOT serving-critical (schedules/sensors/runs are the daemon
+# + code-server). It is the operator's console: trigger jobs, toggle schedules at
+# cutover, inspect run history. Binds 0.0.0.0:$PORT for Railway's public ingress;
+# give it a generated public domain (lock down with Railway access controls).
+#
+# Optional cost lever: enable "serverless"/sleep on this service so it scales to
+# zero when idle (the daemon keeps the pipeline running without it). Reuses the
+# repo-root Dockerfile; loads the code location over private gRPC via workspace.yaml.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "dagster-webserver --host 0.0.0.0 --port $PORT --workspace /app/services/dagster/workspace.yaml"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

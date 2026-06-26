@@ -1,0 +1,18 @@
+# E11.15 — Railway config for the Dagster DAEMON.
+# One `dagster-daemon run` process drives ALL background loops: the scheduler,
+# the sensor daemon, the QueuedRunCoordinator (run queue + concurrency caps), and
+# run-monitoring (the 4h hard timeout). This is the serving-critical heartbeat —
+# if it is down, schedules and sensors stop firing (no picks). ON_FAILURE restart.
+#
+# Loads the code location over private gRPC via workspace.yaml. Needs DAGSTER_HOME
+# (= /app/services/dagster) + DAGSTER_PG_URL so it shares the same Postgres
+# instance as the code-server and webserver. Reuses the repo-root Dockerfile.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "dagster-daemon run --workspace /app/services/dagster/workspace.yaml"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

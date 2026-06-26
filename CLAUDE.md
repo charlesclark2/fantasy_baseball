@@ -62,7 +62,7 @@ Three tiers govern how pipeline failures behave. Every new op, cron, sensor, and
 | `ingest_weather`, `ingest_oaa`, `ingest_umpires_early/late` | WARN | non-critical; predictions run without |
 | `ingest_umpire_scorecards`, `settle_user_bets_op` | WARN | post-game enrichment; non-blocking |
 | `generate_pick_narratives_op`, `check_data_freshness` | WARN | advisory; fallback exists |
-| `ingest_statcast_to_s3_op`, `run_w1_lakehouse_op` | WARN | S3 track; Snowflake path is primary |
+| `ingest_statcast_to_s3_op`, `run_w1_lakehouse_op`, `refresh_w1_external_tables_op` | HALT | E11.1-W1d: mart_pitch_* served from S3 external tables; on critical path before dbt_daily_build |
 | `intraday_weather_capture`, `write_book_odds_op` | WARN | supplemental; never blocks predictions |
 | `schedule_capture` cron → dbt trigger | ALERT | skip must log WARNING to stderr |
 | `trigger_dbt.py` when DBT_RUNNER_URL unset | ALERT | skip is loud (INC-5) |
