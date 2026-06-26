@@ -85,11 +85,11 @@ export default function AboutPage() {
         </div>
 
         {/* Footer / CTA */}
-        <div className="border-t border-[#262626] pt-10">
+        <div className="border-t border-[#262626] pt-10 flex flex-col items-center text-center">
           <p className="text-xs text-muted-foreground mb-6">
             A product of Penumbra Partners.
           </p>
-          <div className="flex flex-wrap gap-3 mb-10">
+          <div className="flex flex-wrap justify-center gap-3">
             <Link
               href="/faq"
               className="inline-flex items-center rounded-md border border-[#262626] px-4 py-2 text-sm text-gray-300 hover:text-white hover:border-[#404040] transition-colors"
@@ -102,23 +102,6 @@ export default function AboutPage() {
             >
               Request access
             </a>
-          </div>
-          <div className="flex flex-wrap gap-6 text-sm text-muted-foreground">
-            <Link href="/blog" className="hover:text-foreground transition-colors">
-              Blog
-            </Link>
-            <Link href="/faq" className="hover:text-foreground transition-colors">
-              FAQ
-            </Link>
-            <Link href="/contact" className="hover:text-foreground transition-colors">
-              Contact
-            </Link>
-            <Link href="/privacy" className="hover:text-foreground transition-colors">
-              Privacy Policy
-            </Link>
-            <Link href="/terms" className="hover:text-foreground transition-colors">
-              Terms of Service
-            </Link>
           </div>
         </div>
 
