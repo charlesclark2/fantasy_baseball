@@ -19,8 +19,20 @@ Prerequisites:
   - AWS credentials accessible via credential chain (aws configure or env vars)
 
 Usage (run from anywhere in the repo):
-  python3 scripts/run_w1_lakehouse.py            # full run  (writes to S3)
+  python3 scripts/run_w1_lakehouse.py            # full run: W1 + W2  (writes to S3)
   python3 scripts/run_w1_lakehouse.py --dry-run  # row-count only, no S3 writes
+  python3 scripts/run_w1_lakehouse.py --w1-only  # only the W1 pitch marts (skip W2)
+  python3 scripts/run_w1_lakehouse.py --skip-w1  # only W2 (reuse existing W1 parquet)
+
+E11.1-W2 (2026-06-26): this script now also builds the W2 pitch-derived batch
+marts (W2_MART_MODELS) after the W1 pitch marts, registering the W1 marts as
+DuckDB views first so the W2 models' `from mart_pitch_*` resolves. The build
+stays in this single op (run_w1_lakehouse_op) — sequenced before dbt_daily_build
+so the external tables are fresh for the morning feature build. (The original
+"use a Railway cron, not a Dagster op" guidance was to avoid Dagster+ serverless
+run-minute billing, which E11.15 eliminated by self-hosting Dagster on Railway —
+self-host cost is held RAM, not run-minutes — so extending this op is now both
+free and the safest ordering.)
 """
 
 import re
@@ -43,6 +55,23 @@ MART_MODELS = [
     "mart_pitch_hitter_profile",
     "mart_pitch_pitcher_profile",
     "mart_pitch_hit_characteristics",
+]
+
+# E11.1-W2: the next batch tier — pitch-derived marts whose ENTIRE upstream
+# closure is already in S3 (stg_batter_pitches + the W1 mart_pitch_* above +
+# stg_ref_players). Built AFTER the W1 marts each run; the W1 marts are
+# registered as DuckDB views (over their freshly-written parquet) first so the
+# plain table names in these models' duckdb branches resolve. Ordering within
+# the list respects intra-W2 deps (none today — each reads only stg_* or W1).
+W2_MART_MODELS = [
+    "mart_pitcher_batted_ball_profile",   # ← stg_batter_pitches
+    "mart_batter_bat_tracking_profile",   # ← stg_batter_pitches
+    "mart_batter_rolling_stats",          # ← stg_batter_pitches
+    "mart_pitcher_rolling_stats",         # ← stg_batter_pitches
+    "mart_starting_pitcher_game_log",     # ← stg_batter_pitches + mart_pitch_game_context
+    "mart_pitcher_batter_history",        # ← mart_pitch_play_event
+    "mart_starter_csw_rolling",           # ← mart_pitch_play_event
+    "mart_starter_pitch_mix_rolling",     # ← mart_pitch_characteristics
 ]
 
 
@@ -137,7 +166,38 @@ def extract_duckdb_sql(model_name: str) -> str:
     return sql.strip()
 
 
-def run(dry_run: bool = False) -> None:
+def _build_marts(conn, models: list[str], dry_run: bool) -> None:
+    """Extract each model's duckdb-branch SQL and COPY it to S3 parquet."""
+    for model in models:
+        loc = f"{LAKEHOUSE}/{model}/data.parquet"
+        mart_sql = extract_duckdb_sql(model)
+        if dry_run:
+            n = conn.execute(f"SELECT count(*) FROM ({mart_sql}) t").fetchone()[0]
+            print(f"  {model}: {n:,} rows  (dry-run — no S3 write)")
+        else:
+            conn.execute(f"COPY ({mart_sql}) TO '{loc}' (FORMAT PARQUET)")
+            print(f"  {model}: written → {loc}")
+
+
+def _register_mart_views(conn, models: list[str], dry_run: bool) -> None:
+    """Register built marts as DuckDB views so downstream W2 marts (which read
+    plain `mart_pitch_*` names in their duckdb branch) resolve.
+
+    Real run: read the just-written S3 parquet (fast). Dry-run: the parquet may be
+    absent/stale (dry-run skips the COPY), so recompute the view from the stg views.
+    """
+    for model in models:
+        if dry_run:
+            conn.execute(f"CREATE OR REPLACE VIEW {model} AS {extract_duckdb_sql(model)}")
+        else:
+            loc = f"{LAKEHOUSE}/{model}/data.parquet"
+            conn.execute(
+                f"CREATE OR REPLACE VIEW {model} AS SELECT * FROM read_parquet('{loc}')"
+            )
+        print(f"  registered view: {model}")
+
+
+def run(dry_run: bool = False, skip_w1: bool = False, w1_only: bool = False) -> None:
     import duckdb
 
     conn = duckdb.connect()
@@ -165,19 +225,33 @@ def run(dry_run: bool = False) -> None:
     n_ref = conn.execute("SELECT count(*) FROM stg_ref_players").fetchone()[0]
     print(f"stg_ref_players: {n_ref:,} players loaded from S3")
 
-    for model in MART_MODELS:
-        loc = f"{LAKEHOUSE}/{model}/data.parquet"
-        mart_sql = extract_duckdb_sql(model)
-        if dry_run:
-            n = conn.execute(f"SELECT count(*) FROM ({mart_sql}) t").fetchone()[0]
-            print(f"  {model}: {n:,} rows  (dry-run — no S3 write)")
-        else:
-            conn.execute(f"COPY ({mart_sql}) TO '{loc}' (FORMAT PARQUET)")
-            print(f"  {model}: written → {loc}")
+    # ── W1: pitch-level marts ────────────────────────────────────────────────
+    if not skip_w1:
+        print("\nW1 marts:")
+        _build_marts(conn, MART_MODELS, dry_run)
+
+    if w1_only:
+        conn.close()
+        print("\nW1 lakehouse run complete (--w1-only; W2 skipped).")
+        return
+
+    # ── W2: pitch-derived batch marts (E11.1-W2) ─────────────────────────────
+    # Register the W1 marts as views first so W2 models that read mart_pitch_*
+    # resolve. With --skip-w1 the parquet from a prior run is reused (lets the
+    # operator iterate on W2 without rebuilding the heavy pitch marts).
+    print("\nRegistering W1 marts as views (for W2 dependencies):")
+    _register_mart_views(conn, MART_MODELS, dry_run)
+
+    print("\nW2 marts:")
+    _build_marts(conn, W2_MART_MODELS, dry_run)
 
     conn.close()
-    print("\nW1 lakehouse run complete.")
+    print("\nW1+W2 lakehouse run complete.")
 
 
 if __name__ == "__main__":
-    run(dry_run="--dry-run" in sys.argv)
+    run(
+        dry_run="--dry-run" in sys.argv,
+        skip_w1="--skip-w1" in sys.argv,
+        w1_only="--w1-only" in sys.argv,
+    )

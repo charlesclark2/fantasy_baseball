@@ -1,5 +1,5 @@
 -- =============================================================================
--- mart_pitcher_batter_history.sql
+-- mart_pitcher_batter_history.sql   (E11.1-W2 lakehouse decommission)
 -- Grain: one row per (pitcher_id, batter_id, game_date)
 -- Purpose: Per-game plate-appearance aggregates between each pitcher-batter pair.
 --          Source for the head-to-head (H2H) historical wOBA / xwOBA features
@@ -14,10 +14,29 @@
 --                   excludes IBB and similar non-counting events).
 --   xwoba_sum       Sum of xwOBA across PA where xwOBA is observed.
 --   xwoba_obs       Count of PA with non-null xwOBA (denominator for AVG xwOBA).
+--
+-- E11.1-W2: dual-branch lakehouse model. Upstream mart_pitch_play_event is a W1
+-- lakehouse parquet — run_w1_lakehouse.py registers it as a view before this
+-- model builds (plain table name in the duckdb branch resolves to that view).
 -- =============================================================================
 
-{{ config(materialized='table') }}
+{{
+    config(
+        materialized = 'view',
+        tags         = ['w2_lakehouse']
+    )
+}}
 
+{% if target.name == 'duckdb' %}
+
+-- ⚠️ E11.1-W2 BUG FIX: this model previously read woba_value/woba_denom/xwoba from
+-- mart_pitch_play_event — but W1d's duckdb branch of that mart DROPPED those columns
+-- (its external table still DECLARES them, so Snowflake silently read NULL). Result:
+-- since W1d (2026-06-25) every woba_value_sum/woba_denom_sum/xwoba_sum/xwoba_obs in
+-- this table was 0 (verified: 0/1,229,704 rows nonzero), zeroing the H2H matchup
+-- features. The woba columns live in stg_batter_pitches (full-PA, incl. K/BB), so we
+-- source directly from there. is_terminal_pitch = (plate_appearance_event is not null),
+-- so the PA grain (and pa_count) is unchanged — only the woba columns become REAL.
 with pa_events as (
     select
         pitcher_id,
@@ -26,8 +45,8 @@ with pa_events as (
         woba_value,
         woba_denom,
         xwoba
-    from {{ ref('mart_pitch_play_event') }}
-    where is_terminal_pitch = true
+    from stg_batter_pitches
+    where plate_appearance_event is not null   -- = mart_pitch_play_event.is_terminal_pitch
       and pitcher_id is not null
       and batter_id  is not null
 )
@@ -43,3 +62,9 @@ select
     sum(case when xwoba is not null then 1 else 0 end)                  as xwoba_obs
 from pa_events
 group by pitcher_id, batter_id, game_date
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_pitcher_batter_history
+
+{% endif %}

@@ -201,6 +201,12 @@ def run_w1_lakehouse_op(context):
     # E11.1-W1d HALT: rebuilds all 7 mart_pitch_* S3 Parquets. Now on the
     # critical path — the Snowflake external tables (and the downstream feature
     # build) depend on this write completing successfully.
+    # E11.1-W2: run_w1_lakehouse.py ALSO builds the 8 W2 pitch-derived marts
+    # (registering the W1 marts as views first). Kept in THIS op (not a separate
+    # Railway cron) — the E11.0b "use a cron" guidance existed to avoid Dagster+
+    # serverless run-minute billing, which E11.15 eliminated by self-hosting
+    # Dagster (cost = held RAM, not run-minutes). Ordered before dbt_daily_build
+    # so the W2 external tables are fresh for the morning feature build.
     _run_script(context, "run_w1_lakehouse.py")
 
 
@@ -210,6 +216,8 @@ def refresh_w1_external_tables_op(context):
     # build sees the parquets just written by run_w1_lakehouse_op.
     # AUTO_REFRESH=FALSE on the external tables requires an explicit REFRESH call
     # after each S3 write. Failure here would serve stale pitch features.
+    # E11.1-W2: refresh_w1_external_tables.py now also REFRESHes the 8 W2 external
+    # tables (W2_TABLES) — same HALT rationale (W2 marts feed the feature build).
     _run_script(context, "refresh_w1_external_tables.py")
 
 

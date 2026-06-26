@@ -37,6 +37,21 @@ W1_TABLES = [
     "mart_pitch_hit_characteristics",
 ]
 
+# E11.1-W2: the pitch-derived batch marts written by run_w1_lakehouse.py after
+# the W1 marts. Refreshed in the same op so the morning feature build sees the
+# latest parquet. (Each entry must have an external table created by
+# scripts/ddl/generate_w2_external_tables.py before it can be refreshed.)
+W2_TABLES = [
+    "mart_pitcher_batted_ball_profile",
+    "mart_batter_bat_tracking_profile",
+    "mart_batter_rolling_stats",
+    "mart_pitcher_rolling_stats",
+    "mart_starting_pitcher_game_log",
+    "mart_pitcher_batter_history",
+    "mart_starter_csw_rolling",
+    "mart_starter_pitch_mix_rolling",
+]
+
 
 def _load_private_key():
     key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
@@ -73,7 +88,7 @@ def main():
     conn = get_snowflake_conn()
     cur = conn.cursor()
     failed = []
-    for table in W1_TABLES:
+    for table in W1_TABLES + W2_TABLES:
         fqn = f"{_SCHEMA}.{table}"
         try:
             cur.execute(f"ALTER EXTERNAL TABLE {fqn} REFRESH")

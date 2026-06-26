@@ -1,5 +1,5 @@
 -- =============================================================================
--- mart_starter_csw_rolling.sql
+-- mart_starter_csw_rolling.sql   (E11.1-W2 lakehouse decommission)
 -- Grain: one row per pitcher_id × game_pk (regular season starts only)
 -- Purpose: Called Strike plus Whiff rate (CSW%) for starting pitchers.
 --          CSW% = (called_strike + swinging_strike + swinging_strike_blocked)
@@ -18,9 +18,19 @@
 --
 -- NULL when a pitcher has no prior starts in the season (debut starters).
 -- Card 8.Q.
+--
+-- E11.1-W2: dual-branch lakehouse model. Upstream mart_pitch_play_event is a W1
+-- lakehouse parquet (registered as a view by run_w1_lakehouse.py before build).
 -- =============================================================================
 
-{{ config(materialized='table') }}
+{{
+    config(
+        materialized = 'view',
+        tags         = ['w2_lakehouse']
+    )
+}}
+
+{% if target.name == 'duckdb' %}
 
 with
 
@@ -28,7 +38,7 @@ pitch_events as (
     select
         pitcher_id,
         game_pk,
-        game_date,
+        game_date::date as game_date,   -- VARCHAR (ISO) in parquet → DATE for parity [E11.1-W2]
         game_year,
         -- CSW pitch: called strike, swinging strike, or swinging strike blocked
         case
@@ -38,7 +48,7 @@ pitch_events as (
                 'swinging_strike_blocked'
             ) then 1 else 0
         end as is_csw
-    from {{ ref('mart_pitch_play_event') }}
+    from mart_pitch_play_event
     where game_year >= 2015
 ),
 
@@ -135,3 +145,9 @@ final as (
 )
 
 select * from final
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_starter_csw_rolling
+
+{% endif %}

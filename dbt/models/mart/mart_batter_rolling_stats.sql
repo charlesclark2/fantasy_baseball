@@ -9,42 +9,26 @@
 -- Join keys: batter_id, game_date
 -- =============================================================================
 
+-- E11.1-W2: dual-branch lakehouse model (was incremental on Snowflake; the
+-- duckdb branch is a full rebuild — the daily run rewrites the parquet, like the
+-- W1 marts). Upstream stg_batter_pitches is lakehouse parquet, registered as a
+-- view by run_w1_lakehouse.py before this model builds.
 {{
     config(
-        materialized = 'incremental',
-        unique_key = ['game_pk', 'batter_id'],
-        on_schema_change = 'sync_all_columns'
+        materialized = 'view',
+        tags         = ['w2_lakehouse']
     )
 }}
 
+{% if target.name == 'duckdb' %}
+
 with
-
-{% if is_incremental() %}
-
--- Batters who have new games not yet in this table
-new_game_batters as (
-    select distinct batter_id
-    from {{ ref('stg_batter_pitches') }}
-    where game_type = 'R'
-      and game_date > (select max(game_date) from {{ this }})
-),
-
-{% endif %}
 
 pitches as (
 
     select p.*
-    from {{ ref('stg_batter_pitches') }} p
-    {% if is_incremental() %}
-    -- Only process affected batters; pull from season start so STD windows are correct
-    join new_game_batters ngb on p.batter_id = ngb.batter_id
+    from stg_batter_pitches p
     where p.game_type = 'R'
-      and p.game_date >= (
-          select date_trunc('year', max(game_date)) from {{ this }}
-      )
-    {% else %}
-    where p.game_type = 'R'
-    {% endif %}
 
 ),
 
@@ -55,7 +39,10 @@ pitches_tagged as (
 
     select
         game_pk,
-        game_date,
+        -- game_date is VARCHAR (ISO) in lakehouse parquet; cast to DATE so the
+        -- RANGE … INTERVAL rolling windows bind and the output matches the prior
+        -- Snowflake CTAS (DATE). [E11.1-W2]
+        game_date::date as game_date,
         game_year,
         at_bat_number,
         pitch_number,
@@ -678,8 +665,10 @@ rolling as (
 )
 
 select * from rolling
-{% if is_incremental() %}
--- Only insert rows for game dates not yet in the table
-where game_date > (select max(game_date) from {{ this }})
-{% endif %}
 order by batter_id, game_date
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_batter_rolling_stats
+
+{% endif %}
