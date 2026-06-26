@@ -23,7 +23,7 @@ from app.backend.models.performance import (
     PerformanceByModelResponse,
     PerformanceSummary,
 )
-from app.backend.services import pg
+from app.backend.services import serving_cache
 from app.backend.services.dynamo import list_bets
 from app.backend.services.s3_cache import get_cache, set_cache
 from app.backend.services.snowflake import execute_query
@@ -80,13 +80,13 @@ def get_performance_summary() -> PerformanceSummary:
     from datetime import date
     today_str = date.today().isoformat()
 
-    # PG primary read path (A2.12)
-    pg_hit = pg.get_cache("performance/summary", today_str)
-    if pg_hit is not None:
+    # DynamoDB primary read path (INC-16-P2; was Railway PG / A2.12)
+    cache_hit = serving_cache.get_cache("performance/summary", today_str)
+    if cache_hit is not None:
         try:
-            return PerformanceSummary(**pg_hit)
+            return PerformanceSummary(**cache_hit)
         except Exception:
-            logger.warning("PG performance/summary invalid — falling through")
+            logger.warning("DynamoDB performance/summary invalid — falling through")
 
     # S3 secondary
     cached = get_cache("performance/summary.json")
@@ -108,7 +108,7 @@ def get_performance_summary() -> PerformanceSummary:
                 source="mart_bankroll_state",
             )
             payload = result.model_dump(mode="json")
-            pg.set_cache("performance/summary", today_str, payload)
+            serving_cache.set_cache("performance/summary", today_str, payload)
             set_cache("performance/summary.json", payload)
             return result
     except Exception:
@@ -135,7 +135,7 @@ def get_performance_summary() -> PerformanceSummary:
         source="mart_clv_labeled_games",
     )
     payload = result.model_dump(mode="json")
-    pg.set_cache("performance/summary", today_str, payload)
+    serving_cache.set_cache("performance/summary", today_str, payload)
     set_cache("performance/summary.json", payload)
     return result
 

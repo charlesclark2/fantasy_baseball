@@ -1,4 +1,4 @@
-"""Player profile endpoints — served from Railway PG api_cache."""
+"""Player profile endpoints — served from the DynamoDB serving cache (INC-16-P2)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.backend.dependencies import get_user_id
-from app.backend.services import pg
+from app.backend.services import serving_cache
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/players", tags=["players"])
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/players", tags=["players"])
 def list_players(_: str = Depends(get_user_id)) -> dict:
     """Return summary lists of all batters and pitchers (for the players directory page)."""
     today = date.today().isoformat()
-    payload = pg.get_cache("players/list", today)
+    payload = serving_cache.get_cache("players/list", today)
     if payload is None:
         return {"batters": [], "pitchers": []}
     return payload
@@ -40,8 +40,8 @@ def get_zone_overlay(
     Returns 404 if no overlay is found (not yet written for this matchup).
     """
     today = date.today().isoformat()
-    pg_key = f"zone_matchup/{batter_id}_vs_{pitcher_id}"
-    payload = pg.get_cache_latest(pg_key)
+    cache_key = f"zone_matchup/{batter_id}_vs_{pitcher_id}"
+    payload = serving_cache.get_cache_latest(cache_key)
     if payload:
         return payload
 
@@ -73,7 +73,7 @@ def get_player(player_id: int, _: str = Depends(get_user_id)) -> dict:
     Cache key: player/{player_id}
     """
     today = date.today().isoformat()
-    payload = pg.get_cache(f"player/{player_id}", today)
+    payload = serving_cache.get_cache(f"player/{player_id}", today)
     if payload is None:
         logger.warning("Player profile cache miss for player_id=%s", player_id)
         raise HTTPException(

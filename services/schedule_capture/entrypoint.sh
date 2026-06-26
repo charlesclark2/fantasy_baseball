@@ -19,7 +19,14 @@ fi
 
 # Railway stores the private key as an env string; the Snowflake connector wants a FILE.
 if [ -n "${SNOWFLAKE_PRIVATE_KEY:-}" ]; then
-  printf '%s\n' "$SNOWFLAKE_PRIVATE_KEY" > /tmp/snowflake_rsa_key.pem
+  # INC-16-P3: a single-line env value (cron/Compose env_file/Lambda) can't carry
+  # real PEM newlines, so the key arrives \n-escaped (check FIRST — it still starts
+  # with -----BEGIN) or base64. A raw multi-line PEM passes through unchanged.
+  case "$SNOWFLAKE_PRIVATE_KEY" in
+    *'\n'*)   printf '%b\n' "$SNOWFLAKE_PRIVATE_KEY" > /tmp/snowflake_rsa_key.pem ;;
+    "-----"*) printf '%s\n' "$SNOWFLAKE_PRIVATE_KEY" > /tmp/snowflake_rsa_key.pem ;;
+    *)        printf '%s' "$SNOWFLAKE_PRIVATE_KEY" | base64 -d > /tmp/snowflake_rsa_key.pem ;;
+  esac
   chmod 600 /tmp/snowflake_rsa_key.pem
   export SNOWFLAKE_PRIVATE_KEY_PATH=/tmp/snowflake_rsa_key.pem
 fi

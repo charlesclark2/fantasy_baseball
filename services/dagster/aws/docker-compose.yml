@@ -1,0 +1,271 @@
+# =============================================================================
+# INC-16-P1 — AWS re-host of the Railway Dagster stack onto ONE EC2 box.
+#
+# Replaces the four Railway services (railway.codeloc/daemon/webserver.toml +
+# the dbt-runner railway.toml) and co-locates flaresolverr + a small metadata
+# Postgres on the same instance. This is a RE-DEPLOY of the existing OSS config,
+# not a rebuild — dagster.yaml + the start commands are ported verbatim.
+#
+#   Bring up:   docker compose -f services/dagster/aws/docker-compose.yml up -d --build
+#   Logs:       docker compose -f services/dagster/aws/docker-compose.yml logs -f dagster-codeloc
+#   Health:     docker compose -f services/dagster/aws/docker-compose.yml ps
+#
+# Six services, one Docker bridge network ("default" — created by compose):
+#   dagster-postgres   metadata-only run/event/schedule storage (NOT the serving cache)
+#   dagster-codeloc    gRPC code server + run worker (DefaultRunLauncher subprocesses)
+#   dagster-daemon     scheduler + sensor daemon + run queue + run-monitoring
+#   dagster-webserver  dagit UI / GraphQL (operator console)
+#   dbt-runner         out-of-process dbt (pipeline/ops/_dbt_exec POSTs /run here)
+#   flaresolverr       Cloudflare challenge solver for FanGraphs (IP-shared w/ codeloc)
+#
+# 🔑 EGRESS-IP SHARING (the whole reason flaresolverr lives here): all containers
+# NAT out through the EC2 instance's single public IP (use an Elastic IP for
+# stability). So flaresolverr's headless-Chrome requests and any other agent
+# traffic present the SAME source IP to FanGraphs — which is what its IP-bound
+# cf_clearance cookie requires. Co-location on one box satisfies this exactly as
+# Railway's private-network co-location did.
+#
+# 🔒 SCHEDULES OFF: dagster-postgres starts EMPTY and no schedule/sensor sets
+# default_status=RUNNING in pipeline/, so every schedule + sensor boots STOPPED.
+# Standing this stack up fires NOTHING. Cutover (turning them ON) is Phase 4.
+# =============================================================================
+
+name: credence-dagster
+
+# Reusable env + restart anchors -------------------------------------------------
+x-dagster-env: &dagster-env
+  DAGSTER_HOME: /app/services/dagster
+  DAGSTER_PG_URL: postgresql://dagster:${DAGSTER_PG_PASSWORD}@dagster-postgres:5432/dagster
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  # --- Metadata Postgres (Dagster's OWN run/event/schedule storage) ------------
+  # NOT the serving cache (that → DynamoDB in INC-16-P2). Fully regenerable;
+  # losing it only resets run history + schedule on/off state.
+  dagster-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: dagster
+      POSTGRES_PASSWORD: ${DAGSTER_PG_PASSWORD}
+      POSTGRES_DB: dagster
+    volumes:
+      - dagster_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dagster -d dagster"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    <<: *restart
+
+  # --- Code location gRPC server + RUN WORKER ---------------------------------
+  # Heaviest service: holds the loaded Definitions and executes every run as a
+  # subprocess (DefaultRunLauncher). Binds 0.0.0.0 (compose bridge is IPv4) —
+  # the Railway config used [::] for dual-stack private DNS; not needed here.
+  # Needs the FULL op env → env_file: .env (Snowflake / AWS / serving DATABASE_URL
+  # for write_serving_store until P2 / API keys / DBT_RUNNER_URL / FLARESOLVERR_URL).
+  dagster-codeloc:
+    build:
+      context: ../../..
+      dockerfile: Dockerfile
+    image: credence-dagster:latest
+    command:
+      - dagster
+      - api
+      - grpc
+      - --host
+      - 0.0.0.0
+      - --port
+      - "4000"
+      - --python-file
+      - pipeline/__init__.py
+      - --attribute
+      - defs
+      - --working-directory
+      - /app
+    env_file: [.env]
+    environment:
+      <<: *dagster-env
+      # In-cluster service DNS — override whatever points at Railway/public hosts.
+      DBT_RUNNER_URL: http://dbt-runner:8080
+      FLARESOLVERR_URL: http://flaresolverr:8191/v1
+    depends_on:
+      dagster-postgres:
+        condition: service_healthy
+    <<: *restart
+
+  # --- Daemon: scheduler + sensors + run queue + run-monitoring (heartbeat) -----
+  dagster-daemon:
+    image: credence-dagster:latest
+    command:
+      - dagster-daemon
+      - run
+      - --workspace
+      - /app/services/dagster/aws/workspace.yaml
+    env_file: [.env]
+    environment:
+      <<: *dagster-env
+    depends_on:
+      dagster-postgres:
+        condition: service_healthy
+      dagster-codeloc:
+        condition: service_started
+    <<: *restart
+
+  # --- Webserver: dagit UI / GraphQL (operator console) ------------------------
+  # Bound to the box; reachable only from the operator IP (security group) on
+  # :3000. For extra hardening prefer an SSH tunnel and change ports to
+  # "127.0.0.1:3000:3000" (see README).
+  dagster-webserver:
+    image: credence-dagster:latest
+    command:
+      - dagster-webserver
+      - --host
+      - 0.0.0.0
+      - --port
+      - "3000"
+      - --workspace
+      - /app/services/dagster/aws/workspace.yaml
+    env_file: [.env]
+    environment:
+      <<: *dagster-env
+    # INC-16-P4: no longer published to the world. Caddy (below) terminates TLS +
+    # basic-auth and reaches dagit over the compose network at dagster-webserver:3000.
+    # The 127.0.0.1 binding keeps the SSH-tunnel fallback (`ssh -L 3000:localhost:3000`)
+    # without exposing :3000 publicly. Drop the SG :3000 ingress rule at cutover.
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      dagster-postgres:
+        condition: service_healthy
+      dagster-codeloc:
+        condition: service_started
+    <<: *restart
+
+  # --- dbt-runner: out-of-process dbt (the _dbt_exec contract) -----------------
+  # Same Dockerfile as Railway; entrypoint.sh generates dbt/profiles.yml from the
+  # Snowflake env vars at boot. Reached by codeloc at http://dbt-runner:8080.
+  dbt-runner:
+    build:
+      context: ../../..
+      dockerfile: services/dbt_runner/Dockerfile
+    image: credence-dbt-runner:latest
+    env_file: [.env]
+    environment:
+      PORT: "8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    <<: *restart
+
+  # --- flaresolverr: FanGraphs Cloudflare proxy (~1 GB Chromium) ---------------
+  # ghcr image is multi-arch (arm64 OK on t4g/Graviton). No host port — only
+  # codeloc reaches it on the compose network at http://flaresolverr:8191/v1.
+  # Shares the instance's egress IP (see header) → satisfies cf_clearance.
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    environment:
+      LOG_LEVEL: info
+      TZ: America/New_York
+    <<: *restart
+
+  # --- Caddy: HTTPS reverse proxy + basic-auth for dagit (INC-16-P4) ------------
+  # Public entrypoint for the operator console. Terminates TLS with an auto-renewing
+  # Let's Encrypt cert for ${DAGIT_HOSTNAME} (default dagster.credencesports.com) and
+  # gates access with HTTP basic-auth BEFORE proxying to dagster-webserver:3000 (OSS
+  # dagit has no auth of its own). Defense-in-depth: the SG still allowlists :443/:80
+  # to the operator IP, AND Caddy requires a password — so widening the SG later
+  # (e.g. to share with a collaborator) doesn't expose dagit unauthenticated.
+  #
+  # SETUP (operator): generate the bcrypt hash for the password, then put the user +
+  # hash in .env (DAGIT_BASIC_AUTH_USER / DAGIT_BASIC_AUTH_HASH):
+  #   docker run --rm caddy:2 caddy hash-password --plaintext 'YOUR_PASSWORD'
+  # ACME needs :80 (HTTP-01 challenge) + :443 reachable from Let's Encrypt — the SG
+  # must allow 80/443 from 0.0.0.0/0 DURING first issuance, then can be tightened to
+  # the operator IP (Caddy renews ~30d before expiry; reopen 80 briefly if needed) —
+  # or use 443-only TLS-ALPN by removing the :80 publish once issued.
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    # env_file (NOT `environment: ${...}`) on purpose: the bcrypt hash contains `$`,
+    # which docker-compose's ${} interpolation would mangle. env_file passes
+    # DAGIT_HOSTNAME / DAGIT_BASIC_AUTH_USER / DAGIT_BASIC_AUTH_HASH to the container
+    # verbatim; the Caddyfile reads them with {$VAR}. So the hash goes in .env as-is,
+    # no $$-escaping needed.
+    env_file: [.env]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      dagster-webserver:
+        condition: service_started
+    <<: *restart
+
+  # ── Capture crons (INC-16-P3) ────────────────────────────────────────────────
+  # Re-home of the 4 Railway capture cron services onto this box. They are NOT
+  # long-running: each runs once and exits, fired on a schedule by the HOST crontab
+  # (`services/dagster/aws/capture.crontab`) via `docker compose run --rm <svc>`.
+  # `profiles: [capture]` keeps them OUT of `docker compose up` — they only run when
+  # the crontab (or you) invoke them. `restart: "no"` so a run-once exit isn't retried.
+  # All four reuse their existing lean Dockerfiles + the now-fixed key-normalizing
+  # entrypoints; env_file: .env supplies SNOWFLAKE_* / ODDS_API_KEY / OPENWEATHERMAP_*.
+  #   build once:  docker compose -f services/dagster/aws/docker-compose.yml --profile capture build
+  #   run one:     docker compose -f services/dagster/aws/docker-compose.yml run --rm odds-capture
+  # 🔭 FUTURE (operator decision 2026-06-26): when data sources or ingest frequency
+  # grow, rearchitect these to Lambda + EventBridge (serverless, decoupled from the
+  # box). The images are already standalone, so that lift is mechanical.
+  odds-capture:
+    build:
+      context: ../../..
+      dockerfile: services/odds_capture/Dockerfile
+    image: credence-odds-capture:latest
+    env_file: [.env]
+    environment:
+      AWS_DEFAULT_REGION: us-east-1
+    profiles: [capture]
+    restart: "no"
+
+  schedule-capture:
+    build:
+      context: ../../..
+      dockerfile: services/schedule_capture/Dockerfile
+    image: credence-schedule-capture:latest
+    env_file: [.env]
+    environment:
+      AWS_DEFAULT_REGION: us-east-1
+      DBT_RUNNER_URL: http://dbt-runner:8080   # triggers the lineup-staging rebuild
+    profiles: [capture]
+    restart: "no"
+
+  derivative-capture:
+    build:
+      context: ../../..
+      dockerfile: services/derivative_capture/Dockerfile
+    image: credence-derivative-capture:latest
+    env_file: [.env]
+    environment:
+      AWS_DEFAULT_REGION: us-east-1
+    profiles: [capture]
+    restart: "no"
+
+  weather-capture:
+    build:
+      context: ../../..
+      dockerfile: services/weather_capture/Dockerfile
+    image: credence-weather-capture:latest
+    env_file: [.env]
+    environment:
+      AWS_DEFAULT_REGION: us-east-1
+    profiles: [capture]
+    restart: "no"
+
+volumes:
+  dagster_pg_data:
+  caddy_data:    # INC-16-P4: persists Let's Encrypt certs + ACME account across restarts
+  caddy_config:

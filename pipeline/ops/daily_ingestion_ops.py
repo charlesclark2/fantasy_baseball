@@ -136,10 +136,21 @@ def ingest_fangraphs_stuff_plus(context):
     if not _is_sunday():
         context.log.info("Not Sunday — skipping Stuff+")
         return
-    _run_script(context, "ingest_fangraphs_stuff_plus.py", [
-        "--season", str(date.today().year),
-        "--window-types", "14d,30d,season",
-    ])
+    # WARN-tier (INC-16 / E11.7 gap): FanGraphs is behind a Cloudflare JS challenge
+    # served through flaresolverr (IP-bound cf_clearance). A flaresolverr/FanGraphs
+    # outage must degrade quietly — Stuff+ enrichment is a nullable LEFT JOIN with a
+    # Statcast fallback, so predictions still run — instead of raising into the daily
+    # job. Catch → log.warning → op succeeds.
+    try:
+        _run_script(context, "ingest_fangraphs_stuff_plus.py", [
+            "--season", str(date.today().year),
+            "--window-types", "14d,30d,season",
+        ])
+    except Exception as e:
+        context.log.warning(
+            f"FanGraphs Stuff+ ingest failed (non-fatal; predictions fall back to "
+            f"Statcast — lose Stuff+ enrichment only): {e}"
+        )
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -152,10 +163,19 @@ def ingest_fangraphs_catcher_framing(context):
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def ingest_fangraphs_hitting_leaderboard(context):
-    _run_script(context, "ingest_fangraphs_hitting_leaderboard.py", [
-        "--season", str(date.today().year),
-        "--window-types", "season",
-    ])
+    # WARN-tier (INC-16 / E11.7 gap): same Cloudflare/flaresolverr dependency as
+    # Stuff+. FanGraphs hitting-leaderboard features are nullable LEFT JOINs →
+    # an outage degrades quietly rather than failing the daily ingestion job.
+    try:
+        _run_script(context, "ingest_fangraphs_hitting_leaderboard.py", [
+            "--season", str(date.today().year),
+            "--window-types", "season",
+        ])
+    except Exception as e:
+        context.log.warning(
+            f"FanGraphs hitting-leaderboard ingest failed (non-fatal; predictions "
+            f"run without the FanGraphs hitting enrichment): {e}"
+        )
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -207,6 +227,12 @@ def run_w1_lakehouse_op(context):
     # serverless run-minute billing, which E11.15 eliminated by self-hosting
     # Dagster (cost = held RAM, not run-minutes). Ordered before dbt_daily_build
     # so the W2 external tables are fresh for the morning feature build.
+    # E11.1-W3pre: run_w1_lakehouse.py can ALSO build the odds/staging flatten tier
+    # (stg_oddsapi_*, stg_derivative_odds, stg_statsapi_games) but ONLY under the opt-in
+    # --w3pre flag (NOT passed here yet). Wiring it in is a deliberate follow-up: it needs
+    # the lakehouse_raw/ tier populated first (scripts/export_odds_raw_to_s3.py + flipped
+    # writers) and the serving-coupled cutover validated — otherwise an empty raw tier
+    # would fail this HALT-tier op. Until then this no-arg call builds only W1 + W2.
     _run_script(context, "run_w1_lakehouse.py")
 
 
@@ -218,6 +244,9 @@ def refresh_w1_external_tables_op(context):
     # after each S3 write. Failure here would serve stale pitch features.
     # E11.1-W2: refresh_w1_external_tables.py now also REFRESHes the 8 W2 external
     # tables (W2_TABLES) — same HALT rationale (W2 marts feed the feature build).
+    # E11.1-W3pre: it ALSO refreshes the W3pre stg external tables (W3PRE_TABLES) — a
+    # no-op until those external tables are created (generate_w3pre_external_tables.py),
+    # at which point the daily refresh keeps the odds/staging flatten fresh for serving.
     _run_script(context, "refresh_w1_external_tables.py")
 
 

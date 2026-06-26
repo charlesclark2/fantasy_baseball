@@ -185,3 +185,60 @@ def update_user_profile(user_id: str, initial_deposit: float | None) -> dict:
             ExpressionAttributeValues={":v": Decimal(str(initial_deposit))},
         )
     return get_user_profile(user_id)
+
+
+# ── Portfolio preferences (INC-16-P2: migrated off the Railway PG) ─────────────
+# Per-user portfolio settings used by GET /portfolio/preferences and the
+# /picks/today?apply_portfolio=true server-side filter. Stored as a nested
+# `portfolio` map on the user item (PK user_id) so it rides the existing users
+# table — no new table, no PG dependency. Replaces pg.get_user_portfolio /
+# pg.upsert_user_portfolio (the serving Postgres is decommissioned in P2).
+
+_DEFAULT_PORTFOLIO = {
+    "min_ev_threshold": 0.02,
+    "markets": ["h2h", "totals"],
+    "bankroll": None,
+    "max_kelly_fraction": 0.05,
+}
+
+
+def get_user_portfolio(user_id: str) -> dict:
+    """Return the user's portfolio preferences, or defaults if not yet saved.
+
+    Non-raising — returns defaults on any DynamoDB error so the picks/portfolio
+    routers keep serving (matches the old pg.get_user_portfolio contract).
+    """
+    try:
+        resp = _users_table().get_item(Key={"user_id": user_id})
+        pf = resp.get("Item", {}).get("portfolio")
+        if pf:
+            # Merge over defaults so a field dropped at write time (e.g. a None
+            # bankroll — _to_dynamo strips None) still resolves to its default.
+            return {"user_id": user_id, **_DEFAULT_PORTFOLIO, **_from_dynamo(pf)}
+    except Exception:
+        logger.warning("dynamo.get_user_portfolio failed for user=%s", user_id)
+    return {"user_id": user_id, **_DEFAULT_PORTFOLIO}
+
+
+def upsert_user_portfolio(user_id: str, prefs: dict) -> dict:
+    """Save portfolio preferences as the `portfolio` map on the user item.
+
+    Returns the saved prefs (with user_id). Non-raising: on error returns the
+    requested prefs so the caller still gets a coherent response.
+    """
+    pf = {
+        "min_ev_threshold": prefs.get("min_ev_threshold", _DEFAULT_PORTFOLIO["min_ev_threshold"]),
+        "markets": prefs.get("markets", _DEFAULT_PORTFOLIO["markets"]),
+        "bankroll": prefs.get("bankroll"),
+        "max_kelly_fraction": prefs.get("max_kelly_fraction", _DEFAULT_PORTFOLIO["max_kelly_fraction"]),
+    }
+    try:
+        _users_table().update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET #pf = :pf",
+            ExpressionAttributeNames={"#pf": "portfolio"},
+            ExpressionAttributeValues={":pf": _to_dynamo(pf)},
+        )
+    except Exception:
+        logger.warning("dynamo.upsert_user_portfolio failed for user=%s", user_id)
+    return {"user_id": user_id, **pf}

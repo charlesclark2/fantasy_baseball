@@ -50,7 +50,7 @@ from app.backend.models.picks import (
     WeatherInfo,
 )
 from app.backend.dependencies import get_optional_user_id
-from app.backend.services import pg
+from app.backend.services import dynamo, serving_cache
 from app.backend.services.s3_cache import get_cache, set_cache
 from app.backend.services.snowflake import execute_query
 
@@ -383,7 +383,7 @@ def get_featured_pick() -> FeaturedPickResponse:
 
     # Railway PG is the primary serving path — written by write_serving_store.py after
     # each predict run. No Snowflake query on a PG hit.
-    _pg_hit = pg.get_cache("picks/featured", today)
+    _pg_hit = serving_cache.get_cache("picks/featured", today)
     if _pg_hit is not None and _pg_hit.get("game_pk") is not None:
         try:
             return FeaturedPickResponse(**_pg_hit)
@@ -1283,7 +1283,7 @@ def _pipeline_status(last_updated_at: datetime | None) -> str:
 def _apply_portfolio_filter(result: "TodayPicksResponse", user_id: str) -> "TodayPicksResponse":
     """Filter a TodayPicksResponse picks list by the user's portfolio preferences."""
     try:
-        prefs = pg.get_user_portfolio(user_id)
+        prefs = dynamo.get_user_portfolio(user_id)
         min_ev = prefs.get("min_ev_threshold") or 0.02
         markets = prefs.get("markets") or ["h2h", "totals"]
         if isinstance(markets, str):
@@ -1315,7 +1315,7 @@ def get_picks_today(
         today = datetime.now(_ET).date().isoformat()
 
     # PG primary read path (A2.12)
-    pg_hit = pg.get_cache("picks/today", today)
+    pg_hit = serving_cache.get_cache("picks/today", today)
     if pg_hit is not None:
         try:
             result = TodayPicksResponse(**pg_hit)
@@ -1385,7 +1385,7 @@ def get_picks_today(
     )
     result = TodayPicksResponse(picks=picks, data_quality=data_quality, is_preliminary=is_preliminary)
     payload = result.model_dump(mode="json")
-    pg.set_cache("picks/today", today, payload)
+    serving_cache.set_cache("picks/today", today, payload)
     set_cache("picks/today.json", payload)
     if apply_portfolio and user_id:
         result = _apply_portfolio_filter(result, user_id)
@@ -1449,7 +1449,7 @@ def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaul
         cache_key = "picks/ev.json"
 
     if cache_key:
-        pg_hit = pg.get_cache("picks/ev", today_str)
+        pg_hit = serving_cache.get_cache("picks/ev", today_str)
         if pg_hit is not None:
             try:
                 return EVPicksResponse(**pg_hit)
@@ -1491,7 +1491,7 @@ def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaul
     result = EVPicksResponse(picks=picks, total=len(picks), is_preliminary=is_preliminary)
     if cache_key:
         payload = result.model_dump(mode="json")
-        pg.set_cache("picks/ev", today_str, payload)
+        serving_cache.set_cache("picks/ev", today_str, payload)
         set_cache(cache_key, payload)
     return result
 
@@ -1506,7 +1506,7 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     _game_pg_key = f"picks/game/{game_pk}"
     _game_cache_key = f"picks/game/{game_pk}.json"
 
-    _pg_cached = pg.get_cache(_game_pg_key, _today_str)
+    _pg_cached = serving_cache.get_cache(_game_pg_key, _today_str)
     if _pg_cached is not None and _pg_cached.get("picks"):
         try:
             return GameDetailResponse(**_pg_cached)
@@ -1945,7 +1945,7 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     # permanent cache row is simply overwritten on the next request that misses.
     _is_final = game_score is not None and game_score.status == "Final"
     _payload = result.model_dump(mode="json")
-    pg.set_cache(_game_pg_key, _today_str, _payload, is_permanent=_is_final)
+    serving_cache.set_cache(_game_pg_key, _today_str, _payload, is_permanent=_is_final)
     set_cache(_game_cache_key, _payload, permanent=_is_final)
 
     return result
@@ -1974,7 +1974,7 @@ def get_line_shopping(
         except ValueError:
             raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
 
-    pg_hit = pg.get_cache("picks/line-shopping", _date)
+    pg_hit = serving_cache.get_cache("picks/line-shopping", _date)
     if pg_hit is not None:
         try:
             return LineshoppingResponse(**pg_hit)
@@ -2000,7 +2000,7 @@ def get_odds_comparison(game_pk: int) -> BookOddsComparison:
 
     # Book-odds are "latest available" — use get_cache_latest so blobs written for a prior
     # date (e.g. during backfill or --date testing) are still served correctly.
-    _pg_cached = pg.get_cache_latest(_pg_key)
+    _pg_cached = serving_cache.get_cache_latest(_pg_key)
     if _pg_cached is not None and (_pg_cached.get("h2h") or _pg_cached.get("totals")):
         try:
             return BookOddsComparison(**_pg_cached)

@@ -1,0 +1,16 @@
+# =============================================================================
+# INC-16-P1 — workspace for the OSS daemon + webserver on AWS (Docker Compose).
+#
+# Identical in role to ../workspace.yaml (the Railway one) but the gRPC host is
+# the COMPOSE SERVICE NAME `dagster-codeloc`, not the Railway private domain
+# `dagster-codeloc.railway.internal`. On a single EC2 box every service shares
+# one Docker bridge network, so the daemon/webserver reach the code server at
+# `dagster-codeloc:4000`.
+#
+# The Railway workspace.yaml is left untouched as the rollback target.
+# =============================================================================
+load_from:
+  - grpc_server:
+      host: dagster-codeloc
+      port: 4000
+      location_name: baseball_betting

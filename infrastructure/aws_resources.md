@@ -362,7 +362,147 @@ Set via Lambda console → credence-prod-lambda-execution-role → Configuration
 
 ---
 
-## Railway PostgreSQL Serving Store (A2.12)
+## EC2 — Dagster Orchestration (INC-16 re-host)
+
+Re-homes the Railway orchestration onto AWS after the Railway workspace was
+restricted (see `quant_sports_intel_models/baseball/edge_program/INC16_AWS_REHOST_RECOVERY.md`).
+One box runs the full stack as Docker Compose — config + runbook in
+`services/dagster/aws/`. **Phase 1 (compute) provisioned 2026-06-26.**
+
+| Resource | Value |
+|---|---|
+| Instance ID | `i-07594af1679f81c38` |
+| Elastic IP (stable egress — FanGraphs `cf_clearance` is IP-bound) | `100.57.225.242` |
+| Instance type | `t4g.medium` (arm64 / Graviton, 4 GB) |
+| Region / subnet | `us-east-1`, default VPC public subnet |
+| AMI | Amazon Linux 2023 arm64 (latest via SSM) |
+| Root volume | 30 GB gp3 |
+| Key pair | `credence-dagster-key` (private key at `~/.ssh/credence-dagster-key.pem`) |
+| Security group | `credence-dagster-sg` — ingress SSH 22 + dagit 3000 from operator IP only; egress all |
+| IAM role / instance profile | `credence-dagster-ec2-role` / `credence-dagster-ec2-profile` — S3 access to `baseball-betting-ml-artifacts` (no static keys on the box) |
+| S3 access | **S3 gateway VPC endpoint** (no NAT — cost trap avoided) |
+| SSH | `ssh -i ~/.ssh/credence-dagster-key.pem ec2-user@100.57.225.242` |
+
+### Containers (Docker Compose — `services/dagster/aws/docker-compose.yml`)
+
+| Container | Role | Port |
+|---|---|---|
+| `dagster-postgres` | Dagster run/event/schedule storage (metadata only — NOT the serving cache) | 5432 (internal) |
+| `dagster-codeloc` | gRPC code server + run worker | 4000 (internal) |
+| `dagster-daemon` | scheduler + sensors + run queue + run-monitoring | — |
+| `dagster-webserver` | dagit UI / GraphQL | 3000 (operator IP) |
+| `dbt-runner` | out-of-process dbt | 8080 (internal) |
+| `flaresolverr` | FanGraphs Cloudflare solver (shares EIP egress) | 8191 (internal) |
+| `caddy` (INC-16-P4) | HTTPS reverse proxy + basic-auth → dagit | 80 + 443 (public, auth-gated) |
+| `odds/schedule/derivative/weather-capture` (P3) | run-once capture images (`profile: capture`, host-cron) | — |
+
+dagit (P4): **`https://dagster.credencesports.com`** — Caddy terminates TLS
+(Let's Encrypt) + HTTP basic-auth in front of the OSS webserver (which has no auth
+of its own). `dagster-webserver` is bound to `127.0.0.1:3000` (SSH-tunnel fallback
+only); the public `:3000` SG rule is dropped at cutover.
+**Schedules boot STOPPED** — turning them on is INC-16 Phase 4.
+
+### INC-16-P4 — HTTPS dagit + SSM (operator actions; see `services/dagster/aws/README.md` §P4)
+- **DNS:** Route 53 (zone `credencesports.com`) A record `dagster.credencesports.com` → `100.57.225.242` (the EIP). _[fill ✅ when created]_
+- **TLS:** Caddy auto-issues/renews Let's Encrypt for the subdomain (`caddy_data` volume persists certs). _[fill cert serial/expiry when issued]_
+- **Auth choice (operator-confirmed 2026-06-26):** **Caddy basic-auth + SG IP-allowlist** (defense-in-depth, $0). Hash via `docker run --rm caddy:2 caddy hash-password`; user+hash in box `.env` (`DAGIT_BASIC_AUTH_USER`/`_HASH`).
+- **Security group:** add 80+443; drop the old `:3000` rule; remove `:22` once SSM works.
+- **Shell:** SSM Session Manager — attach `AmazonSSMManagedInstanceCore` to `credence-dagster-ec2-role`; `aws ssm start-session --target i-07594af1679f81c38`. SSH retired (public-subnet+IGW → agent reaches public SSM endpoints, no interface VPC endpoints).
+
+### Provisioned via
+
+```bash
+AWS_PROFILE=default REGION=us-east-1 KEY_NAME=credence-dagster-key \
+  ./services/dagster/aws/provision-ec2.sh
+```
+
+### Cost notes
+
+~$15–35/mo target (t4g.medium + EIP + gp3 + S3 endpoint). NAT Gateway, Aurora,
+and MWAA deliberately avoided. Dagster+ Cloud stays as the idle rollback until a
+clean multi-day window (Phase 4), then is decommissioned.
+
+---
+
+## DynamoDB — Serving Cache (INC-16-P2)
+
+Replaces the Railway PostgreSQL `api_cache` (down after the Railway restriction —
+INC-16). Key→JSON serving cache the FastAPI backend reads at request time; read
+order is now **DynamoDB → S3** (Snowflake last resort). Writer:
+`scripts/write_serving_store.py` (on the EC2 box). Reader:
+`app/backend/services/serving_cache.py`.
+
+| Resource | Value |
+|---|---|
+| Table | `credence-prod-serving-cache` |
+| PK | `pk` (String) — namespace = cache_key up to the first `/` ("picks", "team", "player", "players", "performance", "zone_matchup") |
+| SK | `sk` (String) — `"{rest}#{cache_date}"` for date-scoped rows, `"{rest}#PERMANENT"` for permanent (Final-game / profile) rows |
+| Attributes | `value` (JSON string), `is_permanent` (Bool), `updated_at` (ISO), `cache_date` (date or `PERMANENT`) |
+| Billing | Pay-per-request (on-demand) |
+| Region | `us-east-1` |
+| GSI | none — point reads = GetItem; `team/` list = Query(pk=`team`); `picks/game/*` purge = Query(pk=`picks`, begins_with `game/`); admin full-refresh = a small Scan |
+
+```bash
+# Provision (run once with create-table IAM creds)
+AWS_PROFILE=default ./infrastructure/dynamo/create_serving_cache_table.sh
+```
+
+### IAM — three grants
+
+**1. EC2 instance-profile role** (`credence-dagster-ec2-role`) — the writer runs on
+the box. Attached automatically by `services/dagster/aws/provision-ec2.sh`
+(policy `dynamo-serving-cache`): `GetItem`/`PutItem`/`BatchWriteItem`/`Query`/`Scan`/`DeleteItem`
+on `arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/credence-prod-serving-cache`.
+
+**2. Lambda execution role** (`credence-prod-lambda-execution-role`) — the backend
+reads the cache. Add `GetItem`/`Query`/`Scan` on the table:
+```bash
+aws iam put-role-policy \
+  --role-name credence-prod-lambda-execution-role \
+  --policy-name DynamoServingCacheRead \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Action": ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan"],
+      "Resource": "arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/credence-prod-serving-cache"
+    }]
+  }' --region us-east-1
+```
+
+**3. Lambda execution role — E9.31 zone-overlay S3 read (unparked with INC-16-P2).**
+The `GET /players/{id}/zone-overlay` endpoint falls back to reading overlay JSON
+from `baseball-betting-ml-artifacts/baseball/serving/zone_matchup/*`. Grant the
+Lambda role the S3 read so the heatmap resolves (no 404):
+```bash
+aws iam put-role-policy \
+  --role-name credence-prod-lambda-execution-role \
+  --policy-name S3ArtifactsZoneOverlayRead \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": "arn:aws:s3:::baseball-betting-ml-artifacts/baseball/serving/zone_matchup/*"
+    }]
+  }' --region us-east-1
+```
+
+> **Portfolios (no new grant):** `user_portfolios` moved off PG to a `portfolio`
+> map on the **users** table (`credence-prod-dynamo-users`), read/written via
+> `app/backend/services/dynamo.py`. The Lambda role already has GetItem/UpdateItem
+> on that table (bets/users grant), so portfolio reads/writes are already covered.
+
+---
+
+## Railway PostgreSQL Serving Store (A2.12) — ⛔ DECOMMISSIONED (INC-16-P2)
+
+> **Superseded by the DynamoDB Serving Cache above.** The Railway PG (api_cache +
+> daily_picks + user_portfolios) went down with the Railway restriction (INC-16)
+> and is **not** being restored: api_cache → DynamoDB serving-cache, user_portfolios
+> → users-table `portfolio` map, daily_picks → retired (never read). Once the live
+> backend + writer are validated on DynamoDB, drop `DATABASE_URL` from the EC2 box
+> `.env` and the Lambda config. Original spec retained below for history.
 
 Primary OLTP read path for all FastAPI endpoints. Dagster reverse-ETLs prediction
 outputs to PG after each pipeline run; FastAPI reads PG first (sub-1ms), falls

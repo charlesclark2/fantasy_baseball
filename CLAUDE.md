@@ -60,6 +60,7 @@ Three tiers govern how pipeline failures behave. Every new op, cron, sensor, and
 | `dbt_umpire_feature_rebuild`, `dbt_build_bullpen_posteriors_op` | HALT | rebuild critical feature blocks |
 | `ingest_statcast`, `catchup_ingest_statcast`, `catchup_dbt_rebuild` | HALT | core pitch data; predictions depend |
 | `ingest_weather`, `ingest_oaa`, `ingest_umpires_early/late` | WARN | non-critical; predictions run without |
+| `ingest_fangraphs_stuff_plus`, `ingest_fangraphs_hitting_leaderboard` | WARN | INC-16: FanGraphs behind Cloudflare/flaresolverr (IP-bound cf_clearance); nullable LEFT JOIN → Statcast fallback; outage degrades quietly |
 | `ingest_umpire_scorecards`, `settle_user_bets_op` | WARN | post-game enrichment; non-blocking |
 | `generate_pick_narratives_op`, `check_data_freshness` | WARN | advisory; fallback exists |
 | `ingest_statcast_to_s3_op`, `run_w1_lakehouse_op`, `refresh_w1_external_tables_op` | HALT | E11.1-W1d: mart_pitch_* served from S3 external tables; on critical path before dbt_daily_build |
