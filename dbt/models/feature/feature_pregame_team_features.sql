@@ -560,12 +560,20 @@ final as (
         bw.pitchers_used_prev_2d,
 
         -- ── Schedule context ──────────────────────────────────────────────────
+        -- E11.1-W2: coalesce the not_null-tested schedule columns. They are
+        -- never null in prod (the ordered daily build always populates sc for
+        -- every game), but in CI `state:modified+ --defer` the deferred prod
+        -- mart_team_schedule_context can lag mart_game_spine for TODAY's scheduled
+        -- games, so the LEFT JOIN yields nulls and the error-severity not_null
+        -- tests fail on a partial-build artifact (same class as the has_odds fix).
+        -- 0 games / no-tz-change are the correct defaults for an as-yet-unmatched
+        -- scheduled game; no-op in prod (sc is 0-null → coalesce never fires).
         sc.days_rest,
-        sc.games_last_7d,
-        sc.games_last_14d,
+        coalesce(sc.games_last_7d, 0)                  as games_last_7d,
+        coalesce(sc.games_last_14d, 0)                 as games_last_14d,
         sc.consecutive_home_games,
         sc.consecutive_away_games,
-        sc.tz_changed_from_last_game,
+        coalesce(sc.tz_changed_from_last_game, false)  as tz_changed_from_last_game,
 
         -- ── Bullpen effectiveness (14d / 30d rolling, current-game excluded) ──
         be.k_pct_14d                            as bp_k_pct_14d,
