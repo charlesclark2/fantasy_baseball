@@ -21,11 +21,11 @@ Historical years (2015-2025) remain as year-level parquets written by
 export_statcast_to_s3.py. The stg_batter_pitches view reads both via
 glob `**/*.parquet` with union_by_name=True.
 
-Surrogate key (pitch_sk): SHA-256 hex of
-    game_pk | at_bat_number | batter_id | pitch_number | pitcher_id | inning_half
-Same composite fields as the Snowflake md5_number_upper64 key; VARCHAR not INT64.
-Collision probability at 7.6M rows: effectively zero (birthday paradox needs
-~1.8e38 rows for SHA-256).
+Surrogate key (pitch_sk): md5_number_upper64 equivalent —
+    MD5(concat(game_pk, at_bat_number, batter_id, pitch_number, pitcher_id, inning_half))
+    upper 64 bits as unsigned integer (UBIGINT in parquet).
+    Matches Snowflake STG_BATTER_PITCHES and historical year-level parquets exactly.
+    Verified 2026-06-25 against 3 known Snowflake rows.
 
 Incremental detection: scans S3 game_date= sub-partitions for the max loaded date.
 No Snowflake dependency for reads.
@@ -39,9 +39,11 @@ Usage:
     python3 scripts/ingest_statcast_to_s3.py --date 2026-06-22   # single day
     python3 scripts/ingest_statcast_to_s3.py --dry-run           # print dates, no fetch/write
 
-Note: after the parallel-run validation period, delete the current-year full-parquet
-that was written by export_statcast_to_s3.py to avoid duplicates:
+CLEANUP (run once): delete old SHA-256 VARCHAR pitch_sk parquets for 2026 and
+the duplicate year-level export file:
+    aws s3 rm --recursive s3://baseball-betting-ml-artifacts/baseball/lakehouse/stg_batter_pitches/year=2026/ --exclude "part-0.parquet" --include "game_date=*/part-0.parquet"
     aws s3 rm s3://baseball-betting-ml-artifacts/baseball/lakehouse/stg_batter_pitches/year=2026/part-0.parquet
+Then re-run: uv run python scripts/ingest_statcast_to_s3.py --start-date 2026-03-25
 """
 
 import argparse
@@ -235,16 +237,21 @@ RENAME_MAP: dict[str, tuple[str, str]] = {
 
 # ── Surrogate key ──────────────────────────────────────────────────────────────
 
+def _md5_upper64(s: str) -> int:
+    """Upper 64 bits of MD5(s) as unsigned integer — matches Snowflake MD5_NUMBER_UPPER64."""
+    return int.from_bytes(hashlib.md5(s.encode("utf-8")).digest()[:8], "big", signed=False)
+
+
 def compute_pitch_sk(df: pd.DataFrame) -> pd.Series:
     """
-    SHA-256 hex of game_pk|at_bat_number|batter_id|pitch_number|pitcher_id|inning_half.
+    Python equivalent of Snowflake's md5_number_upper64(concat(fields...)).
 
-    Same composite fields as the Snowflake md5_number_upper64 key.
-    The | delimiter prevents cross-field collisions (game_pk=12,at_bat=34
-    must not hash the same as game_pk=1234,at_bat=...).
+    Matches stg_batter_pitches.sql exactly: no delimiter, same field order and casting.
+    Returns uint64 so parquet schema is UBIGINT — identical to the historical
+    year-level parquets written by export_statcast_to_s3.py (verified 2026-06-25).
     """
-    def _hash(row) -> str:
-        key = "|".join([
+    def _hash(row) -> int:
+        key = "".join([
             str(int(row["game_pk"])),
             str(int(row["at_bat_number"])),
             str(int(row["batter_id"])),
@@ -252,7 +259,7 @@ def compute_pitch_sk(df: pd.DataFrame) -> pd.Series:
             str(int(row["pitcher_id"])),
             str(row["inning_half"]) if pd.notna(row["inning_half"]) else "",
         ])
-        return hashlib.sha256(key.encode()).hexdigest()
+        return _md5_upper64(key)
 
     return df.apply(_hash, axis=1)
 

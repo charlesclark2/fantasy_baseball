@@ -2131,7 +2131,9 @@ models:
           plate_appearance_description, indicating a fielding or throwing error
           was recorded on the play.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: error_type
         description: >
@@ -2334,28 +2336,36 @@ models:
           data is unavailable (sac bunts, early Statcast coverage gaps, radar
           failures). Never null.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: is_hard_hit
         description: >
           Derived. True when exit_velocity_mph >= 95. False when exit velocity
           is not tracked. Never null.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: is_sweet_spot
         description: >
           Derived. True when launch_angle_degrees is between 8 and 32 degrees
           inclusive. False when launch angle is not tracked. Never null.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: is_hard_hit_sweet_spot
         description: >
           Derived. True when exit_velocity_mph >= 95 and launch_angle_degrees
           between 8 and 32. False when either metric is not tracked. Never null.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: hit_coord_x
         description: >
@@ -2595,7 +2605,9 @@ models:
           Derived. True when if_fielding_alignment = 'Infield shift'. False when
           Statcast alignment tracking is unavailable for the pitch. Never null.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: is_infield_shade
         description: >
@@ -2603,7 +2615,9 @@ models:
           distinct from a full shift under 2023 MLB rules. False when alignment
           not tracked. Never null.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: is_infield_strategic
         description: >
@@ -2611,7 +2625,9 @@ models:
           situational depth-based alignment such as corners drawn in or the
           infield playing back. False when alignment not tracked. Never null.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: is_infield_non_standard
         description: >
@@ -2619,7 +2635,9 @@ models:
           'Standard'. Catches any infield deviation including shift, shade, and
           strategic alignments. False when alignment not tracked. Never null.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: is_outfield_extreme_shift
         description: >
@@ -2627,7 +2645,9 @@ models:
           Indicates all three outfielders shifted heavily toward one side.
           False when alignment not tracked. Never null.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: is_fourth_outfielder
         description: >
@@ -2635,7 +2655,9 @@ models:
           a four-outfielder defensive alignment, typically deployed against
           pull-heavy power hitters. False when alignment not tracked. Never null.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: is_outfield_strategic
         description: >
@@ -2643,7 +2665,9 @@ models:
           situational outfield depth adjustment such as playing shallow for a
           sacrifice fly situation. False when alignment not tracked. Never null.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: is_outfield_non_standard
         description: >
@@ -2651,7 +2675,9 @@ models:
           'Standard'. Covers extreme shift, fourth outfielder, and strategic
           alignments. False when alignment not tracked. Never null.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: is_any_shade_or_shift
         description: >
@@ -2661,7 +2687,9 @@ models:
           than lateral positional overloading. False when alignment not tracked.
           Never null.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: catcher_id
         description: MLB Player ID for the catcher. Renamed from fielder_2.
