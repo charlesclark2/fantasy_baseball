@@ -424,6 +424,50 @@ without needing S3's permanent prefix. S3 remains as secondary fallback during t
 | `total_runs/` | Total-runs model artifacts |
 | `dbt_state/{env}/` | **E11.2** — dbt `manifest.json` + `sources.json` for `--state` incremental builds; keyed by `TARGET_ENV` (`prod`/`dev`) |
 
+### IAM — Lambda execution role (zone overlay reads)
+
+The `/players/{id}/zone-overlay` endpoint (E9.31) reads zone overlay JSONs from the
+`baseball/serving/zone_matchup/overlay/` prefix. Add this inline policy to
+`credence-prod-lambda-execution-role`:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": "arn:aws:s3:::baseball-betting-ml-artifacts/baseball/serving/zone_matchup/*"
+    }
+  ]
+}
+```
+
+Add via CLI (run with default IAM-admin profile, not baseball-access-user):
+```bash
+aws iam put-role-policy \
+  --role-name credence-prod-lambda-execution-role \
+  --policy-name S3ArtifactsZoneOverlayRead \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": "arn:aws:s3:::baseball-betting-ml-artifacts/baseball/serving/zone_matchup/*"
+    }]
+  }' \
+  --region us-east-1
+```
+
+Verify after adding:
+```bash
+aws iam get-role-policy \
+  --role-name credence-prod-lambda-execution-role \
+  --policy-name S3ArtifactsZoneOverlayRead
+```
+
+---
+
 ### IAM — dbt-runner Railway service
 
 The Railway dbt-runner writes `dbt_state/{env}/manifest.json` and `sources.json` after

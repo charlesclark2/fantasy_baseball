@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import logging
-from datetime import date
+import os
+from datetime import date, timedelta
 
+import boto3
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.backend.dependencies import get_user_id
@@ -22,6 +26,43 @@ def list_players(_: str = Depends(get_user_id)) -> dict:
     if payload is None:
         return {"batters": [], "pitchers": []}
     return payload
+
+
+@router.get("/{batter_id}/zone-overlay")
+def get_zone_overlay(
+    batter_id: int,
+    pitcher_id: int,
+    _: str = Depends(get_user_id),
+) -> dict:
+    """Return zone-matchup overlay JSON for a batter × pitcher pair.
+
+    Read order: Railway PG cache → S3 ml-artifacts serving prefix (today/yesterday/2d ago).
+    Returns 404 if no overlay is found (not yet written for this matchup).
+    """
+    today = date.today().isoformat()
+    pg_key = f"zone_matchup/{batter_id}_vs_{pitcher_id}"
+    payload = pg.get_cache_latest(pg_key)
+    if payload:
+        return payload
+
+    artifacts_bucket = os.getenv("ARTIFACTS_BUCKET", "baseball-betting-ml-artifacts")
+    s3 = boto3.client("s3", region_name="us-east-2")
+    for days_back in range(3):
+        as_of = (date.fromisoformat(today) - timedelta(days=days_back)).isoformat()
+        key = f"baseball/serving/zone_matchup/overlay/as_of={as_of}/{batter_id}_vs_{pitcher_id}.json"
+        try:
+            response = s3.get_object(Bucket=artifacts_bucket, Key=key)
+            return json.loads(response["Body"].read().decode("utf-8"))
+        except ClientError as e:
+            if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
+                continue
+            logger.warning("zone_overlay S3 error for %s_vs_%s as_of=%s: %s", batter_id, pitcher_id, as_of, e)
+            break
+        except Exception as e:
+            logger.warning("zone_overlay S3 read error: %s", e)
+            break
+
+    raise HTTPException(status_code=404, detail=f"Zone overlay not found for {batter_id}_vs_{pitcher_id}")
 
 
 @router.get("/{player_id}")
