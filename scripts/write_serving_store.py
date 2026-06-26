@@ -1,11 +1,14 @@
 """write_serving_store.py
 -----------------------
 Dagster write-path: queries Snowflake after predict_today_morning completes,
-builds the same JSON payloads FastAPI serves, and writes them to the Railway
-PostgreSQL serving store (api_cache + daily_picks tables).
+builds the same JSON payloads FastAPI serves, and writes them to the DynamoDB
+serving cache (INC-16-P2; replaces the decommissioned Railway PostgreSQL
+api_cache). The DynamoDB schema matches app/backend/services/serving_cache.py:
+PK = namespace, SK = "{rest}#{date}" or "{rest}#PERMANENT", value = JSON string.
 
-Also writes to S3 (same as write_api_cache.py) during the transition period.
-Once PG has been stable for 2+ weeks, the S3 path can be deprecated.
+Also writes to S3 (the read-order fallback) — DynamoDB → S3 at request time, so
+the S3 writes are KEPT (not deprecated). The legacy daily_picks table is retired
+(the backend never read it).
 
 Called by write_serving_store_op in pipeline/ops/daily_ingestion_ops.py.
 
@@ -19,7 +22,8 @@ SQL mirrors:
 Env vars required:
     SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_WAREHOUSE
     SNOWFLAKE_PRIVATE_KEY_PATH  (preferred)  or  SNOWFLAKE_PRIVATE_KEY (PEM/base64)
-    DATABASE_URL                (Railway PG connection string)
+    SERVING_CACHE_TABLE         (DynamoDB table; default credence-prod-serving-cache)
+    AWS_REGION                  (default us-east-1; the EC2 instance role grants access)
     CACHE_BUCKET                (S3 bucket name; optional — skipped if not set)
 
 Exits 0 on full success, 1 if any write fails.
@@ -39,8 +43,6 @@ from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 import boto3
-import psycopg2
-import psycopg2.extras
 import snowflake.connector
 from dotenv import load_dotenv
 
@@ -127,7 +129,17 @@ def _sf_query_batch(conn, sql_template: str, game_pks: list[int]) -> list[dict]:
     return cur.fetchall()
 
 
-# ── PostgreSQL connection ─────────────────────────────────────────────────────
+# ── DynamoDB serving cache (INC-16-P2; replaces the Railway PG api_cache) ──────
+# NOTE: the legacy `_pg_*` helper names and the `pg`/`pg_conn` locals are RETAINED
+# to keep the diff small across this large writer — but the handle is now a boto3
+# DynamoDB Table, not a Postgres connection, and `_pg_set_cache` writes a DynamoDB
+# item. The schema mirrors app/backend/services/serving_cache.py exactly so reads
+# line up: PK = namespace, SK = "{rest}#{date}" | "{rest}#PERMANENT", value = JSON
+# string, plus is_permanent / updated_at / cache_date.
+
+_SERVING_CACHE_TABLE = os.environ.get("SERVING_CACHE_TABLE", "credence-prod-serving-cache")
+_PERMANENT_SK = "PERMANENT"
+
 
 def _json_default(obj):
     if isinstance(obj, decimal.Decimal):
@@ -137,78 +149,46 @@ def _json_default(obj):
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
-def _pg_json(payload: dict):
-    return psycopg2.extras.Json(payload, dumps=lambda o: json.dumps(o, default=_json_default))
+def _split_cache_key(cache_key: str) -> tuple[str, str]:
+    """('picks/game/123') → ('picks', 'game/123'); ('foo') → ('foo', '_')."""
+    ns, sep, rest = cache_key.partition("/")
+    return ns, (rest if sep else "_")
 
 
-def _pg_connect() -> psycopg2.extensions.connection | None:
-    url = os.environ.get("DATABASE_URL")
-    if not url:
-        log.warning("DATABASE_URL not set — skipping PG writes")
+def _pg_connect():
+    """Return the boto3 DynamoDB Table for the serving cache, or None on failure.
+
+    (Legacy name; this is a DynamoDB handle.) On the EC2 box the instance-profile
+    role grants access — no static creds. None ⇒ writers fall through to S3 only.
+    """
+    try:
+        region = os.environ.get("AWS_REGION", "us-east-1")
+        return boto3.resource("dynamodb", region_name=region).Table(_SERVING_CACHE_TABLE)
+    except Exception:
+        log.warning("DynamoDB resource init failed — skipping cache writes (S3 only)")
         return None
-    return psycopg2.connect(dsn=url)
 
 
 def _pg_set_cache(pg, cache_key: str, today: str, payload: dict, is_permanent: bool = False) -> None:
-    with pg.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO api_cache (cache_key, cache_date, payload, is_permanent, updated_at)
-            VALUES (%s, %s, %s, %s, NOW())
-            ON CONFLICT (cache_key, cache_date) DO UPDATE SET
-                payload      = EXCLUDED.payload,
-                is_permanent = api_cache.is_permanent OR EXCLUDED.is_permanent,
-                updated_at   = NOW()
-            """,
-            (cache_key, today, _pg_json(payload), is_permanent),
-        )
-    pg.commit()
+    """Upsert one serving-cache item into DynamoDB. `pg` is the boto3 Table.
 
-
-def _pg_upsert_picks(pg, rows: list[dict], today: str) -> None:
-    """Upserts individual pick rows into daily_picks for portfolio filtering."""
-    if not rows:
-        return
-    with pg.cursor() as cur:
-        for r in rows:
-            cur.execute(
-                """
-                INSERT INTO daily_picks
-                    (game_pk, prediction_date, market, home_team, away_team, game_time_utc,
-                     model_prob, bovada_prob, edge, ev, kelly_fraction, qualified_bet,
-                     game_conviction_score, lineup_confirmed, pick_side,
-                     model_total_runs, market_total_line, total_line_consensus, pred_total_runs)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                ON CONFLICT (game_pk, market, prediction_date) DO UPDATE SET
-                    model_prob            = EXCLUDED.model_prob,
-                    bovada_prob           = EXCLUDED.bovada_prob,
-                    edge                  = EXCLUDED.edge,
-                    ev                    = EXCLUDED.ev,
-                    kelly_fraction        = EXCLUDED.kelly_fraction,
-                    qualified_bet         = EXCLUDED.qualified_bet,
-                    game_conviction_score = EXCLUDED.game_conviction_score,
-                    lineup_confirmed      = EXCLUDED.lineup_confirmed,
-                    pick_side             = EXCLUDED.pick_side,
-                    model_total_runs      = EXCLUDED.model_total_runs,
-                    market_total_line     = EXCLUDED.market_total_line,
-                    total_line_consensus  = EXCLUDED.total_line_consensus,
-                    pred_total_runs       = EXCLUDED.pred_total_runs
-                """,
-                (
-                    r["GAME_PK"], today, r["MARKET_TYPE"],
-                    r.get("HOME_TEAM"), r.get("AWAY_TEAM"),
-                    _ts(r.get("GAME_START_UTC")),
-                    r.get("MODEL_PROB"), r.get("BOVADA_DEVIG_PROB"),
-                    r.get("EDGE"),
-                    # EV rows carry kelly/qualified; today rows may not
-                    r.get("EV"), r.get("KELLY_FRACTION"), r.get("QUALIFIED_BET"),
-                    r.get("GAME_CONVICTION_SCORE"), r.get("LINEUP_CONFIRMED"),
-                    r.get("PICK_SIDE"),
-                    r.get("MODEL_TOTAL_RUNS"), r.get("MARKET_TOTAL_LINE"),
-                    r.get("TOTAL_LINE_CONSENSUS"), r.get("PRED_TOTAL_RUNS"),
-                ),
-            )
-    pg.commit()
+    Non-raising: an oversized payload (>400 KB item limit) or any DynamoDB error
+    is logged, not raised — the parallel S3 write keeps the key servable via the
+    DynamoDB → S3 read fallback.
+    """
+    ns, rest = _split_cache_key(cache_key)
+    sk = f"{rest}#{_PERMANENT_SK}" if is_permanent else f"{rest}#{today}"
+    try:
+        pg.put_item(Item={
+            "pk": ns,
+            "sk": sk,
+            "value": json.dumps(payload, default=_json_default),
+            "is_permanent": is_permanent,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "cache_date": _PERMANENT_SK if is_permanent else today,
+        })
+    except Exception:
+        log.warning("DynamoDB set_cache failed for key=%s (S3 fallback covers)", cache_key)
 
 
 # ── S3 write ─────────────────────────────────────────────────────────────────
@@ -2002,7 +1982,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--picks", action="store_true",
-        help="Write picks/today, picks/ev, and daily_picks rows.",
+        help="Write picks/today + picks/ev cache blobs.",
     )
     parser.add_argument(
         "--game-detail", action="store_true",
@@ -2067,7 +2047,7 @@ def main() -> int:
                 payload = _build_picks_payload(picks_rows, fresh_rows)
                 if pg:
                     _pg_set_cache(pg, "picks/today", today, payload)
-                    log.info("PG: picks/today written (%d picks)", len(picks_rows))
+                    log.info("DynamoDB: picks/today written (%d picks)", len(picks_rows))
                 if bucket:
                     _write_s3(bucket, f"api-cache/{today}/picks/today.json", payload)
         except Exception:
@@ -2193,7 +2173,7 @@ def main() -> int:
                         "served_tier": (_expl_dict or {}).get("served_tier"),
                     }
                     _pg_set_cache(pg, "picks/featured", today, _featured_payload)
-                    log.info("PG: picks/featured written (game_pk=%s, market=%s, narrative=%s)",
+                    log.info("DynamoDB: picks/featured written (game_pk=%s, market=%s, narrative=%s)",
                              gp, _market_type, "yes" if _pick_narrative else "no")
                 else:
                     log.info("No conviction picks for %s — skipping picks/featured cache write", today)
@@ -2210,29 +2190,17 @@ def main() -> int:
                 payload = _build_ev_payload(ev_rows)
                 if pg:
                     _pg_set_cache(pg, "picks/ev", today, payload)
-                    log.info("PG: picks/ev written (%d rows)", len(ev_rows))
+                    log.info("DynamoDB: picks/ev written (%d rows)", len(ev_rows))
                 if bucket:
                     _write_s3(bucket, f"api-cache/{today}/picks/ev.json", payload)
         except Exception:
             log.exception("Failed to write picks/ev")
             errors += 1
 
-        # ── individual daily_picks rows (portfolio filtering) ────────────────
-        if pg and (run_all or args.picks) and (picks_rows or ev_rows):
-            try:
-                merged = {(r["GAME_PK"], r["MARKET_TYPE"]): r for r in picks_rows}
-                for r in ev_rows:
-                    key = (r["GAME_PK"], r["MARKET_TYPE"])
-                    if key in merged:
-                        merged[key].update({k: r[k] for k in ("KELLY_FRACTION", "QUALIFIED_BET",
-                            "TOTAL_LINE_CONSENSUS", "PRED_TOTAL_RUNS") if k in r})
-                    else:
-                        merged[key] = r
-                _pg_upsert_picks(pg, list(merged.values()), today)
-                log.info("PG: daily_picks upserted (%d rows)", len(merged))
-            except Exception:
-                log.exception("Failed to upsert daily_picks rows")
-                errors += 1
+        # ── daily_picks retired (INC-16-P2) ──────────────────────────────────
+        # The legacy daily_picks table is gone; the backend never read it.
+        # Portfolio filtering reads the picks/today blob + per-user bets in
+        # DynamoDB, so no per-pick row write is needed here anymore.
 
     # ── picks/history ────────────────────────────────────────────────────────
     if run_all or args.history:
@@ -2241,7 +2209,7 @@ def main() -> int:
             payload = _build_history_payload(history_rows)
             if pg:
                 _pg_set_cache(pg, "picks/history", today, payload)
-                log.info("PG: picks/history written (%d rows)", len(history_rows))
+                log.info("DynamoDB: picks/history written (%d rows)", len(history_rows))
             if bucket:
                 _write_s3(bucket, f"api-cache/{today}/picks/history.json", payload)
         except Exception:
@@ -2264,7 +2232,7 @@ def main() -> int:
             payload = _build_performance_payload(perf_rows, source)
             if pg:
                 _pg_set_cache(pg, "performance/summary", today, payload)
-                log.info("PG: performance/summary written (source=%s)", source)
+                log.info("DynamoDB: performance/summary written (source=%s)", source)
             if bucket:
                 _write_s3(bucket, f"api-cache/{today}/performance/summary.json", payload)
         except Exception:
@@ -2286,7 +2254,7 @@ def main() -> int:
                         _write_s3(bucket, f"api-cache/permanent/{cache_key}.json", detail_payload)
                     elif bucket:
                         _write_s3(bucket, f"api-cache/{today}/{cache_key}.json", detail_payload)
-                log.info("PG: game detail written for %d games", len(detail_map))
+                log.info("DynamoDB: game detail written for %d games", len(detail_map))
             except Exception:
                 log.exception("Failed to write game detail blobs")
                 errors += 1
@@ -2316,11 +2284,11 @@ def main() -> int:
                 for gp, payload in book_odds_map.items():
                     cache_key = f"picks/book-odds/{gp}"
                     _pg_set_cache(pg, cache_key, today, payload, is_permanent=False)
-                log.info("PG: book-odds written for %d games", len(book_odds_map))
+                log.info("DynamoDB: book-odds written for %d games", len(book_odds_map))
                 # E9.11 — write line-shopping payload (best price per play, sorted by edge)
                 ls_payload = _compute_line_shopping_payload(book_odds_map, ev_rows)
                 _pg_set_cache(pg, "picks/line-shopping", today, ls_payload, is_permanent=False)
-                log.info("PG: line-shopping written (%d plays)", ls_payload["total"])
+                log.info("DynamoDB: line-shopping written (%d plays)", ls_payload["total"])
             except Exception:
                 log.exception("Failed to write book-odds")
                 errors += 1
@@ -2344,8 +2312,7 @@ def main() -> int:
             errors += 1
 
     sf.close()
-    if pg:
-        pg.close()
+    # `pg` is a boto3 DynamoDB Table (INC-16-P2) — no connection to close.
 
     return 0 if errors == 0 else 1
 
@@ -2508,7 +2475,7 @@ ORDER BY t.team_id, g.game_date
 
 
 def write_team_profiles(sf, pg_conn, today: str) -> int:
-    """Builds and writes team profile blobs to api_cache. Returns error count."""
+    """Builds and writes team profile blobs to the DynamoDB serving cache. Returns error count."""
     errors = 0
     try:
         summary_rows  = _sf_query(sf, _TEAM_SUMMARY_SQL)
@@ -2733,7 +2700,7 @@ ORDER BY p.pitcher_id, p.game_date
 
 
 def write_player_profiles(sf, pg_conn, today: str) -> int:
-    """Builds and writes player profile blobs (batters + pitchers) to api_cache.
+    """Builds and writes player profile blobs (batters + pitchers) to the DynamoDB serving cache.
 
     Writes:
       - player/{player_id}  (is_permanent=True) — full profile with season stats + game log

@@ -98,7 +98,21 @@ aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name s3-artifacts \
       \"Resource\":[\"arn:aws:s3:::${ARTIFACTS_BUCKET}\",\"arn:aws:s3:::${ARTIFACTS_BUCKET}/*\"]
     }]
   }" >/dev/null
-# NOTE (P2): add a DynamoDB statement here when the serving cache moves to Dynamo.
+# DynamoDB serving-cache access (INC-16-P2): write_serving_store runs on this box
+# and writes the serving cache → needs read+write+query+delete on the table.
+SERVING_CACHE_TABLE="${SERVING_CACHE_TABLE:-credence-prod-serving-cache}"
+ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name dynamo-serving-cache \
+  --policy-document "{
+    \"Version\":\"2012-10-17\",
+    \"Statement\":[{
+      \"Effect\":\"Allow\",
+      \"Action\":[\"dynamodb:GetItem\",\"dynamodb:PutItem\",\"dynamodb:BatchWriteItem\",
+                  \"dynamodb:Query\",\"dynamodb:Scan\",\"dynamodb:DeleteItem\"],
+      \"Resource\":\"arn:aws:dynamodb:${REGION}:${ACCOUNT_ID}:table/${SERVING_CACHE_TABLE}\"
+    }]
+  }" >/dev/null
+echo "[provision] dynamo-serving-cache policy attached for ${SERVING_CACHE_TABLE}"
 if ! aws iam get-instance-profile --instance-profile-name "$PROFILE_NAME" >/dev/null 2>&1; then
   aws iam create-instance-profile --instance-profile-name "$PROFILE_NAME" >/dev/null
   aws iam add-role-to-instance-profile --instance-profile-name "$PROFILE_NAME" --role-name "$ROLE_NAME"

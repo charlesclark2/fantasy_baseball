@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "new",
+        "text": "Matchup heatmaps are now live on pick and player pages. For a batter × pitcher matchup you'll see a strike-zone heatmap of where the batter does damage, overlaid with bubbles showing where the pitcher actually locates each pitch type — with FB / Breaking / Offspeed toggles and a hero 'All' view, per-cell hover details, and a clean empty state for cold-start players without enough data yet. This is an explanatory 'show-your-work' matchup view, not a bet signal: we tested the zone-overlap as a predictive feature and it showed no edge, so the heatmap is for understanding a matchup, not for picking sides."
+      },
+      {
+        "tag": "new",
         "text": "Line Shopping is now on the EV Tracker. A new 'Line Shopping' section shows model-positive plays ranked by edge, with the best available US price highlighted per play — including which book offers it, the American odds, the model's breakeven price (E9.1), and Pinnacle's fair-value anchor. On each pick's Book Comparison, the best-priced US book for the active pick side is now marked with a 'BEST' badge. This is a line-shopping transparency tool — if you're going to bet this side, here's the best number and where to find it. Our models have no demonstrated market edge (best_alpha=0); the Pinnacle anchor is more truthful than implying our breakeven is the market's."
       },
       {

@@ -412,7 +412,85 @@ clean multi-day window (Phase 4), then is decommissioned.
 
 ---
 
-## Railway PostgreSQL Serving Store (A2.12)
+## DynamoDB — Serving Cache (INC-16-P2)
+
+Replaces the Railway PostgreSQL `api_cache` (down after the Railway restriction —
+INC-16). Key→JSON serving cache the FastAPI backend reads at request time; read
+order is now **DynamoDB → S3** (Snowflake last resort). Writer:
+`scripts/write_serving_store.py` (on the EC2 box). Reader:
+`app/backend/services/serving_cache.py`.
+
+| Resource | Value |
+|---|---|
+| Table | `credence-prod-serving-cache` |
+| PK | `pk` (String) — namespace = cache_key up to the first `/` ("picks", "team", "player", "players", "performance", "zone_matchup") |
+| SK | `sk` (String) — `"{rest}#{cache_date}"` for date-scoped rows, `"{rest}#PERMANENT"` for permanent (Final-game / profile) rows |
+| Attributes | `value` (JSON string), `is_permanent` (Bool), `updated_at` (ISO), `cache_date` (date or `PERMANENT`) |
+| Billing | Pay-per-request (on-demand) |
+| Region | `us-east-1` |
+| GSI | none — point reads = GetItem; `team/` list = Query(pk=`team`); `picks/game/*` purge = Query(pk=`picks`, begins_with `game/`); admin full-refresh = a small Scan |
+
+```bash
+# Provision (run once with create-table IAM creds)
+AWS_PROFILE=default ./infrastructure/dynamo/create_serving_cache_table.sh
+```
+
+### IAM — three grants
+
+**1. EC2 instance-profile role** (`credence-dagster-ec2-role`) — the writer runs on
+the box. Attached automatically by `services/dagster/aws/provision-ec2.sh`
+(policy `dynamo-serving-cache`): `GetItem`/`PutItem`/`BatchWriteItem`/`Query`/`Scan`/`DeleteItem`
+on `arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/credence-prod-serving-cache`.
+
+**2. Lambda execution role** (`credence-prod-lambda-execution-role`) — the backend
+reads the cache. Add `GetItem`/`Query`/`Scan` on the table:
+```bash
+aws iam put-role-policy \
+  --role-name credence-prod-lambda-execution-role \
+  --policy-name DynamoServingCacheRead \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Action": ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan"],
+      "Resource": "arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/credence-prod-serving-cache"
+    }]
+  }' --region us-east-1
+```
+
+**3. Lambda execution role — E9.31 zone-overlay S3 read (unparked with INC-16-P2).**
+The `GET /players/{id}/zone-overlay` endpoint falls back to reading overlay JSON
+from `baseball-betting-ml-artifacts/baseball/serving/zone_matchup/*`. Grant the
+Lambda role the S3 read so the heatmap resolves (no 404):
+```bash
+aws iam put-role-policy \
+  --role-name credence-prod-lambda-execution-role \
+  --policy-name S3ArtifactsZoneOverlayRead \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Action": ["s3:GetObject"],
+      "Resource": "arn:aws:s3:::baseball-betting-ml-artifacts/baseball/serving/zone_matchup/*"
+    }]
+  }' --region us-east-1
+```
+
+> **Portfolios (no new grant):** `user_portfolios` moved off PG to a `portfolio`
+> map on the **users** table (`credence-prod-dynamo-users`), read/written via
+> `app/backend/services/dynamo.py`. The Lambda role already has GetItem/UpdateItem
+> on that table (bets/users grant), so portfolio reads/writes are already covered.
+
+---
+
+## Railway PostgreSQL Serving Store (A2.12) — ⛔ DECOMMISSIONED (INC-16-P2)
+
+> **Superseded by the DynamoDB Serving Cache above.** The Railway PG (api_cache +
+> daily_picks + user_portfolios) went down with the Railway restriction (INC-16)
+> and is **not** being restored: api_cache → DynamoDB serving-cache, user_portfolios
+> → users-table `portfolio` map, daily_picks → retired (never read). Once the live
+> backend + writer are validated on DynamoDB, drop `DATABASE_URL` from the EC2 box
+> `.env` and the Lambda config. Original spec retained below for history.
 
 Primary OLTP read path for all FastAPI endpoints. Dagster reverse-ETLs prediction
 outputs to PG after each pipeline run; FastAPI reads PG first (sub-1ms), falls

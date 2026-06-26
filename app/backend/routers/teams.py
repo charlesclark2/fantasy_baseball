@@ -1,4 +1,4 @@
-"""Team detail endpoints — served from Railway PG api_cache."""
+"""Team detail endpoints — served from the DynamoDB serving cache (INC-16-P2)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.backend.dependencies import get_user_id
-from app.backend.services import pg
+from app.backend.services import serving_cache
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/teams", tags=["teams"])
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/teams", tags=["teams"])
 @router.get("")
 def list_teams(_: str = Depends(get_user_id)) -> list:
     """Return a summary list of all team profiles (for the teams directory page)."""
-    payloads = pg.list_cache_by_prefix("team/")
+    payloads = serving_cache.list_cache_by_prefix("team/")
     return [
         {
             "team_id": p["team_id"],
@@ -41,7 +41,7 @@ def get_team(team_id: int, _: str = Depends(get_user_id)) -> dict:
     from datetime import date
     today = date.today().isoformat()
 
-    payload = pg.get_cache(f"team/{team_id}", today)
+    payload = serving_cache.get_cache(f"team/{team_id}", today)
     if payload is None:
         logger.warning("Team profile cache miss for team_id=%s", team_id)
         raise HTTPException(status_code=404, detail=f"Team profile not found for team_id={team_id}")

@@ -22,12 +22,21 @@ Dagster+ stays at $0 (we just move the self-host from Railway → AWS). Approx (
 
 ---
 
-## PHASE 0 — 🚑 IMMEDIATE: keep beta current TODAY (no Railway needed)
-**Goal:** serve fresh picks while the AWS build happens. The frontend already falls back to S3 (it's up on stale AM data) → just refresh S3.
-- Run `predict_today` + `write_serving_store` as a ONE-OFF **off Railway** (laptop / a throwaway EC2 / a Lambda): read the feature store from **Snowflake** (alive; yesterday's marts persist — skip the dbt feature-rebuild for one cycle), write the serving payload to **S3**.
-- Verify the live frontend serves the refreshed picks (S3 fallback path).
-- Repeat once per day until the AWS pipeline is live.
-- **AC:** today's picks render on the live site from a fresh off-Railway run.
+## PHASE 0 — ✅ DONE 2026-06-26 (pre + post-lineup picks live on S3). Now a DAILY MANUAL CYCLE until P1.
+**Goal:** serve fresh picks while the AWS build happens. The frontend already falls back to S3 (it's up on stale AM data) → refresh S3.
+**What happened (2026-06-26):** the morning predict had ALREADY run before Railway died → Snowflake already held today's 15 games in `daily_model_predictions` (`prediction_type=morning`) + feature + schedule rows. The pipeline only died at the serving-WRITE step (it wrote to the dead PG, never S3). So today's fix was just `write_serving_store → S3`, not a re-predict. Pre-lineup + post-lineup both rendered fresh from `credence-prod-s3-api-cache`.
+
+**🔑 GOTCHAS (carry forward — these cost time):**
+1. **`DATABASE_URL` won't unset via `env -u`** — the script's `load_dotenv()` (default `override=False`) repopulates it from `.env` → it then dials the dead Railway PG. **Fix: pass it EMPTY-but-present:** `DATABASE_URL='' CACHE_BUCKET=credence-prod-s3-api-cache uv run python scripts/write_serving_store.py`. Empty → `load_dotenv` leaves it → `_pg_connect()` returns `None`, PG skipped, only the S3 writes fire. (Backend read order PG→S3→Snowflake confirmed in `picks.py`; S3 keys `api-cache/{today}/picks/*.json`.)
+2. **dbt type-drift self-heal:** the feature rebuild failed on `feature_pregame_game_features_raw` + `_game_features` — `cannot change column HOME_AVG_K_PCT_30D from NUMBER(38,3) to FLOAT`. `--full-refresh` is unreliable in dbt-fusion (MERGEs, doesn't DROP+CREATE — known repo quirk) → fix = manual `DROP TABLE` both, then rebuild → recreate as FLOAT. **Now self-healed (FLOAT going forward).** `_meta_model_features` + `_public_betting_features` aren't needed for a post-lineup pass (meta serves morning-only; public-betting is lineup-independent) → leave them.
+3. **W3pre stash dependency:** before any dbt build, **stash the 4 W3pre stg models** so the build runs against the original Snowflake-flatten models (the W3pre external tables don't exist yet — see the W3pre parked entry in story_prompts.md); `git stash pop` after.
+
+**📋 DAILY MANUAL CYCLE until P1 restores orchestration:**
+- *If the morning predict already ran* (like 2026-06-26): just `write_serving_store` with `DATABASE_URL=''` → S3 (pre-lineup), then after lineups re-run the post-lineup tail.
+- *Tomorrow / cold start (heavier — morning predict won't pre-run):* full off-Railway cycle — `ingest_statsapi.py schedule` (+ `savant_ingestion batter_pitches` if needed) → **stash W3pre** → `+feature_pregame_game_features` dbt build → `predict_today --prediction-type morning` → `write_serving_store` (`DATABASE_URL=''`) → S3 → **stash pop**. After lineups: `ingest_statsapi schedule` (confirmed lineups) → rebuild feature chain → `predict_today --prediction-type post_lineup --lineup-confirmed` → `write_serving_store` → S3.
+- **AC (met):** ✅ pre + post-lineup picks render fresh on the live site from S3. Odds gap quantified + routed to P3 (below).
+
+**⚠️ ODDS REALITY (corrects the original P0/P3 assumption):** there is **NO live runtime odds pull**. Both `predict_today` and `write_serving_store` read CAPTURED odds from `mart_odds_outcomes` → **displayed prices are stale as of the last capture, not current.** On 2026-06-26: last raw capture (`mlb_odds_raw`) 11:02 UTC; served odds (`mart_odds_outcomes`) 07:32 UTC (lags raw because the dbt-runner is down); gap growing ~6–10h. **Pick SELECTION (which side) is the morning model's and is fine; only the PRICES are stale.** This raises P3's urgency — restoring capture is what makes displayed prices current again.
 
 ## PHASE 1 — AWS compute (Dagster + dbt-runner)
 **Goal:** stand the orchestration + dbt-runner up on AWS (re-home, not rebuild — the Dagster OSS config already exists from the Railway self-host).
@@ -60,10 +69,12 @@ The whole stack is now a single Docker Compose box (re-deploy, not rebuild):
 - **AC:** picks/game-detail/book-odds/performance all read from DynamoDB; `write_serving_store` writes DynamoDB + S3; permanent-cache invalidation works; latency acceptable; a full read path validated.
 
 ## PHASE 3 — Capture crons → Lambda + EventBridge
-**Goal:** restore the data feeds (odds/schedule/derivative) off Railway.
-- Re-host `odds_capture` / `schedule_capture` / `derivative_capture` as **Lambda functions on EventBridge schedules** (serverless, ~$0) writing to S3/Snowflake. (Or run them on the EC2 box via cron — Lambda is cheaper + more reliable.)
-- ⚠️ derivative_capture: keep the corrected F5 keys (`*_1st_5_innings`) from E2.0b-fix.
-- **AC:** odds/schedule/derivative feeds flowing again to S3/Snowflake on schedule.
+**Goal:** restore ALL the Railway capture feeds (odds / schedule / derivative / weather) off Railway.
+- ⚠️ **FIRST enumerate every cron that lived on Railway** (cross-check the old Railway cron/service config + the Dagster schedules in `pipeline/` + the CLAUDE.md op→tier map) so none are missed.
+- Re-host as **Lambda functions on EventBridge schedules** (serverless, ~$0) writing to S3/Snowflake — `odds_capture`, `schedule_capture` (schedule/probables), `derivative_capture`, **`ingest_weather` (pregame) + `intraday_weather_capture`**. (Or run on the EC2 box via cron — Lambda is cheaper + more reliable.)
+- ⚠️ `derivative_capture`: keep the corrected F5 keys (`*_1st_5_innings`) from E2.0b-fix.
+- Preserve each op's tier: weather = **WARN** (non-critical; predictions run without it), `schedule_capture`'s dbt trigger = **ALERT-loud-on-skip**.
+- **AC:** odds / schedule / derivative / weather feeds all flowing again to S3/Snowflake on schedule.
 
 ## PHASE 4 — Cut over, validate, decommission Railway
 - Enable the schedules on the AWS Dagster; run a FULL daily cycle end-to-end (compute_elo → dbt_daily_build → predict_today → write_serving_store → DynamoDB/S3); validate picks served.

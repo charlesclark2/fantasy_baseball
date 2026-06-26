@@ -1,6 +1,7 @@
-"""E9.28 — unit tests for bulk permanent-cache invalidation.
+"""E9.28 / INC-16-P2 — unit tests for bulk permanent-cache invalidation.
 
-Tests cover pg.invalidate_permanent_picks and s3_cache.invalidate_permanent_picks
+Tests cover serving_cache.invalidate_permanent_picks (DynamoDB; replaced the
+Railway PG api_cache in INC-16-P2) and s3_cache.invalidate_permanent_picks
 without hitting real infrastructure. Both functions must:
   - Return 0 (not raise) when the backing store is unavailable.
   - Return the count of items deleted when the store is available.
@@ -8,65 +9,51 @@ without hitting real infrastructure. Both functions must:
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 
 # ---------------------------------------------------------------------------
-# pg.invalidate_permanent_picks
+# serving_cache.invalidate_permanent_picks (DynamoDB)
 # ---------------------------------------------------------------------------
 
-class TestPgInvalidatePermanentPicks:
-    def test_returns_zero_when_no_pool(self):
-        """Gracefully returns 0 when DATABASE_URL is unset (pool is None)."""
-        import app.backend.services.pg as pg_mod
-        with patch.object(pg_mod, "_get_pool", return_value=None):
-            result = pg_mod.invalidate_permanent_picks()
-        assert result == 0
+def _mock_table():
+    tbl = MagicMock()
+    batch = MagicMock()
 
-    def test_deletes_permanent_picks_rows(self):
-        """Issues DELETE with is_permanent=TRUE and picks/game/% and returns rowcount."""
-        import app.backend.services.pg as pg_mod
+    @contextmanager
+    def _bw():
+        yield batch
 
-        mock_cur = MagicMock()
-        mock_cur.__enter__ = lambda s: s
-        mock_cur.__exit__ = MagicMock(return_value=False)
-        mock_cur.rowcount = 7
+    tbl.batch_writer.side_effect = _bw
+    tbl._batch = batch
+    return tbl
 
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cur
 
-        mock_pool = MagicMock()
-        mock_pool.getconn.return_value = mock_conn
+class TestServingCacheInvalidatePermanentPicks:
+    def test_returns_zero_on_error(self):
+        """Gracefully returns 0 when DynamoDB is unavailable."""
+        import app.backend.services.serving_cache as sc
+        tbl = _mock_table()
+        tbl.query.side_effect = Exception("ddb down")
+        with patch.object(sc, "_table", return_value=tbl):
+            assert sc.invalidate_permanent_picks() == 0
 
-        with patch.object(pg_mod, "_get_pool", return_value=mock_pool):
-            result = pg_mod.invalidate_permanent_picks()
-
-        assert result == 7
-        executed_sql = mock_cur.execute.call_args[0][0]
-        assert "is_permanent = TRUE" in executed_sql
-        assert "picks/game/%" in executed_sql
-        mock_conn.commit.assert_called_once()
-
-    def test_returns_zero_and_rolls_back_on_db_error(self):
-        """Returns 0 (not raises) and rolls back if the DELETE throws."""
-        import app.backend.services.pg as pg_mod
-
-        mock_cur = MagicMock()
-        mock_cur.__enter__ = lambda s: s
-        mock_cur.__exit__ = MagicMock(return_value=False)
-        mock_cur.execute.side_effect = Exception("connection reset")
-
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cur
-
-        mock_pool = MagicMock()
-        mock_pool.getconn.return_value = mock_conn
-
-        with patch.object(pg_mod, "_get_pool", return_value=mock_pool):
-            result = pg_mod.invalidate_permanent_picks()
-
-        assert result == 0
-        mock_conn.rollback.assert_called_once()
+    def test_deletes_permanent_picks_items(self):
+        """Queries pk=picks + begins_with game/ with an is_permanent filter and
+        batch-deletes each matched item, returning the count."""
+        import app.backend.services.serving_cache as sc
+        tbl = _mock_table()
+        tbl.query.return_value = {"Items": [
+            {"pk": "picks", "sk": "game/1#PERMANENT"},
+            {"pk": "picks", "sk": "game/2#PERMANENT"},
+            {"pk": "picks", "sk": "game/3#PERMANENT"},
+        ]}
+        with patch.object(sc, "_table", return_value=tbl):
+            result = sc.invalidate_permanent_picks()
+        assert result == 3
+        assert tbl._batch.delete_item.call_count == 3
+        assert "FilterExpression" in tbl.query.call_args.kwargs
 
 
 # ---------------------------------------------------------------------------

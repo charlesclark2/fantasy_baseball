@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.backend.dependencies import get_admin_user
-from app.backend.services import pg
+from app.backend.services import serving_cache
 from app.backend.services.s3_cache import invalidate_game as s3_invalidate_game
 from app.backend.services.s3_cache import invalidate_permanent_picks as s3_invalidate_permanent_picks
 from app.backend.services.s3_cache import invalidate_today
@@ -72,39 +72,39 @@ def invalidate_cache(
     game_pk: int | None = None,
     _: str = Depends(get_admin_user),
 ) -> dict:
-    """Invalidates today's cache (PG + S3).
+    """Invalidates today's cache (DynamoDB + S3).
 
     If game_pk is provided, invalidates only that game's detail blob.
     Otherwise invalidates the full day's non-permanent cache.
     """
     today_str = datetime.date.today().isoformat()
     if game_pk is not None:
-        pg.invalidate_game(game_pk, today_str)
+        serving_cache.invalidate_game(game_pk, today_str)
         s3_invalidate_game(game_pk)
         return {"status": "ok", "message": f"Game {game_pk} cache invalidated"}
     invalidate_today()
-    pg.invalidate_today(today_str)
+    serving_cache.invalidate_today(today_str)
     return {"status": "ok", "message": "Cache invalidated — next request will re-query Snowflake"}
 
 
 @router.post("/cache/invalidate-permanent")
 def invalidate_permanent_cache(_: str = Depends(get_admin_user)) -> dict:
-    """Purge permanent-tier picks/game/* caches from both S3 and Railway PG.
+    """Purge permanent-tier picks/game/* caches from both S3 and DynamoDB.
 
     Use after a champion promotion to clear stale Final-game detail blobs that
     day-scoped invalidations never touch (the is_permanent=TRUE blobs from
-    api-cache/permanent/ and the corresponding PG rows). Stale blobs regenerate
-    lazily on the next page load. Idempotent — safe to re-run.
+    api-cache/permanent/ and the corresponding DynamoDB items). Stale blobs
+    regenerate lazily on the next page load. Idempotent — safe to re-run.
     """
     s3_deleted = s3_invalidate_permanent_picks()
-    pg_deleted = pg.invalidate_permanent_picks()
+    ddb_deleted = serving_cache.invalidate_permanent_picks()
     return {
         "status": "ok",
         "s3_objects_deleted": s3_deleted,
-        "pg_rows_deleted": pg_deleted,
+        "ddb_items_deleted": ddb_deleted,
         "message": (
             f"Permanent picks/game cache cleared: {s3_deleted} S3 objects, "
-            f"{pg_deleted} PG rows. Stale Final-game blobs will regen on next page load."
+            f"{ddb_deleted} DynamoDB items. Stale Final-game blobs will regen on next page load."
         ),
     }
 

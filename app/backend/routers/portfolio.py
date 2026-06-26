@@ -4,7 +4,8 @@ GET /portfolio/preferences  — fetch the authenticated user's portfolio setting
 PUT /portfolio/preferences  — update the authenticated user's portfolio settings
 
 Portfolio preferences drive server-side pick filtering on GET /picks/today?apply_portfolio=true.
-Settings live in the Railway PostgreSQL user_portfolios table.
+Settings live in DynamoDB as a `portfolio` map on the users table (INC-16-P2;
+migrated off the decommissioned Railway PostgreSQL user_portfolios table).
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from app.backend.dependencies import get_user_id
-from app.backend.services import pg
+from app.backend.services import dynamo
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -45,7 +46,7 @@ class PortfolioPreferencesResponse(PortfolioPreferences):
 @router.get("/preferences", response_model=PortfolioPreferencesResponse)
 def get_portfolio_preferences(user_id: str = Depends(get_user_id)) -> PortfolioPreferencesResponse:
     """Returns the authenticated user's portfolio preferences (defaults if not yet set)."""
-    prefs = pg.get_user_portfolio(user_id)
+    prefs = dynamo.get_user_portfolio(user_id)
     markets = prefs.get("markets") or ["h2h", "totals"]
     if isinstance(markets, str):
         import json
@@ -65,7 +66,7 @@ def update_portfolio_preferences(
     user_id: str = Depends(get_user_id),
 ) -> PortfolioPreferencesResponse:
     """Saves the authenticated user's portfolio preferences."""
-    saved = pg.upsert_user_portfolio(user_id, prefs.model_dump())
+    saved = dynamo.upsert_user_portfolio(user_id, prefs.model_dump())
     markets = saved.get("markets") or prefs.markets
     if isinstance(markets, str):
         import json
