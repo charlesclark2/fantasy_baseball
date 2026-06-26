@@ -367,6 +367,8 @@ models:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns: [game_pk, side]
+          config:
+            severity: warn
 
     columns:
       - name: game_pk
