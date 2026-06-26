@@ -106,6 +106,19 @@ The whole stack is now a single Docker Compose box (re-deploy, not rebuild):
 - **AC:** odds / schedule / derivative / weather feeds all flowing again to S3/Snowflake on schedule.
 
 ## PHASE 4 — dev→main cutover, validate, decommission Railway
+> **🔧 ARTIFACTS CODE-COMPLETE 2026-06-26 — cutover itself is operator-run (multi-day window).**
+> Code-side delivered: (1) **no-double-serve VERIFIED in code** — the 4 host-cron captures have NO
+> registered Dagster schedule (`intraday_schedule_capture_*` / `intraday_weather_*` are omitted from
+> `all_intraday_schedules`; registered = 7 weekly/daily + `odds_clv_rebuild_daily`, none a capture);
+> nothing boots `default_status=RUNNING`. (2) **Caddy HTTPS+basic-auth** service + `Caddyfile` added to
+> the compose (webserver re-bound to `127.0.0.1:3000`; `caddy_data`/`caddy_config` volumes; secrets via
+> `env_file` so the bcrypt `$` survives). (3) `.env.example` updated (P4 dagit vars + P2 DynamoDB vars;
+> dropped stale `DATABASE_URL`). (4) Full P4 runbook (checklist + Caddy + SSM + SG + DNS commands) in
+> `services/dagster/aws/README.md` §P4; `aws_resources.md` P4 record (auth choice = **Caddy basic-auth
+> + SG allowlist**, operator-confirmed). **OPERATOR RUNTIME STEPS** (sequence in README §P4): merge
+> dev→main + rebuild (incl. `--profile capture`) → pre-cutover checklist → full daily cycle → flip
+> schedules + enable `odds_current_rebuild_sensor` + re-comment `capture.crontab` line 42 (same window)
+> → DNS A record + Caddy secret + SG 80/443 + SSM policy → multi-day soak → cancel Railway + Dagster+.
 - The box tracks **`dev`** → **merge `dev`→`main`** (carries P2 + the PEM key-normalization + P3), repoint the box to `main`, `docker compose up -d --build`.
 - **PRE-CUTOVER CHECKLIST (from the P2/P3 findings — all green before enabling schedules):** dbt-runner key loads (`head -1 /tmp/snowflake_rsa_key.pem` = `-----BEGIN`, the `_normalize_pem` fix); IMDSv2 hop-limit=2 persists + `AWS_DEFAULT_REGION=us-east-1` in container env; Lambda still has the `DynamoServingCacheRead` + `S3ArtifactsZoneOverlayRead` grants after any redeploy; `DATABASE_URL` absent on box + Lambda.
 - Run a FULL daily cycle end-to-end (compute_elo → dbt_daily_build → predict_today → write_serving_store → DynamoDB/S3); validate picks served + the 4 backend surfaces + the E9.31 heatmap.
@@ -122,6 +135,15 @@ The whole stack is now a single Docker Compose box (re-deploy, not rebuild):
 - **CD** (on merge to `main`, orchestration paths): deploy to the box (SSH/SSM `git pull` + `docker compose up -d --build` + a post-deploy `/health` + defs-loaded check), so `main` == running box automatically.
 - **Safe-deploy / blue-green (replaces Railway's rolling deploys — PHASED):** serving is decoupled from the box (no site downtime on redeploy), and the Dagster daemon is a SINGLETON (never two at once). **NOW:** health-gated deploy with auto-rollback to the prior image + graceful drain of in-flight runs before recreate (~$0). **EVENTUAL (deferred, gated on an uptime SLA):** true blue/green — proxy-fronted dual stateless tier + a daemon-ownership handoff, or a standby instance (≈ doubled compute during deploys).
 - **AC:** orchestration-affecting PRs are CI-gated; merges to `main` auto-deploy + self-verify + auto-rollback on failure; the "manual codeloc redeploy" step is gone.
+
+## PHASE 6 — Observability + email alerting (the box now runs live with NO alerting)
+**Why:** a silent failure (dead box / crashed daemon / failed build / bad deploy) wouldn't surface until someone notices stale picks. Email-preferred (SES already wired); ~$0. **CAN START NOW** (liveness layer doesn't wait on P4; the daily-output dead-man switch finalizes at/after P4). Three failure modes → one layer each, + reuse existing signals:
+- **🪦 Daily-output dead-man's switch (highest value, do first):** alert if today's picks aren't in `credence-prod-serving-cache` by a cutoff (~8am ET) — outcome-based, fires for ANY root cause (watches what users see). Lambda+EventBridge or a CloudWatch heartbeat metric from `write_serving_store` → SES/SNS email on miss.
+- **📉 Box/instance liveness:** CloudWatch EC2 status-check alarms (instance + system) + disk/memory (CloudWatch agent) → SNS → email.
+- **🐳 Service liveness (box up, container down — a ping misses this):** host-cron healthcheck (~5 min) — `docker compose ps` all-Up + curl dagit:3000 / dbt-runner:8080 / flaresolverr:8191 (+ daemon-heartbeat-stale) → SNS/SES.
+- **🚨 Dagster run-failure → SES**, scoped LOUD to HALT-tier ops (E11.7 map); WARN-tier digested to avoid noise.
+- **♻️ Reuse, don't reinvent:** route `check_data_freshness` / `signal_freshness_check` output to the same channel; add a capture-feed dead-man switch (odds not landing in `mart_odds_outcomes`) since the P3 captures are host-cron, not Dagster-monitored.
+- **AC:** a verified email per layer (missed daily output, instance/disk, stopped container, HALT-tier run failure); existing freshness routed to the same channel; de-duped + documented in `aws_resources.md`.
 
 ## Strategic upside
 Consolidating orchestration + serving onto AWS (where Lambda/S3/DynamoDB/Cognito/SES already live) **removes the single-provider single-point-of-failure that just bricked everything** — no separate restrictable account can take the whole stack down again. The lakehouse (S3/duckdb) + Snowflake-minimization work continues unchanged (the dbt-runner just runs on EC2 now); end-state Snowflake-touch is still only the Cortex narrative.

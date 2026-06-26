@@ -1,0 +1,31 @@
+# =============================================================================
+# INC-16-P4 — Caddy config for the dagit operator console.
+#
+# Terminates TLS (auto Let's Encrypt for $DAGIT_HOSTNAME) + HTTP basic-auth, then
+# reverse-proxies to the dagster webserver over the compose network. OSS dagit has
+# NO auth of its own, so this password gate is mandatory before exposing it.
+#
+# Env (from docker-compose `env_file: [.env]`, read here via {$VAR}):
+#   DAGIT_HOSTNAME         e.g. dagster.credencesports.com  (must resolve to the EIP)
+#   DAGIT_BASIC_AUTH_USER  the login username
+#   DAGIT_BASIC_AUTH_HASH  bcrypt hash from: docker run --rm caddy:2 caddy hash-password --plaintext 'PW'
+#
+# Caddy auto-redirects http->https and obtains/renews the cert. Renewal needs :443
+# (TLS-ALPN) reachable from Let's Encrypt; :80 is used for the initial HTTP-01
+# challenge + the http->https redirect.
+# =============================================================================
+{$DAGIT_HOSTNAME} {
+	basic_auth {
+		{$DAGIT_BASIC_AUTH_USER} {$DAGIT_BASIC_AUTH_HASH}
+	}
+
+	# dagit + GraphQL + websockets (run/log streaming) all flow through here.
+	reverse_proxy dagster-webserver:3000
+
+	encode gzip
+
+	log {
+		output stdout
+		format console
+	}
+}

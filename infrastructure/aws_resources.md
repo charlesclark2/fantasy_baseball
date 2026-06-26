@@ -393,9 +393,21 @@ One box runs the full stack as Docker Compose — config + runbook in
 | `dagster-webserver` | dagit UI / GraphQL | 3000 (operator IP) |
 | `dbt-runner` | out-of-process dbt | 8080 (internal) |
 | `flaresolverr` | FanGraphs Cloudflare solver (shares EIP egress) | 8191 (internal) |
+| `caddy` (INC-16-P4) | HTTPS reverse proxy + basic-auth → dagit | 80 + 443 (public, auth-gated) |
+| `odds/schedule/derivative/weather-capture` (P3) | run-once capture images (`profile: capture`, host-cron) | — |
 
-dagit: `http://100.57.225.242:3000` (security-group-locked to the operator IP).
+dagit (P4): **`https://dagster.credencesports.com`** — Caddy terminates TLS
+(Let's Encrypt) + HTTP basic-auth in front of the OSS webserver (which has no auth
+of its own). `dagster-webserver` is bound to `127.0.0.1:3000` (SSH-tunnel fallback
+only); the public `:3000` SG rule is dropped at cutover.
 **Schedules boot STOPPED** — turning them on is INC-16 Phase 4.
+
+### INC-16-P4 — HTTPS dagit + SSM (operator actions; see `services/dagster/aws/README.md` §P4)
+- **DNS:** Route 53 (zone `credencesports.com`) A record `dagster.credencesports.com` → `100.57.225.242` (the EIP). _[fill ✅ when created]_
+- **TLS:** Caddy auto-issues/renews Let's Encrypt for the subdomain (`caddy_data` volume persists certs). _[fill cert serial/expiry when issued]_
+- **Auth choice (operator-confirmed 2026-06-26):** **Caddy basic-auth + SG IP-allowlist** (defense-in-depth, $0). Hash via `docker run --rm caddy:2 caddy hash-password`; user+hash in box `.env` (`DAGIT_BASIC_AUTH_USER`/`_HASH`).
+- **Security group:** add 80+443; drop the old `:3000` rule; remove `:22` once SSM works.
+- **Shell:** SSM Session Manager — attach `AmazonSSMManagedInstanceCore` to `credence-dagster-ec2-role`; `aws ssm start-session --target i-07594af1679f81c38`. SSH retired (public-subnet+IGW → agent reaches public SSM endpoints, no interface VPC endpoints).
 
 ### Provisioned via
 
