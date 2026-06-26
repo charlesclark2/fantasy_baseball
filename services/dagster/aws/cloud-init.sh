@@ -18,13 +18,19 @@ set -euxo pipefail
 # --- packages ---------------------------------------------------------------
 dnf update -y
 dnf install -y docker git
-# compose v2 plugin (AL2023 ships it in the docker-compose-plugin pkg or via the
-# cli-plugins dir; install the standalone plugin binary as a robust fallback).
+# compose v2 + buildx plugins. AL2023's `docker` package ships an OLD buildx
+# (< 0.17.0), but Compose v2's `--build` requires buildx >= 0.17.0 to drive image
+# builds ("compose build requires buildx 0.17.0 or later") — so install a current
+# buildx alongside compose into the global cli-plugins dir.
 mkdir -p /usr/local/lib/docker/cli-plugins
 ARCH=$(uname -m)  # aarch64 on t4g
+case "$ARCH" in aarch64) GH_ARCH=arm64 ;; x86_64) GH_ARCH=amd64 ;; *) GH_ARCH="$ARCH" ;; esac
 curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${ARCH}" \
   -o /usr/local/lib/docker/cli-plugins/docker-compose
 chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+curl -fsSL "https://github.com/docker/buildx/releases/download/v0.19.3/buildx-v0.19.3.linux-${GH_ARCH}" \
+  -o /usr/local/lib/docker/cli-plugins/docker-buildx
+chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
 
 # --- swap (protect the heavy image build / weekly PyMC op from OOM) ----------
 if [ ! -f /swapfile ]; then
