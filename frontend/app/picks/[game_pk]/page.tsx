@@ -1211,7 +1211,7 @@ function MatchupZoneSection({
                 <Info className="h-3.5 w-3.5 text-gray-600 cursor-help" />
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-[260px] text-xs leading-relaxed">
-                Batter hot/cold zones (EB-shrunk run value per pitch) overlaid with the pitcher&apos;s location tendencies. Explanatory transparency only — zone profiles tested null for predictive edge (E13.10 Track B).
+                Batter hot/cold zones (EB-shrunk run value per pitch) overlaid with the pitcher&apos;s location tendencies. Explanatory transparency only — zone profiles have no demonstrated predictive edge.
               </TooltipContent>
             </Tooltip>
           </span>

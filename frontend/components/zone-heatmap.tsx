@@ -69,11 +69,6 @@ function toSvgY(z_norm: number): number {
   return (1 - (z_norm - Z_MIN) / (Z_MAX - Z_MIN)) * SVG_H
 }
 
-function zFtToNorm(z_ft: number, sz_bot: number, sz_top: number): number {
-  if (sz_top === sz_bot) return 0.5
-  return (z_ft - sz_bot) / (sz_top - sz_bot)
-}
-
 // ---------------------------------------------------------------------------
 // Color scale — diverging centered at 0, dark-theme palette
 // ---------------------------------------------------------------------------
@@ -152,7 +147,6 @@ export function ZoneHeatmap({
   const groupCells = overlay.cells.filter((c) => c.pitch_group === group)
   const vmax = computeVmax(overlay.cells, group)
 
-  const { sz_top, sz_bot } = overlay.strike_zone
   const { x_edges, z_norm_edges, called_zone } = overlay.grid
 
   // Strike zone box in SVG coords
@@ -294,13 +288,12 @@ export function ZoneHeatmap({
               pointerEvents="none"
             />
 
-            {/* ── Pitcher location bubbles ── */}
+            {/* ── Pitcher location bubbles — anchored to cell centers ── */}
             {groupCells
               .filter((cell) => cell.pitcher_usage_freq > 0.005)
               .map((cell) => {
-                const locZNorm = zFtToNorm(cell.pitcher_loc.z_ft, sz_bot, sz_top)
-                const cx = toSvgX(cell.pitcher_loc.x_ft)
-                const cy = toSvgY(locZNorm)
+                const cx = toSvgX(cell.x_ft)
+                const cy = toSvgY(cell.z_norm)
                 const r = Math.sqrt(cell.pitcher_usage_freq / maxUsage) * 9
                 const isHovered = hoveredCell === cell
 
