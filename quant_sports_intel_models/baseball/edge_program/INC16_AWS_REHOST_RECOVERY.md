@@ -60,8 +60,21 @@ The whole stack is now a single Docker Compose box (re-deploy, not rebuild):
 
 - **AC:** Dagster webserver + daemon healthy on EC2; defs load; the dbt-runner reachable; flaresolverr container healthy + sharing the agent's egress IP (a test FanGraphs leaderboard pull logs "Cloudflare clearance obtained"); FanGraphs ops are WARN-tier; schedules OFF until Phase 2/4.
 
-## PHASE 2 — 💾 Serving cache: Railway Postgres → DynamoDB
+## PHASE 2 — 💾 Serving cache: Railway Postgres → DynamoDB  ✅ DONE 2026-06-26
 **Goal:** replace the serving Postgres (the `api_cache` KV table) with DynamoDB.
+
+> **✅ SHIPPED + DEPLOYED LIVE 2026-06-26.** Table `credence-prod-serving-cache`
+> (single-table **structured PK/SK**: `pk`=namespace, `sk`=`{rest}#{date}`|`{rest}#PERMANENT`,
+> `value`=JSON string — not the PK=`cache_key` sketch below; chosen because the only
+> non-point ops are the `team/` list + `picks/game/*` purge + admin `invalidate_today`).
+> New `app/backend/services/serving_cache.py` reader (DynamoDB→S3); cache fns deleted from
+> `pg.py` → **`pg.py` removed**; 6 routers repointed; `user_portfolios` → a `portfolio` map
+> on the DynamoDB users table (`dynamo.py`); `daily_picks` retired; `write_serving_store`
+> writes DynamoDB+S3; IAM on the EC2 instance-profile + Lambda role; serving `DATABASE_URL`
+> dropped from box + Lambda. **E9.31 heatmap unparked + renders live.** Provision via
+> `infrastructure/dynamo/create_serving_cache_table.sh`. Gotcha solved: a Compose `env_file`
+> can't carry PEM newlines → `resources/__init__.py` + writer + dbt-runner entrypoint now
+> normalize `\n`-escaped/base64 keys (had silently broken ALL container Snowflake access).
 - The serving store IS a key→JSON cache (`cache_key` → `value`, `is_permanent`, `updated_at`) → maps 1:1 to a DynamoDB table: **PK = `cache_key`**, attributes = the JSON value + `is_permanent` + `updated_at`. (Range/list reads like `picks/game/*` → use a GSI or a structured PK, e.g. PK=`picks/game`, SK=`{game_pk}`.)
 - Backend: swap `app/backend/services/pg.py` `get_cache()` (+ the INC-12 `ORDER BY updated_at DESC` dedup) → DynamoDB `get_item`/`query`.
 - Writer: `scripts/write_serving_store.py` → write to DynamoDB instead of the PG `api_cache` (keep the S3 writes as the fallback; the read order becomes **DynamoDB → S3**).
