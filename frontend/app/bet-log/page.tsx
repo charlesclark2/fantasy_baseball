@@ -25,7 +25,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
-import { CalendarIcon, CheckCircle, Pencil, Trash2 } from "lucide-react"
+import { CalendarIcon, CheckCircle, ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
 import { normalizeTeam, normalizeMatchup } from "@/lib/teams"
@@ -92,6 +92,7 @@ const MARKET_OPTIONS = [
 ]
 
 const BOOKMAKER_OPTIONS = ["Bovada", "DraftKings", "FanDuel", "BetMGM", "Pinnacle", "Other"]
+const PAGE_SIZE = 25
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -429,6 +430,7 @@ function BetLogInner() {
   const [seasonFilter, setSeasonFilter] = useState<string>("all")
   const [deletingBetId, setDeletingBetId] = useState<string | null>(null)
   const [editingBet, setEditingBet]       = useState<ApiBet | null>(null)
+  const [currentPage, setCurrentPage]     = useState(1)
 
   const isTotal = market === "over" || market === "under"
 
@@ -526,9 +528,23 @@ function BetLogInner() {
   }, [allBets])
 
   const bets = React.useMemo(() => {
-    if (seasonFilter === "all") return allBets
-    return allBets.filter(b => b.score_date.startsWith(seasonFilter))
+    const filtered = seasonFilter === "all"
+      ? allBets
+      : allBets.filter(b => b.score_date.startsWith(seasonFilter))
+    return [...filtered].sort((a, b) => {
+      const dateDiff = b.score_date.localeCompare(a.score_date)
+      if (dateDiff !== 0) return dateDiff
+      return b.placed_at.localeCompare(a.placed_at)
+    })
   }, [allBets, seasonFilter])
+
+  // Reset to page 1 whenever season filter or bet list changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [seasonFilter, bets.length])
+
+  const totalPages  = Math.max(1, Math.ceil(bets.length / PAGE_SIZE))
+  const pagedBets   = bets.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
   return (
     <AuthGuard>
@@ -726,6 +742,7 @@ function BetLogInner() {
               Summary tiles + bet history
           ---------------------------------------------------------------- */}
           <div className="flex flex-col gap-0 min-w-0">
+            {/* Summary always over the full (season-filtered) log, not just the visible page */}
             <SummaryTiles bets={bets} />
 
             <div className="rounded-lg border border-[#262626] bg-[#141414]">
@@ -768,7 +785,7 @@ function BetLogInner() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {bets.map(bet => {
+                      {pagedBets.map(bet => {
                         const status   = outcomeToStatus(bet.outcome)
                         const ev       = fmtEv(bet.ev)
                         const pnlColor = bet.profit_loss === null
@@ -813,6 +830,31 @@ function BetLogInner() {
                   </Table>
                 )}
               </div>
+              {bets.length > PAGE_SIZE && (
+                <div className="px-5 py-3 border-t border-[#262626] flex items-center justify-between gap-4">
+                  <p className="text-xs text-gray-500">
+                    {bets.length} bets · page {currentPage} of {totalPages}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost" size="sm"
+                      className="h-7 w-7 p-0 text-gray-400 hover:text-white hover:bg-[#1e1e1e] disabled:opacity-30"
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost" size="sm"
+                      className="h-7 w-7 p-0 text-gray-400 hover:text-white hover:bg-[#1e1e1e] disabled:opacity-30"
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

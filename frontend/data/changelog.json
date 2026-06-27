@@ -1,5 +1,14 @@
 [
   {
+    "week": "2026-06-23",
+    "items": [
+      {
+        "tag": "improvement",
+        "text": "The Bet Log now paginates at 25 bets per page, sorted newest-first, with a page counter and Prev / Next controls. The P&L, ROI, and Win Rate summary tiles always reflect your full history for the selected season — not just the visible page."
+      }
+    ]
+  },
+  {
     "week": "2026-06-22",
     "items": [
       {
