@@ -6,16 +6,21 @@
 #   bash services/dagster/aws/deploy.sh
 #
 # Does, in order:
-#   0. env-parity: every key in env.required is present AND non-empty in .env
-#      (empty SHADOWS code defaults — the P4 trap). Abort before touching anything.
-#   1. snapshot current images → :rollback (for auto-revert on a bad deploy)
-#   2. git pull origin main (records the range for change-detection)
-#   3. graceful drain — wait for in-flight Dagster runs to finish before recreate
-#   4. rebuild + redeploy: `up -d --build` (core) AND `--profile capture build`
+#   1. git pull origin main (records the range for change-detection). MUST be first
+#      so env-parity below validates the env.required we're DEPLOYING, not the stale
+#      copy already on the box — otherwise removing/adding a required key never takes
+#      effect via CD without a manual pull. A pull touches only the working tree, not
+#      running containers/images, so nothing serving is mutated yet.
+#   2. env-parity: every key in (the just-pulled) env.required is present AND
+#      non-empty in .env (empty SHADOWS code defaults — the P4 trap). die() on fail —
+#      no images touched yet, so no rollback needed.
+#   3. snapshot current images → :rollback (for auto-revert on a bad deploy)
+#   4. graceful drain — wait for in-flight Dagster runs to finish before recreate
+#   5. rebuild + redeploy: `up -d --build` (core) AND `--profile capture build`
 #      ⭐ the WHOLE point — a git pull does NOT update a running container; the code
 #         is COPY'd into the image, so it must be rebuilt (P4 baked-image drift).
-#   5. reinstall the host crontab IFF capture.crontab changed in the pull
-#   6. post-deploy verify (defs load, daemon up, dbt-runner health, PEM, instance
+#   6. reinstall the host crontab IFF capture.crontab changed in the pull
+#   7. post-deploy verify (defs load, daemon up, dbt-runner health, PEM, instance
 #      role reachable from a container = IMDS hop-limit ok). On FAILURE → roll back
 #      images to :rollback, recreate, exit 1 loudly (never leave a half-deploy).
 # =============================================================================
@@ -33,7 +38,15 @@ cd "$APP_DIR"
 log() { echo "[deploy $(date -u +%H:%M:%S)] $*"; }
 die() { echo "[deploy ERROR] $*" >&2; exit 1; }
 
-# --- 0. env-parity: required keys present AND non-empty (KEY= counts as MISSING)
+# --- 1. pull (FIRST — so env-parity validates the env.required being deployed) --
+OLD_HEAD="$(git rev-parse HEAD)"
+log "git pull origin main (from ${OLD_HEAD:0:8})"
+git pull --ff-only origin main || die "git pull failed"
+NEW_HEAD="$(git rev-parse HEAD)"
+log "now at ${NEW_HEAD:0:8}"
+
+# --- 2. env-parity: required keys present AND non-empty (KEY= counts as MISSING)
+# Runs against the JUST-PULLED env.required. die() on fail — no images touched yet.
 log "env-parity check against env.required"
 missing=()
 while IFS= read -r key; do
@@ -47,7 +60,7 @@ if [ "${#missing[@]}" -gt 0 ]; then
 fi
 log "env-parity OK"
 
-# --- 1. snapshot current images for rollback --------------------------------
+# --- 3. snapshot current images for rollback --------------------------------
 ROLLBACK_IMAGES=(credence-dagster credence-dbt-runner)
 for img in "${ROLLBACK_IMAGES[@]}"; do
   if docker image inspect "${img}:latest" >/dev/null 2>&1; then
@@ -65,14 +78,7 @@ rollback() {
   die "$1"
 }
 
-# --- 2. pull -----------------------------------------------------------------
-OLD_HEAD="$(git rev-parse HEAD)"
-log "git pull origin main (from ${OLD_HEAD:0:8})"
-git pull --ff-only origin main || die "git pull failed"
-NEW_HEAD="$(git rev-parse HEAD)"
-log "now at ${NEW_HEAD:0:8}"
-
-# --- 3. graceful drain — let in-flight runs finish --------------------------
+# --- 4. graceful drain — let in-flight runs finish --------------------------
 log "draining in-flight Dagster runs (timeout ${DRAIN_TIMEOUT}s)"
 in_flight() {
   curl -fsS "$LOCAL_GQL" -H 'Content-Type: application/json' \
@@ -85,13 +91,13 @@ while [ "$(in_flight)" != "0" ] && [ "$waited" -lt "$DRAIN_TIMEOUT" ]; do
 done
 [ "$(in_flight)" != "0" ] && log "  WARN: drain timed out — proceeding (runs may retry)"
 
-# --- 4. rebuild + redeploy (core + capture profile) -------------------------
+# --- 5. rebuild + redeploy (core + capture profile) -------------------------
 log "rebuild + redeploy core services"
 $COMPOSE up -d --build || rollback "core build/up failed"
 log "rebuild capture-profile images"
 $COMPOSE --profile capture build || rollback "capture build failed"
 
-# --- 5. reinstall host crontab IFF capture.crontab changed ------------------
+# --- 6. reinstall host crontab IFF capture.crontab changed ------------------
 if git diff --name-only "${OLD_HEAD}..${NEW_HEAD}" | grep -q 'services/dagster/aws/capture.crontab'; then
   log "capture.crontab changed → reinstalling host crontab"
   crontab "$CRONTAB" || log "  WARN: crontab reinstall failed (check cronie installed)"
@@ -99,7 +105,7 @@ else
   log "capture.crontab unchanged — no crontab reinstall"
 fi
 
-# --- 6. post-deploy verify --------------------------------------------------
+# --- 7. post-deploy verify --------------------------------------------------
 log "post-deploy verification"
 sleep 8   # let containers settle
 
