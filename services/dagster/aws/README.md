@@ -276,3 +276,49 @@ in `infrastructure/aws_resources.md`.
 Cancel the **Railway** plan (serving PG fully replaced by DynamoDB → safe; an
 optional `pg_dump` is insurance only) and **decommission Dagster+ Cloud** (~$275/mo
 saved). Target steady-state AWS infra ~$15–35/mo.
+
+## INC-16-P5 — Orchestration CI/CD (gate + auto-deploy)
+
+Kills the manual "codeloc redeploy off main" step + the **baked-image drift** (a
+`git pull` does NOT update a running container — code is `COPY`'d into the image, so
+it must be rebuilt). Two GitHub Actions workflows, scoped to orchestration paths
+(`pipeline/**`, `services/dagster/aws/**`, `services/dbt_runner/**`, `services/*_capture/**`,
+`infrastructure/**`):
+
+- **`orchestration_ci.yml`** (on PRs) — `dagster definitions validate` (defs load),
+  `docker compose config` + lean-image builds, and the two guards:
+  `scripts/ci/check_env_parity.py` (every `env.required` key documented in `.env.example`)
+  + `scripts/ci/check_deploy_wiring.py` (PEM normalization at every consumer, region
+  wired, no PG on serving/capture). These catch the deploy-only traps P2/P4 hit.
+- **`orchestration_cd.yml`** (on merge to `main`) — OIDC → SSM Run Command runs
+  **`deploy.sh`** on the box as `ec2-user`, waits, surfaces stdout/stderr, fails the
+  job if the box deploy didn't succeed.
+
+**`deploy.sh`** (the payload — also runnable by hand on the box):
+0. env-parity: every `env.required` key present **and non-empty** in `.env` (empty
+   shadows code defaults — the P4 trap) → abort before touching anything.
+1. snapshot images → `:rollback`.
+2. `git pull --ff-only origin main`.
+3. **graceful drain** — wait (≤10 min) for in-flight Dagster runs to finish.
+4. `up -d --build` (core) **and** `--profile capture build` (captures are a separate profile).
+5. reinstall the host crontab **iff** `capture.crontab` changed in the pull.
+6. **verify** (defs import, daemon up, dbt-runner `/health`, PEM materialized, instance
+   role reachable from a container = IMDS hop-limit ok) → on any failure, **roll back to
+   `:rollback` and exit 1** (never leave a half-deploy).
+
+### Operator-provisioned (Claude does NOT handle credentials)
+- **GitHub OIDC → AWS deploy role** (`secrets.AWS_DEPLOY_ROLE_ARN`): trust the GitHub
+  OIDC provider (`token.actions.githubusercontent.com`, scoped to this repo/`main`);
+  perms = `ssm:SendCommand` (on the instance + the `AWS-RunShellScript` document) +
+  `ssm:GetCommandInvocation`. No long-lived keys in CI.
+- **GitHub repo vars**: `AWS_REGION=us-east-1`, `DEPLOY_INSTANCE_ID=i-07594af1679f81c38`.
+- **Branch protection** on `main`: require `Orchestration CI` (all 3 jobs) + the existing
+  fast/slow gates + dbt-Build jobs for orchestration-path PRs.
+- **Image pinning** (P7 task 1, folded in): `flaresolverr` pinned off `:latest` so the
+  auto-`--build` CD can't pull a breaking upstream image silently.
+
+### EVENTUAL (deferred — post-beta SLA, NOT in this story)
+True blue/green (Caddy/ALB-fronted dual stateless stacks + a daemon-ownership handoff,
+or a standby box to flip to). The Dagster daemon is a **singleton** — never two at once
+— so any blue/green is a brief single-owner handoff, not seamless N+1. Cost ≈ doubled
+compute during deploys. The NOW path (health-gated + auto-rollback + drain) is in `deploy.sh`.

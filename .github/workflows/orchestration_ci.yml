@@ -1,0 +1,122 @@
+name: Orchestration CI
+
+# INC-16-P5 — gate orchestration-path PRs beyond the Python fast gate + dbt jobs.
+# Catches the deploy-only failure modes plain compile/unit CI never sees (defs
+# boot-break à la INC-15, compose/Dockerfile breaks, PEM/region/PG wiring, missing
+# env keys). Scoped to orchestration paths so app/model PRs aren't slowed.
+on:
+  pull_request:
+    paths:
+      - "pipeline/**"
+      - "services/dagster/aws/**"
+      - "services/dbt_runner/**"
+      - "services/*_capture/**"
+      - "infrastructure/**"
+      - "scripts/ci/**"
+      - ".github/workflows/orchestration_ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "pipeline/**"
+      - "services/dagster/aws/**"
+      - "services/dbt_runner/**"
+      - "services/*_capture/**"
+      - "infrastructure/**"
+      - "scripts/ci/**"
+
+jobs:
+  wiring-checks:
+    name: Deploy-wiring + env-parity guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: env-parity (required keys documented in .env.example)
+        run: uv run python scripts/ci/check_env_parity.py
+      - name: deploy-wiring (PEM normalization / region / no-PG)
+        run: uv run python scripts/ci/check_deploy_wiring.py
+
+  dagster-defs:
+    name: Dagster definitions validate (defs actually load)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --no-dev-packages || uv sync
+      - name: Cache dbt-fusion binary
+        id: cache-dbtf
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/dbt
+          key: dbtf-${{ runner.os }}-latest
+      - name: Install dbt-fusion
+        if: steps.cache-dbtf.outputs.cache-hit != 'true'
+        env:
+          SHELL: /bin/bash
+        run: |
+          mkdir -p ~/.local/bin
+          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to ~/.local/bin
+      - name: Add dbtf to PATH
+        run: |
+          ln -sf ~/.local/bin/dbt ~/.local/bin/dbtf
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Generate dbt manifest (offline parse — no warehouse connection)
+        # pipeline/assets/dbt_assets.py reads dbt/target/manifest.json at IMPORT
+        # (the @dbt_assets decorator needs it). That file is a build artifact the
+        # runner lacks. `dbtf parse` builds it from the project graph offline —
+        # profiles.yml hardcodes account/user and every env_var() there has a
+        # default, so no creds/connection are needed.
+        run: dbtf parse --project-dir dbt --profiles-dir dbt
+      - name: Validate code location loads (catches import/boot breaks)
+        env:
+          DAGSTER_HOME: /tmp/dagster_home
+          # pipeline/resources reads these four at IMPORT to construct the
+          # SnowflakeResource config dict (it never connects during validate), so
+          # non-secret placeholders let the defs load. SNOWFLAKE_PRIVATE_KEY is
+          # left unset → no key file written, normalize skipped. A real boot/import
+          # break (INC-15 class) still fails here.
+          SNOWFLAKE_ACCOUNT: ci-placeholder
+          SNOWFLAKE_USER: ci-placeholder
+          SNOWFLAKE_WAREHOUSE: ci-placeholder
+          SNOWFLAKE_ROLE: ci-placeholder
+        run: |
+          mkdir -p /tmp/dagster_home
+          uv run dagster definitions validate -f pipeline/__init__.py
+
+  compose-validate:
+    name: Compose config + lean image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Seed .env for compose (env_file path must exist; .env is gitignored)
+        # The compose `env_file: [.env]` + `${VAR}` interpolation both resolve from
+        # services/dagster/aws/ — the real .env lives only on the box. Copy the
+        # committed template so `config` has a present, fully-keyed file (this also
+        # silences the DAGSTER_PG_PASSWORD interpolation warnings). Placeholder
+        # values are fine: `config`/`build` never run the containers.
+        run: cp services/dagster/aws/.env.example services/dagster/aws/.env
+      - name: Validate compose (YAML + interpolation)
+        run: docker compose -f services/dagster/aws/docker-compose.yml config -q
+      - name: Build lean images (dbt-runner + captures — catch Dockerfile/entrypoint breaks)
+        # The heavy core image (credence-dagster: PyMC/CatBoost) is built + verified
+        # + auto-rolled-back at DEPLOY time (deploy.sh) rather than on every PR — a
+        # multi-min core build per orchestration PR isn't worth it; the CD safety net
+        # (health-gated + rollback) covers a bad core build.
+        run: |
+          docker compose -f services/dagster/aws/docker-compose.yml build \
+            dbt-runner odds-capture schedule-capture derivative-capture weather-capture

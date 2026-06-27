@@ -55,9 +55,12 @@ if [ "$SG_ID" = "None" ] || [ -z "$SG_ID" ]; then
     --vpc-id "$VPC_ID" --query 'GroupId' --output text)
   echo "[provision] created SG $SG_ID"
 fi
-# Ingress: SSH + dagit from the operator IP only. (Egress defaults to allow-all,
-# which the agent NEEDS — FanGraphs/Snowflake/odds APIs/GitHub/ghcr.)
-for PORT in 22 3000; do
+# Ingress: SSH (initial bring-up; drop once SSM works) + Caddy 80/443 from the
+# operator IP. dagit :3000 is NOT exposed (P4: Caddy fronts it on 443; webserver is
+# bound to 127.0.0.1). 80/443 may need 0.0.0.0/0 briefly for first Let's Encrypt
+# issuance, then tighten. (Egress defaults to allow-all — the agent NEEDS it:
+# FanGraphs/Snowflake/odds APIs/GitHub/ghcr/SSM/Let's Encrypt.)
+for PORT in 22 80 443; do
   aws ec2 authorize-security-group-ingress --group-id "$SG_ID" \
     --protocol tcp --port "$PORT" --cidr "$CIDR" 2>/dev/null \
     && echo "[provision] ingress $PORT <- $CIDR" \
@@ -113,6 +116,37 @@ aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name dynamo-serving-ca
     }]
   }" >/dev/null
 echo "[provision] dynamo-serving-cache policy attached for ${SERVING_CACHE_TABLE}"
+# Serving S3-fallback cache RW (INC-16-P4): write_serving_store/write_api_cache write
+# the picks/perf JSON the backend reads as its S3 fallback.
+API_CACHE_BUCKET="${API_CACHE_BUCKET:-credence-prod-s3-api-cache}"
+aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name credence-s3-api-cache-rw \
+  --policy-document "{
+    \"Version\":\"2012-10-17\",
+    \"Statement\":[
+      {\"Effect\":\"Allow\",\"Action\":[\"s3:GetObject\",\"s3:PutObject\"],\"Resource\":\"arn:aws:s3:::${API_CACHE_BUCKET}/*\"},
+      {\"Effect\":\"Allow\",\"Action\":[\"s3:ListBucket\"],\"Resource\":\"arn:aws:s3:::${API_CACHE_BUCKET}\"}
+    ]
+  }" >/dev/null
+echo "[provision] credence-s3-api-cache-rw attached for ${API_CACHE_BUCKET}"
+# User-bet settlement (INC-16-P4): settle_user_bets scans/updates the bets table.
+USER_BETS_TABLE="${USER_BETS_TABLE:-credence-prod-dynamo-user-bets}"
+aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name credence-dynamo-user-bets-settle \
+  --policy-document "{
+    \"Version\":\"2012-10-17\",
+    \"Statement\":[{
+      \"Effect\":\"Allow\",
+      \"Action\":[\"dynamodb:Scan\",\"dynamodb:Query\",\"dynamodb:GetItem\",\"dynamodb:UpdateItem\"],
+      \"Resource\":[
+        \"arn:aws:dynamodb:${REGION}:${ACCOUNT_ID}:table/${USER_BETS_TABLE}\",
+        \"arn:aws:dynamodb:${REGION}:${ACCOUNT_ID}:table/${USER_BETS_TABLE}/index/*\"
+      ]
+    }]
+  }" >/dev/null
+echo "[provision] credence-dynamo-user-bets-settle attached for ${USER_BETS_TABLE}"
+# SSM Session Manager (INC-16-P4 retires SSH) — managed policy on the instance role.
+aws iam attach-role-policy --role-name "$ROLE_NAME" \
+  --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore >/dev/null 2>&1 || true
+echo "[provision] AmazonSSMManagedInstanceCore attached (SSM shell)"
 if ! aws iam get-instance-profile --instance-profile-name "$PROFILE_NAME" >/dev/null 2>&1; then
   aws iam create-instance-profile --instance-profile-name "$PROFILE_NAME" >/dev/null
   aws iam add-role-to-instance-profile --instance-profile-name "$PROFILE_NAME" --role-name "$ROLE_NAME"
@@ -132,6 +166,7 @@ INSTANCE_ID=$(aws ec2 run-instances \
   --image-id "$AMI_ID" --instance-type "$INSTANCE_TYPE" \
   --key-name "$KEY_NAME" --security-group-ids "$SG_ID" --subnet-id "$SUBNET_ID" \
   --iam-instance-profile "Name=$PROFILE_NAME" \
+  --metadata-options "HttpEndpoint=enabled,HttpTokens=required,HttpPutResponseHopLimit=2" \
   --block-device-mappings "DeviceName=/dev/xvda,Ebs={VolumeSize=$VOLUME_GB,VolumeType=gp3}" \
   --user-data "file://${SCRIPT_DIR}/cloud-init.sh" \
   --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$NAME_TAG}]" \

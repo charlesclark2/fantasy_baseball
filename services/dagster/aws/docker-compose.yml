@@ -166,7 +166,7 @@ services:
   # codeloc reaches it on the compose network at http://flaresolverr:8191/v1.
   # Shares the instance's egress IP (see header) → satisfies cf_clearance.
   flaresolverr:
-    image: ghcr.io/flaresolverr/flaresolverr:latest
+    image: ghcr.io/flaresolverr/flaresolverr:v3.3.21   # INC-16-P5/P7: pinned (was :latest — auto-build CD could pull a breaking upstream image silently)
     environment:
       LOG_LEVEL: info
       TZ: America/New_York
