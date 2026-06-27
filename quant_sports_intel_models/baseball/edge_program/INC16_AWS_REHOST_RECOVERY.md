@@ -137,18 +137,27 @@ The whole stack is now a single Docker Compose box (re-deploy, not rebuild):
 - **AC:** dev→main merged + box on main; pre-cutover checklist green; a clean multi-day daily cycle on AWS; lineup re-scoring live; dagit at `https://dagster.credencesports.com` behind auth + SSM shell working; Railway cancelled; Dagster+ decommissioned after; the ~$275/mo Dagster+ saving banked; total AWS infra ~$15–35/mo.
 
 ## PHASE 5 — Orchestration CI/CD (GitHub) — guard + auto-deploy future orchestration merges
-> **🔧 CODE-COMPLETE 2026-06-27 (operator wires OIDC/SSM + branch protection).** Built:
+> **✅ EXECUTED LIVE 2026-06-27 — all 3 CI checks GREEN on the PR; CD proven end-to-end (OIDC → SSM →
+> deploy.sh ran full pull→env-parity→drain→rebuild→6 verify checks on the box); auto-on-merge trigger
+> confirmed; operator completed OIDC role + repo vars/secret + branch protection.** Built:
 > `.github/workflows/orchestration_ci.yml` (defs-validate + `compose config` + lean-image
 > builds + `scripts/ci/check_env_parity.py` + `scripts/ci/check_deploy_wiring.py`) and
 > `.github/workflows/orchestration_cd.yml` (OIDC → SSM RunCommand → `deploy.sh`).
-> `services/dagster/aws/deploy.sh` = the payload (env-parity non-empty → snapshot →
-> pull → drain → `up -d --build` + `--profile capture build` → crontab-reinstall-if-changed
+> `services/dagster/aws/deploy.sh` = the payload (**pull FIRST** → env-parity non-empty → snapshot →
+> drain → `up -d --build` + `--profile capture build` → crontab-reinstall-if-changed
 > → verify → **auto-rollback on failure**). `env.required` manifest added; flaresolverr
 > pinned off `:latest` (P7-t1); cloud-init + provision-ec2 fold in cronie/SSM/IMDS-hop-2/
-> P4 IAM grants so a fresh box is fully wired. CI guards verified GREEN locally. **OPERATOR:**
-> create the GH OIDC→AWS deploy role (`ssm:SendCommand`+`GetCommandInvocation`), set repo
-> vars `AWS_REGION`/`DEPLOY_INSTANCE_ID` + secret `AWS_DEPLOY_ROLE_ARN`, add branch
-> protection. EVENTUAL (deferred): true blue/green. Full runbook: `services/dagster/aws/README.md` §P5.
+> P4 IAM grants so a fresh box is fully wired.
+> **🔥 LIVE-DEPLOY GOTCHAS (this session):** (1) CI runner has NO box `.env` and NO dbt build artifacts —
+> defs-validate needs 4 `SNOWFLAKE_*` placeholders (read at import, never connect) + `dbtf parse` to
+> generate `dbt/target/manifest.json` offline (install dbtf via the cached install.sh the dbt-build job
+> uses); `compose config -q` needs `cp .env.example .env` first. (2) **env-parity MUST run after the pull**
+> — originally pre-pull, so it validated the STALE `env.required`; a key add/remove never took effect via
+> CD until reordered (pull = step 1 now). (3) **BOOTSTRAP:** deploy.sh can't deploy itself — a brand-new
+> deploy.sh (or a change to its own pull-vs-check order) needs ONE manual `git pull` on the box (SSM,
+> ec2-user) before CD finds it; pull-first self-heals all future manifest changes. (4) `OPENWEATHERMAP_API_KEY`
+> dropped from env.required (optional weather fallback); operator set `SERVING_CACHE_TABLE` on the box .env.
+> EVENTUAL (deferred): true blue/green (daemon = singleton). Full runbook: `services/dagster/aws/README.md` §P5.
 **Why (the recurring footgun):** "a pipeline change isn't live until the codeloc redeploys off main" is a MANUAL step that already bit a session (CI compile-only let the W1d runtime break through → INC-15). Once the box owns live orchestration, any future merge touching `pipeline/`, `services/dagster/aws/`, the dbt-runner, or the capture Lambdas must be (a) GATED by CI before merge and (b) auto-DEPLOYED to the box on merge to `main` — no silent drift between `main` and the running box.
 **Scope = a GitHub Actions workflow (specced as INC-16-P5 in story_prompts.md):**
 - **CI gate** (on PRs touching orchestration paths): Dagster `definitions validate` (defs load — catches the boot `_InactiveRpcError`/import breaks), `docker compose config` + a build of the changed images, a smoke that the PEM `_normalize_pem` + `AWS_DEFAULT_REGION` wiring is present, plus the existing Python fast gate + dbt jobs.
