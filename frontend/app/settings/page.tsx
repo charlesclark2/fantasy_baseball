@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Bell, Check, ChevronDown, ChevronUp, Plus, ShieldCheck, Trash2, X } from "lucide-react"
+import { Bell, Check, ChevronDown, ChevronUp, Pencil, Plus, ShieldCheck, Trash2, X } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLocalStorage } from "@/hooks/use-local-storage"
 import { apiFetch } from "@/lib/api"
@@ -207,14 +207,16 @@ function CashFlowForm({
   onSubmit,
   isPending,
   onCancel,
+  defaultAmount,
 }: {
   book: string
   onSubmit: (type: "deposit" | "withdrawal", amount: number, date: string) => void
   isPending: boolean
   onCancel: () => void
+  defaultAmount?: number
 }) {
   const [type, setType] = useState<"deposit" | "withdrawal">("deposit")
-  const [amount, setAmount] = useState("")
+  const [amount, setAmount] = useState(defaultAmount != null && defaultAmount > 0 ? String(defaultAmount) : "")
   const [date, setDate] = useState(todayIso())
 
   function handleSubmit() {
@@ -298,26 +300,34 @@ function BookCard({
   account,
   growth,
   events,
+  existingBooks,
   onBalanceChange,
   onAddEvent,
   onRemove,
+  onReassign,
   isUpdating,
   isAddingEvent,
+  isReassigning,
 }: {
   account: BookAccount
   growth: BookGrowth | undefined
   events: BankrollEvent[]
+  existingBooks: string[]
   onBalanceChange: (book: string, balance: number) => void
   onAddEvent: (book: string, type: "deposit" | "withdrawal", amount: number, date: string) => void
   onRemove: (book: string) => void
+  onReassign: (fromBook: string, toBook: string) => void
   isUpdating: boolean
   isAddingEvent: boolean
+  isReassigning: boolean
 }) {
   const [balInput, setBalInput] = useState(String(account.current_balance))
   const [balSaved, setBalSaved] = useState(false)
   const balTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showCashFlow, setShowCashFlow] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
+  const [showReassign, setShowReassign] = useState(false)
+  const [reassignTo, setReassignTo] = useState("")
 
   useEffect(() => {
     setBalInput(String(account.current_balance))
@@ -332,6 +342,16 @@ function BookCard({
     balTimer.current = setTimeout(() => setBalSaved(false), 2000)
   }
 
+  function handleReassign() {
+    if (!reassignTo) return
+    onReassign(account.book, reassignTo)
+    setShowReassign(false)
+    setReassignTo("")
+  }
+
+  const availableBooks = BOOK_CHOICES.filter(
+    (b) => b !== account.book && !existingBooks.includes(b)
+  )
   const bookEvents = events.filter((e) => e.book === account.book)
   const growthStr = growth ? fmtGrowth(growth.growth_pct) : null
 
@@ -340,20 +360,62 @@ function BookCard({
       {/* Header row */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-sm font-semibold text-white truncate">{account.book}</span>
-          {growthStr && (
-            <span className={`text-xs font-mono font-semibold ${pnlColor(growth?.growth_pct)}`}>
-              {growthStr}
-            </span>
+          {showReassign ? (
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <select
+                value={reassignTo}
+                onChange={(e) => setReassignTo(e.target.value)}
+                className="flex-1 rounded border border-[#262626] bg-[#141414] px-2 py-1 text-sm text-white focus:outline-none focus:border-[#10b981]"
+              >
+                <option value="">Rename to…</option>
+                {availableBooks.map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+              <Button
+                size="sm"
+                onClick={handleReassign}
+                disabled={!reassignTo || isReassigning}
+                className="h-7 px-2.5 text-xs bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669] disabled:opacity-50"
+              >
+                {isReassigning ? "…" : "Save"}
+              </Button>
+              <button
+                onClick={() => { setShowReassign(false); setReassignTo("") }}
+                className="text-gray-600 hover:text-gray-400"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            <>
+              <span className="text-sm font-semibold text-white truncate">{account.book}</span>
+              {availableBooks.length > 0 && (
+                <button
+                  onClick={() => setShowReassign(true)}
+                  className="text-gray-600 hover:text-gray-400 transition-colors"
+                  title="Rename book"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              )}
+              {growthStr && (
+                <span className={`text-xs font-mono font-semibold ${pnlColor(growth?.growth_pct)}`}>
+                  {growthStr}
+                </span>
+              )}
+            </>
           )}
         </div>
-        <button
-          onClick={() => onRemove(account.book)}
-          className="flex-shrink-0 text-gray-600 hover:text-[#ef4444] transition-colors"
-          title="Remove book"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        {!showReassign && (
+          <button
+            onClick={() => onRemove(account.book)}
+            className="flex-shrink-0 text-gray-600 hover:text-[#ef4444] transition-colors"
+            title="Remove book"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Current balance input */}
@@ -427,6 +489,7 @@ function BookCard({
           }}
           isPending={isAddingEvent}
           onCancel={() => setShowCashFlow(false)}
+          defaultAmount={account.current_balance > 0 ? account.current_balance : undefined}
         />
       )}
 
@@ -489,6 +552,16 @@ function SportsbooksSection({ accessToken }: { accessToken: string | null }) {
       apiFetch(
         `/users/bankroll/books/${encodeURIComponent(book)}`,
         { method: "DELETE" },
+        accessToken
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bankroll"] }),
+  })
+
+  const reassignMutation = useMutation({
+    mutationFn: ({ fromBook, toBook }: { fromBook: string; toBook: string }) =>
+      apiFetch(
+        `/users/bankroll/books/${encodeURIComponent(fromBook)}/reassign`,
+        { method: "PATCH", body: JSON.stringify({ to_book: toBook }) },
         accessToken
       ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bankroll"] }),
@@ -564,13 +637,16 @@ function SportsbooksSection({ accessToken }: { accessToken: string | null }) {
               account={acct}
               growth={perBook[acct.book]}
               events={events}
+              existingBooks={existingBooks}
               onBalanceChange={(book, balance) => balanceMutation.mutate({ book, balance })}
               onAddEvent={(book, type, amount, date) =>
                 eventMutation.mutate({ book, type, amount, date })
               }
               onRemove={(book) => removeMutation.mutate(book)}
+              onReassign={(fromBook, toBook) => reassignMutation.mutate({ fromBook, toBook })}
               isUpdating={balanceMutation.isPending}
               isAddingEvent={eventMutation.isPending}
+              isReassigning={reassignMutation.isPending}
             />
           ))
         )}

@@ -369,6 +369,32 @@ def remove_book(user_id: str, book: str) -> dict:
     return get_bankroll(user_id)
 
 
+def reassign_book(user_id: str, from_book: str, to_book: str) -> dict:
+    """Rename from_book → to_book in accounts and all events (read-modify-write)."""
+    resp = _users_table().get_item(Key={"user_id": user_id})
+    item = resp.get("Item", {})
+    accounts = _deep_from_dynamo(dict(item.get("book_accounts") or {}))
+    events = _deep_from_dynamo(list(item.get("bankroll_events") or []))
+
+    if from_book not in accounts:
+        raise ValueError(f"Book '{from_book}' not found")
+    if to_book in accounts:
+        raise ValueError(f"Book '{to_book}' already exists — remove it first or choose a different name")
+
+    accounts[to_book] = accounts.pop(from_book)
+    for evt in events:
+        if evt.get("book") == from_book:
+            evt["book"] = to_book
+
+    _users_table().update_item(
+        Key={"user_id": user_id},
+        UpdateExpression="SET #ba = :ba, #be = :be",
+        ExpressionAttributeNames={"#ba": "book_accounts", "#be": "bankroll_events"},
+        ExpressionAttributeValues={":ba": _to_ddb(accounts), ":be": _to_ddb(events)},
+    )
+    return get_bankroll(user_id)
+
+
 # ── Portfolio preferences (INC-16-P2: migrated off the Railway PG) ─────────────
 # Per-user portfolio settings used by GET /portfolio/preferences and the
 # /picks/today?apply_portfolio=true server-side filter. Stored as a nested

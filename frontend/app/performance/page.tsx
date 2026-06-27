@@ -359,7 +359,7 @@ function StatTiles({
       {/* Bankroll growth tile — only shown when deposits are tracked */}
       {showGrowth && (
         <div className="flex flex-col justify-between rounded-xl border border-[#262626] bg-[#141414] px-5 py-4">
-          <p className="text-xs uppercase tracking-wider text-gray-500 font-medium leading-relaxed flex items-center gap-1">
+          <p className="text-xs text-gray-500 font-medium leading-relaxed flex items-center gap-1">
             Bankroll Growth
             <InfoTooltip text="Growth % = betting P&L ÷ total deposited. Deposits and withdrawals are netted out so the figure reflects only betting results, not cash movement. Distinct from ROI (return on stake/turnover)." />
           </p>
@@ -367,7 +367,7 @@ function StatTiles({
             {growthPct ?? "—"}
           </p>
           <p className="mt-1 text-xs text-gray-500">
-            {growthPnlStr} betting P&amp;L
+            {growthPnlStr}{" "}betting P&amp;L
           </p>
         </div>
       )}
@@ -910,19 +910,52 @@ function BreakdownTabs({ bets }: { bets: PerformanceBet[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Bet log — all settled bets newest-first
+// Bet log — all bets newest-first, paginated 25/page
 // ---------------------------------------------------------------------------
+
+const BET_LOG_PAGE_SIZE = 25
 
 function BetLogTable({ bets }: { bets: PerformanceBet[] }) {
   const sorted = useMemo(
     () => [...bets].sort((a, b) => b.score_date.localeCompare(a.score_date)),
     [bets]
   )
+
+  const [page, setPage] = useState(0)
+  const totalPages = Math.max(1, Math.ceil(sorted.length / BET_LOG_PAGE_SIZE))
+  const pageBets = sorted.slice(page * BET_LOG_PAGE_SIZE, (page + 1) * BET_LOG_PAGE_SIZE)
+
+  // Reset to first page when bets list changes (season switch)
+  useMemo(() => { setPage(0) }, [sorted])
+
   return (
     <div>
-      <div className="flex items-center gap-2 mb-4">
-        <h2 className="text-base font-semibold text-white">Bet Log</h2>
-        <InfoTooltip text="Model Prob is the probability our model assigned at bet time. EV is the expected value edge over the offered odds. These show what signals we were reading when the pick was made." />
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold text-white">Bet Log</h2>
+          <InfoTooltip text="Model Prob is the probability our model assigned at bet time. EV is the expected value edge over the offered odds. These show what signals we were reading when the pick was made." />
+        </div>
+        {sorted.length > BET_LOG_PAGE_SIZE && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 font-mono">
+              {page + 1} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="rounded border border-[#262626] px-2.5 py-1 text-xs text-gray-400 hover:text-white hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Prev
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="rounded border border-[#262626] px-2.5 py-1 text-xs text-gray-400 hover:text-white hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
       <div className="overflow-x-auto rounded-xl border border-[#262626] bg-[#141414]">
         {sorted.length === 0 ? (
@@ -936,6 +969,7 @@ function BetLogTable({ bets }: { bets: PerformanceBet[] }) {
                 <TableHead className={`${thClass} pl-5`}>Date</TableHead>
                 <TableHead className={thClass}>Game</TableHead>
                 <TableHead className={`${thClass} hidden sm:table-cell`}>Market</TableHead>
+                <TableHead className={`${thClass} hidden sm:table-cell`}>Book</TableHead>
                 <TableHead className={`${thClass} text-right hidden sm:table-cell`}>Odds</TableHead>
                 <TableHead className={`${thClass} text-right hidden sm:table-cell`}>Stake</TableHead>
                 <TableHead className={`${thClass} text-right hidden md:table-cell`}>Model</TableHead>
@@ -944,7 +978,7 @@ function BetLogTable({ bets }: { bets: PerformanceBet[] }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map((b) => (
+              {pageBets.map((b) => (
                 <TableRow key={b.bet_id} className="border-[#262626] hover:bg-[#1a1a1a]">
                   <TableCell className="py-3 pl-5 text-xs text-gray-500 whitespace-nowrap">
                     {b.score_date}
@@ -955,6 +989,9 @@ function BetLogTable({ bets }: { bets: PerformanceBet[] }) {
                   </TableCell>
                   <TableCell className="py-3 text-xs text-gray-400 whitespace-nowrap hidden sm:table-cell">
                     {b.market}
+                  </TableCell>
+                  <TableCell className="py-3 text-xs text-gray-500 whitespace-nowrap hidden sm:table-cell">
+                    {b.bookmaker ?? "—"}
                   </TableCell>
                   <TableCell className="py-3 text-right font-mono text-sm text-gray-300 whitespace-nowrap hidden sm:table-cell">
                     {fmtOdds(b.american_odds)}
@@ -999,6 +1036,29 @@ function BetLogTable({ bets }: { bets: PerformanceBet[] }) {
           </Table>
         )}
       </div>
+      {sorted.length > BET_LOG_PAGE_SIZE && (
+        <div className="flex items-center justify-between mt-3 px-1">
+          <p className="text-xs text-gray-600">
+            Showing {page * BET_LOG_PAGE_SIZE + 1}–{Math.min((page + 1) * BET_LOG_PAGE_SIZE, sorted.length)} of {sorted.length} bets
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="rounded border border-[#262626] px-2.5 py-1 text-xs text-gray-400 hover:text-white hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Prev
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="rounded border border-[#262626] px-2.5 py-1 text-xs text-gray-400 hover:text-white hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

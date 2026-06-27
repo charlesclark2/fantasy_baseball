@@ -21,6 +21,7 @@ from app.backend.dependencies import get_user_id
 from app.backend.services.dynamo import (
     add_bankroll_event,
     get_bankroll,
+    reassign_book,
     remove_book,
     upsert_book_balance,
 )
@@ -43,6 +44,10 @@ class BankrollEventRequest(BaseModel):
     type: str = Field(..., pattern="^(deposit|withdrawal)$")
     amount: float = Field(..., gt=0)
     date: str = Field(..., description="ISO date YYYY-MM-DD")
+
+
+class ReassignBookRequest(BaseModel):
+    to_book: str
 
 
 def _validate_book(book: str) -> None:
@@ -101,3 +106,22 @@ def delete_book(book: str, user_id: str = Depends(get_user_id)):
     except Exception as exc:
         logger.exception("remove_book failed for %s", user_id)
         raise HTTPException(status_code=503, detail="Could not remove book") from exc
+
+
+@router.patch("/bankroll/books/{book}/reassign")
+def reassign_book_route(
+    book: str,
+    body: ReassignBookRequest,
+    user_id: str = Depends(get_user_id),
+):
+    _validate_book(book)
+    _validate_book(body.to_book)
+    if book == body.to_book:
+        raise HTTPException(status_code=422, detail="from_book and to_book must be different")
+    try:
+        return reassign_book(user_id, book, body.to_book)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("reassign_book failed for %s", user_id)
+        raise HTTPException(status_code=503, detail="Could not reassign book") from exc
