@@ -58,6 +58,30 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: uv sync --no-dev-packages || uv sync
+      - name: Cache dbt-fusion binary
+        id: cache-dbtf
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/dbt
+          key: dbtf-${{ runner.os }}-latest
+      - name: Install dbt-fusion
+        if: steps.cache-dbtf.outputs.cache-hit != 'true'
+        env:
+          SHELL: /bin/bash
+        run: |
+          mkdir -p ~/.local/bin
+          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to ~/.local/bin
+      - name: Add dbtf to PATH
+        run: |
+          ln -sf ~/.local/bin/dbt ~/.local/bin/dbtf
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Generate dbt manifest (offline parse — no warehouse connection)
+        # pipeline/assets/dbt_assets.py reads dbt/target/manifest.json at IMPORT
+        # (the @dbt_assets decorator needs it). That file is a build artifact the
+        # runner lacks. `dbtf parse` builds it from the project graph offline —
+        # profiles.yml hardcodes account/user and every env_var() there has a
+        # default, so no creds/connection are needed.
+        run: dbtf parse --project-dir dbt --profiles-dir dbt
       - name: Validate code location loads (catches import/boot breaks)
         env:
           DAGSTER_HOME: /tmp/dagster_home
