@@ -1,28 +1,34 @@
 import { Nav } from "@/components/nav"
 import changelog from "@/data/changelog.json"
+import { ChangelogAccordion } from "./ChangelogAccordion"
+import type { ChangelogEntry } from "./ChangelogAccordion"
 
 export const metadata = {
   title: "Changelog — Credence Sports",
 }
 
-const TAG_STYLES: Record<string, string> = {
-  new: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
-  improvement: "bg-blue-500/10 text-blue-400 border border-blue-500/20",
-  fix: "bg-amber-500/10 text-amber-400 border border-amber-500/20",
-  model: "bg-purple-500/10 text-purple-400 border border-purple-500/20",
-  data: "bg-gray-500/10 text-gray-400 border border-gray-500/20",
+function toMondayUTC(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00Z")
+  const dow = d.getUTCDay() // 0=Sun, 1=Mon, …, 6=Sat
+  const daysBack = dow === 0 ? 6 : dow - 1
+  d.setUTCDate(d.getUTCDate() - daysBack)
+  return d.toISOString().slice(0, 10)
 }
 
-function formatWeek(week: string) {
-  const start = new Date(week + "T00:00:00")
-  const end = new Date(week + "T00:00:00")
-  end.setUTCDate(end.getUTCDate() + 6)
-  const rangeOpts: Intl.DateTimeFormatOptions = { month: "long", day: "numeric", timeZone: "UTC" }
-  const endOpts: Intl.DateTimeFormatOptions = { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }
-  return `${start.toLocaleDateString("en-US", rangeOpts)} – ${end.toLocaleDateString("en-US", endOpts)}`
+function mergeByWeek(): ChangelogEntry[] {
+  const map = new Map<string, Array<{ tag: string; text: string }>>()
+  for (const entry of changelog) {
+    const monday = toMondayUTC(entry.week)
+    if (!map.has(monday)) map.set(monday, [])
+    map.get(monday)!.push(...entry.items)
+  }
+  return Array.from(map.entries())
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([week, items]) => ({ week, items }))
 }
 
 export default function ChangelogPage() {
+  const entries = mergeByWeek()
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Nav />
@@ -38,32 +44,7 @@ export default function ChangelogPage() {
           </p>
         </div>
 
-        <div className="space-y-12">
-          {changelog.map((entry) => (
-            <div key={entry.week}>
-              <h2 className="text-xs uppercase tracking-widest text-muted-foreground mb-4">
-                Week of {formatWeek(entry.week)}
-              </h2>
-              <ul className="space-y-3">
-                {entry.items.map((item, i) => (
-                  <li key={i} className="flex items-start gap-3">
-                    <span
-                      className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-                        TAG_STYLES[item.tag] ?? TAG_STYLES.data
-                      }`}
-                    >
-                      {item.tag}
-                    </span>
-                    <span className="text-sm text-gray-300 leading-relaxed">
-                      {item.text}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-
+        <ChangelogAccordion entries={entries} />
       </main>
     </div>
   )
