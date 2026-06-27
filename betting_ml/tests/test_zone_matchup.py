@@ -229,8 +229,8 @@ def _toy_league_raw():
         for bh in ("L", "R"):
             for pg in ("FB", "BR", "OS"):
                 rows.append(dict(p_hand=ph, b_hand=bh, pgroup=pg, ix=2, iz=2,
-                                 n_pitches=1000, lg_rv=-0.01, n_swings=400, n_whiffs=80,
-                                 lg_xwoba_con=0.34))
+                                 n_pitches=1000, lg_rv=-0.01, lg_rv_swing=-0.02,
+                                 n_swings=400, n_whiffs=80, lg_xwoba_con=0.34))
     return pd.DataFrame(rows)
 
 
@@ -238,8 +238,8 @@ def test_batter_cold_start_flag_and_shrink_to_prior():
     league = _toy_league_raw()
     # rookie: only 10 pitches total → cold start; value should sit near the league prior (-0.01)
     rookie = pd.DataFrame([dict(batter_id=7, b_hand="R", vs_p_hand="R", pgroup="FB", ix=2, iz=2,
-                               n_pitches=10, raw_rv=2.0, n_swings=5, n_whiffs=0, n_bip=3,
-                               raw_xwoba_con=0.9)])
+                               n_pitches=10, raw_rv=2.0, raw_rv_swing=1.0, n_swings=5, n_whiffs=0,
+                               n_bip=3, raw_xwoba_con=0.9)])
     out = profiles.build_batter_value(rookie, league, min_pitches=200)
     assert bool(out.loc[0, "is_cold_start"]) is True
     assert abs(out.loc[0, "value"] - (-0.01)) < 0.2   # heavily shrunk toward prior despite raw=2.0
@@ -300,8 +300,8 @@ def test_build_overlay_json_contract():
     g = grid.GridSpec()
     bval = profiles.build_batter_value(
         pd.DataFrame([dict(batter_id=1, b_hand="L", vs_p_hand="R", pgroup="FB", ix=2, iz=2,
-                           n_pitches=500, raw_rv=0.05, n_swings=200, n_whiffs=40, n_bip=120,
-                           raw_xwoba_con=0.45)]),
+                           n_pitches=500, raw_rv=0.05, raw_rv_swing=0.03, n_swings=200,
+                           n_whiffs=40, n_bip=120, raw_xwoba_con=0.45)]),
         _toy_league_raw(), grid=g, min_pitches=200)
     pfreq = profiles.build_pitcher_freq(
         pd.DataFrame([dict(pitcher_id=9, p_hand="R", vs_b_hand="L", pgroup="FB", ix=2, iz=2,
