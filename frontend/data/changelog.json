@@ -1,16 +1,11 @@
 [
   {
-    "week": "2026-06-23",
+    "week": "2026-06-22",
     "items": [
       {
         "tag": "improvement",
         "text": "The Bet Log now paginates at 25 bets per page, sorted newest-first, with a page counter and Prev / Next controls. The P&L, ROI, and Win Rate summary tiles always reflect your full history for the selected season — not just the visible page."
-      }
-    ]
-  },
-  {
-    "week": "2026-06-22",
-    "items": [
+      },
       {
         "tag": "new",
         "text": "Matchup heatmaps are now live on pick and player pages. For a batter × pitcher matchup you'll see a strike-zone heatmap of where the batter does damage, overlaid with bubbles showing where the pitcher actually locates each pitch type — with FB / Breaking / Offspeed toggles and a hero 'All' view, per-cell hover details, and a clean empty state for cold-start players without enough data yet. This is an explanatory 'show-your-work' matchup view, not a bet signal: we tested the zone-overlap as a predictive feature and it showed no edge, so the heatmap is for understanding a matchup, not for picking sides."
