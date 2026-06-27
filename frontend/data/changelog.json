@@ -3,6 +3,10 @@
     "week": "2026-06-22",
     "items": [
       {
+        "tag": "new",
+        "text": "Settings now has a Sportsbooks section for multi-book bankroll bookkeeping. Add each sportsbook you use, set its current balance, and record deposits and withdrawals — so your bankroll growth % reflects only betting results, not cash movement. A deposit is not growth; a withdrawal is not a loss — both are netted out of the baseline. The Performance page now shows an overall Bankroll Growth tile (hidden until you've set up at least one book and recorded a deposit). Growth % is labeled distinctly from ROI: ROI is return on stake/turnover; growth is return on your deposited funds. Self-reported and manual — this is a bookkeeping ledger, not auto-settlement."
+      },
+      {
         "tag": "improvement",
         "text": "The Bet Log now paginates at 25 bets per page, sorted newest-first, with a page counter and Prev / Next controls. The P&L, ROI, and Win Rate summary tiles always reflect your full history for the selected season — not just the visible page."
       },

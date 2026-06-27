@@ -33,6 +33,24 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 // ---------------------------------------------------------------------------
+// Bankroll growth types (E9.17)
+// ---------------------------------------------------------------------------
+
+interface BankrollGrowth {
+  total_deposited: number
+  total_withdrawn: number
+  net_deposits: number
+  current_balance: number
+  betting_pnl: number
+  growth_pct: number | null
+}
+
+interface BankrollData {
+  overall_growth: BankrollGrowth
+  per_book_growth: Record<string, BankrollGrowth>
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -271,36 +289,56 @@ function deriveSummary(data: PerformanceBetsResponse | undefined): BetSummary {
   return { wins, losses, pushes, settled, winRate, netPnl, totalStake, roi, total: data?.total ?? 0 }
 }
 
-function StatTiles({ summary }: { summary: BetSummary }) {
+function StatTiles({
+  summary,
+  bankrollGrowth,
+}: {
+  summary: BetSummary
+  bankrollGrowth: BankrollGrowth | null
+}) {
   const tiles = [
     {
       label: "Settled Bets",
       value: summary.settled.toString(),
       sub: `${summary.wins}W · ${summary.losses}L · ${summary.pushes}P`,
       valueClass: "text-white",
+      tooltip: undefined as string | undefined,
     },
     {
       label: "Win Rate",
       value: fmtPct(summary.winRate),
       sub: "excl. pushes",
       valueClass: winRateColor(summary.winRate),
+      tooltip: undefined,
     },
     {
       label: "Net P&L",
       value: fmtPnlExact(summary.netPnl),
       sub: summary.roi != null ? `${fmtSignedPct(summary.roi)} ROI` : undefined,
       valueClass: pnlColor(summary.netPnl),
+      tooltip: undefined,
     },
     {
       label: "Total Staked",
       value: `$${summary.totalStake.toFixed(0)}`,
       sub: `${summary.total} total bets`,
       valueClass: "text-gray-300",
+      tooltip: undefined,
     },
   ]
 
+  const showGrowth = bankrollGrowth != null && bankrollGrowth.total_deposited > 0
+  const growthPct = showGrowth && bankrollGrowth.growth_pct != null
+    ? `${bankrollGrowth.growth_pct >= 0 ? "+" : ""}${(bankrollGrowth.growth_pct * 100).toFixed(1)}%`
+    : null
+  const growthPnlStr = showGrowth
+    ? (bankrollGrowth.betting_pnl >= 0
+        ? `+$${bankrollGrowth.betting_pnl.toFixed(2)}`
+        : `-$${Math.abs(bankrollGrowth.betting_pnl).toFixed(2)}`)
+    : null
+
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className={`grid grid-cols-2 gap-3 ${showGrowth ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
       {tiles.map((tile) => (
         <div
           key={tile.label}
@@ -317,6 +355,22 @@ function StatTiles({ summary }: { summary: BetSummary }) {
           )}
         </div>
       ))}
+
+      {/* Bankroll growth tile — only shown when deposits are tracked */}
+      {showGrowth && (
+        <div className="flex flex-col justify-between rounded-xl border border-[#262626] bg-[#141414] px-5 py-4">
+          <p className="text-xs text-gray-500 font-medium leading-relaxed flex items-center gap-1">
+            Bankroll Growth
+            <InfoTooltip text="Growth % = betting P&L ÷ total deposited. Deposits and withdrawals are netted out so the figure reflects only betting results, not cash movement. Distinct from ROI (return on stake/turnover)." />
+          </p>
+          <p className={`mt-2 text-3xl font-bold tracking-tight font-mono ${pnlColor(bankrollGrowth.growth_pct)}`}>
+            {growthPct ?? "—"}
+          </p>
+          <p className="mt-1 text-xs text-gray-500">
+            {growthPnlStr}{" "}betting P&amp;L
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -856,19 +910,52 @@ function BreakdownTabs({ bets }: { bets: PerformanceBet[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Bet log — all settled bets newest-first
+// Bet log — all bets newest-first, paginated 25/page
 // ---------------------------------------------------------------------------
+
+const BET_LOG_PAGE_SIZE = 25
 
 function BetLogTable({ bets }: { bets: PerformanceBet[] }) {
   const sorted = useMemo(
     () => [...bets].sort((a, b) => b.score_date.localeCompare(a.score_date)),
     [bets]
   )
+
+  const [page, setPage] = useState(0)
+  const totalPages = Math.max(1, Math.ceil(sorted.length / BET_LOG_PAGE_SIZE))
+  const pageBets = sorted.slice(page * BET_LOG_PAGE_SIZE, (page + 1) * BET_LOG_PAGE_SIZE)
+
+  // Reset to first page when bets list changes (season switch)
+  useMemo(() => { setPage(0) }, [sorted])
+
   return (
     <div>
-      <div className="flex items-center gap-2 mb-4">
-        <h2 className="text-base font-semibold text-white">Bet Log</h2>
-        <InfoTooltip text="Model Prob is the probability our model assigned at bet time. EV is the expected value edge over the offered odds. These show what signals we were reading when the pick was made." />
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold text-white">Bet Log</h2>
+          <InfoTooltip text="Model Prob is the probability our model assigned at bet time. EV is the expected value edge over the offered odds. These show what signals we were reading when the pick was made." />
+        </div>
+        {sorted.length > BET_LOG_PAGE_SIZE && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 font-mono">
+              {page + 1} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="rounded border border-[#262626] px-2.5 py-1 text-xs text-gray-400 hover:text-white hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Prev
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="rounded border border-[#262626] px-2.5 py-1 text-xs text-gray-400 hover:text-white hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
       <div className="overflow-x-auto rounded-xl border border-[#262626] bg-[#141414]">
         {sorted.length === 0 ? (
@@ -882,6 +969,7 @@ function BetLogTable({ bets }: { bets: PerformanceBet[] }) {
                 <TableHead className={`${thClass} pl-5`}>Date</TableHead>
                 <TableHead className={thClass}>Game</TableHead>
                 <TableHead className={`${thClass} hidden sm:table-cell`}>Market</TableHead>
+                <TableHead className={`${thClass} hidden sm:table-cell`}>Book</TableHead>
                 <TableHead className={`${thClass} text-right hidden sm:table-cell`}>Odds</TableHead>
                 <TableHead className={`${thClass} text-right hidden sm:table-cell`}>Stake</TableHead>
                 <TableHead className={`${thClass} text-right hidden md:table-cell`}>Model</TableHead>
@@ -890,7 +978,7 @@ function BetLogTable({ bets }: { bets: PerformanceBet[] }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map((b) => (
+              {pageBets.map((b) => (
                 <TableRow key={b.bet_id} className="border-[#262626] hover:bg-[#1a1a1a]">
                   <TableCell className="py-3 pl-5 text-xs text-gray-500 whitespace-nowrap">
                     {b.score_date}
@@ -901,6 +989,9 @@ function BetLogTable({ bets }: { bets: PerformanceBet[] }) {
                   </TableCell>
                   <TableCell className="py-3 text-xs text-gray-400 whitespace-nowrap hidden sm:table-cell">
                     {b.market}
+                  </TableCell>
+                  <TableCell className="py-3 text-xs text-gray-500 whitespace-nowrap hidden sm:table-cell">
+                    {b.bookmaker ?? "—"}
                   </TableCell>
                   <TableCell className="py-3 text-right font-mono text-sm text-gray-300 whitespace-nowrap hidden sm:table-cell">
                     {fmtOdds(b.american_odds)}
@@ -945,6 +1036,29 @@ function BetLogTable({ bets }: { bets: PerformanceBet[] }) {
           </Table>
         )}
       </div>
+      {sorted.length > BET_LOG_PAGE_SIZE && (
+        <div className="flex items-center justify-between mt-3 px-1">
+          <p className="text-xs text-gray-600">
+            Showing {page * BET_LOG_PAGE_SIZE + 1}–{Math.min((page + 1) * BET_LOG_PAGE_SIZE, sorted.length)} of {sorted.length} bets
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="rounded border border-[#262626] px-2.5 py-1 text-xs text-gray-400 hover:text-white hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Prev
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="rounded border border-[#262626] px-2.5 py-1 text-xs text-gray-400 hover:text-white hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -975,8 +1089,15 @@ export default function PerformancePage() {
     },
   })
 
+  const { data: bankrollData } = useQuery<BankrollData>({
+    queryKey: ["bankroll"],
+    queryFn: () => apiFetch("/users/bankroll", {}, accessToken),
+    enabled: !!accessToken,
+  })
+
   const summary = useMemo(() => deriveSummary(betsData), [betsData])
   const bets = betsData?.bets ?? []
+  const bankrollGrowth = bankrollData?.overall_growth ?? null
 
   return (
     <AuthGuard>
@@ -997,7 +1118,7 @@ export default function PerformancePage() {
           </div>
 
           {/* Summary tiles */}
-          <StatTiles summary={summary} />
+          <StatTiles summary={summary} bankrollGrowth={bankrollGrowth} />
 
           {/* Model skill strip */}
           <div className={`mt-5 transition-opacity duration-200 ${modelFetching ? "opacity-50" : "opacity-100"}`}>
