@@ -1,0 +1,83 @@
+name: Orchestration CD
+
+# INC-16-P5 — auto-deploy orchestration changes to the AWS box on merge to main.
+# Kills the manual "codeloc redeploy off main" step + the baked-image drift (a git
+# pull does NOT update a running container — the image must be rebuilt). Deploy logic
+# lives in services/dagster/aws/deploy.sh (rebuild + drain + verify + auto-rollback);
+# this workflow just invokes it on the box via SSM Run Command over OIDC (no static
+# keys, no inbound SSH).
+#
+# Operator-provisioned (see services/dagster/aws/README.md §P5):
+#   secrets.AWS_DEPLOY_ROLE_ARN  — IAM role the GH OIDC provider may assume
+#                                  (perms: ssm:SendCommand + ssm:GetCommandInvocation
+#                                   on the instance + AWS-RunShellScript document)
+#   vars.AWS_REGION              — e.g. us-east-1
+#   vars.DEPLOY_INSTANCE_ID      — i-07594af1679f81c38
+on:
+  push:
+    branches: [main]
+    paths:
+      - "pipeline/**"
+      - "services/dagster/aws/**"
+      - "services/dbt_runner/**"
+      - "services/*_capture/**"
+  workflow_dispatch: {}
+
+# Serialize deploys — never two box deploys racing (singleton daemon).
+concurrency:
+  group: orchestration-cd
+  cancel-in-progress: false
+
+permissions:
+  id-token: write       # for OIDC
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to AWS box (SSM)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Run deploy.sh on the box via SSM, wait, and surface the result
+        env:
+          INSTANCE_ID: ${{ vars.DEPLOY_INSTANCE_ID }}
+        run: |
+          set -euo pipefail
+          # Run as ec2-user (owns ~/app, in the docker group, owns the crontab) — NOT
+          # root (would dirty the repo + edit root's crontab).
+          CMD='sudo -u ec2-user -H bash /home/ec2-user/app/services/dagster/aws/deploy.sh'
+          CID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "orchestration CD ${GITHUB_SHA::8}" \
+            --parameters "commands=[\"$CMD\"],executionTimeout=[\"1800\"]" \
+            --query 'Command.CommandId' --output text)
+          echo "SSM CommandId=$CID — polling…"
+
+          for _ in $(seq 1 120); do      # up to ~20 min (10s * 120)
+            sleep 10
+            STATUS=$(aws ssm get-command-invocation --command-id "$CID" \
+              --instance-id "$INSTANCE_ID" --query 'Status' --output text 2>/dev/null || echo Pending)
+            echo "  status=$STATUS"
+            case "$STATUS" in
+              Success|Failed|Cancelled|TimedOut) break ;;
+            esac
+          done
+
+          echo "----- deploy stdout -----"
+          aws ssm get-command-invocation --command-id "$CID" --instance-id "$INSTANCE_ID" \
+            --query 'StandardOutputContent' --output text || true
+          echo "----- deploy stderr -----"
+          aws ssm get-command-invocation --command-id "$CID" --instance-id "$INSTANCE_ID" \
+            --query 'StandardErrorContent' --output text || true
+
+          if [ "$STATUS" != "Success" ]; then
+            echo "::error::Box deploy ended in status=$STATUS (deploy.sh auto-rolls back on a bad deploy; investigate the box)."
+            exit 1
+          fi
+          echo "✅ Box deploy Success — main is live on the box."

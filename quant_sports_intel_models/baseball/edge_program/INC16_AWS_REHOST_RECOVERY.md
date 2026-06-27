@@ -119,6 +119,14 @@ The whole stack is now a single Docker Compose box (re-deploy, not rebuild):
 > dev→main + rebuild (incl. `--profile capture`) → pre-cutover checklist → full daily cycle → flip
 > schedules + enable `odds_current_rebuild_sensor` + re-comment `capture.crontab` line 42 (same window)
 > → DNS A record + Caddy secret + SG 80/443 + SSM policy → multi-day soak → cancel Railway + Dagster+.
+
+> **🔥 PHASE-G DRY-RUN FINDINGS 2026-06-26 (env/IAM gaps — box `.env` was populated from memory, not the
+> full Railway/Dagster+ env; all surfaced by manually running `daily_ingestion_job`):**
+> 1. **Sub-model `.pkl`s wouldn't load** — `generate_*_signals.py` (run_env/offense/starter/starter_ip/matchup/bullpen, 7 scripts) gated S3-vs-local on `AWS_ACCESS_KEY_ID` (a static key the box doesn't have — it uses the instance role) → fell back to a local path not in the image → `FileNotFoundError`. FIX: switch also honors `ARTIFACTS_FROM_S3`; set `ARTIFACTS_FROM_S3=1` in box `.env`. (Same class as the PEM bug: Railway assumed static keys.)
+> 2. **`CACHE_BUCKET` unset on the box** → `write_serving_store`/`write_api_cache` SILENTLY skip all S3 fallback writes (guarded `if bucket:`) — DynamoDB still served, but the S3 fallback went empty. Set `CACHE_BUCKET=credence-prod-s3-api-cache` (the SERVING cache bucket — NOT the `baseball-betting-ml-artifacts` ML bucket).
+> 3. **IAM: role lacked write on the serving-cache bucket** — `write_api_cache` got `AccessDenied s3:PutObject` on `credence-prod-s3-api-cache` (P1 role was scoped to `baseball-betting-ml-artifacts` only). FIX: added inline policy `credence-s3-api-cache-rw` (Get/Put on `/*` + ListBucket) to `credence-dagster-ec2-role`.
+> 4. **All other daily-job S3 writers (statcast ingest/export, ref_players, W1 lakehouse, raw_writer) target `baseball-betting-ml-artifacts`** (role already RW) → no further S3/IAM gaps on the serving path (swept).
+> 5. **PREVENTIVE:** diff box `.env` keys vs the Dagster+ Cloud env export (the documented source of truth) to flush any remaining missing vars at once, instead of one failed op at a time. `daily_ingestion_job` confirmed GREEN after fixes 1–3.
 - The box tracks **`dev`** → **merge `dev`→`main`** (carries P2 + the PEM key-normalization + P3), repoint the box to `main`, `docker compose up -d --build`.
 - **PRE-CUTOVER CHECKLIST (from the P2/P3 findings — all green before enabling schedules):** dbt-runner key loads (`head -1 /tmp/snowflake_rsa_key.pem` = `-----BEGIN`, the `_normalize_pem` fix); IMDSv2 hop-limit=2 persists + `AWS_DEFAULT_REGION=us-east-1` in container env; Lambda still has the `DynamoServingCacheRead` + `S3ArtifactsZoneOverlayRead` grants after any redeploy; `DATABASE_URL` absent on box + Lambda.
 - Run a FULL daily cycle end-to-end (compute_elo → dbt_daily_build → predict_today → write_serving_store → DynamoDB/S3); validate picks served + the 4 backend surfaces + the E9.31 heatmap.
@@ -129,6 +137,18 @@ The whole stack is now a single Docker Compose box (re-deploy, not rebuild):
 - **AC:** dev→main merged + box on main; pre-cutover checklist green; a clean multi-day daily cycle on AWS; lineup re-scoring live; dagit at `https://dagster.credencesports.com` behind auth + SSM shell working; Railway cancelled; Dagster+ decommissioned after; the ~$275/mo Dagster+ saving banked; total AWS infra ~$15–35/mo.
 
 ## PHASE 5 — Orchestration CI/CD (GitHub) — guard + auto-deploy future orchestration merges
+> **🔧 CODE-COMPLETE 2026-06-27 (operator wires OIDC/SSM + branch protection).** Built:
+> `.github/workflows/orchestration_ci.yml` (defs-validate + `compose config` + lean-image
+> builds + `scripts/ci/check_env_parity.py` + `scripts/ci/check_deploy_wiring.py`) and
+> `.github/workflows/orchestration_cd.yml` (OIDC → SSM RunCommand → `deploy.sh`).
+> `services/dagster/aws/deploy.sh` = the payload (env-parity non-empty → snapshot →
+> pull → drain → `up -d --build` + `--profile capture build` → crontab-reinstall-if-changed
+> → verify → **auto-rollback on failure**). `env.required` manifest added; flaresolverr
+> pinned off `:latest` (P7-t1); cloud-init + provision-ec2 fold in cronie/SSM/IMDS-hop-2/
+> P4 IAM grants so a fresh box is fully wired. CI guards verified GREEN locally. **OPERATOR:**
+> create the GH OIDC→AWS deploy role (`ssm:SendCommand`+`GetCommandInvocation`), set repo
+> vars `AWS_REGION`/`DEPLOY_INSTANCE_ID` + secret `AWS_DEPLOY_ROLE_ARN`, add branch
+> protection. EVENTUAL (deferred): true blue/green. Full runbook: `services/dagster/aws/README.md` §P5.
 **Why (the recurring footgun):** "a pipeline change isn't live until the codeloc redeploys off main" is a MANUAL step that already bit a session (CI compile-only let the W1d runtime break through → INC-15). Once the box owns live orchestration, any future merge touching `pipeline/`, `services/dagster/aws/`, the dbt-runner, or the capture Lambdas must be (a) GATED by CI before merge and (b) auto-DEPLOYED to the box on merge to `main` — no silent drift between `main` and the running box.
 **Scope = a GitHub Actions workflow (specced as INC-16-P5 in story_prompts.md):**
 - **CI gate** (on PRs touching orchestration paths): Dagster `definitions validate` (defs load — catches the boot `_InactiveRpcError`/import breaks), `docker compose config` + a build of the changed images, a smoke that the PEM `_normalize_pem` + `AWS_DEFAULT_REGION` wiring is present, plus the existing Python fast gate + dbt jobs.
@@ -139,11 +159,28 @@ The whole stack is now a single Docker Compose box (re-deploy, not rebuild):
 ## PHASE 6 — Observability + email alerting (the box now runs live with NO alerting)
 **Why:** a silent failure (dead box / crashed daemon / failed build / bad deploy) wouldn't surface until someone notices stale picks. Email-preferred (SES already wired); ~$0. **CAN START NOW** (liveness layer doesn't wait on P4; the daily-output dead-man switch finalizes at/after P4). Three failure modes → one layer each, + reuse existing signals:
 - **🪦 Daily-output dead-man's switch (highest value, do first):** alert if today's picks aren't in `credence-prod-serving-cache` by a cutoff (~8am ET) — outcome-based, fires for ANY root cause (watches what users see). Lambda+EventBridge or a CloudWatch heartbeat metric from `write_serving_store` → SES/SNS email on miss.
-- **📉 Box/instance liveness:** CloudWatch EC2 status-check alarms (instance + system) + disk/memory (CloudWatch agent) → SNS → email.
+- **📉 Box/instance liveness + resource pressure (burstable t4g.medium — tuned so daily-build bursts don't page):** CloudWatch EC2 status-check alarms (instance + system) → SNS → email; + via the CloudWatch agent: **memory `mem_used_percent`>85% + swap climbing (highest-value — OOM is the likeliest failure on 4 GB, not CPU; check `dmesg | grep -i oom`)**, **disk>85%**, **CPU>90% SUSTAINED 30 min** (NOT brief build spikes — baseline 40%, load-avg>2 = saturated), and **CPU-credits** (`CPUCreditBalance`<50 if `standard`; if `unlimited` watch `CPUSurplusCreditsCharged` for cost instead).
 - **🐳 Service liveness (box up, container down — a ping misses this):** host-cron healthcheck (~5 min) — `docker compose ps` all-Up + curl dagit:3000 / dbt-runner:8080 / flaresolverr:8191 (+ daemon-heartbeat-stale) → SNS/SES.
 - **🚨 Dagster run-failure → SES**, scoped LOUD to HALT-tier ops (E11.7 map); WARN-tier digested to avoid noise.
 - **♻️ Reuse, don't reinvent:** route `check_data_freshness` / `signal_freshness_check` output to the same channel; add a capture-feed dead-man switch (odds not landing in `mart_odds_outcomes`) since the P3 captures are host-cron, not Dagster-monitored.
 - **AC:** a verified email per layer (missed daily output, instance/disk, stopped container, HALT-tier run failure); existing freshness routed to the same channel; de-duped + documented in `aws_resources.md`.
+
+## PHASE 7 — Dependency / upgrade & patch management (self-hosting = we own versions now)
+**Why:** Dagster, dbt-runner, flaresolverr, the metadata Postgres, the OS (AL2023), and all base images + Python deps now need deliberate, tested upgrades + CVE awareness — Railway/Dagster+ used to own this.
+- **🛠️ PIN EVERYTHING (DO-NOW; fold into P5's reproducible box):** kill all `:latest` in `docker-compose.yml` (+ capture profile) — pin to explicit versions/`@sha256` (known: `flaresolverr:latest`). With P5's auto-`--build`, a `:latest` can pull a breaking upstream image onto the LIVE box silently → pinning makes upgrades deliberate.
+- **🧩 Dagster coupling:** daemon + webserver + codeloc + the `dagster` lib must all be the SAME version (mixed = broken gRPC); a bump = coordinated across all four + `dagster instance migrate` + read release notes + validate defs before live. Document in `services/dagster/aws/UPGRADING.md`.
+- **🤖 Renovate/Dependabot** for orchestration image tags + Python deps → PRs flow through the **P5 CI gate** (defs-validate + compose-build catch breakage pre-merge); grouped/scheduled to avoid noise.
+- **🔒 Patch cadence (~monthly):** OS/base-image refresh (prefer "replace the box" via a fresh AMI/cloud-init over patch-in-place) + security-advisory scan; subscribe to Dagster release notes + GH security advisories.
+- **🧪 Upgrade test path:** CI-green required; Dagster minor/major bumps validated on a standby box (P5 EVENTUAL) before promoting; P5 auto-rollback + P6 alerting are the net.
+- **AC:** all image tags pinned (no `:latest`) + deps to lockfile; `UPGRADING.md`; Renovate/Dependabot raising grouped PRs through CI; documented patch cadence + advisory subs; an upgrade test path.
+
+## PHASE 8 — DEV/staging box for PR pipeline integration testing (🔭 down-the-road, NOT beta-blocking)
+**Why:** P5's CI gate is STRUCTURAL (defs-validate + compose-build + `dbtf compile`) — it doesn't RUN a pipeline against real-shaped data, which is the exact gap that caused INC-15 (W1d wrong types passed compile, broke at runtime). A dev box that executes the AFFECTED pipeline end-to-end on real-ish data catches what compile can't — the next tier above P5.
+- **💡 One box, three jobs:** scope a single dev box that also serves as P7's Dagster-upgrade test box + P5's EVENTUAL blue/green standby (justifies the cost; don't build three).
+- **Cost-shape:** ephemeral spin-up-on-PR / spot (~$0, preferred for beta) > dedicated small standby (~$25/mo) > ⛔ reuse prod box (contention/isolation risk).
+- **🔒 Data isolation (the real work):** read a SAMPLED dataset, write ONLY to dev Snowflake schema / dev S3 prefix / dev DynamoDB table — NEVER prod serving (`mart_odds_outcomes`, `credence-prod-serving-cache`); dev IAM role scoped so prod-write is impossible.
+- **Diff-scoped:** run only what the PR touches (dbt `state:modified+` + changed `pipeline/` ops), wired into P5's CD as a higher gate that reports PR status.
+- **AC:** reproducible dev box (from P5 cloud-init); isolated dev data targets with no path to prod; PR-diff-scoped pipeline run on PRs + status report; verified isolation guardrail.
 
 ## Strategic upside
 Consolidating orchestration + serving onto AWS (where Lambda/S3/DynamoDB/Cognito/SES already live) **removes the single-provider single-point-of-failure that just bricked everything** — no separate restrictable account can take the whole stack down again. The lakehouse (S3/duckdb) + Snowflake-minimization work continues unchanged (the dbt-runner just runs on EC2 now); end-state Snowflake-touch is still only the Cortex narrative.

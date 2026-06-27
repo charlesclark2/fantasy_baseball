@@ -1,0 +1,85 @@
+name: Orchestration CI
+
+# INC-16-P5 — gate orchestration-path PRs beyond the Python fast gate + dbt jobs.
+# Catches the deploy-only failure modes plain compile/unit CI never sees (defs
+# boot-break à la INC-15, compose/Dockerfile breaks, PEM/region/PG wiring, missing
+# env keys). Scoped to orchestration paths so app/model PRs aren't slowed.
+on:
+  pull_request:
+    paths:
+      - "pipeline/**"
+      - "services/dagster/aws/**"
+      - "services/dbt_runner/**"
+      - "services/*_capture/**"
+      - "infrastructure/**"
+      - "scripts/ci/**"
+      - ".github/workflows/orchestration_ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "pipeline/**"
+      - "services/dagster/aws/**"
+      - "services/dbt_runner/**"
+      - "services/*_capture/**"
+      - "infrastructure/**"
+      - "scripts/ci/**"
+
+jobs:
+  wiring-checks:
+    name: Deploy-wiring + env-parity guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: env-parity (required keys documented in .env.example)
+        run: uv run python scripts/ci/check_env_parity.py
+      - name: deploy-wiring (PEM normalization / region / no-PG)
+        run: uv run python scripts/ci/check_deploy_wiring.py
+
+  dagster-defs:
+    name: Dagster definitions validate (defs actually load)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --no-dev-packages || uv sync
+      - name: Validate code location loads (catches import/boot breaks)
+        env:
+          DAGSTER_HOME: /tmp/dagster_home
+        run: |
+          mkdir -p /tmp/dagster_home
+          # defs build at import of pipeline/__init__.py; resources normalize an
+          # (empty in CI) SNOWFLAKE_PRIVATE_KEY without connecting, so this loads
+          # without real creds — a boot/import break (INC-15 class) fails here.
+          uv run dagster definitions validate -f pipeline/__init__.py
+
+  compose-validate:
+    name: Compose config + lean image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose (YAML + interpolation)
+        run: docker compose -f services/dagster/aws/docker-compose.yml config -q
+      - name: Build lean images (dbt-runner + captures — catch Dockerfile/entrypoint breaks)
+        # The heavy core image (credence-dagster: PyMC/CatBoost) is built + verified
+        # + auto-rolled-back at DEPLOY time (deploy.sh) rather than on every PR — a
+        # multi-min core build per orchestration PR isn't worth it; the CD safety net
+        # (health-gated + rollback) covers a bad core build.
+        run: |
+          docker compose -f services/dagster/aws/docker-compose.yml build \
+            dbt-runner odds-capture schedule-capture derivative-capture weather-capture
