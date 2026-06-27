@@ -395,6 +395,24 @@ def reassign_book(user_id: str, from_book: str, to_book: str) -> dict:
     return get_bankroll(user_id)
 
 
+def delete_bankroll_event(user_id: str, event_id: str) -> dict:
+    """Remove a single event by event_id (read-modify-write)."""
+    resp = _users_table().get_item(Key={"user_id": user_id})
+    item = resp.get("Item", {})
+    events = _deep_from_dynamo(list(item.get("bankroll_events") or []))
+    original_len = len(events)
+    events = [e for e in events if e.get("event_id") != event_id]
+    if len(events) == original_len:
+        raise ValueError(f"Event '{event_id}' not found")
+    _users_table().update_item(
+        Key={"user_id": user_id},
+        UpdateExpression="SET #be = :be",
+        ExpressionAttributeNames={"#be": "bankroll_events"},
+        ExpressionAttributeValues={":be": _to_ddb(events)},
+    )
+    return get_bankroll(user_id)
+
+
 # ── Portfolio preferences (INC-16-P2: migrated off the Railway PG) ─────────────
 # Per-user portfolio settings used by GET /portfolio/preferences and the
 # /picks/today?apply_portfolio=true server-side filter. Stored as a nested

@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from app.backend.dependencies import get_user_id
 from app.backend.services.dynamo import (
     add_bankroll_event,
+    delete_bankroll_event,
     get_bankroll,
     reassign_book,
     remove_book,
@@ -106,6 +107,17 @@ def delete_book(book: str, user_id: str = Depends(get_user_id)):
     except Exception as exc:
         logger.exception("remove_book failed for %s", user_id)
         raise HTTPException(status_code=503, detail="Could not remove book") from exc
+
+
+@router.delete("/bankroll/events/{event_id}")
+def delete_event(event_id: str, user_id: str = Depends(get_user_id)):
+    try:
+        return delete_bankroll_event(user_id, event_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("delete_bankroll_event failed for %s", user_id)
+        raise HTTPException(status_code=503, detail="Could not delete event") from exc
 
 
 @router.patch("/bankroll/books/{book}/reassign")

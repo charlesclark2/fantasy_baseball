@@ -305,9 +305,11 @@ function BookCard({
   onAddEvent,
   onRemove,
   onReassign,
+  onDeleteEvent,
   isUpdating,
   isAddingEvent,
   isReassigning,
+  isDeletingEvent,
 }: {
   account: BookAccount
   growth: BookGrowth | undefined
@@ -317,9 +319,11 @@ function BookCard({
   onAddEvent: (book: string, type: "deposit" | "withdrawal", amount: number, date: string) => void
   onRemove: (book: string) => void
   onReassign: (fromBook: string, toBook: string) => void
+  onDeleteEvent: (eventId: string) => void
   isUpdating: boolean
   isAddingEvent: boolean
   isReassigning: boolean
+  isDeletingEvent: boolean
 }) {
   const [balInput, setBalInput] = useState(String(account.current_balance))
   const [balSaved, setBalSaved] = useState(false)
@@ -328,6 +332,7 @@ function BookCard({
   const [showHistory, setShowHistory] = useState(false)
   const [showReassign, setShowReassign] = useState(false)
   const [reassignTo, setReassignTo] = useState("")
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   useEffect(() => {
     setBalInput(String(account.current_balance))
@@ -496,18 +501,41 @@ function BookCard({
       {/* Event history */}
       {showHistory && bookEvents.length > 0 && (
         <div className="space-y-1 border-t border-[#262626] pt-2">
-          {bookEvents.slice(0, 10).map((evt) => (
-            <div key={evt.event_id} className="flex items-center justify-between text-xs">
-              <span className={`capitalize font-medium ${evt.type === "deposit" ? "text-[#10b981]" : "text-[#ef4444]"}`}>
+          {bookEvents.map((evt) => (
+            <div key={evt.event_id} className="flex items-center gap-2 text-xs">
+              <span className={`capitalize font-medium w-20 shrink-0 ${evt.type === "deposit" ? "text-[#10b981]" : "text-[#ef4444]"}`}>
                 {evt.type}
               </span>
-              <span className="text-gray-500 font-mono">{evt.date}</span>
+              <span className="text-gray-500 font-mono flex-1">{evt.date}</span>
               <span className="text-gray-300 font-mono">${evt.amount.toFixed(2)}</span>
+              {confirmDeleteId === evt.event_id ? (
+                <div className="flex items-center gap-1.5 ml-1">
+                  <span className="text-gray-500 text-[10px]">Delete?</span>
+                  <button
+                    onClick={() => { onDeleteEvent(evt.event_id); setConfirmDeleteId(null) }}
+                    disabled={isDeletingEvent}
+                    className="text-[#ef4444] hover:text-red-300 text-[10px] font-semibold disabled:opacity-50"
+                  >
+                    Yes
+                  </button>
+                  <button
+                    onClick={() => setConfirmDeleteId(null)}
+                    className="text-gray-600 hover:text-gray-400"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmDeleteId(evt.event_id)}
+                  className="ml-1 text-gray-700 hover:text-[#ef4444] transition-colors"
+                  title="Delete this event"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              )}
             </div>
           ))}
-          {bookEvents.length > 10 && (
-            <p className="text-xs text-gray-600">&hellip;and {bookEvents.length - 10} more</p>
-          )}
         </div>
       )}
     </div>
@@ -562,6 +590,16 @@ function SportsbooksSection({ accessToken }: { accessToken: string | null }) {
       apiFetch(
         `/users/bankroll/books/${encodeURIComponent(fromBook)}/reassign`,
         { method: "PATCH", body: JSON.stringify({ to_book: toBook }) },
+        accessToken
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bankroll"] }),
+  })
+
+  const deleteEventMutation = useMutation({
+    mutationFn: (eventId: string) =>
+      apiFetch(
+        `/users/bankroll/events/${encodeURIComponent(eventId)}`,
+        { method: "DELETE" },
         accessToken
       ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bankroll"] }),
@@ -644,9 +682,11 @@ function SportsbooksSection({ accessToken }: { accessToken: string | null }) {
               }
               onRemove={(book) => removeMutation.mutate(book)}
               onReassign={(fromBook, toBook) => reassignMutation.mutate({ fromBook, toBook })}
+              onDeleteEvent={(eventId) => deleteEventMutation.mutate(eventId)}
               isUpdating={balanceMutation.isPending}
               isAddingEvent={eventMutation.isPending}
               isReassigning={reassignMutation.isPending}
+              isDeletingEvent={deleteEventMutation.isPending}
             />
           ))
         )}
