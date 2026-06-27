@@ -28,7 +28,7 @@ if _SENTRY_DSN:
         traces_sample_rate=0.1,
     )
 
-from app.backend.routers import admin, alerts, auth, bets, blog, feedback, finances, picks, performance, pipeline, players, portfolio, teams, users
+from app.backend.routers import admin, alerts, auth, bankroll, bets, blog, feedback, finances, picks, performance, pipeline, players, portfolio, teams, users
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -73,6 +73,7 @@ async def log_requests(request: Request, call_next) -> Response:
     return response
 
 
+app.include_router(bankroll.router)
 app.include_router(blog.router)
 app.include_router(feedback.router)
 app.include_router(picks.router)

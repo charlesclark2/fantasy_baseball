@@ -926,7 +926,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--days", type=int, default=14,
                    help="Number of days to audit (default: 14)")
     p.add_argument("--output", default=str(DEFAULT_OUTPUT),
-                   help=f"Output markdown path (default: {DEFAULT_OUTPUT})")
+                   help=("Report destination: a local path (default), '-' for stdout "
+                         "(no file — best on the ephemeral container), or an s3://bucket/key URI. "
+                         f"Default: {DEFAULT_OUTPUT}"))
     p.add_argument("--skip-dagster", action="store_true",
                    help="Skip Dagster API query and use Snowflake-only analysis")
     return p.parse_args()
@@ -1004,10 +1006,23 @@ def main() -> None:
     # ── Render & write report ──────────────────────────────────────────────────
     report = render_report(sla_records, op_summary, failure_modes, args.days, dagster_available, run_ts)
 
-    out_path = Path(args.output)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(report, encoding="utf-8")
-    print(f"\nReport written to: {out_path}", file=sys.stderr)
+    # Destination: "-" → stdout (no file; ideal on the container — its FS is ephemeral);
+    # "s3://bucket/key" → durable S3; else a local path (dev default).
+    dest = args.output
+    if dest == "-":
+        print(report)
+    elif dest.startswith("s3://"):
+        import boto3
+        bucket, key = dest[5:].split("/", 1)
+        boto3.client("s3").put_object(
+            Bucket=bucket, Key=key, Body=report.encode("utf-8"),
+            ContentType="text/markdown")
+        print(f"\nReport written to: {dest}", file=sys.stderr)
+    else:
+        out_path = Path(dest)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(report, encoding="utf-8")
+        print(f"\nReport written to: {out_path}", file=sys.stderr)
 
     # Print quick summary to stdout
     with_sla = [r for r in sla_records if r.get("sla_met") is not None]

@@ -33,6 +33,24 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 // ---------------------------------------------------------------------------
+// Bankroll growth types (E9.17)
+// ---------------------------------------------------------------------------
+
+interface BankrollGrowth {
+  total_deposited: number
+  total_withdrawn: number
+  net_deposits: number
+  current_balance: number
+  betting_pnl: number
+  growth_pct: number | null
+}
+
+interface BankrollData {
+  overall_growth: BankrollGrowth
+  per_book_growth: Record<string, BankrollGrowth>
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -271,36 +289,56 @@ function deriveSummary(data: PerformanceBetsResponse | undefined): BetSummary {
   return { wins, losses, pushes, settled, winRate, netPnl, totalStake, roi, total: data?.total ?? 0 }
 }
 
-function StatTiles({ summary }: { summary: BetSummary }) {
+function StatTiles({
+  summary,
+  bankrollGrowth,
+}: {
+  summary: BetSummary
+  bankrollGrowth: BankrollGrowth | null
+}) {
   const tiles = [
     {
       label: "Settled Bets",
       value: summary.settled.toString(),
       sub: `${summary.wins}W · ${summary.losses}L · ${summary.pushes}P`,
       valueClass: "text-white",
+      tooltip: undefined as string | undefined,
     },
     {
       label: "Win Rate",
       value: fmtPct(summary.winRate),
       sub: "excl. pushes",
       valueClass: winRateColor(summary.winRate),
+      tooltip: undefined,
     },
     {
       label: "Net P&L",
       value: fmtPnlExact(summary.netPnl),
       sub: summary.roi != null ? `${fmtSignedPct(summary.roi)} ROI` : undefined,
       valueClass: pnlColor(summary.netPnl),
+      tooltip: undefined,
     },
     {
       label: "Total Staked",
       value: `$${summary.totalStake.toFixed(0)}`,
       sub: `${summary.total} total bets`,
       valueClass: "text-gray-300",
+      tooltip: undefined,
     },
   ]
 
+  const showGrowth = bankrollGrowth != null && bankrollGrowth.total_deposited > 0
+  const growthPct = showGrowth && bankrollGrowth.growth_pct != null
+    ? `${bankrollGrowth.growth_pct >= 0 ? "+" : ""}${(bankrollGrowth.growth_pct * 100).toFixed(1)}%`
+    : null
+  const growthPnlStr = showGrowth
+    ? (bankrollGrowth.betting_pnl >= 0
+        ? `+$${bankrollGrowth.betting_pnl.toFixed(2)}`
+        : `-$${Math.abs(bankrollGrowth.betting_pnl).toFixed(2)}`)
+    : null
+
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className={`grid grid-cols-2 gap-3 ${showGrowth ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
       {tiles.map((tile) => (
         <div
           key={tile.label}
@@ -317,6 +355,22 @@ function StatTiles({ summary }: { summary: BetSummary }) {
           )}
         </div>
       ))}
+
+      {/* Bankroll growth tile — only shown when deposits are tracked */}
+      {showGrowth && (
+        <div className="flex flex-col justify-between rounded-xl border border-[#262626] bg-[#141414] px-5 py-4">
+          <p className="text-xs uppercase tracking-wider text-gray-500 font-medium leading-relaxed flex items-center gap-1">
+            Bankroll Growth
+            <InfoTooltip text="Growth % = betting P&L ÷ total deposited. Deposits and withdrawals are netted out so the figure reflects only betting results, not cash movement. Distinct from ROI (return on stake/turnover)." />
+          </p>
+          <p className={`mt-2 text-3xl font-bold tracking-tight font-mono ${pnlColor(bankrollGrowth.growth_pct)}`}>
+            {growthPct ?? "—"}
+          </p>
+          <p className="mt-1 text-xs text-gray-500">
+            {growthPnlStr} betting P&amp;L
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -975,8 +1029,15 @@ export default function PerformancePage() {
     },
   })
 
+  const { data: bankrollData } = useQuery<BankrollData>({
+    queryKey: ["bankroll"],
+    queryFn: () => apiFetch("/users/bankroll", {}, accessToken),
+    enabled: !!accessToken,
+  })
+
   const summary = useMemo(() => deriveSummary(betsData), [betsData])
   const bets = betsData?.bets ?? []
+  const bankrollGrowth = bankrollData?.overall_growth ?? null
 
   return (
     <AuthGuard>
@@ -997,7 +1058,7 @@ export default function PerformancePage() {
           </div>
 
           {/* Summary tiles */}
-          <StatTiles summary={summary} />
+          <StatTiles summary={summary} bankrollGrowth={bankrollGrowth} />
 
           {/* Model skill strip */}
           <div className={`mt-5 transition-opacity duration-200 ${modelFetching ? "opacity-50" : "opacity-100"}`}>

@@ -187,6 +187,188 @@ def update_user_profile(user_id: str, initial_deposit: float | None) -> dict:
     return get_user_profile(user_id)
 
 
+# ── Bankroll bookkeeping (E9.17) ─────────────────────────────────────────────
+
+def _deep_from_dynamo(obj):
+    """Recursively convert Decimal → int/float in nested dicts and lists."""
+    if isinstance(obj, Decimal):
+        return int(obj) if obj == obj.to_integral_value() else float(obj)
+    if isinstance(obj, dict):
+        return {k: _deep_from_dynamo(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_deep_from_dynamo(v) for v in obj]
+    return obj
+
+
+def _to_ddb(obj):
+    """Convert any JSON-serialisable object for DynamoDB storage (floats → Decimal)."""
+    return json.loads(json.dumps(obj, default=str), parse_float=Decimal)
+
+
+def compute_bankroll_growth(
+    book_accounts: dict,
+    bankroll_events: list,
+) -> dict:
+    """Pure function: compute per-book and overall growth from accounts + events.
+
+    Growth math (honest: cash-flow neutral)
+        net_deposits  = Σ deposits − Σ withdrawals   (per book / overall)
+        betting_pnl   = current_balance − net_deposits
+        growth_pct    = betting_pnl / Σ deposits      (None until first deposit)
+
+    A deposit is NOT growth; a withdrawal is NOT a loss — both net out so the
+    percentage reflects only betting performance.
+    """
+    flows: dict = {}
+    for evt in bankroll_events:
+        book = evt.get("book", "Unspecified")
+        if book not in flows:
+            flows[book] = {"total_deposited": 0.0, "total_withdrawn": 0.0}
+        amt = float(evt.get("amount", 0))
+        if evt.get("type") == "deposit":
+            flows[book]["total_deposited"] += amt
+        elif evt.get("type") == "withdrawal":
+            flows[book]["total_withdrawn"] += amt
+
+    for book in book_accounts:
+        if book not in flows:
+            flows[book] = {"total_deposited": 0.0, "total_withdrawn": 0.0}
+
+    per_book: dict = {}
+    for book, f in flows.items():
+        bal = float((book_accounts.get(book) or {}).get("current_balance", 0))
+        td, tw = f["total_deposited"], f["total_withdrawn"]
+        nd = td - tw
+        pnl = bal - nd
+        per_book[book] = {
+            "total_deposited": round(td, 2),
+            "total_withdrawn": round(tw, 2),
+            "net_deposits": round(nd, 2),
+            "current_balance": round(bal, 2),
+            "betting_pnl": round(pnl, 2),
+            "growth_pct": round(pnl / td, 6) if td > 0 else None,
+        }
+
+    td_total = sum(v["total_deposited"] for v in per_book.values())
+    tw_total = sum(v["total_withdrawn"] for v in per_book.values())
+    nd_total = td_total - tw_total
+    bal_total = sum(v["current_balance"] for v in per_book.values())
+    pnl_total = bal_total - nd_total
+    overall = {
+        "total_deposited": round(td_total, 2),
+        "total_withdrawn": round(tw_total, 2),
+        "net_deposits": round(nd_total, 2),
+        "current_balance": round(bal_total, 2),
+        "betting_pnl": round(pnl_total, 2),
+        "growth_pct": round(pnl_total / td_total, 6) if td_total > 0 else None,
+    }
+    return {"overall": overall, "per_book": per_book}
+
+
+def get_bankroll(user_id: str) -> dict:
+    """Return bankroll state; auto-migrates legacy initial_deposit on first call."""
+    resp = _users_table().get_item(Key={"user_id": user_id})
+    item = resp.get("Item", {})
+
+    accounts_raw = dict(item.get("book_accounts") or {})
+    events_raw = list(item.get("bankroll_events") or [])
+
+    # One-time auto-migration: initial_deposit → seed deposit on "Unspecified"
+    legacy = item.get("initial_deposit")
+    if legacy is not None and not events_raw:
+        amount = float(legacy)
+        if amount > 0:
+            seed = {
+                "event_id": str(uuid4()),
+                "book": "Unspecified",
+                "type": "deposit",
+                "amount": amount,
+                "date": "2026-01-01",
+            }
+            accounts_raw.setdefault("Unspecified", {"current_balance": amount})
+            events_raw = [seed]
+            _users_table().update_item(
+                Key={"user_id": user_id},
+                UpdateExpression="SET #ba = :ba, #be = :be",
+                ExpressionAttributeNames={"#ba": "book_accounts", "#be": "bankroll_events"},
+                ExpressionAttributeValues={":ba": _to_ddb(accounts_raw), ":be": _to_ddb(events_raw)},
+            )
+
+    accounts = _deep_from_dynamo(accounts_raw)
+    events = _deep_from_dynamo(events_raw)
+    growth = compute_bankroll_growth(accounts, events)
+
+    books_list = [
+        {"book": b, "current_balance": float((info or {}).get("current_balance", 0))}
+        for b, info in accounts.items()
+    ]
+
+    return {
+        "book_accounts": books_list,
+        "bankroll_events": sorted(events, key=lambda e: e.get("date", ""), reverse=True),
+        "overall_growth": growth["overall"],
+        "per_book_growth": growth["per_book"],
+    }
+
+
+def upsert_book_balance(user_id: str, book: str, current_balance: float) -> dict:
+    """Create or update a sportsbook's current balance."""
+    resp = _users_table().get_item(Key={"user_id": user_id})
+    item = resp.get("Item", {})
+    accounts = _deep_from_dynamo(dict(item.get("book_accounts") or {}))
+    accounts[book] = {"current_balance": current_balance}
+    _users_table().update_item(
+        Key={"user_id": user_id},
+        UpdateExpression="SET #ba = :ba",
+        ExpressionAttributeNames={"#ba": "book_accounts"},
+        ExpressionAttributeValues={":ba": _to_ddb(accounts)},
+    )
+    return get_bankroll(user_id)
+
+
+def add_bankroll_event(
+    user_id: str, book: str, event_type: str, amount: float, date: str
+) -> dict:
+    """Append a deposit or withdrawal event; auto-creates the book entry if absent."""
+    resp = _users_table().get_item(Key={"user_id": user_id})
+    item = resp.get("Item", {})
+    events = _deep_from_dynamo(list(item.get("bankroll_events") or []))
+    accounts = _deep_from_dynamo(dict(item.get("book_accounts") or {}))
+
+    events.append({
+        "event_id": str(uuid4()),
+        "book": book,
+        "type": event_type,
+        "amount": amount,
+        "date": date,
+    })
+    if book not in accounts:
+        accounts[book] = {"current_balance": amount if event_type == "deposit" else 0.0}
+
+    _users_table().update_item(
+        Key={"user_id": user_id},
+        UpdateExpression="SET #ba = :ba, #be = :be",
+        ExpressionAttributeNames={"#ba": "book_accounts", "#be": "bankroll_events"},
+        ExpressionAttributeValues={":ba": _to_ddb(accounts), ":be": _to_ddb(events)},
+    )
+    return get_bankroll(user_id)
+
+
+def remove_book(user_id: str, book: str) -> dict:
+    """Remove a book account (events are preserved for history)."""
+    resp = _users_table().get_item(Key={"user_id": user_id})
+    item = resp.get("Item", {})
+    accounts = _deep_from_dynamo(dict(item.get("book_accounts") or {}))
+    accounts.pop(book, None)
+    _users_table().update_item(
+        Key={"user_id": user_id},
+        UpdateExpression="SET #ba = :ba",
+        ExpressionAttributeNames={"#ba": "book_accounts"},
+        ExpressionAttributeValues={":ba": _to_ddb(accounts)},
+    )
+    return get_bankroll(user_id)
+
+
 # ── Portfolio preferences (INC-16-P2: migrated off the Railway PG) ─────────────
 # Per-user portfolio settings used by GET /portfolio/preferences and the
 # /picks/today?apply_portfolio=true server-side filter. Stored as a nested
