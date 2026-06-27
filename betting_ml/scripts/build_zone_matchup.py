@@ -144,7 +144,17 @@ def cmd_viz(args) -> None:
     meta = _json.loads((pdir / "_meta.json").read_text())
     as_of = meta["end"]
 
-    if args.batter and args.pitcher:
+    if args.pairs:
+        matchups = []
+        for pair in args.pairs.split(","):
+            pair = pair.strip()
+            if not pair:
+                continue
+            bid_s, pid_s = pair.split(":")
+            bid, pid = int(bid_s), int(pid_s)
+            matchups.append((bid, _hand_of(bval, "batter_id", bid),
+                             pid, _hand_of(pfreq, "pitcher_id", pid, hand_col="p_hand")))
+    elif args.batter and args.pitcher:
         b_hand = _hand_of(bval, "batter_id", args.batter)
         p_hand = _hand_of(pfreq, "pitcher_id", args.pitcher, hand_col="p_hand")
         matchups = [(args.batter, b_hand, args.pitcher, p_hand)]
@@ -277,6 +287,8 @@ def main() -> None:
 
     v = sub.add_parser("viz", help="emit matchup overlay JSON (product→S3) + PNG proof (artifact→S3)")
     v.add_argument("--profiles-dir", required=True)
+    v.add_argument("--pairs", default=None,
+                   help="comma-separated batter:pitcher pairs, e.g. 665489:669022,571578:502671")
     v.add_argument("--batter", type=int, default=None)
     v.add_argument("--pitcher", type=int, default=None)
     v.add_argument("--top", type=int, default=6, help="#showcase matchups when ids not given")

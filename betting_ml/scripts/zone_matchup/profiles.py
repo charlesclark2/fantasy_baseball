@@ -38,7 +38,7 @@ def _league_priors(league_raw: pd.DataFrame) -> dict:
     """Tiered league priors (cell → group → global) for run value, whiff-rate, xwOBA-on-contact.
     Keyed by (p_hand, b_hand, pgroup, ix, iz). league_raw columns per lakehouse.league_raw."""
     lr = league_raw.copy()
-    for c in ("lg_rv", "lg_xwoba_con", "n_pitches", "n_swings", "n_whiffs"):
+    for c in ("lg_rv", "lg_rv_swing", "lg_xwoba_con", "n_pitches", "n_swings", "n_whiffs"):
         lr[c] = pd.to_numeric(lr[c], errors="coerce")
     lr["whiff_rate"] = lr["n_whiffs"] / lr["n_swings"].replace(0, np.nan)
 
@@ -51,12 +51,15 @@ def _league_priors(league_raw: pd.DataFrame) -> dict:
     grp = lr.groupby(["p_hand", "b_hand", "pgroup"])
     return {
         "cell_rv": cell["lg_rv"].to_dict(),
+        "cell_rv_swing": cell["lg_rv_swing"].to_dict(),
         "cell_whiff": cell["whiff_rate"].to_dict(),
         "cell_xwoba": cell["lg_xwoba_con"].to_dict(),
         "grp_rv": {k: _wmean(g, "lg_rv", "n_pitches") for k, g in grp},
+        "grp_rv_swing": {k: _wmean(g, "lg_rv_swing", "n_swings") for k, g in grp},
         "grp_whiff": {k: _wmean(g, "whiff_rate", "n_swings") for k, g in grp},
         "grp_xwoba": {k: _wmean(g, "lg_xwoba_con", "n_pitches") for k, g in grp},
         "glob_rv": _wmean(lr, "lg_rv", "n_pitches"),
+        "glob_rv_swing": _wmean(lr, "lg_rv_swing", "n_swings"),
         "glob_whiff": _wmean(lr, "whiff_rate", "n_swings"),
         "glob_xwoba": _wmean(lr, "lg_xwoba_con", "n_pitches"),
     }
@@ -83,13 +86,13 @@ def build_batter_value(batter_raw: pd.DataFrame, league_raw: pd.DataFrame, *,
     spans the FULL grid per (batter, b_hand, vs_p_hand): cells the batter rarely sees resolve to
     the EB prior so the overlap is a true freq-weighted average."""
     out_cols = ["batter_id", "b_hand", "vs_p_hand", "pgroup", "ix", "iz", "value",
-                "whiff_rate", "xwoba_con", "n_pitches", "is_cold_start"]
+                "swing_value", "whiff_rate", "xwoba_con", "n_pitches", "is_cold_start"]
     if batter_raw.empty:
         return pd.DataFrame(columns=out_cols)
     grid = grid or GridSpec()
     priors = _league_priors(league_raw)
     raw = batter_raw.copy()
-    for c in ("n_pitches", "raw_rv", "n_swings", "n_whiffs", "n_bip", "raw_xwoba_con"):
+    for c in ("n_pitches", "raw_rv", "raw_rv_swing", "n_swings", "n_whiffs", "n_bip", "raw_xwoba_con"):
         raw[c] = pd.to_numeric(raw[c], errors="coerce")
 
     # Track total observed pitches per batter BEFORE the full-grid expansion (cold-start = thin).
@@ -105,12 +108,18 @@ def build_batter_value(batter_raw: pd.DataFrame, league_raw: pd.DataFrame, *,
     # the league prior (p_hand=vs_p_hand, b_hand=b_hand).
     pr_rv = np.array([_resolve(priors, "rv", r.vs_p_hand, r.b_hand, r.pgroup, r.ix, r.iz)
                       for r in br.itertuples()])
+    pr_rv_swing = np.array([_resolve(priors, "rv_swing", r.vs_p_hand, r.b_hand, r.pgroup, r.ix, r.iz)
+                            for r in br.itertuples()])
     pr_wh = np.array([_resolve(priors, "whiff", r.vs_p_hand, r.b_hand, r.pgroup, r.ix, r.iz)
                       for r in br.itertuples()])
     pr_xw = np.array([_resolve(priors, "xwoba", r.vs_p_hand, r.b_hand, r.pgroup, r.ix, r.iz)
                       for r in br.itertuples()])
 
     br["value"] = eb_mean(br["raw_rv"].to_numpy(), br["n_pitches"].to_numpy(), pr_rv, k_value)
+    # swing_value: EB-shrunk delta_run_exp conditioned on swings only (n_swings as effective N).
+    # Shadow/ball zones with few swings collapse to the league swing-RV prior (near-zero or negative),
+    # so the display correctly shows neutral-to-cold rather than misleadingly red from called balls.
+    br["swing_value"] = eb_mean(br["raw_rv_swing"].to_numpy(), br["n_swings"].to_numpy(), pr_rv_swing, k_value)
     br["whiff_rate"] = eb_rate(br["n_whiffs"].to_numpy(), br["n_swings"].to_numpy(), pr_wh, k_rate)
     br["xwoba_con"] = eb_mean(br["raw_xwoba_con"].to_numpy(), br["n_bip"].to_numpy(), pr_xw, k_xwoba)
 

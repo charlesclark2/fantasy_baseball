@@ -52,6 +52,16 @@ W2_TABLES = [
     "mart_starter_pitch_mix_rolling",
 ]
 
+# E11.1-W3pre: the odds/staging flatten tier (created by
+# scripts/ddl/generate_w3pre_external_tables.py before it can be refreshed). Refreshed
+# in the same op so the daily build / serving marts see the latest flattened parquet.
+W3PRE_TABLES = [
+    "stg_oddsapi_odds",
+    "stg_oddsapi_events",
+    "stg_derivative_odds",
+    "stg_statsapi_games",
+]
+
 
 def _load_private_key():
     key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
@@ -88,14 +98,22 @@ def main():
     conn = get_snowflake_conn()
     cur = conn.cursor()
     failed = []
-    for table in W1_TABLES + W2_TABLES:
+    # W1+W2 are REQUIRED (HALT) — they exist and feed the morning build. W3pre tables are
+    # BEST-EFFORT until cutover: they don't exist until generate_w3pre_external_tables.py
+    # is run, so a "does not exist" here is an expected skip (WARN-tier), NOT a HALT — else
+    # this op would fail the daily job for the entire pre-cutover rollout window. (E11.1-W3pre)
+    required = set(W1_TABLES) | set(W2_TABLES)
+    for table in W1_TABLES + W2_TABLES + W3PRE_TABLES:
         fqn = f"{_SCHEMA}.{table}"
         try:
             cur.execute(f"ALTER EXTERNAL TABLE {fqn} REFRESH")
             print(f"  refreshed {fqn}")
         except Exception as e:
-            print(f"  FAILED {fqn}: {e}", file=sys.stderr)
-            failed.append(table)
+            if table in required:
+                print(f"  FAILED {fqn}: {e}", file=sys.stderr)
+                failed.append(table)
+            else:
+                print(f"  WARNING skip {fqn} (W3pre, not yet created): {e}", file=sys.stderr)
     cur.close()
     conn.close()
     if failed:
@@ -103,7 +121,7 @@ def main():
             f"External table refresh FAILED for: {failed}  "
             "Downstream feature build will see stale S3 data."
         )
-    print("W1 external table refresh complete.")
+    print("W1+W2 external table refresh complete (W3pre best-effort).")
 
 
 if __name__ == "__main__":

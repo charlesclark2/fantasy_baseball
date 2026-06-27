@@ -379,7 +379,7 @@ One box runs the full stack as Docker Compose — config + runbook in
 | Root volume | 30 GB gp3 |
 | Key pair | `credence-dagster-key` (private key at `~/.ssh/credence-dagster-key.pem`) |
 | Security group | `credence-dagster-sg` — ingress SSH 22 + dagit 3000 from operator IP only; egress all |
-| IAM role / instance profile | `credence-dagster-ec2-role` / `credence-dagster-ec2-profile` — S3 access to `baseball-betting-ml-artifacts` (no static keys on the box) |
+| IAM role / instance profile | `credence-dagster-ec2-role` / `credence-dagster-ec2-profile` (no static keys on the box). Policies: S3 RW on `baseball-betting-ml-artifacts` (model artifacts + dbt state); **`credence-s3-api-cache-rw`** — S3 Get/Put on `credence-prod-s3-api-cache/*` + ListBucket (the serving S3 fallback that `write_serving_store`/`write_api_cache` populate — INC-16-P4); DynamoDB RW on `credence-prod-serving-cache` (P2); **`credence-dynamo-user-bets-settle`** — DynamoDB Scan/Query/GetItem/UpdateItem on `credence-prod-dynamo-user-bets` + `/index/*` (the `settle_user_bets` op — INC-16-P4) |
 | S3 access | **S3 gateway VPC endpoint** (no NAT — cost trap avoided) |
 | SSH | `ssh -i ~/.ssh/credence-dagster-key.pem ec2-user@100.57.225.242` |
 

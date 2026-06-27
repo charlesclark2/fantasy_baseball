@@ -1,42 +1,46 @@
 #!/usr/bin/env python3
-"""Fetch captured stdout/stderr (MessageEvents) for one step of a Dagster+ run.
+"""Fetch captured stdout/stderr (MessageEvents) for one step of a Dagster run.
 
-Reads DAGSTER_CLOUD_API_TOKEN from .env (repo root) or the environment; never
-printed. Deployment: penumbra-partners.dagster.plus, prod.
+Targets the self-hosted OSS Dagster on the AWS box (INC-16). Endpoint + auth are
+env-configurable (see dagster_runs.py):
+    DAGSTER_GRAPHQL_URL   default https://dagster.credencesports.com/graphql
+                          (on the box, set http://localhost:3000/graphql — no auth)
+    DAGIT_BASIC_AUTH_USER + DAGIT_BASIC_AUTH_PASSWORD  → HTTP Basic (through Caddy)
+    DAGSTER_CLOUD_API_TOKEN (only if URL is *.dagster.plus)  → legacy token header
+Secrets are never printed.
 
 Usage:
     python3 scripts/ops/dagster_steplog.py <runId> <stepKey>
     # runId must be the FULL id (the 8-char prefix from dagster_runs.py won't work);
     # dagster_runs.py prints the full id in parentheses.
 """
+import base64
 import json
 import os
-import pathlib
 import sys
 import urllib.request
 
-ENDPOINT = "https://penumbra-partners.dagster.plus/prod/graphql"
+ENDPOINT = os.environ.get("DAGSTER_GRAPHQL_URL", "https://dagster.credencesports.com/graphql")
 
 
-def _load_token() -> str:
+def _headers() -> dict:
+    """Build request headers for the configured Dagster GraphQL endpoint."""
+    h = {"Content-Type": "application/json"}
     tok = os.environ.get("DAGSTER_CLOUD_API_TOKEN")
-    if tok:
-        return tok.strip()
-    here = pathlib.Path(__file__).resolve()
-    for parent in [pathlib.Path.cwd(), *here.parents]:
-        env = parent / ".env"
-        if env.is_file():
-            for line in env.read_text().splitlines():
-                if line.startswith("DAGSTER_CLOUD_API_TOKEN="):
-                    return line.split("=", 1)[1].strip().strip('"').strip("'")
-    sys.exit("DAGSTER_CLOUD_API_TOKEN not found in env or .env")
+    if tok and "dagster.plus" in ENDPOINT:          # legacy Dagster+ Cloud
+        h["Dagster-Cloud-Api-Token"] = tok.strip()
+        return h
+    user = os.environ.get("DAGIT_BASIC_AUTH_USER")
+    pw = os.environ.get("DAGIT_BASIC_AUTH_PASSWORD")
+    if user and pw:                                  # self-hosted behind Caddy basic-auth
+        h["Authorization"] = "Basic " + base64.b64encode(f"{user}:{pw}".encode()).decode()
+    return h                                         # else: no auth (localhost on the box)
 
 
 def main() -> None:
     if len(sys.argv) < 3:
         sys.exit("Usage: dagster_steplog.py <runId> <stepKey>")
     run, step = sys.argv[1], sys.argv[2]
-    token = _load_token()
 
     # logsForRun limit max is 1000.
     q = (
@@ -46,10 +50,7 @@ def main() -> None:
         "... on PythonError { message } } }"
     )
     body = json.dumps({"query": q, "variables": {"r": run}}).encode()
-    req = urllib.request.Request(
-        ENDPOINT, data=body,
-        headers={"Dagster-Cloud-Api-Token": token, "Content-Type": "application/json"},
-    )
+    req = urllib.request.Request(ENDPOINT, data=body, headers=_headers())
     d = json.loads(urllib.request.urlopen(req, timeout=40).read())
 
     node = d.get("data", {}).get("logsForRun", {})

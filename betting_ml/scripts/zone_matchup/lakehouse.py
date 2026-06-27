@@ -89,7 +89,8 @@ def batter_raw(con, grid: GridSpec, window: Window):
     vs_p_hand = the handedness of the pitcher faced (so the batter map is platoon-split).
     b_hand = the batter's own stance (varies with vs_p_hand for switch hitters — correct, that's
     the stance they actually use vs that hand). Returns a DataFrame: batter_id, b_hand, vs_p_hand,
-    pgroup, ix, iz, n_pitches, raw_rv (mean delta_run_exp, batter POV), n_swings, n_whiffs, n_bip,
+    pgroup, ix, iz, n_pitches, raw_rv (mean delta_run_exp, batter POV), raw_rv_swing (same but
+    only on swings — excludes called balls/strikes), n_swings, n_whiffs, n_bip,
     raw_xwoba_con (mean xwOBA on contact).
     """
     sql = _binned_cte(grid, _read(window.years), window,
@@ -97,6 +98,7 @@ def batter_raw(con, grid: GridSpec, window: Window):
     SELECT batter_id, b_hand, vs_p_hand, pgroup, ix, iz,
            count(*)                                            AS n_pitches,
            avg(delta_run_exp)                                  AS raw_rv,
+           avg(CASE WHEN is_swing = 1 THEN delta_run_exp END)  AS raw_rv_swing,
            sum(is_swing)                                       AS n_swings,
            sum(is_whiff)                                       AS n_whiffs,
            sum(is_bip)                                         AS n_bip,
@@ -147,16 +149,17 @@ def league_raw(con, grid: GridSpec, window: Window):
 
     Keyed by BOTH handednesses so it serves the batter prior (group/p_hand) and the pitcher
     usage prior (group/b_hand). Returns p_hand, b_hand, pgroup, ix, iz, n_pitches, lg_rv,
-    n_swings, n_whiffs, lg_xwoba_con.
+    lg_rv_swing (swing-conditional), n_swings, n_whiffs, lg_xwoba_con.
     """
     sql = _binned_cte(grid, _read(window.years), window,
                       "pitcher_hand AS p_hand, batter_hand AS b_hand") + """
     SELECT p_hand, b_hand, pgroup, ix, iz,
-           count(*)                                 AS n_pitches,
-           avg(delta_run_exp)                       AS lg_rv,
-           sum(is_swing)                            AS n_swings,
-           sum(is_whiff)                            AS n_whiffs,
-           avg(CASE WHEN is_bip = 1 THEN xwoba END) AS lg_xwoba_con
+           count(*)                                                AS n_pitches,
+           avg(delta_run_exp)                                      AS lg_rv,
+           avg(CASE WHEN is_swing = 1 THEN delta_run_exp END)      AS lg_rv_swing,
+           sum(is_swing)                                           AS n_swings,
+           sum(is_whiff)                                           AS n_whiffs,
+           avg(CASE WHEN is_bip = 1 THEN xwoba END)               AS lg_xwoba_con
     FROM binned
     WHERE p_hand IN ('L', 'R') AND b_hand IN ('L', 'R')
     GROUP BY 1, 2, 3, 4, 5

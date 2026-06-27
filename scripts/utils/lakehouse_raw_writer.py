@@ -1,0 +1,210 @@
+"""
+lakehouse_raw_writer.py  (E11.1-W3pre lakehouse decommission)
+-------------------------------------------------------------
+Shared S3-parquet equivalent of snowflake_loader.append_raw_rows().
+
+THE CHOKEPOINT MOVE
+  snowflake_loader.append_raw_rows(table_fqn, rows, conn) inserts raw rows into a
+  Snowflake VARIANT table (raw_json wrapped in PARSE_JSON). This module provides the
+  S3/lakehouse twin so the odds/staging WRITERS can stop writing Snowflake without each
+  re-implementing parquet/S3 plumbing. A writer flips by calling append_raw_rows_lakehouse()
+  with a `source` name and a mode (snowflake | s3 | both) instead of inserting directly.
+
+WHY raw_json stays a JSON STRING (not a typed/nested parquet column)
+  The dbt staging models flatten this JSON in their duckdb branch with DuckDB JSON
+  functions (from_json / json_extract / json_extract_string — see W3pre stg_oddsapi_*,
+  stg_statsapi_games duckdb branches). A VARCHAR JSON column is schema-stable across
+  every snapshot and every source (live-writer rows and one-time Snowflake→S3 export
+  rows produce byte-identical layout), so the flatten reads a single uniform parquet.
+  This mirrors Snowflake's TO_JSON(raw_json) and avoids parquet schema drift.
+
+S3 LAYOUT (date sub-partitions for incremental glob + the W2 hardened pre-flight)
+  s3://baseball-betting-ml-artifacts/baseball/lakehouse_raw/<source>/dt=YYYY-MM-DD/part-<uuid>.parquet
+  Append-only: each call writes a NEW part file (unique uuid), exactly like Snowflake's
+  append model — snapshot multiplicity is collapsed downstream by the same row_number()/
+  qualify dedup the Snowflake staging already uses. The runner globs **/*.parquet.
+  mode='overwrite_partition' (for idempotent re-exports) deletes the dt= partition first
+  so a re-run can't leave a stale double-counting part (the W2 re-ingest dupe class).
+
+PUBLIC API
+  raw_lakehouse_loc(source)                         -> s3 prefix for a source
+  rows_to_arrow_table(rows, json_cols)              -> pyarrow.Table (pure; unit-tested)
+  write_raw_rows_s3(source, rows, mode, ...)        -> int rows written
+  append_raw_rows_lakehouse(table_fqn, source, rows, conn=None, mode=None) -> dispatcher
+
+Auth: AWS via boto3 default credential chain (same as ingest_statcast_to_s3.py). Snowflake
+leg (mode in {snowflake, both}) reuses snowflake_loader.append_raw_rows.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import logging
+import os
+import uuid
+from collections import defaultdict
+from datetime import datetime, timezone
+
+import pyarrow as pa
+import pyarrow.parquet as pq
+
+log = logging.getLogger(__name__)
+
+# ── S3 location (mirrors lakehouse_loc() macro; RAW tier is a sibling of lakehouse/) ──
+BUCKET = "baseball-betting-ml-artifacts"
+RAW_PREFIX = "baseball/lakehouse_raw"
+REGION = "us-east-2"
+
+# Columns serialised to a JSON string (superset of snowflake_loader._JSON_COLS so the
+# Snowflake and S3 legs accept identical row dicts). 'json_field' is monthly_schedule's
+# VARIANT column. A value that is ALREADY a JSON string passes through unchanged (the
+# Snowflake→S3 export emits TO_JSON(...) strings); only dict/list values are dumped.
+_JSON_COLS = frozenset({"raw_json", "request_params", "json_field"})
+
+# Valid raw sources (the W3pre scope). Keep in sync with the export + runner + DDL gen.
+RAW_SOURCES = frozenset({
+    "mlb_odds_raw",
+    "mlb_events_raw",
+    "derivative_odds_raw",
+    "monthly_schedule",
+    "odds_snapshots_historical",
+})
+
+_VALID_MODES = frozenset({"snowflake", "s3", "both"})
+
+
+def raw_lakehouse_loc(source: str) -> str:
+    """S3 prefix (directory, trailing slash) for a raw source's parquet."""
+    return f"s3://{BUCKET}/{RAW_PREFIX}/{source}/"
+
+
+def _partition_date(row: dict) -> str:
+    """dt= partition key for a row: the ingestion_ts date, else today (UTC)."""
+    ts = row.get("ingestion_ts")
+    if isinstance(ts, datetime):
+        return ts.date().isoformat()
+    if isinstance(ts, str) and len(ts) >= 10:
+        return ts[:10]
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def rows_to_arrow_table(rows: list[dict], json_cols: frozenset = _JSON_COLS) -> pa.Table:
+    """Build a pyarrow.Table from raw row dicts (PURE — no IO; unit-tested offline).
+
+    JSON columns are serialised to a JSON string. ingestion_ts is stamped (UTC now) when
+    absent so the S3 column matches Snowflake's DDL DEFAULT CURRENT_TIMESTAMP. Column order
+    is taken from the first row; every row is normalised to that column set.
+    """
+    if not rows:
+        raise ValueError("rows_to_arrow_table called with no rows")
+
+    columns = list(rows[0].keys())
+    if "ingestion_ts" not in columns:
+        columns = ["ingestion_ts"] + columns
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    data: dict[str, list] = {c: [] for c in columns}
+    for row in rows:
+        for col in columns:
+            if col == "ingestion_ts":
+                v = row.get("ingestion_ts") or now_iso
+                data[col].append(v.isoformat() if isinstance(v, datetime) else str(v))
+            elif col in json_cols:
+                v = row.get(col)
+                data[col].append(json.dumps(v) if not isinstance(v, str) and v is not None else v)
+            else:
+                data[col].append(row.get(col))
+    # Force every column to string/utf8 EXCEPT ingestion_ts? No — keep scalars native so
+    # numeric metadata (x_requests_used) stays numeric; pyarrow infers per-column type.
+    return pa.Table.from_pydict(data)
+
+
+def _make_s3_client():
+    import boto3
+    return boto3.client("s3", region_name=os.environ.get("AWS_DEFAULT_REGION", REGION))
+
+
+def _delete_partition(s3, source: str, dt: str) -> None:
+    prefix = f"{RAW_PREFIX}/{source}/dt={dt}/"
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=BUCKET, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            s3.delete_object(Bucket=BUCKET, Key=obj["Key"])
+
+
+def write_raw_rows_s3(
+    source: str,
+    rows: list[dict],
+    *,
+    mode: str = "append",
+    s3_client=None,
+) -> int:
+    """Write raw rows to S3 parquet under the source's lakehouse_raw prefix.
+
+    mode='append'              : one new part-<uuid>.parquet per dt= partition (live writers).
+    mode='overwrite_partition' : delete each touched dt= partition first (idempotent re-export).
+    Returns the number of rows written.
+    """
+    if source not in RAW_SOURCES:
+        raise ValueError(f"Unknown raw source '{source}'. Valid: {sorted(RAW_SOURCES)}")
+    if not rows:
+        return 0
+
+    s3 = s3_client or _make_s3_client()
+
+    # Group rows by dt= partition so each file lands in the right partition.
+    by_dt: dict[str, list[dict]] = defaultdict(list)
+    for row in rows:
+        by_dt[_partition_date(row)].append(row)
+
+    written = 0
+    for dt, dt_rows in by_dt.items():
+        if mode == "overwrite_partition":
+            _delete_partition(s3, source, dt)
+        table = rows_to_arrow_table(dt_rows)
+        buf = io.BytesIO()
+        pq.write_table(table, buf, compression="snappy")
+        buf.seek(0)
+        key = f"{RAW_PREFIX}/{source}/dt={dt}/part-{uuid.uuid4().hex[:12]}.parquet"
+        s3.put_object(Bucket=BUCKET, Key=key, Body=buf.getvalue())
+        log.info("  wrote %d rows → s3://%s/%s", len(dt_rows), BUCKET, key)
+        written += len(dt_rows)
+    return written
+
+
+def append_raw_rows_lakehouse(
+    table_fqn: str,
+    source: str,
+    rows: list[dict],
+    conn=None,
+    mode: str | None = None,
+) -> int:
+    """Dispatcher the odds/staging writers call to flip Snowflake → S3 via the shared util.
+
+    mode resolution: explicit arg → env LAKEHOUSE_RAW_WRITE_MODE → default 'snowflake'.
+    The default is NON-BREAKING (current behaviour) so importing this module changes
+    nothing until a writer/operator opts in. Rollout: 'both' (dual-write, validate parity)
+    → 's3' (Snowflake leg retired). 'snowflake'/'both' require a live `conn`.
+
+    Returns rows written on the PRIMARY leg (s3 for s3/both, snowflake for snowflake).
+    """
+    mode = (mode or os.environ.get("LAKEHOUSE_RAW_WRITE_MODE", "snowflake")).lower()
+    if mode not in _VALID_MODES:
+        raise ValueError(f"LAKEHOUSE_RAW_WRITE_MODE='{mode}' invalid; expected one of {sorted(_VALID_MODES)}")
+    if not rows:
+        return 0
+
+    n_sf = n_s3 = 0
+    if mode in ("snowflake", "both"):
+        if conn is None:
+            raise ValueError(f"mode='{mode}' needs a Snowflake conn for {table_fqn}")
+        try:  # 'utils.' path under pytest (pythonpath=scripts); bare under script runtime
+            from utils.snowflake_loader import append_raw_rows
+        except ImportError:
+            from snowflake_loader import append_raw_rows
+        n_sf = append_raw_rows(table_fqn, rows, conn)
+    if mode in ("s3", "both"):
+        n_s3 = write_raw_rows_s3(source, rows, mode="append")
+
+    return n_s3 if mode in ("s3", "both") else n_sf

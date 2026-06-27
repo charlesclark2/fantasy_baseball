@@ -1,42 +1,47 @@
 #!/usr/bin/env python3
-"""Pull recent Dagster+ runs of a job; print per-run status + failed steps.
+"""Pull recent Dagster runs of a job; print per-run status + failed steps.
 
-Reads DAGSTER_CLOUD_API_TOKEN from .env (repo root) or the environment; the
-token is never printed. Deployment: penumbra-partners.dagster.plus, prod.
+Targets the self-hosted OSS Dagster on the AWS box (INC-16). Endpoint + auth are
+env-configurable:
+    DAGSTER_GRAPHQL_URL   default https://dagster.credencesports.com/graphql
+                          (on the box, set http://localhost:3000/graphql — no auth)
+    Auth, in priority order:
+      • *.dagster.plus URL + DAGSTER_CLOUD_API_TOKEN → Dagster-Cloud-Api-Token (legacy)
+      • DAGIT_BASIC_AUTH_USER + DAGIT_BASIC_AUTH_PASSWORD → HTTP Basic (through Caddy)
+      • neither → no auth (localhost on the box)
+Secrets are never printed.
 
 Usage:
     python3 scripts/ops/dagster_runs.py [job] [limit]
     # e.g. python3 scripts/ops/dagster_runs.py lineup_monitor_job 12
 """
+import base64
 import datetime
 import json
 import os
-import pathlib
 import sys
 import urllib.request
 
 JOB = sys.argv[1] if len(sys.argv) > 1 else "daily_ingestion_job"
 LIMIT = int(sys.argv[2]) if len(sys.argv) > 2 else 10
-ENDPOINT = "https://penumbra-partners.dagster.plus/prod/graphql"
+ENDPOINT = os.environ.get("DAGSTER_GRAPHQL_URL", "https://dagster.credencesports.com/graphql")
 
 
-def _load_token() -> str:
+def _headers() -> dict:
+    """Build request headers for the configured Dagster GraphQL endpoint."""
+    h = {"Content-Type": "application/json"}
     tok = os.environ.get("DAGSTER_CLOUD_API_TOKEN")
-    if tok:
-        return tok.strip()
-    # Walk up from this file to find a .env (repo root), independent of CWD.
-    here = pathlib.Path(__file__).resolve()
-    for parent in [pathlib.Path.cwd(), *here.parents]:
-        env = parent / ".env"
-        if env.is_file():
-            for line in env.read_text().splitlines():
-                if line.startswith("DAGSTER_CLOUD_API_TOKEN="):
-                    return line.split("=", 1)[1].strip().strip('"').strip("'")
-    sys.exit("DAGSTER_CLOUD_API_TOKEN not found in env or .env")
+    if tok and "dagster.plus" in ENDPOINT:          # legacy Dagster+ Cloud
+        h["Dagster-Cloud-Api-Token"] = tok.strip()
+        return h
+    user = os.environ.get("DAGIT_BASIC_AUTH_USER")
+    pw = os.environ.get("DAGIT_BASIC_AUTH_PASSWORD")
+    if user and pw:                                  # self-hosted behind Caddy basic-auth
+        h["Authorization"] = "Basic " + base64.b64encode(f"{user}:{pw}".encode()).decode()
+    return h                                         # else: no auth (localhost on the box)
 
 
 def main() -> None:
-    token = _load_token()
     query = (
         "query($f: RunsFilter, $n: Int){ runsOrError(filter:$f, limit:$n){ __typename "
         "... on Runs { results { runId status startTime endTime "
@@ -44,10 +49,7 @@ def main() -> None:
         "... on PythonError { message } } }"
     )
     body = json.dumps({"query": query, "variables": {"f": {"pipelineName": JOB}, "n": LIMIT}}).encode()
-    req = urllib.request.Request(
-        ENDPOINT, data=body,
-        headers={"Dagster-Cloud-Api-Token": token, "Content-Type": "application/json"},
-    )
+    req = urllib.request.Request(ENDPOINT, data=body, headers=_headers())
     d = json.loads(urllib.request.urlopen(req, timeout=30).read())
 
     node = d.get("data", {}).get("runsOrError", {})
