@@ -61,11 +61,17 @@ jobs:
       - name: Validate code location loads (catches import/boot breaks)
         env:
           DAGSTER_HOME: /tmp/dagster_home
+          # pipeline/resources reads these four at IMPORT to construct the
+          # SnowflakeResource config dict (it never connects during validate), so
+          # non-secret placeholders let the defs load. SNOWFLAKE_PRIVATE_KEY is
+          # left unset → no key file written, normalize skipped. A real boot/import
+          # break (INC-15 class) still fails here.
+          SNOWFLAKE_ACCOUNT: ci-placeholder
+          SNOWFLAKE_USER: ci-placeholder
+          SNOWFLAKE_WAREHOUSE: ci-placeholder
+          SNOWFLAKE_ROLE: ci-placeholder
         run: |
           mkdir -p /tmp/dagster_home
-          # defs build at import of pipeline/__init__.py; resources normalize an
-          # (empty in CI) SNOWFLAKE_PRIVATE_KEY without connecting, so this loads
-          # without real creds — a boot/import break (INC-15 class) fails here.
           uv run dagster definitions validate -f pipeline/__init__.py
 
   compose-validate:
@@ -73,6 +79,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Seed .env for compose (env_file path must exist; .env is gitignored)
+        # The compose `env_file: [.env]` + `${VAR}` interpolation both resolve from
+        # services/dagster/aws/ — the real .env lives only on the box. Copy the
+        # committed template so `config` has a present, fully-keyed file (this also
+        # silences the DAGSTER_PG_PASSWORD interpolation warnings). Placeholder
+        # values are fine: `config`/`build` never run the containers.
+        run: cp services/dagster/aws/.env.example services/dagster/aws/.env
       - name: Validate compose (YAML + interpolation)
         run: docker compose -f services/dagster/aws/docker-compose.yml config -q
       - name: Build lean images (dbt-runner + captures — catch Dockerfile/entrypoint breaks)
