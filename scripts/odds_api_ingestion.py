@@ -131,6 +131,34 @@ HIST_ODDS_DEFAULT_START = date(2023, 1, 1)
 SOURCE_SYSTEM = "the_odds_api"
 PROCESS_NAME  = "odds_api_ingestion.py"
 
+
+# ── E11.1-W3pre: S3 lakehouse mirror ────────────────────────────────────────────
+# This writer is being migrated to write the S3 lakehouse_raw/ tier (which the dual-branch
+# stg_oddsapi_* models flatten in DuckDB) instead of Snowflake. The switch is driven by the
+# shared keystone (scripts/utils/lakehouse_raw_writer) and gated by env so the cutover is
+# safe and reversible:
+#   LAKEHOUSE_RAW_WRITE_MODE = snowflake (DEFAULT) → unchanged: Snowflake only, no S3
+#                            = both                → dual-write (validate parity, then…)
+#                            = s3                  → S3 only (Snowflake leg retired)
+# Default 'snowflake' means importing/running this file is a no-op change until the operator
+# opts in — the mirror code below stays dead. ⚠️ mlb_odds_raw feeds the SERVING-critical
+# mart_odds_outcomes, so flip to 's3' only AFTER parity_check_w3pre is GREEN.
+
+def _lakehouse_write_mode() -> str:
+    return os.environ.get("LAKEHOUSE_RAW_WRITE_MODE", "snowflake").lower()
+
+
+def _mirror_raw_to_lakehouse(source: str, rows: list[dict]) -> None:
+    """Mirror raw rows to S3 lakehouse_raw/<source>/ via the shared keystone. Rows carry
+    NATIVE types (int credits, dict raw_json/request_params, datetime ingestion_ts) so the
+    parquet schema matches scripts/export_odds_raw_to_s3.py exactly (no union_by_name drift).
+    Local import keeps boto3/pyarrow off the default Snowflake-only path."""
+    if not rows:
+        return
+    from utils.lakehouse_raw_writer import write_raw_rows_s3
+    n = write_raw_rows_s3(source, rows, mode="append")
+    log.info("  mirrored %d raw row(s) → S3 lakehouse_raw/%s/", n, source)
+
 # Production defaults — all four are overridable via env vars at startup.
 _DEFAULT_DATABASE     = "baseball_data"
 _DEFAULT_SCHEMA       = "oddsapi"
@@ -630,30 +658,45 @@ def run_events(
         )
         return
 
-    try:
-        insert_event_row(
-            conn,
-            target               = target,
-            ingestion_ts         = ingestion_ts,
-            load_id              = load_id,
-            source_endpoint      = EVENTS_ENDPOINT,
-            request_url          = result.url,
-            request_params       = params,
-            http_status_code     = result.status_code,
-            x_requests_used      = result.requests_used,
-            x_requests_remaining = result.requests_remaining,
-            raw_json             = result.payload,
-            event_id             = None,
-            sport_key            = None,
-            sport_title          = None,
-            commence_time        = None,
-            home_team            = None,
-            away_team            = None,
-        )
-        log.info("Events ingest complete — 1 row inserted, %d event(s) in payload (load_id=%s)",
-                 event_count, load_id)
-    except Exception as exc:
-        log.error("Snowflake write failed: %s", exc)
+    write_mode = _lakehouse_write_mode()             # E11.1-W3pre
+    if write_mode in ("snowflake", "both"):
+        try:
+            insert_event_row(
+                conn,
+                target               = target,
+                ingestion_ts         = ingestion_ts,
+                load_id              = load_id,
+                source_endpoint      = EVENTS_ENDPOINT,
+                request_url          = result.url,
+                request_params       = params,
+                http_status_code     = result.status_code,
+                x_requests_used      = result.requests_used,
+                x_requests_remaining = result.requests_remaining,
+                raw_json             = result.payload,
+                event_id             = None,
+                sport_key            = None,
+                sport_title          = None,
+                commence_time        = None,
+                home_team            = None,
+                away_team            = None,
+            )
+            log.info("Events ingest (Snowflake) — 1 row, %d event(s) in payload (load_id=%s)",
+                     event_count, load_id)
+        except Exception as exc:
+            log.error("Snowflake write failed: %s", exc)
+    if write_mode in ("s3", "both"):
+        # The events stg reads only ingestion_ts, load_id, x_requests_*, raw_json (the array).
+        try:
+            _mirror_raw_to_lakehouse("mlb_events_raw", [{
+                "ingestion_ts":         ingestion_ts,
+                "load_id":              load_id,
+                "x_requests_used":      result.requests_used,
+                "x_requests_remaining": result.requests_remaining,
+                "raw_json":             result.payload,
+            }])
+            log.info("Events ingest (S3 lakehouse) — 1 row mirrored (load_id=%s)", load_id)
+        except Exception as exc:
+            log.error("S3 lakehouse mirror failed (load_id=%s): %s", load_id, exc)
 
 
 def run_odds(
@@ -679,10 +722,12 @@ def run_odds(
     # once briefly instead of staying hot for the whole fetch loop. Each row carries its
     # own call's url/params/credits, so a single bulk write preserves per-call metadata.
     buffer: list[tuple] = []
+    write_mode   = _lakehouse_write_mode()           # E11.1-W3pre
+    mirror_buffer: list[dict] = []                   # stg-shaped dicts for the S3 mirror
 
     log.info(
-        "Odds ingest → %s  %d market(s) × %d region(s) = %d call(s)  load_id=%s",
-        target.qualified_name, len(markets), len(regions), total_calls, load_id,
+        "Odds ingest → %s  %d market(s) × %d region(s) = %d call(s)  load_id=%s  write_mode=%s",
+        target.qualified_name, len(markets), len(regions), total_calls, load_id, write_mode,
     )
 
     for market in markets:
@@ -735,21 +780,40 @@ def run_odds(
                     event                = event,
                     bookmakers_count     = len(bookmakers) if isinstance(bookmakers, list) else None,
                 ))
+                if write_mode in ("s3", "both"):       # E11.1-W3pre: only the cols stg reads
+                    mirror_buffer.append({
+                        "ingestion_ts":         ingestion_ts,
+                        "load_id":              load_id,
+                        "request_params":       params,
+                        "x_requests_used":      result.requests_used,
+                        "x_requests_remaining": result.requests_remaining,
+                        "raw_json":             event,
+                    })
 
             log.info("  %d event(s) buffered (%d total)", len(events), len(buffer))
             time.sleep(REQUEST_DELAY)
 
     if dry_run:
-        log.info("[DRY RUN] Odds ingest complete — no Snowflake writes performed (load_id=%s)", load_id)
+        log.info("[DRY RUN] Odds ingest complete — no writes performed (load_id=%s)", load_id)
         return
 
-    try:
-        written = bulk_insert_odds_rows(conn, target=target, rows=buffer)
-        log.info("Odds ingest complete — %d row(s) written in 1 bulk insert (load_id=%s)",
-                 written, load_id)
-    except Exception as exc:
-        log.error("Snowflake bulk write failed (%d buffered row(s), load_id=%s): %s",
-                  len(buffer), load_id, exc)
+    # E11.1-W3pre: Snowflake leg (skipped when write_mode='s3') + S3 lakehouse leg.
+    if write_mode in ("snowflake", "both"):
+        try:
+            written = bulk_insert_odds_rows(conn, target=target, rows=buffer)
+            log.info("Odds ingest (Snowflake) — %d row(s) in 1 bulk insert (load_id=%s)",
+                     written, load_id)
+        except Exception as exc:
+            log.error("Snowflake bulk write failed (%d buffered row(s), load_id=%s): %s",
+                      len(buffer), load_id, exc)
+    if write_mode in ("s3", "both"):
+        try:
+            _mirror_raw_to_lakehouse("mlb_odds_raw", mirror_buffer)
+            log.info("Odds ingest (S3 lakehouse) — %d row(s) mirrored (load_id=%s)",
+                     len(mirror_buffer), load_id)
+        except Exception as exc:
+            log.error("S3 lakehouse mirror failed (%d row(s), load_id=%s): %s",
+                      len(mirror_buffer), load_id, exc)
 
 
 # ── Historical events helpers ─────────────────────────────────────────────────

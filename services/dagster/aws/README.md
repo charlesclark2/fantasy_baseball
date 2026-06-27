@@ -241,10 +241,15 @@ aws ec2 authorize-security-group-ingress --group-id $SG --protocol tcp --port 44
 **Caddy basic-auth secret** (operator decision: basic-auth + SG allowlist):
 ```bash
 docker run --rm caddy:2 caddy hash-password --plaintext 'CHOOSE_A_STRONG_PASSWORD'
-# put the user + the printed hash in services/dagster/aws/.env (AS-IS, no $-escaping):
+# put the user + the printed hash in services/dagster/aws/.env:
 #   DAGIT_HOSTNAME=dagster.credencesports.com
 #   DAGIT_BASIC_AUTH_USER=charlie
-#   DAGIT_BASIC_AUTH_HASH=$2a$14$....
+#   DAGIT_BASIC_AUTH_HASH=$$2a$$14$$....   # ⚠️ DOUBLE every $ → $$
+# ⚠️ GOTCHA (verified 2026-06-26): docker-compose interpolates env_file values, so a
+# bcrypt hash with single `$` arrives MANGLED in the container (Caddy then 401s every
+# login). DOUBLE every `$` in the .env hash ($2a$14$… → $$2a$$14$$…); compose collapses
+# $$→$ so Caddy sees the real 60-char hash. Verify: `docker compose exec caddy printenv
+# DAGIT_BASIC_AUTH_HASH | wc -c` must be 61 (60 + newline), single-$, starts $2a$14$.
 docker compose -f services/dagster/aws/docker-compose.yml up -d caddy
 docker compose -f services/dagster/aws/docker-compose.yml logs caddy | grep -i "certificate obtained\|serving"
 ```

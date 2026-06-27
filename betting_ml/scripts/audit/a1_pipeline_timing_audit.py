@@ -27,6 +27,7 @@ Required environment variables:
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import sys
@@ -171,14 +172,18 @@ def _dagster_request(
     variables: dict[str, Any],
     label: str = "",
 ) -> dict[str, Any]:
-    deployment = _deployment_name_from_url(url)
-    headers = {
-        "Content-Type": "application/json",
-        "Dagster-Cloud-Api-Token": token,
+    headers = {"Content-Type": "application/json"}
+    if "dagster.plus" in url or "dagster.cloud" in url:   # legacy Dagster+ Cloud
+        deployment = _deployment_name_from_url(url)
+        headers["Dagster-Cloud-Api-Token"] = token
         # Required by Dagster Plus to route to the correct deployment
-        "Dagster-Cloud-Scope": "deployment",
-        "Dagster-Cloud-Deployment": deployment,
-    }
+        headers["Dagster-Cloud-Scope"] = "deployment"
+        headers["Dagster-Cloud-Deployment"] = deployment
+    else:                                                  # self-hosted OSS (INC-16): Caddy basic-auth / none
+        ba_user = os.environ.get("DAGIT_BASIC_AUTH_USER")
+        ba_pw = os.environ.get("DAGIT_BASIC_AUTH_PASSWORD")
+        if ba_user and ba_pw:
+            headers["Authorization"] = "Basic " + base64.b64encode(f"{ba_user}:{ba_pw}".encode()).decode()
     payload = {"query": query, "variables": variables}
     resp = requests.post(f"{url.rstrip('/')}/graphql", headers=headers, json=payload, timeout=60)
     # Dagster Plus returns HTTP 400 for GraphQL validation errors; parse body before raising
@@ -950,8 +955,10 @@ def main() -> None:
     dagster_available = False
     run_records: list[dict[str, Any]] = []
 
-    if not args.skip_dagster and args.dagster_url and args.dagster_token:
-        print(f"Querying Dagster Cloud: {args.dagster_url} …", file=sys.stderr)
+    _is_cloud = bool(args.dagster_url) and ("dagster.plus" in args.dagster_url or "dagster.cloud" in args.dagster_url)
+    # Self-hosted OSS (INC-16) needs no token — auth is Caddy basic-auth (env) or none.
+    if not args.skip_dagster and args.dagster_url and (args.dagster_token or not _is_cloud):
+        print(f"Querying Dagster: {args.dagster_url} …", file=sys.stderr)
         try:
             runs = fetch_dagster_runs(args.dagster_url, args.dagster_token, args.days)
             run_records = build_run_timing(runs)

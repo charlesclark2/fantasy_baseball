@@ -58,10 +58,11 @@ def build_overlay(batter_val: pd.DataFrame, pitcher_freq: pd.DataFrame, *,
                         & (pitcher_freq["vs_b_hand"] == b_hand)]
 
     # Dense per-group arrays.
-    val, whf, xwo, frq, lx, lz = {}, {}, {}, {}, {}, {}
+    val, swv, whf, xwo, frq, lx, lz = {}, {}, {}, {}, {}, {}, {}
     for g in PITCH_GROUPS:
         bg, pg = bsel[bsel["pgroup"] == g], psel[psel["pgroup"] == g]
         val[g] = _dense(bg, "value", grid)
+        swv[g] = _dense(bg, "swing_value", grid)
         whf[g] = _dense(bg, "whiff_rate", grid)
         xwo[g] = _dense(bg, "xwoba_con", grid)
         frq[g] = _dense(pg, "freq", grid, fill=0.0)
@@ -74,7 +75,7 @@ def build_overlay(batter_val: pd.DataFrame, pitcher_freq: pd.DataFrame, *,
         num = np.nansum([np.nan_to_num(maps[g]) * np.nan_to_num(frq[g]) for g in PITCH_GROUPS], axis=0)
         with np.errstate(invalid="ignore", divide="ignore"):
             return np.where(freq_all > 0, num / freq_all, np.nan)
-    val["ALL"], whf["ALL"], xwo["ALL"] = _wavg(val), _wavg(whf), _wavg(xwo)
+    val["ALL"], swv["ALL"], whf["ALL"], xwo["ALL"] = _wavg(val), _wavg(swv), _wavg(whf), _wavg(xwo)
     frq["ALL"] = freq_all
     lx["ALL"], lz["ALL"] = _wavg(lx), _wavg(lz)
 
@@ -91,7 +92,9 @@ def build_overlay(batter_val: pd.DataFrame, pitcher_freq: pd.DataFrame, *,
                     "pitch_group": GROUP_NAME[g], "ix": ix, "iz": iz,
                     "x_ft": round(cx, 4), "z_norm": round(cz, 4),
                     "z_ft": round(_z_ft(cz, sz_top, sz_bot), 4),
-                    "batter_run_value": _num(val[g][iz, ix]),
+                    # swing_value = delta_run_exp conditioned on swings (excludes called balls/strikes).
+                    # This is what drives the cell color — red=batter handles swings well, blue=struggles.
+                    "batter_run_value": _num(swv[g][iz, ix]),
                     "batter_whiff": _num(whf[g][iz, ix]),
                     "batter_xwoba": _num(xwo[g][iz, ix]),
                     "pitcher_usage_freq": _num(frq[g][iz, ix], 5),
