@@ -81,7 +81,25 @@ W3PRE_RAW = {
     "stg_oddsapi_odds":    ("mlb_odds_raw",       "load_id || '|' || json_extract_string(raw_json, '$.id')"),
     "stg_oddsapi_events":  ("mlb_events_raw",     "load_id"),
     "stg_derivative_odds": ("derivative_odds_raw", "load_id || '|' || event_id"),
-    "stg_statsapi_games":  ("monthly_schedule",   "ingestion_ts"),
+    "stg_statsapi_games":  ("monthly_schedule",   "ingestion_ts"),  # key UNUSED — see W3PRE_SOURCE_FQN
+}
+
+# Sources whose Snowflake raw table legitimately has MULTIPLE rows per declared natural key,
+# so count(*)==count(DISTINCT key) self-uniqueness is the wrong invariant (it fails on a perfect
+# export). The staging flatten dedups these downstream. Confirmed against the live source:
+#   • monthly_schedule  — 1,712 rows / 1,657 distinct (ts,content); 134 NULL-ts historical rows
+#     (25k+ game_pks found nowhere else), only 79 distinct content.
+#   • mlb_odds_raw       — 4.0 rows per (load_id, event): one raw row per region×market API call
+#     (us/us2 × h2h/totals/…); stg_oddsapi_odds dedups bookmaker×market×outcome.
+#   • mlb_events_raw     — ~1.008 rows per load_id (occasional re-fetch/retry of the events list).
+# For these the dupe guard instead asserts the export preserved ~the source row count: a doubled
+# partition inflates parquet ABOVE source; legitimate source dupes (and small post-export raw
+# drift, which shows as parquet slightly BELOW source) mirror on both sides. derivative_odds_raw
+# is genuinely 1-per-(load,event) → it stays on the strict self-uniqueness check.
+W3PRE_SOURCE_FQN = {
+    "monthly_schedule": "baseball_data.statsapi.monthly_schedule",
+    "mlb_odds_raw":     "baseball_data.oddsapi.mlb_odds_raw",
+    "mlb_events_raw":   "baseball_data.oddsapi.mlb_events_raw",
 }
 
 
@@ -133,13 +151,19 @@ def raw_glob(source: str) -> str:
     return f"s3://{_S3_BUCKET}/{_S3_RAW_PREFIX}/{source}/**/*.parquet"
 
 
-def preflight_raw_integrity(duck, models: list[str]) -> bool:
+def preflight_raw_integrity(duck, sf, models: list[str]) -> bool:
     """HARD pre-flight on the RAW tier before trusting any stg parity.
 
     Adapts the W2 hardened guard to the dt=/part-<uuid> append layout: a re-export run in
     mode='append' (rather than 'overwrite_partition') would write a SECOND part file with
     the same rows into a dt= partition → the **/*.parquet glob double-counts that day and
-    inflates the flattened stg. Catch it by comparing raw row count to distinct raw key.
+    inflates the flattened stg.
+
+    Two strategies:
+      • default — compare raw row count to distinct raw natural key (self-uniqueness).
+      • W3PRE_SOURCE_FQN sources (legitimate source dupes, e.g. monthly_schedule) — compare
+        parquet row count to the Snowflake SOURCE row count; a doubled partition inflates the
+        parquet above source, while genuine source dupes mirror on both sides.
     """
     print("\n── PRE-FLIGHT: RAW tier integrity (lakehouse_raw/) ──")
     ok = True
@@ -150,6 +174,28 @@ def preflight_raw_integrity(duck, models: list[str]) -> bool:
             continue
         seen.add(source)
         try:
+            if source in W3PRE_SOURCE_FQN:
+                parquet_n = duck.execute(
+                    f"SELECT count(*) FROM read_parquet('{raw_glob(source)}', union_by_name=true)"
+                ).fetchone()[0]
+                cur = sf.cursor()
+                cur.execute(f"SELECT count(*) FROM {W3PRE_SOURCE_FQN[source]}")
+                source_n = cur.fetchone()[0]
+                cur.close()
+                if parquet_n > source_n:
+                    ok = False
+                    print(f"  ❌ {source}: parquet {parquet_n:,} rows > Snowflake source "
+                          f"{source_n:,} → a partition was doubled.")
+                    print(f"     FIX: re-export with mode='overwrite_partition', or "
+                          f"aws s3 rm the duplicate part-<uuid>.parquet.")
+                elif parquet_n < source_n:
+                    print(f"  ⚠️  {source}: parquet {parquet_n:,} rows < Snowflake source "
+                          f"{source_n:,} (partial export / --since subset — OK if not a full backfill)")
+                else:
+                    print(f"  ✅ {source}: {parquet_n:,} rows == Snowflake source "
+                          f"(no doubled partition; legitimate source dupes mirrored)")
+                continue
+
             n, ndistinct = duck.execute(
                 f"SELECT count(*), count(DISTINCT ({key_expr})) "
                 f"FROM read_parquet('{raw_glob(source)}', union_by_name=true)"
@@ -300,7 +346,7 @@ def main():
     duck = get_duckdb_conn()
     sf = get_snowflake_conn()
 
-    if not preflight_raw_integrity(duck, models):
+    if not preflight_raw_integrity(duck, sf, models):
         print("\n❌ PRE-FLIGHT FAILED — fix the RAW tier before trusting stg parity. "
               "Aborting (the stg deltas below would be raw-source artifacts, not transform diffs).")
         sf.close(); duck.close()

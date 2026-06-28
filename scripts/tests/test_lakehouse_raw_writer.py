@@ -53,6 +53,47 @@ def test_ingestion_ts_preserved_when_present():
     assert d["ingestion_ts"][0] == "2026-05-11T16:31:37"
 
 
+def test_explicit_null_ingestion_ts_is_preserved_not_stamped():
+    """Historical-backfill rows carry an EXPLICIT NULL ingestion_ts (key present, value None).
+    It must survive as NULL (matches Snowflake) — NOT be stamped now() like a key-ABSENT live
+    row — else the value mismatches and the staging 'order by ingestion_ts desc nulls last'
+    dedup picks the wrong row (silent data loss)."""
+    rows = [{"ingestion_ts": None, "json_field": {"dates": []}}]
+    d = rows_to_arrow_table(rows).to_pydict()
+    assert d["ingestion_ts"][0] is None
+    # key ABSENT still stamps (live-writer DEFAULT CURRENT_TIMESTAMP semantics).
+    d2 = rows_to_arrow_table([{"json_field": {"dates": []}}]).to_pydict()
+    assert d2["ingestion_ts"][0]
+
+
+def test_all_null_ingestion_ts_batch_stays_utf8_typed():
+    """An all-NULL batch (a __nullts__ partition) must NOT infer arrow 'null' type, or its
+    parquet drifts from the utf8 ingestion_ts of dated partitions under the union_by_name glob."""
+    import pyarrow as pa
+    rows = [{"ingestion_ts": None, "json_field": {"a": 1}},
+            {"ingestion_ts": None, "json_field": {"a": 2}}]
+    assert rows_to_arrow_table(rows).schema.field("ingestion_ts").type == pa.string()
+
+
+def test_null_ingestion_ts_routes_to_sentinel_partition():
+    puts = []
+
+    class FakeS3:
+        def put_object(self, Bucket, Key, Body):
+            puts.append(Key)
+
+        def get_paginator(self, _):
+            class P:
+                def paginate(self, **kw):
+                    return iter([{}])
+            return P()
+
+    rows = [{"ingestion_ts": None, "json_field": {"dates": []}}]
+    n = write_raw_rows_s3("monthly_schedule", rows, mode="overwrite_partition", s3_client=FakeS3())
+    assert n == 1
+    assert any("dt=__nullts__/" in k for k in puts)
+
+
 def test_parquet_roundtrips_through_duckdb_triple_flatten(tmp_path):
     """The end-to-end contract: writer parquet → DuckDB flatten → correct outcome rows."""
     rows = [{"ingestion_ts": "2026-06-25T23:02:00", "load_id": "L1", "raw_json": _ODDS_JSON}]

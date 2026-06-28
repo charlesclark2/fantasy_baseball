@@ -37,8 +37,10 @@ self-host cost is held RAM, not run-minutes — so extending this op is now both
 free and the safest ordering.)
 """
 
+import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
@@ -236,6 +238,12 @@ def _build_w3pre(conn, dry_run: bool) -> None:
     parquet yet (export not run) is SKIPPED with a warning rather than crashing the build
     — important because this op is HALT-tier on the daily path once wired in."""
     print("\nW3pre staging (odds/CLV-feeding flatten):")
+    # E11.1-W3pre: monthly_schedule blobs are large (~1.4 MB each, ~2.4 GB total) and the
+    # stg_statsapi_games flatten explodes them in parallel — that parallelism multiplied peak
+    # RAM and OOM'd even with spilling. Cap threads so only a couple of big blobs inflate at
+    # once (the OOM error's #1 recommended knob). This tier is tiny (3 trivial odds models +
+    # the schedule), so the throughput cost is negligible. Raise if the host has ample RAM.
+    conn.execute("SET threads=2")
     for model in W3PRE_STG_MODELS:
         source = _raw_source_for(model)
         glob = f"{LAKEHOUSE_RAW}/{source}/**/*.parquet"
@@ -260,6 +268,21 @@ def run(
     import duckdb
 
     conn = duckdb.connect()
+
+    # E11.1-W3pre: enable larger-than-memory operators. The stg_statsapi_games flatten explodes
+    # monthly_schedule's ~1,700 month-blobs (one row per snapshot of a month) into a multi-hundred-
+    # thousand / million-row intermediate BEFORE the `qualify row_number() over (partition by
+    # game_pk ...)` dedup collapses it to ~26k game_pks. An IN-MEMORY DuckDB does NOT spill to disk
+    # unless temp_directory is set, so that window OOMs (observed 14.3/14.3 GiB) instead of spilling.
+    # Set a spill dir + drop insertion-order preservation: every output here is a parquet COPY that
+    # is re-globbed downstream (row order is irrelevant; the parity hash sorts explicitly), so this
+    # is purely a memory fix — value-identical output. temp_directory under the system temp is
+    # writable on both the operator box and the self-hosted Dagster EC2 host. Harmless for W1/W2.
+    _spill_dir = os.path.join(tempfile.gettempdir(), "duckdb_lakehouse_spill")
+    os.makedirs(_spill_dir, exist_ok=True)
+    conn.execute("SET preserve_insertion_order=false")
+    conn.execute(f"SET temp_directory='{_spill_dir}'")
+
     conn.execute("INSTALL httpfs; LOAD httpfs")
     conn.execute("""
         CREATE OR REPLACE SECRET baseball_s3 (

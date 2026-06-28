@@ -79,13 +79,28 @@ def raw_lakehouse_loc(source: str) -> str:
     return f"s3://{BUCKET}/{RAW_PREFIX}/{source}/"
 
 
+# Sentinel dt= partition for rows whose ingestion_ts is an EXPLICIT NULL (see _partition_date).
+NULL_TS_PARTITION = "__nullts__"
+
+
 def _partition_date(row: dict) -> str:
-    """dt= partition key for a row: the ingestion_ts date, else today (UTC)."""
+    """dt= partition key for a row.
+
+    - real ingestion_ts (datetime / ISO str)            -> its date
+    - EXPLICIT NULL ingestion_ts (key present, value None) -> the stable NULL_TS_PARTITION
+      sentinel. These are historical-backfill rows (e.g. monthly_schedule's pre-2026 schedule)
+      that legitimately have no ingestion time in Snowflake; a real date would be a lie and
+      'today' would break idempotent re-export. The sentinel keeps them in one stable partition.
+    - ingestion_ts key ABSENT (live writers relying on Snowflake's DEFAULT CURRENT_TIMESTAMP)
+      -> today (UTC), matching the now()-stamp rows_to_arrow_table applies to the same rows.
+    """
     ts = row.get("ingestion_ts")
     if isinstance(ts, datetime):
         return ts.date().isoformat()
     if isinstance(ts, str) and len(ts) >= 10:
         return ts[:10]
+    if "ingestion_ts" in row and ts is None:
+        return NULL_TS_PARTITION
     return datetime.now(timezone.utc).date().isoformat()
 
 
@@ -108,16 +123,33 @@ def rows_to_arrow_table(rows: list[dict], json_cols: frozenset = _JSON_COLS) -> 
     for row in rows:
         for col in columns:
             if col == "ingestion_ts":
-                v = row.get("ingestion_ts") or now_iso
-                data[col].append(v.isoformat() if isinstance(v, datetime) else str(v))
+                # Preserve an EXPLICIT NULL (key present, value None): historical-backfill rows
+                # whose Snowflake ingestion_ts is NULL must stay NULL here, so the duckdb
+                # branch's ingestion_ts::timestamp equals Snowflake's AND the staging qualify's
+                # 'order by ingestion_ts desc nulls last' picks the same row. Stamping now()
+                # would both mismatch the value and make these rows win the dedup (data loss).
+                # Key ABSENT -> stamp now() (matches Snowflake DEFAULT CURRENT_TIMESTAMP).
+                if "ingestion_ts" in row and row["ingestion_ts"] is None:
+                    data[col].append(None)
+                else:
+                    v = row.get("ingestion_ts") or now_iso
+                    data[col].append(v.isoformat() if isinstance(v, datetime) else str(v))
             elif col in json_cols:
                 v = row.get(col)
                 data[col].append(json.dumps(v) if not isinstance(v, str) and v is not None else v)
             else:
                 data[col].append(row.get(col))
-    # Force every column to string/utf8 EXCEPT ingestion_ts? No — keep scalars native so
-    # numeric metadata (x_requests_used) stays numeric; pyarrow infers per-column type.
-    return pa.Table.from_pydict(data)
+    # Keep scalars native so numeric metadata (x_requests_used) stays numeric; pyarrow infers
+    # per-column type — EXCEPT ingestion_ts: an all-NULL batch (a NULL_TS_PARTITION historical
+    # partition) would infer arrow 'null' type and write a parquet that drifts from the utf8
+    # ingestion_ts of every dated partition, breaking the union_by_name glob. Pin it to utf8.
+    table = pa.Table.from_pydict(data)
+    i = table.schema.get_field_index("ingestion_ts")
+    if i != -1 and table.schema.field(i).type != pa.string():
+        table = table.set_column(
+            i, pa.field("ingestion_ts", pa.string()), table.column(i).cast(pa.string())
+        )
+    return table
 
 
 def _make_s3_client():

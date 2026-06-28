@@ -9,6 +9,13 @@
 -- Full S3 path for a named model (directory style, trailing slash for glob).
 {% macro lakehouse_loc(model_name) %}s3://{{ lakehouse_bucket() }}/{{ lakehouse_prefix() }}/{{ model_name }}/{% endmacro %}
 
+-- E11.1-W3pre: RAW tier (un-flattened source JSON parquet) — a sibling of lakehouse/.
+-- Written by scripts/utils/lakehouse_raw_writer.py (live writers) and
+-- scripts/export_odds_raw_to_s3.py (one-time/recurring Snowflake→S3 export). The W3pre
+-- staging models' duckdb branch flattens this raw JSON. Mirror of RAW_PREFIX in the writer.
+{% macro lakehouse_raw_prefix() %}baseball/lakehouse_raw{% endmacro %}
+{% macro lakehouse_raw_loc(source_name) %}s3://{{ lakehouse_bucket() }}/{{ lakehouse_raw_prefix() }}/{{ source_name }}/{% endmacro %}
+
 -- Called from on-run-start when --target duckdb. Creates a persistent S3 secret
 -- using the AWS credential chain (reads ~/.aws/credentials the same way the CLI does)
 -- so httpfs can reach the lakehouse bucket without requiring explicit env-var exports.
