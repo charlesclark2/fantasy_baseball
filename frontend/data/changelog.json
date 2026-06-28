@@ -3,6 +3,10 @@
     "week": "2026-06-22",
     "items": [
       {
+        "tag": "fix",
+        "text": "EV Tracker game times were showing +5 hours too late (e.g. 6:15 PM CDT instead of 1:15 PM CDT). The time formatter was appending a trailing 'Z' to UTC timestamps that already carried an explicit '+00:00' timezone offset, producing an invalid datetime string that browsers treated as local time. Updated the formatter to detect and preserve any existing timezone indicator before parsing — matching the fix already in place on game-detail pages."
+      },
+      {
         "tag": "new",
         "text": "Settings now has a Sportsbooks section for multi-book bankroll bookkeeping. Add each sportsbook you use, set its current balance, and record deposits and withdrawals — so your bankroll growth % reflects only betting results, not cash movement. A deposit is not growth; a withdrawal is not a loss — both are netted out of the baseline. The Performance page now shows an overall Bankroll Growth tile (hidden until you've set up at least one book and recorded a deposit). Growth % is labeled distinctly from ROI: ROI is return on stake/turnover; growth is return on your deposited funds. Self-reported and manual — this is a bookkeeping ledger, not auto-settlement."
       },

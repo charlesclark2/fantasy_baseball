@@ -198,7 +198,13 @@ const LS_BOOK_LABELS: Record<string, string> = {
 
 function formatGameTime(isoString: string | null): string {
   if (!isoString) return ""
-  const d = new Date(isoString)
+  // stg_statsapi_games.game_date is TIMESTAMP_TZ; the Snowflake connector serializes it as
+  // "2026-06-28T18:15:00+00:00" (not "Z"). Appending "Z" to that produces the invalid string
+  // "...+00:00Z", which browsers parse as local time → +5h offset on CDT machines.
+  // Mirror fmtGameTime in picks/[game_pk]/page.tsx: use the string as-is if it already carries
+  // any timezone info (Z or ±HH:MM); otherwise append Z to force UTC interpretation.
+  const iso = isoString.endsWith("Z") || /[+-]\d\d:?\d\d$/.test(isoString) ? isoString : isoString + "Z"
+  const d = new Date(iso)
   if (isNaN(d.getTime())) return ""
   return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZoneName: "short" })
 }
