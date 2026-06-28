@@ -2315,6 +2315,34 @@ def main() -> int:
             log.exception("Failed to write player profiles")
             errors += 1
 
+    # ── INC-16-P6 daily heartbeat (dead-man switch source) ───────────────────
+    # One tiny item the OFF-box deadman Lambda checks each morning: it proves the
+    # serving cycle actually RAN today, which a raw "are there picks?" check can't
+    # (0 picks on a legit off-day looks identical to a dead box). Best-effort —
+    # never fail serving for the heartbeat.
+    if pg and (run_all or args.picks):
+        try:
+            from datetime import datetime, timezone
+
+            _n_picks = len(picks_rows) if "picks_rows" in locals() else None
+            _now_iso = datetime.now(timezone.utc).isoformat()
+            pg.put_item(Item={
+                "pk": "ops",
+                "sk": "heartbeat#daily",
+                "value": json.dumps({
+                    "date": today,
+                    "n_picks": _n_picks,
+                    "errors": errors,
+                    "written_at": _now_iso,
+                }),
+                "is_permanent": True,
+                "updated_at": _now_iso,
+                "cache_date": today,
+            })
+            log.info("DynamoDB: ops/heartbeat#daily written (date=%s, n_picks=%s)", today, _n_picks)
+        except Exception:
+            log.warning("Failed to write daily heartbeat (non-fatal)", exc_info=True)
+
     sf.close()
     # `pg` is a boto3 DynamoDB Table (INC-16-P2) — no connection to close.
 

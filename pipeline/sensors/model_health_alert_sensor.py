@@ -79,12 +79,16 @@ def model_health_alert_sensor(context: SensorEvaluationContext):
     failed = [t for t, v in verdicts.items() if v == "FAIL"]
     if failed:
         details = " | ".join(f"{t}: {result[t]['fail_reasons']}" for t in failed)
-        raise Exception(
+        msg = (
             f"MODEL HEALTH ALERT: gate FAILED for {failed} over {window} ({_PREDICTION_TYPE}). "
             f"{details}. Likely a serving/calibration regression — the deployed model's "
             f"discrimination has degraded (cf. the 2026-06 audit). Inspect with: "
             f"uv run python scripts/ops/model_health_metrics.py --since {start.isoformat()} "
             f"--prediction-type {_PREDICTION_TYPE} --schema {_SCHEMA}"
         )
+        from pipeline.utils.alerting import send_alert  # INC-16-P6
+        send_alert("Model health gate FAILED", msg, severity="ERROR",
+                   dedup_key=f"model_health:{_PREDICTION_TYPE}")
+        raise Exception(msg)
 
     yield SkipReason(f"Model health OK {window} ({_PREDICTION_TYPE}): {verdicts}")

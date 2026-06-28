@@ -124,16 +124,20 @@ def statcast_freshness_sensor(context: SensorEvaluationContext):
     if now_et >= deadline:
         fp = first_pitch.strftime("%H:%M ET") if first_pitch else "n/a"
         # E11.8 (INC-5 / monitor-the-monitors): yield SkipReason here was a silent
-        # path — the tick never failed, so Dagster never sent an email-on-failure
-        # alert. Raising converts the SLA breach into a visible tick failure, which
-        # triggers the standard Dagster+ email alert. The sensor still retries on
-        # every subsequent 30-min tick, so Statcast arriving later self-heals.
-        raise Exception(
+        # path — the tick never failed, so no alert fired. Raising converts the SLA
+        # breach into a visible tick failure; the sensor still retries on every
+        # subsequent 30-min tick, so Statcast arriving later self-heals.
+        msg = (
             f"[SLA BREACH] Statcast for {yesterday} still not published within "
             f"{_DEADLINE_LEAD} of today's first pitch ({fp}). "
             f"Today's slate will score WITHOUT {yesterday}'s completed games. "
             f"Manual check: uv run python scripts/savant_ingestion.py batter_pitches"
         )
+        # INC-16-P6: email directly (Dagster+ tick-failure alerting is gone post-cutover).
+        from pipeline.utils.alerting import send_alert
+        send_alert("Statcast SLA breach", msg, severity="CRITICAL",
+                   dedup_key=f"statcast_sla:{yesterday}")
+        raise Exception(msg)
 
     # Missing, before the deadline → fire the catch-up. Hourly run_key bounds
     # retries to ~1/hour; once the catch-up lands the data the next tick sees it

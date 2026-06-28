@@ -38,6 +38,10 @@ cd "$APP_DIR"
 log() { echo "[deploy $(date -u +%H:%M:%S)] $*"; }
 die() { echo "[deploy ERROR] $*" >&2; exit 1; }
 
+# INC-16-P6: source the shared notifier so an auto-rollback pages (best-effort).
+# shellcheck source=/dev/null
+source "${APP_DIR}/services/dagster/aws/notify.sh" 2>/dev/null || notify() { :; }
+
 # --- 1. pull (FIRST — so env-parity validates the env.required being deployed) --
 OLD_HEAD="$(git rev-parse HEAD)"
 log "git pull origin main (from ${OLD_HEAD:0:8})"
@@ -75,6 +79,8 @@ rollback() {
     docker image inspect "${img}:rollback" >/dev/null 2>&1 && docker tag "${img}:rollback" "${img}:latest"
   done
   $COMPOSE up -d --no-build
+  notify CRITICAL "CD auto-rollback on box" \
+    "A deploy to the orchestration box FAILED verification and was auto-rolled-back to the previous images. Reason: $1. Box is serving on the PREVIOUS image — investigate the failed deploy (Actions log + Dagit) before the next merge." 2>/dev/null || true
   die "$1"
 }
 
