@@ -108,3 +108,32 @@ Identify which lineup-gated features are null on post_lineup predictions (likely
 File a new **§0.5 bake-off story** (Opus) on the H2H home_win target. Pre-register ≥3 candidate model classes (include: a market-regression baseline, a regularized logistic on ELO+pythagorean, and one tree-based learner). Tune with Optuna, gate on purged/embargoed CV, PBO<0.2/DSR>0. Do NOT use a single-architecture patch.
 
 **Do NOT retrain v6 in a quick single-arch fix regardless of which path is taken.**
+
+---
+
+## Rescore result (operator ran 2026-06-28) — SERVING GAP CONFIRMED
+
+```
+[home_win]  n=63  corr (live→rescored): 0.031 → 0.149  verdict: FAIL → FAIL
+[run_differential]  corr (live→rescored): 0.027 → 0.125  verdict: FAIL → PASS
+```
+
+Full output:
+```
+[home_win]  n=63  base_rate=0.4127  no_skill_Brier=0.2424
+   calibrated  corr=0.1485  Brier=0.2449  spread=0.0295  mean=0.4898
+   consensus   corr=0.1474  Brier=0.2427  spread=0.0481  mean=0.4833
+   → FAIL (spread 0.029 < 0.03 flat-output; Brier 0.245 barely above no-skill - 0.002)
+
+[run_differential]  n=63  corr=0.1251  pred_spread=0.5744  → PASS
+
+[total_runs]  n=63  corr=0.1856  pred_spread=0.3548 < 0.5 gate  → FAIL (flat spread)
+```
+
+**Interpretation:** Both `home_win` (+5× corr jump, 0.031→0.149) and `run_differential` (+5× corr jump, 0.027→0.125) recover substantially on training-time features. The rescore script's own legend applies: **"a large corr jump (live≈0 → rescored toward CV) ⇒ the model has skill when served correct features ⇒ SERVING was the problem."**
+
+The remaining `home_win` FAIL on rescore (spread just below 0.03 gate, Brier barely above no-skill − 0.002) reflects v6's inherent compression from de-leaking — not a serving issue. The model IS directional; it just outputs near-0.5 for most games. This is a **separate signal** from the serving gap.
+
+**Final routing: SERVING GAP → INC-17 P2 (find and fix which lineup-gated features are null on post_lineup predictions). Do NOT retrain.**
+
+Key diagnostic: lineup-gated features (matchup woba/archetype/lineup-EB aggregates) appear null in the live prediction feature rows even for post_lineup predictions. The A2.5 discriminative_coverage is blind to this class of corruption by design.
