@@ -106,14 +106,19 @@ def _connect_snowflake() -> snowflake.connector.SnowflakeConnection:
 
 
 def _final_scores(conn, game_pks: list[int]) -> dict[int, tuple[int, int]]:
-    """game_pk -> (home_score, away_score) for games that are final ('F')."""
+    """game_pk -> (home_score, away_score) for games that are final.
+
+    MLB Stats API uses 'F' (Final) and 'O' (Final/Official) — both are terminal
+    scored states. Filtering on only 'F' misses games whose status advanced to 'O'
+    before the settle job ran, leaving those bets permanently pending.
+    """
     if not game_pks:
         return {}
     placeholders = ",".join(str(int(g)) for g in game_pks)
     sql = (
         "SELECT game_pk, home_score, away_score "
         "FROM baseball_data.betting.stg_statsapi_games "
-        f"WHERE status_code = 'F' AND game_pk IN ({placeholders}) "
+        f"WHERE status_code IN ('F', 'O') AND game_pk IN ({placeholders}) "
         "AND home_score IS NOT NULL AND away_score IS NOT NULL"
     )
     cur = conn.cursor(snowflake.connector.DictCursor)
