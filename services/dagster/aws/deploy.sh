@@ -42,6 +42,14 @@ die() { echo "[deploy ERROR] $*" >&2; exit 1; }
 # shellcheck source=/dev/null
 source "${APP_DIR}/services/dagster/aws/notify.sh" 2>/dev/null || notify() { :; }
 
+# INC-16-P6a: deploy lock — tells healthcheck.sh containers may be transiently
+# restarting during `up -d --build`; it skips checks + resets its fail counter
+# while this file exists. Trap removes it on any exit (normal, die, rollback).
+DEPLOY_LOCK="/tmp/credence_deploy_in_progress"
+touch "$DEPLOY_LOCK"
+trap 'rm -f "$DEPLOY_LOCK"' EXIT
+log "deploy lock acquired (${DEPLOY_LOCK})"
+
 # --- 1. pull (FIRST — so env-parity validates the env.required being deployed) --
 OLD_HEAD="$(git rev-parse HEAD)"
 log "git pull origin main (from ${OLD_HEAD:0:8})"
