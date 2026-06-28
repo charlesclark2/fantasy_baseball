@@ -1,16 +1,17 @@
-{{
-    config(
-        materialized='table'
-    )
-}}
+-- E11.1-W4 dual-branch (tag w4_lakehouse): the duckdb branch rebuilds from the
+-- registered DuckDB views of its refs; the Snowflake branch is a thin view over
+-- the lakehouse_ext external table.
+{{ config(materialized='view', tags=['w4_lakehouse']) }}
 
 -- Grain: one row per fg_pitcher_id × season
 -- Pivots stg_fangraphs__pitcher_arsenal from pitcher × pitch_type × season to
 -- pitcher × season (wide format) for joining into the feature layer.
 -- Joins stg_fangraphs__stuff_plus for overall_stuff_plus and mlbam_pitcher_id.
 
+{% if target.name == 'duckdb' %}
+
 with arsenal as (
-    select * from {{ ref('stg_fangraphs__pitcher_arsenal') }}
+    select * from stg_fangraphs__pitcher_arsenal
 ),
 
 stuff as (
@@ -19,7 +20,7 @@ stuff as (
         season,
         stuff_plus           as overall_stuff_plus,
         mlbam_pitcher_id
-    from {{ ref('stg_fangraphs__stuff_plus') }}
+    from stg_fangraphs__stuff_plus
 ),
 
 -- Rank pitches by usage to determine primary pitch type
@@ -129,3 +130,9 @@ left join stuff s
 left join primary_pitch pr
     on  pr.fg_pitcher_id = p.fg_pitcher_id
     and pr.season        = p.season
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.fct_fangraphs_pitcher_arsenal_wide
+
+{% endif %}

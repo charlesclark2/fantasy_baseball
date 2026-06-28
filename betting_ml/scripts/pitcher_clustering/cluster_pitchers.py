@@ -29,6 +29,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
 import sys
 from pathlib import Path
 
@@ -45,6 +46,124 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from betting_ml.utils.data_loader import get_snowflake_connection
 
 _MODELS_DIR = PROJECT_ROOT / "betting_ml" / "models" / "pitcher_clustering"
+
+# ── E11.1-W4 lakehouse: build-on-DuckDB I/O ───────────────────────────────────
+# `--s3` reads mart_pitcher_arsenal_summary + ref_players from S3 parquet and writes
+# pitcher_clusters to S3 parquet, so the BUILD runs on DuckDB (the sklearn k-means is
+# unchanged → value-identical assignments). `--seed` is the one-time history migration:
+# it copies the EXISTING Snowflake pitcher_clusters (all accumulated snapshots) into the
+# S3 parquet so mart_batter_woba_vs_cluster — which joins on (pitcher_id, season) across
+# ALL snapshots — has parity at cutover. Ongoing `--s3` runs DELETE+INSERT the run's
+# (season, snapshot_date) into the consolidated parquet, mirroring _persist's semantics.
+_S3_BUCKET   = "baseball-betting-ml-artifacts"
+_LAKEHOUSE   = f"s3://{_S3_BUCKET}/baseball/lakehouse"
+_S3_CLUSTERS = f"{_LAKEHOUSE}/pitcher_clusters/data.parquet"
+_S3_ARSENAL  = f"{_LAKEHOUSE}/mart_pitcher_arsenal_summary/data.parquet"
+_S3_REFPLAYERS = f"{_LAKEHOUSE}/stg_ref_players/part-0.parquet"
+
+# Column order for the pitcher_clusters parquet — matches the LIVE Snowflake table
+# baseball_data.statsapi.pitcher_clusters (pitcher_id, season, cluster_id,
+# cluster_label, silhouette_score, fit_date, run_timestamp). The table is unique on
+# (pitcher_id, season) — the `snapshot_date`-accumulation design in _DDL/_persist never
+# materialised (1 fit_date), and the mart joins on (pitcher_id, season), so we key the
+# S3 build on (pitcher_id, season) too.
+_CLUSTER_COLS = [
+    "pitcher_id", "season", "cluster_id", "cluster_label",
+    "silhouette_score", "fit_date", "run_timestamp",
+]
+
+
+def _get_duckdb():
+    """DuckDB connection with S3 credential-chain auth (mirrors run_w1_lakehouse.py)."""
+    import duckdb
+    duck = duckdb.connect()
+    duck.execute("INSTALL httpfs; LOAD httpfs")
+    duck.execute(
+        "CREATE OR REPLACE SECRET baseball_s3 "
+        "(TYPE S3, PROVIDER credential_chain, REGION 'us-east-2')"
+    )
+    return duck
+
+
+def _load_data_s3(duck, season: int) -> pd.DataFrame:
+    """S3/DuckDB analogue of _load_data — same projection + filter."""
+    cols = (
+        "pitcher_id, game_year AS season, total_pitches, "
+        "fb_avg_velocity, brk_avg_velocity, os_avg_velocity, "
+        "fb_avg_hmov, brk_avg_hmov, fb_avg_vmov, brk_avg_vmov, "
+        "fastball_pct, breaking_pct, offspeed_pct, overall_stuff_plus, "
+        "fb_avg_spin, brk_avg_spin, fb_release_height, fb_release_side, "
+        "fb_extension, fb_arm_angle"
+    )
+    return duck.execute(
+        f"SELECT {cols} FROM read_parquet('{_S3_ARSENAL}', union_by_name=true) "
+        f"WHERE game_year = {int(season)}"
+    ).fetch_df()
+
+
+def _load_names_s3(duck, pitcher_ids: list[int]) -> dict[int, str]:
+    if not pitcher_ids:
+        return {}
+    id_list = ", ".join(str(int(i)) for i in pitcher_ids)
+    df = duck.execute(
+        f"SELECT mlb_bam_id, player_name "
+        f"FROM read_parquet('{_S3_REFPLAYERS}', union_by_name=true) "
+        f"WHERE mlb_bam_id IN ({id_list})"
+    ).fetch_df()
+    return dict(zip(df["mlb_bam_id"], df["player_name"]))
+
+
+def _persist_s3(duck, df_result: pd.DataFrame, season: int, snapshot_date: str,
+                best_score: float) -> None:
+    """Rebuild this run's `season` in the consolidated S3 parquet, preserving every
+    OTHER season. The live table is unique on (pitcher_id, season), so we drop ALL of
+    this season's prior rows (any fit_date) and write the fresh assignments — keeping
+    (pitcher_id, season) unique for the mart join. `snapshot_date` (the --snapshot-date
+    arg) is stored in the `fit_date` column to match the Snowflake schema."""
+    new = df_result[["pitcher_id", "season", "cluster_id", "cluster_label"]].copy()
+    new["silhouette_score"] = float(best_score)
+    new["fit_date"] = snapshot_date
+    # naive (tz-less) UTC wall time → TIMESTAMP_NTZ-compatible parquet column
+    new["run_timestamp"] = pd.Timestamp(_dt.datetime.utcnow())
+    new = new[_CLUSTER_COLS]
+
+    # Carry forward all OTHER seasons (drop this season entirely → no (pitcher_id, season) dupes).
+    try:
+        existing = duck.execute(
+            f"SELECT {', '.join(_CLUSTER_COLS)} "
+            f"FROM read_parquet('{_S3_CLUSTERS}', union_by_name=true) "
+            f"WHERE season <> {int(season)}"
+        ).fetch_df()
+        print(f"  carried forward {len(existing):,} existing rows (other seasons)")
+    except Exception as e:
+        existing = new.iloc[0:0].copy()
+        print(f"  no existing pitcher_clusters parquet ({e}); writing fresh")
+
+    out = pd.concat([existing, new], ignore_index=True)
+    duck.register("_pc_out", out)
+    duck.execute(f"COPY _pc_out TO '{_S3_CLUSTERS}' (FORMAT PARQUET)")
+    print(f"  wrote {len(out):,} rows ({len(new):,} new for "
+          f"season={season} fit_date={snapshot_date}) → {_S3_CLUSTERS}")
+
+
+def _seed_s3_from_snowflake(duck) -> None:
+    """One-time history migration: copy the existing Snowflake pitcher_clusters (all
+    snapshots) into the S3 parquet so the mart has parity at cutover."""
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT pitcher_id, season, cluster_id, cluster_label, "
+            "silhouette_score, fit_date, run_timestamp FROM baseball_data.statsapi.pitcher_clusters"
+        )
+        rows = cur.fetchall()
+        cols = [d[0].lower() for d in cur.description]
+    finally:
+        conn.close()
+    df = pd.DataFrame(rows, columns=cols)[_CLUSTER_COLS]
+    duck.register("_pc_seed", df)
+    duck.execute(f"COPY _pc_seed TO '{_S3_CLUSTERS}' (FORMAT PARQUET)")
+    print(f"Seeded {len(df):,} existing Snowflake rows → {_S3_CLUSTERS}")
 
 # Clustering feature columns. spin_diff and pitch_entropy are derived in
 # _prepare_features before scaling; all others come directly from the mart.
@@ -399,11 +518,32 @@ def main() -> None:
         default=_dt.date.today().isoformat(),
         help="Snapshot date tag for this run (YYYY-MM-DD, default: today)",
     )
+    parser.add_argument(
+        "--s3", action="store_true",
+        help="E11.1-W4: build on DuckDB — read mart_pitcher_arsenal_summary + ref_players "
+             "from S3 parquet and DELETE+INSERT this run's snapshot into the S3 "
+             "pitcher_clusters parquet (no Snowflake).",
+    )
+    parser.add_argument(
+        "--seed", action="store_true",
+        help="E11.1-W4 one-time: copy the existing Snowflake pitcher_clusters (all "
+             "snapshots) into the S3 parquet for cutover parity, then exit.",
+    )
     args = parser.parse_args()
     snapshot_date: str = args.snapshot_date
 
+    if args.seed:
+        # One-time history migration; no clustering this run.
+        duck = _get_duckdb()
+        _seed_s3_from_snowflake(duck)
+        duck.close()
+        print("Done (seed).")
+        return
+
+    _duck = _get_duckdb() if args.s3 else None
+
     print(f"Loading mart_pitcher_arsenal_summary for season={args.season}...")
-    df = _load_data(args.season)
+    df = _load_data_s3(_duck, args.season) if args.s3 else _load_data(args.season)
     print(f"Loaded {len(df)} pitcher-season rows.")
 
     if len(df) == 0:
@@ -441,12 +581,20 @@ def main() -> None:
     print()
 
     # Spot-check against well-known starters
-    id_name_map = _load_names(df_result["pitcher_id"].tolist())
+    id_name_map = (
+        _load_names_s3(_duck, df_result["pitcher_id"].tolist())
+        if args.s3 else _load_names(df_result["pitcher_id"].tolist())
+    )
     _spot_check(df_result, id_name_map)
 
     print(f"Snapshot date: {snapshot_date}")
 
-    if not args.dry_run:
+    if args.s3 and not args.dry_run:
+        # E11.1-W4 build-on-DuckDB: write the snapshot to S3 parquet (no Snowflake).
+        _persist_s3(_duck, df_result, args.season, snapshot_date, best_score)
+        _duck.close()
+        _save_model_artifacts(model, scaler, args.season, snapshot_date)
+    elif not args.dry_run:
         conn = get_snowflake_connection()
         try:
             _persist(df_result, args.season, snapshot_date, best_score, dry_run=False, conn=conn)

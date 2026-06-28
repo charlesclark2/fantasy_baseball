@@ -26,6 +26,8 @@ Usage (run from anywhere in the repo):
   python3 scripts/run_w1_lakehouse.py --w3-only   # only the W3 marts (reuse existing W1+W2 parquet)
   python3 scripts/run_w1_lakehouse.py --w3pre     # W1 + W2 + W3 + the W3pre odds/staging tier (opt-in)
   python3 scripts/run_w1_lakehouse.py --w3pre-only # only the W3pre odds/staging flatten tier
+  python3 scripts/run_w1_lakehouse.py --w4         # W1 + W2 + W3 + the W4 FanGraphs/posteriors/savant marts (opt-in)
+  python3 scripts/run_w1_lakehouse.py --w4-only    # only the W4 marts + FanGraphs precursors (reuse W1 parquet)
 
 E11.1-W2 (2026-06-26): this script now also builds the W2 pitch-derived batch
 marts (W2_MART_MODELS) after the W1 pitch marts, registering the W1 marts as
@@ -103,6 +105,46 @@ W3_MART_MODELS = [
     "mart_reliever_top3_availability",    # ← stg_batter_pitches + mart_pitch_play_event + mart_starting_pitcher_game_log
 ]
 
+# E11.1-W4: the FanGraphs + posteriors/cluster + raw-savant non-serving marts (6),
+# plus the FanGraphs precursor subtree they read. Unlike W1-W3 these do NOT descend
+# from stg_batter_pitches alone — they read RAW precursor parquet (exported by
+# scripts/export_w4_raw_to_s3.py) and builder-output parquet (the migrated DuckDB
+# builds of fit_granular_park_priors.py + cluster_pitchers.py). OPT-IN (--w4) until
+# cutover, like W3pre: the precursor parquet must exist first, so the default daily
+# (HALT) op stays W1+W2+W3 until the operator validates W4 and flips it default-on.
+#
+# Built in DEPENDENCY ORDER; each is registered as a DuckDB view immediately after
+# build so the next model's plain-name reads resolve:
+#   FanGraphs staging (flatten raw_json parquet) → FanGraphs fct → statsapi staging →
+#   the 6 marts (mart_pitcher_arsenal_summary precedes mart_pitcher_profile_summary).
+# Raw/builder-output parquet is read DIRECTLY via read_parquet(lakehouse_loc("X")) in
+# each duckdb branch (no view registration needed):
+#   catcher_framing_raw, fg_stuff_plus_raw, fg_zips_hitting_raw,
+#   fg_hitting_leaderboard_raw, player_profiles_raw, eb_park_factors_granular_raw,
+#   pitcher_clusters.
+W4_PRECURSOR_MODELS = [
+    "stg_fangraphs__stuff_plus",          # ← fg_stuff_plus_raw (parquet)
+    "stg_fangraphs__pitcher_arsenal",     # ← fg_stuff_plus_raw (parquet)
+    "stg_fangraphs__zips_hitting",        # ← fg_zips_hitting_raw (parquet)
+    "stg_fangraphs__hitting_leaderboard", # ← fg_hitting_leaderboard_raw (parquet)
+    "fct_fangraphs_pitcher_arsenal_wide", # ← stg_fangraphs__pitcher_arsenal + __stuff_plus
+    "fct_fangraphs_hitting_analytics",    # ← stg_fangraphs__zips_hitting + __hitting_leaderboard
+    "stg_statsapi_player_profiles",       # ← player_profiles_raw (parquet)
+]
+
+W4_MART_MODELS = [
+    "mart_pitcher_arsenal_summary",       # ← fct_fangraphs_pitcher_arsenal_wide + mart_pitch_characteristics(W1)
+    "mart_pitcher_profile_summary",       # ← mart_pitcher_arsenal_summary(W4) + stg_batter_pitches + stg_statsapi_player_profiles(W4)
+    "mart_batter_profile_summary",        # ← fct_fangraphs_hitting_analytics + mart_pitch_play_event(W1) + stg_batter_pitches
+    "mart_park_factors_granular",         # ← eb_park_factors_granular_raw (builder-output parquet)
+    "mart_batter_woba_vs_cluster",        # ← mart_pitch_play_event(W1) + pitcher_clusters (builder-output parquet)
+    "mart_catcher_framing",               # ← catcher_framing_raw (parquet)
+]
+
+# Ordered build list for _build_w4 (precursors first, then marts; mart_pitcher_arsenal_summary
+# before mart_pitcher_profile_summary, already true in W4_MART_MODELS order).
+W4_BUILD_MODELS = W4_PRECURSOR_MODELS + W4_MART_MODELS
+
 # E11.1-W3pre: the staging tier that feeds the odds/CLV BATCH subtree. Each model's
 # duckdb branch flattens the RAW JSON parquet under lakehouse_raw/<source>/ (written by
 # the migrated writers + scripts/export_odds_raw_to_s3.py) — no W1/W2 dependency, so
@@ -122,9 +164,17 @@ def find_model(model_name: str) -> Path:
         p = MODELS_DIR / subdir / f"{model_name}.sql"
         if p.exists():
             return p
+    # E11.1-W4: the FanGraphs precursor models live in NESTED dirs
+    # (dbt/models/staging/fangraphs/, dbt/models/marts/fangraphs/) and the
+    # statsapi staging in dbt/models/staging/statsapi/ — the flat lookup above
+    # misses them. Fall back to a recursive search (first match wins; model
+    # names are unique across the project).
+    matches = list(MODELS_DIR.rglob(f"{model_name}.sql"))
+    if matches:
+        return matches[0]
     raise FileNotFoundError(
         f"Model file not found: {model_name}.sql  "
-        f"(searched {MODELS_DIR}/staging|mart|marts/)"
+        f"(searched {MODELS_DIR}/**/ recursively)"
     )
 
 
@@ -200,6 +250,21 @@ def extract_duckdb_sql(model_name: str) -> str:
         sql = re.sub(r"\{\{\s*ref\(['\"](\w+)['\"]\)\s*\}\}", r'\1', sql)
         sql = re.sub(
             r"\{\{\s*source\(['\"][^'\"]+['\"],\s*['\"](\w+)['\"]\)\s*\}\}", r'\1', sql
+        )
+
+        # E11.1-W4: mart/fct duckdb branches read RAW precursor parquet directly via
+        # {{ lakehouse_loc("X") }} (catcher_framing_raw, fg_*_raw, player_profiles_raw,
+        # the builder-output parquet eb_park_factors_granular_raw / pitcher_clusters).
+        # Layout A already resolved these; do the same for Layout B (mart/fct).
+        sql = re.sub(
+            r'\{\{\s*lakehouse_loc\([\'"](\w+)[\'"]\)\s*\}\}',
+            rf"{LAKEHOUSE}/\1/",
+            sql,
+        )
+        sql = re.sub(
+            r'\{\{\s*lakehouse_raw_loc\([\'"](\w+)[\'"]\)\s*\}\}',
+            rf"{LAKEHOUSE_RAW}/\1/",
+            sql,
         )
 
         # Strip {% if is_incremental() %} … {% endif %} blocks (safety net)
@@ -293,6 +358,37 @@ def _build_w3(conn, dry_run: bool) -> None:
         _register_mart_views(conn, [model], dry_run)
 
 
+def _build_w4(conn, dry_run: bool) -> None:
+    """Build the E11.1-W4 FanGraphs/posteriors/cluster/raw-savant marts + their
+    FanGraphs precursor subtree, in dependency order. Each model is registered as a
+    DuckDB view immediately after build so the next model's plain-name reads resolve
+    (FG staging → FG fct → statsapi staging → marts; mart_pitcher_arsenal_summary
+    precedes mart_pitcher_profile_summary). Raw/builder-output parquet is read
+    directly via read_parquet(lakehouse_loc(...)) inside each duckdb branch — no
+    registration needed. The W1 marts it reads (mart_pitch_characteristics,
+    mart_pitch_play_event) and stg_batter_pitches are registered as views by the
+    caller before this runs."""
+    print("\nW4 marts (FanGraphs / posteriors-cluster / raw-savant):")
+    # E11.1-W4: the FanGraphs flatten (stg_fangraphs__hitting_leaderboard extracts ~60
+    # json_extract_string columns + a dedup window) and the pitch-derived marts
+    # (mart_batter_woba_vs_cluster reads the full mart_pitch_play_event PA substrate with
+    # career-cumulative windows) inflate large intermediates and OOM'd at the box's RAM
+    # ceiling (14.3 GiB). Same class as the W3pre schedule flatten — cap parallelism so
+    # fewer big intermediates inflate at once, and lower memory_limit so DuckDB spills to
+    # temp_directory (set in run()) EARLIER, leaving headroom for small unspillable allocs.
+    # value-identical output (every output is a parquet COPY re-globbed downstream).
+    for _pragma in ("SET threads=2", "SET memory_limit='11GB'"):
+        try:
+            conn.execute(_pragma)
+        except Exception as _e:
+            print(f"  (note: {_pragma} not applied: {_e})")
+    for model in W4_BUILD_MODELS:
+        _build_marts(conn, [model], dry_run)
+        # Register so a later W4 model that reads this one resolves (fct reads staging;
+        # mart_pitcher_profile_summary reads mart_pitcher_arsenal_summary).
+        _register_mart_views(conn, [model], dry_run)
+
+
 def run(
     dry_run: bool = False,
     skip_w1: bool = False,
@@ -300,6 +396,8 @@ def run(
     w3pre: bool = False,
     w3pre_only: bool = False,
     w3_only: bool = False,
+    w4: bool = False,
+    w4_only: bool = False,
 ) -> None:
     import duckdb
 
@@ -327,6 +425,20 @@ def run(
           REGION 'us-east-2'
         )
     """)
+    # E11.1-W4: harden S3 reads against transient httpfs timeouts. The FanGraphs / raw
+    # precursor parquets are read over httpfs and a slow GET was tripping the default 30s
+    # per-request window (`Timeout was reached error for HTTP GET ...`). Raise the timeout
+    # and add retries with backoff so a transient slow response is retried, not fatal.
+    for _pragma in (
+        "SET http_timeout = 600000",      # 10 min per request (default 30_000 ms)
+        "SET http_retries = 8",           # default 3
+        "SET http_retry_wait_ms = 500",
+        "SET http_retry_backoff = 4",
+    ):
+        try:
+            conn.execute(_pragma)
+        except Exception as _e:  # older httpfs builds may not expose every knob — non-fatal
+            print(f"  (note: {_pragma} not applied: {_e})")
 
     # E11.1-W3pre: --w3pre-only flattens the odds/staging tier from lakehouse_raw/ without
     # touching the pitch marts (lets the operator iterate on W3pre after a raw export).
@@ -361,6 +473,19 @@ def run(
         _build_w3(conn, dry_run)
         conn.close()
         print("\nW3 marts run complete (--w3-only).")
+        return
+
+    # E11.1-W4: --w4-only rebuilds just the W4 marts + their FanGraphs precursor
+    # subtree, reusing the existing W1 parquet (the only prior-wave marts W4 reads are
+    # the W1 mart_pitch_characteristics / mart_pitch_play_event). Lets the operator
+    # iterate on W4 / re-run parity after an export or a builder run, without
+    # rebuilding the heavy pitch marts.
+    if w4_only:
+        print("\nRegistering W1 marts as views (reuse existing parquet for --w4-only):")
+        _register_mart_views(conn, MART_MODELS, dry_run)
+        _build_w4(conn, dry_run)
+        conn.close()
+        print("\nW4 marts run complete (--w4-only).")
         return
 
     # ── W1: pitch-level marts ────────────────────────────────────────────────
@@ -400,8 +525,17 @@ def run(
     if w3pre:
         _build_w3pre(conn, dry_run)
 
+    # ── W4: FanGraphs / posteriors-cluster / raw-savant marts (E11.1-W4) — OPT-IN ──
+    # NOT built by default (like W3pre): W4 reads RAW precursor parquet (export_w4_raw_to_s3.py)
+    # and builder-output parquet (migrated fit_granular_park_priors.py + cluster_pitchers.py)
+    # that must exist first. Enable with --w4 once the exports + builders are wired and cutover
+    # is validated, so an empty precursor tier can't fail the HALT-tier daily op. The W1 marts
+    # W4 reads are already registered as views above.
+    if w4:
+        _build_w4(conn, dry_run)
+
     conn.close()
-    print(f"\nW1+W2+W3{'+W3pre' if w3pre else ''} lakehouse run complete.")
+    print(f"\nW1+W2+W3{'+W3pre' if w3pre else ''}{'+W4' if w4 else ''} lakehouse run complete.")
 
 
 if __name__ == "__main__":
@@ -412,4 +546,6 @@ if __name__ == "__main__":
         w3pre="--w3pre" in sys.argv,
         w3pre_only="--w3pre-only" in sys.argv,
         w3_only="--w3-only" in sys.argv,
+        w4="--w4" in sys.argv,
+        w4_only="--w4-only" in sys.argv,
     )

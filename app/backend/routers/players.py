@@ -36,7 +36,7 @@ def get_zone_overlay(
 ) -> dict:
     """Return zone-matchup overlay JSON for a batter × pitcher pair.
 
-    Read order: Railway PG cache → S3 ml-artifacts serving prefix (today/yesterday/2d ago).
+    Read order: DynamoDB serving cache → S3 ml-artifacts serving prefix (today/yesterday/2d ago).
     Returns 404 if no overlay is found (not yet written for this matchup).
     """
     today = date.today().isoformat()

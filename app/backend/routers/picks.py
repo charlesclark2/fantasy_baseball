@@ -381,8 +381,8 @@ def _build_featured_result(
 def get_featured_pick() -> FeaturedPickResponse:
     today = datetime.now(_ET).date().isoformat()
 
-    # Railway PG is the primary serving path — written by write_serving_store.py after
-    # each predict run. No Snowflake query on a PG hit.
+    # DynamoDB serving cache (INC-16-P2; was Railway PG) is the primary serving path —
+    # written by write_serving_store.py after each predict run. No Snowflake query on a cache hit.
     _pg_hit = serving_cache.get_cache("picks/featured", today)
     if _pg_hit is not None and _pg_hit.get("game_pk") is not None:
         try:

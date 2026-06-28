@@ -1,4 +1,7 @@
-{{ config(materialized='table') }}
+-- E11.1-W4 dual-branch (tag w4_lakehouse): the duckdb branch rebuilds from the
+-- registered DuckDB views of its refs; the Snowflake branch is a thin view over
+-- the lakehouse_ext external table.
+{{ config(materialized='view', tags=['w4_lakehouse']) }}
 
 -- Grain: pitcher_id × game_year
 -- One-row-per-pitcher-season profile vector for k-means pitcher archetype clustering (Card 7.2).
@@ -21,6 +24,8 @@
 -- Minimum 100 BF gate filters mop-up / very-short-stint pitchers. The arsenal mart
 -- already requires ≥ 200 pitches; the 100 BF gate additionally ensures K%/BB%/whiff
 -- estimates are based on enough plate appearances to be statistically meaningful.
+
+{% if target.name == 'duckdb' %}
 
 with outcomes as (
     select
@@ -52,7 +57,7 @@ with outcomes as (
             / nullif(count(case when batted_ball_type is not null then 1 end), 0)
                                                                               as gb_pct
 
-    from {{ ref('stg_batter_pitches') }}
+    from stg_batter_pitches
     where game_type = 'R'
       and game_year >= 2015
     group by pitcher_id, game_year
@@ -63,7 +68,7 @@ player_info as (
     select
         player_id,
         birth_date
-    from {{ ref('stg_statsapi_player_profiles') }}
+    from stg_statsapi_player_profiles
 )
 
 select
@@ -97,9 +102,15 @@ select
     -- For age_at_season_start computation in Python
     p.birth_date
 
-from {{ ref('mart_pitcher_arsenal_summary') }} a
+from mart_pitcher_arsenal_summary a
 inner join outcomes o
     on  o.pitcher_id = a.pitcher_id
     and o.game_year  = a.game_year
 left join player_info p
     on  p.player_id = a.pitcher_id
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_pitcher_profile_summary
+
+{% endif %}

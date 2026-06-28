@@ -16,7 +16,14 @@
 -- Card 8.K
 -- =============================================================================
 
-{{ config(materialized='table') }}
+-- E11.1-W4 dual-branch (tag w4_lakehouse): the duckdb branch rebuilds from the
+-- catcher_framing_raw S3 parquet (exported by scripts/export_w4_raw_to_s3.py); the
+-- Snowflake branch is a thin view over the lakehouse_ext external table written by
+-- run_w1_lakehouse.py --w4. The transform is value-identical to the prior Snowflake
+-- table (reads only the flat typed columns — no raw_json).
+{{ config(materialized='view', tags=['w4_lakehouse']) }}
+
+{% if target.name == 'duckdb' %}
 
 with
 
@@ -33,7 +40,7 @@ latest as (
             partition by player_id, season
             order by snapshot_date desc, ingestion_timestamp desc
         )   as rn
-    from {{ source('savant', 'catcher_framing_raw') }}
+    from read_parquet('{{ lakehouse_loc("catcher_framing_raw") }}**/*.parquet', union_by_name=true)
     where framing_runs is not null
 ),
 
@@ -102,3 +109,9 @@ final as (
 )
 
 select * from final
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_catcher_framing
+
+{% endif %}

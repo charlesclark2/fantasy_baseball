@@ -1,3 +1,10 @@
+-- E11.1-W4 dual-branch (tag w4_lakehouse): the duckdb branch rebuilds from the
+-- player_profiles_raw S3 parquet (flat typed columns — no raw_json); the Snowflake
+-- branch is a thin view over the lakehouse_ext external table.
+{{ config(materialized='view', tags=['w4_lakehouse']) }}
+
+{% if target.name == 'duckdb' %}
+
 WITH ranked AS (
     SELECT
         player_id,
@@ -12,7 +19,7 @@ WITH ranked AS (
             PARTITION BY player_id
             ORDER BY last_fetched_at DESC
         ) AS rn
-    FROM {{ source('statsapi', 'player_profiles_raw') }}
+    FROM read_parquet('{{ lakehouse_loc("player_profiles_raw") }}**/*.parquet', union_by_name=true)
 )
 
 SELECT
@@ -29,3 +36,9 @@ SELECT
     last_fetched_at
 FROM ranked
 WHERE rn = 1
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.stg_statsapi_player_profiles
+
+{% endif %}

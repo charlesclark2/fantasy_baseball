@@ -227,12 +227,22 @@ def run_w1_lakehouse_op(context):
     # serverless run-minute billing, which E11.15 eliminated by self-hosting
     # Dagster (cost = held RAM, not run-minutes). Ordered before dbt_daily_build
     # so the W2 external tables are fresh for the morning feature build.
+    # E11.1-W3: the no-arg call ALSO builds the 11 W3 pitch-derived marts
+    # (handedness/archetype/tto splits + the bullpen/reliever marts) right after W2 — same
+    # default-on rationale (their whole upstream closure is already in S3). They feed
+    # feature_pregame_* + write_serving_store, so they ride this HALT-tier op too.
     # E11.1-W3pre: run_w1_lakehouse.py can ALSO build the odds/staging flatten tier
     # (stg_oddsapi_*, stg_derivative_odds, stg_statsapi_games) but ONLY under the opt-in
     # --w3pre flag (NOT passed here yet). Wiring it in is a deliberate follow-up: it needs
     # the lakehouse_raw/ tier populated first (scripts/export_odds_raw_to_s3.py + flipped
     # writers) and the serving-coupled cutover validated — otherwise an empty raw tier
     # would fail this HALT-tier op. Until then this no-arg call builds only W1 + W2.
+    # E11.1-W4: run_w1_lakehouse.py can ALSO build the FanGraphs/posteriors-cluster/raw-savant
+    # marts (6) + their FanGraphs precursor subtree under the opt-in --w4 flag (NOT passed
+    # here yet). Like W3pre, it needs the precursor parquet first (scripts/export_w4_raw_to_s3.py
+    # + the migrated DuckDB builders fit_granular_park_priors.py --s3 / cluster_pitchers.py
+    # --seed,--s3) and the cutover validated — else an empty precursor tier would fail this
+    # HALT-tier op. Flip to "--w4" once validated. (W4 read-path audit: none request-time read.)
     _run_script(context, "run_w1_lakehouse.py")
 
 
@@ -244,9 +254,14 @@ def refresh_w1_external_tables_op(context):
     # after each S3 write. Failure here would serve stale pitch features.
     # E11.1-W2: refresh_w1_external_tables.py now also REFRESHes the 8 W2 external
     # tables (W2_TABLES) — same HALT rationale (W2 marts feed the feature build).
+    # E11.1-W3: it ALSO refreshes the 11 W3 external tables (W3_TABLES), also HALT —
+    # the W3 marts feed feature_pregame_* + write_serving_store.
     # E11.1-W3pre: it ALSO refreshes the W3pre stg external tables (W3PRE_TABLES) — a
     # no-op until those external tables are created (generate_w3pre_external_tables.py),
     # at which point the daily refresh keeps the odds/staging flatten fresh for serving.
+    # E11.1-W4: it ALSO refreshes the W4 external tables (W4_TABLES, best-effort/WARN until
+    # the generator runs) — the FanGraphs/posteriors/savant marts + precursor subtree.
+    # Promote W4_TABLES to the `required` set once --w4 is default-on above.
     _run_script(context, "refresh_w1_external_tables.py")
 
 

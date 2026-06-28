@@ -1,4 +1,7 @@
-{{ config(materialized='table') }}
+-- E11.1-W4 dual-branch (tag w4_lakehouse): the duckdb branch rebuilds from the
+-- registered DuckDB views of its refs; the Snowflake branch is a thin view over
+-- the lakehouse_ext external table.
+{{ config(materialized='view', tags=['w4_lakehouse']) }}
 
 -- Grain: batter_id × game_year
 -- One-row-per-batter-season hitting vector for k-means batter archetype clustering (Card 7.K2).
@@ -21,6 +24,8 @@
 -- Leakage prevention is enforced in downstream cluster joins (game_year - 1 = season).
 --
 -- Minimum 100 PA gate filters part-time / short-season samples.
+
+{% if target.name == 'duckdb' %}
 
 with statcast_pa as (
     -- Aggregate Statcast PA-level events from mart_pitch_play_event.
@@ -90,8 +95,8 @@ with statcast_pa as (
             0
         )                                                               as iso
 
-    from {{ ref('mart_pitch_play_event') }} ppe
-    join {{ ref('stg_batter_pitches') }} bp
+    from mart_pitch_play_event ppe
+    join stg_batter_pitches bp
         on  bp.pitch_sk = ppe.pitch_sk
     where ppe.plate_appearance_event is not null
       and ppe.game_year >= 2015
@@ -104,7 +109,7 @@ fg_hitting as (
         season           as game_year,
         proj_k_pct,
         proj_bb_pct
-    from {{ ref('fct_fangraphs_hitting_analytics') }}
+    from fct_fangraphs_hitting_analytics
     where season >= 2015
       and mlbam_batter_id is not null
 )
@@ -131,3 +136,9 @@ left join fg_hitting f
     on  f.batter_id = s.batter_id
     and f.game_year = s.game_year
 where s.pa_count >= 100
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_batter_profile_summary
+
+{% endif %}
