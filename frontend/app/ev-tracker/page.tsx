@@ -515,15 +515,17 @@ export default function EVTrackerPage() {
   const { accessToken, email } = useAuth()
 
   const { data, isLoading } = useQuery<EVPicksResponse>({
-    queryKey: ["picks-ev", isoDate],
+    queryKey: ["picks-ev", isoDate, accessToken],
     queryFn: () => apiFetch(`/picks/ev?date=${isoDate}`, {}, accessToken),
     staleTime: 5 * 60 * 1000,
+    enabled: !!accessToken,
   })
 
   const { data: lsData, isLoading: lsLoading } = useQuery<LineshoppingResponse>({
-    queryKey: ["picks-line-shopping", isoDate],
+    queryKey: ["picks-line-shopping", isoDate, accessToken],
     queryFn: () => apiFetch(`/picks/line-shopping?date=${isoDate}`, {}, accessToken),
     staleTime: 5 * 60 * 1000,
+    enabled: !!accessToken,
   })
 
   const allRows = useMemo(() => (data?.picks ?? []).map(p => computeRow(p, maxKelly)), [data, maxKelly])
