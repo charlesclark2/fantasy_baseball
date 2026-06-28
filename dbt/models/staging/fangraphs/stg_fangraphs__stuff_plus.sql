@@ -1,11 +1,12 @@
-{{
-    config(
-        materialized='table'
-    )
-}}
+-- E11.1-W4 dual-branch (tag w4_lakehouse): the duckdb branch rebuilds from the
+-- fg_stuff_plus_raw S3 parquet (flattening the VARCHAR raw_json); the Snowflake
+-- branch is a thin view over the lakehouse_ext external table.
+{{ config(materialized='view', tags=['w4_lakehouse']) }}
+
+{% if target.name == 'duckdb' %}
 
 with source as (
-    select * from {{ source('fangraphs', 'fg_stuff_plus_raw') }}
+    select * from read_parquet('{{ lakehouse_loc("fg_stuff_plus_raw") }}**/*.parquet', union_by_name=true)
 ),
 
 extracted as (
@@ -13,19 +14,19 @@ extracted as (
         fg_pitcher_id,
         pitcher_name,
         season,
-        raw_json:IP::float                                              as ip,
-        raw_json:sp_stuff::float                                        as stuff_plus,
-        raw_json:sp_location::float                                     as location_plus,
-        raw_json:sp_pitching::float                                     as pitching_plus,
+        json_extract_string(raw_json, '$.IP')::float                    as ip,
+        json_extract_string(raw_json, '$.sp_stuff')::float              as stuff_plus,
+        json_extract_string(raw_json, '$.sp_location')::float           as location_plus,
+        json_extract_string(raw_json, '$.sp_pitching')::float           as pitching_plus,
         -- Pitch arsenal usage percentages (pfx = PitchF/X tracking system)
-        raw_json['pfxFA%']::float                                       as _fb_fa_pct,
-        raw_json['pfxSI%']::float                                       as _fb_si_pct,
-        raw_json['pfxFC%']::float                                       as _fb_fc_pct,
-        raw_json['pfxSL%']::float                                       as _brk_sl_pct,
-        raw_json['pfxCU%']::float                                       as _brk_cu_pct,
-        raw_json['pfxCH%']::float                                       as _off_ch_pct,
-        raw_json['pfxFS%']::float                                       as _off_fs_pct,
-        raw_json:xMLBAMID::varchar                                      as mlbam_pitcher_id,
+        json_extract_string(raw_json, '$."pfxFA%"')::float              as _fb_fa_pct,
+        json_extract_string(raw_json, '$."pfxSI%"')::float              as _fb_si_pct,
+        json_extract_string(raw_json, '$."pfxFC%"')::float              as _fb_fc_pct,
+        json_extract_string(raw_json, '$."pfxSL%"')::float              as _brk_sl_pct,
+        json_extract_string(raw_json, '$."pfxCU%"')::float              as _brk_cu_pct,
+        json_extract_string(raw_json, '$."pfxCH%"')::float              as _off_ch_pct,
+        json_extract_string(raw_json, '$."pfxFS%"')::float              as _off_fs_pct,
+        json_extract_string(raw_json, '$.xMLBAMID')::varchar            as mlbam_pitcher_id,
         ingestion_ts,
         load_id,
         row_number() over (
@@ -63,3 +64,9 @@ select
     load_id
 from extracted
 where _rn = 1
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.stg_fangraphs__stuff_plus
+
+{% endif %}

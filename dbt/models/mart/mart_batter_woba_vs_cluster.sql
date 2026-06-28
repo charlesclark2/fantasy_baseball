@@ -1,9 +1,12 @@
-{{
-    config(
-        materialized = 'table',
-        unique_key   = "batter_id || '~' || cluster_id::varchar || '~' || game_date::varchar"
-    )
-}}
+-- E11.1-W4 dual-branch (tag w4_lakehouse): the duckdb branch rebuilds from
+-- mart_pitch_play_event (W1, registered as a DuckDB view) + the pitcher_clusters S3
+-- parquet (built by the DuckDB build of cluster_pitchers.py `--s3`, seeded with the
+-- prior Snowflake snapshots via `--seed`); the Snowflake branch is a thin view over the
+-- lakehouse_ext external table. Value-identical — the join (pitcher_id, season across
+-- ALL snapshots) and the window logic are unchanged.
+{{ config(materialized='view', tags=['w4_lakehouse']) }}
+
+{% if target.name == 'duckdb' %}
 
 -- Grain: batter_id × cluster_id × game_date
 -- Career-cumulative wOBA per batter vs. each pitcher cluster, through game_date - 1.
@@ -22,14 +25,17 @@
 with pa_with_clusters as (
     select
         ppe.batter_id,
-        ppe.game_date,
+        -- E11.1-W4: mart_pitch_play_event parquet stores game_date as VARCHAR; cast to
+        -- DATE so the `range ... interval '1 day' preceding` window below binds (DuckDB
+        -- has no VARCHAR - INTERVAL). Snowflake game_date is already DATE → value-identical.
+        ppe.game_date::date as game_date,
         ppe.game_year,
         ppe.woba_value,
         ppe.woba_denom,
         ppe.xwoba,
         pc.cluster_id
-    from {{ ref('mart_pitch_play_event') }} ppe
-    left join {{ source('statsapi', 'pitcher_clusters') }} pc
+    from mart_pitch_play_event ppe
+    left join read_parquet('{{ lakehouse_loc("pitcher_clusters") }}**/*.parquet', union_by_name=true) pc
         on  pc.pitcher_id = ppe.pitcher_id
         and pc.season     = ppe.game_year - 1
     where ppe.plate_appearance_event is not null
@@ -108,3 +114,9 @@ with_shrinkage as (
 )
 
 select * from with_shrinkage
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_batter_woba_vs_cluster
+
+{% endif %}

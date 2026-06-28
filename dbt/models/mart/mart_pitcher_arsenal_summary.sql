@@ -1,4 +1,7 @@
-{{ config(materialized='table') }}
+-- E11.1-W4 dual-branch (tag w4_lakehouse): the duckdb branch rebuilds from the
+-- registered DuckDB views of its refs; the Snowflake branch is a thin view over
+-- the lakehouse_ext external table.
+{{ config(materialized='view', tags=['w4_lakehouse']) }}
 
 -- Grain: pitcher_id × game_year
 -- Per-pitcher-season arsenal vector for k-means clustering (Card 7.K).
@@ -11,6 +14,8 @@
 -- Stratum-A features (velocity, movement, pitch mix, outcomes) are used for clustering;
 -- stratum-B features (stuff_plus, arm_angle) are recorded but excluded from k-means.
 -- Minimum threshold: 200 pitches (~5 quality starts).
+
+{% if target.name == 'duckdb' %}
 
 with pitch_chars as (
     select
@@ -26,7 +31,7 @@ with pitch_chars as (
         avg(release_pos_x_ft)                  as avg_release_side,
         avg(release_extension_ft)              as avg_extension,
         avg(pitcher_arm_angle_degrees)         as avg_arm_angle
-    from {{ ref('mart_pitch_characteristics') }}
+    from mart_pitch_characteristics
     where pitch_category in ('fastball', 'breaking', 'offspeed')
       and game_year >= 2015
     group by 1, 2, 3
@@ -124,7 +129,7 @@ with_stuff as (
         coalesce(s.breaking_pct, a.breaking_pct_statcast) as breaking_pct,
         coalesce(s.offspeed_pct, a.offspeed_pct_statcast) as offspeed_pct
     from arsenal_wide a
-    left join {{ ref('fct_fangraphs_pitcher_arsenal_wide') }} s
+    left join fct_fangraphs_pitcher_arsenal_wide s
         -- mlbam_pitcher_id in fct table is the MLBAM bam_id crosswalk
         on  s.mlbam_pitcher_id = a.pitcher_id
         and s.season           = a.game_year
@@ -132,3 +137,9 @@ with_stuff as (
 
 select * from with_stuff
 where total_pitches >= 200
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_pitcher_arsenal_summary
+
+{% endif %}

@@ -44,6 +44,77 @@ from betting_ml.utils.data_loader import get_snowflake_connection
 _PRIOR_FIT_MIN_PA = 5_000     # venues with < 5k PAs excluded from prior fit
 _OUTPUT_TABLE     = "baseball_data.betting.eb_park_factors_granular_raw"
 
+# ── E11.1-W4 lakehouse: build-on-DuckDB I/O ───────────────────────────────────
+# `--s3` mode reads savant_park_factors_raw from the S3 parquet (exported by
+# scripts/export_w4_raw_to_s3.py) and writes the EB posteriors to S3 parquet,
+# so the BUILD runs on DuckDB with NO Snowflake compute (the numpy EB math is
+# unchanged → value-identical). The Snowflake MERGE path below is retained for
+# rollback. The mart_park_factors_granular duckdb branch reads the output parquet
+# via read_parquet(lakehouse_loc("eb_park_factors_granular_raw")).
+_S3_BUCKET = "baseball-betting-ml-artifacts"
+_LAKEHOUSE = f"s3://{_S3_BUCKET}/baseball/lakehouse"
+_S3_INPUT  = f"{_LAKEHOUSE}/savant_park_factors_raw/**/*.parquet"
+_S3_OUTPUT = f"{_LAKEHOUSE}/eb_park_factors_granular_raw/data.parquet"
+
+# Output column order — matches eb_park_factors_granular_raw (scripts/ddl/eb_park_factors_granular_raw.sql)
+# so the generated external table + the mart's reads line up.
+_OUTPUT_COLS = [
+    "venue_id", "season", "n_pa",
+    "raw_hr_factor", "raw_doubles_triples_factor", "raw_singles_factor",
+    "raw_bb_factor", "raw_so_factor", "raw_woba_factor",
+    "eb_hr_factor", "eb_doubles_triples_factor", "eb_singles_factor",
+    "eb_bb_factor", "eb_so_factor", "eb_woba_factor",
+    "shrinkage_hr", "shrinkage_doubles_triples", "shrinkage_singles",
+    "shrinkage_bb", "shrinkage_so",
+    "prior_mean_hr", "prior_variance_hr",
+    "prior_mean_doubles_triples", "prior_variance_doubles_triples",
+    "fit_date", "run_id",
+]
+
+
+def _get_duckdb():
+    """DuckDB connection with S3 credential-chain auth (mirrors run_w1_lakehouse.py)."""
+    import duckdb
+    duck = duckdb.connect()
+    duck.execute("INSTALL httpfs; LOAD httpfs")
+    duck.execute(
+        "CREATE OR REPLACE SECRET baseball_s3 "
+        "(TYPE S3, PROVIDER credential_chain, REGION 'us-east-2')"
+    )
+    return duck
+
+
+def _load_savant_s3(duck, season: int) -> list[dict]:
+    """S3/DuckDB analogue of _load_savant — same projection, filter, and order."""
+    cur = duck.execute(
+        f"""
+        SELECT venue_id, venue_name, season, n_pa,
+               index_runs, index_hr, index_1b, index_2b, index_3b,
+               index_bb, index_so, index_woba
+        FROM read_parquet('{_S3_INPUT}', union_by_name=true)
+        WHERE season = {int(season)}
+          AND bat_side = 'All'
+          AND num_years_rolling = 3
+        ORDER BY venue_id
+        """
+    )
+    cols = [d[0].lower() for d in cur.description]
+    return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+
+def _write_s3(duck, rows: list[dict]) -> int:
+    """Write all-season posteriors to S3 parquet (full rebuild; replaces the
+    per-season MERGE). value-identical content — the EB math is unchanged."""
+    if not rows:
+        print("  no rows to write — skipping S3 write")
+        return 0
+    import pandas as pd
+    df = pd.DataFrame(rows, columns=_OUTPUT_COLS)
+    duck.register("_eb_granular_out", df)
+    duck.execute(f"COPY _eb_granular_out TO '{_S3_OUTPUT}' (FORMAT PARQUET)")
+    print(f"  wrote {len(df):,} rows → {_S3_OUTPUT}")
+    return len(df)
+
 # Per-event Bernoulli within-venue variance: (1 - p_event) / p_event
 _SIGMA_SQ_HR    = 30.25   # p ≈ 3.2%
 _SIGMA_SQ_D3    = 15.67   # p ≈ 6.0%  (doubles + triples combined)
@@ -391,6 +462,11 @@ def main() -> None:
     parser.add_argument("--season", type=int, default=None)
     parser.add_argument("--start-season", type=int, default=None)
     parser.add_argument("--end-season", type=int, default=None)
+    parser.add_argument(
+        "--s3", action="store_true",
+        help="E11.1-W4: build on DuckDB — read savant_park_factors_raw from S3 parquet "
+             "and write eb_park_factors_granular_raw posteriors to S3 parquet (no Snowflake).",
+    )
     args = parser.parse_args()
 
     current_year = date.today().year
@@ -400,6 +476,31 @@ def main() -> None:
         seasons = [args.season]
     else:
         seasons = [current_year]
+
+    if args.s3:
+        # E11.1-W4 build-on-DuckDB: read S3 → compute (unchanged numpy) → write S3 parquet.
+        # FULL rebuild across the requested seasons (replaces the per-season MERGE upsert):
+        # the mart reads all rows, so write one parquet holding every season fit this run.
+        duck = _get_duckdb()
+        run_id = str(uuid.uuid4())
+        fit_date = date.today()
+        all_rows: list[dict] = []
+        for s in seasons:
+            print(f"\nFitting granular park priors (S3) for season={s}")
+            rows = _load_savant_s3(duck, s)
+            if not rows:
+                print(f"  No Savant data for season={s}; skipping")
+                continue
+            posteriors = _compute_posteriors(_prep_factors(rows))
+            for r in posteriors:
+                r["fit_date"] = fit_date.isoformat()
+                r["run_id"] = run_id
+            all_rows.extend(posteriors)
+            print(f"  computed {len(posteriors)} venue rows for season={s}")
+        total = _write_s3(duck, all_rows)
+        duck.close()
+        print(f"\nDone (S3). {total} total rows written across {len(seasons)} season(s).")
+        return
 
     conn = get_snowflake_connection(schema="betting")
     try:

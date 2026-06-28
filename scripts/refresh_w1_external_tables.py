@@ -82,6 +82,30 @@ W3PRE_TABLES = [
     "stg_statsapi_games",
 ]
 
+# E11.1-W4: the FanGraphs / posteriors-cluster / raw-savant marts (6) + their FanGraphs
+# precursor subtree (4 staging + 2 fct + 1 statsapi staging), created by
+# scripts/ddl/generate_w4_external_tables.py. BEST-EFFORT (WARN if missing) during the
+# opt-in rollout — like W3pre, these external tables don't exist until the generator is
+# run, so a "does not exist" here is an expected skip, NOT a HALT (else this op would fail
+# the daily job for the whole pre-cutover window). PROMOTE to `required` once W4 is
+# default-on in run_w1_lakehouse (the marts feed the morning feature build at batch time;
+# the W4 read-path audit confirmed NONE are read at request time).
+W4_TABLES = [
+    "stg_fangraphs__stuff_plus",
+    "stg_fangraphs__pitcher_arsenal",
+    "stg_fangraphs__zips_hitting",
+    "stg_fangraphs__hitting_leaderboard",
+    "fct_fangraphs_pitcher_arsenal_wide",
+    "fct_fangraphs_hitting_analytics",
+    "stg_statsapi_player_profiles",
+    "mart_pitcher_arsenal_summary",
+    "mart_pitcher_profile_summary",
+    "mart_batter_profile_summary",
+    "mart_park_factors_granular",
+    "mart_batter_woba_vs_cluster",
+    "mart_catcher_framing",
+]
+
 
 def _load_private_key():
     key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
@@ -123,7 +147,7 @@ def main():
     # is run, so a "does not exist" here is an expected skip (WARN-tier), NOT a HALT — else
     # this op would fail the daily job for the entire pre-cutover rollout window. (E11.1-W3pre)
     required = set(W1_TABLES) | set(W2_TABLES) | set(W3_TABLES)
-    for table in W1_TABLES + W2_TABLES + W3_TABLES + W3PRE_TABLES:
+    for table in W1_TABLES + W2_TABLES + W3_TABLES + W3PRE_TABLES + W4_TABLES:
         fqn = f"{_SCHEMA}.{table}"
         try:
             cur.execute(f"ALTER EXTERNAL TABLE {fqn} REFRESH")
@@ -133,7 +157,7 @@ def main():
                 print(f"  FAILED {fqn}: {e}", file=sys.stderr)
                 failed.append(table)
             else:
-                print(f"  WARNING skip {fqn} (W3pre, not yet created): {e}", file=sys.stderr)
+                print(f"  WARNING skip {fqn} (W3pre/W4, not yet created): {e}", file=sys.stderr)
     cur.close()
     conn.close()
     if failed:
@@ -141,7 +165,7 @@ def main():
             f"External table refresh FAILED for: {failed}  "
             "Downstream feature build will see stale S3 data."
         )
-    print("W1+W2+W3 external table refresh complete (W3pre best-effort).")
+    print("W1+W2+W3 external table refresh complete (W3pre + W4 best-effort).")
 
 
 if __name__ == "__main__":

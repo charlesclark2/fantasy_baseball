@@ -1,12 +1,13 @@
-{{
-    config(
-        materialized='view'
-    )
-}}
+-- E11.1-W4 dual-branch (tag w4_lakehouse): the duckdb branch rebuilds from the
+-- registered DuckDB views of its refs; the Snowflake branch is a thin view over
+-- the lakehouse_ext external table.
+{{ config(materialized='view', tags=['w4_lakehouse']) }}
+
+{% if target.name == 'duckdb' %}
 
 with zips as (
     select *
-    from {{ ref('stg_fangraphs__zips_hitting') }}
+    from stg_fangraphs__zips_hitting
     where projection_type = 'zips'
 ),
 
@@ -28,7 +29,7 @@ latest_windows as (
         max(case when window_type = '14d'    then pa        end) as rolling_pa_14d,
         max(case when window_type = '30d'    then pa        end) as rolling_pa_30d,
         max(case when window_type = 'season' then pa        end) as season_pa
-    from {{ ref('stg_fangraphs__hitting_leaderboard') }}
+    from stg_fangraphs__hitting_leaderboard
     group by fg_batter_id, season
 )
 
@@ -63,3 +64,9 @@ from zips z
 left join latest_windows l
     on  z.fg_batter_id = l.fg_batter_id
     and z.season       = l.season
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.fct_fangraphs_hitting_analytics
+
+{% endif %}

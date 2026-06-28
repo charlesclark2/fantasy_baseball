@@ -11,7 +11,13 @@
 -- 2026 game uses season=2025 EB estimates — same guard as mart_eb_park_factors.
 -- =============================================================================
 
-{{ config(materialized='table') }}
+-- E11.1-W4 dual-branch (tag w4_lakehouse): the duckdb branch reads the
+-- eb_park_factors_granular_raw S3 parquet written by the build-on-DuckDB path of
+-- fit_granular_park_priors.py (`--s3`); the Snowflake branch is a thin view over the
+-- lakehouse_ext external table. Value-identical (this mart is a pure projection).
+{{ config(materialized='view', tags=['w4_lakehouse']) }}
+
+{% if target.name == 'duckdb' %}
 
 select
     venue_id,
@@ -50,4 +56,10 @@ select
     fit_date,
     run_id
 
-from {{ source('betting', 'eb_park_factors_granular_raw') }}
+from read_parquet('{{ lakehouse_loc("eb_park_factors_granular_raw") }}**/*.parquet', union_by_name=true)
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_park_factors_granular
+
+{% endif %}
