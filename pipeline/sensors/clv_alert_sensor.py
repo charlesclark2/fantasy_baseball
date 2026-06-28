@@ -95,11 +95,14 @@ def clv_alert_sensor(context: SensorEvaluationContext):
     )
 
     if pct_pos is not None and pct_pos < _ALERT_THRESHOLD:
-        raise Exception(
+        msg = (
             f"CLV ALERT: pct_positive_clv={pct_pos:.1%} < threshold {_ALERT_THRESHOLD:.0%} "
             f"over last {_ROLLING_DAYS} days (n={n}, mean_clv={mean_clv:+.4f}). "
             f"Check feature_pregame_meta_model_features for model drift or data issues."
         )
+        from pipeline.utils.alerting import send_alert  # INC-16-P6
+        send_alert("CLV degraded", msg, severity="ERROR", dedup_key="clv_alert")
+        raise Exception(msg)
 
     yield SkipReason(
         f"CLV healthy: pct_positive={pct_pos:.1%} >= {_ALERT_THRESHOLD:.0%} "

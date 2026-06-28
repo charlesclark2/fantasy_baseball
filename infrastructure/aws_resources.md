@@ -833,3 +833,41 @@ Verify:
 - Temp-password login works at `https://www.credencesports.com/login`
 - After setting permanent password, dashboard loads
 - No spam folder
+
+---
+
+## Observability — INC-16-P6 (orchestration box alerting)
+
+> **Status: code-complete 2026-06-27; provisioned by `services/observability/provision-observability.sh` (operator-run).** One SNS topic is the unified channel — the Python notifier (`pipeline/utils/alerting.py`), the box shell notifier (`services/dagster/aws/notify.sh`), and all CloudWatch alarms publish to it; one email subscription delivers everything.
+
+| Resource | Name / value | Purpose |
+|----------|--------------|---------|
+| SNS topic | `credence-prod-alerts` | single alert channel (email subscription confirmed by operator) |
+| Box role grant | `credence-alerts-publish` (inline on `credence-dagster-ec2-role`) | `sns:Publish` to the topic |
+| Box role grant | `CloudWatchAgentServerPolicy` (managed) | CloudWatch agent → mem/swap/disk metrics |
+| CloudWatch agent | config `services/dagster/aws/cloudwatch-agent-config.json` (mirrored in `cloud-init.sh`) | publishes `mem_used_percent` / `swap_used_percent` / `disk_used_percent` (namespace `CWAgent`, dim `InstanceId`) |
+| Lambda | `credence-deadman-daily` (py3.12 arm64) | off-box daily-output dead-man switch; reads the DynamoDB heartbeat (`pk=ops, sk=heartbeat#daily`), alerts if not today's date |
+| Lambda role | `credence-deadman-lambda-role` | `dynamodb:GetItem` on serving cache + `sns:Publish` |
+| EventBridge rule | `credence-deadman-daily-schedule` (`cron(30 12 * * ? *)` UTC = 08:30 ET) | invokes the dead-man Lambda at the morning cutoff |
+
+### CloudWatch alarms (all → `credence-prod-alerts`, dim `InstanceId`)
+| Alarm | Condition | Notes |
+|-------|-----------|-------|
+| `credence-box-status-instance` | `StatusCheckFailed_Instance` ≥1, 2×60s | instance reachability; missing-data = breaching |
+| `credence-box-status-system` | `StatusCheckFailed_System` ≥1, 2×60s | AWS-side reachability |
+| `credence-box-cpu-sustained` | `CPUUtilization` >90% avg, 3×600s (30 min) | sustained only — build/predict bursts don't page |
+| `credence-box-mem` | `mem_used_percent` >85% avg, 1×600s | OOM precursor (likeliest failure on the 4 GB box) |
+| `credence-box-swap` | `swap_used_percent` >50% avg, 1×600s | thrashing / memory pressure |
+| `credence-box-disk` | `disk_used_percent` >85% avg, 1×300s | docker images/logs/parquet on small root vol |
+| `credence-box-cpu-credits` *(standard mode)* | `CPUCreditBalance` <50 | throttle precursor — only if instance is `standard` |
+| `credence-box-cpu-surplus` *(unlimited mode)* | `CPUSurplusCreditsCharged` >0, 1×3600s | t4g default; sustained burst = cost, not throttle |
+
+### Alert layers (one per failure mode)
+- **Daily-output dead-man** (Lambda, off-box) — heartbeat from `write_serving_store`; fires whatever the root cause. Highest value.
+- **Box/instance liveness + resource** — CloudWatch alarms above.
+- **Service liveness** — `services/dagster/aws/healthcheck.sh` host-cron (every 5 min): core containers up + dagit/dbt-runner/flaresolverr reachable; 1h cooldown.
+- **Dagster run failures** — `run_failure_alert_sensor` (OSS) → SES/SNS; LOUD for HALT-tier jobs. Replaces Dagster+ Cloud's run-failure alerting (gone post-cutover).
+- **Freshness / capture staleness** — the existing raise-to-alert sensors (`odds_freshness`, `schedule_freshness`, `statcast_freshness`, `clv`, `model_health`) now call `send_alert` directly (their old "raise → Dagster+ email" path died with the cutover); plus `check_data_freshness.py` routed via the crontab.
+- **Deploy rollback** — `deploy.sh` `rollback()` pages on auto-rollback.
+
+**Subject convention:** `[Credence PROD] <SEVERITY>: <subject>`. De-dup: Python notifier rate-limits per key (1h); healthcheck has a 1h file cooldown; freshness sensors carry per-condition `dedup_key`s.

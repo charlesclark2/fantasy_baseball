@@ -1,0 +1,18 @@
+{
+  "agent": { "metrics_collection_interval": 60, "run_as_user": "root" },
+  "metrics": {
+    "namespace": "CWAgent",
+    "append_dimensions": { "InstanceId": "${aws:InstanceId}" },
+    "aggregation_dimensions": [["InstanceId"]],
+    "metrics_collected": {
+      "mem":  { "measurement": [{"name": "mem_used_percent",  "unit": "Percent"}], "metrics_collection_interval": 60 },
+      "swap": { "measurement": [{"name": "swap_used_percent", "unit": "Percent"}], "metrics_collection_interval": 60 },
+      "disk": {
+        "measurement": [{"name": "used_percent", "rename": "disk_used_percent", "unit": "Percent"}],
+        "resources": ["/"],
+        "metrics_collection_interval": 60,
+        "ignore_file_system_types": ["sysfs", "devtmpfs", "tmpfs", "overlay"]
+      }
+    }
+  }
+}

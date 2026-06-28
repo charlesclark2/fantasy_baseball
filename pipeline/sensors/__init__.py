@@ -8,8 +8,10 @@ from pipeline.sensors.conviction_pick_alert_sensor import conviction_pick_alert_
 from pipeline.sensors.odds_current_rebuild_sensor import odds_current_rebuild_sensor
 from pipeline.sensors.odds_freshness_alert_sensor import odds_freshness_alert_sensor
 from pipeline.sensors.schedule_freshness_alert_sensor import schedule_freshness_alert_sensor
+from pipeline.sensors.run_failure_alert_sensor import run_failure_alert_sensor
 
 all_sensors = [
+    run_failure_alert_sensor,  # INC-16-P6: OSS run-failure → SES email (replaces Dagster+ alerting)
     lineup_monitor_sensor,
     morning_watchdog_sensor,
     pregame_alert_sensor,

@@ -54,6 +54,33 @@ systemctl enable --now amazon-ssm-agent # SSM shell (P4 retires SSH); preinstall
 # region for any host-level boto3 (the SSM agent + ad-hoc); containers also get it via .env
 grep -q '^AWS_DEFAULT_REGION=' /etc/environment || echo 'AWS_DEFAULT_REGION=us-east-1' >> /etc/environment
 
+# --- CloudWatch agent (INC-16-P6: mem/swap/disk; CPU + status checks are native) ----
+# EC2 does NOT publish memory/swap/disk — the agent does. Needs CloudWatchAgentServerPolicy
+# on the instance role (provision-ec2.sh attaches it). Config embedded here for fresh-box
+# self-sufficiency; the version-controlled source of truth is
+# services/dagster/aws/cloudwatch-agent-config.json (keep the two in sync).
+dnf install -y amazon-cloudwatch-agent
+cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'CWCFG'
+{
+  "agent": { "metrics_collection_interval": 60, "run_as_user": "root" },
+  "metrics": {
+    "namespace": "CWAgent",
+    "append_dimensions": { "InstanceId": "${aws:InstanceId}" },
+    "aggregation_dimensions": [["InstanceId"]],
+    "metrics_collected": {
+      "mem":  { "measurement": [{"name": "mem_used_percent",  "unit": "Percent"}], "metrics_collection_interval": 60 },
+      "swap": { "measurement": [{"name": "swap_used_percent", "unit": "Percent"}], "metrics_collection_interval": 60 },
+      "disk": { "measurement": [{"name": "used_percent", "rename": "disk_used_percent", "unit": "Percent"}],
+                "resources": ["/"], "metrics_collection_interval": 60,
+                "ignore_file_system_types": ["sysfs", "devtmpfs", "tmpfs", "overlay"] }
+    }
+  }
+}
+CWCFG
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json || \
+  echo "[cloud-init] WARNING: CloudWatch agent start failed (check CloudWatchAgentServerPolicy on the role)"
+
 echo "[cloud-init] INC-16 host ready (docker + cron + ssm + region). Next (as ec2-user):"
 echo "  git clone <repo> ~/app && cd ~/app"
 echo "  cp services/dagster/aws/.env.example services/dagster/aws/.env  # fill it, chmod 600"

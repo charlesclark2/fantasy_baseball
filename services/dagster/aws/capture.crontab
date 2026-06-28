@@ -34,6 +34,15 @@ SHELL=/bin/bash
 # Weather forecast checkpoints T-24/6/3/1h + observed-at-first-pitch (entrypoint self-guards 10:00-02:00 UTC).
 0 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml run --rm weather-capture >> /home/ec2-user/capture-cron.log 2>&1
 
+# ── INC-16-P6 observability (host-cron) ──────────────────────────────────────
+# Service-liveness healthcheck every 5 min (core containers up + reachable; pages
+# via SNS on failure, self-cooldown 1h so a sustained outage doesn't spam).
+*/5 * * * * /home/ec2-user/app/services/dagster/aws/healthcheck.sh >> /home/ec2-user/healthcheck-cron.log 2>&1
+
+# Reuse the existing data-freshness audit (P6 task 5): run it morning + midday and
+# page via SNS on non-zero exit (route its output to the same channel).
+30 12,17 * * * source /home/ec2-user/app/services/dagster/aws/notify.sh; docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e SNOWFLAKE_PRIVATE_KEY_PATH=/tmp/snowflake_rsa_key.pem dagster-codeloc python scripts/check_data_freshness.py >> /home/ec2-user/freshness-cron.log 2>&1 || notify ERROR "data-freshness check failed" "scripts/check_data_freshness.py exited non-zero — see /home/ec2-user/freshness-cron.log on the box (SSM)."
+
 # ── OPTIONAL (interim, until P4): refresh SERVED odds prices ──────────────────
 # P3 restores the RAW odds feed (above) → mlb_odds_raw is current. But DISPLAYED
 # prices read mart_odds_outcomes, which only refreshes when the odds marts rebuild

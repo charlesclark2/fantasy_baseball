@@ -172,10 +172,15 @@ def schedule_freshness_alert_sensor(context: SensorEvaluationContext):
         return
 
     context.update_cursor(today)
-    raise Exception(
+    msg = (
         f"SCHEDULE DATA ALERT ({today}): "
         + "; ".join(problems)
-        + ". Check the Railway schedule_capture service logs, the daily_ingestion_job "
-        "ingest_statsapi_schedule op, and the Dagster+ run history. "
+        + ". Check the host-cron schedule_capture (capture.crontab), the daily_ingestion_job "
+        "ingest_statsapi_schedule op, and the Dagit run history. "
         "Manual fix: uv run python scripts/ingest_statsapi.py schedule"
     )
+    # INC-16-P6: email directly (Dagster+ tick-failure alerting is gone post-cutover);
+    # still raise so the tick is marked FAILED in Dagit.
+    from pipeline.utils.alerting import send_alert
+    send_alert("Schedule data stale/missing", msg, severity="CRITICAL", dedup_key="schedule_freshness")
+    raise Exception(msg)

@@ -105,13 +105,19 @@ def odds_freshness_alert_sensor(context: SensorEvaluationContext):
         )
 
     if problems:
-        raise Exception(
+        msg = (
             "ODDS CAPTURE ALERT (single-vendor Odds-API): "
             + "; ".join(problems)
-            + ". Check the Railway odds_capture service logs + the Odds-API plan/key. "
+            + ". Check the host-cron odds_capture (capture.crontab) + the Odds-API plan/key. "
             "Manual failover: re-enable the Parlay odds_snapshot schedules in "
             "pipeline/schedules/intraday_schedules.py (defs retained) if Parlay is re-subscribed."
         )
+        # INC-16-P6: email directly (Dagster+ tick-failure alerting is gone post-cutover);
+        # still raise so the tick is marked FAILED in Dagit.
+        from pipeline.utils.alerting import send_alert
+        send_alert("Odds capture stale/low-quota", msg, severity="CRITICAL",
+                   dedup_key="odds_freshness")
+        raise Exception(msg)
 
     context.log.info(
         "Odds capture healthy: last ingest %s min ago; x_requests_remaining=%s",
