@@ -43,9 +43,15 @@ sys.path.insert(0, str(PROJECT_ROOT))
 _ROLLING_DAYS = 30
 _PREDICTION_TYPE = "post_lineup"
 _SCHEMA = "betting_ml"                 # prod prediction log
-# Serving + calibration fixes went live 2026-06-10; don't gate on pre-fix predictions.
-# Safe to delete this floor once the rolling window naturally starts after it.
-_GATE_FLOOR_DATE = date(2026, 6, 10)
+# v6 (de-leaked bake-off champion) went live 2026-06-23. Floor prevents the 30-day
+# window from mixing v4/v5 predictions (known-low-spread, near-zero live skill from
+# a different root cause) with the v6 era being measured here (INC-17 diagnosis).
+# Safe to delete/update when the v6 window alone is long enough (>30 days from floor).
+_GATE_FLOOR_DATE = date(2026, 6, 23)
+# Pin to the deployed champion version so mixed-model noise (v4/v5 backfill rows
+# competing with v6 in the dedup) doesn't inflate or deflate the measured spread.
+# Update this when a new champion is promoted.
+_MODEL_VERSION = "v6"
 
 
 @sensor(minimum_interval_seconds=86400)  # at most once per day
@@ -60,7 +66,9 @@ def model_health_alert_sensor(context: SensorEvaluationContext):
 
     conn = get_snowflake_connection()
     try:
-        result = mh.evaluate(conn, _SCHEMA, start, end, prediction_type=_PREDICTION_TYPE)
+        result = mh.evaluate(conn, _SCHEMA, start, end,
+                             model_version=_MODEL_VERSION,
+                             prediction_type=_PREDICTION_TYPE)
     finally:
         conn.close()
 
@@ -79,12 +87,20 @@ def model_health_alert_sensor(context: SensorEvaluationContext):
     failed = [t for t, v in verdicts.items() if v == "FAIL"]
     if failed:
         details = " | ".join(f"{t}: {result[t]['fail_reasons']}" for t in failed)
+        hw_spread = result["home_win"].get("calibrated_spread", float("nan"))
+        flat_note = (
+            " NOTE: home_win calibrated_spread is very low — check for flat-output "
+            "model (de-leak removed primary discriminator?) before assuming serving regression."
+            if hw_spread < mh.MIN_SPREAD_PROB * 2 else ""
+        )
         msg = (
-            f"MODEL HEALTH ALERT: gate FAILED for {failed} over {window} ({_PREDICTION_TYPE}). "
-            f"{details}. Likely a serving/calibration regression — the deployed model's "
-            f"discrimination has degraded (cf. the 2026-06 audit). Inspect with: "
+            f"MODEL HEALTH ALERT ({_MODEL_VERSION}): gate FAILED for {failed} over {window} "
+            f"({_PREDICTION_TYPE}). {details}.{flat_note} "
+            f"Diagnose: (1) run rescore_audit --since {start.isoformat()} --compare-live "
+            f"(serving vs training-time features); (2) check consensus_win_prob spread in pred log "
+            f"(flat output → architecture; large corr jump on rescore → serving gap). Inspect: "
             f"uv run python scripts/ops/model_health_metrics.py --since {start.isoformat()} "
-            f"--prediction-type {_PREDICTION_TYPE} --schema {_SCHEMA}"
+            f"--prediction-type {_PREDICTION_TYPE} --schema {_SCHEMA} --model-version {_MODEL_VERSION}"
         )
         from pipeline.utils.alerting import send_alert  # INC-16-P6
         send_alert("Model health gate FAILED", msg, severity="ERROR",
