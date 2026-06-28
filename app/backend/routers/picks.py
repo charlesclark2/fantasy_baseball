@@ -1440,6 +1440,12 @@ def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaul
             datetime.strptime(date, "%Y-%m-%d")
         except ValueError:
             raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+        pg_hit = serving_cache.get_cache("picks/ev", date)
+        if pg_hit is not None:
+            try:
+                return EVPicksResponse(**pg_hit)
+            except Exception:
+                logger.warning("DynamoDB picks/ev invalid for date=%s — falling through", date)
         query = _EV_QUERY_DATE
         params = {"target_date": date}
         cache_key = None  # don't cache historical date lookups
