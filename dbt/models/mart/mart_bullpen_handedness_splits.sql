@@ -1,9 +1,16 @@
 {{
     config(
-        materialized='table'
+        materialized = 'view',
+        tags         = ['w3_lakehouse']
     )
 }}
 
+-- E11.1-W3: dual-branch lakehouse model. Upstream stg_batter_pitches (W1) and
+-- mart_starting_pitcher_game_log (W2) are S3 parquet (registered as views by
+-- run_w1_lakehouse.py); the Snowflake branch is a thin view over the lakehouse_ext
+-- external table. game_date is cast ::date in the pitches CTE so the RANGE-interval
+-- rolling windows work on the VARCHAR game_date the parquet carries.
+--
 -- Grain: team_abbrev × game_pk.
 -- Rolling 30-day bullpen xwOBA-against split by batter handedness (L or R).
 -- Leakage guard: rolling window upper bound is interval '1 day' preceding (same
@@ -25,11 +32,13 @@
 --   mart_bullpen_effectiveness — overall effectiveness (xwOBA, K%, BB%, etc.)
 -- Join all three on team_abbrev + game_pk for a full pre-game bullpen view.
 
+{% if target.name == 'duckdb' %}
+
 with pitches as (
 
     select
         game_pk,
-        game_date,
+        game_date::date as game_date,   -- VARCHAR (ISO) in parquet → DATE for RANGE windows [E11.1-W3]
         game_year,
         pitcher_id,
         batter_hand,
@@ -39,7 +48,7 @@ with pitches as (
         xwoba,
         woba_value,
         woba_denom
-    from {{ ref('stg_batter_pitches') }}
+    from stg_batter_pitches
     where game_type = 'R'
       and batter_hand in ('L', 'R')
 
@@ -58,7 +67,7 @@ pitches_tagged as (
 starters as (
 
     select game_pk, pitcher_id, pitching_team
-    from {{ ref('mart_starting_pitcher_game_log') }}
+    from mart_starting_pitcher_game_log
 
 ),
 
@@ -195,3 +204,9 @@ from game_spine gs
 left join rolling r
     on  r.game_date     = gs.game_date
     and r.pitching_team = gs.pitching_team
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_bullpen_handedness_splits
+
+{% endif %}

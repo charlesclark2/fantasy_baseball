@@ -35,9 +35,18 @@
 
 {{
     config(
-        materialized = 'table'
+        materialized = 'view',
+        tags         = ['w3_lakehouse']
     )
 }}
+
+-- E11.1-W3: dual-branch lakehouse model. Upstream stg_batter_pitches is the W1
+-- S3 parquet (registered as a view by run_w1_lakehouse.py); the Snowflake branch
+-- is a thin view over the lakehouse_ext external table. game_date is already cast
+-- to ::date in pa_terminal (so the RANGE-interval rolling windows work on the
+-- VARCHAR game_date the parquet carries).
+
+{% if target.name == 'duckdb' %}
 
 with
 
@@ -61,7 +70,7 @@ pitches as (
         xwoba,
         pre_pitch_bat_score,
         post_pitch_bat_score
-    from {{ ref('stg_batter_pitches') }}
+    from stg_batter_pitches
     where game_type = 'R'
 
 ),
@@ -420,3 +429,9 @@ final as (
 )
 
 select * from final
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_team_base_state_splits
+
+{% endif %}

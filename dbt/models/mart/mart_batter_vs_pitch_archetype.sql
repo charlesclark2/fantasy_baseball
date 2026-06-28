@@ -1,4 +1,9 @@
-{{ config(materialized='table') }}
+{{
+    config(
+        materialized = 'view',
+        tags         = ['w3_lakehouse']
+    )
+}}
 
 -- Grain: batter_id × pitch_archetype × game_year
 -- Aggregates batter outcomes against each pitcher pitch-mix archetype.
@@ -11,6 +16,13 @@
 --   shrink_weight = pa_count / (pa_count + 50)
 -- Cells with fewer PA blend toward league-average constants so sparse rows
 -- don't produce extreme feature values.
+--
+-- E11.1-W3: dual-branch lakehouse model. Upstream stg_batter_pitches (W1) and
+-- mart_pitcher_pitch_archetype (W3, built + registered as a view immediately
+-- before this model by run_w1_lakehouse.py) are S3 parquet; the Snowflake branch
+-- is a thin view over the lakehouse_ext external table.
+
+{% if target.name == 'duckdb' %}
 
 with pitches as (
     select
@@ -22,8 +34,8 @@ with pitches as (
         bp.woba_denom,
         bp.xwoba,
         pa.pitch_archetype
-    from {{ ref('stg_batter_pitches') }} bp
-    inner join {{ ref('mart_pitcher_pitch_archetype') }} pa
+    from stg_batter_pitches bp
+    inner join mart_pitcher_pitch_archetype pa
         on  pa.pitcher_id = bp.pitcher_id
         and pa.game_year  = bp.game_year
     where bp.game_type = 'R'
@@ -118,3 +130,9 @@ with_shrinkage as (
 )
 
 select * from with_shrinkage
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_batter_vs_pitch_archetype
+
+{% endif %}

@@ -1,9 +1,17 @@
 {{
     config(
-        materialized='table'
+        materialized = 'view',
+        tags         = ['w3_lakehouse']
     )
 }}
 
+-- E11.1-W3: dual-branch lakehouse model. Upstream stg_batter_pitches (W1),
+-- mart_pitch_play_event (W1), and mart_starting_pitcher_game_log (W2) are S3
+-- parquet (registered as views by run_w1_lakehouse.py); the Snowflake branch is a
+-- thin view over the lakehouse_ext external table. game_date is cast ::date in the
+-- pitches CTE so the RANGE-interval rolling windows work on the VARCHAR game_date
+-- the parquet carries.
+--
 -- Grain: team_abbrev × game_pk.
 -- Pre-game bullpen leverage exhaustion for each team entering a given game.
 -- Designed to join to feature_pregame_game_features on (team_abbrev + game_pk).
@@ -39,6 +47,8 @@
 --   mart_bullpen_handedness_splits  — L/R split effectiveness
 -- Join all four on team_abbrev + game_pk for a complete pre-game bullpen view.
 
+{% if target.name == 'duckdb' %}
+
 with
 
 pitches as (
@@ -46,15 +56,15 @@ pitches as (
     select
         bp.pitch_sk,
         bp.game_pk,
-        bp.game_date,
+        bp.game_date::date as game_date,   -- VARCHAR (ISO) in parquet → DATE for RANGE windows [E11.1-W3]
         bp.game_year,
         bp.at_bat_number,
         bp.pitcher_id,
         case when bp.inning_half = 'Top' then bp.home_team else bp.away_team end
             as pitching_team,
         ppe.delta_home_win_exp
-    from {{ ref('stg_batter_pitches') }} bp
-    join {{ ref('mart_pitch_play_event') }} ppe
+    from stg_batter_pitches bp
+    join mart_pitch_play_event ppe
         on ppe.pitch_sk = bp.pitch_sk
     where bp.game_type = 'R'
       and ppe.delta_home_win_exp is not null
@@ -64,7 +74,7 @@ pitches as (
 starters as (
 
     select game_pk, pitcher_id, pitching_team
-    from {{ ref('mart_starting_pitcher_game_log') }}
+    from mart_starting_pitcher_game_log
 
 ),
 
@@ -174,3 +184,9 @@ from game_spine gs
 left join rolling r
     on  r.game_date     = gs.game_date
     and r.pitching_team = gs.pitching_team
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_bullpen_leverage
+
+{% endif %}
