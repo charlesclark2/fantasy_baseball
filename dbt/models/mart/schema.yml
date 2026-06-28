@@ -8466,14 +8466,19 @@ models:
         description: Bookmaker display name.
       - name: market_key
         description: >
-          Derivative market key. Exactly one of four values:
-          team_totals (team run total), alternate_totals (alt full-game total),
-          h2h_h1 (F5 moneyline), totals_h1 (F5 run total).
+          Derivative market key, passed through unmapped from the odds API. Seven values
+          occur in the source (verified against prod betting.mart_derivative_closes — all
+          predate E11.1-W3pre): team_totals (team run total), alternate_totals (alt full-game
+          total), h2h_h1 and h2h_1st_5_innings (F5 moneyline, two API namings), totals_h1 and
+          totals_1st_5_innings (F5 run total, two API namings), totals_1st_1_innings (first-
+          inning run total). (The list was previously [team_totals, alternate_totals, h2h_h1,
+          totals_h1]; that was stale — the test never ran in state:modified+ CI until W3pre
+          pulled this mart into the selection, which surfaced the four already-present markets.)
         tests:
           - not_null
           - accepted_values:
               arguments:
-                values: [team_totals, alternate_totals, h2h_h1, totals_h1]
+                values: [team_totals, alternate_totals, h2h_h1, totals_h1, h2h_1st_5_innings, totals_1st_5_innings, totals_1st_1_innings]
       - name: outcome_name
         description: >
           Outcome name. 'Over' or 'Under' for totals markets; team name for h2h_h1
