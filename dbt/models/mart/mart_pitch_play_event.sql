@@ -135,7 +135,23 @@ final as (
         -- ── Run / win expectancy impact ───────────────────────────────────────────
         delta_run_exp,
         delta_pitcher_run_exp,
-        delta_home_win_exp
+        delta_home_win_exp,
+
+        -- ── wOBA (PA outcome; non-null only on the terminal pitch of each PA) ──────
+        -- E11.1-W3pre woba-DDL fix: these three columns were DROPPED from this
+        -- branch at W1d (2026-06-25) but were still DECLARED in the lakehouse_ext
+        -- external-table DDL (scripts/ddl/w1_external_tables.sql) → the Snowflake
+        -- view read NULL for them, zeroing every downstream reader of
+        -- ppe.woba_value / ppe.woba_denom / ppe.xwoba:
+        --   mart_batter_woba_vs_cluster, mart_batter_archetype_vs_pitcher_cluster,
+        --   mart_batter_profile_summary  (mart_pitcher_batter_history was repointed
+        --   to stg_batter_pitches in W2 and is unaffected).
+        -- Re-emitting them from the source (stg_batter_pitches carries real woba)
+        -- makes the DDL columns correct again with NO reader or DDL change. Summing
+        -- across pitch rows == summing across PAs (non-terminal pitches are NULL).
+        woba_value,
+        woba_denom,
+        xwoba
 
     from source
 

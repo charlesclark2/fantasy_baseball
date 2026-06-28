@@ -76,8 +76,15 @@ def export_source(conn, source: str, since: str | None, dry_run: bool) -> int:
 
     where = f"WHERE ingestion_ts::date >= '{since}'" if since else ""
     cur.execute(f"SELECT DISTINCT ingestion_ts::date AS dt FROM {fqn} {where} ORDER BY dt")
-    dates = [r[0] for r in cur.fetchall()]
+    raw_dates = [r[0] for r in cur.fetchall()]
+    # Snowflake DISTINCT includes a NULL group (sorted last by ORDER BY) for rows whose
+    # ingestion_ts is NULL — monthly_schedule's historical backfill carries ~134 such rows
+    # (the bulk of the pre-2026 schedule: 25k+ game_pks found in NO dated row). They have no
+    # date, so the per-date loop below would both fail (WHERE ... = 'None') and DROP them.
+    has_null_ts = None in raw_dates
+    dates = [d for d in raw_dates if d is not None]
     print(f"\n{source}: {len(dates)} ingestion date(s) to export"
+          + (" + NULL-ts partition" if has_null_ts else "")
           + (f" (since {since})" if since else ""))
 
     total = 0
@@ -91,6 +98,24 @@ def export_source(conn, source: str, since: str | None, dry_run: bool) -> int:
             n = write_raw_rows_s3(source, rows, mode="overwrite_partition")
             print(f"  {dt}: {n:,} rows → lakehouse_raw/{source}/dt={dt}/")
         total += len(rows)
+
+    # NULL-ts historical rows: export explicitly into the writer's '__nullts__' sentinel
+    # partition with ingestion_ts PRESERVED as NULL (the SELECT returns it as None → the writer
+    # keeps the explicit None rather than stamping now(), so the flatten's qualify dedup and the
+    # parity check both see NULL, matching the live Snowflake staging). They have no date, so a
+    # --since run can't (and shouldn't) target them — only a full backfill exports them, and
+    # overwrite_partition keeps the sentinel partition idempotent across re-runs.
+    if has_null_ts:
+        cur.execute(f"SELECT {cols} FROM {fqn} WHERE ingestion_ts IS NULL")
+        names = [d[0].lower() for d in cur.description]
+        rows = [dict(zip(names, r)) for r in cur.fetchall()]
+        if dry_run:
+            print(f"  NULL-ts: {len(rows):,} rows  (dry-run — no S3 write)")
+        else:
+            n = write_raw_rows_s3(source, rows, mode="overwrite_partition")
+            print(f"  NULL-ts: {n:,} rows → lakehouse_raw/{source}/dt=__nullts__/")
+        total += len(rows)
+
     cur.close()
     return total
 
