@@ -55,6 +55,12 @@ from betting_ml.utils.h2h_probability import devig_home_prob
 from betting_ml.utils.totals_probability import devig_over_prob, prob_to_american
 from betting_ml.utils.probability_layer import compute_kelly
 
+try:
+    from pipeline.utils.alerting import send_alert as _send_alert
+except ImportError:
+    def _send_alert(*args, **kwargs):  # type: ignore[misc]
+        return False
+
 load_dotenv()
 
 # A0.4.32 — curated book set (verified live 2026-06-17; Fanatics added E9.14)
@@ -168,8 +174,17 @@ def _pg_connect():
     try:
         region = os.environ.get("AWS_REGION", "us-east-1")
         return boto3.resource("dynamodb", region_name=region).Table(_SERVING_CACHE_TABLE)
-    except Exception:
-        log.warning("DynamoDB resource init failed — skipping cache writes (S3 only)")
+    except Exception as exc:
+        log.warning("DynamoDB resource init failed — serving writes will be S3-only: %s", exc)
+        _send_alert(
+            "DynamoDB connect failed — serving cache degraded (S3-only)",
+            f"boto3 DynamoDB Table init raised: {exc}\n"
+            f"Table: {_SERVING_CACHE_TABLE}\n"
+            "All serving-cache writes will fall through to S3 until resolved.\n"
+            "Check IAM role permissions for credence-prod-serving-cache.",
+            severity="ERROR",
+            dedup_key="dynamodb-connect-failed",
+        )
         return None
 
 
@@ -191,8 +206,17 @@ def _pg_set_cache(pg, cache_key: str, today: str, payload: dict, is_permanent: b
             "updated_at": datetime.now(timezone.utc).isoformat(),
             "cache_date": _PERMANENT_SK if is_permanent else today,
         })
-    except Exception:
-        log.warning("DynamoDB set_cache failed for key=%s (S3 fallback covers)", cache_key)
+    except Exception as exc:
+        log.warning("DynamoDB set_cache failed for key=%s (S3 fallback covers): %s", cache_key, exc)
+        _send_alert(
+            "DynamoDB write failed — serving cache degraded (S3-only)",
+            f"put_item raised for cache_key={cache_key!r}: {exc}\n"
+            f"Table: {_SERVING_CACHE_TABLE}\n"
+            "Serving reads will fall back to S3. If this persists, DynamoDB is degraded.\n"
+            "Check IAM role permissions and table health in credence-prod-serving-cache.",
+            severity="ERROR",
+            dedup_key="dynamodb-write-failed",
+        )
 
 
 # ── S3 write ─────────────────────────────────────────────────────────────────
