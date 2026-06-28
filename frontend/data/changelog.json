@@ -7,6 +7,10 @@
         "text": "EV Tracker game times were showing +5 hours too late (e.g. 6:15 PM CDT instead of 1:15 PM CDT). The time formatter was appending a trailing 'Z' to UTC timestamps that already carried an explicit '+00:00' timezone offset, producing an invalid datetime string that browsers treated as local time. Updated the formatter to detect and preserve any existing timezone indicator before parsing — matching the fix already in place on game-detail pages."
       },
       {
+        "tag": "fix",
+        "text": "Bets on some games were staying 'pending' in the Bet Log instead of settling after the game ended. The MLB Stats API marks a game's status as 'Final (Official)' (status code 'O') rather than plain 'Final' ('F') when the official scorer has reviewed the result — late games in particular were staying in this 'O' state when the nightly settle job ran. The settlement filter now accepts both states, so these bets will settle on the next daily run."
+      },
+      {
         "tag": "new",
         "text": "Settings now has a Sportsbooks section for multi-book bankroll bookkeeping. Add each sportsbook you use, set its current balance, and record deposits and withdrawals — so your bankroll growth % reflects only betting results, not cash movement. A deposit is not growth; a withdrawal is not a loss — both are netted out of the baseline. The Performance page now shows an overall Bankroll Growth tile (hidden until you've set up at least one book and recorded a deposit). Growth % is labeled distinctly from ROI: ROI is return on stake/turnover; growth is return on your deposited funds. Self-reported and manual — this is a bookkeeping ledger, not auto-settlement."
       },
