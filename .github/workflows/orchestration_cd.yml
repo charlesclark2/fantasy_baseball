@@ -21,6 +21,12 @@ on:
       - "services/dagster/aws/**"
       - "services/dbt_runner/**"
       - "services/*_capture/**"
+      # The dbt project is COPY'd into credence-dbt-runner and scripts/ into
+      # credence-dagster (services/dbt_runner/Dockerfile: `COPY dbt/ /dbt/`; no bind
+      # mount) — so a dbt-model or script change runs STALE on the box until the image
+      # is rebuilt. Trigger the rebuild-deploy on those changes too (E11.1-W3pre).
+      - "dbt/**"
+      - "scripts/**"
   workflow_dispatch: {}
 
 # Serialize deploys — never two box deploys racing (singleton daemon).

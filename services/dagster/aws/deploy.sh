@@ -113,14 +113,38 @@ fi
 
 # --- 7. post-deploy verify --------------------------------------------------
 log "post-deploy verification"
-sleep 8   # let containers settle
 
+# The daemon waits on postgres + the codeloc gRPC server before it reports 'running',
+# so a single check after a fixed `sleep 8` is racy — it false-rolled-back a HEALTHY
+# W3pre deploy on 2026-06-28 (daemon just wasn't 'running' yet at the 8s mark; the
+# build + `import pipeline` had both passed). Poll readiness instead; a genuine crash
+# still rolls back after the timeout (and we dump the daemon logs to show why).
+VERIFY_TIMEOUT="${VERIFY_TIMEOUT:-120}"
+waited=0
+until $COMPOSE ps --status running 2>/dev/null | grep -q dagster-daemon; do
+  if [ "$waited" -ge "$VERIFY_TIMEOUT" ]; then
+    log "dagster-daemon still not running after ${VERIFY_TIMEOUT}s — recent logs:"
+    $COMPOSE logs --tail 40 dagster-daemon 2>&1 | sed 's/^/    /' || true
+    rollback "dagster-daemon not running after ${VERIFY_TIMEOUT}s"
+  fi
+  sleep 5; waited=$((waited+5))
+done
+log "  dagster-daemon running (after ${waited}s)"
+
+# Daemon up ⇒ codeloc gRPC is up; the codeloc-exec checks below can run.
 $COMPOSE exec -T dagster-codeloc python -c "import pipeline" \
   || rollback "defs failed to import in codeloc"
-$COMPOSE ps --status running 2>/dev/null | grep -q dagster-daemon \
-  || rollback "dagster-daemon not running"
-$COMPOSE exec -T dagster-codeloc curl -fsS http://dbt-runner:8080/health | grep -q '"ok"' \
-  || rollback "dbt-runner /health not ok"
+# dbt-runner can also lag its first /health — poll it the same way.
+waited=0
+until $COMPOSE exec -T dagster-codeloc curl -fsS http://dbt-runner:8080/health 2>/dev/null | grep -q '"ok"'; do
+  if [ "$waited" -ge "$VERIFY_TIMEOUT" ]; then
+    log "dbt-runner /health not ok after ${VERIFY_TIMEOUT}s — recent logs:"
+    $COMPOSE logs --tail 40 dbt-runner 2>&1 | sed 's/^/    /' || true
+    rollback "dbt-runner /health not ok after ${VERIFY_TIMEOUT}s"
+  fi
+  sleep 5; waited=$((waited+5))
+done
+log "  dbt-runner /health ok"
 $COMPOSE exec -T dagster-codeloc head -1 /tmp/snowflake_rsa_key.pem | grep -q 'BEGIN' \
   || rollback "Snowflake PEM not materialized (normalize bug?)"
 # instance role reachable from inside a container ⇒ IMDSv2 hop-limit>=2 + region ok
