@@ -1,4 +1,9 @@
-{{ config(materialized='table') }}
+{{
+    config(
+        materialized = 'view',
+        tags         = ['w3_lakehouse']
+    )
+}}
 
 -- Grain: pitcher_id × game_year
 -- Classifies each pitcher × season into a pitch-mix archetype based on
@@ -11,13 +16,19 @@
 --
 -- Unknown/rare types (KN, FA, EP, PO, UN, null) excluded from denominator.
 -- Minimum gate: 100 classified pitches (~3 starts) to suppress noise.
+--
+-- E11.1-W3: dual-branch lakehouse model. Upstream stg_batter_pitches is the W1
+-- S3 parquet (registered as a view by run_w1_lakehouse.py before build); the
+-- Snowflake branch is a thin view over the lakehouse_ext external table.
+
+{% if target.name == 'duckdb' %}
 
 with pitch_source as (
     select
         pitcher_id,
         game_year,
         pitch_type
-    from {{ ref('stg_batter_pitches') }}
+    from stg_batter_pitches
     where game_type = 'R'
       and pitch_type is not null
       and pitcher_id is not null
@@ -75,3 +86,9 @@ select
         else                           'mixed'
     end                                             as pitch_archetype
 from with_pcts
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_pitcher_pitch_archetype
+
+{% endif %}

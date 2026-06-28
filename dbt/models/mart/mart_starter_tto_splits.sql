@@ -1,9 +1,18 @@
 {{
     config(
-        materialized='table'
+        materialized = 'view',
+        tags         = ['w3_lakehouse']
     )
 }}
 
+-- E11.1-W3: dual-branch lakehouse model. Upstream stg_batter_pitches is the W1
+-- S3 parquet (registered as a view by run_w1_lakehouse.py); the Snowflake branch
+-- is a thin view over the lakehouse_ext external table. NB: the DuckDB branch
+-- casts ratios to ::decimal(18,6) (NOT Snowflake's ::number(18,6) — DuckDB has no
+-- NUMBER type alias). Explicit scale is REQUIRED: a bare ::numeric in DuckDB is
+-- DECIMAL(18,3) and in Snowflake is scale-0 (would zero the xwOBA — the bug the
+-- assert_tto_splits_xwoba_not_zeroed test guards). 6 decimals preserves the value.
+--
 -- Grain: pitcher_id × game_year (season). One row per pitcher per season.
 --
 -- Edge Program Story E13.4 — Candidate B1 (times-through-order penalty).
@@ -32,6 +41,8 @@
 -- like the analogous handedness-splits mart; if B1 promotes, consider a season-incremental
 -- rebuild to avoid re-scanning the full pitch table on every build.
 
+{% if target.name == 'duckdb' %}
+
 with pitches as (
     select
         pitcher_id,
@@ -39,7 +50,7 @@ with pitches as (
         pitcher_times_thru_order,
         xwoba,
         woba_denom
-    from {{ ref('stg_batter_pitches') }}
+    from stg_batter_pitches
     where game_type = 'R'
       and pitcher_times_thru_order is not null
 ),
@@ -76,13 +87,13 @@ select
     t1.bf                                                                   as tto1_bf,
     t3.bf                                                                   as tto3_bf,
     least(t1.bf, t3.bf)                                                     as tto_min_bf,
-    round((t1.xwoba_sum / nullif(t1.xwoba_n, 0))::number(18,6), 4)          as tto1_xwoba_against,
-    round((t3.xwoba_sum / nullif(t3.xwoba_n, 0))::number(18,6), 4)          as tto3_xwoba_against,
+    round((t1.xwoba_sum / nullif(t1.xwoba_n, 0))::decimal(18,6), 4)         as tto1_xwoba_against,
+    round((t3.xwoba_sum / nullif(t3.xwoba_n, 0))::decimal(18,6), 4)         as tto3_xwoba_against,
     -- the penalty: 3rd-time xwOBA-against minus 1st-time. Positive = the pitcher fades
     -- the deeper he goes into the order.
     round(
         ((t3.xwoba_sum / nullif(t3.xwoba_n, 0))
-         - (t1.xwoba_sum / nullif(t1.xwoba_n, 0)))::number(18,6), 4
+         - (t1.xwoba_sum / nullif(t1.xwoba_n, 0)))::decimal(18,6), 4
     )                                                                      as tto3_xwoba_penalty
 -- inner join → keep only pitcher-seasons with BOTH buckets measurable
 from tto1 t1
@@ -91,3 +102,9 @@ inner join tto3 t3
     and t1.season     = t3.season
 where t1.xwoba_n > 0
   and t3.xwoba_n > 0
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_starter_tto_splits
+
+{% endif %}

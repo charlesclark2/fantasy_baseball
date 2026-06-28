@@ -1,9 +1,14 @@
 {{
     config(
-        materialized='table'
+        materialized = 'view',
+        tags         = ['w3_lakehouse']
     )
 }}
 
+-- E11.1-W3: dual-branch lakehouse model. Upstream stg_batter_pitches is the W1
+-- S3 parquet (registered as a view by run_w1_lakehouse.py); the Snowflake branch
+-- is a thin view over the lakehouse_ext external table.
+--
 -- Grain: pitcher_id × batter_hand × game_year.
 -- One row per pitcher per batter handedness per season.
 --
@@ -23,9 +28,11 @@
 -- Small-sample caution: rows with fewer than ~50 PA should be interpreted
 -- carefully. No minimum PA filter is applied in this model — filter downstream.
 
+{% if target.name == 'duckdb' %}
+
 with pitches as (
     select *
-    from {{ ref('stg_batter_pitches') }}
+    from stg_batter_pitches
     where game_type = 'R'
       and batter_hand in ('L', 'R')
 ),
@@ -204,3 +211,9 @@ inner join pitch_agg p
     on  pa.pitcher_id  = p.pitcher_id
     and pa.batter_hand = p.batter_hand
     and pa.game_year   = p.game_year
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_pitcher_vs_handedness_splits
+
+{% endif %}

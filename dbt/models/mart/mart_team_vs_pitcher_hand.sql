@@ -23,15 +23,33 @@
 
 {{
     config(
-        materialized = 'table'
+        materialized = 'view',
+        tags         = ['w3_lakehouse']
     )
 }}
+
+-- E11.1-W3: dual-branch lakehouse model. Upstream stg_batter_pitches is the W1
+-- S3 parquet (registered as a view by run_w1_lakehouse.py); the Snowflake branch
+-- is a thin view over the lakehouse_ext external table. game_date is cast to
+-- ::date in plate_appearances so the RANGE-interval rolling windows operate on the
+-- VARCHAR game_date the parquet carries.
+--
+-- ⚠️ ::numeric parity: the single-game `woba` / `xwoba` columns use a RESULT-cast
+-- `(ratio)::numeric` which in Snowflake is scale-0 → those two columns are ZEROED
+-- in the retired Snowflake build (a latent bare-::numeric bug; consumed by NOTHING
+-- — feature_pregame_team_features + write_serving_store read only the _7d/_30d/_std
+-- rolling columns, which carry no result-cast). The DuckDB branch reproduces that
+-- exactly via ::numeric(38,0) so the migration is value-PRESERVING. The single-game
+-- k_pct/bb_pct/slugging/hard_hit_pct/barrel_pct use a NUMERATOR-cast (int::numeric /
+-- int) which is NOT zeroed in either engine, so those keep the bare ::numeric.
+
+{% if target.name == 'duckdb' %}
 
 with
 
 pitches as (
 
-    select * from {{ ref('stg_batter_pitches') }}
+    select * from stg_batter_pitches
     where game_type = 'R'
       and pitcher_hand in ('L', 'R')
 
@@ -92,7 +110,7 @@ plate_appearances as (
 
     select
         p.game_pk,
-        p.game_date,
+        p.game_date::date as game_date,   -- VARCHAR (ISO) in parquet → DATE for RANGE windows [E11.1-W3]
         p.game_year,
 
         case
@@ -208,11 +226,11 @@ rolling as (
         batted_balls,
         round(
             case when woba_denom_sum  > 0
-                 then (woba_value_sum  / woba_denom_sum)::numeric else null end, 3
+                 then (woba_value_sum  / woba_denom_sum)::numeric(38,0) else null end, 3
         )                                                       as woba,
         round(
             case when xwoba_denom     > 0
-                 then (xwoba_sum      / xwoba_denom)::numeric   else null end, 3
+                 then (xwoba_sum      / xwoba_denom)::numeric(38,0)   else null end, 3
         )                                                       as xwoba,
         round(
             case when pa_count        > 0
@@ -369,3 +387,9 @@ rolling as (
 
 select * from rolling
 order by team, opp_starter_hand, game_date
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_team_vs_pitcher_hand
+
+{% endif %}

@@ -1,9 +1,19 @@
 {{
     config(
-        materialized='table'
+        materialized = 'view',
+        tags         = ['w3_lakehouse']
     )
 }}
 
+-- E11.1-W3: dual-branch lakehouse model. Upstream stg_batter_pitches (W1),
+-- mart_pitch_play_event (W1), and mart_starting_pitcher_game_log (W2) are S3
+-- parquet (registered as views by run_w1_lakehouse.py); the Snowflake branch is a
+-- thin view over the lakehouse_ext external table. game_date is cast ::date in the
+-- pitches CTE (the parquet carries VARCHAR), and Snowflake's dateadd('day',-30,d)
+-- is rewritten as DuckDB interval arithmetic (d - interval '30 days') — DuckDB has
+-- no dateadd alias. datediff('day', a, b) has the same end-minus-start convention
+-- in both engines, so it is kept verbatim.
+--
 -- Grain: pitching_team × game_pk (same as mart_bullpen_workload).
 -- Pre-game availability of the three highest-leverage relievers for each team.
 --
@@ -40,6 +50,8 @@
 --   mart_bullpen_leverage  — aggregate leverage workload
 -- Story: 6.6 — Reliever top-3 leverage availability vector
 
+{% if target.name == 'duckdb' %}
+
 with
 
 -- ── Raw pitch data for reliever appearances ───────────────────────────────────
@@ -48,14 +60,14 @@ pitches as (
     select
         bp.pitch_sk,
         bp.game_pk,
-        bp.game_date,
+        bp.game_date::date as game_date,   -- VARCHAR (ISO) in parquet → DATE for date math [E11.1-W3]
         bp.game_year,
         bp.pitcher_id,
         case when bp.inning_half = 'Top' then bp.home_team else bp.away_team end
             as pitching_team,
         ppe.delta_home_win_exp
-    from {{ ref('stg_batter_pitches') }} bp
-    join {{ ref('mart_pitch_play_event') }} ppe
+    from stg_batter_pitches bp
+    join mart_pitch_play_event ppe
         on  ppe.pitch_sk = bp.pitch_sk
     where bp.game_type = 'R'
       and ppe.delta_home_win_exp is not null
@@ -66,7 +78,7 @@ pitches as (
 starters as (
 
     select game_pk, pitcher_id, pitching_team
-    from {{ ref('mart_starting_pitcher_game_log') }}
+    from mart_starting_pitcher_game_log
 
 ),
 
@@ -139,7 +151,7 @@ rolling as (
     join reliever_date_leverage rdl
         on  rdl.pitching_team = gs.pitching_team
         and rdl.game_date < gs.game_date                        -- leakage guard
-        and rdl.game_date >= dateadd('day', -30, gs.game_date)  -- 30-day window
+        and rdl.game_date >= gs.game_date - interval '30 days'  -- 30-day window
     group by gs.game_pk, gs.game_date, gs.pitching_team, rdl.pitcher_id
 
 ),
@@ -227,3 +239,9 @@ from game_spine gs
 left join pivoted p
     on  p.game_pk       = gs.game_pk
     and p.pitching_team = gs.pitching_team
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_reliever_top3_availability
+
+{% endif %}

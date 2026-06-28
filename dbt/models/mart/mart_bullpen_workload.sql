@@ -1,9 +1,16 @@
 {{
     config(
-        materialized='table'
+        materialized = 'view',
+        tags         = ['w3_lakehouse']
     )
 }}
 
+-- E11.1-W3: dual-branch lakehouse model. Upstream stg_batter_pitches (W1) and
+-- mart_starting_pitcher_game_log (W2) are S3 parquet (registered as views by
+-- run_w1_lakehouse.py); the Snowflake branch is a thin view over the lakehouse_ext
+-- external table. game_date is cast ::date in the pitches CTE so the RANGE-interval
+-- rolling windows work on the VARCHAR game_date the parquet carries.
+--
 -- Grain: pitching_team × game_pk.
 -- Each row represents a team's bullpen fatigue profile *entering* a given game.
 -- Rolling windows look exclusively at preceding days (upper bound = 1 day prior)
@@ -23,10 +30,12 @@
 -- the same prior-day fatigue values. Bullpen usage within the first game of
 -- a doubleheader is NOT reflected in the same-day second game's fatigue row.
 
+{% if target.name == 'duckdb' %}
+
 with pitches as (
     select
         game_pk,
-        game_date,
+        game_date::date as game_date,   -- VARCHAR (ISO) in parquet → DATE for RANGE windows [E11.1-W3]
         game_year,
         pitcher_id,
         inning,
@@ -34,13 +43,13 @@ with pitches as (
         away_team,
         plate_appearance_event,
         case when inning_half = 'Top' then home_team else away_team end as pitching_team
-    from {{ ref('stg_batter_pitches') }}
+    from stg_batter_pitches
     where game_type = 'R'
 ),
 
 starters as (
     select game_pk, pitcher_id, pitching_team
-    from {{ ref('mart_starting_pitcher_game_log') }}
+    from mart_starting_pitcher_game_log
 ),
 
 -- All pitches thrown by non-starters, aggregated per pitcher per game
@@ -261,3 +270,9 @@ from game_bullpen gb
 left join rolling r
     on  gb.game_date    = r.game_date
     and gb.pitching_team = r.pitching_team
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_bullpen_workload
+
+{% endif %}

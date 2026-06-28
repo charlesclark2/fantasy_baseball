@@ -52,6 +52,26 @@ W2_TABLES = [
     "mart_starter_pitch_mix_rolling",
 ]
 
+# E11.1-W3: the remaining pitch-derived batch marts written by run_w1_lakehouse.py
+# after the W2 marts (created by scripts/ddl/generate_w3_external_tables.py before
+# they can be refreshed). REQUIRED/HALT like W2 — these feed feature_pregame_* (the
+# morning feature build) and write_serving_store, so a stale read would degrade
+# serving. The cutover order (create the external tables BEFORE the PR merges) means
+# this refresh code never ships ahead of the tables existing.
+W3_TABLES = [
+    "mart_pitcher_pitch_archetype",
+    "mart_batter_vs_pitch_archetype",
+    "mart_batter_vs_handedness_splits",
+    "mart_pitcher_vs_handedness_splits",
+    "mart_starter_tto_splits",
+    "mart_team_base_state_splits",
+    "mart_team_vs_pitcher_hand",
+    "mart_bullpen_handedness_splits",
+    "mart_bullpen_leverage",
+    "mart_bullpen_workload",
+    "mart_reliever_top3_availability",
+]
+
 # E11.1-W3pre: the odds/staging flatten tier (created by
 # scripts/ddl/generate_w3pre_external_tables.py before it can be refreshed). Refreshed
 # in the same op so the daily build / serving marts see the latest flattened parquet.
@@ -102,8 +122,8 @@ def main():
     # BEST-EFFORT until cutover: they don't exist until generate_w3pre_external_tables.py
     # is run, so a "does not exist" here is an expected skip (WARN-tier), NOT a HALT — else
     # this op would fail the daily job for the entire pre-cutover rollout window. (E11.1-W3pre)
-    required = set(W1_TABLES) | set(W2_TABLES)
-    for table in W1_TABLES + W2_TABLES + W3PRE_TABLES:
+    required = set(W1_TABLES) | set(W2_TABLES) | set(W3_TABLES)
+    for table in W1_TABLES + W2_TABLES + W3_TABLES + W3PRE_TABLES:
         fqn = f"{_SCHEMA}.{table}"
         try:
             cur.execute(f"ALTER EXTERNAL TABLE {fqn} REFRESH")
@@ -121,7 +141,7 @@ def main():
             f"External table refresh FAILED for: {failed}  "
             "Downstream feature build will see stale S3 data."
         )
-    print("W1+W2 external table refresh complete (W3pre best-effort).")
+    print("W1+W2+W3 external table refresh complete (W3pre best-effort).")
 
 
 if __name__ == "__main__":

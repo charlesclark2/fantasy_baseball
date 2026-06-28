@@ -19,11 +19,12 @@ Prerequisites:
   - AWS credentials accessible via credential chain (aws configure or env vars)
 
 Usage (run from anywhere in the repo):
-  python3 scripts/run_w1_lakehouse.py             # default: W1 + W2  (writes to S3)
+  python3 scripts/run_w1_lakehouse.py             # default: W1 + W2 + W3  (writes to S3)
   python3 scripts/run_w1_lakehouse.py --dry-run   # row-count only, no S3 writes
-  python3 scripts/run_w1_lakehouse.py --w1-only   # only the W1 pitch marts (skip W2)
-  python3 scripts/run_w1_lakehouse.py --skip-w1   # only W2 (reuse existing W1 parquet)
-  python3 scripts/run_w1_lakehouse.py --w3pre     # W1 + W2 + the W3pre odds/staging tier (opt-in)
+  python3 scripts/run_w1_lakehouse.py --w1-only   # only the W1 pitch marts (skip W2 + W3)
+  python3 scripts/run_w1_lakehouse.py --skip-w1   # only W2 + W3 (reuse existing W1 parquet)
+  python3 scripts/run_w1_lakehouse.py --w3-only   # only the W3 marts (reuse existing W1+W2 parquet)
+  python3 scripts/run_w1_lakehouse.py --w3pre     # W1 + W2 + W3 + the W3pre odds/staging tier (opt-in)
   python3 scripts/run_w1_lakehouse.py --w3pre-only # only the W3pre odds/staging flatten tier
 
 E11.1-W2 (2026-06-26): this script now also builds the W2 pitch-derived batch
@@ -79,6 +80,27 @@ W2_MART_MODELS = [
     "mart_pitcher_batter_history",        # ← mart_pitch_play_event
     "mart_starter_csw_rolling",           # ← mart_pitch_play_event
     "mart_starter_pitch_mix_rolling",     # ← mart_pitch_characteristics
+]
+
+# E11.1-W3: the remaining pitch-derived batch marts whose ENTIRE upstream closure is
+# already in S3 (stg_batter_pitches + the W1 mart_pitch_* + the W2 mart_starting_pitcher_game_log).
+# Built AFTER W2 each run; the W2 marts are registered as DuckDB views first so the
+# bullpen marts' `from mart_starting_pitcher_game_log` resolves. ORDER MATTERS:
+# mart_pitcher_pitch_archetype must be built + registered as a view BEFORE
+# mart_batter_vs_pitch_archetype (which reads it) — each W3 model is registered as a
+# view immediately after it is built (see run()), so the intra-W3 dep resolves.
+W3_MART_MODELS = [
+    "mart_pitcher_pitch_archetype",       # ← stg_batter_pitches   (must precede batter_vs_pitch_archetype)
+    "mart_batter_vs_pitch_archetype",     # ← stg_batter_pitches + mart_pitcher_pitch_archetype
+    "mart_batter_vs_handedness_splits",   # ← stg_batter_pitches
+    "mart_pitcher_vs_handedness_splits",  # ← stg_batter_pitches
+    "mart_starter_tto_splits",            # ← stg_batter_pitches
+    "mart_team_base_state_splits",        # ← stg_batter_pitches
+    "mart_team_vs_pitcher_hand",          # ← stg_batter_pitches
+    "mart_bullpen_handedness_splits",     # ← stg_batter_pitches + mart_starting_pitcher_game_log
+    "mart_bullpen_leverage",              # ← stg_batter_pitches + mart_pitch_play_event + mart_starting_pitcher_game_log
+    "mart_bullpen_workload",              # ← stg_batter_pitches + mart_starting_pitcher_game_log
+    "mart_reliever_top3_availability",    # ← stg_batter_pitches + mart_pitch_play_event + mart_starting_pitcher_game_log
 ]
 
 # E11.1-W3pre: the staging tier that feeds the odds/CLV BATCH subtree. Each model's
@@ -258,12 +280,26 @@ def _build_w3pre(conn, dry_run: bool) -> None:
         _build_marts(conn, [model], dry_run)
 
 
+def _build_w3(conn, dry_run: bool) -> None:
+    """Build the W3 pitch-derived marts. Each model is registered as a DuckDB view
+    immediately after it is built so the intra-W3 dependency resolves (the only one
+    today: mart_batter_vs_pitch_archetype reads mart_pitcher_pitch_archetype). The
+    bullpen marts read the already-registered W1 (mart_pitch_play_event) and W2
+    (mart_starting_pitcher_game_log) views."""
+    print("\nW3 marts:")
+    for model in W3_MART_MODELS:
+        _build_marts(conn, [model], dry_run)
+        # Register so a later W3 model that reads this one resolves.
+        _register_mart_views(conn, [model], dry_run)
+
+
 def run(
     dry_run: bool = False,
     skip_w1: bool = False,
     w1_only: bool = False,
     w3pre: bool = False,
     w3pre_only: bool = False,
+    w3_only: bool = False,
 ) -> None:
     import duckdb
 
@@ -315,6 +351,18 @@ def run(
     n_ref = conn.execute("SELECT count(*) FROM stg_ref_players").fetchone()[0]
     print(f"stg_ref_players: {n_ref:,} players loaded from S3")
 
+    # E11.1-W3: --w3-only rebuilds just the W3 marts, reusing the existing W1+W2
+    # parquet (registered as views from S3). Lets the operator iterate on W3 / re-run
+    # parity without rebuilding the heavy pitch marts.
+    if w3_only:
+        print("\nRegistering W1 + W2 marts as views (reuse existing parquet for --w3-only):")
+        _register_mart_views(conn, MART_MODELS, dry_run)
+        _register_mart_views(conn, W2_MART_MODELS, dry_run)
+        _build_w3(conn, dry_run)
+        conn.close()
+        print("\nW3 marts run complete (--w3-only).")
+        return
+
     # ── W1: pitch-level marts ────────────────────────────────────────────────
     if not skip_w1:
         print("\nW1 marts:")
@@ -335,6 +383,15 @@ def run(
     print("\nW2 marts:")
     _build_marts(conn, W2_MART_MODELS, dry_run)
 
+    # ── W3: remaining pitch-derived batch marts (E11.1-W3) ───────────────────
+    # Register the W2 marts as views first so the W3 bullpen marts' reads of
+    # mart_starting_pitcher_game_log resolve (the W1 marts are already registered
+    # above). W3 is NOT opt-in (unlike W3pre): its whole upstream is already in S3,
+    # so it builds on the default daily path right after W2.
+    print("\nRegistering W2 marts as views (for W3 dependencies):")
+    _register_mart_views(conn, W2_MART_MODELS, dry_run)
+    _build_w3(conn, dry_run)
+
     # ── W3pre: odds/staging flatten tier (E11.1-W3pre) — OPT-IN ──────────────
     # NOT built by default: the daily run_w1_lakehouse_op calls this with no args, and
     # the W3pre stg models need the lakehouse_raw/ tier populated (export + flipped
@@ -344,7 +401,7 @@ def run(
         _build_w3pre(conn, dry_run)
 
     conn.close()
-    print(f"\nW1+W2{'+W3pre' if w3pre else ''} lakehouse run complete.")
+    print(f"\nW1+W2+W3{'+W3pre' if w3pre else ''} lakehouse run complete.")
 
 
 if __name__ == "__main__":
@@ -354,4 +411,5 @@ if __name__ == "__main__":
         w1_only="--w1-only" in sys.argv,
         w3pre="--w3pre" in sys.argv,
         w3pre_only="--w3pre-only" in sys.argv,
+        w3_only="--w3-only" in sys.argv,
     )
