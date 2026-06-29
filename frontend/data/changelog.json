@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "new",
+        "text": "The Performance page now shows a Bankroll by Sportsbook breakdown — one row per book with its current balance, net deposits, betting P&L, and growth %. It appears once you've set up at least one book and recorded a deposit (Settings → Sportsbooks), and pulls straight from your tracked bankroll. Growth is return on deposited bankroll with cash flows netted out — kept distinct from ROI (return on stake). Settings → Sportsbooks also gains an opt-in 'Reset baseline' per book: a confirm-gated action that re-bases that book's cost basis to its current balance so growth restarts at 0% from a fresh start — your deposit/withdrawal history is preserved, not deleted. Self-reported bookkeeping; no edge or model claim."
+      },
+      {
+        "tag": "new",
         "text": "Players are now clickable across pick and team pages, and starting pitchers now show recent form. On a pick's detail page, every batter in the Batting Lineups section and each Probable/Starting Pitcher name now links straight to that player's page (opens in a new tab) — and under each starter you'll see their Last 3 Starts (date, opponent, IP, H, R, K, BB, HR) for quick matchup context. On a team page, the next game's starting pitcher is clickable too. This is navigation and matchup context only — no edge or betting claim."
       },
       {

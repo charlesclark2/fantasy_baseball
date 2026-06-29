@@ -47,7 +47,7 @@ interface BankrollGrowth {
 
 interface BankrollData {
   overall_growth: BankrollGrowth
-  per_book_growth: Record<string, BankrollGrowth>
+  per_book_growth: Record<string, BankrollGrowth & { baseline_reset_at?: string | null }>
 }
 
 // ---------------------------------------------------------------------------
@@ -371,6 +371,75 @@ function StatTiles({
           </p>
         </div>
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Per-book bankroll breakdown — read-only, from /users/bankroll per_book_growth
+// ---------------------------------------------------------------------------
+
+type PerBookGrowth = BankrollGrowth & { baseline_reset_at?: string | null }
+
+function PerBookBreakdown({ perBook }: { perBook: Record<string, PerBookGrowth> }) {
+  const rows = useMemo(
+    () =>
+      Object.entries(perBook)
+        .filter(([, g]) => g.total_deposited > 0)
+        .map(([book, g]) => ({ book, ...g }))
+        .sort((a, b) => b.current_balance - a.current_balance),
+    [perBook]
+  )
+
+  // Hide until at least one book has a deposit recorded.
+  if (rows.length === 0) return null
+
+  return (
+    <div className="rounded-xl border border-[#262626] bg-[#141414] px-5 py-5">
+      <div className="flex items-center gap-1.5 mb-1">
+        <h2 className="text-sm font-semibold text-white">Bankroll by Sportsbook</h2>
+        <InfoTooltip text="Your tracked balance per book. Betting P&L = balance − net deposits; Growth % = betting P&L ÷ total deposited (cash flows netted out). Distinct from ROI (return on stake). Self-reported from Settings → Sportsbooks." />
+      </div>
+      <p className="text-xs text-gray-500 mb-4">
+        Growth is return on deposited bankroll — netting out deposits and withdrawals. Distinct from ROI (return on stake).
+      </p>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-[#262626] hover:bg-transparent">
+              <TableHead className={`${thClass} pl-0`}>Book</TableHead>
+              <TableHead className={`${thClass} text-right`}>Balance</TableHead>
+              <TableHead className={`${thClass} text-right`}>Net Deposits</TableHead>
+              <TableHead className={`${thClass} text-right`}>Betting P&L</TableHead>
+              <TableHead className={`${thClass} text-right`}>Growth</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r) => (
+              <TableRow key={r.book} className="border-[#262626] hover:bg-[#1a1a1a]">
+                <TableCell className="py-3 text-sm text-gray-300 pl-0">
+                  {r.book}
+                  {r.baseline_reset_at && (
+                    <span className="ml-2 text-[10px] text-gray-600">· rebased</span>
+                  )}
+                </TableCell>
+                <TableCell className={`${tdBase} text-right text-gray-300`}>
+                  ${r.current_balance.toFixed(2)}
+                </TableCell>
+                <TableCell className={`${tdBase} text-right text-gray-400`}>
+                  ${r.net_deposits.toFixed(2)}
+                </TableCell>
+                <TableCell className={`${tdBase} text-right ${pnlColor(r.betting_pnl)}`}>
+                  {fmtPnlExact(r.betting_pnl)}
+                </TableCell>
+                <TableCell className={`${tdBase} text-right ${pnlColor(r.growth_pct)}`}>
+                  {fmtSignedPct(r.growth_pct)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   )
 }
@@ -1119,6 +1188,13 @@ export default function PerformancePage() {
 
           {/* Summary tiles */}
           <StatTiles summary={summary} bankrollGrowth={bankrollGrowth} />
+
+          {/* Per-book bankroll breakdown — hidden until ≥1 book+deposit */}
+          {bankrollData?.per_book_growth && (
+            <div className="mt-5">
+              <PerBookBreakdown perBook={bankrollData.per_book_growth} />
+            </div>
+          )}
 
           {/* Model skill strip */}
           <div className={`mt-5 transition-opacity duration-200 ${modelFetching ? "opacity-50" : "opacity-100"}`}>

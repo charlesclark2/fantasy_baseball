@@ -4,6 +4,7 @@ GET  /users/bankroll               — books, events, computed growth
 PUT  /users/bankroll/books/{book}  — set a book's current balance
 POST /users/bankroll/events        — record a deposit or withdrawal
 DELETE /users/bankroll/books/{book} — remove a book (events preserved)
+POST /users/bankroll/books/{book}/reset-baseline — re-base a book's cost basis
 
 Growth math is honest: deposits and withdrawals are netted out so the
 growth % reflects only betting performance, not cash movement.
@@ -24,6 +25,7 @@ from app.backend.services.dynamo import (
     get_bankroll,
     reassign_book,
     remove_book,
+    reset_book_baseline,
     upsert_book_balance,
 )
 
@@ -118,6 +120,22 @@ def delete_event(event_id: str, user_id: str = Depends(get_user_id)):
     except Exception as exc:
         logger.exception("delete_bankroll_event failed for %s", user_id)
         raise HTTPException(status_code=503, detail="Could not delete event") from exc
+
+
+@router.post("/bankroll/books/{book}/reset-baseline")
+def reset_baseline_route(book: str, user_id: str = Depends(get_user_id)):
+    """Opt-in: re-base a single book's cost basis to its current balance.
+
+    Idempotent; event history is preserved (see reset_book_baseline).
+    """
+    _validate_book(book)
+    try:
+        return reset_book_baseline(user_id, book)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("reset_book_baseline failed for %s", user_id)
+        raise HTTPException(status_code=503, detail="Could not reset baseline") from exc
 
 
 @router.patch("/bankroll/books/{book}/reassign")
