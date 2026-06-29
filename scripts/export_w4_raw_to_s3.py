@@ -141,12 +141,15 @@ def _export_one(conn, lakehouse_name: str, snowflake_fqn: str, dry_run: bool) ->
     tmp_path = Path(f"/tmp/{lakehouse_name}.parquet")
     pq.write_table(pa.Table.from_pandas(df, preserve_index=False), str(tmp_path))
 
-    s3 = boto3.client(
-        "s3",
-        region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
-        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
-    )
+    # INC-16 (AWS re-host): pass explicit keys ONLY when present (local/static-cred dev); else
+    # let boto3 resolve the EC2 instance IAM role. Passing aws_access_key_id=None disables the
+    # default chain → AuthorizationHeaderMalformed "a non-empty Access Key (AKID) must be provided".
+    _s3_kwargs = {"region_name": os.environ.get("AWS_DEFAULT_REGION", "us-east-1")}
+    _akid, _secret = os.environ.get("AWS_ACCESS_KEY_ID"), os.environ.get("AWS_SECRET_ACCESS_KEY")
+    if _akid and _secret:
+        _s3_kwargs["aws_access_key_id"] = _akid
+        _s3_kwargs["aws_secret_access_key"] = _secret
+    s3 = boto3.client("s3", **_s3_kwargs)
     print(f"  uploading to s3://{_S3_BUCKET}/{s3_key} ...", flush=True)
     s3.upload_file(str(tmp_path), _S3_BUCKET, s3_key)
     tmp_path.unlink(missing_ok=True)

@@ -85,6 +85,31 @@ def _w7b_s3_args() -> list[str]:
     return ["--s3"] if _w7b_serving_on() else []
 
 
+def _run_mirror(context, script: str, args: list[str] | None = None) -> None:
+    """Run a W7b S3 export-mirror / mini-wave build at the CORRECT failure tier.
+
+    The mirror feeds the `--s3` serving READERS. Once W7B_LAKEHOUSE_S3=1 a stale/partial S3
+    mirror = wrong served picks → **HALT** (propagate the failure; same as _run_script).
+
+    During the parallel window (W7B_LAKEHOUSE_PARALLEL=1 but serving still on Snowflake) the
+    mirror is **parity-ONLY** — predictions/serving do not read it yet — so a mirror failure must
+    NOT take down the serving-critical predict/build path. That's **ALERT-loud-but-continue** per
+    the CLAUDE.md tier contract: log a WARNING (visible in Dagster), op succeeds, and that
+    morning's parity_check_w7b simply shows the gap. (Wiring the mirror as HALT during the
+    parallel run is what red-lined predict_today_morning on 2026-06-29.)
+    """
+    if _w7b_serving_on():
+        _run_script(context, script, args)  # HALT — serving reads this mirror
+        return
+    try:
+        _run_script(context, script, args)
+    except Exception as e:  # noqa: BLE001 — parity-only during the parallel window
+        context.log.warning(
+            f"[W7b parallel] mirror '{os.path.basename(script)}' failed (non-fatal; serving "
+            f"still reads Snowflake, parity_check will show the gap): {e}"
+        )
+
+
 def _recent_completed_dates() -> list[str]:
     # Sub-model signal generators are anchored on mart_game_results, which is
     # pitch-derived (completed games only). After ingest_statcast + dbt_daily_build,
@@ -308,11 +333,14 @@ def run_w1_lakehouse_op(context):
     # (mart_player_profile_identity injury chain + the probable_pitchers/lineups_wide serving-mart
     # backlog) so the --s3 readers + the request-path last-resort resolve them. Requires the
     # player_transactions precursor export (run by the operator/cutover wiring) to exist first.
+    # W6 build is always HALT (mart_odds_outcomes serves from S3 external tables — live since W6).
+    _run_script(context, "run_w1_lakehouse.py", ["--w6"])
+    # The W7b mini-wave + its precursor are mirror-tier: HALT once W7B_LAKEHOUSE_S3=1, else
+    # ALERT-loud-but-continue during the parallel window (parity-only; must not take down the
+    # W6-critical build). --w7b-only reuses the W6 parquet just built ≡ the old "--w6 --w7b".
     if _w7b_mirror_on():
-        _run_script(context, "export_w7b_precursors_to_s3.py")
-        _run_script(context, "run_w1_lakehouse.py", ["--w6", "--w7b"])
-    else:
-        _run_script(context, "run_w1_lakehouse.py", ["--w6"])
+        _run_mirror(context, "export_w7b_precursors_to_s3.py")
+        _run_mirror(context, "run_w1_lakehouse.py", ["--w7b-only"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -696,16 +724,17 @@ def predict_today_morning(context):
     # export-mirror BEFORE scoring so predict_today --s3 reads today's freshly-built features
     # from S3 (the dbt feature BUILD stays on Snowflake in W7b-1; the mirror copies its OUTPUT
     # → S3 parquet). >1 min full export — the W7b-1 export-mirror cost; W7b-2's DuckDB feature
-    # build removes it. HALT tier: a mirror failure must stop the cycle (a stale/partial S3
-    # matrix = wrong served picks), which _run_script enforces by raising on non-zero exit.
+    # build removes it. Mirror tier (_run_mirror): HALT once serving reads S3 (a stale/partial S3
+    # matrix = wrong served picks), but ALERT-loud-but-continue during the parallel window — when
+    # serving still reads Snowflake the mirror is parity-only and must NOT red-line the predict op.
     if _w7b_mirror_on():
-        _run_script(context, "export_features_to_s3.py")
+        _run_mirror(context, "export_features_to_s3.py")
     _run_script(context, "predict_today.py", ["--prediction-type", "morning"] + _w7b_s3_args())
     # Re-export predictions Snowflake→S3 AFTER scoring (predict_today still WRITES to Snowflake
     # in W7b-1) so the downstream write_serving_store_op --s3 + the request-path last-resort serve
-    # TODAY's picks from S3 (the W6 daily_model_predictions freshness contract).
+    # TODAY's picks from S3 (the W6 daily_model_predictions freshness contract). Mirror tier.
     if _w7b_mirror_on():
-        _run_script(context, "export_w6_raw_to_s3.py", ["--table", "daily_model_predictions"])
+        _run_mirror(context, "export_w6_raw_to_s3.py", ["--table", "daily_model_predictions"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

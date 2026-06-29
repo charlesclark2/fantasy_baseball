@@ -154,12 +154,15 @@ def main():
         print("DRY RUN — no S3 writes")
 
     conn = get_snowflake_conn()
-    s3 = boto3.client(
-        "s3",
-        region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
-        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
-    )
+    # INC-16 (AWS re-host): pass explicit keys ONLY when present (local/static-cred dev); else
+    # let boto3 resolve the EC2 instance IAM role. Passing aws_access_key_id=None disables the
+    # default chain → AuthorizationHeaderMalformed "a non-empty Access Key (AKID) must be provided".
+    _s3_kwargs = {"region_name": os.environ.get("AWS_DEFAULT_REGION", "us-east-1")}
+    _akid, _secret = os.environ.get("AWS_ACCESS_KEY_ID"), os.environ.get("AWS_SECRET_ACCESS_KEY")
+    if _akid and _secret:
+        _s3_kwargs["aws_access_key_id"] = _akid
+        _s3_kwargs["aws_secret_access_key"] = _secret
+    s3 = boto3.client("s3", **_s3_kwargs)
 
     total = 0
     for year in years:

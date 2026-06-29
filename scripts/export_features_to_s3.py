@@ -137,12 +137,18 @@ def _coerce_variant_cells(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _s3():
-    return boto3.client(
-        "s3",
-        region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
-        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
-    )
+    # INC-16 (AWS re-host): on the EC2 host S3 access comes from the instance IAM ROLE, so
+    # AWS_ACCESS_KEY_ID is UNSET in the env. Passing aws_access_key_id=None to boto3 DISABLES
+    # its default credential chain → "AuthorizationHeaderMalformed: a non-empty Access Key
+    # (AKID) must be provided" (the 2026-06-29 W7b-parallel mirror failure). So pass explicit
+    # keys ONLY when both are present (local/static-cred dev); otherwise let boto3 resolve the
+    # instance role — the same chain DuckDB COPY already uses for the W-series S3 writes.
+    kwargs = {"region_name": os.environ.get("AWS_DEFAULT_REGION", "us-east-1")}
+    akid, secret = os.environ.get("AWS_ACCESS_KEY_ID"), os.environ.get("AWS_SECRET_ACCESS_KEY")
+    if akid and secret:
+        kwargs["aws_access_key_id"] = akid
+        kwargs["aws_secret_access_key"] = secret
+    return boto3.client("s3", **kwargs)
 
 
 def _export(conn, lakehouse_name: str, fqn: str, dry_run: bool) -> int:
