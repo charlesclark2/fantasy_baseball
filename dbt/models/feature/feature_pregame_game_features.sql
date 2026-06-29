@@ -34,13 +34,19 @@
 
 {%- set cc = contact_quality_columns() -%}
 
+-- INC-19 DURABLE TYPE-PIN (2026-06-29): raw.* inherits the explicit ::double types
+-- pinned in feature_pregame_game_features_raw's TYPE-PIN block, and each _seasonnorm
+-- column is cast ::double here, so every FLOAT column of this public surface is
+-- type-stable against any upstream NUMBER<->FLOAT drift. The _seasonnorm pin is
+-- contract-checked by betting_ml/tests/test_type_contract_guard.py. ::double (not
+-- ::float = 32-bit) is value-preserving and a no-op against the current table.
 select
     raw.*,
     {%- for c in cc %}
     coalesce(
         (raw.{{ c }} - b.{{ c }}__mu) / nullif(b.{{ c }}__sd, 0),
         0
-    ) as {{ c }}_seasonnorm{{ "," if not loop.last }}
+    )::double as {{ c }}_seasonnorm{{ "," if not loop.last }}
     {%- endfor %}
 from {{ ref('feature_pregame_game_features_raw') }} raw
 left join {{ ref('feature_league_contact_baseline') }} b

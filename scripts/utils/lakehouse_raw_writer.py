@@ -156,9 +156,23 @@ def rows_to_arrow_table(rows: list[dict], json_cols: frozenset = _JSON_COLS) -> 
     return table
 
 
-def _make_s3_client():
+def make_s3_client():
+    """Instance-role-safe boto3 S3 client — the shared helper NEW S3 writers should use.
+
+    W7b-1 footgun (2026-06-29): on the EC2 host S3 auth comes from the instance IAM
+    ROLE, so AWS_ACCESS_KEY_ID is UNSET. Passing aws_access_key_id=os.environ.get(...)
+    (=None) to boto3 DISABLES its default credential chain → AuthorizationHeaderMalformed.
+    This client passes NO keys, so boto3 resolves the instance role (or static creds /
+    AWS_PROFILE from the env) via its default chain — the same chain DuckDB COPY uses.
+    NEVER hand-build a client with aws_access_key_id=os.environ.get(...); the
+    test_boto3_credential_lint.py fast-gate guard FAILS the build if you do.
+    """
     import boto3
     return boto3.client("s3", region_name=os.environ.get("AWS_DEFAULT_REGION", REGION))
+
+
+# Back-compat alias for existing internal callers (prune_partitions / write_raw_rows_s3).
+_make_s3_client = make_s3_client
 
 
 def _delete_partition(s3, source: str, dt: str) -> None:
