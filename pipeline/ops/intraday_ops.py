@@ -46,6 +46,47 @@ def _today() -> str:
     return date.today().strftime("%Y-%m-%d")
 
 
+# ── E11.1-W6 INTRADAY lakehouse refresh ──────────────────────────────────────
+# After W6 cutover, mart_odds_outcomes / mart_game_odds_bridge are VIEWS over S3-backed
+# lakehouse_ext external tables, so the Snowflake `dbt run` below only rebuilds the VIEW (a
+# no-op for data). Served PRICES now stay fresh only if the S3 parquet is rebuilt + the
+# external table REFRESHed on the odds-capture cadence (the INC-16 odds-freshness failure if
+# missed). This is gated behind W6_LAKEHOUSE_INTRADAY so it's a clean NO-OP until cutover (the
+# external tables don't exist yet); the operator flips the env var to "1" AFTER creating the
+# external tables + validating parity. ALERT-tier: a failure warns LOUD (stale prices must be
+# visible) but does NOT crash the odds capture/rebuild op.
+_W6_INTRADAY_ENABLED = os.environ.get("W6_LAKEHOUSE_INTRADAY", "0") == "1"
+
+
+def _w6_lakehouse_intraday(context: OpExecutionContext, scope: str) -> None:
+    """scope='odds' — light current-odds path: export today's raw → run_w1_lakehouse
+    --w6-odds-current (rewrite ONLY mart_odds_outcomes' _current bucket + bridge) → refresh
+    --w6-odds (mart_odds_outcomes + mart_game_odds_bridge external tables).
+    scope='clv'  — once/day post-game: export the daily_model_predictions mirror + today's raw
+    → run_w1_lakehouse --w6 (full, incl. the post-hoc CLV/line-movement marts) → refresh
+    --w6-clv (closing_line_value + prediction_clv + line_movement)."""
+    if not _W6_INTRADAY_ENABLED:
+        context.log.info(
+            "W6 lakehouse intraday refresh disabled (set W6_LAKEHOUSE_INTRADAY=1 post-cutover) — skipping."
+        )
+        return
+    try:
+        today = _today()
+        if scope == "odds":
+            _run_script(context, "export_odds_raw_to_s3.py", ["--source", "mlb_odds_raw", "--since", today])
+            _run_script(context, "run_w1_lakehouse.py", ["--w6-odds-current"])
+            _run_script(context, "refresh_w1_external_tables.py", ["--w6-odds"])
+        else:  # clv
+            _run_script(context, "export_w6_raw_to_s3.py", ["--table", "daily_model_predictions"])
+            _run_script(context, "export_odds_raw_to_s3.py", ["--source", "mlb_odds_raw", "--since", today])
+            _run_script(context, "run_w1_lakehouse.py", ["--w6"])
+            _run_script(context, "refresh_w1_external_tables.py", ["--w6-clv"])
+    except Exception as exc:  # ALERT-loud-but-continue — never crash the capture op
+        context.log.warning(
+            f"⚠️ W6 lakehouse intraday refresh ({scope}) FAILED — served odds/CLV may be STALE: {exc}"
+        )
+
+
 # ── Odds Snapshot ────────────────────────────────────────────────────────────
 
 @op(out={"has_games": Out(bool)})
@@ -135,6 +176,9 @@ def odds_current_dbt_rebuild(context: OpExecutionContext) -> None:
         "mart_odds_outcomes",
         "--target", "baseball_betting_and_fantasy",
     ])
+    # E11.1-W6: post-cutover, the dbt run above only rebuilds the Snowflake VIEW — the real
+    # served-price freshness comes from the S3 today-partition rebuild + external-table REFRESH.
+    _w6_lakehouse_intraday(context, scope="odds")
 
 
 @op(out=Out(Nothing))
@@ -159,6 +203,9 @@ def odds_clv_dbt_rebuild(context: OpExecutionContext) -> None:
         "mart_odds_line_movement",
         "--target", "baseball_betting_and_fantasy",
     ])
+    # E11.1-W6: post-cutover these are VIEWS — rebuild the S3 parquet (full --w6, incl. the
+    # post-hoc CLV/line-movement marts on the complete day) + REFRESH the CLV external tables.
+    _w6_lakehouse_intraday(context, scope="clv")
 
 
 # ── Book-odds serving store refresh ─────────────────────────────────────────

@@ -216,6 +216,90 @@ W5B_MART_MODELS = [
 # until the posteriors parquet exists + cutover is validated.
 ARCHETYPE_MODELS = ["mart_batter_archetype_vs_pitcher_cluster"]
 
+# E11.1-W6: the odds/CLV + odds-serving path (the most serving-coupled tier) + the 2
+# Group-C marts inherited from W5. OPT-IN (--w6) until cutover, like W3pre/W4/W5: W6 reads
+# precursor parquet (scripts/export_w6_raw_to_s3.py: odds_snapshots_historical +
+# daily_model_predictions flat exports, venues_raw RAW JSON) plus the already-migrated
+# W3pre staging (stg_oddsapi_*, stg_derivative_odds, stg_statsapi_games) + W5 game chain
+# (dim_team_name_lookup, mart_game_spine, mart_game_results) registered as views.
+#
+# Precursor VIEWS registered (read from S3 parquet, NOT built here):
+#   • W5 game chain (data.parquet): dim_team_name_lookup, mart_game_spine, mart_game_results
+#   • W3pre flatten (data.parquet): stg_oddsapi_odds, stg_oddsapi_events,
+#     stg_derivative_odds, stg_statsapi_games
+# Raw/builder parquet read DIRECTLY via read_parquet(lakehouse_loc/raw_loc) in each duckdb
+# branch (no registration): odds_snapshots_historical, daily_model_predictions (lakehouse/),
+# mlb_odds_raw, venues_raw, monthly_schedule (lakehouse_raw/).
+W6_PRECURSOR_VIEWS = [
+    # W5 game chain
+    "dim_team_name_lookup",
+    "mart_game_spine",
+    "mart_game_results",
+    # W3pre odds/staging flatten
+    "stg_oddsapi_odds",
+    "stg_oddsapi_events",
+    "stg_derivative_odds",
+    "stg_statsapi_games",
+]
+
+# The 2 Group-C staging flattens (W3pre-style): venues_raw / monthly_schedule RAW JSON →
+# stg. Built first so the 2 inherited marts (team_schedule_context / player_game_starts)
+# resolve their `from stg_statsapi_venues|lineups` reads.
+W6_STG_MODELS = [
+    "stg_statsapi_venues",     # ← venues_raw RAW JSON (lakehouse_raw)
+    "stg_statsapi_lineups",    # ← monthly_schedule RAW JSON (lakehouse_raw; already exported W3pre)
+]
+
+# Built in DEPENDENCY ORDER (each registered as a DuckDB view immediately after build so the
+# next model's plain-name reads resolve):
+#   odds_outcomes → (events) → game_odds_bridge → consensus/line_movement/closing_line_value
+#   → clv_labeled_games → clv_label_count, prediction_clv → derivative_closes
+#   → bookmaker_disagreement; the 2 Group-C marts read the stg flattens + mart_game_spine.
+W6_MART_MODELS = [
+    "mart_odds_outcomes",          # ← stg_oddsapi_odds        (incremental→view; serving)
+    "mart_odds_events",            # ← stg_oddsapi_events
+    "mart_game_odds_bridge",       # ← dim_team_name_lookup + mart_game_spine + stg_statsapi_games + mart_odds_outcomes (serving)
+    "mart_odds_consensus",         # ← mart_odds_outcomes
+    "mart_odds_line_movement",     # ← odds_snapshots_historical + stg_statsapi_games + mart_odds_outcomes + mart_game_odds_bridge (serving)
+    "mart_closing_line_value",     # ← odds_snapshots_historical + stg_statsapi_games + mart_odds_outcomes + mart_game_odds_bridge
+    "mart_clv_labeled_games",      # ← daily_model_predictions + mart_closing_line_value + mart_game_results (serving: performance)
+    "mart_clv_label_count",        # ← mart_clv_labeled_games  (view)
+    "mart_prediction_clv",         # ← daily_model_predictions + mart_closing_line_value
+    "mart_derivative_closes",      # ← stg_derivative_odds + mart_game_odds_bridge
+    "mart_bookmaker_disagreement", # ← mlb_odds_raw RAW + mart_game_odds_bridge + mart_odds_outcomes
+    "mart_team_schedule_context",  # ← mart_game_spine + stg_statsapi_venues   (Group-C)
+    "mart_player_game_starts",     # ← mart_game_spine + stg_statsapi_lineups   (Group-C)
+]
+
+# E11.1-W6 INTRADAY REFRESH (operator-decided 2026-06-28, option b — TODAY-SCOPED
+# PARTITIONED REBUILD): mart_odds_outcomes (~2.26M rows of mostly-immutable history)
+# rebuilds INTRADAY on the odds-capture cycle (odds_current_rebuild_sensor), unlike the
+# daily-cadence pitch marts. A full re-flatten each cycle is O(history) → degrades every
+# season. Instead the parquet is split into TWO date-bounded buckets that the external
+# table UNIONs:
+#   mart_odds_outcomes/_history/data.parquet  — commence_date <  today (frozen; daily full build)
+#   mart_odds_outcomes/_current/data.parquet  — commence_date >= today (intraday rewrite, O(today))
+# The buckets are DISJOINT (split on commence_date == today's LA date) so the UNION is the
+# full table with no double-count. The columns (incl. commence_date) stay IN the parquet
+# (NOT Hive PARTITION_BY, which would strip the partition column from the file and break the
+# external-table column inference). Intraday only _current is rewritten (atomic — a failed
+# COPY leaves the prior good _current object live, S3 multipart never exposes a half-write);
+# _history is touched ONLY by the daily full build.
+W6_PARTITIONED = {"mart_odds_outcomes"}
+
+# The intraday --w6-odds-current pass rebuilds only the odds-serving hot set: mart_odds_outcomes
+# (_current bucket) + mart_game_odds_bridge (full — ~26k rows, cheap; its event_id map must
+# track new events intraday). The CLV/line-movement marts are post-hoc (closing line locks at
+# first pitch) → they stay on the once/day odds_clv path (full rebuild), NOT here.
+W6_INTRADAY_MARTS = ["mart_game_odds_bridge"]
+
+# Intraday _current is rebuilt from a RECENT raw window (ingestion dt >= today − N days)
+# rather than all history: no game's odds are captured more than ~7 days ahead, so reading
+# the last 12 ingestion-date partitions yields the COMPLETE snapshot set for every
+# commence_date >= today game (not an approximation), at ~12/season-days the cost. The daily
+# full build (reads ALL raw) re-establishes completeness each morning.
+W6_ODDS_CURRENT_RAW_DAYS = 12
+
 
 def find_model(model_name: str) -> Path:
     for subdir in ("staging", "mart", "marts"):
@@ -362,6 +446,14 @@ def _register_mart_views(conn, models: list[str], dry_run: bool) -> None:
     for model in models:
         if dry_run:
             conn.execute(f"CREATE OR REPLACE VIEW {model} AS {extract_duckdb_sql(model)}")
+        elif model in W6_PARTITIONED:
+            # Partitioned mart (mart_odds_outcomes): glob both date-bucket subdirs
+            # (_history + _current) so downstream W6 marts read the full table.
+            glob = f"{LAKEHOUSE}/{model}/**/*.parquet"
+            conn.execute(
+                f"CREATE OR REPLACE VIEW {model} AS "
+                f"SELECT * FROM read_parquet('{glob}', union_by_name=true)"
+            )
         else:
             loc = f"{LAKEHOUSE}/{model}/data.parquet"
             conn.execute(
@@ -515,6 +607,165 @@ def _build_archetype(conn, dry_run: bool) -> None:
         _register_mart_views(conn, [model], dry_run)
 
 
+def _la_today(conn) -> str:
+    """Today's calendar date in America/Los_Angeles (the tz mart_odds_outcomes.commence_date
+    is computed in) as an ISO string. The _history/_current split boundary — the daily full
+    build and every intraday rebuild within the same LA day agree on it."""
+    return conn.execute(
+        "SELECT (now() AT TIME ZONE 'America/Los_Angeles')::date::varchar"
+    ).fetchone()[0]
+
+
+def _register_recent_stg_oddsapi_odds(conn, boundary: str) -> None:
+    """Register stg_oddsapi_odds as a RECENT-SCOPED flatten for the intraday _current rebuild:
+    flatten only the last W6_ODDS_CURRENT_RAW_DAYS ingestion-date partitions of
+    lakehouse_raw/mlb_odds_raw (a literal list of dt= globs, so DuckDB never lists the full
+    history). That window covers every snapshot of every commence_date >= today game (odds
+    are never captured >~7 days ahead), so the resulting _current bucket is COMPLETE."""
+    from datetime import date, timedelta
+    b = date.fromisoformat(boundary)
+    globs = ",".join(
+        f"'{LAKEHOUSE_RAW}/mlb_odds_raw/dt={(b - timedelta(days=d)).isoformat()}/**/*.parquet'"
+        for d in range(W6_ODDS_CURRENT_RAW_DAYS + 1)
+    )
+    full_sql = extract_duckdb_sql("stg_oddsapi_odds")
+    # Point the model's full-history glob at the recent dt= window (missing dt= dirs are
+    # silently skipped by read_parquet's list form).
+    recent_sql = full_sql.replace(
+        f"'{LAKEHOUSE_RAW}/mlb_odds_raw/**/*.parquet'",
+        f"[{globs}]",
+    )
+    if recent_sql == full_sql:
+        raise RuntimeError(
+            "stg_oddsapi_odds raw glob not found for recent-scope rewrite — the model's "
+            "read_parquet path changed; update _register_recent_stg_oddsapi_odds."
+        )
+    conn.execute(f"CREATE OR REPLACE VIEW stg_oddsapi_odds AS {recent_sql}")
+    print(f"  registered RECENT-scoped stg_oddsapi_odds (dt >= {b - timedelta(days=W6_ODDS_CURRENT_RAW_DAYS)})")
+
+
+def _build_odds_outcomes(conn, dry_run: bool, boundary: str, intraday: bool) -> None:
+    """Build mart_odds_outcomes into its two date-bucket subdirs (E11.1-W6 option b).
+
+    intraday=False (daily full build): rewrite BOTH _history (commence_date < boundary) and
+    _current (commence_date >= boundary) from the full stg_oddsapi_odds.
+    intraday=True: rewrite ONLY _current from the recent-scoped stg_oddsapi_odds (caller must
+    register it first). _history is left untouched. The COPY targets a single object per
+    bucket; S3 multipart makes the swap effectively atomic (a failed COPY leaves the prior
+    good object live)."""
+    model = "mart_odds_outcomes"
+    base = f"{LAKEHOUSE}/{model}"
+    mart_sql = extract_duckdb_sql(model)
+    cur = f"SELECT * FROM ({mart_sql}) t WHERE commence_date >= DATE '{boundary}'"
+    hist = f"SELECT * FROM ({mart_sql}) t WHERE commence_date <  DATE '{boundary}'"
+    if dry_run:
+        n_cur = conn.execute(f"SELECT count(*) FROM ({cur})").fetchone()[0]
+        print(f"  {model} _current (>= {boundary}): {n_cur:,} rows  (dry-run)")
+        if not intraday:
+            n_hist = conn.execute(f"SELECT count(*) FROM ({hist})").fetchone()[0]
+            print(f"  {model} _history (<  {boundary}): {n_hist:,} rows  (dry-run)")
+        return
+    conn.execute(f"COPY ({cur}) TO '{base}/_current/data.parquet' (FORMAT PARQUET)")
+    print(f"  {model}: _current (>= {boundary}) written → {base}/_current/data.parquet")
+    if not intraday:
+        conn.execute(f"COPY ({hist}) TO '{base}/_history/data.parquet' (FORMAT PARQUET)")
+        print(f"  {model}: _history (<  {boundary}) written → {base}/_history/data.parquet")
+
+
+def _build_w6_precursor_views(conn) -> None:
+    """Register the shared W6 precursor views (W5 game chain + W3pre odds/staging flatten +
+    the two typed flat-export views). Used by both the daily and intraday W6 builds."""
+    print("\nW6 precursor views (W5 game chain + W3pre odds/staging flatten):")
+    _register_s3_glob_views(conn, W6_PRECURSOR_VIEWS)
+    print("\nW6 typed precursor views (odds_snapshots_historical + daily_model_predictions):")
+    conn.execute(
+        "CREATE OR REPLACE VIEW odds_snapshots_historical AS "
+        "SELECT * REPLACE ("
+        "  snapshot_ts::timestamptz AS snapshot_ts,"
+        "  game_date::date          AS game_date,"
+        "  loaded_at::timestamptz   AS loaded_at"
+        f") FROM read_parquet('{LAKEHOUSE}/odds_snapshots_historical/*.parquet', union_by_name=true)"
+    )
+    print("  registered typed view: odds_snapshots_historical")
+    conn.execute(
+        "CREATE OR REPLACE VIEW daily_model_predictions AS "
+        "SELECT * REPLACE ("
+        "  score_date::date       AS score_date,"
+        "  game_date::date        AS game_date,"
+        "  inserted_at::timestamp AS inserted_at,"
+        "  game_datetime::timestamp AS game_datetime"
+        f") FROM read_parquet('{LAKEHOUSE}/daily_model_predictions/*.parquet', union_by_name=true)"
+    )
+    print("  registered typed view: daily_model_predictions")
+
+
+def _build_w6_odds_current(conn, dry_run: bool) -> None:
+    """E11.1-W6 INTRADAY pass (--w6-odds-current): rewrite ONLY the odds-serving hot set —
+    mart_odds_outcomes _current bucket (today + future games, from a recent raw window) +
+    mart_game_odds_bridge (full; cheap). Fired by the odds_current_rebuild path AFTER the
+    capture exports today's mlb_odds_raw → S3. _history is untouched (frozen by the daily
+    build). The caller (intraday op) then refreshes only these external tables."""
+    _build_w6_precursor_views(conn)
+    for _pragma in ("SET threads=2", "SET memory_limit='11GB'"):
+        try:
+            conn.execute(_pragma)
+        except Exception as _e:
+            print(f"  (note: {_pragma} not applied: {_e})")
+    boundary = _la_today(conn)
+    print(f"\nW6 intraday rebuild (LA today = {boundary}):")
+    # Recent-scoped stg so the _current flatten is O(recent), not O(history).
+    _register_recent_stg_oddsapi_odds(conn, boundary)
+    _build_odds_outcomes(conn, dry_run, boundary, intraday=True)
+    _register_mart_views(conn, ["mart_odds_outcomes"], dry_run)
+    # bridge reads the FULL mart_odds_outcomes (both buckets, just re-registered) — small,
+    # full rebuild keeps its event_id map fresh for today's games.
+    for model in W6_INTRADAY_MARTS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+
+def _build_w6(conn, dry_run: bool) -> None:
+    """Build the E11.1-W6 odds/CLV + odds-serving marts (13) + the 2 Group-C staging
+    flattens (the DAILY full build). Registers the W5 game chain + W3pre odds/staging
+    flattens as views first, then builds the 2 stg flattens (venues/lineups RAW JSON), then
+    the 13 marts in dependency order — each registered as a DuckDB view immediately after
+    build so the next model's plain-name reads resolve. mart_odds_outcomes is built into its
+    _history/_current date buckets (see W6_PARTITIONED); every other mart writes a single
+    data.parquet. The raw/builder parquet (odds_snapshots_historical, daily_model_predictions,
+    mlb_odds_raw, venues_raw, monthly_schedule) is read DIRECTLY via
+    read_parquet(lakehouse_loc/raw_loc) in each duckdb branch — no view registration."""
+    _build_w6_precursor_views(conn)
+
+    # The stg_statsapi_lineups flatten explodes the same large monthly_schedule month-blobs
+    # as the W3pre stg_statsapi_games (the known OOM source); the bookmaker_disagreement
+    # historical path re-flattens mlb_odds_raw. Cap parallelism + lower memory_limit so
+    # DuckDB spills to temp_directory (set in run()) rather than OOMing. value-identical
+    # output (every output is a parquet COPY re-globbed downstream).
+    for _pragma in ("SET threads=2", "SET memory_limit='11GB'"):
+        try:
+            conn.execute(_pragma)
+        except Exception as _e:
+            print(f"  (note: {_pragma} not applied: {_e})")
+
+    boundary = _la_today(conn)
+    print(f"\nW6 daily full build (mart_odds_outcomes _history/_current split at LA today = {boundary}):")
+
+    print("\nW6 Group-C staging flattens (venues / lineups RAW JSON):")
+    for model in W6_STG_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+    print("\nW6 marts (odds/CLV + odds-serving + Group-C):")
+    for model in W6_MART_MODELS:
+        if model in W6_PARTITIONED:
+            # mart_odds_outcomes — write both date buckets (_history + _current), then
+            # register the union view so downstream W6 marts read the full table.
+            _build_odds_outcomes(conn, dry_run, boundary, intraday=False)
+        else:
+            _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+
 def run(
     dry_run: bool = False,
     skip_w1: bool = False,
@@ -529,6 +780,9 @@ def run(
     w5_group_a_only: bool = False,
     archetype: bool = False,
     archetype_only: bool = False,
+    w6: bool = False,
+    w6_only: bool = False,
+    w6_odds_current: bool = False,
 ) -> None:
     import duckdb
 
@@ -547,8 +801,28 @@ def run(
     os.makedirs(_spill_dir, exist_ok=True)
     conn.execute("SET preserve_insertion_order=false")
     conn.execute(f"SET temp_directory='{_spill_dir}'")
+    # E11.1-W6: pin the session timezone to UTC so any implicit naive↔tz cast is
+    # deterministic + UTC-consistent. The odds/CLV marts union a TIMESTAMP_NTZ (UTC
+    # wall-clock) live arm into a TIMESTAMP_TZ column (mart_closing_line_value.
+    # close_snapshot_ts) and compare snapshot_ts (timestamptz) to a TIMESTAMP_NTZ
+    # ingestion_ts — UTC pinning keeps those casts reproducible across hosts. Harmless
+    # for W1–W5 (their marts use only explicit ::date/::timestamp, no implicit tz casts).
+    try:
+        conn.execute("SET TimeZone='UTC'")
+    except Exception as _e:
+        print(f"  (note: SET TimeZone='UTC' not applied: {_e})")
 
     conn.execute("INSTALL httpfs; LOAD httpfs")
+    # E11.1-W6: the odds/CLV marts use timezone conversion (mart_odds_outcomes /
+    # mart_odds_events commence_date, mart_closing_line_value / mart_bookmaker_disagreement
+    # ET-window guards). Snowflake's convert_timezone(src, tgt, ts) is reimplemented in the
+    # duckdb branch with `ts AT TIME ZONE 'UTC' AT TIME ZONE '<tgt>'`, which needs the ICU
+    # extension. Load it here (harmless for W1–W5). Autoload usually covers AT TIME ZONE, but
+    # load explicitly so a host with autoload disabled still resolves the zone names.
+    try:
+        conn.execute("INSTALL icu; LOAD icu")
+    except Exception as _e:
+        print(f"  (note: ICU extension not loaded: {_e}; AT TIME ZONE may rely on autoload)")
     conn.execute("""
         CREATE OR REPLACE SECRET baseball_s3 (
           TYPE S3,
@@ -577,6 +851,18 @@ def run(
         _build_w3pre(conn, dry_run)
         conn.close()
         print("\nW3pre staging run complete (--w3pre-only).")
+        return
+
+    # E11.1-W6 INTRADAY: --w6-odds-current rewrites ONLY mart_odds_outcomes' _current bucket
+    # (today + future games, recent-scoped flatten) + mart_game_odds_bridge, reusing the
+    # existing W3pre/W5 parquet. Standalone (no pitch-mart build) so the odds_current_rebuild
+    # path stays light. The caller exports today's mlb_odds_raw → S3 first, then refreshes the
+    # mart_odds_outcomes / mart_game_odds_bridge / stg_oddsapi_odds external tables.
+    if w6_odds_current:
+        print("\nBuilding W6 INTRADAY current-odds pass (--w6-odds-current):")
+        _build_w6_odds_current(conn, dry_run)
+        conn.close()
+        print("\nW6 intraday current-odds run complete (--w6-odds-current).")
         return
 
     # Register stg_batter_pitches as a view so mart refs resolve.
@@ -642,6 +928,18 @@ def run(
         print("\nW5b archetype mart run complete (--archetype-only).")
         return
 
+    # E11.1-W6: --w6-only rebuilds just the W6 odds/CLV + odds-serving marts + the 2
+    # Group-C staging flattens, reusing the existing W3pre/W5 parquet (registered as views
+    # by _build_w6) + the precursor exports. stg_batter_pitches is already registered above
+    # (W6 doesn't read it). Lets the operator iterate on W6 / re-run parity after an export,
+    # without rebuilding the heavy pitch marts.
+    if w6_only:
+        print("\nBuilding W6 (reuse existing W3pre/W5 parquet for --w6-only):")
+        _build_w6(conn, dry_run)
+        conn.close()
+        print("\nW6 marts run complete (--w6-only).")
+        return
+
     # ── W1: pitch-level marts ────────────────────────────────────────────────
     if not skip_w1:
         print("\nW1 marts:")
@@ -703,10 +1001,20 @@ def run(
     if archetype:
         _build_archetype(conn, dry_run)
 
+    # ── W6: odds/CLV + odds-serving path + Group-C marts (E11.1-W6) — OPT-IN ──────
+    # NOT built by default: reads the precursor exports (odds_snapshots_historical,
+    # daily_model_predictions, venues_raw via scripts/export_w6_raw_to_s3.py) + the W5 game
+    # chain + W3pre staging that must exist first. Enable with --w6 once the exports are
+    # wired and cutover is validated, so an empty precursor tier can't fail the HALT-tier
+    # daily op. The W3pre/W5 marts W6 reads are registered as views inside _build_w6.
+    if w6:
+        _build_w6(conn, dry_run)
+
     conn.close()
     print(
         f"\nW1+W2+W3{'+W3pre' if w3pre else ''}{'+W4' if w4 else ''}"
-        f"{'+W5' if w5 else ''}{'+W5b' if archetype else ''} lakehouse run complete."
+        f"{'+W5' if w5 else ''}{'+W5b' if archetype else ''}{'+W6' if w6 else ''} "
+        f"lakehouse run complete."
     )
 
 
@@ -725,4 +1033,7 @@ if __name__ == "__main__":
         w5_group_a_only="--w5-group-a-only" in sys.argv,
         archetype="--archetype" in sys.argv,
         archetype_only="--archetype-only" in sys.argv,
+        w6="--w6" in sys.argv,
+        w6_only="--w6-only" in sys.argv,
+        w6_odds_current="--w6-odds-current" in sys.argv,
     )

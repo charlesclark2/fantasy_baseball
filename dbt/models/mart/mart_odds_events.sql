@@ -6,17 +6,18 @@
 --          snapshot per event. Use this as the authoritative event dimension
 --          when joining to mart_odds_outcomes.
 -- Join key: event_id
+--
+-- DuckDB branch (E11.1-W6): reads the migrated stg_oddsapi_events; the Snowflake
+-- (else) branch is a thin view over the lakehouse_ext external table.
 -- =============================================================================
 
-{{
-    config(
-        materialized = 'table'
-    )
-}}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w6_lakehouse']) }}
 
 with events as (
 
-    select * from {{ ref('stg_oddsapi_events') }}
+    select * from stg_oddsapi_events
 
 )
 
@@ -29,7 +30,7 @@ select
     sport_key,
     sport_title,
     commence_time,
-    convert_timezone('UTC', 'America/Los_Angeles', commence_time)::date as commence_date,
+    (commence_time::timestamp at time zone 'UTC' at time zone 'America/Los_Angeles')::date as commence_date,
 
     -- ── Teams ─────────────────────────────────────────────────────────────────
     home_team,
@@ -42,3 +43,11 @@ select
     x_requests_remaining
 
 from events
+
+{% else %}
+
+{{ config(materialized='view', tags=['w6_lakehouse']) }}
+
+select * from baseball_data.lakehouse_ext.mart_odds_events
+
+{% endif %}

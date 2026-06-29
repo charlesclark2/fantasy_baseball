@@ -63,14 +63,41 @@ def model_health_alert_sensor(context: SensorEvaluationContext):
     end = date.today()
     start = max(end - timedelta(days=_ROLLING_DAYS), _GATE_FLOOR_DATE)
     window = f"{start.isoformat()}→{end.isoformat()}"
+    # INC-17-P3: check yesterday's post_lineup slate for lineup-gated feature coverage.
+    # Yesterday is guaranteed to have had its post_lineup pass written at game time;
+    # today's may not exist yet when the sensor fires in the morning.
+    matchup_check_date = end - timedelta(days=1)
 
     conn = get_snowflake_connection()
     try:
         result = mh.evaluate(conn, _SCHEMA, start, end,
                              model_version=_MODEL_VERSION,
                              prediction_type=_PREDICTION_TYPE)
+        matchup_result = mh.check_post_lineup_matchup_coverage(
+            conn, _SCHEMA, matchup_check_date
+        )
     finally:
         conn.close()
+
+    # INC-17-P3: post_lineup matchup block coverage alert (fires independently of skill gate).
+    if matchup_result["alert_fired"]:
+        from pipeline.utils.alerting import send_alert  # INC-16-P6
+        matchup_msg = (
+            f"INC-17 CLASS ALERT: {matchup_result['fail_reason']} "
+            f"Run: uv run python scripts/ops/model_health_metrics.py "
+            f"--since {matchup_check_date.isoformat()} --prediction-type post_lineup "
+            f"--schema {_SCHEMA}"
+        )
+        context.log.warning("post_lineup matchup coverage LOW: %s", matchup_result["fail_reason"])
+        send_alert("post_lineup matchup block null (INC-17 class)", matchup_msg,
+                   severity="ERROR", dedup_key="model_health:post_lineup_matchup")
+        raise Exception(matchup_msg)
+
+    context.log.info(
+        "post_lineup matchup coverage OK for %s: avg_coverage=%.3f n_games=%d",
+        matchup_check_date, matchup_result.get("avg_coverage", float("nan")),
+        matchup_result.get("n_games", 0),
+    )
 
     if result is None:
         yield SkipReason(f"No completed {_PREDICTION_TYPE} predictions in {window}.")

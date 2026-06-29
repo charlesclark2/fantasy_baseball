@@ -1,21 +1,16 @@
 -- =============================================================================
 -- mart_clv_label_count.sql
 -- Grain: one row total
+-- Purpose: Canonical gate threshold tracker for Epic 12 (count of CLV-labeled
+--          games + pct_clv_positive across all market types).
 --
--- Purpose: Canonical gate threshold tracker for Epic 12.
---          Downstream stories gate on specific live_total_count thresholds:
---            ≥ 10  → 12.2 (descriptive monitoring) — already met
---            ≥ 50  → 12.3 (proxy analysis), 12.4 (Bayesian meta-model)
---            ≥ 100 → 12.5 (Bayesian → Epic 19 integration)
---            ≥ 200 → 12.4 posterior CIs narrow enough for operational use
---            ≥ 500 → 12.6 (frequentist exploratory meta-model)
---            ≥ 1000 → 12.7 (production meta-model)
---
---          pct_clv_positive is the fraction of rows where clv > 0, measured
---          across all market types. Used in 12.2 monitoring alerts.
+-- DuckDB branch (E11.1-W6): aggregates the migrated mart_clv_labeled_games; the
+-- Snowflake (else) branch is a thin view over the lakehouse_ext external table.
 -- =============================================================================
 
-{{ config(materialized='view') }}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w6_lakehouse']) }}
 
 select
     count(case when market_type = 'h2h'    then 1 end)          as live_h2h_count,
@@ -27,4 +22,12 @@ select
         avg(case when clv_positive then 1.0 else 0.0 end),
         4
     )                                                           as pct_clv_positive
-from {{ ref('mart_clv_labeled_games') }}
+from mart_clv_labeled_games
+
+{% else %}
+
+{{ config(materialized='view', tags=['w6_lakehouse']) }}
+
+select * from baseball_data.lakehouse_ext.mart_clv_label_count
+
+{% endif %}

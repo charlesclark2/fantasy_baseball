@@ -253,7 +253,23 @@ def run_w1_lakehouse_op(context):
     # fail this HALT-tier op. Flip to "--w5" once validated. (W5 careful tier: only the
     # game-detail Snowflake FALLBACK reads mart_team_pythagorean_rolling, behind the DynamoDB
     # serving cache — no other request-time read; post-cutover it serves the S3-backed view.)
-    _run_script(context, "run_w1_lakehouse.py")
+    #
+    # E11.1-W6: run_w1_lakehouse.py ALSO builds the 13 odds/CLV + odds-serving marts + the 2
+    # Group-C staging flattens under --w6 (flipped ON at the W6 cutover, after the lakehouse_ext
+    # W6 external tables were created + parity validated). Precursors:
+    #   • monthly_schedule re-export (the line BELOW, BEFORE the --w6 build): the 3 Group-C lineup
+    #     marts (stg_statsapi_lineups → mart_player_game_starts / mart_team_schedule_context)
+    #     flatten it, and ingest_statsapi.py is Snowflake-only (W3pre never S3-flipped its writer),
+    #     so a stale snapshot drops today's lineups → matchup features NULL for live serving (the
+    #     INC-17 P2 class). Parity at backfill showed DuckDB ~1.4% < Snowflake purely from this lag.
+    #   • daily_model_predictions is NOT re-exported here — this op runs BEFORE predict_today, so
+    #     the CLV marts (mart_prediction_clv / mart_clv_labeled_games) are refreshed POST-predict
+    #     by the gated intraday odds_clv_dbt_rebuild path (export dmp → --w6 → refresh --w6-clv).
+    # ⭐ mart_odds_outcomes is date-bucketed (_history/_current); this daily --w6 rewrites BOTH
+    # buckets, while the intraday odds_current_rebuild path (pipeline/ops/intraday_ops.py, gated
+    # W6_LAKEHOUSE_INTRADAY) rewrites ONLY _current each odds cycle so served prices stay fresh.
+    _run_script(context, "export_odds_raw_to_s3.py", ["--source", "monthly_schedule"])
+    _run_script(context, "run_w1_lakehouse.py", ["--w6"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -811,3 +827,26 @@ def settle_user_bets_op(context):
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def backfill_prediction_log(context):
     _run_script(context, "backfill_prediction_log.py")
+
+
+# ── E9.31b — Zone-overlay daily generation ───────────────────────────────────
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def build_zone_matchup_overlay_op(context):
+    """Generate today's batter × starter zone-overlay JSONs and write to S3.
+
+    WARN-tier (E11.7 / e13_10_app_handoff_spec §3): peripheral/app-cosmetic.
+    A failure here must never block predictions or the serving writes. The
+    backend reads S3 directly for these files; they are NOT on the predict path.
+
+    Reads: stg_statsapi_lineups + stg_statsapi_probable_pitchers (Snowflake, IDs only).
+    Heavy compute: S3 lakehouse DuckDB (never Snowflake per E13.10 cost-aware rule).
+    Writes: s3://baseball-betting-ml-artifacts/baseball/serving/zone_matchup/overlay/as_of=<date>/
+    """
+    try:
+        _run_script(context, "generate_zone_overlays_today.py")
+    except Exception as exc:  # noqa: BLE001
+        context.log.warning(
+            "WARNING: build_zone_matchup_overlay_op failed (non-fatal — zone heatmaps may be "
+            f"absent for today's picks, predictions and serving are unaffected): {exc}"
+        )

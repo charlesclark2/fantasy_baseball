@@ -3,6 +3,10 @@
     "week": "2026-06-22",
     "items": [
       {
+        "tag": "improvement",
+        "text": "Zone heatmaps now populate across the full slate. The batter hot-zone × pitcher tendency overlay (the red/blue cell grid on pick and player detail pages) previously only rendered when an overlay happened to be pre-generated. A daily background process now builds overlays for every confirmed batter-vs-starter matchup each morning, so the heatmap shows up consistently — not just for hand-picked showcase pairs. Honest framing: this is a transparency and explainability view of the matchup, not a bet signal."
+      },
+      {
         "tag": "fix",
         "text": "EV Tracker game times were showing +5 hours too late (e.g. 6:15 PM CDT instead of 1:15 PM CDT). The time formatter was appending a trailing 'Z' to UTC timestamps that already carried an explicit '+00:00' timezone offset, producing an invalid datetime string that browsers treated as local time. Updated the formatter to detect and preserve any existing timezone indicator before parsing — matching the fix already in place on game-detail pages."
       },
