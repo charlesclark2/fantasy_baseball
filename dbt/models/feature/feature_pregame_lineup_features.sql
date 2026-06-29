@@ -354,7 +354,7 @@ batter_archetype_dist as (
         count(case when bc.cluster_label = 'contact_spray'    then 1 end) as n_contact_spray,
         count(case when bc.cluster_label is null               then 1 end) as n_no_label
     from lineup_slots ls
-    left join {{ source('statsapi', 'batter_clusters') }} bc
+    left join {{ source('lakehouse_clusters', 'batter_clusters') }} bc
         on  bc.batter_id = ls.batter_id
         and bc.season    = year(ls.official_date) - 1
     where ls.batter_id is not null

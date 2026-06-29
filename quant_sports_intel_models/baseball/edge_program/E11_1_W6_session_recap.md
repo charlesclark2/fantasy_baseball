@@ -1,6 +1,9 @@
 # E11.1-W6 session recap — the odds/CLV + odds-serving tier (the most serving-coupled wave)
 
-**Status: CODE-COMPLETE 2026-06-28 (Opus). Parity + external-table create + cutover = operator.**
+**Status: ✅ DEPLOYED + VIEWS LIVE 2026-06-29 (Opus). Merged→main, CD redeployed, parity GREEN 15/15,
+external tables created, 15 models flipped to Snowflake views over `lakehouse_ext.*`, `W6_LAKEHOUSE_INTRADAY=1`
+on the EC2 box.** Remaining = operational monitoring (below) + the W7 carryovers. See bottom for the
+W7 handoff.
 
 Migrated the final mart tier — **15 dual-branch models** (`tags=['w6_lakehouse']`, `materialized='view'`
 over `baseball_data.lakehouse_ext.*`) — off Snowflake → DuckDB/S3. This is the tier the program's
@@ -148,3 +151,45 @@ under `s3://…/lakehouse/` is S3-only.
 
 ⇒ After W6 cutover, only the READERS (feature/serving layer) + the Cortex narrative remain on
 Snowflake → **W7 (= Wsv)** finishes the program.
+
+---
+
+## 🔭 Post-cutover MONITORING (W6 residual — operator/PM should confirm over the next cycle)
+The structural flip is done + validated (views live). What's left is observing the *first* live cycles:
+1. **First daily build with `--w6` + `monthly_schedule` re-export** runs GREEN, and today's games have
+   **non-NULL** lineup/matchup features (the INC-17 P2 guard — the whole reason the monthly_schedule
+   re-export was added). If lineups are NULL for today, the re-export didn't land before the `--w6` build.
+2. **First intraday odds cycle** (`odds_current_dbt_rebuild`, now gated-ON): logs show `export mlb_odds_raw
+   → run_w1 --w6-odds-current → refresh --w6-odds` with **no ALERT-tier warnings**, and `mart_odds_outcomes`
+   `_current` reflects fresh prices (served prices not stale = the INC-16 failure mode this design prevents).
+3. **CLV marts post-predict**: after `predict_today` + the intraday `odds_clv_dbt_rebuild`, `/performance`
+   (`mart_prediction_clv` / `mart_clv_labeled_games`) includes today.
+4. **Live app surfaces**: EV Tracker / Line Shopping / game-detail load with fresh odds.
+
+## ⚠️ Known-minor (non-blocking, carry as notes)
+- **`parity_check_w6.py` hash for `mart_prediction_clv`** errors on the SF side (`invalid identifier
+  RETRAIN_TAG`) — a script bug (the PK expression `coalesce(retrain_tag,'')` isn't aliased in the inner
+  subquery, so the outer ORDER BY can't resolve it). SF table HAS the column; rows+PK pass. Fix the script
+  alias if W6 parity is ever re-run; not a data issue.
+- **`mart_odds_events.ingestion_ts` is VARCHAR** in the external table (passthrough from `mlb_events_raw`,
+  never compared to a timestamp) — intentional, matches the parquet; only `mart_odds_outcomes.ingestion_ts`
+  needed the `TIMESTAMP_NTZ` cast.
+- **`mart_odds_events` is stale upstream** (events feed stalled 2026-06-04) — **pre-existing, NOT a W6
+  regression**; tracked in the roadmap.
+- The native Snowflake `dbt run` of these 15 models is now a redundant no-op (they're views); safe to drop
+  from any path that still materializes them natively, but harmless if left.
+
+## ➡️ W7 (FINISH) handoff — what W7 must do (per `build_roadmap.md`)
+W6 left the odds/CLV/serving marts as **Snowflake views over `lakehouse_ext.*`**. W7 finishes the program:
+1. **Repoint the feature/serving READERS off the Snowflake views → direct S3** (DuckDB reads), then **DROP
+   the W6 views** and the request-time **Snowflake fallbacks** in the careful tier (`picks.py` reads
+   `daily_model_predictions` + `mart_odds_outcomes` + `mart_odds_line_movement`; `performance.py` reads
+   `mart_clv_labeled_games` + `daily_model_predictions` — all behind the DynamoDB serving cache today).
+2. **`mart_player_profile_identity`** migrates (blocked on `feature_pregame_injury_status`).
+3. **Drop the W4/W5/W5b dual-write Snowflake builder runs** — the matchup-signal consumers
+   (`generate_matchup_signals` / `update_matchup_cell_posteriors` / `fit_archetype_priors` /
+   `build_matchup_training_data`) migrate here. **This is where the real Snowflake-credit drop lands.**
+4. End-state = **Cortex-only** (the narrative LLM is the last Snowflake dependency).
+
+W7 inherits W6's **careful tier** discipline: repoint/remove each Snowflake fallback *as* its reader moves
+to S3, and verify LIVE (not just parity) — the W6 marts are on the request path.

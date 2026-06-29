@@ -169,6 +169,15 @@ W6_TABLES = [
 # two — the CLV/line-movement marts are post-hoc (once/day, --w6-clv).
 W6_ODDS_INTRADAY_TABLES = ["mart_odds_outcomes", "mart_game_odds_bridge"]
 # Refreshed once/day after odds_clv_dbt_rebuild (closing line locks at first pitch).
+
+# E11.1-W7a: the builder-output cluster external tables, created by
+# scripts/ddl/generate_w7_external_tables.py over the cluster_batters/cluster_pitchers --s3
+# parquet. The feature layer now reads clusters from here (source 'lakehouse_clusters')
+# instead of native statsapi.{batter,pitcher}_clusters. BEST-EFFORT (WARN if missing) like
+# W4/W5/W5b/W6 during the opt-in rollout. Clusters are rebuilt SEASONALLY (pre-season +
+# optional mid-season), so this REFRESH is a cheap no-op on most days, but it's included in
+# the daily refresh so a same-day cluster_*.py --s3 run is picked up without a manual step.
+W7_TABLES = ["batter_clusters", "pitcher_clusters"]
 W6_CLV_TABLES = ["mart_closing_line_value", "mart_prediction_clv", "mart_odds_line_movement"]
 
 
@@ -258,10 +267,10 @@ def main():
     required = set(W1_TABLES) | set(W2_TABLES) | set(W3_TABLES)
     _refresh(
         W1_TABLES + W2_TABLES + W3_TABLES + W3PRE_TABLES
-        + W4_TABLES + W5_TABLES + ARCHETYPE_TABLES + W6_TABLES,
+        + W4_TABLES + W5_TABLES + ARCHETYPE_TABLES + W6_TABLES + W7_TABLES,
         required=required,
     )
-    print("W1+W2+W3 external table refresh complete (W3pre + W4 + W5 + W5b + W6 best-effort).")
+    print("W1+W2+W3 external table refresh complete (W3pre + W4 + W5 + W5b + W6 + W7 best-effort).")
 
 
 if __name__ == "__main__":

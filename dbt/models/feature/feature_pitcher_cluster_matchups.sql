@@ -46,7 +46,7 @@ starter_cluster as (
     from games g
     join starters s
         on  s.game_pk = g.game_pk
-    left join {{ source('statsapi', 'pitcher_clusters') }} pc
+    left join {{ source('lakehouse_clusters', 'pitcher_clusters') }} pc
         on  pc.pitcher_id = s.pitcher_id
         and pc.season     = g.game_year - 1
 ),
