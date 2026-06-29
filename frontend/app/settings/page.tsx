@@ -306,10 +306,12 @@ function BookCard({
   onRemove,
   onReassign,
   onDeleteEvent,
+  onResetBaseline,
   isUpdating,
   isAddingEvent,
   isReassigning,
   isDeletingEvent,
+  isResettingBaseline,
 }: {
   account: BookAccount
   growth: BookGrowth | undefined
@@ -320,10 +322,12 @@ function BookCard({
   onRemove: (book: string) => void
   onReassign: (fromBook: string, toBook: string) => void
   onDeleteEvent: (eventId: string) => void
+  onResetBaseline: (book: string) => void
   isUpdating: boolean
   isAddingEvent: boolean
   isReassigning: boolean
   isDeletingEvent: boolean
+  isResettingBaseline: boolean
 }) {
   const [balInput, setBalInput] = useState(String(account.current_balance))
   const [balSaved, setBalSaved] = useState(false)
@@ -333,6 +337,7 @@ function BookCard({
   const [showReassign, setShowReassign] = useState(false)
   const [reassignTo, setReassignTo] = useState("")
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [confirmReset, setConfirmReset] = useState(false)
 
   useEffect(() => {
     setBalInput(String(account.current_balance))
@@ -455,9 +460,37 @@ function BookCard({
 
       {/* P&L summary */}
       {growth && growth.total_deposited > 0 && (
-        <div className="flex gap-4 text-xs text-gray-500 font-mono">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 font-mono">
           <span>Net P&amp;L: <span className={pnlColor(growth.betting_pnl)}>{fmtPnl(growth.betting_pnl)}</span></span>
           <span>Net deposits: <span className="text-gray-400">${growth.net_deposits.toFixed(2)}</span></span>
+          {confirmReset ? (
+            <span className="flex items-center gap-1.5 ml-auto font-sans">
+              <span className="text-gray-400 text-[11px]">
+                Reset to ${growth.current_balance.toFixed(2)}? Growth restarts at 0%.
+              </span>
+              <button
+                onClick={() => { onResetBaseline(account.book); setConfirmReset(false) }}
+                disabled={isResettingBaseline}
+                className="text-[#f59e0b] hover:text-amber-300 text-[11px] font-semibold disabled:opacity-50"
+              >
+                {isResettingBaseline ? "…" : "Confirm"}
+              </button>
+              <button
+                onClick={() => setConfirmReset(false)}
+                className="text-gray-600 hover:text-gray-400"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ) : (
+            <button
+              onClick={() => setConfirmReset(true)}
+              className="ml-auto font-sans text-[11px] text-gray-600 hover:text-[#f59e0b] transition-colors"
+              title="Re-base this book's cost basis to its current balance — events are kept"
+            >
+              Reset baseline
+            </button>
+          )}
         </div>
       )}
 
@@ -605,6 +638,16 @@ function SportsbooksSection({ accessToken }: { accessToken: string | null }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bankroll"] }),
   })
 
+  const resetBaselineMutation = useMutation({
+    mutationFn: (book: string) =>
+      apiFetch(
+        `/users/bankroll/books/${encodeURIComponent(book)}/reset-baseline`,
+        { method: "POST" },
+        accessToken
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bankroll"] }),
+  })
+
   const accounts = bankroll?.book_accounts ?? []
   const events = bankroll?.bankroll_events ?? []
   const overall = bankroll?.overall_growth
@@ -683,10 +726,12 @@ function SportsbooksSection({ accessToken }: { accessToken: string | null }) {
               onRemove={(book) => removeMutation.mutate(book)}
               onReassign={(fromBook, toBook) => reassignMutation.mutate({ fromBook, toBook })}
               onDeleteEvent={(eventId) => deleteEventMutation.mutate(eventId)}
+              onResetBaseline={(book) => resetBaselineMutation.mutate(book)}
               isUpdating={balanceMutation.isPending}
               isAddingEvent={eventMutation.isPending}
               isReassigning={reassignMutation.isPending}
               isDeletingEvent={deleteEventMutation.isPending}
+              isResettingBaseline={resetBaselineMutation.isPending}
             />
           ))
         )}

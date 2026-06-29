@@ -218,6 +218,12 @@ def compute_bankroll_growth(
 
     A deposit is NOT growth; a withdrawal is NOT a loss — both net out so the
     percentage reflects only betting performance.
+
+    Per-book baseline reset (E9.17 Phase 2): a book's account entry may carry a
+    ``baseline`` marker ({basis, deposited_offset, withdrawn_offset, reset_at}).
+    When present the prior cash-flow history is re-based out and the snapshot
+    balance (``basis``) is treated as a fresh deposit, so growth_pct restarts at
+    0% from the current balance. Events themselves are never deleted.
     """
     flows: dict = {}
     for evt in bankroll_events:
@@ -236,8 +242,23 @@ def compute_bankroll_growth(
 
     per_book: dict = {}
     for book, f in flows.items():
-        bal = float((book_accounts.get(book) or {}).get("current_balance", 0))
+        info = book_accounts.get(book) or {}
+        bal = float(info.get("current_balance", 0))
         td, tw = f["total_deposited"], f["total_withdrawn"]
+
+        baseline = info.get("baseline")
+        reset_at = None
+        if baseline:
+            basis = float(baseline.get("basis", 0))
+            dep_off = float(baseline.get("deposited_offset", 0))
+            wd_off = float(baseline.get("withdrawn_offset", 0))
+            reset_at = baseline.get("reset_at")
+            # Re-base: drop cash-flow recorded up to the reset, then inject the
+            # snapshot balance as the fresh cost basis. max() guards against an
+            # event deleted after the reset dragging a total below its offset.
+            td = max(0.0, td - dep_off) + basis
+            tw = max(0.0, tw - wd_off)
+
         nd = td - tw
         pnl = bal - nd
         per_book[book] = {
@@ -247,6 +268,7 @@ def compute_bankroll_growth(
             "current_balance": round(bal, 2),
             "betting_pnl": round(pnl, 2),
             "growth_pct": round(pnl / td, 6) if td > 0 else None,
+            "baseline_reset_at": reset_at,
         }
 
     td_total = sum(v["total_deposited"] for v in per_book.values())
@@ -316,7 +338,12 @@ def upsert_book_balance(user_id: str, book: str, current_balance: float) -> dict
     resp = _users_table().get_item(Key={"user_id": user_id})
     item = resp.get("Item", {})
     accounts = _deep_from_dynamo(dict(item.get("book_accounts") or {}))
-    accounts[book] = {"current_balance": current_balance}
+    prev = accounts.get(book) or {}
+    new_entry = {"current_balance": current_balance}
+    # Preserve any baseline reset marker across balance edits.
+    if prev.get("baseline"):
+        new_entry["baseline"] = prev["baseline"]
+    accounts[book] = new_entry
     _users_table().update_item(
         Key={"user_id": user_id},
         UpdateExpression="SET #ba = :ba",
@@ -409,6 +436,53 @@ def delete_bankroll_event(user_id: str, event_id: str) -> dict:
         UpdateExpression="SET #be = :be",
         ExpressionAttributeNames={"#be": "bankroll_events"},
         ExpressionAttributeValues={":be": _to_ddb(events)},
+    )
+    return get_bankroll(user_id)
+
+
+def reset_book_baseline(user_id: str, book: str) -> dict:
+    """Reset a single book's cost basis to its current balance (fresh start).
+
+    Opt-in, idempotent, and non-destructive: the book's deposit/withdrawal
+    events are preserved. We only snapshot a ``baseline`` marker on the account
+    that re-bases compute_bankroll_growth so growth_pct restarts at 0% from the
+    current balance. Calling it again recomputes the same offsets from the
+    (unchanged) events, so a repeat reset is a no-op on an unchanged book.
+    """
+    resp = _users_table().get_item(Key={"user_id": user_id})
+    item = resp.get("Item", {})
+    accounts = _deep_from_dynamo(dict(item.get("book_accounts") or {}))
+    events = _deep_from_dynamo(list(item.get("bankroll_events") or []))
+
+    if book not in accounts:
+        raise ValueError(f"Book '{book}' not found")
+
+    dep = sum(
+        float(e.get("amount", 0))
+        for e in events
+        if e.get("book") == book and e.get("type") == "deposit"
+    )
+    wd = sum(
+        float(e.get("amount", 0))
+        for e in events
+        if e.get("book") == book and e.get("type") == "withdrawal"
+    )
+    bal = float((accounts[book] or {}).get("current_balance", 0))
+
+    accounts[book] = {
+        "current_balance": bal,
+        "baseline": {
+            "basis": bal,
+            "deposited_offset": dep,
+            "withdrawn_offset": wd,
+            "reset_at": datetime.now(timezone.utc).isoformat(),
+        },
+    }
+    _users_table().update_item(
+        Key={"user_id": user_id},
+        UpdateExpression="SET #ba = :ba",
+        ExpressionAttributeNames={"#ba": "book_accounts"},
+        ExpressionAttributeValues={":ba": _to_ddb(accounts)},
     )
     return get_bankroll(user_id)
 

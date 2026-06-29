@@ -123,3 +123,98 @@ def test_loss_scenario():
     overall = result["overall"]
     assert overall["betting_pnl"] == pytest.approx(-200.0)
     assert overall["growth_pct"] == pytest.approx(-0.2)
+
+
+# ── Per-book baseline reset (E9.17 Phase 2) ───────────────────────────────────
+
+def _baseline(accounts, events, book):
+    """Mimic reset_book_baseline's marker without touching DynamoDB."""
+    dep = sum(float(e["amount"]) for e in events
+              if e["book"] == book and e["type"] == "deposit")
+    wd = sum(float(e["amount"]) for e in events
+             if e["book"] == book and e["type"] == "withdrawal")
+    bal = float(accounts[book]["current_balance"])
+    accounts[book] = {
+        "current_balance": bal,
+        "baseline": {
+            "basis": bal,
+            "deposited_offset": dep,
+            "withdrawn_offset": wd,
+            "reset_at": "2026-06-29T00:00:00+00:00",
+        },
+    }
+
+
+def test_reset_baseline_zeroes_growth():
+    """After a reset, growth restarts at 0% from the snapshot balance."""
+    accounts = {"BetMGM": {"current_balance": 600.0}}
+    events = [
+        {"book": "BetMGM", "type": "deposit", "amount": 500.0, "date": "2026-06-01", "event_id": "1"},
+    ]
+    _baseline(accounts, events, "BetMGM")
+    pb = compute_bankroll_growth(accounts, events)["per_book"]["BetMGM"]
+    assert pb["growth_pct"] == pytest.approx(0.0)
+    assert pb["betting_pnl"] == pytest.approx(0.0)
+    assert pb["total_deposited"] == pytest.approx(600.0)  # new cost basis
+    assert pb["baseline_reset_at"] == "2026-06-29T00:00:00+00:00"
+
+
+def test_reset_baseline_then_win():
+    """Reset at $600, win to $700 → +16.67% growth on the new $600 basis."""
+    accounts = {"BetMGM": {"current_balance": 600.0}}
+    events = [
+        {"book": "BetMGM", "type": "deposit", "amount": 500.0, "date": "2026-06-01", "event_id": "1"},
+    ]
+    _baseline(accounts, events, "BetMGM")
+    accounts["BetMGM"]["current_balance"] = 700.0  # later win
+    pb = compute_bankroll_growth(accounts, events)["per_book"]["BetMGM"]
+    assert pb["betting_pnl"] == pytest.approx(100.0)
+    assert pb["growth_pct"] == pytest.approx(round(100 / 600, 6))
+
+
+def test_reset_baseline_idempotent():
+    """Re-basing an unchanged book a second time yields the same result."""
+    accounts = {"FanDuel": {"current_balance": 450.0}}
+    events = [
+        {"book": "FanDuel", "type": "deposit", "amount": 500.0, "date": "2026-06-01", "event_id": "1"},
+    ]
+    _baseline(accounts, events, "FanDuel")
+    first = compute_bankroll_growth(accounts, events)["per_book"]["FanDuel"]
+    # Second reset off the already-rebased state, events unchanged.
+    _baseline(accounts, events, "FanDuel")
+    second = compute_bankroll_growth(accounts, events)["per_book"]["FanDuel"]
+    assert first["growth_pct"] == pytest.approx(0.0)
+    assert second["growth_pct"] == pytest.approx(0.0)
+    assert first["total_deposited"] == pytest.approx(second["total_deposited"])
+
+
+def test_reset_baseline_new_deposit_counts():
+    """Deposits recorded after a reset still extend the (re-based) cost basis."""
+    accounts = {"Bovada": {"current_balance": 300.0}}
+    events = [
+        {"book": "Bovada", "type": "deposit", "amount": 300.0, "date": "2026-06-01", "event_id": "1"},
+    ]
+    _baseline(accounts, events, "Bovada")
+    # Post-reset: deposit $100 more, balance now $400 (no betting yet).
+    events.append({"book": "Bovada", "type": "deposit", "amount": 100.0, "date": "2026-06-29", "event_id": "2"})
+    accounts["Bovada"]["current_balance"] = 400.0
+    pb = compute_bankroll_growth(accounts, events)["per_book"]["Bovada"]
+    assert pb["total_deposited"] == pytest.approx(400.0)
+    assert pb["betting_pnl"] == pytest.approx(0.0)
+    assert pb["growth_pct"] == pytest.approx(0.0)
+
+
+def test_reset_one_book_does_not_affect_other():
+    """Resetting BetMGM leaves FanDuel's growth untouched in the overall roll-up."""
+    accounts = {
+        "BetMGM": {"current_balance": 600.0},
+        "FanDuel": {"current_balance": 450.0},
+    }
+    events = [
+        {"book": "BetMGM", "type": "deposit", "amount": 500.0, "date": "2026-06-01", "event_id": "1"},
+        {"book": "FanDuel", "type": "deposit", "amount": 500.0, "date": "2026-06-01", "event_id": "2"},
+    ]
+    _baseline(accounts, events, "BetMGM")
+    result = compute_bankroll_growth(accounts, events)
+    assert result["per_book"]["BetMGM"]["growth_pct"] == pytest.approx(0.0)
+    assert result["per_book"]["FanDuel"]["growth_pct"] == pytest.approx(-0.1)
