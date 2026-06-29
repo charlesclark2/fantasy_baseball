@@ -148,6 +148,19 @@ class GamePicksResponse(BaseModel):
     total: int
 
 
+class StarterStartLog(BaseModel):
+    """E9.36 — one prior start in a pitcher's last-3 game log (context only)."""
+    date: str | None = None
+    opp: str | None = None
+    home_away: str | None = None
+    ip: str | None = None
+    k: int | None = None
+    bb: int | None = None
+    h: int | None = None
+    r: int | None = None
+    hr: int | None = None
+
+
 class StarterStats(BaseModel):
     pitcher_id: int | None = None
     name: str | None = None
@@ -164,6 +177,8 @@ class StarterStats(BaseModel):
     prior_ra9: float | None = None
     prior_whip: float | None = None
     prior_k_pct: float | None = None
+    # E9.36 — last 3 completed starts before this game (context/navigation, no edge claim)
+    last_3_starts: list[StarterStartLog] = []
 
 
 class GameStarters(BaseModel):
@@ -279,8 +294,9 @@ class LineMovement(BaseModel):
     total_line_movement: float | None = None
 
 
-# E9.37 — per-market line-movement time series (open→current). Market context
-# only — NOT an edge claim (our h2h/totals models show no demonstrated edge).
+# E9.37 — per-book, per-market line-movement time series (open→current). Market
+# context only — NOT an edge claim (our h2h/totals models show no demonstrated
+# edge). E9.37b: multi-book (was Bovada-only); h2h is de-vigged.
 class LineMovementSeriesH2HPoint(BaseModel):
     ts: str
     home_win_prob: float | None = None
@@ -289,12 +305,20 @@ class LineMovementSeriesH2HPoint(BaseModel):
 class LineMovementSeriesTotalsPoint(BaseModel):
     ts: str
     line: float | None = None
+    # E9.37c — de-vigged Over probability at this snapshot (captures juice moves
+    # when the line is sticky). None when only one side was posted.
+    over_prob: float | None = None
+
+
+class LineMovementSeriesBook(BaseModel):
+    h2h: list[LineMovementSeriesH2HPoint] = []
+    totals: list[LineMovementSeriesTotalsPoint] = []
 
 
 class LineMovementSeries(BaseModel):
-    book: str = "bovada"
-    h2h: list[LineMovementSeriesH2HPoint] = []
-    totals: list[LineMovementSeriesTotalsPoint] = []
+    # Canonical book keys present, in display order (pinnacle, betmgm, …).
+    books: list[str] = []
+    series: dict[str, LineMovementSeriesBook] = {}
 
 
 class UmpireInfo(BaseModel):

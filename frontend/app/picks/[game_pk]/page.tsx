@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import posthog from "posthog-js"
 import { useQuery } from "@tanstack/react-query"
@@ -154,6 +154,18 @@ type Pick = {
   predicted_at: string | null
 }
 
+type StarterStartLog = {
+  date: string | null
+  opp: string | null
+  home_away: "home" | "away" | null
+  ip: string | null
+  k: number | null
+  bb: number | null
+  h: number | null
+  r: number | null
+  hr: number | null
+}
+
 type StarterStats = {
   pitcher_id: number | null
   name: string | null
@@ -170,6 +182,8 @@ type StarterStats = {
   prior_ra9: number | null
   prior_whip: number | null
   prior_k_pct: number | null
+  // E9.36 — last 3 completed starts before this game (context only)
+  last_3_starts?: StarterStartLog[] | null
 }
 
 type TeamPerfStats = {
@@ -258,12 +272,14 @@ type GameDetailData = {
     pregame_total_line: number | null
     total_line_movement: number | null
   } | null
-  // E9.37 — per-market line-movement time series (open→current), Bovada.
-  // Market context only — not an edge claim.
+  // E9.37 — per-book, per-market line-movement time series (open→current).
+  // h2h is de-vigged. Market context only — not an edge claim.
   line_movement_series: {
-    book: string
-    h2h: { ts: string; home_win_prob: number | null }[]
-    totals: { ts: string; line: number | null }[]
+    books: string[]
+    series: Record<string, {
+      h2h: { ts: string; home_win_prob: number | null }[]
+      totals: { ts: string; line: number | null; over_prob: number | null }[]
+    }>
   } | null
   umpire: {
     name: string | null
@@ -320,6 +336,12 @@ function fmtAmerican(n: number | null | undefined): string {
 function fmtStat(n: number | null | undefined, digits = 3): string {
   if (n == null) return "—"
   return n.toFixed(digits)
+}
+
+function fmtShortDate(s: string | null | undefined): string {
+  if (!s) return "—"
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
+  return m ? `${parseInt(m[2], 10)}/${parseInt(m[3], 10)}` : s
 }
 
 function fmtPct(n: number | null | undefined): string {
@@ -1066,7 +1088,8 @@ function MetricTip({ label, tip }: { label: string; tip?: string }) {
 // Market context only — NOT an edge claim (models show no demonstrated edge).
 // ---------------------------------------------------------------------------
 
-type LMSeriesPoint = { ts: string; home_win_prob?: number | null; line?: number | null }
+type LMSeriesPoint = { ts: string; home_win_prob?: number | null; line?: number | null; over_prob?: number | null }
+type LMKind = "h2h" | "totals_line" | "totals_overprob"
 
 function fmtMovementTs(iso: string): string {
   const norm = iso.endsWith("Z") || /[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + "Z"
@@ -1075,23 +1098,31 @@ function fmtMovementTs(iso: string): string {
   return d.toLocaleString(undefined, { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" })
 }
 
+type LMDatum = { ts: string; value: number; line: number | null; overPct: number | null }
+
 function LineMovementTooltip({
   active,
   payload,
   kind,
 }: {
   active?: boolean
-  payload?: Array<{ payload: { ts: string; value: number } }>
-  kind: "h2h" | "totals"
+  payload?: Array<{ payload: LMDatum }>
+  kind: LMKind
 }) {
   if (!active || !payload?.length) return null
   const p = payload[0].payload
+  let body: string
+  if (kind === "h2h") {
+    body = `${p.value.toFixed(1)}% home win`
+  } else if (kind === "totals_overprob") {
+    body = `Over ${p.value.toFixed(1)}%${p.line != null ? ` · line ${p.line.toFixed(1)}` : ""}`
+  } else {
+    body = `${p.value.toFixed(1)} runs${p.overPct != null ? ` · Over ${p.overPct.toFixed(1)}%` : ""}`
+  }
   return (
     <div className="rounded-lg border border-[#262626] bg-[#0a0a0a] px-2.5 py-1.5 text-xs shadow-xl">
       <p className="text-gray-500">{fmtMovementTs(p.ts)}</p>
-      <p className="font-mono text-gray-200">
-        {kind === "h2h" ? `${p.value.toFixed(1)}% home win` : `${p.value.toFixed(1)} runs`}
-      </p>
+      <p className="font-mono text-gray-200">{body}</p>
     </div>
   )
 }
@@ -1101,25 +1132,34 @@ function LineMovementChart({
   points,
   book,
 }: {
-  kind: "h2h" | "totals"
+  kind: LMKind
   points: LMSeriesPoint[]
   book: string
 }) {
-  const data = points
+  const isPct = kind !== "totals_line"
+  const data: LMDatum[] = points
     .map((p) => ({
       ts: p.ts,
-      value: kind === "h2h" ? (p.home_win_prob != null ? p.home_win_prob * 100 : null) : (p.line ?? null),
+      value:
+        kind === "h2h"
+          ? (p.home_win_prob != null ? p.home_win_prob * 100 : null)
+          : kind === "totals_overprob"
+          ? (p.over_prob != null ? p.over_prob * 100 : null)
+          : (p.line ?? null),
+      line: p.line ?? null,
+      overPct: p.over_prob != null ? p.over_prob * 100 : null,
     }))
-    .filter((d): d is { ts: string; value: number } => d.value != null)
+    .filter((d): d is LMDatum => d.value != null)
 
   const bookLabel = BOOK_LABELS[book] ?? book
+  const fmtV = (v: number) => (isPct ? `${v.toFixed(1)}%` : v.toFixed(1))
 
   // Need ≥2 distinct snapshots to draw an open→current line.
   if (data.length < 2) {
     return (
       <div className="rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-4 py-6 text-center">
         <p className="text-xs text-gray-600">
-          {data.length === 1 ? "Line held steady — no movement recorded yet." : "No line-movement history for this market yet."}
+          {data.length === 1 ? "Held steady — no movement recorded yet." : "No movement history for this market yet."}
         </p>
       </div>
     )
@@ -1128,30 +1168,34 @@ function LineMovementChart({
   const vals = data.map((d) => d.value)
   const lo = Math.min(...vals)
   const hi = Math.max(...vals)
-  const pad = kind === "h2h" ? 1.5 : 0.5
+  const pad = isPct ? 1.5 : 0.5
   const domain: [number, number] = [lo - pad, hi + pad]
   const open = data[0].value
   const current = data[data.length - 1].value
   const delta = current - open
-  const unit = kind === "h2h" ? "pp" : ""
-  const deltaStr = `${delta >= 0 ? "+" : ""}${delta.toFixed(kind === "h2h" ? 1 : 1)}${unit}`
-  const ariaLabel =
+  const unit = isPct ? "pp" : ""
+  const deltaStr = `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}${unit}`
+  const metricName =
     kind === "h2h"
-      ? `${bookLabel} home win probability moved from ${open.toFixed(1)}% at open to ${current.toFixed(1)}% current (${deltaStr})`
-      : `${bookLabel} total line moved from ${open.toFixed(1)} at open to ${current.toFixed(1)} current (${deltaStr})`
+      ? `${bookLabel} home win probability`
+      : kind === "totals_overprob"
+      ? `${bookLabel} de-vigged Over probability`
+      : `${bookLabel} total line`
+  const ariaLabel = `${metricName} moved from ${fmtV(open)} at open to ${fmtV(current)} current (${deltaStr})`
+  const flatThresh = isPct ? 0.1 : 0.05
 
   return (
     <div>
       {/* Open → current summary (also the chart's accessible description) */}
       <div className="mb-1.5 flex items-center justify-between text-[11px]">
         <span className="text-gray-600">
-          Open <span className="font-mono text-gray-400">{kind === "h2h" ? `${open.toFixed(1)}%` : open.toFixed(1)}</span>
+          Open <span className="font-mono text-gray-400">{fmtV(open)}</span>
           <span className="mx-1 text-gray-700">→</span>
-          Current <span className="font-mono text-gray-300">{kind === "h2h" ? `${current.toFixed(1)}%` : current.toFixed(1)}</span>
+          Current <span className="font-mono text-gray-300">{fmtV(current)}</span>
         </span>
         <span
           className={`font-mono ${
-            Math.abs(delta) < (kind === "h2h" ? 0.1 : 0.05)
+            Math.abs(delta) < flatThresh
               ? "text-gray-500"
               : delta > 0
               ? "text-[#10b981]"
@@ -1178,9 +1222,9 @@ function LineMovementChart({
               tick={{ fill: "#6b7280", fontSize: 10 }}
               axisLine={false}
               tickLine={false}
-              width={kind === "h2h" ? 34 : 30}
+              width={isPct ? 34 : 30}
               domain={domain}
-              tickFormatter={(v: number) => (kind === "h2h" ? `${v.toFixed(0)}%` : v.toFixed(1))}
+              tickFormatter={(v: number) => (isPct ? `${v.toFixed(0)}%` : v.toFixed(1))}
             />
             <RechartsTooltip content={<LineMovementTooltip kind={kind} />} />
             <RLine
@@ -2291,6 +2335,41 @@ export default function PickDetailPage() {
                                   </div>
                                 </div>
                               )}
+
+                              {/* E9.36 — last 3 starts (context only, no edge claim) */}
+                              {sp.last_3_starts && sp.last_3_starts.length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-[#1e1e1e]">
+                                  <p className="mb-1.5 text-[10px] font-semibold text-gray-600 uppercase tracking-widest">
+                                    Last 3 Starts
+                                  </p>
+                                  <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto] gap-x-2 gap-y-1 text-xs">
+                                    <span className="text-[10px] text-gray-600">Date</span>
+                                    <span className="text-[10px] text-gray-600">Opp</span>
+                                    <span className="text-[10px] text-gray-600 text-right">IP</span>
+                                    <span className="text-[10px] text-gray-600 text-right">H</span>
+                                    <span className="text-[10px] text-gray-600 text-right">R</span>
+                                    <span className="text-[10px] text-gray-600 text-right">K</span>
+                                    <span className="text-[10px] text-gray-600 text-right">BB</span>
+                                    <span className="text-[10px] text-gray-600 text-right">HR</span>
+                                    {sp.last_3_starts.map((g, i) => (
+                                      <Fragment key={`${g.date}-${i}`}>
+                                        <span className="text-gray-400">{fmtShortDate(g.date)}</span>
+                                        <span className="text-gray-300 truncate">
+                                          {g.opp ? `${g.home_away === "home" ? "vs" : "@"} ${g.opp}` : "—"}
+                                        </span>
+                                        <span className="font-mono text-white text-right">{g.ip ?? "—"}</span>
+                                        <span className="font-mono text-gray-400 text-right">{g.h ?? "—"}</span>
+                                        <span className="font-mono text-gray-400 text-right">{g.r ?? "—"}</span>
+                                        <span className="font-mono text-gray-400 text-right">{g.k ?? "—"}</span>
+                                        <span className="font-mono text-gray-400 text-right">{g.bb ?? "—"}</span>
+                                        <span className={`font-mono text-right ${(g.hr ?? 0) > 0 ? "text-[#f59e0b]" : "text-gray-400"}`}>
+                                          {g.hr ?? "—"}
+                                        </span>
+                                      </Fragment>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </>
                           ) : (
                             <p className="text-xs text-gray-600">Starter not announced</p>
@@ -2549,7 +2628,7 @@ export default function PickDetailPage() {
               {/* ============================================================
                   7. Market Action — public betting + line movement
               ============================================================ */}
-              {(pb || lm || (lms && (lms.h2h.length > 0 || lms.totals.length > 0))) && (
+              {(pb || lm || (lms && lms.books.length > 0)) && (
                 <CollapsibleSection title="Market Action">
                   {pb && (
                     <>
@@ -2668,53 +2747,96 @@ export default function PickDetailPage() {
                     </>
                   )}
 
-                  {/* E9.37 — per-market line-movement over time (open→current) */}
-                  {lms && (lms.h2h.length > 0 || lms.totals.length > 0) && (
-                    <div className="mt-5">
-                      <div className="mb-1 flex items-center gap-2">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Line Movement Over Time</p>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info className="h-3 w-3 text-gray-600 cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[280px] text-xs leading-relaxed">
-                            How {BOOK_LABELS[lms.book] ?? lms.book}&apos;s line drifted from open to current, snapshot by snapshot. Market context only — this is not an edge claim, and our models show no demonstrated ability to beat the close.
-                          </TooltipContent>
-                        </Tooltip>
+                  {/* E9.37 — per-book line-movement over time (open→current) */}
+                  {lms && lms.books.length > 0 && (() => {
+                    const activeBook = lms.series[selectedBook] ? selectedBook : lms.books[0]
+                    const activeSeries = lms.series[activeBook]
+                    if (!activeSeries) return null
+                    const bookLabel = BOOK_LABELS[activeBook] ?? activeBook
+                    return (
+                      <div className="mt-5">
+                        <div className="mb-1 flex items-center gap-2">
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Line Movement Over Time</p>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3 w-3 text-gray-600 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-[280px] text-xs leading-relaxed">
+                              How each book&apos;s line drifted from open to current, snapshot by snapshot. Moneyline is de-vigged (vig removed) so it&apos;s comparable across books. Market context only — not an edge claim, and our models show no demonstrated ability to beat the close.
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+
+                        {/* Book selector — shared with Book Comparison (selectedBook) */}
+                        <div className="mb-3 flex flex-wrap gap-1.5">
+                          {BOOK_ORDER.filter((k) => lms.books.includes(k)).map((k) => (
+                            <button
+                              key={k}
+                              onClick={() => setSelectedBook(k)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors border ${
+                                activeBook === k
+                                  ? k === "pinnacle"
+                                    ? "bg-[#a78bfa]/15 text-[#a78bfa] border-[#a78bfa]/30"
+                                    : "bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30"
+                                  : "bg-transparent text-gray-500 border-[#262626] hover:border-[#333] hover:text-gray-300"
+                              }`}
+                            >
+                              {BOOK_LABELS[k] ?? k}
+                              {k === "pinnacle" && (
+                                <span className="ml-1 text-[9px] font-bold uppercase tracking-widest opacity-70">sharp</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+
+                        {activeSeries.h2h.length > 0 && (
+                          <div className="mb-4">
+                            <p className="mb-1.5 text-[11px] text-gray-500">
+                              <MetricTip
+                                label="Moneyline — home win probability"
+                                tip={`${bookLabel}'s de-vigged (no-vig) implied home win probability at each pre-game snapshot. Rising = home shortening (more backed); falling = home lengthening.`}
+                              />
+                            </p>
+                            <LineMovementChart kind="h2h" points={activeSeries.h2h} book={activeBook} />
+                          </div>
+                        )}
+
+                        {activeSeries.totals.length > 0 && (
+                          <div className="mb-4">
+                            <p className="mb-1.5 text-[11px] text-gray-500">
+                              <MetricTip
+                                label="Total — line (runs)"
+                                tip={`${bookLabel}'s total (over/under) line at each pre-game snapshot. Moving up = the book expects more scoring; down = less. Totals lines are sticky at half-run steps, so look at the Over% below for finer movement.`}
+                              />
+                            </p>
+                            <LineMovementChart kind="totals_line" points={activeSeries.totals} book={activeBook} />
+                          </div>
+                        )}
+
+                        {activeSeries.totals.some((p) => p.over_prob != null) && (
+                          <div>
+                            <p className="mb-1.5 text-[11px] text-gray-500">
+                              <MetricTip
+                                label="Total — Over probability (de-vigged)"
+                                tip={`${bookLabel}'s de-vigged (no-vig) implied probability of the Over at each snapshot. This captures juice movement even when the line holds flat — rising = the market leaning Over. Note: when the line steps up (e.g. 8.5→9.0) this drops a little mechanically (higher bar to clear).`}
+                              />
+                            </p>
+                            <LineMovementChart kind="totals_overprob" points={activeSeries.totals} book={activeBook} />
+                          </div>
+                        )}
+
+                        {activeSeries.h2h.length === 0 && activeSeries.totals.length === 0 && (
+                          <div className="rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-4 py-6 text-center">
+                            <p className="text-xs text-gray-600">No line-movement history for {bookLabel} on this game.</p>
+                          </div>
+                        )}
+
+                        <p className="mt-2 text-[10px] text-gray-600">
+                          Market context — not a bet recommendation or edge claim.
+                        </p>
                       </div>
-                      <p className="mb-3 text-[11px] text-gray-600">
-                        {BOOK_LABELS[lms.book] ?? lms.book} · pre-game snapshots
-                      </p>
-
-                      {lms.h2h.length > 0 && (
-                        <div className="mb-4">
-                          <p className="mb-1.5 text-[11px] text-gray-500">
-                            <MetricTip
-                              label="Moneyline — home win probability"
-                              tip="Bovada's de-vigged implied home win probability at each pre-game snapshot. Rising = home shortening (more backed); falling = home lengthening."
-                            />
-                          </p>
-                          <LineMovementChart kind="h2h" points={lms.h2h} book={lms.book} />
-                        </div>
-                      )}
-
-                      {lms.totals.length > 0 && (
-                        <div>
-                          <p className="mb-1.5 text-[11px] text-gray-500">
-                            <MetricTip
-                              label="Totals — line (runs)"
-                              tip="Bovada's total (over/under) line at each pre-game snapshot. Moving up = the book expects more scoring; down = less."
-                            />
-                          </p>
-                          <LineMovementChart kind="totals" points={lms.totals} book={lms.book} />
-                        </div>
-                      )}
-
-                      <p className="mt-2 text-[10px] text-gray-600">
-                        Market context — not a bet recommendation or edge claim.
-                      </p>
-                    </div>
-                  )}
+                    )
+                  })()}
                 </CollapsibleSection>
               )}
 
