@@ -57,10 +57,22 @@ from betting_ml.utils.data_loader import get_snowflake_connection  # noqa: E402
 MIN_GAMES = 30                 # below this the sample can't support a verdict → INSUFFICIENT
 MIN_CORR_CLASS = 0.05          # corr(prob, binary outcome) floor for a classifier to have signal
 MIN_CORR_REG = 0.05            # corr(pred, actual) floor for a regressor to have signal
-MIN_SPREAD_PROB = 0.03         # std of the probability output; the audit's flat model had 0.016
+# E13.6 TemperatureCalibrator (T=6.30) compresses calibrated_win_prob spread to ~0.030; the
+# original INC-17 flat-output incident had spread ~0.016. 0.025 catches real collapse while
+# giving calibrated models (v6 spread=0.0299) a healthy margin (INC-17-P3 fix).
+MIN_SPREAD_PROB = 0.025        # std of the probability output; the audit's flat model had 0.016
 MIN_SPREAD_TOTALS = 0.50       # std of pred_total_runs (runs); a useful model varies game to game
 MIN_SPREAD_RUNDIFF = 0.50      # std of pred_run_diff_loc (runs)
 BRIER_MARGIN = 0.002           # Brier must beat no-skill by at least this to count as skill
+
+# INC-17-P3: post_lineup matchup-block coverage check. When lineup data flows correctly,
+# feature_coverage_score for post_lineup predictions should average ≥ 0.85 (i.e., at most
+# one non-lineup block, like odds, can be missing). A drop below this threshold means the
+# lineup block (avg_eb_woba / matchup woba / archetype features) went null — the INC-17
+# serving-feature gap class. Measured as a slate-average to avoid individual-game false alerts
+# from games that legitimately lack bookmaker odds.
+POST_LINEUP_AVG_COVERAGE_THRESHOLD = 0.85
+POST_LINEUP_MIN_GAMES_FOR_CHECK = 3  # don't alert on single-game or empty slates
 
 _PRED_SCHEMA_DEFAULT = "betting_ml"
 _RESULTS_TABLE = "baseball_data.betting_ml.model_health_metrics"
@@ -356,6 +368,62 @@ def _persist(conn, run_at: datetime, start: date, end: date, ptype: str | None,
     )
     cur.close()
     print(f"  Wrote {len(rows)} metric row(s) to {_RESULTS_TABLE} (run_at={run_at.isoformat()}).")
+
+
+def check_post_lineup_matchup_coverage(
+    conn, schema: str, check_date: date
+) -> dict:
+    """INC-17-P3: verify that lineup-gated features were populated for a post_lineup slate.
+
+    Uses `feature_coverage_score` (stored per-row in daily_model_predictions) as a proxy
+    for the lineup block. In a healthy post_lineup slate all 6 coverage blocks are populated
+    (avg score ≈ 1.0). When the lineup block (avg_eb_woba / matchup woba / archetype
+    features) goes null the score drops by 1/6 ≈ 0.167, dragging the slate average below
+    POST_LINEUP_AVG_COVERAGE_THRESHOLD. A few games legitimately lack the odds block
+    (no bookmaker line) without causing a slate-level average drop; the alert only fires
+    when the lineup block is broadly missing — the INC-17 failure signature.
+
+    Returns:
+        dict with keys n_games, avg_coverage, alert_fired, fail_reason.
+    """
+    sql = f"""
+        select count(*) as n_games,
+               avg(feature_coverage_score) as avg_coverage
+        from baseball_data.{schema}.daily_model_predictions
+        where score_date = %(d)s
+          and prediction_type = 'post_lineup'
+          and feature_coverage_score is not null
+    """
+    cur = conn.cursor()
+    cur.execute(sql, {"d": check_date.isoformat()})
+    row = cur.fetchone()
+    cur.close()
+
+    n_games = int(row[0]) if row and row[0] else 0
+    if n_games < POST_LINEUP_MIN_GAMES_FOR_CHECK:
+        return {
+            "n_games": n_games,
+            "avg_coverage": float("nan"),
+            "alert_fired": False,
+            "fail_reason": f"insufficient post_lineup rows ({n_games}) for {check_date}",
+        }
+
+    avg_cov = float(row[1]) if row[1] is not None else float("nan")
+    alert_fired = avg_cov < POST_LINEUP_AVG_COVERAGE_THRESHOLD
+    fail_reason = (
+        f"INC-17 class: post_lineup matchup block likely null. "
+        f"avg feature_coverage_score={avg_cov:.3f} < {POST_LINEUP_AVG_COVERAGE_THRESHOLD} "
+        f"across {n_games} games on {check_date}. "
+        f"Lineup-gated features (avg_eb_woba, matchup woba, archetype) are imputed. "
+        f"Check: feature_pregame_lineup_features / feature_pitcher_batter_h2h_matchups lineage."
+        if alert_fired else ""
+    )
+    return {
+        "n_games": n_games,
+        "avg_coverage": avg_cov,
+        "alert_fired": alert_fired,
+        "fail_reason": fail_reason,
+    }
 
 
 def evaluate(conn, schema: str, start: date, end: date,
