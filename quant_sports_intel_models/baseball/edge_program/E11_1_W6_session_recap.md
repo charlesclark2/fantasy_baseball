@@ -107,7 +107,12 @@ data (it's infra), then fix the stale test bound, don't change mart semantics.
 4. `uv run python scripts/ddl/generate_w6_external_tables.py` → review → run the DDL in Snowflake (15 lakehouse_ext tables)
 5. `uv run python scripts/refresh_w1_external_tables.py` (or just confirm W6_TABLES refresh)
 6. Merge dev→main (P5 CD redeploys). THEN: `W6_LAKEHOUSE_INTRADAY=1` on the box + run the daily op
-   with `--w6` (and add the dmp re-export after predict_today).
+   with `--w6`, AND add two precursor re-exports to that daily op BEFORE the `--w6` build:
+   (a) `export_w6_raw_to_s3.py --table daily_model_predictions` after predict_today (CLV marts),
+   (b) `export_odds_raw_to_s3.py --source monthly_schedule` (lineup marts — else today's lineups
+   are missing from the S3 flatten → matchup features NULL, the INC-17 P2 class). Parity at
+   backfill showed `stg_statsapi_lineups` / `mart_player_game_starts` DuckDB ~1.4% < Snowflake
+   purely from the stale one-time W3pre monthly_schedule snapshot; the daily re-export heals it.
 7. **Post-cutover live check:** EV Tracker / Line Shopping / game-detail / `mart_odds_outcomes` fresh;
    intraday odds cycle rewrites `_current` + REFRESHes the external table (served prices stay fresh).
 

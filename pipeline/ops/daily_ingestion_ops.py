@@ -254,18 +254,22 @@ def run_w1_lakehouse_op(context):
     # game-detail Snowflake FALLBACK reads mart_team_pythagorean_rolling, behind the DynamoDB
     # serving cache — no other request-time read; post-cutover it serves the S3-backed view.)
     #
-    # E11.1-W6: run_w1_lakehouse.py can ALSO build the 13 odds/CLV + odds-serving marts + the 2
-    # Group-C staging flattens under the opt-in --w6 flag (NOT passed here yet). Like W3pre/W4/W5
-    # it needs the precursor exports first (scripts/export_w6_raw_to_s3.py:
-    # odds_snapshots_historical + the daily_model_predictions MIRROR + venues_raw) — and the dmp
-    # mirror MUST be re-exported in this op AFTER predict_today writes the day's predictions and
-    # BEFORE the --w6 build, else the /performance CLV marts (mart_clv_labeled_games /
-    # mart_prediction_clv) go stale. ⭐ W6 is the INTRADAY-coupled tier: mart_odds_outcomes is
-    # date-bucketed (_history/_current); the daily --w6 build rewrites BOTH buckets, while the
-    # intraday odds_current_rebuild path (pipeline/ops/intraday_ops.py, gated W6_LAKEHOUSE_INTRADAY)
-    # rewrites ONLY _current each odds cycle so served prices stay fresh. Flip to "--w6" + add the
-    # dmp re-export once cutover is validated.
-    _run_script(context, "run_w1_lakehouse.py")
+    # E11.1-W6: run_w1_lakehouse.py ALSO builds the 13 odds/CLV + odds-serving marts + the 2
+    # Group-C staging flattens under --w6 (flipped ON at the W6 cutover, after the lakehouse_ext
+    # W6 external tables were created + parity validated). Precursors:
+    #   • monthly_schedule re-export (the line BELOW, BEFORE the --w6 build): the 3 Group-C lineup
+    #     marts (stg_statsapi_lineups → mart_player_game_starts / mart_team_schedule_context)
+    #     flatten it, and ingest_statsapi.py is Snowflake-only (W3pre never S3-flipped its writer),
+    #     so a stale snapshot drops today's lineups → matchup features NULL for live serving (the
+    #     INC-17 P2 class). Parity at backfill showed DuckDB ~1.4% < Snowflake purely from this lag.
+    #   • daily_model_predictions is NOT re-exported here — this op runs BEFORE predict_today, so
+    #     the CLV marts (mart_prediction_clv / mart_clv_labeled_games) are refreshed POST-predict
+    #     by the gated intraday odds_clv_dbt_rebuild path (export dmp → --w6 → refresh --w6-clv).
+    # ⭐ mart_odds_outcomes is date-bucketed (_history/_current); this daily --w6 rewrites BOTH
+    # buckets, while the intraday odds_current_rebuild path (pipeline/ops/intraday_ops.py, gated
+    # W6_LAKEHOUSE_INTRADAY) rewrites ONLY _current each odds cycle so served prices stay fresh.
+    _run_script(context, "export_odds_raw_to_s3.py", ["--source", "monthly_schedule"])
+    _run_script(context, "run_w1_lakehouse.py", ["--w6"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

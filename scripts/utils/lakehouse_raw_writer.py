@@ -62,13 +62,17 @@ REGION = "us-east-2"
 # Snowflake→S3 export emits TO_JSON(...) strings); only dict/list values are dumped.
 _JSON_COLS = frozenset({"raw_json", "request_params", "json_field"})
 
-# Valid raw sources (the W3pre scope). Keep in sync with the export + runner + DDL gen.
+# Valid raw sources. Keep in sync with the export + runner + DDL gen.
+#   W3pre scope: mlb_odds_raw, mlb_events_raw, derivative_odds_raw, monthly_schedule,
+#                odds_snapshots_historical.
+#   W6 adds:     venues_raw (Group-C venues flatten — stg_statsapi_venues).
 RAW_SOURCES = frozenset({
     "mlb_odds_raw",
     "mlb_events_raw",
     "derivative_odds_raw",
     "monthly_schedule",
     "odds_snapshots_historical",
+    "venues_raw",
 })
 
 _VALID_MODES = frozenset({"snowflake", "s3", "both"})

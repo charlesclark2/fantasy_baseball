@@ -1,30 +1,19 @@
 -- =============================================================================
 -- mart_prediction_clv.sql
 -- Grain: one row per (game_pk, model_version, retrain_tag).
---        score_date is NOT part of the grain — a game re-scored under the same
---        model_version (e.g. a live morning row later joined by a post_lineup
---        row, or a backfill of a game that already had a live prediction) resolves
---        to a single canonical row: post_lineup > morning, live > backfill,
---        most-recent inserted_at as tiebreaker. (E9.15 fix: removing score_date
---        from the partition collapsed 9 v5-morning duplicates in 2026.)
---        Multiple model variants (e.g. v5 champion + pre_lineup_v1 morning model)
---        coexist as separate rows so the Model Performance page can compare them.
--- Purpose: Joins daily_model_predictions to mart_closing_line_value to
---          surface CLV metrics alongside model predictions.
+-- Purpose: Joins daily_model_predictions to mart_closing_line_value to surface CLV
+--          metrics alongside model predictions. (Canonical-row selection:
+--          post_lineup > morning, live > backfill, most-recent inserted_at.)
 --
---          CLV interpretation:
---            clv_home_ml > 0: market moved toward home team winning by close.
---            clv_home_ml < 0: market moved away from home team by close.
---            mean_clv_ml > 0 across all has_odds games: model is consistently
---                ahead of where the market settles (real predictive edge).
---
---          Aggregate CLV metrics for use in Streamlit and evaluation:
---            mean_clv_ml       = AVG(clv_home_ml) WHERE clv_home_ml IS NOT NULL
---            mean_clv_total    = AVG(clv_total)   WHERE clv_total IS NOT NULL
---            pct_positive_clv  = fraction of games where clv_home_ml > 0
+-- DuckDB branch (E11.1-W6): daily_model_predictions is a TYPED view over its S3
+-- parquet (registered by run_w1_lakehouse.py); mart_closing_line_value is the
+-- migrated W6 mart. Snowflake (else) branch is a thin view over the lakehouse_ext
+-- external table.
 -- =============================================================================
 
-{{ config(materialized='table') }}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w6_lakehouse']) }}
 
 with
 
@@ -32,13 +21,9 @@ predictions_ranked as (
     select
         *,
         row_number() over (
-            -- E9.15: score_date removed from partition so same game re-scored under
-            -- the same model_version collapses to one canonical row instead of two.
             partition by game_pk, model_version, coalesce(retrain_tag, '')
             order by
-                -- prefer post_lineup (dense confirmed-lineup features) over morning
                 case when prediction_type = 'post_lineup' then 1 else 2 end,
-                -- prefer live serve (is_backfill=FALSE) over after-the-fact backfill
                 case when coalesce(is_backfill, false) then 2 else 1 end,
                 inserted_at desc
         ) as _rn
@@ -65,7 +50,7 @@ clv as (
         n_books_with_clv,
         data_source                                                     as clv_data_source,
         close_snapshot_ts
-    from {{ ref('mart_closing_line_value') }}
+    from mart_closing_line_value
 )
 
 select
@@ -124,3 +109,11 @@ select
 from predictions p
 left join clv c
     on  c.game_pk = p.game_pk
+
+{% else %}
+
+{{ config(materialized='view', tags=['w6_lakehouse']) }}
+
+select * from baseball_data.lakehouse_ext.mart_prediction_clv
+
+{% endif %}

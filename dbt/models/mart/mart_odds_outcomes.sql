@@ -11,19 +11,33 @@
 --          same bookmaker appears across multiple Odds API region calls (us/us2).
 -- Join key:   event_id → mart_odds_events (Odds API)
 -- Discriminator: source_system ('odds_api' | 'parlay_api')
+--
+-- ⚠️ SERVING-COUPLED (E11.1-W6): read at request time by predict_today.py /
+-- write_serving_store.py (batch) and the picks/odds serving fallback. The
+-- DuckDB/Snowflake outputs MUST be value-identical (parity-gated). The live
+-- Snowflake table is odds_api-only (no Parlay archive rows present), so the
+-- full DuckDB rebuild from stg_oddsapi_odds reproduces it exactly.
+--
+-- DuckDB branch (E11.1-W6): the former incremental(append) build becomes a full
+-- rebuild (view) over the migrated stg_oddsapi_odds; the Snowflake (else) branch
+-- is a thin view over the lakehouse_ext external table. (First W6 incremental→view
+-- conversion — same pattern as W5's mart_game_results.)
 -- =============================================================================
 
-{{
-    config(
-        materialized = 'incremental',
-        incremental_strategy = 'append',
-    )
-}}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w6_lakehouse']) }}
 
 with odds_api as (
 
     select
-        ingestion_ts,
+        -- stg_oddsapi_odds carries ingestion_ts as VARCHAR (the lakehouse_raw tier pins it to
+        -- utf8); Snowflake's mart_odds_outcomes.ingestion_ts is TIMESTAMP_NTZ. Cast here so the
+        -- grain + every downstream `ingestion_ts < commence_time` leakage guard
+        -- (mart_odds_line_movement / mart_closing_line_value) binds, and parity matches the
+        -- Snowflake type. Session TZ=UTC ⇒ naive (historical export) and +00:00 (live writer)
+        -- strings both land on the same UTC wall time.
+        ingestion_ts::timestamp                                as ingestion_ts,
         load_id,
         market_requested,
         region_requested,
@@ -46,10 +60,7 @@ with odds_api as (
         outcome_price_american,
         outcome_price_decimal,
         outcome_point
-    from {{ ref('stg_oddsapi_odds') }}
-    {% if is_incremental() %}
-    where ingestion_ts > (select max(ingestion_ts) from {{ this }})
-    {% endif %}
+    from stg_oddsapi_odds
 
 ),
 
@@ -79,7 +90,9 @@ select
     sport_key,
     sport_title,
     commence_time,
-    convert_timezone('UTC', 'America/Los_Angeles', commence_time)::date as commence_date,
+    -- Snowflake convert_timezone('UTC','America/Los_Angeles', commence_time)::date →
+    -- DuckDB AT TIME ZONE chain (commence_time is a naive UTC timestamp).
+    (commence_time::timestamp at time zone 'UTC' at time zone 'America/Los_Angeles')::date as commence_date,
     home_team,
     away_team,
 
@@ -107,3 +120,11 @@ select
     (outcome_name = away_team)::boolean                    as is_away_outcome
 
 from combined
+
+{% else %}
+
+{{ config(materialized='view', tags=['w6_lakehouse']) }}
+
+select * from baseball_data.lakehouse_ext.mart_odds_outcomes
+
+{% endif %}

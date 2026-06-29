@@ -140,6 +140,37 @@ W5_TABLES = [
 # (builder output, no external table) — only the mart itself becomes a lakehouse_ext view.
 ARCHETYPE_TABLES = ["mart_batter_archetype_vs_pitcher_cluster"]
 
+# E11.1-W6: the 2 Group-C staging flattens + 13 odds/CLV + odds-serving marts, created by
+# scripts/ddl/generate_w6_external_tables.py. BEST-EFFORT (WARN if missing) during the opt-in
+# rollout, like W3pre/W4/W5. Refreshed in full by the DAILY op (the _history bucket of
+# mart_odds_outcomes is rewritten daily). NOTE: mart_odds_outcomes is date-bucketed
+# (_history/_current) — one REFRESH re-lists both buckets.
+W6_TABLES = [
+    "stg_statsapi_venues",
+    "stg_statsapi_lineups",
+    "mart_odds_outcomes",
+    "mart_odds_events",
+    "mart_game_odds_bridge",
+    "mart_odds_consensus",
+    "mart_odds_line_movement",
+    "mart_closing_line_value",
+    "mart_clv_labeled_games",
+    "mart_clv_label_count",
+    "mart_prediction_clv",
+    "mart_derivative_closes",
+    "mart_bookmaker_disagreement",
+    "mart_team_schedule_context",
+    "mart_player_game_starts",
+]
+
+# E11.1-W6 INTRADAY: the odds-serving hot set refreshed on the odds_current_rebuild cadence
+# (--w6-odds), AFTER run_w1_lakehouse.py --w6-odds-current rewrites mart_odds_outcomes'
+# _current bucket. SERVING-CRITICAL: stale here = stale served prices (INC-16). Only these
+# two — the CLV/line-movement marts are post-hoc (once/day, --w6-clv).
+W6_ODDS_INTRADAY_TABLES = ["mart_odds_outcomes", "mart_game_odds_bridge"]
+# Refreshed once/day after odds_clv_dbt_rebuild (closing line locks at first pitch).
+W6_CLV_TABLES = ["mart_closing_line_value", "mart_prediction_clv", "mart_odds_line_movement"]
+
 
 def _load_private_key():
     key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
@@ -172,17 +203,11 @@ def get_snowflake_conn():
     return snowflake.connector.connect(**kwargs)
 
 
-def main():
+def _refresh(tables, required: set) -> None:
     conn = get_snowflake_conn()
     cur = conn.cursor()
     failed = []
-    # W1+W2 are REQUIRED (HALT) — they exist and feed the morning build. W3pre tables are
-    # BEST-EFFORT until cutover: they don't exist until generate_w3pre_external_tables.py
-    # is run, so a "does not exist" here is an expected skip (WARN-tier), NOT a HALT — else
-    # this op would fail the daily job for the entire pre-cutover rollout window. (E11.1-W3pre)
-    required = set(W1_TABLES) | set(W2_TABLES) | set(W3_TABLES)
-    for table in (W1_TABLES + W2_TABLES + W3_TABLES + W3PRE_TABLES
-                  + W4_TABLES + W5_TABLES + ARCHETYPE_TABLES):
+    for table in tables:
         fqn = f"{_SCHEMA}.{table}"
         try:
             cur.execute(f"ALTER EXTERNAL TABLE {fqn} REFRESH")
@@ -192,15 +217,51 @@ def main():
                 print(f"  FAILED {fqn}: {e}", file=sys.stderr)
                 failed.append(table)
             else:
-                print(f"  WARNING skip {fqn} (W3pre/W4/W5/W5b, not yet created): {e}", file=sys.stderr)
+                print(f"  WARNING skip {fqn} (not yet created / best-effort): {e}", file=sys.stderr)
     cur.close()
     conn.close()
     if failed:
         raise RuntimeError(
             f"External table refresh FAILED for: {failed}  "
-            "Downstream feature build will see stale S3 data."
+            "Downstream feature build / served prices will see stale S3 data."
         )
-    print("W1+W2+W3 external table refresh complete (W3pre + W4 + W5 + W5b best-effort).")
+
+
+def main():
+    import argparse
+    ap = argparse.ArgumentParser(description="Refresh lakehouse_ext external tables after S3 writes")
+    ap.add_argument("--w6-odds", action="store_true",
+                    help="INTRADAY: refresh only mart_odds_outcomes + mart_game_odds_bridge "
+                         "(serving-critical — after run_w1_lakehouse.py --w6-odds-current).")
+    ap.add_argument("--w6-clv", action="store_true",
+                    help="Once/day: refresh the CLV/line-movement marts (after odds_clv rebuild).")
+    args = ap.parse_args()
+
+    # E11.1-W6 INTRADAY: the odds hot set is SERVING-CRITICAL (HALT) — a missing/failed REFRESH
+    # here means served prices go stale (INC-16). By the time this op fires, cutover has happened
+    # (the intraday wiring only runs post-cutover), so these tables MUST exist → required.
+    if args.w6_odds:
+        print("Refreshing W6 INTRADAY odds-serving external tables (--w6-odds):")
+        _refresh(W6_ODDS_INTRADAY_TABLES, required=set(W6_ODDS_INTRADAY_TABLES))
+        print("W6 intraday odds external-table refresh complete.")
+        return
+
+    if args.w6_clv:
+        print("Refreshing W6 CLV/line-movement external tables (--w6-clv):")
+        _refresh(W6_CLV_TABLES, required=set(W6_CLV_TABLES))
+        print("W6 CLV external-table refresh complete.")
+        return
+
+    # DAILY full refresh. W1+W2+W3 are REQUIRED (HALT) — they feed the morning build. W3pre/W4/
+    # W5/W5b/W6 are BEST-EFFORT until their cutover (they don't exist until the generator runs,
+    # so a "does not exist" is an expected skip, NOT a HALT that would fail the whole daily job).
+    required = set(W1_TABLES) | set(W2_TABLES) | set(W3_TABLES)
+    _refresh(
+        W1_TABLES + W2_TABLES + W3_TABLES + W3PRE_TABLES
+        + W4_TABLES + W5_TABLES + ARCHETYPE_TABLES + W6_TABLES,
+        required=required,
+    )
+    print("W1+W2+W3 external table refresh complete (W3pre + W4 + W5 + W5b + W6 best-effort).")
 
 
 if __name__ == "__main__":

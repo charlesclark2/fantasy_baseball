@@ -1,42 +1,32 @@
 -- =============================================================================
 -- mart_clv_labeled_games.sql
 -- Grain: one row per (game_pk, market_type) where market_type ∈ {h2h, totals}
---
 -- Purpose: Canonical source of CLV-labeled games for the Epic 12 meta-model.
---          Only materializes rows meeting all four CLV label conditions:
---            1. A live pre-game prediction exists (morning or post_lineup)
---            2. Opening market price exists (open_vf_home / open_vf_over)
---            3. Closing market price exists (close_vf_home / close_vf_over)
---            4. Game result exists (home_team_won IS NOT NULL)
+--          Only materializes rows meeting all four CLV label conditions.
+--          Prediction selection: one canonical v6 champion prediction per game_pk.
 --
---          This is the gate-threshold tracker referenced by all Epic 12 stories.
---          "50 CLV-labeled games" means 50 distinct game_pk values in this mart.
---
--- Prediction selection: one canonical v5 champion prediction per game_pk.
---          post_lineup > morning, live > backfill, latest inserted_at as final
---          tiebreaker. Pinned to model_version = 'v5' so pre_lineup_v1 morning
---          rows cannot contaminate Model-Skill metrics. (E9.15)
---
--- CLV direction: clv and clv_positive are always measured from the home/over
---          perspective (consistent with mart_closing_line_value). Use model_edge
---          to determine the direction of the actual bet for meta-model training.
+-- ⚠️ SERVING-COUPLED (E11.1-W6): the /performance page reads this at request time
+-- (Snowflake FALLBACK behind the DynamoDB cache). Value-identical parity required.
 --
 -- Sources:
 --   Predictions: betting_ml.daily_model_predictions (2026-05-10+, live only)
 --   Lines:       mart_closing_line_value
 --   Results:     mart_game_results
+--
+-- DuckDB branch (E11.1-W6): daily_model_predictions is a TYPED view over its S3
+-- parquet (registered by run_w1_lakehouse.py); mart_closing_line_value /
+-- mart_game_results are migrated W6/W5 marts. Snowflake (else) branch is a thin view
+-- over the lakehouse_ext external table.
 -- =============================================================================
 
-{{ config(materialized='table') }}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w6_lakehouse']) }}
 
 with
 
--- One canonical pre-game prediction per game: post_lineup > morning, live > backfill, latest wins.
--- E9.15 / E13.11: pin to the production champion model_version so the Model-Skill metrics on the
--- performance page reflect the CURRENT model, and pre_lineup morning rows (stamped
--- 'pre_lineup_<ver>', a different string) cannot contaminate them.
--- ⚠️ MUST be bumped to the new champion version on every champion promotion (see
---    docs/model_promotion_runbook.md). E13.11 (2026-06-23): 'v5' → 'v6' (de-leaked champion).
+-- One canonical pre-game prediction per game: post_lineup > morning, live > backfill,
+-- latest wins. Pinned to the production champion model_version (E13.11: 'v6').
 best_prediction as (
     select
         *,
@@ -57,35 +47,28 @@ predictions as (
 ),
 
 clv as (
-    select * from {{ ref('mart_closing_line_value') }}
+    select * from mart_closing_line_value
 ),
 
 results as (
-    select * from {{ ref('mart_game_results') }}
+    select * from mart_game_results
 ),
 
--- H2H labeled rows: one row per game where all four h2h label conditions are met
+-- H2H labeled rows
 h2h_rows as (
     select
         p.game_pk,
         p.game_date,
         'h2h'                                                           as market_type,
         p.inserted_at                                                   as predicted_at,
-        -- In the current system, bet execution and prediction happen together
         p.inserted_at                                                   as bet_execution_price_timestamp,
         c.close_snapshot_ts                                             as closing_price_timestamp,
         c.open_vf_home                                                  as bovada_open_devig_prob,
         c.close_vf_home                                                 as bovada_close_devig_prob,
         p.consensus_win_prob                                            as model_prob,
         p.h2h_edge                                                      as model_edge,
-        -- clv = close − open of the devig probs (schema definition). Source
-        -- mart_closing_line_value.clv_home_ml is avg(per-book close−open) and can be
-        -- NULL when no single book carried BOTH an open and close price even though the
-        -- avg open/close (guaranteed non-null by the WHERE) are present; fall back to
-        -- close−open of those displayed probs so the not_null label contract holds.
         coalesce(c.clv_home_ml, c.close_vf_home - c.open_vf_home)        as clv,
         (coalesce(c.clv_home_ml, c.close_vf_home - c.open_vf_home) > 0)::boolean as clv_positive,
-        -- actual_outcome = 1 if home team won (consistent with home-perspective CLV)
         r.home_team_won::integer                                        as actual_outcome
     from predictions p
     inner join clv c
@@ -98,7 +81,7 @@ h2h_rows as (
       and r.home_team_won       is not null
 ),
 
--- Totals labeled rows: one row per game where all four totals label conditions are met
+-- Totals labeled rows
 totals_rows as (
     select
         p.game_pk,
@@ -111,13 +94,8 @@ totals_rows as (
         c.close_vf_over                                                 as bovada_close_devig_prob,
         p.totals_model_prob                                             as model_prob,
         p.totals_edge                                                   as model_edge,
-        -- See h2h note: clv_over_prob (avg per-book close−open) is NULL when no single
-        -- book carried both an open and close over-price; fall back to close−open of the
-        -- displayed avg devig probs (non-null by the WHERE) so the not_null test holds.
-        -- (2026-06-10 had 2 such totals games — the catchup_dbt_rebuild test failure.)
         coalesce(c.clv_over_prob, c.close_vf_over - c.open_vf_over)      as clv,
         (coalesce(c.clv_over_prob, c.close_vf_over - c.open_vf_over) > 0)::boolean as clv_positive,
-        -- actual_outcome = 1 if total runs exceeded the opening total line (over won)
         case
             when r.home_final_score + r.away_final_score > c.open_total_line then 1
             else 0
@@ -141,3 +119,11 @@ final as (
 )
 
 select * from final
+
+{% else %}
+
+{{ config(materialized='view', tags=['w6_lakehouse']) }}
+
+select * from baseball_data.lakehouse_ext.mart_clv_labeled_games
+
+{% endif %}

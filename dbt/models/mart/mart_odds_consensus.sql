@@ -4,29 +4,26 @@
 -- Purpose: Pre-game bookmaker consensus aggregation across all bookmakers.
 --          Computes consensus, sharp, and soft vig-adjusted implied probabilities
 --          for the home team moneyline, plus consensus totals line and over
---          probability. Card 3.11 confirmed consensus features carry signal
---          (Brier = 0.2395 < 0.240 threshold). Direct prerequisite for Cards
---          4.8–4.12 odds feature integration.
+--          probability.
 --
 -- Leakage guard: only bookmaker_last_update < commence_time snapshots included.
---   bookmaker_last_update (not ingestion_ts) is used because historical backfill
---   rows carry ingestion_ts = the backfill run date, not the original snapshot time.
---   This matches the guard used in feature_pregame_odds_features.
 -- Sharp books (Card 3.11): lowvig, betonlineag, bovada.
 -- Soft books (Card 3.11): draftkings, fanduel, betmgm, williamhill_us, betrivers.
+--
+-- DuckDB branch (E11.1-W6): reads the migrated mart_odds_outcomes; Snowflake (else)
+-- branch is a thin view over the lakehouse_ext external table. iff()/count_if() are
+-- reimplemented with CASE / count(*) FILTER for DuckDB.
 -- =============================================================================
 
-{{ config(materialized = 'table') }}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w6_lakehouse']) }}
 
 with
 
 pre_game_snapshots as (
     select *
-    from {{ ref('mart_odds_outcomes') }}
-    -- bookmaker_last_update is used (not ingestion_ts) because historical backfill
-    -- rows carry ingestion_ts = the backfill run date, not the original snapshot time.
-    -- bookmaker_last_update is the API-returned timestamp of when the bookmaker
-    -- last changed their line — the correct pre-game leakage guard.
+    from mart_odds_outcomes
     where bookmaker_last_update < commence_time
 ),
 
@@ -61,7 +58,6 @@ h2h_vig_adjusted as (
         bookmaker_key,
         is_sharp,
         is_soft,
-        -- vig-adjusted home implied probability
         (case when home_price < 0
               then abs(home_price) / (abs(home_price) + 100.0)
               else 100.0 / (home_price + 100.0)
@@ -101,7 +97,6 @@ totals_vig_adjusted as (
         event_id,
         bookmaker_key,
         total_line,
-        -- vig-adjusted over implied probability
         (case when over_price < 0
               then abs(over_price) / (abs(over_price) + 100.0)
               else 100.0 / (over_price + 100.0)
@@ -127,15 +122,16 @@ totals_vig_adjusted as (
 h2h_consensus as (
     select
         event_id,
-        avg(home_imp)::float                                              as home_win_prob_consensus,
-        iff(count_if(is_sharp) > 0,
-            avg(case when is_sharp then home_imp end)::float, null)       as home_win_prob_sharp,
-        iff(count_if(is_soft) > 0,
-            avg(case when is_soft  then home_imp end)::float, null)       as home_win_prob_soft,
-        iff(count_if(is_sharp) > 0 and count_if(is_soft) > 0,
-            (avg(case when is_sharp then home_imp end)
-             - avg(case when is_soft  then home_imp end))::float, null)   as sharp_soft_ml_delta,
-        nullif(stddev(home_imp), 0)::float                                as ml_consensus_std,
+        avg(home_imp)::double                                              as home_win_prob_consensus,
+        case when count(*) filter (where is_sharp) > 0
+             then avg(case when is_sharp then home_imp end)::double end    as home_win_prob_sharp,
+        case when count(*) filter (where is_soft) > 0
+             then avg(case when is_soft  then home_imp end)::double end    as home_win_prob_soft,
+        case when count(*) filter (where is_sharp) > 0
+              and count(*) filter (where is_soft) > 0
+             then (avg(case when is_sharp then home_imp end)
+                   - avg(case when is_soft  then home_imp end))::double end as sharp_soft_ml_delta,
+        nullif(stddev(home_imp), 0)::double                                as ml_consensus_std,
         count(bookmaker_key)::integer                                     as market_bookmaker_count
     from h2h_vig_adjusted
     group by event_id
@@ -144,9 +140,9 @@ h2h_consensus as (
 totals_consensus as (
     select
         event_id,
-        avg(total_line)::float                                            as total_line_consensus,
-        nullif(stddev(total_line), 0)::float                              as total_line_std,
-        avg(over_imp)::float                                              as over_prob_consensus,
+        avg(total_line)::double                                            as total_line_consensus,
+        nullif(stddev(total_line), 0)::double                              as total_line_std,
+        avg(over_imp)::double                                              as over_prob_consensus,
         count(bookmaker_key)::integer                                     as totals_bookmaker_count
     from totals_vig_adjusted
     group by event_id
@@ -167,3 +163,11 @@ select
 from h2h_consensus h
 left join totals_consensus t
     on t.event_id = h.event_id
+
+{% else %}
+
+{{ config(materialized='view', tags=['w6_lakehouse']) }}
+
+select * from baseball_data.lakehouse_ext.mart_odds_consensus
+
+{% endif %}

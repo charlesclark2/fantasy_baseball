@@ -6,45 +6,31 @@
 --          signed deltas (pregame − open).
 --
 -- Data sources (priority order, deduped per game_pk):
---   1. baseball_data.oddsapi.odds_snapshots_historical  (Odds API historical backfill,
---      backfill_historical_odds_snapshots.py) — AUTHORITATIVE wherever present. Covers
---      2021–2025 (Card 7.P2) AND the 2026 Odds-API backfill (Story 12.3.4 — dense
---      5-min-grid bovada snapshots that recovered the Parlay quota-crunch gap, 12.3.3).
---   2. mart_odds_outcomes (Odds API intraday snapshots via Railway cron) — FALLBACK,
---      used only for game_pks NOT yet in the Odds-API backfill (e.g. today's games).
---   Per-game dedup (below) prevents mixing the two sources' snapshots for one game.
+--   1. oddsapi.odds_snapshots_historical (Odds API backfill) — AUTHORITATIVE.
+--   2. mart_odds_outcomes (Odds API intraday) — FALLBACK for game_pks not yet
+--      in the backfill (today's games).
+-- Bookmaker: bovada (hardcoded). Leakage guard: snapshot_ts < commence_time.
 --
--- Bookmaker: bovada (hardcoded) on both sources → consistent implied-prob scale. (We
---   also backfill pinnacle/eu into odds_snapshots_historical for sharp-vs-soft work, but
---   this bovada-only mart ignores it.) Future enhancement: make bookmaker configurable.
---
--- Leakage guard: all snapshots must have snapshot_ts < game commence_time.
---   For historical rows the guard uses stg_statsapi_games.game_date (TIMESTAMP_TZ).
---   For live rows the guard uses mart_odds_outcomes.commence_time (Odds API returns
---   real per-game start times, unlike the decommissioned Parlay API 19:00:00Z placeholder).
---
--- Null handling:
---   h2h_line_movement / total_line_movement are NULL when snapshot_count = 1
---   (open = close, no detectable movement). Imputation to 0.0 happens downstream
---   in feature_pregame_game_features. open_home_win_prob and open_total_line are
---   left NULL when no data exists; imputing 0.0 for a probability is meaningless.
+-- DuckDB branch (E11.1-W6): odds_snapshots_historical is registered as a TYPED view
+-- over its S3 parquet by run_w1_lakehouse.py (_build_w6); the other reads are migrated
+-- W3pre/W6 marts. The Snowflake (else) branch is a thin view over the lakehouse_ext
+-- external table.
 -- =============================================================================
 
-{{ config(materialized='table') }}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w6_lakehouse']) }}
 
 with
 
 game_times as (
-    -- Game start timestamp (UTC) for leakage guard on historical snapshots
     select
         game_pk,
         game_date   as commence_time   -- TIMESTAMP_TZ from Stats API gameDate
-    from {{ ref('stg_statsapi_games') }}
+    from stg_statsapi_games
 ),
 
 -- ── Historical snapshots (2021–2025) ──────────────────────────────────────────
--- odds_snapshots_historical is pre-pivoted: one row per (game_pk, snapshot_ts,
--- bookmaker) with home_win_prob and total_line already computed.
 historical as (
     select
         h.game_pk,
@@ -62,16 +48,10 @@ historical as (
         on  gt.game_pk = h.game_pk
     where h.bookmaker = 'bovada'
       and h.game_pk is not null
-      -- Leakage guard: drop any snapshot after first pitch
       and (gt.commence_time is null or h.snapshot_ts < gt.commence_time)
 ),
 
 -- ── Live snapshots (2026+) ────────────────────────────────────────────────────
--- mart_odds_outcomes has one row per (ingestion_ts, event_id, bookmaker_key,
--- market_key, outcome_name). Pivot to game-level row with home_win_prob + total_line.
--- E11.6 (2026-06-21): removed Parlay canonical-time CTEs (event_canonical_bridge +
--- canonical_times). Odds API rows carry real commence_time (not a 19:00 placeholder),
--- so the leakage guard uses o.commence_time directly.
 live_raw as (
     select
         o.ingestion_ts                                              as snapshot_ts,
@@ -80,17 +60,15 @@ live_raw as (
         o.home_team,
         o.away_team,
         o.bookmaker_key                                             as bookmaker,
-        -- h2h home-win price (American odds); null for all other outcome rows
         case
             when o.market_key = 'h2h' and o.is_home_outcome
             then o.outcome_price_american
         end                                                         as home_price,
-        -- O/U line; same value on Over and Under rows, null for h2h rows
         case
             when o.market_key = 'totals'
             then o.outcome_point
         end                                                         as total_line_val
-    from {{ ref('mart_odds_outcomes') }} o
+    from mart_odds_outcomes o
     where o.bookmaker_key = 'bovada'
       and o.market_key in ('h2h', 'totals')
       and o.ingestion_ts < o.commence_time
@@ -104,7 +82,6 @@ live_pivoted as (
         home_team,
         away_team,
         bookmaker,
-        -- Convert American odds to raw implied probability (with vig)
         max(
             case when home_price is not null then
                 case when home_price < 0
@@ -118,9 +95,6 @@ live_pivoted as (
     group by snapshot_ts, event_id, commence_time, home_team, away_team, bookmaker
 ),
 
--- Join live pivoted snapshots to game_pk via mart_game_odds_bridge (event_id key).
--- Note: mart_game_odds_bridge stores one canonical event_id per game_pk (the most
--- recently ingested). Snapshots associated with superseded event_ids are excluded.
 live as (
     select
         b.game_pk,
@@ -134,7 +108,7 @@ live as (
         'live'          as data_source,
         p.commence_time
     from live_pivoted p
-    inner join {{ ref('mart_game_odds_bridge') }} b
+    inner join mart_game_odds_bridge b
         on  b.event_id = p.event_id
 ),
 
@@ -142,18 +116,12 @@ live as (
 all_snapshots as (
     select * from historical
     union all
-    -- The Odds-API historical backfill is authoritative per game_pk where present
-    -- (clean, dense, our target book). Parlay live fills ONLY games not in the backfill
-    -- (e.g. today's not-yet-backfilled games), so we never mix two sources' snapshots
-    -- for a single game (which would corrupt open/close and snapshot_count).
     select * from live l
     where not exists (
         select 1 from historical h where h.game_pk = l.game_pk
     )
 ),
 
--- ── Rank snapshots within each game to identify open (earliest) and
---    pregame (latest, already leakage-guarded) ─────────────────────────────────
 ranked as (
     select
         *,
@@ -201,38 +169,30 @@ final as (
         c.game_date,
         c.home_team,
         c.away_team,
-
-        -- Opening-line implied probabilities (earliest pre-game snapshot)
         o.open_home_win_prob,
-
-        -- Pre-game implied probabilities (latest pre-game snapshot)
         c.pregame_home_win_prob,
-
-        -- h2h line movement: NULL when only 1 snapshot (open = close, no detectable movement)
-        -- Positive = line moved toward home team winning
         case when c.snapshot_count > 1
              then c.pregame_home_win_prob - o.open_home_win_prob
         end                                                         as h2h_line_movement,
-
-        -- Opening O/U total
         o.open_total_line,
-
-        -- Pre-game O/U total
         c.pregame_total_line,
-
-        -- Totals movement: NULL when only 1 snapshot or totals absent for game
-        -- Positive = total moved up (more runs expected)
         case when c.snapshot_count > 1
              then c.pregame_total_line - o.open_total_line
         end                                                         as total_line_movement,
-
         c.snapshot_count,
         c.data_source,
         c.bookmaker
-
     from close_snap c
     inner join open_snap o
         on  o.game_pk = c.game_pk
 )
 
 select * from final
+
+{% else %}
+
+{{ config(materialized='view', tags=['w6_lakehouse']) }}
+
+select * from baseball_data.lakehouse_ext.mart_odds_line_movement
+
+{% endif %}
