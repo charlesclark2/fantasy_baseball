@@ -258,12 +258,14 @@ type GameDetailData = {
     pregame_total_line: number | null
     total_line_movement: number | null
   } | null
-  // E9.37 — per-market line-movement time series (open→current), Bovada.
-  // Market context only — not an edge claim.
+  // E9.37 — per-book, per-market line-movement time series (open→current).
+  // h2h is de-vigged. Market context only — not an edge claim.
   line_movement_series: {
-    book: string
-    h2h: { ts: string; home_win_prob: number | null }[]
-    totals: { ts: string; line: number | null }[]
+    books: string[]
+    series: Record<string, {
+      h2h: { ts: string; home_win_prob: number | null }[]
+      totals: { ts: string; line: number | null }[]
+    }>
   } | null
   umpire: {
     name: string | null
@@ -2549,7 +2551,7 @@ export default function PickDetailPage() {
               {/* ============================================================
                   7. Market Action — public betting + line movement
               ============================================================ */}
-              {(pb || lm || (lms && (lms.h2h.length > 0 || lms.totals.length > 0))) && (
+              {(pb || lm || (lms && lms.books.length > 0)) && (
                 <CollapsibleSection title="Market Action">
                   {pb && (
                     <>
@@ -2668,53 +2670,84 @@ export default function PickDetailPage() {
                     </>
                   )}
 
-                  {/* E9.37 — per-market line-movement over time (open→current) */}
-                  {lms && (lms.h2h.length > 0 || lms.totals.length > 0) && (
-                    <div className="mt-5">
-                      <div className="mb-1 flex items-center gap-2">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Line Movement Over Time</p>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info className="h-3 w-3 text-gray-600 cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[280px] text-xs leading-relaxed">
-                            How {BOOK_LABELS[lms.book] ?? lms.book}&apos;s line drifted from open to current, snapshot by snapshot. Market context only — this is not an edge claim, and our models show no demonstrated ability to beat the close.
-                          </TooltipContent>
-                        </Tooltip>
+                  {/* E9.37 — per-book line-movement over time (open→current) */}
+                  {lms && lms.books.length > 0 && (() => {
+                    const activeBook = lms.series[selectedBook] ? selectedBook : lms.books[0]
+                    const activeSeries = lms.series[activeBook]
+                    if (!activeSeries) return null
+                    const bookLabel = BOOK_LABELS[activeBook] ?? activeBook
+                    return (
+                      <div className="mt-5">
+                        <div className="mb-1 flex items-center gap-2">
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Line Movement Over Time</p>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3 w-3 text-gray-600 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-[280px] text-xs leading-relaxed">
+                              How each book&apos;s line drifted from open to current, snapshot by snapshot. Moneyline is de-vigged (vig removed) so it&apos;s comparable across books. Market context only — not an edge claim, and our models show no demonstrated ability to beat the close.
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+
+                        {/* Book selector — shared with Book Comparison (selectedBook) */}
+                        <div className="mb-3 flex flex-wrap gap-1.5">
+                          {BOOK_ORDER.filter((k) => lms.books.includes(k)).map((k) => (
+                            <button
+                              key={k}
+                              onClick={() => setSelectedBook(k)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors border ${
+                                activeBook === k
+                                  ? k === "pinnacle"
+                                    ? "bg-[#a78bfa]/15 text-[#a78bfa] border-[#a78bfa]/30"
+                                    : "bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30"
+                                  : "bg-transparent text-gray-500 border-[#262626] hover:border-[#333] hover:text-gray-300"
+                              }`}
+                            >
+                              {BOOK_LABELS[k] ?? k}
+                              {k === "pinnacle" && (
+                                <span className="ml-1 text-[9px] font-bold uppercase tracking-widest opacity-70">sharp</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+
+                        {activeSeries.h2h.length > 0 && (
+                          <div className="mb-4">
+                            <p className="mb-1.5 text-[11px] text-gray-500">
+                              <MetricTip
+                                label="Moneyline — home win probability"
+                                tip={`${bookLabel}'s de-vigged (no-vig) implied home win probability at each pre-game snapshot. Rising = home shortening (more backed); falling = home lengthening.`}
+                              />
+                            </p>
+                            <LineMovementChart kind="h2h" points={activeSeries.h2h} book={activeBook} />
+                          </div>
+                        )}
+
+                        {activeSeries.totals.length > 0 && (
+                          <div>
+                            <p className="mb-1.5 text-[11px] text-gray-500">
+                              <MetricTip
+                                label="Totals — line (runs)"
+                                tip={`${bookLabel}'s total (over/under) line at each pre-game snapshot. Moving up = the book expects more scoring; down = less.`}
+                              />
+                            </p>
+                            <LineMovementChart kind="totals" points={activeSeries.totals} book={activeBook} />
+                          </div>
+                        )}
+
+                        {activeSeries.h2h.length === 0 && activeSeries.totals.length === 0 && (
+                          <div className="rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-4 py-6 text-center">
+                            <p className="text-xs text-gray-600">No line-movement history for {bookLabel} on this game.</p>
+                          </div>
+                        )}
+
+                        <p className="mt-2 text-[10px] text-gray-600">
+                          Market context — not a bet recommendation or edge claim.
+                        </p>
                       </div>
-                      <p className="mb-3 text-[11px] text-gray-600">
-                        {BOOK_LABELS[lms.book] ?? lms.book} · pre-game snapshots
-                      </p>
-
-                      {lms.h2h.length > 0 && (
-                        <div className="mb-4">
-                          <p className="mb-1.5 text-[11px] text-gray-500">
-                            <MetricTip
-                              label="Moneyline — home win probability"
-                              tip="Bovada's de-vigged implied home win probability at each pre-game snapshot. Rising = home shortening (more backed); falling = home lengthening."
-                            />
-                          </p>
-                          <LineMovementChart kind="h2h" points={lms.h2h} book={lms.book} />
-                        </div>
-                      )}
-
-                      {lms.totals.length > 0 && (
-                        <div>
-                          <p className="mb-1.5 text-[11px] text-gray-500">
-                            <MetricTip
-                              label="Totals — line (runs)"
-                              tip="Bovada's total (over/under) line at each pre-game snapshot. Moving up = the book expects more scoring; down = less."
-                            />
-                          </p>
-                          <LineMovementChart kind="totals" points={lms.totals} book={lms.book} />
-                        </div>
-                      )}
-
-                      <p className="mt-2 text-[10px] text-gray-600">
-                        Market context — not a bet recommendation or edge claim.
-                      </p>
-                    </div>
-                  )}
+                    )
+                  })()}
                 </CollapsibleSection>
               )}
 

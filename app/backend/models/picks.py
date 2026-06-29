@@ -279,8 +279,9 @@ class LineMovement(BaseModel):
     total_line_movement: float | None = None
 
 
-# E9.37 — per-market line-movement time series (open→current). Market context
-# only — NOT an edge claim (our h2h/totals models show no demonstrated edge).
+# E9.37 — per-book, per-market line-movement time series (open→current). Market
+# context only — NOT an edge claim (our h2h/totals models show no demonstrated
+# edge). E9.37b: multi-book (was Bovada-only); h2h is de-vigged.
 class LineMovementSeriesH2HPoint(BaseModel):
     ts: str
     home_win_prob: float | None = None
@@ -291,10 +292,15 @@ class LineMovementSeriesTotalsPoint(BaseModel):
     line: float | None = None
 
 
-class LineMovementSeries(BaseModel):
-    book: str = "bovada"
+class LineMovementSeriesBook(BaseModel):
     h2h: list[LineMovementSeriesH2HPoint] = []
     totals: list[LineMovementSeriesTotalsPoint] = []
+
+
+class LineMovementSeries(BaseModel):
+    # Canonical book keys present, in display order (pinnacle, betmgm, …).
+    books: list[str] = []
+    series: dict[str, LineMovementSeriesBook] = {}
 
 
 class UmpireInfo(BaseModel):
