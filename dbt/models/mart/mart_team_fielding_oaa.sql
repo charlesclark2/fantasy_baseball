@@ -1,8 +1,17 @@
+-- E11.1-W5 dual-branch lakehouse model (W4-deferred Group B). DuckDB branch reads the
+-- oaa_team_season_raw S3 parquet (exported by scripts/export_w5_raw_to_s3.py) + the
+-- Group-A mart_game_spine (registered as a DuckDB view); Snowflake branch is a thin view
+-- over the lakehouse_ext external table. The FanGraphs OAA ingest KEEPS its Snowflake
+-- write — this reads the one-time/opt-in S3 mirror. game_date is a passthrough from the
+-- spine (TIMESTAMP) — no RANGE-interval window, so no cast needed.
 {{
     config(
-        materialized='table'
+        materialized = 'view',
+        tags         = ['w5_lakehouse']
     )
 }}
+
+{% if target.name == 'duckdb' %}
 
 -- Team defensive quality per game, sourced from FanGraphs season-level OAA/DRS.
 -- Grain: game_pk × team_abbrev (home and away rows per game).
@@ -26,7 +35,7 @@ with oaa_raw as (
         oaa,
         drs,
         n_opportunities
-    from {{ source('external', 'oaa_team_season_raw') }}
+    from read_parquet('{{ lakehouse_loc("oaa_team_season_raw") }}**/*.parquet', union_by_name=true)
     qualify row_number() over (
         partition by team_abbrev, game_year
         order by loaded_at desc nulls last
@@ -43,7 +52,7 @@ games as (
         game_year,
         home_team    as team_abbrev,
         'home'       as side
-    from {{ ref('mart_game_spine') }}
+    from mart_game_spine
     where game_type = 'R'
 
     union all
@@ -54,7 +63,7 @@ games as (
         game_year,
         away_team    as team_abbrev,
         'away'       as side
-    from {{ ref('mart_game_spine') }}
+    from mart_game_spine
     where game_type = 'R'
 )
 
@@ -84,3 +93,9 @@ left join oaa_raw prior
 left join oaa_raw current_yr
     on  current_yr.team_abbrev = g.team_abbrev
     and current_yr.game_year   = g.game_year
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_team_fielding_oaa
+
+{% endif %}

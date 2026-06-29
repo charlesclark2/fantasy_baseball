@@ -106,6 +106,34 @@ W4_TABLES = [
     "mart_catcher_framing",
 ]
 
+# E11.1-W5: the mart_game_results/mart_game_spine team/game chain (Group A, 10) + the 4
+# W4-deferred marts and the stg_batter_sprint_speed precursor (Group B, 5), created by
+# scripts/ddl/generate_w5_external_tables.py. BEST-EFFORT (WARN if missing) during the
+# opt-in rollout — like W3pre/W4, these external tables don't exist until the generator
+# is run, so a "does not exist" here is an expected skip, NOT a HALT (else this op would
+# fail the daily job for the whole pre-cutover window). PROMOTE to `required` once W5 is
+# default-on in run_w1_lakehouse (the chain feeds the morning feature build at batch time;
+# the W4 read-path audit found NO request-time read of any W5 mart — only the game-detail
+# Snowflake FALLBACK reads mart_team_pythagorean_rolling, behind the DynamoDB cache).
+# NOTE: the seeds (ref_teams/ref_team_aliases) stay dbt seeds — they have no external table.
+W5_TABLES = [
+    "dim_team_name_lookup",
+    "mart_game_results",
+    "mart_game_spine",
+    "mart_head_to_head_team_history",
+    "mart_home_away_splits",
+    "mart_park_run_factors",
+    "mart_team_pythagorean_rolling",
+    "mart_team_rolling_offense",
+    "mart_team_rolling_pitching",
+    "mart_team_season_record",
+    "stg_batter_sprint_speed",
+    "mart_eb_park_factors",
+    "mart_bullpen_effectiveness",
+    "mart_team_fielding_oaa",
+    "mart_team_defense_quality_rolling",
+]
+
 
 def _load_private_key():
     key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
@@ -147,7 +175,7 @@ def main():
     # is run, so a "does not exist" here is an expected skip (WARN-tier), NOT a HALT — else
     # this op would fail the daily job for the entire pre-cutover rollout window. (E11.1-W3pre)
     required = set(W1_TABLES) | set(W2_TABLES) | set(W3_TABLES)
-    for table in W1_TABLES + W2_TABLES + W3_TABLES + W3PRE_TABLES + W4_TABLES:
+    for table in W1_TABLES + W2_TABLES + W3_TABLES + W3PRE_TABLES + W4_TABLES + W5_TABLES:
         fqn = f"{_SCHEMA}.{table}"
         try:
             cur.execute(f"ALTER EXTERNAL TABLE {fqn} REFRESH")
@@ -157,7 +185,7 @@ def main():
                 print(f"  FAILED {fqn}: {e}", file=sys.stderr)
                 failed.append(table)
             else:
-                print(f"  WARNING skip {fqn} (W3pre/W4, not yet created): {e}", file=sys.stderr)
+                print(f"  WARNING skip {fqn} (W3pre/W4/W5, not yet created): {e}", file=sys.stderr)
     cur.close()
     conn.close()
     if failed:
@@ -165,7 +193,7 @@ def main():
             f"External table refresh FAILED for: {failed}  "
             "Downstream feature build will see stale S3 data."
         )
-    print("W1+W2+W3 external table refresh complete (W3pre + W4 best-effort).")
+    print("W1+W2+W3 external table refresh complete (W3pre + W4 + W5 best-effort).")
 
 
 if __name__ == "__main__":

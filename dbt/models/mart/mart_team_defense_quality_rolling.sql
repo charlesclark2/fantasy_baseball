@@ -1,8 +1,18 @@
+-- E11.1-W5 dual-branch lakehouse model (W4-deferred Group B). DuckDB branch reads the
+-- oaa_team_season_raw + sprint_speed_raw (via stg_batter_sprint_speed) S3 parquet
+-- (exported by scripts/export_w5_raw_to_s3.py) + the Group-A mart_game_spine (registered
+-- as a DuckDB view); Snowflake branch is a thin view over the lakehouse_ext external table.
+-- The OAA + Savant ingests KEEP their Snowflake writes — this reads the one-time/opt-in
+-- S3 mirror. game_date is a passthrough from the spine — z-scoring is by game_year, no
+-- RANGE-interval date window, so no cast needed.
 {{
     config(
-        materialized='table'
+        materialized = 'view',
+        tags         = ['w5_lakehouse']
     )
 }}
+
+{% if target.name == 'duckdb' %}
 
 -- Team defensive quality composite signal for pregame feature store.
 -- Grain: game_pk × side  (one row per game-side — the FIELDING team perspective)
@@ -27,7 +37,7 @@ with oaa_season as (
         team_abbrev,
         game_year,
         oaa
-    from {{ source('external', 'oaa_team_season_raw') }}
+    from read_parquet('{{ lakehouse_loc("oaa_team_season_raw") }}**/*.parquet', union_by_name=true)
     qualify row_number() over (
         partition by team_abbrev, game_year
         order by loaded_at desc nulls last
@@ -51,7 +61,7 @@ sprint_player as (
         team_abbrev,
         season as game_year,
         sprint_speed_fts
-    from {{ ref('stg_batter_sprint_speed') }}
+    from stg_batter_sprint_speed
     where sprint_speed_fts is not null
       and competitive_runs > 0
 ),
@@ -98,13 +108,13 @@ sprint_team_eb as (
 games as (
     -- Game spine: one row per game-side (fielding-team perspective)
     select game_pk, game_date, game_year, home_team as team_abbrev, 'home' as side
-    from {{ ref('mart_game_spine') }}
+    from mart_game_spine
     where game_type = 'R'
 
     union all
 
     select game_pk, game_date, game_year, away_team as team_abbrev, 'away' as side
-    from {{ ref('mart_game_spine') }}
+    from mart_game_spine
     where game_type = 'R'
 ),
 
@@ -206,3 +216,9 @@ select
     end as defense_quality_mu
 
 from z_scored
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_team_defense_quality_rolling
+
+{% endif %}

@@ -6,23 +6,29 @@
 --          Join key: game_pk.
 -- =============================================================================
 
+-- E11.1-W5 dual-branch lakehouse model. The DuckDB branch (built by
+-- run_w1_lakehouse.py → S3 parquet) reads the W1 stg_batter_pitches + the W3pre
+-- stg_statsapi_games + the ref_teams seed (all registered as DuckDB views). The
+-- Snowflake branch is a thin view over the lakehouse_ext external table. This was
+-- an `incremental`/merge table pre-W5; the lakehouse build is a full rebuild each
+-- run. game_date is cast ::date so the parquet carries DATE (matching the retired
+-- Snowflake mart_game_results.GAME_DATE DATE type) — the spine + every team/game
+-- mart inherits a real DATE for its RANGE-interval windows.
+
 {{
     config(
-        materialized     = 'incremental',
-        unique_key       = 'game_pk',
-        incremental_strategy = 'merge'
+        materialized = 'view',
+        tags         = ['w5_lakehouse']
     )
 }}
+
+{% if target.name == 'duckdb' %}
 
 with
 
 source as (
 
-    select * from {{ ref('stg_batter_pitches') }}
-
-    {% if is_incremental() %}
-        where game_date > (select max(game_date) from {{ this }})
-    {% endif %}
+    select * from stg_batter_pitches
 
 ),
 
@@ -33,7 +39,7 @@ game_level as (
 
     select
         game_pk,
-        max(game_date)               as game_date,
+        max(game_date::date)         as game_date,
         max(game_year)               as game_year,
         max(game_type)               as game_type,
         max(home_team)               as home_team,
@@ -46,9 +52,9 @@ game_level as (
 
 ),
 
-ref_teams as (
+team_ref as (
 
-    select * from {{ ref('ref_teams') }}
+    select * from ref_teams
 
 ),
 
@@ -58,7 +64,7 @@ venue_lookup as (
         game_pk,
         venue_id,
         venue_name
-    from {{ ref('stg_statsapi_games') }}
+    from stg_statsapi_games
 
 ),
 
@@ -88,11 +94,11 @@ final as (
 
         -- ── Away team ────────────────────────────────────────────────────────────
         gl.away_team,
-        at.team_id                   as away_team_id,
-        at.team_name                 as away_team_name,
-        at.league                    as away_league,
-        at.division                  as away_division,
-        at.league_division           as away_league_division,
+        at_.team_id                   as away_team_id,
+        at_.team_name                 as away_team_name,
+        at_.league                    as away_league,
+        at_.division                  as away_division,
+        at_.league_division           as away_league_division,
 
         -- ── Scores ───────────────────────────────────────────────────────────────
         gl.home_final_score,
@@ -125,13 +131,19 @@ final as (
         end                                        as losing_team,
 
         -- ── Schedule context ─────────────────────────────────────────────────────
-        (ht.league != at.league)::boolean          as is_interleague
+        (ht.league != at_.league)::boolean          as is_interleague
 
     from game_level gl
     left join venue_lookup vl on gl.game_pk = vl.game_pk
-    left join ref_teams ht on gl.home_team = ht.team_abbrev
-    left join ref_teams at on gl.away_team = at.team_abbrev
+    left join team_ref ht on gl.home_team = ht.team_abbrev
+    left join team_ref at_ on gl.away_team = at_.team_abbrev
 
 )
 
 select * from final
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_game_results
+
+{% endif %}

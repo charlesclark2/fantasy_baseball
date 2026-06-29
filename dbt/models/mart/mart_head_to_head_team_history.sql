@@ -15,25 +15,34 @@
 -- Source: mart_game_results (regular season only, game_type = 'R')
 -- =============================================================================
 
+-- E11.1-W5 dual-branch lakehouse model. DuckDB branch reads the migrated
+-- mart_game_results + the ref_teams seed (registered as DuckDB views); Snowflake
+-- branch is a thin view over the lakehouse_ext external table. The `ref_teams` CTE
+-- is renamed `team_ref` to avoid colliding with the base ref_teams view name in
+-- DuckDB. Aggregates by game_year only — no game_date cast needed.
+
 {{
     config(
-        materialized = 'table'
+        materialized = 'view',
+        tags         = ['w5_lakehouse']
     )
 }}
+
+{% if target.name == 'duckdb' %}
 
 with
 
 games as (
 
-    select * from {{ ref('mart_game_results') }}
+    select * from mart_game_results
     where game_type = 'R'
 
 ),
 
-ref_teams as (
+team_ref as (
 
     select team_abbrev, canonical_abbrev
-    from {{ ref('ref_teams') }}
+    from ref_teams
 
 ),
 
@@ -55,8 +64,8 @@ games_normalized as (
         g.is_tie
 
     from games         g
-    left join ref_teams ht  on g.home_team = ht.team_abbrev
-    left join ref_teams at_ on g.away_team = at_.team_abbrev
+    left join team_ref ht  on g.home_team = ht.team_abbrev
+    left join team_ref at_ on g.away_team = at_.team_abbrev
 
 ),
 
@@ -211,3 +220,9 @@ select
 
 from season_stats
 order by team_a, team_b, game_year
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_head_to_head_team_history
+
+{% endif %}

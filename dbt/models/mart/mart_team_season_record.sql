@@ -11,15 +11,25 @@
 
 {{
     config(
-        materialized = 'table'
+        materialized = 'view',
+        tags         = ['w5_lakehouse']
     )
 }}
+
+-- E11.1-W5 dual-branch lakehouse model. DuckDB branch reads the migrated
+-- mart_game_results + the ref_teams seed (registered as DuckDB views); Snowflake
+-- branch is a thin view over the lakehouse_ext external table. Two DuckDB-specific
+-- rewrites: (1) the `ref_teams` CTE is renamed `team_ref` to avoid colliding with
+-- the base ref_teams view name; (2) the dbt_utils.date_spine() macro is inlined as a
+-- DuckDB range() (the bespoke extractor cannot render dbt macros) — end-exclusive,
+-- matching date_spine; the 2030 tail never reaches output (no 2030 games).
+{% if target.name == 'duckdb' %}
 
 with
 
 game_results as (
 
-    select * from {{ ref('mart_game_results') }}
+    select * from mart_game_results
     -- Regular season only; exclude ties (no W/L credited)
     where game_type = 'R'
       and home_team_won is not null
@@ -27,9 +37,9 @@ game_results as (
 ),
 
 -- One canonical row per team (no legacy abbreviation aliases)
-ref_teams as (
+team_ref as (
 
-    select * from {{ ref('ref_teams') }}
+    select * from ref_teams
     where not is_legacy_abbrev
 
 ),
@@ -49,12 +59,12 @@ team_games as (
         gr.home_final_score        as runs_scored,
         gr.away_final_score        as runs_allowed
     from game_results gr
-    inner join ref_teams ht on gr.home_team = ht.team_abbrev
+    inner join team_ref ht on gr.home_team = ht.team_abbrev
 
     union all
 
     select
-        at.team_id,
+        at_.team_id,
         gr.away_team               as team_abbrev,
         gr.game_pk,
         gr.game_date,
@@ -63,7 +73,7 @@ team_games as (
         gr.away_final_score        as runs_scored,
         gr.home_final_score        as runs_allowed
     from game_results gr
-    inner join ref_teams at on gr.away_team = at.team_abbrev
+    inner join team_ref at_ on gr.away_team = at_.team_abbrev
 
 ),
 
@@ -201,11 +211,11 @@ game_day_with_expiry as (
 
 date_spine as (
 
-    {{ dbt_utils.date_spine(
-        datepart   = "day",
-        start_date = "cast('2015-01-01' as date)",
-        end_date   = "cast('2030-12-31' as date)"
-    ) }}
+    -- Inlined dbt_utils.date_spine (day grain, 2015-01-01 .. 2030-12-31 exclusive)
+    -- as a DuckDB range() — end-exclusive, so the last date is 2030-12-30, matching
+    -- dbt_utils. range(DATE, DATE, INTERVAL) yields TIMESTAMP, cast back to DATE.
+    select cast(d as date) as date_day
+    from range(date '2015-01-01', date '2030-12-31', interval '1 day') as g(d)
 
 ),
 
@@ -271,7 +281,7 @@ with_team_info as (
         rt.division,
         rt.league_division
     from expanded e
-    inner join ref_teams rt on e.team_id = rt.team_id
+    inner join team_ref rt on e.team_id = rt.team_id
 
 ),
 
@@ -359,3 +369,9 @@ final as (
 )
 
 select * from final
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_team_season_record
+
+{% endif %}

@@ -10,24 +10,33 @@
 -- Source: stg_batter_pitches, mart_game_results
 -- =============================================================================
 
+-- E11.1-W5 dual-branch lakehouse model. DuckDB branch reads the W1 stg_batter_pitches
+-- + the migrated mart_game_results (registered as DuckDB views); Snowflake branch is a
+-- thin view over the lakehouse_ext external table. game_date is cast ::date in the
+-- pitches CTE (via SELECT * REPLACE) so the RANGE-interval rolling windows operate on
+-- DATE (stg_batter_pitches stores game_date as VARCHAR; mart_game_results is already DATE).
+
 {{
     config(
-        materialized = 'table'
+        materialized = 'view',
+        tags         = ['w5_lakehouse']
     )
 }}
+
+{% if target.name == 'duckdb' %}
 
 with
 
 pitches as (
 
-    select * from {{ ref('stg_batter_pitches') }}
+    select * replace (game_date::date as game_date) from stg_batter_pitches
     where game_type = 'R'
 
 ),
 
 game_results as (
 
-    select * from {{ ref('mart_game_results') }}
+    select * from mart_game_results
     where game_type = 'R'
 
 ),
@@ -590,3 +599,9 @@ select
 
 from game_combined
 order by team, home_away_flag, game_date
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_home_away_splits
+
+{% endif %}

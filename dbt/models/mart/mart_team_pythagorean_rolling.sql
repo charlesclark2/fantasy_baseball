@@ -20,25 +20,30 @@
 
 {{
     config(
-        materialized = 'incremental',
-        unique_key = ['game_pk', 'team_abbrev'],
-        on_schema_change = 'sync_all_columns'
+        materialized = 'view',
+        tags         = ['w5_lakehouse']
     )
 }}
+
+-- E11.1-W5 dual-branch lakehouse model (was incremental). DuckDB branch reads the
+-- migrated mart_game_results + the ref_teams seed (registered as DuckDB views);
+-- Snowflake branch is a thin view over the lakehouse_ext external table. The
+-- `ref_teams` CTE is renamed `team_ref` to avoid colliding with the base ref_teams
+-- view name in DuckDB. game_date::date already in team_games (mart_game_results is
+-- DATE; the cast is a harmless no-op). Full rebuild — the incremental WHERE arms are
+-- dropped.
+{% if target.name == 'duckdb' %}
 
 with
 
 game_results as (
-    select * from {{ ref('mart_game_results') }}
+    select * from mart_game_results
     where game_type = 'R'
       and home_team_won is not null
-    {% if is_incremental() %}
-      and game_date >= (select max(game_date) - interval '30 days' from {{ this }})
-    {% endif %}
 ),
 
-ref_teams as (
-    select * from {{ ref('ref_teams') }}
+team_ref as (
+    select * from ref_teams
     where not is_legacy_abbrev
 ),
 
@@ -54,12 +59,12 @@ team_games as (
         gr.home_final_score        as runs_scored,
         gr.away_final_score        as runs_allowed
     from game_results gr
-    inner join ref_teams ht on gr.home_team = ht.team_abbrev
+    inner join team_ref ht on gr.home_team = ht.team_abbrev
 
     union all
 
     select
-        at.team_id,
+        at_.team_id,
         gr.away_team               as team_abbrev,
         gr.game_pk,
         gr.game_date::date         as game_date,
@@ -68,7 +73,7 @@ team_games as (
         gr.away_final_score        as runs_scored,
         gr.home_final_score        as runs_allowed
     from game_results gr
-    inner join ref_teams at on gr.away_team = at.team_abbrev
+    inner join team_ref at_ on gr.away_team = at_.team_abbrev
 ),
 
 -- Aggregate to the calendar-date level (doubleheader-safe). Both halves of a
@@ -186,6 +191,9 @@ final as (
 )
 
 select * from final
-{% if is_incremental() %}
-where game_date > (select max(game_date) from {{ this }})
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_team_pythagorean_rolling
+
 {% endif %}
