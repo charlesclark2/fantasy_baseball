@@ -17,6 +17,15 @@ import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import dynamic from "next/dynamic"
+import {
+  LineChart,
+  Line as RLine,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+} from "recharts"
 import type { PickExplanationPayload } from "@/components/pick-explanation"
 
 // ---------------------------------------------------------------------------
@@ -249,6 +258,13 @@ type GameDetailData = {
     pregame_total_line: number | null
     total_line_movement: number | null
   } | null
+  // E9.37 — per-market line-movement time series (open→current), Bovada.
+  // Market context only — not an edge claim.
+  line_movement_series: {
+    book: string
+    h2h: { ts: string; home_win_prob: number | null }[]
+    totals: { ts: string; line: number | null }[]
+  } | null
   umpire: {
     name: string | null
     k_pct_zscore: number | null
@@ -309,6 +325,35 @@ function fmtStat(n: number | null | undefined, digits = 3): string {
 function fmtPct(n: number | null | undefined): string {
   if (n == null) return "—"
   return `${(n * 100).toFixed(1)}%`
+}
+
+// Renders a player's name as a link to their player page (new tab, accessible)
+// when an id is present; falls back to plain text otherwise. Navigation/context
+// only — no betting claim.
+function PlayerLink({
+  id,
+  name,
+  className = "",
+}: {
+  id: number | null | undefined
+  name: string | null | undefined
+  className?: string
+}) {
+  const label = name ?? "—"
+  if (id == null || name == null) {
+    return <span className={className}>{label}</span>
+  }
+  return (
+    <a
+      href={`/players/${id}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`View ${name}'s player page (opens in a new tab)`}
+      className={`${className} hover:text-[#10b981] hover:underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#10b981] rounded-sm transition-colors`}
+    >
+      {label}
+    </a>
+  )
 }
 
 function fmtGameTime(utc: string | null): string | null {
@@ -1017,6 +1062,144 @@ function MetricTip({ label, tip }: { label: string; tip?: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// E9.37 — LineMovementChart: per-market line drift over time (open→current)
+// Market context only — NOT an edge claim (models show no demonstrated edge).
+// ---------------------------------------------------------------------------
+
+type LMSeriesPoint = { ts: string; home_win_prob?: number | null; line?: number | null }
+
+function fmtMovementTs(iso: string): string {
+  const norm = iso.endsWith("Z") || /[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + "Z"
+  const d = new Date(norm)
+  if (isNaN(d.getTime())) return ""
+  return d.toLocaleString(undefined, { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" })
+}
+
+function LineMovementTooltip({
+  active,
+  payload,
+  kind,
+}: {
+  active?: boolean
+  payload?: Array<{ payload: { ts: string; value: number } }>
+  kind: "h2h" | "totals"
+}) {
+  if (!active || !payload?.length) return null
+  const p = payload[0].payload
+  return (
+    <div className="rounded-lg border border-[#262626] bg-[#0a0a0a] px-2.5 py-1.5 text-xs shadow-xl">
+      <p className="text-gray-500">{fmtMovementTs(p.ts)}</p>
+      <p className="font-mono text-gray-200">
+        {kind === "h2h" ? `${p.value.toFixed(1)}% home win` : `${p.value.toFixed(1)} runs`}
+      </p>
+    </div>
+  )
+}
+
+function LineMovementChart({
+  kind,
+  points,
+  book,
+}: {
+  kind: "h2h" | "totals"
+  points: LMSeriesPoint[]
+  book: string
+}) {
+  const data = points
+    .map((p) => ({
+      ts: p.ts,
+      value: kind === "h2h" ? (p.home_win_prob != null ? p.home_win_prob * 100 : null) : (p.line ?? null),
+    }))
+    .filter((d): d is { ts: string; value: number } => d.value != null)
+
+  const bookLabel = BOOK_LABELS[book] ?? book
+
+  // Need ≥2 distinct snapshots to draw an open→current line.
+  if (data.length < 2) {
+    return (
+      <div className="rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-4 py-6 text-center">
+        <p className="text-xs text-gray-600">
+          {data.length === 1 ? "Line held steady — no movement recorded yet." : "No line-movement history for this market yet."}
+        </p>
+      </div>
+    )
+  }
+
+  const vals = data.map((d) => d.value)
+  const lo = Math.min(...vals)
+  const hi = Math.max(...vals)
+  const pad = kind === "h2h" ? 1.5 : 0.5
+  const domain: [number, number] = [lo - pad, hi + pad]
+  const open = data[0].value
+  const current = data[data.length - 1].value
+  const delta = current - open
+  const unit = kind === "h2h" ? "pp" : ""
+  const deltaStr = `${delta >= 0 ? "+" : ""}${delta.toFixed(kind === "h2h" ? 1 : 1)}${unit}`
+  const ariaLabel =
+    kind === "h2h"
+      ? `${bookLabel} home win probability moved from ${open.toFixed(1)}% at open to ${current.toFixed(1)}% current (${deltaStr})`
+      : `${bookLabel} total line moved from ${open.toFixed(1)} at open to ${current.toFixed(1)} current (${deltaStr})`
+
+  return (
+    <div>
+      {/* Open → current summary (also the chart's accessible description) */}
+      <div className="mb-1.5 flex items-center justify-between text-[11px]">
+        <span className="text-gray-600">
+          Open <span className="font-mono text-gray-400">{kind === "h2h" ? `${open.toFixed(1)}%` : open.toFixed(1)}</span>
+          <span className="mx-1 text-gray-700">→</span>
+          Current <span className="font-mono text-gray-300">{kind === "h2h" ? `${current.toFixed(1)}%` : current.toFixed(1)}</span>
+        </span>
+        <span
+          className={`font-mono ${
+            Math.abs(delta) < (kind === "h2h" ? 0.1 : 0.05)
+              ? "text-gray-500"
+              : delta > 0
+              ? "text-[#10b981]"
+              : "text-[#f87171]"
+          }`}
+        >
+          {deltaStr}
+        </span>
+      </div>
+      <div role="img" aria-label={ariaLabel}>
+        <ResponsiveContainer width="100%" height={140}>
+          <LineChart data={data} margin={{ top: 6, right: 12, left: 4, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1e1e1e" vertical={false} />
+            <XAxis
+              dataKey="ts"
+              tick={{ fill: "#6b7280", fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+              dy={4}
+              minTickGap={40}
+              tickFormatter={fmtMovementTs}
+            />
+            <YAxis
+              tick={{ fill: "#6b7280", fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+              width={kind === "h2h" ? 34 : 30}
+              domain={domain}
+              tickFormatter={(v: number) => (kind === "h2h" ? `${v.toFixed(0)}%` : v.toFixed(1))}
+            />
+            <RechartsTooltip content={<LineMovementTooltip kind={kind} />} />
+            <RLine
+              type="stepAfter"
+              dataKey="value"
+              stroke="#10b981"
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4, fill: "#10b981", stroke: "#0a0a0a", strokeWidth: 2 }}
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // ZScoreBar — umpire/contextual z-score visual
 // ---------------------------------------------------------------------------
 
@@ -1382,6 +1565,7 @@ export default function PickDetailPage() {
   const wx = data?.weather
   const pb = data?.public_betting
   const lm = data?.line_movement
+  const lms = data?.line_movement_series
   const ump = data?.umpire
   const ctx = data?.game_context
 
@@ -2034,7 +2218,11 @@ export default function PickDetailPage() {
                             )}
                             <div>
                               <p className="text-base font-semibold text-white flex items-center gap-2 flex-wrap">
-                                {sp?.name ?? "TBD"}
+                                {sp?.name ? (
+                                  <PlayerLink id={sp.pitcher_id} name={sp.name} />
+                                ) : (
+                                  "TBD"
+                                )}
                                 {sp?.is_opener && (
                                   <span className="text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded uppercase tracking-widest">
                                     Opener
@@ -2174,7 +2362,7 @@ export default function PickDetailPage() {
                                     className="grid grid-cols-[1.5rem_1fr_auto_auto_auto_auto_auto] gap-x-3 px-3 py-2 border-b border-[#1a1a1a] last:border-0 hover:bg-[#111111] transition-colors"
                                   >
                                     <span className="text-xs text-gray-600 text-center">{p.slot}</span>
-                                    <span className="text-xs text-gray-200 truncate">{p.player_name ?? "—"}</span>
+                                    <PlayerLink id={p.player_id} name={p.player_name} className="text-xs text-gray-200 truncate" />
                                     <span className="text-xs font-mono text-gray-300 text-right">
                                       {p.game_h != null && p.game_ab != null ? `${p.game_h}/${p.game_ab}` : "—"}
                                     </span>
@@ -2193,7 +2381,7 @@ export default function PickDetailPage() {
                                     className="grid grid-cols-[1.5rem_1fr_auto_auto_auto] gap-x-3 px-3 py-2 border-b border-[#1a1a1a] last:border-0 hover:bg-[#111111] transition-colors"
                                   >
                                     <span className="text-xs text-gray-600 text-center">{p.slot}</span>
-                                    <span className="text-xs text-gray-200 truncate">{p.player_name ?? "—"}</span>
+                                    <PlayerLink id={p.player_id} name={p.player_name} className="text-xs text-gray-200 truncate" />
                                     <span className="text-xs text-gray-500 text-right">{p.position ?? "—"}</span>
                                     <span className="text-xs font-mono text-gray-400 text-right">
                                       {p.season_ops != null ? p.season_ops.toFixed(3) : "—"}
@@ -2361,7 +2549,7 @@ export default function PickDetailPage() {
               {/* ============================================================
                   7. Market Action — public betting + line movement
               ============================================================ */}
-              {(pb || lm) && (
+              {(pb || lm || (lms && (lms.h2h.length > 0 || lms.totals.length > 0))) && (
                 <CollapsibleSection title="Market Action">
                   {pb && (
                     <>
@@ -2478,6 +2666,54 @@ export default function PickDetailPage() {
                         </div>
                       )}
                     </>
+                  )}
+
+                  {/* E9.37 — per-market line-movement over time (open→current) */}
+                  {lms && (lms.h2h.length > 0 || lms.totals.length > 0) && (
+                    <div className="mt-5">
+                      <div className="mb-1 flex items-center gap-2">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Line Movement Over Time</p>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3 w-3 text-gray-600 cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[280px] text-xs leading-relaxed">
+                            How {BOOK_LABELS[lms.book] ?? lms.book}&apos;s line drifted from open to current, snapshot by snapshot. Market context only — this is not an edge claim, and our models show no demonstrated ability to beat the close.
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <p className="mb-3 text-[11px] text-gray-600">
+                        {BOOK_LABELS[lms.book] ?? lms.book} · pre-game snapshots
+                      </p>
+
+                      {lms.h2h.length > 0 && (
+                        <div className="mb-4">
+                          <p className="mb-1.5 text-[11px] text-gray-500">
+                            <MetricTip
+                              label="Moneyline — home win probability"
+                              tip="Bovada's de-vigged implied home win probability at each pre-game snapshot. Rising = home shortening (more backed); falling = home lengthening."
+                            />
+                          </p>
+                          <LineMovementChart kind="h2h" points={lms.h2h} book={lms.book} />
+                        </div>
+                      )}
+
+                      {lms.totals.length > 0 && (
+                        <div>
+                          <p className="mb-1.5 text-[11px] text-gray-500">
+                            <MetricTip
+                              label="Totals — line (runs)"
+                              tip="Bovada's total (over/under) line at each pre-game snapshot. Moving up = the book expects more scoring; down = less."
+                            />
+                          </p>
+                          <LineMovementChart kind="totals" points={lms.totals} book={lms.book} />
+                        </div>
+                      )}
+
+                      <p className="mt-2 text-[10px] text-gray-600">
+                        Market context — not a bet recommendation or edge claim.
+                      </p>
+                    </div>
                   )}
                 </CollapsibleSection>
               )}

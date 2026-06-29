@@ -279,6 +279,24 @@ class LineMovement(BaseModel):
     total_line_movement: float | None = None
 
 
+# E9.37 — per-market line-movement time series (open→current). Market context
+# only — NOT an edge claim (our h2h/totals models show no demonstrated edge).
+class LineMovementSeriesH2HPoint(BaseModel):
+    ts: str
+    home_win_prob: float | None = None
+
+
+class LineMovementSeriesTotalsPoint(BaseModel):
+    ts: str
+    line: float | None = None
+
+
+class LineMovementSeries(BaseModel):
+    book: str = "bovada"
+    h2h: list[LineMovementSeriesH2HPoint] = []
+    totals: list[LineMovementSeriesTotalsPoint] = []
+
+
 class UmpireInfo(BaseModel):
     name: str | None = None
     k_pct_zscore: float | None = None
@@ -323,6 +341,8 @@ class GameDetailResponse(BaseModel):
     weather: WeatherInfo | None = None
     public_betting: PublicBetting | None = None
     line_movement: LineMovement | None = None
+    # E9.37 — per-market open→current line-movement series (additive payload field)
+    line_movement_series: LineMovementSeries | None = None
     umpire: UmpireInfo | None = None
     game_context: GameContext | None = None
     # Story 30.15 — model explanation

@@ -55,13 +55,20 @@ from betting_ml.utils.h2h_probability import devig_home_prob
 from betting_ml.utils.totals_probability import devig_over_prob, prob_to_american
 from betting_ml.utils.probability_layer import compute_kelly
 
+# Load .env BEFORE importing pipeline.* — pipeline.resources instantiates the
+# Snowflake resource at IMPORT time and reads os.environ["SNOWFLAKE_ACCOUNT"]
+# eagerly, so the creds must already be present. In dev that means .env; in
+# prod/containers the vars are injected and load_dotenv() is a harmless no-op.
+load_dotenv()
+
 try:
     from pipeline.utils.alerting import send_alert as _send_alert
-except ImportError:
+except Exception:
+    # Catch broadly (not just ImportError): pipeline.resources can raise KeyError
+    # at import if Snowflake env vars are absent. Alerting is non-essential to the
+    # serving write, so degrade to a no-op rather than crash the whole script.
     def _send_alert(*args, **kwargs):  # type: ignore[misc]
         return False
-
-load_dotenv()
 
 # A0.4.32 — curated book set (verified live 2026-06-17; Fanatics added E9.14)
 _BOOK_DISPLAY: dict[str, str] = {
@@ -734,6 +741,50 @@ WHERE game_pk IN ({game_pk_list})
 QUALIFY ROW_NUMBER() OVER (PARTITION BY game_pk ORDER BY game_pk) = 1
 """
 
+_LINE_MOVEMENT_SERIES_BATCH = """
+-- E9.37: compact per-market Bovada odds-snapshot series (open→current) for the
+-- game-detail payload. Source = mart_odds_outcomes (live intraday snapshots)
+-- bridged to game_pk via mart_game_odds_bridge; leakage-guarded
+-- (snapshot < commence). Collapsed/downsampled in Python to keep the blob lean.
+-- NOTE (W7b coordination): these are W6-migrated marts read here through the
+-- established Snowflake-FQN-over-lakehouse pattern; repoint alongside the other
+-- game-detail batch reads when W7b moves write_serving_store to direct-S3.
+WITH bridge AS (
+    SELECT game_pk, event_id
+    FROM baseball_data.betting.mart_game_odds_bridge
+    WHERE game_pk IN ({game_pk_list}) AND event_id IS NOT NULL
+),
+snaps AS (
+    SELECT
+        b.game_pk,
+        o.market_key,
+        o.ingestion_ts AS snapshot_ts,
+        CASE
+            WHEN o.market_key = 'h2h' AND o.is_home_outcome THEN
+                CASE WHEN o.outcome_price_american < 0
+                     THEN ABS(o.outcome_price_american) / (ABS(o.outcome_price_american) + 100.0)
+                     ELSE 100.0 / (o.outcome_price_american + 100.0)
+                END
+        END AS home_win_prob,
+        CASE WHEN o.market_key = 'totals' THEN o.outcome_point END AS total_line
+    FROM baseball_data.betting.mart_odds_outcomes o
+    INNER JOIN bridge b ON b.event_id = o.event_id
+    WHERE o.bookmaker_key = 'bovada'
+      AND o.market_key IN ('h2h', 'totals')
+      AND o.ingestion_ts < o.commence_time
+)
+SELECT
+    game_pk,
+    market_key,
+    snapshot_ts,
+    MAX(home_win_prob) AS home_win_prob,
+    MAX(total_line)    AS total_line
+FROM snaps
+GROUP BY game_pk, market_key, snapshot_ts
+HAVING COALESCE(MAX(home_win_prob), MAX(total_line)) IS NOT NULL
+ORDER BY game_pk, market_key, snapshot_ts ASC
+"""
+
 _RECENT_FORM_BATCH = """
 WITH game_meta AS (
     SELECT game_pk, game_date, home_team_id, away_team_id
@@ -1116,6 +1167,59 @@ def _int(val) -> int | None:
         return int(val)
     except (TypeError, ValueError):
         return None
+
+
+# E9.37 — per-market line-movement series: cap points so the game-detail blob
+# stays lean (intraday snapshots can run to dozens of rows per market).
+_LM_SERIES_MAX_POINTS = 24
+
+
+def _downsample_series(points: list[dict], value_key: str, cap: int = _LM_SERIES_MAX_POINTS) -> list[dict]:
+    """Collapse consecutive no-change snapshots (the line frequently holds flat),
+    then cap to `cap` points via even stride — always pinning the first (open) and
+    last (current) snapshot. Input must be time-ordered ascending."""
+    if not points:
+        return []
+    deduped = [points[0]]
+    for p in points[1:]:
+        if p[value_key] != deduped[-1][value_key]:
+            deduped.append(p)
+    # Always keep the latest snapshot so the series ends at "current".
+    if deduped[-1] is not points[-1]:
+        deduped.append(points[-1])
+    if len(deduped) <= cap:
+        return deduped
+    step = (len(deduped) - 1) / (cap - 1)
+    idxs = sorted({round(i * step) for i in range(cap)})
+    return [deduped[i] for i in idxs]
+
+
+def _build_line_movement_series(rows: list[dict]) -> dict | None:
+    """Group time-ordered Bovada odds snapshots into a compact per-market
+    open→current series for the game-detail payload (E9.37). Returns
+    {"book": "bovada", "h2h": [{ts, home_win_prob}], "totals": [{ts, line}]} or
+    None when there are no usable snapshots. Market context only — not an edge
+    claim (our h2h/totals models show no demonstrated market edge)."""
+    h2h_pts: list[dict] = []
+    tot_pts: list[dict] = []
+    for r in rows:
+        ts = _ts(r.get("SNAPSHOT_TS"))
+        if ts is None:
+            continue
+        mkt = str(r.get("MARKET_KEY") or "").lower()
+        if mkt == "h2h":
+            v = _flt(r.get("HOME_WIN_PROB"))
+            if v is not None:
+                h2h_pts.append({"ts": ts, "home_win_prob": round(v, 4)})
+        elif mkt == "totals":
+            v = _flt(r.get("TOTAL_LINE"))
+            if v is not None:
+                tot_pts.append({"ts": ts, "line": v})
+    h2h_pts = _downsample_series(h2h_pts, "home_win_prob")
+    tot_pts = _downsample_series(tot_pts, "line")
+    if not h2h_pts and not tot_pts:
+        return None
+    return {"book": "bovada", "h2h": h2h_pts, "totals": tot_pts}
 
 
 def _build_picks_payload(rows: list[dict], freshness_rows: list[dict]) -> dict:
@@ -1682,6 +1786,7 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
     weather_rows    = _sf_query_batch(sf, _WEATHER_BATCH, game_pks)
     pb_rows         = _sf_query_batch(sf, _PUBLIC_BETTING_BATCH, game_pks)
     lm_rows         = _sf_query_batch(sf, _LINE_MOVEMENT_BATCH, game_pks)
+    lm_series_rows  = _sf_query_batch(sf, _LINE_MOVEMENT_SERIES_BATCH, game_pks)
     form_rows       = _sf_query_batch(sf, _RECENT_FORM_BATCH, game_pks)
     h2h_rows        = _sf_query_batch(sf, _H2H_BATCH, game_pks)
     umpire_rows     = _sf_query_batch(sf, _UMPIRE_BATCH, game_pks)
@@ -1719,6 +1824,11 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
     form_by_pk = defaultdict(list)
     for r in form_rows:
         form_by_pk[r["GAME_PK"]].append(r)
+
+    # E9.37 — intraday line-movement snapshots, kept in ascending ts order per game.
+    lm_series_by_pk = defaultdict(list)
+    for r in lm_series_rows:
+        lm_series_by_pk[r["GAME_PK"]].append(r)
 
     picks_by_pk = defaultdict(list)
     for r in pick_rows:
@@ -1937,6 +2047,9 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
                 "total_line_movement": _flt(lm.get("TOTAL_LINE_MOVEMENT")),
             }
 
+        # ── line-movement series (E9.37; per-market open→current, Bovada) ──
+        line_movement_series = _build_line_movement_series(lm_series_by_pk.get(gp, []))
+
         # ── recent form + H2H ──
         game_context = None
         home_form = None
@@ -1994,6 +2107,7 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
             "game_score": game_score, "starters": starters, "bovada_lines": bovada_lines,
             "team_features": team_features, "lineups": lineups, "weather": weather,
             "public_betting": public_betting, "line_movement": line_movement,
+            "line_movement_series": line_movement_series,
             "umpire": umpire, "game_context": game_context,
             "pick_explanation": pick_explanation, "pick_narrative": pick_narrative,
         }
@@ -2503,7 +2617,7 @@ GROUP BY t.team_id
 
 _TEAM_SCHEDULE_SQL = """
 WITH probable AS (
-    SELECT game_pk, side, probable_pitcher_name
+    SELECT game_pk, side, probable_pitcher_id, probable_pitcher_name
     FROM baseball_data.betting.stg_statsapi_probable_pitchers
     QUALIFY ROW_NUMBER() OVER (PARTITION BY game_pk, side ORDER BY ingestion_ts DESC) = 1
 )
@@ -2515,7 +2629,9 @@ SELECT
     CASE WHEN g.home_team_id = t.team_id THEN 'home' ELSE 'away' END                 AS home_away,
     g.venue_name,
     CASE WHEN g.home_team_id = t.team_id THEN ph.probable_pitcher_name
-         ELSE pa.probable_pitcher_name END                                             AS our_probable_pitcher
+         ELSE pa.probable_pitcher_name END                                             AS our_probable_pitcher,
+    CASE WHEN g.home_team_id = t.team_id THEN ph.probable_pitcher_id
+         ELSE pa.probable_pitcher_id END                                               AS our_probable_pitcher_id
 FROM baseball_data.betting.stg_statsapi_games g
 JOIN baseball_data.betting.dim_team_name_lookup t
     ON t.team_id = g.home_team_id OR t.team_id = g.away_team_id
@@ -2527,6 +2643,30 @@ WHERE g.game_date BETWEEN CURRENT_DATE AND DATEADD(day, 7, CURRENT_DATE)
   AND g.abstract_game_state NOT IN ('Final', 'Live')
   AND YEAR(g.game_date) = YEAR(CURRENT_DATE)
 ORDER BY t.team_id, g.game_date
+"""
+
+# E9.36 — last 3 completed starts for the next-game starting pitchers (context only,
+# no edge claim). {pid_list} is filled with the set of next-game probable_pitcher_ids.
+# Sourced from the W-migrated mart_starting_pitcher_game_log via the established
+# Snowflake-FQN-over-lakehouse pattern (W7b repoints to direct-S3 with the rest of
+# this writer). Kept tiny: 3 rows per pitcher, only the next-game SPs.
+_TEAM_SP_LAST3_SQL = """
+SELECT
+    pitcher_id,
+    game_date::VARCHAR              AS game_date,
+    opposing_team,
+    is_home_team,
+    outs_recorded,
+    strikeouts,
+    walks,
+    hits_allowed,
+    runs_allowed,
+    home_runs_allowed
+FROM baseball_data.betting.mart_starting_pitcher_game_log
+WHERE pitcher_id IN ({pid_list})
+  AND game_date < CURRENT_DATE
+QUALIFY ROW_NUMBER() OVER (PARTITION BY pitcher_id ORDER BY game_date DESC) <= 3
+ORDER BY pitcher_id, game_date DESC
 """
 
 
@@ -2586,7 +2726,39 @@ def write_team_profiles(sf, pg_conn, today: str) -> int:
             "home_away": r.get("HOME_AWAY"),
             "venue_name": r.get("VENUE_NAME"),
             "our_probable_pitcher": r.get("OUR_PROBABLE_PITCHER"),
+            "our_probable_pitcher_id": _int(r.get("OUR_PROBABLE_PITCHER_ID")),
         })
+
+    # E9.36 — last-3-starts for each team's NEXT-game starting pitcher (context only).
+    # schedule is ordered by game_date, so [0] is the soonest upcoming game.
+    next_sp_by_team: dict = {}
+    for tid, games in schedule_by_team.items():
+        if games and games[0].get("our_probable_pitcher_id"):
+            next_sp_by_team[tid] = {
+                "pitcher_id": games[0]["our_probable_pitcher_id"],
+                "pitcher_name": games[0].get("our_probable_pitcher"),
+            }
+    sp_ids = sorted({v["pitcher_id"] for v in next_sp_by_team.values()})
+    last3_by_pitcher: dict = defaultdict(list)
+    if sp_ids:
+        try:
+            pid_list = ",".join(str(p) for p in sp_ids)
+            last3_rows = _sf_query(sf, _TEAM_SP_LAST3_SQL.format(pid_list=pid_list))
+            for r in last3_rows:
+                outs = _int(r.get("OUTS_RECORDED"))
+                last3_by_pitcher[r["PITCHER_ID"]].append({
+                    "date": str(r["GAME_DATE"]),
+                    "opp": r.get("OPPOSING_TEAM"),
+                    "home_away": "home" if r.get("IS_HOME_TEAM") else "away",
+                    "ip": (f"{outs // 3}.{outs % 3}" if outs is not None else None),
+                    "k": _int(r.get("STRIKEOUTS")),
+                    "bb": _int(r.get("WALKS")),
+                    "h": _int(r.get("HITS_ALLOWED")),
+                    "r": _int(r.get("RUNS_ALLOWED")),
+                    "hr": _int(r.get("HOME_RUNS_ALLOWED")),
+                })
+        except Exception:
+            log.exception("Failed to query SP last-3-starts; continuing without")
 
     for r in summary_rows:
         tid = r["TEAM_ID"]
@@ -2639,6 +2811,15 @@ def write_team_profiles(sf, pg_conn, today: str) -> int:
             },
             "recent_form": form_by_team[tid],
             "schedule": schedule_by_team[tid],
+            "sp_last_3_starts": (
+                {
+                    "pitcher_id": next_sp_by_team[tid]["pitcher_id"],
+                    "pitcher_name": next_sp_by_team[tid]["pitcher_name"],
+                    "starts": last3_by_pitcher.get(next_sp_by_team[tid]["pitcher_id"], []),
+                }
+                if tid in next_sp_by_team
+                else None
+            ),
             "h2h_model": (
                 {
                     "games": _int(h2h_by_team[tid].get("GAMES_PREDICTED")),
