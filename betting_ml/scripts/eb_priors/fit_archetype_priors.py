@@ -73,6 +73,72 @@ _MIN_CELL_PLAYERS = 20  # fallback threshold
 _OUTPUT_PATH = _PROJECT_ROOT / "betting_ml" / "models" / "eb_priors" / "archetype_priors.json"
 
 
+# ── E11.1-W7a lakehouse: read-on-DuckDB ───────────────────────────────────────
+# `--s3` repoints the cluster + player-profile reads at S3 parquet via DuckDB so the prior fit
+# runs off-Snowflake. There is no Snowflake write (output is the local JSON), so --s3 is a pure
+# read-side swap.
+_S3_BUCKET = "baseball-betting-ml-artifacts"
+_LAKEHOUSE = f"s3://{_S3_BUCKET}/baseball/lakehouse"
+
+_S3_SOURCE_TABLES = [
+    "batter_clusters",
+    "pitcher_clusters",
+    "stg_statsapi_player_profiles",
+]
+
+
+def _get_duckdb():
+    import duckdb
+    duck = duckdb.connect()
+    duck.execute("INSTALL httpfs; LOAD httpfs")
+    duck.execute(
+        "CREATE OR REPLACE SECRET baseball_s3 "
+        "(TYPE S3, PROVIDER credential_chain, REGION 'us-east-2')"
+    )
+    for _p in ("SET http_timeout=600000", "SET http_retries=8",
+               "SET preserve_insertion_order=false"):
+        try:
+            duck.execute(_p)
+        except Exception:
+            pass
+    return duck
+
+
+def _register_s3_views(duck) -> None:
+    for name in _S3_SOURCE_TABLES:
+        glob = f"{_LAKEHOUSE}/{name}/**/*.parquet"
+        duck.execute(
+            f"CREATE OR REPLACE VIEW {name} AS "
+            f"SELECT * FROM read_parquet('{glob}', union_by_name=true)"
+        )
+
+
+def _duck_sql_for(sql: str) -> str:
+    """Rewrite the cluster/profile Snowflake source queries for DuckDB: bare-name views.
+    The %(first_season)s param is substituted as a literal int by the caller. No date logic
+    crosses an engine boundary here (season is INT), so no game_date casts are needed."""
+    s = sql
+    s = s.replace("baseball_data.statsapi.batter_clusters", "batter_clusters")
+    s = s.replace("baseball_data.statsapi.pitcher_clusters", "pitcher_clusters")
+    s = s.replace("baseball_data.betting.stg_statsapi_player_profiles", "stg_statsapi_player_profiles")
+    return s
+
+
+def _fetch_rows(conn, sql: str, params: dict, duck=None) -> list[dict]:
+    # E11.1-W7a: --s3 reads from S3 parquet via DuckDB (named param substituted as literal int).
+    if duck is not None:
+        s = _duck_sql_for(sql).replace("%(first_season)s", str(int(params["first_season"])))
+        cur = duck.execute(s)
+        cols = [d[0].lower() for d in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+    cur = conn.cursor()
+    cur.execute(sql, params)
+    cols = [d[0].lower() for d in cur.description]
+    rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+    cur.close()
+    return rows
+
+
 # ── Age band helpers ──────────────────────────────────────────────────────────
 
 def _age_at_season_start(birth_date_val, season: int) -> int | None:
@@ -102,10 +168,7 @@ def _age_band(age: int | None) -> str | None:
 
 # ── Data loading ──────────────────────────────────────────────────────────────
 
-def _load_batter_rows(conn) -> list[dict]:
-    cur = conn.cursor()
-    cur.execute(
-        """
+_BATTER_ROWS_SQL = """
         SELECT
             bc.batter_id   AS player_id,
             bc.season,
@@ -116,23 +179,9 @@ def _load_batter_rows(conn) -> list[dict]:
             ON pp.player_id = bc.batter_id
         WHERE bc.season >= %(first_season)s
         ORDER BY bc.season, bc.batter_id
-        """,
-        {"first_season": _FIRST_SEASON},
-    )
-    cols = [d[0].lower() for d in cur.description]
-    rows = [dict(zip(cols, r)) for r in cur.fetchall()]
-    cur.close()
-    for r in rows:
-        age = _age_at_season_start(r.get("birth_date"), int(r["season"]))
-        r["age"] = age
-        r["age_band"] = _age_band(age)
-    return rows
-
-
-def _load_pitcher_rows(conn) -> list[dict]:
-    cur = conn.cursor()
-    cur.execute(
         """
+
+_PITCHER_ROWS_SQL = """
         SELECT
             pc.pitcher_id  AS player_id,
             pc.season,
@@ -143,12 +192,20 @@ def _load_pitcher_rows(conn) -> list[dict]:
             ON pp.player_id = pc.pitcher_id
         WHERE pc.season >= %(first_season)s
         ORDER BY pc.season, pc.pitcher_id
-        """,
-        {"first_season": _FIRST_SEASON},
-    )
-    cols = [d[0].lower() for d in cur.description]
-    rows = [dict(zip(cols, r)) for r in cur.fetchall()]
-    cur.close()
+        """
+
+
+def _load_batter_rows(conn, duck=None) -> list[dict]:
+    rows = _fetch_rows(conn, _BATTER_ROWS_SQL, {"first_season": _FIRST_SEASON}, duck=duck)
+    for r in rows:
+        age = _age_at_season_start(r.get("birth_date"), int(r["season"]))
+        r["age"] = age
+        r["age_band"] = _age_band(age)
+    return rows
+
+
+def _load_pitcher_rows(conn, duck=None) -> list[dict]:
+    rows = _fetch_rows(conn, _PITCHER_ROWS_SQL, {"first_season": _FIRST_SEASON}, duck=duck)
     for r in rows:
         age = _age_at_season_start(r.get("birth_date"), int(r["season"]))
         r["age"] = age
@@ -340,14 +397,28 @@ def _write_json(payload: dict) -> None:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    conn = get_snowflake_connection()
+    import argparse
+    parser = argparse.ArgumentParser(description="Fit Dirichlet archetype priors (Epic 7A.1)")
+    parser.add_argument("--s3", action="store_true",
+                        help="E11.1-W7a: read cluster + player-profile tables from S3 parquet "
+                             "via DuckDB (no Snowflake). Output JSON path is unchanged.")
+    args = parser.parse_args()
+
+    conn = None
+    duck = None
+    if args.s3:
+        print("[--s3] Reading cluster/profile tables from S3 lakehouse via DuckDB...")
+        duck = _get_duckdb()
+        _register_s3_views(duck)
+    else:
+        conn = get_snowflake_connection()
     try:
         print(f"Loading batter cluster assignments ({_FIRST_SEASON}+)...")
-        batter_rows = _load_batter_rows(conn)
+        batter_rows = _load_batter_rows(conn, duck=duck)
         print(f"  {len(batter_rows)} batter-season rows loaded")
 
         print(f"\nLoading pitcher cluster assignments ({_FIRST_SEASON}+)...")
-        pitcher_rows = _load_pitcher_rows(conn)
+        pitcher_rows = _load_pitcher_rows(conn, duck=duck)
         print(f"  {len(pitcher_rows)} pitcher-season rows loaded")
 
         missing_age = sum(1 for r in batter_rows if r["age_band"] is None)
@@ -390,7 +461,10 @@ def main() -> None:
         _write_json(payload)
 
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
+        if duck is not None:
+            duck.close()
 
 
 if __name__ == "__main__":

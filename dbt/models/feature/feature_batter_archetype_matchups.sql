@@ -56,7 +56,7 @@ starter_cluster as (
     from games g
     join starters s
         on  s.game_pk = g.game_pk
-    left join {{ source('statsapi', 'pitcher_clusters') }} pc
+    left join {{ source('lakehouse_clusters', 'pitcher_clusters') }} pc
         on  pc.pitcher_id = s.pitcher_id
         and pc.season     = g.game_year - 1
 ),
@@ -138,7 +138,7 @@ batter_cluster_joined as (
     from lineup_slots ls
     join games g
         on  g.game_pk = ls.game_pk
-    left join {{ source('statsapi', 'batter_clusters') }} bc
+    left join {{ source('lakehouse_clusters', 'batter_clusters') }} bc
         on  bc.batter_id = ls.batter_id
         and bc.season    = g.game_year - 1
     where ls.batter_id is not null

@@ -445,10 +445,10 @@ pitcher_archetype as (
         pp.pitcher_id,
         coalesce(pc1.cluster_label, pc2.cluster_label) as starter_pitcher_archetype
     from probable_pitchers pp
-    left join {{ source('statsapi', 'pitcher_clusters') }} pc1
+    left join {{ source('lakehouse_clusters', 'pitcher_clusters') }} pc1
         on  pc1.pitcher_id = pp.pitcher_id
         and pc1.season     = year(pp.game_date) - 1
-    left join {{ source('statsapi', 'pitcher_clusters') }} pc2
+    left join {{ source('lakehouse_clusters', 'pitcher_clusters') }} pc2
         on  pc2.pitcher_id = pp.pitcher_id
         and pc2.season     = year(pp.game_date) - 2
 ),

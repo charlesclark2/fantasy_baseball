@@ -936,6 +936,28 @@ sources:
           scripts/ingest_oaa.py. Grain: team_abbrev × game_year. Season-level
           totals only (not daily rolling). OAA coverage begins 2016 (Statcast era).
 
+  - name: lakehouse_clusters
+    database: baseball_data
+    schema: lakehouse_ext
+    description: >
+      E11.1-W7a — batter/pitcher k-means cluster assignments served from the S3
+      lakehouse as EXTERNAL TABLES (over the cluster_batters/cluster_pitchers `--s3`
+      parquet; DDL: scripts/ddl/generate_w7_external_tables.py). The feature models
+      read clusters from here instead of native statsapi.{batter,pitcher}_clusters,
+      so the native Snowflake cluster builds can be DROPPED (run cluster_*.py with
+      `--s3` only). Same (batter_id|pitcher_id, season) grain + columns as the native
+      tables — value-identical (same builder, same parquet). lakehouse_ext is S3-backed
+      so a CREATE OR REPLACE never strips its grant the way native staging did (INC-18).
+    tables:
+      - name: batter_clusters
+        description: >
+          One row per batter_id × season (lakehouse_ext external table over
+          batter_clusters/data.parquet). cluster_label is the human-readable archetype.
+      - name: pitcher_clusters
+        description: >
+          One row per pitcher_id × season (lakehouse_ext external table over
+          pitcher_clusters/data.parquet). cluster_label is the human-readable archetype.
+
   - name: betting
     database: baseball_data
     schema: betting

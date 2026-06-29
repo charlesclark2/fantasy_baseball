@@ -50,6 +50,17 @@ def _target_env() -> str:
     return os.environ.get("TARGET_ENV", "dev")
 
 
+def _w7a_s3_args() -> list[str]:
+    # E11.1-W7a: when W7A_LAKEHOUSE_S3=1, the matchup-signal consumers + the archetype
+    # posterior builder READ the cluster / posterior / pitch substrate from the S3 lakehouse
+    # (DuckDB) instead of native Snowflake — so the operator can DROP the native
+    # cluster_batters/cluster_pitchers/compute_archetype_posteriors Snowflake builds (the W7a
+    # credit drop). The SCD-2 / posterior WRITES stay on Snowflake. Default OFF so merging the
+    # code is a no-op until the operator creates the W7 external tables, seeds the S3 parquet,
+    # and validates parity (mirrors the W6_LAKEHOUSE_INTRADAY cutover gate).
+    return ["--s3"] if os.environ.get("W7A_LAKEHOUSE_S3") == "1" else []
+
+
 def _recent_completed_dates() -> list[str]:
     # Sub-model signal generators are anchored on mart_game_results, which is
     # pitch-derived (completed games only). After ingest_statcast + dbt_daily_build,
@@ -399,7 +410,7 @@ def generate_matchup_signals_op(context):
     env = _target_env()
     for d in _recent_completed_dates():
         _run_script(context, "/app/betting_ml/scripts/eb_priors/generate_matchup_signals.py",
-                    ["--date", d, "--env", env])
+                    ["--date", d, "--env", env] + _w7a_s3_args())
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing), tags=_SUB_MODEL_OP_TAGS)
@@ -536,7 +547,8 @@ def update_team_posteriors_op(context):
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def update_matchup_cell_posteriors_op(context):
-    _run_script(context, f"{_SEQ_DIR}/update_matchup_cell_posteriors.py", ["--date", _one_day_ago()])
+    _run_script(context, f"{_SEQ_DIR}/update_matchup_cell_posteriors.py",
+                ["--date", _one_day_ago()] + _w7a_s3_args())
 
 
 # INC-2 (2026-06-22): compute_archetype_posteriors.py had NO scheduled caller and
@@ -557,7 +569,8 @@ def update_archetype_posteriors_op(context):
     # the table goes stale. INC (2026-06-23): the op HALTed the whole daily job when the
     # centroids/scaler pkls were missing from the image — now loaded from S3 + non-blocking.
     try:
-        _run_script(context, f"{_EB_DIR}/compute_archetype_posteriors.py", ["--mode", "today"])
+        _run_script(context, f"{_EB_DIR}/compute_archetype_posteriors.py",
+                    ["--mode", "today"] + _w7a_s3_args())
     except Exception as exc:  # noqa: BLE001 — peripheral; never block the serving pipeline.
         context.log.warning(
             "WARNING: update_archetype_posteriors_op failed; continuing without a fresh "

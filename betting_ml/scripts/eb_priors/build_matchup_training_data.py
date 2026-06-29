@@ -113,7 +113,74 @@ ORDER BY season, batter_cluster_label, pitcher_cluster_label
 """
 
 
-def _run_query(conn, sql: str, params: dict) -> list[dict]:
+# ── E11.1-W7a lakehouse: read-on-DuckDB ───────────────────────────────────────
+# `--s3` repoints the hard-MAP + soft-weighted source reads at S3 parquet via DuckDB so the
+# training-data build runs off-Snowflake. There is no Snowflake write here (the only output is
+# the local CSV), so --s3 is purely a read-side swap.
+_S3_BUCKET = "baseball-betting-ml-artifacts"
+_LAKEHOUSE = f"s3://{_S3_BUCKET}/baseball/lakehouse"
+
+_S3_SOURCE_TABLES = [
+    "mart_pitch_play_event",
+    "batter_clusters",
+    "pitcher_clusters",
+    "stg_batter_pitches",
+    "mart_batter_archetype_vs_pitcher_cluster",
+]
+
+
+def _get_duckdb():
+    import duckdb
+    duck = duckdb.connect()
+    duck.execute("INSTALL httpfs; LOAD httpfs")
+    duck.execute(
+        "CREATE OR REPLACE SECRET baseball_s3 "
+        "(TYPE S3, PROVIDER credential_chain, REGION 'us-east-2')"
+    )
+    for _p in ("SET http_timeout=600000", "SET http_retries=8",
+               "SET preserve_insertion_order=false"):
+        try:
+            duck.execute(_p)
+        except Exception:
+            pass
+    return duck
+
+
+def _register_s3_views(duck) -> None:
+    for name in _S3_SOURCE_TABLES:
+        glob = f"{_LAKEHOUSE}/{name}/**/*.parquet"
+        duck.execute(
+            f"CREATE OR REPLACE VIEW {name} AS "
+            f"SELECT * FROM read_parquet('{glob}', union_by_name=true)"
+        )
+
+
+def _duck_sql_for(sql: str) -> str:
+    """Rewrite the hard/soft Snowflake source queries for DuckDB: bare-name views,
+    YEAR(game_date)→year(game_date::date) (parquet game_date is VARCHAR), and the named
+    %(min_season)s/%(max_season)s params are substituted as literals by the caller."""
+    import re
+    s = sql
+    s = s.replace("baseball_data.betting.mart_pitch_play_event", "mart_pitch_play_event")
+    s = s.replace("baseball_data.statsapi.batter_clusters", "batter_clusters")
+    s = s.replace("baseball_data.statsapi.pitcher_clusters", "pitcher_clusters")
+    s = s.replace("baseball_data.betting.stg_batter_pitches", "stg_batter_pitches")
+    s = s.replace("baseball_data.betting.mart_batter_archetype_vs_pitcher_cluster",
+                  "mart_batter_archetype_vs_pitcher_cluster")
+    s = re.sub(r"YEAR\(\s*game_date\s*\)", "year(game_date::date)", s)
+    return s
+
+
+def _run_query(conn, sql: str, params: dict, duck=None) -> list[dict]:
+    # E11.1-W7a: --s3 reads from S3 parquet via DuckDB (named params substituted as literal
+    # ints — DuckDB execute here uses string substitution, not paramstyle).
+    if duck is not None:
+        s = _duck_sql_for(sql)
+        s = s.replace("%(min_season)s", str(int(params["min_season"])))
+        s = s.replace("%(max_season)s", str(int(params["max_season"])))
+        cur = duck.execute(s)
+        cols = [d[0].lower() for d in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
     cur = conn.cursor()
     cur.execute(sql, params)
     cols = [d[0].lower() for d in cur.description]
@@ -274,6 +341,9 @@ def main() -> None:
     parser.add_argument("--min-season", type=int, default=2021)
     parser.add_argument("--max-season", type=int, default=2025)
     parser.add_argument("--dry-run", action="store_true", help="Print report but do not write CSV")
+    parser.add_argument("--s3", action="store_true",
+                        help="E11.1-W7a: read source tables from S3 parquet via DuckDB "
+                             "(no Snowflake). Output CSV path is unchanged.")
     args = parser.parse_args()
 
     print(f"Loading EB priors from {_EB_PRIORS_PATH.name}...")
@@ -281,19 +351,29 @@ def main() -> None:
     g = eb["global"]
     print(f"  grand_mean={g['grand_mean_xwoba']:.4f}  σ_interaction={g['sigma_interaction']:.4f}  k_ratio={g['k_ratio']:.0f}")
 
-    print(f"\nQuerying Snowflake ({args.min_season}–{args.max_season})...")
-    conn = get_snowflake_connection()
     params = {"min_season": args.min_season, "max_season": args.max_season}
+    conn = None
+    duck = None
+    if args.s3:
+        print(f"\n[--s3] Reading sources from S3 lakehouse via DuckDB ({args.min_season}–{args.max_season})...")
+        duck = _get_duckdb()
+        _register_s3_views(duck)
+    else:
+        print(f"\nQuerying Snowflake ({args.min_season}–{args.max_season})...")
+        conn = get_snowflake_connection()
     try:
         print("  Running hard MAP query (mart_pitch_play_event + batter/pitcher_clusters)...")
-        hard_rows = _run_query(conn, _HARD_MAP_SQL, params)
+        hard_rows = _run_query(conn, _HARD_MAP_SQL, params, duck=duck)
         print(f"  {len(hard_rows)} rows")
 
         print("  Running soft-weighted query (mart_batter_archetype_vs_pitcher_cluster)...")
-        soft_rows = _run_query(conn, _SOFT_SQL, params)
+        soft_rows = _run_query(conn, _SOFT_SQL, params, duck=duck)
         print(f"  {len(soft_rows)} rows")
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
+        if duck is not None:
+            duck.close()
 
     if not hard_rows:
         print("ERROR: no hard MAP rows. Check batter_clusters/pitcher_clusters have prior-season coverage (game_year - 1).")

@@ -101,6 +101,96 @@ _SOURCE_MARGINALS_ONLY  = 0.0   # no posterior data; uniform priors
 _SOURCE_HISTORICAL_EB   = 1.0   # Ridge model static cell means (no sequential update yet)
 _SOURCE_SEQUENTIAL      = 2.0   # sequential current-season posteriors from Story 8.5
 
+# ── E11.1-W7a lakehouse: read-on-DuckDB ───────────────────────────────────────
+# `--s3` repoints the matchup-signal SOURCE reads (the cell-feature substrate, the games
+# spine, and the archetype posteriors) at S3 parquet via DuckDB so the operator can stop
+# running the Snowflake builds of batter_clusters/pitcher_clusters/mart_player_archetype_posteriors.
+# The WRITES stay on Snowflake: the matchup_cell_sequential_posteriors read (_load_seq_cell_posteriors)
+# and the SCD-2 write to mart_sub_model_signals are UNCHANGED — so in --s3 mode the script holds
+# BOTH a DuckDB connection (S3 reads) and a Snowflake connection (seq-posteriors read + final write).
+_S3_BUCKET = "baseball-betting-ml-artifacts"
+_LAKEHOUSE = f"s3://{_S3_BUCKET}/baseball/lakehouse"
+
+# Source tables this script reads (all repointed to S3 in --s3 mode). union_by_name=true with the
+# **/*.parquet glob matches both partitioned layouts and single-file data.parquet layouts.
+# E11.1-W7a: ONLY the source tables that actually exist in the S3 lakehouse get a DuckDB view.
+# `stg_statsapi_probable_pitchers` + `stg_statsapi_lineups_wide` are NOT migrated (Snowflake-only
+# staging — verified via `aws s3 ls .../lakehouse/`; only `stg_statsapi_lineups`, the long flatten,
+# is in S3). They're read ONLY by _GAMES_SQL → which stays on Snowflake in --s3 mode (see run()).
+# This does NOT keep any dual-write builder alive: the credit-drop tables (batter_clusters,
+# pitcher_clusters, mart_player_archetype_posteriors) are all here and read off S3 below.
+_S3_SOURCE_TABLES = [
+    "mart_pitch_play_event",
+    "stg_batter_pitches",
+    "mart_batter_archetype_vs_pitcher_cluster",
+    "batter_clusters",
+    "pitcher_clusters",
+    "mart_player_archetype_posteriors",
+]
+
+
+def _get_duckdb():
+    import duckdb
+    duck = duckdb.connect()
+    duck.execute("INSTALL httpfs; LOAD httpfs")
+    duck.execute(
+        "CREATE OR REPLACE SECRET baseball_s3 "
+        "(TYPE S3, PROVIDER credential_chain, REGION 'us-east-2')"
+    )
+    for _p in ("SET http_timeout=600000", "SET http_retries=8",
+               "SET preserve_insertion_order=false"):
+        try:
+            duck.execute(_p)
+        except Exception:
+            pass
+    return duck
+
+
+def _register_s3_views(duck) -> None:
+    """Register every source table this script reads as a DuckDB view under its bare Snowflake
+    name, so _duck_sql_for's table-name rewrite resolves."""
+    for name in _S3_SOURCE_TABLES:
+        glob = f"{_LAKEHOUSE}/{name}/**/*.parquet"
+        duck.execute(
+            f"CREATE OR REPLACE VIEW {name} AS "
+            f"SELECT * FROM read_parquet('{glob}', union_by_name=true)"
+        )
+
+
+def _duck_sql_for(sql: str) -> str:
+    """Rewrite a Snowflake matchup-source query to its DuckDB equivalent: point the
+    fully-qualified tables at the registered bare-name views, translate Snowflake-only SQL
+    (YEAR(), CURRENT_DATE()), and cast the VARCHAR parquet game_date to DATE wherever it
+    crosses an engine type boundary (date comparisons in _GAMES_SQL)."""
+    import re
+    s = sql
+    s = s.replace("baseball_data.betting.mart_pitch_play_event", "mart_pitch_play_event")
+    s = s.replace("baseball_data.betting.stg_batter_pitches", "stg_batter_pitches")
+    s = s.replace("baseball_data.betting.mart_batter_archetype_vs_pitcher_cluster",
+                  "mart_batter_archetype_vs_pitcher_cluster")
+    s = s.replace("baseball_data.statsapi.batter_clusters", "batter_clusters")
+    s = s.replace("baseball_data.statsapi.pitcher_clusters", "pitcher_clusters")
+    s = s.replace("baseball_data.betting.mart_game_results", "mart_game_results")
+    s = s.replace("baseball_data.betting.stg_statsapi_probable_pitchers",
+                  "stg_statsapi_probable_pitchers")
+    s = s.replace("baseball_data.betting.stg_statsapi_lineups_wide", "stg_statsapi_lineups_wide")
+    s = s.replace("baseball_data.betting.mart_player_archetype_posteriors",
+                  "mart_player_archetype_posteriors")
+    s = s.replace("CURRENT_DATE()", "current_date")
+    # YEAR(game_date) → year(game_date::date): parquet game_date is VARCHAR.
+    s = re.sub(r"YEAR\(\s*game_date\s*\)", "year(game_date::date)", s)
+    # _GAMES_SQL date-range filter compares g.game_date (VARCHAR in parquet) to literal dates.
+    s = re.sub(r"g\.game_date\s*>=", "g.game_date::date >=", s)
+    s = re.sub(r"g\.game_date\s*<=", "g.game_date::date <=", s)
+    return s
+
+
+def _fetch_duck(duck, sql: str) -> list[dict]:
+    cur = duck.execute(sql)
+    cols = [d[0].lower() for d in cur.description]
+    return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+
 _SEQ_POSTERIORS_TABLE = "baseball_data.betting.matchup_cell_sequential_posteriors"
 
 _SEQ_POSTERIORS_SQL = """
@@ -257,22 +347,35 @@ WHERE rn = 1
 """
 
 
-def _build_cell_df(conn, prior_season: int, eb: dict) -> pd.DataFrame:
+def _build_cell_df(conn, prior_season: int, eb: dict, duck=None) -> pd.DataFrame:
     """
     Build a 25-row cell feature DataFrame for `prior_season` (= game_year - 1).
     Features mirror the training data produced by build_matchup_training_data.py.
+
+    E11.1-W7a: when `duck` is provided (--s3), the hard/soft cell SQL reads from S3 parquet
+    via DuckDB (named %(season)s param substituted as a literal int — DuckDB execute here
+    uses string substitution, not paramstyle). `conn` (Snowflake) is unused in that mode.
     """
-    cur = conn.cursor()
+    if duck is not None:
+        hard_sql = _duck_sql_for(_CELL_HARD_SQL).replace("%(season)s", str(int(prior_season)))
+        hard_list = _fetch_duck(duck, hard_sql)
+        hard_rows = {(r["batter_cluster_label"], r["pitcher_cluster_label"]): r for r in hard_list}
 
-    cur.execute(_CELL_HARD_SQL, {"season": prior_season})
-    cols = [d[0].lower() for d in cur.description]
-    hard_rows = {(r[0], r[1]): dict(zip(cols, r)) for r in cur.fetchall()}
+        soft_sql = _duck_sql_for(_CELL_SOFT_SQL).replace("%(season)s", str(int(prior_season)))
+        soft_list = _fetch_duck(duck, soft_sql)
+        soft_rows = {(r["batter_cluster_label"], r["pitcher_cluster_label"]): r for r in soft_list}
+    else:
+        cur = conn.cursor()
 
-    cur.execute(_CELL_SOFT_SQL, {"season": prior_season})
-    cols = [d[0].lower() for d in cur.description]
-    soft_rows = {(r[0], r[1]): dict(zip(cols, r)) for r in cur.fetchall()}
+        cur.execute(_CELL_HARD_SQL, {"season": prior_season})
+        cols = [d[0].lower() for d in cur.description]
+        hard_rows = {(r[0], r[1]): dict(zip(cols, r)) for r in cur.fetchall()}
 
-    cur.close()
+        cur.execute(_CELL_SOFT_SQL, {"season": prior_season})
+        cols = [d[0].lower() for d in cur.description]
+        soft_rows = {(r[0], r[1]): dict(zip(cols, r)) for r in cur.fetchall()}
+
+        cur.close()
 
     grand_mean    = eb["global"]["grand_mean_xwoba"]
     batt_effects  = eb["batter_effects"]
@@ -420,7 +523,12 @@ ORDER BY g.game_date, g.game_pk
 """
 
 
-def _load_games(conn, start_date: str, end_date: str) -> list[dict]:
+def _load_games(conn, start_date: str, end_date: str, duck=None) -> list[dict]:
+    # E11.1-W7a: --s3 reads the games spine from S3 parquet via DuckDB. _GAMES_SQL already
+    # interpolates the dates literally (.format); _duck_sql_for adds the g.game_date::date casts.
+    if duck is not None:
+        sql = _duck_sql_for(_GAMES_SQL.format(start_date=start_date, end_date=end_date))
+        return _fetch_duck(duck, sql)
     cur = conn.cursor()
     cur.execute(_GAMES_SQL.format(start_date=start_date, end_date=end_date))
     cols = [d[0].lower() for d in cur.description]
@@ -446,13 +554,20 @@ ORDER BY player_id, player_type, as_of_date
 """
 
 
-def _load_posteriors(conn, season: int) -> dict[tuple[int, str], list[dict]]:
-    """Return {(player_id, player_type): [rows sorted asc by as_of_date]}."""
-    cur = conn.cursor()
-    cur.execute(_POSTERIORS_SQL, {"season": season})
-    cols = [d[0].lower() for d in cur.description]
-    rows = [dict(zip(cols, r)) for r in cur.fetchall()]
-    cur.close()
+def _load_posteriors(conn, season: int, duck=None) -> dict[tuple[int, str], list[dict]]:
+    """Return {(player_id, player_type): [rows sorted asc by as_of_date]}.
+
+    E11.1-W7a: --s3 reads mart_player_archetype_posteriors from S3 parquet via DuckDB.
+    """
+    if duck is not None:
+        sql = _duck_sql_for(_POSTERIORS_SQL).replace("%(season)s", str(int(season)))
+        rows = _fetch_duck(duck, sql)
+    else:
+        cur = conn.cursor()
+        cur.execute(_POSTERIORS_SQL, {"season": season})
+        cols = [d[0].lower() for d in cur.description]
+        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+        cur.close()
 
     index: dict[tuple[int, str], list[dict]] = {}
     for r in rows:
@@ -623,13 +738,26 @@ def _signals_for_side(
 
 # ── Main orchestration ─────────────────────────────────────────────────────────
 
-def run(start_date: str, end_date: str, env: str, dry_run: bool) -> None:
+def run(start_date: str, end_date: str, env: str, dry_run: bool, use_s3: bool = False) -> None:
     target_table, temp_table = _resolve_tables(env)
+
+    # E11.1-W7a: in --s3 mode the SOURCE reads come from S3 via this DuckDB connection;
+    # the seq-posteriors read + SCD-2 write below STILL use Snowflake.
+    duck = None
+    if use_s3:
+        print("\n[--s3] Reading matchup sources from S3 lakehouse via DuckDB...")
+        duck = _get_duckdb()
+        _register_s3_views(duck)
 
     print("\nLoading artifacts...")
     artifact, eb = _load_artifacts()
 
     print(f"\nLoading games {start_date} → {end_date}...")
+    # E11.1-W7a: _GAMES_SQL joins stg_statsapi_probable_pitchers + stg_statsapi_lineups_wide,
+    # which are NOT in the S3 lakehouse (Snowflake-only staging) → load the games spine from
+    # Snowflake even in --s3 mode. mart_game_results in this query is a lakehouse_ext view
+    # (S3-backed), so it's a view scan, not a native CTAS, and keeps no dual-write builder alive
+    # (the credit-drop cluster/posterior tables are read from S3 in the per-season loop below).
     conn = get_snowflake_connection()
     try:
         games = _load_games(conn, start_date, end_date)
@@ -654,22 +782,42 @@ def run(start_date: str, end_date: str, env: str, dry_run: bool) -> None:
         season_games  = games_by_season[season]
         print(f"\n  Season {season} ({len(season_games):,} games; cell features from prior_season={prior_season})...")
 
-        conn = get_snowflake_connection()
-        try:
+        if use_s3:
+            # E11.1-W7a: cell features + archetype posteriors from S3/DuckDB; seq-posteriors
+            # (matchup_cell_sequential_posteriors) STILL from Snowflake (write-side table).
             print(f"    Building 25-cell feature matrix (prior_season={prior_season})...")
-            cell_df = _build_cell_df(conn, prior_season, eb)
+            cell_df = _build_cell_df(None, prior_season, eb, duck=duck)
             n_cells_with_data = (cell_df["hard_n_pa"] > 0).sum()
             print(f"    {n_cells_with_data}/25 cells have hard MAP data for {prior_season}")
 
             print(f"    Loading archetype posteriors (season={season})...")
-            posteriors = _load_posteriors(conn, season)
+            posteriors = _load_posteriors(None, season, duck=duck)
             n_players  = len(posteriors)
             print(f"    {n_players:,} players with posterior records")
 
-            print(f"    Loading sequential cell posteriors for season {season}...")
-            seq_cell_posteriors = _load_seq_cell_posteriors(conn, season)
-        finally:
-            conn.close()
+            print(f"    Loading sequential cell posteriors for season {season} (Snowflake)...")
+            conn = get_snowflake_connection()
+            try:
+                seq_cell_posteriors = _load_seq_cell_posteriors(conn, season)
+            finally:
+                conn.close()
+        else:
+            conn = get_snowflake_connection()
+            try:
+                print(f"    Building 25-cell feature matrix (prior_season={prior_season})...")
+                cell_df = _build_cell_df(conn, prior_season, eb)
+                n_cells_with_data = (cell_df["hard_n_pa"] > 0).sum()
+                print(f"    {n_cells_with_data}/25 cells have hard MAP data for {prior_season}")
+
+                print(f"    Loading archetype posteriors (season={season})...")
+                posteriors = _load_posteriors(conn, season)
+                n_players  = len(posteriors)
+                print(f"    {n_players:,} players with posterior records")
+
+                print(f"    Loading sequential cell posteriors for season {season}...")
+                seq_cell_posteriors = _load_seq_cell_posteriors(conn, season)
+            finally:
+                conn.close()
 
         if seq_cell_posteriors:
             print(f"    {len(seq_cell_posteriors)} sequential posteriors found — using Story 8.5 path")
@@ -700,6 +848,9 @@ def run(start_date: str, end_date: str, env: str, dry_run: bool) -> None:
     n_sides  = n_total // n_signals
     print(f"\n  Total rows: {n_total:,}  ({n_sides:,} game-sides × {n_signals} signals)")
 
+    if duck is not None:
+        duck.close()
+
     if dry_run:
         print("\n[DRY RUN] Sample — first game, home side (7 rows):")
         for r in all_rows[:7]:
@@ -708,6 +859,7 @@ def run(start_date: str, end_date: str, env: str, dry_run: bool) -> None:
         print("[DRY RUN] Skipping Snowflake write.")
         return
 
+    # E11.1-W7a: the SCD-2 write to mart_sub_model_signals ALWAYS goes to Snowflake.
     print(f"\nWriting to {target_table}...")
     conn = get_snowflake_connection()
     try:
@@ -736,6 +888,10 @@ def main() -> None:
                         help="Target Snowflake environment (default: prod)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Compute signals but do not write to Snowflake")
+    parser.add_argument("--s3", action="store_true",
+                        help="E11.1-W7a: read matchup SOURCE tables (cell features, games "
+                             "spine, archetype posteriors) from S3 parquet via DuckDB. The "
+                             "seq-posteriors read + SCD-2 write stay on Snowflake.")
     args = parser.parse_args()
 
     if args.backfill:
@@ -744,8 +900,8 @@ def main() -> None:
     else:
         start_date = end_date = args.date
 
-    print(f"generate_matchup_signals  {start_date} → {end_date}  env={args.env}")
-    run(start_date, end_date, env=args.env, dry_run=args.dry_run)
+    print(f"generate_matchup_signals  {start_date} → {end_date}  env={args.env}  s3={args.s3}")
+    run(start_date, end_date, env=args.env, dry_run=args.dry_run, use_s3=args.s3)
 
 
 if __name__ == "__main__":
