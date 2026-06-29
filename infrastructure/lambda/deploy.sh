@@ -23,8 +23,10 @@ ZIP_PATH="$(pwd)/.lambda_build/deployment.zip"
 # Deploy via S3 — a direct --zip-file upload base64-inflates the package and hits the
 # ~70 MB request cap (the duckdb dep added in W7b pushed the zip past it). Uploading the
 # zip to S3 and pointing update-function-code at it lifts the ceiling to the 250 MB
-# unzipped quota. Override the bucket with LAMBDA_DEPLOY_BUCKET if needed.
-S3_DEPLOY_BUCKET="${LAMBDA_DEPLOY_BUCKET:-baseball-betting-ml-artifacts}"
+# unzipped quota. The bucket MUST be in the same region as the function (us-east-1) —
+# baseball-betting-ml-artifacts is us-east-2, so use the us-east-1 api-cache bucket.
+# Override with LAMBDA_DEPLOY_BUCKET if needed (must be a us-east-1 bucket).
+S3_DEPLOY_BUCKET="${LAMBDA_DEPLOY_BUCKET:-credence-prod-s3-api-cache}"
 S3_DEPLOY_KEY="lambda-deploy/${FUNCTION_NAME}.zip"
 DRY_RUN=false
 
