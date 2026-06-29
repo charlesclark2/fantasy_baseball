@@ -23,8 +23,7 @@ _ML_SCHEMA = (
     else "baseball_data.betting_ml_dev"
 )
 
-_STATUS_QUERY = f"""
-SELECT
+_STATUS_COLS = """
     run_date,
     predict_today_complete_ts,
     lineup_confirmed_complete_ts,
@@ -34,8 +33,22 @@ SELECT
     signal_completeness_score,
     avg_feature_coverage_score,
     updated_at
+"""
+
+_STATUS_QUERY = f"""
+SELECT {_STATUS_COLS}
 FROM {_ML_SCHEMA}.pipeline_status
 WHERE run_date = CURRENT_DATE
+"""
+
+# Most-recent row regardless of date — used only by the admin panel (fallback_latest)
+# so it shows the last completed run when today's row isn't written yet. The public
+# dashboard dot keeps the today-only query so it never implies stale data is "today".
+_LATEST_QUERY = f"""
+SELECT {_STATUS_COLS}
+FROM {_ML_SCHEMA}.pipeline_status
+ORDER BY run_date DESC
+LIMIT 1
 """
 
 
@@ -77,14 +90,21 @@ def _derive(row: dict | None) -> PipelineStatus:
 
 
 @router.get("/status", response_model=PipelineStatus)
-def get_pipeline_status() -> PipelineStatus:
+def get_pipeline_status(fallback_latest: bool = False) -> PipelineStatus:
     """Return today's prediction freshness for the dashboard status indicator.
 
     Intentionally uncached — this is a liveness signal and must reflect the
     latest pipeline run. Returns the red/"running" default if no row exists yet.
+
+    fallback_latest (admin-only): when today's row isn't written yet, fall back to
+    the most recent run so the admin System Health panel shows the last completed run
+    instead of an empty/red card. The public dashboard dot leaves this False so it
+    never presents a prior day's "complete" as if it were today's.
     """
     try:
         rows = execute_query(_STATUS_QUERY)
+        if not rows and fallback_latest:
+            rows = execute_query(_LATEST_QUERY)
     except Exception:
         logger.exception("pipeline status query failed")
         return PipelineStatus()  # fail safe → red dot rather than 500

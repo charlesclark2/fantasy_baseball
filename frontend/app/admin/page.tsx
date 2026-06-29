@@ -41,6 +41,8 @@ interface ModelFreshness {
   model_name: string
   target: string
   version: string
+  registry_version: string
+  ledger_behind: boolean
   last_trained_date: string
   days_since_training: number
   status: "healthy" | "watch" | "stale"
@@ -157,7 +159,7 @@ export default function AdminPage() {
 
   const { data: pipelineStatus, isLoading: statusLoading } = useQuery<PipelineStatus>({
     queryKey: ["pipeline-status", accessToken],
-    queryFn: () => apiFetch("/pipeline/status", {}, accessToken),
+    queryFn: () => apiFetch("/pipeline/status?fallback_latest=true", {}, accessToken),
     staleTime: 60_000,
     enabled: !!accessToken && isAdmin,
   })
@@ -421,7 +423,14 @@ export default function AdminPage() {
                       <span className="block text-sm text-white font-medium truncate">
                         {m.model_name} ({m.version})
                       </span>
-                      <span className="block text-xs text-gray-500">{m.target}</span>
+                      <span className="block text-xs text-gray-500">
+                        {m.target}
+                        {m.ledger_behind && (
+                          <span className="ml-1.5 text-amber-400">
+                            · serving {m.version}, registry {m.registry_version} — reconcile ledger
+                          </span>
+                        )}
+                      </span>
                     </div>
                     <span
                       className="text-xs text-gray-500 whitespace-nowrap"

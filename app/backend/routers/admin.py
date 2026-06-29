@@ -13,6 +13,7 @@ import datetime
 import json
 import logging
 import os
+import re
 import urllib.request
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -51,7 +52,9 @@ class PipelineRun(BaseModel):
 class ModelFreshness(BaseModel):
     model_name: str
     target: str
-    version: str
+    version: str            # version actually serving (from daily_model_predictions when available)
+    registry_version: str   # version the promotion ledger (model_registry) marks current
+    ledger_behind: bool     # True when the serving version is ahead of the registry ledger
     last_trained_date: str
     days_since_training: int
     status: str  # "healthy" | "watch" | "stale"
@@ -154,7 +157,12 @@ def _dagster_runs_for_job(job: str, limit: int = 8) -> list[dict]:
     if node.get("__typename") != "Runs":
         logger.warning("Dagster GraphQL error for %s: %s", job, str(resp)[:400])
         return []
-    return node["results"]
+    # Stamp the job we queried — OSS dagit doesn't return the `dagster/job_name` tag
+    # the Cloud API did, and we already know the job from the filtered query.
+    results = node["results"]
+    for r in results:
+        r["_queried_job"] = job
+    return results
 
 
 def _dagster_status(dagster_status: str) -> str:
@@ -197,7 +205,7 @@ def pipeline_runs(_: str = Depends(get_admin_user)) -> list[PipelineRun]:
         end = r.get("endTime")
         duration = int(end - start) if (start and end) else None
         tags = {t["key"]: t["value"] for t in (r.get("tags") or [])}
-        job = tags.get("dagster/job_name") or r.get("pipelineName", "—")
+        job = tags.get("dagster/job_name") or r.get("_queried_job") or r.get("pipelineName") or "—"
         status = _dagster_status(r["status"])
         notes = ""
         if status == "failed":
@@ -219,9 +227,43 @@ def pipeline_runs(_: str = Depends(get_admin_user)) -> list[PipelineRun]:
 # ---------------------------------------------------------------------------
 
 
+def _live_served_version() -> str | None:
+    """Champion bundle version actually stamped on recent served predictions.
+
+    model_registry is a promotion ledger that can lag a champion swap (E13.11 shipped
+    v6 to S3/serving but the registry still marks v5 current). daily_model_predictions
+    records the version predict_today actually used, so it's the truthful "what's live"
+    source. Returns the highest vN seen on the last ~14 days of predictions — both
+    tiers ('pre_lineup_v6' and 'v6') normalize to v6 — or None if unavailable.
+    """
+    try:
+        rows = execute_query(
+            """
+            SELECT DISTINCT model_version
+            FROM baseball_data.betting_ml.daily_model_predictions
+            WHERE game_date >= DATEADD('day', -14, CURRENT_DATE())
+            """
+        )
+    except Exception:
+        logger.warning("daily_model_predictions version lookup failed — falling back to registry")
+        return None
+    best: int | None = None
+    for r in rows:
+        m = re.search(r"v(\d+)", str(r.get("MODEL_VERSION") or ""))
+        if m:
+            n = int(m.group(1))
+            best = n if best is None else max(best, n)
+    return f"v{best}" if best is not None else None
+
+
 @router.get("/model-freshness", response_model=list[ModelFreshness])
 def model_freshness(_: str = Depends(get_admin_user)) -> list[ModelFreshness]:
-    """Current champion models from model_registry with days_since_training."""
+    """Current champion models with days_since_training.
+
+    Version shown is the LIVE served version (from daily_model_predictions) so the
+    panel reflects what's actually serving even when the promotion ledger lags; the
+    registry version + a `ledger_behind` flag surface any mismatch for reconciliation.
+    """
     try:
         rows = execute_query(
             f"""
@@ -240,10 +282,19 @@ def model_freshness(_: str = Depends(get_admin_user)) -> list[ModelFreshness]:
         logger.exception("model_registry query failed")
         return []
 
+    live_version = _live_served_version()
+
     results: list[ModelFreshness] = []
     for row in rows:
         days = int(row.get("DAYS_SINCE") or 0)
-        if days < 30:
+        registry_version = str(row.get("MODEL_VERSION") or "—")
+        served_version = live_version or registry_version
+        ledger_behind = bool(live_version and live_version != registry_version)
+
+        if ledger_behind:
+            # Serving a version the ledger hasn't recorded — flag for reconciliation.
+            freshness_status = "watch"
+        elif days < 30:
             freshness_status = "healthy"
         elif days <= 60:
             freshness_status = "watch"
@@ -253,7 +304,9 @@ def model_freshness(_: str = Depends(get_admin_user)) -> list[ModelFreshness]:
         results.append(ModelFreshness(
             model_name=str(row.get("MODEL_NAME") or "—"),
             target=str(row.get("TARGET") or "—"),
-            version=str(row.get("MODEL_VERSION") or "—"),
+            version=served_version,
+            registry_version=registry_version,
+            ledger_behind=ledger_behind,
             last_trained_date=str(row.get("PROMOTED_DATE") or "—"),
             days_since_training=days,
             status=freshness_status,

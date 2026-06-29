@@ -57,6 +57,95 @@ class TestDagsterRepoint:
                 result = admin.pipeline_runs(_="admin")
         assert result == []
 
+    def test_pipeline_runs_uses_queried_job_name(self):
+        # OSS dagit returns no `dagster/job_name` tag → fall back to the job we queried.
+        def fake_runs(job, limit=8):
+            return [{"runId": f"r-{job}", "status": "SUCCESS",
+                     "startTime": 1.0, "endTime": 2.0, "tags": [],
+                     "_queried_job": job}]
+        with patch.object(admin, "_dagster_runs_for_job", side_effect=fake_runs):
+            runs = admin.pipeline_runs(_="admin")
+        jobs = {r.job_name for r in runs}
+        assert "daily_ingestion_job" in jobs
+        assert "lineup_monitor_job" in jobs
+        assert "—" not in jobs
+
+
+# ---------------------------------------------------------------------------
+# 4. Model freshness — live served version vs stale registry ledger
+# ---------------------------------------------------------------------------
+
+class TestLiveServedVersion:
+    def test_normalizes_tiers_and_picks_highest(self):
+        rows = [{"MODEL_VERSION": "pre_lineup_v6"}, {"MODEL_VERSION": "v6"},
+                {"MODEL_VERSION": "v5"}, {"MODEL_VERSION": "pre_lineup_v1"}]
+        with patch.object(admin, "execute_query", return_value=rows):
+            assert admin._live_served_version() == "v6"
+
+    def test_returns_none_on_query_failure(self):
+        with patch.object(admin, "execute_query", side_effect=Exception("no table")):
+            assert admin._live_served_version() is None
+
+    def test_model_freshness_shows_served_version_and_flags_stale_ledger(self):
+        registry_rows = [{"TARGET": "home_win", "MODEL_NAME": "xgb_classifier_market_blind",
+                          "MODEL_VERSION": "v5", "PROMOTED_DATE": "2026-06-12", "DAYS_SINCE": 17}]
+        with patch.object(admin, "execute_query", return_value=registry_rows), \
+             patch.object(admin, "_live_served_version", return_value="v6"):
+            out = admin.model_freshness(_="admin")
+        row = out[0]
+        assert row.version == "v6"            # what's actually serving
+        assert row.registry_version == "v5"   # what the ledger records
+        assert row.ledger_behind is True
+        assert row.status == "watch"          # mismatch surfaced, not silently "healthy"
+
+    def test_model_freshness_no_flag_when_in_sync(self):
+        registry_rows = [{"TARGET": "home_win", "MODEL_NAME": "m",
+                          "MODEL_VERSION": "v6", "PROMOTED_DATE": "2026-06-20", "DAYS_SINCE": 9}]
+        with patch.object(admin, "execute_query", return_value=registry_rows), \
+             patch.object(admin, "_live_served_version", return_value="v6"):
+            out = admin.model_freshness(_="admin")
+        assert out[0].ledger_behind is False
+        assert out[0].status == "healthy"
+
+
+# ---------------------------------------------------------------------------
+# 5. Pipeline status — opt-in fallback_latest (admin) leaves dashboard untouched
+# ---------------------------------------------------------------------------
+
+class TestPipelineStatusFallback:
+    def test_fallback_queries_latest_only_when_today_missing(self):
+        import app.backend.routers.pipeline as pipe
+        calls = []
+
+        def fake_execute(sql):
+            calls.append(sql)
+            if "CURRENT_DATE" in sql:
+                return []  # no row for today
+            return [{"RUN_DATE": "2026-06-28", "PIPELINE_STATUS": "complete",
+                     "N_GAMES_SCORED": 15, "N_QUALIFIED_BETS": 37,
+                     "LINEUP_CONFIRMED_COMPLETE_TS": None,
+                     "PREDICT_TODAY_COMPLETE_TS": "2026-06-28T13:08:42"}]
+
+        with patch.object(pipe, "execute_query", side_effect=fake_execute):
+            status = pipe.get_pipeline_status(fallback_latest=True)
+        # Two queries: today (empty) then the latest fallback.
+        assert len(calls) == 2 and "ORDER BY run_date DESC" in calls[1]
+        assert status.n_games_scored == 15
+
+    def test_dashboard_default_does_not_fall_back(self):
+        import app.backend.routers.pipeline as pipe
+        calls = []
+
+        def fake_execute(sql):
+            calls.append(sql)
+            return []  # nothing for today
+
+        with patch.object(pipe, "execute_query", side_effect=fake_execute):
+            status = pipe.get_pipeline_status()  # default fallback_latest=False
+        # Only the today query runs — no fallback for the public dot.
+        assert len(calls) == 1
+        assert status.indicator == "red"
+
 
 # ---------------------------------------------------------------------------
 # 2. Snowflake credit calc — daily 10% cloud-services rule
