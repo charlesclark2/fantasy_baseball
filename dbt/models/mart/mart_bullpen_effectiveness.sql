@@ -198,6 +198,17 @@ team_date as (
 ),
 
 -- Rolling effectiveness windows; upper bound = 1 day prior (no leakage)
+-- INC-19 TYPE CONTRACT: every rolling column is explicitly ::double. The W5
+-- lakehouse migration moved these from the old native-Snowflake build (where the
+-- integer-derived rolls — k/bb/hard_hit/whiff = round(int/int,4) → NUMBER(38,4),
+-- innings = round(.../3.0,1) → NUMBER(38,1)) to the DuckDB branch, where the same
+-- expressions yield DOUBLE → parquet → Snowflake FLOAT. That NUMBER→FLOAT shift
+-- HALTed the downstream `sync_all_columns` incremental feature_pregame_game_features_raw
+-- (INC-19: "cannot change column HOME_BP_K_PCT_14D from NUMBER(38,4) to FLOAT"). The
+-- explicit ::double pins the lakehouse-native FLOAT so the type can't silently drift
+-- again on a future refactor/migration. ::double (NOT ::float — that's 32-bit in DuckDB
+-- and would break the W5 value parity, see project_e11_1_w6_lakehouse). Value-preserving
+-- no-op today (the divisions already produce DOUBLE); the cast is the durable lock.
 rolling as (
 
     select
@@ -216,7 +227,7 @@ rolling as (
                           and interval '1 day'  preceding
             ), 0),
             4
-        )                                                       as k_pct_14d,
+        )::double                                               as k_pct_14d,
 
         round(
             sum(walks) over (
@@ -229,7 +240,7 @@ rolling as (
                           and interval '1 day'  preceding
             ), 0),
             4
-        )                                                       as bb_pct_14d,
+        )::double                                               as bb_pct_14d,
 
         round(
             sum(xwoba_numerator) over (
@@ -242,7 +253,7 @@ rolling as (
                           and interval '1 day'  preceding
             ), 0),
             4
-        )                                                       as xwoba_against_14d,
+        )::double                                               as xwoba_against_14d,
 
         round(
             sum(hard_hit_balls) over (
@@ -255,7 +266,7 @@ rolling as (
                           and interval '1 day'  preceding
             ), 0),
             4
-        )                                                       as hard_hit_pct_14d,
+        )::double                                               as hard_hit_pct_14d,
 
         round(
             sum(swing_and_misses) over (
@@ -268,7 +279,7 @@ rolling as (
                           and interval '1 day'  preceding
             ), 0),
             4
-        )                                                       as whiff_rate_14d,
+        )::double                                               as whiff_rate_14d,
 
         round(
             coalesce(sum(outs_recorded) over (
@@ -277,7 +288,7 @@ rolling as (
                           and interval '1 day'  preceding
             ), 0) / 3.0,
             1
-        )                                                       as innings_pitched_14d,
+        )::double                                               as innings_pitched_14d,
 
         -- ── 30-day rolling ──────────────────────────────────────────────────────
         round(
@@ -291,7 +302,7 @@ rolling as (
                           and interval '1 day'  preceding
             ), 0),
             4
-        )                                                       as k_pct_30d,
+        )::double                                               as k_pct_30d,
 
         round(
             sum(walks) over (
@@ -304,7 +315,7 @@ rolling as (
                           and interval '1 day'  preceding
             ), 0),
             4
-        )                                                       as bb_pct_30d,
+        )::double                                               as bb_pct_30d,
 
         round(
             sum(xwoba_numerator) over (
@@ -317,7 +328,7 @@ rolling as (
                           and interval '1 day'  preceding
             ), 0),
             4
-        )                                                       as xwoba_against_30d,
+        )::double                                               as xwoba_against_30d,
 
         round(
             sum(hard_hit_balls) over (
@@ -330,7 +341,7 @@ rolling as (
                           and interval '1 day'  preceding
             ), 0),
             4
-        )                                                       as hard_hit_pct_30d,
+        )::double                                               as hard_hit_pct_30d,
 
         round(
             sum(swing_and_misses) over (
@@ -343,7 +354,7 @@ rolling as (
                           and interval '1 day'  preceding
             ), 0),
             4
-        )                                                       as whiff_rate_30d,
+        )::double                                               as whiff_rate_30d,
 
         round(
             coalesce(sum(outs_recorded) over (
@@ -352,7 +363,7 @@ rolling as (
                           and interval '1 day'  preceding
             ), 0) / 3.0,
             1
-        )                                                       as innings_pitched_30d
+        )::double                                               as innings_pitched_30d
 
     from team_date
 
@@ -368,7 +379,7 @@ eb_bullpen as (
         round(
             n_relievers / nullif(n_relievers + n_prior_only, 0),
             4
-        )                                                       as eb_bullpen_coverage_pct
+        )::double                                               as eb_bullpen_coverage_pct
     from read_parquet('{{ lakehouse_loc("eb_bullpen_team_posteriors") }}**/*.parquet', union_by_name=true)  -- A2.11 dbt model; W5 reads its S3 mirror
 
 )

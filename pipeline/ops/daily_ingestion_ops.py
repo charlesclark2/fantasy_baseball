@@ -61,6 +61,30 @@ def _w7a_s3_args() -> list[str]:
     return ["--s3"] if os.environ.get("W7A_LAKEHOUSE_S3") == "1" else []
 
 
+def _w7b_serving_on() -> bool:
+    # E11.1-W7b: the cutover switch. When 1, the DAILY prediction/serving READ path
+    # (predict_today_morning + write_serving_store_op) reads the S3 lakehouse via DuckDB
+    # instead of Snowflake. Default OFF so merging is a no-op until the operator validates the
+    # multi-day parallel run (scripts/parity_check_w7b.py) and flips it (mirrors W7A_LAKEHOUSE_S3
+    # / W6_LAKEHOUSE_INTRADAY). Snowflake stays the instant rollback (set back to 0).
+    return os.environ.get("W7B_LAKEHOUSE_S3") == "1"
+
+
+def _w7b_mirror_on() -> bool:
+    # The feature + predictions S3 export-mirrors (export_features_to_s3 / export_w6
+    # daily_model_predictions) run when serving is ON (the --s3 readers need fresh S3) OR during
+    # the parallel run (W7B_LAKEHOUSE_PARALLEL=1) so parity_check_w7b has fresh S3 data to compare
+    # against Snowflake BEFORE the serving flip. Either flag populates S3; only W7B_LAKEHOUSE_S3
+    # flips the actual serving reads. (W7b-1 export-mirror keeps the dbt feature BUILD on
+    # Snowflake; W7b-2 converts the build to DuckDB and retires the mirror.)
+    return _w7b_serving_on() or os.environ.get("W7B_LAKEHOUSE_PARALLEL") == "1"
+
+
+def _w7b_s3_args() -> list[str]:
+    # E11.1-W7b: append --s3 to predict_today.py / write_serving_store.py ONLY on cutover.
+    return ["--s3"] if _w7b_serving_on() else []
+
+
 def _recent_completed_dates() -> list[str]:
     # Sub-model signal generators are anchored on mart_game_results, which is
     # pitch-derived (completed games only). After ingest_statcast + dbt_daily_build,
@@ -280,7 +304,15 @@ def run_w1_lakehouse_op(context):
     # buckets, while the intraday odds_current_rebuild path (pipeline/ops/intraday_ops.py, gated
     # W6_LAKEHOUSE_INTRADAY) rewrites ONLY _current each odds cycle so served prices stay fresh.
     _run_script(context, "export_odds_raw_to_s3.py", ["--source", "monthly_schedule"])
-    _run_script(context, "run_w1_lakehouse.py", ["--w6"])
+    # E11.1-W7b: when the S3 mirror is on, ALSO build the prediction/serving mini-wave parquet
+    # (mart_player_profile_identity injury chain + the probable_pitchers/lineups_wide serving-mart
+    # backlog) so the --s3 readers + the request-path last-resort resolve them. Requires the
+    # player_transactions precursor export (run by the operator/cutover wiring) to exist first.
+    if _w7b_mirror_on():
+        _run_script(context, "export_w7b_precursors_to_s3.py")
+        _run_script(context, "run_w1_lakehouse.py", ["--w6", "--w7b"])
+    else:
+        _run_script(context, "run_w1_lakehouse.py", ["--w6"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -660,7 +692,20 @@ def dbt_umpire_feature_rebuild(context):
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def predict_today_morning(context):
-    _run_script(context, "predict_today.py", ["--prediction-type", "morning"])
+    # E11.1-W7b: when the S3 mirror is on (parallel run or cutover), refresh the feature
+    # export-mirror BEFORE scoring so predict_today --s3 reads today's freshly-built features
+    # from S3 (the dbt feature BUILD stays on Snowflake in W7b-1; the mirror copies its OUTPUT
+    # → S3 parquet). >1 min full export — the W7b-1 export-mirror cost; W7b-2's DuckDB feature
+    # build removes it. HALT tier: a mirror failure must stop the cycle (a stale/partial S3
+    # matrix = wrong served picks), which _run_script enforces by raising on non-zero exit.
+    if _w7b_mirror_on():
+        _run_script(context, "export_features_to_s3.py")
+    _run_script(context, "predict_today.py", ["--prediction-type", "morning"] + _w7b_s3_args())
+    # Re-export predictions Snowflake→S3 AFTER scoring (predict_today still WRITES to Snowflake
+    # in W7b-1) so the downstream write_serving_store_op --s3 + the request-path last-resort serve
+    # TODAY's picks from S3 (the W6 daily_model_predictions freshness contract).
+    if _w7b_mirror_on():
+        _run_script(context, "export_w6_raw_to_s3.py", ["--table", "daily_model_predictions"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -789,10 +834,13 @@ def write_api_cache_op(context):
                 "after predictions complete. Primary read path for all FastAPI endpoints.",
 )
 def write_serving_store_op(context):
-    """Queries Snowflake and writes picks/today, picks/ev, game detail, and
-    performance/summary to the Railway PG api_cache + daily_picks tables.
-    Also writes to S3 during the transition period."""
-    _run_script(context, "write_serving_store.py")
+    """Queries Snowflake (or the S3 lakehouse via DuckDB when W7B_LAKEHOUSE_S3=1) and writes
+    picks/today, picks/ev, game detail, and performance/summary to the Railway PG api_cache +
+    daily_picks tables. Also writes to S3 during the transition period."""
+    # E11.1-W7b: --s3 reads the serving store from the S3 lakehouse on cutover. predict_today_morning
+    # has already refreshed the feature mirror + re-exported today's daily_model_predictions → S3,
+    # so today's picks are fresh. No-op until W7B_LAKEHOUSE_S3=1 (instant rollback by unsetting it).
+    _run_script(context, "write_serving_store.py", _w7b_s3_args())
 
 
 @op(
@@ -810,6 +858,13 @@ def write_serving_store_intraday_op(context):
     wasted wall-clock — those sections are static within a day and owned by the
     once-daily daily_ingestion_job. This variant cuts each intraday fire to the
     three sections that actually change when a lineup or odds update posts.
+
+    E11.1-W7b: this INTRADAY path stays on Snowflake in W7b-1 (no --s3). The export-mirror is
+    daily-cadence (a full-history feature re-export every ~10-min intraday fire is too costly),
+    and today's lineup-driven feature freshness needs the W6-style _current-bucket split or the
+    W7b-2 DuckDB feature build → so the daily morning path goes S3 first; the intraday/post-lineup
+    serving path is the documented W7b remaining tail. (The request-path last-resort that serves
+    these intraday picks IS direct-S3 — it reads the daily-mirrored parquet + the W6 intraday odds.)
     """
     _run_script(context, "write_serving_store.py", ["--picks", "--game-detail", "--book-odds"])
 

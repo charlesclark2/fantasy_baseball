@@ -766,6 +766,77 @@ def _build_w6(conn, dry_run: bool) -> None:
         _register_mart_views(conn, [model], dry_run)
 
 
+# E11.1-W7b: the prediction/serving-path mini-wave — the mart_player_profile_identity injury
+# chain + the serving-mart backlog (stg_statsapi_probable_pitchers / stg_statsapi_lineups_wide).
+# OPT-IN (--w7b) until cutover, like W3pre/W4/W5/W6: reads the player_transactions precursor
+# parquet (scripts/export_w7b_precursors_to_s3.py) + the W2/W4/W6 marts (registered as views) +
+# the monthly_schedule raw tier (already exported). Enable with --w7b once the precursor export
+# is wired and parity is validated. Each builds a single data.parquet; the Snowflake side is a
+# view over the lakehouse_ext external table (generate_w7b_external_tables.py).
+#
+# Precursor VIEWS registered (read from S3 parquet, NOT built here):
+#   • W2 marts: mart_batter_rolling_stats, mart_starting_pitcher_game_log
+#   • W4 staging: stg_statsapi_player_profiles
+#   • W6 staging: stg_statsapi_lineups
+# Read DIRECTLY via read_parquet(lakehouse_loc/raw_loc) in the duckdb branch (no registration):
+#   • player_transactions (lakehouse/), monthly_schedule (lakehouse_raw/).
+W7B_PRECURSOR_VIEWS = [
+    "mart_batter_rolling_stats",
+    "mart_starting_pitcher_game_log",
+    "stg_statsapi_player_profiles",
+    "stg_statsapi_lineups",
+]
+
+# Built in DEPENDENCY ORDER (each registered as a DuckDB view immediately after build so the next
+# model's plain-name reads resolve): the injury chain feeds mart_player_profile_identity.
+W7B_CHAIN_MODELS = [
+    "stg_statsapi_transactions",          # ← player_transactions (parquet, read_parquet lakehouse_loc)
+    "stg_statsapi_player_injury_status",  # ← stg_statsapi_transactions
+    "feature_pregame_injury_status",      # ← stg_statsapi_player_injury_status (SCD-2)
+    "mart_player_profile_identity",       # ← W2/W4/W6 precursors + feature_pregame_injury_status
+]
+
+# Independent serving-mart backlog (no intra-W7b dep): probable_pitchers flattens monthly_schedule
+# raw directly; lineups_wide pivots the registered W6 stg_statsapi_lineups view.
+W7B_BACKLOG_MODELS = [
+    "stg_statsapi_probable_pitchers",     # ← monthly_schedule raw (lakehouse_raw)
+    "stg_statsapi_lineups_wide",          # ← stg_statsapi_lineups (W6 view)
+]
+
+W7B_MODELS = W7B_CHAIN_MODELS + W7B_BACKLOG_MODELS
+
+
+def _build_w7b(conn, dry_run: bool) -> None:
+    """Build the E11.1-W7b prediction/serving mini-wave: the mart_player_profile_identity injury
+    chain (dependency-ordered, each registered as a view immediately after build) + the serving-mart
+    backlog (probable_pitchers reads monthly_schedule raw directly; lineups_wide reads the registered
+    W6 stg_statsapi_lineups). Registers the W2/W4/W6 precursor views first. The player_transactions
+    precursor parquet + monthly_schedule raw are read directly via read_parquet(lakehouse_loc/raw_loc)
+    in each duckdb branch — no registration. A missing precursor makes a build raise; W7b is gated
+    (opt-in) so the daily HALT op never trips on it pre-cutover."""
+    print("\nW7b precursor views (W2 rolling marts + W4 profiles + W6 lineups):")
+    _register_s3_glob_views(conn, W7B_PRECURSOR_VIEWS)
+
+    # The probable_pitchers flatten explodes the same large monthly_schedule month-blobs as
+    # stg_statsapi_games (the known OOM source) → cap parallelism + lower memory_limit so DuckDB
+    # spills rather than OOMing. value-identical output (every output is a parquet COPY).
+    for _pragma in ("SET threads=2", "SET memory_limit='11GB'"):
+        try:
+            conn.execute(_pragma)
+        except Exception as _e:
+            print(f"  (note: {_pragma} not applied: {_e})")
+
+    print("\nW7b injury chain → mart_player_profile_identity:")
+    for model in W7B_CHAIN_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+    print("\nW7b serving-mart backlog (probable_pitchers / lineups_wide):")
+    for model in W7B_BACKLOG_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+
 def run(
     dry_run: bool = False,
     skip_w1: bool = False,
@@ -783,6 +854,8 @@ def run(
     w6: bool = False,
     w6_only: bool = False,
     w6_odds_current: bool = False,
+    w7b: bool = False,
+    w7b_only: bool = False,
 ) -> None:
     import duckdb
 
@@ -940,6 +1013,18 @@ def run(
         print("\nW6 marts run complete (--w6-only).")
         return
 
+    # E11.1-W7b: --w7b-only rebuilds just the prediction/serving mini-wave (the
+    # mart_player_profile_identity injury chain + the probable_pitchers/lineups_wide serving-mart
+    # backlog), reusing the existing W2/W4/W6 parquet (registered as precursor views by _build_w7b)
+    # + the player_transactions precursor export + the monthly_schedule raw tier. Lets the operator
+    # iterate on W7b / re-run parity after an export, without rebuilding the heavy pitch marts.
+    if w7b_only:
+        print("\nBuilding W7b (reuse existing W2/W4/W6 parquet for --w7b-only):")
+        _build_w7b(conn, dry_run)
+        conn.close()
+        print("\nW7b mini-wave run complete (--w7b-only).")
+        return
+
     # ── W1: pitch-level marts ────────────────────────────────────────────────
     if not skip_w1:
         print("\nW1 marts:")
@@ -1010,10 +1095,20 @@ def run(
     if w6:
         _build_w6(conn, dry_run)
 
+    # ── W7b: prediction/serving mini-wave (profile_identity chain + serving backlog) — OPT-IN ──
+    # NOT built by default: reads the player_transactions precursor export
+    # (scripts/export_w7b_precursors_to_s3.py) + the W2/W4/W6 marts + monthly_schedule raw that
+    # must exist first. Enable with --w7b once the export is wired and parity is validated. The
+    # daily run_w1_lakehouse_op appends --w7b only when the W7b mirror is on (W7B_LAKEHOUSE_S3=1
+    # or W7B_LAKEHOUSE_PARALLEL=1), so an empty precursor tier can't fail the HALT-tier daily op.
+    if w7b:
+        _build_w7b(conn, dry_run)
+
     conn.close()
     print(
         f"\nW1+W2+W3{'+W3pre' if w3pre else ''}{'+W4' if w4 else ''}"
-        f"{'+W5' if w5 else ''}{'+W5b' if archetype else ''}{'+W6' if w6 else ''} "
+        f"{'+W5' if w5 else ''}{'+W5b' if archetype else ''}{'+W6' if w6 else ''}"
+        f"{'+W7b' if w7b else ''} "
         f"lakehouse run complete."
     )
 
@@ -1036,4 +1131,6 @@ if __name__ == "__main__":
         w6="--w6" in sys.argv,
         w6_only="--w6-only" in sys.argv,
         w6_odds_current="--w6-odds-current" in sys.argv,
+        w7b="--w7b" in sys.argv,
+        w7b_only="--w7b-only" in sys.argv,
     )

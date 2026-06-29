@@ -180,6 +180,21 @@ W6_ODDS_INTRADAY_TABLES = ["mart_odds_outcomes", "mart_game_odds_bridge"]
 W7_TABLES = ["batter_clusters", "pitcher_clusters"]
 W6_CLV_TABLES = ["mart_closing_line_value", "mart_prediction_clv", "mart_odds_line_movement"]
 
+# E11.1-W7b: the prediction/serving mini-wave external tables (created by
+# scripts/ddl/generate_w7b_external_tables.py over the run_w1_lakehouse.py --w7b parquet): the
+# mart_player_profile_identity injury chain + the serving-mart backlog. BEST-EFFORT (WARN if
+# missing) like W4/W5/W5b/W6/W7 during the opt-in rollout — these don't exist until the generator
+# runs, so a "does not exist" is an expected skip, NOT a HALT. PROMOTE to required once W7b is
+# default-on. (player_transactions is read via read_parquet, not a Snowflake source → no external table.)
+W7B_TABLES = [
+    "stg_statsapi_transactions",
+    "stg_statsapi_player_injury_status",
+    "feature_pregame_injury_status",
+    "mart_player_profile_identity",
+    "stg_statsapi_probable_pitchers",
+    "stg_statsapi_lineups_wide",
+]
+
 
 def _load_private_key():
     key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
