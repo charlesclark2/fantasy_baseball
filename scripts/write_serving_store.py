@@ -777,8 +777,10 @@ _LINE_MOVEMENT_SERIES_BATCH = """
 -- mart_game_odds_bridge; leakage-guarded (snapshot < commence). williamhill_us is
 -- canonicalized to 'caesars' (matches the Book Comparison key). h2h is DE-VIGGED
 -- (home_imp / (home_imp + away_imp)) so levels are comparable across books with
--- different vig; totals = the over/under line (runs). Collapsed/downsampled in
--- Python to keep the blob lean.
+-- different vig; totals carries BOTH the over/under line (runs) AND a de-vigged
+-- Over probability (E9.37c — totals lines are sticky at half-run steps; the real
+-- market move is often in the juice, which over_prob captures). Collapsed/
+-- downsampled in Python to keep the blob lean.
 -- NOTE (W7b coordination): these are W6-migrated marts read here through the
 -- established Snowflake-FQN-over-lakehouse pattern; repoint alongside the other
 -- game-detail batch reads when W7b moves write_serving_store to direct-S3.
@@ -805,21 +807,37 @@ snaps AS (
                  ELSE 100.0 / (o.outcome_price_american + 100.0)
             END
         END AS away_imp,
-        CASE WHEN o.market_key = 'totals' THEN o.outcome_point END AS total_line
+        CASE WHEN o.market_key = 'totals' THEN o.outcome_point END AS total_line,
+        CASE WHEN o.market_key = 'totals' AND o.outcome_name = 'Over' THEN
+            CASE WHEN o.outcome_price_american < 0
+                 THEN ABS(o.outcome_price_american) / (ABS(o.outcome_price_american) + 100.0)
+                 ELSE 100.0 / (o.outcome_price_american + 100.0)
+            END
+        END AS over_imp,
+        CASE WHEN o.market_key = 'totals' AND o.outcome_name = 'Under' THEN
+            CASE WHEN o.outcome_price_american < 0
+                 THEN ABS(o.outcome_price_american) / (ABS(o.outcome_price_american) + 100.0)
+                 ELSE 100.0 / (o.outcome_price_american + 100.0)
+            END
+        END AS under_imp
     FROM baseball_data.betting.mart_odds_outcomes o
     INNER JOIN bridge b ON b.event_id = o.event_id
     WHERE o.bookmaker_key IN ('pinnacle', 'betmgm', 'williamhill_us', 'fanduel', 'draftkings', 'fanatics', 'bovada')
       AND o.market_key IN ('h2h', 'totals')
       AND o.ingestion_ts < o.commence_time
 ),
+-- Group per LINE (outcome_point) so Over/Under prices pair within the same line;
+-- h2h rows have a NULL line → one group per snapshot. This avoids conflating a
+-- main line's price with a simultaneously-posted alternate line.
 agg AS (
     SELECT
-        game_pk, book, market_key, snapshot_ts,
-        MAX(home_imp)   AS home_imp,
-        MAX(away_imp)   AS away_imp,
-        MAX(total_line) AS total_line
+        game_pk, book, market_key, snapshot_ts, total_line AS line,
+        MAX(home_imp)  AS home_imp,
+        MAX(away_imp)  AS away_imp,
+        MAX(over_imp)  AS over_imp,
+        MAX(under_imp) AS under_imp
     FROM snaps
-    GROUP BY game_pk, book, market_key, snapshot_ts
+    GROUP BY game_pk, book, market_key, snapshot_ts, total_line
 )
 SELECT
     game_pk,
@@ -828,9 +846,20 @@ SELECT
     snapshot_ts,
     CASE WHEN home_imp IS NOT NULL AND away_imp IS NOT NULL AND (home_imp + away_imp) > 0
          THEN home_imp / (home_imp + away_imp) END AS home_win_prob,
-    total_line
+    CASE WHEN market_key = 'totals' THEN line END AS total_line,
+    CASE WHEN over_imp IS NOT NULL AND under_imp IS NOT NULL AND (over_imp + under_imp) > 0
+         THEN over_imp / (over_imp + under_imp) END AS over_prob
 FROM agg
-WHERE (home_imp IS NOT NULL AND away_imp IS NOT NULL) OR total_line IS NOT NULL
+WHERE (home_imp IS NOT NULL AND away_imp IS NOT NULL) OR market_key = 'totals'
+-- When a book posts >1 total line in one snapshot (alternates), keep the MAIN
+-- line: fully-priced first, then juice closest to even (the balanced market).
+QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY game_pk, book, market_key, snapshot_ts
+    ORDER BY
+        CASE WHEN market_key = 'totals' AND over_imp IS NOT NULL AND under_imp IS NOT NULL THEN 0 ELSE 1 END,
+        CASE WHEN market_key = 'totals' AND over_imp IS NOT NULL AND under_imp IS NOT NULL AND (over_imp + under_imp) > 0
+             THEN ABS(over_imp / (over_imp + under_imp) - 0.5) ELSE 0 END
+) = 1
 ORDER BY game_pk, book, market_key, snapshot_ts ASC
 """
 
@@ -1223,15 +1252,20 @@ def _int(val) -> int | None:
 _LM_SERIES_MAX_POINTS = 24
 
 
-def _downsample_series(points: list[dict], value_key: str, cap: int = _LM_SERIES_MAX_POINTS) -> list[dict]:
-    """Collapse consecutive no-change snapshots (the line frequently holds flat),
+def _downsample_series(points: list[dict], value_keys, cap: int = _LM_SERIES_MAX_POINTS) -> list[dict]:
+    """Collapse consecutive no-change snapshots (a value frequently holds flat),
     then cap to `cap` points via even stride — always pinning the first (open) and
-    last (current) snapshot. Input must be time-ordered ascending."""
+    last (current) snapshot. `value_keys` is a key (str) or list of keys — a point
+    is kept when ANY listed key changes (so totals keeps both line and juice
+    moves). Input must be time-ordered ascending."""
     if not points:
         return []
+    keys = [value_keys] if isinstance(value_keys, str) else list(value_keys)
+    def _val(p):
+        return tuple(p.get(k) for k in keys)
     deduped = [points[0]]
     for p in points[1:]:
-        if p[value_key] != deduped[-1][value_key]:
+        if _val(p) != _val(deduped[-1]):
             deduped.append(p)
     # Always keep the latest snapshot so the series ends at "current".
     if deduped[-1] is not points[-1]:
@@ -1265,13 +1299,18 @@ def _build_line_movement_series(rows: list[dict]) -> dict | None:
             if v is not None:
                 by_book[book]["h2h"].append({"ts": ts, "home_win_prob": round(v, 4)})
         elif mkt == "totals":
-            v = _flt(r.get("TOTAL_LINE"))
-            if v is not None:
-                by_book[book]["totals"].append({"ts": ts, "line": v})
+            line = _flt(r.get("TOTAL_LINE"))
+            if line is not None:
+                op = _flt(r.get("OVER_PROB"))
+                by_book[book]["totals"].append({
+                    "ts": ts, "line": line,
+                    "over_prob": round(op, 4) if op is not None else None,
+                })
     series: dict[str, dict] = {}
     for book, mkts in by_book.items():
         h2h_pts = _downsample_series(mkts["h2h"], "home_win_prob")
-        tot_pts = _downsample_series(mkts["totals"], "line")
+        # totals: keep a point when EITHER the line or the de-vigged Over% moves.
+        tot_pts = _downsample_series(mkts["totals"], ["line", "over_prob"])
         if h2h_pts or tot_pts:
             series[book] = {"h2h": h2h_pts, "totals": tot_pts}
     if not series:

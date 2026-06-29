@@ -305,6 +305,9 @@ class LineMovementSeriesH2HPoint(BaseModel):
 class LineMovementSeriesTotalsPoint(BaseModel):
     ts: str
     line: float | None = None
+    # E9.37c — de-vigged Over probability at this snapshot (captures juice moves
+    # when the line is sticky). None when only one side was posted.
+    over_prob: float | None = None
 
 
 class LineMovementSeriesBook(BaseModel):

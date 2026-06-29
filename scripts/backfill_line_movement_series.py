@@ -72,14 +72,18 @@ def _ts(val) -> str | None:
 
 
 # ── DUPLICATED from write_serving_store.py — keep in sync ─────────────────────
-def _downsample_series(points: list[dict], value_key: str, cap: int = _LM_SERIES_MAX_POINTS) -> list[dict]:
+def _downsample_series(points: list[dict], value_keys, cap: int = _LM_SERIES_MAX_POINTS) -> list[dict]:
     """Collapse consecutive no-change snapshots, then cap to `cap` points via even
-    stride — always pinning the first (open) and last (current). Time-ordered in."""
+    stride — always pinning the first (open) and last (current). `value_keys` is a
+    key or list of keys; a point is kept when ANY listed key changes. Time-ordered in."""
     if not points:
         return []
+    keys = [value_keys] if isinstance(value_keys, str) else list(value_keys)
+    def _val(p):
+        return tuple(p.get(k) for k in keys)
     deduped = [points[0]]
     for p in points[1:]:
-        if p[value_key] != deduped[-1][value_key]:
+        if _val(p) != _val(deduped[-1]):
             deduped.append(p)
     if deduped[-1] is not points[-1]:
         deduped.append(points[-1])
@@ -109,13 +113,17 @@ def _build_line_movement_series(rows: list[dict]) -> dict | None:
             if v is not None:
                 by_book[book]["h2h"].append({"ts": ts, "home_win_prob": round(v, 4)})
         elif mkt == "totals":
-            v = _flt(r.get("TOTAL_LINE"))
-            if v is not None:
-                by_book[book]["totals"].append({"ts": ts, "line": v})
+            line = _flt(r.get("TOTAL_LINE"))
+            if line is not None:
+                op = _flt(r.get("OVER_PROB"))
+                by_book[book]["totals"].append({
+                    "ts": ts, "line": line,
+                    "over_prob": round(op, 4) if op is not None else None,
+                })
     series: dict[str, dict] = {}
     for book, mkts in by_book.items():
         h2h_pts = _downsample_series(mkts["h2h"], "home_win_prob")
-        tot_pts = _downsample_series(mkts["totals"], "line")
+        tot_pts = _downsample_series(mkts["totals"], ["line", "over_prob"])
         if h2h_pts or tot_pts:
             series[book] = {"h2h": h2h_pts, "totals": tot_pts}
     if not series:
@@ -182,21 +190,36 @@ snaps AS (
                  ELSE 100.0 / (o.outcome_price_american + 100.0)
             END
         END AS away_imp,
-        CASE WHEN o.market_key = 'totals' THEN o.outcome_point END AS total_line
+        CASE WHEN o.market_key = 'totals' THEN o.outcome_point END AS total_line,
+        CASE WHEN o.market_key = 'totals' AND o.outcome_name = 'Over' THEN
+            CASE WHEN o.outcome_price_american < 0
+                 THEN abs(o.outcome_price_american) / (abs(o.outcome_price_american) + 100.0)
+                 ELSE 100.0 / (o.outcome_price_american + 100.0)
+            END
+        END AS over_imp,
+        CASE WHEN o.market_key = 'totals' AND o.outcome_name = 'Under' THEN
+            CASE WHEN o.outcome_price_american < 0
+                 THEN abs(o.outcome_price_american) / (abs(o.outcome_price_american) + 100.0)
+                 ELSE 100.0 / (o.outcome_price_american + 100.0)
+            END
+        END AS under_imp
     FROM moo o
     JOIN br b ON b.event_id = o.event_id
     WHERE o.bookmaker_key IN ('pinnacle', 'betmgm', 'williamhill_us', 'fanduel', 'draftkings', 'fanatics', 'bovada')
       AND o.market_key IN ('h2h', 'totals')
       AND o.ingestion_ts < o.commence_time
 ),
+-- Group per LINE so Over/Under prices pair within the same line (h2h line is NULL
+-- → one group/snapshot); avoids conflating a main line with a simultaneous alternate.
 agg AS (
     SELECT
-        game_pk, book, market_key, snapshot_ts,
-        max(home_imp)   AS home_imp,
-        max(away_imp)   AS away_imp,
-        max(total_line) AS total_line
+        game_pk, book, market_key, snapshot_ts, total_line AS line,
+        max(home_imp)  AS home_imp,
+        max(away_imp)  AS away_imp,
+        max(over_imp)  AS over_imp,
+        max(under_imp) AS under_imp
     FROM snaps
-    GROUP BY game_pk, book, market_key, snapshot_ts
+    GROUP BY game_pk, book, market_key, snapshot_ts, total_line
 )
 SELECT
     game_pk     AS GAME_PK,
@@ -205,9 +228,20 @@ SELECT
     snapshot_ts AS SNAPSHOT_TS,
     CASE WHEN home_imp IS NOT NULL AND away_imp IS NOT NULL AND (home_imp + away_imp) > 0
          THEN home_imp / (home_imp + away_imp) END AS HOME_WIN_PROB,
-    total_line  AS TOTAL_LINE
+    CASE WHEN market_key = 'totals' THEN line END AS TOTAL_LINE,
+    CASE WHEN over_imp IS NOT NULL AND under_imp IS NOT NULL AND (over_imp + under_imp) > 0
+         THEN over_imp / (over_imp + under_imp) END AS OVER_PROB
 FROM agg
-WHERE (home_imp IS NOT NULL AND away_imp IS NOT NULL) OR total_line IS NOT NULL
+WHERE (home_imp IS NOT NULL AND away_imp IS NOT NULL) OR market_key = 'totals'
+-- Keep the MAIN total line when a snapshot has alternates: fully-priced first,
+-- then juice closest to even.
+QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY game_pk, book, market_key, snapshot_ts
+    ORDER BY
+        CASE WHEN market_key = 'totals' AND over_imp IS NOT NULL AND under_imp IS NOT NULL THEN 0 ELSE 1 END,
+        CASE WHEN market_key = 'totals' AND over_imp IS NOT NULL AND under_imp IS NOT NULL AND (over_imp + under_imp) > 0
+             THEN abs(over_imp / (over_imp + under_imp) - 0.5) ELSE 0 END
+) = 1
 ORDER BY game_pk, book, market_key, snapshot_ts
 """
 
