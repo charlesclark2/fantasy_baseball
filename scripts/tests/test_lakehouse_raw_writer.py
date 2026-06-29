@@ -13,6 +13,8 @@ import pytest
 from utils.lakehouse_raw_writer import (
     RAW_SOURCES,
     append_raw_rows_lakehouse,
+    list_partition_dts,
+    prune_partitions,
     raw_lakehouse_loc,
     rows_to_arrow_table,
     write_raw_rows_s3,
@@ -181,3 +183,74 @@ def test_dispatcher_s3_mode_skips_snowflake(monkeypatch):
 def test_all_raw_sources_have_valid_locs():
     for s in RAW_SOURCES:
         assert raw_lakehouse_loc(s).startswith("s3://")
+
+
+# ── E11.1-W6 / INC-20: monthly_schedule retention ──────────────────────────────
+def test_latest_dt_per_month_keeps_one_latest_per_calendar_month():
+    """The retention rule: collapse accumulating daily snapshots to the latest ingestion per
+    (year, month) — value-identical under the flatten's latest-ingestion-per-game_pk dedup."""
+    from datetime import date
+
+    from export_odds_raw_to_s3 import latest_dt_per_month
+
+    dates = [
+        date(2026, 5, 12), date(2026, 5, 20), date(2026, 5, 31),   # May → keep 05-31
+        date(2026, 6, 1), date(2026, 6, 15), date(2026, 6, 28),    # Jun → keep 06-28
+        date(2026, 4, 30),                                          # Apr → keep 04-30 (only one)
+    ]
+    assert latest_dt_per_month(dates) == [date(2026, 4, 30), date(2026, 5, 31), date(2026, 6, 28)]
+    assert latest_dt_per_month([]) == []
+
+
+class _FakeS3Partitions:
+    """Fake S3 supporting list_objects_v2 pagination + delete_object, for prune tests."""
+
+    def __init__(self, keys):
+        self._keys = list(keys)
+        self.deleted = []
+
+    def get_paginator(self, _op):
+        outer = self
+
+        class P:
+            def paginate(self, Bucket, Prefix):
+                contents = [{"Key": k} for k in outer._keys if k.startswith(Prefix)]
+                return iter([{"Contents": contents}])
+
+        return P()
+
+    def delete_object(self, Bucket, Key):
+        self.deleted.append(Key)
+        self._keys.remove(Key)
+
+
+def test_list_partition_dts_parses_dt_keys():
+    keys = [
+        "baseball/lakehouse_raw/monthly_schedule/dt=2026-05-31/part-a.parquet",
+        "baseball/lakehouse_raw/monthly_schedule/dt=2026-06-28/part-b.parquet",
+        "baseball/lakehouse_raw/monthly_schedule/dt=__nullts__/part-c.parquet",
+    ]
+    assert list_partition_dts(_FakeS3Partitions(keys), "monthly_schedule") == [
+        "2026-05-31", "2026-06-28", "__nullts__",
+    ]
+
+
+def test_prune_partitions_keeps_keepset_and_nullts_deletes_rest():
+    keys = [
+        "baseball/lakehouse_raw/monthly_schedule/dt=2026-05-12/part-a.parquet",
+        "baseball/lakehouse_raw/monthly_schedule/dt=2026-05-31/part-b.parquet",
+        "baseball/lakehouse_raw/monthly_schedule/dt=2026-06-15/part-c.parquet",
+        "baseball/lakehouse_raw/monthly_schedule/dt=2026-06-28/part-d.parquet",
+        "baseball/lakehouse_raw/monthly_schedule/dt=__nullts__/part-e.parquet",
+    ]
+    fake = _FakeS3Partitions(keys)
+    deleted = prune_partitions("monthly_schedule", ["2026-05-31", "2026-06-28"], s3_client=fake)
+    # redundant same-month snapshots gone; latest-per-month + __nullts__ retained.
+    assert deleted == ["2026-05-12", "2026-06-15"]
+    assert "baseball/lakehouse_raw/monthly_schedule/dt=__nullts__/part-e.parquet" in fake._keys
+    assert "baseball/lakehouse_raw/monthly_schedule/dt=2026-05-31/part-b.parquet" in fake._keys
+
+
+def test_prune_partitions_rejects_unknown_source():
+    with pytest.raises(ValueError, match="Unknown raw source"):
+        prune_partitions("not_a_source", ["2026-06-28"], s3_client=_FakeS3Partitions([]))

@@ -36,8 +36,23 @@ Usage:
 import argparse
 
 # scripts/ is on sys.path under the runtime; import the shared utils as top-level packages.
-from utils.lakehouse_raw_writer import write_raw_rows_s3
+from utils.lakehouse_raw_writer import prune_partitions, write_raw_rows_s3
 from utils.snowflake_loader import get_snowflake_connection
+
+
+def latest_dt_per_month(dates: list) -> list:
+    """Reduce ingestion dates to the LATEST per calendar (year, month) — the monthly_schedule
+    retention rule (E11.1-W6 / INC-20). The daily run re-fetches only the CURRENT month, so a
+    month's games live in that month's ingestion partitions and the flatten keeps the latest
+    ingestion per game_pk — so only the latest ingestion date per calendar month affects the
+    output; the rest are redundant snapshots whose accumulation OOM'd the W6 flatten. Pure +
+    unit-tested."""
+    latest: dict = {}
+    for d in dates:
+        key = (d.year, d.month)
+        if key not in latest or d > latest[key]:
+            latest[key] = d
+    return sorted(latest.values())
 
 # source → (fully-qualified raw table, SELECT column SQL). VARIANT cols are TO_JSON'd to a
 # string; timestamps cast ::varchar (ISO) so the raw parquet is uniform VARCHAR for the
@@ -83,9 +98,19 @@ def export_source(conn, source: str, since: str | None, dry_run: bool) -> int:
     # date, so the per-date loop below would both fail (WHERE ... = 'None') and DROP them.
     has_null_ts = None in raw_dates
     dates = [d for d in raw_dates if d is not None]
-    print(f"\n{source}: {len(dates)} ingestion date(s) to export"
+    # E11.1-W6 / INC-20 — monthly_schedule retention: collapse the accumulating daily month
+    # snapshots to the latest ingestion per calendar month (value-identical under the flatten's
+    # latest-ingestion-per-game_pk dedup). Without this, ~50 redundant full-month snapshots
+    # (~470 MiB) pile up and the W6 DuckDB flatten OOMs (SIGKILL) on the ~750k pre-dedup
+    # fat-JSON game-rows. Stale same-month partitions are pruned from S3 after the write below.
+    retained = len(dates)
+    if source == "monthly_schedule":
+        dates = latest_dt_per_month(dates)
+        retained = len(dates)
+    print(f"\n{source}: {retained} ingestion date(s) to export"
           + (" + NULL-ts partition" if has_null_ts else "")
-          + (f" (since {since})" if since else ""))
+          + (f" (since {since})" if since else "")
+          + (" [latest-per-month retention]" if source == "monthly_schedule" else ""))
 
     total = 0
     for dt in dates:
@@ -115,6 +140,16 @@ def export_source(conn, source: str, since: str | None, dry_run: bool) -> int:
             n = write_raw_rows_s3(source, rows, mode="overwrite_partition")
             print(f"  NULL-ts: {n:,} rows → lakehouse_raw/{source}/dt=__nullts__/")
         total += len(rows)
+
+    # E11.1-W6 / INC-20 — prune stale monthly_schedule partitions so the W6 flatten reads only the
+    # latest-per-month snapshots (+ __nullts__). Only on a FULL export: a --since run sees only
+    # recent dates, so pruning to that reduced keep-set would wrongly delete older months. The keep
+    # set is the latest-per-month `dates` just written; prune_partitions always keeps __nullts__.
+    if source == "monthly_schedule" and not dry_run and since is None:
+        deleted = prune_partitions(source, [str(d) for d in dates])
+        if deleted:
+            print(f"  pruned {len(deleted)} stale monthly_schedule partition(s) "
+                  f"(latest-per-month retention): {deleted}")
 
     cur.close()
     return total
