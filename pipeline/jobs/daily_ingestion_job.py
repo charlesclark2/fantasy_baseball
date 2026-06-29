@@ -14,6 +14,7 @@ from pipeline.ops.daily_ingestion_ops import (
     dbt_pregame_odds_rebuild,
     dbt_sub_model_signals_rebuild,
     dbt_umpire_feature_rebuild,
+    export_w9_signals_to_s3_op,
     generate_bullpen_signals_op,
     generate_defense_quality_signals_op,
     generate_env_state_signals_op,
@@ -119,6 +120,11 @@ def daily_ingestion_job():
         env_state_done=sig_env_state,
         defense_quality_done=sig_defense_quality,
     )
+    # E11.1-W9 — mirror the 5 sub-model signal STORES to S3 (mart_sub_model_signals + the 4
+    # betting_features signal tables) once all 8 generators + the PIVOT rebuild have run. Fans
+    # out from the rebuild and is NEVER depended on, so a mirror failure can't block the
+    # freshness check or predictions (MIRROR tier; gated default-OFF by W9_LAKEHOUSE_S3).
+    export_w9_signals_to_s3_op(start=sig_rebuild)
     sig_fresh = signal_freshness_check(start=sig_rebuild)
     # SCD-2 update: mart_odds_outcomes is now fresh; update market features and
     # rebuild feature_pregame_odds_features before the prediction step.

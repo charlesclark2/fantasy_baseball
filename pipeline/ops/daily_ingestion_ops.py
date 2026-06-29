@@ -523,6 +523,41 @@ def dbt_sub_model_signals_rebuild(context):
     ])
 
 
+# ── E11.1-W9 — sub-model SIGNAL-STORE export-mirror → S3 ─────────────────────
+# Mirror the 5 signal stores (mart_sub_model_signals + the 4 betting_features signal
+# tables) Snowflake → S3 parquet so the W8 feature-layer consumer can read the signal
+# path from S3. ADDITIVE dual-write: the generators keep writing Snowflake (the live
+# accumulate path); this copies their OUTPUT to S3 (accumulate-safe by construction —
+# a full-table copy carries every SCD-2 history row). Gated default-OFF.
+def _w9_mirror_on() -> bool:
+    # E11.1-W9 cutover switch (default OFF → the op is a no-op until the operator validates
+    # the mirror via scripts/parity_check_w9_signals.py and flips it; mirrors W7A_LAKEHOUSE_S3 /
+    # W6_LAKEHOUSE_INTRADAY). Snowflake stays the live signal path during the W9 window.
+    return os.environ.get("W9_LAKEHOUSE_S3") == "1"
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def export_w9_signals_to_s3_op(context):
+    # E11.7 failure tier: ALERT-loud-but-continue (MIRROR tier). The signal stores are BATCH
+    # feature inputs, not user-read, and no serving-critical reader consumes the S3 mirror yet
+    # (W8 isn't cut over) — so a mirror failure must NEVER HALT the serving-critical daily job.
+    # Fans out from dbt_sub_model_signals_rebuild (all 5 stores fresh) and is never depended on.
+    if not _w9_mirror_on():
+        context.log.info("W9_LAKEHOUSE_S3 != 1 — skipping W9 signal-store mirror (default OFF).")
+        return
+    try:
+        _run_script(context, "export_w9_signals_to_s3.py")
+        # Best-effort external-table refresh so the lakehouse_ext W9 views see the fresh parquet
+        # (no native reader depends on them yet; --w9 is best-effort and never raises on a miss).
+        _run_script(context, "refresh_w1_external_tables.py", ["--w9"])
+    except Exception as exc:  # noqa: BLE001 — MIRROR tier; never block the serving pipeline.
+        context.log.warning(
+            "WARNING: export_w9_signals_to_s3_op failed; continuing (the W9 S3 signal mirror "
+            "may be stale/partial — serving still reads Snowflake, parity_check_w9_signals will "
+            f"show the gap). Error: {exc}"
+        )
+
+
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def signal_freshness_check(context):
     # A1.3: Now blocking for run_env and offense signals. check_signal_freshness.py

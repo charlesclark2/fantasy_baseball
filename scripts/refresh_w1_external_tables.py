@@ -195,6 +195,20 @@ W7B_TABLES = [
     "stg_statsapi_lineups_wide",
 ]
 
+# E11.1-W9: the 5 sub-model SIGNAL STORES mirrored to S3 by scripts/export_w9_signals_to_s3.py
+# (external tables created by scripts/ddl/generate_w9_external_tables.py). BEST-EFFORT (WARN if
+# missing) like W4/W5/W6/W7/W7b during the opt-in rollout — they don't exist until the export
+# mirror runs (W9_LAKEHOUSE_S3=1), so a "does not exist" is an expected skip, NOT a HALT.
+# Refreshed via the dedicated --w9 path (the W9 mirror op calls it right after the export), so
+# they stay OUT of the default daily refresh list until W9 cutover (no native reader yet).
+W9_TABLES = [
+    "mart_sub_model_signals",
+    "offense_v1_signals",
+    "offense_v2_signals",
+    "starter_suppression_signals",
+    "starter_ip_signals",
+]
+
 
 def _load_private_key():
     key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
@@ -259,7 +273,20 @@ def main():
                          "(serving-critical — after run_w1_lakehouse.py --w6-odds-current).")
     ap.add_argument("--w6-clv", action="store_true",
                     help="Once/day: refresh the CLV/line-movement marts (after odds_clv rebuild).")
+    ap.add_argument("--w9", action="store_true",
+                    help="E11.1-W9: refresh only the 5 sub-model signal-store external tables "
+                         "(after export_w9_signals_to_s3.py). Best-effort — these don't exist "
+                         "until the W9 mirror is enabled, so a missing table is an expected skip.")
     args = ap.parse_args()
+
+    # E11.1-W9: the signal-store mirror op refreshes its own external tables right after writing
+    # the parquet (mirror-tier — best-effort, never required). Kept off the default daily refresh
+    # list because no native reader depends on them until W8/W9 cutover.
+    if args.w9:
+        print("Refreshing W9 sub-model signal-store external tables (--w9):")
+        _refresh(W9_TABLES, required=set())
+        print("W9 signal-store external-table refresh complete (best-effort).")
+        return
 
     # E11.1-W6 INTRADAY: the odds hot set is SERVING-CRITICAL (HALT) — a missing/failed REFRESH
     # here means served prices go stale (INC-16). By the time this op fires, cutover has happened
