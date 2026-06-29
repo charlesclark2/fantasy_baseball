@@ -169,6 +169,40 @@ def _delete_partition(s3, source: str, dt: str) -> None:
             s3.delete_object(Bucket=BUCKET, Key=obj["Key"])
 
 
+def list_partition_dts(s3, source: str) -> list[str]:
+    """Return the dt= partition keys present for a source (e.g. '2026-06-28', '__nullts__')."""
+    prefix = f"{RAW_PREFIX}/{source}/dt="
+    dts: set[str] = set()
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=BUCKET, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            tail = obj["Key"].split(f"{source}/dt=", 1)
+            if len(tail) == 2:
+                dts.add(tail[1].split("/", 1)[0])
+    return sorted(dts)
+
+
+def prune_partitions(source: str, keep_dts, *, s3_client=None) -> list[str]:
+    """Delete every dt= partition for `source` NOT in keep_dts. The NULL_TS_PARTITION sentinel is
+    ALWAYS kept (historical-backfill rows). Returns the sorted list of deleted dt= keys.
+
+    E11.1-W6 / INC-20 monthly_schedule retention: the daily export re-materialises the full
+    accumulating month-snapshot history, but the stg_statsapi_lineups/games flatten dedups to the
+    latest ingestion per game_pk — so only the latest-ingestion partition per calendar month
+    affects the output. Pruning the rest is value-identical and stops the unbounded growth that
+    OOM'd the W6 DuckDB flatten (~750k pre-dedup fat-JSON game-rows, unspillable)."""
+    if source not in RAW_SOURCES:
+        raise ValueError(f"Unknown raw source '{source}'. Valid: {sorted(RAW_SOURCES)}")
+    s3 = s3_client or _make_s3_client()
+    keep = set(keep_dts) | {NULL_TS_PARTITION}
+    deleted: list[str] = []
+    for dt in list_partition_dts(s3, source):
+        if dt not in keep:
+            _delete_partition(s3, source, dt)
+            deleted.append(dt)
+    return sorted(deleted)
+
+
 def write_raw_rows_s3(
     source: str,
     rows: list[dict],
