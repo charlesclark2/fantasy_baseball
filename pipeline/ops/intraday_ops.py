@@ -58,6 +58,56 @@ def _today() -> str:
 _W6_INTRADAY_ENABLED = os.environ.get("W6_LAKEHOUSE_INTRADAY", "0") == "1"
 
 
+# ── INTRADAY schedule/game-state lakehouse refresh (Preview-stuck root-cause fix) ──
+# ROOT CAUSE: ingest_statsapi.py writes monthly_schedule ONLY to native Snowflake (its
+# writer was never S3-flipped). Prod stg_statsapi_games (abstract_game_state, game_date)
+# reads the S3 lakehouse_ext external table — refreshed only by the once-daily
+# run_w1_lakehouse_op (export monthly_schedule → rebuild → refresh). Crucially the daily
+# op passes only --w6, which REGISTERS stg_statsapi_games as a view over existing parquet
+# but does NOT rebuild that parquet (the W3pre flatten that owns it is opt-in, not passed).
+# Net: game-state in the lakehouse lags ~a full ingest cycle, so yesterday's games stay in
+# pre-game "Preview" through the evening — and the serving caches that bake those games read
+# the stale snapshot (empty lineups / no Final → no permanent blob). The 30-min intraday
+# schedule capture updates NATIVE + rebuilds the lineup VIEWS, but never re-exports
+# monthly_schedule to S3 nor rebuilds the games flatten, so it can't fix this.
+#
+# FIX (this helper): after the native capture, run the proven daily chain scoped to the
+# schedule tier — export today's monthly_schedule raw → S3, rebuild the W3pre flatten
+# (--w3pre-only rebuilds stg_statsapi_games' output parquet from that raw), then refresh
+# the external-table metadata so Snowflake serves the fresh game-state immediately.
+#
+# Gated OFF by default (clean no-op until the operator validates on the box) and ALERT-tier
+# (warn LOUD but never crash the schedule capture) — mirroring _w6_lakehouse_intraday.
+_SCHEDULE_INTRADAY_ENABLED = os.environ.get("SCHEDULE_LAKEHOUSE_INTRADAY", "0") == "1"
+
+
+def _schedule_lakehouse_intraday(context: OpExecutionContext) -> None:
+    """Refresh the S3 lakehouse game-state (stg_statsapi_games) from the just-captured native
+    monthly_schedule snapshot, so prod stops serving a day-stale 'Preview' game-state.
+
+    Sequence mirrors the daily run_w1_lakehouse_op for this tier, scoped to today's raw:
+      export_odds_raw_to_s3.py --source monthly_schedule --since <today>   (native → S3 raw)
+      run_w1_lakehouse.py --w3pre-only                                     (rebuild games flatten)
+      refresh_w1_external_tables.py                                        (refresh ext-table metadata)
+    """
+    if not _SCHEDULE_INTRADAY_ENABLED:
+        context.log.info(
+            "Intraday schedule lakehouse refresh disabled "
+            "(set SCHEDULE_LAKEHOUSE_INTRADAY=1 to enable) — skipping."
+        )
+        return
+    try:
+        today = _today()
+        _run_script(context, "export_odds_raw_to_s3.py", ["--source", "monthly_schedule", "--since", today])
+        _run_script(context, "run_w1_lakehouse.py", ["--w3pre-only"])
+        _run_script(context, "refresh_w1_external_tables.py")
+    except Exception as exc:  # ALERT-loud-but-continue — never crash the schedule capture op
+        context.log.warning(
+            f"⚠️ Intraday schedule lakehouse refresh FAILED — served game-state/lineups may be "
+            f"STALE (games may show as pre-game 'Preview'): {exc}"
+        )
+
+
 def _w6_lakehouse_intraday(context: OpExecutionContext, scope: str) -> None:
     """scope='odds' — light current-odds path: export today's raw → run_w1_lakehouse
     --w6-odds-current (rewrite ONLY mart_odds_outcomes' _current bucket + bridge) → refresh
@@ -255,6 +305,10 @@ def intraday_schedule_capture(context: OpExecutionContext) -> None:
         "--end-date", _today(),
         "--capture-reason", "intraday_gameday",
     ])
+    # Propagate the freshly-captured native snapshot to the S3 lakehouse so prod's
+    # game-state (stg_statsapi_games) stops lagging a full ingest cycle behind native —
+    # the Preview-stuck root cause. Gated/ALERT-tier no-op until the operator enables it.
+    _schedule_lakehouse_intraday(context)
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
