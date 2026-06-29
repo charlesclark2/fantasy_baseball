@@ -374,6 +374,163 @@ def _load_prior_clusters(conn, prior_season: int) -> dict[tuple[int, str], str]:
     return {(r["player_id"], r["player_type"]): r["cluster_label"] for r in rows}
 
 
+# ── E11.1-W5b lakehouse: build-on-DuckDB I/O ──────────────────────────────────
+# `--s3` reads the rolling-stat substrate (stg_batter_pitches), player profiles, and the
+# prior-season cluster tables from S3 parquet via DuckDB, and writes the posteriors to S3
+# parquet — so the BUILD runs off-Snowflake. The Bayesian/numpy math (_compute_posterior,
+# _gaussian_likelihood, the S3-loaded *_archetypes centroids/scalers) is UNCHANGED, so the
+# only engine-level difference is float precision in the rolling-stat SQL (Snowflake vs
+# DuckDB) propagating through exp(-dist²) into cluster_probs at ~1e-4 → TOLERANCE parity,
+# not row-exact (this is why W5b is its own wave). `--seed` is the one-time copy of the
+# EXISTING Snowflake posteriors into the S3 parquet, so the dual-branch archetype mart has
+# a parity-clean cutover baseline (and the --s3 build is tolerance-compared against it).
+_S3_BUCKET    = "baseball-betting-ml-artifacts"
+_LAKEHOUSE    = f"s3://{_S3_BUCKET}/baseball/lakehouse"
+_S3_POSTERIORS = f"{_LAKEHOUSE}/mart_player_archetype_posteriors/data.parquet"
+
+# Output column order — matches the live Snowflake mart_player_archetype_posteriors.
+_POSTERIOR_COLS = [
+    "player_id", "player_type", "season", "as_of_date", "pa_count", "age_band",
+    "cluster_probs", "map_cluster", "cluster_entropy", "assignment_confidence",
+    "eb_data_source", "run_timestamp",
+]
+
+
+def _get_duckdb():
+    import duckdb
+    duck = duckdb.connect()
+    duck.execute("INSTALL httpfs; LOAD httpfs")
+    duck.execute(
+        "CREATE OR REPLACE SECRET baseball_s3 "
+        "(TYPE S3, PROVIDER credential_chain, REGION 'us-east-2')"
+    )
+    for _p in ("SET http_timeout=600000", "SET http_retries=8",
+               "SET preserve_insertion_order=false"):
+        try:
+            duck.execute(_p)
+        except Exception:
+            pass
+    return duck
+
+
+def _register_s3_views(duck) -> None:
+    """Register the S3 parquet the rolling/profile/prior-cluster SQL reads as DuckDB views
+    under their bare Snowflake names, so _duck_sql_for's table-name rewrite resolves."""
+    specs = {
+        "stg_batter_pitches":            f"{_LAKEHOUSE}/stg_batter_pitches/**/*.parquet",
+        "stg_statsapi_player_profiles":  f"{_LAKEHOUSE}/stg_statsapi_player_profiles/*.parquet",
+        "batter_clusters":               f"{_LAKEHOUSE}/batter_clusters/*.parquet",
+        "pitcher_clusters":              f"{_LAKEHOUSE}/pitcher_clusters/*.parquet",
+    }
+    for name, glob in specs.items():
+        duck.execute(
+            f"CREATE OR REPLACE VIEW {name} AS "
+            f"SELECT * FROM read_parquet('{glob}', union_by_name=true)"
+        )
+
+
+def _duck_sql_for(sql: str) -> str:
+    """Rewrite a Snowflake rolling/profile/cluster query to its DuckDB equivalent: point
+    fully-qualified tables at the registered views, CURRENT_DATE()→current_date, and cast
+    the VARCHAR parquet game_date to DATE wherever it crosses an engine type boundary
+    (the as_of_date output column + the today-mode date filter)."""
+    import re
+    s = sql
+    s = s.replace("baseball_data.betting.stg_batter_pitches", "stg_batter_pitches")
+    s = s.replace("baseball_data.betting.stg_statsapi_player_profiles", "stg_statsapi_player_profiles")
+    s = s.replace("baseball_data.statsapi.batter_clusters", "batter_clusters")
+    s = s.replace("baseball_data.statsapi.pitcher_clusters", "pitcher_clusters")
+    s = s.replace("CURRENT_DATE()", "current_date")
+    # as_of_date must be DATE (parity with the Snowflake DATE column); parquet game_date is VARCHAR.
+    s = re.sub(r"game_date\s+AS as_of_date", "game_date::date AS as_of_date", s)
+    # today-mode filter: AND game_date < current_date → cast the VARCHAR side.
+    s = s.replace("AND game_date < current_date", "AND game_date::date < current_date")
+    return s
+
+
+def _fetch_duck(duck, sql: str) -> list[dict]:
+    cur = duck.execute(sql)
+    cols = [d[0].lower() for d in cur.description]
+    return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+
+def _load_rolling_s3(duck, player_type: str, season: int, mode: str) -> list[dict]:
+    date_filter = "AND game_date::date < current_date" if mode == "today" else ""
+    sql_tmpl = _BATTER_ROLLING_SQL if player_type == "batter" else _PITCHER_ROLLING_SQL
+    sql = _duck_sql_for(sql_tmpl.format(date_filter=date_filter)).replace("%(season)s", str(int(season)))
+    rows = _fetch_duck(duck, sql)
+    if mode == "today":
+        latest: dict[int, dict] = {}
+        for r in rows:
+            pid = r["player_id"]
+            if pid not in latest or r["as_of_date"] > latest[pid]["as_of_date"]:
+                latest[pid] = r
+        rows = list(latest.values())
+    return rows
+
+
+def _load_profiles_s3(duck) -> dict[int, dict]:
+    rows = _fetch_duck(duck, _duck_sql_for(_PROFILES_SQL))
+    return {r["player_id"]: r for r in rows}
+
+
+def _load_prior_clusters_s3(duck, prior_season: int) -> dict[tuple[int, str], str]:
+    sql = _duck_sql_for(_PRIOR_CLUSTERS_SQL).replace("%(season)s", str(int(prior_season)))
+    rows = _fetch_duck(duck, sql)
+    return {(r["player_id"], r["player_type"]): r["cluster_label"] for r in rows}
+
+
+def _persist_s3(duck, rows: list[dict], season: int) -> None:
+    """Write this run's `season` rows to the consolidated S3 posteriors parquet, carrying
+    forward every OTHER season (PK (player_id, player_type, season, as_of_date) — full
+    rebuild of `season`, mirroring the MERGE's per-season effect for the backfill mode)."""
+    import pandas as pd
+    new = pd.DataFrame(rows)[_POSTERIOR_COLS].copy()
+    new["run_timestamp"] = pd.Timestamp(_dt_utcnow())
+    try:
+        existing = duck.execute(
+            f"SELECT {', '.join(_POSTERIOR_COLS)} "
+            f"FROM read_parquet('{_S3_POSTERIORS}', union_by_name=true) "
+            f"WHERE season <> {int(season)}"
+        ).fetch_df()
+        print(f"  carried forward {len(existing):,} existing rows (other seasons)")
+    except Exception as e:
+        existing = new.iloc[0:0].copy()
+        print(f"  no existing posteriors parquet ({e}); writing fresh")
+    out = pd.concat([existing, new], ignore_index=True)
+    duck.register("_post_out", out)
+    duck.execute(f"COPY _post_out TO '{_S3_POSTERIORS}' (FORMAT PARQUET)")
+    print(f"  wrote {len(out):,} rows ({len(new):,} new for season={season}) → {_S3_POSTERIORS}")
+
+
+def _seed_s3_from_snowflake(duck) -> None:
+    """One-time history migration: copy the existing Snowflake posteriors (all seasons) into
+    the S3 parquet so the dual-branch archetype mart has a parity-clean cutover baseline."""
+    import pandas as pd
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT player_id, player_type, season, as_of_date, pa_count, age_band, "
+            "TO_JSON(cluster_probs) AS cluster_probs, map_cluster, cluster_entropy, "
+            "assignment_confidence, eb_data_source, run_timestamp "
+            "FROM baseball_data.betting.mart_player_archetype_posteriors"
+        )
+        rows = cur.fetchall()
+        cols = [d[0].lower() for d in cur.description]
+    finally:
+        conn.close()
+    df = pd.DataFrame(rows, columns=cols)[_POSTERIOR_COLS]
+    duck.register("_post_seed", df)
+    duck.execute(f"COPY _post_seed TO '{_S3_POSTERIORS}' (FORMAT PARQUET)")
+    print(f"Seeded {len(df):,} existing Snowflake posteriors → {_S3_POSTERIORS}")
+
+
+def _dt_utcnow():
+    import datetime as _dt
+    return _dt.datetime.utcnow()
+
+
 # ── Age / band helpers ─────────────────────────────────────────────────────────
 
 _AGE_BANDS = [("u24", None, 23), ("a24", 24, 27), ("a28", 28, 999)]
@@ -675,13 +832,17 @@ def _process_population(
     priors: dict,
     profiles: dict,
     prior_clusters: dict,
+    use_s3: bool = False,
 ) -> list[dict]:
     features      = _BATTER_FEATURES if player_type == "batter" else _PITCHER_FEATURES
     cluster_labels = priors[f"{player_type}s"]["base_prior"]["u24"]["alpha"].keys()
     cluster_labels = list(cluster_labels)
 
     print(f"  Loading {player_type} rolling stats ({mode}, season={season})...")
-    rows = _load_rolling(conn, player_type, season, mode)
+    rows = (
+        _load_rolling_s3(conn, player_type, season, mode)
+        if use_s3 else _load_rolling(conn, player_type, season, mode)
+    )
     print(f"    {len(rows)} player-date rows loaded")
 
     output: list[dict] = []
@@ -707,9 +868,59 @@ def main() -> None:
     parser.add_argument("--mode",   choices=["today", "backfill"], default="today")
     parser.add_argument("--season", type=int, default=date.today().year,
                         help="Season year (backfill mode)")
+    parser.add_argument(
+        "--s3", action="store_true",
+        help="E11.1-W5b: build on DuckDB — read the rolling substrate + profiles + prior "
+             "clusters from S3 parquet and write the posteriors to the S3 parquet (no "
+             "Snowflake). Math unchanged → tolerance parity vs the Snowflake build.",
+    )
+    parser.add_argument(
+        "--seed", action="store_true",
+        help="E11.1-W5b one-time: copy the existing Snowflake posteriors into the S3 parquet "
+             "for the archetype mart's cutover baseline, then exit.",
+    )
     args = parser.parse_args()
 
+    if args.seed:
+        duck = _get_duckdb()
+        _seed_s3_from_snowflake(duck)
+        duck.close()
+        print("Done (seed).")
+        return
+
     b_km, b_sc, p_km, p_sc, priors = _load_models()
+
+    if args.s3:
+        # E11.1-W5b build-on-DuckDB: the "conn" passed to _process_population is the DuckDB
+        # connection (with the S3 views registered); the loaders branch on use_s3.
+        duck = _get_duckdb()
+        _register_s3_views(duck)
+        print("Loading player profiles (S3)...")
+        profiles = _load_profiles_s3(duck)
+        print(f"  {len(profiles)} profiles loaded")
+
+        prior_season = args.season - 1
+        print(f"Loading prior-season cluster assignments (S3, season={prior_season})...")
+        prior_clusters = _load_prior_clusters_s3(duck, prior_season)
+        print(f"  {len(prior_clusters)} prior-season assignments loaded")
+
+        all_output: list[dict] = []
+        print("\n── Batters ──────────────────────────────────────────────")
+        all_output += _process_population(
+            duck, "batter", args.season, args.mode,
+            b_km, b_sc, priors, profiles, prior_clusters, use_s3=True,
+        )
+        print("\n── Pitchers ─────────────────────────────────────────────")
+        all_output += _process_population(
+            duck, "pitcher", args.season, args.mode,
+            p_km, p_sc, priors, profiles, prior_clusters, use_s3=True,
+        )
+
+        print(f"\nWriting {len(all_output)} rows → {_S3_POSTERIORS} ...")
+        _persist_s3(duck, all_output, args.season)
+        duck.close()
+        print("Done (--s3).")
+        return
 
     conn = get_snowflake_connection()
     try:

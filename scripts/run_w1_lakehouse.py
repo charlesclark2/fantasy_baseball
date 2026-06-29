@@ -206,6 +206,16 @@ W5B_MART_MODELS = [
     "mart_team_defense_quality_rolling",# ← oaa_team_season_raw (parquet) + stg_batter_sprint_speed + mart_game_spine
 ]
 
+# E11.1-W5b: the ARCHETYPE builder-mini-wave (its OWN risk class — Bayesian/k-means →
+# TOLERANCE parity, NOT row-exact). The single dual-branch mart reads the W1
+# mart_pitch_play_event (registered as a view) + the mart_player_archetype_posteriors
+# parquet directly via read_parquet(lakehouse_loc(...)) in its duckdb branch. That parquet
+# is produced by betting_ml/scripts/eb_priors/compute_archetype_posteriors.py (--seed for the
+# one-time Snowflake→S3 baseline, --s3 to rebuild on DuckDB), which itself reads the migrated
+# batter_clusters (cluster_batters.py --s3/--seed) + pitcher_clusters (W4). OPT-IN (--archetype)
+# until the posteriors parquet exists + cutover is validated.
+ARCHETYPE_MODELS = ["mart_batter_archetype_vs_pitcher_cluster"]
+
 
 def find_model(model_name: str) -> Path:
     for subdir in ("staging", "mart", "marts"):
@@ -488,6 +498,23 @@ def _build_w5(conn, dry_run: bool, group_b: bool = True) -> None:
         _register_mart_views(conn, [model], dry_run)
 
 
+def _build_archetype(conn, dry_run: bool) -> None:
+    """Build the E11.1-W5b archetype mart (mart_batter_archetype_vs_pitcher_cluster). It
+    reads the W1 mart_pitch_play_event (registered as a DuckDB view) + the
+    mart_player_archetype_posteriors parquet directly via read_parquet(lakehouse_loc(...))
+    in its duckdb branch. ⚠️ TOLERANCE risk class — the posteriors are Bayesian; when they
+    are rebuilt on DuckDB (compute_archetype_posteriors.py --s3) rather than seeded, this
+    mart's adj_woba/adj_xwoba carry ~3rd-decimal float drift (parity_check_w5b uses bands)."""
+    print("\nW5b archetype mart (mart_batter_archetype_vs_pitcher_cluster):")
+    # mart_pitch_play_event is the only registered-view dependency (the posteriors parquet
+    # is read directly). It is registered by the caller for the full path; register here too
+    # so --archetype-only works standalone.
+    _register_mart_views(conn, ["mart_pitch_play_event"], dry_run)
+    for model in ARCHETYPE_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+
 def run(
     dry_run: bool = False,
     skip_w1: bool = False,
@@ -500,6 +527,8 @@ def run(
     w5: bool = False,
     w5_only: bool = False,
     w5_group_a_only: bool = False,
+    archetype: bool = False,
+    archetype_only: bool = False,
 ) -> None:
     import duckdb
 
@@ -602,6 +631,17 @@ def run(
         print("\nW5 marts run complete (--w5-only).")
         return
 
+    # E11.1-W5b: --archetype-only rebuilds just the archetype mart, reusing the existing W1
+    # mart_pitch_play_event parquet + the mart_player_archetype_posteriors parquet (built by
+    # compute_archetype_posteriors.py --s3/--seed). stg_batter_pitches is already registered
+    # above (the archetype mart doesn't read it, but run() registers it unconditionally).
+    if archetype_only:
+        print("\nBuilding W5b archetype mart (reuse existing parquet for --archetype-only):")
+        _build_archetype(conn, dry_run)
+        conn.close()
+        print("\nW5b archetype mart run complete (--archetype-only).")
+        return
+
     # ── W1: pitch-level marts ────────────────────────────────────────────────
     if not skip_w1:
         print("\nW1 marts:")
@@ -656,10 +696,17 @@ def run(
     if w5:
         _build_w5(conn, dry_run, group_b=not w5_group_a_only)
 
+    # ── W5b: the archetype builder-mini-wave (tolerance class) — OPT-IN ──────────
+    # NOT built by default: reads the mart_player_archetype_posteriors parquet (produced by
+    # compute_archetype_posteriors.py --seed/--s3) that must exist first. Enable with
+    # --archetype once the posteriors parquet is written + cutover is validated.
+    if archetype:
+        _build_archetype(conn, dry_run)
+
     conn.close()
     print(
         f"\nW1+W2+W3{'+W3pre' if w3pre else ''}{'+W4' if w4 else ''}"
-        f"{'+W5' if w5 else ''} lakehouse run complete."
+        f"{'+W5' if w5 else ''}{'+W5b' if archetype else ''} lakehouse run complete."
     )
 
 
@@ -676,4 +723,6 @@ if __name__ == "__main__":
         w5="--w5" in sys.argv,
         w5_only="--w5-only" in sys.argv,
         w5_group_a_only="--w5-group-a-only" in sys.argv,
+        archetype="--archetype" in sys.argv,
+        archetype_only="--archetype-only" in sys.argv,
     )
