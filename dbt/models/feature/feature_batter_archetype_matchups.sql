@@ -62,6 +62,30 @@ starter_cluster as (
 ),
 
 lineups as (
+    -- SCD-2 lineup state (2026+): most-recent confirmed lineup per game-side.
+    -- INC-17 P2: 2026 games are not in stg_statsapi_lineups_wide; without this
+    -- source all slot_*_player_id are NULL → archetype matchup is null → model
+    -- sees imputed constants and loses all lineup-gated discrimination.
+    select
+        game_pk,
+        home_away,
+        slot_1_player_id,
+        slot_2_player_id,
+        slot_3_player_id,
+        slot_4_player_id,
+        slot_5_player_id,
+        slot_6_player_id,
+        slot_7_player_id,
+        slot_8_player_id,
+        slot_9_player_id
+    from {{ source('betting_features', 'feature_pregame_lineup_state') }}
+    where is_current = true
+    qualify row_number() over (partition by game_pk, home_away order by valid_from desc) = 1
+
+    union all
+
+    -- Historical lineups (2015–2025): confirmed post-game lineups not covered by
+    -- the SCD-2 state above.
     select
         game_pk,
         home_away,
@@ -75,6 +99,11 @@ lineups as (
         slot_8_player_id,
         slot_9_player_id
     from {{ ref('stg_statsapi_lineups_wide') }}
+    where game_pk not in (
+        select distinct game_pk
+        from {{ source('betting_features', 'feature_pregame_lineup_state') }}
+        where is_current = true
+    )
 ),
 
 -- Unpivot lineup slots: one row per game_pk × side × slot × batter_id
