@@ -8,6 +8,7 @@ GET  /admin/snowflake-credits   — month-by-month Snowflake credit usage (last 
 
 from __future__ import annotations
 
+import base64
 import datetime
 import json
 import logging
@@ -27,7 +28,9 @@ from app.backend.services.snowflake import execute_query
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-_DAGSTER_ENDPOINT = "https://penumbra-partners.dagster.plus/prod/graphql"
+# Post-INC-16: Dagster is self-hosted on EC2 behind Caddy (HTTPS + basic-auth), not
+# Dagster+ Cloud. Endpoint + auth are env-configurable and mirror scripts/ops/dagster_runs.py.
+_DAGSTER_ENDPOINT = os.getenv("DAGSTER_GRAPHQL_URL", "https://dagster.credencesports.com/graphql")
 _REGISTRY = "baseball_data.betting_ml.model_registry"
 
 
@@ -57,9 +60,9 @@ class ModelFreshness(BaseModel):
 class SnowflakeCredits(BaseModel):
     month: str          # "2026-06" formatted
     month_label: str    # "Jun 2026" formatted
-    compute_credits: float
-    cloud_service_credits: float
-    total_credits: float
+    compute_credits: float        # raw warehouse compute credits (informational)
+    cloud_service_credits: float  # raw cloud-services credits before the 10% adjustment
+    billed_credits: float         # compute + DAILY-applied cloud-services excess (what Snowflake bills)
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +117,28 @@ def invalidate_permanent_cache(_: str = Depends(get_admin_user)) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _dagster_runs_for_job(token: str, job: str, limit: int = 8) -> list[dict]:
+def _dagster_headers() -> dict:
+    """Build request headers for the configured Dagster GraphQL endpoint.
+
+    Mirrors scripts/ops/dagster_runs.py auth precedence:
+      • legacy Dagster+ Cloud (`*.dagster.plus` URL) + DAGSTER_CLOUD_API_TOKEN
+      • self-hosted EC2 dagit behind Caddy basic-auth (DAGIT_BASIC_AUTH_USER/_PASSWORD)
+      • neither → no auth (e.g. localhost on the box)
+    Operator supplies the basic-auth creds via env/secret — never hard-coded here.
+    """
+    h = {"Content-Type": "application/json"}
+    token = os.getenv("DAGSTER_CLOUD_API_TOKEN")
+    if token and "dagster.plus" in _DAGSTER_ENDPOINT:
+        h["Dagster-Cloud-Api-Token"] = token.strip()
+        return h
+    user = os.getenv("DAGIT_BASIC_AUTH_USER")
+    pw = os.getenv("DAGIT_BASIC_AUTH_PASSWORD")
+    if user and pw:
+        h["Authorization"] = "Basic " + base64.b64encode(f"{user}:{pw}".encode()).decode()
+    return h
+
+
+def _dagster_runs_for_job(job: str, limit: int = 8) -> list[dict]:
     query = (
         "query($f:RunsFilter,$n:Int){"
         "runsOrError(filter:$f,limit:$n){"
@@ -124,11 +148,7 @@ def _dagster_runs_for_job(token: str, job: str, limit: int = 8) -> list[dict]:
         "...on PythonError{message}}}"
     )
     body = json.dumps({"query": query, "variables": {"f": {"pipelineName": job}, "n": limit}}).encode()
-    req = urllib.request.Request(
-        _DAGSTER_ENDPOINT,
-        data=body,
-        headers={"Dagster-Cloud-Api-Token": token, "Content-Type": "application/json"},
-    )
+    req = urllib.request.Request(_DAGSTER_ENDPOINT, data=body, headers=_dagster_headers())
     resp = json.loads(urllib.request.urlopen(req, timeout=15).read())
     node = resp.get("data", {}).get("runsOrError", {})
     if node.get("__typename") != "Runs":
@@ -153,15 +173,16 @@ def _format_ts(unix: float | None) -> str:
 
 @router.get("/pipeline-runs", response_model=list[PipelineRun])
 def pipeline_runs(_: str = Depends(get_admin_user)) -> list[PipelineRun]:
-    """Last 14 Dagster run entries across daily_ingestion_job and lineup_monitor_sensor."""
-    token = os.getenv("DAGSTER_CLOUD_API_TOKEN", "")
-    if not token:
-        raise HTTPException(status_code=503, detail="DAGSTER_CLOUD_API_TOKEN not configured")
+    """Last 14 Dagster run entries across daily_ingestion_job and lineup_monitor_sensor.
 
+    Reads the self-hosted EC2 dagit (DAGSTER_GRAPHQL_URL). Caddy basic-auth creds
+    (DAGIT_BASIC_AUTH_USER/_PASSWORD) are operator-supplied via env; if the endpoint
+    requires auth and none is configured the upstream call returns 401 → surfaced as 502.
+    """
     try:
         raw = (
-            _dagster_runs_for_job(token, "daily_ingestion_job", 8)
-            + _dagster_runs_for_job(token, "lineup_monitor_job", 8)
+            _dagster_runs_for_job("daily_ingestion_job", 8)
+            + _dagster_runs_for_job("lineup_monitor_job", 8)
         )
     except Exception as exc:
         logger.exception("Dagster API error")
@@ -250,6 +271,12 @@ def model_freshness(_: str = Depends(get_admin_user)) -> list[ModelFreshness]:
 def snowflake_credits(_: str = Depends(get_admin_user)) -> list[SnowflakeCredits]:
     """Month-by-month Snowflake credit consumption for the last 6 months.
 
+    Applies Snowflake's cloud-services billing rule: cloud-services credits are
+    only billed for the portion that exceeds 10% of the day's COMPUTE credits.
+    The adjustment is applied DAILY (aggregate per day first, then sum the month) —
+    applying it to the period total under-counts, since a free day cannot offset a
+    heavy day. So billed ≈ SUM_day(compute + MAX(0, cloud_services − 0.10·compute)).
+
     Requires the Lambda's Snowflake role to have IMPORTED PRIVILEGES on the
     SNOWFLAKE database (i.e. GRANT IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE TO
     ROLE <lambda_role>). Returns [] gracefully if the role lacks access.
@@ -257,14 +284,21 @@ def snowflake_credits(_: str = Depends(get_admin_user)) -> list[SnowflakeCredits
     try:
         rows = execute_query(
             """
+            WITH daily AS (
+                SELECT
+                    USAGE_DATE,
+                    SUM(CREDITS_USED_COMPUTE)        AS compute_c,
+                    SUM(CREDITS_USED_CLOUD_SERVICES) AS cloud_c
+                FROM SNOWFLAKE.ACCOUNT_USAGE.METERING_DAILY_HISTORY
+                WHERE USAGE_DATE >= DATEADD('month', -6, CURRENT_DATE())
+                GROUP BY USAGE_DATE
+            )
             SELECT
-                DATE_TRUNC('month', USAGE_DATE)              AS month,
-                SUM(CREDITS_USED_COMPUTE)                    AS compute_credits,
-                SUM(CREDITS_USED_CLOUD_SERVICES)             AS cloud_service_credits,
-                SUM(CREDITS_USED_COMPUTE
-                    + CREDITS_USED_CLOUD_SERVICES)           AS total_credits
-            FROM SNOWFLAKE.ACCOUNT_USAGE.METERING_DAILY_HISTORY
-            WHERE USAGE_DATE >= DATEADD('month', -6, CURRENT_DATE())
+                DATE_TRUNC('month', USAGE_DATE)                                  AS month,
+                SUM(compute_c)                                                   AS compute_credits,
+                SUM(cloud_c)                                                     AS cloud_service_credits,
+                SUM(compute_c + GREATEST(0, cloud_c - 0.10 * compute_c))         AS billed_credits
+            FROM daily
             GROUP BY 1
             ORDER BY 1 DESC
             """
@@ -289,7 +323,7 @@ def snowflake_credits(_: str = Depends(get_admin_user)) -> list[SnowflakeCredits
             month_label=month_label,
             compute_credits=round(float(row.get("COMPUTE_CREDITS") or 0), 2),
             cloud_service_credits=round(float(row.get("CLOUD_SERVICE_CREDITS") or 0), 2),
-            total_credits=round(float(row.get("TOTAL_CREDITS") or 0), 2),
+            billed_credits=round(float(row.get("BILLED_CREDITS") or 0), 2),
         ))
 
     return results

@@ -155,7 +155,25 @@ the Lambda execution role (`credence-prod-lambda-execution-role`) in the IAM con
 }
 ```
 
-Without this, AWS costs show as `—` and the endpoint logs a warning.
+Without this, AWS costs show as `—` and the endpoint logs a warning. As of E9.39 the
+endpoint groups Cost Explorer by SERVICE into line items (EC2 / S3 / Lambda / API
+Gateway / DynamoDB / SES / Other AWS); Snowflake applies the daily 10%-cloud-services
+billing rule; the dead Railway/Dagster cost lines are removed (Railway is cancelled,
+Dagster self-hosts on the EC2 box — that spend lands in the EC2 line item).
+
+### Lambda env for the Admin Dagster panel (E9.39 — post-INC-16)
+
+The Admin "Recent Pipeline Runs" panel (`GET /admin/pipeline-runs`) now reads the
+self-hosted EC2 dagit instead of Dagster+ Cloud. Set on `credence-prod-lambda-execution`:
+
+| Env var | Value |
+|---|---|
+| `DAGSTER_GRAPHQL_URL` | `https://dagster.credencesports.com/graphql` (default if unset) |
+| `DAGIT_BASIC_AUTH_USER` | Caddy basic-auth user (same as the box `.env`) |
+| `DAGIT_BASIC_AUTH_PASSWORD` | Caddy basic-auth **plaintext** password (Caddy stores the *hash*; the Lambda client needs the plaintext to build the `Authorization: Basic` header) |
+
+`DAGSTER_CLOUD_API_TOKEN` is no longer required and is ignored unless the URL is a
+`*.dagster.plus` host. Creds are operator-supplied via Lambda env — never committed.
 
 ### Deploying
 
