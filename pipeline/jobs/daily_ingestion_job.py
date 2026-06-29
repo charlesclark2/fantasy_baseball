@@ -2,6 +2,7 @@ from dagster import in_process_executor, job
 
 from pipeline.ops.daily_ingestion_ops import (
     backfill_prediction_log,
+    build_zone_matchup_overlay_op,
     check_data_freshness,
     check_prediction_coverage,
     compute_elo,
@@ -160,6 +161,10 @@ def daily_ingestion_job():
     # serving writes so Railway PG picks up pick_narrative alongside pick_explanation.
     # Soft-fail, so a Cortex outage never blocks write_serving_store_op.
     s19n = generate_pick_narratives_op(start=s19)
+    # E9.31b — generate zone-overlay JSONs for today's batter × starter pairs.
+    # WARN-tier: fans out from predict_today_morning in parallel with narrative
+    # generation; writes directly to S3 (never blocks serving or predictions).
+    build_zone_matchup_overlay_op(start=s19)
     write_api_cache_op(predict_done=s19n)
     write_serving_store_op(predict_done=s19n)
     s19b = update_pipeline_status(start=s19n)

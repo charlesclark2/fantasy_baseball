@@ -103,6 +103,10 @@ models:
   baseball_betting_and_fantasy:
     staging:
       +materialized: table
+      # Re-grant CREDENCE_API_RO after every rebuild: CREATE OR REPLACE TABLE/VIEW
+      # wipes Snowflake grants. The dbt runner owns the objects it creates, so it
+      # has GRANT OPTION. Skip on the duckdb target (no roles).
+      +post-hook: "{% if target.name != 'duckdb' %}{% set obj_type = 'VIEW' if config.get('materialized') == 'view' else 'TABLE' %}GRANT SELECT ON {{ obj_type }} {{ this }} TO ROLE CREDENCE_API_RO{% endif %}"
     mart:
       +materialized: view
     marts:

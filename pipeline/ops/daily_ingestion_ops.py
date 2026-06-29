@@ -253,6 +253,18 @@ def run_w1_lakehouse_op(context):
     # fail this HALT-tier op. Flip to "--w5" once validated. (W5 careful tier: only the
     # game-detail Snowflake FALLBACK reads mart_team_pythagorean_rolling, behind the DynamoDB
     # serving cache — no other request-time read; post-cutover it serves the S3-backed view.)
+    #
+    # E11.1-W6: run_w1_lakehouse.py can ALSO build the 13 odds/CLV + odds-serving marts + the 2
+    # Group-C staging flattens under the opt-in --w6 flag (NOT passed here yet). Like W3pre/W4/W5
+    # it needs the precursor exports first (scripts/export_w6_raw_to_s3.py:
+    # odds_snapshots_historical + the daily_model_predictions MIRROR + venues_raw) — and the dmp
+    # mirror MUST be re-exported in this op AFTER predict_today writes the day's predictions and
+    # BEFORE the --w6 build, else the /performance CLV marts (mart_clv_labeled_games /
+    # mart_prediction_clv) go stale. ⭐ W6 is the INTRADAY-coupled tier: mart_odds_outcomes is
+    # date-bucketed (_history/_current); the daily --w6 build rewrites BOTH buckets, while the
+    # intraday odds_current_rebuild path (pipeline/ops/intraday_ops.py, gated W6_LAKEHOUSE_INTRADAY)
+    # rewrites ONLY _current each odds cycle so served prices stay fresh. Flip to "--w6" + add the
+    # dmp re-export once cutover is validated.
     _run_script(context, "run_w1_lakehouse.py")
 
 
@@ -811,3 +823,26 @@ def settle_user_bets_op(context):
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def backfill_prediction_log(context):
     _run_script(context, "backfill_prediction_log.py")
+
+
+# ── E9.31b — Zone-overlay daily generation ───────────────────────────────────
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def build_zone_matchup_overlay_op(context):
+    """Generate today's batter × starter zone-overlay JSONs and write to S3.
+
+    WARN-tier (E11.7 / e13_10_app_handoff_spec §3): peripheral/app-cosmetic.
+    A failure here must never block predictions or the serving writes. The
+    backend reads S3 directly for these files; they are NOT on the predict path.
+
+    Reads: stg_statsapi_lineups + stg_statsapi_probable_pitchers (Snowflake, IDs only).
+    Heavy compute: S3 lakehouse DuckDB (never Snowflake per E13.10 cost-aware rule).
+    Writes: s3://baseball-betting-ml-artifacts/baseball/serving/zone_matchup/overlay/as_of=<date>/
+    """
+    try:
+        _run_script(context, "generate_zone_overlays_today.py")
+    except Exception as exc:  # noqa: BLE001
+        context.log.warning(
+            "WARNING: build_zone_matchup_overlay_op failed (non-fatal — zone heatmaps may be "
+            f"absent for today's picks, predictions and serving are unaffected): {exc}"
+        )
