@@ -64,6 +64,14 @@ jobs:
           echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" > /tmp/snowflake_rsa_key.pem
           chmod 600 /tmp/snowflake_rsa_key.pem
 
+      # INC-19 type-contract guard — RED (pure stdlib, no deps) if an incremental
+      # feature model's generated ::double TYPE-PIN block drifted from its manifest
+      # (the recurring NUMBER<->FLOAT HALT class). Also in the Python fast gate via
+      # betting_ml/tests/test_type_contract_guard.py; duplicated here so a dbt-models-only
+      # PR (which the Python CI paths filter skips) is still gated before merge.
+      - name: Type-contract guard (INC-19 — no NUMBER<->FLOAT drift)
+        run: python3 scripts/gen_type_contract.py --check
+
       - name: Compile dbt project
         run: dbtf compile --project-dir dbt --profiles-dir dbt
 
