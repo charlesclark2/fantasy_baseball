@@ -134,6 +134,12 @@ W5_TABLES = [
     "mart_team_defense_quality_rolling",
 ]
 
+# E11.1-W5b: the archetype mart (its own tolerance-class mini-wave), created by
+# scripts/ddl/generate_w5b_external_tables.py. BEST-EFFORT (WARN if missing) like W3pre/W4/W5
+# during the opt-in rollout. The mart reads the mart_player_archetype_posteriors parquet
+# (builder output, no external table) — only the mart itself becomes a lakehouse_ext view.
+ARCHETYPE_TABLES = ["mart_batter_archetype_vs_pitcher_cluster"]
+
 
 def _load_private_key():
     key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
@@ -175,7 +181,8 @@ def main():
     # is run, so a "does not exist" here is an expected skip (WARN-tier), NOT a HALT — else
     # this op would fail the daily job for the entire pre-cutover rollout window. (E11.1-W3pre)
     required = set(W1_TABLES) | set(W2_TABLES) | set(W3_TABLES)
-    for table in W1_TABLES + W2_TABLES + W3_TABLES + W3PRE_TABLES + W4_TABLES + W5_TABLES:
+    for table in (W1_TABLES + W2_TABLES + W3_TABLES + W3PRE_TABLES
+                  + W4_TABLES + W5_TABLES + ARCHETYPE_TABLES):
         fqn = f"{_SCHEMA}.{table}"
         try:
             cur.execute(f"ALTER EXTERNAL TABLE {fqn} REFRESH")
@@ -185,7 +192,7 @@ def main():
                 print(f"  FAILED {fqn}: {e}", file=sys.stderr)
                 failed.append(table)
             else:
-                print(f"  WARNING skip {fqn} (W3pre/W4/W5, not yet created): {e}", file=sys.stderr)
+                print(f"  WARNING skip {fqn} (W3pre/W4/W5/W5b, not yet created): {e}", file=sys.stderr)
     cur.close()
     conn.close()
     if failed:
@@ -193,7 +200,7 @@ def main():
             f"External table refresh FAILED for: {failed}  "
             "Downstream feature build will see stale S3 data."
         )
-    print("W1+W2+W3 external table refresh complete (W3pre + W4 + W5 best-effort).")
+    print("W1+W2+W3 external table refresh complete (W3pre + W4 + W5 + W5b best-effort).")
 
 
 if __name__ == "__main__":
