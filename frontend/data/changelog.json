@@ -4,7 +4,7 @@
     "items": [
       {
         "tag": "new",
-        "text": "Players are now clickable across pick and team pages. On a pick's detail page, every batter in the Batting Lineups section and each Probable/Starting Pitcher name now links straight to that player's page (opens in a new tab). On a team page, the next game's starting pitcher is clickable too — and a new 'Next Starter · Last 3 Starts' section shows that pitcher's last three outings (date, opponent, IP, H, R, K, BB, HR) inline, with a clean empty state before any starts are on record. This is navigation and matchup context only — no edge or betting claim."
+        "text": "Players are now clickable across pick and team pages, and starting pitchers now show recent form. On a pick's detail page, every batter in the Batting Lineups section and each Probable/Starting Pitcher name now links straight to that player's page (opens in a new tab) — and under each starter you'll see their Last 3 Starts (date, opponent, IP, H, R, K, BB, HR) for quick matchup context. On a team page, the next game's starting pitcher is clickable too. This is navigation and matchup context only — no edge or betting claim."
       },
       {
         "tag": "new",

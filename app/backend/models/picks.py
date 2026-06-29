@@ -148,6 +148,19 @@ class GamePicksResponse(BaseModel):
     total: int
 
 
+class StarterStartLog(BaseModel):
+    """E9.36 — one prior start in a pitcher's last-3 game log (context only)."""
+    date: str | None = None
+    opp: str | None = None
+    home_away: str | None = None
+    ip: str | None = None
+    k: int | None = None
+    bb: int | None = None
+    h: int | None = None
+    r: int | None = None
+    hr: int | None = None
+
+
 class StarterStats(BaseModel):
     pitcher_id: int | None = None
     name: str | None = None
@@ -164,6 +177,8 @@ class StarterStats(BaseModel):
     prior_ra9: float | None = None
     prior_whip: float | None = None
     prior_k_pct: float | None = None
+    # E9.36 — last 3 completed starts before this game (context/navigation, no edge claim)
+    last_3_starts: list[StarterStartLog] = []
 
 
 class GameStarters(BaseModel):

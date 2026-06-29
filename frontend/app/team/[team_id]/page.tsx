@@ -43,24 +43,6 @@ type ScheduleGame = {
   our_probable_pitcher_id: number | null
 }
 
-type SpStart = {
-  date: string
-  opp: string | null
-  home_away: "home" | "away"
-  ip: string | null
-  k: number | null
-  bb: number | null
-  h: number | null
-  r: number | null
-  hr: number | null
-}
-
-type SpLast3 = {
-  pitcher_id: number
-  pitcher_name: string | null
-  starts: SpStart[]
-}
-
 type TeamProfile = {
   team_id: number
   team_abbrev: string
@@ -106,7 +88,6 @@ type TeamProfile = {
   }
   recent_form: FormGame[]
   schedule: ScheduleGame[]
-  sp_last_3_starts: SpLast3 | null
   h2h_model: {
     games: number
     correct: number
@@ -623,62 +604,6 @@ function TeamPageInner() {
                     </tbody>
                   </table>
                 </div>
-              </div>
-            )}
-
-            {/* Next starter — last 3 starts (context only) */}
-            {team.sp_last_3_starts && team.sp_last_3_starts.pitcher_name && (
-              <div>
-                <SectionHeader>
-                  Next Starter ·{" "}
-                  <PlayerLink
-                    id={team.sp_last_3_starts.pitcher_id}
-                    name={team.sp_last_3_starts.pitcher_name}
-                    className="text-gray-300 normal-case tracking-normal"
-                  />{" "}
-                  <span className="normal-case tracking-normal text-gray-600">(Last 3 Starts)</span>
-                </SectionHeader>
-                {team.sp_last_3_starts.starts.length === 0 ? (
-                  <div className="rounded-lg border border-[#262626] bg-[#111111] px-4 py-3 text-xs text-gray-500">
-                    No completed starts on record this season yet.
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto rounded-lg border border-[#262626]">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b border-[#262626] text-left text-gray-500">
-                          <th className="px-3 py-2 font-medium">Date</th>
-                          <th className="px-3 py-2 font-medium">Opp</th>
-                          <th className="px-3 py-2 font-medium text-right">IP</th>
-                          <th className="px-3 py-2 font-medium text-right">H</th>
-                          <th className="px-3 py-2 font-medium text-right">R</th>
-                          <th className="px-3 py-2 font-medium text-right">K</th>
-                          <th className="px-3 py-2 font-medium text-right">BB</th>
-                          <th className="px-3 py-2 font-medium text-right">HR</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {team.sp_last_3_starts.starts.map((s, i) => (
-                          <tr
-                            key={`${s.date}-${i}`}
-                            className={`border-b border-[#1a1a1a] last:border-0 ${i % 2 === 0 ? "bg-[#0d0d0d]" : ""}`}
-                          >
-                            <td className="px-3 py-2 text-gray-400">{fmtDate(s.date)}</td>
-                            <td className="px-3 py-2 text-gray-300">
-                              {s.opp ? `${s.home_away === "home" ? "vs" : "@"} ${s.opp}` : "—"}
-                            </td>
-                            <td className="px-3 py-2 text-right tabular-nums text-white">{s.ip ?? "—"}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-gray-300">{s.h ?? "—"}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-gray-300">{s.r ?? "—"}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-gray-300">{s.k ?? "—"}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-gray-300">{s.bb ?? "—"}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-gray-300">{s.hr ?? "—"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
               </div>
             )}
 

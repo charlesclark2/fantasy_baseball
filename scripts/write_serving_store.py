@@ -1839,6 +1839,7 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
     # Run all 13 batch queries
     status_rows     = _sf_query_batch(sf, _GAME_STATUS_BATCH, game_pks)
     starter_rows    = _sf_query_batch(sf, _STARTERS_BATCH, game_pks)
+    sp_last3_rows    = _sf_query_batch(sf, _SP_LAST3_BATCH, game_pks)
     bovada_rows     = _sf_query_batch(sf, _BOVADA_BATCH, game_pks)
     features_rows   = _sf_query_batch(sf, _TEAM_FEATURES_BATCH, game_pks)
     lineup_rows     = _sf_query_batch(sf, _LINEUP_BATCH, game_pks)
@@ -1866,6 +1867,22 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
     starters_by_pk  = defaultdict(list)
     for r in starter_rows:
         starters_by_pk[r["GAME_PK"]].append(r)
+
+    # E9.36 — last-3-starts keyed by (game_pk, side); rows already ordered newest-first.
+    sp_last3_by_pk_side: dict = defaultdict(list)
+    for r in sp_last3_rows:
+        outs = _int(r.get("OUTS_RECORDED"))
+        sp_last3_by_pk_side[(r["GAME_PK"], str(r.get("SIDE", "")).lower())].append({
+            "date": str(r["START_DATE"]),
+            "opp": r.get("OPPOSING_TEAM"),
+            "home_away": "home" if r.get("IS_HOME_TEAM") else "away",
+            "ip": (f"{outs // 3}.{outs % 3}" if outs is not None else None),
+            "k": _int(r.get("STRIKEOUTS")),
+            "bb": _int(r.get("WALKS")),
+            "h": _int(r.get("HITS_ALLOWED")),
+            "r": _int(r.get("RUNS_ALLOWED")),
+            "hr": _int(r.get("HOME_RUNS_ALLOWED")),
+        })
 
     bovada_by_pk = defaultdict(list)
     for r in bovada_rows:
@@ -1957,6 +1974,7 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
         home_sp = None
         away_sp = None
         for row in starters_by_pk[gp]:
+            side = str(row.get("SIDE", "")).lower()
             sp = {
                 "pitcher_id": row.get("PROBABLE_PITCHER_ID"),
                 "name": row.get("PROBABLE_PITCHER_NAME"),
@@ -1969,8 +1987,9 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
                 "prior_starts": row.get("PRIOR_STARTS"),
                 "prior_ra9": row.get("PRIOR_RA9"), "prior_whip": row.get("PRIOR_WHIP"),
                 "prior_k_pct": row.get("PRIOR_K_PCT"),
+                "last_3_starts": sp_last3_by_pk_side.get((gp, side), []),
             }
-            if str(row.get("SIDE", "")).lower() == "home":
+            if side == "home":
                 home_sp = sp
             else:
                 away_sp = sp

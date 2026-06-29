@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import posthog from "posthog-js"
 import { useQuery } from "@tanstack/react-query"
@@ -154,6 +154,18 @@ type Pick = {
   predicted_at: string | null
 }
 
+type StarterStartLog = {
+  date: string | null
+  opp: string | null
+  home_away: "home" | "away" | null
+  ip: string | null
+  k: number | null
+  bb: number | null
+  h: number | null
+  r: number | null
+  hr: number | null
+}
+
 type StarterStats = {
   pitcher_id: number | null
   name: string | null
@@ -170,6 +182,8 @@ type StarterStats = {
   prior_ra9: number | null
   prior_whip: number | null
   prior_k_pct: number | null
+  // E9.36 — last 3 completed starts before this game (context only)
+  last_3_starts?: StarterStartLog[] | null
 }
 
 type TeamPerfStats = {
@@ -322,6 +336,12 @@ function fmtAmerican(n: number | null | undefined): string {
 function fmtStat(n: number | null | undefined, digits = 3): string {
   if (n == null) return "—"
   return n.toFixed(digits)
+}
+
+function fmtShortDate(s: string | null | undefined): string {
+  if (!s) return "—"
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
+  return m ? `${parseInt(m[2], 10)}/${parseInt(m[3], 10)}` : s
 }
 
 function fmtPct(n: number | null | undefined): string {
@@ -2290,6 +2310,41 @@ export default function PickDetailPage() {
                                       </p>
                                       <p className="text-xs text-gray-600">K%</p>
                                     </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* E9.36 — last 3 starts (context only, no edge claim) */}
+                              {sp.last_3_starts && sp.last_3_starts.length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-[#1e1e1e]">
+                                  <p className="mb-1.5 text-[10px] font-semibold text-gray-600 uppercase tracking-widest">
+                                    Last 3 Starts
+                                  </p>
+                                  <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto] gap-x-2 gap-y-1 text-xs">
+                                    <span className="text-[10px] text-gray-600">Date</span>
+                                    <span className="text-[10px] text-gray-600">Opp</span>
+                                    <span className="text-[10px] text-gray-600 text-right">IP</span>
+                                    <span className="text-[10px] text-gray-600 text-right">H</span>
+                                    <span className="text-[10px] text-gray-600 text-right">R</span>
+                                    <span className="text-[10px] text-gray-600 text-right">K</span>
+                                    <span className="text-[10px] text-gray-600 text-right">BB</span>
+                                    <span className="text-[10px] text-gray-600 text-right">HR</span>
+                                    {sp.last_3_starts.map((g, i) => (
+                                      <Fragment key={`${g.date}-${i}`}>
+                                        <span className="text-gray-400">{fmtShortDate(g.date)}</span>
+                                        <span className="text-gray-300 truncate">
+                                          {g.opp ? `${g.home_away === "home" ? "vs" : "@"} ${g.opp}` : "—"}
+                                        </span>
+                                        <span className="font-mono text-white text-right">{g.ip ?? "—"}</span>
+                                        <span className="font-mono text-gray-400 text-right">{g.h ?? "—"}</span>
+                                        <span className="font-mono text-gray-400 text-right">{g.r ?? "—"}</span>
+                                        <span className="font-mono text-gray-400 text-right">{g.k ?? "—"}</span>
+                                        <span className="font-mono text-gray-400 text-right">{g.bb ?? "—"}</span>
+                                        <span className={`font-mono text-right ${(g.hr ?? 0) > 0 ? "text-[#f59e0b]" : "text-gray-400"}`}>
+                                          {g.hr ?? "—"}
+                                        </span>
+                                      </Fragment>
+                                    ))}
                                   </div>
                                 </div>
                               )}
