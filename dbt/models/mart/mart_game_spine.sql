@@ -30,22 +30,35 @@
 -- is handled the same way everywhere.
 -- =============================================================================
 
-{{ config(materialized='view') }}
+-- E11.1-W5 dual-branch lakehouse model. DuckDB branch unions the migrated
+-- mart_game_results (completed) + stg_statsapi_games (scheduled), resolving team
+-- abbrevs via dim_team_name_lookup — all registered as DuckDB views by
+-- run_w1_lakehouse.py. Snowflake branch is a thin view over the lakehouse_ext
+-- external table. game_date is emitted as ::timestamp so the parquet carries
+-- TIMESTAMP (matching the retired Snowflake mart_game_spine.GAME_DATE TIMESTAMP_NTZ,
+-- which the original UNION ALL promoted DATE→TIMESTAMP_NTZ). Snowflake dateadd()/
+-- ::timestamp_ntz are rewritten to DuckDB interval arithmetic / ::timestamp.
+
+{{ config(materialized='view', tags=['w5_lakehouse']) }}
+
+{% if target.name == 'duckdb' %}
 
 with team_lookup as (
 
     select name_lower, team_id, canonical_abbrev
-    from {{ ref('dim_team_name_lookup') }}
+    from dim_team_name_lookup
 
 ),
 
 completed as (
 
     -- Pass-through of the authoritative completed-game record. Column list is
-    -- the spine contract; values are unchanged from mart_game_results.
+    -- the spine contract; values are unchanged from mart_game_results. game_date
+    -- is cast ::timestamp so the union's common type matches the scheduled branch
+    -- (and the retired Snowflake TIMESTAMP_NTZ).
     select
         game_pk,
-        game_date,
+        game_date::timestamp               as game_date,
         game_year,
         game_type,
         home_team,
@@ -59,7 +72,7 @@ completed as (
         home_final_score,
         away_final_score,
         false                              as is_scheduled
-    from {{ ref('mart_game_results') }}
+    from mart_game_results
 
 ),
 
@@ -69,7 +82,7 @@ scheduled as (
     -- resolved to the canonical form via the A1.9 team dimension.
     select
         g.game_pk,
-        g.official_date::timestamp_ntz     as game_date,
+        g.official_date::timestamp         as game_date,
         year(g.official_date)::integer     as game_year,
         g.game_type,
         h.canonical_abbrev                 as home_team,
@@ -83,21 +96,21 @@ scheduled as (
         cast(null as integer)              as home_final_score,
         cast(null as integer)              as away_final_score,
         true                               as is_scheduled
-    from {{ ref('stg_statsapi_games') }} g
+    from stg_statsapi_games g
     left join team_lookup h
         on h.name_lower = lower(regexp_replace(trim(g.home_team_name), '^G[12] ', ''))
     left join team_lookup a
         on a.name_lower = lower(regexp_replace(trim(g.away_team_name), '^G[12] ', ''))
     where g.game_type = 'R'
-      and g.game_pk not in (select game_pk from {{ ref('mart_game_results') }})
+      and g.game_pk not in (select game_pk from mart_game_results)
       -- Tight forward window: today (with a 1-day back/2-day fwd cushion for
       -- timezones + next-day pre-scoring). This keeps the spine lean AND means
       -- the scheduled branch NEVER adds a row for a historical date, so every
       -- past game's output is byte-for-byte identical to the old mart_game_results
       -- spine. (A postponed/cancelled game that was never played simply ages out
       -- of the window instead of lingering as a phantom "scheduled" row.)
-      and g.official_date >= dateadd('day', -1, current_date)
-      and g.official_date <= dateadd('day',  2, current_date)
+      and g.official_date >= current_date - interval 1 day
+      and g.official_date <= current_date + interval 2 day
       -- NB: we do NOT filter on abstract_game_state. A game that is already
       -- 'Final' but whose pitch data hasn't landed in mart_game_results yet
       -- (ingestion lags game-end by hours) must stay visible here as a pending
@@ -111,3 +124,9 @@ scheduled as (
 select * from completed
 union all
 select * from scheduled
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_game_spine
+
+{% endif %}

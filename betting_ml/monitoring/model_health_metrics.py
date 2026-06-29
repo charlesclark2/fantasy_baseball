@@ -283,6 +283,16 @@ def _print_report(window: str, ptype: str | None, model_version: str | None,
     print(f"   calibrated accuracy={_fmt(hw['calibrated_accuracy'])}  "
           f"beats_market_Brier={_fmt(hw['beats_market_brier'])}")
     print(f"   → {hw['verdict']}" + (f"  ({hw['fail_reasons']})" if hw["fail_reasons"] else ""))
+    # INC-17: flat-output early warning. When spread < 2×MIN_SPREAD_PROB the model output
+    # is compressed near 0.5 — corr can't reach 0.05 even with correct feature ranking.
+    # This distinguishes the "de-leaked model correctly uncertain" case from a serving
+    # regression. Run rescore_audit.py --since <date> --compare-live to fork the two.
+    hw_spread = hw.get("calibrated_spread", float("nan"))
+    if not (hw_spread != hw_spread) and hw_spread < MIN_SPREAD_PROB * 2:
+        print(f"   ⚠ FLAT-OUTPUT: calibrated_spread={_fmt(hw_spread)} < {MIN_SPREAD_PROB * 2:.3f}. "
+              f"Model output is compressed — check (a) de-leak removed primary discriminator or "
+              f"(b) lineup-gated features (matchup woba/archetype) imputed null at serve time. "
+              f"Run: uv run python scripts/ops/rescore_audit.py --since <date> --compare-live")
 
     for m, label in ((tot, "total_runs"), (rd, "run_differential")):
         print(f"\n[{label}]  n={m['n_games']}  MAE={_fmt(m['mae'])}  RMSE={_fmt(m['rmse'])}  "

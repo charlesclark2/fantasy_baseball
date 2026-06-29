@@ -243,6 +243,16 @@ def run_w1_lakehouse_op(context):
     # + the migrated DuckDB builders fit_granular_park_priors.py --s3 / cluster_pitchers.py
     # --seed,--s3) and the cutover validated — else an empty precursor tier would fail this
     # HALT-tier op. Flip to "--w4" once validated. (W4 read-path audit: none request-time read.)
+    #
+    # E11.1-W5: run_w1_lakehouse.py can ALSO build the mart_game_results/mart_game_spine
+    # team/game chain (Group A, 10 marts) + the 4 W4-deferred marts + stg_batter_sprint_speed
+    # (Group B) under the opt-in --w5 flag (NOT passed here yet). Like W3pre/W4, it needs the
+    # precursor parquet first (scripts/export_w5_raw_to_s3.py: the seeds + eb_park_factors_raw +
+    # eb_bullpen_team_posteriors + oaa_team_season_raw + sprint_speed_raw) and the W3pre
+    # stg_statsapi_games parquet, plus cutover validated — else an empty precursor tier would
+    # fail this HALT-tier op. Flip to "--w5" once validated. (W5 careful tier: only the
+    # game-detail Snowflake FALLBACK reads mart_team_pythagorean_rolling, behind the DynamoDB
+    # serving cache — no other request-time read; post-cutover it serves the S3-backed view.)
     _run_script(context, "run_w1_lakehouse.py")
 
 

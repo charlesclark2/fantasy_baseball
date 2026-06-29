@@ -18,7 +18,15 @@
 --   team_id and should not join to an MLB game.
 -- =============================================================================
 
-{{ config(materialized='view') }}
+-- E11.1-W5 dual-branch lakehouse model. DuckDB branch reads the ref_teams +
+-- ref_team_aliases seeds (registered as DuckDB views over their S3 parquet by
+-- run_w1_lakehouse.py); Snowflake branch is a thin view over the lakehouse_ext
+-- external table. mart_game_spine reads this resolver for scheduled-game
+-- abbreviation normalization, so it is built/registered before the spine.
+
+{{ config(materialized='view', tags=['w5_lakehouse']) }}
+
+{% if target.name == 'duckdb' %}
 
 with team_dim as (
     -- One canonical row per team_id. ref_teams carries a legacy + an active row
@@ -28,7 +36,7 @@ with team_dim as (
         team_id,
         max(canonical_abbrev) as canonical_abbrev,
         max(team_name)        as canonical_name
-    from {{ ref('ref_teams') }}
+    from ref_teams
     group by team_id
 ),
 
@@ -37,7 +45,7 @@ canonical_names as (
     select distinct
         lower(team_name) as name_lower,
         team_id
-    from {{ ref('ref_teams') }}
+    from ref_teams
 ),
 
 alias_names as (
@@ -45,7 +53,7 @@ alias_names as (
     select
         lower(alias_name) as name_lower,
         team_id
-    from {{ ref('ref_team_aliases') }}
+    from ref_team_aliases
 ),
 
 all_names as (
@@ -61,3 +69,9 @@ select
     d.canonical_name
 from all_names n
 join team_dim d on d.team_id = n.team_id
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.dim_team_name_lookup
+
+{% endif %}

@@ -8,39 +8,38 @@
 -- Join keys: team (team_abbrev), game_date
 -- =============================================================================
 
+-- E11.1-W5 dual-branch lakehouse model (was incremental). DuckDB branch reads the
+-- W1 stg_batter_pitches + the migrated mart_game_results (registered as DuckDB
+-- views); Snowflake branch is a thin view over the lakehouse_ext external table.
+-- The lakehouse build is a full rebuild (the incremental WHERE arm is dropped, the
+-- non-incremental game_type filter kept). game_date is cast ::date in plate_appearances
+-- so the parquet carries DATE for the RANGE-interval rolling windows (stg_batter_pitches
+-- stores game_date as VARCHAR; mart_game_results is already DATE).
+
 {{
     config(
-        materialized = 'incremental',
-        unique_key = ['game_pk', 'team'],
-        on_schema_change = 'sync_all_columns'
+        materialized = 'view',
+        tags         = ['w5_lakehouse']
     )
 }}
+
+{% if target.name == 'duckdb' %}
 
 with
 
 pitches as (
 
     select p.*
-    from {{ ref('stg_batter_pitches') }} p
-    {% if is_incremental() %}
+    from stg_batter_pitches p
     where p.game_type = 'R'
-      and p.game_date >= (select date_trunc('year', max(game_date)) from {{ this }})
-    {% else %}
-    where p.game_type = 'R'
-    {% endif %}
 
 ),
 
 game_results as (
 
     select gr.*
-    from {{ ref('mart_game_results') }} gr
-    {% if is_incremental() %}
+    from mart_game_results gr
     where gr.game_type = 'R'
-      and gr.game_date >= (select date_trunc('year', max(game_date)) from {{ this }})
-    {% else %}
-    where gr.game_type = 'R'
-    {% endif %}
 
 ),
 
@@ -51,7 +50,7 @@ plate_appearances as (
 
     select
         game_pk,
-        game_date,
+        game_date::date as game_date,
         game_year,
         at_bat_number,
 
@@ -342,7 +341,10 @@ rolling as (
 )
 
 select * from rolling
-{% if is_incremental() %}
-where game_date > (select max(game_date) from {{ this }})
-{% endif %}
 order by team, game_date
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_team_rolling_offense
+
+{% endif %}

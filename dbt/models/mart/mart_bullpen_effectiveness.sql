@@ -19,19 +19,29 @@
 --   Join both on pitching_team + game_pk for a complete pre-game bullpen view.
 -- =============================================================================
 
+-- E11.1-W5 dual-branch lakehouse model (W4-deferred Group B; was incremental). DuckDB
+-- branch reads the W1 stg_batter_pitches + the W2 mart_starting_pitcher_game_log
+-- (registered as DuckDB views) + the eb_bullpen_team_posteriors S3 parquet (exported by
+-- scripts/export_w5_raw_to_s3.py); Snowflake branch is a thin view over the lakehouse_ext
+-- external table. The eb_bullpen_team_posteriors dbt model KEEPS its Snowflake write — this
+-- reads the one-time/opt-in S3 mirror. Full rebuild (incremental WHERE arms dropped).
+-- game_date is cast ::date in the pitches CTE for the RANGE-interval rolling windows
+-- (stg_batter_pitches stores it VARCHAR).
+
 {{
     config(
-        materialized = 'incremental',
-        unique_key = ['game_pk', 'team_abbrev'],
-        on_schema_change = 'sync_all_columns'
+        materialized = 'view',
+        tags         = ['w5_lakehouse']
     )
 }}
+
+{% if target.name == 'duckdb' %}
 
 with pitches as (
 
     select
         game_pk,
-        game_date,
+        game_date::date as game_date,
         game_year,
         at_bat_number,
         pitch_number,
@@ -46,11 +56,8 @@ with pitches as (
         xwoba,
         woba_value,
         woba_denom
-    from {{ ref('stg_batter_pitches') }}
+    from stg_batter_pitches
     where game_type = 'R'
-    {% if is_incremental() %}
-      and game_date >= (select max(game_date) - interval '30 days' from {{ this }})
-    {% endif %}
 
 ),
 
@@ -67,7 +74,7 @@ pitches_tagged as (
 starters as (
 
     select game_pk, pitcher_id, pitching_team
-    from {{ ref('mart_starting_pitcher_game_log') }}
+    from mart_starting_pitcher_game_log
 
 ),
 
@@ -362,7 +369,7 @@ eb_bullpen as (
             n_relievers / nullif(n_relievers + n_prior_only, 0),
             4
         )                                                       as eb_bullpen_coverage_pct
-    from {{ ref('eb_bullpen_team_posteriors') }}  -- Story A2.11: dbt model (was source table)
+    from read_parquet('{{ lakehouse_loc("eb_bullpen_team_posteriors") }}**/*.parquet', union_by_name=true)  -- A2.11 dbt model; W5 reads its S3 mirror
 
 )
 
@@ -402,12 +409,9 @@ left join rolling r
 left join eb_bullpen eb
     on  cast(tg.game_pk as text) = eb.game_pk
     and tg.pitching_team         = eb.team
-{% if is_incremental() %}
--- 7-day lookback (not strict `> max`) so late-arriving EB bullpen posteriors merge
--- into already-inserted rows. eb_bullpen_team_posteriors for game-date D is written
--- by compute_bullpen_posteriors AFTER this mart first processes D (the daily op runs
--- post-dbt_daily_build), so a strict `> max` would freeze those rows at NULL eb. The
--- unique_key (game_pk, team_abbrev) makes the reprocess a merge-update, not a dup.
--- Also self-heals a missed daily run within the window. See reference_bullpen_freshness_chain.
-where tg.game_date >= (select max(game_date) - interval '7 days' from {{ this }})
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_bullpen_effectiveness
+
 {% endif %}

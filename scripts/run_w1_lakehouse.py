@@ -158,6 +158,54 @@ W3PRE_STG_MODELS = [
     "stg_statsapi_games",    # ← lakehouse_raw/monthly_schedule   (⚠ double-duty + serving)
 ]
 
+# E11.1-W5: the seeds + the mart_game_results / mart_game_spine team/game chain (10
+# marts) + the 4 W4-deferred marts. OPT-IN (--w5) until cutover, like W3pre/W4: the
+# precursor exports (scripts/export_w5_raw_to_s3.py) + the W3pre stg_statsapi_games
+# parquet must exist first, so the default daily (HALT) op stays W1+W2+W3 until the
+# operator validates W5 and flips it default-on.
+#
+# Precursor VIEWS registered (read directly from S3 parquet, NOT built here):
+#   • seeds (part-0.parquet): ref_teams, ref_team_aliases
+#   • W3pre flatten (data.parquet): stg_statsapi_games   ← mart_game_results/spine read it
+#   • W2 mart (data.parquet): mart_starting_pitcher_game_log  ← Group B bullpen mart
+# stg_batter_pitches + the W1 mart_pitch_* are already registered by run() before this.
+W5_SEED_VIEWS = ["ref_teams", "ref_team_aliases"]
+W5_PRECURSOR_VIEWS = ["stg_statsapi_games"]
+
+# Group A — built in DEPENDENCY ORDER (each registered as a DuckDB view immediately
+# after build so the next model's plain-name reads resolve). dim_team_name_lookup +
+# mart_game_results precede mart_game_spine; the spine precedes the Group B marts that
+# read it (team_fielding_oaa, team_defense_quality_rolling).
+W5_MART_MODELS = [
+    "dim_team_name_lookup",          # ← ref_teams + ref_team_aliases seeds
+    "mart_game_results",             # ← stg_batter_pitches + ref_teams + stg_statsapi_games
+    "mart_game_spine",               # ← mart_game_results + stg_statsapi_games + dim_team_name_lookup
+    "mart_head_to_head_team_history",# ← mart_game_results + ref_teams
+    "mart_home_away_splits",         # ← stg_batter_pitches + mart_game_results
+    "mart_park_run_factors",         # ← mart_game_results
+    "mart_team_pythagorean_rolling", # ← mart_game_results + ref_teams
+    "mart_team_rolling_offense",     # ← stg_batter_pitches + mart_game_results
+    "mart_team_rolling_pitching",    # ← stg_batter_pitches + mart_game_results
+    "mart_team_season_record",       # ← mart_game_results + ref_teams (+ inlined date_spine)
+]
+
+# Group B — the 4 W4-deferred marts + the stg_batter_sprint_speed precursor. Each reads
+# RAW/builder-output parquet exported by scripts/export_w5_raw_to_s3.py directly via
+# read_parquet(lakehouse_loc(...)) in its duckdb branch (eb_park_factors_raw,
+# oaa_team_season_raw, eb_bullpen_team_posteriors, sprint_speed_raw) PLUS the Group-A
+# mart_game_spine (registered above). stg_batter_sprint_speed is a staging precursor
+# (flattens sprint_speed_raw) — built + registered before the defense-quality mart that
+# reads it. ⚠ The builders that WRITE those raw tables (fit_park_priors.py, the
+# eb_bullpen_team_posteriors dbt model, the OAA + Savant ingests) keep their Snowflake
+# writes — this is the one-time/opt-in S3 mirror (W4 dual-write caveat).
+W5B_PRECURSOR_MODELS = ["stg_batter_sprint_speed"]   # ← sprint_speed_raw (parquet)
+W5B_MART_MODELS = [
+    "mart_eb_park_factors",             # ← eb_park_factors_raw (parquet)
+    "mart_bullpen_effectiveness",       # ← stg_batter_pitches + mart_starting_pitcher_game_log + eb_bullpen_team_posteriors (parquet)
+    "mart_team_fielding_oaa",           # ← mart_game_spine + oaa_team_season_raw (parquet)
+    "mart_team_defense_quality_rolling",# ← oaa_team_season_raw (parquet) + stg_batter_sprint_speed + mart_game_spine
+]
+
 
 def find_model(model_name: str) -> Path:
     for subdir in ("staging", "mart", "marts"):
@@ -389,6 +437,57 @@ def _build_w4(conn, dry_run: bool) -> None:
         _register_mart_views(conn, [model], dry_run)
 
 
+def _register_s3_glob_views(conn, names: list[str]) -> None:
+    """Register S3 parquet directly as DuckDB views by globbing the model dir.
+
+    Used for E11.1-W5 precursors that are NOT built in this run: the tiny seeds
+    (ref_teams/ref_team_aliases — part-0.parquet), the W3pre stg_statsapi_games flatten
+    (data.parquet), and the W2 mart_starting_pitcher_game_log (data.parquet). None of
+    these are year-partitioned, so a flat `<name>/*.parquet` glob matches both the
+    part-0/data file naming without a recursive walk."""
+    for name in names:
+        glob = f"{LAKEHOUSE}/{name}/*.parquet"
+        conn.execute(
+            f"CREATE OR REPLACE VIEW {name} AS SELECT * FROM read_parquet('{glob}')"
+        )
+        print(f"  registered S3 view: {name}")
+
+
+def _build_w5(conn, dry_run: bool, group_b: bool = True) -> None:
+    """Build the E11.1-W5 seeds + mart_game_results/mart_game_spine team/game chain
+    (Group A, 10 marts) and, optionally, the 4 W4-deferred marts (Group B).
+
+    Group A registers the seed + W3pre precursor views first, then builds each mart in
+    dependency order, registering it as a DuckDB view immediately so the next model's
+    plain-name reads resolve (dim_team_name_lookup + mart_game_results → mart_game_spine
+    → the team/game leaves). The W1 mart_pitch_* + stg_batter_pitches it reads are
+    registered as views by the caller before this runs.
+
+    Group B reads its raw/builder parquet (eb_park_factors_raw, oaa_team_season_raw,
+    eb_bullpen_team_posteriors, sprint_speed_raw) DIRECTLY via read_parquet(lakehouse_loc)
+    in each model's duckdb branch — no view registration — plus the Group-A mart_game_spine
+    + the W2 mart_starting_pitcher_game_log (registered here). A Group B raw parquet that
+    is absent (export not run) makes that mart's build raise; Group B is gated by the
+    caller (opt-in) so the daily HALT op never trips on a missing precursor."""
+    print("\nW5 precursor views (seeds + W3pre stg_statsapi_games):")
+    _register_s3_glob_views(conn, W5_SEED_VIEWS + W5_PRECURSOR_VIEWS)
+
+    print("\nW5 Group A marts (game-results team/game chain):")
+    for model in W5_MART_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+    if not group_b:
+        return
+
+    print("\nW5 Group B marts (W4-deferred) + stg_batter_sprint_speed precursor:")
+    # mart_bullpen_effectiveness reads the W2 mart_starting_pitcher_game_log.
+    _register_s3_glob_views(conn, ["mart_starting_pitcher_game_log"])
+    for model in W5B_PRECURSOR_MODELS + W5B_MART_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+
 def run(
     dry_run: bool = False,
     skip_w1: bool = False,
@@ -398,6 +497,9 @@ def run(
     w3_only: bool = False,
     w4: bool = False,
     w4_only: bool = False,
+    w5: bool = False,
+    w5_only: bool = False,
+    w5_group_a_only: bool = False,
 ) -> None:
     import duckdb
 
@@ -488,6 +590,18 @@ def run(
         print("\nW4 marts run complete (--w4-only).")
         return
 
+    # E11.1-W5: --w5-only rebuilds just the W5 marts (the game-results team/game chain
+    # + the 4 W4-deferred marts), reusing the existing W1/W2/W3pre parquet (registered
+    # as views by _build_w5). stg_batter_pitches is already registered above. Lets the
+    # operator iterate on W5 / re-run parity after an export, without rebuilding the
+    # heavy pitch marts. --w5-group-a-only stops after the 10-mart Group A chain.
+    if w5_only:
+        print("\nBuilding W5 (reuse existing W1/W2/W3pre parquet for --w5-only):")
+        _build_w5(conn, dry_run, group_b=not w5_group_a_only)
+        conn.close()
+        print("\nW5 marts run complete (--w5-only).")
+        return
+
     # ── W1: pitch-level marts ────────────────────────────────────────────────
     if not skip_w1:
         print("\nW1 marts:")
@@ -534,8 +648,19 @@ def run(
     if w4:
         _build_w4(conn, dry_run)
 
+    # ── W5: seeds + mart_game_results/spine team chain + W4-deferred marts — OPT-IN ──
+    # NOT built by default (like W3pre/W4): W5 reads the seed + W4-deferred raw parquet
+    # (scripts/export_w5_raw_to_s3.py) that must exist first. Enable with --w5 once the
+    # exports are wired and cutover is validated. --w5-group-a-only restricts to the
+    # 10-mart Group A chain (skips the 4 W4-deferred Group B marts).
+    if w5:
+        _build_w5(conn, dry_run, group_b=not w5_group_a_only)
+
     conn.close()
-    print(f"\nW1+W2+W3{'+W3pre' if w3pre else ''}{'+W4' if w4 else ''} lakehouse run complete.")
+    print(
+        f"\nW1+W2+W3{'+W3pre' if w3pre else ''}{'+W4' if w4 else ''}"
+        f"{'+W5' if w5 else ''} lakehouse run complete."
+    )
 
 
 if __name__ == "__main__":
@@ -548,4 +673,7 @@ if __name__ == "__main__":
         w3_only="--w3-only" in sys.argv,
         w4="--w4" in sys.argv,
         w4_only="--w4-only" in sys.argv,
+        w5="--w5" in sys.argv,
+        w5_only="--w5-only" in sys.argv,
+        w5_group_a_only="--w5-group-a-only" in sys.argv,
     )

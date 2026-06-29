@@ -8,11 +8,19 @@
 --          stg_statsapi_venues; this model captures the observed run signal.
 -- =============================================================================
 
+-- E11.1-W5 dual-branch lakehouse model. DuckDB branch reads the migrated
+-- mart_game_results (registered as a DuckDB view); Snowflake branch is a thin view
+-- over the lakehouse_ext external table. Aggregates by game_year only — no
+-- RANGE-interval date windows, so no game_date cast is needed.
+
 {{
     config(
-        materialized = 'table'
+        materialized = 'view',
+        tags         = ['w5_lakehouse']
     )
 }}
+
+{% if target.name == 'duckdb' %}
 
 with game_results as (
 
@@ -21,7 +29,7 @@ with game_results as (
         venue_name,
         game_year,
         home_final_score + away_final_score as total_runs
-    from {{ ref('mart_game_results') }}
+    from mart_game_results
     where game_type = 'R'
       and venue_id is not null
 
@@ -60,3 +68,9 @@ with_rolling as (
 select *
 from with_rolling
 where game_count >= 10
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_park_run_factors
+
+{% endif %}

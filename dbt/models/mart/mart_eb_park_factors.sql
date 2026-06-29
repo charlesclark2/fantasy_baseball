@@ -12,7 +12,14 @@
 -- park_run_factor_3yr it replaces.
 -- =============================================================================
 
-{{ config(materialized='table') }}
+-- E11.1-W5 dual-branch lakehouse model (W4-deferred Group B). DuckDB branch reads the
+-- eb_park_factors_raw S3 parquet (exported by scripts/export_w5_raw_to_s3.py); Snowflake
+-- branch is a thin view over the lakehouse_ext external table. fit_park_priors.py KEEPS
+-- its Snowflake MERGE-upsert into eb_park_factors_raw — this reads the one-time/opt-in S3
+-- mirror. Thin passthrough, value-identical.
+{{ config(materialized='view', tags=['w5_lakehouse']) }}
+
+{% if target.name == 'duckdb' %}
 
 select
     venue_id,
@@ -27,4 +34,10 @@ select
     fit_date,
     run_id
 
-from {{ source('betting', 'eb_park_factors_raw') }}
+from read_parquet('{{ lakehouse_loc("eb_park_factors_raw") }}**/*.parquet', union_by_name=true)
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.mart_eb_park_factors
+
+{% endif %}

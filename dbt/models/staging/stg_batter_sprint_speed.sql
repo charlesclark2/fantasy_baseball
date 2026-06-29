@@ -4,13 +4,23 @@
 -- Grain: one row per player per season (latest snapshot only)
 -- Purpose: Expose Statcast sprint speed (ft/s) for use in lineup features.
 --          Deduplicates to the most recent snapshot_date per player × season.
+--
+-- E11.1-W5 dual-branch lakehouse precursor (W4-deferred Group B). DuckDB branch reads
+-- the sprint_speed_raw S3 parquet (exported by scripts/export_w5_raw_to_s3.py); Snowflake
+-- branch is a thin view over the lakehouse_ext external table. The Savant sprint ingest
+-- KEEPS its Snowflake write — this reads the one-time/opt-in S3 mirror. Feeds the W5
+-- Group-B mart_team_defense_quality_rolling.
 -- =============================================================================
+
+{{ config(materialized='view', tags=['w5_lakehouse']) }}
+
+{% if target.name == 'duckdb' %}
 
 with
 
 source as (
 
-    select * from {{ source('savant', 'sprint_speed_raw') }}
+    select * from read_parquet('{{ lakehouse_loc("sprint_speed_raw") }}**/*.parquet', union_by_name=true)
 
 ),
 
@@ -49,3 +59,9 @@ deduped as (
 )
 
 select * from deduped
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.stg_batter_sprint_speed
+
+{% endif %}
