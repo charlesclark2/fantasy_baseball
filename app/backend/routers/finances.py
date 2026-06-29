@@ -3,10 +3,15 @@
 GET /admin/finances — 6-month rolling window of costs, P&L, and net profitability.
 
 Variable cost sources:
-  - Snowflake: ACCOUNT_USAGE.METERING_DAILY_HISTORY (requires IMPORTED PRIVILEGES)
-  - AWS:       Cost Explorer ce:GetCostAndUsage (requires IAM permission on Lambda role)
-  - Railway:   RAILWAY_MONTHLY_ESTIMATE env var (manual — no public billing API)
-  - Dagster+:  DAGSTER_MONTHLY_ESTIMATE env var (manual — $0.04/credit, check dashboard)
+  - Snowflake: ACCOUNT_USAGE.METERING_DAILY_HISTORY (requires IMPORTED PRIVILEGES).
+               Cloud-services credits are billed only above 10% of the day's compute
+               credits, applied DAILY (see _snowflake_costs_by_month).
+  - AWS:       Cost Explorer ce:GetCostAndUsage grouped by SERVICE (requires the
+               ce:GetCostAndUsage IAM permission on the Lambda role). Broken into
+               line items: EC2, S3, Lambda, API Gateway, DynamoDB, SES, Other AWS.
+
+Post-INC-16 (Railway cancelled, Dagster self-hosted on EC2) there is no separate
+Railway/Dagster cost line — that spend now shows up inside the AWS EC2 line item.
 
 Fixed costs and subscription revenue are hardcoded / placeholders updated in this file.
 """
@@ -14,15 +19,13 @@ Fixed costs and subscription revenue are hardcoded / placeholders updated in thi
 from __future__ import annotations
 
 import datetime
-import json
 import logging
 import os
 import time
 
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
-from botocore.exceptions import ClientError
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.backend.dependencies import get_admin_user
@@ -61,12 +64,21 @@ _SNOWFLAKE_CREDIT_PRICE: float = 2.0  # $/credit
 _sf_cost_cache: tuple[float, dict[str, float]] | None = None  # (expires_at, data)
 _SF_CACHE_TTL = 6 * 3600  # 6 hours
 
-# S3 key for admin-editable cost estimates (outside api-cache/ prefix, never invalidated)
-_FINANCES_CONFIG_S3_KEY = "admin-settings/finances-config.json"
-_FINANCES_CONFIG_DEFAULTS: dict[str, float] = {
-    "railway_monthly_estimate": 0.0,
-    "dagster_monthly_estimate": 50.0,  # sensible default until set explicitly
-}
+# AWS Cost Explorer SERVICE-dimension names → P&L line-item labels. Matched by
+# case-insensitive substring (CE service names vary: "EC2 - Other" vs "Amazon
+# Elastic Compute Cloud - Compute"). Anything unmatched falls into "Other AWS".
+# Order matters — first match wins.
+_AWS_LINE_ITEMS: list[tuple[str, tuple[str, ...]]] = [
+    ("EC2", ("elastic compute cloud", "ec2")),
+    ("S3", ("simple storage service",)),
+    ("Lambda", ("lambda",)),
+    ("API Gateway", ("api gateway",)),
+    ("DynamoDB", ("dynamodb",)),
+    ("SES", ("simple email service", "ses")),
+]
+_AWS_OTHER = "Other AWS"
+# Line items rolled into the AWS infra total (SES is kept as its own P&L line).
+_AWS_INFRA_LABELS = ("EC2", "S3", "Lambda", "API Gateway", "DynamoDB", _AWS_OTHER)
 
 
 # ── Response models ───────────────────────────────────────────────────────────
@@ -76,9 +88,8 @@ class MonthlyFinances(BaseModel):
     month_label: str         # "Jun 2026"
     fixed_cost: float
     snowflake_cost: float | None
-    aws_cost: float | None
-    railway_cost: float | None
-    dagster_cost: float | None
+    aws_cost: float | None   # AWS infra total (EC2+S3+Lambda+API GW+DynamoDB+Other), ex-SES
+    ses_cost: float | None
     total_cost: float
     betting_pl: float
     subscription_revenue: float
@@ -88,54 +99,29 @@ class MonthlyFinances(BaseModel):
 class FinancesResponse(BaseModel):
     months: list[MonthlyFinances]
     fixed_breakdown: dict[str, float]
+    aws_breakdown: dict[str, float]  # window totals per AWS line item (EC2, S3, …, SES, Other AWS)
     notes: list[str]
-
-
-class FinancesConfig(BaseModel):
-    railway_monthly_estimate: float = 0.0
-    dagster_monthly_estimate: float = 50.0
-
-
-# ── S3 config helpers ─────────────────────────────────────────────────────────
-
-def _load_finances_config() -> FinancesConfig:
-    bucket = os.getenv("CACHE_BUCKET")
-    if not bucket:
-        return FinancesConfig(**_FINANCES_CONFIG_DEFAULTS)
-    try:
-        s3 = boto3.client("s3", region_name=_REGION)
-        resp = s3.get_object(Bucket=bucket, Key=_FINANCES_CONFIG_S3_KEY)
-        data = json.loads(resp["Body"].read().decode())
-        return FinancesConfig(**{**_FINANCES_CONFIG_DEFAULTS, **data})
-    except ClientError as exc:
-        if exc.response["Error"]["Code"] != "NoSuchKey":
-            logger.warning("Could not load finances config from S3: %s", exc)
-        return FinancesConfig(**_FINANCES_CONFIG_DEFAULTS)
-    except Exception as exc:
-        logger.warning("Could not load finances config from S3 — using defaults: %s", exc)
-        return FinancesConfig(**_FINANCES_CONFIG_DEFAULTS)
-
-
-def _save_finances_config(config: FinancesConfig) -> None:
-    bucket = os.getenv("CACHE_BUCKET")
-    if not bucket:
-        raise HTTPException(status_code=500, detail="CACHE_BUCKET not configured")
-    try:
-        s3 = boto3.client("s3", region_name=_REGION)
-        s3.put_object(
-            Bucket=bucket,
-            Key=_FINANCES_CONFIG_S3_KEY,
-            Body=json.dumps(config.model_dump()),
-            ContentType="application/json",
-        )
-    except Exception as exc:
-        logger.error("Failed to save finances config: %s", exc)
-        raise HTTPException(status_code=500, detail="Failed to save config") from exc
 
 
 # ── Data fetchers ─────────────────────────────────────────────────────────────
 
+def _classify_aws_service(service_name: str) -> str:
+    """Map a Cost Explorer SERVICE name to a P&L line-item label."""
+    s = service_name.lower()
+    for label, needles in _AWS_LINE_ITEMS:
+        if any(n in s for n in needles):
+            return label
+    return _AWS_OTHER
+
+
 def _snowflake_costs_by_month() -> dict[str, float]:
+    """Monthly Snowflake $ cost, applying the daily 10%-cloud-services billing rule.
+
+    Cloud-services credits are billed only above 10% of the day's compute credits,
+    so billed credits = SUM_day(compute + MAX(0, cloud_services − 0.10·compute)).
+    The 10% rule is applied DAILY (a free day cannot offset a heavy day), then the
+    daily billed credits are summed per month and priced at $/credit.
+    """
     global _sf_cost_cache
     now = time.time()
     if _sf_cost_cache is not None and now < _sf_cost_cache[0]:
@@ -143,11 +129,19 @@ def _snowflake_costs_by_month() -> dict[str, float]:
 
     try:
         rows = execute_query("""
+            WITH daily AS (
+                SELECT
+                    USAGE_DATE,
+                    SUM(CREDITS_USED_COMPUTE)        AS compute_c,
+                    SUM(CREDITS_USED_CLOUD_SERVICES) AS cloud_c
+                FROM SNOWFLAKE.ACCOUNT_USAGE.METERING_DAILY_HISTORY
+                WHERE USAGE_DATE >= DATEADD('month', -6, CURRENT_DATE())
+                GROUP BY USAGE_DATE
+            )
             SELECT
-                DATE_TRUNC('month', USAGE_DATE)                     AS month,
-                SUM(CREDITS_USED_COMPUTE + CREDITS_USED_CLOUD_SERVICES) AS total_credits
-            FROM SNOWFLAKE.ACCOUNT_USAGE.METERING_DAILY_HISTORY
-            WHERE USAGE_DATE >= DATEADD('month', -6, CURRENT_DATE())
+                DATE_TRUNC('month', USAGE_DATE)                          AS month,
+                SUM(compute_c + GREATEST(0, cloud_c - 0.10 * compute_c)) AS billed_credits
+            FROM daily
             GROUP BY 1
             ORDER BY 1 DESC
         """)
@@ -160,14 +154,19 @@ def _snowflake_costs_by_month() -> dict[str, float]:
         if dt is None:
             continue
         key = dt.strftime("%Y-%m") if hasattr(dt, "strftime") else str(dt)[:7]
-        credits = float(row.get("TOTAL_CREDITS") or 0)
+        credits = float(row.get("BILLED_CREDITS") or 0)
         result[key] = round(credits * _SNOWFLAKE_CREDIT_PRICE, 2)
 
     _sf_cost_cache = (now + _SF_CACHE_TTL, result)
     return result
 
 
-def _aws_costs_by_month() -> dict[str, float]:
+def _aws_costs_by_month() -> dict[str, dict[str, float]]:
+    """AWS $ cost per month, grouped into P&L line items via Cost Explorer SERVICE.
+
+    Returns {month_key: {line_item_label: cost}}. An empty dict signals the CE call
+    failed (e.g. missing ce:GetCostAndUsage) so the caller can mark costs unavailable.
+    """
     try:
         today = datetime.date.today()
         year, month = today.year, today.month - 5
@@ -178,16 +177,28 @@ def _aws_costs_by_month() -> dict[str, float]:
         end = today + datetime.timedelta(days=1)  # CE end is exclusive
 
         ce = boto3.client("ce", region_name="us-east-1")
-        resp = ce.get_cost_and_usage(
-            TimePeriod={"Start": start.isoformat(), "End": end.isoformat()},
-            Granularity="MONTHLY",
-            Metrics=["UnblendedCost"],
-        )
-        result: dict[str, float] = {}
-        for period in resp.get("ResultsByTime", []):
-            key = period["TimePeriod"]["Start"][:7]
-            amount = float(period["Total"]["UnblendedCost"]["Amount"])
-            result[key] = round(amount, 2)
+        result: dict[str, dict[str, float]] = {}
+        next_token: str | None = None
+        while True:
+            kwargs: dict = {
+                "TimePeriod": {"Start": start.isoformat(), "End": end.isoformat()},
+                "Granularity": "MONTHLY",
+                "Metrics": ["UnblendedCost"],
+                "GroupBy": [{"Type": "DIMENSION", "Key": "SERVICE"}],
+            }
+            if next_token:
+                kwargs["NextPageToken"] = next_token
+            resp = ce.get_cost_and_usage(**kwargs)
+            for period in resp.get("ResultsByTime", []):
+                key = period["TimePeriod"]["Start"][:7]
+                bucket = result.setdefault(key, {})
+                for grp in period.get("Groups", []):
+                    label = _classify_aws_service(grp["Keys"][0])
+                    amount = float(grp["Metrics"]["UnblendedCost"]["Amount"])
+                    bucket[label] = round(bucket.get(label, 0.0) + amount, 2)
+            next_token = resp.get("NextPageToken")
+            if not next_token:
+                break
         return result
     except Exception:
         logger.warning("AWS Cost Explorer query failed — add ce:GetCostAndUsage to Lambda IAM role")
@@ -251,19 +262,6 @@ def _betting_pl_by_month(user_id: str) -> dict[str, float]:
 
 # ── Endpoint ──────────────────────────────────────────────────────────────────
 
-@router.get("/finances-config", response_model=FinancesConfig)
-def get_finances_config(_: str = Depends(get_admin_user)) -> FinancesConfig:
-    """Read editable cost estimates (Railway, Dagster+)."""
-    return _load_finances_config()
-
-
-@router.patch("/finances-config", response_model=FinancesConfig)
-def update_finances_config(body: FinancesConfig, _: str = Depends(get_admin_user)) -> FinancesConfig:
-    """Persist updated cost estimates to S3."""
-    _save_finances_config(body)
-    return body
-
-
 @router.get("/finances", response_model=FinancesResponse)
 def get_finances(_: str = Depends(get_admin_user)) -> FinancesResponse:
     """6-month rolling infrastructure cost + betting P&L profitability view."""
@@ -272,34 +270,33 @@ def get_finances(_: str = Depends(get_admin_user)) -> FinancesResponse:
     owner_id = _owner_user_id()
     pl_by_month = _betting_pl_by_month(owner_id) if owner_id else {}
 
-    cfg = _load_finances_config()
-    railway_est = cfg.railway_monthly_estimate
-    dagster_est = cfg.dagster_monthly_estimate
-
     notes: list[str] = []
     if not sf_costs:
         notes.append("Snowflake costs unavailable — role needs IMPORTED PRIVILEGES on SNOWFLAKE database")
     if not aws_costs:
         notes.append("AWS costs unavailable — add ce:GetCostAndUsage to Lambda IAM role")
-    if railway_est == 0:
-        notes.append("Railway estimate not set — edit estimates above to include Railway costs")
-    if dagster_est == 0:
-        notes.append("Dagster+ estimate not set — edit estimates above ($0.04/credit)")
 
     today = datetime.date.today()
     current_month = datetime.date(today.year, today.month, 1)
     months: list[MonthlyFinances] = []
+    aws_breakdown: dict[str, float] = {}  # window totals per line item
     month_date = _FINANCES_START
     while month_date <= current_month:
         key = month_date.strftime("%Y-%m")
         label = month_date.strftime("%b %Y")
 
         sf = sf_costs.get(key)
-        aws = aws_costs.get(key)
-        ry = railway_est if railway_est > 0 else None
-        da = dagster_est if dagster_est > 0 else None
+        aws_bucket = aws_costs.get(key)  # None if CE failed or no spend for this month
+        if aws_bucket is not None:
+            aws = round(sum(aws_bucket.get(lbl, 0.0) for lbl in _AWS_INFRA_LABELS), 2)
+            ses = aws_bucket.get("SES")
+            for lbl, amount in aws_bucket.items():
+                aws_breakdown[lbl] = round(aws_breakdown.get(lbl, 0.0) + amount, 2)
+        else:
+            aws = None
+            ses = None
 
-        variable = (sf or 0.0) + (aws or 0.0) + (ry or 0.0) + (da or 0.0)
+        variable = (sf or 0.0) + (aws or 0.0) + (ses or 0.0)
         total = round(_FIXED_TOTAL + variable, 2)
         pl = pl_by_month.get(key, 0.0)
         subs = 0.0  # placeholder — wire when subscription billing is live
@@ -311,8 +308,7 @@ def get_finances(_: str = Depends(get_admin_user)) -> FinancesResponse:
             fixed_cost=_FIXED_TOTAL,
             snowflake_cost=sf,
             aws_cost=aws,
-            railway_cost=ry,
-            dagster_cost=da,
+            ses_cost=ses,
             total_cost=total,
             betting_pl=pl,
             subscription_revenue=subs,
@@ -328,5 +324,6 @@ def get_finances(_: str = Depends(get_admin_user)) -> FinancesResponse:
     return FinancesResponse(
         months=months,
         fixed_breakdown=_FIXED_LINE_ITEMS,
+        aws_breakdown=aws_breakdown,
         notes=notes,
     )

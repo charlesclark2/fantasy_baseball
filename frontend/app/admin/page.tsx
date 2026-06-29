@@ -41,6 +41,8 @@ interface ModelFreshness {
   model_name: string
   target: string
   version: string
+  registry_version: string
+  ledger_behind: boolean
   last_trained_date: string
   days_since_training: number
   status: "healthy" | "watch" | "stale"
@@ -51,7 +53,7 @@ interface SnowflakeCredits {
   month_label: string
   compute_credits: number
   cloud_service_credits: number
-  total_credits: number
+  billed_credits: number
 }
 
 interface MonthlyFinances {
@@ -60,8 +62,7 @@ interface MonthlyFinances {
   fixed_cost: number
   snowflake_cost: number | null
   aws_cost: number | null
-  railway_cost: number | null
-  dagster_cost: number | null
+  ses_cost: number | null
   total_cost: number
   betting_pl: number
   subscription_revenue: number
@@ -71,12 +72,8 @@ interface MonthlyFinances {
 interface FinancesData {
   months: MonthlyFinances[]
   fixed_breakdown: Record<string, number>
+  aws_breakdown: Record<string, number>
   notes: string[]
-}
-
-interface FinancesConfig {
-  railway_monthly_estimate: number
-  dagster_monthly_estimate: number
 }
 
 interface DataQualityReport {
@@ -157,13 +154,12 @@ export default function AdminPage() {
   const qc = useQueryClient()
   const [refreshState, setRefreshState] = useState<"idle" | "loading" | "done" | "error">("idle")
   const [showFixedBreakdown, setShowFixedBreakdown] = useState(false)
+  const [showAwsBreakdown, setShowAwsBreakdown] = useState(false)
   const [showResolved, setShowResolved] = useState(false)
-  const [configDraft, setConfigDraft] = useState<FinancesConfig | null>(null)
-  const [configSaving, setConfigSaving] = useState(false)
 
   const { data: pipelineStatus, isLoading: statusLoading } = useQuery<PipelineStatus>({
     queryKey: ["pipeline-status", accessToken],
-    queryFn: () => apiFetch("/pipeline/status", {}, accessToken),
+    queryFn: () => apiFetch("/pipeline/status?fallback_latest=true", {}, accessToken),
     staleTime: 60_000,
     enabled: !!accessToken && isAdmin,
   })
@@ -196,13 +192,6 @@ export default function AdminPage() {
     enabled: !!accessToken && isAdmin,
   })
 
-  const { data: financesConfig } = useQuery<FinancesConfig>({
-    queryKey: ["admin-finances-config", accessToken],
-    queryFn: () => apiFetch("/admin/finances-config", {}, accessToken),
-    staleTime: Infinity,
-    enabled: !!accessToken && isAdmin,
-  })
-
   const { data: dataQualityReports, isLoading: reportsLoading } = useQuery<DataQualityReport[]>({
     queryKey: ["admin-data-quality-reports", accessToken],
     queryFn: () => apiFetch("/admin/data-quality-reports", {}, accessToken),
@@ -215,23 +204,6 @@ export default function AdminPage() {
       apiFetch(`/admin/data-quality-reports/${reportId}/resolve`, { method: "PATCH" }, accessToken),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-data-quality-reports"] }),
   })
-
-  // Sync config into draft once loaded (only if draft not yet set)
-  if (financesConfig && configDraft === null) {
-    setConfigDraft(financesConfig)
-  }
-
-  async function saveFinancesConfig() {
-    if (!configDraft) return
-    setConfigSaving(true)
-    try {
-      await apiFetch("/admin/finances-config", { method: "PATCH", body: JSON.stringify(configDraft) }, accessToken)
-      qc.invalidateQueries({ queryKey: ["admin-finances", accessToken] })
-      qc.invalidateQueries({ queryKey: ["admin-finances-config", accessToken] })
-    } finally {
-      setConfigSaving(false)
-    }
-  }
 
   async function handleRefresh() {
     setRefreshState("loading")
@@ -451,7 +423,14 @@ export default function AdminPage() {
                       <span className="block text-sm text-white font-medium truncate">
                         {m.model_name} ({m.version})
                       </span>
-                      <span className="block text-xs text-gray-500">{m.target}</span>
+                      <span className="block text-xs text-gray-500">
+                        {m.target}
+                        {m.ledger_behind && (
+                          <span className="ml-1.5 text-amber-400">
+                            · serving {m.version}, registry {m.registry_version} — reconcile ledger
+                          </span>
+                        )}
+                      </span>
                     </div>
                     <span
                       className="text-xs text-gray-500 whitespace-nowrap"
@@ -493,7 +472,7 @@ export default function AdminPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[#262626]">
-                    {["Month", "Compute cr.", "Cloud Svc cr.", "Total cr.", "Est. Cost"].map((h) => (
+                    {["Month", "Compute cr.", "Cloud Svc cr.", "Billed cr.", "Est. Cost"].map((h) => (
                       <th key={h} className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-gray-500">
                         {h}
                       </th>
@@ -506,71 +485,69 @@ export default function AdminPage() {
                       <td className="py-3 pr-4 text-xs font-medium text-white whitespace-nowrap">{row.month_label}</td>
                       <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{row.compute_credits.toFixed(1)}</td>
                       <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{row.cloud_service_credits.toFixed(1)}</td>
-                      <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{row.total_credits.toFixed(1)}</td>
+                      <td className="py-3 pr-4 text-xs text-gray-300 whitespace-nowrap">{row.billed_credits.toFixed(1)}</td>
                       <td className="py-3 text-xs font-semibold text-[#10b981] whitespace-nowrap">
-                        ${(row.total_credits * 2).toFixed(2)}
+                        ${(row.billed_credits * 2).toFixed(2)}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
+            <p className="mt-3 text-[10px] text-gray-600">
+              Billed cr. applies Snowflake&apos;s cloud-services rule (free up to 10% of the day&apos;s compute, daily).
+            </p>
           </section>
         </div>
         {/* Monthly P&L */}
         <section className="rounded-lg border border-[#262626] bg-[#141414] p-6">
           <div className="mb-5 flex items-center justify-between">
             <h2 className="text-base font-semibold text-white">Monthly P&amp;L</h2>
-            <button
-              onClick={() => setShowFixedBreakdown((v) => !v)}
-              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
-            >
-              Fixed breakdown
-              {showFixedBreakdown ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            </button>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setShowAwsBreakdown((v) => !v)}
+                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                AWS breakdown
+                {showAwsBreakdown ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
+              <button
+                onClick={() => setShowFixedBreakdown((v) => !v)}
+                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                Fixed breakdown
+                {showFixedBreakdown ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
+            </div>
           </div>
 
-          {/* Editable variable estimates */}
-          <div className="mb-5 rounded-lg border border-[#1e1e1e] bg-[#0a0a0a] p-4">
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-gray-500">
-              Variable Estimates
-            </p>
-            <div className="flex flex-wrap gap-4 items-end">
-              <label className="flex flex-col gap-1">
-                <span className="text-[11px] text-gray-500">Railway ($/mo)</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={configDraft?.railway_monthly_estimate ?? ""}
-                  onChange={(e) => setConfigDraft((d) => d ? { ...d, railway_monthly_estimate: parseFloat(e.target.value) || 0 } : d)}
-                  className="w-28 rounded border border-[#2a2a2a] bg-[#141414] px-2 py-1 text-sm text-white focus:border-blue-500 focus:outline-none"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-[11px] text-gray-500">Dagster+ ($/mo)</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={configDraft?.dagster_monthly_estimate ?? ""}
-                  onChange={(e) => setConfigDraft((d) => d ? { ...d, dagster_monthly_estimate: parseFloat(e.target.value) || 0 } : d)}
-                  className="w-28 rounded border border-[#2a2a2a] bg-[#141414] px-2 py-1 text-sm text-white focus:border-blue-500 focus:outline-none"
-                />
-              </label>
-              <Button
-                size="sm"
-                onClick={saveFinancesConfig}
-                disabled={configSaving || configDraft === null}
-                className="h-[30px] text-xs"
-              >
-                {configSaving ? "Saving…" : "Save"}
-              </Button>
+          {showAwsBreakdown && finances?.aws_breakdown && Object.keys(finances.aws_breakdown).length > 0 && (
+            <div className="mb-5 rounded-lg border border-[#1e1e1e] bg-[#0a0a0a] p-4">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-gray-500">
+                AWS Cost by Service (window total)
+              </p>
+              <ul className="space-y-1.5">
+                {Object.entries(finances.aws_breakdown)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([name, cost]) => (
+                    <li key={name} className="flex justify-between text-sm">
+                      <span className="text-gray-400">{name}</span>
+                      <span className="text-white">${cost.toFixed(2)}</span>
+                    </li>
+                  ))}
+                <li className="flex justify-between border-t border-[#262626] pt-2 text-sm font-medium">
+                  <span className="text-gray-300">Total AWS</span>
+                  <span className="text-white">
+                    ${Object.values(finances.aws_breakdown).reduce((a, b) => a + b, 0).toFixed(2)}
+                  </span>
+                </li>
+              </ul>
+              <p className="mt-2 text-[10px] text-gray-600">
+                From Cost Explorer (grouped by service). Railway is cancelled and Dagster is self-hosted on EC2 —
+                that spend now appears in the EC2 line.
+              </p>
             </div>
-            <p className="mt-2 text-[10px] text-gray-600">
-              Dagster+ default: $50/mo. Railway: check your dashboard. Both persisted to S3.
-            </p>
-          </div>
+          )}
 
           {showFixedBreakdown && finances?.fixed_breakdown && (
             <div className="mb-5 rounded-lg border border-[#1e1e1e] bg-[#0a0a0a] p-4">
@@ -608,7 +585,7 @@ export default function AdminPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[#262626]">
-                      {["Month", "Fixed", "Snowflake", "AWS", "Railway", "Dagster", "Total Cost", "Betting P&L", "Subs", "Net"].map((h) => (
+                      {["Month", "Fixed", "Snowflake", "AWS", "SES", "Total Cost", "Betting P&L", "Subs", "Net"].map((h) => (
                         <th key={h} className="pb-3 pr-4 text-left text-xs font-semibold uppercase tracking-widest text-gray-500 last:pr-0 whitespace-nowrap">
                           {h}
                         </th>
@@ -622,8 +599,7 @@ export default function AdminPage() {
                         <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">${m.fixed_cost.toFixed(2)}</td>
                         <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{fmt(m.snowflake_cost)}</td>
                         <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{fmt(m.aws_cost)}</td>
-                        <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{fmt(m.railway_cost)}</td>
-                        <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{fmt(m.dagster_cost)}</td>
+                        <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{fmt(m.ses_cost)}</td>
                         <td className="py-3 pr-4 text-xs font-medium text-white whitespace-nowrap">${m.total_cost.toFixed(2)}</td>
                         <td className="py-3 pr-4 text-xs whitespace-nowrap">
                           <PLCell value={m.betting_pl} />
@@ -650,7 +626,6 @@ export default function AdminPage() {
                         <tr className="border-t-2 border-[#333] bg-[#0f0f0f]">
                           <td className="py-3 pr-4 text-xs font-bold text-gray-300 whitespace-nowrap uppercase tracking-widest">YTD Total</td>
                           <td className="py-3 pr-4 text-xs font-medium text-gray-300 whitespace-nowrap">${totals.fixed.toFixed(2)}</td>
-                          <td className="py-3 pr-4 text-xs text-gray-500 whitespace-nowrap">—</td>
                           <td className="py-3 pr-4 text-xs text-gray-500 whitespace-nowrap">—</td>
                           <td className="py-3 pr-4 text-xs text-gray-500 whitespace-nowrap">—</td>
                           <td className="py-3 pr-4 text-xs text-gray-500 whitespace-nowrap">—</td>

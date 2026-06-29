@@ -76,12 +76,17 @@ FEATURE_TABLES = {
 
 # Non-dbt SERVING marts the prediction/serving READERS need from S3 but that are NOT in any
 # dbt lakehouse wave (Python-written, not dbt models → no DuckDB build branch): team_elo_history
-# (compute_elo output, read by write_serving_store --teams) and mart_bankroll_state (read by
-# write_serving_store --performance + performance.py /summary). Mirrored here so the serving
-# --s3 path is complete; their generators (compute_elo, the bankroll writer) are the W8+ tail.
+# (compute_elo output, read by write_serving_store --teams). Mirrored here so the serving --s3
+# path is complete; its generator (compute_elo) is the W8+ tail.
+#
+# NOT mirrored: mart_bankroll_state. Bankroll now serves from DynamoDB; the Snowflake object no
+# longer exists (`does not exist or not authorized`). BOTH readers already try/except it and fall
+# back to mart_clv_labeled_games when it's unavailable — write_serving_store.py (~L2690) and
+# performance.py /summary (~L97-118) — so the bankroll read 404s → CLV fallback IDENTICALLY in
+# Snowflake and --s3 mode. Mirroring a non-existent object would only fail the export, so it's
+# excluded; the readers keep their existing CLV fallback (no behavior change).
 SERVING_MARTS = {
     "team_elo_history":   "baseball_data.betting.team_elo_history",
-    "mart_bankroll_state":"baseball_data.betting.mart_bankroll_state",
 }
 
 MIRROR_TABLES = {**FEATURE_TABLES, **SERVING_MARTS}
@@ -132,12 +137,18 @@ def _coerce_variant_cells(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _s3():
-    return boto3.client(
-        "s3",
-        region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
-        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
-    )
+    # INC-16 (AWS re-host): on the EC2 host S3 access comes from the instance IAM ROLE, so
+    # AWS_ACCESS_KEY_ID is UNSET in the env. Passing aws_access_key_id=None to boto3 DISABLES
+    # its default credential chain → "AuthorizationHeaderMalformed: a non-empty Access Key
+    # (AKID) must be provided" (the 2026-06-29 W7b-parallel mirror failure). So pass explicit
+    # keys ONLY when both are present (local/static-cred dev); otherwise let boto3 resolve the
+    # instance role — the same chain DuckDB COPY already uses for the W-series S3 writes.
+    kwargs = {"region_name": os.environ.get("AWS_DEFAULT_REGION", "us-east-1")}
+    akid, secret = os.environ.get("AWS_ACCESS_KEY_ID"), os.environ.get("AWS_SECRET_ACCESS_KEY")
+    if akid and secret:
+        kwargs["aws_access_key_id"] = akid
+        kwargs["aws_secret_access_key"] = secret
+    return boto3.client("s3", **kwargs)
 
 
 def _export(conn, lakehouse_name: str, fqn: str, dry_run: bool) -> int:

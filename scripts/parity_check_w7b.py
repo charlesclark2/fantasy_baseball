@@ -61,7 +61,14 @@ def _sf_df(conn, sql: str, params: dict | None = None) -> pd.DataFrame:
 
 
 def _duck_df(conn, sql: str, params: dict | None = None) -> pd.DataFrame:
-    duck_sql = lr.to_duckdb_param_sql(lr.strip_fqn(sql))
+    # Apply the SAME Snowflake→DuckDB dialect translation the LIVE reader uses
+    # (write_serving_store._duck_dialect: IFF→CASE, DATEADD→INTERVAL, ::FLOAT→::double,
+    # TIMESTAMP_NTZ/TZ casts) BEFORE the FQN-strip + param-style rewrite — mirroring the
+    # production order at write_serving_store.py (`query_upper(conn, _duck_dialect(sql), …)`).
+    # Without this the parity check would run an un-translated query production never executes
+    # (the IFF-not-found error this guards against).
+    from scripts.write_serving_store import _duck_dialect
+    duck_sql = lr.to_duckdb_param_sql(lr.strip_fqn(_duck_dialect(sql)))
     cur = conn.execute(duck_sql, params) if params else conn.execute(duck_sql)
     df = cur.fetch_df()
     df.columns = [c.upper() for c in df.columns]
@@ -95,7 +102,14 @@ def _compare(sf: pd.DataFrame, s3: pd.DataFrame, keys: list[str], label: str) ->
     val_cols = [c for c in common_cols if c not in keys]
     for c in val_cols:
         sa, sb = a[c], b[c]
-        if pd.api.types.is_numeric_dtype(sa) and pd.api.types.is_numeric_dtype(sb):
+        # Bool dtypes report as numeric in pandas, but `na - nb` raises "numpy boolean
+        # subtract not supported" — route bools (and any non-numeric) to the exact-equality
+        # (string) branch instead of the float-tolerance subtract.
+        is_num = (
+            pd.api.types.is_numeric_dtype(sa) and not pd.api.types.is_bool_dtype(sa)
+            and pd.api.types.is_numeric_dtype(sb) and not pd.api.types.is_bool_dtype(sb)
+        )
+        if is_num:
             na, nb = pd.to_numeric(sa, errors="coerce"), pd.to_numeric(sb, errors="coerce")
             both_na = na.isna() & nb.isna()
             close = ((na - nb).abs() <= (_FLOAT_RTOL * nb.abs().clip(lower=1.0))) | both_na

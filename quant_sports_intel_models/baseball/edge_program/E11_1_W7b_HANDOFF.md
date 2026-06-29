@@ -83,10 +83,19 @@ W7b-2 + the §3.5–3.8 tail. (A `w7b_drop_candidates` list is deliberately NOT 
 operator running a build-breaking drop.)
 
 ## 5. The multi-day parallel run (the safety gate — operator-run)
-1. **Create + populate S3** (one-time, then daily): create the W7B external tables
-   (`scripts/ddl/generate_w7b_external_tables.py` → review → run in Snowflake), build the new
-   S3 parquet (`run_w1_lakehouse.py --w7b`), and run the mirrors once
-   (`export_features_to_s3.py`, `export_w6_raw_to_s3.py --table daily_model_predictions`).
+1. **Create + populate S3** (one-time, then daily) — ORDER MATTERS (the DDL generator DESCRIBEs
+   the parquet to infer the schema, so it must run AFTER the build):
+   a. seed the precursor: `export_w7b_precursors_to_s3.py` (player_transactions → S3).
+   b. build the parquet: `run_w1_lakehouse.py --w7b-only` (writes the 6 model parquets; needs the
+      W2/W4/W6 precursors already in S3 — `mart_batter_rolling_stats`/`mart_starting_pitcher_game_log`
+      (W2, daily), `stg_statsapi_player_profiles` (W4), `stg_statsapi_lineups` (W6)).
+   c. generate the external-table DDL: `scripts/ddl/generate_w7b_external_tables.py` → review
+      `w7b_external_tables.generated.sql` (all 6 tables) → run in Snowflake.
+   d. mirror the feature/serving outputs: `export_features_to_s3.py` (9 tables: the 8 feature_pregame_*
+      + team_elo_history. NOT mart_bankroll_state — bankroll serves from DynamoDB, the SF object is
+      gone, and both readers already fall back to mart_clv_labeled_games when it's absent) +
+      `export_w6_raw_to_s3.py --table daily_model_predictions`.
+   e. refresh: `refresh_w1_external_tables.py`.
 2. **Turn on parallel mode:** set `W7B_LAKEHOUSE_PARALLEL=1` (mirrors run daily; serving stays
    Snowflake).
 3. **DAILY for ≥ a multi-day window**, after the morning cycle:
@@ -129,6 +138,31 @@ upstreams — full of `NUMBER(38,4)` rolling-stat columns):
    `--full-refresh` MERGEs rather than DROP+CREATE — documented repo quirk; see [[feedback_dbtf_incremental_fullrefresh]]),
    so the table recreates with the new column types.
 
+## 5c. Parallel-run production fixes (2026-06-29 — first day W7B_LAKEHOUSE_PARALLEL=1 on EC2)
+Two bugs surfaced the first morning the mirror ops actually ran on the EC2 host; both fixed.
+
+1. **AWS credential resolution (AKID bug).** The boto3 export-mirrors built
+   `boto3.client("s3", aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"), …)`. On the EC2 host
+   that env var is **unset** — S3 access is the **instance IAM role** (INC-16) — and passing
+   `aws_access_key_id=None` *disables* boto3's default credential chain, so it never reaches the role
+   → every upload failed with `AuthorizationHeaderMalformed: a non-empty Access Key (AKID) must be
+   provided`. (The W-series writes were unaffected because `run_w1_lakehouse.py` writes via DuckDB
+   `COPY` using a credential_chain secret, which *does* resolve the instance role.) **Fix:** pass
+   explicit keys only when both are present (local/static-cred dev); otherwise fall back to the
+   default chain. Applied to **all 7 boto3 exporters** (`export_features_to_s3`, `export_w6_raw_to_s3`,
+   `export_w7b_precursors_to_s3`, `export_statcast_to_s3`, `export_w5_raw_to_s3`, `export_w4_raw_to_s3`,
+   `export_ref_players_to_s3`) — not just the W7b three, since `export_statcast_to_s3` is HALT-tier in
+   the same `statcast_catchup_job` and carried the identical latent bug.
+
+2. **Mirror failure tier.** The feature/predictions/precursor mirrors were wired as **HALT** inside
+   `predict_today_morning`/`run_w1_lakehouse_op`. During the *parallel* window serving still reads
+   Snowflake, so a parity-only mirror failure must NOT take down the serving-critical predict op — it
+   red-lined the catchup job on 2026-06-29. **Fix:** `_run_mirror()` in `daily_ingestion_ops.py` —
+   HALT once `W7B_LAKEHOUSE_S3=1` (serving reads the mirror), else **ALERT-loud-but-continue** (log a
+   WARNING, op succeeds; that morning's parity_check just shows the gap). Also split the build
+   `--w6 --w7b` → HALT `--w6` (W6 serves live) + mirror-tier `--w7b-only`. Verified by
+   `test_e11_7_failure_contract.py::test_no_silent_swallow[daily_ingestion_ops.py]`.
+
 ## 6. Cutover checklist
 - [ ] W7B external tables created in Snowflake (generated SQL reviewed).
 - [ ] `run_w1_lakehouse.py --w7b` build green; `refresh_w1_external_tables.py` includes W7B.
@@ -138,7 +172,8 @@ upstreams — full of `NUMBER(38,4)` rolling-stat columns):
 - [ ] `W7B_LAKEHOUSE_S3=1` flipped; served picks match the Snowflake-path; P6 watching; rollback ready.
 
 ## 7. CI gate result (session close)
-- **Unit Tests (fast gate)** `uv run pytest -m "not slow" -n auto` → **701 passed, 1 skipped** (GREEN).
+- **Unit Tests (fast gate)** `uv run pytest -m "not slow" -n auto` → **718 passed, 1 skipped** (GREEN,
+  post the 2026-06-29 parallel-run fixes; was 701 at first close).
   The 2 `test_intraday_assembly.py` failures the concurrent agents saw were a transient mid-edit of
   `data_loader.py`; the final integrated tree passes.
 - **dbt compile** `dbtf compile` → **1771 total | 1771 success** (GREEN). (2 warnings pre-existing/env:
@@ -160,6 +195,11 @@ git add \
   scripts/tests/test_lakehouse_read.py \
   scripts/export_features_to_s3.py \
   scripts/export_w7b_precursors_to_s3.py \
+  scripts/export_w6_raw_to_s3.py \
+  scripts/export_statcast_to_s3.py \
+  scripts/export_w5_raw_to_s3.py \
+  scripts/export_w4_raw_to_s3.py \
+  scripts/export_ref_players_to_s3.py \
   scripts/ddl/generate_w7b_external_tables.py \
   scripts/parity_check_w7b.py \
   scripts/run_w1_lakehouse.py \
