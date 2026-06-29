@@ -76,12 +76,17 @@ FEATURE_TABLES = {
 
 # Non-dbt SERVING marts the prediction/serving READERS need from S3 but that are NOT in any
 # dbt lakehouse wave (Python-written, not dbt models → no DuckDB build branch): team_elo_history
-# (compute_elo output, read by write_serving_store --teams) and mart_bankroll_state (read by
-# write_serving_store --performance + performance.py /summary). Mirrored here so the serving
-# --s3 path is complete; their generators (compute_elo, the bankroll writer) are the W8+ tail.
+# (compute_elo output, read by write_serving_store --teams). Mirrored here so the serving --s3
+# path is complete; its generator (compute_elo) is the W8+ tail.
+#
+# NOT mirrored: mart_bankroll_state. Bankroll now serves from DynamoDB; the Snowflake object no
+# longer exists (`does not exist or not authorized`). BOTH readers already try/except it and fall
+# back to mart_clv_labeled_games when it's unavailable — write_serving_store.py (~L2690) and
+# performance.py /summary (~L97-118) — so the bankroll read 404s → CLV fallback IDENTICALLY in
+# Snowflake and --s3 mode. Mirroring a non-existent object would only fail the export, so it's
+# excluded; the readers keep their existing CLV fallback (no behavior change).
 SERVING_MARTS = {
     "team_elo_history":   "baseball_data.betting.team_elo_history",
-    "mart_bankroll_state":"baseball_data.betting.mart_bankroll_state",
 }
 
 MIRROR_TABLES = {**FEATURE_TABLES, **SERVING_MARTS}

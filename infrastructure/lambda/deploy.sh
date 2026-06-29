@@ -20,6 +20,12 @@ FUNCTION_NAME="credence-prod-lambda-api"
 REGION="us-east-1"
 PACKAGE_DIR="$(pwd)/.lambda_build/package"
 ZIP_PATH="$(pwd)/.lambda_build/deployment.zip"
+# Deploy via S3 — a direct --zip-file upload base64-inflates the package and hits the
+# ~70 MB request cap (the duckdb dep added in W7b pushed the zip past it). Uploading the
+# zip to S3 and pointing update-function-code at it lifts the ceiling to the 250 MB
+# unzipped quota. Override the bucket with LAMBDA_DEPLOY_BUCKET if needed.
+S3_DEPLOY_BUCKET="${LAMBDA_DEPLOY_BUCKET:-baseball-betting-ml-artifacts}"
+S3_DEPLOY_KEY="lambda-deploy/${FUNCTION_NAME}.zip"
 DRY_RUN=false
 
 for arg in "$@"; do
@@ -107,11 +113,15 @@ if [[ "$DRY_RUN" == "true" ]]; then
   exit 0
 fi
 
-# ── 5. Deploy to Lambda ────────────────────────────────────────────────────────
-echo "Uploading to Lambda..."
+# ── 5. Deploy to Lambda (via S3 to avoid the ~70 MB direct-upload request cap) ──
+echo "Uploading package to s3://${S3_DEPLOY_BUCKET}/${S3_DEPLOY_KEY}..."
+aws s3 cp "$ZIP_PATH" "s3://${S3_DEPLOY_BUCKET}/${S3_DEPLOY_KEY}" --region "$REGION"
+
+echo "Pointing Lambda at the S3 object..."
 OUTPUT=$(aws lambda update-function-code \
   --function-name "$FUNCTION_NAME" \
-  --zip-file "fileb://$ZIP_PATH" \
+  --s3-bucket "$S3_DEPLOY_BUCKET" \
+  --s3-key "$S3_DEPLOY_KEY" \
   --region "$REGION" \
   --output json)
 

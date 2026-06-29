@@ -83,10 +83,19 @@ W7b-2 + the §3.5–3.8 tail. (A `w7b_drop_candidates` list is deliberately NOT 
 operator running a build-breaking drop.)
 
 ## 5. The multi-day parallel run (the safety gate — operator-run)
-1. **Create + populate S3** (one-time, then daily): create the W7B external tables
-   (`scripts/ddl/generate_w7b_external_tables.py` → review → run in Snowflake), build the new
-   S3 parquet (`run_w1_lakehouse.py --w7b`), and run the mirrors once
-   (`export_features_to_s3.py`, `export_w6_raw_to_s3.py --table daily_model_predictions`).
+1. **Create + populate S3** (one-time, then daily) — ORDER MATTERS (the DDL generator DESCRIBEs
+   the parquet to infer the schema, so it must run AFTER the build):
+   a. seed the precursor: `export_w7b_precursors_to_s3.py` (player_transactions → S3).
+   b. build the parquet: `run_w1_lakehouse.py --w7b-only` (writes the 6 model parquets; needs the
+      W2/W4/W6 precursors already in S3 — `mart_batter_rolling_stats`/`mart_starting_pitcher_game_log`
+      (W2, daily), `stg_statsapi_player_profiles` (W4), `stg_statsapi_lineups` (W6)).
+   c. generate the external-table DDL: `scripts/ddl/generate_w7b_external_tables.py` → review
+      `w7b_external_tables.generated.sql` (all 6 tables) → run in Snowflake.
+   d. mirror the feature/serving outputs: `export_features_to_s3.py` (9 tables: the 8 feature_pregame_*
+      + team_elo_history. NOT mart_bankroll_state — bankroll serves from DynamoDB, the SF object is
+      gone, and both readers already fall back to mart_clv_labeled_games when it's absent) +
+      `export_w6_raw_to_s3.py --table daily_model_predictions`.
+   e. refresh: `refresh_w1_external_tables.py`.
 2. **Turn on parallel mode:** set `W7B_LAKEHOUSE_PARALLEL=1` (mirrors run daily; serving stays
    Snowflake).
 3. **DAILY for ≥ a multi-day window**, after the morning cycle:
