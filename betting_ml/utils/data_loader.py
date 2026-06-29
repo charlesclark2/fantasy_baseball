@@ -2,12 +2,22 @@ from __future__ import annotations
 
 import os
 import re
+import sys
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 import snowflake.connector
+
+# E11.1-W7b — the shared DuckDB-over-S3 read helper lives in scripts/utils. The repo
+# root is normally on sys.path in the predict_today run context; add it defensively
+# (mirrors the parents-based insert other betting_ml entry points use) so the import
+# resolves whether this module is imported from the package or a bare script.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 _KEY_PATH = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH") or os.path.expanduser(
     "~/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem"
@@ -141,15 +151,15 @@ totals_vig AS (
 ),
 h2h_consensus AS (
     SELECT event_id,
-           AVG(home_imp)::FLOAT    AS home_win_prob_consensus,
-           STDDEV(home_imp)::FLOAT AS ml_consensus_std
+           AVG(home_imp)::double    AS home_win_prob_consensus,
+           STDDEV(home_imp)::double AS ml_consensus_std
     FROM h2h_vig
     GROUP BY event_id
 ),
 totals_consensus AS (
     SELECT event_id,
-           AVG(total_line)::FLOAT AS total_line_consensus,
-           AVG(over_imp)::FLOAT   AS over_prob_consensus
+           AVG(total_line)::double AS total_line_consensus,
+           AVG(over_imp)::double   AS over_prob_consensus
     FROM totals_vig
     GROUP BY event_id
 )
@@ -202,6 +212,113 @@ def get_snowflake_connection(schema: str | None = None) -> snowflake.connector.S
     Pass schema to set a default schema for unqualified references (e.g. temp tables).
     """
     return _connect(schema=schema)
+
+
+# ---------------------------------------------------------------------------
+# E11.1-W7b — S3 lakehouse READ mode (gated, OFF by default).
+#
+# When _S3_MODE is on, every feature/mart SELECT in this module runs against the
+# S3 lakehouse parquet via DuckDB (one shared, lazily-created connection) instead
+# of Snowflake. WRITES are unaffected — they are not in this module. The toggle is
+# a module global flipped by set_s3_mode() (mirrors set_range_feature_cache) so the
+# pre-A1.11 read-path call shapes stay untouched and the Snowflake path is a
+# byte-for-byte instant rollback (set_s3_mode(False)).
+#
+# Correctness of the served feature matrix is paramount: the SF cursor path builds
+# columns from cur.description (the SELECT's selected identifiers); the read funcs
+# here ALWAYS lower-case those names. DuckDB's fetch_df() likewise preserves the
+# SELECT identifier case (already lower in our `SELECT f.*` / lowercase-aliased
+# queries). _run_query normalises BOTH paths to lower-case column names + Python
+# rows so every caller (which slices feature columns BY NAME) sees identical output.
+# ---------------------------------------------------------------------------
+_S3_MODE: bool = False
+_DUCK_CONN = None  # lazily-created DuckDB connection (cached for the process)
+
+
+def set_s3_mode(enabled: bool) -> None:
+    """Enable/disable S3-lakehouse read mode for this module (E11.1-W7b).
+
+    OFF by default. Flipped True by predict_today's --s3 flag before any read. When
+    disabled (default) every read uses the existing Snowflake path unchanged."""
+    global _S3_MODE
+    _S3_MODE = bool(enabled)
+
+
+def _get_duck():
+    """Lazily create + cache the shared DuckDB connection and register the lakehouse
+    views this module's feature/mart queries reference.
+
+    The view set is grep-derived via referenced_tables(...) over every query constant
+    (so adding/removing a query auto-updates the registration — no fixed list to
+    drift, per the W7b discipline). Snowflake-free: the helper uses AWS creds only."""
+    global _DUCK_CONN
+    if _DUCK_CONN is None:
+        from scripts.utils.lakehouse_read import (
+            duck_connect,
+            referenced_tables,
+            register_views,
+        )
+
+        tables = referenced_tables(
+            _QUERY,
+            _TODAY_QUERY,
+            _LATEST_HOME_QUERY,
+            _LATEST_AWAY_QUERY,
+            _TODAY_ODDS_QUERY,
+            _TEAM_LOOKUP_QUERY,
+            _TODAY_LINEUP_QUERY,
+            _TODAY_STARTER_QUERY,
+            # load_range_features' inline SQL also reads feature_pregame_game_features;
+            # it is already covered by _QUERY/_TODAY_QUERY but listed for clarity.
+            "SELECT f.* FROM baseball_data.betting_features.feature_pregame_game_features f",
+        )
+        conn = duck_connect()
+        register_views(conn, tables)
+        _DUCK_CONN = conn
+    return _DUCK_CONN
+
+
+def _run_query(
+    sql: str,
+    params: dict | None = None,
+    conn: snowflake.connector.SnowflakeConnection | None = None,
+) -> tuple[list[str], list[tuple]]:
+    """Run one feature/mart SELECT and return (lower_case_columns, rows-as-tuples).
+
+    Single branch point for the SF↔S3 read split. In S3 mode the SQL is FQN-stripped
+    + the %(name)s paramstyle is translated to DuckDB $name (via the shared helper),
+    then executed against the cached DuckDB connection (the passed `conn`, if any, is
+    ignored — DuckDB owns its own). In Snowflake mode an explicitly-passed `conn` is
+    REUSED (and left open for the caller to close) — this preserves the dependency-
+    injection contract the intraday-assembly tests rely on (they inject a fake conn);
+    otherwise a fresh connection is opened and closed here. BOTH paths normalise
+    column names to lower-case and return plain Python row tuples, so callers (which
+    build dicts / pd.DataFrame keyed by name) are output-identical regardless of
+    backend."""
+    if _S3_MODE:
+        from scripts.utils.lakehouse_read import strip_fqn, to_duckdb_param_sql
+
+        duck_sql = to_duckdb_param_sql(strip_fqn(sql))
+        dconn = _get_duck()
+        cur = dconn.execute(duck_sql, params) if params else dconn.execute(duck_sql)
+        columns = [d[0].lower() for d in cur.description]
+        rows = cur.fetchall()
+        return columns, rows
+
+    own_conn = conn is None
+    sf_conn = _connect() if own_conn else conn
+    try:
+        cur = sf_conn.cursor()
+        if params is not None:
+            cur.execute(sql, params)
+        else:
+            cur.execute(sql)
+        columns = [d[0].lower() for d in cur.description]
+        rows = cur.fetchall()
+    finally:
+        if own_conn:
+            sf_conn.close()
+    return columns, rows
 
 
 def _numeric_convert(df: pd.DataFrame) -> pd.DataFrame:
@@ -262,12 +379,15 @@ _TEAM_LOOKUP_QUERY = "SELECT name_lower, team_id FROM baseball_data.betting.dim_
 
 
 def _load_team_id_lookup(
-    conn: snowflake.connector.SnowflakeConnection,
+    conn: snowflake.connector.SnowflakeConnection | None = None,
 ) -> dict[str, int]:
-    """Return a {name_lower -> team_id} map from the canonical team dimension."""
-    cur = conn.cursor()
-    cur.execute(_TEAM_LOOKUP_QUERY)
-    return {name_lower: team_id for name_lower, team_id in cur.fetchall()}
+    """Return a {name_lower -> team_id} map from the canonical team dimension.
+
+    Routes through _run_query so it reads Snowflake or the S3 lakehouse per _S3_MODE.
+    In Snowflake mode the passed `conn` is reused (dependency-injection contract for
+    the tests); in S3 mode pass None — DuckDB owns its own connection."""
+    _cols, rows = _run_query(_TEAM_LOOKUP_QUERY, conn=conn)
+    return {name_lower: team_id for name_lower, team_id in rows}
 
 
 def _resolve_team_id(name: str | None, lookup: dict[str, int]) -> int | None:
@@ -292,30 +412,26 @@ def _get_statsapi_team_abbrevs() -> dict[int, str]:
 
 
 def _load_latest_team_features(
-    conn: snowflake.connector.SnowflakeConnection,
+    conn: snowflake.connector.SnowflakeConnection | None,
     home_abbrevs: list[str],
     away_abbrevs: list[str],
 ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
-    """Fetch the most recent home/away game row per team from Snowflake.
+    """Fetch the most recent home/away game row per team (Snowflake or S3 per _S3_MODE).
 
-    Returns (home_rows, away_rows), each keyed by team abbreviation.
-    """
+    Returns (home_rows, away_rows), each keyed by team abbreviation. In Snowflake mode
+    the passed `conn` is reused; in S3 mode pass None (DuckDB owns its connection)."""
     home_list = ", ".join(f"'{a}'" for a in home_abbrevs)
     away_list = ", ".join(f"'{a}'" for a in away_abbrevs)
 
-    cur = conn.cursor()
-
-    cur.execute(_LATEST_HOME_QUERY.format(team_list=home_list))
-    cols = [d[0].lower() for d in cur.description]
+    cols, raw_rows = _run_query(_LATEST_HOME_QUERY.format(team_list=home_list), conn=conn)
     home_rows: dict[str, dict[str, Any]] = {}
-    for raw_row in cur.fetchall():
+    for raw_row in raw_rows:
         row = dict(zip(cols, raw_row))
         home_rows[row["home_team"]] = row
 
-    cur.execute(_LATEST_AWAY_QUERY.format(team_list=away_list))
-    cols = [d[0].lower() for d in cur.description]
+    cols, raw_rows = _run_query(_LATEST_AWAY_QUERY.format(team_list=away_list), conn=conn)
     away_rows: dict[str, dict[str, Any]] = {}
-    for raw_row in cur.fetchall():
+    for raw_row in raw_rows:
         row = dict(zip(cols, raw_row))
         away_rows[row["away_team"]] = row
 
@@ -323,7 +439,7 @@ def _load_latest_team_features(
 
 
 def _load_todays_odds(
-    conn: snowflake.connector.SnowflakeConnection,
+    conn: snowflake.connector.SnowflakeConnection | None,
     target_date: str,
     team_lookup: dict[str, int],
 ) -> dict[tuple[int, int], dict[str, Any]]:
@@ -340,11 +456,9 @@ def _load_todays_odds(
     empty dict if no odds are available.
     """
     query = _TODAY_ODDS_QUERY.format(target_date=target_date)
-    cur = conn.cursor()
-    cur.execute(query)
-    cols = [d[0].lower() for d in cur.description]
+    cols, raw_rows = _run_query(query, conn=conn)
     result: dict[tuple[int, int], dict[str, Any]] = {}
-    for raw_row in cur.fetchall():
+    for raw_row in raw_rows:
         row = dict(zip(cols, raw_row))
         home_id = _resolve_team_id(row["home_team"], team_lookup)
         away_id = _resolve_team_id(row["away_team"], team_lookup)
@@ -390,11 +504,9 @@ def _load_todays_lineup_starter(
     """
     lineup_by_game: dict[tuple[int, str], dict] = {}
     starter_by_game: dict[tuple[int, str], dict] = {}
-    cur = conn.cursor()
 
-    cur.execute(_TODAY_LINEUP_QUERY.format(target_date=target_date))
-    cols = [d[0].lower() for d in cur.description]
-    for raw in cur.fetchall():
+    cols, raw_rows = _run_query(_TODAY_LINEUP_QUERY.format(target_date=target_date), conn=conn)
+    for raw in raw_rows:
         r = dict(zip(cols, raw))
         side = r.get("side")
         if side not in ("home", "away"):
@@ -403,9 +515,8 @@ def _load_todays_lineup_starter(
             f"{side}_{c}": v for c, v in r.items() if c not in _LINEUP_STARTER_META_COLS
         }
 
-    cur.execute(_TODAY_STARTER_QUERY.format(target_date=target_date))
-    cols = [d[0].lower() for d in cur.description]
-    for raw in cur.fetchall():
+    cols, raw_rows = _run_query(_TODAY_STARTER_QUERY.format(target_date=target_date), conn=conn)
+    for raw in raw_rows:
         r = dict(zip(cols, raw))
         side = r.get("side")
         if side not in ("home", "away"):
@@ -543,14 +654,18 @@ def load_todays_features_via_statsapi(target_date: str) -> pd.DataFrame:
     if not game_records:
         return pd.DataFrame()
 
-    conn = _connect()
+    # E11.1-W7b — in S3 mode the read functions own their own DuckDB connection
+    # (via _run_query → _get_duck), so no Snowflake connection is opened here. The
+    # SF path is unchanged: one connection, closed in the finally.
+    conn = None if _S3_MODE else _connect()
     try:
         home_rows, away_rows = _load_latest_team_features(conn, home_abbrevs, away_abbrevs)
         team_lookup = _load_team_id_lookup(conn)
         odds_by_matchup = _load_todays_odds(conn, target_date, team_lookup)
         lineup_by_game, starter_by_game = _load_todays_lineup_starter(conn, target_date)
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
     if odds_by_matchup:
         print(f"  Loaded odds for {len(odds_by_matchup)} game(s) from mart_odds_outcomes")
@@ -671,19 +786,13 @@ def load_range_features(start_date: str, end_date: str) -> pd.DataFrame:
     """One-shot pull of feature_store rows for every game_date in [start_date, end_date]
     (inclusive). Backs the backfill parquet cache: ONE Snowflake read for the whole window
     instead of one per date. Mirrors _TODAY_QUERY's `SELECT f.*` so the per-date slices are
-    schema-identical to the live single-date path."""
-    conn = _connect()
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT f.* FROM baseball_data.betting_features.feature_pregame_game_features f "
-            "WHERE f.game_date BETWEEN %(s)s AND %(e)s",
-            {"s": start_date, "e": end_date},
-        )
-        columns = [desc[0].lower() for desc in cur.description]
-        rows = cur.fetchall()
-    finally:
-        conn.close()
+    schema-identical to the live single-date path. Reads Snowflake or the S3 lakehouse
+    per _S3_MODE (routed through _run_query)."""
+    columns, rows = _run_query(
+        "SELECT f.* FROM baseball_data.betting_features.feature_pregame_game_features f "
+        "WHERE f.game_date BETWEEN %(s)s AND %(e)s",
+        {"s": start_date, "e": end_date},
+    )
     if not rows:
         return pd.DataFrame(columns=columns)
     return pd.DataFrame(rows, columns=columns)
@@ -728,29 +837,22 @@ def load_todays_features(target_date: str) -> pd.DataFrame:
             print(f"[INFO] [backfill-cache] cached rows for {target_date} below coverage gate "
                   f"({cov:.2f} < {_MIN_FEATURE_STORE_COVERAGE:.2f}); falling through to live load.")
 
-    conn = _connect()
-    try:
-        query = _TODAY_QUERY.format(target_date=target_date)
-        cur = conn.cursor()
-        cur.execute(query)
-        columns = [desc[0].lower() for desc in cur.description]
-        rows = cur.fetchall()
-        if rows:
-            df = pd.DataFrame(rows, columns=columns)
-            # A1.11 Stage 3 — only trust the feature_store path if today's rows
-            # actually clear the coverage gate; otherwise fall through to the
-            # intraday assembly so a half-built feature store can't silently
-            # degrade live serving.
-            cov = _feature_store_mean_coverage(df)
-            if cov >= _MIN_FEATURE_STORE_COVERAGE:
-                print(f"[INFO] feature_store serving {len(df)} game(s) for {target_date} "
-                      f"(mean block coverage {cov:.2f} ≥ {_MIN_FEATURE_STORE_COVERAGE:.2f}).")
-                df["data_source"] = "feature_store"
-                return _numeric_convert(df)
-            print(f"[INFO] feature_store rows found for {target_date} but mean coverage "
-                  f"{cov:.2f} < {_MIN_FEATURE_STORE_COVERAGE:.2f}; falling back to intraday assembly.")
-    finally:
-        conn.close()
+    query = _TODAY_QUERY.format(target_date=target_date)
+    columns, rows = _run_query(query)
+    if rows:
+        df = pd.DataFrame(rows, columns=columns)
+        # A1.11 Stage 3 — only trust the feature_store path if today's rows
+        # actually clear the coverage gate; otherwise fall through to the
+        # intraday assembly so a half-built feature store can't silently
+        # degrade live serving.
+        cov = _feature_store_mean_coverage(df)
+        if cov >= _MIN_FEATURE_STORE_COVERAGE:
+            print(f"[INFO] feature_store serving {len(df)} game(s) for {target_date} "
+                  f"(mean block coverage {cov:.2f} ≥ {_MIN_FEATURE_STORE_COVERAGE:.2f}).")
+            df["data_source"] = "feature_store"
+            return _numeric_convert(df)
+        print(f"[INFO] feature_store rows found for {target_date} but mean coverage "
+              f"{cov:.2f} < {_MIN_FEATURE_STORE_COVERAGE:.2f}; falling back to intraday assembly.")
 
     print(f"  No usable feature-store rows for {target_date}; assembling from Stats API schedule...")
     print("[INFO] Intraday assembly active — team-level rolling/EB-bullpen/standings columns carry "
@@ -789,17 +891,11 @@ def load_features(min_games_played: int = 15, min_year: int = 2021) -> pd.DataFr
     AS-OF-snapshotted (refined_architecture_proposal §Point-in-Time), treat offline
     evals via this loader as ceilings, not live KPIs.
     """
-    conn = _connect()
-    try:
-        query = _QUERY.format(min_games_played=int(min_games_played), min_year=int(min_year))
-        cur = conn.cursor()
-        cur.execute(query)
-        columns = [desc[0].lower() for desc in cur.description]
-        rows = cur.fetchall()
-        df = pd.DataFrame(rows, columns=columns)
-        # Snowflake returns NUMERIC/DECIMAL columns as decimal.Decimal objects.
-        # Convert object-dtype columns that contain numeric values to float64 so
-        # downstream arithmetic (Bayesian shrinkage, pandas ops) works correctly.
-        return _numeric_convert(df)
-    finally:
-        conn.close()
+    query = _QUERY.format(min_games_played=int(min_games_played), min_year=int(min_year))
+    columns, rows = _run_query(query)
+    df = pd.DataFrame(rows, columns=columns)
+    # Snowflake returns NUMERIC/DECIMAL columns as decimal.Decimal objects.
+    # Convert object-dtype columns that contain numeric values to float64 so
+    # downstream arithmetic (Bayesian shrinkage, pandas ops) works correctly.
+    # (DuckDB returns native numeric dtypes; _numeric_convert is a safe no-op there.)
+    return _numeric_convert(df)

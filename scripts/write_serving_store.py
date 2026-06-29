@@ -1,10 +1,24 @@
 """write_serving_store.py
 -----------------------
-Dagster write-path: queries Snowflake after predict_today_morning completes,
+Dagster write-path: queries the prediction/feature data (Snowflake by default, or
+the S3 lakehouse via DuckDB with --s3) after predict_today_morning completes,
 builds the same JSON payloads FastAPI serves, and writes them to the DynamoDB
 serving cache (INC-16-P2; replaces the decommissioned Railway PostgreSQL
 api_cache). The DynamoDB schema matches app/backend/services/serving_cache.py:
 PK = namespace, SK = "{rest}#{date}" or "{rest}#PERMANENT", value = JSON string.
+
+E11.1-W7b — DuckDB-over-S3 read mode (--s3): with --s3 every READ is served
+directly from the S3 lakehouse parquet through DuckDB (scripts/utils/lakehouse_read.py)
+instead of Snowflake. This is GATED/TRANSITIONAL: shipped OFF by default; an operator
+runs a multi-day parallel comparison (both modes side-by-side) before cutover, so the
+Snowflake path stays 100% intact as the instant rollback. There are NO Snowflake WRITES
+anywhere here — every write goes to DynamoDB / S3 — so --s3 is a pure read repoint.
+In --s3 mode the connection needs AWS creds only (DuckDB credential_chain); the Snowflake
+env vars below are NOT required. The two read helpers (_sf_query / _sf_query_batch) detect
+a DuckDB connection and route through the shared lakehouse helper, so every call site is
+unchanged; a small per-query dialect shim (_duck_dialect) rewrites the handful of
+Snowflake-only tokens (IFF, DATEADD, TIMESTAMP_NTZ/TZ casts, ::FLOAT→::DOUBLE) that
+DuckDB does not parse — applied ONLY on the DuckDB branch, never to the Snowflake SQL.
 
 Also writes to S3 (the read-order fallback) — DynamoDB → S3 at request time, so
 the S3 writes are KEPT (not deprecated). The legacy daily_picks table is retired
@@ -130,7 +144,178 @@ def _sf_connect() -> snowflake.connector.SnowflakeConnection:
     return snowflake.connector.connect(**kwargs)
 
 
-def _sf_query(conn: snowflake.connector.SnowflakeConnection, sql: str, params: dict | None = None) -> list[dict]:
+# ── E11.1-W7b: DuckDB-over-S3 read mode (gated; --s3) ─────────────────────────
+# The connection object threaded through main() is either a Snowflake connection
+# (default) or a DuckDB connection (--s3). `_is_duck` lets the two read helpers below
+# stay polymorphic so EVERY call site is unchanged — _sf_query / _sf_query_batch route
+# a DuckDB handle through the shared lakehouse helper (scripts/utils/lakehouse_read.py),
+# otherwise the original Snowflake DictCursor path. There are no Snowflake WRITES here,
+# so this is a pure read repoint.
+
+
+def _is_duck(conn) -> bool:
+    """True iff `conn` is a DuckDB connection (the --s3 read mode).
+
+    Note: a DuckDB connection's type module is the C-extension name ``_duckdb`` (leading
+    underscore) and its class is ``DuckDBPyConnection`` — so match on both the (underscore-
+    stripped) module AND the class name to be robust across DuckDB versions."""
+    tp = type(conn)
+    mod = (tp.__module__ or "").lstrip("_").lower()
+    return mod.startswith("duckdb") or tp.__name__ == "DuckDBPyConnection"
+
+
+def _duck_dialect(sql: str) -> str:
+    """Rewrite the Snowflake-only tokens DuckDB cannot parse — applied ONLY on the DuckDB
+    branch, NEVER to the Snowflake SQL (the Snowflake path runs the constants verbatim).
+
+    Cross-dialect-safe rewrites we leave to the constants themselves (CASE / QUALIFY /
+    ROW_NUMBER / ABS / COALESCE / SPLIT_PART / MEDIAN / YEAR / windowed aggs / NULLS LAST /
+    ::VARCHAR / ::DATE / ::INTEGER all parse on both). What needs rewriting here:
+      - ``::TIMESTAMP_NTZ`` → ``::TIMESTAMP``  and  ``::TIMESTAMP_TZ`` → ``::TIMESTAMPTZ``
+        (DuckDB has no TIMESTAMP_NTZ/_TZ type names).
+      - ``::FLOAT`` → ``::DOUBLE`` (DuckDB ``::FLOAT`` is 32-bit; Snowflake FLOAT is 64-bit —
+        ``::DOUBLE`` matches for parity, per the W6 lesson).
+      - ``DATEADD(part, n, expr)`` → ``(expr + INTERVAL (n) PART)`` (DuckDB has no DATEADD).
+      - ``IFF(cond, a, b)`` → ``CASE WHEN cond THEN a ELSE b END`` (DuckDB has no IFF).
+    All verified against DuckDB; the constants are otherwise FQN-stripped + paramstyle-shifted
+    by the shared helper. Parenthesis-balanced so nested calls (COALESCE inside IFF, ::DATE
+    inside DATEADD) translate cleanly."""
+    import re
+
+    out = re.sub(r"::\s*TIMESTAMP_NTZ", "::TIMESTAMP", sql, flags=re.IGNORECASE)
+    out = re.sub(r"::\s*TIMESTAMP_TZ", "::TIMESTAMPTZ", out, flags=re.IGNORECASE)
+    out = re.sub(r"::\s*FLOAT\b", "::DOUBLE", out, flags=re.IGNORECASE)
+    out = _rewrite_call(out, "DATEADD", _dateadd_repl)
+    out = _rewrite_call(out, "IFF", _iff_repl)
+    return out
+
+
+def _split_top_args(s: str) -> list[str]:
+    """Split a function arg list on top-level commas (respecting nested parens)."""
+    args: list[str] = []
+    depth = 0
+    cur: list[str] = []
+    for ch in s:
+        if ch == "(":
+            depth += 1
+            cur.append(ch)
+        elif ch == ")":
+            depth -= 1
+            cur.append(ch)
+        elif ch == "," and depth == 0:
+            args.append("".join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+    if cur:
+        args.append("".join(cur))
+    return [a.strip() for a in args]
+
+
+def _rewrite_call(sql: str, name: str, repl_fn) -> str:
+    """Replace every top-level ``name(...)`` call via `repl_fn(arg_list) -> str`,
+    matching the closing paren by balancing (so nested parens are handled)."""
+    import re
+
+    pat = re.compile(r"\b" + name + r"\s*\(", re.IGNORECASE)
+    while True:
+        m = pat.search(sql)
+        if not m:
+            return sql
+        open_i = m.end() - 1
+        depth = 0
+        close_i = None
+        for i in range(open_i, len(sql)):
+            if sql[i] == "(":
+                depth += 1
+            elif sql[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    close_i = i
+                    break
+        if close_i is None:
+            return sql  # unbalanced — leave untouched rather than corrupt
+        args = _split_top_args(sql[open_i + 1 : close_i])
+        replacement = repl_fn(args)
+        if replacement is None:  # arity mismatch — leave untouched
+            return sql
+        sql = sql[: m.start()] + replacement + sql[close_i + 1 :]
+
+
+def _dateadd_repl(args: list[str]) -> str | None:
+    if len(args) != 3:
+        return None
+    part, n, expr = args
+    return f"({expr} + INTERVAL ({n}) {part.upper()})"
+
+
+def _iff_repl(args: list[str]) -> str | None:
+    if len(args) != 3:
+        return None
+    cond, a, b = args
+    return f"CASE WHEN {cond} THEN {a} ELSE {b} END"
+
+
+def _duck_connect_and_register():
+    """E11.1-W7b: build the canonical DuckDB-over-S3 connection (AWS creds only — NO Snowflake
+    env) and register a view for EVERY lakehouse table referenced by this module's reads.
+
+    GREP-DRIVEN registration (NOT a fixed list): we scan this module's globals for every
+    str constant that contains ``baseball_data.`` (i.e. all the SQL constants) and feed them to
+    `referenced_tables`, so a query added by a concurrent app story is auto-covered without
+    maintaining a table list here (the W7b 'grep the live reads, don't trust a fixed list'
+    discipline).
+
+    RESILIENT registration (W7b is mid-migration): a few referenced tables are not yet in the
+    lakehouse (the feature_pregame_* features, mart_bankroll_state, mart_player_profile_identity,
+    stg_statsapi_lineups_wide, stg_statsapi_probable_pitchers, team_elo_history — un-migrated
+    stragglers, NOT a place to re-add a Snowflake read). `register_views` would raise at
+    CREATE-VIEW time on a missing parquet glob and kill the whole --s3 run, so we register
+    each view individually and skip the ones with no parquet, logging a loud WARNING that
+    names them. Sections that touch only migrated tables (e.g. --picks) then run fine; a
+    section that hits a missing table fails LOUDLY with DuckDB's "Table … does not exist"
+    (which names the table) and is caught by that section's try/except in main() — exactly
+    what the operator's parallel-comparison run needs (run what's ready, see what isn't).
+    Returns the registered DuckDB connection."""
+    from scripts.utils.lakehouse_read import (  # local import: Snowflake-free, AWS creds only
+        duck_connect,
+        referenced_tables,
+        register_views,
+    )
+
+    sql_constants = [
+        v for v in globals().values()
+        if isinstance(v, str) and "baseball_data." in v
+    ]
+    tables = referenced_tables(*sql_constants)
+    conn = duck_connect()
+    registered: list[str] = []
+    missing: list[str] = []
+    for t in tables:
+        try:
+            register_views(conn, [t])
+            registered.append(t)
+        except Exception as exc:  # noqa: BLE001 — missing parquet / un-migrated straggler
+            missing.append(t)
+            log.debug("Lakehouse view %s not registered (no parquet?): %s", t, exc)
+    log.info("DuckDB-over-S3 read mode (--s3): registered %d/%d lakehouse views: %s",
+             len(registered), len(tables), ", ".join(sorted(registered)))
+    if missing:
+        log.warning(
+            "DuckDB-over-S3 read mode (--s3): %d referenced table(s) have NO lakehouse "
+            "parquet yet (un-migrated W7b stragglers) — any section that reads them will fail "
+            "loudly (Table does not exist), not silently: %s",
+            len(missing), ", ".join(sorted(missing)),
+        )
+    return conn
+
+
+def _sf_query(conn, sql: str, params: dict | None = None) -> list[dict]:
+    if _is_duck(conn):
+        # --s3: route through the shared lakehouse helper. _duck_dialect handles the
+        # Snowflake-only tokens; query_upper does strip_fqn + paramstyle + UPPERCASE dicts.
+        from scripts.utils.lakehouse_read import query_upper
+        return query_upper(conn, _duck_dialect(sql), params)
     cur = conn.cursor(snowflake.connector.DictCursor)
     cur.execute(sql, params)
     return cur.fetchall()
@@ -140,6 +325,9 @@ def _sf_query_batch(conn, sql_template: str, game_pks: list[int]) -> list[dict]:
     """Runs sql_template with {game_pk_list} replaced by the int list. Safe: game_pks are DB integers."""
     if not game_pks:
         return []
+    if _is_duck(conn):  # --s3: dialect-shim the template, then the shared batch helper.
+        from scripts.utils.lakehouse_read import query_upper_batch
+        return query_upper_batch(conn, _duck_dialect(sql_template), game_pks)
     gp_list = ",".join(str(g) for g in game_pks)
     cur = conn.cursor(snowflake.connector.DictCursor)
     cur.execute(sql_template.format(game_pk_list=gp_list))
@@ -1218,6 +1406,16 @@ SELECT game_pk, calibrated_win_prob, pred_total_runs, pred_total_runs_scale,
 FROM ranked WHERE _rn = 1
 """
 
+# A0.4.32 — standalone --book-odds game-pk resolver (no --picks given).
+# Module-level (not inlined in main()) so the --s3 grep-driven view registration
+# auto-discovers daily_model_predictions for it like every other SQL constant.
+_STANDALONE_BOOK_PKS_SQL = """
+SELECT DISTINCT game_pk
+FROM baseball_data.betting_ml.daily_model_predictions
+WHERE game_date = %(today)s
+  AND prediction_type IN ('post_lineup', 'morning')
+"""
+
 
 # ── Payload builders ──────────────────────────────────────────────────────────
 
@@ -2272,6 +2470,12 @@ def _parse_args() -> argparse.Namespace:
         "--date", default=None,
         help="Override today's date (YYYY-MM-DD). Useful for backfilling or testing with yesterday's predictions.",
     )
+    parser.add_argument(
+        "--s3", action="store_true",
+        help=("Read serving data from the S3 lakehouse via DuckDB instead of Snowflake "
+              "(E11.1-W7b). Gated/transitional, OFF by default; needs AWS creds (DuckDB "
+              "credential_chain), NOT the Snowflake env. Writes are unchanged (DynamoDB / S3)."),
+    )
     return parser.parse_args()
 
 
@@ -2285,10 +2489,13 @@ def main() -> int:
     today = args.date if args.date else date.today().isoformat()
     bucket = os.environ.get("CACHE_BUCKET")
 
+    # E11.1-W7b: `sf` is the read connection — DuckDB-over-S3 with --s3 (AWS creds only),
+    # else the default Snowflake connection. Every read helper is polymorphic on it; writes
+    # are unaffected. Both connection types expose .close() (called at the end of main()).
     try:
-        sf = _sf_connect()
+        sf = _duck_connect_and_register() if args.s3 else _sf_connect()
     except Exception:
-        log.exception("Snowflake connection failed")
+        log.exception("%s connection failed", "DuckDB-over-S3 (--s3)" if args.s3 else "Snowflake")
         return 1
 
     pg = _pg_connect()
@@ -2526,14 +2733,9 @@ def main() -> int:
         book_pks = list({r["GAME_PK"] for r in picks_rows} | {r["GAME_PK"] for r in ev_rows})
         if not book_pks:
             # Standalone --book-odds run (no --picks): resolve game_pks directly from predictions.
-            _standalone_pks_sql = """
-                SELECT DISTINCT game_pk
-                FROM baseball_data.betting_ml.daily_model_predictions
-                WHERE game_date = %(today)s
-                  AND prediction_type IN ('post_lineup', 'morning')
-            """
+            # (Module-level constant so the --s3 grep-driven view registration auto-discovers it.)
             try:
-                pk_rows = _sf_query(sf, _standalone_pks_sql, {"today": today})
+                pk_rows = _sf_query(sf, _STANDALONE_BOOK_PKS_SQL, {"today": today})
                 book_pks = [r["GAME_PK"] for r in pk_rows]
                 log.info("book-odds standalone: resolved %d game_pks for %s", len(book_pks), today)
             except Exception:

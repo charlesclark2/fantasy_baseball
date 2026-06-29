@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.backend.dependencies import get_user_id
 from app.backend.models.bets import Bet, BetCreate, BetUpdate, BetsResponse, LoginSyncRequest
 from app.backend.services.dynamo import delete_bet, list_bets, put_bet, update_bet, upsert_user
-from app.backend.services.snowflake import execute_query
+from app.backend.services.lakehouse_read import lakehouse_query
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["bets"])
@@ -47,7 +47,12 @@ def get_bets(user_id: str = Depends(get_user_id)) -> BetsResponse:
         game_pks = list({b["game_pk"] for b in pending})
         pks_csv = ",".join(str(pk) for pk in game_pks)
         try:
-            rows = execute_query(f"""
+            # E11.1-W7b: zero-Snowflake request path — read stg_statsapi_games directly
+            # from the S3 lakehouse via DuckDB. FRESHNESS: stg_statsapi_games (source
+            # monthly_schedule) is re-flattened to the same S3 path by the 30-min intraday
+            # re-export, and the helper globs the live dir (**/*.parquet), so this read
+            # picks up postponements/cancellations promptly with no special-casing.
+            rows = lakehouse_query(f"""
                 SELECT game_pk
                 FROM baseball_data.betting.stg_statsapi_games
                 WHERE game_pk IN ({pks_csv})

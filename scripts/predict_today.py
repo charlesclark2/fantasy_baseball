@@ -51,6 +51,14 @@ from betting_ml.utils.data_loader import (
     get_snowflake_connection,
     load_range_features,        # E13.11 — one-shot range feature pull for the backfill cache
     set_range_feature_cache,    # E13.11 — install/clear the backfill range feature cache
+    set_s3_mode,                # E11.1-W7b — flip the data_loader feature/mart reads onto S3
+)
+from scripts.utils.lakehouse_read import (  # E11.1-W7b — DuckDB-over-S3 read helper for the aux reads
+    duck_connect as _duck_connect,
+    register_views as _register_views,
+    referenced_tables as _referenced_tables,
+    strip_fqn as _strip_fqn,
+    to_duckdb_param_sql as _to_duckdb_param_sql,
 )
 from betting_ml.utils.preprocessing import build_imputation_pipeline
 from betting_ml.utils.feature_selection import load_retained_features
@@ -88,6 +96,82 @@ MODEL_VERSION = "v0"
 # writing per date; _flush_backfill_predictions() drains the buffer in ONE transaction at
 # end-of-range. None on every live / single-date path. Shape: {"rows": list[dict]}.
 _BACKFILL_BATCH: dict | None = None
+
+# ---------------------------------------------------------------------------
+# E11.1-W7b — S3 lakehouse READ mode (gated, OFF by default).
+#
+# When --s3 is passed, set_s3_mode(True) flips the data_loader feature/mart reads
+# onto the S3 lakehouse (DuckDB) and _PREDICT_S3_MODE (here) flips this script's
+# direct AUX reads (bullpen OOD / Bovada ML / meta-serve / posterior provenance /
+# best_alpha / range-date resolution) onto the same DuckDB-over-S3 helper. WRITES
+# (daily_model_predictions, prediction_log) stay on Snowflake — W7b is the READ
+# path; writes are long-tail (handled in a later wave). The Snowflake path is a
+# byte-for-byte instant rollback (omit --s3 / _PREDICT_S3_MODE=False).
+# ---------------------------------------------------------------------------
+_PREDICT_S3_MODE: bool = False
+_AUX_DUCK_CONN = None  # lazily-created, view-registered DuckDB connection for the aux reads
+
+
+def _set_predict_s3_mode(enabled: bool) -> None:
+    """Flip this script's direct aux reads onto S3 AND propagate to data_loader's
+    feature/mart reads via set_s3_mode. One switch threads the whole read path."""
+    global _PREDICT_S3_MODE
+    _PREDICT_S3_MODE = bool(enabled)
+    set_s3_mode(enabled)
+
+
+def _get_aux_duck():
+    """Lazily create + cache the DuckDB connection for the aux reads, registering the
+    lakehouse views every aux query references (grep-derived via referenced_tables,
+    so the set tracks the queries — no fixed list to drift). Snowflake-free."""
+    global _AUX_DUCK_CONN
+    if _AUX_DUCK_CONN is None:
+        tables = _referenced_tables(
+            _BULLPEN_OOD_QUERY,
+            _BOVADA_ML_QUERY,
+            _META_SERVE_QUERY,
+            _POSTERIOR_PROVENANCE_QUERY,
+            _RANGE_DATES_QUERY,
+        )
+        conn = _duck_connect()
+        _register_views(conn, tables)
+        _AUX_DUCK_CONN = conn
+    return _AUX_DUCK_CONN
+
+
+def _aux_query(sql: str, params: dict | None = None) -> tuple[list[str], list[tuple]]:
+    """Run one AUX read and return (lower_case_columns, rows-as-tuples).
+
+    Single SF↔S3 branch point for predict_today's direct reads. In S3 mode the SQL
+    is FQN-stripped + paramstyle-translated (%(name)s → $name) and run on the cached
+    aux DuckDB connection; else it is the existing Snowflake cursor path. Both return
+    plain Python row tuples + lower-case column names, so the unpacking call sites
+    (positional `for a, b, c in rows`) are output-identical regardless of backend.
+
+    NOTE: the aux SELECT column ORDER must match between the SF query and the
+    rewritten SQL — every aux read here unpacks positionally, so order is the
+    contract (not column name). The same SQL string drives both paths, so order is
+    preserved by construction."""
+    if _PREDICT_S3_MODE:
+        duck_sql = _to_duckdb_param_sql(_strip_fqn(sql))
+        conn = _get_aux_duck()
+        cur = conn.execute(duck_sql, params) if params else conn.execute(duck_sql)
+        columns = [d[0].lower() for d in cur.description]
+        return columns, cur.fetchall()
+
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        if params is not None:
+            cur.execute(sql, params)
+        else:
+            cur.execute(sql)
+        columns = [d[0].lower() for d in cur.description]
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+    return columns, rows
+
 
 # A1.12 — write target resolved by the shared resolver so this scorer, the
 # betting_ml/ scorer, and the app all agree on dev vs prod (TARGET_ENV=prod →
@@ -497,20 +581,15 @@ def _load_bullpen_ood_signals(target_date: str) -> dict[int, dict]:
     Used by the Epic 19 bullpen OOD gate in compute_bet_permission(). Returns
     empty dict on any failure — OOD gate then produces None z-scores (no block)."""
     try:
-        conn = get_snowflake_connection()
-        try:
-            cur = conn.cursor()
-            cur.execute(_BULLPEN_OOD_QUERY, {"d": target_date})
-            out: dict[int, dict] = {}
-            for gpk, mu_home, mu_away in cur.fetchall():
-                out[int(gpk)] = {
-                    "bullpen_mu_home": float(mu_home) if mu_home is not None else None,
-                    "bullpen_mu_away": float(mu_away) if mu_away is not None else None,
-                }
-            print(f"  [Epic 19] Loaded bullpen OOD signals for {len(out)} game(s).")
-            return out
-        finally:
-            conn.close()
+        _cols, rows = _aux_query(_BULLPEN_OOD_QUERY, {"d": target_date})
+        out: dict[int, dict] = {}
+        for gpk, mu_home, mu_away in rows:
+            out[int(gpk)] = {
+                "bullpen_mu_home": float(mu_home) if mu_home is not None else None,
+                "bullpen_mu_away": float(mu_away) if mu_away is not None else None,
+            }
+        print(f"  [Epic 19] Loaded bullpen OOD signals for {len(out)} game(s).")
+        return out
     except Exception as exc:  # noqa: BLE001
         print(f"  [Epic 19] bullpen OOD signals unavailable ({exc}); OOD gate will not fire.")
         return {}
@@ -552,20 +631,15 @@ def _load_bovada_ml_odds(target_date: str) -> dict[int, dict]:
     magnitude kill-criterion monitor can compute real-book ROI, not vig-free estimates.
     Graceful — returns empty dict on any failure so scoring is never blocked."""
     try:
-        conn = get_snowflake_connection()
-        try:
-            cur = conn.cursor()
-            cur.execute(_BOVADA_ML_QUERY, {"d": target_date})
-            out: dict[int, dict] = {}
-            for gpk, ml_home, ml_away in cur.fetchall():
-                out[int(gpk)] = {
-                    "bovada_ml_home": int(ml_home) if ml_home is not None else None,
-                    "bovada_ml_away": int(ml_away) if ml_away is not None else None,
-                }
-            print(f"  [28.3] Loaded Bovada ML odds for {len(out)} game(s).")
-            return out
-        finally:
-            conn.close()
+        _cols, rows = _aux_query(_BOVADA_ML_QUERY, {"d": target_date})
+        out: dict[int, dict] = {}
+        for gpk, ml_home, ml_away in rows:
+            out[int(gpk)] = {
+                "bovada_ml_home": int(ml_home) if ml_home is not None else None,
+                "bovada_ml_away": int(ml_away) if ml_away is not None else None,
+            }
+        print(f"  [28.3] Loaded Bovada ML odds for {len(out)} game(s).")
+        return out
     except Exception as exc:  # noqa: BLE001
         print(f"  [28.3] Bovada ML odds unavailable ({exc}); columns will be NULL.")
         return {}
@@ -601,24 +675,19 @@ def _load_meta_serve_inputs(target_date: str) -> dict[int, dict]:
     home split for h2h, over split for totals). Graceful — empty dict on any failure; a game with
     no open line for a market gets a NULL meta prediction for that market (the meta-model abstains)."""
     try:
-        conn = get_snowflake_connection()
-        try:
-            cur = conn.cursor()
-            cur.execute(_META_SERVE_QUERY, {"d": target_date})
-            out: dict[int, dict] = {}
-            for gpk, open_hwp, open_tot, htd, over_htd in cur.fetchall():
-                if gpk is None:
-                    continue
-                out[int(gpk)] = {
-                    "open_home_win_prob": float(open_hwp) if open_hwp is not None else None,
-                    "handle_ticket_div": float(htd) if htd is not None else None,
-                    "open_total_line": float(open_tot) if open_tot is not None else None,
-                    "over_handle_ticket_div": float(over_htd) if over_htd is not None else None,
-                }
-            print(f"  [12.4/12.12] Loaded meta-model serve inputs for {len(out)} game(s).")
-            return out
-        finally:
-            conn.close()
+        _cols, rows = _aux_query(_META_SERVE_QUERY, {"d": target_date})
+        out: dict[int, dict] = {}
+        for gpk, open_hwp, open_tot, htd, over_htd in rows:
+            if gpk is None:
+                continue
+            out[int(gpk)] = {
+                "open_home_win_prob": float(open_hwp) if open_hwp is not None else None,
+                "handle_ticket_div": float(htd) if htd is not None else None,
+                "open_total_line": float(open_tot) if open_tot is not None else None,
+                "over_handle_ticket_div": float(over_htd) if over_htd is not None else None,
+            }
+        print(f"  [12.4/12.12] Loaded meta-model serve inputs for {len(out)} game(s).")
+        return out
     except Exception as exc:  # noqa: BLE001
         print(f"  [12.4/12.12] Meta-model serve inputs unavailable ({exc}); meta columns will be NULL.")
         return {}
@@ -630,19 +699,14 @@ def _load_posterior_provenance(target_date: str) -> dict[int, dict]:
     Empty dict if the EB tables aren't yet populated for the date (graceful — the
     columns then write NULL). Read-only; never blocks scoring."""
     try:
-        conn = get_snowflake_connection()
-        try:
-            cur = conn.cursor()
-            cur.execute(_POSTERIOR_PROVENANCE_QUERY, {"d": target_date})
-            out: dict[int, dict] = {}
-            for gpk, max_age, src in cur.fetchall():
-                out[int(gpk)] = {
-                    "prior_age_days": int(max_age) if max_age is not None else None,
-                    "posterior_source": src,
-                }
-            return out
-        finally:
-            conn.close()
+        _cols, rows = _aux_query(_POSTERIOR_PROVENANCE_QUERY, {"d": target_date})
+        out: dict[int, dict] = {}
+        for gpk, max_age, src in rows:
+            out[int(gpk)] = {
+                "prior_age_days": int(max_age) if max_age is not None else None,
+                "posterior_source": src,
+            }
+        return out
     except Exception as exc:  # noqa: BLE001
         print(f"  [16.2] posterior provenance unavailable ({exc}); columns will be NULL.")
         return {}
@@ -1485,28 +1549,42 @@ def _load_ngb_cfg(path: str, target_label: str) -> tuple[int, str]:
 
 
 def _load_best_alpha() -> float:
-    try:
-        conn = get_snowflake_connection()
+    # E11.1-W7b — best_alpha lives in betting_ml.alpha_tuning_results, which is NOT
+    # in the S3 lakehouse (it is a market-blend tuning table, not a serving mart) and
+    # is destined for the write-path long tail, not W7b. In S3 mode we therefore skip
+    # the Snowflake read entirely (keeps the --s3 serving path Snowflake-free) and use
+    # the local cache, defaulting to the market-blind value (best_alpha=0) when absent
+    # — consistent with the program's market-blind discipline. The Snowflake path is
+    # unchanged below.
+    if not _PREDICT_S3_MODE:
         try:
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT alpha FROM baseball_data.betting_ml.alpha_tuning_results "
-                "ORDER BY loaded_at DESC LIMIT 1"
-            )
-            row = cur.fetchone()
-            if row is not None:
-                return float(row[0])
-            print("Warning: alpha_tuning_results is empty; trying local cache")
-        finally:
-            conn.close()
-    except Exception as exc:
-        print(f"Warning: Could not load alpha from Snowflake ({exc}); trying local cache")
+            conn = get_snowflake_connection()
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT alpha FROM baseball_data.betting_ml.alpha_tuning_results "
+                    "ORDER BY loaded_at DESC LIMIT 1"
+                )
+                row = cur.fetchone()
+                if row is not None:
+                    return float(row[0])
+                print("Warning: alpha_tuning_results is empty; trying local cache")
+            finally:
+                conn.close()
+        except Exception as exc:
+            print(f"Warning: Could not load alpha from Snowflake ({exc}); trying local cache")
+    else:
+        print("[E11.1-W7b] --s3 mode: alpha_tuning_results not in lakehouse; "
+              "using local cache (market-blind default 0 if absent).")
 
     cache_path = PROJECT_ROOT / "betting_ml" / "models" / "best_alpha.json"
     if cache_path.exists():
         with open(cache_path) as f:
             return float(json.load(f)["best_alpha"])
 
+    if _PREDICT_S3_MODE:
+        print("Warning: best_alpha.json not found; using market-blind 0.0 (--s3).")
+        return 0.0
     print("Warning: best_alpha.json not found; using 0.5")
     return 0.5
 
@@ -1783,6 +1861,18 @@ def _parse_args() -> argparse.Namespace:
             "past games; never for live morning/post_lineup runs."
         ),
     )
+    parser.add_argument(
+        "--s3",
+        action="store_true",
+        default=False,
+        help=(
+            "E11.1-W7b (GATED, OFF by default) — read the feature matrix + marts + odds from "
+            "the S3 lakehouse parquet (DuckDB) instead of Snowflake. WRITES "
+            "(daily_model_predictions, prediction_log) stay on Snowflake. Intended for the "
+            "operator's multi-day parallel parity comparison before the read-path cutover; the "
+            "Snowflake read path is the instant rollback (omit --s3)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -1822,26 +1912,25 @@ def _fit_pipeline_cached(X_hist: pd.DataFrame):
     return hit
 
 
+# Range-mode completed-game date resolution (Story 30.7 backfill). mart_game_results
+# is in the S3 lakehouse, so this routes through _aux_query (SF or DuckDB per --s3).
+_RANGE_DATES_QUERY = (
+    "SELECT DISTINCT game_date FROM baseball_data.betting.mart_game_results "
+    "WHERE game_date BETWEEN %(s)s AND %(e)s "
+    "AND home_final_score IS NOT NULL AND away_final_score IS NOT NULL "
+    "ORDER BY game_date"
+)
+
+
 def _resolve_target_dates(args) -> list[str]:
     """Single --date (default) or the list of completed-game dates in [--start, --end].
     Range mode powers the Story 30.7 backfill: one process, setup built once."""
     if not getattr(args, "start", None):
         return [args.date]
     end = args.end or date.today().isoformat()
-    conn = get_snowflake_connection()
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT DISTINCT game_date FROM baseball_data.betting.mart_game_results "
-            "WHERE game_date BETWEEN %(s)s AND %(e)s "
-            "AND home_final_score IS NOT NULL AND away_final_score IS NOT NULL "
-            "ORDER BY game_date",
-            {"s": args.start, "e": end},
-        )
-        dates = [r[0].isoformat() if hasattr(r[0], "isoformat") else str(r[0])
-                 for r in cur.fetchall()]
-    finally:
-        conn.close()
+    _cols, rows = _aux_query(_RANGE_DATES_QUERY, {"s": args.start, "e": end})
+    dates = [r[0].isoformat() if hasattr(r[0], "isoformat") else str(r[0])
+             for r in rows]
     print(f"Range mode: {len(dates)} completed-game date(s) {args.start} → {end}")
     return dates
 
@@ -2321,6 +2410,14 @@ def main(target_date: str, args) -> None:
 
 if __name__ == "__main__":
     _args = _parse_args()
+    # E11.1-W7b — flip the WHOLE read path (data_loader feature/mart reads + this
+    # script's aux reads) onto the S3 lakehouse BEFORE any read fires. Gated, OFF by
+    # default; writes stay on Snowflake. Must precede _resolve_target_dates (which is
+    # itself a read).
+    if getattr(_args, "s3", False):
+        _set_predict_s3_mode(True)
+        print("[E11.1-W7b] --s3 ENABLED: feature/mart/odds READS via DuckDB-over-S3 "
+              "(lakehouse parquet); WRITES remain on Snowflake.")
     _dates = _resolve_target_dates(_args)
     _failures: list[str] = []
     # E13.11 — batch a multi-date --is-backfill run: features pulled once → local parquet,

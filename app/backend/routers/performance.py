@@ -25,8 +25,8 @@ from app.backend.models.performance import (
 )
 from app.backend.services import serving_cache
 from app.backend.services.dynamo import list_bets
+from app.backend.services.lakehouse_read import lakehouse_query
 from app.backend.services.s3_cache import get_cache, set_cache
-from app.backend.services.snowflake import execute_query
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/performance", tags=["performance"])
@@ -94,7 +94,7 @@ def get_performance_summary() -> PerformanceSummary:
         return PerformanceSummary(**cached)
 
     try:
-        rows = execute_query(_BANKROLL_SUMMARY_QUERY)
+        rows = lakehouse_query(_BANKROLL_SUMMARY_QUERY)
         if rows:
             r = rows[0]
             result = PerformanceSummary(
@@ -115,9 +115,9 @@ def get_performance_summary() -> PerformanceSummary:
         logger.warning("mart_bankroll_state unavailable — falling back to mart_clv_labeled_games")
 
     try:
-        rows = execute_query(_CLV_SUMMARY_QUERY)
+        rows = lakehouse_query(_CLV_SUMMARY_QUERY)
     except Exception as exc:
-        logger.exception("Snowflake query failed for /performance/summary")
+        logger.exception("Lakehouse last-resort query failed for /performance/summary")
         raise HTTPException(status_code=503, detail="Data unavailable") from exc
 
     if not rows:
@@ -143,9 +143,9 @@ def get_performance_summary() -> PerformanceSummary:
 @router.get("/by-model", response_model=PerformanceByModelResponse)
 def get_performance_by_model() -> PerformanceByModelResponse:
     try:
-        rows = execute_query(_BY_MODEL_QUERY)
+        rows = lakehouse_query(_BY_MODEL_QUERY)
     except Exception as exc:
-        logger.exception("Snowflake query failed for /performance/by-model")
+        logger.exception("Lakehouse last-resort query failed for /performance/by-model")
         raise HTTPException(status_code=503, detail="Data unavailable") from exc
 
     breakdown = [
@@ -219,9 +219,9 @@ def get_model_metrics(
     params = {"season": season} if season else None
 
     try:
-        rows = execute_query(query, params)
+        rows = lakehouse_query(query, params)
     except Exception as exc:
-        logger.exception("Snowflake query failed for /performance/model")
+        logger.exception("Lakehouse last-resort query failed for /performance/model")
         raise HTTPException(status_code=503, detail="Data unavailable") from exc
 
     markets = [

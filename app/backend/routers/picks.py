@@ -51,8 +51,8 @@ from app.backend.models.picks import (
 )
 from app.backend.dependencies import get_optional_user_id
 from app.backend.services import dynamo, serving_cache
+from app.backend.services.lakehouse_read import lakehouse_query
 from app.backend.services.s3_cache import get_cache, set_cache
-from app.backend.services.snowflake import execute_query
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/picks", tags=["picks"])
@@ -388,7 +388,7 @@ def get_featured_pick() -> FeaturedPickResponse:
         try:
             return FeaturedPickResponse(**_pg_hit)
         except Exception:
-            logger.warning("PG stale/invalid for picks/featured, re-fetching from Snowflake")
+            logger.warning("PG stale/invalid for picks/featured, re-fetching from lakehouse last-resort")
 
     # S3/in-process cache: only populated once narrative is available
     cached = get_cache(f"picks/featured_{today}.json")
@@ -396,10 +396,10 @@ def get_featured_pick() -> FeaturedPickResponse:
         return FeaturedPickResponse(**cached)
 
     try:
-        rows = execute_query(_FEATURED_TODAY_QUERY, params={"today": today})
-        yesterday_rows = execute_query(_FEATURED_YESTERDAY_QUERY, params={"today": today})
+        rows = lakehouse_query(_FEATURED_TODAY_QUERY, params={"today": today})
+        yesterday_rows = lakehouse_query(_FEATURED_YESTERDAY_QUERY, params={"today": today})
     except Exception as exc:
-        logger.exception("Snowflake query failed for /picks/featured")
+        logger.exception("Lakehouse last-resort query failed for /picks/featured")
         raise HTTPException(status_code=503, detail="Data unavailable") from exc
 
     yesterday: FeaturedYesterday | None = None
@@ -421,7 +421,7 @@ def get_featured_pick() -> FeaturedPickResponse:
         narrative_str: str | None = None
         if game_pk_for_expl:
             try:
-                expl_rows = execute_query(_EXPLANATION_QUERY, params={"game_pk": game_pk_for_expl})
+                expl_rows = lakehouse_query(_EXPLANATION_QUERY, params={"game_pk": game_pk_for_expl})
                 if expl_rows:
                     expl_payload = _parse_explanation(expl_rows[0].get("PICK_EXPLANATION"))
                     narrative_str = expl_rows[0].get("PICK_NARRATIVE")
@@ -437,9 +437,9 @@ def get_featured_pick() -> FeaturedPickResponse:
 
     # No picks today — fall back to yesterday's champion pick (don't cache: re-check on next request)
     try:
-        stale_rows = execute_query(_FEATURED_STALE_FALLBACK_QUERY, params={"today": today})
+        stale_rows = lakehouse_query(_FEATURED_STALE_FALLBACK_QUERY, params={"today": today})
     except Exception:
-        logger.exception("Snowflake query failed for /picks/featured stale fallback")
+        logger.exception("Lakehouse last-resort query failed for /picks/featured stale fallback")
         return FeaturedPickResponse(game_pk=None)
 
     if not stale_rows:
@@ -450,7 +450,7 @@ def get_featured_pick() -> FeaturedPickResponse:
     stale_narrative: str | None = None
     if stale_game_pk:
         try:
-            stale_expl_rows = execute_query(_EXPLANATION_QUERY, params={"game_pk": stale_game_pk})
+            stale_expl_rows = lakehouse_query(_EXPLANATION_QUERY, params={"game_pk": stale_game_pk})
             if stale_expl_rows:
                 stale_expl = _parse_explanation(stale_expl_rows[0].get("PICK_EXPLANATION"))
                 stale_narrative = stale_expl_rows[0].get("PICK_NARRATIVE")
@@ -1337,10 +1337,10 @@ def get_picks_today(
             pass
 
     try:
-        rows = execute_query(_TODAY_QUERY, params={"today": today})
-        freshness = execute_query(_FRESHNESS_QUERY, params={"today": today})
+        rows = lakehouse_query(_TODAY_QUERY, params={"today": today})
+        freshness = lakehouse_query(_FRESHNESS_QUERY, params={"today": today})
     except Exception as exc:
-        logger.exception("Snowflake query failed for /picks/today")
+        logger.exception("Lakehouse last-resort query failed for /picks/today")
         raise HTTPException(status_code=503, detail="Data unavailable") from exc
 
     last_updated_at: datetime | None = None
@@ -1399,9 +1399,9 @@ def get_picks_history() -> HistoryPicksResponse:
         return HistoryPicksResponse(**cached)
 
     try:
-        rows = execute_query(_HISTORY_QUERY)
+        rows = lakehouse_query(_HISTORY_QUERY)
     except Exception as exc:
-        logger.exception("Snowflake query failed for /picks/history")
+        logger.exception("Lakehouse last-resort query failed for /picks/history")
         raise HTTPException(status_code=503, detail="Data unavailable") from exc
 
     picks = [
@@ -1466,9 +1466,9 @@ def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaul
             return EVPicksResponse(**cached)
 
     try:
-        rows = execute_query(query, params)
+        rows = lakehouse_query(query, params)
     except Exception as exc:
-        logger.exception("Snowflake query failed for /picks/ev")
+        logger.exception("Lakehouse last-resort query failed for /picks/ev")
         raise HTTPException(status_code=503, detail="Data unavailable") from exc
 
     picks = [
@@ -1528,9 +1528,9 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
 
     # Base picks
     try:
-        pick_rows = execute_query(_GAME_QUERY, params=params)
+        pick_rows = lakehouse_query(_GAME_QUERY, params=params)
     except Exception as exc:
-        logger.exception("Snowflake query failed for /picks/%s/detail (picks)", game_pk)
+        logger.exception("Lakehouse last-resort query failed for /picks/%s/detail (picks)", game_pk)
         raise HTTPException(status_code=503, detail="Data unavailable") from exc
 
     if not pick_rows:
@@ -1568,7 +1568,7 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     pick_explanation: PickExplanationPayload | None = None
     pick_narrative: str | None = None
     try:
-        expl_rows = execute_query(_EXPLANATION_QUERY, params=params)
+        expl_rows = lakehouse_query(_EXPLANATION_QUERY, params=params)
         if expl_rows:
             pick_explanation = _parse_explanation(expl_rows[0].get("PICK_EXPLANATION"))
             pick_narrative = expl_rows[0].get("PICK_NARRATIVE")
@@ -1580,7 +1580,7 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     home_team_name: str | None = None
     away_team_name: str | None = None
     try:
-        status_rows = execute_query(_GAME_STATUS_QUERY, params=params)
+        status_rows = lakehouse_query(_GAME_STATUS_QUERY, params=params)
         if status_rows:
             sr = status_rows[0]
             state = str(sr.get("ABSTRACT_GAME_STATE") or "Preview")
@@ -1632,7 +1632,7 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     # Probable starters — current-season + prior-season stats
     starters: GameStarters | None = None
     try:
-        starter_rows = execute_query(_STARTERS_QUERY, params=params)
+        starter_rows = lakehouse_query(_STARTERS_QUERY, params=params)
         home_sp: StarterStats | None = None
         away_sp: StarterStats | None = None
         for row in starter_rows:
@@ -1663,7 +1663,7 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     # Bovada lines
     bovada_lines: BovadaLines | None = None
     try:
-        bov_rows = execute_query(_BOVADA_LINES_QUERY, params=params)
+        bov_rows = lakehouse_query(_BOVADA_LINES_QUERY, params=params)
         h2h_rows = [r for r in bov_rows if str(r.get("MARKET_KEY", "")).lower() == "h2h"]
         tot_rows = [r for r in bov_rows if str(r.get("MARKET_KEY", "")).lower() == "totals"]
 
@@ -1698,7 +1698,7 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     # Team performance features
     team_features: GamePerfFeatures | None = None
     try:
-        feat_rows = execute_query(_TEAM_FEATURES_QUERY, params=params)
+        feat_rows = lakehouse_query(_TEAM_FEATURES_QUERY, params=params)
         if feat_rows:
             fr = feat_rows[0]
 
@@ -1748,7 +1748,7 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     # Umpire — sourced from dedicated umpire features table so k%/bb% nulls are preserved
     umpire: UmpireInfo | None = None
     try:
-        ump_rows = execute_query(_UMPIRE_QUERY, params=params)
+        ump_rows = lakehouse_query(_UMPIRE_QUERY, params=params)
         if ump_rows:
             ur = ump_rows[0]
             def _uf(key: str) -> float | None:
@@ -1774,7 +1774,7 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     # Weather
     weather: WeatherInfo | None = None
     try:
-        wx_rows = execute_query(_WEATHER_QUERY, params=params)
+        wx_rows = lakehouse_query(_WEATHER_QUERY, params=params)
         if wx_rows:
             wr = wx_rows[0]
             weather = WeatherInfo(
@@ -1790,7 +1790,7 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     # Public betting action
     public_betting: PublicBetting | None = None
     try:
-        pb_rows = execute_query(_PUBLIC_BETTING_QUERY, params=params)
+        pb_rows = lakehouse_query(_PUBLIC_BETTING_QUERY, params=params)
         if pb_rows:
             pb = pb_rows[0]
 
@@ -1819,7 +1819,7 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     # Line movement
     line_movement: LineMovement | None = None
     try:
-        lm_rows = execute_query(_LINE_MOVEMENT_QUERY, params=params)
+        lm_rows = lakehouse_query(_LINE_MOVEMENT_QUERY, params=params)
         if lm_rows:
             lm = lm_rows[0]
 
@@ -1844,7 +1844,7 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     # Recent form + H2H
     game_context: GameContext | None = None
     try:
-        form_rows = execute_query(_RECENT_FORM_QUERY, params=params)
+        form_rows = lakehouse_query(_RECENT_FORM_QUERY, params=params)
         home_form: TeamRecentForm | None = None
         away_form: TeamRecentForm | None = None
         for row in form_rows:
@@ -1863,7 +1863,7 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
 
         # H2H computed point-in-time from stg_statsapi_games (game_pk drives date filter)
         h2h: H2HRecord | None = None
-        h2h_rows = execute_query(_H2H_QUERY, params=params)
+        h2h_rows = lakehouse_query(_H2H_QUERY, params=params)
         if h2h_rows:
             hr = h2h_rows[0]
             gp = hr.get("GAMES_PLAYED")
@@ -1883,13 +1883,13 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     # Batting lineups (always) + box score (completed games only)
     lineups: GameLineups | None = None
     try:
-        lineup_rows = execute_query(_LINEUP_QUERY, params=params)
+        lineup_rows = lakehouse_query(_LINEUP_QUERY, params=params)
 
         # Build a box-score lookup keyed by batter_id if the game is final
         box_score_map: dict[int, dict] = {}
         if game_score and game_score.status == "Final":
             try:
-                bs_rows = execute_query(_BOX_SCORE_QUERY, params=params)
+                bs_rows = lakehouse_query(_BOX_SCORE_QUERY, params=params)
                 for bs in bs_rows:
                     bid = bs.get("BATTER_ID")
                     if bid is not None:
@@ -2014,7 +2014,7 @@ def get_odds_comparison(game_pk: int) -> BookOddsComparison:
             logger.warning("PG book-odds invalid for game_pk=%s, returning empty", game_pk)
 
     # If no PG data yet (book-odds write hasn't run), return an empty shell so
-    # the frontend can display gracefully. Do NOT query Snowflake live at request time.
+    # the frontend can display gracefully. Do NOT query the lakehouse live at request time.
     logger.info("No book-odds cache for game_pk=%s — returning empty payload", game_pk)
     return BookOddsComparison(game_pk=game_pk)
 
@@ -2022,9 +2022,9 @@ def get_odds_comparison(game_pk: int) -> BookOddsComparison:
 @router.get("/{game_pk}", response_model=GamePicksResponse)
 def get_pick_by_game_pk(game_pk: int) -> GamePicksResponse:
     try:
-        rows = execute_query(_GAME_QUERY, params={"game_pk": game_pk})
+        rows = lakehouse_query(_GAME_QUERY, params={"game_pk": game_pk})
     except Exception as exc:
-        logger.exception("Snowflake query failed for /picks/%s", game_pk)
+        logger.exception("Lakehouse last-resort query failed for /picks/%s", game_pk)
         raise HTTPException(status_code=503, detail="Data unavailable") from exc
 
     if not rows:
