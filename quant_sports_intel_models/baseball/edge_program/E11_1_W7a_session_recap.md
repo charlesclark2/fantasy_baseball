@@ -1,7 +1,11 @@
 # E11.1-W7a session recap — the FINISH wave, part a (the credit drop + request-path resolve)
 
-**Status: ✅ CODE-COMPLETE, GATED, READY-TO-VALIDATE (Opus, 2026-06-29). NOT yet cut over —
-operator runs parity + creates the external tables + flips the `W7A_LAKEHOUSE_S3` gate.**
+**Status: ✅ CODE-COMPLETE + PHASE-1/2/4-VALIDATED (Opus, 2026-06-29). External tables created
+(`lakehouse_ext.batter_clusters`=5,099, `pitcher_clusters`=5,618); parity value-exact; the 4 `--s3`
+consumer paths run clean end-to-end after 4 latent-bug fixes (see below) — `generate_matchup_signals
+--s3` = 100% signal_available, posteriors parquet = native-exact (35,513/95/DATE), seq posteriors +
+mart_sub_model_signals written. REMAINING: (a) commit tonight's 4 fixes into the PR, (b) merge, (c)
+flip `W7A_LAKEHOUSE_S3=1` on the box, (d) Phase 5/6 (drop native cluster builds + measure).**
 
 W7 (the program FINISH) is genuinely multi-part with sharply different risk per part. The operator
 chose a **phased** split: do the lower-risk, high-credit-drop pieces now (**W7a**), defer the live
@@ -42,6 +46,36 @@ off Snowflake, then stop running the native cluster builds.
   (migrate `stg_statsapi_probable_pitchers` + `stg_statsapi_lineups_wide` to S3, then route
   `_GAMES_SQL` to DuckDB). The `games` parity check was removed (nothing to compare). Verified:
   `get_duck()` registers 7 S3 views cleanly + `batter_clusters`=5,099 rows.
+  ⚠️ **SECOND LATENT-BUG FIX (2026-06-29, operator Phase-4 run):** `compute_archetype_posteriors.py`
+  `_persist_s3` did `pd.DataFrame(rows)[_POSTERIOR_COLS]` BEFORE adding `run_timestamp` →
+  `KeyError: run_timestamp` (the Snowflake `_upsert` path stamps it via `CURRENT_TIMESTAMP()`;
+  `_compute_posterior` never emits it). **Latent since W5b** — the `--s3` *compute+persist* path was
+  never exercised (W5b ran only `--seed` + native `--mode today`); W7a is the first to run
+  `compute_archetype_posteriors --s3` daily, so it surfaced now. FIX: add `run_timestamp` first,
+  then select `_POSTERIOR_COLS`. Failed before the S3 write → existing parquet untouched. **Add
+  `betting_ml/scripts/eb_priors/compute_archetype_posteriors.py` to the W7a PR.**
+  ⚠️ **THIRD LATENT-BUG FIX (2026-06-29, operator Phase-4 run):** `_persist_s3` wrote `as_of_date`
+  as **TIMESTAMP** not DATE — the carried-forward rows come back from `.fetch_df()` as `datetime64`,
+  so concat made the whole parquet column TIMESTAMP. DuckDB then returns `datetime` → the matchup
+  consumers' `aod < game_date` (date) raised `TypeError: can't compare datetime.datetime to
+  datetime.date`, and it drifts from the native DATE column + breaks the parity string-key join.
+  FIX: source — `_persist_s3` normalizes `out["as_of_date"] = pd.to_datetime(...).dt.date` before the
+  COPY (parquet now DATE, verified DuckDB `typeof`=DATE); plus reader robustness — both
+  `update_matchup_cell_posteriors._map_cluster_for_update` and `generate_matchup_signals._posterior_as_of`
+  now narrow a `datetime` `as_of_date` to `.date()`. All 3 already in the W7a PR list.
+  ⚠️ **FOURTH (most important) FIX — ROLLING-HISTORY WIPE (2026-06-29, operator Phase-4 run):**
+  `_persist_s3` did `WHERE season <> {season}` = full-season REPLACE. In `--mode today` (which keeps
+  only each player's LATEST snapshot, ~1 row/player) this **wiped the within-season rolling history**
+  the native MERGE accumulates (native 2026 = 35,513 rows / 95 as_of_dates / ~28 per player; the
+  wiped S3 = 1,298 rows / ~1 per player). `generate_matchup_signals`'s `as_of_date < game_date`
+  leakage guard then found NOTHING for completed-date scoring → **0% signal_available** (matchup
+  feature dead). FIX: `_persist_s3` now **UPSERTs by the full PK** (anti-join keeps every existing row
+  whose (player_id,player_type,season,as_of_date) isn't in this run's `new`, then appends `new`) —
+  preserves history like the native MERGE; backfill still effectively rebuilds. ⚠️ **Tonight's runs
+  already wiped the prod posteriors parquet** (also read by the W5b `mart_batter_archetype_vs_pitcher_cluster`
+  duckdb build) → **operator must RE-SEED from native** (`compute_archetype_posteriors --seed`) to
+  recover, then re-run the consumers. ⇒ **LESSON: W5b's `--s3` paths were never exercised → 4 latent
+  bugs surfaced when W7a turned them on. ALWAYS run a dormant prior-wave `--s3` build before trusting it.**
 - **dbt FEATURE models** (the hidden dependency that makes this a real wave, not a 4-script edit):
   `feature_pregame_lineup_features`, `feature_pregame_starter_features`,
   `feature_batter_archetype_matchups`, `feature_pitcher_cluster_matchups` read clusters via
@@ -147,6 +181,7 @@ betting_ml/scripts/eb_priors/generate_matchup_signals.py
 betting_ml/scripts/eb_priors/build_matchup_training_data.py
 betting_ml/scripts/eb_priors/fit_archetype_priors.py
 betting_ml/scripts/sequential_bayes/update_matchup_cell_posteriors.py
+betting_ml/scripts/eb_priors/compute_archetype_posteriors.py   (W5b file — W7a _persist_s3 KeyError fix)
 dbt/models/feature/feature_pregame_lineup_features.sql
 dbt/models/feature/feature_pregame_starter_features.sql
 dbt/models/feature/feature_batter_archetype_matchups.sql

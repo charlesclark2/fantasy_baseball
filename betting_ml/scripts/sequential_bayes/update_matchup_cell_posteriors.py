@@ -218,6 +218,8 @@ def _map_cluster_for_update(posteriors: dict, player_id, player_type: str, game_
         aod = r["as_of_date"]
         if isinstance(aod, str):
             aod = date.fromisoformat(aod)
+        elif isinstance(aod, datetime):  # S3 parquet may hand back TIMESTAMP → datetime; narrow to date
+            aod = aod.date()
         if aod < game_date:
             best = r
         else:

@@ -481,23 +481,45 @@ def _load_prior_clusters_s3(duck, prior_season: int) -> dict[tuple[int, str], st
 
 
 def _persist_s3(duck, rows: list[dict], season: int) -> None:
-    """Write this run's `season` rows to the consolidated S3 posteriors parquet, carrying
-    forward every OTHER season (PK (player_id, player_type, season, as_of_date) — full
-    rebuild of `season`, mirroring the MERGE's per-season effect for the backfill mode)."""
+    """UPSERT this run's rows into the consolidated S3 posteriors parquet by the full PK
+    (player_id, player_type, season, as_of_date) — preserving the ROLLING posterior history,
+    exactly like the native MERGE in _upsert."""
     import pandas as pd
-    new = pd.DataFrame(rows)[_POSTERIOR_COLS].copy()
+    # E11.1-W7a: _compute_posterior emits every column EXCEPT run_timestamp (the Snowflake
+    # _upsert path stamps it via CURRENT_TIMESTAMP() in the MERGE). Add it here BEFORE selecting
+    # _POSTERIOR_COLS (which includes run_timestamp) — else the column-select KeyErrors. (Latent
+    # since W5b; first exercised when W7a turns on `compute_archetype_posteriors --s3` daily.)
+    new = pd.DataFrame(rows).copy()
     new["run_timestamp"] = pd.Timestamp(_dt_utcnow())
+    new = new[_POSTERIOR_COLS]
+    # E11.1-W7a: UPSERT, do NOT replace the whole season. The prior `WHERE season <> {season}`
+    # dropped every existing row of `season`, so `--mode today` (one latest snapshot per player)
+    # WIPED the within-season rolling history the native MERGE accumulates (~28 as_of_dates/player).
+    # generate_matchup_signals' `as_of_date < game_date` leakage guard then found nothing for
+    # completed-date scoring → 0% signal_available. Keep every existing row whose PK is NOT in this
+    # run's `new`, then append `new`. Backfill: `new` spans all as_of_dates → same as a season
+    # rebuild; today: `new` is one as_of/player → accumulates like native. (`::date` guards against
+    # a legacy TIMESTAMP-typed as_of_date column in an older parquet.)
+    duck.register("_post_new", new)
     try:
         existing = duck.execute(
-            f"SELECT {', '.join(_POSTERIOR_COLS)} "
-            f"FROM read_parquet('{_S3_POSTERIORS}', union_by_name=true) "
-            f"WHERE season <> {int(season)}"
+            f"SELECT {', '.join('ex.' + c for c in _POSTERIOR_COLS)} "
+            f"FROM read_parquet('{_S3_POSTERIORS}', union_by_name=true) ex "
+            f"WHERE NOT EXISTS (SELECT 1 FROM _post_new n "
+            f"  WHERE n.player_id = ex.player_id AND n.player_type = ex.player_type "
+            f"    AND n.season = ex.season AND n.as_of_date::date = ex.as_of_date::date)"
         ).fetch_df()
-        print(f"  carried forward {len(existing):,} existing rows (other seasons)")
+        print(f"  carried forward {len(existing):,} existing rows (other seasons + prior as_of_dates)")
     except Exception as e:
         existing = new.iloc[0:0].copy()
         print(f"  no existing posteriors parquet ({e}); writing fresh")
     out = pd.concat([existing, new], ignore_index=True)
+    # E11.1-W7a: force as_of_date to a DATE (object of datetime.date), not TIMESTAMP. The
+    # carried-forward `existing` comes back from .fetch_df() as datetime64, which would make
+    # concat write the whole column as parquet TIMESTAMP → DuckDB readers then return datetime
+    # (breaks `aod < game_date` in the matchup consumers) and drifts from the native DATE column
+    # + the parity string-key join. Normalize so the parquet matches mart_player_archetype_posteriors.
+    out["as_of_date"] = pd.to_datetime(out["as_of_date"]).dt.date
     duck.register("_post_out", out)
     duck.execute(f"COPY _post_out TO '{_S3_POSTERIORS}' (FORMAT PARQUET)")
     print(f"  wrote {len(out):,} rows ({len(new):,} new for season={season}) → {_S3_POSTERIORS}")

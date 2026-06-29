@@ -598,6 +598,8 @@ def _posterior_as_of(
         aod = r["as_of_date"]
         if isinstance(aod, str):
             aod = date.fromisoformat(aod)
+        elif isinstance(aod, datetime):  # S3 parquet may hand back TIMESTAMP → datetime; narrow to date
+            aod = aod.date()
         if aod < game_date:
             best = r
         else:
