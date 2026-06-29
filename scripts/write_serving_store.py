@@ -591,7 +591,7 @@ WITH targets AS (
 SELECT
     t.game_pk, t.side, t.pitcher_id,
     l.game_date::VARCHAR AS start_date,
-    l.opposing_team, l.is_home_team, l.outs_recorded,
+    l.batting_team AS opposing_team, l.is_home_team, l.outs_recorded,
     l.strikeouts, l.walks, l.hits_allowed, l.runs_allowed, l.home_runs_allowed
 FROM targets t
 JOIN baseball_data.betting.mart_starting_pitcher_game_log l
