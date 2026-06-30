@@ -114,6 +114,83 @@ def _load_games(conn, start_date: str, end_date: str) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# E11.1-W9-tail: read the env_state source (mart_game_results only) from the S3
+# lakehouse via DuckDB instead of Snowflake.  env_state is the SIMPLEST W9 generator
+# — it reads ONLY mart_game_results (now in S3 post-W8b) — so it is the natural first
+# `--s3` repoint.  The SCD-2 WRITE to mart_sub_model_signals stays on Snowflake (the
+# W9 export-mirror copies that OUTPUT to S3; re-implementing SCD-2 accumulate in DuckDB
+# is the W7a-wipe class the W9 design forbids).  Mirrors the W7a matchup `--s3` pattern,
+# but uses the shared scripts.utils.lakehouse_read connection helper (NOT a forked
+# `_get_duckdb` triplet — that drift was where W7a's 4 latent bugs lived).
+#
+# mart_game_results.game_date is DATE in the parquet (verified) → no ::date cast needed;
+# Snowflake `TO_DATE(game_date)` has no DuckDB equivalent so it is dropped (the column is
+# already a DATE).  These queries mirror fit_env_state.build_daily_league_df /
+# build_daily_team_df + _GAMES_QUERY, in DuckDB dialect.
+_DUCK_LEAGUE_HIST_SQL = """
+SELECT
+    game_date,
+    COUNT(*)                                    AS n_games,
+    AVG(home_final_score + away_final_score)    AS mean_total,
+    STDDEV(home_final_score + away_final_score) AS std_total
+FROM mart_game_results
+WHERE game_type = 'R'
+  AND game_year >= 2021
+GROUP BY game_date
+ORDER BY game_date
+"""
+
+_DUCK_TEAM_HIST_SQL = """
+SELECT game_date, home_team AS team, home_final_score AS runs_scored, away_final_score AS runs_allowed
+FROM mart_game_results
+WHERE game_type = 'R' AND game_year >= 2021
+UNION ALL
+SELECT game_date, away_team AS team, away_final_score AS runs_scored, home_final_score AS runs_allowed
+FROM mart_game_results
+WHERE game_type = 'R' AND game_year >= 2021
+ORDER BY game_date, team
+"""
+
+
+def _load_s3_inputs(start_date: str, end_date: str):
+    """Return (league_hist, team_hist, games_df) read from the S3 lakehouse via DuckDB.
+
+    Shape-/dtype-identical to the Snowflake path (build_daily_league_df /
+    build_daily_team_df / _load_games) so the Kalman filter + signal generation run
+    unchanged.  Holds only a DuckDB connection (S3 reads); the SCD-2 write stays SF.
+    """
+    from scripts.utils.lakehouse_read import duck_connect, register_views, strip_fqn
+
+    duck = duck_connect()
+    try:
+        register_views(duck, ["mart_game_results"])
+
+        def _df(sql: str) -> pd.DataFrame:
+            cur = duck.execute(sql)
+            cols = [d[0].lower() for d in cur.description]
+            return pd.DataFrame(cur.fetchall(), columns=cols)
+
+        league_hist = _df(_DUCK_LEAGUE_HIST_SQL)
+        league_hist["game_date"] = pd.to_datetime(league_hist["game_date"]).dt.date
+        league_hist = league_hist.sort_values("game_date").reset_index(drop=True)
+
+        team_hist = _df(_DUCK_TEAM_HIST_SQL)
+        team_hist["game_date"] = pd.to_datetime(team_hist["game_date"]).dt.date
+
+        # _GAMES_QUERY already filters on a DATE column; drop the SF-only TO_DATE wrapper.
+        games_sql = (
+            strip_fqn(_GAMES_QUERY)
+            .replace("TO_DATE(game_date)", "game_date")
+            .format(start_date=start_date, end_date=end_date)
+        )
+        games_df = _df(games_sql)
+        games_df["game_date"] = pd.to_datetime(games_df["game_date"]).dt.date
+    finally:
+        duck.close()
+    return league_hist, team_hist, games_df
+
+
+# ---------------------------------------------------------------------------
 # Leakage-safe fast state lookup
 # ---------------------------------------------------------------------------
 
@@ -309,6 +386,12 @@ def main() -> None:
         action="store_true",
         help="Compute signals but skip the Snowflake write.",
     )
+    parser.add_argument(
+        "--s3",
+        action="store_true",
+        help="E11.1-W9-tail: read mart_game_results from the S3 lakehouse via DuckDB "
+             "instead of Snowflake. The SCD-2 write stays on Snowflake.",
+    )
     args = parser.parse_args()
 
     target_table, temp_table = _resolve_tables(args.env)
@@ -328,14 +411,18 @@ def main() -> None:
     print(f"\nKalman params: Q={Q:.6f}  R={R:.4f}")
 
     # ---- Load all historical data for the filter ----
-    print("\nLoading historical game data for Kalman filter...")
-    conn = get_snowflake_connection()
-    try:
-        league_hist = build_daily_league_df(conn)
-        team_hist   = build_daily_team_df(conn)
-        games_df    = _load_games(conn, game_start, game_end)
-    finally:
-        conn.close()
+    src = "S3 lakehouse (DuckDB)" if args.s3 else "Snowflake"
+    print(f"\nLoading historical game data for Kalman filter from {src}...")
+    if args.s3:
+        league_hist, team_hist, games_df = _load_s3_inputs(game_start, game_end)
+    else:
+        conn = get_snowflake_connection()
+        try:
+            league_hist = build_daily_league_df(conn)
+            team_hist   = build_daily_team_df(conn)
+            games_df    = _load_games(conn, game_start, game_end)
+        finally:
+            conn.close()
 
     print(f"  League history: {len(league_hist):,} dates")
     print(f"  Team history  : {len(team_hist):,} rows")

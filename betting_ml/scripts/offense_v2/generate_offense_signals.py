@@ -164,18 +164,46 @@ _CAT_FEATURE = "starter_pitch_archetype"
 
 
 # ---------------------------------------------------------------------------
-# Data loading
+# E11.1-W9-tail: read the offense feature sources (feature_pregame_lineup_features +
+# mart_game_results, both in S3 post-W8b) from the S3 lakehouse via DuckDB. The MERGE
+# WRITE to offense_v2_signals stays on Snowflake (the W9 export-mirror copies that
+# OUTPUT to S3; re-implementing MERGE accumulate in DuckDB is the W7a-wipe class W9
+# forbids). Reuses scripts.utils.lakehouse_read. No SF dialect tokens; game_date is
+# DATE in the parquet → no ::date cast needed.
 # ---------------------------------------------------------------------------
 
-def load_games(start_date: str, end_date: str) -> pd.DataFrame:
-    conn = get_snowflake_connection(schema="betting_features")
+def _load_games_s3(start_date: str, end_date: str):
+    """Run _SCORE_QUERY against the S3 lakehouse. Returns (rows, lowercase-cols)."""
+    from scripts.utils.lakehouse_read import duck_connect, register_views, strip_fqn, referenced_tables
+
+    duck_sql = strip_fqn(_SCORE_QUERY.format(start_date=start_date, end_date=end_date))
+    duck = duck_connect()
     try:
-        cur = conn.cursor()
-        cur.execute(_SCORE_QUERY.format(start_date=start_date, end_date=end_date))
+        register_views(duck, referenced_tables(_SCORE_QUERY))
+        cur = duck.execute(duck_sql)
         cols = [d[0].lower() for d in cur.description]
         rows = cur.fetchall()
     finally:
-        conn.close()
+        duck.close()
+    return rows, cols
+
+
+# ---------------------------------------------------------------------------
+# Data loading
+# ---------------------------------------------------------------------------
+
+def load_games(start_date: str, end_date: str, use_s3: bool = False) -> pd.DataFrame:
+    if use_s3:
+        rows, cols = _load_games_s3(start_date, end_date)
+    else:
+        conn = get_snowflake_connection(schema="betting_features")
+        try:
+            cur = conn.cursor()
+            cur.execute(_SCORE_QUERY.format(start_date=start_date, end_date=end_date))
+            cols = [d[0].lower() for d in cur.description]
+            rows = cur.fetchall()
+        finally:
+            conn.close()
 
     df = pd.DataFrame(rows, columns=cols)
 
@@ -405,6 +433,12 @@ def main() -> None:
         action="store_true",
         help="Compute signals but skip the Snowflake write.",
     )
+    parser.add_argument(
+        "--s3",
+        action="store_true",
+        help="E11.1-W9-tail: read feature sources from the S3 lakehouse via DuckDB "
+             "instead of Snowflake. The MERGE write stays on Snowflake.",
+    )
     args = parser.parse_args()
 
     target_table = _resolve_target(args.env)
@@ -427,8 +461,8 @@ def main() -> None:
           f"ohe_categories={len(artifact['ohe_categories'])}")
 
     # Load games
-    print(f"\nLoading games {start_date} → {end_date} ...")
-    df = load_games(start_date, end_date)
+    print(f"\nLoading games {start_date} → {end_date} from {'S3 (DuckDB)' if args.s3 else 'Snowflake'} ...")
+    df = load_games(start_date, end_date, use_s3=args.s3)
     print(f"  Loaded {len(df):,} rows ({df['game_pk'].nunique():,} games, "
           f"{df['game_year'].nunique()} seasons).")
 

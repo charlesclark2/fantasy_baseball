@@ -66,6 +66,19 @@ def _w7a_s3_args() -> list[str]:
     return ["--s3"] if os.environ.get("W7A_LAKEHOUSE_S3") == "1" else []
 
 
+def _w9_s3_read_args() -> list[str]:
+    # E11.1-W9-tail: when W9_LAKEHOUSE_S3_READS=1, the 7 sub-model signal generators READ their
+    # feature/mart sources (mart_game_results, the feature_pregame_* layer, the bullpen marts,
+    # mart_team_defense_quality_rolling, starter_ip_signals) from the S3 lakehouse (DuckDB)
+    # instead of native Snowflake — finishing the W9 source-repoint now that the feature layer
+    # is in S3 (W8b). The SCD-2 / MERGE WRITES stay on Snowflake (the W9 export-mirror copies
+    # those OUTPUTS to S3; a DuckDB accumulate rewrite is the W7a-wipe class W9 forbids).
+    # DISTINCT from W9_LAKEHOUSE_S3 (the output-mirror flag, already live): the read repoint
+    # gets its OWN default-OFF gate so the operator validates it with a real box run (the
+    # matchup-4-latent-bugs lesson — parity validates reads, not accumulate) before flipping it.
+    return ["--s3"] if os.environ.get("W9_LAKEHOUSE_S3_READS") == "1" else []
+
+
 def _w7b_serving_on() -> bool:
     # E11.1-W7b: the cutover switch. When 1, the DAILY prediction/serving READ path
     # (predict_today_morning + write_serving_store_op) reads the S3 lakehouse via DuckDB
@@ -160,6 +173,21 @@ def _run_w8b_mirror(context, script: str, args: list[str] | None = None) -> None
             f"[W8b parallel] mirror '{os.path.basename(script)}' failed (non-fatal; the dbt "
             f"build still computes these models natively, parity_check_w8b will show the gap): {e}"
         )
+
+
+def _w3pre_daily_on() -> bool:
+    # E11.1-W11 / INC-23 residual: wire the W3pre odds/staging flatten into the daily
+    # run_w1_lakehouse_op so mart_derivative_closes stops topping out at ~Apr-1 (E13.14
+    # leans on it). The daily op's --w6 call REGISTERS stg_derivative_odds as a view over
+    # the existing parquet but never REBUILDS it; only --w3pre (_build_w3pre) rebuilds that
+    # parquet from lakehouse_raw/derivative_odds_raw/. With this flag ON the daily op also
+    # re-exports the derivative-odds raw tier (the recurring bridge — the live derivative
+    # writer is not S3-flipped yet) and passes --w3pre so stg_derivative_odds is fresh
+    # before --w6 builds mart_derivative_closes. Mirrors the proven intraday-schedule
+    # pattern (_schedule_lakehouse_intraday: export raw → --w3pre → refresh). Default OFF
+    # (W11 coordination discipline) so merging is a no-op until the operator runs the
+    # one-time derivative_odds_raw gap-fill backfill + validates on the box, then flips it.
+    return os.environ.get("W11_W3PRE_DAILY") == "1"
 
 
 def _run_mirror(context, script: str, args: list[str] | None = None) -> None:
@@ -368,12 +396,17 @@ def run_w1_lakehouse_op(context):
     # (handedness/archetype/tto splits + the bullpen/reliever marts) right after W2 — same
     # default-on rationale (their whole upstream closure is already in S3). They feed
     # feature_pregame_* + write_serving_store, so they ride this HALT-tier op too.
-    # E11.1-W3pre: run_w1_lakehouse.py can ALSO build the odds/staging flatten tier
-    # (stg_oddsapi_*, stg_derivative_odds, stg_statsapi_games) but ONLY under the opt-in
-    # --w3pre flag (NOT passed here yet). Wiring it in is a deliberate follow-up: it needs
-    # the lakehouse_raw/ tier populated first (scripts/export_odds_raw_to_s3.py + flipped
-    # writers) and the serving-coupled cutover validated — otherwise an empty raw tier
-    # would fail this HALT-tier op. Until then this no-arg call builds only W1 + W2.
+    # E11.1-W3pre / W11 (INC-23): run_w1_lakehouse.py can ALSO build the odds/staging flatten
+    # tier (stg_oddsapi_*, stg_derivative_odds, stg_statsapi_games) under the --w3pre flag.
+    # This is NOW WIRED IN behind the W11_W3PRE_DAILY gate (_w3pre_daily_on): when ON, the op
+    # re-exports the derivative-odds raw tier (recurring bridge — the live derivative writer is
+    # not S3-flipped) and passes --w3pre so stg_derivative_odds is rebuilt from fresh raw before
+    # --w6 builds mart_derivative_closes (which had topped out at ~Apr-1 — E13.14 leans on it).
+    # _build_w3pre defensively SKIPs any source with no raw parquet, so it can't fail this HALT
+    # op. Default OFF until the operator runs the one-time derivative_odds_raw gap-fill backfill
+    # and validates on the box (W11 runtime-gate + parallel-session discipline). The bridge uses
+    # a 7-day --since lookback (INC-20 retention: bounded per-day partitions, not full-history
+    # snapshots — each dt= is overwritten idempotently) to recover a missed run.
     # E11.1-W4: run_w1_lakehouse.py can ALSO build the FanGraphs/posteriors-cluster/raw-savant
     # marts (6) + their FanGraphs precursor subtree under the opt-in --w4 flag (NOT passed
     # here yet). Like W3pre, it needs the precursor parquet first (scripts/export_w4_raw_to_s3.py
@@ -406,12 +439,22 @@ def run_w1_lakehouse_op(context):
     # buckets, while the intraday odds_current_rebuild path (pipeline/ops/intraday_ops.py, gated
     # W6_LAKEHOUSE_INTRADAY) rewrites ONLY _current each odds cycle so served prices stay fresh.
     _run_script(context, "export_odds_raw_to_s3.py", ["--source", "monthly_schedule"])
+    # E11.1-W11 (INC-23): when W11_W3PRE_DAILY=1, refresh the derivative-odds raw bridge (7-day
+    # --since lookback — bounded per-day partitions, idempotent overwrite_partition; INC-20-safe)
+    # and pass --w3pre so the W3pre flatten rebuilds stg_derivative_odds from fresh raw before the
+    # --w6 build below registers it as a view and builds mart_derivative_closes. Gated default-OFF.
+    w6_args = ["--w6"]
+    if _w3pre_daily_on():
+        _run_script(context, "export_odds_raw_to_s3.py",
+                    ["--source", "derivative_odds_raw", "--since", _seven_days_ago()])
+        w6_args = ["--w3pre", "--w6"]
     # E11.1-W7b: when the S3 mirror is on, ALSO build the prediction/serving mini-wave parquet
     # (mart_player_profile_identity injury chain + the probable_pitchers/lineups_wide serving-mart
     # backlog) so the --s3 readers + the request-path last-resort resolve them. Requires the
     # player_transactions precursor export (run by the operator/cutover wiring) to exist first.
     # W6 build is always HALT (mart_odds_outcomes serves from S3 external tables — live since W6).
-    _run_script(context, "run_w1_lakehouse.py", ["--w6"])
+    # w6_args is ["--w6"] normally, or ["--w3pre", "--w6"] when W11_W3PRE_DAILY=1 (INC-23, above).
+    _run_script(context, "run_w1_lakehouse.py", w6_args)
     # The W7b mini-wave + its precursor are mirror-tier: HALT once W7B_LAKEHOUSE_S3=1, else
     # ALERT-loud-but-continue during the parallel window (parity-only; must not take down the
     # W6-critical build). --w7b-only reuses the W6 parquet just built ≡ the old "--w6 --w7b".
@@ -521,7 +564,7 @@ def generate_run_env_signals_op(context):
     env = _target_env()
     for d in _recent_completed_dates():
         _run_script(context, "/app/betting_ml/scripts/generate_run_env_signals.py",
-                    ["--date", d, "--env", env])
+                    ["--date", d, "--env", env] + _w9_s3_read_args())
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing), tags=_SUB_MODEL_OP_TAGS)
@@ -529,7 +572,7 @@ def generate_offense_signals_op(context):
     env = _target_env()
     for d in _recent_completed_dates():
         _run_script(context, "/app/betting_ml/scripts/offense_v2/generate_offense_signals.py",
-                    ["--date", d, "--env", env])
+                    ["--date", d, "--env", env] + _w9_s3_read_args())
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing), tags=_SUB_MODEL_OP_TAGS)
@@ -537,7 +580,7 @@ def generate_starter_signals_op(context):
     env = _target_env()
     for d in _recent_completed_dates():
         _run_script(context, "/app/betting_ml/scripts/starter_v1/generate_starter_signals.py",
-                    ["--date", d, "--env", env])
+                    ["--date", d, "--env", env] + _w9_s3_read_args())
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing), tags=_SUB_MODEL_OP_TAGS)
@@ -545,7 +588,7 @@ def generate_starter_ip_signals_op(context):
     env = _target_env()
     for d in _recent_completed_dates():
         _run_script(context, "/app/betting_ml/scripts/starter_v1/generate_starter_ip_signals.py",
-                    ["--date", d, "--env", env])
+                    ["--date", d, "--env", env] + _w9_s3_read_args())
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing), tags=_SUB_MODEL_OP_TAGS)
@@ -557,7 +600,7 @@ def generate_bullpen_signals_op(context):
     env = _target_env()
     for d in _recent_completed_dates():
         _run_script(context, "/app/betting_ml/scripts/generate_bullpen_signals.py",
-                    ["--date", d, "--env", env, "--v2-only"])
+                    ["--date", d, "--env", env, "--v2-only"] + _w9_s3_read_args())
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing), tags=_SUB_MODEL_OP_TAGS)
@@ -584,7 +627,7 @@ def generate_env_state_signals_op(context):
     env = _target_env()
     for d in _recent_completed_dates():
         _run_script(context, "/app/betting_ml/scripts/generate_env_state_signals.py",
-                    ["--date", d, "--env", env])
+                    ["--date", d, "--env", env] + _w9_s3_read_args())
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing), tags=_SUB_MODEL_OP_TAGS)
@@ -598,7 +641,7 @@ def generate_defense_quality_signals_op(context):
     env = _target_env()
     for d in _recent_completed_dates():
         _run_script(context, "/app/betting_ml/scripts/generate_defense_quality_signals.py",
-                    ["--date", d, "--env", env])
+                    ["--date", d, "--env", env] + _w9_s3_read_args())
 
 
 @op(

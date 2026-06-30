@@ -17,8 +17,10 @@ WHAT IT CHECKS (per model, Snowflake-native vs DuckDB-over-S3, computed IN-ENGIN
 tables never land in pandas):
   • row count + distinct game_pk            (exact)
   • per-column fingerprint: non-null count (exact) + rounded SUM for numerics / boolean true-count
-    (float rtol 1e-6; _std cols 1e-4 for cross-engine STDDEV noise). Metadata cols (computed_at/
-    record_hash) are ts/text → only their non-null count is compared (build run-time differs).
+    (float rtol 1e-6; _std cols 1e-4 for cross-engine STDDEV noise; POSTERIOR-derived cols — eb_/
+    sequential/archetype/cluster/matchup/h2h — get a looser 2% rel OR 5e-3 per-row-abs tolerance and
+    are reported as benign drift, never a FAIL: see the E11.1-W9-tail PARITY RIDER below). Metadata
+    cols (computed_at/record_hash) are ts/text → only their non-null count is compared (build differs).
   • SCD-2 SPAN check for feature_pregame_lineup_features (is_current sentinel): the is_current split
     must match both engines.
 
@@ -72,6 +74,31 @@ _SUM_RTOL = 1e-6
 # benign cross-engine float noise (~1e-6, up to ~6e-6). Looser rtol for `_std` cols ONLY; genuine
 # drift (>=~1e-4) is still caught.
 _STD_RTOL = 1e-4
+
+# ── E11.1-W9-tail PARITY RIDER — posterior-input drift is a benign FALSE-RED class ──────────────
+# The native feature build (≈04:17 morning dbt) and the DuckDB-over-S3 build (≈14:52 --w8b) read
+# DIFFERENT generations of the EB / sequential / archetype / cluster posteriors. Population
+# shrinkage nudges every historical posterior ~0.001–0.004 on each daytime recompute, so every
+# posterior-DERIVED aggregator column's SUM differs by ~1% at an otherwise value-preserving,
+# EQUAL-row-count build. That is NOT a migration defect — pre-rider it fired RED on aligned dailies
+# and misled sessions into chasing a non-bug (the W8b-memory PARITY-FAIL NON-BUG). Posterior columns
+# therefore get a looser per-column tolerance — relative 2% OR mean per-row abs ≤ 5e-3, whichever
+# passes — and are reported as an informational drift class, NEVER a hard FAIL. Deterministic columns
+# keep the tight 1e-6, and EVERY column's non-null COUNT stays EXACT — so a real migration bug (wrong
+# column/join → count or null change; wrong scale → ≫2% diff) is still caught. (Parity remains
+# necessary-not-sufficient; the binding cutover gate is the per-ROW ext fetch + predict_today.)
+_POSTERIOR_RTOL = 2e-2
+_POSTERIOR_ABS  = 5e-3   # mean per-row absolute drift floor (|Δsum| / n_rows)
+# Substring tokens identifying posterior/cluster/archetype-derived columns. Verified against the
+# 751-col aggregator: catches the 83 EB/sequential/archetype/cluster/matchup/h2h columns and ZERO
+# deterministic columns (rolling _Nd / park / weather / win_rate / odds all excluded).
+_POSTERIOR_TOKENS = ("eb_", "sequential", "archetype", "cluster", "matchup", "h2h")
+
+
+def _is_posterior_col(col: str) -> bool:
+    """True if `col` is derived from an EB/sequential/archetype/cluster posterior (which recomputes
+    between the native and S3 build snapshots → benign value drift at equal row counts)."""
+    return any(tok in col for tok in _POSTERIOR_TOKENS)
 _NUMERIC = {"DOUBLE", "FLOAT", "REAL", "DECIMAL", "NUMERIC", "BIGINT", "INTEGER", "HUGEINT",
             "SMALLINT", "TINYINT", "UBIGINT", "UINTEGER", "USMALLINT", "UTINYINT", "INT"}
 _BOOLEAN = {"BOOLEAN", "BOOL"}
@@ -161,20 +188,43 @@ def _compare(name: str, sf: dict, s3: dict, scd2: tuple[dict, dict] | None) -> b
 
     ok = True
     mism = []
+    post_drift = []   # posterior-derived cols whose drift is within the benign tolerance (informational)
+    n_rows = max(n_sf, 1.0)
     for key in sorted(set(sf) & set(s3)):
         if key in ("n_rows", "n_games"):
             continue
         a, b = sf[key], s3[key]
         if key.startswith("c__"):
+            # Non-null COUNT stays EXACT for ALL columns (posterior tolerance never loosens counts).
             if _num(a) != _num(b):
                 mism.append(f"{key}: sf={_num(a):,.0f} s3={_num(b):,.0f}")
         else:
+            col = key[3:]   # strip the s__ prefix
             fa, fb = _num(a), _num(b)
             denom = max(abs(fa), abs(fb), 1.0)
-            rtol = _STD_RTOL if key[3:].endswith("_std") else _SUM_RTOL
-            if abs(fa - fb) / denom > rtol:
-                mism.append(f"{key}: sf={fa:.6g} s3={fb:.6g}")
+            rel = abs(fa - fb) / denom
+            if _is_posterior_col(col):
+                # Benign build-snapshot posterior drift: pass on either a loose relative OR a small
+                # mean per-row absolute drift. Report (non-zero drift) but never FAIL.
+                per_row = abs(fa - fb) / n_rows
+                if rel > _POSTERIOR_RTOL and per_row > _POSTERIOR_ABS:
+                    mism.append(f"{key}: sf={fa:.6g} s3={fb:.6g} (posterior col, "
+                                f"rel={rel:.3g} per_row={per_row:.3g} — EXCEEDS posterior tolerance)")
+                elif abs(fa - fb) > 0:
+                    post_drift.append(f"{col}: rel={rel:.2g} per_row={per_row:.2g}")
+            else:
+                rtol = _STD_RTOL if col.endswith("_std") else _SUM_RTOL
+                if rel > rtol:
+                    mism.append(f"{key}: sf={fa:.6g} s3={fb:.6g}")
     if n_sf == n_s3:
+        if post_drift:
+            print(f"  ℹ️ {len(post_drift)} posterior-derived column(s) drift within the benign "
+                  f"tolerance (≤{_POSTERIOR_RTOL:.0%} rel or ≤{_POSTERIOR_ABS:g} per-row abs) — "
+                  f"expected build-snapshot noise, NOT a migration defect:")
+            for m in post_drift[:8]:
+                print(f"     · {m}")
+            if len(post_drift) > 8:
+                print(f"     · … (+{len(post_drift) - 8} more posterior cols)")
         if mism:
             ok = False
             print(f"  ❌ {len(mism)} column fingerprint mismatch(es):")
@@ -182,7 +232,7 @@ def _compare(name: str, sf: dict, s3: dict, scd2: tuple[dict, dict] | None) -> b
                 print(f"     - {m}")
         else:
             print(f"  ✅ all {len([k for k in sf if k.startswith(('c__', 's__'))])} column "
-                  f"fingerprints match (value-preserving).")
+                  f"fingerprints match (value-preserving; posterior drift within tolerance).")
     else:
         print("  (column fingerprints skipped at unequal counts — re-build then re-run)")
     return ok

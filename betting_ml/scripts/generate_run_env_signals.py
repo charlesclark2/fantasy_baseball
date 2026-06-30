@@ -126,18 +126,50 @@ order by g.game_date, g.game_pk
 
 
 # ---------------------------------------------------------------------------
-# Data loading
+# E11.1-W9-tail: read the run_env feature sources (mart_game_results + 5
+# feature_pregame_* tables, all in S3 post-W8b) from the S3 lakehouse via DuckDB.
+# The SCD-2 WRITE to mart_sub_model_signals stays on Snowflake (the W9 export-mirror
+# copies that OUTPUT to S3; re-implementing SCD-2 accumulate in DuckDB is the W7a-wipe
+# class the W9 design forbids). Reuses the shared scripts.utils.lakehouse_read helper
+# (NOT a forked `_get_duckdb`). The only SF dialect token here is iff() → IF() (DuckDB
+# has IF, not IFF); every game_date is DATE in the parquet → no ::date cast needed.
 # ---------------------------------------------------------------------------
 
-def load_games(start_date: str, end_date: str) -> pd.DataFrame:
-    conn = get_snowflake_connection()
+def _load_games_s3(start_date: str, end_date: str):
+    """Run _SIGNAL_QUERY_TEMPLATE against the S3 lakehouse. Returns (rows, lowercase-cols)."""
+    import re
+
+    from scripts.utils.lakehouse_read import duck_connect, register_views, strip_fqn, referenced_tables
+
+    sql = _SIGNAL_QUERY_TEMPLATE.format(start_date=start_date, end_date=end_date)
+    duck_sql = re.sub(r"\biff\s*\(", "IF(", strip_fqn(sql), flags=re.IGNORECASE)
+    duck = duck_connect()
     try:
-        cur = conn.cursor()
-        cur.execute(_SIGNAL_QUERY_TEMPLATE.format(start_date=start_date, end_date=end_date))
+        register_views(duck, referenced_tables(_SIGNAL_QUERY_TEMPLATE))
+        cur = duck.execute(duck_sql)
         cols = [d[0].lower() for d in cur.description]
         rows = cur.fetchall()
     finally:
-        conn.close()
+        duck.close()
+    return rows, cols
+
+
+# ---------------------------------------------------------------------------
+# Data loading
+# ---------------------------------------------------------------------------
+
+def load_games(start_date: str, end_date: str, use_s3: bool = False) -> pd.DataFrame:
+    if use_s3:
+        rows, cols = _load_games_s3(start_date, end_date)
+    else:
+        conn = get_snowflake_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(_SIGNAL_QUERY_TEMPLATE.format(start_date=start_date, end_date=end_date))
+            cols = [d[0].lower() for d in cur.description]
+            rows = cur.fetchall()
+        finally:
+            conn.close()
 
     df = pd.DataFrame(rows, columns=cols)
     for col in df.columns:
@@ -268,6 +300,12 @@ def main() -> None:
         action="store_true",
         help="Compute signals but skip the Snowflake write.",
     )
+    parser.add_argument(
+        "--s3",
+        action="store_true",
+        help="E11.1-W9-tail: read feature sources from the S3 lakehouse via DuckDB "
+             "instead of Snowflake. The SCD-2 write stays on Snowflake.",
+    )
     args = parser.parse_args()
 
     target_table, temp_table = _resolve_tables(args.env)
@@ -291,8 +329,8 @@ def main() -> None:
         f"CV MAE={artifact['cv_mae']:.4f}"
     )
 
-    print(f"\nLoading games {start_date} → {end_date}...")
-    df = load_games(start_date, end_date)
+    print(f"\nLoading games {start_date} → {end_date} from {'S3 (DuckDB)' if args.s3 else 'Snowflake'}...")
+    df = load_games(start_date, end_date, use_s3=args.s3)
     print(f"  Loaded {len(df):,} games.")
 
     if df.empty:
