@@ -269,9 +269,14 @@ slot_injury as (
     from slot_pre_game sp
     left join {{ ref('feature_pregame_injury_status') }} inj
         on  inj.player_id  = sp.batter_id
-        and inj.valid_from <= sp.official_date   -- LEAKAGE GUARD
+        -- LEAKAGE GUARD. INC-23: valid_from/valid_to are TIMESTAMP in dbt/Snowflake but the
+        -- W8a/W8b cure stores them as ISO-VARCHAR in the S3 parquet, so the DuckDB --w8b build
+        -- cannot compare them to the DATE official_date (binder error → silent --w8b abort →
+        -- stale S3 feature tables). Cast ::timestamp at the use-site (DuckDB-only branch);
+        -- value-preserving — official_date promotes to midnight, matching the SF semantics.
+        and inj.valid_from::timestamp <= sp.official_date
         and (
-                inj.valid_to  > sp.official_date
+                inj.valid_to::timestamp  > sp.official_date
                 or inj.valid_to is null
             )
 ),
