@@ -96,7 +96,7 @@ live_h2h_pivoted as (
         max(case when is_away_outcome then outcome_price_decimal end)   as away_decimal
     from mart_odds_outcomes
     where market_key = 'h2h'
-      and ingestion_ts < commence_time
+      and ingestion_ts < commence_time::timestamp
     group by ingestion_ts, event_id, commence_time, bookmaker_key
 ),
 
@@ -111,7 +111,7 @@ live_totals as (
         max(case when outcome_name ilike '%under%' then outcome_price_decimal end) as under_decimal
     from mart_odds_outcomes
     where market_key = 'totals'
-      and ingestion_ts < commence_time
+      and ingestion_ts < commence_time::timestamp
     group by ingestion_ts, event_id, bookmaker_key
 ),
 
