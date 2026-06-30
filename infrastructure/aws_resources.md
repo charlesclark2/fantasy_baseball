@@ -391,7 +391,7 @@ One box runs the full stack as Docker Compose — config + runbook in
 |---|---|
 | Instance ID | `i-07594af1679f81c38` |
 | Elastic IP (stable egress — FanGraphs `cf_clearance` is IP-bound) | `100.57.225.242` |
-| Instance type | `t4g.medium` (arm64 / Graviton, 4 GB) |
+| Instance type | `r6g.large` (arm64 / Graviton, 2 vCPU / **16 GB**) — resized from `t4g.medium` (4 GB) on **INC-22 (2026-06-29)**. The 4 GB box OOM-killed itself running a `run_w1_lakehouse` monthly_schedule flatten (DuckDB `memory_limit` exceeded physical RAM); memory-optimized r6g gives the headroom for a flatten + the resident Dagster/dbt-runner/flaresolverr stack, and the `memory_limit` is now box-aware (`run_w1_lakehouse._safe_memory_limit_gb`). Resize = Stop → Change instance type → Start (EBS + EIP persist). |
 | Region / subnet | `us-east-1`, default VPC public subnet |
 | AMI | Amazon Linux 2023 arm64 (latest via SSM) |
 | Root volume | 30 GB gp3 |
@@ -436,7 +436,10 @@ AWS_PROFILE=default REGION=us-east-1 KEY_NAME=credence-dagster-key \
 
 ### Cost notes
 
-~$15–35/mo target (t4g.medium + EIP + gp3 + S3 endpoint). NAT Gateway, Aurora,
+~$15–35/mo was the original `t4g.medium` target. **INC-22 (2026-06-29):** resized to
+`r6g.large` (16 GB) ⇒ compute ~$73/mo on-demand (+EIP + gp3 + S3 endpoint) — the 4 GB
+box could not run the DuckDB lakehouse flattens without OOM-killing the host. Consider a
+1-yr Compute Savings Plan / RI to claw back ~40% if the size holds. NAT Gateway, Aurora,
 and MWAA deliberately avoided. Dagster+ Cloud stays as the idle rollback until a
 clean multi-day window (Phase 4), then is decommissioned.
 

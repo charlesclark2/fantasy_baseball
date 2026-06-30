@@ -428,6 +428,33 @@ def extract_duckdb_sql(model_name: str) -> str:
     return sql.strip()
 
 
+def _physical_ram_gb() -> float | None:
+    """Total physical RAM in GiB, or None if undetectable (non-Linux dev box)."""
+    try:
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / (1024 ** 3)
+    except (ValueError, OSError, AttributeError):
+        return None
+
+
+def _safe_memory_limit_gb() -> int:
+    """A DuckDB memory_limit that stays BELOW physical RAM so a flatten can never OOM-KILL
+    the box.
+
+    INC-22 (2026-06-29): a hardcoded 11GB memory_limit on a 4 GiB t4g.medium told DuckDB it
+    had ~3× the box's RAM, so it never spilled — it blew past physical memory and the kernel
+    OOM-killed the EC2 host (Dagster + dbt-runner + flaresolverr with it). The cure is to size
+    the limit to physical RAM and leave headroom for the co-resident container stack; spillable
+    operators still spill to the temp_directory set in run(). 60% of RAM, floored at 2GB, capped
+    at 11GB (the monthly_schedule flatten doesn't need more after the collapse-early dedup, and
+    the cap bounds very large boxes). When RAM is undetectable (dev/macOS) fall back to a
+    conservative 6GB rather than the old over-allocating 11GB.
+    """
+    ram = _physical_ram_gb()
+    if ram is None:
+        return 6
+    return max(2, min(11, int(ram * 0.6)))
+
+
 def _build_marts(conn, models: list[str], dry_run: bool) -> None:
     """Extract each model's duckdb-branch SQL and COPY it to S3 parquet."""
     for model in models:
@@ -489,10 +516,13 @@ def _build_w3pre(conn, dry_run: bool) -> None:
     # RAM and OOM'd even with spilling. Cap threads so only a couple of big blobs inflate at
     # once (the OOM error's #1 recommended knob). This tier is tiny (3 trivial odds models +
     # the schedule), so the throughput cost is negligible. Raise if the host has ample RAM.
-    # INC-22: ALSO raise memory_limit to 11GB to match every other build path (_build_w6 etc.).
-    # Without it this path OOM'd at DuckDB's low auto-default (~2.9 GiB) on the monthly_schedule
-    # flatten when run standalone via --w3pre-only — threads=2 alone wasn't enough.
-    for _pragma in ("SET threads=2", "SET memory_limit='11GB'"):
+    # INC-22: set a BOX-AWARE memory_limit (_safe_memory_limit_gb — a fraction of physical RAM,
+    # leaving headroom for the co-resident Dagster/dbt-runner/flaresolverr stack), NOT a hardcoded
+    # value. The earlier 11GB hardcode OOM-KILLED the 4 GiB t4g.medium host (DuckDB never spilled
+    # because the limit was 3× physical RAM). threads=2 caps how many big blobs inflate at once;
+    # spillable ops spill to temp_directory (set in run()). The collapse-early dedup keeps the
+    # working set small enough that the box-aware limit is ample on the resized host.
+    for _pragma in ("SET threads=2", f"SET memory_limit='{_safe_memory_limit_gb()}GB'"):
         conn.execute(_pragma)
     for model in W3PRE_STG_MODELS:
         source = _raw_source_for(model)
@@ -540,7 +570,7 @@ def _build_w4(conn, dry_run: bool) -> None:
     # fewer big intermediates inflate at once, and lower memory_limit so DuckDB spills to
     # temp_directory (set in run()) EARLIER, leaving headroom for small unspillable allocs.
     # value-identical output (every output is a parquet COPY re-globbed downstream).
-    for _pragma in ("SET threads=2", "SET memory_limit='11GB'"):
+    for _pragma in ("SET threads=2", f"SET memory_limit='{_safe_memory_limit_gb()}GB'"):
         try:
             conn.execute(_pragma)
         except Exception as _e:
@@ -719,7 +749,7 @@ def _build_w6_odds_current(conn, dry_run: bool) -> None:
     capture exports today's mlb_odds_raw → S3. _history is untouched (frozen by the daily
     build). The caller (intraday op) then refreshes only these external tables."""
     _build_w6_precursor_views(conn)
-    for _pragma in ("SET threads=2", "SET memory_limit='11GB'"):
+    for _pragma in ("SET threads=2", f"SET memory_limit='{_safe_memory_limit_gb()}GB'"):
         try:
             conn.execute(_pragma)
         except Exception as _e:
@@ -754,7 +784,7 @@ def _build_w6(conn, dry_run: bool) -> None:
     # historical path re-flattens mlb_odds_raw. Cap parallelism + lower memory_limit so
     # DuckDB spills to temp_directory (set in run()) rather than OOMing. value-identical
     # output (every output is a parquet COPY re-globbed downstream).
-    for _pragma in ("SET threads=2", "SET memory_limit='11GB'"):
+    for _pragma in ("SET threads=2", f"SET memory_limit='{_safe_memory_limit_gb()}GB'"):
         try:
             conn.execute(_pragma)
         except Exception as _e:
@@ -833,7 +863,7 @@ def _build_w7b(conn, dry_run: bool) -> None:
     # The probable_pitchers flatten explodes the same large monthly_schedule month-blobs as
     # stg_statsapi_games (the known OOM source) → cap parallelism + lower memory_limit so DuckDB
     # spills rather than OOMing. value-identical output (every output is a parquet COPY).
-    for _pragma in ("SET threads=2", "SET memory_limit='11GB'"):
+    for _pragma in ("SET threads=2", f"SET memory_limit='{_safe_memory_limit_gb()}GB'"):
         try:
             conn.execute(_pragma)
         except Exception as _e:
@@ -953,7 +983,7 @@ def _build_w8a(conn, dry_run: bool) -> None:
     # stg_statsapi_starter_snapshots RETAINS every (game_pk, side, ingestion_ts) snapshot, so the
     # monthly_schedule month-blob flatten is NOT collapsed early (the OOM source — same as
     # stg_statsapi_games). Cap parallelism + lower memory_limit so DuckDB spills rather than OOMs.
-    for _pragma in ("SET threads=2", "SET memory_limit='11GB'"):
+    for _pragma in ("SET threads=2", f"SET memory_limit='{_safe_memory_limit_gb()}GB'"):
         try:
             conn.execute(_pragma)
         except Exception as _e:
