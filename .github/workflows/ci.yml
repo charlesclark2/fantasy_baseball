@@ -69,6 +69,34 @@ jobs:
       - name: Install dependencies
         run: uv sync --no-dev-packages || uv sync
 
+      # The slow gate now also collects W12's pipeline-importing sensor-fire tests
+      # (betting_ml/tests/test_e11_1_w12_sensor_fire.py, all @pytest.mark.slow). Importing
+      # pipeline.sensors.* triggers pipeline/__init__.py → pipeline/assets/dbt_assets.py,
+      # which reads dbt/target/manifest.json at IMPORT (the @dbt_assets decorator). That
+      # file is a build artifact the runner lacks → FileNotFoundError. `dbtf parse` builds
+      # it offline (profiles.yml has defaults for every env_var → no creds/connection),
+      # mirroring orchestration_ci.yml's dagster-defs job. The fast gate stays light (no
+      # non-slow test imports pipeline).
+      - name: Cache dbt-fusion binary
+        id: cache-dbtf
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/dbt
+          key: dbtf-${{ runner.os }}-latest
+      - name: Install dbt-fusion
+        if: steps.cache-dbtf.outputs.cache-hit != 'true'
+        env:
+          SHELL: /bin/bash
+        run: |
+          mkdir -p ~/.local/bin
+          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to ~/.local/bin
+      - name: Add dbtf to PATH
+        run: |
+          ln -sf ~/.local/bin/dbt ~/.local/bin/dbtf
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Generate dbt manifest (offline parse — no warehouse connection)
+        run: dbtf parse --project-dir dbt --profiles-dir dbt
+
       - name: Run slow tests (Monte-Carlo calibration guards)
         run: uv run pytest -m slow -n auto --tb=short
 
