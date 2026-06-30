@@ -12,13 +12,22 @@ Two groups:
     DuckDB branch can read them. Exported from the PROD `betting.*` seed tables so
     the parity check (Snowflake CTAS vs DuckDB/S3) compares like-for-like.
   • W4-DEFERRED RAW/BUILDER tables — the precursors the four W4-inherited marts
-    read (eb_park_factors_raw, eb_bullpen_team_posteriors, oaa_team_season_raw,
-    sprint_speed_raw). Like the W4 raw exports these are read directly by the
-    marts' DuckDB branch via read_parquet(lakehouse_loc(...)). The builders that
-    write these tables (fit_park_priors.py, the eb_bullpen_team_posteriors dbt
-    model, the FanGraphs OAA + Savant sprint ingests) KEEP writing Snowflake —
-    this export is the one-time/opt-in S3 mirror for the lakehouse build, same
-    pattern + recurring-freshness caveat as W4 (wire into the daily op at cutover).
+    read (eb_park_factors_raw, oaa_team_season_raw, sprint_speed_raw). Like the
+    W4 raw exports these are read directly by the marts' DuckDB branch via
+    read_parquet(lakehouse_loc(...)). The builders that write these tables
+    (fit_park_priors.py, the FanGraphs OAA + Savant sprint ingests) KEEP writing
+    Snowflake — this export is the one-time/opt-in S3 mirror for the lakehouse
+    build, same pattern + recurring-freshness caveat as W4 (wire into the daily op
+    at cutover).
+
+  ⚠️ E11.1-W8a OWNERSHIP TRANSFER (2026-06-29): eb_bullpen_team_posteriors was
+  REMOVED from this mirror. W8a's dual-branch dbt model now BUILDS it directly to
+  lakehouse/eb_bullpen_team_posteriors/data.parquet (run_w1_lakehouse.py --w8a).
+  This mirror wrote it as `part-0.parquet`; leaving BOTH in the same prefix made
+  the lakehouse_ext external table (and the `**/*.parquet` glob readers, e.g. W5b
+  mart_bullpen_effectiveness) UNION both files → ~2x rows → a (game_pk, team)
+  uniqueness-test failure. The stale part-0.parquet was deleted as a one-time
+  cleanup. Keep --w8a ordered BEFORE --w5 so W5b reads the fresh data.parquet.
 
 Each table is written as a single Parquet file to:
   s3://baseball-betting-ml-artifacts/baseball/lakehouse/<table>/part-0.parquet
@@ -64,7 +73,10 @@ TABLES = {
     "ref_team_aliases":           "baseball_data.betting.ref_team_aliases",
     # ── W4-deferred raw / builder-output precursors ───────────────────────────
     "eb_park_factors_raw":        "baseball_data.betting.eb_park_factors_raw",
-    "eb_bullpen_team_posteriors": "baseball_data.betting.eb_bullpen_team_posteriors",
+    # NOTE: eb_bullpen_team_posteriors REMOVED 2026-06-29 — W8a's dbt model now BUILDS it to
+    # lakehouse/eb_bullpen_team_posteriors/data.parquet (run_w1_lakehouse --w8a). Mirroring it
+    # here too (as part-0.parquet) made the ext table / glob readers UNION both → ~2x rows. See
+    # the docstring "W8a OWNERSHIP TRANSFER" note. Keep --w8a ordered before --w5.
     "oaa_team_season_raw":        "baseball_data.external.oaa_team_season_raw",
     "sprint_speed_raw":           "baseball_data.savant.sprint_speed_raw",
 }
