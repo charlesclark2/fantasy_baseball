@@ -32,42 +32,41 @@ from pipeline.jobs.daily_ingestion_job import daily_ingestion_job
 _WINDOW_START = time(13, 30)  # 13:30 UTC — 90 min after scheduled start
 _WINDOW_END = time(15, 0)     # 15:00 UTC — give up; page on-call if needed
 
-_ML_SCHEMA = "baseball_data.betting_ml"
-_MART_SCHEMA = "baseball_data.betting"
+# E11.1-W12: reads moved off Snowflake to the S3 lakehouse via DuckDB (instance-role
+# credential_chain — Snowflake-free). daily_model_predictions (W7b) + stg_statsapi_games
+# are both already on S3.
 
 
 def _has_morning_predictions(today: str) -> bool:
-    from betting_ml.utils.data_loader import get_snowflake_connection
+    from betting_ml.utils.lakehouse_monitor import duck, lh
 
-    conn = get_snowflake_connection()
+    conn = duck()
     try:
-        cur = conn.cursor()
-        cur.execute(
+        (n,) = conn.execute(
             f"""
-            SELECT COUNT(*) FROM {_ML_SCHEMA}.daily_model_predictions
-            WHERE score_date = %s AND prediction_type = 'morning'
+            SELECT COUNT(*) FROM read_parquet('{lh('daily_model_predictions')}', union_by_name=true)
+            WHERE score_date = ? AND prediction_type = 'morning'
             """,
             [today],
-        )
-        return int(cur.fetchone()[0]) > 0
+        ).fetchone()
+        return int(n) > 0
     finally:
         conn.close()
 
 
 def _has_games_today(today: str) -> bool:
-    from betting_ml.utils.data_loader import get_snowflake_connection
+    from betting_ml.utils.lakehouse_monitor import duck, lh
 
-    conn = get_snowflake_connection()
+    conn = duck()
     try:
-        cur = conn.cursor()
-        cur.execute(
+        (n,) = conn.execute(
             f"""
-            SELECT COUNT(*) FROM {_MART_SCHEMA}.stg_statsapi_games
-            WHERE official_date = %s AND game_type = 'R'
+            SELECT COUNT(*) FROM read_parquet('{lh('stg_statsapi_games')}', union_by_name=true)
+            WHERE official_date = ? AND game_type = 'R'
             """,
             [today],
-        )
-        return int(cur.fetchone()[0]) > 0
+        ).fetchone()
+        return int(n) > 0
     finally:
         conn.close()
 
@@ -105,7 +104,7 @@ def morning_watchdog_sensor(context: SensorEvaluationContext):
             )
             return
     except Exception as exc:
-        yield SkipReason(f"Snowflake check failed — skipping watchdog tick: {exc}")
+        yield SkipReason(f"Lakehouse check failed — skipping watchdog tick: {exc}")
         return
 
     # No morning predictions yet; confirm there are games before triggering.
@@ -116,7 +115,7 @@ def morning_watchdog_sensor(context: SensorEvaluationContext):
             )
             return
     except Exception as exc:
-        yield SkipReason(f"Snowflake schedule check failed — skipping watchdog tick: {exc}")
+        yield SkipReason(f"Lakehouse schedule check failed — skipping watchdog tick: {exc}")
         return
 
     context.log.warning(

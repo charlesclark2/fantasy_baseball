@@ -65,6 +65,7 @@ from cryptography.hazmat.primitives import serialization
 
 from scipy.stats import norm as _scipy_norm
 
+from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
 from betting_ml.utils.h2h_probability import devig_home_prob
 from betting_ml.utils.totals_probability import devig_over_prob, prob_to_american
 from betting_ml.utils.probability_layer import compute_kelly
@@ -332,6 +333,39 @@ def _sf_query_batch(conn, sql_template: str, game_pks: list[int]) -> list[dict]:
     cur = conn.cursor(snowflake.connector.DictCursor)
     cur.execute(sql_template.format(game_pk_list=gp_list))
     return cur.fetchall()
+
+
+def _alert_empty_serving_date(conn, today: str) -> None:
+    """ALERT-loud-but-continue (INC-22): no predictions exist for the resolved serving
+    date `today`. This used to be a benign `log.info` — which is exactly how the
+    UTC-midnight date-rollover bug HID (the evening intraday write silently skipped the
+    live slate). Emit a WARNING (→ stderr → the op's context.log.warning → visible to the
+    dead-man monitor) and, when possible, report the latest date predictions DO exist for
+    so a date-ahead-of-slate mismatch is self-describing vs. a legit off-day.
+    """
+    latest = None
+    try:
+        rows = _sf_query(conn, _LATEST_PREDICTION_DATE_SQL)
+        if rows:
+            val = next(iter(rows[0].values()))
+            latest = val.isoformat() if hasattr(val, "isoformat") else (str(val) if val is not None else None)
+    except Exception:  # noqa: BLE001 — diagnostic only; never let it break the (already-empty) serve
+        log.debug("Could not look up latest prediction date for the empty-serve alert", exc_info=True)
+
+    if latest and latest < today:
+        log.warning(
+            "⚠️ INC-22: NO predictions for resolved serving date %s, but predictions exist "
+            "through %s — the serving date is AHEAD of the latest slate (likely a TZ/date "
+            "rollover, NOT an off-day). picks/today NOT refreshed → app slate will go STALE. "
+            "Re-run with --date %s to refresh now.", today, latest, latest,
+        )
+    else:
+        log.warning(
+            "⚠️ No predictions for resolved serving date %s — skipping picks/today cache write. "
+            "If games are scheduled today this is a MISS (predict_today may not have run, or the "
+            "serving date is wrong); the app slate will not refresh. (latest available: %s)",
+            today, latest or "unknown",
+        )
 
 
 # ── DynamoDB serving cache (INC-16-P2; replaces the Railway PG api_cache) ──────
@@ -631,6 +665,15 @@ _FRESHNESS_SQL = """
 SELECT MAX(inserted_at) AS last_updated_at
 FROM baseball_data.betting_ml.daily_model_predictions
 WHERE game_date = %(today)s
+"""
+
+# INC-22 — diagnostic for the ALERT-loud empty-skip: the most recent date predictions
+# actually exist for. If this is BEHIND the resolved serving `today`, the serving date
+# rolled ahead of the slate (the UTC-midnight bug class) rather than a legit off-day.
+# Contains `baseball_data.` so the --s3 grep-driven registration auto-covers it.
+_LATEST_PREDICTION_DATE_SQL = """
+SELECT MAX(game_date) AS latest_game_date
+FROM baseball_data.betting_ml.daily_model_predictions
 """
 
 _BANKROLL_SQL = """
@@ -2486,7 +2529,11 @@ def main() -> int:
                        args.performance, args.teams, args.players,
                        getattr(args, "book_odds", False)])
 
-    today = args.date if args.date else date.today().isoformat()
+    # INC-22 — resolve "today" in the canonical US baseball-day TZ (LA), NOT the UTC box
+    # clock. A naive date.today() on the UTC box rolls to tomorrow at 00:00 UTC (= evening
+    # US time), so the EVENING intraday serving write resolved an empty future date and
+    # silently skipped the live slate. --date still overrides (backfill / mitigation).
+    today = args.date if args.date else current_game_date_iso()
     bucket = os.environ.get("CACHE_BUCKET")
 
     # E11.1-W7b: `sf` is the read connection — DuckDB-over-S3 with --s3 (AWS creds only),
@@ -2509,7 +2556,7 @@ def main() -> int:
             picks_rows = _sf_query(sf, _PICKS_TODAY_SQL, {"today": today})
             fresh_rows = _sf_query(sf, _FRESHNESS_SQL, {"today": today})
             if not picks_rows:
-                log.info("No predictions for %s — skipping picks/today cache write", today)
+                _alert_empty_serving_date(sf, today)  # INC-22 — ALERT-loud, was a benign log.info
             elif run_all or args.picks:
                 payload = _build_picks_payload(picks_rows, fresh_rows)
                 if pg:

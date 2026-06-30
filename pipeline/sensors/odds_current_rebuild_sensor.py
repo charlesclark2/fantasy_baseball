@@ -10,16 +10,24 @@ mart_odds_outcomes) on a DYNAMIC, game-hours window derived from today's actual 
     * NO games today  → never fires (0 warehouse spend on dark days)
 
 Why a sensor and not a schedule: the window depends on external state (tonight's pitch
-times) AND we want to pay Snowflake for it only ONCE/day. A schedule would have to re-query
-the slate on every tick (each a ~60s warehouse spin); the sensor caches first/last pitch in
-its cursor and only re-queries when the ET date rolls over. The 30-min Railway capture keeps
-`mlb_odds_raw` dense regardless — this sensor only governs when the *marts* get rebuilt.
+times) AND we want to read the slate only ONCE/day. A schedule would have to re-query the
+slate on every tick; the sensor caches first/last pitch in its cursor and only re-queries
+when the ET date rolls over. The 30-min host-cron capture keeps `mlb_odds_raw` dense
+regardless — this sensor only governs when the *marts* get rebuilt.
 
 Cadence vs the old per-capture trigger: ~12-14 light rebuilds on a game day (vs ~48), and
 the heavy post-hoc CLV/line-movement marts are split off to a once/day post-game schedule.
+
+E11.1-W12 (INC-21 cure): the slate read was the literal INC-21 footgun. It used a raw
+`open(os.environ["SNOWFLAKE_PRIVATE_KEY_PATH"])` + `snowflake.connector`; on the EC2 box
+`pipeline.resources` sets that PATH env var UNCONDITIONALLY but only writes the key file when
+the inline `SNOWFLAKE_PRIVATE_KEY` is present, so any gap (empty inline key / transient
+connect failure) made `_query_slate` throw → the broad `except` below swallowed it into a
+SkipReason → the odds rebuild silently never fired → empty dashboard, NO alert. The read now
+goes to the S3 lakehouse (`stg_statsapi_games`) via DuckDB's instance-role credential_chain —
+the SAME substrate the serving path already trusts, with no Snowflake/key-file dependency.
 """
 import json
-import os
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -31,43 +39,23 @@ _ET = ZoneInfo("America/New_York")
 _OPEN_LEAD = timedelta(hours=3)        # window opens 3h before first pitch
 _NEAR_CLOSE_LEAD = timedelta(minutes=10)  # extra fire in the 10 min before last first pitch
 
-# MIN/MAX first pitch for today's regular-season slate (ET date keys the slate so the
-# window survives the UTC-midnight boundary mid-evening).
-_SLATE_SQL = (
-    "SELECT MIN(game_date), MAX(game_date) "
-    "FROM baseball_data.betting.stg_statsapi_games "
-    "WHERE official_date = %s AND game_type = 'R'"
-)
-
 
 def _query_slate(et_date: str):
     """Return (first_pitch, last_pitch) as tz-aware UTC datetimes for the ET slate, or
-    (None, None) if the slate isn't loaded yet / no games (key-pair auth)."""
-    import snowflake.connector
-    from cryptography.hazmat.backends import default_backend
-    from cryptography.hazmat.primitives.serialization import (
-        Encoding, NoEncryption, PrivateFormat, load_pem_private_key,
-    )
+    (None, None) if the slate isn't loaded yet / no games. Reads stg_statsapi_games from the
+    S3 lakehouse via DuckDB (instance-role credential_chain — Snowflake-free). game_date is
+    stored as a tz-aware UTC timestamp, so MIN/MAX already give the first/last first-pitch
+    instant in UTC."""
+    from betting_ml.utils.lakehouse_monitor import duck, lh
 
-    with open(os.environ["SNOWFLAKE_PRIVATE_KEY_PATH"], "rb") as f:
-        key = load_pem_private_key(f.read(), password=None, backend=default_backend())
-    pk = key.private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())
-
-    conn = snowflake.connector.connect(
-        account=os.environ["SNOWFLAKE_ACCOUNT"],
-        user=os.environ["SNOWFLAKE_USER"],
-        warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
-        role=os.environ.get("SNOWFLAKE_ROLE", ""),
-        database="baseball_data",
-        private_key=pk,
-        # E11.3 cost tagging
-        session_parameters={"QUERY_TAG": f"odds_current_rebuild_sensor|{os.environ.get('TARGET_ENV', 'dev')}"},
-    )
+    conn = duck()
     try:
-        cur = conn.cursor()
-        cur.execute(_SLATE_SQL, [et_date])
-        first, last = cur.fetchone()
-        cur.close()
+        first, last = conn.execute(
+            f"SELECT MIN(game_date), MAX(game_date) "
+            f"FROM read_parquet('{lh('stg_statsapi_games')}', union_by_name=true) "
+            f"WHERE official_date = ? AND game_type = 'R'",
+            [et_date],
+        ).fetchone()
     finally:
         conn.close()
     if first is None or last is None:

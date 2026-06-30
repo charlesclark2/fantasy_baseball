@@ -58,7 +58,13 @@ _MODEL_VERSION = "v6"
 def model_health_alert_sensor(context: SensorEvaluationContext):
     """Alert if the deployed model's live skill degrades (serving/calibration regression)."""
     from betting_ml.monitoring import model_health_metrics as mh
-    from betting_ml.utils.data_loader import get_snowflake_connection
+    # E11.1-W12: read the prediction log + game results from the S3 lakehouse via DuckDB
+    # (Snowflake-free, instance-role credential_chain). model_health_metrics.evaluate() takes
+    # a Snowflake-shaped `conn` and runs iff()/%(name)s SQL; monitor_connection() is a thin
+    # DuckDB-over-S3 adapter that honours that exact cursor contract, so the gate logic +
+    # thresholds run UNCHANGED — only the backend moves. daily_model_predictions and
+    # mart_game_results are both already on S3 (W7b / W1).
+    from betting_ml.utils.lakehouse_monitor import monitor_connection
 
     end = date.today()
     start = max(end - timedelta(days=_ROLLING_DAYS), _GATE_FLOOR_DATE)
@@ -68,7 +74,7 @@ def model_health_alert_sensor(context: SensorEvaluationContext):
     # today's may not exist yet when the sensor fires in the morning.
     matchup_check_date = end - timedelta(days=1)
 
-    conn = get_snowflake_connection()
+    conn = monitor_connection()
     try:
         result = mh.evaluate(conn, _SCHEMA, start, end,
                              model_version=_MODEL_VERSION,

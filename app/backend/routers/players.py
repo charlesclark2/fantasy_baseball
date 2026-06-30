@@ -7,6 +7,8 @@ import logging
 import os
 from datetime import date, timedelta
 
+from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
+
 import boto3
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException
@@ -21,7 +23,7 @@ router = APIRouter(prefix="/players", tags=["players"])
 @router.get("")
 def list_players(_: str = Depends(get_user_id)) -> dict:
     """Return summary lists of all batters and pitchers (for the players directory page)."""
-    today = date.today().isoformat()
+    today = current_game_date_iso()  # INC-22 — match the LA baseball-day write key
     payload = serving_cache.get_cache("players/list", today)
     if payload is None:
         return {"batters": [], "pitchers": []}
@@ -39,7 +41,7 @@ def get_zone_overlay(
     Read order: DynamoDB serving cache → S3 ml-artifacts serving prefix (today/yesterday/2d ago).
     Returns 404 if no overlay is found (not yet written for this matchup).
     """
-    today = date.today().isoformat()
+    today = current_game_date_iso()  # INC-22 — match the LA baseball-day write key
     cache_key = f"zone_matchup/{batter_id}_vs_{pitcher_id}"
     payload = serving_cache.get_cache_latest(cache_key)
     if payload:
@@ -72,7 +74,7 @@ def get_player(player_id: int, _: str = Depends(get_user_id)) -> dict:
     Profiles are written daily by write_serving_store.py (write_player_profiles).
     Cache key: player/{player_id}
     """
-    today = date.today().isoformat()
+    today = current_game_date_iso()  # INC-22 — match the LA baseball-day write key
     payload = serving_cache.get_cache(f"player/{player_id}", today)
     if payload is None:
         logger.warning("Player profile cache miss for player_id=%s", player_id)

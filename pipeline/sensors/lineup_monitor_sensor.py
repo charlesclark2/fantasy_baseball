@@ -12,7 +12,9 @@ SCRIPTS_DIR = "/app/scripts"
 APP_DIR = "/app"
 
 _ET = ZoneInfo("America/New_York")
-_GAMES_SCHEMA = "baseball_data.betting"
+# E11.1-W12: the cadence-gate slate read moved off Snowflake to the S3 lakehouse
+# (stg_statsapi_games) via DuckDB. (The lineup_monitor.py subprocess below keeps its own
+# data access — its state table is a separate W13 migration, out of this wave's scope.)
 
 # --- Early-game-aware cadence -------------------------------------------------
 # The lineup-confirmed re-score must land >= 30 min before first pitch (Epic A1
@@ -43,18 +45,16 @@ def _minutes_to_next_first_pitch(now_et: datetime) -> float | None:
     to run every tick. `game_date` is the StatsAPI first-pitch instant stored as
     TIMESTAMP_TZ (tz-aware); a game already past first pitch but still flagged
     'Preview' clamps to 0 (treated as active)."""
-    from betting_ml.utils.data_loader import get_snowflake_connection
+    from betting_ml.utils.lakehouse_monitor import duck, lh
 
-    conn = get_snowflake_connection()
+    conn = duck()
     try:
-        cur = conn.cursor()
-        cur.execute(
-            f"SELECT MIN(game_date) FROM {_GAMES_SCHEMA}.stg_statsapi_games "
-            f"WHERE official_date = %s AND game_type = 'R' "
+        row = conn.execute(
+            f"SELECT MIN(game_date) FROM read_parquet('{lh('stg_statsapi_games')}', "
+            f"union_by_name=true) WHERE official_date = ? AND game_type = 'R' "
             f"AND abstract_game_state = 'Preview'",
             [now_et.date().isoformat()],
-        )
-        row = cur.fetchone()
+        ).fetchone()
     finally:
         conn.close()
 

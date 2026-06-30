@@ -1,10 +1,10 @@
 import os
 import subprocess
 import sys
-from datetime import date
 
 from dagster import In, Nothing, OpExecutionContext, Out, RetryPolicy, op
 
+from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
 from pipeline.ops._dbt_exec import _failure_detail, _run_dbt
 
 SCRIPTS_DIR = "/app/scripts"
@@ -41,7 +41,7 @@ _SUBPROCESS_TIMEOUT = 1800  # seconds (30 min) — hard ceiling per subprocess o
 
 
 def _today() -> str:
-    return date.today().strftime("%Y-%m-%d")
+    return current_game_date_iso()  # INC-22 — US baseball-day (LA), not the UTC box clock
 
 
 def _run(cmd: list[str], timeout: int = _SUBPROCESS_TIMEOUT):

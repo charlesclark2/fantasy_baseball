@@ -45,6 +45,7 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
 from betting_ml.utils.data_loader import (
     load_features,
     load_todays_features,
@@ -1801,7 +1802,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--date",
         metavar="YYYY-MM-DD",
-        default=date.today().isoformat(),
+        default=current_game_date_iso(),  # INC-22 — US baseball-day (LA), not the UTC box clock
         help="Target game date (default: today)",
     )
     parser.add_argument(
@@ -1927,7 +1928,7 @@ def _resolve_target_dates(args) -> list[str]:
     Range mode powers the Story 30.7 backfill: one process, setup built once."""
     if not getattr(args, "start", None):
         return [args.date]
-    end = args.end or date.today().isoformat()
+    end = args.end or current_game_date_iso()  # INC-22 — US baseball-day (LA), not UTC box clock
     _cols, rows = _aux_query(_RANGE_DATES_QUERY, {"s": args.start, "e": end})
     dates = [r[0].isoformat() if hasattr(r[0], "isoformat") else str(r[0])
              for r in rows]

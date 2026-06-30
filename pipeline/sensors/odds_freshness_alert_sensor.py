@@ -26,20 +26,27 @@ Two gates (raise on either):
      while the starter cap is a fixed 500.) Historical loads use the main key but write a
      different table (odds_snapshots_historical), so they don't pollute this live signal.
 
-Transient Snowflake/connection errors → SkipReason (don't page on our own infra blip; matches
+Transient lakehouse/S3 errors → SkipReason (don't page on our own infra blip; matches
 odds_current_rebuild_sensor / pregame_snapshot_sensor). A genuine stale/low-quota condition
-persists across ticks and will fire as soon as the connection recovers.
+persists across ticks and will fire as soon as the read recovers.
 
 NOTE (off-season): in-season this is safe to run 24/7. If captures legitimately stop (All-Star
 break / off-season → 0 upcoming events → ingestion_ts stops advancing), add a "games in the next
 N days" guard before the staleness raise to avoid false pages.
+
+E11.1-W12: reads moved off Snowflake to the S3 lakehouse via DuckDB (instance-role
+credential_chain — Snowflake-free). mlb_odds_raw lives at lakehouse_raw/mlb_odds_raw; its
+ingestion_ts is a VARCHAR ISO timestamp (UTC) and x_requests_remaining a BIGINT. The capture
+age is computed in Python (now_utc − MAX(ingestion_ts)) instead of Snowflake DATEDIFF/SYSDATE.
 """
 from __future__ import annotations
+
+from datetime import datetime, timezone
 
 from dagster import SensorEvaluationContext, SkipReason, sensor
 
 # ── thresholds ────────────────────────────────────────────────────────────────
-_STALE_MINUTES = 90      # ≈3 missed 30-min Railway fires → capture is down
+_STALE_MINUTES = 90      # ≈3 missed 30-min host-cron fires → capture is down
 _STARTER_CAP = 500       # starter key's monthly allotment; readings ≤ this are the STARTER key
                          # (expected drain every month) — alert only on MAIN-key readings (> this)
 # MAIN plan = 100k credits/mo; normal main burn ≈8k/mo, so the main key's `remaining` sits
@@ -48,40 +55,35 @@ _STARTER_CAP = 500       # starter key's monthly allotment; readings ≤ this ar
 # The window where we alert is (_STARTER_CAP, _QUOTA_FLOOR) = (500, 10000). Re-tune if plan sizes change.
 _QUOTA_FLOOR = 10000
 
-# UTC-on-UTC: mlb_odds_raw.ingestion_ts is TIMESTAMP_NTZ written in UTC; SYSDATE() is current
-# UTC as NTZ, so DATEDIFF avoids any LTZ/session-tz ambiguity.
-_FRESHNESS_SQL = (
-    "SELECT DATEDIFF('minute', MAX(ingestion_ts), SYSDATE()) AS age_min, "
-    "MAX(ingestion_ts) AS latest FROM baseball_data.oddsapi.mlb_odds_raw"
-)
-# Latest MAIN-key reading only (remaining > starter cap). Read from raw (current every capture,
-# no rebuild lag). NULL result = main key not recently used (pure-starter phase) → no quota concern.
-_QUOTA_SQL = (
-    "SELECT x_requests_remaining FROM baseball_data.oddsapi.mlb_odds_raw "
-    "WHERE x_requests_remaining > %s "
-    "ORDER BY ingestion_ts DESC LIMIT 1"
-)
-
 
 @sensor(minimum_interval_seconds=1800)  # every ~30 min, aligned to the capture cadence
 def odds_freshness_alert_sensor(context: SensorEvaluationContext):
     """Alert if the Odds-API live capture goes stale or its monthly quota runs low."""
-    from betting_ml.utils.data_loader import get_snowflake_connection
+    from betting_ml.utils.lakehouse_monitor import duck, lh_raw
 
+    raw = f"read_parquet('{lh_raw('mlb_odds_raw')}', union_by_name=true)"
     try:
-        conn = get_snowflake_connection()
+        conn = duck()
         try:
-            cur = conn.cursor()
-            cur.execute(_FRESHNESS_SQL)
-            age_min, latest = cur.fetchone()
-            cur.execute(_QUOTA_SQL, [_STARTER_CAP])
-            quota_row = cur.fetchone()
-            cur.close()
+            # latest capture timestamp (VARCHAR ISO → naive UTC timestamp)
+            (latest,) = conn.execute(f"SELECT MAX(ingestion_ts::timestamp) FROM {raw}").fetchone()
+            # latest MAIN-key reading only (remaining > starter cap); NULL = pure-starter phase.
+            quota_row = conn.execute(
+                f"SELECT x_requests_remaining FROM {raw} "
+                f"WHERE x_requests_remaining > ? ORDER BY ingestion_ts::timestamp DESC LIMIT 1",
+                [_STARTER_CAP],
+            ).fetchone()
         finally:
             conn.close()
     except Exception as exc:  # noqa: BLE001 — transient infra; skip, retry next tick
         yield SkipReason(f"Could not read odds freshness/quota (transient): {exc}")
         return
+
+    # Capture age in minutes (now_utc − latest), naive-UTC on both sides.
+    age_min = None
+    if latest is not None:
+        now_utc_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+        age_min = (now_utc_naive - latest).total_seconds() / 60.0
 
     problems: list[str] = []
 
@@ -90,8 +92,8 @@ def odds_freshness_alert_sensor(context: SensorEvaluationContext):
         problems.append("oddsapi.mlb_odds_raw is EMPTY — capture never landed")
     elif age_min is not None and age_min > _STALE_MINUTES:
         problems.append(
-            f"STALE capture: newest mlb_odds_raw ingest {age_min} min ago "
-            f"(> {_STALE_MINUTES}) — Railway cron down / key expired / plan lapsed"
+            f"STALE capture: newest mlb_odds_raw ingest {age_min:.0f} min ago "
+            f"(> {_STALE_MINUTES}) — host-cron capture down / key expired / plan lapsed"
         )
 
     # 2. quota — MAIN key only (readings > _STARTER_CAP). The starter key's expected ≤500 drain
@@ -119,10 +121,11 @@ def odds_freshness_alert_sensor(context: SensorEvaluationContext):
                    dedup_key="odds_freshness")
         raise Exception(msg)
 
+    age_str = f"{age_min:.0f}" if age_min is not None else "n/a"
     context.log.info(
         "Odds capture healthy: last ingest %s min ago; x_requests_remaining=%s",
-        age_min, remaining,
+        age_str, remaining,
     )
     yield SkipReason(
-        f"Odds capture healthy: {age_min} min since last ingest, quota {remaining}."
+        f"Odds capture healthy: {age_str} min since last ingest, quota {remaining}."
     )

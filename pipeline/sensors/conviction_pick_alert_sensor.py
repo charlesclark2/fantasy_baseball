@@ -35,30 +35,31 @@ from dagster import SensorEvaluationContext, SkipReason, sensor
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-_ML_SCHEMA = "baseball_data.betting_ml"
-_MART_SCHEMA = "baseball_data.betting"
-
 # Fire when now_utc is in [first_pitch - LEAD, first_pitch - CLOSE]. A wider lead
 # than the pipeline watchdog so there's time to place the bets before first pitch.
 _ALERT_LEAD_MIN = 75
 _ALERT_CLOSE_MIN = 20
 
+# E11.1-W12: reads moved off Snowflake to the S3 lakehouse via DuckDB (instance-role
+# credential_chain — Snowflake-free). stg_statsapi_games + daily_model_predictions are both
+# already on S3 (with all the layer4_h2h_* conviction columns).
+
 
 def _get_earliest_first_pitch_utc(today: str) -> datetime | None:
-    from betting_ml.utils.data_loader import get_snowflake_connection
+    from betting_ml.utils.lakehouse_monitor import duck, lh
 
-    conn = get_snowflake_connection()
+    conn = duck()
     try:
-        cur = conn.cursor()
-        cur.execute(
+        # game_date is stored tz-aware (UTC) in the lakehouse → MIN is the earliest first
+        # pitch in UTC; no CONVERT_TIMEZONE needed.
+        row = conn.execute(
             f"""
-            SELECT MIN(CONVERT_TIMEZONE('UTC', game_date)) AS earliest_utc
-            FROM {_MART_SCHEMA}.stg_statsapi_games
-            WHERE official_date = %s AND game_type = 'R'
+            SELECT MIN(game_date) AS earliest_utc
+            FROM read_parquet('{lh('stg_statsapi_games')}', union_by_name=true)
+            WHERE official_date = ? AND game_type = 'R'
             """,
             [today],
-        )
-        row = cur.fetchone()
+        ).fetchone()
         if row is None or row[0] is None:
             return None
         return row[0].replace(tzinfo=UTC) if row[0].tzinfo is None else row[0].astimezone(UTC)
@@ -69,22 +70,19 @@ def _get_earliest_first_pitch_utc(today: str) -> datetime | None:
 def _get_conviction_picks(today: str) -> list[dict] | None:
     """Today's post_lineup conviction picks. Returns None if NO post_lineup rows
     exist yet (predictions not written), else the (possibly empty) pick list."""
-    from betting_ml.utils.data_loader import get_snowflake_connection
+    from betting_ml.utils.lakehouse_monitor import duck, lh
 
-    conn = get_snowflake_connection()
+    conn = duck()
     try:
-        cur = conn.cursor()
-        cur.execute(
-            f"""
-            SELECT COUNT(*) FROM {_ML_SCHEMA}.daily_model_predictions
-            WHERE score_date = %s AND prediction_type = 'post_lineup'
-            """,
+        dmp = f"read_parquet('{lh('daily_model_predictions')}', union_by_name=true)"
+        (n_post_lineup,) = conn.execute(
+            f"SELECT COUNT(*) FROM {dmp} WHERE score_date = ? AND prediction_type = 'post_lineup'",
             [today],
-        )
-        if int(cur.fetchone()[0]) == 0:
+        ).fetchone()
+        if int(n_post_lineup) == 0:
             return None  # predictions not ready — do not finalize the day
 
-        cur.execute(
+        rel = conn.execute(
             f"""
             SELECT home_team_abbrev, away_team_abbrev,
                    layer4_h2h_decision,
@@ -93,8 +91,8 @@ def _get_conviction_picks(today: str) -> list[dict] | None:
                    layer4_h2h_conviction_disagree,
                    layer4_h2h_bovada_ml_home,
                    layer4_h2h_bovada_ml_away
-            FROM {_ML_SCHEMA}.daily_model_predictions
-            WHERE score_date = %s
+            FROM {dmp}
+            WHERE score_date = ?
               AND prediction_type = 'post_lineup'
               AND layer4_h2h_conviction_flag = TRUE
               AND layer4_h2h_decision IN ('home', 'away')
@@ -102,8 +100,8 @@ def _get_conviction_picks(today: str) -> list[dict] | None:
             """,
             [today],
         )
-        cols = [d[0].lower() for d in cur.description]
-        return [dict(zip(cols, r)) for r in cur.fetchall()]
+        cols = [d[0].lower() for d in rel.description]
+        return [dict(zip(cols, r)) for r in rel.fetchall()]
     finally:
         conn.close()
 
