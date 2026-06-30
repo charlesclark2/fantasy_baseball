@@ -111,13 +111,32 @@ $COMPOSE up -d --build || rollback "core build/up failed"
 log "rebuild capture-profile images"
 $COMPOSE --profile capture build || rollback "capture build failed"
 
-# --- 6. reinstall host crontab IFF capture.crontab changed ------------------
+# --- 6. reconcile host crontab to the committed source of truth (ALWAYS) ----
+# INC-23 (2026-06-30): this used to reinstall ONLY IFF capture.crontab changed in the
+# pull. That let a resize / reprovision / on-box `crontab -e` mistake silently DROP the
+# capture crons (incl. odds-capture) — a deploy that didn't touch capture.crontab would
+# report success with NO host crontab installed → the 5.6h odds-capture stall (mlb_odds_raw
+# went 336 min stale). The committed capture.crontab is the SINGLE SOURCE OF TRUTH; reconcile
+# to it on EVERY deploy (`crontab <file>` idempotently replaces the whole table) and ALERT
+# LOUDLY if the install fails or the odds-capture line is absent afterward — never a silent skip.
 if git diff --name-only "${OLD_HEAD}..${NEW_HEAD}" | grep -q 'services/dagster/aws/capture.crontab'; then
-  log "capture.crontab changed → reinstalling host crontab"
-  crontab "$CRONTAB" || log "  WARN: crontab reinstall failed (check cronie installed)"
+  log "reconciling host crontab (capture.crontab CHANGED in this pull)"
 else
-  log "capture.crontab unchanged — no crontab reinstall"
+  log "reconciling host crontab (capture.crontab unchanged — reinstalled idempotently anyway)"
 fi
+if ! crontab "$CRONTAB"; then
+  notify CRITICAL "host crontab reinstall FAILED on box" \
+    "deploy.sh could not install ${CRONTAB} (cronie missing / crond down / spool not writable). The capture crons (odds/derivative/weather/schedule) are NOT scheduled — odds WILL go stale. Fix on the box: 'sudo dnf install -y cronie && sudo systemctl enable --now crond', then re-run deploy." 2>/dev/null || true
+  die "crontab reinstall failed — capture crons not scheduled (see CRITICAL alert)"
+fi
+# A `crontab <file>` can return 0 yet leave an empty/partial table on some minimal AMIs;
+# verify the odds-capture line actually landed (the line whose absence == the INC-23 stall).
+if ! crontab -l 2>/dev/null | grep -q 'run --rm odds-capture'; then
+  notify CRITICAL "odds-capture cron MISSING after reinstall on box" \
+    "crontab installed but 'crontab -l' has no odds-capture line — live odds capture will go stale. Investigate crond/spool on the box (SSM)." 2>/dev/null || true
+  die "odds-capture cron absent after reinstall (see CRITICAL alert)"
+fi
+log "  host crontab reconciled — odds-capture line present"
 
 # --- 7. post-deploy verify --------------------------------------------------
 log "post-deploy verification"
