@@ -19,9 +19,20 @@
 --   *_h2h_pa_coverage   fraction of slots with career_pa >= 10 against this starter
 --
 -- Card 8.J.
+--
+-- E11.1-W8b (serving-aggregator wave): dual-branch. DuckDB branch (real compute → S3,
+-- run_w1_lakehouse._build_w8b) reads the migrated marts/staging + the S3-mirrored
+-- feature_pregame_lineup_state (the INC-17-P2 dual-source CTE: SCD-2 lineup_state UNION
+-- historical stg_statsapi_lineups_wide) + lakehouse_clusters; body is dialect-clean
+-- (::float→::double only). The Snowflake (else) branch reads the lakehouse_ext external
+-- table (parity-gated by parity_check_w8b.py). ⚠️ The lineup dual-source MUST stay intact
+-- or 2026 slot_*_player_id go NULL → matchup features impute to constants (silent
+-- discrimination collapse) — verified non-null on a real post_lineup run at cutover.
 -- =============================================================================
 
-{{ config(materialized='table') }}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w8b_lakehouse']) }}
 
 with games as (
     select
@@ -182,7 +193,7 @@ lineup_agg as (
         side,
         avg(adjusted_woba)                                                  as h2h_woba,
         avg(adjusted_xwoba)                                                 as h2h_xwoba,
-        sum(case when career_pa >= 10 then 1 else 0 end)::float
+        sum(case when career_pa >= 10 then 1 else 0 end)::double
             / nullif(count(*), 0)                                           as h2h_pa_coverage
     from slot_adj
     where adjusted_woba is not null   -- exclude slots where the opposing starter is unknown
@@ -208,3 +219,11 @@ select
 from games g
 left join home_agg h_agg on h_agg.game_pk = g.game_pk
 left join away_agg a_agg on a_agg.game_pk = g.game_pk
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.feature_pitcher_batter_h2h_matchups
+
+{% endif %}

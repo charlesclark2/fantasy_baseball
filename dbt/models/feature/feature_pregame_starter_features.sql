@@ -12,9 +12,19 @@
 -- (e.g. MLB debut). Rows with null probable_pitcher_id are excluded — the
 -- master assembly (feature_pregame_game_features) LEFT JOINs this model and
 -- detects missing starters via null.
+--
+-- E11.1-W8b (serving-aggregator wave): dual-branch. DuckDB branch (real compute → S3,
+-- run_w1_lakehouse._build_w8b) reads the migrated marts/staging (mart_pitcher_rolling_stats,
+-- mart_starting_pitcher_game_log, mart_pitcher_vs_handedness_splits, mart_starter_*,
+-- fct_fangraphs_pitcher_arsenal_wide, the S3-mirrored fct_fangraphs_pitching_analytics,
+-- stg_statsapi_probable_pitchers, eb_starter_posteriors) + lakehouse_clusters; body is
+-- dialect-clean (Snowflake float casts → DuckDB ::double; datediff is DuckDB-native). The
+-- Snowflake (else) branch reads the lakehouse_ext external table (parity_check_w8b.py).
 -- =============================================================================
 
-{{ config(materialized='table') }}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w8b_lakehouse']) }}
 
 with
 
@@ -157,13 +167,13 @@ ip_stats as (
         game_pk,
         pitcher_id,
         round(
-            avg(case when recency_rank <= 3 then outs_recorded::float / 3.0 end),
+            avg(case when recency_rank <= 3 then outs_recorded::double / 3.0 end),
         2)                                      as avg_ip_last_3,
         round(
-            avg(case when start_year = target_year then outs_recorded::float / 3.0 end),
+            avg(case when start_year = target_year then outs_recorded::double / 3.0 end),
         2)                                      as avg_ip_season,
         round(
-            sum(case when start_year = target_year then outs_recorded::float / 3.0 end),
+            sum(case when start_year = target_year then outs_recorded::double / 3.0 end),
         2)                                      as cumulative_season_ip,
         sum(case when start_year = target_year then total_pitches end)
                                                 as cumulative_season_pitches
@@ -796,3 +806,11 @@ final as (
 )
 
 select * from final
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.feature_pregame_starter_features
+
+{% endif %}

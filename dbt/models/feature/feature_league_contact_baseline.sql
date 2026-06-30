@@ -17,6 +17,22 @@
 -- model). Shrinkage pseudo-count: var contact_baseline_shrinkage_k (default 200).
 -- =============================================================================
 
-{{ config(materialized='table') }}
+-- E11.1-W8b (serving-aggregator wave): dual-branch. DuckDB branch (real compute → S3,
+-- run_w1_lakehouse special-cases this macro model in a Python builder — extract_duckdb_sql can't
+-- render the as_of_contact_baseline() per-column loops) reads the migrated
+-- feature_pregame_game_features_raw (registered DuckDB view). The Snowflake (else) branch reads the
+-- lakehouse_ext external table (parity-gated by parity_check_w8b.py). The macro stays the single
+-- source of truth for the contact-quality column list on the Snowflake side.
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w8b_lakehouse']) }}
 
 {{ as_of_contact_baseline(ref('feature_pregame_game_features_raw')) }}
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.feature_league_contact_baseline
+
+{% endif %}

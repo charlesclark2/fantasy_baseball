@@ -67,39 +67,15 @@ select * from with_scd2_cols
 
 {% else %}
 
+-- E11.1-W8b: FINALIZE the dual-branch (the W7b-deferred cutover). The Snowflake side
+-- now reads the lakehouse_ext external table over the DuckDB-built S3 parquet (created
+-- by generate_w7b_external_tables.py / W7B_TABLES — feature_pregame_injury_status already
+-- has an external table). Was a native `table` materialize from stg_statsapi_player_injury_status;
+-- the DuckDB branch above is the build that produces that parquet. Parity-gated by
+-- parity_check_w8b.py. Materialized='table' so downstream ref()s (mart_player_profile_identity,
+-- feature_pregame_lineup_features) see a concrete table with the same grain.
 {{ config(materialized='table') }}
 
-with
-
-source as (
-    -- Zero-length intervals (status_start_date = status_end_date) are intra-day
-    -- transaction noise from same-day place+activate events and must be dropped
-    -- before SCD-2 promotion; they are never valid pregame windows.
-    select *
-    from {{ ref('stg_statsapi_player_injury_status') }}
-    where status_end_date is null
-       or status_end_date > status_start_date
-),
-
-with_scd2_cols as (
-    select
-        player_id,
-        player_name,
-        is_injured,
-
-        -- SCD-2 temporal columns; date-cast to midnight TIMESTAMP_NTZ because
-        -- IL transactions are reported at day granularity (no intraday precision).
-        status_start_date::timestamp_ntz                    as valid_from,
-        status_end_date::timestamp_ntz                      as valid_to,
-        (status_end_date is null)                           as is_current,
-
-        -- Record hash over the state value for audit/diff tooling.
-        md5(cast(is_injured as varchar))                    as record_hash,
-        sysdate()                                           as computed_at
-
-    from source
-)
-
-select * from with_scd2_cols
+select * from baseball_data.lakehouse_ext.feature_pregame_injury_status
 
 {% endif %}

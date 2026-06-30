@@ -34,6 +34,18 @@ SHELL=/bin/bash
 # Weather forecast checkpoints T-24/6/3/1h + observed-at-first-pitch (entrypoint self-guards 10:00-02:00 UTC).
 0 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml run --rm weather-capture >> /home/ec2-user/capture-cron.log 2>&1
 
+# MLB player-prop forward catch-up → S3 mlb/props/ (E5.1b). ONCE/day: the Odds-API
+# historical endpoint only gains yesterday's snapshots once/day, so a 30-min cadence
+# would just re-skip. Advances all 8 player props (batter_*/pitcher_*) to yesterday via
+# the dynamic season-end (today-1) + idempotent partition skip (~14 events × 2 snaps ≈
+# 2k cr/day, ~60k/mo, single-region us; fits the post-7/17 100k/mo). Runs via `exec` on
+# the always-up code-server (no dedicated image needed), exactly like the freshness check
+# below. AWS_DEFAULT_REGION pinned us-east-2 — the artifacts bucket is us-east-2, but the
+# `run --rm` capture images set us-east-1, so an inherited region would break the S3 write.
+# ODDS_API_KEY comes from the container's env_file: .env; S3 auth = the instance IAM role.
+# WARN/supplemental tier — a failure logs + is non-blocking (never gates predictions).
+0 13 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/backfill_multisport_props_to_s3.py --mode backfill --sport baseball_mlb --player-props-only >> /home/ec2-user/capture-cron.log 2>&1
+
 # ── INC-16-P6 observability (host-cron) ──────────────────────────────────────
 # Service-liveness healthcheck every 5 min (core containers up + reachable; pages
 # via SNS on failure, self-cooldown 1h so a sustained outage doesn't spam).

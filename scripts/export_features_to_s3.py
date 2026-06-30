@@ -61,17 +61,22 @@ _S3_BUCKET = "baseball-betting-ml-artifacts"
 
 # lakehouse_name → Snowflake fully-qualified feature table. The readers address each by its
 # BARE name ({LAKEHOUSE}/<name>/data.parquet) via scripts/utils/lakehouse_read.register_views.
-# This set = predict_today/data_loader reads (game/lineup/starter/sub_model_signals/
-# public_betting/odds) ∪ write_serving_store reads (game/weather/public_betting/umpire).
+#
+# E11.1-W8b — W7b-1 MIRROR RETIREMENT (TRIMMED to the un-migrated tail). The W8a/W8b dual-branch
+# waves now BUILD the migrated feature tables to S3 directly (run_w1_lakehouse --w8a/--w8b → the SAME
+# data.parquet key), so this export-mirror is redundant for them and was removed:
+#   game_features, lineup_features, starter_features  (W8b dbt-built),
+#   sub_model_signals, odds_features                  (W8a dbt-built).
+# KEPT = the W11-deferred tail still read by the W8b DuckDB aggregator build + write_serving_store but
+# NOT yet migrated (umpire/weather blocked on RAW; public_betting reads the aggregator → W11):
+#   weather / umpire / public_betting features.
+# ⚠️ DEPLOY-ORDER: this trim ships WITH the --w8b cutover (W8B_LAKEHOUSE_S3=1) — never BEFORE, else
+# the migrated keys lose their only writer until --w8b runs and serving --s3 reads stale parquet.
+# Full retirement (drop weather/umpire/public_betting too) is the W11 step once those models migrate.
 FEATURE_TABLES = {
-    "feature_pregame_game_features":          "baseball_data.betting_features.feature_pregame_game_features",
-    "feature_pregame_lineup_features":        "baseball_data.betting_features.feature_pregame_lineup_features",
-    "feature_pregame_starter_features":       "baseball_data.betting_features.feature_pregame_starter_features",
     "feature_pregame_weather_features":       "baseball_data.betting_features.feature_pregame_weather_features",
     "feature_pregame_public_betting_features":"baseball_data.betting_features.feature_pregame_public_betting_features",
     "feature_pregame_umpire_features":        "baseball_data.betting_features.feature_pregame_umpire_features",
-    "feature_pregame_sub_model_signals":      "baseball_data.betting_features.feature_pregame_sub_model_signals",
-    "feature_pregame_odds_features":          "baseball_data.betting_features.feature_pregame_odds_features",
 }
 
 # Non-dbt SERVING marts the prediction/serving READERS need from S3 but that are NOT in any

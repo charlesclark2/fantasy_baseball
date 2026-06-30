@@ -1,4 +1,13 @@
-{{ config(materialized='table') }}
+-- E11.1-W8b (serving-aggregator wave): dual-branch. DuckDB branch (real compute → S3,
+-- run_w1_lakehouse._build_w8b) reads the migrated marts + the S3-mirrored
+-- feature_pregame_lineup_state (INC-17-P2 dual-source CTE) + lakehouse_clusters; the
+-- Snowflake (else) branch reads the lakehouse_ext external table (parity_check_w8b.py).
+-- ⚠️ The lineup dual-source MUST stay intact (2026 slot_*_player_id else NULL → constant
+-- imputation → silent matchup collapse) — verified non-null on a real post_lineup run.
+
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w8b_lakehouse']) }}
 
 -- Grain: game_pk × side (home / away)
 -- Aggregates mart_batter_woba_vs_cluster across lineup slots given the
@@ -220,3 +229,11 @@ left join home_agg h_agg      on  h_agg.game_pk = g.game_pk
 left join away_agg a_agg      on  a_agg.game_pk = g.game_pk
 left join home_starter_cl h_sc on  h_sc.game_pk = g.game_pk
 left join away_starter_cl a_sc on  a_sc.game_pk = g.game_pk
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.feature_pitcher_cluster_matchups
+
+{% endif %}

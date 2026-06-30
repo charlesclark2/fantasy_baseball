@@ -27,11 +27,24 @@
 -- Sunday `dbtf build --full-refresh` net corrects any drift. The is_incremental()
 -- spine filter below is the ONLY behavioural change — every E1.8 as-of `< game_date`
 -- guard downstream is untouched, so point-in-time semantics are byte-for-byte identical.
+--
+-- E11.1-W8b (serving-aggregator wave): dual-branch. DuckDB branch (real compute → S3,
+-- run_w1_lakehouse._build_w8b) reads the migrated feature layer + marts (registered DuckDB
+-- views) + the S3-mirrored team_sequential_posteriors / stg_actionnetwork_public_betting /
+-- feature_pregame_umpire_features / feature_pregame_weather_features. is_incremental blocks are
+-- stripped by extract_duckdb_sql (DuckDB = full COPY). Dialect: Snowflake float casts → DuckDB
+-- ::double, dateadd → interval, iff → case. The TYPE-PIN block below (gen_type_contract --write)
+-- casts every FLOAT output ::double (INC-19) incl. home_win_rate_trailing_3yr (the KNOWN flip
+-- NUMBER(21,4)→FLOAT). The Snowflake (else) branch MERGEs from the lakehouse_ext external table;
+-- at cutover the operator DROPs+rebuilds this incremental so the stored NUMBER cols adopt FLOAT.
+{% if target.name == 'duckdb' %}
+
 {{ config(
     materialized='incremental',
     unique_key='game_pk',
     incremental_strategy='delete+insert',
-    on_schema_change='sync_all_columns'
+    on_schema_change='sync_all_columns',
+    tags=['w8b_lakehouse']
 ) }}
 
 with
@@ -207,7 +220,7 @@ home_win_rate_by_date as (
     from (select distinct game_date from games) d
     left join {{ ref('mart_game_results') }} hist
         on  hist.game_type = 'R'
-        and hist.game_date::date >= dateadd('year', -3, d.game_date)
+        and hist.game_date::date >= (d.game_date - interval '3 years')
         and hist.game_date::date <  d.game_date
         and hist.home_team_won is not null
     group by d.game_date
@@ -278,7 +291,7 @@ team_seq as (
         )
     qualify row_number() over (
         partition by st.game_pk, st.side
-        order by iff(ts.game_pk = st.game_pk, 1, 0) desc,
+        order by case when ts.game_pk = st.game_pk then 1 else 0 end desc,
                  ts.game_date desc nulls last
     ) = 1
 ),
@@ -310,7 +323,7 @@ base_state_resolved as (
         )
     qualify row_number() over (
         partition by st.game_pk, st.side
-        order by iff(bs.game_pk = st.game_pk, 1, 0) desc,
+        order by case when bs.game_pk = st.game_pk then 1 else 0 end desc,
                  bs.game_date desc nulls last
     ) = 1
 ),
@@ -830,10 +843,10 @@ final as (
         -- a tired pen bites harder behind a starter expected to be pulled early, so the
         -- PRODUCT carries skill the two levels don't. = bullpen_pitches_prev_3d × (1 /
         -- starter_avg_ip_last_3). nullif guards the season-opener / no-IP-history case
-        -- (→ NULL, imputed downstream). `::float` forces float division — NEVER write a
+        -- (→ NULL, imputed downstream). `::double` forces float division — NEVER write a
         -- bare `::numeric`/`::number` on a ratio (= NUMBER(38,0) = scale 0 = integer
         -- truncation; the bug that silently zeroed the B1 TTO mart, 2026-06-23).
-        (h_tm.bullpen_pitches_prev_3d::float
+        (h_tm.bullpen_pitches_prev_3d::double
             / nullif(h_st.avg_ip_last_3, 0))    as home_bullpen_fatigue_short_leash,
         h_tm.bp_k_pct_14d                       as home_bp_k_pct_14d,
         h_tm.bp_bb_pct_14d                      as home_bp_bb_pct_14d,
@@ -963,7 +976,7 @@ final as (
         -- Mirror of home_bullpen_fatigue_short_leash (see the home block above for the
         -- hypothesis + the ::numeric truncation footgun). Per-side harness reads this via
         -- opp_bullpen_fatigue_short_leash (the FACED pitching side).
-        (a_tm.bullpen_pitches_prev_3d::float
+        (a_tm.bullpen_pitches_prev_3d::double
             / nullif(a_st.avg_ip_last_3, 0))    as away_bullpen_fatigue_short_leash,
         a_tm.bp_k_pct_14d                       as away_bp_k_pct_14d,
         a_tm.bp_bb_pct_14d                      as away_bp_bb_pct_14d,
@@ -1036,45 +1049,45 @@ final as (
 
         -- Home offense vs away starter
         round(
-            (h_ln.rhb_count::float / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
+            (h_ln.rhb_count::double / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
                 * a_st.xwoba_vs_rhb
-            + (h_ln.lhb_count::float / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
+            + (h_ln.lhb_count::double / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
                 * a_st.xwoba_vs_lhb
         , 3)                                    as home_lineup_vs_away_starter_xwoba_adj,
 
         round(
-            (h_ln.rhb_count::float / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
+            (h_ln.rhb_count::double / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
                 * a_st.k_pct_vs_rhb
-            + (h_ln.lhb_count::float / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
+            + (h_ln.lhb_count::double / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
                 * a_st.k_pct_vs_lhb
         , 3)                                    as home_lineup_vs_away_starter_k_pct_adj,
 
         round(
-            (h_ln.rhb_count::float / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
+            (h_ln.rhb_count::double / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
                 * a_st.bb_pct_vs_rhb
-            + (h_ln.lhb_count::float / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
+            + (h_ln.lhb_count::double / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
                 * a_st.bb_pct_vs_lhb
         , 3)                                    as home_lineup_vs_away_starter_bb_pct_adj,
 
         -- Away offense vs home starter
         round(
-            (a_ln.rhb_count::float / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
+            (a_ln.rhb_count::double / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
                 * h_st.xwoba_vs_rhb
-            + (a_ln.lhb_count::float / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
+            + (a_ln.lhb_count::double / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
                 * h_st.xwoba_vs_lhb
         , 3)                                    as away_lineup_vs_home_starter_xwoba_adj,
 
         round(
-            (a_ln.rhb_count::float / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
+            (a_ln.rhb_count::double / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
                 * h_st.k_pct_vs_rhb
-            + (a_ln.lhb_count::float / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
+            + (a_ln.lhb_count::double / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
                 * h_st.k_pct_vs_lhb
         , 3)                                    as away_lineup_vs_home_starter_k_pct_adj,
 
         round(
-            (a_ln.rhb_count::float / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
+            (a_ln.rhb_count::double / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
                 * h_st.bb_pct_vs_rhb
-            + (a_ln.lhb_count::float / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
+            + (a_ln.lhb_count::double / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
                 * h_st.bb_pct_vs_lhb
         , 3)                                    as away_lineup_vs_home_starter_bb_pct_adj,
 
@@ -1229,16 +1242,16 @@ final as (
         -- NULL when bullpen handedness splits or lineup counts are unavailable.
         round(
             a_bph.bp_xwoba_vs_rhb_30d
-                * (h_ln.rhb_count::float / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
+                * (h_ln.rhb_count::double / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
             + a_bph.bp_xwoba_vs_lhb_30d
-                * (h_ln.lhb_count::float / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
+                * (h_ln.lhb_count::double / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
         , 4)                                    as home_bp_matchup_xwoba,
 
         round(
             h_bph.bp_xwoba_vs_rhb_30d
-                * (a_ln.rhb_count::float / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
+                * (a_ln.rhb_count::double / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
             + h_bph.bp_xwoba_vs_lhb_30d
-                * (a_ln.lhb_count::float / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
+                * (a_ln.lhb_count::double / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
         , 4)                                    as away_bp_matchup_xwoba,
 
         -- ── Bullpen leverage exhaustion (Card 8.U) ───────────────────────────
@@ -1428,7 +1441,7 @@ select
     venue_name,
     is_day_game,
     series_game_number,
-    home_win_rate_trailing_3yr,
+    home_win_rate_trailing_3yr::double as home_win_rate_trailing_3yr,
     post_2022_rules,
     has_full_data,
     has_odds,
@@ -2138,3 +2151,23 @@ select
     total_sharp_signal_active::double as total_sharp_signal_active
 from final
 -- TYPE-PIN-END
+
+{% else %}
+
+{{ config(
+    materialized='incremental',
+    unique_key='game_pk',
+    incremental_strategy='delete+insert',
+    on_schema_change='sync_all_columns'
+) }}
+
+-- E11.1-W8b: the Snowflake side MERGEs from the lakehouse_ext external table over the
+-- DuckDB-built S3 parquet. ⚠️ At cutover the operator DROPs+rebuilds this incremental
+-- (home_win_rate_trailing_3yr flips NUMBER(21,4)→FLOAT — dbt --full-refresh MERGEs, does
+-- NOT DROP). The is_incremental window mirrors the DuckDB branch's games spine scope.
+select * from baseball_data.lakehouse_ext.feature_pregame_game_features_raw
+{% if is_incremental() %}
+where game_date::date >= dateadd('day', -{{ var('pregame_incremental_lookback_days', 7) }}, current_date)
+{% endif %}
+
+{% endif %}
