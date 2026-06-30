@@ -24,13 +24,16 @@ S3 LAYOUT
 One Parquet file per (sport, market_key, season, calendar_date).
 Each row = one (event × snapshot_ts × bookmaker × player).
 
-CREDIT BUDGET (as of 2026-06-24 — pre-7/1 conservation window)
-    Surplus remaining : ~888,000 credits (renewing to 5M on 7/1)
-    Reserve           : 88,000 (10% hold-back; stop well before 0)
-    Available         : ~800,000 credits
-    Pre-7/1 scope     : MLB key derivatives only (F5 + NRFI)
-    Value rank        : MLB → NFL → NCAAF → NCAAB
-    Script stops when remaining credits drop below CREDIT_RESERVE.
+CREDIT BUDGET (as of 2026-06-30 — pre-7/1 reset; verify live with GET /v4/sports)
+    Live balance      : ~544,000 credits, EXPIRING at the 7/1 reset
+    Post-reset         : refreshes to ~5M, good to ~7/17 (then drops to 100k/mo)
+    Strategy          : run ACROSS the reset — spend the expiring ~544k on the
+                        top-value MLB player props (batter_runs_scored, batter_rbis),
+                        then auto-continue on the fresh 5M (idempotent skip).
+    Value rank        : batter_runs_scored+batter_rbis → batter_hits_runs_rbis →
+                        spreads (2026 catch-up) → F5/period set (2026 catch-up).
+    Idempotency       : existing (market,season,date) partitions auto-skip, so a
+                        stalled-at-2025-08-11 market grabs only the 2025-08-12+ gap.
 
 IDEMPOTENCY
 A (market_key, season, date) partition that already exists in S3 is skipped on
@@ -98,7 +101,13 @@ BUCKET            = "baseball-betting-ml-artifacts"
 AWS_REGION        = "us-east-2"
 REQUEST_DELAY     = 1.0  # seconds between API calls
 
-CREDIT_SURPLUS    = 888_000    # updated 2026-06-24: pre-7/1 conservation window
+# 2026-06-30: current cycle = ~544k expiring at the 7/1 reset, then refreshes to
+# ~5M (good to ~7/17). The intended grab runs ACROSS the reset (use the expiring
+# ~544k, then auto-continue on the fresh 5M via idempotency), so this per-session
+# ceiling is deliberately left ABOVE 544k — it must not stop a market mid-run at
+# the reset boundary. The Odds API itself hard-stops at 0; the 5M post-reset is the
+# real headroom. (Verify the live balance with GET /v4/sports before each run.)
+CREDIT_SURPLUS    = 888_000    # per-session soft ceiling (NOT the live balance)
 CREDIT_RESERVE    = 88_000    # ~10% hold-back; stop well before 0
 CREDIT_AVAILABLE  = CREDIT_SURPLUS - CREDIT_RESERVE  # 800,000
 
@@ -115,12 +124,17 @@ SPORTS_CONFIG: dict[str, dict] = {
         "label"   : "mlb",
         "display" : "MLB",
         "markets" : [
-            # Player props (already backfilled)
+            # Player props — kept fresh forward by the daily --player-props-only cron
+            # (E5.1b: batter_runs_scored/rbis/hits_runs_rbis added 2026-06-30; the
+            # historical backfill + the daily catch-up share this one canonical list).
             "pitcher_strikeouts",
             "pitcher_outs",
             "batter_total_bases",
             "batter_hits",
             "batter_home_runs",
+            "batter_runs_scored",
+            "batter_rbis",
+            "batter_hits_runs_rbis",
             # Tier 1 — highest edge-lane value (F5 + NRFI)
             "h2h_1st_5_innings",
             "totals_1st_5_innings",
@@ -365,6 +379,19 @@ def _season_for_date(sport: str, d: date) -> int | None:
 def _credits_per_event(markets: list[str], regions: list[str]) -> int:
     """Standard formula: 10 × #markets × #regions."""
     return 10 * len(markets) * len(regions)
+
+
+# Player-prop market keys all carry one of these prefixes (batter_*/pitcher_*/
+# player_*); the period/derivative/spread keys do not. The daily forward cron
+# uses --player-props-only to capture JUST these from a sport's canonical list,
+# so the prop surface stays fresh without re-buying the (separately-captured)
+# game-level derivatives. Adding a prop to a sport's `markets` auto-includes it.
+_PLAYER_PROP_PREFIXES = ("batter_", "pitcher_", "player_")
+
+
+def _filter_player_props(markets: list[str]) -> list[str]:
+    """Keep only player-prop keys (batter_*/pitcher_*/player_*), order preserved."""
+    return [m for m in markets if m.startswith(_PLAYER_PROP_PREFIXES)]
 
 
 # ── API helpers ────────────────────────────────────────────────────────────────
@@ -616,6 +643,7 @@ def run_probe(
     api_key: str,
     sleep_secs: float,
     markets_override: list[str] | None = None,
+    player_props_only: bool = False,
 ) -> None:
     print()
     print("══ MULTI-SPORT PLAYER PROPS — PHASE 0 PROBE ════════════════════════════════")
@@ -629,6 +657,8 @@ def run_probe(
         cfg = SPORTS_CONFIG[sport]
         probe_date   = cfg["probe_date"]
         markets      = markets_override if markets_override else cfg["markets"]
+        if player_props_only:
+            markets = _filter_player_props(markets)
         snapshots    = cfg["snapshots"]
         snap         = snapshots[0]
         snap_ts_str  = _snap_ts(probe_date, snap)
@@ -750,6 +780,7 @@ def run_backfill(
     force: bool,
     dry_run: bool,
     markets_override: list[str] | None = None,
+    player_props_only: bool = False,
 ) -> None:
     if dry_run:
         print()
@@ -760,7 +791,9 @@ def run_backfill(
         total = 0
         for sport in sports:
             cfg        = SPORTS_CONFIG[sport]
-            markets    = cfg["markets"]
+            markets    = markets_override if markets_override else cfg["markets"]
+            if player_props_only:
+                markets = _filter_player_props(markets)
             snapshots  = cfg["snapshots"]
             est_events = cfg["_est_total_events"]
             cr         = _credits_per_event(markets, regions)
@@ -788,8 +821,14 @@ def run_backfill(
         cfg      = SPORTS_CONFIG[sport]
         label    = cfg["label"]
         markets  = markets_override if markets_override else cfg["markets"]
+        if player_props_only:
+            markets = _filter_player_props(markets)
         regions_ = regions
         snaps    = cfg["snapshots"]
+        if not markets:
+            log.warning("  %s — no markets after --player-props-only filter; skipping.",
+                        cfg["display"])
+            continue
         cr_per_event = _credits_per_event(markets, regions_)
 
         log.info("════ %s — scanning existing S3 partitions …", cfg["display"])
@@ -958,6 +997,17 @@ def _build_parser() -> argparse.ArgumentParser:
             "Example: --sport baseball_mlb --markets h2h_1st_5_innings"
         ),
     )
+    p.add_argument(
+        "--player-props-only",
+        action="store_true",
+        help=(
+            "Restrict the run to player-prop keys (batter_*/pitcher_*/player_*) from "
+            "the resolved market list — the daily forward catch-up cron. Combined with "
+            "the dynamic season-end (today−1) + idempotent partition skip, a daily run "
+            "advances mlb/props/ to yesterday for just the props. "
+            "Example: --sport baseball_mlb --player-props-only"
+        ),
+    )
     return p
 
 
@@ -977,7 +1027,8 @@ def main() -> None:
     )
 
     if args.mode == "probe":
-        run_probe(sports, regions, api_key, args.sleep_seconds, markets_override)
+        run_probe(sports, regions, api_key, args.sleep_seconds, markets_override,
+                  args.player_props_only)
         return
 
     # Backfill mode — needs S3
@@ -999,6 +1050,7 @@ def main() -> None:
         force            = args.force,
         dry_run          = args.dry_run,
         markets_override = markets_override,
+        player_props_only = args.player_props_only,
     )
 
 

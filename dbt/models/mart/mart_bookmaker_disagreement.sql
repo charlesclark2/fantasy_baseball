@@ -132,8 +132,14 @@ live_h2h_raw as (
         on  b.event_id = o.event_id
         or (b.odds_api_event_id is not null and b.odds_api_event_id = o.event_id)
     where o.market_key = 'h2h'
-      and year(b.game_date) >= 2026
-      and o.ingestion_ts::date in (b.game_date, b.game_date - interval 1 day)
+      -- INC-23: b.game_date is parquet-VARCHAR here. mart_game_spine emits game_date
+      -- as ::timestamp (its ext-table contract), and the W8a binary-timestamp cure
+      -- (_string_timestamp_wrap) stores every TIMESTAMP output as ISO VARCHAR in the
+      -- parquet → mart_game_odds_bridge inherits VARCHAR game_date → year(VARCHAR) and
+      -- VARCHAR ± interval are rejected by the DuckDB binder. Cast ::date before any
+      -- date function / arithmetic (DuckDB-compat rule). Output game_date stays VARCHAR.
+      and year(b.game_date::date) >= 2026
+      and o.ingestion_ts::date in (b.game_date::date, b.game_date::date - interval 1 day)
       and (o.ingestion_ts::timestamp at time zone 'UTC' at time zone 'America/New_York')
           <= b.game_date::timestamp + interval 720 minute
     group by b.game_pk, b.game_date, o.bookmaker_key, o.ingestion_ts
@@ -155,8 +161,9 @@ live_totals_raw as (
         or (b.odds_api_event_id is not null and b.odds_api_event_id = o.event_id)
     where o.market_key = 'totals'
       and o.outcome_point is not null
-      and year(b.game_date) >= 2026
-      and o.ingestion_ts::date in (b.game_date, b.game_date - interval 1 day)
+      -- INC-23: cast parquet-VARCHAR game_date ::date before year()/interval (see live_h2h_raw).
+      and year(b.game_date::date) >= 2026
+      and o.ingestion_ts::date in (b.game_date::date, b.game_date::date - interval 1 day)
       and (o.ingestion_ts::timestamp at time zone 'UTC' at time zone 'America/New_York')
           <= b.game_date::timestamp + interval 720 minute
     group by b.game_pk, o.bookmaker_key, o.ingestion_ts

@@ -473,15 +473,32 @@ def _string_timestamp_wrap(conn, mart_sql: str) -> str:
     read correctly by Snowflake (INT32 days) so they are left alone — only TIMESTAMP* is stringified.
     Keep generate_w8a_external_tables.TS_STRING_COLS in sync with the columns this stringifies.
     DESCRIBE binds-only (no execution) so it's cheap.
+
+    ⚠️ INC-23 (2026-06-30): a DESCRIBE failure must HALT, NEVER fall back to an unwrapped COPY.
+    The prior "warn + return mart_sql (COPY proceeds unwrapped)" was the exact dangerous pattern
+    this helper exists to prevent — on a model with TIMESTAMP outputs an unwrapped COPY re-emits the
+    BINARY parquet timestamp Snowflake misreads per-row (the year-~56M EOVERFLOW / W8a 24h outage),
+    and parity never catches it. DESCRIBE binds the SAME plan the COPY would, so if it fails to bind
+    we cannot identify (let alone stringify) the TIMESTAMP columns — we refuse to COPY and raise.
+    The recurring trigger is a date function / interval arithmetic applied to a column an upstream
+    wrap already stringified to ISO VARCHAR (e.g. year(x) where x is now a parquet-VARCHAR) — fix it
+    by casting x::date at the use site (see INC-23 / mart_bookmaker_disagreement.game_date).
     """
     try:
         desc = conn.execute(f"DESCRIBE SELECT * FROM (\n{mart_sql}\n) _d").fetchall()
     except Exception as exc:
-        # DESCRIBE binds the same plan the COPY will — a failure here means the COPY would fail too.
-        # Warn LOUDLY rather than silently skip (a silent skip re-emits a binary parquet timestamp
-        # that Snowflake misreads). Return mart_sql so the COPY surfaces the real error.
-        print(f"  WARNING: timestamp-stringify DESCRIBE failed ({exc}) — COPY proceeds unwrapped")
-        return mart_sql
+        # HALT — do NOT return mart_sql for an unwrapped COPY (would risk shipping a binary parquet
+        # timestamp Snowflake misreads per-row). run_w1_lakehouse_op is HALT-tier; raising surfaces
+        # the failure loudly on the box at build time, BEFORE any COPY, instead of silently re-
+        # introducing the outage class.
+        raise RuntimeError(
+            "timestamp-stringify DESCRIBE failed — REFUSING to COPY unwrapped (an unwrapped COPY "
+            "would risk a binary parquet timestamp that Snowflake's external table misreads per-row: "
+            "the year-~56M EOVERFLOW / W8a 24h serving outage). Most common cause: a date function or "
+            "interval arithmetic applied to a column an upstream wrap stringified to ISO VARCHAR — "
+            "cast that column ::date at the use site. Underlying DuckDB binder error: "
+            f"{exc}"
+        ) from exc
     ts_cols = [r[0] for r in desc if str(r[1]).upper().startswith("TIMESTAMP")]
     if not ts_cols:
         return mart_sql
@@ -1040,6 +1057,217 @@ def _build_w8a(conn, dry_run: bool) -> None:
         _register_mart_views(conn, [model], dry_run)
 
 
+# E11.1-W8b: the SERVING-CRITICAL half — the complex upstream feature models (starter/lineup/
+# bullpen-state), the 3 lineup-matchup models (the INC-17-P2 dual-source-lineup class), THE
+# AGGREGATOR feature_pregame_game_features_raw (+ its public wrapper feature_pregame_game_features)
+# and feature_league_contact_baseline. OPT-IN (--w8b) until cutover, like the prior waves: reads
+# precursor parquet that must exist first:
+#   • the W8b precursor mirrors (scripts/export_w8b_precursors_to_s3.py): feature_pregame_lineup_state
+#     (SCD-2; the INC-17-P2 source), team_sequential_posteriors (Epic 16.3), stg_actionnetwork_public_betting,
+#     fct_fangraphs_pitching_analytics (ZiPS FIP — its stg_fangraphs__zips_pitching subtree stays a
+#     Snowflake residual, flagged for a future wave; fg_zips_pitching_raw IS already in S3).
+#   • the W7b-1 feature mirror (scripts/export_features_to_s3.py) for the W11-deferred tail the
+#     aggregator still reads: feature_pregame_umpire_features, feature_pregame_weather_features.
+#   • the prior-wave (W1-W8a) marts/staging/feature-layer parquet already in S3 + the W7a clusters +
+#     the W7b injury chain — all registered as DuckDB views.
+#
+# ⚠️ The 2 macro models (feature_league_contact_baseline + feature_pregame_game_features) cannot go
+# through extract_duckdb_sql (it is a regex pseudo-renderer that errors on the as_of_contact_baseline()
+# / contact_quality_columns() Jinja loops). They are built by dedicated Python builders that PORT the
+# macro (reading the canonical 34-column list from dbt/macros/season_normalize_contact.sql — the single
+# source of truth) so the DuckDB build can never drift from the Snowflake macro's column list.
+W8B_PRECURSOR_VIEWS = [
+    # W1-W6 marts read by the feature/matchup models + the aggregator
+    "mart_game_spine", "mart_game_results", "mart_team_base_state_splits",
+    "mart_pitcher_rolling_stats", "mart_starting_pitcher_game_log",
+    "mart_pitcher_vs_handedness_splits", "mart_starter_csw_rolling",
+    "mart_starter_pitch_mix_rolling", "mart_starter_tto_splits",
+    "mart_catcher_framing", "mart_batter_rolling_stats",
+    "mart_batter_vs_handedness_splits", "mart_batter_vs_pitch_archetype",
+    "mart_batter_bat_tracking_profile", "mart_pitcher_pitch_archetype",
+    "mart_pitcher_batter_history", "mart_batter_woba_vs_cluster",
+    "mart_batter_archetype_vs_pitcher_cluster", "mart_bullpen_workload",
+    "mart_bullpen_handedness_splits", "mart_bullpen_leverage",
+    "mart_reliever_top3_availability", "mart_odds_line_movement",
+    "mart_bookmaker_disagreement",
+    # W4 fct + stg
+    "fct_fangraphs_pitcher_arsenal_wide", "stg_fangraphs__zips_hitting",
+    # W3pre / W6 / W7b staging
+    "stg_statsapi_games", "stg_statsapi_lineups_wide", "stg_statsapi_probable_pitchers",
+    # W7a clusters (lakehouse_clusters source)
+    "pitcher_clusters", "batter_clusters",
+    # W7b injury chain (already in S3; read by lineup_features)
+    "feature_pregame_injury_status",
+    # W8a feature layer (already in S3; read by the aggregator)
+    "feature_pregame_expected_lineup", "feature_pregame_odds_features",
+    "feature_pregame_park_features", "feature_pregame_team_features",
+    # W8a EB posteriors (read by starter/lineup features)
+    "eb_starter_posteriors", "eb_batter_posteriors_raw",
+    # W11-deferred tail the aggregator still reads — mirrored by export_features_to_s3.py (W7b-1)
+    "feature_pregame_umpire_features", "feature_pregame_weather_features",
+    # W8b NEW precursor mirrors (export_w8b_precursors_to_s3.py)
+    "feature_pregame_lineup_state", "team_sequential_posteriors",
+    "stg_actionnetwork_public_betting", "fct_fangraphs_pitching_analytics",
+]
+
+# Dialect-clean feature/matchup models + the aggregator, DEPENDENCY-ORDERED (each registered as a
+# DuckDB view immediately after build so the next model's plain-name reads resolve). The aggregator
+# reads the 3 matchup models + lineup/starter features + the W8a layer, so it is built LAST here.
+W8B_FEATURE_MODELS = [
+    "feature_pregame_starter_features",        # ← marts + eb_starter + clusters + probable + fct_fangraphs_pitching_analytics
+    "feature_pregame_lineup_features",         # ← lineup_state + lineups_wide + injury + starter_features + eb_batter + clusters + marts
+    "feature_pregame_bullpen_state_features",  # ← lineup_features + bullpen marts + game_spine
+    "feature_batter_archetype_matchups",       # ← lineup_state + clusters + archetype mart + probable + game_spine
+    "feature_pitcher_batter_h2h_matchups",     # ← lineup_state + pitcher_batter_history + probable + game_spine
+    "feature_pitcher_cluster_matchups",        # ← lineup_state + batter_woba_vs_cluster + clusters + probable + game_spine
+    "feature_pregame_game_features_raw",       # ← THE AGGREGATOR (all the above + W8a layer + W8b mirrors); TYPE-PIN incremental
+]
+
+# 🧨 INC-23 — precursor parquet that must be MATERIALIZED into a DuckDB table (not a glob VIEW) so a
+# downstream `where is_current = true` + `qualify` + wide projection doesn't trip DuckDB's
+# filter_pushdown ColumnBindingResolver bug (pushes the boolean predicate into the parquet scan →
+# mis-binds is_current as UBIGINT → INTERNAL Error). A physical table has no parquet scan → no
+# pushdown-into-scan → no bug. feature_pregame_lineup_state (the INC-17-P2 SCD-2 source read by
+# lineup_features + the 3 matchup models with exactly that pattern) is the only one that hits it.
+W8B_MATERIALIZE_TABLES = ["feature_pregame_lineup_state"]
+
+
+def _contact_quality_columns() -> list[str]:
+    """The canonical contact-quality column list — PARSED from the dbt macro
+    (dbt/macros/season_normalize_contact.sql `contact_quality_columns()` return list) so the
+    DuckDB build of feature_league_contact_baseline / feature_pregame_game_features can never drift
+    from the Snowflake macro's list (the macro's whole point — a single source of truth)."""
+    macro = REPO_ROOT / "dbt" / "macros" / "season_normalize_contact.sql"
+    text = macro.read_text()
+    m = re.search(r"macro\s+contact_quality_columns\(\).*?return\(\[(.*?)\]\)", text, re.DOTALL)
+    if not m:
+        raise RuntimeError("could not parse contact_quality_columns() from season_normalize_contact.sql")
+    cols = re.findall(r"'([a-z0-9_]+)'", m.group(1))
+    if len(cols) < 30:
+        raise RuntimeError(f"contact_quality_columns() parse looks wrong ({len(cols)} cols)")
+    return cols
+
+
+def _contact_baseline_sql(upstream: str) -> str:
+    """Python PORT of the as_of_contact_baseline() dbt macro (dbt/macros/season_normalize_contact.sql).
+    Emits the strictly-prior AS-OF league mean/std per contact column, shrunk toward the prior season
+    with pseudo-count K (var contact_baseline_shrinkage_k default 200). Byte-for-byte the macro's SQL —
+    every expression mirrors the macro so the DuckDB build matches the Snowflake build (parity)."""
+    cc = _contact_quality_columns()
+    K = 200  # var('contact_baseline_shrinkage_k', 200)
+    wf = "over (partition by game_year order by game_date rows between unbounded preceding and 1 preceding)"
+    daily = ",\n        ".join(
+        f"count({c}) as n__{c}, sum({c}) as s__{c}, sum({c} * {c}) as ss__{c}" for c in cc)
+    asof = ",\n        ".join(
+        f"sum(n__{c}) {wf} as cn__{c}, sum(s__{c}) {wf} as cs__{c}, sum(ss__{c}) {wf} as css__{c}" for c in cc)
+    season = ",\n        ".join(
+        f"avg({c}) as fmu__{c}, coalesce(stddev_samp({c}), 0) as fsd__{c}" for c in cc)
+    prior = ",\n        ".join(f"fmu__{c} as pmu__{c}, fsd__{c} as psd__{c}" for c in cc)
+    least = ", ".join(f"coalesce(a.cn__{c}, 0)" for c in cc)
+    finals = ",\n        ".join(
+        f"(coalesce(a.cn__{c}, 0) * (a.cs__{c} / nullif(a.cn__{c}, 0)) "
+        f"+ {K} * coalesce(pr.pmu__{c}, sf.fmu__{c})) / (coalesce(a.cn__{c}, 0) + {K}) as {c}__mu,\n"
+        f"        (coalesce(a.cn__{c}, 0) * sqrt(greatest("
+        f"a.css__{c} / nullif(a.cn__{c}, 0) - power(a.cs__{c} / nullif(a.cn__{c}, 0), 2), 0)) "
+        f"+ {K} * coalesce(pr.psd__{c}, sf.fsd__{c})) / (coalesce(a.cn__{c}, 0) + {K}) as {c}__sd"
+        for c in cc)
+    return (
+        f"with daily as (\n"
+        f"    select game_year, game_date,\n        {daily}\n"
+        f"    from {upstream}\n    group by game_year, game_date\n),\n"
+        f"asof_cum as (\n"
+        f"    select game_year, game_date,\n        {asof}\n    from daily\n),\n"
+        f"season_full as (\n"
+        f"    select game_year,\n        {season}\n    from {upstream}\n    group by game_year\n),\n"
+        f"prior as (\n"
+        f"    select game_year + 1 as game_year,\n        {prior}\n    from season_full\n)\n"
+        f"select\n    a.game_year,\n    a.game_date,\n    least({least}) as n_asof_min,\n        {finals}\n"
+        f"from asof_cum a\n"
+        f"left join prior       pr on pr.game_year = a.game_year\n"
+        f"left join season_full sf on sf.game_year = a.game_year\n"
+    )
+
+
+def _game_features_wrapper_sql() -> str:
+    """Python PORT of feature_pregame_game_features (the public wrapper): raw.* + a season-normalized
+    `<col>_seasonnorm` per contact column (cast ::double — the INC-19 pin). Mirrors the dbt for-loop."""
+    cc = _contact_quality_columns()
+    sn = ",\n    ".join(
+        f"coalesce((raw.{c} - b.{c}__mu) / nullif(b.{c}__sd, 0), 0)::double as {c}_seasonnorm"
+        for c in cc)
+    return (
+        f"select\n    raw.*,\n    {sn}\n"
+        f"from feature_pregame_game_features_raw raw\n"
+        f"left join feature_league_contact_baseline b\n"
+        f"    on  b.game_year = raw.game_year\n    and b.game_date = raw.game_date\n"
+    )
+
+
+def _build_one_sql(conn, name: str, sql: str, dry_run: bool) -> None:
+    """Build a model from EXPLICIT SQL (the macro models extract_duckdb_sql can't render) → S3 parquet,
+    then register it as a DuckDB view. Applies the same TIMESTAMP→ISO-VARCHAR pin + newline-safe COPY
+    as _build_marts (the wrapper carries odds_ingestion_ts via raw.* → must be stringified)."""
+    loc = f"{LAKEHOUSE}/{name}/data.parquet"
+    body = _string_timestamp_wrap(conn, sql)
+    if dry_run:
+        n = conn.execute(f"SELECT count(*) FROM (\n{body}\n) t").fetchone()[0]
+        print(f"  {name}: {n:,} rows  (dry-run — no S3 write)")
+        conn.execute(f"CREATE OR REPLACE VIEW {name} AS {sql}")
+    else:
+        conn.execute(f"COPY (\n{body}\n) TO '{loc}' (FORMAT PARQUET)")
+        print(f"  {name}: written → {loc}")
+        conn.execute(f"CREATE OR REPLACE VIEW {name} AS SELECT * FROM read_parquet('{loc}')")
+
+
+def _build_w8b(conn, dry_run: bool) -> None:
+    """Build the E11.1-W8b serving-aggregator wave. Registers the prior-wave feature layer + marts +
+    the W8b/W7b-1 mirrors as DuckDB views first, then builds the dialect-clean feature/matchup models
+    and the aggregator in dependency order (each registered as a view immediately after build), then
+    builds the 2 macro models (league_contact_baseline → public wrapper) via the Python ports. A
+    missing precursor makes a build raise; W8b is gated (opt-in) so the daily HALT op never trips on
+    it pre-cutover."""
+    print("\nW8b precursor views (prior-wave feature layer + marts + W8b/W7b-1 mirrors):")
+    # Register every precursor as a view EXCEPT the INC-23 materialize-tables (CREATE OR REPLACE TABLE
+    # can't replace an existing VIEW of the same name, so never register those as views first).
+    _register_w8a_views(conn, [v for v in W8B_PRECURSOR_VIEWS if v not in W8B_MATERIALIZE_TABLES])
+
+    # 🧨 INC-23 (DuckDB filter_pushdown binder bug): the lineup_features + 3 matchup models read
+    # feature_pregame_lineup_state with `where is_current = true` + `qualify row_number() over (…)` +
+    # a wide projection. Through a parquet-scan VIEW, DuckDB pushes the is_current predicate into the
+    # scan and ColumnBindingResolver mis-binds it → `INTERNAL Error: Failed to bind column reference
+    # "IS_CURRENT": inequal types (UBIGINT != BOOLEAN)` (the parquet is_current IS BOOLEAN — no data
+    # issue; verified). Data-side cures (projection barrier / ::boolean cast in the view) do NOT
+    # survive the full models; disabling filter_pushdown globally would slow/OOM the wide aggregator.
+    # CURE: MATERIALIZE these into physical DuckDB tables (no parquet scan → no pushdown-into-scan →
+    # no bug). Tiny (~2.4k rows) → negligible. Overrides the views registered just above.
+    for _t in W8B_MATERIALIZE_TABLES:
+        glob = f"{LAKEHOUSE}/{_t}/**/*.parquet"
+        conn.execute(
+            f"CREATE OR REPLACE TABLE {_t} AS "
+            f"SELECT * FROM read_parquet('{glob}', union_by_name=true)"
+        )
+        print(f"  materialized table (INC-23 filter_pushdown cure): {_t}")
+
+    # The aggregator + lineup_features are very wide (700+ cols / 9-slot unpivots); cap parallelism +
+    # box-aware memory_limit so DuckDB spills to temp_directory rather than OOMing. value-identical
+    # output (every output is a parquet COPY re-globbed downstream).
+    for _pragma in ("SET threads=2", f"SET memory_limit='{_safe_memory_limit_gb()}GB'"):
+        try:
+            conn.execute(_pragma)
+        except Exception as _e:
+            print(f"  (note: {_pragma} not applied: {_e})")
+
+    print("\nW8b feature/matchup models + aggregator (dependency-ordered):")
+    for model in W8B_FEATURE_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+    print("\nW8b macro models (Python-ported from the dbt macros — league baseline, then public wrapper):")
+    _build_one_sql(conn, "feature_league_contact_baseline",
+                   _contact_baseline_sql("feature_pregame_game_features_raw"), dry_run)
+    _build_one_sql(conn, "feature_pregame_game_features", _game_features_wrapper_sql(), dry_run)
+
+
 def run(
     dry_run: bool = False,
     skip_w1: bool = False,
@@ -1061,6 +1289,8 @@ def run(
     w7b_only: bool = False,
     w8a: bool = False,
     w8a_only: bool = False,
+    w8b: bool = False,
+    w8b_only: bool = False,
 ) -> None:
     import duckdb
 
@@ -1242,6 +1472,20 @@ def run(
         print("\nW8a upstream feature layer + EB posteriors run complete (--w8a-only).")
         return
 
+    # E11.1-W8b: --w8b-only rebuilds just the serving-aggregator wave (complex upstream feature
+    # models + 3 matchup models + the aggregator + its wrapper + the contact baseline), reusing the
+    # existing prior-wave/W8a/W7b-1 parquet (registered as precursor views by _build_w8b) + the W8b
+    # precursor mirrors (export_w8b_precursors_to_s3.py). stg_batter_pitches is already registered
+    # above (W8b doesn't read it directly). Lets the operator iterate on W8b / re-run parity after an
+    # export, without rebuilding the heavy pitch marts. ⚠️ W8a must already be in S3 (the aggregator
+    # reads the W8a feature layer); run --w8a-only first in a clean rebuild.
+    if w8b_only:
+        print("\nBuilding W8b (reuse existing prior-wave/W8a/W7b-1/mirror parquet for --w8b-only):")
+        _build_w8b(conn, dry_run)
+        conn.close()
+        print("\nW8b serving-aggregator wave run complete (--w8b-only).")
+        return
+
     # ── W1: pitch-level marts ────────────────────────────────────────────────
     if not skip_w1:
         print("\nW1 marts:")
@@ -1330,11 +1574,20 @@ def run(
     if w8a:
         _build_w8a(conn, dry_run)
 
+    # ── W8b: serving-aggregator wave (complex upstream + matchups + aggregator) — OPT-IN ──
+    # NOT built by default: reads the W8b precursor mirrors (scripts/export_w8b_precursors_to_s3.py)
+    # + the W8a feature layer + the W7b-1 feature mirror (umpire/weather tail) that must exist first.
+    # Enable with --w8b once the exports are wired and parity is validated. ⚠️ --w8a (and --w7b for
+    # the injury chain) must run BEFORE --w8b in a full rebuild — the aggregator reads the W8a feature
+    # layer + injury_status.
+    if w8b:
+        _build_w8b(conn, dry_run)
+
     conn.close()
     print(
         f"\nW1+W2+W3{'+W3pre' if w3pre else ''}{'+W4' if w4 else ''}"
         f"{'+W5' if w5 else ''}{'+W5b' if archetype else ''}{'+W6' if w6 else ''}"
-        f"{'+W7b' if w7b else ''}{'+W8a' if w8a else ''} "
+        f"{'+W7b' if w7b else ''}{'+W8a' if w8a else ''}{'+W8b' if w8b else ''} "
         f"lakehouse run complete."
     )
 
@@ -1361,4 +1614,6 @@ if __name__ == "__main__":
         w7b_only="--w7b-only" in sys.argv,
         w8a="--w8a" in sys.argv,
         w8a_only="--w8a-only" in sys.argv,
+        w8b="--w8b" in sys.argv,
+        w8b_only="--w8b-only" in sys.argv,
     )
