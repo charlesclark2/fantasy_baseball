@@ -1,10 +1,10 @@
 import os
 import subprocess
 import sys
-from datetime import date
 
 from dagster import In, Nothing, OpExecutionContext, Out, SkipReason, op
 
+from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
 from pipeline.ops._dbt_exec import _run_dbt
 
 SCRIPTS_DIR = "/app/scripts"
@@ -43,7 +43,11 @@ def _run_script(context: OpExecutionContext, script: str, args: list[str] | None
 
 
 def _today() -> str:
-    return date.today().strftime("%Y-%m-%d")
+    # INC-22 — the US baseball-day in the canonical TZ (LA), NOT the UTC box clock. These
+    # ops fire INTRADAY (incl. evening, past 00:00 UTC) feeding --since/--start-date today
+    # to the odds/schedule/weather refreshes; a UTC date.today() would resolve TOMORROW
+    # after 00:00 UTC and export/capture an empty future date → stale served prices/lineups.
+    return current_game_date_iso()
 
 
 # ── E11.1-W6 INTRADAY lakehouse refresh ──────────────────────────────────────
@@ -168,7 +172,7 @@ def check_games_today(context: OpExecutionContext) -> bool:
         cur.execute(
             "SELECT COUNT(*) FROM baseball_data.betting.stg_statsapi_games "
             "WHERE official_date = %s AND game_type = 'R'",
-            [date.today().isoformat()],
+            [_today()],  # INC-22 — US baseball-day (LA), not the UTC box clock
         )
         count = cur.fetchone()[0]
         cur.close()
