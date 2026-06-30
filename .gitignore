@@ -65,6 +65,11 @@ betting_ml/data/**/*.parquet
 # E5.3 full prop edge/EV table (large, regenerated via edge_devig_props.py; committed: summary+coverage+sample)
 quant_sports_intel_models/baseball/edge_program/ablation_results/*.parquet
 
+# E13.13 — bulky SYNTHETIC smoke outputs (regenerate via `eval_derivatives.py --smoke`;
+# committed: the small banner-marked _smoke.md proof + the real operator-run dossier, no suffix)
+quant_sports_intel_models/baseball/edge_program/ablation_results/e13_13_derivative_efficiency_smoke.json
+quant_sports_intel_models/baseball/edge_program/ablation_results/e13_13_market_grid_results_smoke.csv
+
 # Next.js frontend
 frontend/.next/
 frontend/out/
