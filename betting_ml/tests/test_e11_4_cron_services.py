@@ -1,8 +1,9 @@
 """E11.4 — CI guard for the intraday job decomposition.
 
 Verifies:
-  1. intraday_schedule_job and intraday_weather_job are NOT in all_intraday_schedules
-     (their Railway cron services have taken over; Dagster must not auto-fire them).
+  1. intraday_weather_job is NOT in all_intraday_schedules (its Railway/EC2 cron service
+     took over). intraday_schedule_capture_* ARE back (INC-22 Option-2 re-enable — the lean
+     cron couldn't propagate captures to the S3 lakehouse the prod marts serve).
   2. lineup_monitor_job does NOT reference lineup_ingest_schedule or lineup_odds_snapshot
      (schedule capture → Railway cron; Parlay odds → decommissioned).
   3. services/schedule_capture/ and services/weather_capture/ directories exist and
@@ -54,12 +55,23 @@ class TestDecommissionedSchedules:
         end = src.find("]", start)
         return src[start:end + 1]
 
-    def test_intraday_schedule_job_not_in_all_schedules(self):
-        """intraday_schedule_capture_* schedules must not be in the list."""
+    def test_intraday_schedule_capture_re_enabled_inc22(self):
+        """INC-22 Option 2: intraday_schedule_capture_* are RE-ADDED to all_intraday_schedules.
+
+        The lean services/schedule_capture/ cron could only refresh native Snowflake + the
+        lineup VIEWS; post-W6 those are views over the S3 lakehouse_ext external tables, so
+        the lean cron never reached the parquet prod actually serves. The Dagster job has
+        DuckDB + run_w1_lakehouse on the box and runs the full S3 propagation chain
+        (gated by SCHEDULE_LAKEHOUSE_INTRADAY=1), so it owns intraday schedule capture again.
+        """
         body = self._all_schedules_body()
-        assert "intraday_schedule_capture" not in body, (
-            "intraday_schedule_capture schedule is still in all_intraday_schedules — "
-            "E11.4 moved this to Railway cron (services/schedule_capture/)"
+        assert "intraday_schedule_capture_daytime" in body, (
+            "intraday_schedule_capture_daytime should be back in all_intraday_schedules "
+            "(INC-22 Option-2 re-enable so captures propagate to the S3 lakehouse)"
+        )
+        assert "intraday_schedule_capture_overnight" in body, (
+            "intraday_schedule_capture_overnight should be back in all_intraday_schedules "
+            "(INC-22 Option-2 re-enable)"
         )
 
     def test_intraday_weather_job_not_in_all_schedules(self):

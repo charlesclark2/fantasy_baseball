@@ -21,7 +21,10 @@ RUN pip install --no-cache-dir \
     requests \
     snowflake-connector-python \
     cryptography \
-    python-dotenv
+    python-dotenv \
+    tzdata
+    # tzdata (INC-22): the slim image ships no system zoneinfo DB, so entrypoint.sh's
+    # zoneinfo('America/Los_Angeles') baseball-day resolution needs the tzdata wheel.
 
 WORKDIR /app
 

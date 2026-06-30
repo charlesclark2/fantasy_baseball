@@ -53,6 +53,14 @@ games_flattened as (
 -- Deduping on the narrow (ingestion_ts, game) rows first drops the projected set to ~26k
 -- surviving games. The window partition/order is byte-identical to the original, so output
 -- is unchanged (one row per game_pk, latest ingestion, postponed-DH tiebreaker).
+-- INC-22 (2026-06-29) — robust order key. The old key led with `ingestion_ts desc`,
+-- but legacy raw partitions store ingestion_ts in a type that casts to year 56,494,802
+-- (a nanosecond epoch read as microseconds); `union_by_name` poisons the column, so that
+-- garbage "latest" timestamp can pin a game in a STALE snapshot (e.g. 'Preview' after it
+-- already went Final — the recurring Preview-stuck class). Game state only advances, so
+-- order FIRST by state rank (Final > Live > Preview), THEN by a SANE-RANGE ingestion_ts
+-- (out-of-range sorts last), then the postponed-DH / gameNumber tiebreaks. Correct even
+-- when every snapshot's ingestion_ts is uniformly corrupt.
 deduped as (
 
     select ingestion_ts, game
@@ -60,7 +68,11 @@ deduped as (
     qualify row_number() over (
         partition by json_extract_string(game, '$.gamePk')::integer
         order by
-            ingestion_ts desc nulls last,
+            case json_extract_string(game, '$.status.abstractGameState')
+                 when 'Final' then 3 when 'Live' then 2 when 'Preview' then 1 else 0 end desc,
+            (case when try_cast(ingestion_ts as timestamp)
+                       between timestamp '2015-01-01' and timestamp '2035-01-01'
+                  then try_cast(ingestion_ts as timestamp) end) desc nulls last,
             case when json_extract_string(game, '$.doubleHeader') in ('Y', 'S') then 0 else 1 end asc,
             json_extract_string(game, '$.gameNumber')::integer desc nulls last
     ) = 1
@@ -111,7 +123,11 @@ select
     json_extract_string(game, '$.venue.id')::integer                as venue_id,
     json_extract_string(game, '$.venue.name')                       as venue_name,
 
-    ingestion_ts::timestamp                                         as ingestion_ts
+    -- INC-22: guard the output cast — a legacy int64-nanos raw value casts to year
+    -- 56,494,802 (nanos read as micros) and breaks downstream reads. Out-of-range → NULL.
+    case when try_cast(ingestion_ts as timestamp)
+              between timestamp '2015-01-01' and timestamp '2035-01-01'
+         then try_cast(ingestion_ts as timestamp) end                as ingestion_ts
 
 from deduped
 

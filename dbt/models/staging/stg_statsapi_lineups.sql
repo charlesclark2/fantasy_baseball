@@ -50,16 +50,31 @@ games_flattened as (
 
 ),
 
--- Collapse blob multiplicity to one (latest-ingestion) snapshot per game_pk BEFORE
--- exploding the lineup arrays (the OOM guard). Order key matches the player-grain
--- dedup below (ingestion_ts desc nulls last).
+-- Collapse blob multiplicity to one snapshot per game_pk BEFORE exploding the lineup
+-- arrays (the OOM guard).
+--
+-- INC-22 (2026-06-29) — robust order key. The old key was `ingestion_ts desc` alone,
+-- which assumed the latest snapshot has the most complete lineup. But legacy raw
+-- partitions store ingestion_ts in a type that casts to year 56,494,802 (a nanosecond
+-- epoch read as microseconds); `union_by_name` poisons the column, so that garbage
+-- "latest" timestamp made the dedup pick a STALE, pre-lineup blob — dropping the home
+-- (or away) lineup for the late slate even though a complete snapshot existed (MIL/SEA/
+-- COL/ATH/AZ on 6/29). Fix: order FIRST by lineup completeness (a posted lineup never
+-- un-posts across re-fetches, so the completest snapshot is the freshest by content),
+-- THEN by a SANE-RANGE ingestion_ts (out-of-range values sort last, not first). This is
+-- correct even when every snapshot's ingestion_ts is uniformly corrupt.
 deduped as (
 
     select ingestion_ts, game
     from games_flattened
     qualify row_number() over (
         partition by json_extract_string(game, '$.gamePk')::integer
-        order by ingestion_ts desc nulls last
+        order by
+            (case when json_extract(game, '$.lineups.homePlayers') is not null then 1 else 0 end)
+              + (case when json_extract(game, '$.lineups.awayPlayers') is not null then 1 else 0 end) desc,
+            (case when try_cast(ingestion_ts as timestamp)
+                       between timestamp '2015-01-01' and timestamp '2035-01-01'
+                  then try_cast(ingestion_ts as timestamp) end) desc nulls last
     ) = 1
 
 ),
@@ -115,7 +130,12 @@ select
     json_extract_string(player, '$.primaryPosition.type')         as position_type,
     json_extract_string(player, '$.primaryPosition.abbreviation') as position_abbreviation,
 
-    ingestion_ts::timestamp                                 as ingestion_ts
+    -- INC-22: guard the output cast — a legacy int64-nanos raw value casts to year
+    -- 56,494,802 (nanos read as micros), which breaks every downstream read of this
+    -- column (Snowflake "out of range" on SELECT). Out-of-range → NULL, not garbage.
+    case when try_cast(ingestion_ts as timestamp)
+              between timestamp '2015-01-01' and timestamp '2035-01-01'
+         then try_cast(ingestion_ts as timestamp) end as ingestion_ts
 
 from all_players
 qualify row_number() over (

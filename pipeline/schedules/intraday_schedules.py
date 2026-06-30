@@ -59,10 +59,29 @@ intraday_schedule_capture_overnight = ScheduleDefinition(
     name="intraday_schedule_capture_overnight",
 )
 
-# E11.4 (2026-06-19) — intraday_weather_* and intraday_schedule_capture_* are OMITTED:
-# their jobs are now run by Railway cron services (services/schedule_capture/ and
-# services/weather_capture/) off Dagster's metered compute. The ScheduleDefinition
-# objects above are kept for manual fallback via the Dagster UI.
+# E11.4 (2026-06-19) — intraday_weather_* WAS offloaded to a Railway/EC2 cron service
+# (services/weather_capture/) and stays omitted here.
+#
+# INC-22 (2026-06-29) — intraday_schedule_capture_* are RE-ADDED to Dagster (operator's
+# Option-2 decision). The lean services/schedule_capture/ cron could ONLY refresh native
+# Snowflake + the lineup VIEWS — but post-W6 those are views over the S3 lakehouse_ext
+# external tables, so the lean cron's rebuild was a NO-OP for served data: intraday lineup/
+# game-state captures never reached the S3 parquet prod actually serves (the 6/29 evening-
+# slate miss). The Dagster job has DuckDB + boto3 + run_w1_lakehouse on the box, so its
+# intraday_schedule_capture op runs the full parquet/DuckDB propagation chain
+# (_schedule_lakehouse_intraday: export today's raw → S3 → run_w1_lakehouse --w3pre-only →
+# refresh external tables) and then intraday_lineup_rebuild re-materializes the downstream
+# lineup/pitcher TABLES off the now-fresh views. Gated by SCHEDULE_LAKEHOUSE_INTRADAY=1.
+#
+# OPERATOR (enabling Option 2):
+#   1. set SCHEDULE_LAKEHOUSE_INTRADAY=1 on the Dagster box (else the S3 chain no-ops),
+#   2. START intraday_schedule_capture_daytime + _overnight in the Dagster UI (repo
+#      convention: schedules boot STOPPED — they will NOT auto-fire until toggled),
+#   3. DISABLE the lean services/schedule_capture/ EC2 cron so the two don't double-ingest.
+# The ScheduleDefinitions fire on UTC cron, but every op resolves the baseball-day via
+# current_game_date_iso() (LA), so the captured/served date is correct (INC-22).
 all_intraday_schedules = [
     odds_clv_rebuild_schedule,
+    intraday_schedule_capture_daytime,
+    intraday_schedule_capture_overnight,
 ]

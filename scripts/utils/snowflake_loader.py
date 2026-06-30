@@ -20,6 +20,7 @@ Authentication env vars (same convention as all other ingest scripts):
   SNOWFLAKE_ROLE                                          (optional)
 """
 
+import base64
 import json
 import logging
 import os
@@ -49,9 +50,7 @@ class SnowflakeLoadError(Exception):
     pass
 
 
-def _load_private_key(path: str, passphrase: str | None) -> bytes:
-    with open(path, "rb") as fh:
-        pem = fh.read()
+def _pem_to_der(pem: bytes, passphrase: str | None) -> bytes:
     pwd = passphrase.encode() if passphrase else None
     key = load_pem_private_key(pem, password=pwd, backend=default_backend())
     return key.private_bytes(
@@ -59,6 +58,30 @@ def _load_private_key(path: str, passphrase: str | None) -> bytes:
         format=PrivateFormat.PKCS8,
         encryption_algorithm=NoEncryption(),
     )
+
+
+def _load_private_key(path: str, passphrase: str | None) -> bytes:
+    with open(path, "rb") as fh:
+        pem = fh.read()
+    return _pem_to_der(pem, passphrase)
+
+
+def _load_private_key_inline(key_val: str, passphrase: str | None) -> bytes:
+    """DER-encode an inline RSA key value.
+
+    INC-22: on EC2/Compose/Lambda the key is carried as an env STRING, not a file
+    (SNOWFLAKE_PRIVATE_KEY_PATH is unset / points at a non-existent file). The value
+    arrives as a raw multi-line PEM, a \\n-escaped single line, or base64-encoded PEM.
+    Mirrors the resolution in data_loader._load_private_key and ingest_statsapi.
+    """
+    s = key_val.strip()
+    if "-----BEGIN" in s:
+        if "\\n" in s and "\n" not in s:
+            s = s.replace("\\n", "\n")
+        pem = s.encode()
+    else:
+        pem = base64.b64decode(s)
+    return _pem_to_der(pem, passphrase)
 
 
 def get_snowflake_connection(
@@ -78,18 +101,24 @@ def get_snowflake_connection(
         "schema":    schema,
     }
 
+    # INC-22: PATH only when the file actually EXISTS — `$K` (SNOWFLAKE_PRIVATE_KEY_PATH
+    # pointed at a /tmp/*.pem that was never materialized in the container) must fall
+    # through to the inline key, not crash with FileNotFoundError.
     private_key_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
-    if private_key_path:
-        log.info("Authenticating with private key: %s", private_key_path)
-        kwargs["private_key"] = _load_private_key(
-            private_key_path,
-            os.environ.get("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE"),
-        )
+    passphrase = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
+    inline_key = os.environ.get("SNOWFLAKE_PRIVATE_KEY")
+    if private_key_path and os.path.exists(private_key_path):
+        log.info("Authenticating with private key file: %s", private_key_path)
+        kwargs["private_key"] = _load_private_key(private_key_path, passphrase)
+    elif inline_key:
+        log.info("Authenticating with inline private key (SNOWFLAKE_PRIVATE_KEY)")
+        kwargs["private_key"] = _load_private_key_inline(inline_key, passphrase)
     else:
         password = os.environ.get("SNOWFLAKE_PASSWORD")
         if not password:
             raise EnvironmentError(
-                "Either SNOWFLAKE_PRIVATE_KEY_PATH or SNOWFLAKE_PASSWORD must be set."
+                "Set SNOWFLAKE_PRIVATE_KEY_PATH (existing file), SNOWFLAKE_PRIVATE_KEY "
+                "(inline), or SNOWFLAKE_PASSWORD."
             )
         log.info("Authenticating with password")
         kwargs["password"] = password
