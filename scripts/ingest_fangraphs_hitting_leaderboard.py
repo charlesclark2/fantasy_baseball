@@ -48,6 +48,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "uti
 from fangraphs_client import fetch_leaderboard, FangraphsClientError  # noqa: E402
 from snowflake_loader import get_snowflake_connection, append_raw_rows  # noqa: E402
 
+# E11.1-W11 (FINISH wave): the S3-capable dispatcher. Gated by LAKEHOUSE_RAW_WRITE_MODE
+# (default 'snowflake' → unchanged); 'both' dual-writes, 's3' retires the Snowflake leg. The
+# stg_fangraphs__hitting_leaderboard duckdb branch reads byte-identical rows from
+# lakehouse_raw/fg_hitting_leaderboard_raw/ whether written by the live writer or the bridge.
+try:  # 'utils.' under pytest (pythonpath=scripts); bare under the script runtime
+    from utils.lakehouse_raw_writer import append_raw_rows_lakehouse, w11_write_mode  # noqa: E402
+except ImportError:
+    from lakehouse_raw_writer import append_raw_rows_lakehouse, w11_write_mode  # noqa: E402
+
+_LAKEHOUSE_SOURCE = "fg_hitting_leaderboard_raw"
+
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 logging.basicConfig(
@@ -177,7 +188,8 @@ def ingest_window(
         for player in data
     ]
 
-    return append_raw_rows(TABLE_FQN, rows, conn)
+    # E11.1-W11: gated Snowflake→S3 flip (W11_RAW_WRITE_MODE; default 'snowflake'=unchanged).
+    return append_raw_rows_lakehouse(TABLE_FQN, _LAKEHOUSE_SOURCE, rows, conn, mode=w11_write_mode())
 
 
 def ingest_season(

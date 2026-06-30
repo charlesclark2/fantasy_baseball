@@ -50,6 +50,13 @@ import snowflake.connector
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
+# E11.1-W11 (FINISH wave): gated Snowflake→S3 flip (LAKEHOUSE_RAW_WRITE_MODE; default 'snowflake').
+# The records are list[dict] (raw_json a JSON string); the mirror ADDS snapshot_date (the dedup key
+# the records carry separately) so lakehouse_raw/catcher_framing_raw/ matches the SF table layout.
+from utils.lakehouse_raw_writer import lakehouse_write_legs, w11_write_mode, write_raw_rows_s3  # noqa: E402
+
+_LAKEHOUSE_SOURCE = "catcher_framing_raw"
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(message)s",
@@ -302,13 +309,24 @@ def main() -> None:
             )
         return
 
-    log.info("Connecting to Snowflake…")
-    conn = _connect()
-    try:
-        written = write_to_snowflake(conn, all_records, args.snapshot_date)
-        log.info("Done. %d rows written to %s", written, TABLE_FQN)
-    finally:
-        conn.close()
+    # E11.1-W11: leg-gated dual-write (W11_RAW_WRITE_MODE). SF write on 'snowflake'/'both'; S3 on 's3'/'both'.
+    do_sf, do_s3 = lakehouse_write_legs(w11_write_mode())
+    written = 0
+    if do_sf:
+        log.info("Connecting to Snowflake…")
+        conn = _connect()
+        try:
+            written = write_to_snowflake(conn, all_records, args.snapshot_date)
+            log.info("Done. %d rows written to %s", written, TABLE_FQN)
+        finally:
+            conn.close()
+    if do_s3:
+        # snapshot_date is passed separately to write_to_snowflake (not in the record dict) — add it
+        # to the mirror so the (player_id, season, snapshot_date) dedup grain is present in S3.
+        mirror_rows = [{**r, "snapshot_date": args.snapshot_date} for r in all_records]
+        n_s3 = write_raw_rows_s3(_LAKEHOUSE_SOURCE, mirror_rows, mode="append")
+        log.info("mirrored %d row(s) → S3 lakehouse_raw/%s/", n_s3, _LAKEHOUSE_SOURCE)
+        written = written or len(all_records)
 
 
 if __name__ == "__main__":

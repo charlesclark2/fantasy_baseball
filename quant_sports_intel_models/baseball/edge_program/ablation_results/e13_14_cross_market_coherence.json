@@ -1,0 +1,114 @@
+{
+  "synthetic": false,
+  "meta": {
+    "n_rows": 245203,
+    "n_games": 5478,
+    "seasons": [
+      2023,
+      2024,
+      2025,
+      2026
+    ],
+    "relations_present": [
+      "f5_to_full_control",
+      "props_to_team_total",
+      "team_total_to_game_total"
+    ],
+    "status": {
+      "team_total_to_game_total": "RAN (4672 games)",
+      "f5_to_full_control": "RAN (5289 games)",
+      "props_to_team_total": "RAN (4472 games)",
+      "kprop_to_opp_team_total": "DEFERRED (pre-registered; engine-ready; assembly is a follow-up)",
+      "sides_to_totals": "DEFERRED (pre-registered; engine-ready; assembly is a follow-up)"
+    }
+  },
+  "relations": {
+    "props_to_team_total": {
+      "display": "\u2460 props \u2192 team offense \u2194 team-total",
+      "is_control": false,
+      "prior": "highest (laziest pair)",
+      "coherence": {
+        "n": 8859,
+        "corr_markets": 0.7001060802993103,
+        "ols_slope": 0.9770664330605362,
+        "ols_intercept": 0.08245712550885749,
+        "mean_resid": 0.009300156285428287,
+        "resid_sd": 0.4887674073525465,
+        "corr_realized_implied": 0.14277296065248712,
+        "corr_realized_posted": 0.17403398634352274,
+        "info_gain": -0.009903710109140824
+      },
+      "n_units": 8859,
+      "n_games": 4472
+    },
+    "team_total_to_game_total": {
+      "display": "\u2461 team-totals \u2192 game-total",
+      "is_control": false,
+      "prior": "medium",
+      "coherence": {
+        "n": 4672,
+        "corr_markets": 0.5806316662397117,
+        "ols_slope": 0.935152036590878,
+        "ols_intercept": 0.5139962869188232,
+        "mean_resid": 0.04147646072520376,
+        "resid_sd": 0.9754540972942518,
+        "corr_realized_implied": 0.16585397562786172,
+        "corr_realized_posted": 0.22587663333860558,
+        "info_gain": -0.023512712256815515
+      },
+      "n_units": 4672,
+      "n_games": 4672
+    },
+    "f5_to_full_control": {
+      "display": "\u2462 F5 \u2192 full-game [NEGATIVE CONTROL]",
+      "is_control": true,
+      "prior": "MUST be consistent",
+      "coherence": {
+        "n": 5289,
+        "corr_markets": 0.5874425823053439,
+        "ols_slope": 0.9478800267929293,
+        "ols_intercept": 0.4184423953912095,
+        "mean_resid": 0.030043105377763252,
+        "resid_sd": 1.036316553457369,
+        "corr_realized_implied": 0.17135237364156916,
+        "corr_realized_posted": 0.23459765221039539,
+        "info_gain": -0.025674422470029705
+      },
+      "n_units": 5289,
+      "n_games": 5289
+    }
+  },
+  "deflation": {
+    "pbo": {
+      "pbo": 0.487,
+      "n_combos": 2000,
+      "n_configs": 3,
+      "n_splits": 16,
+      "clears_live_pbo": false
+    },
+    "dsr": {
+      "dsr": 0.8479036378296732,
+      "observed_sr": 0.5023913939669593,
+      "sr0": 0.32871792489590884,
+      "n_trials": 53,
+      "n_obs": 55,
+      "passes_live": false,
+      "best_config": "f5_to_full_control|tau0.9|pinnacle",
+      "best_roi": 0.45890881237276965
+    },
+    "fdr": {
+      "threshold": 0.02861191944343812,
+      "n_survive": 22,
+      "n_tested": 53,
+      "q": 0.1
+    },
+    "n_selectable": 53
+  },
+  "candidates": {
+    "candidates": [],
+    "control_breaks": [],
+    "control_consistent": true,
+    "n_fragile": 0,
+    "verdict": "CLEAN NULL \u2014 the market constellation is internally coherent (no cross-market edge)"
+  }
+}

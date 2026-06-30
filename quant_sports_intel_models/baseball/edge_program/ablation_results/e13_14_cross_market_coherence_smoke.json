@@ -1,0 +1,234 @@
+{
+  "synthetic": true,
+  "meta": {
+    "n_rows": 12000,
+    "n_games": 600,
+    "seasons": [
+      2023,
+      2024,
+      2025,
+      2026
+    ],
+    "relations_present": [
+      "f5_to_full_control",
+      "props_to_team_total",
+      "team_total_to_game_total"
+    ],
+    "status": {}
+  },
+  "relations": {
+    "props_to_team_total": {
+      "display": "\u2460 props \u2192 team offense \u2194 team-total",
+      "is_control": false,
+      "prior": "highest (laziest pair)",
+      "coherence": {
+        "n": 1200,
+        "corr_markets": 0.7168649632139145,
+        "ols_slope": 0.9972688709577406,
+        "ols_intercept": 0.012612306539868248,
+        "mean_resid": -0.00018440601985302804,
+        "resid_sd": 0.8168193588117737,
+        "corr_realized_implied": 0.35981875077403874,
+        "corr_realized_posted": 0.27592206124515223,
+        "info_gain": 0.05333654952681627
+      },
+      "n_units": 1200,
+      "n_games": 600
+    },
+    "team_total_to_game_total": {
+      "display": "\u2461 team-totals \u2192 game-total",
+      "is_control": false,
+      "prior": "medium",
+      "coherence": {
+        "n": 600,
+        "corr_markets": 0.9829012534097897,
+        "ols_slope": 0.9998439631303109,
+        "ols_intercept": 0.0017698965395688846,
+        "mean_resid": -0.00035961161085511657,
+        "resid_sd": 0.21531492846164219,
+        "corr_realized_implied": 0.3467297769669357,
+        "corr_realized_posted": 0.356156933181743,
+        "info_gain": -0.006626222817883609
+      },
+      "n_units": 600,
+      "n_games": 600
+    },
+    "f5_to_full_control": {
+      "display": "\u2462 F5 \u2192 full-game [NEGATIVE CONTROL]",
+      "is_control": true,
+      "prior": "MUST be consistent",
+      "coherence": {
+        "n": 600,
+        "corr_markets": 0.9791815931451129,
+        "ols_slope": 0.9988500497548566,
+        "ols_intercept": 0.011839808941716514,
+        "mean_resid": -0.0014476351329111381,
+        "resid_sd": 0.2373638482380142,
+        "corr_realized_implied": 0.35092936124969865,
+        "corr_realized_posted": 0.356156933181743,
+        "info_gain": -0.0036963444663030837
+      },
+      "n_units": 600,
+      "n_games": 600
+    }
+  },
+  "deflation": {
+    "pbo": {
+      "pbo": 0.0,
+      "n_combos": 2000,
+      "n_configs": 28,
+      "n_splits": 16,
+      "clears_live_pbo": true
+    },
+    "dsr": {
+      "dsr": 0.13462517593276885,
+      "observed_sr": 0.4030234269117771,
+      "sr0": 0.47009821851404227,
+      "n_trials": 36,
+      "n_obs": 374,
+      "passes_live": false,
+      "best_config": "props_to_team_total|tau0.975|pinnacle",
+      "best_roi": 0.3329735563950351
+    },
+    "fdr": {
+      "threshold": 1.100602558165749e-08,
+      "n_survive": 20,
+      "n_tested": 36,
+      "q": 0.1
+    },
+    "n_selectable": 36
+  },
+  "candidates": {
+    "candidates": [
+      {
+        "relation": "props_to_team_total",
+        "name": "props_to_team_total|tau0.75",
+        "n": 568,
+        "roi_net_vig": 0.18342499633686432,
+        "roi_p": 2.750568446624807e-09,
+        "book_groups": [
+          "all",
+          "majors",
+          "pinnacle",
+          "soft"
+        ],
+        "per_season_roi": {
+          "2023": 0.2833,
+          "2024": 0.0738,
+          "2025": 0.1705,
+          "2026": 0.2024
+        },
+        "season_consistent": true,
+        "fdr_survive": true,
+        "grid_pbo_lt_0p2": true,
+        "grid_dsr_ge_0p95": false,
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "relation": "props_to_team_total",
+        "name": "props_to_team_total|tau0.85",
+        "n": 508,
+        "roi_net_vig": 0.2130054358654639,
+        "roi_p": 1.906238364806483e-10,
+        "book_groups": [
+          "all",
+          "majors",
+          "pinnacle",
+          "soft"
+        ],
+        "per_season_roi": {
+          "2023": 0.311,
+          "2024": 0.1754,
+          "2025": 0.1494,
+          "2026": 0.2144
+        },
+        "season_consistent": true,
+        "fdr_survive": true,
+        "grid_pbo_lt_0p2": true,
+        "grid_dsr_ge_0p95": false,
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "relation": "props_to_team_total",
+        "name": "props_to_team_total|tau0.9",
+        "n": 479,
+        "roi_net_vig": 0.24452465916978322,
+        "roi_p": 2.2843956243760398e-12,
+        "book_groups": [
+          "all",
+          "majors",
+          "pinnacle",
+          "soft"
+        ],
+        "per_season_roi": {
+          "2023": 0.3387,
+          "2024": 0.2131,
+          "2025": 0.1936,
+          "2026": 0.2255
+        },
+        "season_consistent": true,
+        "fdr_survive": true,
+        "grid_pbo_lt_0p2": true,
+        "grid_dsr_ge_0p95": false,
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "relation": "props_to_team_total",
+        "name": "props_to_team_total|tau0.95",
+        "n": 417,
+        "roi_net_vig": 0.2923828818189712,
+        "roi_p": 6.401168702191107e-15,
+        "book_groups": [
+          "all",
+          "majors",
+          "pinnacle",
+          "soft"
+        ],
+        "per_season_roi": {
+          "2023": 0.3913,
+          "2024": 0.2545,
+          "2025": 0.2155,
+          "2026": 0.3019
+        },
+        "season_consistent": true,
+        "fdr_survive": true,
+        "grid_pbo_lt_0p2": true,
+        "grid_dsr_ge_0p95": false,
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "relation": "props_to_team_total",
+        "name": "props_to_team_total|tau0.975",
+        "n": 374,
+        "roi_net_vig": 0.2940086162971793,
+        "roi_p": 3.5191074594154414e-13,
+        "book_groups": [
+          "all",
+          "majors",
+          "pinnacle",
+          "soft"
+        ],
+        "per_season_roi": {
+          "2023": 0.3613,
+          "2024": 0.2979,
+          "2025": 0.2342,
+          "2026": 0.2737
+        },
+        "season_consistent": true,
+        "fdr_survive": true,
+        "grid_pbo_lt_0p2": true,
+        "grid_dsr_ge_0p95": false,
+        "is_control": false,
+        "fragile": false
+      }
+    ],
+    "control_breaks": [],
+    "control_consistent": true,
+    "n_fragile": 0,
+    "verdict": "CROSS-MARKET CANDIDATE(S) \u2014 5 robust + 0 fragile"
+  }
+}

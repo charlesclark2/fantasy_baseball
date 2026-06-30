@@ -50,7 +50,7 @@ import logging
 import os
 import sys
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
 
 import snowflake.connector
@@ -70,6 +70,15 @@ _KEY_PATH = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH") or os.path.expanduser(
 )
 
 TABLE_FQN = "baseball_data.external.oaa_team_season_raw"
+
+# E11.1-W11 (FINISH wave): gated Snowflake→S3 flip. The typed records (no raw_json) are mirrored to
+# lakehouse_raw/oaa_team_season_raw/ when LAKEHOUSE_RAW_WRITE_MODE is 'both'/'s3' (default
+# 'snowflake' → unchanged). ⚠️ mart_team_fielding_oaa dedups by latest `loaded_at` (the SF DDL
+# DEFAULT), which the record dict lacks — so the mirror STAMPS loaded_at, else the downstream dedup
+# column would be absent. Bespoke per-record INSERT → leg-gated, not the dispatcher.
+from utils.lakehouse_raw_writer import lakehouse_write_legs, w11_write_mode, write_raw_rows_s3  # noqa: E402
+
+_LAKEHOUSE_SOURCE = "oaa_team_season_raw"
 
 # Baseball Savant team OAA leaderboard (CSV). team_id is the MLB StatsAPI id.
 SAVANT_URL = "https://baseballsavant.mlb.com/leaderboard/outs_above_average"
@@ -263,13 +272,25 @@ def main() -> None:
                   f"OAA={r['oaa']}  DRS={r['drs']}  Plays={r['n_opportunities']}")
         return
 
-    log.info("Connecting to Snowflake...")
-    conn = _connect()
-    try:
-        written = write_to_snowflake(conn, all_records)
-        log.info("Done. %d rows written to %s", written, TABLE_FQN)
-    finally:
-        conn.close()
+    # E11.1-W11: leg-gated dual-write (W11_RAW_WRITE_MODE). SF insert on 'snowflake'/'both'; S3 on 's3'/'both'.
+    do_sf, do_s3 = lakehouse_write_legs(w11_write_mode())
+    written = 0
+    if do_sf:
+        log.info("Connecting to Snowflake...")
+        conn = _connect()
+        try:
+            written = write_to_snowflake(conn, all_records)
+            log.info("Done. %d rows written to %s", written, TABLE_FQN)
+        finally:
+            conn.close()
+    if do_s3:
+        # Stamp loaded_at (the mart's dedup tiebreaker) — the record dict relies on the SF DDL
+        # DEFAULT, so the S3 mirror must supply it explicitly or the downstream ORDER BY breaks.
+        _now = datetime.now(timezone.utc).isoformat()
+        mirror_rows = [{**r, "loaded_at": _now} for r in all_records]
+        n_s3 = write_raw_rows_s3(_LAKEHOUSE_SOURCE, mirror_rows, mode="append")
+        log.info("mirrored %d row(s) → S3 lakehouse_raw/%s/", n_s3, _LAKEHOUSE_SOURCE)
+        written = written or len(all_records)
 
 
 if __name__ == "__main__":

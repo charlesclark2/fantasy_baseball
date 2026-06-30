@@ -66,6 +66,12 @@ _JSON_COLS = frozenset({"raw_json", "request_params", "json_field"})
 #   W3pre scope: mlb_odds_raw, mlb_events_raw, derivative_odds_raw, monthly_schedule,
 #                odds_snapshots_historical.
 #   W6 adds:     venues_raw (Group-C venues flatten — stg_statsapi_venues).
+#   W11 adds (the FINISH wave — writer→S3 flip for the Tier-A raw feeds): the FanGraphs
+#     leaderboards (JSON-VARIANT raw_json) + the savant/statsapi typed feeds. Each source's
+#     live writer flips from a Snowflake-only append to append_raw_rows_lakehouse (gated by
+#     LAKEHOUSE_RAW_WRITE_MODE), and its stg model's duckdb branch repoints to read
+#     lakehouse_raw/<source>/ under the W11_<...>_LAKEHOUSE env gate. The typed feeds carry no
+#     raw_json (no _JSON_COLS member) — write_raw_rows_s3 keeps their scalar columns native.
 RAW_SOURCES = frozenset({
     "mlb_odds_raw",
     "mlb_events_raw",
@@ -73,6 +79,16 @@ RAW_SOURCES = frozenset({
     "monthly_schedule",
     "odds_snapshots_historical",
     "venues_raw",
+    # E11.1-W11 Tier-A — JSON-VARIANT FanGraphs leaderboards (raw_json blob)
+    "fg_stuff_plus_raw",
+    "fg_hitting_leaderboard_raw",
+    # E11.1-W11 Tier-A — JSON-VARIANT savant/statsapi feeds (raw_json blob)
+    "catcher_framing_raw",
+    "player_transactions",
+    # E11.1-W11 Tier-A — typed (columnar) savant/external feeds (no raw_json)
+    "sprint_speed_raw",
+    "oaa_team_season_raw",
+    "savant_park_factors_raw",
 })
 
 _VALID_MODES = frozenset({"snowflake", "s3", "both"})
@@ -255,6 +271,38 @@ def write_raw_rows_s3(
         log.info("  wrote %d rows → s3://%s/%s", len(dt_rows), BUCKET, key)
         written += len(dt_rows)
     return written
+
+
+# E11.1-W11: the Tier-A raw feeds use their OWN write-mode env, NOT the shared
+# LAKEHOUSE_RAW_WRITE_MODE. The shared var is already 's3'/'both' in prod (W3pre/W6 odds cut over),
+# so reusing it would flip the W11 writers to S3-only the instant they deploy — BEFORE the per-source
+# parity + read-side cutover, silently starving the still-Snowflake-reading stg/marts. A separate
+# default-'snowflake' env keeps merging the W11 flips a true no-op until the operator opts THIS wave in.
+W11_WRITE_MODE_ENV = "W11_RAW_WRITE_MODE"
+
+
+def w11_write_mode() -> str:
+    """The W11 Tier-A write mode (snowflake | both | s3), default 'snowflake' (no-op). Pass the
+    result to lakehouse_write_legs() (typed writers) or append_raw_rows_lakehouse(..., mode=) (the
+    FanGraphs JSON writers) so all 7 Tier-A flips share ONE wave-level switch independent of odds."""
+    return os.environ.get(W11_WRITE_MODE_ENV, "snowflake").lower()
+
+
+def lakehouse_write_legs(mode: str | None = None) -> tuple[bool, bool]:
+    """Resolve a write mode → (write_snowflake, write_s3). Defaults to LAKEHOUSE_RAW_WRITE_MODE when
+    mode is None; W11 writers pass w11_write_mode() explicitly (their own env — see W11_WRITE_MODE_ENV).
+
+    E11.1-W11: append_raw_rows_lakehouse couples the Snowflake leg to snowflake_loader.append_raw_rows
+    (the VARIANT append model). The Tier-A TYPED writers (sprint_speed/oaa/catcher/park_factors/
+    transactions) have a BESPOKE Snowflake write — a temp-table upsert / write_pandas — that the
+    dispatcher can't drive. They instead call this to decide which legs run, then gate their existing
+    SF write on the first bool and a write_raw_rows_s3(source, rows, mode='append') mirror on the
+    second. Default 'snowflake' → (True, False) = importing/running the writer is unchanged until the
+    operator opts in (mirror of odds_api_ingestion._lakehouse_write_mode)."""
+    mode = (mode or os.environ.get("LAKEHOUSE_RAW_WRITE_MODE", "snowflake")).lower()
+    if mode not in _VALID_MODES:
+        raise ValueError(f"LAKEHOUSE_RAW_WRITE_MODE='{mode}' invalid; expected one of {sorted(_VALID_MODES)}")
+    return (mode in ("snowflake", "both"), mode in ("s3", "both"))
 
 
 def append_raw_rows_lakehouse(
