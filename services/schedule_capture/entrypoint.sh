@@ -31,8 +31,14 @@ if [ -n "${SNOWFLAKE_PRIVATE_KEY:-}" ]; then
   export SNOWFLAKE_PRIVATE_KEY_PATH=/tmp/snowflake_rsa_key.pem
 fi
 
-TODAY=$(date -u +%Y-%m-%d)
-echo "[schedule_capture] $(date -u +%FT%TZ) start — date=$TODAY"
+# INC-22: the US baseball-day (America/Los_Angeles), NOT the UTC date. A bare `date -u`
+# rolls to TOMORROW at 00:00 UTC — but this cron's active window runs to 03:59 UTC
+# (= 8 PM–11:59 PM PT), exactly when the late West-coast slate's lineups post. With the
+# UTC date, those captures targeted *tomorrow*, so the current day's late lineups never
+# landed (e.g. the 6/29 MIL/SEA/COL/ATH/AZ lineups). zoneinfo (+ the tzdata wheel in the
+# image) resolves LA with correct DST, matching betting_ml.utils.game_day everywhere else.
+TODAY=$(python -c "from datetime import datetime; from zoneinfo import ZoneInfo; print(datetime.now(ZoneInfo('America/Los_Angeles')).date().isoformat())")
+echo "[schedule_capture] $(date -u +%FT%TZ) start — baseball-day(LA)=$TODAY"
 
 # Step 1: re-ingest today's schedule (picks up retroactive lineup confirmations).
 python ingest_statsapi.py schedule --start-date "$TODAY" --end-date "$TODAY" --capture-reason intraday_gameday
