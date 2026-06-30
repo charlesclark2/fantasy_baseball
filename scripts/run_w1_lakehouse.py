@@ -455,35 +455,37 @@ def _safe_memory_limit_gb() -> int:
     return max(2, min(11, int(ram * 0.6)))
 
 
-def _micros_timestamp_wrap(conn, mart_sql: str) -> str:
-    """Cast every TIMESTAMP-family output column to MICROSECOND precision before the COPY.
+def _string_timestamp_wrap(conn, mart_sql: str) -> str:
+    """Store every TIMESTAMP-family output column as an ISO **VARCHAR** in the parquet.
 
-    ⚠️ Snowflake's parquet external-table reader MISREADS nanosecond-unit timestamps. DuckDB
-    writes a column as TIMESTAMP_NS whenever it originates from a pyarrow-mirrored parquet
-    (pandas datetime64[ns] → NANOS, e.g. the W8a market_features / snapshot sources) or any
-    ns-precision source; the W8a `lakehouse_ext.<model>` then reads `VALUE:col::TIMESTAMP_NTZ`
-    as garbage years (±32 000) and the Snowflake Python connector raises `252005 … [Errno 75]
-    Value too large` (EOVERFLOW) on fetch — which broke the W7b feature mirror's export of
-    feature_pregame_odds_features + the game_features that carries it. Parity could not catch it:
-    it reads the parquet via DuckDB (nanos-correct) and only count-compares TIMESTAMP columns,
-    never their values through the Snowflake external table.
+    ⚠️ ROOT CAUSE (the 24h serving outage): Snowflake's parquet external table reads a binary
+    parquet TIMESTAMP INT64 at the WRONG SCALE PER ROW — it interprets the micros value as SECONDS,
+    so e.g. 2026-06-30 (1.78e15 micros) materializes as year ~56,000,000, and the Python connector
+    raises `252005 … year … is out of range` (EOVERFLOW) on fetch. The trap: `min/max(year(col))`
+    and `to_varchar(min(col))` are answered from parquet COLUMN STATISTICS (read correctly), so the
+    column looks fine until you fetch / CTAS / dbt-materialize a ROW. Re-casting micros↔nanos does
+    NOT help — Snowflake misreads any binary parquet timestamp here.
 
-    MICROS is the unit Snowflake reads correctly (matches every prior-wave lakehouse parquet).
-    `::timestamp` (DuckDB's micros TIMESTAMP) is a no-op for already-micros columns, so this is
-    safe + idempotent for ALL models/waves. DESCRIBE binds-only (no execution) so it's cheap.
+    CURE (the documented write_pandas-timestamp convention — store VARCHAR ISO, cast downstream):
+    cast each TIMESTAMP column to ISO VARCHAR before the COPY. The W8a ext-table DDL then declares
+    these columns TIMESTAMP_NTZ AS (VALUE:col::TIMESTAMP_NTZ) — a STRING parse, which Snowflake does
+    reliably (verified '2022-04-23 15:59:45.ffffff'::timestamp_ntz round-trips). DATE columns are
+    read correctly by Snowflake (INT32 days) so they are left alone — only TIMESTAMP* is stringified.
+    Keep generate_w8a_external_tables.TS_STRING_COLS in sync with the columns this stringifies.
+    DESCRIBE binds-only (no execution) so it's cheap.
     """
     try:
         desc = conn.execute(f"DESCRIBE SELECT * FROM (\n{mart_sql}\n) _d").fetchall()
     except Exception as exc:
-        # DESCRIBE binds the same plan the COPY will — a failure here means the COPY would fail
-        # too. Warn LOUDLY rather than silently skip the micros pin (a silent skip would re-emit a
-        # nanos parquet that Snowflake misreads). Return mart_sql so the COPY surfaces the real error.
-        print(f"  WARNING: micros-timestamp DESCRIBE failed ({exc}) — COPY proceeds unwrapped")
+        # DESCRIBE binds the same plan the COPY will — a failure here means the COPY would fail too.
+        # Warn LOUDLY rather than silently skip (a silent skip re-emits a binary parquet timestamp
+        # that Snowflake misreads). Return mart_sql so the COPY surfaces the real error.
+        print(f"  WARNING: timestamp-stringify DESCRIBE failed ({exc}) — COPY proceeds unwrapped")
         return mart_sql
     ts_cols = [r[0] for r in desc if str(r[1]).upper().startswith("TIMESTAMP")]
     if not ts_cols:
         return mart_sql
-    repl = ", ".join(f'"{c}"::timestamp AS "{c}"' for c in ts_cols)
+    repl = ", ".join(f'"{c}"::varchar AS "{c}"' for c in ts_cols)
     return f"SELECT * REPLACE ({repl}) FROM (\n{mart_sql}\n) _d"
 
 
@@ -492,14 +494,15 @@ def _build_marts(conn, models: list[str], dry_run: bool) -> None:
     for model in models:
         loc = f"{LAKEHOUSE}/{model}/data.parquet"
         mart_sql = extract_duckdb_sql(model)
-        # MICROS TIMESTAMP PIN: Snowflake misreads nanosecond-unit parquet timestamps → fetch
-        # EOVERFLOW. Cast every TIMESTAMP column to micros before the COPY (no-op if already micros).
-        body = _micros_timestamp_wrap(conn, mart_sql)
+        # STRING TIMESTAMP PIN: Snowflake's parquet external table misreads BINARY parquet
+        # timestamps per-row (micros read as seconds → year ~56M → connector EOVERFLOW). Store
+        # every TIMESTAMP column as ISO VARCHAR; the ext-table DDL parses it back (reliable).
+        body = _string_timestamp_wrap(conn, mart_sql)
         # NEWLINE-SAFE WRAP: a type-pinned incremental's DuckDB branch ends in the GENERATED
         # `-- TYPE-PIN-END` line comment (gen_type_contract.py). Inlining `({mart_sql})` on one
         # line would put the closing `)` (and the TO/alias clause) ON that comment line → commented
         # out → "syntax error at end of input". Put the body on its own lines so `)` is never eaten.
-        # (The _micros wrap, when applied, already encloses mart_sql in an outer SELECT, so the
+        # (The _string wrap, when applied, already encloses mart_sql in an outer SELECT, so the
         # trailing comment is interior — but keep the newlines unconditionally for the no-ts path.)
         if dry_run:
             n = conn.execute(f"SELECT count(*) FROM (\n{body}\n) t").fetchone()[0]

@@ -69,6 +69,20 @@ EB_INCREMENTALS = {
     "eb_batter_posteriors_raw":   "baseball_data.betting.eb_batter_posteriors_raw",
 }
 
+# ⚠️ TIMESTAMP columns stored as ISO **VARCHAR** in the parquet (run_w1_lakehouse._string_timestamp_wrap).
+# Snowflake misreads BINARY parquet timestamps per-row (micros read as seconds → year ~56M → connector
+# EOVERFLOW on fetch — the 24h serving outage). So these columns land in the parquet as strings; the
+# external table declares them TIMESTAMP_NTZ AS (VALUE:col::TIMESTAMP_NTZ) — a reliable STRING parse —
+# so the dbt `select * from lakehouse_ext` materializes a correct native TIMESTAMP_NTZ. Keep this in
+# sync with _string_timestamp_wrap (it stringifies EVERY TIMESTAMP* col; list each model's here so the
+# DDL re-parses them). DATE columns read correctly from parquet → NOT listed.
+TS_STRING_COLS = {
+    "stg_statsapi_starter_snapshots": {"ingestion_ts"},
+    "feature_pregame_starter_status": {"valid_from", "valid_to", "computed_at"},
+    "feature_pregame_park_status":    {"computed_at"},
+    "feature_pregame_odds_features":  {"odds_ingestion_ts"},
+}
+
 
 def duckdb_to_snowflake_type(duck_type: str) -> str:
     t = duck_type.upper().strip()
@@ -122,10 +136,17 @@ def emit_external_table(model: str, cols) -> str:
     # whose game_pk is all-NULL). Parity can't catch it (it reads the parquet via DuckDB, which is
     # case-insensitive). So emit the EXACT described case. The external-table COLUMN name stays
     # UPPERCASE (unquoted-ref friendly for the dbt else branch); only the VALUE: key must match.
-    col_lines = [
-        f"    {name.upper():<32} {duckdb_to_snowflake_type(dt):<14} AS (VALUE:{name}::{duckdb_to_snowflake_type(dt)})"
-        for name, dt in cols
-    ]
+    # Columns stored as ISO VARCHAR in the parquet but exposed as TIMESTAMP_NTZ via a STRING parse
+    # (VALUE:col::TIMESTAMP_NTZ) — see TS_STRING_COLS. This sidesteps Snowflake's broken binary
+    # parquet-timestamp per-row read. The parquet's DuckDB type for these IS varchar, so the auto
+    # duckdb_to_snowflake_type would emit VARCHAR — override to TIMESTAMP_NTZ here.
+    ts_string = {c.lower() for c in TS_STRING_COLS.get(model, ())}
+
+    def _line(name: str, dt: str) -> str:
+        sf = "TIMESTAMP_NTZ" if name.lower() in ts_string else duckdb_to_snowflake_type(dt)
+        return f"    {name.upper():<32} {sf:<14} AS (VALUE:{name}::{sf})"
+
+    col_lines = [_line(name, dt) for name, dt in cols]
     cols_block = ",\n".join(col_lines)
     return (
         f"-- ── {model}  ({len(cols)} columns) ──\n"
