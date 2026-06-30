@@ -125,6 +125,43 @@ def _run_w8a_mirror(context, script: str, args: list[str] | None = None) -> None
         )
 
 
+def _w8b_serving_on() -> bool:
+    # E11.1-W8b: the serving-aggregator cutover switch. When 1, the Snowflake dbt build's else
+    # branches read the W8b lakehouse_ext external tables (the complex upstream + matchup models +
+    # the aggregator feature_pregame_game_features_raw + its wrapper compute on DuckDB→S3), so the
+    # W8b DuckDB build is on the critical path → HALT. Default OFF so merging the dual-branch models
+    # is a no-op until the operator creates the W8b external tables, builds the parquet, validates
+    # parity (scripts/parity_check_w8b.py) + a per-ROW ext-table fetch + predict_today matchup
+    # non-null, DROP+rebuilds the 2 aggregator incrementals, and flips this. Snowflake-native is
+    # rollback. ⚠️ requires W8A_LAKEHOUSE_S3=1 first (the aggregator reads the W8a feature layer).
+    return os.environ.get("W8B_LAKEHOUSE_S3") == "1"
+
+
+def _w8b_mirror_on() -> bool:
+    # The W8b precursor export + DuckDB build run when cutover is ON (the else branches read the
+    # external tables) OR during the parallel run (W8B_LAKEHOUSE_PARALLEL=1) so parity_check_w8b has
+    # fresh S3 data to compare against the live native tables BEFORE the flip.
+    return _w8b_serving_on() or os.environ.get("W8B_LAKEHOUSE_PARALLEL") == "1"
+
+
+def _run_w8b_mirror(context, script: str, args: list[str] | None = None) -> None:
+    """Run a W8b precursor export / DuckDB build at the correct failure tier (mirror of
+    _run_w8a_mirror, gated on the W8b flags). HALT once W8B_LAKEHOUSE_S3=1 (the serving feature
+    build reads the W8b external tables → stale/partial = wrong served features); ALERT-loud-but-
+    continue during the parallel window (W8B_LAKEHOUSE_PARALLEL=1, parity-only — the dbt else
+    branches aren't merged/flipped yet, so a build failure must NOT take down run_w1_lakehouse_op)."""
+    if _w8b_serving_on():
+        _run_script(context, script, args)  # HALT — the serving feature build reads this
+        return
+    try:
+        _run_script(context, script, args)
+    except Exception as e:  # noqa: BLE001 — parity-only during the parallel window
+        context.log.warning(
+            f"[W8b parallel] mirror '{os.path.basename(script)}' failed (non-fatal; the dbt "
+            f"build still computes these models natively, parity_check_w8b will show the gap): {e}"
+        )
+
+
 def _run_mirror(context, script: str, args: list[str] | None = None) -> None:
     """Run a W7b S3 export-mirror / mini-wave build at the CORRECT failure tier.
 
@@ -391,6 +428,19 @@ def run_w1_lakehouse_op(context):
         _run_w8a_mirror(context, "export_w8a_precursors_to_s3.py")
         _run_w8a_mirror(context, "run_w1_lakehouse.py", ["--w8a-only"])
         _run_w8a_mirror(context, "refresh_w1_external_tables.py", ["--w8a"])
+
+    # E11.1-W8b: the SERVING-AGGREGATOR wave. Runs AFTER --w8a (the aggregator reads the W8a feature
+    # layer). Mirrors the W8a Python-table precursors (lineup_state / team_sequential_posteriors /
+    # public_betting / fct_fangraphs_pitching_analytics), builds the complex upstream + matchup
+    # models + the aggregator + wrapper, and refreshes the W8b external tables. Mirror-tier per
+    # _run_w8b_mirror (HALT once W8B_LAKEHOUSE_S3=1, else ALERT-continue). The W11-deferred umpire/
+    # weather tail the aggregator reads is mirrored by export_features_to_s3.py (predict path) — it is
+    # ~1-day-stale at this point in the daily order (run_w1_lakehouse_op precedes the dbt feature
+    # build), which parity_check_w8b surfaces; acceptable for those slow-moving features.
+    if _w8b_mirror_on():
+        _run_w8b_mirror(context, "export_w8b_precursors_to_s3.py")
+        _run_w8b_mirror(context, "run_w1_lakehouse.py", ["--w8b-only"])
+        _run_w8b_mirror(context, "refresh_w1_external_tables.py", ["--w8b"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

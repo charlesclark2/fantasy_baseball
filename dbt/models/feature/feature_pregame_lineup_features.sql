@@ -8,9 +8,20 @@
 --   rs.game_date::date < ls.official_date   (strictly less than)
 -- Platoon splits use prior season only (game_year - 1) to avoid in-season
 -- leakage from full-season aggregates.
+--
+-- E11.1-W8b (serving-aggregator wave): dual-branch. DuckDB branch (real compute → S3,
+-- run_w1_lakehouse._build_w8b) reads the migrated marts/staging + the S3-mirrored
+-- feature_pregame_lineup_state (INC-17-P2 dual-source CTE: SCD-2 lineup_state UNION historical
+-- stg_statsapi_lineups_wide) + feature_pregame_injury_status + feature_pregame_starter_features
+-- (W8b) + eb_batter_posteriors_raw (W8a) + lakehouse_clusters. Dialect: Snowflake float casts →
+-- DuckDB ::double, Snowflake ::timestamp_ntz → DuckDB ::timestamp, current_timestamp() → current_timestamp. The
+-- Snowflake (else) branch reads the lakehouse_ext external table (parity_check_w8b.py). ⚠️ The
+-- lineup dual-source MUST stay intact (else 2026 slot_*_player_id NULL → constant imputation).
 -- =============================================================================
 
-{{ config(materialized='table') }}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w8b_lakehouse']) }}
 
 with
 
@@ -502,7 +513,7 @@ zips_agg as (
         round(avg(proj_k_pct),      3)                              as avg_zips_k_pct,
         round(avg(proj_iso),        3)                              as avg_zips_iso,
         round(
-            sum(case when not no_zips_data then 1 else 0 end)::float / 9.0
+            sum(case when not no_zips_data then 1 else 0 end)::double / 9.0
         , 3)                                                        as zips_coverage_pct,
         -- Proxy for rookies / unknowns: slots with no ZiPS in current or prior season
         sum(case when no_zips_data then 1 else 0 end)               as lineup_rookie_count
@@ -601,7 +612,7 @@ eb_agg as (
         round(avg(eb_iso),               3) as avg_eb_iso,
         round(avg(eb_woba_uncertainty),  4) as avg_eb_woba_uncertainty,
         round(
-            count(case when eb_woba is not null then 1 end)::float / 9.0
+            count(case when eb_woba is not null then 1 end)::double / 9.0
         , 3)                               as eb_coverage_pct,
         -- Epic 16B.1 — least-informed-wins aggregation across 9 slots.
         -- Informativeness order: sequential > season_eb > prior_only.
@@ -734,10 +745,10 @@ final as (
         coalesce(bad.n_no_label,         9)                         as n_no_label,
 
         -- SCD-2 sentinel columns (Story 2.4 convention — born SCD-2-ready)
-        current_timestamp()::timestamp_ntz                          as valid_from,
-        null::timestamp_ntz                                         as valid_to,
+        current_timestamp::timestamp                          as valid_from,
+        null::timestamp                                         as valid_to,
         true                                                        as is_current,
-        current_timestamp()::timestamp_ntz                          as computed_at,
+        current_timestamp::timestamp                          as computed_at,
         md5(concat_ws('|',
             coalesce(la.avg_woba_30d::varchar,              ''),
             coalesce(la.avg_xwoba_30d::varchar,             ''),
@@ -792,3 +803,11 @@ final as (
 )
 
 select * from final
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.feature_pregame_lineup_features
+
+{% endif %}

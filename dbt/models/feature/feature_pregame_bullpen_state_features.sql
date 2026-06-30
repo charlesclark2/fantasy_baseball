@@ -1,8 +1,12 @@
-{{
-    config(
-        materialized='table'
-    )
-}}
+-- E11.1-W8b (serving-aggregator wave): dual-branch. DuckDB branch (real compute → S3,
+-- run_w1_lakehouse._build_w8b) reads the migrated feature_pregame_lineup_features (W8b) +
+-- mart_bullpen_* / mart_game_spine / mart_reliever_top3_availability marts (registered DuckDB
+-- views); body is dialect-clean (Snowflake ::float → DuckDB ::double only). The Snowflake (else) branch reads the
+-- lakehouse_ext external table (parity-gated by parity_check_w8b.py).
+
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w8b_lakehouse']) }}
 
 -- Grain: one row per game_pk × team_abbrev (home and away).
 -- Pre-game bullpen state for each team entering a given game.
@@ -126,9 +130,9 @@ final as (
                     when coalesce(aln.total_batters, 0) = 0 then null
                     else round(
                         hs.bp_xwoba_vs_rhb_30d
-                            * (aln.rhb_count / aln.total_batters::float)
+                            * (aln.rhb_count / aln.total_batters::double)
                         + hs.bp_xwoba_vs_lhb_30d
-                            * (aln.lhb_count / aln.total_batters::float),
+                            * (aln.lhb_count / aln.total_batters::double),
                         4
                     )
                 end
@@ -139,9 +143,9 @@ final as (
                     when coalesce(hln.total_batters, 0) = 0 then null
                     else round(
                         hs.bp_xwoba_vs_rhb_30d
-                            * (hln.rhb_count / hln.total_batters::float)
+                            * (hln.rhb_count / hln.total_batters::double)
                         + hs.bp_xwoba_vs_lhb_30d
-                            * (hln.lhb_count / hln.total_batters::float),
+                            * (hln.lhb_count / hln.total_batters::double),
                         4
                     )
                 end
@@ -181,3 +185,11 @@ final as (
 )
 
 select * from final
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.feature_pregame_bullpen_state_features
+
+{% endif %}

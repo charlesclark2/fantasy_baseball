@@ -25,11 +25,21 @@
 -- _raw and this wrapper are rebuilt together by every feature-rebuild op, so the
 -- same N-day window keeps the served slate (today + recent) fresh. delete+insert
 -- by game_pk; weekly full-refresh net corrects drift.
+-- E11.1-W8b (serving-aggregator wave): dual-branch. DuckDB branch (real compute → S3,
+-- run_w1_lakehouse special-cases this macro/for-loop model in a Python builder — extract_duckdb_sql
+-- can't render the contact_quality_columns() loop) reads the migrated feature_pregame_game_features_raw
+-- + feature_league_contact_baseline (registered DuckDB views). The Snowflake (else) branch MERGEs from
+-- the lakehouse_ext external table; at cutover the operator DROPs+rebuilds this incremental (it inherits
+-- the raw's home_win_rate_trailing_3yr NUMBER→FLOAT flip via raw.*). The _seasonnorm ::double pin is
+-- preserved in the DuckDB branch (test_type_contract_guard.py::test_public_wrapper_pins_seasonnorm_double).
+{% if target.name == 'duckdb' %}
+
 {{ config(
     materialized='incremental',
     unique_key='game_pk',
     incremental_strategy='delete+insert',
-    on_schema_change='sync_all_columns'
+    on_schema_change='sync_all_columns',
+    tags=['w8b_lakehouse']
 ) }}
 
 {%- set cc = contact_quality_columns() -%}
@@ -56,4 +66,20 @@ left join {{ ref('feature_league_contact_baseline') }} b
 -- E11.9-T2 — match the _raw incremental scope so we only re-derive _seasonnorm for
 -- the games _raw re-materialized this run.
 where raw.game_date::date >= dateadd('day', -{{ var('pregame_incremental_lookback_days', 7) }}, current_date)
+{% endif %}
+
+{% else %}
+
+{{ config(
+    materialized='incremental',
+    unique_key='game_pk',
+    incremental_strategy='delete+insert',
+    on_schema_change='sync_all_columns'
+) }}
+
+select * from baseball_data.lakehouse_ext.feature_pregame_game_features
+{% if is_incremental() %}
+where game_date::date >= dateadd('day', -{{ var('pregame_incremental_lookback_days', 7) }}, current_date)
+{% endif %}
+
 {% endif %}
