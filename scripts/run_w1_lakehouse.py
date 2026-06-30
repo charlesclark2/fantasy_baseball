@@ -1123,10 +1123,13 @@ W8B_FEATURE_MODELS = [
     "feature_pregame_game_features_raw",       # ← THE AGGREGATOR (all the above + W8a layer + W8b mirrors); TYPE-PIN incremental
 ]
 
-# 🧨 INC-23 — precursor parquet that must be MATERIALIZED into a DuckDB table (not a glob VIEW) so a
-# downstream `where is_current = true` + `qualify` + wide projection doesn't trip DuckDB's
-# filter_pushdown ColumnBindingResolver bug (pushes the boolean predicate into the parquet scan →
-# mis-binds is_current as UBIGINT → INTERNAL Error). A physical table has no parquet scan → no
+# 🧨 DuckDB filter_pushdown is_current binder bug (W8b first-build HALT 2026-06-30; DISTINCT from the
+# INC-23 year(VARCHAR) incident — operator to assign a number) — precursor parquet that must be
+# MATERIALIZED into a DuckDB table (not a glob VIEW) so a downstream `where is_current = true` +
+# `qualify` + wide projection doesn't trip DuckDB's filter_pushdown ColumnBindingResolver (it pushes
+# the boolean predicate into the parquet scan → mis-binds is_current as UBIGINT → `INTERNAL Error:
+# Failed to bind column reference "IS_CURRENT": inequal types (UBIGINT != BOOLEAN)`, even though the
+# parquet is_current IS BOOLEAN — verified, no data issue). A physical table has no parquet scan → no
 # pushdown-into-scan → no bug. feature_pregame_lineup_state (the INC-17-P2 SCD-2 source read by
 # lineup_features + the 3 matchup models with exactly that pattern) is the only one that hits it.
 W8B_MATERIALIZE_TABLES = ["feature_pregame_lineup_state"]
@@ -1231,7 +1234,8 @@ def _build_w8b(conn, dry_run: bool) -> None:
     # can't replace an existing VIEW of the same name, so never register those as views first).
     _register_w8a_views(conn, [v for v in W8B_PRECURSOR_VIEWS if v not in W8B_MATERIALIZE_TABLES])
 
-    # 🧨 INC-23 (DuckDB filter_pushdown binder bug): the lineup_features + 3 matchup models read
+    # 🧨 DuckDB filter_pushdown is_current binder bug (W8b first-build HALT 2026-06-30; DISTINCT from
+    # the INC-23 year-VARCHAR incident): the lineup_features + 3 matchup models read
     # feature_pregame_lineup_state with `where is_current = true` + `qualify row_number() over (…)` +
     # a wide projection. Through a parquet-scan VIEW, DuckDB pushes the is_current predicate into the
     # scan and ColumnBindingResolver mis-binds it → `INTERNAL Error: Failed to bind column reference
