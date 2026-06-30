@@ -28,7 +28,7 @@ game_times as (
     select
         game_pk,
         game_date::date                                                 as game_date,
-        game_date                                                       as commence_time
+        game_date::timestamptz                                                       as commence_time
     from stg_statsapi_games
 ),
 
