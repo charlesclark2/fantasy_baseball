@@ -18,7 +18,16 @@
 --   bullpen workload columns retain their source names (no prefix)
 -- =============================================================================
 
-{{ config(materialized='table') }}
+-- E11.1-W8a (upstream feature-layer migration): DuckDB branch reads the migrated team
+-- marts (rolling offense/pitching/vs-hand, season-record, pythagorean, bullpen workload/
+-- effectiveness, schedule-context, fielding-oaa) + team_elo_history (registered as DuckDB
+-- views by run_w1_lakehouse._build_w8a). Dialect rewrites: iff()->case; dateadd('day',-1,d)
+-- ->(d - interval '1' day). The Snowflake (else) branch is a thin view over the
+-- lakehouse_ext external table (parity-gated by parity_check_w8a.py).
+
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w8a_lakehouse']) }}
 
 with
 
@@ -34,7 +43,7 @@ games as (
         home_team    as team_abbrev,
         'home'       as side,
         is_scheduled
-    from {{ ref('mart_game_spine') }}
+    from mart_game_spine
     where game_type = 'R'
 
     union all
@@ -46,7 +55,7 @@ games as (
         away_team    as team_abbrev,
         'away'       as side,
         is_scheduled
-    from {{ ref('mart_game_spine') }}
+    from mart_game_spine
     where game_type = 'R'
 ),
 
@@ -70,7 +79,7 @@ team_demand as (
 -- ── Rolling offense (most recent pre-game row per game × team) ─────────────────
 offense_combined as (
     select team as team_abbrev, game_date::date as evt_date, 0 as is_demand
-    from {{ ref('mart_team_rolling_offense') }}
+    from mart_team_rolling_offense
     union all
     select team_abbrev, anchor_date as evt_date, 1 as is_demand
     from team_demand
@@ -126,7 +135,7 @@ offense_pre_game as (
     left join offense_asof a
         on  a.team_abbrev = g.team_abbrev
         and a.anchor_date = g.game_date::date
-    left join {{ ref('mart_team_rolling_offense') }} ro
+    left join mart_team_rolling_offense ro
         on  ro.team            = g.team_abbrev
         and ro.game_date::date = a.asof_date
     qualify row_number() over (
@@ -138,7 +147,7 @@ offense_pre_game as (
 -- ── Rolling pitching (most recent pre-game row per game × team) ────────────────
 pitching_combined as (
     select team as team_abbrev, game_date::date as evt_date, 0 as is_demand
-    from {{ ref('mart_team_rolling_pitching') }}
+    from mart_team_rolling_pitching
     union all
     select team_abbrev, anchor_date as evt_date, 1 as is_demand
     from team_demand
@@ -189,7 +198,7 @@ pitching_pre_game as (
     left join pitching_asof a
         on  a.team_abbrev = g.team_abbrev
         and a.anchor_date = g.game_date::date
-    left join {{ ref('mart_team_rolling_pitching') }} rp
+    left join mart_team_rolling_pitching rp
         on  rp.team            = g.team_abbrev
         and rp.game_date::date = a.asof_date
     qualify row_number() over (
@@ -201,7 +210,7 @@ pitching_pre_game as (
 -- ── Platoon splits vs LHP (most recent pre-game row) ──────────────────────────
 vs_lhp_combined as (
     select team as team_abbrev, game_date::date as evt_date, 0 as is_demand
-    from {{ ref('mart_team_vs_pitcher_hand') }}
+    from mart_team_vs_pitcher_hand
     where opp_starter_hand = 'L'
     union all
     select team_abbrev, anchor_date as evt_date, 1 as is_demand
@@ -239,7 +248,7 @@ vs_lhp_pre_game as (
     left join vs_lhp_asof a
         on  a.team_abbrev = g.team_abbrev
         and a.anchor_date = g.game_date::date
-    left join {{ ref('mart_team_vs_pitcher_hand') }} vh
+    left join mart_team_vs_pitcher_hand vh
         on  vh.team             = g.team_abbrev
         and vh.opp_starter_hand = 'L'
         and vh.game_date::date  = a.asof_date
@@ -252,7 +261,7 @@ vs_lhp_pre_game as (
 -- ── Platoon splits vs RHP (most recent pre-game row) ──────────────────────────
 vs_rhp_combined as (
     select team as team_abbrev, game_date::date as evt_date, 0 as is_demand
-    from {{ ref('mart_team_vs_pitcher_hand') }}
+    from mart_team_vs_pitcher_hand
     where opp_starter_hand = 'R'
     union all
     select team_abbrev, anchor_date as evt_date, 1 as is_demand
@@ -290,7 +299,7 @@ vs_rhp_pre_game as (
     left join vs_rhp_asof a
         on  a.team_abbrev = g.team_abbrev
         and a.anchor_date = g.game_date::date
-    left join {{ ref('mart_team_vs_pitcher_hand') }} vh
+    left join mart_team_vs_pitcher_hand vh
         on  vh.team             = g.team_abbrev
         and vh.opp_starter_hand = 'R'
         and vh.game_date::date  = a.asof_date
@@ -325,10 +334,10 @@ season_record as (
         tsr.streak_direction,
         tsr.streak_length
     from games g
-    left join {{ ref('mart_team_season_record') }} tsr
+    left join mart_team_season_record tsr
         on  tsr.team_abbrev = g.team_abbrev
         and (
-            (not g.is_scheduled and tsr.record_date = dateadd('day', -1, g.game_date::date))
+            (not g.is_scheduled and tsr.record_date = (g.game_date::date - interval '1' day))
             or (g.is_scheduled and tsr.record_date::date < g.game_date::date)
         )
     qualify row_number() over (
@@ -349,7 +358,7 @@ pythagorean_30d as (
         g.team_abbrev,
         pr.pythagorean_residual_30d
     from games g
-    left join {{ ref('mart_team_pythagorean_rolling') }} pr
+    left join mart_team_pythagorean_rolling pr
         on  pr.team_abbrev = g.team_abbrev
         and (
             (not g.is_scheduled and pr.game_pk = g.game_pk)
@@ -357,7 +366,7 @@ pythagorean_30d as (
         )
     qualify row_number() over (
         partition by g.game_pk, g.team_abbrev
-        order by iff(pr.game_pk = g.game_pk, 1, 0) desc, pr.game_date::date desc nulls last
+        order by case when pr.game_pk = g.game_pk then 1 else 0 end desc, pr.game_date::date desc nulls last
     ) = 1
 ),
 
@@ -385,7 +394,7 @@ bullpen_workload_resolved as (
         bw.bullpen_ip_prev_2d,
         bw.pitchers_used_prev_2d
     from games g
-    left join {{ ref('mart_bullpen_workload') }} bw
+    left join mart_bullpen_workload bw
         on  bw.pitching_team = g.team_abbrev
         and (
             (not g.is_scheduled and bw.game_pk = g.game_pk)
@@ -393,7 +402,7 @@ bullpen_workload_resolved as (
         )
     qualify row_number() over (
         partition by g.game_pk, g.team_abbrev
-        order by iff(bw.game_pk = g.game_pk, 1, 0) desc, bw.game_date::date desc nulls last
+        order by case when bw.game_pk = g.game_pk then 1 else 0 end desc, bw.game_date::date desc nulls last
     ) = 1
 ),
 
@@ -417,7 +426,7 @@ bullpen_effectiveness_resolved as (
         be.eb_bullpen_uncertainty,
         be.eb_bullpen_coverage_pct
     from games g
-    left join {{ ref('mart_bullpen_effectiveness') }} be
+    left join mart_bullpen_effectiveness be
         on  be.team_abbrev = g.team_abbrev
         and (
             (not g.is_scheduled and be.game_pk = g.game_pk)
@@ -425,7 +434,7 @@ bullpen_effectiveness_resolved as (
         )
     qualify row_number() over (
         partition by g.game_pk, g.team_abbrev
-        order by iff(be.game_pk = g.game_pk, 1, 0) desc, be.game_date::date desc nulls last
+        order by case when be.game_pk = g.game_pk then 1 else 0 end desc, be.game_date::date desc nulls last
     ) = 1
 ),
 
@@ -441,9 +450,9 @@ elo_ratings as (
     select
         g.game_pk,
         g.team_abbrev,
-        iff(g.is_scheduled, eh.elo_after_game, eh.elo_before_game) as elo_before_game
+        case when g.is_scheduled then eh.elo_after_game else eh.elo_before_game end as elo_before_game
     from games g
-    left join {{ source('betting', 'team_elo_history') }} eh
+    left join team_elo_history eh
         on  eh.team_abbrev = g.team_abbrev
         and (
             (not g.is_scheduled and eh.game_pk = g.game_pk)
@@ -451,7 +460,7 @@ elo_ratings as (
         )
     qualify row_number() over (
         partition by g.game_pk, g.team_abbrev
-        order by iff(eh.game_pk = g.game_pk, 1, 0) desc, eh.game_date::date desc nulls last
+        order by case when eh.game_pk = g.game_pk then 1 else 0 end desc, eh.game_date::date desc nulls last
     ) = 1
 ),
 
@@ -640,15 +649,23 @@ final as (
     left join bullpen_effectiveness_resolved be
         on  be.team_abbrev   = g.team_abbrev
         and be.game_pk       = g.game_pk
-    left join {{ ref('mart_team_schedule_context') }} sc
+    left join mart_team_schedule_context sc
         on  sc.team_abbrev   = g.team_abbrev
         and sc.game_pk       = g.game_pk
     left join elo_ratings er
         on  er.team_abbrev   = g.team_abbrev
         and er.game_pk       = g.game_pk
-    left join {{ ref('mart_team_fielding_oaa') }} fo
+    left join mart_team_fielding_oaa fo
         on  fo.team_abbrev   = g.team_abbrev
         and fo.game_pk       = g.game_pk
 )
 
 select * from final
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.feature_pregame_team_features
+
+{% endif %}

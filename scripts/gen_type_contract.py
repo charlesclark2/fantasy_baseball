@@ -62,6 +62,33 @@ CONTRACTS = [
         REPO / "dbt/type_contracts/feature_pregame_game_features_raw.types.json",
         REPO / "dbt/models/feature/feature_pregame_game_features_raw.sql",
     ),
+    # E11.1-W8a: the 5 EB-posterior incrementals migrated to a DuckDB/S3 dual-branch.
+    # Their DuckDB branch ends in `select * from final` (inside the `{% if duckdb %}`
+    # branch, immediately before `{% else %}`); the TYPE-PIN block replaces that select so
+    # the S3 parquet / lakehouse_ext FLOAT types stay stable and the at-cutover DROP+rebuild
+    # adopts a deterministic FLOAT schema (INC-19). (meta_model_features — the 6th INC-19
+    # incremental — is DEFERRED: it depends on feature_pregame_public_betting_features, which
+    # is W8b/raw-blocked, so it is NOT migrated in W8a.)
+    (
+        REPO / "dbt/type_contracts/eb_starter_posteriors.types.json",
+        REPO / "dbt/models/eb_posteriors/eb_starter_posteriors.sql",
+    ),
+    (
+        REPO / "dbt/type_contracts/eb_batter_posteriors_raw.types.json",
+        REPO / "dbt/models/eb_posteriors/eb_batter_posteriors_raw.sql",
+    ),
+    (
+        REPO / "dbt/type_contracts/eb_bullpen_posteriors.types.json",
+        REPO / "dbt/models/eb_posteriors/eb_bullpen_posteriors.sql",
+    ),
+    (
+        REPO / "dbt/type_contracts/eb_bullpen_team_posteriors.types.json",
+        REPO / "dbt/models/eb_posteriors/eb_bullpen_team_posteriors.sql",
+    ),
+    (
+        REPO / "dbt/type_contracts/int_bullpen_ali_by_season.types.json",
+        REPO / "dbt/models/eb_posteriors/int_bullpen_ali_by_season.sql",
+    ),
 ]
 
 _START = "-- TYPE-PIN-START (generated; do not hand-edit individual lines)"
@@ -71,8 +98,16 @@ _BLOCK_RE = re.compile(
     r"-- ={4,}\n-- INC-19 DURABLE TYPE-PIN.*?" + re.escape(_END) + r"\n?",
     re.DOTALL,
 )
-# first-time bootstrap: the un-pinned model ends in `select * from final`
-_BOOTSTRAP_RE = re.compile(r"select\s+\*\s+from\s+final\s*$", re.IGNORECASE)
+# first-time bootstrap: the un-pinned model ends its computed branch in `select * from final`.
+# Two layouts: (a) single-branch models end at EOF (feature_pregame_game_features_raw);
+# (b) E11.1-W8a dual-branch models have it inside `{% if target.name == 'duckdb' %}`,
+# immediately before `{% else %}` (the Snowflake branch reads `... from lakehouse_ext.<model>`,
+# never `from final`, so the lookahead never matches that one). The lookahead keeps the
+# replacement scoped to the DuckDB branch's terminal select.
+_BOOTSTRAP_RE = re.compile(
+    r"select\s+\*\s+from\s+final\s*(?=\n*\s*\{%-?\s*else|\s*$)",
+    re.IGNORECASE,
+)
 
 
 def load_manifest(path: pathlib.Path) -> dict:

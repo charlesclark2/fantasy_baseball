@@ -1,0 +1,13 @@
+{
+  "_comment": "INC-19 type-contract for int_bullpen_ali_by_season (E11.1-W8a). Derived from the live BETTING.INT_BULLPEN_ALI_BY_SEASON schema (2026-06-29). double_pinned = FLOAT cols the DuckDB branch casts ::double in its TYPE-PIN block so the S3 parquet / lakehouse_ext type is stable across upstream NUMBER<->FLOAT flips. Intended type change => regenerate (scripts/gen_type_contract.py --write) in the same PR + operator DROP+rebuild.",
+  "model": "int_bullpen_ali_by_season",
+  "all_columns": [
+    "season",
+    "pitcher_id",
+    "appearances",
+    "normalized_ali"
+  ],
+  "double_pinned": [
+    "normalized_ali"
+  ]
+}

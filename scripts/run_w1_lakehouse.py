@@ -415,6 +415,11 @@ def extract_duckdb_sql(model_name: str) -> str:
             '', sql, flags=re.DOTALL,
         )
 
+    # E11.1-W8a: the EB-posterior models stamp `'{{ invocation_id }}' as run_id` (dbt's run
+    # UUID). DuckDB has no invocation_id; resolve it to a stable literal here. run_id is
+    # provenance metadata (not parity-checked — like fit_date), so the literal is value-safe.
+    sql = re.sub(r"\{\{\s*invocation_id\s*\}\}", "lakehouse_duckdb", sql)
+
     # Guard: any surviving Jinja will cause a DuckDB parser error
     if re.search(r'\{[{%]', sql):
         sample = re.findall(r'\{[{%][^}]*?[%}]\}', sql)[:3]
@@ -428,11 +433,15 @@ def _build_marts(conn, models: list[str], dry_run: bool) -> None:
     for model in models:
         loc = f"{LAKEHOUSE}/{model}/data.parquet"
         mart_sql = extract_duckdb_sql(model)
+        # NEWLINE-SAFE WRAP: a type-pinned incremental's DuckDB branch ends in the GENERATED
+        # `-- TYPE-PIN-END` line comment (gen_type_contract.py). Inlining `({mart_sql})` on one
+        # line would put the closing `)` (and the TO/alias clause) ON that comment line → commented
+        # out → "syntax error at end of input". Put mart_sql on its own lines so `)` is never eaten.
         if dry_run:
-            n = conn.execute(f"SELECT count(*) FROM ({mart_sql}) t").fetchone()[0]
+            n = conn.execute(f"SELECT count(*) FROM (\n{mart_sql}\n) t").fetchone()[0]
             print(f"  {model}: {n:,} rows  (dry-run — no S3 write)")
         else:
-            conn.execute(f"COPY ({mart_sql}) TO '{loc}' (FORMAT PARQUET)")
+            conn.execute(f"COPY (\n{mart_sql}\n) TO '{loc}' (FORMAT PARQUET)")
             print(f"  {model}: written → {loc}")
 
 
@@ -480,7 +489,11 @@ def _build_w3pre(conn, dry_run: bool) -> None:
     # RAM and OOM'd even with spilling. Cap threads so only a couple of big blobs inflate at
     # once (the OOM error's #1 recommended knob). This tier is tiny (3 trivial odds models +
     # the schedule), so the throughput cost is negligible. Raise if the host has ample RAM.
-    conn.execute("SET threads=2")
+    # INC-22: ALSO raise memory_limit to 11GB to match every other build path (_build_w6 etc.).
+    # Without it this path OOM'd at DuckDB's low auto-default (~2.9 GiB) on the monthly_schedule
+    # flatten when run standalone via --w3pre-only — threads=2 alone wasn't enough.
+    for _pragma in ("SET threads=2", "SET memory_limit='11GB'"):
+        conn.execute(_pragma)
     for model in W3PRE_STG_MODELS:
         source = _raw_source_for(model)
         glob = f"{LAKEHOUSE_RAW}/{source}/**/*.parquet"
@@ -837,6 +850,126 @@ def _build_w7b(conn, dry_run: bool) -> None:
         _register_mart_views(conn, [model], dry_run)
 
 
+# E11.1-W8a: the INDEPENDENT half of the feature tree — feature/status models + the EB
+# posteriors that depend ONLY on already-S3 marts/staging/refs/signal-stores (NO dependency
+# on the W8b serving aggregator). OPT-IN (--w8a) until cutover, like W3pre/W4/W5/W6/W7b: reads
+# precursor parquet that must exist first:
+#   • the W8a Python-table mirrors + EB seeds (scripts/export_w8a_precursors_to_s3.py)
+#   • the W9 signal stores (scripts/export_w9_signals_to_s3.py)
+#   • the prior-wave marts/staging (W1-W7b), registered as DuckDB views from existing S3 parquet
+#   • monthly_schedule RAW (lakehouse_raw; read directly by stg_statsapi_starter_snapshots)
+# Each W8a model builds a single data.parquet; the Snowflake side is a view/table over the
+# lakehouse_ext external table (generate_w8a_external_tables.py).
+#
+# ⚠️ BUILD-ORDER NOTE (eb_bullpen_team_posteriors → mart_bullpen_effectiveness): the W5b mart
+# mart_bullpen_effectiveness reads eb_bullpen_team_posteriors S3 parquet (was the export_w5
+# mirror; W8a now BUILDS it). In a FULL rebuild run --w8a BEFORE --w5 so the W5b mart reads the
+# fresh EB parquet; in the daily flow the EB posteriors change slowly (1-day-stale is acceptable
+# and parity-checkable). The W8a build is otherwise independent of the serving aggregator.
+W8A_PRECURSOR_VIEWS = [
+    # W1
+    "mart_pitch_play_event",
+    # W2
+    "mart_batter_rolling_stats", "mart_starting_pitcher_game_log",
+    # W3
+    "mart_batter_vs_handedness_splits", "mart_bullpen_workload", "mart_team_vs_pitcher_hand",
+    # W4
+    "stg_fangraphs__zips_hitting", "mart_park_factors_granular",
+    # W5 game/team chain
+    "mart_game_results", "mart_game_spine", "mart_park_run_factors",
+    "mart_team_pythagorean_rolling", "mart_team_rolling_offense", "mart_team_rolling_pitching",
+    "mart_team_season_record",
+    # W5b
+    "mart_eb_park_factors", "mart_bullpen_effectiveness", "mart_team_fielding_oaa",
+    # W6
+    "stg_statsapi_venues", "mart_game_odds_bridge", "mart_odds_consensus",
+    "mart_team_schedule_context", "stg_statsapi_lineups",
+    # W7b
+    "stg_statsapi_probable_pitchers",
+    # W9 signal stores (feature_pregame_sub_model_signals reads all 5)
+    "mart_sub_model_signals", "offense_v1_signals", "offense_v2_signals",
+    "starter_suppression_signals", "starter_ip_signals",
+    # W8a Python-table mirrors (scripts/export_w8a_precursors_to_s3.py)
+    "mart_player_start_probability", "feature_pregame_market_features", "player_sequential_posteriors",
+    # team_elo_history (compute_elo output; Python-written source read by feature_pregame_team_features
+    # via a hardcoded source(). Already mirrored by W7b export_features_to_s3.py, AND by the W8a
+    # precursor export for --w8a-only self-containment — same low-risk full-table mirror pattern.)
+    "team_elo_history",
+    # W8a EB-prior seeds (mirrored alongside)
+    "ref_eb_starter_priors", "ref_eb_lineup_priors", "ref_eb_bullpen_priors",
+]
+
+# Feature/status models, dependency-ordered (each registered as a view after build so intra-W8a
+# reads resolve — stg_statsapi_starter_snapshots precedes feature_pregame_starter_status).
+W8A_FEATURE_MODELS = [
+    "stg_statsapi_starter_snapshots",   # ← monthly_schedule RAW (lakehouse_raw); retains all snapshots
+    "feature_pregame_starter_status",   # ← stg_statsapi_starter_snapshots (SCD-2)
+    "feature_pregame_park_status",      # ← mart_eb_park_factors + mart_game_results + stg_statsapi_venues (SCD-2)
+    "feature_pregame_park_features",    # ← mart_game_spine + park marts + stg_statsapi_venues
+    "feature_pregame_team_features",    # ← team marts + bullpen marts + team_elo_history (mirrored precursor)
+    "feature_pregame_expected_lineup",  # ← mart_player_start_probability + batter rolling/platoon marts
+    "feature_pregame_odds_features",    # ← mart_game_spine/odds_bridge/consensus + feature_pregame_market_features
+    "feature_pregame_sub_model_signals",# ← the 5 W9 signal stores
+]
+
+# EB posteriors (ALL INCREMENTAL on Snowflake; DuckDB = full COPY). Dependency-ordered:
+# int_bullpen_ali → eb_bullpen_posteriors → eb_bullpen_team_posteriors; eb_starter/eb_batter
+# are independent leaves (read player_sequential_posteriors mirror + seeds).
+W8A_EB_MODELS = [
+    "int_bullpen_ali_by_season",        # ← stg_batter_pitches + mart_pitch_play_event + mart_starting_pitcher_game_log
+    "eb_bullpen_posteriors",            # ← int_bullpen_ali + mart_starting_pitcher_game_log + ref_eb_bullpen_priors + stg_batter_pitches
+    "eb_bullpen_team_posteriors",       # ← eb_bullpen_posteriors + mart_game_spine
+    "eb_starter_posteriors",            # ← mart_starting_pitcher_game_log + ref_eb_starter_priors + stg_statsapi_probable_pitchers + player_seq
+    "eb_batter_posteriors_raw",         # ← mart_batter_rolling_stats + ref_eb_lineup_priors + stg_fangraphs__zips_hitting + stg_statsapi_lineups + player_seq
+]
+
+W8A_MODELS = W8A_FEATURE_MODELS + W8A_EB_MODELS
+
+
+def _register_w8a_views(conn, names: list[str]) -> None:
+    """Register W8a precursor parquet as DuckDB views with the UNIVERSAL
+    `<name>/**/*.parquet` glob (union_by_name=true) so single-file marts, the seed
+    part-0.parquet, year-partitioned tables, AND W6 date-bucketed marts all resolve
+    through one code path (same contract as scripts/utils/lakehouse_read.register_views)."""
+    for name in names:
+        glob = f"{LAKEHOUSE}/{name}/**/*.parquet"
+        conn.execute(
+            f"CREATE OR REPLACE VIEW {name} AS "
+            f"SELECT * FROM read_parquet('{glob}', union_by_name=true)"
+        )
+        print(f"  registered S3 view: {name}")
+
+
+def _build_w8a(conn, dry_run: bool) -> None:
+    """Build the E11.1-W8a upstream feature layer + EB posteriors. Registers the prior-wave +
+    W9 + W8a-mirror precursor views first, then builds the feature/status models and the EB
+    posteriors in dependency order (each registered as a view immediately after build). The
+    monthly_schedule RAW (stg_statsapi_starter_snapshots) + the seed/mirror parquet are read via
+    read_parquet / registered views — a missing precursor makes a build raise; W8a is gated
+    (opt-in) so the daily HALT op never trips on it pre-cutover."""
+    print("\nW8a precursor views (prior-wave marts/staging + W9 signal stores + W8a mirrors/seeds):")
+    _register_w8a_views(conn, W8A_PRECURSOR_VIEWS)
+
+    # stg_statsapi_starter_snapshots RETAINS every (game_pk, side, ingestion_ts) snapshot, so the
+    # monthly_schedule month-blob flatten is NOT collapsed early (the OOM source — same as
+    # stg_statsapi_games). Cap parallelism + lower memory_limit so DuckDB spills rather than OOMs.
+    for _pragma in ("SET threads=2", "SET memory_limit='11GB'"):
+        try:
+            conn.execute(_pragma)
+        except Exception as _e:
+            print(f"  (note: {_pragma} not applied: {_e})")
+
+    print("\nW8a feature/status models (dependency-ordered):")
+    for model in W8A_FEATURE_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+    print("\nW8a EB posteriors (dependency-ordered; run BEFORE --w5 in a full rebuild — see note):")
+    for model in W8A_EB_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+
 def run(
     dry_run: bool = False,
     skip_w1: bool = False,
@@ -856,6 +989,8 @@ def run(
     w6_odds_current: bool = False,
     w7b: bool = False,
     w7b_only: bool = False,
+    w8a: bool = False,
+    w8a_only: bool = False,
 ) -> None:
     import duckdb
 
@@ -1025,6 +1160,18 @@ def run(
         print("\nW7b mini-wave run complete (--w7b-only).")
         return
 
+    # E11.1-W8a: --w8a-only rebuilds just the upstream feature layer + EB posteriors, reusing the
+    # existing prior-wave parquet (registered as precursor views by _build_w8a) + the W9 signal
+    # stores + the W8a Python-table/seed mirrors. stg_batter_pitches is already registered above.
+    # Lets the operator iterate on W8a / re-run parity after an export, without rebuilding the
+    # heavy pitch marts.
+    if w8a_only:
+        print("\nBuilding W8a (reuse existing prior-wave/W9/mirror parquet for --w8a-only):")
+        _build_w8a(conn, dry_run)
+        conn.close()
+        print("\nW8a upstream feature layer + EB posteriors run complete (--w8a-only).")
+        return
+
     # ── W1: pitch-level marts ────────────────────────────────────────────────
     if not skip_w1:
         print("\nW1 marts:")
@@ -1104,11 +1251,20 @@ def run(
     if w7b:
         _build_w7b(conn, dry_run)
 
+    # ── W8a: upstream feature layer + EB posteriors (E11.1-W8a) — OPT-IN ──────────
+    # NOT built by default: reads the W8a Python-table/seed mirrors
+    # (scripts/export_w8a_precursors_to_s3.py) + the W9 signal stores + the prior-wave
+    # marts that must exist first. Enable with --w8a once the exports are wired and parity
+    # is validated. ⚠️ In a full rebuild --w8a must run BEFORE --w5 (the W5b mart
+    # mart_bullpen_effectiveness reads the eb_bullpen_team_posteriors parquet W8a builds).
+    if w8a:
+        _build_w8a(conn, dry_run)
+
     conn.close()
     print(
         f"\nW1+W2+W3{'+W3pre' if w3pre else ''}{'+W4' if w4 else ''}"
         f"{'+W5' if w5 else ''}{'+W5b' if archetype else ''}{'+W6' if w6 else ''}"
-        f"{'+W7b' if w7b else ''} "
+        f"{'+W7b' if w7b else ''}{'+W8a' if w8a else ''} "
         f"lakehouse run complete."
     )
 
@@ -1133,4 +1289,6 @@ if __name__ == "__main__":
         w6_odds_current="--w6-odds-current" in sys.argv,
         w7b="--w7b" in sys.argv,
         w7b_only="--w7b-only" in sys.argv,
+        w8a="--w8a" in sys.argv,
+        w8a_only="--w8a-only" in sys.argv,
     )

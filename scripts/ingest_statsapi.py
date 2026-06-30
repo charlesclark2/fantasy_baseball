@@ -62,6 +62,7 @@ Usage:
 """
 
 import argparse
+import base64
 import calendar
 import csv
 import json
@@ -134,6 +135,27 @@ def _load_private_key(path: str, passphrase: str | None) -> bytes:
     )
 
 
+def _load_private_key_inline(key_val: str) -> bytes:
+    """Decode an inline SNOWFLAKE_PRIVATE_KEY (PEM or base64) → DER bytes for the connector.
+
+    INC-22: the prod box authenticates via the inline SNOWFLAKE_PRIVATE_KEY env var, not a
+    key file — so this mirrors scripts/write_serving_store._load_private_key. A Compose
+    env_file can't carry real newlines, so handle the \\n-escaped PEM first (still starts
+    with "-----BEGIN"), then base64.
+    """
+    key_val = key_val.strip()
+    if "\\n" in key_val:
+        key_val = key_val.replace("\\n", "\n").strip()
+    elif not key_val.startswith("-----"):
+        key_val = base64.b64decode(key_val).decode("utf-8")
+    key = load_pem_private_key(key_val.encode("utf-8"), password=None, backend=default_backend())
+    return key.private_bytes(
+        encoding=Encoding.DER,
+        format=PrivateFormat.PKCS8,
+        encryption_algorithm=NoEncryption(),
+    )
+
+
 def get_snowflake_connection() -> snowflake.connector.SnowflakeConnection:
     """
     Build a Snowflake connection using private key auth when
@@ -174,14 +196,22 @@ def get_snowflake_connection() -> snowflake.connector.SnowflakeConnection:
     }
 
     private_key_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
-    if private_key_path:
-        log.info("Authenticating with private key: %s", private_key_path)
+    inline_key = os.environ.get("SNOWFLAKE_PRIVATE_KEY", "").strip()
+    if private_key_path and os.path.exists(private_key_path):
+        log.info("Authenticating with private key file: %s", private_key_path)
         kwargs["private_key"] = _load_private_key(private_key_path, passphrase=None)
+    elif inline_key:
+        # INC-22: prod sets the inline SNOWFLAKE_PRIVATE_KEY (no key file on the box), so
+        # this core ingestion script now authenticates the SAME way as write_serving_store
+        # instead of demanding a file — no more docker-exec key-file gymnastics.
+        log.info("Authenticating with inline private key (SNOWFLAKE_PRIVATE_KEY)")
+        kwargs["private_key"] = _load_private_key_inline(inline_key)
     else:
         password = os.environ.get("SNOWFLAKE_PASSWORD")
         if not password:
             raise EnvironmentError(
-                "Either SNOWFLAKE_PRIVATE_KEY_PATH or SNOWFLAKE_PASSWORD must be set."
+                "None of SNOWFLAKE_PRIVATE_KEY_PATH (a key file), SNOWFLAKE_PRIVATE_KEY "
+                "(inline PEM/base64), or SNOWFLAKE_PASSWORD is set."
             )
         log.info("Authenticating with password")
         kwargs["password"] = password

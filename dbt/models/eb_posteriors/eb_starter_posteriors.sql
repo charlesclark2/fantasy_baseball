@@ -38,7 +38,19 @@
 -- recent games — matching the Python's idempotent per-day MERGE. The season-to-date
 -- joins still read full source for the recent games (values stay exact); only the
 -- OUTPUT spine (starters) is scoped to the recent window.
-{{ config(materialized='incremental', unique_key=['game_pk', 'pitcher_id'], incremental_strategy='merge') }}
+
+-- E11.1-W8a: dual-branch. DuckDB branch (real compute -> S3, run_w1_lakehouse._build_w8a)
+-- reads the migrated upstream marts/staging (registered DuckDB views) + the S3-mirrored
+-- player_sequential_posteriors where applicable; is_incremental blocks are stripped by
+-- extract_duckdb_sql (DuckDB = full rebuild -> COPY). The TYPE-PIN block (gen_type_contract
+-- --write) casts every FLOAT output ::double (INC-19 cure) so the S3 parquet / lakehouse_ext
+-- type is stable; guarded by test_type_contract_guard.py. The Snowflake (else) branch MERGEs
+-- from the lakehouse_ext external table; at cutover the operator DROPs+rebuilds this
+-- incremental so the stored NUMBER cols adopt the FLOAT type (INC-19).
+
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='incremental', unique_key=['game_pk', 'pitcher_id'], incremental_strategy='merge', tags=['w8a_lakehouse']) }}
 
 with probable as (
     select game_pk, game_date, side, probable_pitcher_id as pitcher_id
@@ -47,7 +59,7 @@ with probable as (
                row_number() over (
                    partition by game_pk, side order by ingestion_ts desc nulls last
                ) as rn
-        from {{ ref('stg_statsapi_probable_pitchers') }}
+        from stg_statsapi_probable_pitchers
         where probable_pitcher_id is not null
     )
     where rn = 1
@@ -85,7 +97,7 @@ gamelog as (
         game_date::date     as game_date,
         game_year,
         batters_faced, strikeouts, walks, xwoba_against
-    from {{ ref('mart_starting_pitcher_game_log') }}
+    from mart_starting_pitcher_game_log
     where batters_faced > 0
 ),
 
@@ -151,7 +163,7 @@ starter_band as (
 -- ── Prior cells with band fallback (lowest band_rank per season×metric) ──────
 priors as (
     select season, metric, age_band, band_rank, mu, sigma
-    from {{ ref('ref_eb_starter_priors') }}
+    from ref_eb_starter_priors
 ),
 priors_fallback as (
     select season, metric, mu, sigma
@@ -192,7 +204,7 @@ prior_cells as (
 seq as (
     select s.game_pk, s.pitcher_id, sp.posterior_mu, sp.game_date as seq_game_date
     from starter_band s
-    join baseball_data.betting.player_sequential_posteriors sp
+    join player_sequential_posteriors sp
       on  sp.player_id::varchar = s.pitcher_id
       and sp.player_type = 'starter'
       and sp.metric      = 'xwoba_against'
@@ -308,4 +320,51 @@ final as (
     from post
 )
 
-select * from final
+-- ============================================================================
+-- INC-19 DURABLE TYPE-PIN (2026-06-29) — see CLAUDE.md "type-contract guard".
+-- Every FLOAT output column is cast to an explicit ::double so an upstream
+-- NUMBER<->FLOAT migration (a lakehouse dual-branch flip) can NEVER drift this
+-- incremental's stored column type again — the recurring HALT class that fired
+-- 5x (INC-15 / W1d / INC-16-P0 / INC-19 / INC-19-recurrence). ::double (NOT
+-- ::float = 32-bit in DuckDB) is value-preserving 64-bit; it ADOPTS the FLOAT
+-- types the table already holds, so this is a no-op incremental (no type ALTER).
+--
+-- This pinned set is contract-checked by betting_ml/tests/test_type_contract_guard.py
+-- against dbt/type_contracts/eb_starter_posteriors.types.json. If you ADD a column or
+-- INTEND a type change, update BOTH this block AND that manifest in the SAME PR
+-- (regenerate via scripts/gen_type_contract.py --write) or CI goes red. A new
+-- numeric column that can ever be FLOAT MUST be ::double-pinned here.
+-- NOTE: the explicit outer select is intentional — a column added to `final` but
+-- not added here is DROPPED; the guard's set-equality check catches that too.
+-- TYPE-PIN-START (generated; do not hand-edit individual lines)
+select
+    game_pk,
+    side,
+    pitcher_id,
+    season,
+    game_date,
+    age_band,
+    current_season_bf,
+    current_season_starts,
+    eb_data_source,
+    eb_xwoba_against::double as eb_xwoba_against,
+    eb_k_pct::double as eb_k_pct,
+    eb_bb_pct::double as eb_bb_pct,
+    eb_xwoba_uncertainty::double as eb_xwoba_uncertainty,
+    eb_xwoba_against_sequential::double as eb_xwoba_against_sequential,
+    posterior_source,
+    prior_age_days,
+    fit_date,
+    run_id
+from final
+-- TYPE-PIN-END
+{% else %}
+
+{{ config(materialized='incremental', unique_key=['game_pk', 'pitcher_id'], incremental_strategy='merge') }}
+
+select * from baseball_data.lakehouse_ext.eb_starter_posteriors
+{% if is_incremental() %}
+  where game_date >= dateadd('day', -7, current_date())
+{% endif %}
+
+{% endif %}

@@ -30,7 +30,9 @@
 --   Parlay API (source_system = 'parlay_api'): 2026-05-26 onward
 -- =============================================================================
 
-{{ config(materialized='table') }}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w8a_lakehouse']) }}
 
 with
 
@@ -43,7 +45,7 @@ games as (
         game_year::integer as game_year,
         home_team,
         away_team
-    from {{ ref('mart_game_spine') }}
+    from mart_game_spine
     where game_type = 'R'
 ),
 
@@ -52,7 +54,7 @@ bridge as (
         game_pk,
         event_id,
         has_odds
-    from {{ ref('mart_game_odds_bridge') }}
+    from mart_game_odds_bridge
 ),
 
 -- Current lowvig h2h snapshot from the SCD-2 market features table.
@@ -70,14 +72,14 @@ h2h as (
         home_implied_prob,
         away_implied_prob,
         total_market_vig
-    from {{ source('betting_features', 'feature_pregame_market_features') }}
+    from feature_pregame_market_features
     where bookmaker_key = 'lowvig'
       and market_type   = 'h2h'
       and is_current    = true
 ),
 
 consensus_odds as (
-    select * from {{ ref('mart_odds_consensus') }}
+    select * from mart_odds_consensus
 ),
 
 -- Current lowvig totals snapshot.
@@ -90,7 +92,7 @@ totals as (
         over_implied_prob,
         under_implied_prob,
         totals_market_vig
-    from {{ source('betting_features', 'feature_pregame_market_features') }}
+    from feature_pregame_market_features
     where bookmaker_key = 'lowvig'
       and market_type   = 'totals'
       and is_current    = true
@@ -157,3 +159,11 @@ left join bridge b       on b.game_pk  = g.game_pk
 left join h2h            on h2h.game_pk = g.game_pk
 left join totals         on totals.game_pk = g.game_pk
 left join consensus_odds con on con.event_id = b.event_id
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.feature_pregame_odds_features
+
+{% endif %}

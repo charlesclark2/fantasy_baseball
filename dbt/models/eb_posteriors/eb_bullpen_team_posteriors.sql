@@ -49,7 +49,19 @@
 
 -- Story A2.11: incremental (merge on grain), scoped to recent games to match the
 -- per-reliever model's daily window.
-{{ config(materialized='incremental', unique_key=['game_pk', 'team'], incremental_strategy='merge') }}
+
+-- E11.1-W8a: dual-branch. DuckDB branch (real compute -> S3, run_w1_lakehouse._build_w8a)
+-- reads the migrated upstream marts/staging (registered DuckDB views) + the S3-mirrored
+-- player_sequential_posteriors where applicable; is_incremental blocks are stripped by
+-- extract_duckdb_sql (DuckDB = full rebuild -> COPY). The TYPE-PIN block (gen_type_contract
+-- --write) casts every FLOAT output ::double (INC-19 cure) so the S3 parquet / lakehouse_ext
+-- type is stable; guarded by test_type_contract_guard.py. The Snowflake (else) branch MERGEs
+-- from the lakehouse_ext external table; at cutover the operator DROPs+rebuilds this
+-- incremental so the stored NUMBER cols adopt the FLOAT type (INC-19).
+
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='incremental', unique_key=['game_pk', 'team'], incremental_strategy='merge', tags=['w8a_lakehouse']) }}
 
 with spine as (
     -- mart_game_spine = completed + today's SCHEDULED games (A1.11), so the live
@@ -61,7 +73,7 @@ with spine as (
         game_year       as season,
         home_team,
         away_team
-    from {{ ref('mart_game_spine') }}
+    from mart_game_spine
     where game_type = 'R'
     {% if is_incremental() %}
     and game_date >= (select dateadd('day', -7, max(game_date)) from {{ this }})
@@ -86,7 +98,7 @@ reliever_eb as (
         eb_xwoba_against,
         eb_xwoba_uncertainty,
         eb_data_source
-    from {{ ref('eb_bullpen_posteriors') }}
+    from eb_bullpen_posteriors
 ),
 
 -- LEAKAGE-SAFE pre-game pool: relievers who appeared for the team in the strictly
@@ -109,12 +121,14 @@ pool as (
     join reliever_eb re
         on  re.pitching_team    = ttg.team
         and re.appearance_date  <  ttg.game_date                          -- STRICTLY prior (leakage guard)
-        and re.appearance_date  >= dateadd('day', -30, ttg.game_date)
+        and re.appearance_date  >= (ttg.game_date - interval '30' day)
 ),
 
 pool_latest as (
     select * from pool where rn = 1
-)
+),
+
+final as (
 
 select
     game_pk,
@@ -131,3 +145,46 @@ select
     '{{ invocation_id }}' as run_id
 from pool_latest
 group by game_pk, team
+
+)
+
+-- ============================================================================
+-- INC-19 DURABLE TYPE-PIN (2026-06-29) — see CLAUDE.md "type-contract guard".
+-- Every FLOAT output column is cast to an explicit ::double so an upstream
+-- NUMBER<->FLOAT migration (a lakehouse dual-branch flip) can NEVER drift this
+-- incremental's stored column type again — the recurring HALT class that fired
+-- 5x (INC-15 / W1d / INC-16-P0 / INC-19 / INC-19-recurrence). ::double (NOT
+-- ::float = 32-bit in DuckDB) is value-preserving 64-bit; it ADOPTS the FLOAT
+-- types the table already holds, so this is a no-op incremental (no type ALTER).
+--
+-- This pinned set is contract-checked by betting_ml/tests/test_type_contract_guard.py
+-- against dbt/type_contracts/eb_bullpen_team_posteriors.types.json. If you ADD a column or
+-- INTEND a type change, update BOTH this block AND that manifest in the SAME PR
+-- (regenerate via scripts/gen_type_contract.py --write) or CI goes red. A new
+-- numeric column that can ever be FLOAT MUST be ::double-pinned here.
+-- NOTE: the explicit outer select is intentional — a column added to `final` but
+-- not added here is DROPPED; the guard's set-equality check catches that too.
+-- TYPE-PIN-START (generated; do not hand-edit individual lines)
+select
+    game_pk,
+    game_date,
+    season,
+    team,
+    team_eb_bullpen_xwoba::double as team_eb_bullpen_xwoba,
+    team_eb_bullpen_uncertainty::double as team_eb_bullpen_uncertainty,
+    n_relievers,
+    n_prior_only,
+    fit_date,
+    run_id
+from final
+-- TYPE-PIN-END
+{% else %}
+
+{{ config(materialized='incremental', unique_key=['game_pk', 'team'], incremental_strategy='merge') }}
+
+select * from baseball_data.lakehouse_ext.eb_bullpen_team_posteriors
+{% if is_incremental() %}
+  where game_date >= (select dateadd('day', -7, max(game_date)) from {{ this }})
+{% endif %}
+
+{% endif %}
