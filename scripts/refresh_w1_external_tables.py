@@ -209,6 +209,27 @@ W9_TABLES = [
     "starter_ip_signals",
 ]
 
+# E11.1-W8a: the upstream feature layer + EB posteriors external tables (created by
+# scripts/ddl/generate_w8a_external_tables.py over the run_w1_lakehouse.py --w8a parquet).
+# BEST-EFFORT (WARN if missing) like W4/W5/W6/W7/W7b/W9 during the opt-in rollout. Refreshed via
+# the dedicated --w8a path (the W8a mirror op calls it right after the build). The 5 EB models'
+# Snowflake side is INCREMENTAL — a stale external-table refresh just delays the MERGE pickup.
+W8A_TABLES = [
+    "stg_statsapi_starter_snapshots",
+    "feature_pregame_starter_status",
+    "feature_pregame_park_status",
+    "feature_pregame_park_features",
+    "feature_pregame_team_features",
+    "feature_pregame_expected_lineup",
+    "feature_pregame_odds_features",
+    "feature_pregame_sub_model_signals",
+    "int_bullpen_ali_by_season",
+    "eb_bullpen_posteriors",
+    "eb_bullpen_team_posteriors",
+    "eb_starter_posteriors",
+    "eb_batter_posteriors_raw",
+]
+
 
 def _load_private_key():
     key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
@@ -277,7 +298,21 @@ def main():
                     help="E11.1-W9: refresh only the 5 sub-model signal-store external tables "
                          "(after export_w9_signals_to_s3.py). Best-effort — these don't exist "
                          "until the W9 mirror is enabled, so a missing table is an expected skip.")
+    ap.add_argument("--w8a", action="store_true",
+                    help="E11.1-W8a: refresh only the 13 upstream feature-layer + EB-posterior "
+                         "external tables (after run_w1_lakehouse.py --w8a). Best-effort — these "
+                         "don't exist until the W8a build is enabled, so a missing table is an "
+                         "expected skip.")
     args = ap.parse_args()
+
+    # E11.1-W8a: the W8a build op refreshes its own external tables right after the build
+    # (mirror-tier — best-effort, never required). Kept off the default daily refresh list until
+    # the W8a cutover (the dbt else branches that read them aren't merged until then).
+    if args.w8a:
+        print("Refreshing W8a upstream feature-layer + EB-posterior external tables (--w8a):")
+        _refresh(W8A_TABLES, required=set())
+        print("W8a external-table refresh complete (best-effort).")
+        return
 
     # E11.1-W9: the signal-store mirror op refreshes its own external tables right after writing
     # the parquet (mirror-tier — best-effort, never required). Kept off the default daily refresh

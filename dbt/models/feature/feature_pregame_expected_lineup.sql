@@ -10,22 +10,24 @@
 --          the per-batter stats are resolved strictly-prior (leakage-safe as-of).
 --
 -- WHY THIS IS LEAKAGE-SAFE / PRE-LINEUP:
---   * P(start) is walk-forward (33.1: year Y scored by a model fit on <Y) and needs
---     no confirmed lineup — it is computed from each team's recent start history.
---   * Batter stats use the SAME as-of carry-forward as feature_pregame_lineup_features:
---     the latest rolling-stats row STRICTLY BEFORE official_date (demand rows sort
---     before same-date data via is_demand desc), so no same-day leak.
+--   * P(start) is walk-forward (33.1) and needs no confirmed lineup.
+--   * Batter stats use the SAME as-of carry-forward as feature_pregame_lineup_features.
 --   * Prior-season platoon splits use game_year - 1 only.
---   * INJURIES ARE SUBSUMED: P(start) already downweights injured players (the model
---     has is_injured), so no separate injury-adjustment is needed here.
+--   * INJURIES ARE SUBSUMED: P(start) already downweights injured players.
 --
--- v1 SCOPE: rolling-30d + std + prior-season platoon (vs-LHP/RHP) expected aggregates —
--- the bulk of the dropped offense signal, and recoverable WITHOUT the opposing starter.
--- The matchup families (vs-pitch-archetype / vs-cluster / bat-tracking) are a documented
--- 33.3 follow-on (they need the opposing probable starter joined in).
+-- E11.1-W8a (upstream feature-layer migration): DuckDB branch reads the migrated
+-- mart_batter_rolling_stats / mart_batter_vs_handedness_splits (registered as DuckDB
+-- views by run_w1_lakehouse._build_w8a) + mart_player_start_probability (registered
+-- from its S3 export-mirror, scripts/export_w8a_precursors_to_s3.py). The Jinja
+-- for-loops in the Snowflake source are EXPANDED inline here — run_w1_lakehouse's
+-- extract_duckdb_sql is a regex pseudo-renderer (no loop expansion). The Snowflake
+-- (else) branch is a thin view over the lakehouse_ext external table; the
+-- column set is identical (parity-gated by scripts/parity_check_w8a.py).
 -- =============================================================================
 
-{{ config(materialized='table') }}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w8a_lakehouse']) }}
 
 with candidates as (
 
@@ -35,20 +37,19 @@ with candidates as (
         player_id              as batter_id,
         official_date::date    as official_date,
         start_probability      as p
-    from {{ source('betting', 'mart_player_start_probability') }}
+    from mart_player_start_probability
     where start_probability > 0      -- ignore ~0-weight candidates (no contribution)
 
 ),
 
 -- as-of carry-forward: latest strictly-prior rolling-stats date per (batter, official_date).
--- Demand rows (is_demand=1) sort BEFORE same-date data rows → enforces strict < (no leak).
 asof_demand as (
     select distinct batter_id, official_date from candidates
 ),
 
 asof_combined as (
     select batter_id, game_date::date as evt_date, 0 as is_demand
-    from {{ ref('mart_batter_rolling_stats') }}
+    from mart_batter_rolling_stats
     union all
     select batter_id, official_date as evt_date, 1 as is_demand
     from asof_demand
@@ -87,7 +88,7 @@ cand_stats as (
     left join asof_date ad
         on  ad.batter_id     = c.batter_id
         and ad.official_date = c.official_date
-    left join {{ ref('mart_batter_rolling_stats') }} rs
+    left join mart_batter_rolling_stats rs
         on  rs.batter_id      = c.batter_id
         and rs.game_date::date = ad.asof_date
     qualify row_number() over (
@@ -95,9 +96,7 @@ cand_stats as (
     ) = 1
 ),
 
--- P-weighted expected rolling aggregates.
--- expected_stat = Σ(p·stat) / Σ(p over candidates with a non-null stat) — missing-stat
--- candidates drop out of BOTH numerator and denominator (no dilution toward 0).
+-- P-weighted expected rolling aggregates (Jinja for-loops EXPANDED for the DuckDB branch).
 expected_rolling as (
     select
         game_pk,
@@ -106,12 +105,20 @@ expected_rolling as (
         count(*)                                                    as n_candidates,
         round(sum(p * case when batter_hand = 'L' then 1 else 0 end), 2) as exp_lhb_count,
         round(sum(p * case when batter_hand = 'R' then 1 else 0 end), 2) as exp_rhb_count,
-        {% set _roll = ['woba_30d','xwoba_30d','k_pct_30d','bb_pct_30d','hard_hit_pct_30d',
-                        'barrel_pct_30d','whiff_rate_30d','chase_rate_30d',
-                        'woba_std','xwoba_std','k_pct_std','bb_pct_std','hard_hit_pct_std','barrel_pct_std'] %}
-        {% for s in _roll %}
-        round(sum(p * {{ s }}) / nullif(sum(case when {{ s }} is not null then p end), 0), 3) as exp_{{ s }}{{ ',' if not loop.last }}
-        {% endfor %}
+        round(sum(p * woba_30d)         / nullif(sum(case when woba_30d         is not null then p end), 0), 3) as exp_woba_30d,
+        round(sum(p * xwoba_30d)        / nullif(sum(case when xwoba_30d        is not null then p end), 0), 3) as exp_xwoba_30d,
+        round(sum(p * k_pct_30d)        / nullif(sum(case when k_pct_30d        is not null then p end), 0), 3) as exp_k_pct_30d,
+        round(sum(p * bb_pct_30d)       / nullif(sum(case when bb_pct_30d       is not null then p end), 0), 3) as exp_bb_pct_30d,
+        round(sum(p * hard_hit_pct_30d) / nullif(sum(case when hard_hit_pct_30d is not null then p end), 0), 3) as exp_hard_hit_pct_30d,
+        round(sum(p * barrel_pct_30d)   / nullif(sum(case when barrel_pct_30d   is not null then p end), 0), 3) as exp_barrel_pct_30d,
+        round(sum(p * whiff_rate_30d)   / nullif(sum(case when whiff_rate_30d   is not null then p end), 0), 3) as exp_whiff_rate_30d,
+        round(sum(p * chase_rate_30d)   / nullif(sum(case when chase_rate_30d   is not null then p end), 0), 3) as exp_chase_rate_30d,
+        round(sum(p * woba_std)         / nullif(sum(case when woba_std         is not null then p end), 0), 3) as exp_woba_std,
+        round(sum(p * xwoba_std)        / nullif(sum(case when xwoba_std        is not null then p end), 0), 3) as exp_xwoba_std,
+        round(sum(p * k_pct_std)        / nullif(sum(case when k_pct_std        is not null then p end), 0), 3) as exp_k_pct_std,
+        round(sum(p * bb_pct_std)       / nullif(sum(case when bb_pct_std       is not null then p end), 0), 3) as exp_bb_pct_std,
+        round(sum(p * hard_hit_pct_std) / nullif(sum(case when hard_hit_pct_std is not null then p end), 0), 3) as exp_hard_hit_pct_std,
+        round(sum(p * barrel_pct_std)   / nullif(sum(case when barrel_pct_std   is not null then p end), 0), 3) as exp_barrel_pct_std
     from cand_stats
     group by game_pk, home_away
 ),
@@ -125,7 +132,7 @@ cand_platoon as (
         hs.pitcher_hand,
         hs.woba, hs.xwoba, hs.k_pct, hs.bb_pct, hs.hard_hit_pct
     from candidates c
-    left join {{ ref('mart_batter_vs_handedness_splits') }} hs
+    left join mart_batter_vs_handedness_splits hs
         on  hs.batter_id = c.batter_id
         and hs.game_year = year(c.official_date) - 1
 ),
@@ -134,13 +141,16 @@ expected_platoon as (
     select
         game_pk,
         home_away,
-        {% set _plat = ['woba','xwoba','k_pct','bb_pct','hard_hit_pct'] %}
-        {% for s in _plat %}
-        round(sum(case when pitcher_hand='L' then p * {{ s }} end)
-              / nullif(sum(case when pitcher_hand='L' and {{ s }} is not null then p end), 0), 3) as exp_{{ s }}_vs_lhp,
-        round(sum(case when pitcher_hand='R' then p * {{ s }} end)
-              / nullif(sum(case when pitcher_hand='R' and {{ s }} is not null then p end), 0), 3) as exp_{{ s }}_vs_rhp{{ ',' if not loop.last }}
-        {% endfor %}
+        round(sum(case when pitcher_hand='L' then p * woba end)         / nullif(sum(case when pitcher_hand='L' and woba         is not null then p end), 0), 3) as exp_woba_vs_lhp,
+        round(sum(case when pitcher_hand='R' then p * woba end)         / nullif(sum(case when pitcher_hand='R' and woba         is not null then p end), 0), 3) as exp_woba_vs_rhp,
+        round(sum(case when pitcher_hand='L' then p * xwoba end)        / nullif(sum(case when pitcher_hand='L' and xwoba        is not null then p end), 0), 3) as exp_xwoba_vs_lhp,
+        round(sum(case when pitcher_hand='R' then p * xwoba end)        / nullif(sum(case when pitcher_hand='R' and xwoba        is not null then p end), 0), 3) as exp_xwoba_vs_rhp,
+        round(sum(case when pitcher_hand='L' then p * k_pct end)        / nullif(sum(case when pitcher_hand='L' and k_pct        is not null then p end), 0), 3) as exp_k_pct_vs_lhp,
+        round(sum(case when pitcher_hand='R' then p * k_pct end)        / nullif(sum(case when pitcher_hand='R' and k_pct        is not null then p end), 0), 3) as exp_k_pct_vs_rhp,
+        round(sum(case when pitcher_hand='L' then p * bb_pct end)       / nullif(sum(case when pitcher_hand='L' and bb_pct       is not null then p end), 0), 3) as exp_bb_pct_vs_lhp,
+        round(sum(case when pitcher_hand='R' then p * bb_pct end)       / nullif(sum(case when pitcher_hand='R' and bb_pct       is not null then p end), 0), 3) as exp_bb_pct_vs_rhp,
+        round(sum(case when pitcher_hand='L' then p * hard_hit_pct end) / nullif(sum(case when pitcher_hand='L' and hard_hit_pct is not null then p end), 0), 3) as exp_hard_hit_pct_vs_lhp,
+        round(sum(case when pitcher_hand='R' then p * hard_hit_pct end) / nullif(sum(case when pitcher_hand='R' and hard_hit_pct is not null then p end), 0), 3) as exp_hard_hit_pct_vs_rhp
     from cand_platoon
     group by game_pk, home_away
 )
@@ -155,3 +165,11 @@ from expected_rolling r
 left join expected_platoon p
     on  p.game_pk   = r.game_pk
     and p.home_away = r.home_away
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.feature_pregame_expected_lineup
+
+{% endif %}

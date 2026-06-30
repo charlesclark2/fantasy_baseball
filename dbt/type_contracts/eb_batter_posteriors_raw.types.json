@@ -1,0 +1,32 @@
+{
+  "_comment": "INC-19 type-contract for eb_batter_posteriors_raw (E11.1-W8a). Derived from the live BETTING.EB_BATTER_POSTERIORS_RAW schema (2026-06-29). double_pinned = FLOAT cols the DuckDB branch casts ::double in its TYPE-PIN block so the S3 parquet / lakehouse_ext type is stable across upstream NUMBER<->FLOAT flips. Intended type change => regenerate (scripts/gen_type_contract.py --write) in the same PR + operator DROP+rebuild.",
+  "model": "eb_batter_posteriors_raw",
+  "all_columns": [
+    "game_pk",
+    "batting_slot",
+    "batter_id",
+    "season",
+    "game_date",
+    "eb_data_source",
+    "eb_woba",
+    "eb_k_pct",
+    "eb_bb_pct",
+    "eb_iso",
+    "eb_woba_uncertainty",
+    "pa_weight",
+    "eb_woba_sequential",
+    "posterior_source",
+    "prior_age_days",
+    "fit_date",
+    "run_id"
+  ],
+  "double_pinned": [
+    "eb_woba",
+    "eb_k_pct",
+    "eb_bb_pct",
+    "eb_iso",
+    "eb_woba_uncertainty",
+    "pa_weight",
+    "eb_woba_sequential"
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "_comment": "INC-19 type-contract for eb_starter_posteriors (E11.1-W8a). Derived from the live BETTING.EB_STARTER_POSTERIORS schema (2026-06-29). double_pinned = FLOAT cols the DuckDB branch casts ::double in its TYPE-PIN block so the S3 parquet / lakehouse_ext type is stable across upstream NUMBER<->FLOAT flips. Intended type change => regenerate (scripts/gen_type_contract.py --write) in the same PR + operator DROP+rebuild.",
+  "model": "eb_starter_posteriors",
+  "all_columns": [
+    "game_pk",
+    "side",
+    "pitcher_id",
+    "season",
+    "game_date",
+    "age_band",
+    "current_season_bf",
+    "current_season_starts",
+    "eb_data_source",
+    "eb_xwoba_against",
+    "eb_k_pct",
+    "eb_bb_pct",
+    "eb_xwoba_uncertainty",
+    "eb_xwoba_against_sequential",
+    "posterior_source",
+    "prior_age_days",
+    "fit_date",
+    "run_id"
+  ],
+  "double_pinned": [
+    "eb_xwoba_against",
+    "eb_k_pct",
+    "eb_bb_pct",
+    "eb_xwoba_uncertainty",
+    "eb_xwoba_against_sequential"
+  ]
+}

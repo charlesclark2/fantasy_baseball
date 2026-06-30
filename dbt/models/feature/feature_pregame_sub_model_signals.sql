@@ -67,10 +67,9 @@
 --             For AS-OF historical replay see mart_sub_model_signals directly.
 -- =============================================================================
 
-{{ config(
-    materialized='table',
-    schema='betting_features'
-) }}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', schema='betting_features', tags=['w8a_lakehouse']) }}
 
 with current_signals as (
     select
@@ -81,7 +80,7 @@ with current_signals as (
         signal_value,
         uncertainty,
         signal_available
-    from {{ source('betting', 'mart_sub_model_signals') }}
+    from mart_sub_model_signals
     where is_current = true
 ),
 
@@ -320,19 +319,27 @@ select
     p.test_signal_v1_available
 
 from pivoted p
-left join {{ source('betting_features', 'offense_v1_signals') }} o
+left join offense_v1_signals o
     on  o.game_pk       = p.game_pk
     and o.side          = p.side
     and o.model_version = 'offense_v1'
-left join {{ source('betting_features', 'offense_v2_signals') }} o2
+left join offense_v2_signals o2
     on  o2.game_pk       = p.game_pk
     and o2.side          = p.side
     and o2.model_version = 'offense_v2'
-left join {{ source('betting_features', 'starter_suppression_signals') }} ss
+left join starter_suppression_signals ss
     on  ss.game_pk       = p.game_pk
     and ss.side          = p.side
     and ss.model_version = 'starter_v1'
-left join {{ source('betting_features', 'starter_ip_signals') }} ip
+left join starter_ip_signals ip
     on  ip.game_pk       = p.game_pk
     and ip.side          = p.side
     and ip.model_version = 'starter_ip_v1'
+
+{% else %}
+
+{{ config(materialized='table', schema='betting_features') }}
+
+select * from baseball_data.lakehouse_ext.feature_pregame_sub_model_signals
+
+{% endif %}

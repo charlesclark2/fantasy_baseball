@@ -24,24 +24,28 @@
 -- This SCD-2 chain (stg_statsapi_starter_snapshots → here) is NOT on the live
 -- serving path. The 30.6 fix repointed feature_pregame_starter_features AND
 -- eb_starter_posteriors to `stg_statsapi_probable_pitchers`, which is the
--- CANONICAL current-probable source (it tracks the latest monthly_schedule
--- before the feature build + serve; the SCD-2's is_current lagged it ~80% null
--- for +1/+2-day games — the serving-skew that 30.6 diagnosed). Keep this model
--- for point-in-time HISTORICAL replay (use is_current=false with the join pattern
--- above) ONLY. Do NOT add it to any serving-path feature model. If you need
--- "the current projected starter" at serve time, ref stg_statsapi_probable_pitchers.
+-- CANONICAL current-probable source. Keep this model for point-in-time HISTORICAL
+-- replay ONLY. Do NOT add it to any serving-path feature model.
+-- =============================================================================
+-- E11.1-W8a (upstream feature-layer migration): DuckDB branch reads the migrated
+-- stg_statsapi_starter_snapshots (registered as a DuckDB view by run_w1_lakehouse.
+-- _build_w8a) and recomputes the SCD-2 spans (sysdate()→current_timestamp; the
+-- lag/lead window + `is distinct from` are DuckDB-native). The Snowflake (else)
+-- branch is a thin view over the lakehouse_ext external table. SCD-2 spans are
+-- parity-verified SF-vs-S3 by scripts/parity_check_w8a.py before cutover.
 -- =============================================================================
 
-{{ config(materialized='table') }}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w8a_lakehouse']) }}
 
 with
 
 snapshots as (
-    select * from {{ ref('stg_statsapi_starter_snapshots') }}
+    select * from stg_statsapi_starter_snapshots
 ),
 
 -- Compare each pitcher to the prior ingestion for the same (game_pk, side).
--- Rows where the pitcher is unchanged are skipped; only boundaries matter.
 with_lag as (
     select
         game_pk,
@@ -65,7 +69,6 @@ change_boundaries as (
     where prev_pitcher_id is distinct from probable_pitcher_id
 ),
 
--- LEAD gives the next change timestamp for the same (game_pk, side); NULL = still current.
 with_scd2 as (
     select
         game_pk,
@@ -79,7 +82,7 @@ with_scd2 as (
             order by ingestion_ts
         )                                                               as valid_to,
         md5(coalesce(cast(probable_pitcher_id as varchar), ''))         as record_hash,
-        sysdate()                                                       as computed_at
+        current_timestamp::timestamp                                    as computed_at
     from change_boundaries
 )
 
@@ -95,3 +98,11 @@ select
     record_hash,
     computed_at
 from with_scd2
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.feature_pregame_starter_status
+
+{% endif %}

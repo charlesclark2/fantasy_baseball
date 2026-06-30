@@ -18,7 +18,19 @@
 -- immutable, but the current season's aLI shifts as games accumulate (and the
 -- prior season is the leverage_role basis), so incremental runs recompute current
 -- + prior season only — avoiding a daily all-seasons pitch-level rescan.
-{{ config(materialized='incremental', unique_key='season', incremental_strategy='delete+insert') }}
+
+-- E11.1-W8a: dual-branch. DuckDB branch (real compute -> S3, run_w1_lakehouse._build_w8a)
+-- reads the migrated upstream marts/staging (registered DuckDB views) + the S3-mirrored
+-- player_sequential_posteriors where applicable; is_incremental blocks are stripped by
+-- extract_duckdb_sql (DuckDB = full rebuild -> COPY). The TYPE-PIN block (gen_type_contract
+-- --write) casts every FLOAT output ::double (INC-19 cure) so the S3 parquet / lakehouse_ext
+-- type is stable; guarded by test_type_contract_guard.py. The Snowflake (else) branch MERGEs
+-- from the lakehouse_ext external table; at cutover the operator DROPs+rebuilds this
+-- incremental so the stored NUMBER cols adopt the FLOAT type (INC-19).
+
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='incremental', unique_key='season', incremental_strategy='delete+insert', tags=['w8a_lakehouse']) }}
 
 with reliever_at_bats as (
     select
@@ -28,8 +40,8 @@ with reliever_at_bats as (
         bp.pitcher_id,
         case when bp.inning_half = 'Top' then bp.home_team else bp.away_team end as pitching_team,
         abs(ppe.delta_home_win_exp) as abs_delta
-    from {{ ref('stg_batter_pitches') }} bp
-    join {{ ref('mart_pitch_play_event') }} ppe on ppe.pitch_sk = bp.pitch_sk
+    from stg_batter_pitches bp
+    join mart_pitch_play_event ppe on ppe.pitch_sk = bp.pitch_sk
     where bp.game_type = 'R'
       and ppe.delta_home_win_exp is not null
       and bp.game_year between 2015 and year(current_date())
@@ -40,7 +52,7 @@ with reliever_at_bats as (
 
 starters as (
     select game_pk, pitcher_id, pitching_team
-    from {{ ref('mart_starting_pitcher_game_log') }}
+    from mart_starting_pitcher_game_log
 ),
 
 reliever_only as (
@@ -71,7 +83,9 @@ pitcher_season as (
         avg(ab_score)           as raw_ali
     from at_bat_scores
     group by season, pitcher_id
-)
+),
+
+final as (
 
 select
     ps.season,
@@ -81,3 +95,40 @@ select
 from pitcher_season ps
 join season_avg sa on sa.season = ps.season
 where ps.appearances >= 20
+
+)
+
+-- ============================================================================
+-- INC-19 DURABLE TYPE-PIN (2026-06-29) — see CLAUDE.md "type-contract guard".
+-- Every FLOAT output column is cast to an explicit ::double so an upstream
+-- NUMBER<->FLOAT migration (a lakehouse dual-branch flip) can NEVER drift this
+-- incremental's stored column type again — the recurring HALT class that fired
+-- 5x (INC-15 / W1d / INC-16-P0 / INC-19 / INC-19-recurrence). ::double (NOT
+-- ::float = 32-bit in DuckDB) is value-preserving 64-bit; it ADOPTS the FLOAT
+-- types the table already holds, so this is a no-op incremental (no type ALTER).
+--
+-- This pinned set is contract-checked by betting_ml/tests/test_type_contract_guard.py
+-- against dbt/type_contracts/int_bullpen_ali_by_season.types.json. If you ADD a column or
+-- INTEND a type change, update BOTH this block AND that manifest in the SAME PR
+-- (regenerate via scripts/gen_type_contract.py --write) or CI goes red. A new
+-- numeric column that can ever be FLOAT MUST be ::double-pinned here.
+-- NOTE: the explicit outer select is intentional — a column added to `final` but
+-- not added here is DROPPED; the guard's set-equality check catches that too.
+-- TYPE-PIN-START (generated; do not hand-edit individual lines)
+select
+    season,
+    pitcher_id,
+    appearances,
+    normalized_ali::double as normalized_ali
+from final
+-- TYPE-PIN-END
+{% else %}
+
+{{ config(materialized='incremental', unique_key='season', incremental_strategy='delete+insert') }}
+
+select * from baseball_data.lakehouse_ext.int_bullpen_ali_by_season
+{% if is_incremental() %}
+  where season >= year(current_date()) - 1
+{% endif %}
+
+{% endif %}

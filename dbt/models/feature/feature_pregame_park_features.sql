@@ -14,9 +14,17 @@
 -- venues with fewer than 10 games in the prior season (filtered in the mart).
 -- eb_park_run_factor is non-null for all venues covered by fit_park_priors.py.
 -- venue_id is null for a small number of games with missing venue data.
+--
+-- E11.1-W8a (upstream feature-layer migration): DuckDB branch reads the migrated
+-- mart_game_spine / stg_statsapi_venues / mart_park_run_factors / mart_eb_park_factors /
+-- mart_park_factors_granular (registered as DuckDB views by run_w1_lakehouse._build_w8a);
+-- the body is dialect-clean (plain table names only). The Snowflake (else) branch is a
+-- thin view over the lakehouse_ext external table (parity-gated by parity_check_w8a.py).
 -- =============================================================================
 
-{{ config(materialized='table') }}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w8a_lakehouse']) }}
 
 with
 
@@ -28,7 +36,7 @@ games as (
         game_date,
         game_year::integer  as game_year,
         venue_id
-    from {{ ref('mart_game_spine') }}
+    from mart_game_spine
     where game_type = 'R'
 ),
 
@@ -50,7 +58,7 @@ venue_latest as (
             partition by venue_id
             order by ingest_date desc
         ) as rn
-    from {{ ref('stg_statsapi_venues') }}
+    from stg_statsapi_venues
 ),
 
 venues as (
@@ -64,7 +72,7 @@ park_factors as (
         prf.runs_per_game_at_park,
         prf.park_run_factor_3yr
     from games g
-    left join {{ ref('mart_park_run_factors') }} prf
+    left join mart_park_run_factors prf
         on  prf.venue_id        = g.venue_id
         and prf.game_year       = g.game_year - 1
 ),
@@ -76,7 +84,7 @@ eb_factors as (
         eb.eb_park_run_factor,
         eb.shrinkage_factor
     from games g
-    left join {{ ref('mart_eb_park_factors') }} eb
+    left join mart_eb_park_factors eb
         on  eb.venue_id = g.venue_id
         and eb.season   = g.game_year - 1
 ),
@@ -93,7 +101,7 @@ eb_granular as (
         eg.eb_woba_factor,
         eg.n_pa                         as park_granular_n_pa
     from games g
-    left join {{ ref('mart_park_factors_granular') }} eg
+    left join mart_park_factors_granular eg
         on  eg.venue_id = g.venue_id
         and eg.season   = g.game_year - 1
 ),
@@ -146,3 +154,11 @@ final as (
 )
 
 select * from final
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.feature_pregame_park_features
+
+{% endif %}

@@ -26,7 +26,19 @@
 -- No custom schema → target.schema (betting), matching the Python table.
 -- Story A2.11: incremental (merge on grain) — daily rebuild recomputes only recent
 -- games; rolling_asof still reads full mart for those games (values exact).
-{{ config(materialized='incremental', unique_key=['game_pk', 'batting_slot', 'batter_id'], incremental_strategy='merge') }}
+
+-- E11.1-W8a: dual-branch. DuckDB branch (real compute -> S3, run_w1_lakehouse._build_w8a)
+-- reads the migrated upstream marts/staging (registered DuckDB views) + the S3-mirrored
+-- player_sequential_posteriors where applicable; is_incremental blocks are stripped by
+-- extract_duckdb_sql (DuckDB = full rebuild -> COPY). The TYPE-PIN block (gen_type_contract
+-- --write) casts every FLOAT output ::double (INC-19 cure) so the S3 parquet / lakehouse_ext
+-- type is stable; guarded by test_type_contract_guard.py. The Snowflake (else) branch MERGEs
+-- from the lakehouse_ext external table; at cutover the operator DROPs+rebuilds this
+-- incremental so the stored NUMBER cols adopt the FLOAT type (INC-19).
+
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='incremental', unique_key=['game_pk', 'batting_slot', 'batter_id'], incremental_strategy='merge', tags=['w8a_lakehouse']) }}
 
 with lineups as (
     select
@@ -38,7 +50,7 @@ with lineups as (
         case when batting_order <= 3 then 'top'
              when batting_order <= 6 then 'middle'
              else 'bottom' end         as role
-    from {{ ref('stg_statsapi_lineups') }}
+    from stg_statsapi_lineups
     where batting_order between 1 and 9
       and year(official_date) between 2015 and year(current_date())
     {% if is_incremental() %}
@@ -57,7 +69,7 @@ rolling_asof as (
         coalesce(r.pa_count_std, 0) as pa,
         coalesce(r.batter_hand, 'R') as hand
     from lineups l
-    join {{ ref('mart_batter_rolling_stats') }} r
+    join mart_batter_rolling_stats r
       on  r.batter_id  = l.batter_id
       and r.game_year  = l.season
       and r.game_date::date < l.game_date          -- LEAKAGE GUARD
@@ -71,7 +83,7 @@ zips as (
     select
         mlbam_batter_id::varchar as batter_id, season,
         proj_woba, proj_k_pct, proj_bb_pct, proj_iso
-    from {{ ref('stg_fangraphs__zips_hitting') }}
+    from stg_fangraphs__zips_hitting
     where projection_type = 'zips'
     qualify row_number() over (
         partition by mlbam_batter_id, season order by ingestion_ts desc
@@ -89,7 +101,7 @@ priors_wide as (
         max(case when metric='bb_pct' then beta  end) as bb_beta,
         max(case when metric='iso'    then mu    end) as iso_mu,
         max(case when metric='iso'    then sigma end) as iso_sigma
-    from {{ ref('ref_eb_lineup_priors') }}
+    from ref_eb_lineup_priors
     group by season, role, batter_hand
 ),
 
@@ -97,7 +109,7 @@ priors_wide as (
 seq as (
     select l.game_pk, l.batter_id, sp.posterior_mu, sp.game_date as seq_game_date
     from lineups l
-    join baseball_data.betting.player_sequential_posteriors sp
+    join player_sequential_posteriors sp
       on  sp.player_id::varchar = l.batter_id
       and sp.player_type = 'batter'
       and sp.metric      = 'xwoba'
@@ -230,4 +242,50 @@ final as (
     from calc
 )
 
-select * from final
+-- ============================================================================
+-- INC-19 DURABLE TYPE-PIN (2026-06-29) — see CLAUDE.md "type-contract guard".
+-- Every FLOAT output column is cast to an explicit ::double so an upstream
+-- NUMBER<->FLOAT migration (a lakehouse dual-branch flip) can NEVER drift this
+-- incremental's stored column type again — the recurring HALT class that fired
+-- 5x (INC-15 / W1d / INC-16-P0 / INC-19 / INC-19-recurrence). ::double (NOT
+-- ::float = 32-bit in DuckDB) is value-preserving 64-bit; it ADOPTS the FLOAT
+-- types the table already holds, so this is a no-op incremental (no type ALTER).
+--
+-- This pinned set is contract-checked by betting_ml/tests/test_type_contract_guard.py
+-- against dbt/type_contracts/eb_batter_posteriors_raw.types.json. If you ADD a column or
+-- INTEND a type change, update BOTH this block AND that manifest in the SAME PR
+-- (regenerate via scripts/gen_type_contract.py --write) or CI goes red. A new
+-- numeric column that can ever be FLOAT MUST be ::double-pinned here.
+-- NOTE: the explicit outer select is intentional — a column added to `final` but
+-- not added here is DROPPED; the guard's set-equality check catches that too.
+-- TYPE-PIN-START (generated; do not hand-edit individual lines)
+select
+    game_pk,
+    batting_slot,
+    batter_id,
+    season,
+    game_date,
+    eb_data_source,
+    eb_woba::double as eb_woba,
+    eb_k_pct::double as eb_k_pct,
+    eb_bb_pct::double as eb_bb_pct,
+    eb_iso::double as eb_iso,
+    eb_woba_uncertainty::double as eb_woba_uncertainty,
+    pa_weight::double as pa_weight,
+    eb_woba_sequential::double as eb_woba_sequential,
+    posterior_source,
+    prior_age_days,
+    fit_date,
+    run_id
+from final
+-- TYPE-PIN-END
+{% else %}
+
+{{ config(materialized='incremental', unique_key=['game_pk', 'batting_slot', 'batter_id'], incremental_strategy='merge') }}
+
+select * from baseball_data.lakehouse_ext.eb_batter_posteriors_raw
+{% if is_incremental() %}
+  where game_date >= (select dateadd('day', -7, max(game_date)) from {{ this }})
+{% endif %}
+
+{% endif %}
