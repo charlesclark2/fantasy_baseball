@@ -71,7 +71,7 @@ live_raw as (
     from mart_odds_outcomes o
     where o.bookmaker_key = 'bovada'
       and o.market_key in ('h2h', 'totals')
-      and o.ingestion_ts < o.commence_time
+      and o.ingestion_ts < o.commence_time::timestamp
 ),
 
 live_pivoted as (
