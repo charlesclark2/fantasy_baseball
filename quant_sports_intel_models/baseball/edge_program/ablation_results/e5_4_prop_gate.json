@@ -1,0 +1,390 @@
+{
+  "story": "E5.4",
+  "prop_type": "pitcher_strikeouts",
+  "run_at": "2026-06-29",
+  "honest_framing": "best_alpha=0. Calibration \u2260 edge \u2014 that is decided ONLY here. Offline ROI is the necessary leg + carries model in-sample optimism; the TRUE verdict is forward CLV net of vig on live prop closes.",
+  "coverage": {
+    "n_edge_rows_raw": 63765,
+    "n_with_actual_k": 63765,
+    "actual_k_join_frac": 1.0,
+    "n_gated_rows": 63606,
+    "n_pitcher_dates": 7055,
+    "n_books": 14,
+    "season_range": [
+      2023,
+      2026
+    ],
+    "n_integer_line_pushes": 0
+  },
+  "calibration": {
+    "prop_type": "pitcher_strikeouts",
+    "served_glm_calib_80_purged_cv": 0.8104,
+    "served_glm_per_season_calib_80": {
+      "2023": 0.7455,
+      "2024": 0.8528,
+      "2025": 0.8556,
+      "2026": 0.7622
+    },
+    "calib_floor": 0.8,
+    "calib_floor_met": true,
+    "at_the_line_reliability": {
+      "n": 63606,
+      "ece": 0.0531,
+      "brier": 0.2473,
+      "bins": [
+        {
+          "bin": 0,
+          "n": 6356,
+          "p_mean": 0.2406,
+          "over_rate": 0.3132,
+          "gap": -0.0726
+        },
+        {
+          "bin": 1,
+          "n": 6361,
+          "p_mean": 0.3357,
+          "over_rate": 0.4397,
+          "gap": -0.104
+        },
+        {
+          "bin": 2,
+          "n": 6347,
+          "p_mean": 0.3851,
+          "over_rate": 0.4508,
+          "gap": -0.0656
+        },
+        {
+          "bin": 3,
+          "n": 6375,
+          "p_mean": 0.425,
+          "over_rate": 0.4891,
+          "gap": -0.0641
+        },
+        {
+          "bin": 4,
+          "n": 6337,
+          "p_mean": 0.4598,
+          "over_rate": 0.4676,
+          "gap": -0.0078
+        },
+        {
+          "bin": 5,
+          "n": 6366,
+          "p_mean": 0.4945,
+          "over_rate": 0.4995,
+          "gap": -0.0051
+        },
+        {
+          "bin": 6,
+          "n": 6380,
+          "p_mean": 0.5296,
+          "over_rate": 0.5163,
+          "gap": 0.0133
+        },
+        {
+          "bin": 7,
+          "n": 6348,
+          "p_mean": 0.5676,
+          "over_rate": 0.5129,
+          "gap": 0.0547
+        },
+        {
+          "bin": 8,
+          "n": 6352,
+          "p_mean": 0.614,
+          "over_rate": 0.5449,
+          "gap": 0.0691
+        },
+        {
+          "bin": 9,
+          "n": 6384,
+          "p_mean": 0.7074,
+          "over_rate": 0.6325,
+          "gap": 0.0749
+        }
+      ]
+    },
+    "at_the_line_per_season": {
+      "2023": {
+        "n": 17434,
+        "ece": 0.0549,
+        "brier": 0.245
+      },
+      "2024": {
+        "n": 20482,
+        "ece": 0.0585,
+        "brier": 0.2482
+      },
+      "2025": {
+        "n": 18331,
+        "ece": 0.0556,
+        "brier": 0.248
+      },
+      "2026": {
+        "n": 7359,
+        "ece": 0.0544,
+        "brier": 0.2483
+      }
+    },
+    "note": "calib_80 is the served-glm 80% predictive-interval coverage under E1.1 purged walk-forward CV (E5.2). The at-the-line ECE/Brier here is the reliability of the over/under probability the bet is priced on (model_p_over_cond vs realized over)."
+  },
+  "n_configs_total": 660,
+  "selected_config": {
+    "name": "barstool|mid_5p5|tau0.04|book",
+    "book_group": "barstool",
+    "line_bucket": "mid_5p5",
+    "tau": 0.04,
+    "anchor": "book",
+    "n_bets": 214,
+    "roi": 0.092957685906785,
+    "sharpe": 0.06778368030553104,
+    "per_ym": {
+      "2023-05": 0.1785637902323965,
+      "2023-06": 0.20977847625711676,
+      "2023-07": -0.18542594466936574,
+      "2023-08": 0.13011357315262237,
+      "2023-09": -0.006270020297147992,
+      "2023-10": 0.32499999999999996
+    },
+    "per_season": {
+      "2023": {
+        "roi": 0.09295768590678499,
+        "n": 214
+      }
+    }
+  },
+  "pbo": {
+    "n_selectable": 582,
+    "n_slate": 453,
+    "n_slices_total": 24,
+    "pbo": 0.42063492063492064,
+    "n_combos": 252,
+    "n_splits": 10,
+    "n_configs": 453,
+    "n_slices_kept": 11,
+    "median_oos_rank_of_is_best": 279.5,
+    "clears_live_pbo": false
+  },
+  "dsr": {
+    "dsr": 0.24562518491530105,
+    "observed_sr": 0.06778368030553104,
+    "sr0": 0.1127499120124399,
+    "n_trials": 582,
+    "n_obs": 214,
+    "skew": 1.429,
+    "kurtosis": 6.1126,
+    "passes_live": false
+  },
+  "forward_holdout": {
+    "is_years": [
+      2023,
+      2024
+    ],
+    "oos_years": [
+      2025,
+      2026
+    ],
+    "n_selectable_is": 547,
+    "n_runnable_both": 397,
+    "selected_config": "betrivers|high_ge6p5|tau0.1|book",
+    "is_roi": 0.07772062448264902,
+    "is_n_bets": 392,
+    "oos_roi": 0.010847658461114464,
+    "oos_n_bets": 228,
+    "oos_positive": true,
+    "raw_is_best": {
+      "config": "barstool|mid_5p5|tau0.04|book",
+      "is_roi": 0.092957685906785,
+      "is_n_bets": 214,
+      "oos_roi": NaN,
+      "oos_n_bets": 0
+    }
+  },
+  "robustness": {
+    "precommitted_broad_config": {
+      "config": "all|all|tau0.04|book",
+      "n_bets": 44851,
+      "roi": -0.0314,
+      "per_season": {
+        "2023": {
+          "roi": -0.0575,
+          "n": 12227
+        },
+        "2024": {
+          "roi": -0.0286,
+          "n": 14816
+        },
+        "2025": {
+          "roi": -0.0083,
+          "n": 12916
+        },
+        "2026": {
+          "roi": -0.0359,
+          "n": 4892
+        }
+      }
+    },
+    "per_book_favored_roi_tau0p04": {
+      "fanatics": {
+        "roi": -0.0071,
+        "n": 1528
+      },
+      "betonlineag": {
+        "roi": -0.019,
+        "n": 4394
+      },
+      "fanduel": {
+        "roi": -0.0208,
+        "n": 4809
+      },
+      "bovada": {
+        "roi": -0.0261,
+        "n": 4096
+      },
+      "draftkings": {
+        "roi": -0.0273,
+        "n": 4931
+      },
+      "betmgm": {
+        "roi": -0.0275,
+        "n": 4742
+      },
+      "pointsbetus": {
+        "roi": -0.03,
+        "n": 1467
+      },
+      "betrivers": {
+        "roi": -0.0302,
+        "n": 4394
+      },
+      "unibet_us": {
+        "roi": -0.0376,
+        "n": 1541
+      },
+      "pinnacle": {
+        "roi": -0.0384,
+        "n": 4882
+      },
+      "barstool": {
+        "roi": -0.048,
+        "n": 1031
+      },
+      "mybookieag": {
+        "roi": -0.0514,
+        "n": 3405
+      },
+      "superbook": {
+        "roi": -0.0522,
+        "n": 648
+      },
+      "williamhill_us": {
+        "roi": -0.0548,
+        "n": 2983
+      }
+    },
+    "n_selectable_configs": 582,
+    "selectable_roi_dist": {
+      "mean": -0.028,
+      "std": 0.0349,
+      "min": -0.1531,
+      "max": 0.093,
+      "frac_positive": 0.2027
+    },
+    "top8_configs_by_is_roi": [
+      {
+        "name": "barstool|mid_5p5|tau0.04|book",
+        "roi": 0.093,
+        "n_bets": 214
+      },
+      {
+        "name": "pointsbetus|low_le4p5|tau0.1|book",
+        "roi": 0.0771,
+        "n_bets": 330
+      },
+      {
+        "name": "barstool|low_le4p5|tau0.1|book",
+        "roi": 0.0695,
+        "n_bets": 208
+      },
+      {
+        "name": "barstool|mid_5p5|tau0.02|book",
+        "roi": 0.0685,
+        "n_bets": 257
+      },
+      {
+        "name": "pointsbetus|low_le4p5|tau0.1|pinnacle",
+        "roi": 0.0652,
+        "n_bets": 293
+      },
+      {
+        "name": "barstool|all|tau0.1|book",
+        "roi": 0.0622,
+        "n_bets": 433
+      },
+      {
+        "name": "betonlineag|low_le4p5|tau0.1|book",
+        "roi": 0.0563,
+        "n_bets": 1092
+      },
+      {
+        "name": "betrivers|high_ge6p5|tau0.1|book",
+        "roi": 0.0531,
+        "n_bets": 620
+      }
+    ],
+    "bottom8_configs_by_is_roi": [
+      {
+        "name": "barstool|low_le4p5|tau0.02|book",
+        "roi": -0.113,
+        "n_bets": 583
+      },
+      {
+        "name": "superbook|low_le4p5|tau0.02|pinnacle",
+        "roi": -0.1137,
+        "n_bets": 412
+      },
+      {
+        "name": "betrivers|mid_5p5|tau0.02|pinnacle",
+        "roi": -0.1222,
+        "n_bets": 289
+      },
+      {
+        "name": "mybookieag|mid_5p5|tau0.02|pinnacle",
+        "roi": -0.1234,
+        "n_bets": 978
+      },
+      {
+        "name": "barstool|all|tau0.04|pinnacle",
+        "roi": -0.1415,
+        "n_bets": 223
+      },
+      {
+        "name": "barstool|all|tau0.02|pinnacle",
+        "roi": -0.1435,
+        "n_bets": 274
+      },
+      {
+        "name": "fanatics|high_ge6p5|tau0.02|pinnacle",
+        "roi": -0.146,
+        "n_bets": 215
+      },
+      {
+        "name": "betrivers|high_ge6p5|tau0.02|pinnacle",
+        "roi": -0.1531,
+        "n_bets": 222
+      }
+    ]
+  },
+  "decision": {
+    "verdict": "NULL \u2014 no cashable K-prop edge",
+    "rationale": "CLEAN NULL: the K distribution is well-CALIBRATED (product value) but NOT PROFITABLE. Failing gate(s): PBO \u2265 0.2 (selection overfit / unstable); DSR < 0.95 (deflated Sharpe \u2264 benchmark \u2014 edge vanishes once deflated for the config count); pre-committed broad-strategy ROI net of vig \u2264 0. The large prop vig (median book hold \u2248 6.9%, E5.3) eats the model-relative disagreement \u2014 gross 'edge' that the vig consumes is not edge. Consistent with H2H (dead \u00d75), the efficient main total (E13.8), and E5.3's blind-over EV \u2248 \u22128.7%/$1. The K-prop softest-market hypothesis is CLOSED with integrity (calibration \u2260 edge).",
+    "gates": {
+      "calib_floor": true,
+      "pbo_lt_0p2": false,
+      "dsr_ge_0p95": false,
+      "offline_roi_positive": false,
+      "holdout_roi_positive": true,
+      "ship": false
+    }
+  }
+}
