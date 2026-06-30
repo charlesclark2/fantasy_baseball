@@ -5,6 +5,7 @@ from datetime import date, timedelta
 
 from dagster import HookContext, In, MetadataValue, Nothing, Out, failure_hook, op
 
+from betting_ml.utils.game_day import current_game_date, current_game_date_iso  # INC-22 — canonical US baseball-day
 from pipeline.ops._dbt_exec import _run_dbt
 
 SCRIPTS_DIR = "/app/scripts"
@@ -29,20 +30,24 @@ def _run_script(context, script: str, args: list[str] | None = None) -> str:
     return result.stdout or ""
 
 
+# INC-22 — anchor "today" and every day-relative window to the canonical US baseball-day
+# (LA), so the daily ingest windows can't roll to the UTC-tomorrow if a run/catch-up
+# crosses 00:00 UTC. (The genuine calendar uses below — weekday() for the Sunday weekly
+# gate, .year for the season — stay on date.today(); they are not the serving slate.)
 def _today() -> str:
-    return date.today().strftime("%Y-%m-%d")
+    return current_game_date_iso()
 
 
 def _seven_days_ago() -> str:
-    return (date.today() - timedelta(days=7)).strftime("%Y-%m-%d")
+    return (current_game_date() - timedelta(days=7)).strftime("%Y-%m-%d")
 
 
 def _two_days_ago() -> str:
-    return (date.today() - timedelta(days=2)).strftime("%Y-%m-%d")
+    return (current_game_date() - timedelta(days=2)).strftime("%Y-%m-%d")
 
 
 def _one_day_ago() -> str:
-    return (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+    return (current_game_date() - timedelta(days=1)).strftime("%Y-%m-%d")
 
 
 def _target_env() -> str:
@@ -83,6 +88,41 @@ def _w7b_mirror_on() -> bool:
 def _w7b_s3_args() -> list[str]:
     # E11.1-W7b: append --s3 to predict_today.py / write_serving_store.py ONLY on cutover.
     return ["--s3"] if _w7b_serving_on() else []
+
+
+def _w8a_serving_on() -> bool:
+    # E11.1-W8a: the cutover switch. When 1, the Snowflake dbt build's else branches read the
+    # W8a lakehouse_ext external tables (the upstream feature layer + EB posteriors compute on
+    # DuckDB→S3), so the W8a DuckDB build is on the critical path → HALT. Default OFF so merging
+    # the dual-branch models is a no-op until the operator creates the W8a external tables, builds
+    # the parquet, validates parity (scripts/parity_check_w8a.py), DROP+rebuilds the 5 EB
+    # incrementals, and flips this (mirrors W7B_LAKEHOUSE_S3). Snowflake-native is the rollback.
+    return os.environ.get("W8A_LAKEHOUSE_S3") == "1"
+
+
+def _w8a_mirror_on() -> bool:
+    # The W8a precursor export + DuckDB build run when cutover is ON (the else branches read the
+    # external tables) OR during the parallel run (W8A_LAKEHOUSE_PARALLEL=1) so parity_check_w8a
+    # has fresh S3 data to compare against the live native tables BEFORE the flip.
+    return _w8a_serving_on() or os.environ.get("W8A_LAKEHOUSE_PARALLEL") == "1"
+
+
+def _run_w8a_mirror(context, script: str, args: list[str] | None = None) -> None:
+    """Run a W8a precursor export / DuckDB build at the correct failure tier (mirror of
+    _run_mirror, gated on the W8a flags). HALT once W8A_LAKEHOUSE_S3=1 (the feature build reads
+    the W8a external tables → stale/partial = wrong features); ALERT-loud-but-continue during the
+    parallel window (W8A_LAKEHOUSE_PARALLEL=1, parity-only — the dbt else branches aren't merged/
+    flipped yet, so a build failure must NOT take down the W6-critical run_w1_lakehouse_op)."""
+    if _w8a_serving_on():
+        _run_script(context, script, args)  # HALT — the feature build reads this
+        return
+    try:
+        _run_script(context, script, args)
+    except Exception as e:  # noqa: BLE001 — parity-only during the parallel window
+        context.log.warning(
+            f"[W8a parallel] mirror '{os.path.basename(script)}' failed (non-fatal; the dbt "
+            f"build still computes these models natively, parity_check_w8a will show the gap): {e}"
+        )
 
 
 def _run_mirror(context, script: str, args: list[str] | None = None) -> None:
@@ -341,6 +381,16 @@ def run_w1_lakehouse_op(context):
     if _w7b_mirror_on():
         _run_mirror(context, "export_w7b_precursors_to_s3.py")
         _run_mirror(context, "run_w1_lakehouse.py", ["--w7b-only"])
+    # E11.1-W8a: when the S3 build is on (cutover OR parallel), ALSO mirror the W8a Python-table/
+    # seed precursors and build the upstream feature layer + EB posteriors parquet so the dbt else
+    # branches (cutover) resolve and parity_check_w8a (parallel) has fresh S3 data. Mirror-tier per
+    # _run_w8a_mirror (HALT once W8A_LAKEHOUSE_S3=1, else ALERT-continue). The W9 signal stores
+    # this build reads are mirrored by export_w9_signals_to_s3_op (its own graph node); the prior-
+    # wave marts were just rebuilt above (--w6) / are in S3. --w8a-only reuses that parquet.
+    if _w8a_mirror_on():
+        _run_w8a_mirror(context, "export_w8a_precursors_to_s3.py")
+        _run_w8a_mirror(context, "run_w1_lakehouse.py", ["--w8a-only"])
+        _run_w8a_mirror(context, "refresh_w1_external_tables.py", ["--w8a"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

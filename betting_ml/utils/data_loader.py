@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import os
 import re
 import sys
@@ -19,7 +20,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-_KEY_PATH = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH") or os.path.expanduser(
+# Legacy local-dev key-file default (last-resort fallback only). Production authenticates
+# via the inline SNOWFLAKE_PRIVATE_KEY env var — see _load_private_key().
+_LEGACY_KEY_PATH = os.path.expanduser(
     "~/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem"
 )
 
@@ -182,16 +185,50 @@ _VENUE_COLUMNS = [
 ]
 
 
-def _connect(schema: str | None = None) -> snowflake.connector.SnowflakeConnection:
-    with open(_KEY_PATH, "rb") as fh:
-        p_key = serialization.load_pem_private_key(
-            fh.read(), password=None, backend=default_backend()
+def _load_private_key() -> bytes:
+    """Load the Snowflake RSA key as DER/PKCS8 bytes — same resolution order as
+    scripts/write_serving_store._load_private_key, so predict_today and every other
+    data_loader caller authenticates in the SAME environments as the serving writer.
+
+    INC-22 (2026-06-29): predict_today crashed on the prod box because this loader only
+    supported a key FILE (`_KEY_PATH`, resolved at import → stale local default when the
+    env var is unset), while the box authenticates via the INLINE SNOWFLAKE_PRIVATE_KEY
+    PEM that write_serving_store already handled. Now: prefer SNOWFLAKE_PRIVATE_KEY_PATH
+    (a readable file), else the inline SNOWFLAKE_PRIVATE_KEY (\\n-escaped or base64), else
+    the legacy local-dev file. Resolved at call time so an env var set after import
+    (e.g. `docker exec -e`) takes effect.
+    """
+    pk_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
+    if pk_path and os.path.exists(pk_path):
+        with open(pk_path, "rb") as fh:
+            pem_bytes = fh.read()
+    elif os.environ.get("SNOWFLAKE_PRIVATE_KEY", "").strip():
+        key_val = os.environ["SNOWFLAKE_PRIVATE_KEY"].strip()
+        # A Compose env_file can't carry real newlines: handle the \n-escaped PEM first
+        # (it still starts with "-----BEGIN"), then base64.
+        if "\\n" in key_val:
+            key_val = key_val.replace("\\n", "\n").strip()
+        elif not key_val.startswith("-----"):
+            key_val = base64.b64decode(key_val).decode("utf-8")
+        pem_bytes = key_val.encode("utf-8")
+    elif os.path.exists(_LEGACY_KEY_PATH):
+        with open(_LEGACY_KEY_PATH, "rb") as fh:
+            pem_bytes = fh.read()
+    else:
+        raise RuntimeError(
+            "No Snowflake key found: set SNOWFLAKE_PRIVATE_KEY_PATH (a key file) or "
+            "SNOWFLAKE_PRIVATE_KEY (inline PEM / base64)."
         )
-    pkb = p_key.private_bytes(
+    p_key = serialization.load_pem_private_key(pem_bytes, password=None, backend=default_backend())
+    return p_key.private_bytes(
         encoding=serialization.Encoding.DER,
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption(),
     )
+
+
+def _connect(schema: str | None = None) -> snowflake.connector.SnowflakeConnection:
+    pkb = _load_private_key()
     kwargs: dict = dict(
         account=os.environ.get("SNOWFLAKE_ACCOUNT", "IHUPICS-DP59975"),
         user=os.environ.get("SNOWFLAKE_USER", "dbt_rw"),
