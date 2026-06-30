@@ -39,7 +39,7 @@ import json
 import logging
 import os
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pandas as pd
 import requests
@@ -74,6 +74,12 @@ TABLE_FQN = "baseball_data.savant.sprint_speed_raw"
 TABLE_NAME = "SPRINT_SPEED_RAW"
 DB = "BASEBALL_DATA"
 SCHEMA = "SAVANT"
+
+# E11.1-W11 (FINISH wave): the S3 mirror target + the leg-gating primitive (scripts/ on sys.path
+# under both the script runtime and pytest). Gated by LAKEHOUSE_RAW_WRITE_MODE (default 'snowflake').
+from utils.lakehouse_raw_writer import lakehouse_write_legs, w11_write_mode, write_raw_rows_s3  # noqa: E402
+
+_LAKEHOUSE_SOURCE = "sprint_speed_raw"
 
 # Savant CSV column names → our Snowflake column names (all uppercase)
 COLUMN_MAP = {
@@ -313,12 +319,27 @@ def main() -> None:
         print(df.head())
         return
 
-    conn = get_snowflake_connection()
-    try:
-        load(conn, df, args.season, snapshot_date)
-    finally:
-        conn.close()
-        log.info("Snowflake connection closed")
+    # E11.1-W11: leg-gated dual-write. SF DELETE+INSERT on 'snowflake'/'both'; S3 mirror on
+    # 's3'/'both' (default 'snowflake' → unchanged). The df columns are UPPERCASE (write_pandas
+    # convention) but stg_batter_sprint_speed reads LOWERCASE + ingestion_timestamp — so the mirror
+    # lowercases the keys and stamps ingestion_timestamp (the SF table's DDL DEFAULT, absent from the
+    # df). raw_json (lowercased) is a JSON string → the keystone's _JSON_COLS passes it through.
+    do_sf, do_s3 = lakehouse_write_legs(w11_write_mode())
+    if do_sf:
+        conn = get_snowflake_connection()
+        try:
+            load(conn, df, args.season, snapshot_date)
+        finally:
+            conn.close()
+            log.info("Snowflake connection closed")
+    if do_s3:
+        _now = datetime.now(timezone.utc).isoformat()
+        mirror_rows = [
+            {**{k.lower(): v for k, v in r.items()}, "ingestion_timestamp": _now}
+            for r in df.to_dict("records")
+        ]
+        n_s3 = write_raw_rows_s3(_LAKEHOUSE_SOURCE, mirror_rows, mode="append")
+        log.info("mirrored %d row(s) → S3 lakehouse_raw/%s/", n_s3, _LAKEHOUSE_SOURCE)
 
 
 if __name__ == "__main__":

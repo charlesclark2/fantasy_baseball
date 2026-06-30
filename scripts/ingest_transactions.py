@@ -59,6 +59,14 @@ TRANSACTIONS_URL = "https://statsapi.mlb.com/api/v1/transactions"
 REQUEST_TIMEOUT = 30
 MAX_RETRIES = 1
 
+# E11.1-W11 (FINISH wave): gated Snowflake→S3 flip. The `records` list[dict] (incl. raw_json as a
+# JSON string) is mirrored to lakehouse_raw/player_transactions/ when LAKEHOUSE_RAW_WRITE_MODE is
+# 'both'/'s3' (default 'snowflake' → unchanged). Bespoke temp-table upsert below → leg-gated, not
+# the append_raw_rows_lakehouse dispatcher. scripts/ on sys.path under both runtime + pytest.
+from utils.lakehouse_raw_writer import lakehouse_write_legs, w11_write_mode, write_raw_rows_s3  # noqa: E402
+
+_LAKEHOUSE_SOURCE = "player_transactions"
+
 
 # ---------------------------------------------------------------------------
 # Snowflake connection (mirrors pattern from other ingest scripts)
@@ -278,12 +286,20 @@ def main() -> None:
         log.info("No records to upsert — done")
         return
 
-    conn = _get_snowflake_connection()
-    try:
-        written = _upsert_records(conn, records)
-        conn.commit()
-    finally:
-        conn.close()
+    # E11.1-W11: leg-gated dual-write (W11_RAW_WRITE_MODE). SF upsert on 'snowflake'/'both'; S3 on 's3'/'both'.
+    do_sf, do_s3 = lakehouse_write_legs(w11_write_mode())
+    written = 0
+    if do_sf:
+        conn = _get_snowflake_connection()
+        try:
+            written = _upsert_records(conn, records)
+            conn.commit()
+        finally:
+            conn.close()
+    if do_s3:
+        n_s3 = write_raw_rows_s3(_LAKEHOUSE_SOURCE, records, mode="append")
+        log.info("mirrored %d transaction row(s) → S3 lakehouse_raw/%s/", n_s3, _LAKEHOUSE_SOURCE)
+        written = written or len(records)
 
     log.info(
         "Done. fetched=%d  written=%d  skipped=%d",

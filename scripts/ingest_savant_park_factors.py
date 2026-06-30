@@ -38,6 +38,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "uti
 from fangraphs_client import _get_session           # noqa: E402
 from snowflake_loader import get_snowflake_connection  # noqa: E402
 
+# E11.1-W11 (FINISH wave): gated Snowflake→S3 flip. The typed `rows` list[dict] (no raw_json) is
+# mirrored to lakehouse_raw/savant_park_factors_raw/ when LAKEHOUSE_RAW_WRITE_MODE is 'both'/'s3'
+# (default 'snowflake' → unchanged). Bespoke temp-table insert → leg-gated, not the dispatcher.
+try:  # 'utils.' under pytest (pythonpath=scripts); bare under the script runtime (utils on path)
+    from utils.lakehouse_raw_writer import lakehouse_write_legs, w11_write_mode, write_raw_rows_s3  # noqa: E402
+except ImportError:
+    from lakehouse_raw_writer import lakehouse_write_legs, w11_write_mode, write_raw_rows_s3  # noqa: E402
+
+_LAKEHOUSE_SOURCE = "savant_park_factors_raw"
+
 from dotenv import load_dotenv
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -219,7 +229,13 @@ def ingest_season(season: int, dry_run: bool, conn) -> int:
                      r["index_hr"], r["index_runs"], r["index_bb"], r["index_so"])
         return len(rows)
 
-    inserted = _insert_rows(rows, conn)
+    # E11.1-W11: leg-gated dual-write (W11_RAW_WRITE_MODE). SF insert on 'snowflake'/'both'; S3 on 's3'/'both'.
+    do_sf, do_s3 = lakehouse_write_legs(w11_write_mode())
+    inserted = _insert_rows(rows, conn) if do_sf else 0
+    if do_s3:
+        n_s3 = write_raw_rows_s3(_LAKEHOUSE_SOURCE, rows, mode="append")
+        log.info("  mirrored %d row(s) → S3 lakehouse_raw/%s/", n_s3, _LAKEHOUSE_SOURCE)
+        inserted = inserted or len(rows)
     log.info("  Inserted %d rows for season=%d", inserted, season)
     return inserted
 
