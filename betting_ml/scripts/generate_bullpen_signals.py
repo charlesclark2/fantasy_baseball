@@ -191,18 +191,46 @@ ORDER BY g.game_date, g.game_pk, w.pitching_team
 
 
 # ---------------------------------------------------------------------------
-# Data loading
+# E11.1-W9-tail: read the bullpen feature sources (mart_game_results, the 3 bullpen
+# marts, and starter_ip_signals — the latter via the W9 S3 export-mirror) from the S3
+# lakehouse via DuckDB. The SCD-2 WRITE to mart_sub_model_signals stays on Snowflake
+# (the W9 mirror copies that OUTPUT to S3; re-implementing SCD-2 accumulate in DuckDB
+# is the W7a-wipe class the W9 design forbids). Reuses scripts.utils.lakehouse_read.
+# No SF dialect tokens (no IFF/YEAR/TO_DATE); every game_date is DATE → no ::date cast.
 # ---------------------------------------------------------------------------
 
-def load_games(start_date: str, end_date: str) -> pd.DataFrame:
-    conn = get_snowflake_connection()
+def _load_games_s3(start_date: str, end_date: str):
+    """Run _SIGNAL_QUERY against the S3 lakehouse. Returns (rows, lowercase-cols)."""
+    from scripts.utils.lakehouse_read import duck_connect, register_views, strip_fqn, referenced_tables
+
+    duck_sql = strip_fqn(_SIGNAL_QUERY.format(start_date=start_date, end_date=end_date))
+    duck = duck_connect()
     try:
-        cur = conn.cursor()
-        cur.execute(_SIGNAL_QUERY.format(start_date=start_date, end_date=end_date))
+        register_views(duck, referenced_tables(_SIGNAL_QUERY))
+        cur = duck.execute(duck_sql)
         cols = [d[0].lower() for d in cur.description]
         rows = cur.fetchall()
     finally:
-        conn.close()
+        duck.close()
+    return rows, cols
+
+
+# ---------------------------------------------------------------------------
+# Data loading
+# ---------------------------------------------------------------------------
+
+def load_games(start_date: str, end_date: str, use_s3: bool = False) -> pd.DataFrame:
+    if use_s3:
+        rows, cols = _load_games_s3(start_date, end_date)
+    else:
+        conn = get_snowflake_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(_SIGNAL_QUERY.format(start_date=start_date, end_date=end_date))
+            cols = [d[0].lower() for d in cur.description]
+            rows = cur.fetchall()
+        finally:
+            conn.close()
 
     df = pd.DataFrame(rows, columns=cols)
     for col in df.select_dtypes(include="object").columns:
@@ -442,6 +470,12 @@ def main() -> None:
         action="store_true",
         help="Emit only v2 NegBin signals (skip bullpen_quality_v1 artifact load).",
     )
+    parser.add_argument(
+        "--s3",
+        action="store_true",
+        help="E11.1-W9-tail: read feature sources from the S3 lakehouse via DuckDB "
+             "instead of Snowflake. The SCD-2 write stays on Snowflake.",
+    )
     args = parser.parse_args()
 
     if args.v1_only and args.v2_only:
@@ -499,8 +533,8 @@ def main() -> None:
         )
 
     # --- Load games ----------------------------------------------------------
-    print(f"\nLoading games {start_date} → {end_date}...")
-    df = load_games(start_date, end_date)
+    print(f"\nLoading games {start_date} → {end_date} from {'S3 (DuckDB)' if args.s3 else 'Snowflake'}...")
+    df = load_games(start_date, end_date, use_s3=args.s3)
     n_team_games = len(df)
     n_games = df["game_pk"].nunique()
     print(f"  Loaded {n_team_games:,} team-game rows ({n_games:,} unique games).")

@@ -92,8 +92,33 @@ ORDER BY game_pk, side
 """
 
 
-def _load_mart_rows(conn, mart_table: str, start_date: str, end_date: str) -> pd.DataFrame:
-    """Load pre-computed defense quality rows from the dbt mart."""
+def _load_mart_rows(conn, mart_table: str, start_date: str, end_date: str,
+                    use_s3: bool = False) -> pd.DataFrame:
+    """Load pre-computed defense quality rows from the dbt mart.
+
+    E11.1-W9-tail: when use_s3, read mart_team_defense_quality_rolling from the S3
+    lakehouse via DuckDB instead of Snowflake. The SCD-2 WRITE stays on Snowflake (the
+    W9 export-mirror copies the OUTPUT to S3; a DuckDB SCD-2 rewrite is the W7a-wipe
+    class W9 forbids). game_date is TIMESTAMP in the parquet (NOT DATE like the other
+    marts) → cast ::date so a single-date `--date` run isn't dropped by the midnight
+    boundary. Reuses scripts.utils.lakehouse_read (no forked connection helper)."""
+    if use_s3:
+        from scripts.utils.lakehouse_read import duck_connect, register_views
+
+        _MART_S3 = "mart_team_defense_quality_rolling"
+        sql = _MART_QUERY.format(mart_table=_MART_S3, start_date=start_date, end_date=end_date)
+        sql = (sql.replace("WHERE game_date >=", "WHERE game_date::date >=")
+                  .replace("AND game_date <=", "AND game_date::date <="))
+        duck = duck_connect()
+        try:
+            register_views(duck, [_MART_S3])
+            cur = duck.execute(sql)
+            cols = [d[0].lower() for d in cur.description]
+            rows = cur.fetchall()
+        finally:
+            duck.close()
+        return pd.DataFrame(rows, columns=cols)
+
     cur = conn.cursor()
     try:
         cur.execute(_MART_QUERY.format(
@@ -201,6 +226,12 @@ def main() -> None:
         action="store_true",
         help="Compute signals but skip the Snowflake write.",
     )
+    parser.add_argument(
+        "--s3",
+        action="store_true",
+        help="E11.1-W9-tail: read mart_team_defense_quality_rolling from the S3 lakehouse "
+             "via DuckDB instead of Snowflake. The SCD-2 write stays on Snowflake.",
+    )
     args = parser.parse_args()
 
     target_table, temp_table, mart_table = _resolve_tables(args.env)
@@ -217,12 +248,15 @@ def main() -> None:
     print(f"Mode: {'backfill' if args.backfill else 'date=' + args.date}")
 
     # ---- Load mart rows ----
-    print("\nLoading mart_team_defense_quality_rolling...")
-    conn = get_snowflake_connection()
-    try:
-        mart_df = _load_mart_rows(conn, mart_table, game_start, game_end)
-    finally:
-        conn.close()
+    print(f"\nLoading mart_team_defense_quality_rolling from {'S3 (DuckDB)' if args.s3 else 'Snowflake'}...")
+    if args.s3:
+        mart_df = _load_mart_rows(None, mart_table, game_start, game_end, use_s3=True)
+    else:
+        conn = get_snowflake_connection()
+        try:
+            mart_df = _load_mart_rows(conn, mart_table, game_start, game_end)
+        finally:
+            conn.close()
 
     print(f"  {len(mart_df):,} mart rows ({len(mart_df) // 2:,} games) for {game_start} → {game_end}")
 
