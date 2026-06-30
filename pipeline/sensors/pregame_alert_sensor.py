@@ -1,15 +1,23 @@
 """
 pregame_alert_sensor.py — A1.5
 
-Fires an alert 45 minutes before today's earliest scheduled game if the
-morning pipeline has not completed successfully or lineup-confirmed predictions
-are not yet available.
+Fires an alert 45 minutes before today's earliest scheduled game if lineup-confirmed
+predictions are not yet available.
 
 Alert mechanism: raises an exception, which marks the sensor tick as FAILED
-and triggers Dagster Cloud's standard email-on-failure notification.
+and triggers the standard email-on-failure notification.
 
 Cursor stores the last-alerted date (ISO string) so at most one alert fires
 per calendar day even if multiple ticks land in the 25-minute alert window.
+
+E11.1-W12: reads moved off Snowflake to the S3 lakehouse via DuckDB (instance-role
+credential_chain — Snowflake-free). The schedule read is `stg_statsapi_games` (on S3).
+The pipeline-health read changed SOURCE: the old `betting_ml.pipeline_status` state table
+is NOT on S3 (it is W13 serving-state), so health is now judged directly from the OUTPUT —
+`daily_model_predictions` post_lineup rows with `lineup_confirmed = TRUE`. This is a more
+direct check of exactly what pregame_alert guards (are lineup-confirmed predictions live
+before first pitch) than the intermediate status flag, and it uses an already-on-S3 table.
+The "morning pipeline ran at all" half of the old check is covered by morning_watchdog_sensor.
 """
 
 from __future__ import annotations
@@ -23,29 +31,26 @@ from dagster import SensorEvaluationContext, SkipReason, sensor
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-_ML_SCHEMA = "baseball_data.betting_ml"
-_MART_SCHEMA = "baseball_data.betting"
-
 # Alert fires when now_utc is in [first_pitch - ALERT_LEAD, first_pitch - ALERT_CLOSE].
 _ALERT_LEAD_MIN = 55    # open the window this many minutes before first pitch
 _ALERT_CLOSE_MIN = 30   # close the window (predictions should be live by this point)
 
 
 def _get_earliest_first_pitch_utc(today: str) -> datetime | None:
-    from betting_ml.utils.data_loader import get_snowflake_connection
+    from betting_ml.utils.lakehouse_monitor import duck, lh
 
-    conn = get_snowflake_connection()
+    conn = duck()
     try:
-        cur = conn.cursor()
-        cur.execute(
+        # game_date is stored tz-aware (UTC) in the lakehouse, so MIN already gives the
+        # earliest first-pitch instant in UTC — no CONVERT_TIMEZONE needed.
+        row = conn.execute(
             f"""
-            SELECT MIN(CONVERT_TIMEZONE('UTC', game_date)) AS earliest_utc
-            FROM {_MART_SCHEMA}.stg_statsapi_games
-            WHERE official_date = %s AND game_type = 'R'
+            SELECT MIN(game_date) AS earliest_utc
+            FROM read_parquet('{lh('stg_statsapi_games')}', union_by_name=true)
+            WHERE official_date = ? AND game_type = 'R'
             """,
             [today],
-        )
-        row = cur.fetchone()
+        ).fetchone()
         if row is None or row[0] is None:
             return None
         return row[0].replace(tzinfo=UTC) if row[0].tzinfo is None else row[0].astimezone(UTC)
@@ -53,42 +58,41 @@ def _get_earliest_first_pitch_utc(today: str) -> datetime | None:
         conn.close()
 
 
-def _get_pipeline_status(today: str) -> dict | None:
-    from betting_ml.utils.data_loader import get_snowflake_connection
+def _get_post_lineup_status(today: str) -> dict:
+    """Lineup-confirmed prediction coverage for today, from the daily_model_predictions
+    OUTPUT (the on-S3 replacement for the betting_ml.pipeline_status state table). Returns
+    n_post_lineup (post_lineup rows) and n_confirmed (those flagged lineup_confirmed)."""
+    from betting_ml.utils.lakehouse_monitor import duck, lh
 
-    conn = get_snowflake_connection()
+    conn = duck()
     try:
-        cur = conn.cursor()
-        cur.execute(
+        row = conn.execute(
             f"""
-            SELECT pipeline_status, n_games_scored, lineup_confirmed_complete_ts,
-                   predict_today_complete_ts
-            FROM {_ML_SCHEMA}.pipeline_status
-            WHERE run_date = %s
+            SELECT COUNT(*) AS n_post_lineup,
+                   COUNT(*) FILTER (WHERE lineup_confirmed) AS n_confirmed
+            FROM read_parquet('{lh('daily_model_predictions')}', union_by_name=true)
+            WHERE score_date = ? AND prediction_type = 'post_lineup'
             """,
             [today],
-        )
-        cols = [d[0].lower() for d in cur.description]
-        row = cur.fetchone()
-        return dict(zip(cols, row)) if row else None
+        ).fetchone()
     finally:
         conn.close()
+    return {"n_post_lineup": int(row[0] or 0), "n_confirmed": int(row[1] or 0)}
 
 
 def _get_n_scheduled(today: str) -> int:
-    from betting_ml.utils.data_loader import get_snowflake_connection
+    from betting_ml.utils.lakehouse_monitor import duck, lh
 
-    conn = get_snowflake_connection()
+    conn = duck()
     try:
-        cur = conn.cursor()
-        cur.execute(
+        (n,) = conn.execute(
             f"""
-            SELECT COUNT(*) FROM {_MART_SCHEMA}.stg_statsapi_games
-            WHERE official_date = %s AND game_type = 'R'
+            SELECT COUNT(*) FROM read_parquet('{lh('stg_statsapi_games')}', union_by_name=true)
+            WHERE official_date = ? AND game_type = 'R'
             """,
             [today],
-        )
-        return int(cur.fetchone()[0])
+        ).fetchone()
+        return int(n)
     finally:
         conn.close()
 
@@ -96,8 +100,8 @@ def _get_n_scheduled(today: str) -> int:
 @sensor(minimum_interval_seconds=600)
 def pregame_alert_sensor(context: SensorEvaluationContext):
     """
-    Alert sensor: fires 45 minutes before the earliest scheduled game if
-    pipeline_status != 'complete' or lineup predictions are missing.
+    Alert sensor: fires 45 minutes before the earliest scheduled game if no
+    lineup-confirmed predictions are available yet for today.
     """
     today = date.today().isoformat()
 
@@ -134,26 +138,28 @@ def pregame_alert_sensor(context: SensorEvaluationContext):
         )
         return
 
-    # Inside the window: check pipeline status.
+    # Inside the window: check lineup-confirmed prediction coverage (the OUTPUT-side health
+    # signal — the on-S3 replacement for the betting_ml.pipeline_status state table).
     try:
-        status_row = _get_pipeline_status(today)
+        status = _get_post_lineup_status(today)
         n_scheduled = _get_n_scheduled(today)
     except Exception as exc:
-        yield SkipReason(f"Snowflake status check failed — skipping alert tick: {exc}")
+        yield SkipReason(f"Lakehouse status check failed — skipping alert tick: {exc}")
         return
 
-    pipeline_status = status_row["pipeline_status"] if status_row else "missing"
-    n_scored = status_row["n_games_scored"] if status_row else 0
-    lineup_confirmed = (
-        status_row["lineup_confirmed_complete_ts"] is not None if status_row else False
-    )
+    n_post_lineup = status["n_post_lineup"]
+    n_confirmed = status["n_confirmed"]
 
-    is_healthy = (pipeline_status == "complete") and lineup_confirmed
+    # Healthy = at least one lineup-confirmed post_lineup prediction exists. By 55–30 min
+    # before the EARLIEST first pitch the earliest game(s) must have confirmed lineups, so a
+    # confirmed prediction must exist; later games whose lineups post nearer their own first
+    # pitch legitimately lag, so we don't require full-slate coverage (which would false-page).
+    is_healthy = n_confirmed > 0
 
     if is_healthy:
         yield SkipReason(
-            f"Pipeline healthy: status={pipeline_status}, "
-            f"n_games={n_scored}/{n_scheduled}, lineup_confirmed=True."
+            f"Pipeline healthy: {n_confirmed} lineup-confirmed post_lineup prediction(s) "
+            f"({n_post_lineup} post_lineup rows / {n_scheduled} scheduled)."
         )
         return
 
@@ -161,8 +167,8 @@ def pregame_alert_sensor(context: SensorEvaluationContext):
     context.update_cursor(today)
     raise Exception(
         f"⚠️ Diamond Edge pipeline alert — {today}: "
-        f"pipeline_status={pipeline_status}, "
-        f"n_games_scored={n_scored}/{n_scheduled}, "
-        f"lineup_confirmed={str(lineup_confirmed).lower()}. "
-        f"Check Dagster Cloud for details."
+        f"NO lineup-confirmed predictions yet "
+        f"(post_lineup_rows={n_post_lineup}, confirmed={n_confirmed}, "
+        f"scheduled={n_scheduled}). The lineup-confirmed predict pass has not produced "
+        f"picks within the pre-game window. Check Dagit for the lineup_predict run."
     )

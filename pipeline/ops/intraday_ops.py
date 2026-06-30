@@ -145,37 +145,22 @@ def _w6_lakehouse_intraday(context: OpExecutionContext, scope: str) -> None:
 
 @op(out={"has_games": Out(bool)})
 def check_games_today(context: OpExecutionContext) -> bool:
-    """Query Snowflake to check if there are regular-season games today."""
-    import snowflake.connector
-    from cryptography.hazmat.backends import default_backend
-    from cryptography.hazmat.primitives.serialization import (
-        Encoding, NoEncryption, PrivateFormat, load_pem_private_key,
-    )
+    """Check whether there are regular-season games today (gates the odds snapshot job).
 
-    key_path = os.environ["SNOWFLAKE_PRIVATE_KEY_PATH"]
-    with open(key_path, "rb") as f:
-        pem = f.read()
-    key = load_pem_private_key(pem, password=None, backend=default_backend())
-    private_key_bytes = key.private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())
+    E11.1-W12 (INC-21 class): this read used the same `open(os.environ["SNOWFLAKE_PRIVATE_KEY_PATH"])`
+    footgun as odds_current_rebuild_sensor — on the box the PATH env var is set unconditionally but
+    the key file is only written when the inline SNOWFLAKE_PRIVATE_KEY is present, so a gap made this
+    op fail. Now reads stg_statsapi_games from the S3 lakehouse via DuckDB (instance-role
+    credential_chain — Snowflake-free)."""
+    from betting_ml.utils.lakehouse_monitor import duck, lh
 
-    conn = snowflake.connector.connect(
-        account=os.environ["SNOWFLAKE_ACCOUNT"],
-        user=os.environ["SNOWFLAKE_USER"],
-        warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
-        role=os.environ.get("SNOWFLAKE_ROLE", ""),
-        database="baseball_data",
-        private_key=private_key_bytes,
-        session_parameters={"QUERY_TAG": f"{context.job_name}|{os.environ.get('TARGET_ENV', 'dev')}"},
-    )
+    conn = duck()
     try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT COUNT(*) FROM baseball_data.betting.stg_statsapi_games "
-            "WHERE official_date = %s AND game_type = 'R'",
+        (count,) = conn.execute(
+            f"SELECT COUNT(*) FROM read_parquet('{lh('stg_statsapi_games')}', union_by_name=true) "
+            f"WHERE official_date = ? AND game_type = 'R'",
             [_today()],  # INC-22 — US baseball-day (LA), not the UTC box clock
-        )
-        count = cur.fetchone()[0]
-        cur.close()
+        ).fetchone()
     finally:
         conn.close()
 

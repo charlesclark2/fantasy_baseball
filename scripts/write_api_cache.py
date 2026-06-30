@@ -23,12 +23,14 @@ import json
 import logging
 import os
 import sys
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 import boto3
 import snowflake.connector
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
+
+from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -416,7 +418,7 @@ def main() -> int:
         log.error("CACHE_BUCKET env var not set — cannot write cache")
         return 1
 
-    today = date.today().isoformat()
+    today = current_game_date_iso()  # INC-22 — US baseball-day (LA), matches the read prefix + game_date
     prefix = f"api-cache/{today}"
 
     try:

@@ -41,46 +41,59 @@ _EARLIEST = time(4, 0)              # don't bother before 04:00 ET
 _DEADLINE_LEAD = timedelta(hours=2)  # must be in ≥ 2h before today's first pitch
 _DEFAULT_DEADLINE = time(13, 0)     # used when today has no games to anchor on
 
-_MART_SCHEMA = "baseball_data.betting"
-_SAVANT_SCHEMA = "baseball_data.savant"
+# E11.1-W12: reads moved off Snowflake to the S3 lakehouse via DuckDB (instance-role
+# credential_chain). `stg_statsapi_games` is the flattened slate; `stg_batter_pitches`
+# (year-partitioned) is the S3 home of the Savant pitch data the old `savant.batter_pitches`
+# raw fed. Snowflake-free — see betting_ml.utils.lakehouse_monitor.
 
 
 def _conn():
-    from betting_ml.utils.data_loader import get_snowflake_connection
-    return get_snowflake_connection()
+    from betting_ml.utils.lakehouse_monitor import duck
+    return duck()
 
 
 def _had_rs_games(conn, d: date) -> bool:
-    cur = conn.cursor()
-    cur.execute(
-        f"SELECT COUNT(*) FROM {_MART_SCHEMA}.stg_statsapi_games "
-        f"WHERE official_date = %s AND game_type = 'R'",
+    from betting_ml.utils.lakehouse_monitor import lh
+
+    (n,) = conn.execute(
+        f"SELECT COUNT(*) FROM read_parquet('{lh('stg_statsapi_games')}', union_by_name=true) "
+        f"WHERE official_date = ? AND game_type = 'R'",
         [d.isoformat()],
-    )
-    return int(cur.fetchone()[0]) > 0
+    ).fetchone()
+    return int(n) > 0
 
 
 def _pitches_present(conn, d: date) -> bool:
-    # game_date is stored as TEXT (ISO yyyy-mm-dd) in the raw Savant table.
-    cur = conn.cursor()
-    cur.execute(
-        f"SELECT COUNT(*) FROM {_SAVANT_SCHEMA}.batter_pitches WHERE game_date = %s",
-        [d.isoformat()],
-    )
-    return int(cur.fetchone()[0]) > 0
+    # stg_batter_pitches.game_date is a DATE; read only the year=YYYY/ partition so we don't
+    # scan every season's pitch parquet (a full-glob metadata scan is ~10s, the partition ~2s).
+    # A missing year= partition (no export yet for that season) means no pitches → False, NOT a
+    # tick failure — that's exactly the season-start "fire the catchup" case the sensor handles.
+    from betting_ml.utils.lakehouse_monitor import is_missing_glob, lh_year
+
+    try:
+        (n,) = conn.execute(
+            f"SELECT COUNT(*) FROM read_parquet('{lh_year('stg_batter_pitches', d.year)}', "
+            f"union_by_name=true) WHERE game_date = ?",
+            [d.isoformat()],
+        ).fetchone()
+    except Exception as exc:  # noqa: BLE001
+        if is_missing_glob(exc):
+            return False
+        raise
+    return int(n) > 0
 
 
 def _first_pitch_et(conn, d: date) -> datetime | None:
     """Earliest first-pitch for date d, as an aware US/Eastern datetime.
-    game_date is the StatsAPI first-pitch instant stored as TIMESTAMP_TZ
-    (tz-aware); a naive value is defensively treated as UTC."""
-    cur = conn.cursor()
-    cur.execute(
-        f"SELECT MIN(game_date) FROM {_MART_SCHEMA}.stg_statsapi_games "
-        f"WHERE official_date = %s AND game_type = 'R'",
+    game_date is the StatsAPI first-pitch instant stored as a tz-aware UTC timestamp in the
+    lakehouse; a naive value is defensively treated as UTC."""
+    from betting_ml.utils.lakehouse_monitor import lh
+
+    row = conn.execute(
+        f"SELECT MIN(game_date) FROM read_parquet('{lh('stg_statsapi_games')}', union_by_name=true) "
+        f"WHERE official_date = ? AND game_type = 'R'",
         [d.isoformat()],
-    )
-    row = cur.fetchone()
+    ).fetchone()
     if not row or row[0] is None:
         return None
     val = row[0]
@@ -104,7 +117,7 @@ def statcast_freshness_sensor(context: SensorEvaluationContext):
     try:
         conn = _conn()
     except Exception as e:  # transient connection issue — don't error the sensor
-        yield SkipReason(f"Snowflake connection failed: {e}")
+        yield SkipReason(f"Lakehouse (DuckDB/S3) connection failed: {e}")
         return
     try:
         if not _had_rs_games(conn, yesterday):

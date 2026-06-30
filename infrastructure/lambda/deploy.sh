@@ -99,6 +99,20 @@ cp -r app/backend "$PACKAGE_DIR/app/"
 # Copy app/__init__.py if it exists (needed for `app` to be a Python package)
 [ -f app/__init__.py ] && cp app/__init__.py "$PACKAGE_DIR/app/"
 
+# ── 3b. Copy the canonical baseball-day helper (INC-22) ──────────────────────
+# The backend resolves "today" via betting_ml.utils.game_day.current_game_date so the
+# SERVED slate date matches the pipeline's WRITE date and the odds marts — all the US
+# baseball-day (America/Los_Angeles), not the UTC Lambda clock. Mismatched read/write
+# dates were silently serving an empty future date in the evening (INC-22). betting_ml
+# is NOT pip-installed into the bundle, so copy just this STDLIB-ONLY module plus the
+# (empty) package __init__ files — the import path `betting_ml.utils.game_day` then
+# resolves on Lambda with zero extra deps (zoneinfo is already used in prod).
+echo "Copying betting_ml/utils/game_day.py (INC-22 canonical date helper)..."
+mkdir -p "$PACKAGE_DIR/betting_ml/utils"
+cp betting_ml/__init__.py "$PACKAGE_DIR/betting_ml/__init__.py"
+cp betting_ml/utils/__init__.py "$PACKAGE_DIR/betting_ml/utils/__init__.py"
+cp betting_ml/utils/game_day.py "$PACKAGE_DIR/betting_ml/utils/game_day.py"
+
 # ── 4. Zip the package ────────────────────────────────────────────────────────
 echo "Creating deployment.zip..."
 cd .lambda_build/package

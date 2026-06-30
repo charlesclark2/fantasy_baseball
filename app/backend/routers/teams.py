@@ -6,6 +6,8 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
+
 from app.backend.dependencies import get_user_id
 from app.backend.services import serving_cache
 
@@ -38,8 +40,7 @@ def get_team(team_id: int, _: str = Depends(get_user_id)) -> dict:
     Profiles are written daily by write_serving_store.py (write_team_profiles).
     Cache key: team/{team_id}
     """
-    from datetime import date
-    today = date.today().isoformat()
+    today = current_game_date_iso()  # INC-22 — match the LA baseball-day write key
 
     payload = serving_cache.get_cache(f"team/{team_id}", today)
     if payload is None:

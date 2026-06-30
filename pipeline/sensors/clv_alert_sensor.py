@@ -1,14 +1,20 @@
 """
 clv_alert_sensor.py — Epic 12 Story 12.2
 
-Daily sensor: computes the rolling 2-week pct_positive_clv from
-feature_pregame_meta_model_features. If it drops below 0.35, raises an
-exception so Dagster marks the tick as failed and sends the standard
+Daily sensor: computes the rolling 2-week pct_positive_clv for the H2H market. If it drops
+below 0.35, raises an exception so Dagster marks the tick as failed and sends the standard
 email-on-failure notification.
 
 Alert threshold: pct_positive_clv < 0.35 over any 14-day rolling window.
 This threshold signals that the model's edge direction is wrong more than
 65% of the time — a strong indicator of model drift or data quality issues.
+
+E11.1-W12: the CLV signal is read from the S3 lakehouse `mart_clv_labeled_games` mart via
+DuckDB (instance-role credential_chain — Snowflake-free) instead of the native-Snowflake
+`feature_pregame_meta_model_features` view (a feature-layer table not yet on S3; that wave is
+W8). `mart_clv_labeled_games` is the canonical labeled-CLV mart and carries the same `clv` /
+`clv_positive` columns; we scope to `market_type = 'h2h'` to match the H2H CLV meta-model's
+grain (the feature view was the H2H meta-model's training surface). One row per game/market.
 """
 
 from __future__ import annotations
@@ -24,34 +30,28 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 _ALERT_THRESHOLD = 0.35
 _ROLLING_DAYS = 14
-_DATABASE = "baseball_data"
-_FEATURE_TABLE = f"{_DATABASE}.betting_features.feature_pregame_meta_model_features"
-
-_ROLLING_QUERY = """
-select
-    count(*)                                            as n_rows,
-    avg(clv_positive::integer)                          as pct_positive_clv,
-    avg(clv)                                            as mean_clv
-from {table}
-where game_date >= '{cutoff}'
-  and clv is not null
-""".format(
-    table=_FEATURE_TABLE,
-    cutoff="{cutoff}",
-)
+_MARKET = "h2h"
 
 
 def _compute_rolling_stats() -> dict | None:
-    from betting_ml.utils.data_loader import get_snowflake_connection
+    from betting_ml.utils.lakehouse_monitor import duck, lh
 
     cutoff = (date.today() - timedelta(days=_ROLLING_DAYS)).isoformat()
-    query = _ROLLING_QUERY.format(cutoff=cutoff)
 
-    conn = get_snowflake_connection()
+    conn = duck()
     try:
-        cur = conn.cursor()
-        cur.execute(query)
-        row = cur.fetchone()
+        row = conn.execute(
+            f"""
+            select count(*)               as n_rows,
+                   avg(clv_positive::int)  as pct_positive_clv,
+                   avg(clv)                as mean_clv
+            from read_parquet('{lh('mart_clv_labeled_games')}', union_by_name=true)
+            where market_type = ?
+              and game_date >= ?
+              and clv is not null
+            """,
+            [_MARKET, cutoff],
+        ).fetchone()
     finally:
         conn.close()
 

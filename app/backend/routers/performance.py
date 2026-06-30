@@ -13,6 +13,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
+
 from app.backend.dependencies import get_user_id
 from app.backend.models.performance import (
     MarketMetrics,
@@ -77,8 +79,7 @@ ORDER BY market_type
 
 @router.get("/summary", response_model=PerformanceSummary)
 def get_performance_summary() -> PerformanceSummary:
-    from datetime import date
-    today_str = date.today().isoformat()
+    today_str = current_game_date_iso()  # INC-22 — match the LA baseball-day write key
 
     # DynamoDB primary read path (INC-16-P2; was Railway PG / A2.12)
     cache_hit = serving_cache.get_cache("performance/summary", today_str)

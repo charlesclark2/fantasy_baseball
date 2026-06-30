@@ -10,6 +10,8 @@ from __future__ import annotations
 import logging
 import os
 from datetime import date, datetime, timezone
+
+from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -379,7 +381,7 @@ def _build_featured_result(
 
 @router.get("/featured", response_model=FeaturedPickResponse)
 def get_featured_pick() -> FeaturedPickResponse:
-    today = datetime.now(_ET).date().isoformat()
+    today = current_game_date_iso()
 
     # DynamoDB serving cache (INC-16-P2; was Railway PG) is the primary serving path —
     # written by write_serving_store.py after each predict run. No Snowflake query on a cache hit.
@@ -1312,7 +1314,7 @@ def get_picks_today(
         except ValueError:
             raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
     else:
-        today = datetime.now(_ET).date().isoformat()
+        today = current_game_date_iso()
 
     # PG primary read path (A2.12)
     pg_hit = serving_cache.get_cache("picks/today", today)
@@ -1434,7 +1436,7 @@ def get_picks_history() -> HistoryPicksResponse:
 
 @router.get("/ev", response_model=EVPicksResponse)
 def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaults to today")) -> EVPicksResponse:
-    today_str = datetime.now(_ET).date().isoformat()
+    today_str = current_game_date_iso()
     if date and date != today_str:
         try:
             datetime.strptime(date, "%Y-%m-%d")
@@ -1507,8 +1509,7 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     params = {"game_pk": game_pk}
 
     # Cache check — PG primary, then S3 (permanent for Final games, date-scoped for live)
-    from datetime import date as _date
-    _today_str = _date.today().isoformat()
+    _today_str = current_game_date_iso()  # INC-22 — match the LA baseball-day write key
     _game_pg_key = f"picks/game/{game_pk}"
     _game_cache_key = f"picks/game/{game_pk}.json"
 
@@ -1971,7 +1972,7 @@ def get_line_shopping(
     demonstrated market edge (best_alpha=0). Treat as informational only.
     All bets are manual.
     """
-    today_str = datetime.now(_ET).date().isoformat()
+    today_str = current_game_date_iso()
     _date = today_str if not date else date
 
     if date and date != today_str:

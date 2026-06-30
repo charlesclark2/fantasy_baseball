@@ -11,20 +11,28 @@ game list — both silent corruptions.
 
 Two gates (raise on either):
 
-  1. SCHEDULE STALE — `monthly_schedule` hasn't been refreshed since > 4h ago
-     on a game day. Both the Railway schedule_capture cron (every 30 min) and the
-     daily_ingestion_job ingest_statsapi_schedule op must be dead for this to fire.
-     Checked after 14:30 UTC (2.5h after the daily job fires) to avoid false alarms
-     during the job's normal run window.
+  1. SCHEDULE STALE — the raw `monthly_schedule` lakehouse export hasn't been refreshed
+     since > _STALE_HOURS ago on a game day (a feed-death backstop; see the threshold note
+     below). Both the host-cron schedule_capture and the daily_ingestion_job ingest path
+     (→ the S3 re-export) must be dead for this to fire. Checked after 14:30 UTC (2.5h after
+     the daily job fires) to avoid false alarms during the job's normal run window.
 
   2. NO GAMES LOADED — monthly_schedule shows R-games today but stg_statsapi_games
-     has 0 rows for today. The dbt staging build didn't complete (or failed), or the
-     raw ingest never landed. Either way predictions would run blind.
+     has 0 rows for today. The dbt/lakehouse staging build didn't complete (or failed), or
+     the raw ingest never landed. Either way predictions would run blind.
 
-Transient Snowflake failures → SkipReason (don't page on our own infra blip).
+Transient lakehouse/S3 failures → SkipReason (don't page on our own infra blip).
 Real staleness / missing data persists across ticks → fires once per day.
 
 Off-season: when monthly_schedule has no upcoming R-games the sensor skips quietly.
+
+E11.1-W12: reads moved off Snowflake to the S3 lakehouse via DuckDB. Gate 1's freshness
+signal is now `monthly_schedule.ingestion_ts` (the raw-export heartbeat the 30-min intraday
+re-export advances) instead of the weak `month_end_date` proxy (a calendar boundary that
+could never detect mid-month feed stalls). The raw-vs-flattened independence the two gates
+rely on is preserved: gate 1 reads `lakehouse_raw/monthly_schedule` (the raw JSON), gate 2
+reads `lakehouse/stg_statsapi_games` (the flattened build) — distinct objects, distinct
+writers.
 """
 from __future__ import annotations
 
@@ -37,63 +45,75 @@ from dagster import SensorEvaluationContext, SkipReason, sensor
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-_MART_SCHEMA = "baseball_data.betting"
-_RAW_SCHEMA  = "baseball_data.statsapi"
-
 # Only evaluate in the window after the daily job has had time to complete.
 # Daily job fires at 12:00 UTC; ingest_statsapi_schedule is step 3, typically
 # done by 12:05–12:10. 14:30 is generous and avoids false alarms mid-run.
 _WINDOW_OPEN_UTC  = time(14, 30)
 _WINDOW_CLOSE_UTC = time(20, 0)   # give up; if still missing, pregame_alert_sensor covers it
 
-# Schedule is ingested every 30 min by Railway cron + daily job; 4h stale means
-# both paths have been down for ≥ 7 missed Railway fires or the daily job failed.
-_STALE_HOURS = 4
+# Gate-1 staleness threshold for the raw monthly_schedule S3 export.
+# E11.1-W12 cadence note: the host-cron schedule_capture exports monthly_schedule → S3 on a
+# MORNING-weighted 30-min cadence (observed ~09:00–14:00 UTC) plus the ~12:00-UTC daily job —
+# it is NOT a flat 24/7 30-min feed. So a healthy feed can legitimately read ~6h old at the
+# 20:00-UTC window close. The pre-W12 Snowflake gate-1 measured `month_end_date` (a calendar
+# boundary that is ALWAYS "fresh" while the current month is loaded), so it never detected
+# staleness at all; a tight S3 threshold here would be a NEW false-alarm source. 12h is set so
+# gate-1 fires only on an UNAMBIGUOUS feed death (no morning export at all → age ≫ 12h even at
+# window open) while tolerating the morning-weighted cadence. Gate-2 (raw-has-today vs
+# stg-missing) is the sharp, threshold-free daily-continuity signal. Operator: retighten toward
+# 4h once/if the box's schedule-export cron is confirmed to run continuously through 20:00 UTC.
+_STALE_HOURS = 12
 
 
 def _get_connection():
-    from betting_ml.utils.data_loader import get_snowflake_connection
-    return get_snowflake_connection()
+    from betting_ml.utils.lakehouse_monitor import duck
+    return duck()
 
 
 def _monthly_schedule_age_hours(conn) -> float | None:
-    """Minutes since the last monthly_schedule row was written (via month_end_date)."""
-    cur = conn.cursor()
-    # month_end_date is a DATE; cast to TIMESTAMP_NTZ to get DATEDIFF in hours.
-    cur.execute(
-        f"SELECT DATEDIFF('hour', MAX(month_end_date::TIMESTAMP_NTZ), SYSDATE()) "
-        f"FROM {_RAW_SCHEMA}.monthly_schedule"
-    )
-    row = cur.fetchone()
-    return float(row[0]) if row and row[0] is not None else None
+    """Hours since the last raw monthly_schedule snapshot was exported to S3 (via
+    ingestion_ts, the raw-export heartbeat). ingestion_ts is a VARCHAR ISO timestamp (UTC)."""
+    from betting_ml.utils.lakehouse_monitor import lh_raw
+
+    row = conn.execute(
+        f"SELECT MAX(ingestion_ts::timestamp) "
+        f"FROM read_parquet('{lh_raw('monthly_schedule')}', union_by_name=true)"
+    ).fetchone()
+    if not row or row[0] is None:
+        return None
+    now_utc_naive = datetime.now(UTC).replace(tzinfo=None)
+    return (now_utc_naive - row[0]).total_seconds() / 3600.0
 
 
 def _monthly_schedule_has_today(conn, today: str) -> bool:
-    """Does monthly_schedule contain R-games for today?"""
-    cur = conn.cursor()
-    cur.execute(
+    """Does the raw monthly_schedule JSON contain R-games for today? json_field is a VARCHAR
+    JSON blob ({"dates":[{"games":[{officialDate,gameType,...}]}]}); unnest the nested arrays
+    across all snapshots (a boolean count — snapshot dedup is irrelevant for >0)."""
+    from betting_ml.utils.lakehouse_monitor import lh_raw
+
+    (n,) = conn.execute(
         f"""
         SELECT COUNT(*)
-        FROM {_RAW_SCHEMA}.monthly_schedule,
-             LATERAL FLATTEN(input => json_field:dates) d,
-             LATERAL FLATTEN(input => d.value:games) g
-        WHERE g.value:officialDate::DATE = %s
-          AND g.value:gameType::VARCHAR = 'R'
+        FROM read_parquet('{lh_raw('monthly_schedule')}', union_by_name=true) ms,
+             UNNEST(json_extract(ms.json_field, '$.dates[*].games[*]')) AS t(g)
+        WHERE json_extract_string(g, '$.officialDate') = ?
+          AND json_extract_string(g, '$.gameType') = 'R'
         """,
         [today],
-    )
-    return int(cur.fetchone()[0]) > 0
+    ).fetchone()
+    return int(n) > 0
 
 
 def _stg_games_has_today(conn, today: str) -> bool:
-    """Does the dbt-built stg_statsapi_games table have any rows for today?"""
-    cur = conn.cursor()
-    cur.execute(
-        f"SELECT COUNT(*) FROM {_MART_SCHEMA}.stg_statsapi_games "
-        f"WHERE official_date = %s AND game_type = 'R'",
+    """Does the built stg_statsapi_games table have any rows for today?"""
+    from betting_ml.utils.lakehouse_monitor import lh
+
+    (n,) = conn.execute(
+        f"SELECT COUNT(*) FROM read_parquet('{lh('stg_statsapi_games')}', union_by_name=true) "
+        f"WHERE official_date = ? AND game_type = 'R'",
         [today],
-    )
-    return int(cur.fetchone()[0]) > 0
+    ).fetchone()
+    return int(n) > 0
 
 
 @sensor(minimum_interval_seconds=1800)  # check every ~30 min, aligned to capture cadence
@@ -133,7 +153,7 @@ def schedule_freshness_alert_sensor(context: SensorEvaluationContext):
     try:
         conn = _get_connection()
     except Exception as exc:
-        yield SkipReason(f"Snowflake connection failed (transient): {exc}")
+        yield SkipReason(f"Lakehouse (DuckDB/S3) connection failed (transient): {exc}")
         return
 
     problems: list[str] = []

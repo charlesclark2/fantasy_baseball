@@ -19,6 +19,8 @@ import urllib.request
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
+
 from app.backend.dependencies import get_admin_user
 from app.backend.services import serving_cache
 from app.backend.services.s3_cache import invalidate_game as s3_invalidate_game
@@ -83,7 +85,7 @@ def invalidate_cache(
     If game_pk is provided, invalidates only that game's detail blob.
     Otherwise invalidates the full day's non-permanent cache.
     """
-    today_str = datetime.date.today().isoformat()
+    today_str = current_game_date_iso()  # INC-22 — invalidate the LA baseball-day serving keys
     if game_pk is not None:
         serving_cache.invalidate_game(game_pk, today_str)
         s3_invalidate_game(game_pk)

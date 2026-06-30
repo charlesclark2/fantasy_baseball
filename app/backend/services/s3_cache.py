@@ -10,10 +10,11 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import date
 
 import boto3
 from botocore.exceptions import ClientError
+
+from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,10 @@ _PERMANENT_PREFIX = "api-cache/permanent"
 
 
 def _today_prefix() -> str:
-    return f"api-cache/{date.today().isoformat()}"
+    # INC-22 — the US baseball-day (LA), matching the write_serving_store / write_api_cache
+    # write prefix. A naive date.today() on the UTC Lambda rolled to tomorrow at 00:00 UTC
+    # (= US evening) → this S3 fallback read missed the slate's freshly-written cache.
+    return f"api-cache/{current_game_date_iso()}"
 
 
 def _full_key(key: str, permanent: bool) -> str:
