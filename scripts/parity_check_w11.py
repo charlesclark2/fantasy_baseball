@@ -63,11 +63,14 @@ def raw_glob(source: str) -> str:
 def get_duckdb_conn() -> duckdb.DuckDBPyConnection:
     conn = duckdb.connect()
     conn.execute("INSTALL httpfs; LOAD httpfs;")
-    conn.execute(f"SET s3_region='{os.environ.get('AWS_DEFAULT_REGION', 'us-east-2')}';")
-    # Instance-role on the box; static creds locally (mirrors get_duckdb_conn in parity_check_w3pre).
-    if os.environ.get("AWS_ACCESS_KEY_ID"):
-        conn.execute(f"SET s3_access_key_id='{os.environ['AWS_ACCESS_KEY_ID']}';")
-        conn.execute(f"SET s3_secret_access_key='{os.environ['AWS_SECRET_ACCESS_KEY']}';")
+    # Instance-role-safe S3 auth: credential_chain resolves the EC2 instance role on the box
+    # (AWS_ACCESS_KEY_ID is UNSET there — post-INC-16) AND static creds / AWS_PROFILE locally.
+    # Region pinned to us-east-2 (boto3 is region-less but DuckDB needs it — the landmine note).
+    # This is the run_w1_lakehouse.py pattern; do NOT use `SET s3_access_key_id` from env (fails on box).
+    conn.execute(
+        f"CREATE OR REPLACE SECRET baseball_s3 (TYPE S3, PROVIDER credential_chain, "
+        f"REGION '{os.environ.get('AWS_DEFAULT_REGION', 'us-east-2')}')"
+    )
     return conn
 
 
