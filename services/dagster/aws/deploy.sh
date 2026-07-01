@@ -52,6 +52,19 @@ log "deploy lock acquired (${DEPLOY_LOCK})"
 
 # --- 1. pull (FIRST — so env-parity validates the env.required being deployed) --
 OLD_HEAD="$(git rev-parse HEAD)"
+# The host crontab is hand-editable on the box (operators toggle capture crons for Odds-API
+# credit windows), but the COMMITTED capture.crontab is the single source of truth — the
+# reconcile step (§6) re-installs it every deploy regardless. A local edit otherwise makes
+# `git pull --ff-only` ABORT ("Your local changes would be overwritten by merge") and fails
+# the WHOLE CD deploy (recurring 2026-06-30/07-01). Discard drift on JUST capture.crontab
+# before the pull — LOUD so the log shows it — restoring it to HEAD (the pull then brings the
+# committed version). Untracked files (.env, backups) are never touched; OTHER tracked-file
+# drift still (correctly) aborts the pull so a real on-box edit gets investigated, not eaten.
+if ! git diff --quiet -- services/dagster/aws/capture.crontab; then
+  log "WARN: discarding local edits to capture.crontab (committed version is source of truth):"
+  git --no-pager diff --stat -- services/dagster/aws/capture.crontab | sed 's/^/    /' || true
+  git checkout HEAD -- services/dagster/aws/capture.crontab || true
+fi
 log "git pull origin main (from ${OLD_HEAD:0:8})"
 git pull --ff-only origin main || die "git pull failed"
 NEW_HEAD="$(git rev-parse HEAD)"
