@@ -42,6 +42,8 @@ interface ProjectionRow {
   opponent: string | null
   game_pk: number | null
   game_date: string | null
+  game_datetime: string | null
+  last3_k: number[] | null
   mean: number | null
   median: number | null
   p10: number | null
@@ -76,6 +78,14 @@ function fmtSignedPct(p: number | null): string {
   if (p == null) return "—"
   const v = p * 100
   return `${v >= 0 ? "+" : ""}${v.toFixed(0)} pts`
+}
+
+// First-pitch time from an ISO timestamp, in the viewer's local zone (e.g. "7:05 PM").
+function fmtGameTime(iso: string | null): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
 }
 
 // Compact range bar: 5th–95th band, 80% (p10–p90) emphasis, median tick, book-line marker.
@@ -122,7 +132,7 @@ function MiniRange({ r }: { r: ProjectionRow }) {
 function ProjectionCard({ r }: { r: ProjectionRow }) {
   return (
     <Link
-      href={`/players/${r.pitcher_id}`}
+      href={`/props/${r.pitcher_id}`}
       className="block rounded-lg border border-[#262626] bg-[#111111] p-4 transition-colors hover:border-[#3a3a3a] hover:bg-[#141414]"
     >
       <div className="flex items-start justify-between gap-2">
@@ -138,8 +148,22 @@ function ProjectionCard({ r }: { r: ProjectionRow }) {
           <div className="text-2xl font-bold tabular-nums text-emerald-400">
             {r.mean != null ? r.mean.toFixed(1) : "—"}
           </div>
+          {fmtGameTime(r.game_datetime) && (
+            <div className="text-[10px] text-gray-500">{fmtGameTime(r.game_datetime)}</div>
+          )}
         </div>
       </div>
+
+      {r.last3_k && r.last3_k.length > 0 && (
+        <div className="mt-2 flex items-center gap-1.5 text-[10px] text-gray-500">
+          <span className="uppercase tracking-wider text-gray-600">Last 3 K</span>
+          {r.last3_k.map((k, i) => (
+            <span key={i} className="rounded bg-[#1a1a1a] px-1.5 py-0.5 tabular-nums text-gray-300">
+              {k}
+            </span>
+          ))}
+        </div>
+      )}
 
       <MiniRange r={r} />
 

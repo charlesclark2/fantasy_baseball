@@ -146,6 +146,21 @@ def test_build_payload_shape_and_primary_line():
     assert p["caption"] == CAPTION and p["disclaimer"] == DISCLAIMER
 
 
+def test_payload_and_index_carry_game_time_and_last3_k():
+    p = build_k_projection_payload(
+        pitcher_id=543037, full_name="Gerrit Cole", team="NYY", game_pk=1,
+        game_date="2026-06-30", opponent="BOS",
+        game_datetime="2026-06-30T23:05:00Z", last3_k=[7, 5, 9],
+        quantile_levels=_QUANTILES, k_quantile_grid=list(range(2, 21)),
+        mean=6.2, std=2.1, calib_80=0.81, book_comparisons=[],
+    )
+    assert p["game_datetime"] == "2026-06-30T23:05:00Z"
+    assert p["last3_k"] == [7, 5, 9]
+    row = index_row(p)
+    assert row["game_datetime"] == "2026-06-30T23:05:00Z"
+    assert row["last3_k"] == [7, 5, 9]
+
+
 def test_build_payload_is_json_serialisable():
     p = _sample_payload()
     s = json.dumps(p)  # must not raise (no numpy scalars / NaN-as-object leaks)

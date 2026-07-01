@@ -41,6 +41,8 @@ export interface KProjection {
   team: string | null
   opponent: string | null
   game_date: string | null
+  game_datetime: string | null
+  last3_k: number[] | null
   model_version: string
   calib_80: number | null
   distribution: KDistribution
@@ -50,6 +52,19 @@ export interface KProjection {
   disclaimer: string
   best_alpha: number
   is_bet_recommendation: boolean
+}
+
+// First-pitch time from an ISO timestamp, in the viewer's local zone (e.g. "Jul 1, 7:05 PM").
+function fmtGameTime(iso: string | null): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
 }
 
 // Honest-framing fallback — mirrors betting_ml/utils/k_projection_serving.DISCLAIMER. Shown if a
@@ -228,6 +243,9 @@ export function PitcherKProjection({ pitcherId }: { pitcherId: number }) {
   const dist = data.distribution
   if (!dist || !dist.k_quantile_grid?.length) return null
 
+  const gameTime = fmtGameTime(data.game_datetime) ?? data.game_date
+  const last3 = data.last3_k ?? []
+
   return (
     <section className="mb-8">
       <div className="mb-3 flex items-baseline justify-between">
@@ -238,6 +256,25 @@ export function PitcherKProjection({ pitcherId }: { pitcherId: number }) {
           model: {data.model_version}
           {data.calib_80 != null ? ` · calibration ${(data.calib_80 * 100).toFixed(0)}%` : ""}
         </span>
+      </div>
+
+      {/* Pitcher identity + matchup context */}
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <div>
+          <span className="text-lg font-bold text-white">{data.full_name ?? "—"}</span>
+          <span className="ml-2 text-xs text-gray-500">
+            {data.team ?? "—"}
+            {data.opponent ? <span className="text-gray-600"> vs {data.opponent}</span> : null}
+          </span>
+        </div>
+        <div className="flex items-center gap-4 text-[11px] text-gray-500">
+          {gameTime && <span>{gameTime}</span>}
+          {last3.length > 0 && (
+            <span>
+              Last 3 K: <span className="tabular-nums text-gray-300">{last3.join(" · ")}</span>
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="rounded-lg border border-[#262626] bg-[#111111] px-4 py-4">

@@ -1275,6 +1275,16 @@ LIMIT 1
 """
 
 
+def _blob_matches_date(cached: dict, today: str) -> bool:
+    """True if a cached picks/today blob is for `today` (or is empty). Guards the DATELESS S3 fallback
+    (`picks/today.json`, which holds the last-written slate) from surfacing a prior day's games when
+    today's picks aren't published yet."""
+    picks = cached.get("picks") or []
+    if not picks:
+        return True
+    return any(str(p.get("game_date") or "").startswith(today) for p in picks)
+
+
 def _pipeline_status(last_updated_at: datetime | None) -> str:
     if last_updated_at is None:
         return "no_predictions"
@@ -1327,9 +1337,11 @@ def get_picks_today(
         except Exception:
             logger.warning("PG picks/today invalid — falling through")
 
-    # S3 secondary
+    # S3 secondary — `picks/today.json` is DATELESS (holds the last-written slate). Guard against
+    # surfacing a prior day's games when a specific `date` is requested but not yet published to
+    # DynamoDB (e.g. before the morning pipeline runs): only use it when it matches `today`.
     cached = get_cache("picks/today.json")
-    if cached is not None:
+    if cached is not None and _blob_matches_date(cached, today):
         try:
             result = TodayPicksResponse(**cached)
             if apply_portfolio and user_id:
@@ -1387,8 +1399,9 @@ def get_picks_today(
     )
     result = TodayPicksResponse(picks=picks, data_quality=data_quality, is_preliminary=is_preliminary)
     payload = result.model_dump(mode="json")
-    serving_cache.set_cache("picks/today", today, payload)
-    set_cache("picks/today.json", payload)
+    serving_cache.set_cache("picks/today", today, payload)  # date-keyed (safe to cache an empty day)
+    if picks:  # don't clobber the dateless "last good slate" blob with an empty/pending day
+        set_cache("picks/today.json", payload)
     if apply_portfolio and user_id:
         result = _apply_portfolio_filter(result, user_id)
     return result
