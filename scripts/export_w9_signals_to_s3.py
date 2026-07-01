@@ -170,6 +170,77 @@ def _export(conn, lakehouse_name: str, fqn: str, dry_run: bool) -> int:
     return len(df)
 
 
+# INC-25 — at-the-SOURCE coverage ALERT. This export mirrors the generator OUTPUT stores; if a
+# generator produced 0 rows for the freshest completed slate, warn HERE (stderr → ALERT tier) rather
+# than only at the downstream signal_freshness_check HALT gate. Checks the source stores directly
+# (mart_sub_model_signals + the betting_features signal tables), so it isolates a genuine generator
+# failure from consumer/parquet staleness (the INC-25 ordering bug the daily-job reorder fixes).
+# Never fails the export — pure observability. matchup is availability-gated (legit-null for
+# sparse-history games) so it is reported but excluded from the ALERT floor (mirrors
+# check_signal_freshness._SIGNAL_GROUPS in_floor).
+_SOURCE_COVERAGE_SQL = """
+with ref as (
+    select max(game_date) as d from baseball_data.betting.mart_game_results
+    where game_type = 'R' and home_final_score is not null
+),
+slate as (
+    select distinct g.game_pk from baseball_data.betting.mart_game_results g, ref
+    where g.game_date = ref.d
+)
+select
+    (select to_varchar(d) from ref)                                                 as ref_date,
+    (select count(*) from slate)                                                    as n_games,
+    (select count(distinct m.game_pk) from baseball_data.betting.mart_sub_model_signals m
+       join slate s on s.game_pk = m.game_pk
+       where m.is_current and m.signal_name = 'run_env_mu')                         as run_env,
+    (select count(distinct o.game_pk) from baseball_data.betting_features.offense_v2_signals o
+       join slate s on s.game_pk = o.game_pk)                                       as offense,
+    (select count(distinct ss.game_pk) from baseball_data.betting_features.starter_suppression_signals ss
+       join slate s on s.game_pk = ss.game_pk)                                      as starter,
+    (select count(distinct ip.game_pk) from baseball_data.betting_features.starter_ip_signals ip
+       join slate s on s.game_pk = ip.game_pk)                                      as starter_ip,
+    (select count(distinct m.game_pk) from baseball_data.betting.mart_sub_model_signals m
+       join slate s on s.game_pk = m.game_pk
+       where m.is_current and m.signal_name = 'bullpen_mu')                         as bullpen,
+    (select count(distinct m.game_pk) from baseball_data.betting.mart_sub_model_signals m
+       join slate s on s.game_pk = m.game_pk
+       where m.is_current and m.signal_name = 'matchup_advantage_mu')              as matchup
+"""
+
+
+def _alert_empty_source_groups(conn) -> None:
+    """INC-25: emit an ALERT (stderr) for any signal group whose SOURCE store is empty on the
+    freshest completed slate. Never raises — observability only."""
+    try:
+        cur = conn.cursor()
+        try:
+            cur.execute(_SOURCE_COVERAGE_SQL)
+            row = dict(zip([d[0].lower() for d in cur.description], cur.fetchone()))
+        finally:
+            cur.close()
+    except Exception as exc:  # noqa: BLE001 — never let the guard fail the export
+        print(f"  (INC-25 source coverage check skipped: {exc})", file=sys.stderr)
+        return
+
+    ref_date, n_games = row.get("ref_date"), int(row.get("n_games") or 0)
+    floor_groups = ["run_env", "offense", "starter", "starter_ip", "bullpen"]
+    if not n_games:
+        print(f"[INC-25] no completed slate to coverage-check (ref_date={ref_date}).")
+        return
+    empty = [g for g in floor_groups if int(row.get(g) or 0) == 0]
+    if empty:
+        print(
+            f"WARNING: [INC-25] sub-model signal SOURCE stores are EMPTY on the freshest completed "
+            f"slate {ref_date} ({n_games} games): {', '.join(empty)} — a generator produced 0 signals. "
+            f"predict_today WILL be blocked by signal_freshness_check until the generator(s) are fixed "
+            f"and re-run. Check the corresponding generate_*_signals ops.",
+            file=sys.stderr,
+        )
+    else:
+        print("[INC-25] source coverage OK on {}: {}".format(
+            ref_date, ", ".join(f"{g}={row.get(g)}/{n_games}" for g in floor_groups + ["matchup"])))
+
+
 def main():
     ap = argparse.ArgumentParser(description="E11.1-W9 sub-model signal-store export-mirror → S3")
     ap.add_argument("--table", choices=ALL_NAMES, help="Export one (default: all 5)")
@@ -188,6 +259,10 @@ def main():
             except Exception as exc:  # noqa: BLE001 — per-table isolation; continue to the rest
                 print(f"  ERROR exporting {name}: {exc}")
                 failures.append((name, str(exc)))
+        # INC-25 — ALERT at the source if any generator wrote 0 rows for the freshest slate (only
+        # meaningful on a full run; --table exports a single store).
+        if not args.table:
+            _alert_empty_source_groups(conn)
     finally:
         conn.close()
 

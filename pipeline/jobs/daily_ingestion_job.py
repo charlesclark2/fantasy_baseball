@@ -25,6 +25,7 @@ from pipeline.ops.daily_ingestion_ops import (
     generate_run_env_signals_op,
     generate_starter_ip_signals_op,
     generate_starter_signals_op,
+    rebuild_sub_model_signals_consumer_op,
     signal_freshness_check,
     signal_freshness_failure_hook,
     update_archetype_posteriors_op,
@@ -111,7 +112,15 @@ def daily_ingestion_job():
     # Reads mart_team_defense_quality_rolling (dbt-built; prior-season OAA + EB sprint speed).
     # Shared signal for Epic 27 (totals) and Epic 28 (H2H) per R33.
     sig_defense_quality = generate_defense_quality_signals_op(start=s16)
-    sig_rebuild    = dbt_sub_model_signals_rebuild(
+    # INC-25 — ORDERING FIX (P0 serving-down). After the W8a cutover the Snowflake consumer
+    # feature_pregame_sub_model_signals reads the S3 parquet built from these stores, so the chain
+    # MUST be: generators write SF stores → export stores to S3 → rebuild the consumer parquet from
+    # the fresh stores → materialize the SF consumer → gate. Previously the store mirror + consumer
+    # parquet were built at job START (before the generators) so the consumer served a slate-stale
+    # pivot and signal_freshness_check HALTed the job.
+    # 1) export_w9_signals_to_s3_op is now the fan-in of all 8 generators (SF stores → S3 parquet)
+    #    + emits the at-the-source empty-slate coverage ALERT.
+    sig_stores_s3 = export_w9_signals_to_s3_op(
         run_env_done=sig_run_env,
         offense_done=sig_offense,
         starter_done=sig_starter,
@@ -121,11 +130,11 @@ def daily_ingestion_job():
         env_state_done=sig_env_state,
         defense_quality_done=sig_defense_quality,
     )
-    # E11.1-W9 — mirror the 5 sub-model signal STORES to S3 (mart_sub_model_signals + the 4
-    # betting_features signal tables) once all 8 generators + the PIVOT rebuild have run. Fans
-    # out from the rebuild and is NEVER depended on, so a mirror failure can't block the
-    # freshness check or predictions (MIRROR tier; gated default-OFF by W9_LAKEHOUSE_S3).
-    export_w9_signals_to_s3_op(start=sig_rebuild)
+    # 2) rebuild the CONSUMER S3 parquet from the fresh stores (+ refresh its ext table). No-op until
+    #    the W8a cutover (W8A_LAKEHOUSE_S3=1); serving-critical/HALT once cut over.
+    sig_consumer = rebuild_sub_model_signals_consumer_op(start=sig_stores_s3)
+    # 3) materialize the SF consumer table from the now-fresh parquet, then 4) gate on freshness.
+    sig_rebuild = dbt_sub_model_signals_rebuild(start=sig_consumer)
     sig_fresh = signal_freshness_check(start=sig_rebuild)
     # SCD-2 update: mart_odds_outcomes is now fresh; update market features and
     # rebuild feature_pregame_odds_features before the prediction step.
