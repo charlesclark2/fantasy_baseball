@@ -175,6 +175,34 @@ def _run_w8b_mirror(context, script: str, args: list[str] | None = None) -> None
         )
 
 
+def _w11_w4w5_nightly_on() -> bool:
+    # E11.1-W11 (ingestion FINISH wave): the Tier-A raw writers now dual-write S3 and the 8 consumer
+    # duckdb branches were repointed lakehouse_loc → lakehouse_raw_loc (the SF-sourced W4/W5 snapshot →
+    # the live-writer raw mirror). But run_w1_lakehouse.py --w4/--w5 (the parquet REBUILD) is NOT in the
+    # daily op — only the ext-table REFRESH is (refresh_w1_external_tables_op's default set includes
+    # W4_TABLES+W5_TABLES). So without this the W4/W5 lakehouse/ parquet would freeze at the last manual
+    # rebuild and the repointed reads would go stale. This gate wires a nightly --w4-only/--w5-only
+    # rebuild; the existing refresh op then re-reads the fresh parquet. Default OFF: flip to 1 only after
+    # (1) W11_RAW_WRITE_MODE=both on the daily job (so the live writers keep the raw mirror fresh),
+    # (2) a box-validated --w4-only/--w5-only run (RUNTIME GATE), and (3) the W4/W5 lakehouse_ext tables
+    # exist. Merging default-OFF is a true no-op (the un-gated glue is just this env read).
+    return os.environ.get("W11_W4W5_NIGHTLY") == "1"
+
+
+def _run_w11_nightly(context, script: str, args: list[str] | None = None) -> None:
+    """E11.1-W11 nightly W4/W5 parquet rebuild at mirror-tier (ALERT-loud-but-continue). The W4/W5 marts
+    have NO request-time read (per the run_w1_lakehouse_op W4/W5 notes) — they feed the dbt feature build,
+    which retains its Snowflake-native path — so a rebuild failure must NOT take down the W6-critical
+    run_w1_lakehouse_op. Log a WARNING (visible in Dagster) and continue; the next day's run retries."""
+    try:
+        _run_script(context, script, args)
+    except Exception as e:  # noqa: BLE001 — non-serving W4/W5 rebuild; must not HALT the daily job
+        context.log.warning(
+            f"[W11 nightly] W4/W5 rebuild '{os.path.basename(script)}' {' '.join(args or [])} failed "
+            f"(non-fatal; the dbt feature build still computes these models natively): {e}"
+        )
+
+
 def _w3pre_daily_on() -> bool:
     # E11.1-W11 / INC-23 residual: wire the W3pre odds/staging flatten into the daily
     # run_w1_lakehouse_op so mart_derivative_closes stops topping out at ~Apr-1 (E13.14
@@ -484,6 +512,20 @@ def run_w1_lakehouse_op(context):
         _run_w8b_mirror(context, "export_w8b_precursors_to_s3.py")
         _run_w8b_mirror(context, "run_w1_lakehouse.py", ["--w8b-only"])
         _run_w8b_mirror(context, "refresh_w1_external_tables.py", ["--w8b"])
+
+    # E11.1-W11 (ingestion FINISH wave): rebuild the W4 (FanGraphs stuff+/arsenal/hitting, catcher) +
+    # W5 (sprint, OAA ×2) marts from the repointed raw mirror so their lakehouse/ parquet — and thus the
+    # lakehouse_ext tables refresh_w1_external_tables_op refreshes next — stays fresh (the 8 duckdb
+    # branches now read lakehouse_raw/, written by the dual-writing Tier-A ingests). --w4-only/--w5-only
+    # REUSE the W1/W2/W3pre parquet the base --w6 build just wrote (light incremental mart rebuilds, not
+    # a history rebuild). Placed AFTER --w8a (W5b's mart_bullpen_effectiveness/defense_quality read the
+    # W8a EB posteriors just built — the documented --w8a-before-w5 order) and after --w8b (does not
+    # perturb the serving-critical blocks). Mirror-tier (ALERT-continue) — W4/W5 have no request-time
+    # read. The 1-day feature-propagation lag (--w8a this run used yesterday's W4/W5 marts) is immaterial:
+    # the fangraphs/sprint/catcher feeds are Sunday-only and OAA is season-cumulative. Gated default-OFF.
+    if _w11_w4w5_nightly_on():
+        _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w4-only"])
+        _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w5-only"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

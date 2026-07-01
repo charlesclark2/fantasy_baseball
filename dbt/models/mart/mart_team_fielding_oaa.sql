@@ -35,7 +35,9 @@ with oaa_raw as (
         oaa,
         drs,
         n_opportunities
-    from read_parquet('{{ lakehouse_loc("oaa_team_season_raw") }}**/*.parquet', union_by_name=true)
+    -- E11.1-W11 read-repoint: live-writer raw mirror (lakehouse_raw/, dual-written by
+    -- ingest_oaa.py under W11_RAW_WRITE_MODE, which stamps loaded_at); loaded_at desc wins latest.
+    from read_parquet('{{ lakehouse_raw_loc("oaa_team_season_raw") }}**/*.parquet', union_by_name=true)
     qualify row_number() over (
         partition by team_abbrev, game_year
         order by loaded_at desc nulls last

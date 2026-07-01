@@ -101,6 +101,21 @@ def test_typed_row_roundtrips_with_scalar_columns_intact(tmp_path):
     assert cnt == 1
 
 
+def test_nan_in_string_column_does_not_crash_arrow_build():
+    """Regression (the sprint_speed crash): a pandas-derived row with a NaN float in an otherwise-
+    STRING column (player_name) must normalize to None, not raise 'Expected bytes, got a float'."""
+    from utils.lakehouse_raw_writer import rows_to_arrow_table
+    rows = [
+        {"ingestion_ts": "2026-06-30T18:00:00", "player_mlbam_id": 1, "player_name": "Mike Trout",
+         "sprint_speed_fts": 28.7},
+        {"ingestion_ts": "2026-06-30T18:00:00", "player_mlbam_id": 2, "player_name": float("nan"),
+         "sprint_speed_fts": float("nan")},
+    ]
+    d = rows_to_arrow_table(rows).to_pydict()        # must not raise
+    assert d["player_name"] == ["Mike Trout", None]  # NaN string → None
+    assert d["sprint_speed_fts"][1] is None          # NaN numeric → None too
+
+
 def test_all_seven_flipped_writers_target_registered_sources():
     """Every Tier-A writer imports cleanly (catches an import-time bug — e.g. a missing datetime
     import in a flipped writer) and tags a registered _LAKEHOUSE_SOURCE."""

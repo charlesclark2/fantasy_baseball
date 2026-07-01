@@ -40,7 +40,9 @@ latest as (
             partition by player_id, season
             order by snapshot_date desc, ingestion_timestamp desc
         )   as rn
-    from read_parquet('{{ lakehouse_loc("catcher_framing_raw") }}**/*.parquet', union_by_name=true)
+    -- E11.1-W11 read-repoint: live-writer raw mirror (lakehouse_raw/, dual-written by
+    -- ingest_catcher_framing.py under W11_RAW_WRITE_MODE); snapshot_date desc wins latest.
+    from read_parquet('{{ lakehouse_raw_loc("catcher_framing_raw") }}**/*.parquet', union_by_name=true)
     where framing_runs is not null
 ),
 

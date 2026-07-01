@@ -6,7 +6,9 @@
 {% if target.name == 'duckdb' %}
 
 with source as (
-    select * from read_parquet('{{ lakehouse_loc("fg_hitting_leaderboard_raw") }}**/*.parquet', union_by_name=true)
+    -- E11.1-W11 read-repoint: reads the live-writer raw mirror (lakehouse_raw/, dual-written by
+    -- ingest_fangraphs_hitting_leaderboard.py under W11_RAW_WRITE_MODE) instead of the SF-sourced W4 snapshot.
+    select * from read_parquet('{{ lakehouse_raw_loc("fg_hitting_leaderboard_raw") }}**/*.parquet', union_by_name=true)
 ),
 
 extracted as (
