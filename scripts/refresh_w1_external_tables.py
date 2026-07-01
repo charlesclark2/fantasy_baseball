@@ -357,6 +357,10 @@ def main():
                          "external tables (after run_w1_lakehouse.py --w8a). Best-effort — these "
                          "don't exist until the W8a build is enabled, so a missing table is an "
                          "expected skip.")
+    ap.add_argument("--sub-model-signals", action="store_true",
+                    help="INC-25: refresh ONLY the feature_pregame_sub_model_signals external table "
+                         "(after run_w1_lakehouse.py --sub-model-signals-only re-writes its parquet "
+                         "from the fresh W9 stores). Best-effort — missing table is an expected skip.")
     ap.add_argument("--w8b", action="store_true",
                     help="E11.1-W8b: refresh only the 9 serving-aggregator + complex-upstream "
                          "external tables (after run_w1_lakehouse.py --w8b). Best-effort — these "
@@ -386,6 +390,15 @@ def main():
         print("Refreshing W8a upstream feature-layer + EB-posterior external tables (--w8a):")
         _refresh(W8A_TABLES, required=set())
         print("W8a external-table refresh complete (best-effort).")
+        return
+
+    # INC-25: the narrow post-generator consumer refresh (after --sub-model-signals-only re-writes
+    # the parquet). Refreshes only feature_pregame_sub_model_signals so the serving read reflects
+    # the current slate before signal_freshness_check + the SF materialize.
+    if args.sub_model_signals:
+        print("Refreshing feature_pregame_sub_model_signals external table (--sub-model-signals):")
+        _refresh(["feature_pregame_sub_model_signals"], required=set())
+        print("feature_pregame_sub_model_signals external-table refresh complete (best-effort).")
         return
 
     # E11.1-W8b: the serving-aggregator build op refreshes its own external tables right after the

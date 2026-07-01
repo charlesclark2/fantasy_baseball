@@ -181,6 +181,54 @@ ip_stats as (
     group by game_pk, pitcher_id
 ),
 
+-- ── E1.11 START-INDEXED starter form (last ≤3 prior STARTS; IL/offseason-aware) ──
+-- The CORRECTNESS fix for the E1.11 audit's flagship miscalc: a starter works a
+-- rotation, so the calendar 7/14/30-day rolling windows (pgr.*, sourced from
+-- mart_pitcher_rolling_stats with rn=1 and NO max-staleness bound) silently carry a
+-- prior season's / pre-IL numbers forward across a long gap. Measured rate: 100% of the
+-- 9.43% of starter-rows with days_rest>15 still show a *populated* "7-day" window — a
+-- definitionally-impossible stale carry-forward. Lead case: Julio Teheran, game_pk 634573
+-- (2021-04-03 DET season debut) wore his final-2020 LAA form (k_pct_7d=0.188) 189 days
+-- stale. Start-indexed aggregates are gap-immune ("the last 3 real starts", whenever they
+-- were) and are paired in `final` with an explicit source-age + long-layoff flag so a
+-- model can down-weight or gate old form instead of trusting a phantom calendar window.
+-- LEAKAGE GUARD: strict gl.game_date < pp.game_date. BF-weighted so a 1-batter opener
+-- cameo cannot distort the rate. Validated vs ground truth (Teheran): sp_k_pct_l3=0.115,
+-- sp_bb_pct_l3=0.192, sp_xwoba_against_l3=0.6846, sp_form_start_count=3.
+sp_form as (
+    select
+        pp.game_pk,
+        pp.pitcher_id,
+        gl.strikeouts,
+        gl.walks,
+        gl.batters_faced,
+        gl.xwoba_against,
+        row_number() over (
+            partition by pp.game_pk, pp.pitcher_id
+            order by gl.game_date::date desc
+        ) as recency_rank
+    from probable_pitchers pp
+    inner join {{ ref('mart_starting_pitcher_game_log') }} gl
+        on  gl.pitcher_id       = pp.pitcher_id
+        and gl.game_date::date  < pp.game_date   -- LEAKAGE GUARD
+),
+
+sp_form_stats as (
+    select
+        game_pk,
+        pitcher_id,
+        round(sum(case when recency_rank <= 3 then strikeouts end)
+              / nullif(sum(case when recency_rank <= 3 then batters_faced end), 0), 4) as sp_k_pct_l3,
+        round(sum(case when recency_rank <= 3 then walks end)
+              / nullif(sum(case when recency_rank <= 3 then batters_faced end), 0), 4) as sp_bb_pct_l3,
+        round(sum(case when recency_rank <= 3 then xwoba_against * batters_faced end)
+              / nullif(sum(case when recency_rank <= 3 then batters_faced end), 0), 4) as sp_xwoba_against_l3,
+        sum(case when recency_rank <= 3 then batters_faced end)                        as sp_form_bf_l3,
+        sum(case when recency_rank <= 3 then 1 else 0 end)                             as sp_form_start_count
+    from sp_form
+    group by game_pk, pitcher_id
+),
+
 -- Start-count fastball velocity: last ≤3 prior starts with valid velo data.
 -- Mirrors the ip_starts / ip_stats pattern. LEAKAGE GUARD identical: strictly < pp.game_date.
 -- avg_fastball_velo from mart_starting_pitcher_game_log is the per-start mean across FF/SI/FC,
@@ -607,6 +655,28 @@ final as (
         pgr.k_pct_7d - pgr.k_pct_std                as k_pct_7d_minus_std,
         pgr.xwoba_against_7d - pgr.xwoba_against_std as xwoba_7d_minus_std,
 
+        -- ── E1.11 START-INDEXED form (last ≤3 prior starts; gap-immune) ──────
+        -- Trustworthy replacement for the stale-prone calendar *_7d/_14d/_30d block:
+        -- BF-weighted rates over the pitcher's last ≤3 actual starts, whenever they
+        -- occurred. NULL only for a true debut (no prior starts). See sp_form above.
+        sfs.sp_k_pct_l3,
+        sfs.sp_bb_pct_l3,
+        sfs.sp_xwoba_against_l3,
+        coalesce(sfs.sp_form_start_count, 0)        as sp_form_start_count,
+
+        -- ── E1.11 form-staleness diagnostics ────────────────────────────────
+        -- starter_form_source_age_days: calendar days between the CALENDAR-rolling source
+        -- row (pgr.stats_game_date) and this game. When it exceeds a window length, that
+        -- window's *_Nd value is a stale carry-forward, NOT current form. NULL for debuts.
+        datediff('day', pgr.stats_game_date::date, pp.game_date)             as starter_form_source_age_days,
+        -- starter_form_stale: the calendar 7/14/30-day rolling source is older than its
+        -- widest (30-day) window ⇒ the *_7d/_14d/_30d columns are NOT "recent form" for
+        -- this start; prefer sp_*_l3. (Teheran 634573: age 189 ⇒ true.)
+        (datediff('day', pgr.stats_game_date::date, pp.game_date) > 30)::boolean as starter_form_stale,
+        -- starter_long_layoff: >30 days since the pitcher's last START (offseason debut /
+        -- IL return). Makes a large, correct days_rest (e.g. 189) legible to the model.
+        (datediff('day', ps.last_start_date, pp.game_date) > 30)::boolean    as starter_long_layoff,
+
         -- ── Sample size flags: appearances in each rolling window ─────────────
         pgr.games_30d                                as appearances_30d,
         pgr.games_std                                as appearances_std,
@@ -746,6 +816,10 @@ final as (
     left join ip_stats ips
         on  ips.game_pk     = pp.game_pk
         and ips.pitcher_id  = pp.pitcher_id
+    -- E1.11 start-indexed form (last ≤3 prior starts; gap-immune)
+    left join sp_form_stats sfs
+        on  sfs.game_pk     = pp.game_pk
+        and sfs.pitcher_id  = pp.pitcher_id
     left join velo_stats vs
         on  vs.game_pk      = pp.game_pk
         and vs.pitcher_id   = pp.pitcher_id

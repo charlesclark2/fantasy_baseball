@@ -769,21 +769,13 @@ def generate_defense_quality_signals_op(context):
                     ["--date", d, "--env", env] + _w9_s3_read_args())
 
 
-@op(
-    ins={
-        "run_env_done":       In(Nothing),
-        "offense_done":       In(Nothing),
-        "starter_done":       In(Nothing),
-        "starter_ip_done":    In(Nothing),
-        "bullpen_done":       In(Nothing),
-        "matchup_done":       In(Nothing),
-        "env_state_done":     In(Nothing),
-        "defense_quality_done": In(Nothing),
-    },
-    out=Out(Nothing),
-)
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def dbt_sub_model_signals_rebuild(context):
-    # Fan-in: refresh the wide PIVOT once all eight signal tables are written.
+    # Materialize the wide PIVOT (feature_pregame_sub_model_signals) in Snowflake. INC-25: this now
+    # runs AFTER export_w9_signals_to_s3_op (stores→S3) + rebuild_sub_model_signals_consumer_op
+    # (rebuilds the consumer S3 parquet from the fresh stores). On the SF target the model is
+    # `select * from lakehouse_ext.feature_pregame_sub_model_signals` (reads that fresh parquet); on
+    # a native target it builds the pivot directly from the live SF stores — both are fresh here.
     _run_dbt(context, [
         "run",
         "--select", "feature_pregame_sub_model_signals",
@@ -804,12 +796,29 @@ def _w9_mirror_on() -> bool:
     return os.environ.get("W9_LAKEHOUSE_S3") == "1"
 
 
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+@op(
+    ins={
+        "run_env_done":       In(Nothing),
+        "offense_done":       In(Nothing),
+        "starter_done":       In(Nothing),
+        "starter_ip_done":    In(Nothing),
+        "bullpen_done":       In(Nothing),
+        "matchup_done":       In(Nothing),
+        "env_state_done":     In(Nothing),
+        "defense_quality_done": In(Nothing),
+    },
+    out=Out(Nothing),
+)
 def export_w9_signals_to_s3_op(context):
-    # E11.7 failure tier: ALERT-loud-but-continue (MIRROR tier). The signal stores are BATCH
-    # feature inputs, not user-read, and no serving-critical reader consumes the S3 mirror yet
-    # (W8 isn't cut over) — so a mirror failure must NEVER HALT the serving-critical daily job.
-    # Fans out from dbt_sub_model_signals_rebuild (all 5 stores fresh) and is never depended on.
+    # E11.7 failure tier: ALERT-loud-but-continue (MIRROR tier) — a Snowflake→S3 export failure must
+    # never HALT the serving pipeline; if the mirror is stale the consumer rebuild + freshness gate
+    # catch it downstream.
+    # INC-25 (2026-07-01): this op is now the FAN-IN of all 8 signal generators and runs BEFORE
+    # rebuild_sub_model_signals_consumer_op + dbt_sub_model_signals_rebuild. After the W8a cutover the
+    # Snowflake consumer feature_pregame_sub_model_signals reads the S3 parquet built from these
+    # stores, so the store parquets MUST be refreshed (here) before the consumer parquet is rebuilt —
+    # otherwise the consumer serves a slate-stale pivot (the INC-25 root cause). It also emits an
+    # at-the-source coverage ALERT (export_w9_signals_to_s3._alert_empty_source_groups).
     if not _w9_mirror_on():
         context.log.info("W9_LAKEHOUSE_S3 != 1 — skipping W9 signal-store mirror (default OFF).")
         return
@@ -824,6 +833,39 @@ def export_w9_signals_to_s3_op(context):
             "may be stale/partial — serving still reads Snowflake, parity_check_w9_signals will "
             f"show the gap). Error: {exc}"
         )
+
+
+# ── INC-25 — post-generator consumer-parquet rebuild ─────────────────────────
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def rebuild_sub_model_signals_consumer_op(context):
+    """INC-25 (P0 serving-down fix): rebuild the feature_pregame_sub_model_signals CONSUMER S3
+    parquet from the freshly-exported W9 stores, then refresh its external table — so the Snowflake
+    consumer (`select * from lakehouse_ext.feature_pregame_sub_model_signals` post-W8a-cutover)
+    reflects the CURRENT slate before dbt_sub_model_signals_rebuild materializes it and
+    signal_freshness_check gates on it.
+
+    ROOT CAUSE it fixes: the full --w8a build runs at daily-job START (run_w1_lakehouse_op, line ~76),
+    BEFORE the day's signal generators write the stores and BEFORE export_w9_signals_to_s3_op mirrors
+    them to S3 → the consumer parquet it produced lagged the stores by a full slate, so the SCD-2
+    groups (run_env/bullpen/matchup/env/defense) read empty on the freshest completed slate and
+    signal_freshness_check HALTed the job (starter_ip happened to be present in the prior-day parquet
+    → the lone survivor). Fans out from export_w9_signals_to_s3_op; must precede
+    dbt_sub_model_signals_rebuild.
+
+    Failure tier: only meaningful once the W8a cutover is live (W8A_LAKEHOUSE_S3=1) — that is when the
+    SF consumer reads the S3 parquet. Then it is SERVING-CRITICAL (a stale/failed rebuild HALTs the
+    freshness gate anyway), so let _run_script raise (HALT). Pre-cutover the SF consumer builds the
+    pivot natively from the live SF stores (always fresh) → this op is a no-op."""
+    if not _w8a_serving_on():
+        context.log.info(
+            "W8A_LAKEHOUSE_S3 != 1 — the SF consumer builds the pivot natively from the live stores "
+            "(fresh); skipping the INC-25 consumer-parquet rebuild (default OFF)."
+        )
+        return
+    # HALT tier: rebuild the single consumer parquet from the fresh W9 store parquets, then refresh
+    # just that external table (both narrow/fast — a single pivot + one ALTER … REFRESH).
+    _run_script(context, "run_w1_lakehouse.py", ["--sub-model-signals-only"])
+    _run_script(context, "refresh_w1_external_tables.py", ["--sub-model-signals"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

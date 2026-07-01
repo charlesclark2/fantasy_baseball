@@ -1057,6 +1057,33 @@ def _build_w8a(conn, dry_run: bool) -> None:
         _register_mart_views(conn, [model], dry_run)
 
 
+# INC-25 (2026-07-01): the 5 W9 signal STORES the consumer feature_pregame_sub_model_signals reads
+# (subset of W8A_PRECURSOR_VIEWS; kept as its own name so the narrow rebuild below registers exactly
+# these and nothing else).
+W9_SIGNAL_STORE_VIEWS = [
+    "mart_sub_model_signals", "offense_v1_signals", "offense_v2_signals",
+    "starter_suppression_signals", "starter_ip_signals",
+]
+
+
+def _build_sub_model_signals_consumer(conn, dry_run: bool) -> None:
+    """INC-25: rebuild ONLY the feature_pregame_sub_model_signals consumer parquet from the freshly
+    exported W9 signal-store parquets.
+
+    WHY: the full --w8a build runs at daily-job START — BEFORE the day's signal generators write the
+    stores AND before export_w9_signals_to_s3 mirrors them to S3 — so the consumer parquet it
+    produces lags the stores by a full slate. After the W8a cutover the Snowflake consumer is
+    `select * from lakehouse_ext.feature_pregame_sub_model_signals` = that stale parquet, so
+    signal_freshness_check sees the SCD-2 groups (run_env/bullpen/matchup/env/defense) missing on the
+    freshest completed slate and HALTs the daily job (INC-25). The daily job runs this narrow rebuild
+    AFTER export_w9_signals_to_s3 refreshes the store parquets, so the consumer reflects the current
+    slate before the SF materialize + the freshness gate. Reads only the 5 store parquets (glob
+    views) — no prior-wave parquet needed, so it is standalone + fast (a single pivot)."""
+    print("\nINC-25: rebuilding feature_pregame_sub_model_signals from fresh W9 store parquets:")
+    _register_w8a_views(conn, W9_SIGNAL_STORE_VIEWS)
+    _build_marts(conn, ["feature_pregame_sub_model_signals"], dry_run)
+
+
 # E11.1-W8b: the SERVING-CRITICAL half — the complex upstream feature models (starter/lineup/
 # bullpen-state), the 3 lineup-matchup models (the INC-17-P2 dual-source-lineup class), THE
 # AGGREGATOR feature_pregame_game_features_raw (+ its public wrapper feature_pregame_game_features)
@@ -1428,6 +1455,7 @@ def run(
     w7b_only: bool = False,
     w8a: bool = False,
     w8a_only: bool = False,
+    sub_model_signals_only: bool = False,
     w8b: bool = False,
     w8b_only: bool = False,
     w11b: bool = False,
@@ -1516,6 +1544,18 @@ def run(
         _build_w6_odds_current(conn, dry_run)
         conn.close()
         print("\nW6 intraday current-odds run complete (--w6-odds-current).")
+        return
+
+    # INC-25: --sub-model-signals-only rebuilds JUST the feature_pregame_sub_model_signals consumer
+    # parquet from the freshly-exported W9 store parquets. Placed HERE (before the heavy
+    # stg_batter_pitches scan) because the consumer pivot reads only the 5 signal-store parquets — it
+    # is standalone + fast. The daily job runs this AFTER export_w9_signals_to_s3 (so the consumer
+    # isn't a slate stale — the full --w8a build at job START read yesterday's stores). See
+    # _build_sub_model_signals_consumer for the full rationale.
+    if sub_model_signals_only:
+        _build_sub_model_signals_consumer(conn, dry_run)
+        conn.close()
+        print("\nfeature_pregame_sub_model_signals consumer rebuild complete (--sub-model-signals-only).")
         return
 
     # Register stg_batter_pitches as a view so mart refs resolve.
@@ -1811,6 +1851,7 @@ if __name__ == "__main__":
         w7b_only="--w7b-only" in sys.argv,
         w8a="--w8a" in sys.argv,
         w8a_only="--w8a-only" in sys.argv,
+        sub_model_signals_only="--sub-model-signals-only" in sys.argv,
         w8b="--w8b" in sys.argv,
         w8b_only="--w8b-only" in sys.argv,
         w11b="--w11b" in sys.argv,
