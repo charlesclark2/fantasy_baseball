@@ -4,7 +4,7 @@
     "items": [
       {
         "tag": "new",
-        "text": "New Projections page (in the top nav) shows every probable starter's strikeout projection for the day at a glance — one card per pitcher with our projected strikeout total, the 80% range, the sportsbook's posted line, and the model-minus-book gap, sorted so the highest projections lead. Click any card for the full distribution and per-book breakdown on the pitcher's page. Projections and a transparency comparison only — not betting advice, and we make no profitability claim. To keep the nav uncluttered, Dashboard and EV Tracker now live under a 'Betting' dropdown (like Research and Admin)."
+        "text": "New Props page (under the Betting dropdown in the nav) shows every probable starter's projection for a day at a glance — one card per pitcher with our projected strikeout total, the 80% range, the sportsbook's posted line, and the model-minus-book gap, sorted so the highest projections lead. Pick any date with the date selector, and choose the prop type up top (Strikeouts for now — more coming). Click a card for the full distribution and per-book breakdown on the pitcher's page. Projections and a transparency comparison only — not betting advice, and we make no profitability claim. To keep the nav uncluttered, Dashboard and EV Tracker now live under that same 'Betting' dropdown (like Research and Admin)."
       },
       {
         "tag": "new",

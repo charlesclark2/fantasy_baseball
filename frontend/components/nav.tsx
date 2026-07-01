@@ -20,7 +20,7 @@ type ActiveLink =
   | "changelog"
   | "teams"
   | "players"
-  | "projections"
+  | "props"
   | null
 
 const latestWeek = changelog[0]?.week
@@ -37,9 +37,11 @@ interface NavProps {
 }
 
 // Personal betting workflow — collapsed into a "Betting" dropdown to keep the sub-nav uncrowded.
+// Props = the daily model-projection surface (transparency, not a bet rec).
 const BETTING_ITEMS = [
   { label: "Dashboard", href: "/dashboard", key: "dashboard" },
   { label: "EV Tracker", href: "/ev-tracker", key: "ev-tracker" },
+  { label: "Props", href: "/props", key: "props" },
 ] as const
 
 const MAIN_NAV_ITEMS = [
@@ -220,11 +222,6 @@ export function Nav({
             </Link>
           ))}
 
-          {/* Projections — daily model projections (transparency, not a bet rec) */}
-          <Link href="/projections" className={flatLinkClass("projections")}>
-            Projections
-          </Link>
-
           {/* Research dropdown */}
           <div className="group relative">
             <button
@@ -339,17 +336,6 @@ export function Nav({
                 {label}
               </Link>
             ))}
-            <Link
-              href="/projections"
-              onClick={() => setMobileOpen(false)}
-              className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
-                activeLink === "projections"
-                  ? "bg-[#1a1a1a] text-white"
-                  : "text-gray-400 hover:bg-[#141414] hover:text-white"
-              }`}
-            >
-              Projections
-            </Link>
 
             <div className="my-2 border-t border-[#262626]" />
             <span className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">

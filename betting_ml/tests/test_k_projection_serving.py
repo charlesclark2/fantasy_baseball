@@ -221,7 +221,7 @@ _BANNED_RE = re.compile("|".join(_BANNED), re.IGNORECASE)
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _FRONTEND_SURFACES = [
     _REPO_ROOT / "frontend" / "components" / "pitcher-k-projection.tsx",
-    _REPO_ROOT / "frontend" / "app" / "projections" / "page.tsx",
+    _REPO_ROOT / "frontend" / "app" / "props" / "page.tsx",
 ]
 
 

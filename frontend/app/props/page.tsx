@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
 import { Info } from "lucide-react"
@@ -8,6 +9,22 @@ import { AuthGuard } from "@/components/auth-guard"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/lib/auth-context"
 import { apiFetch } from "@/lib/api"
+
+// ---------------------------------------------------------------------------
+// Prop types — extensible. Only Strikeouts (K) has a projection surface today; add more here as
+// their models ship (each maps to its own index endpoint via `endpoint`).
+// ---------------------------------------------------------------------------
+
+type PropType = {
+  key: string
+  label: string
+  endpoint: string
+  available: boolean
+}
+
+const PROP_TYPES: PropType[] = [
+  { key: "strikeouts", label: "Strikeouts (K)", endpoint: "/players/k-projections", available: true },
+]
 
 // ---------------------------------------------------------------------------
 // Types — mirrors betting_ml/utils/k_projection_serving.build_index_payload / index_row
@@ -49,11 +66,6 @@ const DISCLAIMER_FALLBACK =
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function fmtPct(p: number | null): string {
-  if (p == null) return "—"
-  return `${(p * 100).toFixed(0)}%`
-}
 
 function fmtSignedPct(p: number | null): string {
   if (p == null) return "—"
@@ -158,33 +170,82 @@ function ProjectionCard({ r }: { r: ProjectionRow }) {
 // Page
 // ---------------------------------------------------------------------------
 
-function ProjectionsPageInner() {
+function PropsPageInner() {
   const { accessToken, email } = useAuth()
+  const [propType, setPropType] = useState<string>(PROP_TYPES[0].key)
+  const [selectedDate, setSelectedDate] = useState<string>("") // "" = latest available
+
+  const active = PROP_TYPES.find((p) => p.key === propType) ?? PROP_TYPES[0]
 
   const { data, isLoading, isError } = useQuery<ProjectionIndex>({
-    queryKey: ["k-projections-today"],
-    queryFn: () => apiFetch("/players/k-projections/today", {}, accessToken!),
-    enabled: !!accessToken,
+    queryKey: ["props-index", active.key, selectedDate],
+    queryFn: () =>
+      apiFetch(
+        `${active.endpoint}${selectedDate ? `?as_of=${selectedDate}` : ""}`,
+        {},
+        accessToken!
+      ),
+    enabled: !!accessToken && active.available,
     staleTime: 1000 * 60 * 30,
   })
 
   const pitchers = data?.pitchers ?? []
+  // The date shown in the picker: an explicit selection, else the loaded slate's date.
+  const dateValue = selectedDate || data?.game_date || ""
 
   return (
     <>
-      <Nav authenticated activeLink="projections" userEmail={email} />
+      <Nav authenticated activeLink="props" userEmail={email} />
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <div className="mb-2 flex items-baseline justify-between">
-          <h1 className="text-2xl font-bold text-white">Strikeout Projections</h1>
-          {data?.game_date && (
-            <span className="text-xs text-gray-500">{data.game_date}</span>
-          )}
-        </div>
+        <h1 className="mb-1 text-2xl font-bold text-white">Props</h1>
         <p className="mb-5 max-w-3xl text-sm text-gray-500">
-          Our model&apos;s projected strikeout total for each probable starter, shown next to the
-          sportsbooks&apos; posted line. Projections and a transparency comparison only — click a
-          pitcher for the full distribution and per-book breakdown.
+          Our model&apos;s projection for each probable starter, shown next to the sportsbooks&apos;
+          posted line. Projections and a transparency comparison only — click a pitcher for the full
+          distribution and per-book breakdown.
         </p>
+
+        {/* Prop-type + date controls */}
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <div className="inline-flex rounded-md border border-[#262626] bg-[#111111] p-0.5">
+              {PROP_TYPES.map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => p.available && setPropType(p.key)}
+                  disabled={!p.available}
+                  className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+                    p.key === propType
+                      ? "bg-[#1a1a1a] text-white"
+                      : p.available
+                        ? "text-gray-500 hover:text-gray-300"
+                        : "cursor-not-allowed text-gray-700"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <span className="hidden text-[11px] text-gray-600 sm:inline">More prop types coming soon</span>
+          </div>
+
+          <label className="flex items-center gap-2 text-xs text-gray-500">
+            Date
+            <input
+              type="date"
+              value={dateValue}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="rounded-md border border-[#262626] bg-[#111111] px-2.5 py-1.5 text-sm text-white [color-scheme:dark]"
+            />
+            {selectedDate && (
+              <button
+                onClick={() => setSelectedDate("")}
+                className="text-[11px] text-gray-500 underline hover:text-gray-300"
+              >
+                latest
+              </button>
+            )}
+          </label>
+        </div>
 
         {isLoading ? (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -198,9 +259,12 @@ function ProjectionsPageInner() {
           </div>
         ) : pitchers.length === 0 ? (
           <div className="rounded-lg border border-[#262626] bg-[#111111] px-4 py-10 text-center">
-            <p className="text-sm text-gray-400">No projections posted yet.</p>
+            <p className="text-sm text-gray-400">
+              No projections{dateValue ? ` for ${dateValue}` : ""} yet.
+            </p>
             <p className="mt-1 text-xs text-gray-600">
-              Projections appear once probable starters are announced for the day&apos;s slate.
+              Projections appear once probable starters are announced for the day&apos;s slate. Try
+              another date.
             </p>
           </div>
         ) : (
@@ -223,10 +287,10 @@ function ProjectionsPageInner() {
   )
 }
 
-export default function ProjectionsPage() {
+export default function PropsPage() {
   return (
     <AuthGuard>
-      <ProjectionsPageInner />
+      <PropsPageInner />
     </AuthGuard>
   )
 }
