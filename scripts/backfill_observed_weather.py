@@ -52,6 +52,22 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
+# E11.1-W11 Tier-C: leg-gated dual-write to the shared weather_raw S3 mirror (W11_RAW_WRITE_MODE,
+# default 'snowflake' → unchanged). SF INSERT on 'snowflake'/'both'; an S3 mirror with INC-20
+# latest-per-period retention on 's3'/'both'. Shares the writer + retention key with ingest_weather.
+import sys  # noqa: E402
+
+sys.path.insert(0, os.path.dirname(__file__))
+from utils.lakehouse_raw_writer import (  # noqa: E402
+    WEATHER_RAW_RETENTION_KEY,
+    lakehouse_write_legs,
+    w11_write_mode,
+    weather_mirror_rows,
+    write_raw_rows_s3_retained,
+)
+
+_LAKEHOUSE_SOURCE = "weather_raw"
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(message)s",
@@ -239,9 +255,14 @@ def main() -> None:
                 print(f"  … and {len(games) - 20} more")
             return
 
+        # E11.1-W11 Tier-C: which legs run (SF INSERT and/or S3 mirror).
+        do_sf, do_s3 = lakehouse_write_legs(w11_write_mode())
+        log.info("write_mode=%s (sf=%s, s3=%s)", w11_write_mode(), do_sf, do_s3)
+
         inserted = 0
         skipped  = 0
         now_utc  = datetime.now(timezone.utc)
+        mirror: list[dict] = []
 
         for i, g in enumerate(games, start=1):
             game_pk  = g["game_pk"]
@@ -276,20 +297,39 @@ def main() -> None:
             game_dt_utc = game_dt.astimezone(timezone.utc)
             fetch_offset = round((now_utc - game_dt_utc).total_seconds() / 3600, 1)
 
-            with conn.cursor() as cur:
-                cur.execute(_INSERT_SQL, {
-                    "game_pk":           game_pk,
-                    "venue_id":          venue_id,
-                    "game_datetime_utc": game_dt_utc.strftime("%Y-%m-%d %H:%M:%S"),
-                    "fetch_offset_hours": fetch_offset,
-                    "temp_f":            weather["temp_f"],
-                    "wind_speed_mph":    weather["wind_speed_mph"],
-                    "wind_direction_deg": weather["wind_direction_deg"],
-                    "humidity_pct":      weather["humidity_pct"],
-                })
+            insert_params = {
+                "game_pk":           game_pk,
+                "venue_id":          venue_id,
+                "game_datetime_utc": game_dt_utc.strftime("%Y-%m-%d %H:%M:%S"),
+                "fetch_offset_hours": fetch_offset,
+                "temp_f":            weather["temp_f"],
+                "wind_speed_mph":    weather["wind_speed_mph"],
+                "wind_direction_deg": weather["wind_direction_deg"],
+                "humidity_pct":      weather["humidity_pct"],
+            }
+            if do_sf:
+                with conn.cursor() as cur:
+                    cur.execute(_INSERT_SQL, insert_params)
+            # S3 mirror row — the columns the _INSERT_SQL hardcodes as literals (obs-type / api_source /
+            # NULL condition & checkpoint) are set explicitly so the mirror matches the SF row exactly.
+            mirror.append({
+                **insert_params,
+                "condition_text":           None,
+                "api_source":               "open-meteo",
+                "weather_observation_type": "observed_at_first_pitch",
+                "hours_to_first_pitch":     None,
+            })
             inserted += 1
 
             time.sleep(REQUEST_DELAY)
+
+        if do_s3 and mirror:
+            n = write_raw_rows_s3_retained(
+                _LAKEHOUSE_SOURCE, weather_mirror_rows(mirror),
+                key_cols=WEATHER_RAW_RETENTION_KEY, ts_col="loaded_at",
+            )
+            log.info("mirrored %d observed row(s) → S3 lakehouse_raw/%s/ (retained latest-per-period)",
+                     n, _LAKEHOUSE_SOURCE)
 
         log.info("Backfill complete — %d inserted, %d skipped.", inserted, skipped)
 

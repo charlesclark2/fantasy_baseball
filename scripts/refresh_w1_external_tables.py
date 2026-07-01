@@ -260,6 +260,30 @@ W11B_TABLES = [
     "feature_pregame_umpire_status",
 ]
 
+# E11.1-W11 Tier-C: the weather stg + feature external tables (created by
+# scripts/ddl/generate_w11c_external_tables.py over the run_w1_lakehouse.py --w11c parquet).
+# BEST-EFFORT (WARN if missing) like W4-W9 during the opt-in rollout. Refreshed via the dedicated
+# --w11c path (the W11c mirror op calls it right after the build). All 4 are TABLE/VIEW on the
+# Snowflake side (no incrementals) → no DROP+rebuild at cutover.
+W11C_TABLES = [
+    "stg_weather_raw",
+    "stg_weather_raw_snapshots",
+    "feature_pregame_weather_status",
+    "feature_pregame_weather_features",
+]
+
+# E11.1-W11 Tier-D: the public-betting stg + feature external tables (created by
+# scripts/ddl/generate_w11d_external_tables.py over the run_w1_lakehouse.py --w11d parquet).
+# BEST-EFFORT (WARN if missing) like W4-W9/W11b-c during the opt-in rollout. Refreshed via the
+# dedicated --w11d path (the W11d mirror op calls it right after the build). All 4 are TABLE/VIEW on
+# the Snowflake side (no incrementals) → no DROP+rebuild at cutover.
+W11D_TABLES = [
+    "stg_actionnetwork_public_betting",
+    "stg_actionnetwork_public_betting_snapshots",
+    "feature_pregame_public_betting_status",
+    "feature_pregame_public_betting_features",
+]
+
 
 def _load_private_key():
     key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
@@ -343,6 +367,16 @@ def main():
                          "tables (after run_w1_lakehouse.py --w11b). Best-effort — these don't "
                          "exist until the W11b build is enabled, so a missing table is an "
                          "expected skip.")
+    ap.add_argument("--w11c", action="store_true",
+                    help="E11.1-W11 Tier-C: refresh only the 4 weather stg + feature external "
+                         "tables (after run_w1_lakehouse.py --w11c). Best-effort — these don't "
+                         "exist until the W11c build is enabled, so a missing table is an "
+                         "expected skip.")
+    ap.add_argument("--w11d", action="store_true",
+                    help="E11.1-W11 Tier-D: refresh only the 4 public-betting stg + feature external "
+                         "tables (after run_w1_lakehouse.py --w11d). Best-effort — these don't "
+                         "exist until the W11d build is enabled, so a missing table is an "
+                         "expected skip.")
     args = ap.parse_args()
 
     # E11.1-W8a: the W8a build op refreshes its own external tables right after the build
@@ -370,6 +404,24 @@ def main():
         print("Refreshing W11b umpire stg + feature external tables (--w11b):")
         _refresh(W11B_TABLES, required=set())
         print("W11b umpire external-table refresh complete (best-effort).")
+        return
+
+    # E11.1-W11 Tier-C: the weather mirror op refreshes its own external tables right after the
+    # build (mirror-tier — best-effort, never required). Kept off the default daily refresh list
+    # until cutover (the dbt else branches that read them aren't merged/flipped until then).
+    if args.w11c:
+        print("Refreshing W11c weather stg + feature external tables (--w11c):")
+        _refresh(W11C_TABLES, required=set())
+        print("W11c weather external-table refresh complete (best-effort).")
+        return
+
+    # E11.1-W11 Tier-D: the public-betting mirror op refreshes its own external tables right after the
+    # build (mirror-tier — best-effort, never required). Kept off the default daily refresh list
+    # until cutover (the dbt else branches that read them aren't merged/flipped until then).
+    if args.w11d:
+        print("Refreshing W11d public-betting stg + feature external tables (--w11d):")
+        _refresh(W11D_TABLES, required=set())
+        print("W11d public-betting external-table refresh complete (best-effort).")
         return
 
     # E11.1-W9: the signal-store mirror op refreshes its own external tables right after writing

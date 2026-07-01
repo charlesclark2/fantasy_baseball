@@ -1310,6 +1310,103 @@ def _build_w11b(conn, dry_run: bool) -> None:
         _register_mart_views(conn, [model], dry_run)
 
 
+# E11.1-W11 Tier-D: the ActionNetwork PUBLIC-BETTING stg + feature layer. The writer dual-writes one
+# raw source (lakehouse_raw/public_betting_raw/); these 4 models read it. Unlike W11b (umpire), this
+# chain is NOT self-contained — stg_actionnetwork_public_betting_snapshots joins the pregame spine
+# feature_pregame_game_features (a W8b output) for game_pk resolution, so _build_w11d registers that as
+# a precursor VIEW first and MUST run AFTER --w8b (its parquet must exist). Dependency order: the plain
+# stg feeds the W8b aggregator (a 1-cycle propagation lag on its contribution is acceptable — public
+# betting is a slow-moving, non-serving-critical feature); the snapshots stg + SCD-2 chain feed the
+# W8a-deferred straggler feature_pregame_public_betting_features (read by the W8b aggregator tail +
+# export_features_to_s3.py mirror at the same S3 key → this native build replaces that mirror).
+W11D_STG_MODELS = ["stg_actionnetwork_public_betting", "stg_actionnetwork_public_betting_snapshots"]
+W11D_FEATURE_MODELS = ["feature_pregame_public_betting_status", "feature_pregame_public_betting_features"]
+W11D_MODELS = W11D_STG_MODELS + W11D_FEATURE_MODELS
+# The pregame-spine precursor the snapshots stg joins for game_pk resolution (built by --w8b).
+W11D_PRECURSOR_VIEWS = ["feature_pregame_game_features"]
+
+
+def _build_w11d(conn, dry_run: bool) -> None:
+    """Build the E11.1-W11 Tier-D public-betting stg + feature layer from the public_betting_raw mirror.
+    NOT self-contained: stg_actionnetwork_public_betting_snapshots joins feature_pregame_game_features
+    (registered here as a DuckDB view over its W8b native parquet), so this runs AFTER --w8b. Builds the
+    2 stg models (plain → snapshots), registers each as a view, then builds the 2 feature models (SCD-2
+    status → current-state features) and registers them. A missing raw parquet or the missing spine
+    parquet makes a build raise; W11d is gated (opt-in) so the daily HALT op never trips on it
+    pre-cutover."""
+    for _pragma in ("SET threads=2", f"SET memory_limit='{_safe_memory_limit_gb()}GB'"):
+        try:
+            conn.execute(_pragma)
+        except Exception as _e:
+            print(f"  (note: {_pragma} not applied: {_e})")
+
+    print("\nW11d public-betting precursor (register the pregame spine as a DuckDB view):")
+    _register_s3_glob_views(conn, W11D_PRECURSOR_VIEWS)
+
+    print("\nW11d public-betting staging (read lakehouse_raw/public_betting_raw/ + the spine view):")
+    for model in W11D_STG_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+    print("\nW11d public-betting feature layer (SCD-2 status → current-state features):")
+    for model in W11D_FEATURE_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+
+# E11.1-W11 Tier-C: the shared WEATHER feed's stg + feature layer. Both weather writers
+# (ingest_weather / backfill_observed_weather) dual-write one raw source (lakehouse_raw/weather_raw/);
+# these 4 models read it via read_parquet in their duckdb branch. The 2 feature models are the
+# W8a-deferred stragglers (feature_pregame_weather_features feeds the W8b aggregator + the game-features
+# incremental). Dependency: the 2 stg read the raw directly; feature_status reads stg_weather_raw_snapshots;
+# feature_features reads feature_status + the raw (observed) + the ref_venues seed. OPT-IN (--w11c).
+W11C_STG_MODELS = ["stg_weather_raw", "stg_weather_raw_snapshots"]
+W11C_FEATURE_MODELS = ["feature_pregame_weather_status", "feature_pregame_weather_features"]
+W11C_MODELS = W11C_STG_MODELS + W11C_FEATURE_MODELS
+
+SEEDS_DIR = REPO_ROOT / "dbt" / "seeds"
+
+
+def _register_seed_csv(conn, name: str) -> None:
+    """Register a dbt seed CSV as a DuckDB view so a duckdb-branch model can join it by bare name.
+
+    ref_venues (venue_id, venue_name, roof_type, park_facing_degrees) is a tiny static seed that is
+    NOT exported to the S3 lakehouse (unlike ref_teams/ref_team_aliases); the CSV ships in the repo, so
+    read it directly. read_csv_auto infers the (int, varchar, varchar, int) types correctly."""
+    csv_path = SEEDS_DIR / f"{name}.csv"
+    conn.execute(
+        f"CREATE OR REPLACE VIEW {name} AS SELECT * FROM read_csv_auto('{csv_path}', header=true)"
+    )
+    print(f"  registered seed view: {name}  ({csv_path})")
+
+
+def _build_w11c(conn, dry_run: bool) -> None:
+    """Build the E11.1-W11 Tier-C weather stg + feature layer from the weather_raw raw mirror.
+    Registers the ref_venues seed view first (the snapshots + observed feature paths join it), then
+    builds the 2 stg models (read lakehouse_raw/weather_raw/ directly) and registers them, then the 2
+    feature models in dependency order (feature_status reads stg_weather_raw_snapshots; feature_features
+    reads feature_status + the raw + ref_venues). A missing raw parquet makes a build raise; W11c is
+    gated (opt-in) so the daily HALT op never trips on it pre-cutover."""
+    for _pragma in ("SET threads=2", f"SET memory_limit='{_safe_memory_limit_gb()}GB'"):
+        try:
+            conn.execute(_pragma)
+        except Exception as _e:
+            print(f"  (note: {_pragma} not applied: {_e})")
+
+    print("\nW11c precursor: ref_venues seed view")
+    _register_seed_csv(conn, "ref_venues")
+
+    print("\nW11c weather staging (read lakehouse_raw/weather_raw/ directly):")
+    for model in W11C_STG_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+    print("\nW11c weather feature layer (dependency-ordered; read the stg views just built):")
+    for model in W11C_FEATURE_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+
 def run(
     dry_run: bool = False,
     skip_w1: bool = False,
@@ -1335,6 +1432,10 @@ def run(
     w8b_only: bool = False,
     w11b: bool = False,
     w11b_only: bool = False,
+    w11c: bool = False,
+    w11c_only: bool = False,
+    w11d: bool = False,
+    w11d_only: bool = False,
 ) -> None:
     import duckdb
 
@@ -1540,6 +1641,28 @@ def run(
         print("\nW11b umpire wave run complete (--w11b-only).")
         return
 
+    # E11.1-W11 Tier-C: --w11c-only rebuilds just the weather stg + feature layer from the weather_raw
+    # raw mirror (+ the ref_venues seed CSV). Self-contained (no prior-wave parquet needed), so it runs
+    # standalone — ideal for the box RUNTIME GATE (rebuild weather only, then per-ROW ext-validate).
+    if w11c_only:
+        print("\nBuilding W11c weather stg + feature layer (--w11c-only):")
+        _build_w11c(conn, dry_run)
+        conn.close()
+        print("\nW11c weather wave run complete (--w11c-only).")
+        return
+
+    # E11.1-W11 Tier-D: --w11d-only rebuilds just the public-betting stg + feature layer from the
+    # public_betting_raw mirror. NOT fully self-contained — it registers feature_pregame_game_features
+    # (the pregame spine the snapshots stg joins) as a view over its EXISTING W8b parquet, so a prior
+    # --w8b build must have written that parquet to S3. Ideal for the box RUNTIME GATE (rebuild
+    # public-betting only, then per-ROW ext-validate) once the spine parquet is present.
+    if w11d_only:
+        print("\nBuilding W11d public-betting stg + feature layer (--w11d-only):")
+        _build_w11d(conn, dry_run)
+        conn.close()
+        print("\nW11d public-betting wave run complete (--w11d-only).")
+        return
+
     # ── W1: pitch-level marts ────────────────────────────────────────────────
     if not skip_w1:
         print("\nW1 marts:")
@@ -1643,12 +1766,25 @@ def run(
     if w11b:
         _build_w11b(conn, dry_run)
 
+    # ── W11c: weather stg + feature layer — OPT-IN ──
+    # Self-contained (reads only the weather_raw raw mirror + the ref_venues seed). Enable with --w11c
+    # once the weather writers dual-write + the ext tables exist. Standalone use is --w11c-only.
+    if w11c:
+        _build_w11c(conn, dry_run)
+
+    # ── W11d: public-betting stg + feature layer — OPT-IN ──
+    # Runs AFTER --w8b (the snapshots stg joins feature_pregame_game_features, built by W8b). Enable
+    # with --w11d once the writer dual-writes + the ext tables exist. On the full path the spine parquet
+    # was just written above; standalone use is --w11d-only (which also registers the spine view).
+    if w11d:
+        _build_w11d(conn, dry_run)
+
     conn.close()
     print(
         f"\nW1+W2+W3{'+W3pre' if w3pre else ''}{'+W4' if w4 else ''}"
         f"{'+W5' if w5 else ''}{'+W5b' if archetype else ''}{'+W6' if w6 else ''}"
         f"{'+W7b' if w7b else ''}{'+W8a' if w8a else ''}{'+W8b' if w8b else ''}"
-        f"{'+W11b' if w11b else ''} "
+        f"{'+W11b' if w11b else ''}{'+W11c' if w11c else ''}{'+W11d' if w11d else ''} "
         f"lakehouse run complete."
     )
 
@@ -1679,4 +1815,8 @@ if __name__ == "__main__":
         w8b_only="--w8b-only" in sys.argv,
         w11b="--w11b" in sys.argv,
         w11b_only="--w11b-only" in sys.argv,
+        w11c="--w11c" in sys.argv,
+        w11c_only="--w11c-only" in sys.argv,
+        w11d="--w11d" in sys.argv,
+        w11d_only="--w11d-only" in sys.argv,
     )

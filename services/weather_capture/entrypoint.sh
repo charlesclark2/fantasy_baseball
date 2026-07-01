@@ -50,4 +50,13 @@ echo "[weather_capture] observed_at_first_pitch checkpoint"
 python ingest_weather.py --observation-type observed_at_first_pitch \
   || echo "[weather_capture] WARNING: observed_at_first_pitch failed (non-fatal)"
 
+# ⭐ E11.1-W11 Tier-C ADDITION — the hourly all-slate-park weather TIME-SERIES (the E13.16
+# weather→line-movement precursor). Captures EVERY outdoor slate park once this hour, S3-ONLY,
+# tagged with captured_at so the trajectory is reconstructable. Retention keeps latest-per-hour.
+# Non-fatal (mirror-tier ALERT-continue): a series failure must never kill the forecast capture.
+# Needs AWS creds (instance role on the box) + W11-enabled deps (boto3/pyarrow in this image).
+echo "[weather_capture] intraday_series (hourly all-slate-park snapshot)"
+python ingest_weather.py --observation-type intraday_series \
+  || echo "[weather_capture] WARNING: intraday_series capture failed (non-fatal)"
+
 echo "[weather_capture] $(date -u +%FT%TZ) done"

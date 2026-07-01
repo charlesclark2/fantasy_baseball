@@ -55,6 +55,17 @@ SOURCES = {
     # writers key distinct assignment/tendency rows per game (statsapi / statsapi_backfill /
     # umpscorecards), so every SF (game_pk, data_source) pair must survive in the S3 mirror.
     "umpire_game_log":            ("baseball_data.statsapi.umpire_game_log",             "game_pk || '|' || data_source"),
+    # E11.1-W11 Tier-C — the shared weather feed. No-loss key = (game_pk, venue_id, obs_type,
+    # hours_to_first_pitch): the stg dedup grain, so every distinct SF checkpoint row must survive.
+    # hours_to_first_pitch is NULL for forecast_pregame/observed → coalesce so the concat key is stable.
+    "weather_raw":                ("baseball_data.statsapi.weather_raw",
+                                   "game_pk || '|' || venue_id || '|' || weather_observation_type "
+                                   "|| '|' || coalesce(cast(hours_to_first_pitch as varchar), 'NA')"),
+    # E11.1-W11 Tier-D — the ActionNetwork public-betting feed. No-loss key = (game_date, an_game_id):
+    # the stg dedup grain (one row per game per capture; the mirror is append-only so every distinct
+    # GAME must survive — snapshot multiplicity is validated by the row-count check, not this key).
+    "public_betting_raw":         ("baseball_data.actionnetwork.public_betting_raw",
+                                   "cast(game_date as varchar) || '|' || an_game_id"),
 }
 
 _DEFAULT_TOLERANCE = 0.01  # 1% — absorbs append drift between the export and this check

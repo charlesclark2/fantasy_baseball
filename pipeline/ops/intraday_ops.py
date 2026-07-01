@@ -282,6 +282,43 @@ def intraday_weather_capture(context: OpExecutionContext) -> None:
         _run_script(context, "ingest_weather.py", ["--observation-type", "observed_at_first_pitch"])
     except Exception as e:
         context.log.warning(f"Observed-at-first-pitch capture failed (non-fatal): {e}")
+    # ⭐ E11.1-W11 Tier-C — the hourly all-slate-park weather TIME-SERIES (E13.16 precursor). S3-only,
+    # captured_at-tagged; mirror-tier ALERT-continue so a series failure never kills the capture op.
+    # (The live hourly path is the host-cron weather-capture container's entrypoint; this op mirrors it
+    # for Dagster manual re-runs.)
+    try:
+        _run_script(context, "ingest_weather.py", ["--observation-type", "intraday_series"])
+    except Exception as e:
+        context.log.warning(f"Intraday weather-series capture failed (non-fatal): {e}")
+
+
+# ── Intraday Public Betting (E11.1-W11-D addendum) ───────────────────────────
+
+@op(out=Out(Nothing))
+def intraday_public_betting_capture(context: OpExecutionContext) -> None:
+    """Hourly ActionNetwork public-betting capture across the pre-game window (W11-D addendum).
+
+    Builds a public-% time-series aligned to the odds line trajectory so E13.16 can later test whether
+    the line moves AGAINST the public % (reverse line movement / sharp-money divergence). Each hourly
+    run appends a distinct-captured_at snapshot to BOTH the migration raw mirror (public_betting_raw,
+    which the SCD-2 chain turns into an intraday shift) AND the dedicated append-only trajectory
+    (public_betting_intraday_series) — nothing is collapsed, so every hour is kept for the game-day.
+
+    Requires the S3 write leg (W11_RAW_WRITE_MODE=s3|both) for the mirror/series to be written; with the
+    default 'snowflake' the run just re-inserts the SF row (harmless) and warns the series was skipped.
+    ALERT-loud-but-continue: a capture miss must never crash — the trajectory tolerates a dropped hour
+    (dedup + the append model absorb it), and this is a supplemental signal, not a serving input.
+
+    Cadence note (probed 2026-07-01): the AN publicbetting endpoint carries no explicit updated_at; its
+    per-game `num_bets` counter increments continuously (a freshness proxy). Hourly is a safe default —
+    if AN refreshes ~hourly this aligns; slower is harmless (the snapshot repeats, dedup handles it);
+    faster just means we sample the trajectory hourly (aliasing noted, still a fine starting resolution).
+    """
+    try:
+        _run_script(context, "ingest_actionnetwork_betting.py",
+                    ["--date", _today(), "--intraday-series"], timeout=_POLL_TIMEOUT)
+    except Exception as e:  # noqa: BLE001 — supplemental signal; a missed hour must not crash the op
+        context.log.warning(f"intraday public-betting capture failed (non-fatal): {e}")
 
 
 # ── Intraday Schedule ────────────────────────────────────────────────────────

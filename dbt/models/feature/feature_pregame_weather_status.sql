@@ -17,9 +17,19 @@
 --
 -- valid_to semantics: NULL means this is the current (latest) forecast.
 -- is_current = (valid_to IS NULL).
+--
+-- E11.1-W11 Tier-C lakehouse migration. DuckDB branch recomputes the SCD-2 spans over the migrated
+-- stg_weather_raw_snapshots (registered as a DuckDB view by run_w1_lakehouse._build_w11c) with a
+-- Snowflake→DuckDB dialect rewrite (sysdate()→current_timestamp). The Snowflake (else) branch is a
+-- thin view over the lakehouse_ext external table (rollback path). valid_from/valid_to/computed_at
+-- land in the parquet as ISO VARCHAR (run_w1_lakehouse._string_timestamp_wrap) and the ext-table DDL
+-- parses them back TIMESTAMP_NTZ (generate_w11c_external_tables.TS_STRING_COLS). The SCD-2 change-
+-- boundary logic is parity-verified SF-vs-S3 on a REAL box run before cutover.
 -- =============================================================================
 
-{{ config(materialized='table') }}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w11c_lakehouse']) }}
 
 with snapshots as (
 
@@ -68,7 +78,7 @@ with_scd2 as (
             order by loaded_at
         )                                                   as valid_to,
         record_hash,
-        sysdate()                                           as computed_at
+        current_timestamp::timestamp                        as computed_at
     from change_boundaries
 
 )
@@ -89,3 +99,11 @@ select
     record_hash,
     computed_at
 from with_scd2
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.feature_pregame_weather_status
+
+{% endif %}
