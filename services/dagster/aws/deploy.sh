@@ -144,9 +144,27 @@ if ! crontab "$CRONTAB"; then
 fi
 # A `crontab <file>` can return 0 yet leave an empty/partial table on some minimal AMIs;
 # verify the odds-capture line actually landed (the line whose absence == the INC-23 stall).
-if ! crontab -l 2>/dev/null | grep -q 'run --rm odds-capture'; then
+# 2026-07-01: this verify false-failed 3 CONSECUTIVE CD deploys while a standalone repro of
+# the SAME commands (same user + `sudo -u ec2-user -H` env) passed with the line present —
+# the install DID land, but `crontab -l` read EMPTY in the tiny window while crond reloads
+# the just-written spool. The reconcile runs right after a container-recreation storm, which
+# widens that race, and the old `2>/dev/null` hid the transient read error so it looked
+# "absent" and die()'d the whole deploy (auto-rollback). Retry the read, RE-ASSERTING the
+# install each round, and dump the real crontab + stderr before ever giving up.
+_odds_seen=0
+for _try in 1 2 3 4 5; do
+  if crontab -l 2>/tmp/credence_crontab_err | grep -q 'run --rm odds-capture'; then
+    _odds_seen=1; break
+  fi
+  log "  crontab verify ${_try}/5: odds-capture not visible yet (crond reload race?); stderr: $(tr '\n' ' ' < /tmp/credence_crontab_err 2>/dev/null)"
+  sleep 2
+  crontab "$CRONTAB" >/dev/null 2>&1 || true   # re-assert the install before the next read
+done
+if [ "$_odds_seen" != "1" ]; then
+  log "  odds-capture GENUINELY absent after 5 tries — FINAL crontab -l dump:"
+  crontab -l 2>&1 | sed 's/^/    /' || true
   notify CRITICAL "odds-capture cron MISSING after reinstall on box" \
-    "crontab installed but 'crontab -l' has no odds-capture line — live odds capture will go stale. Investigate crond/spool on the box (SSM)." 2>/dev/null || true
+    "crontab installed but 'crontab -l' had no odds-capture line after 5 retries — live odds capture will go stale. Investigate crond/spool on the box (SSM)." 2>/dev/null || true
   die "odds-capture cron absent after reinstall (see CRITICAL alert)"
 fi
 log "  host crontab reconciled — odds-capture line present"
