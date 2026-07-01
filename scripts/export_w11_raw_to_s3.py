@@ -60,6 +60,16 @@ SOURCES = {
     # E11.1-W11 Tier-B — the shared umpire feed (4 writers → one table). loaded_at is the stg
     # dedup tiebreaker (order by loaded_at desc); alias it to ingestion_ts for the dt= partition.
     "umpire_game_log":            ("baseball_data.statsapi.umpire_game_log",             "loaded_at"),
+    # E11.1-W11 Tier-C — the shared weather feed (ingest_weather + backfill_observed_weather → one
+    # table). loaded_at is the stg dedup tiebreaker (order by loaded_at desc); alias it to ingestion_ts
+    # for the dt= partition. (The hourly weather_intraday_series is S3-ONLY new data — no SF to export.)
+    "weather_raw":                ("baseball_data.statsapi.weather_raw",                 "loaded_at"),
+    # E11.1-W11 Tier-D — the ActionNetwork public-betting feed. ingestion_timestamp is the stg dedup
+    # key (order by ingestion_timestamp desc) + the SCD-2 loaded_at; alias it to ingestion_ts for the
+    # dt= partition. public_betting_raw is append-only (no INC-20 retention) — a full re-export is
+    # idempotent per dt= via overwrite_partition. (The hourly public_betting_intraday_series is S3-ONLY
+    # new data — no SF to export.)
+    "public_betting_raw":         ("baseball_data.actionnetwork.public_betting_raw",     "ingestion_timestamp"),
 }
 
 

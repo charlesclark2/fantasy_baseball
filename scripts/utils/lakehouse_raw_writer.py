@@ -95,6 +95,34 @@ RAW_SOURCES = frozenset({
     # (columnar) rows, no raw_json; each writer stamps loaded_at (the stg dedup tiebreaker,
     # normally a SF DDL DEFAULT) so the S3 mirror carries it explicitly.
     "umpire_game_log",
+    # E11.1-W11 Tier-C — the weather feed. Both writers (ingest_weather / backfill_observed_weather)
+    # share baseball_data.statsapi.weather_raw → ONE raw source. Typed (columnar) rows, no raw_json;
+    # each writer stamps loaded_at (the stg dedup tiebreaker, normally a SF DDL DEFAULT) so the S3
+    # mirror carries it explicitly. Retention: latest-per-(game_pk,venue_id,obs_type,checkpoint) so
+    # re-fetch re-runs don't inflate the mirror (INC-20 latest-per-period at the writer).
+    "weather_raw",
+    # E11.1-W11 Tier-C ADDITION — the hourly all-slate-park weather TIME-SERIES (the E13.16
+    # weather→line-movement precursor). Brand-new S3-ONLY source (no SF table to decommission).
+    # One snapshot per (game_pk, capture-hour) with an explicit captured_at; retention keeps the
+    # LATEST per hour within the game-day (the trajectory IS the signal — do NOT collapse to
+    # latest-per-period like weather_raw). Not consumed by any dbt model yet; it accrues forward.
+    "weather_intraday_series",
+    # E11.1-W11 Tier-D — the ActionNetwork PUBLIC-BETTING feed (ingest_actionnetwork_betting).
+    # Typed (columnar) money%/ticket% percentages, no raw_json; the writer stamps ingestion_timestamp
+    # (the stg dedup key `order by ingestion_timestamp desc` + the SCD-2 loaded_at, normally the SF DDL
+    # DEFAULT CURRENT_TIMESTAMP the record dict lacks). Unlike weather_raw/monthly_schedule this source
+    # is NOT INC-20-pruned (idempotent-by-date, no accumulating month snapshots) → the mirror is
+    # append-only and every capture is a distinct-ingestion_timestamp snapshot the SCD-2 chain turns
+    # into an intraday shift.
+    "public_betting_raw",
+    # E11.1-W11 Tier-D ADDITION — the hourly public-betting % TIME-SERIES (the E13.16 public-%→line-
+    # movement / reverse-line-movement precursor). Sibling of weather_intraday_series. One snapshot per
+    # (game, capture-hour) with an EXPLICIT captured_at; retention keeps EVERY hour within the game-day
+    # (the trajectory IS the signal — do NOT collapse to latest-per-period). Kept DISTINCT from the
+    # migration's public_betting_raw mirror per the operator's W11-D addendum: a flat, join-free
+    # substrate (no game_pk resolution / feature spine dependency) purpose-built for the later analysis.
+    # Not consumed by any dbt model yet; it accrues forward.
+    "public_betting_intraday_series",
 })
 
 _VALID_MODES = frozenset({"snowflake", "s3", "both"})
@@ -325,6 +353,244 @@ def umpire_mirror_rows(rows: list[dict], *, data_source: str | None = None,
             row["data_source"] = data_source
         if row.get("loaded_at") is None:
             row["loaded_at"] = stamp
+        if row.get("game_date") is not None:
+            row["game_date"] = str(row["game_date"])
+        out.append(row)
+    return out
+
+
+# E11.1-W11 Tier-C: the canonical weather_raw column set (matches the SF DDL + the stg duckdb
+# branch's SELECT). Both writers (ingest_weather / backfill_observed_weather) supply this set;
+# weather_mirror_rows() normalizes to it + stamps loaded_at so the S3 mirror is schema-uniform.
+WEATHER_RAW_COLS = (
+    "game_pk", "venue_id", "game_datetime_utc", "fetch_offset_hours",
+    "temp_f", "wind_speed_mph", "wind_direction_deg", "humidity_pct",
+    "condition_text", "api_source", "weather_observation_type",
+    "hours_to_first_pitch", "loaded_at",
+)
+
+# The natural dedup key stg_weather_raw uses (one row per game×venue×obs-type×checkpoint). The
+# retention writer collapses re-fetch re-runs to the latest loaded_at per this tuple (INC-20).
+WEATHER_RAW_RETENTION_KEY = ("game_pk", "venue_id", "weather_observation_type", "hours_to_first_pitch")
+
+# E11.1-W11 Tier-C ADDITION: the hourly time-series column set. Superset of the weather scalars +
+# an explicit captured_at (the snapshot's wall-clock, so the trajectory is reconstructable) and a
+# captured_hour bucket (retention key — one row per hour is kept; the series IS the signal).
+WEATHER_SERIES_COLS = (
+    "game_pk", "venue_id", "game_datetime_utc", "hours_to_first_pitch",
+    "temp_f", "wind_speed_mph", "wind_direction_deg", "humidity_pct",
+    "condition_text", "api_source", "weather_observation_type",
+    "captured_at", "captured_hour",
+)
+# Keep the LATEST snapshot per (game, hour) — do NOT collapse across hours (the trajectory is data).
+WEATHER_SERIES_RETENTION_KEY = ("game_pk", "venue_id", "captured_hour")
+
+
+def _iso_or_none(v):
+    """Coerce a datetime/date/str to an ISO string, pass None through. (Mirrors umpire_mirror_rows'
+    game_date handling — write_raw_rows_s3 keeps scalars native; the stg duckdb branch try_casts.)"""
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        return v.isoformat()
+    return str(v)
+
+
+def weather_mirror_rows(rows: list[dict], *, loaded_at: str | None = None) -> list[dict]:
+    """Normalize partial weather_raw rows to the full column set for the S3 mirror.
+
+    Both writers build a row from the fetched weather + the game metadata but rely on Snowflake's
+    `loaded_at DEFAULT CURRENT_TIMESTAMP`; the S3 mirror has no default, so stamp loaded_at (ISO UTC)
+    here — it is the stg dedup tiebreaker (`order by loaded_at desc`). game_datetime_utc/loaded_at are
+    coerced to ISO strings (write_raw_rows_s3 keeps scalars native; the stg duckdb branch try_casts to
+    timestamp — the INC-23 use-site cast that reconciles the SF-typed bridge with these VARCHAR rows).
+    """
+    stamp = loaded_at or datetime.now(timezone.utc).isoformat()
+    out: list[dict] = []
+    for r in rows:
+        row = {c: r.get(c) for c in WEATHER_RAW_COLS}
+        if row.get("loaded_at") is None:
+            row["loaded_at"] = stamp
+        row["loaded_at"] = _iso_or_none(row["loaded_at"])
+        row["game_datetime_utc"] = _iso_or_none(row["game_datetime_utc"])
+        out.append(row)
+    return out
+
+
+def weather_series_rows(rows: list[dict], *, captured_at: str | None = None) -> list[dict]:
+    """Normalize hourly-series rows to WEATHER_SERIES_COLS + stamp captured_at / derive captured_hour.
+
+    captured_at is the snapshot wall-clock (a whole run shares one stamp); captured_hour is its
+    truncation to the hour (the retention bucket — one kept per hour). Both stored ISO VARCHAR."""
+    stamp = captured_at or datetime.now(timezone.utc).isoformat()
+    hour_bucket = stamp[:13]  # 'YYYY-MM-DDTHH' — the hour the snapshot belongs to
+    out: list[dict] = []
+    for r in rows:
+        row = {c: r.get(c) for c in WEATHER_SERIES_COLS}
+        row["captured_at"] = _iso_or_none(row.get("captured_at") or stamp)
+        if row.get("captured_hour") is None:
+            row["captured_hour"] = row["captured_at"][:13]
+        row["game_datetime_utc"] = _iso_or_none(row.get("game_datetime_utc"))
+        if row.get("weather_observation_type") is None:
+            row["weather_observation_type"] = "forecast_intraday_series"
+        out.append(row)
+    return out
+
+
+def _ts_sort_key(v):
+    """A total-order sort key for a loaded_at/captured_at value that may be a datetime OR a mixed-format
+    ISO string (the SF-typed bridge datetime vs the live-writer 'T'/space VARCHAR — the INC-23 union).
+    Lexicographic string order is WRONG across formats, so parse to a real datetime when possible."""
+    if isinstance(v, datetime):
+        return v.replace(tzinfo=None)
+    if isinstance(v, str) and v:
+        s = v.replace("T", " ")
+        # tolerate a trailing offset/zone by clipping to the second-precision core when parse fails
+        for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(s[:26] if "." in s else s[:19], fmt)
+            except ValueError:
+                continue
+    return datetime.min
+
+
+def dedupe_latest_per_key(rows: list[dict], key_cols, ts_col: str) -> list[dict]:
+    """PURE (no IO; unit-tested): keep the row with the greatest ts_col per key_cols tuple.
+
+    This is the INC-20 latest-per-period retention primitive. For weather_raw the key is
+    (game_pk,venue_id,obs_type,checkpoint) → re-fetch re-runs collapse to the newest per checkpoint.
+    For the hourly series the key includes the hour bucket → one row per hour survives (the trajectory
+    is preserved, only true intra-hour re-captures collapse). Ties keep the last-seen row."""
+    best: dict[tuple, dict] = {}
+    for row in rows:
+        k = tuple(row.get(c) for c in key_cols)
+        cur = best.get(k)
+        if cur is None or _ts_sort_key(row.get(ts_col)) >= _ts_sort_key(cur.get(ts_col)):
+            best[k] = row
+    return list(best.values())
+
+
+def _read_partition_rows(s3, source: str, dt: str) -> list[dict]:
+    """Read every existing part-file in a source's dt= partition back into row dicts (for the
+    within-day retention merge). Tiny partitions (weather is ≤ a few hundred rows/day), so this is
+    cheap. Columns come back as stored (timestamps as VARCHAR for live rows). Missing partition → []."""
+    prefix = f"{RAW_PREFIX}/{source}/dt={dt}/"
+    rows: list[dict] = []
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=BUCKET, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            if not key.endswith(".parquet"):
+                continue
+            body = s3.get_object(Bucket=BUCKET, Key=key)["Body"].read()
+            tbl = pq.read_table(io.BytesIO(body))
+            rows.extend(tbl.to_pylist())
+    return rows
+
+
+def write_raw_rows_s3_retained(
+    source: str,
+    rows: list[dict],
+    *,
+    key_cols,
+    ts_col: str = "loaded_at",
+    s3_client=None,
+) -> int:
+    """Write rows to S3 with INC-20 latest-per-key retention applied WITHIN each dt= partition.
+
+    Unlike write_raw_rows_s3 (pure append), this MERGES the incoming rows with what already exists in
+    the touched dt= partition(s), keeps the latest row per key_cols (dedupe_latest_per_key), and
+    overwrites the partition with the single deduped part. So a re-fetch / re-run never inflates the
+    mirror — the physical row count stays bounded to the distinct keys per day, matching the stg dedup
+    the reader applies anyway. Returns the number of rows written (post-dedup). Read-back is scoped to
+    today's partition only (tiny), so the extra S3 GETs are negligible for the weather volume.
+    """
+    if source not in RAW_SOURCES:
+        raise ValueError(f"Unknown raw source '{source}'. Valid: {sorted(RAW_SOURCES)}")
+    if not rows:
+        return 0
+
+    s3 = s3_client or _make_s3_client()
+
+    by_dt: dict[str, list[dict]] = defaultdict(list)
+    for row in rows:
+        by_dt[_partition_date(row)].append(row)
+
+    written = 0
+    for dt, new_rows in by_dt.items():
+        existing = _read_partition_rows(s3, source, dt)
+        merged = dedupe_latest_per_key(existing + new_rows, key_cols, ts_col)
+        _delete_partition(s3, source, dt)
+        table = rows_to_arrow_table(merged)
+        buf = io.BytesIO()
+        pq.write_table(table, buf, compression="snappy")
+        buf.seek(0)
+        key = f"{RAW_PREFIX}/{source}/dt={dt}/part-{uuid.uuid4().hex[:12]}.parquet"
+        s3.put_object(Bucket=BUCKET, Key=key, Body=buf.getvalue())
+        log.info("  wrote %d rows (retained latest-per-key from %d) → s3://%s/%s",
+                 len(merged), len(existing) + len(new_rows), BUCKET, key)
+        written += len(merged)
+    return written
+
+
+# E11.1-W11 Tier-D: the canonical public_betting_raw column set (matches the SF DDL
+# create_actionnetwork_public_betting_raw.sql + the stg duckdb branch's SELECT). ingest_actionnetwork
+# _betting builds a per-game row from the parsed ActionNetwork response; public_betting_mirror_rows()
+# normalizes it to this set + stamps ingestion_timestamp so the S3 mirror is schema-uniform.
+PUBLIC_BETTING_RAW_COLS = (
+    "game_date", "an_game_id", "home_team_abbr", "away_team_abbr",
+    "home_ml_money_pct", "away_ml_money_pct", "home_ml_ticket_pct", "away_ml_ticket_pct",
+    "over_money_pct", "under_money_pct", "over_ticket_pct", "under_ticket_pct",
+    "book_ids_used", "ingestion_timestamp",
+)
+
+# The hourly TIME-SERIES column set (public_betting_intraday_series). Same percentages as the raw
+# mirror + an EXPLICIT captured_at (the snapshot wall-clock) so the trajectory is reconstructable and
+# join-free. NO game_pk (that resolution lives in the SCD-2 chain, not here) — the series keys on the
+# ActionNetwork identifiers + captured_at. Append-only, never pruned (every hour kept — W11-D addendum).
+PUBLIC_BETTING_SERIES_COLS = (
+    "game_date", "an_game_id", "home_team_abbr", "away_team_abbr",
+    "home_ml_money_pct", "away_ml_money_pct", "home_ml_ticket_pct", "away_ml_ticket_pct",
+    "over_money_pct", "under_money_pct", "over_ticket_pct", "under_ticket_pct",
+    "book_ids_used", "captured_at",
+)
+
+
+def public_betting_mirror_rows(rows: list[dict], *, ingestion_timestamp: str | None = None) -> list[dict]:
+    """Normalize parsed ActionNetwork rows to PUBLIC_BETTING_RAW_COLS for the S3 raw mirror.
+
+    The writer parses one row per game (an_game_id + the money%/ticket% columns + book_ids_used) and
+    supplies game_date from the requested date; Snowflake fills ingestion_timestamp via its DDL
+    DEFAULT CURRENT_TIMESTAMP. The S3 mirror has no default → stamp ingestion_timestamp (ISO UTC) here:
+    it is the stg dedup key (`order by ingestion_timestamp desc`) AND the SCD-2 loaded_at, so the
+    S3-read stg/SCD-2 picks the same snapshots as Snowflake. A whole capture shares ONE stamp → each
+    hourly run is a distinct snapshot the SCD-2 chain turns into an intraday shift. game_date is coerced
+    to an ISO string (write_raw_rows_s3 keeps scalars native; the stg duckdb branch casts ::date)."""
+    stamp = ingestion_timestamp or datetime.now(timezone.utc).isoformat()
+    out: list[dict] = []
+    for r in rows:
+        row = {c: r.get(c) for c in PUBLIC_BETTING_RAW_COLS}
+        if row.get("ingestion_timestamp") is None:
+            row["ingestion_timestamp"] = stamp
+        row["ingestion_timestamp"] = _iso_or_none(row["ingestion_timestamp"])
+        if row.get("game_date") is not None:
+            row["game_date"] = str(row["game_date"])
+        out.append(row)
+    return out
+
+
+def public_betting_series_rows(rows: list[dict], *, captured_at: str | None = None) -> list[dict]:
+    """Normalize parsed ActionNetwork rows to PUBLIC_BETTING_SERIES_COLS + stamp captured_at.
+
+    The dedicated hourly trajectory (E13.16 public-%→line-movement precursor). captured_at is the
+    snapshot wall-clock (a whole run shares one stamp) — stored ISO VARCHAR. Written APPEND-ONLY via
+    write_raw_rows_s3 (NOT the latest-per-key retained writer): the operator's W11-D addendum wants
+    EVERY hourly snapshot kept within the game-day, so nothing is collapsed."""
+    stamp = captured_at or datetime.now(timezone.utc).isoformat()
+    out: list[dict] = []
+    for r in rows:
+        row = {c: r.get(c) for c in PUBLIC_BETTING_SERIES_COLS}
+        row["captured_at"] = _iso_or_none(row.get("captured_at") or stamp)
         if row.get("game_date") is not None:
             row["game_date"] = str(row["game_date"])
         out.append(row)

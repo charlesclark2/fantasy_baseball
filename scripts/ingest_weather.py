@@ -55,6 +55,24 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
+# E11.1-W11 Tier-C: leg-gated dual-write (W11_RAW_WRITE_MODE, its OWN env — default 'snowflake' =
+# unchanged). SF INSERT on 'snowflake'/'both'; an S3 mirror to lakehouse_raw/weather_raw/ on
+# 's3'/'both', with INC-20 latest-per-period retention (re-fetch re-runs collapse per checkpoint).
+# The hourly all-slate-park series is a separate S3-ONLY source (weather_intraday_series).
+sys.path.insert(0, os.path.dirname(__file__))
+from utils.lakehouse_raw_writer import (  # noqa: E402
+    WEATHER_RAW_RETENTION_KEY,
+    WEATHER_SERIES_RETENTION_KEY,
+    lakehouse_write_legs,
+    w11_write_mode,
+    weather_mirror_rows,
+    weather_series_rows,
+    write_raw_rows_s3_retained,
+)
+
+_LAKEHOUSE_SOURCE = "weather_raw"
+_SERIES_SOURCE = "weather_intraday_series"
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(message)s",
@@ -341,8 +359,9 @@ SELECT
 """
 
 
-def _insert_weather_row(
+def _persist_weather_row(
     conn,
+    do_sf: bool,
     game_pk: int,
     venue_id: int,
     game_dt: datetime,
@@ -350,7 +369,14 @@ def _insert_weather_row(
     source: str,
     observation_type: str,
     hours_to_first_pitch: int | None = None,
-) -> None:
+) -> dict:
+    """Build the canonical weather_raw row dict; INSERT it into Snowflake when do_sf is set.
+
+    E11.1-W11 Tier-C: returns the row so the caller can collect it for the S3 mirror leg
+    (write_raw_rows_s3_retained). game_datetime_utc is a space-separated UTC string (matches the
+    SF DDL + the export bridge's str(TIMESTAMP_NTZ) format) so the duckdb branch's try_cast is
+    format-uniform. loaded_at is NOT set here — the SF DDL DEFAULT stamps it, and weather_mirror_rows
+    stamps the S3 copy (so both legs agree)."""
     now = datetime.now(timezone.utc)
     if game_dt.tzinfo is not None:
         game_dt_utc = game_dt.astimezone(timezone.utc)
@@ -359,21 +385,26 @@ def _insert_weather_row(
 
     fetch_offset_hours = round((now - game_dt_utc).total_seconds() / 3600, 1)
 
-    with conn.cursor() as cur:
-        cur.execute(_INSERT_SQL, {
-            "game_pk":              game_pk,
-            "venue_id":             venue_id,
-            "game_datetime_utc":    game_dt_utc.strftime("%Y-%m-%d %H:%M:%S"),
-            "fetch_offset_hours":   fetch_offset_hours,
-            "temp_f":               weather["temp_f"],
-            "wind_speed_mph":       weather["wind_speed_mph"],
-            "wind_direction_deg":   weather["wind_direction_deg"],
-            "humidity_pct":         weather["humidity_pct"],
-            "condition_text":       weather["condition_text"],
-            "api_source":           source,
-            "weather_observation_type": observation_type,
-            "hours_to_first_pitch": hours_to_first_pitch,
-        })
+    row = {
+        "game_pk":                  game_pk,
+        "venue_id":                 venue_id,
+        "game_datetime_utc":        game_dt_utc.strftime("%Y-%m-%d %H:%M:%S"),
+        "fetch_offset_hours":       fetch_offset_hours,
+        "temp_f":                   weather["temp_f"],
+        "wind_speed_mph":           weather["wind_speed_mph"],
+        "wind_direction_deg":       weather["wind_direction_deg"],
+        "humidity_pct":             weather["humidity_pct"],
+        "condition_text":           weather["condition_text"],
+        "api_source":               source,
+        "weather_observation_type": observation_type,
+        "hours_to_first_pitch":     hours_to_first_pitch,
+    }
+
+    if do_sf:
+        with conn.cursor() as cur:
+            cur.execute(_INSERT_SQL, row)
+
+    return row
 
 # ── Checkpoint detection (forecast_intraday) ───────────────────────────────────
 
@@ -386,7 +417,34 @@ def _nearest_checkpoint(hours_until: float) -> int | None:
 
 # ── Main ingestion logic ───────────────────────────────────────────────────────
 
-def _run_forecast_pregame(conn, game_date: str, source: str) -> None:
+def _flush_s3_mirror(rows: list[dict]) -> None:
+    """Mirror collected weather_raw rows to S3 with INC-20 latest-per-period retention."""
+    if not rows:
+        return
+    n = write_raw_rows_s3_retained(
+        _LAKEHOUSE_SOURCE, weather_mirror_rows(rows),
+        key_cols=WEATHER_RAW_RETENTION_KEY, ts_col="loaded_at",
+    )
+    log.info("mirrored %d row(s) → S3 lakehouse_raw/%s/ (retained latest-per-period)", n, _LAKEHOUSE_SOURCE)
+
+
+def _already_fetched(conn, do_sf: bool, game_date: str, observation_type: str,
+                     hours_to_first_pitch: int | None) -> set:
+    """game_pks already having a row for this (date, obs-type, checkpoint). SF-only optimisation —
+    skips redundant weather-API calls. In s3-only mode there is no SF to read, so return empty and
+    let the retention writer collapse any re-fetch (correctness holds; only extra API calls)."""
+    if not do_sf:
+        return set()
+    with conn.cursor() as cur:
+        cur.execute(_ALREADY_FETCHED_SQL, {
+            "game_date":            game_date,
+            "observation_type":     observation_type,
+            "hours_to_first_pitch": hours_to_first_pitch,
+        })
+        return {row[0] for row in cur.fetchall()}
+
+
+def _run_forecast_pregame(conn, game_date: str, source: str, do_sf: bool, do_s3: bool) -> None:
     """Original daily pre-game forecast ingestion path."""
     with conn.cursor() as cur:
         cur.execute(_SCHEDULE_SQL, {"game_date": game_date})
@@ -398,13 +456,7 @@ def _run_forecast_pregame(conn, game_date: str, source: str) -> None:
         log.info("No outdoor-park games found for %s — nothing to fetch.", game_date)
         return
 
-    with conn.cursor() as cur:
-        cur.execute(_ALREADY_FETCHED_SQL, {
-            "game_date":          game_date,
-            "observation_type":   "forecast_pregame",
-            "hours_to_first_pitch": None,
-        })
-        already_done = {row[0] for row in cur.fetchall()}
+    already_done = _already_fetched(conn, do_sf, game_date, "forecast_pregame", None)
 
     pending = [g for g in games if g["game_pk"] not in already_done]
     log.info(
@@ -412,6 +464,7 @@ def _run_forecast_pregame(conn, game_date: str, source: str) -> None:
         len(pending), len(already_done),
     )
 
+    mirror: list[dict] = []
     success = 0
     for g in pending:
         game_pk  = g["game_pk"]
@@ -433,12 +486,15 @@ def _run_forecast_pregame(conn, game_date: str, source: str) -> None:
             log.warning("No weather data returned for game_pk=%d — skipping.", game_pk)
             continue
 
-        _insert_weather_row(conn, game_pk, venue_id, game_dt, weather, source,
-                            "forecast_pregame", None)
+        mirror.append(_persist_weather_row(conn, do_sf, game_pk, venue_id, game_dt, weather,
+                                           source, "forecast_pregame", None))
         log.info("  Saved: temp=%.1f°F  wind=%.1f mph (dir=%s°)  humidity=%s%%",
                  weather["temp_f"] or 0, weather["wind_speed_mph"] or 0,
                  weather["wind_direction_deg"], weather["humidity_pct"])
         success += 1
+
+    if do_s3:
+        _flush_s3_mirror(mirror)
 
     total = len(pending)
     log.info("forecast_pregame complete — %d/%d outdoor parks fetched.", success, total)
@@ -447,7 +503,7 @@ def _run_forecast_pregame(conn, game_date: str, source: str) -> None:
         sys.exit(1)
 
 
-def _run_observed_at_first_pitch(conn, game_date: str, source: str) -> None:
+def _run_observed_at_first_pitch(conn, game_date: str, source: str, do_sf: bool, do_s3: bool) -> None:
     """Fetch observed weather from archive endpoint for completed games on game_date."""
     with conn.cursor() as cur:
         cur.execute(_COMPLETED_GAMES_SQL, {"game_date": game_date})
@@ -459,13 +515,7 @@ def _run_observed_at_first_pitch(conn, game_date: str, source: str) -> None:
         log.info("No completed outdoor-park games found for %s — nothing to fetch.", game_date)
         return
 
-    with conn.cursor() as cur:
-        cur.execute(_ALREADY_FETCHED_SQL, {
-            "game_date":            game_date,
-            "observation_type":     "observed_at_first_pitch",
-            "hours_to_first_pitch": None,
-        })
-        already_done = {row[0] for row in cur.fetchall()}
+    already_done = _already_fetched(conn, do_sf, game_date, "observed_at_first_pitch", None)
 
     pending = [g for g in games if g["game_pk"] not in already_done]
     log.info(
@@ -473,6 +523,7 @@ def _run_observed_at_first_pitch(conn, game_date: str, source: str) -> None:
         len(pending), len(already_done),
     )
 
+    mirror: list[dict] = []
     success = 0
     for g in pending:
         game_pk  = g["game_pk"]
@@ -493,16 +544,21 @@ def _run_observed_at_first_pitch(conn, game_date: str, source: str) -> None:
             log.warning("No observed weather returned for game_pk=%d — skipping.", game_pk)
             continue
 
-        _insert_weather_row(conn, game_pk, venue_id, game_dt, weather, "open-meteo",
-                            "observed_at_first_pitch", None)
+        weather = {**weather, "condition_text": weather.get("condition_text")}
+        mirror.append(_persist_weather_row(conn, do_sf, game_pk, venue_id, game_dt, weather,
+                                           "open-meteo", "observed_at_first_pitch", None))
         log.info("  Saved observed: temp=%.1f°F  wind=%.1f mph",
                  weather["temp_f"] or 0, weather["wind_speed_mph"] or 0)
         success += 1
 
+    if do_s3:
+        _flush_s3_mirror(mirror)
+
     log.info("observed_at_first_pitch complete — %d/%d games fetched.", success, len(pending))
 
 
-def _run_forecast_intraday(conn, game_date: str, source: str, hours_to_first_pitch: int) -> None:
+def _run_forecast_intraday(conn, game_date: str, source: str, hours_to_first_pitch: int,
+                           do_sf: bool, do_s3: bool) -> None:
     """Fetch intraday forecast snapshot for today's games at a specific checkpoint."""
     with conn.cursor() as cur:
         cur.execute(_SCHEDULE_SQL, {"game_date": game_date})
@@ -514,13 +570,7 @@ def _run_forecast_intraday(conn, game_date: str, source: str, hours_to_first_pit
         log.info("No outdoor-park games found for %s — nothing to fetch.", game_date)
         return
 
-    with conn.cursor() as cur:
-        cur.execute(_ALREADY_FETCHED_SQL, {
-            "game_date":            game_date,
-            "observation_type":     "forecast_intraday",
-            "hours_to_first_pitch": hours_to_first_pitch,
-        })
-        already_done = {row[0] for row in cur.fetchall()}
+    already_done = _already_fetched(conn, do_sf, game_date, "forecast_intraday", hours_to_first_pitch)
 
     now_utc = datetime.now(timezone.utc)
     eligible = []
@@ -542,6 +592,7 @@ def _run_forecast_intraday(conn, game_date: str, source: str, hours_to_first_pit
         hours_to_first_pitch, len(eligible), len(already_done),
     )
 
+    mirror: list[dict] = []
     success = 0
     for g, game_dt in eligible:
         game_pk  = g["game_pk"]
@@ -560,13 +611,87 @@ def _run_forecast_intraday(conn, game_date: str, source: str, hours_to_first_pit
             log.warning("No forecast returned for game_pk=%d — skipping.", game_pk)
             continue
 
-        _insert_weather_row(conn, game_pk, venue_id, game_dt, weather, source,
-                            "forecast_intraday", hours_to_first_pitch)
+        mirror.append(_persist_weather_row(conn, do_sf, game_pk, venue_id, game_dt, weather,
+                                           source, "forecast_intraday", hours_to_first_pitch))
         log.info("  Saved T-%dh: temp=%.1f°F  wind=%.1f mph",
                  hours_to_first_pitch, weather["temp_f"] or 0, weather["wind_speed_mph"] or 0)
         success += 1
 
+    if do_s3:
+        _flush_s3_mirror(mirror)
+
     log.info("forecast_intraday T-%dh complete — %d/%d fetched.", hours_to_first_pitch, success, len(eligible))
+
+
+def _run_intraday_series(conn, game_date: str, source: str) -> None:
+    """⭐ E11.1-W11-C ADDITION — hourly weather snapshot for EVERY slate park (not just the
+    T-24/6/3/1h checkpoints), stored S3-ONLY as weather_intraday_series with an explicit captured_at.
+
+    WHY: build a dense weather TIME-SERIES aligned to the odds line-movement series → the E13.16
+    weather→line-movement hypothesis (do books lag weather updates → a totals timing edge). Every
+    outdoor slate park is captured once per invocation (the weather_capture cron fires hourly), tagged
+    with captured_at / captured_hour so the trajectory is reconstructable. Retention keeps the LATEST
+    snapshot per (game, hour) within the game-day — the hours are the SIGNAL, so we do NOT collapse
+    across hours (only a true intra-hour re-run collapses). S3-only: this is a brand-new source with
+    no Snowflake table to decommission (aligns with 'all ingestion strictly to S3')."""
+    with conn.cursor() as cur:
+        cur.execute(_SCHEDULE_SQL, {"game_date": game_date})
+        rows = cur.fetchall()
+        col_names = [d[0].lower() for d in cur.description]
+        games = [dict(zip(col_names, row)) for row in rows]
+
+    if not games:
+        log.info("intraday_series: no outdoor-park games for %s — nothing to capture.", game_date)
+        return
+
+    captured_at = datetime.now(timezone.utc)
+    now_utc = captured_at
+    mirror: list[dict] = []
+    for g in games:
+        game_pk  = g["game_pk"]
+        venue_id = g["venue_id"]
+        lat      = g["latitude"]
+        lon      = g["longitude"]
+        game_dt  = g["game_datetime_utc"]
+
+        if isinstance(game_dt, str):
+            game_dt = datetime.fromisoformat(game_dt)
+        if game_dt.tzinfo is None:
+            game_dt = game_dt.replace(tzinfo=timezone.utc)
+        if lat is None or lon is None:
+            log.warning("intraday_series: skipping venue_id=%s — missing GPS coordinates.", venue_id)
+            continue
+
+        weather = fetch_weather(source, lat, lon, game_dt)
+        if weather is None:
+            log.warning("intraday_series: no weather for game_pk=%d — skipping.", game_pk)
+            continue
+
+        hours_to_first_pitch = round((game_dt - now_utc).total_seconds() / 3600, 2)
+        mirror.append({
+            "game_pk":                  game_pk,
+            "venue_id":                 venue_id,
+            "game_datetime_utc":        game_dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+            "hours_to_first_pitch":     hours_to_first_pitch,
+            "temp_f":                   weather["temp_f"],
+            "wind_speed_mph":           weather["wind_speed_mph"],
+            "wind_direction_deg":       weather["wind_direction_deg"],
+            "humidity_pct":             weather["humidity_pct"],
+            "condition_text":           weather["condition_text"],
+            "api_source":               source,
+            "weather_observation_type": "forecast_intraday_series",
+        })
+
+    if not mirror:
+        log.info("intraday_series: nothing captured for %s.", game_date)
+        return
+
+    n = write_raw_rows_s3_retained(
+        _SERIES_SOURCE, weather_series_rows(mirror, captured_at=captured_at.isoformat()),
+        key_cols=WEATHER_SERIES_RETENTION_KEY, ts_col="captured_at",
+    )
+    log.info("intraday_series: captured %d slate-park snapshot(s) → S3 lakehouse_raw/%s/ "
+             "(captured_at=%s, retained latest-per-hour)", n, _SERIES_SOURCE, captured_at.isoformat())
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
@@ -586,9 +711,14 @@ def main() -> None:
     )
     parser.add_argument(
         "--observation-type",
-        choices=["forecast_pregame", "observed_at_first_pitch", "forecast_intraday"],
+        choices=["forecast_pregame", "observed_at_first_pitch", "forecast_intraday",
+                 "intraday_series"],
         default="forecast_pregame",
-        help="Type of weather observation to capture (default: forecast_pregame).",
+        help=(
+            "Type of weather observation to capture (default: forecast_pregame). "
+            "intraday_series = the ⭐ hourly all-slate-park time-series (E13.16 precursor); "
+            "captures EVERY outdoor slate park once, S3-only, tagged with captured_at."
+        ),
     )
     parser.add_argument(
         "--hours-to-first-pitch",
@@ -624,9 +754,15 @@ def main() -> None:
     else:
         game_date = date.today().isoformat()
 
+    # E11.1-W11 Tier-C: which legs run (SF INSERT and/or S3 mirror) per W11_RAW_WRITE_MODE (default
+    # 'snowflake' → unchanged). The intraday_series is ALWAYS S3-only (a brand-new source).
+    do_sf, do_s3 = lakehouse_write_legs(w11_write_mode())
+
     log.info(
-        "Weather ingest — date=%s  observation_type=%s  hours_to_first_pitch=%s  dry_run=%s",
-        game_date, args.observation_type, args.hours_to_first_pitch, args.dry_run,
+        "Weather ingest — date=%s  observation_type=%s  hours_to_first_pitch=%s  "
+        "write_mode=%s (sf=%s, s3=%s)  dry_run=%s",
+        game_date, args.observation_type, args.hours_to_first_pitch, w11_write_mode(),
+        do_sf, do_s3, args.dry_run,
     )
 
     if args.dry_run:
@@ -638,11 +774,15 @@ def main() -> None:
     conn = get_snowflake_conn()
     try:
         if args.observation_type == "forecast_pregame":
-            _run_forecast_pregame(conn, game_date, args.source)
+            _run_forecast_pregame(conn, game_date, args.source, do_sf, do_s3)
         elif args.observation_type == "observed_at_first_pitch":
-            _run_observed_at_first_pitch(conn, game_date, args.source)
+            _run_observed_at_first_pitch(conn, game_date, args.source, do_sf, do_s3)
         elif args.observation_type == "forecast_intraday":
-            _run_forecast_intraday(conn, game_date, args.source, args.hours_to_first_pitch)
+            _run_forecast_intraday(conn, game_date, args.source, args.hours_to_first_pitch,
+                                   do_sf, do_s3)
+        elif args.observation_type == "intraday_series":
+            # S3-only new source (the E13.16 precursor); do_sf/do_s3 don't gate it.
+            _run_intraday_series(conn, game_date, args.source)
     finally:
         conn.close()
 

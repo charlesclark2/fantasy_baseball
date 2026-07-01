@@ -27,9 +27,20 @@
 -- staging layer computes it for the forecast rows, so both sources carry an
 -- identical feature definition. Dome parks have is_dome = TRUE and NULL
 -- wind_component_mph; dome imputation is handled in Python preprocessing.
+--
+-- E11.1-W11 Tier-C lakehouse migration. DuckDB branch reads the migrated
+-- feature_pregame_weather_status (forecast) + the weather_raw S3 raw mirror (observed) + the
+-- ref_venues seed (all registered as DuckDB views / read via read_parquet by run_w1_lakehouse
+-- ._build_w11c). The Snowflake (else) branch is a thin view over the lakehouse_ext external table
+-- (rollback path). This is the W8a-deferred straggler the W8b aggregator + feature_pregame_game_
+-- features_raw read — once the native parquet lands at lakehouse/feature_pregame_weather_features/,
+-- the W8b/game-features precursor picks it up at the same S3 path. Output column set/types are
+-- UNCHANGED from the Snowflake model so the downstream type-pinned incremental does not drift.
 -- =============================================================================
 
-{{ config(materialized='table') }}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w11c_lakehouse']) }}
 
 with forecast as (
 
@@ -53,17 +64,17 @@ observed_dedup as (
     -- Historical training backfill: realized first-pitch OBSERVED weather.
     -- One row per game_pk (latest ingestion).
     select
-        game_pk::integer            as game_pk,
-        venue_id::integer           as venue_id,
-        temp_f::float               as temp_f,
-        wind_speed_mph::float       as wind_speed_mph,
-        wind_direction_deg::integer as wind_direction_deg,
-        humidity_pct::integer       as humidity_pct
-    from {{ source('statsapi', 'weather_raw') }}
+        game_pk::integer                        as game_pk,
+        venue_id::integer                       as venue_id,
+        try_cast(temp_f as double)              as temp_f,
+        try_cast(wind_speed_mph as double)      as wind_speed_mph,
+        try_cast(wind_direction_deg as integer) as wind_direction_deg,
+        try_cast(humidity_pct as integer)       as humidity_pct
+    from read_parquet('{{ lakehouse_raw_loc("weather_raw") }}**/*.parquet', union_by_name=true)
     where weather_observation_type = 'observed_at_first_pitch'
     qualify row_number() over (
         partition by game_pk
-        order by loaded_at desc nulls last
+        order by try_cast(loaded_at as timestamp) desc nulls last
     ) = 1
 
 ),
@@ -119,3 +130,11 @@ select
     wind_component_mph,
     is_dome
 from observed
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.feature_pregame_weather_features
+
+{% endif %}
