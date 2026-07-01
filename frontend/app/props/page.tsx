@@ -3,11 +3,16 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
-import { Info } from "lucide-react"
+import { format } from "date-fns"
+import { CalendarIcon, Info } from "lucide-react"
 import { Nav } from "@/components/nav"
 import { AuthGuard } from "@/components/auth-guard"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useAuth } from "@/lib/auth-context"
+import { useSelectedDate } from "@/lib/date-context"
 import { apiFetch } from "@/lib/api"
 
 // ---------------------------------------------------------------------------
@@ -172,26 +177,22 @@ function ProjectionCard({ r }: { r: ProjectionRow }) {
 
 function PropsPageInner() {
   const { accessToken, email } = useAuth()
+  // Shared slate date — held in the same context as the other betting pages, so the selected day
+  // carries across pages.
+  const { selectedDate, setSelectedDate, isoDate } = useSelectedDate()
   const [propType, setPropType] = useState<string>(PROP_TYPES[0].key)
-  const [selectedDate, setSelectedDate] = useState<string>("") // "" = latest available
+  const [calOpen, setCalOpen] = useState(false)
 
   const active = PROP_TYPES.find((p) => p.key === propType) ?? PROP_TYPES[0]
 
   const { data, isLoading, isError } = useQuery<ProjectionIndex>({
-    queryKey: ["props-index", active.key, selectedDate],
-    queryFn: () =>
-      apiFetch(
-        `${active.endpoint}${selectedDate ? `?as_of=${selectedDate}` : ""}`,
-        {},
-        accessToken!
-      ),
+    queryKey: ["props-index", active.key, isoDate],
+    queryFn: () => apiFetch(`${active.endpoint}?as_of=${isoDate}`, {}, accessToken!),
     enabled: !!accessToken && active.available,
     staleTime: 1000 * 60 * 30,
   })
 
   const pitchers = data?.pitchers ?? []
-  // The date shown in the picker: an explicit selection, else the loaded slate's date.
-  const dateValue = selectedDate || data?.game_date || ""
 
   return (
     <>
@@ -228,23 +229,32 @@ function PropsPageInner() {
             <span className="hidden text-[11px] text-gray-600 sm:inline">More prop types coming soon</span>
           </div>
 
-          <label className="flex items-center gap-2 text-xs text-gray-500">
-            Date
-            <input
-              type="date"
-              value={dateValue}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="rounded-md border border-[#262626] bg-[#111111] px-2.5 py-1.5 text-sm text-white [color-scheme:dark]"
-            />
-            {selectedDate && (
-              <button
-                onClick={() => setSelectedDate("")}
-                className="text-[11px] text-gray-500 underline hover:text-gray-300"
+          {/* Date picker — the same shared control the other betting pages use */}
+          <Popover open={calOpen} onOpenChange={setCalOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className="h-9 w-[156px] justify-start gap-2 border-[#262626] bg-[#141414] text-left text-sm font-normal text-white hover:bg-[#1a1a1a]"
               >
-                latest
-              </button>
-            )}
-          </label>
+                <CalendarIcon className="h-4 w-4 text-gray-500" />
+                {format(selectedDate, "MMM d, yyyy")}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto border-[#262626] bg-[#141414] p-0" align="end">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={(d) => {
+                  if (d) {
+                    setSelectedDate(d)
+                    setCalOpen(false)
+                  }
+                }}
+                toDate={new Date()}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
         </div>
 
         {isLoading ? (
@@ -260,7 +270,7 @@ function PropsPageInner() {
         ) : pitchers.length === 0 ? (
           <div className="rounded-lg border border-[#262626] bg-[#111111] px-4 py-10 text-center">
             <p className="text-sm text-gray-400">
-              No projections{dateValue ? ` for ${dateValue}` : ""} yet.
+              No projections for {format(selectedDate, "MMM d, yyyy")} yet.
             </p>
             <p className="mt-1 text-xs text-gray-600">
               Projections appear once probable starters are announced for the day&apos;s slate. Try
