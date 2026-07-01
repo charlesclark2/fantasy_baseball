@@ -25,6 +25,18 @@ SHELL=/bin/bash
 # Live odds (h2h/totals across us/us2/eu, all books incl. Bovada+Pinnacle) → mlb_odds_raw.
 */30 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml run --rm odds-capture >> /home/ec2-user/capture-cron.log 2>&1
 
+# 24/7 S3 MIRROR of mlb_odds_raw (E11.1-W12 fix — the odds_freshness_alert_sensor reads
+# lakehouse_raw/mlb_odds_raw/ via DuckDB 24/7). The lean odds-capture image above writes
+# Snowflake ONLY (no boto3/pyarrow/utils in it); the S3 mirror is otherwise refreshed only
+# during GAME HOURS by odds_current_rebuild_sensor (gated W6_LAKEHOUSE_INTRADAY) — so off-hours
+# the mirror goes STALE and the 24/7 freshness sensor FALSE-PAGES CRITICAL while Snowflake is
+# fine. This runs the box's real mirror mechanism (export_odds_raw_to_s3.py, same as the daily +
+# intraday W6 paths) inside the always-up full-stack codeloc container every 30 min. --since
+# 1-day-ago covers the UTC/baseball-day boundary (INC-22 class); overwrite_partition = idempotent.
+# AWS_DEFAULT_REGION us-east-2 = the artifacts bucket (codeloc default may differ). WARN/mirror
+# tier — non-blocking; a failure never gates predictions.
+*/30 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/export_odds_raw_to_s3.py --source mlb_odds_raw --since $(date -u -d '1 day ago' +\%F) >> /home/ec2-user/capture-cron.log 2>&1
+
 # Intraday schedule re-ingest + lineup-staging dbt rebuild (entrypoint self-guards 14:00-03:00 UTC).
 */30 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml run --rm schedule-capture >> /home/ec2-user/capture-cron.log 2>&1
 
