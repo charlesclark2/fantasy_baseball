@@ -132,14 +132,14 @@ function MiniRange({ r }: { r: ProjectionRow }) {
 function ProjectionCard({ r }: { r: ProjectionRow }) {
   return (
     <Link
-      href={`/props/${r.pitcher_id}`}
+      href={r.game_date ? `/props/${r.pitcher_id}?as_of=${r.game_date}` : `/props/${r.pitcher_id}`}
       className="block rounded-lg border border-[#262626] bg-[#111111] p-4 transition-colors hover:border-[#3a3a3a] hover:bg-[#141414]"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate font-semibold text-white">{r.full_name ?? `Pitcher ${r.pitcher_id}`}</div>
-          <div className="truncate text-[11px] text-gray-500">
-            {r.team ?? "—"}
+          <div className="truncate text-[11px]">
+            <span className="font-medium text-gray-200">{r.team ?? "—"}</span>
             {r.opponent ? <span className="text-gray-600"> vs {r.opponent}</span> : null}
           </div>
         </div>
