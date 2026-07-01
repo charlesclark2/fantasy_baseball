@@ -81,8 +81,11 @@ function fmtSignedPct(p: number | null): string {
 }
 
 // First-pitch time from an ISO timestamp, in the viewer's local zone (e.g. "7:05 PM").
-function fmtGameTime(iso: string | null): string | null {
-  if (!iso) return null
+// Mirror the tracker page's parser: use the string as-is if it already carries tz info
+// (Z or ±HH:MM); otherwise treat it as UTC by appending "Z" (game_datetime is a UTC instant).
+function fmtGameTime(raw: string | null): string | null {
+  if (!raw) return null
+  const iso = raw.endsWith("Z") || /[+-]\d\d:?\d\d$/.test(raw) ? raw : raw + "Z"
   const d = new Date(iso)
   if (isNaN(d.getTime())) return null
   return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })

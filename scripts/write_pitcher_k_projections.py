@@ -176,9 +176,13 @@ def _pitcher_meta(target: str, pitcher_ids: list[int]) -> dict[int, dict]:
                 """
                 SELECT pp.probable_pitcher_id AS pid, pp.probable_pitcher_name AS nm,
                        pp.side AS side, g.home_team_name AS home_team, g.away_team_name AS away_team,
-                       -- Emit an unambiguous ISO-8601 UTC instant ("...Z") so the browser renders
-                       -- first-pitch in the VIEWER's local timezone (not UTC / the box's session TZ).
-                       TO_VARCHAR(CONVERT_TIMEZONE('UTC', g.game_date), 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS game_dt
+                       -- g.game_date is a naive TIMESTAMP_NTZ that is ALREADY stored in UTC
+                       -- (e.g. 2026-06-29 22:40:00 = 6:40 PM EDT first pitch). Do NOT CONVERT_TIMEZONE:
+                       -- that reinterprets the naive value as the box's session TZ (PT) and shifts it
+                       -- +7h. Just format as-is and stamp 'Z' so it's an unambiguous UTC instant, which
+                       -- the browser renders in the VIEWER's local zone. (Mirrors how the EV Tracker
+                       -- consumes stg_statsapi_games.game_date — no conversion.)
+                       TO_VARCHAR(g.game_date, 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS game_dt
                 FROM baseball_data.betting.stg_statsapi_probable_pitchers pp
                 LEFT JOIN baseball_data.betting.stg_statsapi_games g ON g.game_pk = pp.game_pk
                 WHERE pp.game_date::date = %(d)s AND pp.probable_pitcher_id IS NOT NULL
