@@ -217,6 +217,21 @@ def _w11b_umpire_nightly_on() -> bool:
     return os.environ.get("W11B_UMPIRE_NIGHTLY") == "1"
 
 
+def _w11c_weather_nightly_on() -> bool:
+    # E11.1-W11 Tier-C: the 2 weather writers (ingest_weather / backfill_observed_weather) now
+    # dual-write the weather_raw raw mirror and the 4 weather dbt models (2 stg + 2 feature) were
+    # dual-branched to read it. run_w1_lakehouse.py --w11c (the parquet REBUILD) is NOT in the daily op
+    # by default. This gate wires a nightly --w11c-only rebuild + the --w11c ext-table refresh so
+    # lakehouse_ext.feature_pregame_weather_* (read by the W8b aggregator precursor view + the game-
+    # features chain + the dbt else branch after cutover) stays fresh from the live raw mirror. Self-
+    # contained (only precursor is the raw parquet + the ref_venues seed CSV). Default OFF: flip to 1
+    # only after (1) W11_RAW_WRITE_MODE=both on the daily job (the live writers keep the raw mirror
+    # fresh), (2) the W11c lakehouse_ext tables exist (generate_w11c_external_tables.py), and (3) a
+    # box-validated --w11c-only run + per-ROW ext fetch (the RUNTIME GATE). Merging default-OFF is a
+    # true no-op (the un-gated glue is just this env read).
+    return os.environ.get("W11C_WEATHER_NIGHTLY") == "1"
+
+
 def _w11d_public_betting_nightly_on() -> bool:
     # E11.1-W11 Tier-D: ingest_actionnetwork_betting now dual-writes the public_betting_raw mirror and
     # the 4 public-betting dbt models (2 stg + 2 feature) were dual-branched to read it. run_w1_lakehouse
@@ -565,6 +580,20 @@ def run_w1_lakehouse_op(context):
     if _w11b_umpire_nightly_on():
         _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w11b-only"])
         _run_w11_nightly(context, "refresh_w1_external_tables.py", ["--w11b"])
+
+    # E11.1-W11 Tier-C (weather): rebuild the weather stg + feature parquet from the dual-written
+    # weather_raw raw mirror + refresh the W11c external tables, so lakehouse_ext.feature_pregame_
+    # weather_* stays fresh (the W8b aggregator + feature_pregame_game_features chain read
+    # feature_pregame_weather_features as a precursor from the SAME S3 path — this native build replaces
+    # the W7b-1 export_features_to_s3 mirror at that key). Self-contained (reads only the raw mirror +
+    # the ref_venues seed CSV) so order-independent. Mirror-tier (ALERT-continue) — weather features are
+    # slow-moving and the dbt build retains its Snowflake-native path pre-cutover, so a rebuild failure
+    # must NOT HALT the daily job. Gated default-OFF. NOTE: the raw mirror is kept fresh by the live
+    # writers' dual-write; the hourly all-slate-park series (weather_intraday_series) is a SEPARATE
+    # S3-only source not read by any dbt model, so it is not part of this rebuild.
+    if _w11c_weather_nightly_on():
+        _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w11c-only"])
+        _run_w11_nightly(context, "refresh_w1_external_tables.py", ["--w11c"])
 
     # E11.1-W11 Tier-D (public betting): rebuild the public-betting stg + feature parquet from the
     # dual-written public_betting_raw mirror + refresh the W11d external tables, so lakehouse_ext.
