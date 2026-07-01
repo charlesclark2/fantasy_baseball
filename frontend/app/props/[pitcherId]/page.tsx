@@ -1,7 +1,8 @@
 "use client"
 
+import { Suspense } from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { useParams, useSearchParams } from "next/navigation"
 import { ChevronLeft } from "lucide-react"
 import { Nav } from "@/components/nav"
 import { AuthGuard } from "@/components/auth-guard"
@@ -10,6 +11,8 @@ import { PitcherKProjection } from "@/components/pitcher-k-projection"
 
 function PropDetailInner() {
   const { pitcherId } = useParams<{ pitcherId: string }>()
+  const searchParams = useSearchParams()
+  const asOf = searchParams.get("as_of") // pin to the slate the /props list linked from
   const { email } = useAuth()
   const id = Number(pitcherId)
 
@@ -26,7 +29,7 @@ function PropDetailInner() {
         </Link>
 
         {Number.isFinite(id) ? (
-          <PitcherKProjection pitcherId={id} />
+          <PitcherKProjection pitcherId={id} asOf={asOf} />
         ) : (
           <p className="text-sm text-gray-500">Invalid pitcher.</p>
         )}
@@ -45,7 +48,9 @@ function PropDetailInner() {
 export default function PropDetailPage() {
   return (
     <AuthGuard>
-      <PropDetailInner />
+      <Suspense fallback={null}>
+        <PropDetailInner />
+      </Suspense>
     </AuthGuard>
   )
 }

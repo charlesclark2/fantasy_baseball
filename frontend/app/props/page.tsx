@@ -81,8 +81,11 @@ function fmtSignedPct(p: number | null): string {
 }
 
 // First-pitch time from an ISO timestamp, in the viewer's local zone (e.g. "7:05 PM").
-function fmtGameTime(iso: string | null): string | null {
-  if (!iso) return null
+// Mirror the tracker page's parser: use the string as-is if it already carries tz info
+// (Z or ±HH:MM); otherwise treat it as UTC by appending "Z" (game_datetime is a UTC instant).
+function fmtGameTime(raw: string | null): string | null {
+  if (!raw) return null
+  const iso = raw.endsWith("Z") || /[+-]\d\d:?\d\d$/.test(raw) ? raw : raw + "Z"
   const d = new Date(iso)
   if (isNaN(d.getTime())) return null
   return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
@@ -132,14 +135,14 @@ function MiniRange({ r }: { r: ProjectionRow }) {
 function ProjectionCard({ r }: { r: ProjectionRow }) {
   return (
     <Link
-      href={`/props/${r.pitcher_id}`}
+      href={r.game_date ? `/props/${r.pitcher_id}?as_of=${r.game_date}` : `/props/${r.pitcher_id}`}
       className="block rounded-lg border border-[#262626] bg-[#111111] p-4 transition-colors hover:border-[#3a3a3a] hover:bg-[#141414]"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate font-semibold text-white">{r.full_name ?? `Pitcher ${r.pitcher_id}`}</div>
-          <div className="truncate text-[11px] text-gray-500">
-            {r.team ?? "—"}
+          <div className="truncate text-[11px]">
+            <span className="font-medium text-gray-200">{r.team ?? "—"}</span>
             {r.opponent ? <span className="text-gray-600"> vs {r.opponent}</span> : null}
           </div>
         </div>

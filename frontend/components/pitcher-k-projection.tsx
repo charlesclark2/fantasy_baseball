@@ -55,8 +55,11 @@ export interface KProjection {
 }
 
 // First-pitch time from an ISO timestamp, in the viewer's local zone (e.g. "Jul 1, 7:05 PM").
-function fmtGameTime(iso: string | null): string | null {
-  if (!iso) return null
+// Mirror the tracker page's parser: use the string as-is if it already carries tz info
+// (Z or ±HH:MM); otherwise treat it as UTC by appending "Z" (game_datetime is a UTC instant).
+function fmtGameTime(raw: string | null): string | null {
+  if (!raw) return null
+  const iso = raw.endsWith("Z") || /[+-]\d\d:?\d\d$/.test(raw) ? raw : raw + "Z"
   const d = new Date(iso)
   if (isNaN(d.getTime())) return null
   return d.toLocaleString(undefined, {
@@ -104,26 +107,12 @@ function fmtSignedPct(p: number | null): string {
 // A 1-D projection range — no probability/recommendation framing, just where our model lands.
 // ---------------------------------------------------------------------------
 
-// Distinct book lines → the books posting each, so the strip shows where every market sits.
-function uniqueBookLines(comparisons: BookComparison[]): { line: number; books: string[] }[] {
-  const byLine = new Map<number, string[]>()
-  for (const c of comparisons) {
-    if (c.line == null) continue
-    const books = byLine.get(c.line) ?? []
-    books.push(c.book)
-    byLine.set(c.line, books)
-  }
-  return [...byLine.entries()].map(([line, books]) => ({ line, books })).sort((a, b) => a.line - b.line)
-}
-
 function RangeStrip({
   dist,
   primaryLine,
-  comparisons,
 }: {
   dist: KDistribution
   primaryLine: number | null
-  comparisons: BookComparison[]
 }) {
   const [hover, setHover] = useState(false)
 
@@ -136,12 +125,10 @@ function RangeStrip({
   const median = dist.median ?? gridAt(dist, 0.5)
   if (p05 == null || p95 == null) return null
 
-  const bookLines = uniqueBookLines(comparisons)
-  const lineVals = bookLines.map((b) => b.line)
-
-  // Domain: pad so every book line + range marker sits inside the track.
-  const lo = Math.min(p05, ...(lineVals.length ? lineVals : [p05])) - 1
-  const hi = Math.max(p95, ...(lineVals.length ? lineVals : [p95])) + 1
+  // Domain: pad so the consensus line + range markers sit inside the track. Only the CONSENSUS
+  // (primary) line is drawn — per-book lines live in the table below, so the graph stays legible.
+  const lo = Math.min(p05, primaryLine ?? p05) - 1
+  const hi = Math.max(p95, primaryLine ?? p95) + 1
   const span = Math.max(hi - lo, 1)
   const pos = (v: number) => ((v - lo) / span) * 100
 
@@ -171,19 +158,18 @@ function RangeStrip({
             style={{ left: `${pos(median)}%` }}
           />
         )}
-        {/* one marker per distinct book line */}
-        {bookLines.map((b) => (
+        {/* consensus book line (single marker; per-book lines are in the table below) */}
+        {primaryLine != null && (
           <div
-            key={b.line}
             className="absolute top-1/2 h-8 w-[2px] -translate-x-1/2 -translate-y-1/2 bg-amber-400/90"
-            style={{ left: `${pos(b.line)}%` }}
-            title={`${b.line} — ${b.books.join(", ")}`}
+            style={{ left: `${pos(primaryLine)}%` }}
+            title={`Consensus book line: ${primaryLine}`}
           >
             <span className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium text-amber-400">
-              {b.line}
+              line {primaryLine}
             </span>
           </div>
-        ))}
+        )}
 
         {/* hover card — the calibrated confidence interval */}
         {hover && (
@@ -226,15 +212,16 @@ function RangeStrip({
 // Panel
 // ---------------------------------------------------------------------------
 
-export function PitcherKProjection({ pitcherId }: { pitcherId: number }) {
+export function PitcherKProjection({ pitcherId, asOf }: { pitcherId: number; asOf?: string | null }) {
   const { accessToken } = useAuth()
 
   const { data, isError } = useQuery<KProjection>({
-    queryKey: ["k-projection", pitcherId],
-    queryFn: () => apiFetch(`/players/${pitcherId}/k-projection`, {}, accessToken!),
+    queryKey: ["k-projection", pitcherId, asOf ?? "latest"],
+    queryFn: () =>
+      apiFetch(`/players/${pitcherId}/k-projection${asOf ? `?as_of=${asOf}` : ""}`, {}, accessToken!),
     enabled: !!accessToken,
     staleTime: 1000 * 60 * 30,
-    retry: false, // a 404 (no projection today) is expected — fail quietly
+    retry: false, // a 404 (no projection for this date) is expected — fail quietly
   })
 
   // No projection for this pitcher (not a probable starter today / pre-slate) → render nothing.
@@ -262,8 +249,8 @@ export function PitcherKProjection({ pitcherId }: { pitcherId: number }) {
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <div>
           <span className="text-lg font-bold text-white">{data.full_name ?? "—"}</span>
-          <span className="ml-2 text-xs text-gray-500">
-            {data.team ?? "—"}
+          <span className="ml-2 text-xs">
+            <span className="font-medium text-gray-200">{data.team ?? "—"}</span>
             {data.opponent ? <span className="text-gray-600"> vs {data.opponent}</span> : null}
           </span>
         </div>
@@ -314,7 +301,7 @@ export function PitcherKProjection({ pitcherId }: { pitcherId: number }) {
           )}
         </div>
 
-        <RangeStrip dist={dist} primaryLine={data.primary_line} comparisons={data.book_comparisons} />
+        <RangeStrip dist={dist} primaryLine={data.primary_line} />
 
         {/* Per-book transparency comparison */}
         {data.book_comparisons.length > 0 && (

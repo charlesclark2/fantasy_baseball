@@ -38,7 +38,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -176,7 +176,13 @@ def _pitcher_meta(target: str, pitcher_ids: list[int]) -> dict[int, dict]:
                 """
                 SELECT pp.probable_pitcher_id AS pid, pp.probable_pitcher_name AS nm,
                        pp.side AS side, g.home_team_name AS home_team, g.away_team_name AS away_team,
-                       TO_VARCHAR(g.game_date) AS game_dt
+                       -- g.game_date is a naive TIMESTAMP_NTZ that is ALREADY stored in UTC
+                       -- (e.g. 2026-06-29 22:40:00 = 6:40 PM EDT first pitch). Do NOT CONVERT_TIMEZONE:
+                       -- that reinterprets the naive value as the box's session TZ (PT) and shifts it
+                       -- +7h. Just format as-is and stamp 'Z' so it's an unambiguous UTC instant, which
+                       -- the browser renders in the VIEWER's local zone. (Mirrors how the EV Tracker
+                       -- consumes stg_statsapi_games.game_date — no conversion.)
+                       TO_VARCHAR(g.game_date, 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS game_dt
                 FROM baseball_data.betting.stg_statsapi_probable_pitchers pp
                 LEFT JOIN baseball_data.betting.stg_statsapi_games g ON g.game_pk = pp.game_pk
                 WHERE pp.game_date::date = %(d)s AND pp.probable_pitcher_id IS NOT NULL
@@ -352,50 +358,37 @@ def _ddb_put_index(target: str, payload: dict) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="E5.5 — daily pitcher K-projection serving writer")
-    ap.add_argument("--date", default=None, help="Target US baseball-day (YYYY-MM-DD); default = today.")
-    ap.add_argument("--min-year", type=int, default=2021, help="History floor for the league/EB context frame.")
-    ap.add_argument("--dry-run", action="store_true", help="Score + print; do not write to S3.")
-    args = ap.parse_args()
-
-    target = args.date or current_game_date_iso()
-    rng = np.random.default_rng(_SEED)
+def _run_for_date(target: str, args, bundle: dict, hist: pd.DataFrame, build_predictors, rng) -> None:
+    """Score + write the K-projection payloads for ONE target date. Fail-soft (WARN, returns) at
+    every step so a bad date in a backfill loop never aborts the rest."""
     print(f"[k-projection] target date = {target}")
-
-    bundle = _load_bundle()
-    if bundle is None:
-        _warn("no served bundle available — nothing written (promote strikeout_glm_v1.pkl to S3).")
-        return 0
 
     # 1) Today's pregame feature rows.
     try:
         today = _load_today_frame(target)
     except Exception as exc:  # noqa: BLE001
-        _warn(f"today-frame query failed — nothing written: {exc}")
-        return 0
+        _warn(f"[{target}] today-frame query failed — skipped: {exc}")
+        return
     if today.empty:
-        _warn(f"no probable pitchers for {target} (lineups not posted?) — nothing written.")
-        return 0
+        _warn(f"[{target}] no probable pitchers (lineups not posted?) — skipped.")
+        return
     print(f"[k-projection] {len(today)} probable starters for {target}")
 
     # 2) Concatenate with the cached historical frame so build_predictors derives league/EB/log5/framing
     #    exactly as at fit time (league_k_rate needs the prior completed season in the frame).
     try:
-        from betting_ml.scripts.prop_pricing.fit_prop_pricing import build_predictors, load_frame_cached
-        hist = load_frame_cached(args.min_year, int(target[:4]))
         frame = pd.concat([hist[_FRAME_COLS], today[_FRAME_COLS]], ignore_index=True)
         pred = build_predictors(frame, rate_mode="recency_blend")
     except Exception as exc:  # noqa: BLE001
-        _warn(f"feature derivation failed — nothing written: {exc}")
-        return 0
+        _warn(f"[{target}] feature derivation failed — skipped: {exc}")
+        return
 
     # 3) The today rows (identified by null strikeouts) that have the workload signal needed to score.
     today_mask = pred["strikeouts"].isna() & pred["game_pk"].isin(today["game_pk"].tolist())
     elig = pred[today_mask].dropna(subset=["starter_ip_mu", "starter_ip_dispersion"]).reset_index(drop=True)
     if elig.empty:
-        _warn(f"no scorable starters for {target} (starter_ip_v1 signal missing) — nothing written.")
-        return 0
+        _warn(f"[{target}] no scorable starters (starter_ip_v1 signal missing) — skipped.")
+        return
 
     samples = _score_samples(bundle, elig, rng)  # (n, n_draws)
 
@@ -465,6 +458,40 @@ def main() -> int:
             _warn(f"S3 index write failed: {exc}")
         print(f"[k-projection] wrote {written}/{len(elig)} projections + index ({index_payload['count']}) → "
               f"s3://{_S3_BUCKET}/{_S3_PROJECTION_PREFIX}/as_of={target}/")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="E5.5 — daily pitcher K-projection serving writer")
+    ap.add_argument("--date", default=None, help="Target US baseball-day (YYYY-MM-DD); default = today.")
+    ap.add_argument("--days-back", type=int, default=0,
+                    help="Also write the N calendar days BEFORE --date (backfill; e.g. --date 2026-06-30 "
+                         "--days-back 29 covers Jun 1–30). The history frame is loaded once and reused.")
+    ap.add_argument("--min-year", type=int, default=2021, help="History floor for the league/EB context frame.")
+    ap.add_argument("--dry-run", action="store_true", help="Score + print; do not write to S3/DynamoDB.")
+    args = ap.parse_args()
+
+    target = args.date or current_game_date_iso()
+    rng = np.random.default_rng(_SEED)
+
+    bundle = _load_bundle()
+    if bundle is None:
+        _warn("no served bundle available — nothing written (promote strikeout_glm_v1.pkl to S3).")
+        return 0
+
+    # Load the historical league/EB context frame ONCE (reused across every backfill date).
+    try:
+        from betting_ml.scripts.prop_pricing.fit_prop_pricing import build_predictors, load_frame_cached
+        hist = load_frame_cached(args.min_year, int(target[:4]))
+    except Exception as exc:  # noqa: BLE001
+        _warn(f"history frame load failed — nothing written: {exc}")
+        return 0
+
+    base = date.fromisoformat(target)
+    dates = [(base - timedelta(days=n)).isoformat() for n in range(max(args.days_back, 0) + 1)]
+    if len(dates) > 1:
+        print(f"[k-projection] backfill: {dates[-1]} … {dates[0]} ({len(dates)} dates)")
+    for d in dates:
+        _run_for_date(d, args, bundle, hist, build_predictors, rng)
     return 0
 
 
