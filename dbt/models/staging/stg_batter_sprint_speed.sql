@@ -45,11 +45,16 @@ deduped as (
         s.team_abbrev,
         s.season,
         s.snapshot_date,
-        s.sprint_speed_fts,
-        s.competitive_runs,
-        s.hp_to_1b                                         as hp_to_1b_sec,
-        s.hp_to_2b                                         as hp_to_2b_sec,
-        s.age,
+        -- E11.1-W11: the raw mirror is written from a dtype=str CSV (ingest_sprint_speed reads every
+        -- column as a string; the SF table coerced them to INTEGER/FLOAT on INSERT, so the old W4/W5
+        -- snapshot was typed). Reading lakehouse_raw directly yields VARCHAR numerics → cast at the
+        -- use-site (INC-23 pattern). try_cast → NULL on an empty/non-numeric string, matching SF's
+        -- coercion (so `where sprint_speed_fts is not null` / `competitive_runs > 0` behave identically).
+        try_cast(s.sprint_speed_fts as double)             as sprint_speed_fts,
+        try_cast(s.competitive_runs as integer)            as competitive_runs,
+        try_cast(s.hp_to_1b as double)                     as hp_to_1b_sec,
+        try_cast(s.hp_to_2b as double)                     as hp_to_2b_sec,
+        try_cast(s.age as integer)                         as age,
         s.position,
         s.ingestion_timestamp
     from source s

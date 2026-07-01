@@ -67,6 +67,41 @@ def get_zone_overlay(
     raise HTTPException(status_code=404, detail=f"Zone overlay not found for {batter_id}_vs_{pitcher_id}")
 
 
+@router.get("/{pitcher_id}/k-projection")
+def get_k_projection(pitcher_id: int, _: str = Depends(get_user_id)) -> dict:
+    """Return the E5.5 strikeout PROJECTION + model-vs-book transparency payload for a pitcher.
+
+    Read order: DynamoDB serving cache → S3 ml-artifacts serving prefix (today/yesterday/2d ago),
+    mirroring the zone-overlay endpoint. Returns 404 when no projection is written for this pitcher
+    (e.g. not a probable starter today, or pre-slate). 🔒 HONEST FRAMING: the payload is a projection
+    + transparency comparison, never a bet recommendation (best_alpha=0, is_bet_recommendation=False);
+    the caption/disclaimer are written by betting_ml.utils.k_projection_serving.
+    """
+    today = current_game_date_iso()  # INC-22 — match the LA baseball-day write key
+    payload = serving_cache.get_cache_latest(f"pitcher_k_projection/{pitcher_id}")
+    if payload:
+        return payload
+
+    artifacts_bucket = os.getenv("ARTIFACTS_BUCKET", "baseball-betting-ml-artifacts")
+    s3 = boto3.client("s3", region_name="us-east-2")
+    for days_back in range(3):
+        as_of = (date.fromisoformat(today) - timedelta(days=days_back)).isoformat()
+        key = f"baseball/serving/pitcher_k_projection/as_of={as_of}/{pitcher_id}.json"
+        try:
+            response = s3.get_object(Bucket=artifacts_bucket, Key=key)
+            return json.loads(response["Body"].read().decode("utf-8"))
+        except ClientError as e:
+            if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
+                continue
+            logger.warning("k_projection S3 error for pitcher=%s as_of=%s: %s", pitcher_id, as_of, e)
+            break
+        except Exception as e:  # noqa: BLE001
+            logger.warning("k_projection S3 read error: %s", e)
+            break
+
+    raise HTTPException(status_code=404, detail=f"K-projection not found for pitcher {pitcher_id}")
+
+
 @router.get("/{player_id}")
 def get_player(player_id: int, _: str = Depends(get_user_id)) -> dict:
     """Return the cached player profile for a given MLBAM player_id.
