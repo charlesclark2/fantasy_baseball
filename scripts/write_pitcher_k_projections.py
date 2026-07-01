@@ -36,8 +36,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -274,6 +275,43 @@ def _s3_put(key: str, body: bytes) -> None:
     make_s3_client().put_object(Bucket=_S3_BUCKET, Key=key, Body=body, ContentType="application/json")
 
 
+# DynamoDB serving cache = the PRIMARY read path (S3 is the fallback). Schema + region resolution
+# mirror app/backend/services/serving_cache.py EXACTLY so the backend's get_cache_latest finds it.
+# NB: the serving cache lives in AWS_REGION (default us-east-1) — NOT the S3 bucket's us-east-2.
+_SERVING_CACHE_TABLE = os.getenv("SERVING_CACHE_TABLE", "credence-prod-serving-cache")
+_SERVING_CACHE_REGION = os.getenv("AWS_REGION", "us-east-1")
+
+
+def _ddb_put(pitcher_id: int, target: str, payload: dict) -> None:
+    """Write the projection to the DynamoDB serving cache (primary path). Date-scoped (not permanent);
+    the backend's get_cache_latest picks the newest by updated_at. Instance-role credential chain."""
+    import boto3
+    tbl = boto3.resource("dynamodb", region_name=_SERVING_CACHE_REGION).Table(_SERVING_CACHE_TABLE)
+    tbl.put_item(Item={
+        "pk": "pitcher_k_projection",
+        "sk": f"{pitcher_id}#{target}",
+        "value": json.dumps(payload, default=float),
+        "is_permanent": False,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "cache_date": target,
+    })
+
+
+def _ddb_put_index(target: str, payload: dict) -> None:
+    """Write the daily index blob to the serving cache (key `pitcher_k_projection/index`), read by the
+    /projections list endpoint via get_cache_latest (newest index wins → robust to date rollover)."""
+    import boto3
+    tbl = boto3.resource("dynamodb", region_name=_SERVING_CACHE_REGION).Table(_SERVING_CACHE_TABLE)
+    tbl.put_item(Item={
+        "pk": "pitcher_k_projection",
+        "sk": f"index#{target}",
+        "value": json.dumps(payload, default=float),
+        "is_permanent": False,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "cache_date": target,
+    })
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -334,6 +372,7 @@ def main() -> int:
 
     grids = quantile_grid(samples, DEFAULT_QUANTILES)  # (n, n_quantiles)
     written = 0
+    index_rows: list[dict] = []
     for i in range(len(elig)):
         pid = int(elig["pitcher_id"].iloc[i])
         m = meta.get(pid, {})
@@ -350,21 +389,42 @@ def main() -> int:
             mean=mean_i, std=std_i, calib_80=_CALIB_80,
             book_comparisons=comparisons, generated_at=f"{target}T00:00:00Z",
         )
+        index_rows.append(kps.index_row(payload))
         if args.dry_run:
             print(f"  [dry-run] {pid} {name}: mean={mean_i:.2f} lines={len(lines)} "
                   f"primary={payload['primary_line']}")
             continue
+        body = json.dumps(payload, default=float).encode()
+        # PRIMARY: DynamoDB serving cache (non-fatal — S3 is the fallback the endpoint also reads).
+        try:
+            _ddb_put(pid, target, payload)
+        except Exception as exc:  # noqa: BLE001
+            _warn(f"DynamoDB write failed for pitcher {pid} (S3 fallback still covers): {exc}")
+        # FALLBACK: S3 serving prefix.
         key = f"{_S3_PROJECTION_PREFIX}/as_of={target}/{pid}.json"
         try:
-            _s3_put(key, json.dumps(payload, default=float).encode())
+            _s3_put(key, body)
             written += 1
         except Exception as exc:  # noqa: BLE001
             _warn(f"S3 write failed for pitcher {pid}: {exc}")
 
+    # Daily index blob — powers the /projections list page (one fetch for the whole slate).
+    index_payload = kps.build_index_payload(index_rows, game_date=target,
+                                            generated_at=f"{target}T00:00:00Z")
     if args.dry_run:
-        print(f"[k-projection] dry-run complete — {len(elig)} starters scored (no writes).")
+        print(f"[k-projection] dry-run complete — {len(elig)} starters scored, "
+              f"index would list {index_payload['count']} (no writes).")
     else:
-        print(f"[k-projection] wrote {written}/{len(elig)} projections → "
+        index_body = json.dumps(index_payload, default=float).encode()
+        try:
+            _ddb_put_index(target, index_payload)
+        except Exception as exc:  # noqa: BLE001
+            _warn(f"DynamoDB index write failed (S3 fallback still covers): {exc}")
+        try:
+            _s3_put(f"{_S3_PROJECTION_PREFIX}/as_of={target}/index.json", index_body)
+        except Exception as exc:  # noqa: BLE001
+            _warn(f"S3 index write failed: {exc}")
+        print(f"[k-projection] wrote {written}/{len(elig)} projections + index ({index_payload['count']}) → "
               f"s3://{_S3_BUCKET}/{_S3_PROJECTION_PREFIX}/as_of={target}/")
     return 0
 

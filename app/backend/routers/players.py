@@ -67,6 +67,58 @@ def get_zone_overlay(
     raise HTTPException(status_code=404, detail=f"Zone overlay not found for {batter_id}_vs_{pitcher_id}")
 
 
+def _empty_index(game_date: str | None) -> dict:
+    return {"game_date": game_date, "count": 0, "pitchers": [],
+            "is_bet_recommendation": False, "best_alpha": 0}
+
+
+def _index_from_s3(as_of: str) -> dict | None:
+    """Read the daily index blob for one date from S3, or None on miss."""
+    artifacts_bucket = os.getenv("ARTIFACTS_BUCKET", "baseball-betting-ml-artifacts")
+    s3 = boto3.client("s3", region_name="us-east-2")
+    key = f"baseball/serving/pitcher_k_projection/as_of={as_of}/index.json"
+    try:
+        response = s3.get_object(Bucket=artifacts_bucket, Key=key)
+        return json.loads(response["Body"].read().decode("utf-8"))
+    except ClientError as e:
+        if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
+            return None
+        logger.warning("k_projection index S3 error as_of=%s: %s", as_of, e)
+        return None
+    except Exception as e:  # noqa: BLE001
+        logger.warning("k_projection index S3 read error: %s", e)
+        return None
+
+
+@router.get("/k-projections")
+def list_k_projections(as_of: str | None = None, _: str = Depends(get_user_id)) -> dict:
+    """Return the daily K-projection index (one summary row per probable starter) for the /props page.
+
+    `as_of` (YYYY-MM-DD) selects a specific slate; omitted → the latest available. Read order:
+    DynamoDB serving cache → S3 index fallback. Returns an empty slate (not 404) when nothing is
+    written for the requested date, so the date picker degrades gracefully.
+
+    🔒 HONEST FRAMING: projections + transparency only; best_alpha=0, is_bet_recommendation=False.
+    """
+    if as_of:
+        payload = serving_cache.get_cache("pitcher_k_projection/index", as_of)
+        if payload:
+            return payload
+        return _index_from_s3(as_of) or _empty_index(as_of)
+
+    # No date requested → the most recent index (robust to date rollover), then a short S3 lookback.
+    payload = serving_cache.get_cache_latest("pitcher_k_projection/index")
+    if payload:
+        return payload
+    today = current_game_date_iso()
+    for days_back in range(7):
+        d = (date.fromisoformat(today) - timedelta(days=days_back)).isoformat()
+        hit = _index_from_s3(d)
+        if hit:
+            return hit
+    return _empty_index(None)
+
+
 @router.get("/{pitcher_id}/k-projection")
 def get_k_projection(pitcher_id: int, _: str = Depends(get_user_id)) -> dict:
     """Return the E5.5 strikeout PROJECTION + model-vs-book transparency payload for a pitcher.

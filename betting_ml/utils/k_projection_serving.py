@@ -196,6 +196,75 @@ def build_k_projection_payload(
 
 
 # ---------------------------------------------------------------------------
+# Daily index row — compact per-pitcher summary for the "today's projections" list page.
+# ---------------------------------------------------------------------------
+
+def index_row(payload: dict[str, Any]) -> dict[str, Any]:
+    """Compact summary of a full projection payload for the daily list page (one card per pitcher).
+
+    Carries just what a card renders — identity, the projected mean/median, the 80% interval endpoints,
+    the primary posted line, and the neutral model-vs-book delta AT that line — so the list endpoint
+    ships one small blob instead of N full payloads. The full distribution + per-book table stay on the
+    detail (player) page. NO edge/EV field (honest framing)."""
+    dist = payload.get("distribution", {}) or {}
+    levels = dist.get("quantile_levels", []) or []
+    grid = dist.get("k_quantile_grid", []) or []
+
+    def _at(level: float) -> float | None:
+        for q, g in zip(levels, grid):
+            if abs(float(q) - level) < 1e-6:
+                return float(g)
+        return None
+
+    primary = payload.get("primary_line")
+    at_primary = None
+    if primary is not None:
+        for c in payload.get("book_comparisons", []) or []:
+            if c.get("line") == primary:
+                at_primary = c
+                break
+    return {
+        "pitcher_id": payload.get("pitcher_id"),
+        "full_name": payload.get("full_name"),
+        "team": payload.get("team"),
+        "opponent": payload.get("opponent"),
+        "game_pk": payload.get("game_pk"),
+        "game_date": payload.get("game_date"),
+        "mean": dist.get("mean"),
+        "median": dist.get("median"),
+        "p10": _at(0.10),
+        "p90": _at(0.90),
+        "p05": dist.get("p05"),
+        "p95": dist.get("p95"),
+        "primary_line": primary,
+        "book_count": len(payload.get("book_comparisons", []) or []),
+        "model_p_over": (at_primary or {}).get("model_p_over"),
+        "model_vs_book_p_over": (at_primary or {}).get("model_vs_book_p_over"),
+        "model_mean_minus_line": (at_primary or {}).get("model_mean_minus_line"),
+    }
+
+
+def build_index_payload(rows: Sequence[dict[str, Any]], game_date: str | None,
+                        generated_at: str | None = None) -> dict[str, Any]:
+    """The daily 'today's projections' list blob: the summary rows + honest-framing caption/disclaimer.
+
+    Rows are sorted by projected mean (desc) so the highest-strikeout projections lead. best_alpha=0 /
+    is_bet_recommendation=False travel with the list too."""
+    ordered = sorted(rows, key=lambda r: (r.get("mean") is not None, r.get("mean") or 0.0), reverse=True)
+    return {
+        "game_date": game_date,
+        "count": len(ordered),
+        "pitchers": ordered,
+        "model_version": MODEL_VERSION,
+        "caption": CAPTION,
+        "disclaimer": DISCLAIMER,
+        "best_alpha": 0,
+        "is_bet_recommendation": False,
+        "generated_at": generated_at,
+    }
+
+
+# ---------------------------------------------------------------------------
 # small helpers
 # ---------------------------------------------------------------------------
 

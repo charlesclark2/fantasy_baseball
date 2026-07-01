@@ -22,8 +22,10 @@ from betting_ml.utils.k_projection_serving import (
     CAPTION,
     DISCLAIMER,
     book_comparison_row,
+    build_index_payload,
     build_k_projection_payload,
     comparison_from_samples,
+    index_row,
     summarize_distribution,
 )
 
@@ -160,6 +162,50 @@ def test_primary_line_none_when_no_books():
     assert p["book_comparisons"] == []
 
 
+# ── daily index (list page) ─────────────────────────────────────────────────
+
+def test_index_row_extracts_summary():
+    p = _sample_payload()  # primary line 5.5, bovada+fanduel at 5.5 (model_p_over 0.61)
+    row = index_row(p)
+    assert row["pitcher_id"] == 543037
+    assert row["full_name"] == "Gerrit Cole"
+    assert row["primary_line"] == 5.5
+    assert row["mean"] == 6.2
+    assert row["p10"] == 3 and row["p90"] == 19   # grid=range(2,21): level idx 1→3, 17→19
+    assert row["model_p_over"] == 0.61            # pulled from the 5.5 comparison row
+    assert row["book_count"] == 3
+    # index row must not leak edge/EV keys either
+    assert {"edge_over", "ev_over", "best_ev"}.isdisjoint(row.keys())
+
+
+def test_index_row_no_books():
+    p = build_k_projection_payload(
+        pitcher_id=1, full_name="x", team=None, game_pk=None, game_date="2026-06-30", opponent=None,
+        quantile_levels=_QUANTILES, k_quantile_grid=list(range(19)), mean=5.0, std=2.0,
+        calib_80=0.8, book_comparisons=[],
+    )
+    row = index_row(p)
+    assert row["primary_line"] is None
+    assert row["model_p_over"] is None
+    assert row["book_count"] == 0
+
+
+def test_build_index_payload_sorts_by_mean_desc_and_is_honest():
+    rows = [
+        index_row(build_k_projection_payload(
+            pitcher_id=i, full_name=f"P{i}", team=None, game_pk=None, game_date="2026-06-30",
+            opponent=None, quantile_levels=_QUANTILES, k_quantile_grid=list(range(19)),
+            mean=m, std=2.0, calib_80=0.8, book_comparisons=[]))
+        for i, m in [(1, 4.0), (2, 8.0), (3, 6.0)]
+    ]
+    idx = build_index_payload(rows, game_date="2026-06-30", generated_at="2026-06-30T00:00:00Z")
+    assert idx["count"] == 3
+    assert [r["mean"] for r in idx["pitchers"]] == [8.0, 6.0, 4.0]  # desc
+    assert idx["best_alpha"] == 0 and idx["is_bet_recommendation"] is False
+    assert idx["disclaimer"] == DISCLAIMER
+    json.dumps(idx)  # serialisable
+
+
 # ── HONEST-FRAMING GUARD (the crux of E5.5) ─────────────────────────────────
 
 # Words/phrases that would imply a profitability / bet recommendation. Banned from the user-facing
@@ -173,7 +219,10 @@ _BANNED = [
 _BANNED_RE = re.compile("|".join(_BANNED), re.IGNORECASE)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_FRONTEND_COMPONENT = _REPO_ROOT / "frontend" / "components" / "pitcher-k-projection.tsx"
+_FRONTEND_SURFACES = [
+    _REPO_ROOT / "frontend" / "components" / "pitcher-k-projection.tsx",
+    _REPO_ROOT / "frontend" / "app" / "props" / "page.tsx",
+]
 
 
 def test_caption_and_disclaimer_are_honest():
@@ -186,14 +235,13 @@ def test_caption_and_disclaimer_are_honest():
     assert "no profitability claim" in low
 
 
-def test_frontend_component_has_no_bet_rec_language():
-    """The shipped pitcher-page panel must carry no +EV / edge / win-rate / bet-rec wording."""
-    if not _FRONTEND_COMPONENT.exists():
-        pytest.skip("frontend component not present in this checkout")
-    src = _FRONTEND_COMPONENT.read_text(encoding="utf-8")
-    # Strip the model-vs-BOOK token so the literal substring 'book' etc. never trips a word boundary,
-    # and ignore the eslint/import noise — we scan the rendered copy + identifiers.
+@pytest.mark.parametrize("surface", _FRONTEND_SURFACES, ids=lambda p: p.name)
+def test_frontend_surface_has_no_bet_rec_language(surface):
+    """Every shipped K-projection surface must carry no +EV / edge / win-rate / bet-rec wording,
+    and must surface the projection-not-advice disclaimer copy."""
+    if not surface.exists():
+        pytest.skip(f"{surface.name} not present in this checkout")
+    src = surface.read_text(encoding="utf-8")
     hits = sorted({m.group(0) for m in _BANNED_RE.finditer(src)})
-    assert not hits, f"banned profitability language in {_FRONTEND_COMPONENT.name}: {hits}"
-    # Must surface the disclaimer copy (projection, not advice).
+    assert not hits, f"banned profitability language in {surface.name}: {hits}"
     assert "not betting advice" in src.lower()
