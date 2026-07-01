@@ -10,6 +10,7 @@ import { AuthGuard } from "@/components/auth-guard"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/lib/auth-context"
 import { apiFetch } from "@/lib/api"
+import { PitcherKProjection } from "@/components/pitcher-k-projection"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -373,6 +374,9 @@ function PitcherView({ profile }: { profile: PitcherProfile }) {
           </div>
         </section>
       )}
+
+      {/* Strikeout projection (E5.5) — renders only when a projection is served for this pitcher */}
+      <PitcherKProjection pitcherId={profile.player_id} />
 
       {/* Game log */}
       <section>

@@ -1,0 +1,377 @@
+"""write_pitcher_k_projections.py — Edge Program Story E5.5 daily K-PROJECTION writer.
+
+Scores today's PROBABLE pitchers with the E5.2 served strikeout model (`strikeout_glm_v1`), joins the
+live K-prop book lines (S3 props feed), and writes an honest model-vs-book PROJECTION payload to the
+serving S3 prefix that the pitcher player page reads (DynamoDB serving cache → S3 fallback).
+
+🔒 HONEST FRAMING (E5.5 crux): the payload is a PROJECTION + transparency comparison, NEVER a "+EV" /
+bet recommendation — E5.4 proved no cashable edge (best_alpha=0). The user-facing prose + the no-bet-rec
+posture are baked into `betting_ml.utils.k_projection_serving` (asserted by test_k_projection_serving.py).
+
+TIER = WARN / ALERT-loud-but-continue (E11.7): peripheral, app-cosmetic. Any failure logs a WARNING to
+stderr and the script exits 0 — it NEVER blocks predictions or serving. Mirrors the E13.10 zone-overlay
+writer (`generate_zone_overlays_today.py`): write ONLY to the S3 serving prefix
+  s3://baseball-betting-ml-artifacts/baseball/serving/pitcher_k_projection/as_of=<date>/<pitcher_id>.json
+The backend endpoint tries today → yesterday → 2-days-ago, so writing at today's as-of date keeps a
+just-played slate reachable without per-date keys.
+
+DATA PATH (offline writer — Snowflake/DuckDB at WRITE time is fine; the REQUEST path stays cache→S3):
+  * served model bundle: S3 (load_artifact) → local fallback (gitignored .pkl).
+  * pregame K feature frame for today's starters: ONE Snowflake query mirroring the E5.2 _FRAME_QUERY
+    (trailing windows as-of the target date + the pregame signal/feature marts), concatenated with the
+    cached historical frame so `build_predictors` derives league/EB/log5/framing exactly as at fit time.
+  * live K-prop lines: DuckDB over the S3 props parquet (mlb/props/market=pitcher_strikeouts/...).
+
+Usage:
+    # daily (Dagster / cron — scores the current US baseball-day slate):
+    uv run python scripts/write_pitcher_k_projections.py
+
+    # specific date smoke test (no S3 writes):
+    uv run python scripts/write_pitcher_k_projections.py --date 2026-06-27 --dry-run
+
+This is a >1-min job (Snowflake frame + MC scoring) — HAND IT TO THE OPERATOR.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from datetime import date
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
+from betting_ml.utils import k_projection_serving as kps
+
+_S3_BUCKET = "baseball-betting-ml-artifacts"
+_S3_PROJECTION_PREFIX = "baseball/serving/pitcher_k_projection"
+# Served bundle: S3 (promoted by the operator) → local fallback (gitignored).
+_BUNDLE_S3 = f"s3://{_S3_BUCKET}/mlb/models/prop_pricing_v1/strikeout_glm_v1.pkl"
+_BUNDLE_LOCAL = PROJECT_ROOT / "betting_ml" / "models" / "sub_models" / "prop_pricing_v1" / "strikeout_glm_v1.pkl"
+_PROPS_GLOB = f"s3://{_S3_BUCKET}/mlb/props/market=pitcher_strikeouts/season=*/date={{date}}/data.parquet"
+
+# E5.2 served calib_80 (the calibration that makes the projection a product) — surfaced for context.
+_CALIB_80 = 0.8104
+_N_DRAWS = 10_000
+_SEED = 7
+
+
+def _warn(msg: str) -> None:
+    """ALERT-loud-but-continue: every skip/failure is a stderr WARNING (never a silent pass)."""
+    print(f"[k-projection][WARNING] {msg}", file=sys.stderr)
+
+
+# ---------------------------------------------------------------------------
+# Today's pregame K-feature frame — mirrors fit_prop_pricing._FRAME_QUERY, as-of the target date.
+# Trailing career/season counts use ONLY games strictly before the target date (leak-clean); the
+# pregame signal/feature marts are joined at the target game_pk (they are pregame by construction).
+# ---------------------------------------------------------------------------
+
+_TODAY_FRAME_QUERY = """
+WITH starters AS (
+    SELECT game_pk, game_date, side,
+           CASE WHEN side = 'home' THEN TRUE ELSE FALSE END AS is_home_team,
+           probable_pitcher_id AS pitcher_id
+    FROM baseball_data.betting.stg_statsapi_probable_pitchers
+    WHERE game_date::date = %(d)s
+      AND probable_pitcher_id IS NOT NULL
+),
+-- Leak-clean trailing aggregates as-of the target date (strictly prior games only).
+hist AS (
+    SELECT pitcher_id,
+           SUM(strikeouts)    AS k_career,
+           SUM(batters_faced) AS bf_career,
+           SUM(outs_recorded) AS outs_career
+    FROM baseball_data.betting.mart_starting_pitcher_game_log
+    WHERE game_date::date < %(d)s
+      AND batters_faced >= 1 AND outs_recorded >= 1
+    GROUP BY pitcher_id
+),
+hist_season AS (
+    SELECT pitcher_id,
+           SUM(strikeouts)    AS k_season,
+           SUM(batters_faced) AS bf_season,
+           SUM(outs_recorded) AS outs_season
+    FROM baseball_data.betting.mart_starting_pitcher_game_log
+    WHERE game_date::date < %(d)s
+      AND game_year = YEAR(%(d)s::date)
+      AND batters_faced >= 1 AND outs_recorded >= 1
+    GROUP BY pitcher_id
+)
+SELECT
+    s.game_pk, s.game_date, YEAR(s.game_date)::int AS game_year, s.pitcher_id, s.side, s.is_home_team,
+    CAST(NULL AS FLOAT) AS strikeouts, CAST(NULL AS FLOAT) AS batters_faced, CAST(NULL AS FLOAT) AS outs_recorded,
+    h.k_career, h.bf_career, h.outs_career,
+    hs.k_season, hs.bf_season, hs.outs_season,
+    sig.starter_ip_mu, sig.starter_ip_dispersion,
+    lf.avg_k_pct_30d AS opp_lineup_k_pct,
+    CASE WHEN s.is_home_team THEN gf.home_catcher_framing_runs
+         ELSE gf.away_catcher_framing_runs END AS catcher_framing_runs,
+    sf.k_pct_7d, sf.k_pct_30d, sf.whiff_rate_30d, sf.csw_pct_3start,
+    sf.velo_delta_3start, sf.fastball_velo_trend
+FROM starters s
+LEFT JOIN hist        h  ON h.pitcher_id  = s.pitcher_id
+LEFT JOIN hist_season hs ON hs.pitcher_id = s.pitcher_id
+LEFT JOIN baseball_data.betting_features.starter_ip_signals sig
+    ON sig.game_pk = s.game_pk AND sig.side = s.side AND sig.model_version = 'starter_ip_v1'
+LEFT JOIN baseball_data.betting_features.feature_pregame_lineup_features lf
+    ON lf.game_pk = s.game_pk
+   AND lf.side = CASE WHEN s.is_home_team THEN 'away' ELSE 'home' END
+LEFT JOIN baseball_data.betting_features.feature_pregame_game_features gf
+    ON gf.game_pk = s.game_pk
+LEFT JOIN baseball_data.betting_features.feature_pregame_starter_features sf
+    ON sf.game_pk = s.game_pk AND sf.side = s.side
+ORDER BY s.game_pk, s.side
+"""
+
+# Column order the historical cached frame uses — the today-frame is aligned to it before concat.
+_FRAME_COLS = [
+    "game_pk", "game_date", "game_year", "pitcher_id", "side", "is_home_team",
+    "strikeouts", "batters_faced", "outs_recorded",
+    "k_career", "bf_career", "outs_career", "k_season", "bf_season", "outs_season",
+    "starter_ip_mu", "starter_ip_dispersion", "opp_lineup_k_pct", "catcher_framing_runs",
+    "k_pct_7d", "k_pct_30d", "whiff_rate_30d", "csw_pct_3start", "velo_delta_3start", "fastball_velo_trend",
+]
+
+
+def _load_today_frame(target: str) -> pd.DataFrame:
+    """One Snowflake query: today's probable-pitcher pregame K-feature rows (mirrors _FRAME_QUERY)."""
+    from betting_ml.utils.data_loader import get_snowflake_connection
+    conn = get_snowflake_connection(schema="betting_features")
+    try:
+        cur = conn.cursor()
+        cur.execute(_TODAY_FRAME_QUERY, {"d": target})
+        cols = [c[0].lower() for c in cur.description]
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+    df = pd.DataFrame(rows, columns=cols)
+    if df.empty:
+        return df
+    df["game_date"] = pd.to_datetime(df["game_date"], errors="coerce")
+    for c in [c for c in df.columns if c not in ("side", "game_date")]:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    return df
+
+
+def _pitcher_meta(target: str, pitcher_ids: list[int]) -> dict[int, dict]:
+    """Best-effort id → {full_name, team, opponent} for the panel header. Cosmetic — isolated in its
+    own try so a column/name mismatch never kills the scoring path (the AC-critical part)."""
+    meta: dict[int, dict] = {}
+    if not pitcher_ids:
+        return meta
+    try:
+        from betting_ml.utils.data_loader import get_snowflake_connection
+        conn = get_snowflake_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT pp.probable_pitcher_id AS pid, pp.probable_pitcher_name AS nm,
+                       pp.side AS side, g.home_team_name AS home_team, g.away_team_name AS away_team
+                FROM baseball_data.betting.stg_statsapi_probable_pitchers pp
+                LEFT JOIN baseball_data.betting.stg_statsapi_games g ON g.game_pk = pp.game_pk
+                WHERE pp.game_date::date = %(d)s AND pp.probable_pitcher_id IS NOT NULL
+                """,
+                {"d": target},
+            )
+            for r in cur.fetchall():
+                pid, nm, side, home_team, away_team = r
+                is_home = (side == "home")
+                team = home_team if is_home else away_team
+                opp = away_team if is_home else home_team
+                meta[int(pid)] = {"full_name": nm, "team": team, "opponent": opp}
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001 — cosmetic, never fatal
+        _warn(f"pitcher meta join skipped (names/teams will be null): {exc}")
+    return meta
+
+
+# ---------------------------------------------------------------------------
+# Live K-prop book lines — DuckDB over the S3 props parquet (latest snapshot per book×player).
+# ---------------------------------------------------------------------------
+
+def _load_book_lines(target: str) -> dict[str, list[dict]]:
+    """{normalized_player_name: [{book, line, over_odds, under_odds}, ...]} for the target date.
+
+    Reads the S3 props parquet via DuckDB (credential_chain, us-east-2). Keeps the LATEST snapshot per
+    (bookmaker, player). Fail-open: any error → {} (the projection still renders, sans book lines)."""
+    from betting_ml.utils.prop_edge import normalize_name
+    out: dict[str, list[dict]] = {}
+    glob = _PROPS_GLOB.format(date=target)
+    try:
+        import duckdb
+        con = duckdb.connect()
+        con.execute("INSTALL httpfs; LOAD httpfs")
+        con.execute("CREATE OR REPLACE SECRET s3lines (TYPE S3, PROVIDER credential_chain, REGION 'us-east-2')")
+        rows = con.execute(
+            f"""
+            WITH ranked AS (
+                SELECT player_name, bookmaker_key, line, over_price, under_price,
+                       ROW_NUMBER() OVER (PARTITION BY bookmaker_key, player_name
+                                          ORDER BY snapshot_ts DESC) AS rn
+                FROM read_parquet('{glob}', hive_partitioning=1, union_by_name=true)
+                WHERE line IS NOT NULL
+            )
+            SELECT player_name, bookmaker_key, line, over_price, under_price
+            FROM ranked WHERE rn = 1
+            """
+        ).fetchall()
+        con.close()
+    except Exception as exc:  # noqa: BLE001 — fail-open
+        _warn(f"book-line read skipped (fail-open, no lines): {exc}")
+        return out
+    for player_name, book, line, over_price, under_price in rows:
+        key = normalize_name(player_name)
+        if not key:
+            continue
+        out.setdefault(key, []).append({
+            "book": book, "line": float(line),
+            "over_odds": over_price, "under_odds": under_price,
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Scoring — the E5.2 served bundle's serve recipe (mu → Poisson → scale_spread).
+# ---------------------------------------------------------------------------
+
+def _score_samples(bundle: dict, elig: pd.DataFrame, rng: np.random.Generator) -> np.ndarray:
+    """(n_pitchers, n_draws) K-count samples via the served bundle recipe.
+
+    serve: mu = clip(glm.predict(scaler.transform(impute(X[features]))), 0.3, None);
+           K ~ Poisson(mu); scale_spread(K, spread_scale)."""
+    from betting_ml.scripts.prop_pricing.bakeoff_strikeouts import _learned_matrix
+    from betting_ml.utils.prop_pricing import scale_spread
+    X, _ = _learned_matrix(elig, elig.index, bundle["impute"])
+    mu = np.clip(bundle["model"].predict(bundle["scaler"].transform(X)), 0.3, None)
+    n_draws = int(bundle.get("n_draws", _N_DRAWS))
+    samp = rng.poisson(mu[:, None], size=(len(mu), n_draws)).astype(float)
+    return scale_spread(samp, float(bundle["spread_scale"]))
+
+
+def _load_bundle() -> dict | None:
+    from betting_ml.utils.artifact_store import load_artifact
+    for src in (_BUNDLE_S3, _BUNDLE_LOCAL):
+        try:
+            bundle = load_artifact(src)
+            print(f"[k-projection] loaded served bundle from {src}")
+            return bundle
+        except Exception as exc:  # noqa: BLE001
+            _warn(f"bundle load failed from {src}: {exc}")
+    return None
+
+
+def _s3_put(key: str, body: bytes) -> None:
+    from scripts.utils.lakehouse_raw_writer import make_s3_client
+    make_s3_client().put_object(Bucket=_S3_BUCKET, Key=key, Body=body, ContentType="application/json")
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="E5.5 — daily pitcher K-projection serving writer")
+    ap.add_argument("--date", default=None, help="Target US baseball-day (YYYY-MM-DD); default = today.")
+    ap.add_argument("--min-year", type=int, default=2021, help="History floor for the league/EB context frame.")
+    ap.add_argument("--dry-run", action="store_true", help="Score + print; do not write to S3.")
+    args = ap.parse_args()
+
+    target = args.date or current_game_date_iso()
+    rng = np.random.default_rng(_SEED)
+    print(f"[k-projection] target date = {target}")
+
+    bundle = _load_bundle()
+    if bundle is None:
+        _warn("no served bundle available — nothing written (promote strikeout_glm_v1.pkl to S3).")
+        return 0
+
+    # 1) Today's pregame feature rows.
+    try:
+        today = _load_today_frame(target)
+    except Exception as exc:  # noqa: BLE001
+        _warn(f"today-frame query failed — nothing written: {exc}")
+        return 0
+    if today.empty:
+        _warn(f"no probable pitchers for {target} (lineups not posted?) — nothing written.")
+        return 0
+    print(f"[k-projection] {len(today)} probable starters for {target}")
+
+    # 2) Concatenate with the cached historical frame so build_predictors derives league/EB/log5/framing
+    #    exactly as at fit time (league_k_rate needs the prior completed season in the frame).
+    try:
+        from betting_ml.scripts.prop_pricing.fit_prop_pricing import build_predictors, load_frame_cached
+        hist = load_frame_cached(args.min_year, int(target[:4]))
+        frame = pd.concat([hist[_FRAME_COLS], today[_FRAME_COLS]], ignore_index=True)
+        pred = build_predictors(frame, rate_mode="recency_blend")
+    except Exception as exc:  # noqa: BLE001
+        _warn(f"feature derivation failed — nothing written: {exc}")
+        return 0
+
+    # 3) The today rows (identified by null strikeouts) that have the workload signal needed to score.
+    today_mask = pred["strikeouts"].isna() & pred["game_pk"].isin(today["game_pk"].tolist())
+    elig = pred[today_mask].dropna(subset=["starter_ip_mu", "starter_ip_dispersion"]).reset_index(drop=True)
+    if elig.empty:
+        _warn(f"no scorable starters for {target} (starter_ip_v1 signal missing) — nothing written.")
+        return 0
+
+    samples = _score_samples(bundle, elig, rng)  # (n, n_draws)
+
+    # 4) Live book lines + per-pitcher metadata.
+    book_lines_by_name = _load_book_lines(target)
+    meta = _pitcher_meta(target, elig["pitcher_id"].astype(int).tolist())
+
+    from betting_ml.utils.prop_edge import normalize_name
+    from betting_ml.utils.totals_distribution import DEFAULT_QUANTILES, quantile_grid
+
+    grids = quantile_grid(samples, DEFAULT_QUANTILES)  # (n, n_quantiles)
+    written = 0
+    for i in range(len(elig)):
+        pid = int(elig["pitcher_id"].iloc[i])
+        m = meta.get(pid, {})
+        name = m.get("full_name")
+        samp_i = samples[i]
+        mean_i, std_i = float(samp_i.mean()), float(samp_i.std())
+        lines = book_lines_by_name.get(normalize_name(name), []) if name else []
+        comparisons = kps.comparison_from_samples(samp_i, lines, model_mean=mean_i)
+        payload = kps.build_k_projection_payload(
+            pitcher_id=pid, full_name=name, team=m.get("team"),
+            game_pk=int(elig["game_pk"].iloc[i]),
+            game_date=target, opponent=m.get("opponent"),
+            quantile_levels=DEFAULT_QUANTILES, k_quantile_grid=grids[i],
+            mean=mean_i, std=std_i, calib_80=_CALIB_80,
+            book_comparisons=comparisons, generated_at=f"{target}T00:00:00Z",
+        )
+        if args.dry_run:
+            print(f"  [dry-run] {pid} {name}: mean={mean_i:.2f} lines={len(lines)} "
+                  f"primary={payload['primary_line']}")
+            continue
+        key = f"{_S3_PROJECTION_PREFIX}/as_of={target}/{pid}.json"
+        try:
+            _s3_put(key, json.dumps(payload, default=float).encode())
+            written += 1
+        except Exception as exc:  # noqa: BLE001
+            _warn(f"S3 write failed for pitcher {pid}: {exc}")
+
+    if args.dry_run:
+        print(f"[k-projection] dry-run complete — {len(elig)} starters scored (no writes).")
+    else:
+        print(f"[k-projection] wrote {written}/{len(elig)} projections → "
+              f"s3://{_S3_BUCKET}/{_S3_PROJECTION_PREFIX}/as_of={target}/")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except Exception as exc:  # noqa: BLE001 — WARN-tier: never block the pipeline.
+        _warn(f"unhandled error — exiting 0 (peripheral writer): {exc}")
+        sys.exit(0)
