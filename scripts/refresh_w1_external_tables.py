@@ -248,6 +248,18 @@ W8B_TABLES = [
     "feature_pregame_game_features",
 ]
 
+# E11.1-W11 Tier-B: the umpire stg + feature external tables (created by
+# scripts/ddl/generate_w11b_external_tables.py over the run_w1_lakehouse.py --w11b parquet).
+# BEST-EFFORT (WARN if missing) like W4-W9 during the opt-in rollout. Refreshed via the dedicated
+# --w11b path (the W11b mirror op calls it right after the build). All 4 are TABLE on the Snowflake
+# side (no incrementals) → no DROP+rebuild at cutover.
+W11B_TABLES = [
+    "stg_statsapi_umpire_game_log",
+    "stg_statsapi_umpire_snapshots",
+    "feature_pregame_umpire_features",
+    "feature_pregame_umpire_status",
+]
+
 
 def _load_private_key():
     key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
@@ -326,6 +338,11 @@ def main():
                          "external tables (after run_w1_lakehouse.py --w8b). Best-effort — these "
                          "don't exist until the W8b build is enabled, so a missing table is an "
                          "expected skip.")
+    ap.add_argument("--w11b", action="store_true",
+                    help="E11.1-W11 Tier-B: refresh only the 4 umpire stg + feature external "
+                         "tables (after run_w1_lakehouse.py --w11b). Best-effort — these don't "
+                         "exist until the W11b build is enabled, so a missing table is an "
+                         "expected skip.")
     args = ap.parse_args()
 
     # E11.1-W8a: the W8a build op refreshes its own external tables right after the build
@@ -344,6 +361,15 @@ def main():
         print("Refreshing W8b serving-aggregator + complex-upstream external tables (--w8b):")
         _refresh(W8B_TABLES, required=set())
         print("W8b external-table refresh complete (best-effort).")
+        return
+
+    # E11.1-W11 Tier-B: the umpire mirror op refreshes its own external tables right after the
+    # build (mirror-tier — best-effort, never required). Kept off the default daily refresh list
+    # until cutover (the dbt else branches that read them aren't merged/flipped until then).
+    if args.w11b:
+        print("Refreshing W11b umpire stg + feature external tables (--w11b):")
+        _refresh(W11B_TABLES, required=set())
+        print("W11b umpire external-table refresh complete (best-effort).")
         return
 
     # E11.1-W9: the signal-store mirror op refreshes its own external tables right after writing

@@ -196,11 +196,25 @@ def _run_w11_nightly(context, script: str, args: list[str] | None = None) -> Non
     run_w1_lakehouse_op. Log a WARNING (visible in Dagster) and continue; the next day's run retries."""
     try:
         _run_script(context, script, args)
-    except Exception as e:  # noqa: BLE001 — non-serving W4/W5 rebuild; must not HALT the daily job
+    except Exception as e:  # noqa: BLE001 — non-serving W11 rebuild; must not HALT the daily job
         context.log.warning(
-            f"[W11 nightly] W4/W5 rebuild '{os.path.basename(script)}' {' '.join(args or [])} failed "
+            f"[W11 nightly] rebuild '{os.path.basename(script)}' {' '.join(args or [])} failed "
             f"(non-fatal; the dbt feature build still computes these models natively): {e}"
         )
+
+
+def _w11b_umpire_nightly_on() -> bool:
+    # E11.1-W11 Tier-B: the 4 umpire writers now dual-write the umpire_game_log raw mirror and the
+    # 4 umpire dbt models (2 stg + 2 feature) were dual-branched to read it. run_w1_lakehouse.py
+    # --w11b (the parquet REBUILD) is NOT in the daily op by default — only the ext-table REFRESH is
+    # once the W11b tables are added to a refresh path. This gate wires a nightly --w11b-only rebuild
+    # + the --w11b ext-table refresh so lakehouse_ext.feature_pregame_umpire_* (read by the W8b
+    # aggregator precursor view + the dbt else branch after cutover) stays fresh from the live raw
+    # mirror. Default OFF: flip to 1 only after (1) W11_RAW_WRITE_MODE=both on the daily job (the live
+    # writers keep the raw mirror fresh), (2) the W11b lakehouse_ext tables exist
+    # (generate_w11b_external_tables.py), and (3) a box-validated --w11b-only run + per-ROW ext fetch
+    # (the RUNTIME GATE). Merging default-OFF is a true no-op (the un-gated glue is just this env read).
+    return os.environ.get("W11B_UMPIRE_NIGHTLY") == "1"
 
 
 def _w3pre_daily_on() -> bool:
@@ -526,6 +540,17 @@ def run_w1_lakehouse_op(context):
     if _w11_w4w5_nightly_on():
         _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w4-only"])
         _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w5-only"])
+
+    # E11.1-W11 Tier-B (umpire): rebuild the umpire stg + feature parquet from the dual-written
+    # umpire_game_log raw mirror + refresh the W11b external tables, so lakehouse_ext.
+    # feature_pregame_umpire_* stays fresh (the W8b aggregator reads feature_pregame_umpire_features
+    # as a precursor from the SAME S3 path — this native build replaces the W7b-1 export_features_to_s3
+    # mirror at that key). Self-contained (reads only the raw mirror) so order-independent. Mirror-tier
+    # (ALERT-continue) — umpire features are slow-moving and the dbt build retains its Snowflake-native
+    # path pre-cutover, so a rebuild failure must NOT HALT the daily job. Gated default-OFF.
+    if _w11b_umpire_nightly_on():
+        _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w11b-only"])
+        _run_w11_nightly(context, "refresh_w1_external_tables.py", ["--w11b"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

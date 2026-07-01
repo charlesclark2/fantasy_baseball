@@ -11,8 +11,17 @@
 -- Note: umpire_id is null for all umpscorecards rows (99% of source); umpire_name
 -- is the canonical identifier used in both the hash and downstream trailing joins.
 -- Most games will have a single SCD-2 row (one assignment, no intraday change).
+--
+-- E11.1-W11 Tier-B lakehouse migration. DuckDB branch recomputes the SCD-2 spans over the
+-- migrated stg_statsapi_umpire_snapshots (registered as a DuckDB view by run_w1_lakehouse
+-- ._build_w11b) with a Snowflake→DuckDB dialect rewrite (sysdate()→current_timestamp). The
+-- Snowflake (else) branch is a thin view over the lakehouse_ext external table (rollback path).
+-- The valid_from/valid_to/is_current spans are parity-verified SF-vs-S3 on a REAL box run
+-- before cutover (a parity SELECT alone won't prove the snapshot/hash change-boundary logic).
 
-{{ config(materialized='table') }}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w11b_lakehouse']) }}
 
 with snapshots as (
     select * from {{ ref('stg_statsapi_umpire_snapshots') }}
@@ -43,9 +52,17 @@ with_scd2 as (
         loaded_at                                                       as valid_from,
         lead(loaded_at) over (partition by game_pk order by loaded_at) as valid_to,
         record_hash,
-        sysdate()                                                       as computed_at
+        current_timestamp::timestamp                                    as computed_at
     from change_boundaries
 )
 
 select *, (valid_to is null) as is_current
 from with_scd2
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.feature_pregame_umpire_status
+
+{% endif %}

@@ -11,8 +11,18 @@
 -- ump_run_impact_zscore, and ump_accuracy_zscore.
 --
 -- Minimum sample gate: ump_games_sample < 10 → all z-scores = 0.0.
+--
+-- E11.1-W11 Tier-B lakehouse migration. DuckDB branch recomputes the trailing z-scores over
+-- the migrated stg_statsapi_umpire_game_log (registered as a DuckDB view by run_w1_lakehouse
+-- ._build_w11b) with a Snowflake→DuckDB dialect rewrite (dateadd('year',-3,x) → x - interval
+-- '3' year). The Snowflake (else) branch is a thin view over the lakehouse_ext external table
+-- (rollback path). This is the W8a-deferred straggler the W8b aggregator reads — once the
+-- native parquet lands at lakehouse/feature_pregame_umpire_features/, the W8b precursor VIEW
+-- reads it directly (replacing the W7b-1 export_features_to_s3.py mirror at the same S3 path).
 
-{{ config(materialized='table') }}
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w11b_lakehouse']) }}
 
 with
 
@@ -65,7 +75,7 @@ ump_trailing as (
     from {{ ref('stg_statsapi_umpire_game_log') }} a
     join ump_history b
         on  b.umpire_name = a.umpire_name
-        and b.game_date  >= dateadd('year', -3, a.game_date)
+        and b.game_date  >= (a.game_date - interval '3' year)  -- DuckDB: dateadd('year',-3,a.game_date)
         and b.game_date   < a.game_date   -- LEAKAGE GUARD: strictly before target
     group by a.game_pk, a.game_date, a.umpire_name
 ),
@@ -124,3 +134,11 @@ final as (
 )
 
 select * from final
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.feature_pregame_umpire_features
+
+{% endif %}

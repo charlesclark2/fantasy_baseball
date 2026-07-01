@@ -51,6 +51,10 @@ SOURCES = {
     "sprint_speed_raw":           ("baseball_data.savant.sprint_speed_raw",              "player_mlbam_id || '|' || season"),
     "oaa_team_season_raw":        ("baseball_data.external.oaa_team_season_raw",         None),
     "savant_park_factors_raw":    ("baseball_data.fangraphs.savant_park_factors_raw",    None),
+    # E11.1-W11 Tier-B — the shared umpire feed. No-loss key = (game_pk, data_source): the 4
+    # writers key distinct assignment/tendency rows per game (statsapi / statsapi_backfill /
+    # umpscorecards), so every SF (game_pk, data_source) pair must survive in the S3 mirror.
+    "umpire_game_log":            ("baseball_data.statsapi.umpire_game_log",             "game_pk || '|' || data_source"),
 }
 
 _DEFAULT_TOLERANCE = 0.01  # 1% — absorbs append drift between the export and this check

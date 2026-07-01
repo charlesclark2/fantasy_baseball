@@ -57,6 +57,9 @@ SOURCES = {
     "sprint_speed_raw":           ("baseball_data.savant.sprint_speed_raw",              "ingestion_timestamp"),
     "oaa_team_season_raw":        ("baseball_data.external.oaa_team_season_raw",         "loaded_at"),
     "savant_park_factors_raw":    ("baseball_data.fangraphs.savant_park_factors_raw",    None),
+    # E11.1-W11 Tier-B — the shared umpire feed (4 writers → one table). loaded_at is the stg
+    # dedup tiebreaker (order by loaded_at desc); alias it to ingestion_ts for the dt= partition.
+    "umpire_game_log":            ("baseball_data.statsapi.umpire_game_log",             "loaded_at"),
 }
 
 

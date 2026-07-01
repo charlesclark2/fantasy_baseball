@@ -1272,6 +1272,44 @@ def _build_w8b(conn, dry_run: bool) -> None:
     _build_one_sql(conn, "feature_pregame_game_features", _game_features_wrapper_sql(), dry_run)
 
 
+# E11.1-W11 Tier-B: the shared UMPIRE feed's stg + feature layer. The 4 umpire writers dual-write
+# one raw source (lakehouse_raw/umpire_game_log/); these 4 models read it via read_parquet in their
+# duckdb branch (self-contained — the ONLY precursor is the raw parquet, no prior-wave view needed).
+# OPT-IN (--w11b) until cutover, like the prior waves. Dependency order: the 2 stg models read the
+# raw directly; feature_features reads stg_umpire_game_log, feature_status reads stg_umpire_snapshots.
+# feature_pregame_umpire_features is the W8a-deferred straggler the W8b aggregator reads — once its
+# native parquet lands at lakehouse/feature_pregame_umpire_features/, the W8b precursor VIEW reads it
+# directly (replacing the W7b-1 export_features_to_s3.py mirror at the SAME S3 path → no W8b edit).
+W11B_STG_MODELS = ["stg_statsapi_umpire_game_log", "stg_statsapi_umpire_snapshots"]
+W11B_FEATURE_MODELS = ["feature_pregame_umpire_features", "feature_pregame_umpire_status"]
+W11B_MODELS = W11B_STG_MODELS + W11B_FEATURE_MODELS
+
+
+def _build_w11b(conn, dry_run: bool) -> None:
+    """Build the E11.1-W11 Tier-B umpire stg + feature layer from the umpire_game_log raw mirror.
+    Self-contained: each stg model reads lakehouse_raw/umpire_game_log/ directly, so no prior-wave
+    precursor view is needed. Builds the 2 stg models, registers each as a view, then builds the 2
+    feature models (which read the stg views) and registers them. A missing raw parquet makes a
+    build raise; W11b is gated (opt-in) so the daily HALT op never trips on it pre-cutover."""
+    # Cap parallelism + box-aware memory_limit (consistent with the other waves; the umpire raw is
+    # tiny so this is precautionary, not load-bearing).
+    for _pragma in ("SET threads=2", f"SET memory_limit='{_safe_memory_limit_gb()}GB'"):
+        try:
+            conn.execute(_pragma)
+        except Exception as _e:
+            print(f"  (note: {_pragma} not applied: {_e})")
+
+    print("\nW11b umpire staging (read lakehouse_raw/umpire_game_log/ directly):")
+    for model in W11B_STG_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+    print("\nW11b umpire feature layer (dependency-ordered; read the stg views just built):")
+    for model in W11B_FEATURE_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+
 def run(
     dry_run: bool = False,
     skip_w1: bool = False,
@@ -1295,6 +1333,8 @@ def run(
     w8a_only: bool = False,
     w8b: bool = False,
     w8b_only: bool = False,
+    w11b: bool = False,
+    w11b_only: bool = False,
 ) -> None:
     import duckdb
 
@@ -1490,6 +1530,16 @@ def run(
         print("\nW8b serving-aggregator wave run complete (--w8b-only).")
         return
 
+    # E11.1-W11 Tier-B: --w11b-only rebuilds just the umpire stg + feature layer from the
+    # umpire_game_log raw mirror. Self-contained (no prior-wave parquet needed), so it runs
+    # standalone — ideal for the box RUNTIME GATE (rebuild umpire only, then per-ROW ext-validate).
+    if w11b_only:
+        print("\nBuilding W11b umpire stg + feature layer (--w11b-only):")
+        _build_w11b(conn, dry_run)
+        conn.close()
+        print("\nW11b umpire wave run complete (--w11b-only).")
+        return
+
     # ── W1: pitch-level marts ────────────────────────────────────────────────
     if not skip_w1:
         print("\nW1 marts:")
@@ -1587,11 +1637,18 @@ def run(
     if w8b:
         _build_w8b(conn, dry_run)
 
+    # ── W11b: umpire stg + feature layer — OPT-IN ──
+    # Self-contained (reads only the umpire_game_log raw mirror), so it is independent of the other
+    # waves' order. Enable with --w11b once the umpire writers dual-write and the ext tables exist.
+    if w11b:
+        _build_w11b(conn, dry_run)
+
     conn.close()
     print(
         f"\nW1+W2+W3{'+W3pre' if w3pre else ''}{'+W4' if w4 else ''}"
         f"{'+W5' if w5 else ''}{'+W5b' if archetype else ''}{'+W6' if w6 else ''}"
-        f"{'+W7b' if w7b else ''}{'+W8a' if w8a else ''}{'+W8b' if w8b else ''} "
+        f"{'+W7b' if w7b else ''}{'+W8a' if w8a else ''}{'+W8b' if w8b else ''}"
+        f"{'+W11b' if w11b else ''} "
         f"lakehouse run complete."
     )
 
@@ -1620,4 +1677,6 @@ if __name__ == "__main__":
         w8a_only="--w8a-only" in sys.argv,
         w8b="--w8b" in sys.argv,
         w8b_only="--w8b-only" in sys.argv,
+        w11b="--w11b" in sys.argv,
+        w11b_only="--w11b-only" in sys.argv,
     )
