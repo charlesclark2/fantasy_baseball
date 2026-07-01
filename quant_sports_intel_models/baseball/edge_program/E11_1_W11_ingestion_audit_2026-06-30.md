@@ -187,8 +187,18 @@ now normalizes `NaN → None` (regression test added).
   `--w8a`-before-`--w5` order; W4/W5 have no request-time read; the Sunday-only/season-cumulative feeds make the
   1-day propagation lag immaterial). The ext-table REFRESH already runs nightly (`refresh_w1_external_tables_op`'s
   default set includes W4_TABLES+W5_TABLES) — only the parquet REBUILD was missing.
-- **CI**: fast gate 880 passed / 1 skipped; `dbtf compile` 49/49 (the SF `{% else %}` branch is unchanged → the
-  Snowflake-compiled SQL is byte-identical, so the state:modified+ build is expected-green/inert on the SF path).
+- 🧨 **NEW LANDMINE — `dtype=str` CSV writer → VARCHAR raw mirror → downstream numeric ops HALT** (caught on
+  the box `--w5-only` run): `ingest_sprint_speed` does `pd.read_csv(..., dtype=str)`, so EVERY column is a
+  string. The SF table coerced them to INTEGER/FLOAT on INSERT (so the old W4/W5 snapshot was typed), but
+  the raw mirror stores the raw VARCHAR strings → `mart_team_defense_quality_rolling`'s `where competitive_runs
+  > 0` hit `Binder Error: Cannot compare VARCHAR and INTEGER_LITERAL`. **Cure = `try_cast` at the use-site**
+  (INC-23 pattern) in `stg_batter_sprint_speed` (`sprint_speed_fts`/`competitive_runs`/`hp_to_1b`/`hp_to_2b`/`age`);
+  `try_cast`→NULL on empties matches SF coercion. Verified on the real mirror: all 6,094 rows cast clean, filter
+  passes. **Only sprint is affected** (only writer using `dtype=str`) — oaa/catcher build typed dicts (DOUBLE/BIGINT),
+  fangraphs extracts `raw_json` with in-model `::float`. ⚠️ Any FUTURE typed-CSV feed migrated to the raw mirror
+  needs the same use-site cast (parity-over-parquet is BLIND to it — it only surfaces on a real `--wN` DuckDB build).
+- **CI**: fast gate 880 passed / 1 skipped; `dbtf compile` 49/49 + the sprint-cast recompile 13/13 (the SF `{% else %}`
+  branch is unchanged → the Snowflake-compiled SQL is byte-identical, so the state:modified+ build is expected-green).
 
 **REMAINING — operator box-gated cutover (RUNTIME GATE: flip only after a real box run):**
 1. Set `W11_RAW_WRITE_MODE=both` in the daily job env (live writers keep the raw mirror fresh going forward).

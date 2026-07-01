@@ -175,7 +175,8 @@ def _pitcher_meta(target: str, pitcher_ids: list[int]) -> dict[int, dict]:
             cur.execute(
                 """
                 SELECT pp.probable_pitcher_id AS pid, pp.probable_pitcher_name AS nm,
-                       pp.side AS side, g.home_team_name AS home_team, g.away_team_name AS away_team
+                       pp.side AS side, g.home_team_name AS home_team, g.away_team_name AS away_team,
+                       TO_VARCHAR(g.game_date) AS game_dt
                 FROM baseball_data.betting.stg_statsapi_probable_pitchers pp
                 LEFT JOIN baseball_data.betting.stg_statsapi_games g ON g.game_pk = pp.game_pk
                 WHERE pp.game_date::date = %(d)s AND pp.probable_pitcher_id IS NOT NULL
@@ -183,16 +184,51 @@ def _pitcher_meta(target: str, pitcher_ids: list[int]) -> dict[int, dict]:
                 {"d": target},
             )
             for r in cur.fetchall():
-                pid, nm, side, home_team, away_team = r
+                pid, nm, side, home_team, away_team, game_dt = r
                 is_home = (side == "home")
                 team = home_team if is_home else away_team
                 opp = away_team if is_home else home_team
-                meta[int(pid)] = {"full_name": nm, "team": team, "opponent": opp}
+                meta[int(pid)] = {"full_name": nm, "team": team, "opponent": opp,
+                                  "game_datetime": str(game_dt) if game_dt else None}
         finally:
             conn.close()
     except Exception as exc:  # noqa: BLE001 — cosmetic, never fatal
         _warn(f"pitcher meta join skipped (names/teams will be null): {exc}")
     return meta
+
+
+def _recent_k(target: str, pitcher_ids: list[int]) -> dict[int, list[int]]:
+    """{pitcher_id: [K, K, K]} — each pitcher's last 3 starts' strikeouts before the target date
+    (most-recent first). Cosmetic matchup context; isolated try so it never breaks scoring."""
+    out: dict[int, list[int]] = {}
+    if not pitcher_ids:
+        return out
+    try:
+        from betting_ml.utils.data_loader import get_snowflake_connection
+        idlist = ",".join(str(int(p)) for p in pitcher_ids)
+        conn = get_snowflake_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                f"""
+                SELECT pitcher_id, strikeouts FROM (
+                    SELECT pitcher_id, strikeouts, game_date,
+                           ROW_NUMBER() OVER (PARTITION BY pitcher_id ORDER BY game_date DESC) AS rn
+                    FROM baseball_data.betting.mart_starting_pitcher_game_log
+                    WHERE game_date::date < %(d)s AND batters_faced >= 1
+                      AND pitcher_id IN ({idlist})
+                ) WHERE rn <= 3
+                ORDER BY pitcher_id, rn
+                """,
+                {"d": target},
+            )
+            for pid, k in cur.fetchall():
+                out.setdefault(int(pid), []).append(int(k) if k is not None else 0)
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001 — cosmetic, never fatal
+        _warn(f"recent-K lookup skipped (last-3 K will be null): {exc}")
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -363,9 +399,11 @@ def main() -> int:
 
     samples = _score_samples(bundle, elig, rng)  # (n, n_draws)
 
-    # 4) Live book lines + per-pitcher metadata.
+    # 4) Live book lines + per-pitcher metadata + recent-form context.
+    pids = elig["pitcher_id"].astype(int).tolist()
     book_lines_by_name = _load_book_lines(target)
-    meta = _pitcher_meta(target, elig["pitcher_id"].astype(int).tolist())
+    meta = _pitcher_meta(target, pids)
+    last3_by_pid = _recent_k(target, pids)
 
     from betting_ml.utils.prop_edge import normalize_name
     from betting_ml.utils.totals_distribution import DEFAULT_QUANTILES, quantile_grid
@@ -385,6 +423,7 @@ def main() -> int:
             pitcher_id=pid, full_name=name, team=m.get("team"),
             game_pk=int(elig["game_pk"].iloc[i]),
             game_date=target, opponent=m.get("opponent"),
+            game_datetime=m.get("game_datetime"), last3_k=last3_by_pid.get(pid),
             quantile_levels=DEFAULT_QUANTILES, k_quantile_grid=grids[i],
             mean=mean_i, std=std_i, calib_80=_CALIB_80,
             book_comparisons=comparisons, generated_at=f"{target}T00:00:00Z",

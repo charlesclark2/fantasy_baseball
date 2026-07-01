@@ -164,6 +164,8 @@ def build_k_projection_payload(
     std: float | None,
     calib_80: float | None,
     book_comparisons: Sequence[dict[str, Any]],
+    game_datetime: str | None = None,
+    last3_k: Sequence[int] | None = None,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
     """Assemble the full pitcher-page K-projection serving payload.
@@ -180,7 +182,9 @@ def build_k_projection_payload(
         "team": team,
         "game_pk": int(game_pk) if game_pk is not None else None,
         "game_date": game_date,
+        "game_datetime": game_datetime,
         "opponent": opponent,
+        "last3_k": [int(k) for k in last3_k] if last3_k else None,
         "model_version": MODEL_VERSION,
         "calib_80": round(float(calib_80), 3) if calib_80 is not None and np.isfinite(calib_80) else None,
         "distribution": dist,
@@ -230,6 +234,8 @@ def index_row(payload: dict[str, Any]) -> dict[str, Any]:
         "opponent": payload.get("opponent"),
         "game_pk": payload.get("game_pk"),
         "game_date": payload.get("game_date"),
+        "game_datetime": payload.get("game_datetime"),
+        "last3_k": payload.get("last3_k"),
         "mean": dist.get("mean"),
         "median": dist.get("median"),
         "p10": _at(0.10),
