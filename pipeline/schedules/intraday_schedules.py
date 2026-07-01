@@ -1,6 +1,7 @@
 from dagster import ScheduleDefinition
 
 from pipeline.jobs.intraday_jobs import (
+    intraday_public_betting_job,
     intraday_schedule_job,
     intraday_weather_job,
     odds_clv_rebuild_job,
@@ -80,8 +81,34 @@ intraday_schedule_capture_overnight = ScheduleDefinition(
 #   3. DISABLE the lean services/schedule_capture/ EC2 cron so the two don't double-ingest.
 # The ScheduleDefinitions fire on UTC cron, but every op resolves the baseball-day via
 # current_game_date_iso() (LA), so the captured/served date is correct (INC-22).
+# ── Intraday Public Betting (E11.1-W11-D addendum) ────────────────────────────
+# Hourly ActionNetwork public-betting capture across the pre-game window, building the public-%
+# time-series (the E13.16 public-%→line-movement / reverse-line-movement precursor). Two cron
+# expressions cover ~10:00 AM–01:59 AM ET (14:00–05:59 UTC) — pre-game through the late-slate first
+# pitches — since cron can't wrap midnight in one expr. Boots STOPPED (repo convention: schedules do
+# NOT auto-fire until toggled in the Dagster UI), so merging this is a no-op. Every op resolves the
+# baseball-day via current_game_date_iso() (LA), so the captured date is correct off UTC cron (INC-22).
+#
+# OPERATOR (enabling the hourly capture):
+#   1. set W11_RAW_WRITE_MODE=s3 (or both) on the Dagster box so the S3 raw mirror + the dedicated
+#      public_betting_intraday_series are actually written (default 'snowflake' → SF-only, series skipped),
+#   2. START intraday_public_betting_daytime + _overnight in the Dagster UI.
+intraday_public_betting_daytime = ScheduleDefinition(
+    job=intraday_public_betting_job,
+    cron_schedule="0 14-23 * * *",
+    name="intraday_public_betting_daytime",
+)
+
+intraday_public_betting_overnight = ScheduleDefinition(
+    job=intraday_public_betting_job,
+    cron_schedule="0 0-5 * * *",
+    name="intraday_public_betting_overnight",
+)
+
 all_intraday_schedules = [
     odds_clv_rebuild_schedule,
     intraday_schedule_capture_daytime,
     intraday_schedule_capture_overnight,
+    intraday_public_betting_daytime,
+    intraday_public_betting_overnight,
 ]

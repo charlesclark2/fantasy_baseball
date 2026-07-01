@@ -1,5 +1,3 @@
-{{ config(materialized='table') }}
-
 -- =============================================================================
 -- feature_pregame_public_betting_status.sql
 -- Story 15.6 — SCD-2 table for Action Network public betting percentages.
@@ -22,7 +20,18 @@
 --   WHERE game_pk = :gk
 --     AND valid_from <= :prediction_ts
 --     AND (valid_to IS NULL OR valid_to > :prediction_ts)
+--
+-- E11.1-W11 Tier-D lakehouse migration. The DuckDB branch recomputes the SCD-2 spans over the
+-- migrated stg_actionnetwork_public_betting_snapshots (registered as a DuckDB view by
+-- run_w1_lakehouse._build_w11d) with a Snowflake→DuckDB dialect rewrite (sysdate()→current_timestamp).
+-- The Snowflake (else) branch is a thin view over the lakehouse_ext external table (rollback path).
+-- The valid_from/valid_to/is_current spans are parity-verified SF-vs-S3 on a REAL box run before
+-- cutover (a parity SELECT alone won't prove the lag/lead change-boundary logic).
 -- =============================================================================
+
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w11d_lakehouse']) }}
 
 with snapshots as (
     select * from {{ ref('stg_actionnetwork_public_betting_snapshots') }}
@@ -76,7 +85,7 @@ with_scd2 as (
             order by loaded_at
         )                                                       as valid_to,
         record_hash,
-        sysdate()                                               as computed_at
+        current_timestamp::timestamp                            as computed_at
     from change_boundaries
 )
 
@@ -99,3 +108,11 @@ select
     record_hash,
     computed_at
 from with_scd2
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.feature_pregame_public_betting_status
+
+{% endif %}

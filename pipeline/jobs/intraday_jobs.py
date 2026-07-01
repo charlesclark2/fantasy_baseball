@@ -2,6 +2,7 @@ from dagster import in_process_executor, job
 
 from pipeline.ops.intraday_ops import (
     intraday_lineup_rebuild,
+    intraday_public_betting_capture,
     intraday_schedule_capture,
     intraday_weather_capture,
     odds_clv_dbt_rebuild,
@@ -39,3 +40,11 @@ def intraday_weather_job():
 def intraday_schedule_job():
     done = intraday_schedule_capture()
     intraday_lineup_rebuild(start=done)
+
+
+# E11.1-W11-D addendum — hourly ActionNetwork public-betting capture (the E13.16 public-%→line-movement
+# precursor). One op, its own job so it can be scheduled independently (hourly, pre-game window). Boots
+# STOPPED per repo convention — a merge is a no-op until the operator toggles it on.
+@job(executor_def=in_process_executor)
+def intraday_public_betting_job():
+    intraday_public_betting_capture()

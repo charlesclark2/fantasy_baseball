@@ -217,6 +217,35 @@ def _w11b_umpire_nightly_on() -> bool:
     return os.environ.get("W11B_UMPIRE_NIGHTLY") == "1"
 
 
+def _w11c_weather_nightly_on() -> bool:
+    # E11.1-W11 Tier-C: the 2 weather writers (ingest_weather / backfill_observed_weather) now
+    # dual-write the weather_raw raw mirror and the 4 weather dbt models (2 stg + 2 feature) were
+    # dual-branched to read it. run_w1_lakehouse.py --w11c (the parquet REBUILD) is NOT in the daily op
+    # by default. This gate wires a nightly --w11c-only rebuild + the --w11c ext-table refresh so
+    # lakehouse_ext.feature_pregame_weather_* (read by the W8b aggregator precursor view + the game-
+    # features chain + the dbt else branch after cutover) stays fresh from the live raw mirror. Self-
+    # contained (only precursor is the raw parquet + the ref_venues seed CSV). Default OFF: flip to 1
+    # only after (1) W11_RAW_WRITE_MODE=both on the daily job (the live writers keep the raw mirror
+    # fresh), (2) the W11c lakehouse_ext tables exist (generate_w11c_external_tables.py), and (3) a
+    # box-validated --w11c-only run + per-ROW ext fetch (the RUNTIME GATE). Merging default-OFF is a
+    # true no-op (the un-gated glue is just this env read).
+    return os.environ.get("W11C_WEATHER_NIGHTLY") == "1"
+
+
+def _w11d_public_betting_nightly_on() -> bool:
+    # E11.1-W11 Tier-D: ingest_actionnetwork_betting now dual-writes the public_betting_raw mirror and
+    # the 4 public-betting dbt models (2 stg + 2 feature) were dual-branched to read it. run_w1_lakehouse
+    # .py --w11d (the parquet REBUILD) is NOT in the daily op by default. This gate wires a nightly
+    # --w11d-only rebuild + the --w11d ext-table refresh so lakehouse_ext.feature_pregame_public_betting_*
+    # (read by the W8b aggregator precursor view + the dbt else branch after cutover) stays fresh from
+    # the live raw mirror. Runs AFTER --w8b in the op (the snapshots stg joins feature_pregame_game_
+    # features, built by --w8b). Default OFF: flip to 1 only after (1) W11_RAW_WRITE_MODE=both on the
+    # daily job (the live writer keeps the raw mirror fresh), (2) the W11d lakehouse_ext tables exist
+    # (generate_w11d_external_tables.py), and (3) a box-validated --w11d-only run + per-ROW ext fetch
+    # (the RUNTIME GATE). Merging default-OFF is a true no-op (the un-gated glue is just this env read).
+    return os.environ.get("W11D_PUBLIC_BETTING_NIGHTLY") == "1"
+
+
 def _w3pre_daily_on() -> bool:
     # E11.1-W11 / INC-23 residual: wire the W3pre odds/staging flatten into the daily
     # run_w1_lakehouse_op so mart_derivative_closes stops topping out at ~Apr-1 (E13.14
@@ -551,6 +580,35 @@ def run_w1_lakehouse_op(context):
     if _w11b_umpire_nightly_on():
         _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w11b-only"])
         _run_w11_nightly(context, "refresh_w1_external_tables.py", ["--w11b"])
+
+    # E11.1-W11 Tier-C (weather): rebuild the weather stg + feature parquet from the dual-written
+    # weather_raw raw mirror + refresh the W11c external tables, so lakehouse_ext.feature_pregame_
+    # weather_* stays fresh (the W8b aggregator + feature_pregame_game_features chain read
+    # feature_pregame_weather_features as a precursor from the SAME S3 path — this native build replaces
+    # the W7b-1 export_features_to_s3 mirror at that key). Self-contained (reads only the raw mirror +
+    # the ref_venues seed CSV) so order-independent. Mirror-tier (ALERT-continue) — weather features are
+    # slow-moving and the dbt build retains its Snowflake-native path pre-cutover, so a rebuild failure
+    # must NOT HALT the daily job. Gated default-OFF. NOTE: the raw mirror is kept fresh by the live
+    # writers' dual-write; the hourly all-slate-park series (weather_intraday_series) is a SEPARATE
+    # S3-only source not read by any dbt model, so it is not part of this rebuild.
+    if _w11c_weather_nightly_on():
+        _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w11c-only"])
+        _run_w11_nightly(context, "refresh_w1_external_tables.py", ["--w11c"])
+
+    # E11.1-W11 Tier-D (public betting): rebuild the public-betting stg + feature parquet from the
+    # dual-written public_betting_raw mirror + refresh the W11d external tables, so lakehouse_ext.
+    # feature_pregame_public_betting_* stays fresh (the W8b aggregator reads feature_pregame_public_
+    # betting_features as a precursor from the SAME S3 path — this native build replaces the W7b-1
+    # export_features_to_s3 mirror at that key; the plain stg_actionnetwork_public_betting native
+    # parquet replaces the export_w8b_precursors_to_s3 mirror likewise). Placed AFTER --w8b (the
+    # snapshots stg joins feature_pregame_game_features, built by --w8b — --w11d-only registers that
+    # spine parquet as a view). Mirror-tier (ALERT-continue) — public betting is slow-moving and the
+    # dbt build retains its Snowflake-native path pre-cutover, so a rebuild failure must NOT HALT the
+    # daily job. Gated default-OFF. NOTE: this rebuilds from the DAILY-capture snapshot; the hourly
+    # pre-game series (intraday_public_betting_capture) keeps the raw mirror rich between rebuilds.
+    if _w11d_public_betting_nightly_on():
+        _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w11d-only"])
+        _run_w11_nightly(context, "refresh_w1_external_tables.py", ["--w11d"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -1191,4 +1249,26 @@ def build_zone_matchup_overlay_op(context):
         context.log.warning(
             "WARNING: build_zone_matchup_overlay_op failed (non-fatal — zone heatmaps may be "
             f"absent for today's picks, predictions and serving are unaffected): {exc}"
+        )
+
+
+# ── E5.5 — daily pitcher K-projection generation (the /props page) ─────────────
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def write_pitcher_k_projections_op(context):
+    """Score today's probable starters with the E5.2 K model and write the K-projection serving
+    payloads (DynamoDB primary + S3 fallback) + daily index that power the /props page.
+
+    WARN-tier (E11.7): peripheral/app-cosmetic transparency surface. A failure must never block
+    predictions or the serving writes — the writer already exits 0 on any internal error, but we
+    guard here too. Reads: probable pitchers (Snowflake, IDs) + the cached E5.2 feature frame +
+    live K-prop lines (S3 DuckDB). Writes: pitcher_k_projection/* (DynamoDB + S3). Honest framing:
+    projections only, best_alpha=0 — never a bet rec (E5.4 null).
+    """
+    try:
+        _run_script(context, "write_pitcher_k_projections.py")
+    except Exception as exc:  # noqa: BLE001
+        context.log.warning(
+            "WARNING: write_pitcher_k_projections_op failed (non-fatal — the /props page may be "
+            f"stale for today; predictions and serving are unaffected): {exc}"
         )

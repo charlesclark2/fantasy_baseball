@@ -1,9 +1,3 @@
-{{
-    config(
-        materialized='table'
-    )
-}}
-
 -- =============================================================================
 -- stg_actionnetwork_public_betting.sql
 -- Card 8.R — normalize Action Network public-betting raw data.
@@ -19,10 +13,24 @@
 --   ml_sharp_signal    = home_ml_money_pct - home_ml_ticket_pct
 --   total_sharp_signal = over_money_pct    - over_ticket_pct
 -- Positive = money side heavier than ticket side (proxy for sharp lean).
--- =============================================================================
+--
+-- E11.1-W11 Tier-D lakehouse migration. This model feeds the W8b serving aggregator
+-- (feature_pregame_game_features_raw's public_betting CTE) as a precursor. The DuckDB branch reads
+-- the public_betting_raw S3 raw mirror (lakehouse_raw/public_betting_raw/, dual-written by
+-- ingest_actionnetwork_betting under W11_RAW_WRITE_MODE + the one-time export_w11_raw_to_s3.py
+-- bridge); the Snowflake (else) branch is a thin view over the lakehouse_ext external table (rollback
+-- path). Once the native parquet lands at lakehouse/stg_actionnetwork_public_betting/, the W8b
+-- precursor VIEW reads it directly, replacing the export_w8b_precursors_to_s3.py mirror at the same
+-- key. ingestion_timestamp is read via try_cast(... as timestamp) — the INC-23 use-site cast: the raw
+-- mirror UNIONs the SF-typed bridge (TIMESTAMP) with live-writer rows (ISO VARCHAR from
+-- public_betting_mirror_rows), which union_by_name reconciles to VARCHAR; try_cast parses both.
+
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w11d_lakehouse']) }}
 
 with raw as (
-    select * from {{ source('actionnetwork', 'public_betting_raw') }}
+    select * from read_parquet('{{ lakehouse_raw_loc("public_betting_raw") }}**/*.parquet', union_by_name=true)
 ),
 
 normalized as (
@@ -40,20 +48,20 @@ normalized as (
             else upper(away_team_abbr)
         end                                              as away_team_id,
 
-        home_ml_money_pct::float                         as home_ml_money_pct,
-        away_ml_money_pct::float                         as away_ml_money_pct,
-        home_ml_ticket_pct::float                        as home_ml_ticket_pct,
-        away_ml_ticket_pct::float                        as away_ml_ticket_pct,
+        try_cast(home_ml_money_pct as double)            as home_ml_money_pct,
+        try_cast(away_ml_money_pct as double)            as away_ml_money_pct,
+        try_cast(home_ml_ticket_pct as double)           as home_ml_ticket_pct,
+        try_cast(away_ml_ticket_pct as double)           as away_ml_ticket_pct,
 
-        over_money_pct::float                            as over_money_pct,
-        under_money_pct::float                           as under_money_pct,
-        over_ticket_pct::float                           as over_ticket_pct,
-        under_ticket_pct::float                          as under_ticket_pct,
+        try_cast(over_money_pct as double)               as over_money_pct,
+        try_cast(under_money_pct as double)              as under_money_pct,
+        try_cast(over_ticket_pct as double)              as over_ticket_pct,
+        try_cast(under_ticket_pct as double)             as under_ticket_pct,
 
-        (home_ml_money_pct - home_ml_ticket_pct)::float  as ml_sharp_signal,
-        (over_money_pct - over_ticket_pct)::float        as total_sharp_signal,
+        (try_cast(home_ml_money_pct as double) - try_cast(home_ml_ticket_pct as double)) as ml_sharp_signal,
+        (try_cast(over_money_pct as double)    - try_cast(over_ticket_pct as double))    as total_sharp_signal,
 
-        ingestion_timestamp::timestamp_ntz               as ingestion_timestamp
+        try_cast(ingestion_timestamp as timestamp)       as ingestion_timestamp
     from raw
 )
 
@@ -62,3 +70,11 @@ qualify row_number() over (
     partition by game_date, an_game_id
     order by ingestion_timestamp desc
 ) = 1
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.stg_actionnetwork_public_betting
+
+{% endif %}

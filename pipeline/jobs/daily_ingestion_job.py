@@ -3,6 +3,7 @@ from dagster import in_process_executor, job
 from pipeline.ops.daily_ingestion_ops import (
     backfill_prediction_log,
     build_zone_matchup_overlay_op,
+    write_pitcher_k_projections_op,
     check_data_freshness,
     check_prediction_coverage,
     compute_elo,
@@ -171,6 +172,9 @@ def daily_ingestion_job():
     # WARN-tier: fans out from predict_today_morning in parallel with narrative
     # generation; writes directly to S3 (never blocks serving or predictions).
     build_zone_matchup_overlay_op(start=s19)
+    # E5.5 — daily K-projection payloads for the /props page. WARN-tier; fans out from
+    # predict_today_morning in parallel with the zone overlays; writes DynamoDB + S3, never blocks.
+    write_pitcher_k_projections_op(start=s19)
     write_api_cache_op(predict_done=s19n)
     write_serving_store_op(predict_done=s19n)
     s19b = update_pipeline_status(start=s19n)
