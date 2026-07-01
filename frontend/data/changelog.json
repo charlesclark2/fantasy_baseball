@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "new",
+        "text": "New Projections page (in the top nav) shows every probable starter's strikeout projection for the day at a glance — one card per pitcher with our projected strikeout total, the 80% range, the sportsbook's posted line, and the model-minus-book gap, sorted so the highest projections lead. Click any card for the full distribution and per-book breakdown on the pitcher's page. Projections and a transparency comparison only — not betting advice, and we make no profitability claim. To keep the nav uncluttered, Dashboard and EV Tracker now live under a 'Betting' dropdown (like Research and Admin)."
+      },
+      {
+        "tag": "new",
         "text": "Starting pitcher pages now show a Strikeout Projection — our model's projected strikeout total for that pitcher's next start, shown next to the sportsbooks' posted strikeout line. You get our projected number, a range strip (where the middle 50% of outcomes land, with the median and the book's line marked), and a per-book table comparing the book's de-vigged Over% (its price with the margin removed, so books are comparable) against our model's Over% at the same line, plus the model-minus-book gap. This is a projection and a transparency comparison only — it is not betting advice and we make no profitability claim; single-game strikeout totals are high-variance, so treat it as context, not a play. The projection appears only on days a pitcher is a probable starter and once lines are posted."
       },
       {

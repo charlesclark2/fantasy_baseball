@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Info } from "lucide-react"
 import { apiFetch } from "@/lib/api"
@@ -88,29 +89,60 @@ function fmtSignedPct(p: number | null): string {
 // A 1-D projection range — no probability/recommendation framing, just where our model lands.
 // ---------------------------------------------------------------------------
 
-function RangeStrip({ dist, primaryLine }: { dist: KDistribution; primaryLine: number | null }) {
+// Distinct book lines → the books posting each, so the strip shows where every market sits.
+function uniqueBookLines(comparisons: BookComparison[]): { line: number; books: string[] }[] {
+  const byLine = new Map<number, string[]>()
+  for (const c of comparisons) {
+    if (c.line == null) continue
+    const books = byLine.get(c.line) ?? []
+    books.push(c.book)
+    byLine.set(c.line, books)
+  }
+  return [...byLine.entries()].map(([line, books]) => ({ line, books })).sort((a, b) => a.line - b.line)
+}
+
+function RangeStrip({
+  dist,
+  primaryLine,
+  comparisons,
+}: {
+  dist: KDistribution
+  primaryLine: number | null
+  comparisons: BookComparison[]
+}) {
+  const [hover, setHover] = useState(false)
+
   const p05 = dist.p05 ?? gridAt(dist, 0.05)
   const p95 = dist.p95 ?? gridAt(dist, 0.95)
+  const p10 = gridAt(dist, 0.1)
+  const p90 = gridAt(dist, 0.9)
   const p25 = gridAt(dist, 0.25)
   const p75 = gridAt(dist, 0.75)
   const median = dist.median ?? gridAt(dist, 0.5)
   if (p05 == null || p95 == null) return null
 
-  // Domain: pad so the book line + range markers always sit inside the track.
-  const lo = Math.min(p05, primaryLine ?? p05) - 1
-  const hi = Math.max(p95, primaryLine ?? p95) + 1
+  const bookLines = uniqueBookLines(comparisons)
+  const lineVals = bookLines.map((b) => b.line)
+
+  // Domain: pad so every book line + range marker sits inside the track.
+  const lo = Math.min(p05, ...(lineVals.length ? lineVals : [p05])) - 1
+  const hi = Math.max(p95, ...(lineVals.length ? lineVals : [p95])) + 1
   const span = Math.max(hi - lo, 1)
   const pos = (v: number) => ((v - lo) / span) * 100
 
   return (
-    <div className="mt-4">
-      <div className="relative h-12">
-        {/* full P05–P95 band */}
+    <div className="mt-6">
+      <div
+        className="relative h-12 cursor-help"
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+      >
+        {/* full 5th–95th percentile band */}
         <div
           className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full bg-[#1f2937]"
           style={{ left: `${pos(p05)}%`, width: `${pos(p95) - pos(p05)}%` }}
         />
-        {/* interquartile band */}
+        {/* interquartile (middle 50%) band */}
         {p25 != null && p75 != null && (
           <div
             className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full bg-emerald-500/40"
@@ -122,25 +154,53 @@ function RangeStrip({ dist, primaryLine }: { dist: KDistribution; primaryLine: n
           <div
             className="absolute top-1/2 h-6 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded bg-emerald-400"
             style={{ left: `${pos(median)}%` }}
-            title={`Projected median: ${median} K`}
           />
         )}
-        {/* book line marker */}
-        {primaryLine != null && (
+        {/* one marker per distinct book line */}
+        {bookLines.map((b) => (
           <div
-            className="absolute top-1/2 h-8 w-[2px] -translate-x-1/2 -translate-y-1/2 bg-amber-400"
-            style={{ left: `${pos(primaryLine)}%` }}
-            title={`Book line: ${primaryLine}`}
+            key={b.line}
+            className="absolute top-1/2 h-8 w-[2px] -translate-x-1/2 -translate-y-1/2 bg-amber-400/90"
+            style={{ left: `${pos(b.line)}%` }}
+            title={`${b.line} — ${b.books.join(", ")}`}
           >
             <span className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium text-amber-400">
-              line {primaryLine}
+              {b.line}
             </span>
+          </div>
+        ))}
+
+        {/* hover card — the calibrated confidence interval */}
+        {hover && (
+          <div className="pointer-events-none absolute -top-2 left-1/2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-[#262626] bg-[#0d0d0d] px-3 py-2 text-[11px] shadow-lg">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500">Projected median</span>
+              <span className="tabular-nums font-semibold text-emerald-400">{median ?? "—"} K</span>
+            </div>
+            {p10 != null && p90 != null && (
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">80% interval</span>
+                <span className="tabular-nums text-white">
+                  {p10}–{p90} K
+                </span>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500">5th–95th pct</span>
+              <span className="tabular-nums text-gray-300">
+                {p05}–{p95} K
+              </span>
+            </div>
+            <p className="mt-1 max-w-[220px] whitespace-normal text-[10px] leading-snug text-gray-600">
+              Our model is calibrated so roughly 80% of starts land inside the 80% interval.
+            </p>
           </div>
         )}
       </div>
+
       <div className="flex justify-between text-[10px] text-gray-600">
         <span>{p05} K</span>
-        <span className="text-emerald-400/80">middle 50% shaded · median tick</span>
+        <span className="text-emerald-400/80">middle 50% shaded · median tick · hover for interval</span>
         <span>{p95} K</span>
       </div>
     </div>
@@ -217,7 +277,7 @@ export function PitcherKProjection({ pitcherId }: { pitcherId: number }) {
           )}
         </div>
 
-        <RangeStrip dist={dist} primaryLine={data.primary_line} />
+        <RangeStrip dist={dist} primaryLine={data.primary_line} comparisons={data.book_comparisons} />
 
         {/* Per-book transparency comparison */}
         {data.book_comparisons.length > 0 && (

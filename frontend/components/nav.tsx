@@ -20,6 +20,7 @@ type ActiveLink =
   | "changelog"
   | "teams"
   | "players"
+  | "projections"
   | null
 
 const latestWeek = changelog[0]?.week
@@ -35,9 +36,13 @@ interface NavProps {
   userEmail?: string | null
 }
 
-const MAIN_NAV_ITEMS = [
+// Personal betting workflow — collapsed into a "Betting" dropdown to keep the sub-nav uncrowded.
+const BETTING_ITEMS = [
   { label: "Dashboard", href: "/dashboard", key: "dashboard" },
   { label: "EV Tracker", href: "/ev-tracker", key: "ev-tracker" },
+] as const
+
+const MAIN_NAV_ITEMS = [
   { label: "Performance", href: "/performance", key: "performance" },
   { label: "Bet Log", href: "/bet-log", key: "bet-log" },
 ] as const
@@ -68,6 +73,7 @@ export function Nav({
       ? "border-b-2 border-[#10b981] pb-2.5 text-sm text-white font-medium transition-colors whitespace-nowrap"
       : "border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors whitespace-nowrap"
 
+  const isBettingActive = BETTING_ITEMS.some((i) => i.key === activeLink)
   const isResearchActive = RESEARCH_ITEMS.some((i) => i.key === activeLink)
   const isAdminActive = ADMIN_ITEMS.some((i) => i.key === activeLink)
 
@@ -179,11 +185,45 @@ export function Nav({
       {/* Desktop sub-nav */}
       {showSubNav && (
         <div className="mx-auto hidden max-w-6xl items-center gap-6 px-4 pb-0 sm:flex">
+          {/* Betting dropdown */}
+          <div className="group relative">
+            <button
+              className={`flex items-center gap-1 pb-2.5 text-sm transition-colors whitespace-nowrap ${
+                isBettingActive
+                  ? "border-b-2 border-[#10b981] font-medium text-white"
+                  : "border-b-2 border-transparent text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              Betting
+              <ChevronDown className="h-3 w-3" />
+            </button>
+            <div className="absolute left-0 top-full z-50 hidden w-36 rounded-md border border-[#262626] bg-[#0f0f0f] py-1 shadow-xl group-hover:block">
+              {BETTING_ITEMS.map(({ label, href, key }) => (
+                <Link
+                  key={key}
+                  href={href}
+                  className={`block px-3 py-2 text-sm transition-colors ${
+                    activeLink === key
+                      ? "text-white bg-[#1a1a1a]"
+                      : "text-gray-400 hover:text-white hover:bg-[#1a1a1a]"
+                  }`}
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+          </div>
+
           {MAIN_NAV_ITEMS.map(({ label, href, key }) => (
             <Link key={key} href={href} className={flatLinkClass(key)}>
               {label}
             </Link>
           ))}
+
+          {/* Projections — daily model projections (transparency, not a bet rec) */}
+          <Link href="/projections" className={flatLinkClass("projections")}>
+            Projections
+          </Link>
 
           {/* Research dropdown */}
           <div className="group relative">
@@ -266,6 +306,25 @@ export function Nav({
       {showSubNav && mobileOpen && (
         <div className="border-t border-[#262626] bg-[#0a0a0a] px-4 py-3 sm:hidden">
           <div className="flex flex-col gap-0.5">
+            <span className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
+              Betting
+            </span>
+            {BETTING_ITEMS.map(({ label, href, key }) => (
+              <Link
+                key={key}
+                href={href}
+                onClick={() => setMobileOpen(false)}
+                className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+                  activeLink === key
+                    ? "bg-[#1a1a1a] text-white"
+                    : "text-gray-400 hover:bg-[#141414] hover:text-white"
+                }`}
+              >
+                {label}
+              </Link>
+            ))}
+
+            <div className="my-2 border-t border-[#262626]" />
             {MAIN_NAV_ITEMS.map(({ label, href, key }) => (
               <Link
                 key={key}
@@ -280,6 +339,17 @@ export function Nav({
                 {label}
               </Link>
             ))}
+            <Link
+              href="/projections"
+              onClick={() => setMobileOpen(false)}
+              className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+                activeLink === "projections"
+                  ? "bg-[#1a1a1a] text-white"
+                  : "text-gray-400 hover:bg-[#141414] hover:text-white"
+              }`}
+            >
+              Projections
+            </Link>
 
             <div className="my-2 border-t border-[#262626]" />
             <span className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">

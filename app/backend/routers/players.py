@@ -67,6 +67,39 @@ def get_zone_overlay(
     raise HTTPException(status_code=404, detail=f"Zone overlay not found for {batter_id}_vs_{pitcher_id}")
 
 
+@router.get("/k-projections/today")
+def list_k_projections(_: str = Depends(get_user_id)) -> dict:
+    """Return the daily K-projection index (one summary row per probable starter) for the /projections
+    page. Read order: DynamoDB serving cache (latest index wins → robust to date rollover) → S3 index
+    fallback (today … 6 days back). Returns an empty slate (not 404) when nothing is written yet.
+
+    🔒 HONEST FRAMING: projections + transparency only; best_alpha=0, is_bet_recommendation=False.
+    """
+    payload = serving_cache.get_cache_latest("pitcher_k_projection/index")
+    if payload:
+        return payload
+
+    today = current_game_date_iso()
+    artifacts_bucket = os.getenv("ARTIFACTS_BUCKET", "baseball-betting-ml-artifacts")
+    s3 = boto3.client("s3", region_name="us-east-2")
+    for days_back in range(7):
+        as_of = (date.fromisoformat(today) - timedelta(days=days_back)).isoformat()
+        key = f"baseball/serving/pitcher_k_projection/as_of={as_of}/index.json"
+        try:
+            response = s3.get_object(Bucket=artifacts_bucket, Key=key)
+            return json.loads(response["Body"].read().decode("utf-8"))
+        except ClientError as e:
+            if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
+                continue
+            logger.warning("k_projection index S3 error as_of=%s: %s", as_of, e)
+            break
+        except Exception as e:  # noqa: BLE001
+            logger.warning("k_projection index S3 read error: %s", e)
+            break
+
+    return {"game_date": None, "count": 0, "pitchers": [], "is_bet_recommendation": False, "best_alpha": 0}
+
+
 @router.get("/{pitcher_id}/k-projection")
 def get_k_projection(pitcher_id: int, _: str = Depends(get_user_id)) -> dict:
     """Return the E5.5 strikeout PROJECTION + model-vs-book transparency payload for a pitcher.
