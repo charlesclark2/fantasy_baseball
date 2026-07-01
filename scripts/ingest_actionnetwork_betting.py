@@ -37,7 +37,7 @@ import logging
 import os
 import sys
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import requests
@@ -51,7 +51,31 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from dotenv import load_dotenv
 
+# E11.1-W11 Tier-D: leg-gated dual-write (W11_RAW_WRITE_MODE). SF INSERT on 'snowflake'/'both'; an S3
+# mirror to lakehouse_raw/public_betting_raw/ on 's3'/'both'. Default 'snowflake' → unchanged. The
+# optional --intraday-series flag ALSO writes the hourly trajectory (public_betting_intraday_series).
+try:  # 'utils.' path under the script runtime (scripts/ on sys.path); bare under pytest pythonpath
+    from utils.lakehouse_raw_writer import (
+        lakehouse_write_legs,
+        public_betting_mirror_rows,
+        public_betting_series_rows,
+        w11_write_mode,
+        write_raw_rows_s3,
+    )
+except ImportError:  # pragma: no cover
+    from scripts.utils.lakehouse_raw_writer import (  # type: ignore
+        lakehouse_write_legs,
+        public_betting_mirror_rows,
+        public_betting_series_rows,
+        w11_write_mode,
+        write_raw_rows_s3,
+    )
+
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
+
+# E11.1-W11 Tier-D — the raw mirror source + the dedicated hourly time-series source.
+_LAKEHOUSE_SOURCE = "public_betting_raw"
+_LAKEHOUSE_SERIES = "public_betting_intraday_series"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -333,8 +357,15 @@ def ingest_date(
     game_date: date,
     *,
     dry_run: bool = False,
+    do_sf: bool = True,
+    do_s3: bool = False,
+    intraday_series: bool = False,
 ) -> int:
-    """Returns number of rows written (or that would be written in dry-run)."""
+    """Returns number of rows written (or that would be written in dry-run).
+
+    E11.1-W11 Tier-D: writes the Snowflake raw table (do_sf) and/or the S3 raw mirror (do_s3), gated by
+    W11_RAW_WRITE_MODE. When intraday_series is set (the hourly capture op), ALSO append the parsed
+    snapshot to public_betting_intraday_series with an explicit captured_at (the E13.16 trajectory)."""
     log.info("Fetching Action Network public betting for %s", game_date)
     try:
         data = fetch_public_betting(game_date)
@@ -371,12 +402,32 @@ def ingest_date(
     log.info("  Parsed %d/%d game(s) with public-betting data", len(rows), len(games))
 
     if dry_run:
-        log.info("Dry run — skipping Snowflake write. Sample row: %s", rows[0])
+        log.info("Dry run — skipping writes. Sample row: %s", rows[0])
         return len(rows)
 
-    assert conn is not None
-    n = insert_rows(conn, game_date, rows)
-    log.info("  Inserted %d row(s) into %s", n, TARGET_FQN)
+    # E11.1-W11 Tier-D: Snowflake INSERT and/or the S3 raw mirror, per W11_RAW_WRITE_MODE.
+    n = 0
+    if do_sf:
+        assert conn is not None, "do_sf requires a live Snowflake connection"
+        n = insert_rows(conn, game_date, rows)
+        log.info("  Inserted %d row(s) into %s", n, TARGET_FQN)
+
+    if do_s3:
+        # One shared stamp for the whole capture → the mirror's ingestion_timestamp and the series'
+        # captured_at align, so a snapshot is cross-referenceable between the two S3 sources.
+        stamp = datetime.now(timezone.utc).isoformat()
+        mirror_source = [{"game_date": game_date.isoformat(), **r} for r in rows]
+        mirror_rows = public_betting_mirror_rows(mirror_source, ingestion_timestamp=stamp)
+        n_s3 = write_raw_rows_s3(_LAKEHOUSE_SOURCE, mirror_rows, mode="append")
+        log.info("  mirrored %d row(s) → S3 lakehouse_raw/%s/", n_s3, _LAKEHOUSE_SOURCE)
+        if intraday_series:
+            # APPEND-ONLY (never pruned) — keep every hourly snapshot for the game-day (W11-D addendum).
+            series_rows = public_betting_series_rows(mirror_source, captured_at=stamp)
+            n_series = write_raw_rows_s3(_LAKEHOUSE_SERIES, series_rows, mode="append")
+            log.info("  appended %d row(s) → S3 lakehouse_raw/%s/ (captured_at=%s)",
+                     n_series, _LAKEHOUSE_SERIES, stamp)
+        if not do_sf:
+            n = n_s3
     return n
 
 
@@ -405,16 +456,20 @@ def daterange(start: date, end_inclusive: date):
 
 
 def run_backfill(
-    conn: snowflake.connector.SnowflakeConnection,
+    conn: snowflake.connector.SnowflakeConnection | None,
     start_date: date,
     end_date: date,
     *,
     skip_existing: bool = True,
+    do_sf: bool = True,
+    do_s3: bool = False,
 ) -> None:
     log.info("Backfill range: %s → %s", start_date, end_date)
+    # skip-existing checks the Snowflake target; only meaningful when the SF leg is live and connected.
+    # In s3-only mode the append + downstream dedup make a re-run harmless, so skip the check.
     already_loaded: set[date] = (
         fetch_already_loaded_dates(conn, start_date, end_date)
-        if skip_existing
+        if (skip_existing and do_sf and conn is not None)
         else set()
     )
     if already_loaded:
@@ -428,7 +483,7 @@ def run_backfill(
             log.info("[SKIP] %s — already loaded", d)
             continue
         total_dates += 1
-        n = ingest_date(conn, d)
+        n = ingest_date(conn, d, do_sf=do_sf, do_s3=do_s3)
         total_rows += n
         if n == 0:
             skipped_empty += 1
@@ -481,6 +536,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Fetch and parse but do not write to Snowflake. Prints raw JSON for first game.",
     )
+    p.add_argument(
+        "--intraday-series",
+        action="store_true",
+        help=(
+            "E11.1-W11 Tier-D: ALSO append the parsed snapshot to the hourly public-betting "
+            "time-series (public_betting_intraday_series) with an explicit captured_at. The hourly "
+            "capture op passes this; append-only (every hour kept — the E13.16 trajectory). Requires "
+            "the S3 write leg (W11_RAW_WRITE_MODE=s3|both)."
+        ),
+    )
     return p
 
 
@@ -497,8 +562,17 @@ def main() -> None:
         ingest_date(None, target_date, dry_run=True)
         return
 
-    log.info("Connecting to Snowflake → %s", TARGET_FQN)
-    conn = get_snowflake_connection()
+    # E11.1-W11 Tier-D: which legs run (SF INSERT and/or S3 mirror), per W11_RAW_WRITE_MODE.
+    do_sf, do_s3 = lakehouse_write_legs(w11_write_mode())
+    if args.intraday_series and not do_s3:
+        log.warning("--intraday-series needs the S3 leg (W11_RAW_WRITE_MODE=s3|both); series NOT written.")
+    log.info("Write legs: snowflake=%s  s3=%s  intraday_series=%s", do_sf, do_s3, args.intraday_series)
+
+    # Open a Snowflake connection only if the SF leg is live (s3-only mode needs none).
+    conn = None
+    if do_sf:
+        log.info("Connecting to Snowflake → %s", TARGET_FQN)
+        conn = get_snowflake_connection()
     try:
         if args.backfill:
             start = date.fromisoformat(args.start_date)
@@ -508,15 +582,19 @@ def main() -> None:
                 start,
                 end,
                 skip_existing=not args.no_skip_existing,
+                do_sf=do_sf,
+                do_s3=do_s3,
             )
         else:
             target_date = (
                 date.fromisoformat(args.date) if args.date else today
             )
-            ingest_date(conn, target_date)
+            ingest_date(conn, target_date, do_sf=do_sf, do_s3=do_s3,
+                        intraday_series=args.intraday_series)
     finally:
-        conn.close()
-        log.info("Snowflake connection closed")
+        if conn is not None:
+            conn.close()
+            log.info("Snowflake connection closed")
 
 
 if __name__ == "__main__":

@@ -1,5 +1,3 @@
-{{ config(materialized='table') }}
-
 -- =============================================================================
 -- stg_actionnetwork_public_betting_snapshots.sql
 -- Story 15.6 — all ingestion snapshots from public_betting_raw, normalized and
@@ -20,7 +18,20 @@
 --   home_ml_money_pct, home_ml_ticket_pct, over_money_pct, over_ticket_pct
 -- away_ml and under columns are near-complements (100 - home/over) and would
 -- produce redundant change detection; sharp signals are derived from these four.
--- =============================================================================
+--
+-- E11.1-W11 Tier-D lakehouse migration. The DuckDB branch reads the public_betting_raw S3 raw mirror
+-- and joins feature_pregame_game_features (registered as a DuckDB VIEW over its W8b native parquet by
+-- run_w1_lakehouse._build_w11d — referenced by BARE name, NOT a Jinja ref, because the stg-layout
+-- extractor does not resolve Jinja refs and dbt-fusion would try to compile a bare ref() call even
+-- inside a SQL comment). The Snowflake (else) branch is a thin view over the
+-- lakehouse_ext external table (rollback path). loaded_at = ingestion_timestamp via try_cast(... as
+-- timestamp) — the INC-23 use-site cast for the SF-bridge(TIMESTAMP)↔live-writer(ISO VARCHAR) union
+-- that union_by_name reconciles to VARCHAR (also the SCD-2 valid_from — must be a real timestamp for
+-- the lag/lead ordering in feature_pregame_public_betting_status).
+
+{% if target.name == 'duckdb' %}
+
+{{ config(materialized='view', tags=['w11d_lakehouse']) }}
 
 with source as (
     select
@@ -34,18 +45,18 @@ with source as (
             when 'ARI' then 'AZ'
             else upper(away_team_abbr)
         end                                                     as away_team_norm,
-        home_ml_money_pct::float                                as home_ml_money_pct,
-        away_ml_money_pct::float                                as away_ml_money_pct,
-        home_ml_ticket_pct::float                               as home_ml_ticket_pct,
-        away_ml_ticket_pct::float                               as away_ml_ticket_pct,
-        over_money_pct::float                                   as over_money_pct,
-        under_money_pct::float                                  as under_money_pct,
-        over_ticket_pct::float                                  as over_ticket_pct,
-        under_ticket_pct::float                                 as under_ticket_pct,
-        (home_ml_money_pct - home_ml_ticket_pct)::float        as ml_sharp_signal,
-        (over_money_pct - over_ticket_pct)::float              as total_sharp_signal,
-        ingestion_timestamp::timestamp_ntz                      as loaded_at
-    from {{ source('actionnetwork', 'public_betting_raw') }}
+        try_cast(home_ml_money_pct as double)                   as home_ml_money_pct,
+        try_cast(away_ml_money_pct as double)                   as away_ml_money_pct,
+        try_cast(home_ml_ticket_pct as double)                  as home_ml_ticket_pct,
+        try_cast(away_ml_ticket_pct as double)                  as away_ml_ticket_pct,
+        try_cast(over_money_pct as double)                      as over_money_pct,
+        try_cast(under_money_pct as double)                     as under_money_pct,
+        try_cast(over_ticket_pct as double)                     as over_ticket_pct,
+        try_cast(under_ticket_pct as double)                    as under_ticket_pct,
+        (try_cast(home_ml_money_pct as double) - try_cast(home_ml_ticket_pct as double)) as ml_sharp_signal,
+        (try_cast(over_money_pct as double)    - try_cast(over_ticket_pct as double))    as total_sharp_signal,
+        try_cast(ingestion_timestamp as timestamp)              as loaded_at
+    from read_parquet('{{ lakehouse_raw_loc("public_betting_raw") }}**/*.parquet', union_by_name=true)
 ),
 
 with_game_pk as (
@@ -70,9 +81,9 @@ with_game_pk as (
         )                                                       as record_hash,
         s.loaded_at
     from source s
-    -- Pregame spine (regular-season, includes today + full history) → resolves
-    -- game_pk for not-yet-completed games, unlike the completed-only mart_game_results.
-    inner join {{ ref('feature_pregame_game_features') }} g
+    -- Pregame spine (regular-season, includes today + full history) → resolves game_pk for
+    -- not-yet-completed games. Registered as a DuckDB view by _build_w11d (BARE name — no Jinja ref).
+    inner join feature_pregame_game_features g
         on  s.game_date      = g.game_date::date
         and s.home_team_norm = g.home_team
         and s.away_team_norm = g.away_team
@@ -84,3 +95,11 @@ qualify row_number() over (
     partition by game_pk, loaded_at
     order by home_ml_money_pct nulls last
 ) = 1
+
+{% else %}
+
+{{ config(materialized='table') }}
+
+select * from baseball_data.lakehouse_ext.stg_actionnetwork_public_betting_snapshots
+
+{% endif %}
