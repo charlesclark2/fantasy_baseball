@@ -29,11 +29,9 @@ SHELL=/bin/bash
 */30 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml run --rm schedule-capture >> /home/ec2-user/capture-cron.log 2>&1
 
 # Derivative odds (team_totals / *_1st_5_innings F5 / etc.) → oddsapi schema.
-# 🚨 DISABLED 2026-06-30 — FREE-KEY WINDOW (paid Odds-API credits exhausted; live
-# capture flipped to the free/Starter key, which burns the limited quota on
-# derivatives. ▶️ RE-ENABLE at the 2026-07-01 00:00 credit refresh / flip-back
-# (uncomment this line) — see E5_1b_session_recap_2026-06-30.md.
-#*/30 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml run --rm derivative-capture >> /home/ec2-user/capture-cron.log 2>&1
+# ✅ RE-ENABLED 2026-07-01 — paid Odds-API credits refreshed at the 00:00 flip-back
+# (was DISABLED 2026-06-30 for the free/Starter-key window). See E5_1b_session_recap_2026-06-30.md.
+*/30 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml run --rm derivative-capture >> /home/ec2-user/capture-cron.log 2>&1
 
 # Weather forecast checkpoints T-24/6/3/1h + observed-at-first-pitch (entrypoint self-guards 10:00-02:00 UTC).
 0 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml run --rm weather-capture >> /home/ec2-user/capture-cron.log 2>&1
@@ -48,11 +46,9 @@ SHELL=/bin/bash
 # `run --rm` capture images set us-east-1, so an inherited region would break the S3 write.
 # ODDS_API_KEY comes from the container's env_file: .env; S3 auth = the instance IAM role.
 # WARN/supplemental tier — a failure logs + is non-blocking (never gates predictions).
-# 🚨 DISABLED 2026-06-30 — FREE-KEY WINDOW (paid Odds-API credits exhausted; this
-# props catch-up would burn ~2k/day of the free/Starter quota). ▶️ RE-ENABLE at the
-# 2026-07-01 00:00 credit refresh / flip-back (uncomment this line) — see
-# E5_1b_session_recap_2026-06-30.md.
-#0 13 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/backfill_multisport_props_to_s3.py --mode backfill --sport baseball_mlb --player-props-only >> /home/ec2-user/capture-cron.log 2>&1
+# ✅ RE-ENABLED 2026-07-01 — paid Odds-API credits refreshed at the 00:00 flip-back
+# (was DISABLED 2026-06-30 for the free/Starter-key window). See E5_1b_session_recap_2026-06-30.md.
+0 13 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/backfill_multisport_props_to_s3.py --mode backfill --sport baseball_mlb --player-props-only >> /home/ec2-user/capture-cron.log 2>&1
 
 # ── INC-16-P6 observability (host-cron) ──────────────────────────────────────
 # Service-liveness healthcheck every 5 min (core containers up + reachable; pages
