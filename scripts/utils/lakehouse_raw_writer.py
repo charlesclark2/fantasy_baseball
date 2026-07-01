@@ -158,7 +158,15 @@ def rows_to_arrow_table(rows: list[dict], json_cols: frozenset = _JSON_COLS) -> 
                 v = row.get(col)
                 data[col].append(json.dumps(v) if not isinstance(v, str) and v is not None else v)
             else:
-                data[col].append(row.get(col))
+                v = row.get(col)
+                # E11.1-W11: pandas-derived TYPED rows (e.g. sprint_speed's df.to_dict) carry a NaN
+                # float for a missing value in an otherwise-STRING column (e.g. player_name for a
+                # nameless row). from_pydict then infers utf8 from the strings and chokes on the NaN
+                # ("Expected bytes, got a 'float'"). Snowflake-derived rows (the bridge) use None,
+                # not NaN, so this is a NO-OP for the odds/bridge path — it only normalizes the
+                # pandas NaN → None so the column type resolves cleanly. (NaN is the only float that
+                # is not equal to itself, so `v != v` detects it without importing math/numpy.)
+                data[col].append(None if isinstance(v, float) and v != v else v)
     # Keep scalars native so numeric metadata (x_requests_used) stays numeric; pyarrow infers
     # per-column type — EXCEPT ingestion_ts: an all-NULL batch (a NULL_TS_PARTITION historical
     # partition) would infer arrow 'null' type and write a parquet that drifts from the utf8

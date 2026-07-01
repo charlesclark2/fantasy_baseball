@@ -156,24 +156,52 @@ Guarded by `test_w11_write_mode_independent_of_shared_odds_env`.
 `lakehouse_write_legs`, `w11_write_mode`); `scripts/export_w11_raw_to_s3.py` (SF→lakehouse_raw bridge);
 `scripts/parity_check_w11.py` (raw-tier parity); `scripts/tests/test_w11_ingestion_lakehouse.py` (5 tests).
 
-**NOT done (deliberately deferred to the operator's box-gated CUTOVER — `extract_duckdb_sql` can't gate
-a model jinja-conditionally, and the read repoint must follow a GREEN parity):** per-source repoint of
-the stg/mart duckdb branch `lakehouse_loc → lakehouse_raw_loc`, the SF-leg retirement (`s3`), the SF raw
-DROP, and the per-source export-bridge removal from `export_w4/w5_raw_to_s3.py`.
+## §8 — PHASE 2 + PHASE 3 DONE THIS SESSION (2026-06-30 — validation + read-repoint + nightly wiring)
 
-**Per-source CUTOVER sequence (operator, box, serialized with the W9-tail run):**
-1. `export_w11_raw_to_s3.py [--source X]` (full history → lakehouse_raw/) — >1 min, operator.
-2. `parity_check_w11.py [--source X]` → GREEN (raw mirror == Snowflake raw).
-3. Repoint that source's stg/mart duckdb branch `lakehouse_loc("X") → lakehouse_raw_loc("X")`; rebuild
-   `--w4`/`--w5`; verify the feature is non-null (per-ROW fetch, not just parity).
-4. Set `W11_RAW_WRITE_MODE=both` → confirm the LIVE writer's mirror matches (re-run parity).
-5. `W11_RAW_WRITE_MODE=s3` → DROP the SF raw table + remove the source from `export_w4/w5_raw_to_s3.py`.
+**Phase 2 — live dual-write validated** (`W11_RAW_WRITE_MODE=both`, one run per source): every Tier-A
+source emitted its `mirrored N → S3 lakehouse_raw/<src>/` line end-to-end — oaa (30), sprint_speed (487),
+player_transactions (128), catcher_framing (99), savant_park_factors (29). fangraphs stuff+ /
+hitting_leaderboard validated at the **bridge** level (a transient FanGraphs 500 blocked a live sample;
+the shared write path is the one sprint_speed + the daily odds writers already exercise, and
+`rows_to_arrow_table` stamps `ingestion_ts=now()` for the fangraphs rows → latest-wins holds). One writer
+bug fixed en route: pandas `NaN` in a string column crashed `pa.Table.from_pydict` → `rows_to_arrow_table`
+now normalizes `NaN → None` (regression test added).
+
+**Phase 3 — read-repoint (8 duckdb branches) + nightly rebuild wiring, CODE-COMPLETE + CI-green:**
+- Repointed `lakehouse_loc("X") → lakehouse_raw_loc("X")` (pure path swap — every model **already** carries
+  the multi-snapshot dedup, so no dedup change) in **8 consumer models** (6 sources): `stg_fangraphs__stuff_plus`,
+  `stg_fangraphs__pitcher_arsenal` (2nd fg_stuff consumer — not in the original list), `stg_fangraphs__hitting_leaderboard`,
+  `mart_catcher_framing`, `stg_statsapi_transactions`, `stg_batter_sprint_speed`, `mart_team_fielding_oaa`,
+  `mart_team_defense_quality_rolling`.
+- **Validated read-safe before editing** (local DuckDB over the actual S3 mirror, box untouched): every model's
+  dedup ORDER BY column is present on the live rows (oaa `loaded_at`, sprint `snapshot_date`, catcher `snapshot_date`
+  tie-break, transactions `ingestion_ts`, fangraphs `ingestion_ts` stamped), and the **bridge (SF-typed) + live
+  (writer-typed) parquet union reconciles cleanly** (`union_by_name` common-supertypes TIMESTAMP↔VARCHAR without error;
+  real read + QUALIFY dedup succeed on all 6). No writer fixes needed. sprint's missing `hp_to_2b`/`position` = true
+  parity (Savant CSV lacked them → SF NULL too), not a regression.
+- **park_factors excluded from the repoint**: no model reads `savant_park_factors_raw` directly — its consumers read
+  the *derived* `eb_park_factors_*` compute tables → its downstream repoint is coupled to the eb-compute chain (a
+  separate W5 migration). Its writer-flip stands.
+- **Nightly `--w4-only`/`--w5-only` rebuild wired** into `run_w1_lakehouse_op` behind gate `W11_W4W5_NIGHTLY`
+  (default OFF, mirror-tier ALERT-continue), placed after the `--w8a`/`--w8b` blocks (respects the documented
+  `--w8a`-before-`--w5` order; W4/W5 have no request-time read; the Sunday-only/season-cumulative feeds make the
+  1-day propagation lag immaterial). The ext-table REFRESH already runs nightly (`refresh_w1_external_tables_op`'s
+  default set includes W4_TABLES+W5_TABLES) — only the parquet REBUILD was missing.
+- **CI**: fast gate 880 passed / 1 skipped; `dbtf compile` 49/49 (the SF `{% else %}` branch is unchanged → the
+  Snowflake-compiled SQL is byte-identical, so the state:modified+ build is expected-green/inert on the SF path).
+
+**REMAINING — operator box-gated cutover (RUNTIME GATE: flip only after a real box run):**
+1. Set `W11_RAW_WRITE_MODE=both` in the daily job env (live writers keep the raw mirror fresh going forward).
+2. Box: `run_w1_lakehouse.py --w4-only` then `--w5-only` → verify the 8 features are non-null (per-ROW, not just parity).
+3. Flip `W11_W4W5_NIGHTLY=1` (nightly rebuild on) — the existing refresh op then re-reads the fresh parquet.
+4. `W11_RAW_WRITE_MODE=s3` → DROP the SF raw tables + remove the 6 repointed sources from `export_w4/w5_raw_to_s3.py`
+   (leave `savant_park_factors_raw` in the export until its eb-chain repoint).
 
 ## §6 — Shared-file touch list (for the sibling/operator to rebase onto)
-- `pipeline/ops/daily_ingestion_ops.py` — **W11 touched**: added `_w3pre_daily_on()` helper + gated derivative export + `--w3pre` arg inside `run_w1_lakehouse_op` (W-series op, not a W9 op). No edits to W9's signal ops.
+- `pipeline/ops/daily_ingestion_ops.py` — **W11 touched**: added `_w3pre_daily_on()` helper + gated derivative export + `--w3pre` arg inside `run_w1_lakehouse_op` (W-series op, not a W9 op); **Phase 3** added `_w11_w4w5_nightly_on()` + `_run_w11_nightly()` + a gated `--w4-only`/`--w5-only` block at the end of `run_w1_lakehouse_op`. No edits to W9's signal ops.
 - `scripts/utils/lakehouse_raw_writer.py` — **W11 touched**: +7 RAW_SOURCES, `lakehouse_write_legs`, `w11_write_mode`/`W11_WRITE_MODE_ENV`. Additive; W9 doesn't touch this file.
 - 7 ingestion writers (`ingest_fangraphs_*`, `ingest_transactions`, `ingest_savant_park_factors`, `ingest_oaa`, `ingest_sprint_speed`, `ingest_catcher_framing`) — gated dual-write (default-OFF).
 - `scripts/export_w11_raw_to_s3.py`, `scripts/parity_check_w11.py`, `scripts/tests/test_w11_ingestion_lakehouse.py` — new (W11).
 - `quant_sports_intel_models/baseball/edge_program/E11_1_W11_ingestion_audit_2026-06-30.md` — this doc (new).
-- **NO dbt model files touched** (the repoints are the operator cutover) → the dbtf-Build CI gate is not triggered by this diff.
-- (future sub-sessions for the model repoints will add: a `W11_TABLES` dict in `refresh_w1_external_tables.py` only where a source's stg OUTPUT isn't already a W4/W5 external table.)
+- **8 dbt models touched (Phase 3 read-repoint)** — `dbt/models/staging/fangraphs/stg_fangraphs__stuff_plus.sql`, `…/stg_fangraphs__pitcher_arsenal.sql`, `…/stg_fangraphs__hitting_leaderboard.sql`, `dbt/models/mart/mart_catcher_framing.sql`, `dbt/models/staging/statsapi/stg_statsapi_transactions.sql`, `dbt/models/staging/stg_batter_sprint_speed.sql`, `dbt/models/mart/mart_team_fielding_oaa.sql`, `dbt/models/mart/mart_team_defense_quality_rolling.sql` (duckdb-branch macro swap only → SF `{% else %}` unchanged; `dbtf compile` 49/49). **The dbtf-Build CI gate IS now triggered** by this diff.
+- No `W11_TABLES` / `refresh_w1_external_tables.py` change needed — all 6 repointed sources already have W4/W5 external tables (refreshed by the default set) and read their raw parquet directly via `read_parquet(lakehouse_raw_loc)`.

@@ -20,7 +20,9 @@ with
 
 source as (
 
-    select * from read_parquet('{{ lakehouse_loc("sprint_speed_raw") }}**/*.parquet', union_by_name=true)
+    -- E11.1-W11 read-repoint: live-writer raw mirror (lakehouse_raw/, dual-written by
+    -- ingest_sprint_speed.py under W11_RAW_WRITE_MODE); max(snapshot_date) wins latest.
+    select * from read_parquet('{{ lakehouse_raw_loc("sprint_speed_raw") }}**/*.parquet', union_by_name=true)
 
 ),
 

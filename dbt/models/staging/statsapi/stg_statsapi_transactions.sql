@@ -23,8 +23,10 @@
 {{ config(materialized='view', tags=['w7b_lakehouse']) }}
 
 with raw as (
+    -- E11.1-W11 read-repoint: live-writer raw mirror (lakehouse_raw/, dual-written by
+    -- ingest_transactions.py under W11_RAW_WRITE_MODE) instead of the SF-sourced W7b snapshot.
     select *
-    from read_parquet('{{ lakehouse_loc("player_transactions") }}**/*.parquet', union_by_name=true)
+    from read_parquet('{{ lakehouse_raw_loc("player_transactions") }}**/*.parquet', union_by_name=true)
 ),
 
 deduped as (
