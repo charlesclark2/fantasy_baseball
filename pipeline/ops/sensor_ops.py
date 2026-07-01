@@ -44,6 +44,14 @@ def _today() -> str:
     return current_game_date_iso()  # INC-22 — US baseball-day (LA), not the UTC box clock
 
 
+def _intraday_s3_rebuild_on() -> bool:
+    """Gate for lineup_intraday_s3_feature_rebuild (the 824819-loop fix). Default OFF
+    until validated on the box (the runtime gate — CI mocks all S3/SF IO and cannot see
+    the --w8b build). Flip LINEUP_INTRADAY_S3_REBUILD=1 in the box env_file after a real
+    lineup_monitor_job run proves the chain green + a post_lineup row lands."""
+    return os.environ.get("LINEUP_INTRADAY_S3_REBUILD") == "1"
+
+
 def _run(cmd: list[str], timeout: int = _SUBPROCESS_TIMEOUT):
     """subprocess.run with a hard timeout. On timeout the child is killed and a
     clear Exception is raised so the op FAILS FAST (retryable / visible) instead of
@@ -151,11 +159,80 @@ def lineup_ingest_umpires(context: OpExecutionContext) -> None:
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def lineup_intraday_s3_feature_rebuild(context: OpExecutionContext) -> None:
+    """Regenerate the S3 W8b feature parquet for the confirmed-lineup re-score.
+
+    THE GAP THIS CLOSES (2026-06-30, game 824819 restart loop): post-W8b-cutover the
+    served feature_pregame_lineup_features / matchups / aggregator are a COPY of a
+    DAILY-FROZEN S3 parquet — the dbt prod (else) branch is `select * from
+    lakehouse_ext.<model>`. The NEXT op (lineup_dbt_feature_rebuild) only RE-COPIES that
+    external table; it does NOT regenerate the S3 parquet (that is the daily
+    run_w1_lakehouse_op, which is absent from this job). So a lineup/starter confirmation
+    that posts AFTER the morning --w8b build never reaches the post_lineup re-score → the
+    game's away/home side is missing/stale in the aggregator → predict writes no
+    post_lineup row → lineup_monitor re-triggers it every tick FOREVER (the 824819 loop).
+
+    This op rebuilds the S3 chain BEFORE the feature copy, mirroring the daily order:
+      1. backfill_lineup_state_scd2  — MERGE the just-rebuilt staging into the SCD-2
+         feature_pregame_lineup_state (the daily update_lineup_state_scd2 op runs only at
+         07:00; an intraday confirmation never reaches the SCD-2 without this).
+      2. export_w8b_precursors_to_s3 --table feature_pregame_lineup_state — mirror the
+         fresh SCD-2 state to S3 (the only precursor that changes intraday; the rest stay
+         from the morning build, which --w8b-only reuses).
+      3. run_w1_lakehouse --w8b-only — rebuild the feature/matchup/aggregator parquet from
+         the fresh mirror.
+      4. refresh_w1_external_tables --w8b — point lakehouse_ext at the new parquet, so the
+         downstream lineup_dbt_feature_rebuild copies FRESH rows.
+
+    GATING: default-OFF (LINEUP_INTRADAY_S3_REBUILD) for the box validation window. When
+    off this is a logged no-op and the job behaves exactly as before (no regression).
+    TIER: MIRROR / ALERT-loud-but-continue — a rebuild failure is logged LOUD but does NOT
+    raise, so the post_lineup re-score still runs on the last-good S3 features (degraded >
+    no prediction at all), the next sensor tick retries, and the 30.13 serve-time freshness
+    gate backstops genuine staleness. A failure here must never block the WHOLE slate's
+    re-score just because one game's intraday rebuild broke.
+
+    ⚠️ COST: this runs the full --w8b-only build (all-history, ~minutes) on every firing.
+    Acceptable as the correctness fix; the fast-follow is scoping --w8b to today's games."""
+    if not _intraday_s3_rebuild_on():
+        context.log.warning(
+            "lineup_intraday_s3_feature_rebuild SKIPPED (LINEUP_INTRADAY_S3_REBUILD != 1) — "
+            "the post-lineup re-score reads the daily-frozen S3 features; an intraday lineup/"
+            "starter confirmation posted after the morning --w8b build will NOT be reflected "
+            "(the 824819 stale-side class). Flip the flag on the box once validated."
+        )
+        return
+    # Dependent chain — on the FIRST failure, log LOUD + return (never raise: predict must
+    # still run on the last-good S3 features rather than the whole slate getting no re-score).
+    steps: list[tuple[str, list[str]]] = [
+        ("backfill_lineup_state_scd2.py", ["--since", _today()]),
+        ("export_w8b_precursors_to_s3.py", ["--table", "feature_pregame_lineup_state"]),
+        ("run_w1_lakehouse.py", ["--w8b-only"]),
+        ("refresh_w1_external_tables.py", ["--w8b"]),
+    ]
+    try:
+        for script, args in steps:
+            _run_script(context, script, args)
+        context.log.info("Intraday S3 W8b feature parquet regenerated — ext tables refreshed.")
+    except Exception as e:  # ALERT-loud-but-continue (mirror tier)
+        context.log.warning(
+            f"lineup_intraday_s3_feature_rebuild FAILED ({e}) — CONTINUING so the post-lineup "
+            f"re-score still runs on the last-good S3 features. A PERSISTENT failure means "
+            f"intraday lineup changes are not reaching the serve; investigate the --w8b build."
+        )
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def lineup_dbt_feature_rebuild(context: OpExecutionContext) -> None:
     """Rebuild the lineup + starter + downstream game features with the fresh
     confirmed-lineup posteriors, BEFORE lineup_predict reads the feature store —
     so the post-lineup prediction reflects who is actually playing. Models are
-    table-materialized; the full rebuild re-reads eb_batter_posteriors_raw."""
+    table-materialized; the full rebuild re-reads eb_batter_posteriors_raw.
+
+    NB (2026-06-30): post-W8b these models' prod branch is `select * from lakehouse_ext.*`,
+    so this op COPIES the S3 ext table — it does not regenerate the S3 parquet. The
+    preceding lineup_intraday_s3_feature_rebuild op regenerates that parquet so this copy
+    picks up an intraday lineup change (else the post_lineup re-score is daily-frozen)."""
     _run_dbt(context, [
         "run",
         "--select",

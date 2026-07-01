@@ -152,9 +152,15 @@ def test_odds_freshness_healthy_skips(monkeypatch):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _full_day_window(m, monkeypatch):
-    """Force the sensor's UTC window wide open so the test isn't clock-dependent."""
-    monkeypatch.setattr(m, "_WINDOW_OPEN_UTC", time(0, 0))
-    monkeypatch.setattr(m, "_WINDOW_CLOSE_UTC", time(23, 59))
+    """Force the sensor's UTC window wide open so the test isn't clock-dependent.
+
+    Use time.min/time.max, NOT time(0,0)/time(23,59): the sensor gate is
+    `current_time > _WINDOW_CLOSE_UTC → SkipReason`, so a time(23,59) close still
+    skips for the whole 23:59:00–23:59:59 UTC minute — a real CI flake when the run
+    lands in that minute (the raise-expecting tests got SkipReason). time.max is
+    never `<` any wall-clock time, so the window is genuinely all-day."""
+    monkeypatch.setattr(m, "_WINDOW_OPEN_UTC", time.min)
+    monkeypatch.setattr(m, "_WINDOW_CLOSE_UTC", time.max)
 
 
 def test_schedule_freshness_raises_when_stg_missing_but_raw_has_games(monkeypatch):
@@ -351,8 +357,8 @@ def test_statcast_gap_before_deadline_fires_catchup(monkeypatch):
 
 def test_morning_watchdog_fires_when_predictions_missing(monkeypatch):
     m = _mod("morning_watchdog_sensor")
-    monkeypatch.setattr(m, "_WINDOW_START", time(0, 0))
-    monkeypatch.setattr(m, "_WINDOW_END", time(23, 59))
+    monkeypatch.setattr(m, "_WINDOW_START", time.min)
+    monkeypatch.setattr(m, "_WINDOW_END", time.max)  # time.max: window never closes (avoid the 23:59-UTC skip flake)
     monkeypatch.setattr(m, "_has_morning_predictions", lambda t: False)
     monkeypatch.setattr(m, "_has_games_today", lambda t: True)
     out = _drive(m.morning_watchdog_sensor, build_sensor_context())
@@ -362,8 +368,8 @@ def test_morning_watchdog_fires_when_predictions_missing(monkeypatch):
 
 def test_morning_watchdog_skips_when_present(monkeypatch):
     m = _mod("morning_watchdog_sensor")
-    monkeypatch.setattr(m, "_WINDOW_START", time(0, 0))
-    monkeypatch.setattr(m, "_WINDOW_END", time(23, 59))
+    monkeypatch.setattr(m, "_WINDOW_START", time.min)
+    monkeypatch.setattr(m, "_WINDOW_END", time.max)  # time.max: window never closes (avoid the 23:59-UTC skip flake)
     monkeypatch.setattr(m, "_has_morning_predictions", lambda t: True)
     out = _drive(m.morning_watchdog_sensor, build_sensor_context())
     assert out == ("yield", ["SkipReason"]), f"present predictions must skip, got {out}"
