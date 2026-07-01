@@ -55,9 +55,12 @@ def test_w11_sources_registered_in_dispatcher():
 def test_bridge_and_parity_source_sets_agree_with_registry():
     bridge = importlib.import_module("export_w11_raw_to_s3")
     parity = importlib.import_module("parity_check_w11")
-    assert set(bridge.SOURCES) == W11_TIER_A_SOURCES, "export_w11_raw_to_s3.SOURCES drifted from the wave set"
-    assert set(parity.SOURCES) == W11_TIER_A_SOURCES, "parity_check_w11.SOURCES drifted from the wave set"
+    # The bridge + parity must agree with EACH OTHER (a typo in one can't silently drift) and cover
+    # at least Tier-A. Later tiers (B umpire, …) append to the same bridge/parity sets.
+    assert set(bridge.SOURCES) == set(parity.SOURCES), "bridge/parity source sets drifted apart"
+    assert W11_TIER_A_SOURCES <= set(bridge.SOURCES), "a Tier-A source dropped out of the bridge"
     # Every bridged/parity source must be a valid dispatcher source (else write/read would reject).
+    assert set(bridge.SOURCES) <= set(RAW_SOURCES)
     assert W11_TIER_A_SOURCES <= set(RAW_SOURCES)
 
 

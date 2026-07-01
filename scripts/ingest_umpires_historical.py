@@ -51,7 +51,17 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from dotenv import load_dotenv
 
+# E11.1-W11 Tier-B: leg-gated dual-write (W11_RAW_WRITE_MODE) to lakehouse_raw/umpire_game_log/.
+from utils.lakehouse_raw_writer import (  # noqa: E402
+    lakehouse_write_legs,
+    umpire_mirror_rows,
+    w11_write_mode,
+    write_raw_rows_s3,
+)
+
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
+
+_LAKEHOUSE_SOURCE = "umpire_game_log"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -243,21 +253,30 @@ def main():
         print(f"Source URL (for future reference): {UMPSCORECARDS_GAMES_URL}")
         return
 
-    log.info("Connecting to Snowflake...")
-    conn = get_snowflake_conn()
-    try:
-        if args.row_by_row:
-            rows = df.to_dict(orient="records")
-            for r in rows:
-                r["game_date"] = str(r["game_date"])
-            log.info("Inserting %d rows (row-by-row)...", len(rows))
-            loaded = insert_rows(conn, rows)
-        else:
-            log.info("Bulk inserting %d rows (write_pandas)...", len(df))
-            loaded = bulk_load(conn, df)
-        log.info("Loaded %d UmpScorecards rows (%s)", loaded, season_range)
-    finally:
-        conn.close()
+    do_sf, do_s3 = lakehouse_write_legs(w11_write_mode())
+
+    if do_sf:
+        log.info("Connecting to Snowflake...")
+        conn = get_snowflake_conn()
+        try:
+            if args.row_by_row:
+                rows = df.to_dict(orient="records")
+                for r in rows:
+                    r["game_date"] = str(r["game_date"])
+                log.info("Inserting %d rows (row-by-row)...", len(rows))
+                loaded = insert_rows(conn, rows)
+            else:
+                log.info("Bulk inserting %d rows (write_pandas)...", len(df))
+                loaded = bulk_load(conn, df)
+            log.info("Loaded %d UmpScorecards rows (%s)", loaded, season_range)
+        finally:
+            conn.close()
+
+    if do_s3:
+        # data_source='umpscorecards' (historical bulk tendency); umpire_id/k_pct/bb_pct NULL.
+        mirror_rows = umpire_mirror_rows(df.to_dict(orient="records"), data_source="umpscorecards")
+        n_s3 = write_raw_rows_s3(_LAKEHOUSE_SOURCE, mirror_rows, mode="append")
+        log.info("mirrored %d row(s) → S3 lakehouse_raw/%s/", n_s3, _LAKEHOUSE_SOURCE)
 
 
 if __name__ == "__main__":

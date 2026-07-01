@@ -46,7 +46,17 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from dotenv import load_dotenv
 
+# E11.1-W11 Tier-B: leg-gated dual-write (W11_RAW_WRITE_MODE) to lakehouse_raw/umpire_game_log/.
+from utils.lakehouse_raw_writer import (  # noqa: E402
+    lakehouse_write_legs,
+    umpire_mirror_rows,
+    w11_write_mode,
+    write_raw_rows_s3,
+)
+
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
+
+_LAKEHOUSE_SOURCE = "umpire_game_log"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -201,8 +211,13 @@ def main() -> None:
                 print(f"  … and {len(games) - 20} more")
             return
 
+        # E11.1-W11 Tier-B: which legs run. The pending-games query above always reads Snowflake
+        # (mart_game_results — still live during migration); only the WRITE legs are gated.
+        do_sf, do_s3 = lakehouse_write_legs(w11_write_mode())
+
         inserted = 0
         skipped  = 0
+        mirror_src: list[dict] = []   # rows to mirror to S3 at the end (data_source='statsapi_backfill')
         for i, g in enumerate(games, start=1):
             game_pk  = g["game_pk"]
             log.info("[%d/%d] game_pk=%d  date=%s", i, len(games), game_pk, g["game_date"])
@@ -211,18 +226,27 @@ def main() -> None:
             if umpire is None:
                 skipped += 1
             else:
-                with conn.cursor() as cur:
-                    cur.execute(_INSERT_SQL, {
-                        "game_pk":     game_pk,
-                        "game_date":   str(g["game_date"]),
-                        "season":      g["season"],
-                        "umpire_name": umpire["umpire_name"],
-                        "umpire_id":   umpire["umpire_id"],
-                    })
+                row = {
+                    "game_pk":     game_pk,
+                    "game_date":   str(g["game_date"]),
+                    "season":      g["season"],
+                    "umpire_name": umpire["umpire_name"],
+                    "umpire_id":   umpire["umpire_id"],
+                }
+                if do_sf:
+                    with conn.cursor() as cur:
+                        cur.execute(_INSERT_SQL, row)
+                if do_s3:
+                    mirror_src.append(row)
                 log.info("  Inserted: %s (id=%s)", umpire["umpire_name"], umpire["umpire_id"])
                 inserted += 1
 
             time.sleep(REQUEST_DELAY)
+
+        if do_s3 and mirror_src:
+            mirror_rows = umpire_mirror_rows(mirror_src, data_source="statsapi_backfill")
+            n_s3 = write_raw_rows_s3(_LAKEHOUSE_SOURCE, mirror_rows, mode="append")
+            log.info("mirrored %d row(s) → S3 lakehouse_raw/%s/", n_s3, _LAKEHOUSE_SOURCE)
 
         log.info("Backfill complete — %d inserted, %d skipped (no HP official found).",
                  inserted, skipped)

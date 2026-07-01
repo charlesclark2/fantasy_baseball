@@ -89,6 +89,12 @@ RAW_SOURCES = frozenset({
     "sprint_speed_raw",
     "oaa_team_season_raw",
     "savant_park_factors_raw",
+    # E11.1-W11 Tier-B — the umpire feed: 4 writers (ingest_umpires / _scorecards /
+    # _historical / backfill_umpire_assignments) SHARE ONE Snowflake table
+    # (baseball_data.statsapi.umpire_game_log) → they migrate as ONE raw source. Typed
+    # (columnar) rows, no raw_json; each writer stamps loaded_at (the stg dedup tiebreaker,
+    # normally a SF DDL DEFAULT) so the S3 mirror carries it explicitly.
+    "umpire_game_log",
 })
 
 _VALID_MODES = frozenset({"snowflake", "s3", "both"})
@@ -287,6 +293,42 @@ def write_raw_rows_s3(
 # parity + read-side cutover, silently starving the still-Snowflake-reading stg/marts. A separate
 # default-'snowflake' env keeps merging the W11 flips a true no-op until the operator opts THIS wave in.
 W11_WRITE_MODE_ENV = "W11_RAW_WRITE_MODE"
+
+
+# E11.1-W11 Tier-B: the canonical umpire_game_log column set (matches the SF DDL + the stg
+# duckdb branch's SELECT). The 4 writers each supply a DIFFERENT subset; umpire_mirror_rows()
+# normalizes any partial row to this full set so every writer's S3 mirror is schema-uniform.
+UMPIRE_GAME_LOG_COLS = (
+    "game_pk", "game_date", "season", "umpire_name", "umpire_id",
+    "k_pct", "bb_pct", "total_runs", "called_strikes_above_avg",
+    "run_expectancy_delta", "total_run_impact", "accuracy_above_expected",
+    "data_source", "loaded_at",
+)
+
+
+def umpire_mirror_rows(rows: list[dict], *, data_source: str | None = None,
+                       loaded_at: str | None = None) -> list[dict]:
+    """Normalize partial umpire_game_log rows to the full column set for the S3 mirror.
+
+    The 4 umpire writers (ingest_umpires / _scorecards / _historical / backfill_umpire_assignments)
+    share baseball_data.statsapi.umpire_game_log but each supplies a different subset of columns.
+    This fills every missing column with None, sets data_source (a per-writer constant) when absent,
+    and STAMPS loaded_at — the stg dedup tiebreaker (order by loaded_at desc), normally the SF DDL
+    DEFAULT CURRENT_TIMESTAMP the record dict lacks — to an ISO UTC string so the S3-read stg picks
+    the same latest row as Snowflake. game_date is coerced to an ISO string (write_raw_rows_s3 keeps
+    scalars native; the stg duckdb branch casts ::date)."""
+    stamp = loaded_at or datetime.now(timezone.utc).isoformat()
+    out: list[dict] = []
+    for r in rows:
+        row = {c: r.get(c) for c in UMPIRE_GAME_LOG_COLS}
+        if row.get("data_source") is None and data_source is not None:
+            row["data_source"] = data_source
+        if row.get("loaded_at") is None:
+            row["loaded_at"] = stamp
+        if row.get("game_date") is not None:
+            row["game_date"] = str(row["game_date"])
+        out.append(row)
+    return out
 
 
 def w11_write_mode() -> str:

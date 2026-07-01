@@ -60,7 +60,17 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from dotenv import load_dotenv
 
+# E11.1-W11 Tier-B: leg-gated dual-write (W11_RAW_WRITE_MODE) to lakehouse_raw/umpire_game_log/.
+from utils.lakehouse_raw_writer import (  # noqa: E402
+    lakehouse_write_legs,
+    umpire_mirror_rows,
+    w11_write_mode,
+    write_raw_rows_s3,
+)
+
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
+
+_LAKEHOUSE_SOURCE = "umpire_game_log"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -236,12 +246,21 @@ def main() -> None:
         print(df.head(3).to_dict("records"))
         return
 
-    conn = get_snowflake_conn()
-    try:
-        n = write_idempotent(conn, df)
-    finally:
-        conn.close()
-    log.info("Done — loaded %d umpscorecards tendency row(s) into %s.", n, TABLE_FQN)
+    do_sf, do_s3 = lakehouse_write_legs(w11_write_mode())
+
+    if do_sf:
+        conn = get_snowflake_conn()
+        try:
+            n = write_idempotent(conn, df)
+        finally:
+            conn.close()
+        log.info("Done — loaded %d umpscorecards tendency row(s) into %s.", n, TABLE_FQN)
+
+    if do_s3:
+        # df already carries data_source='umpscorecards'; stamp loaded_at + fill the full column set.
+        mirror_rows = umpire_mirror_rows(df.to_dict("records"), data_source="umpscorecards")
+        n_s3 = write_raw_rows_s3(_LAKEHOUSE_SOURCE, mirror_rows, mode="append")
+        log.info("mirrored %d row(s) → S3 lakehouse_raw/%s/", n_s3, _LAKEHOUSE_SOURCE)
 
 
 if __name__ == "__main__":

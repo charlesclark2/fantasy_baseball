@@ -41,7 +41,18 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from dotenv import load_dotenv
 
+# E11.1-W11 Tier-B: leg-gated dual-write (W11_RAW_WRITE_MODE). SF INSERT on 'snowflake'/'both';
+# an S3 mirror to lakehouse_raw/umpire_game_log/ on 's3'/'both'. Default 'snowflake' → unchanged.
+from utils.lakehouse_raw_writer import (  # noqa: E402
+    lakehouse_write_legs,
+    umpire_mirror_rows,
+    w11_write_mode,
+    write_raw_rows_s3,
+)
+
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
+
+_LAKEHOUSE_SOURCE = "umpire_game_log"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -194,10 +205,14 @@ def main():
                         ))
     args = parser.parse_args()
 
+    # E11.1-W11 Tier-B: which legs run (SF INSERT and/or S3 mirror) per W11_RAW_WRITE_MODE.
+    do_sf, do_s3 = lakehouse_write_legs(w11_write_mode())
+
     # E11.11 — once-captured guard: skip the MLB API call if today's data is already present.
     # The delete-then-insert is idempotent, but hitting the API and re-writing on every
     # lineup_monitor fire (~every 10 min) is wasteful after the first successful ingest.
-    if args.skip_if_exists and not args.dry_run:
+    # SF-leg-only optimization (there's no Snowflake to check in s3-only mode).
+    if args.skip_if_exists and not args.dry_run and do_sf:
         conn = get_snowflake_conn()
         try:
             with conn.cursor() as cur:
@@ -227,17 +242,24 @@ def main():
         log.warning("No HP umpire assignments found for %s — nothing to write.", args.date)
         return
 
-    log.info("Connecting to Snowflake...")
-    conn = get_snowflake_conn()
-    try:
-        loaded = insert_rows(conn, assignments)
-        log.info("Inserted %d HP umpire assignments for %s", loaded, args.date)
-    except Exception as exc:
-        log.error("Snowflake write failed: %s", exc)
-        conn.close()
-        sys.exit(1)
-    finally:
-        conn.close()
+    if do_sf:
+        log.info("Connecting to Snowflake...")
+        conn = get_snowflake_conn()
+        try:
+            loaded = insert_rows(conn, assignments)
+            log.info("Inserted %d HP umpire assignments for %s", loaded, args.date)
+        except Exception as exc:
+            log.error("Snowflake write failed: %s", exc)
+            conn.close()
+            sys.exit(1)
+        finally:
+            conn.close()
+
+    if do_s3:
+        # data_source='statsapi' (today's HP-name assignment); tendency cols NULL.
+        mirror_rows = umpire_mirror_rows(assignments, data_source="statsapi")
+        n_s3 = write_raw_rows_s3(_LAKEHOUSE_SOURCE, mirror_rows, mode="append")
+        log.info("mirrored %d row(s) → S3 lakehouse_raw/%s/", n_s3, _LAKEHOUSE_SOURCE)
 
 
 if __name__ == "__main__":
