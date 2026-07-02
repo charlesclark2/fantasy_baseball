@@ -532,6 +532,19 @@ def run_w1_lakehouse_op(context):
     if _w7b_mirror_on():
         _run_mirror(context, "export_w7b_precursors_to_s3.py")
         _run_mirror(context, "run_w1_lakehouse.py", ["--w7b-only"])
+    # E11.1-W8-SPINE (2026-07-02) — the W8b cutover made mart_game_spine (a W5 Group-A model)
+    # SERVING-CRITICAL: the --w8a/--w8b feature build below reads it as a precursor VIEW, and the served
+    # feature_pregame_game_features is only as fresh as the spine's scheduled-game universe. But --w5 is
+    # NOT in the daily build (only the gated W11_W4W5_NIGHTLY rebuild, placed AFTER --w8b), so the spine
+    # froze at its last manual build → the pregame feature store lost the current slate → predict_today
+    # silently degraded to the intraday-assembly fallback (patchy post_lineup coverage). Rebuild the spine
+    # (W5 Group A = mart_game_results/spine + team/game chain; NOT W5b, which reads the W8a EB posteriors
+    # built below → stays in the W11 nightly's post-w8a slot) HERE, BEFORE --w8a/--w8b, so the SAME-day
+    # feature build sees today's scheduled games. Reuses the W1/W2/W3pre parquet the --w6 build just wrote.
+    # Same tier as the W8a mirror (HALT once W8A_LAKEHOUSE_S3=1 — serving depends on it now; ALERT during
+    # the parallel window). The build emits a spine-staleness ALERT at the source if the universe is stale.
+    if _w8a_mirror_on():
+        _run_w8a_mirror(context, "run_w1_lakehouse.py", ["--w5-only", "--w5-group-a-only"])
     # E11.1-W8a: when the S3 build is on (cutover OR parallel), ALSO mirror the W8a Python-table/
     # seed precursors and build the upstream feature layer + EB posteriors parquet so the dbt else
     # branches (cutover) resolve and parity_check_w8a (parallel) has fresh S3 data. Mirror-tier per

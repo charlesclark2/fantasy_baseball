@@ -655,6 +655,39 @@ def _register_s3_glob_views(conn, names: list[str]) -> None:
         print(f"  registered S3 view: {name}")
 
 
+def _alert_stale_game_spine(conn) -> None:
+    """Spine-staleness ALERT at the SOURCE (2026-07-02).
+
+    Post-W8b-cutover mart_game_spine is SERVING-CRITICAL: the --w8a/--w8b feature build reads it as a
+    precursor view, and the served pregame feature store (feature_pregame_game_features) is only as
+    fresh as the spine's scheduled-game universe. If a build produces a spine whose games do NOT reach
+    the current day — a frozen spine (--w5 not run) OR a stale stg_statsapi_games — the feature store
+    loses today's slate and predict_today silently degrades to the intraday-assembly fallback (patchy
+    post_lineup coverage). WARN loudly (stderr → ALERT tier) HERE, at the build, rather than only at the
+    downstream serving symptom. Never raises — pure observability. Reads the just-registered
+    mart_game_spine view; game_date is ISO-VARCHAR in the parquet (INC-23 ts-stringify) so try_cast."""
+    try:
+        row = conn.execute(
+            "select max(try_cast(game_date as date)) as mx, "
+            "(max(try_cast(game_date as date)) >= current_date) as covers_today "
+            "from mart_game_spine"
+        ).fetchone()
+    except Exception as e:  # noqa: BLE001 — observability only; never fail the build
+        print(f"  (spine-staleness check skipped: {e})", file=sys.stderr)
+        return
+    mx, covers_today = (row[0] if row else None), (row[1] if row else False)
+    if not covers_today:
+        print(
+            f"WARNING: [spine-staleness] mart_game_spine's scheduled universe does not reach today "
+            f"(current_date); max game_date = {mx}. The pregame feature store will LACK the current "
+            f"slate → predict_today degrades to the intraday-assembly fallback. Ensure --w5-group-a "
+            f"runs daily BEFORE --w8a/--w8b and that stg_statsapi_games is fresh.",
+            file=sys.stderr,
+        )
+    else:
+        print(f"[spine-staleness] OK: mart_game_spine reaches today (max game_date {mx}).")
+
+
 def _build_w5(conn, dry_run: bool, group_b: bool = True) -> None:
     """Build the E11.1-W5 seeds + mart_game_results/mart_game_spine team/game chain
     (Group A, 10 marts) and, optionally, the 4 W4-deferred marts (Group B).
@@ -678,6 +711,9 @@ def _build_w5(conn, dry_run: bool, group_b: bool = True) -> None:
     for model in W5_MART_MODELS:
         _build_marts(conn, [model], dry_run)
         _register_mart_views(conn, [model], dry_run)
+
+    # Spine now built + registered — ALERT if its scheduled universe doesn't reach today (serving-critical).
+    _alert_stale_game_spine(conn)
 
     if not group_b:
         return
