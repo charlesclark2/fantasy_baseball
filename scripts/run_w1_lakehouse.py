@@ -1210,6 +1210,10 @@ W8B_PRECURSOR_VIEWS = [
     "fct_fangraphs_pitcher_arsenal_wide", "stg_fangraphs__zips_hitting",
     # W3pre / W6 / W7b staging
     "stg_statsapi_games", "stg_statsapi_lineups_wide", "stg_statsapi_probable_pitchers",
+    # E1.11 Phase 2 — starter + lineup features read stg_statsapi_transactions (W7b parquet,
+    # written by --w7b before --w8b in the daily op) for the recently-acquired / traded-player
+    # context (is_recently_acquired, days_on_team, same-team form). Fresh via the daily --w7b run.
+    "stg_statsapi_transactions",
     # W7a clusters (lakehouse_clusters source)
     "pitcher_clusters", "batter_clusters",
     # W7b injury chain (already in S3; read by lineup_features)
