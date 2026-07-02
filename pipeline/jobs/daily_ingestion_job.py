@@ -3,8 +3,10 @@ from dagster import in_process_executor, job
 from pipeline.ops.daily_ingestion_ops import (
     backfill_prediction_log,
     build_zone_matchup_overlay_op,
+    ingest_player_props_op,
     write_pitcher_k_projections_op,
     check_data_freshness,
+    check_odds_coverage_op,
     check_prediction_coverage,
     compute_elo,
     compute_model_health,
@@ -76,7 +78,12 @@ def daily_ingestion_job():
     s5b = ingest_statcast_to_s3_op(start=s5)
     s5c = run_w1_lakehouse_op(start=s5b)
     s5d = refresh_w1_external_tables_op(start=s5c)
-    s6 = ingest_statsapi_schedule(start=s5d)
+    # Durable odds-coverage DQ guard (2026-07-02 incident). The odds marts (mart_odds_outcomes
+    # + mart_game_odds_bridge) are now fresh; detect the "bridge freeze" class — 0 has_odds rows
+    # for the current slate while spine + outcomes are both fresh — before the prediction path.
+    # ALERT-continue by default; HALTs here only when ODDS_COVERAGE_STRICT=1 (see the op docstring).
+    s5e = check_odds_coverage_op(start=s5d)
+    s6 = ingest_statsapi_schedule(start=s5e)
     s7 = ingest_weather(start=s6)
     s8 = ingest_umpires_early(start=s7)
     s9 = ingest_fangraphs_stuff_plus(start=s8)
@@ -184,6 +191,11 @@ def daily_ingestion_job():
     # E5.5 — daily K-projection payloads for the /props page. WARN-tier; fans out from
     # predict_today_morning in parallel with the zone overlays; writes DynamoDB + S3, never blocks.
     write_pitcher_k_projections_op(start=s19)
+    # E5.1b — daily player-prop odds catch-up (mlb/props/ S3). WARN-tier; hangs off predict so
+    # its ~few-minute paid Odds API pull never delays the serving-critical predict path. Gated
+    # PROPS_DAILY_INGEST (default OFF) → a no-op loud-skip until the operator flips it. Historical
+    # endpoint → lands yesterday's slate; idempotent partition-skip → only pays for the new day.
+    ingest_player_props_op(start=s19)
     write_api_cache_op(predict_done=s19n)
     write_serving_store_op(predict_done=s19n)
     s19b = update_pipeline_status(start=s19n)
