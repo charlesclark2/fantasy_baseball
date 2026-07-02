@@ -55,12 +55,21 @@ def test_spine_group_a_rebuild_is_present():
     assert all("--w5-only" in blob for _, blob in spine), "--w5-group-a-only requires --w5-only"
 
 
+def _first_line(token: str) -> int:
+    hits = [ln for ln, blob in _run_w1_lakehouse_calls() if token in blob]
+    assert hits, f"no run_w1_lakehouse.py call with {token}"
+    return min(hits)
+
+
 def test_spine_rebuild_precedes_the_w8a_and_w8b_feature_builds():
-    calls = _run_w1_lakehouse_calls()
-    def first_line(token: str) -> int:
-        hits = [ln for ln, blob in calls if token in blob]
-        assert hits, f"no run_w1_lakehouse.py call with {token}"
-        return min(hits)
-    spine_ln = first_line("--w5-group-a-only")
-    assert spine_ln < first_line("--w8a-only"), "spine rebuild must precede --w8a-only"
-    assert spine_ln < first_line("--w8b-only"), "spine rebuild must precede --w8b-only"
+    spine_ln = _first_line("--w5-group-a-only")
+    assert spine_ln < _first_line("--w8a-only"), "spine rebuild must precede --w8a-only"
+    assert spine_ln < _first_line("--w8b-only"), "spine rebuild must precede --w8b-only"
+
+
+def test_w5b_rebuild_runs_after_w8a_and_before_the_w8b_aggregator():
+    # W5b reads the eb_bullpen_team_posteriors parquet --w8a writes, and the --w8b aggregator reads
+    # W5b's park/defense/bullpen-effectiveness marts → the slot is strictly between --w8a and --w8b.
+    w5b_ln = _first_line("--w5b-only")
+    assert _first_line("--w8a-only") < w5b_ln, "--w5b-only must run AFTER --w8a-only"
+    assert w5b_ln < _first_line("--w8b-only"), "--w5b-only must run BEFORE --w8b-only"

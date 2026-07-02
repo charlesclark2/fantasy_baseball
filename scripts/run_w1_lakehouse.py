@@ -726,6 +726,59 @@ def _build_w5(conn, dry_run: bool, group_b: bool = True) -> None:
         _register_mart_views(conn, [model], dry_run)
 
 
+def _alert_stale_w5b(conn) -> None:
+    """W5b staleness ALERT at the SOURCE (2026-07-02). Post-W8b-cutover the --w8b aggregator reads the
+    W5b park/defense/bullpen-effectiveness feature VALUES; if --w5b doesn't run daily these marts
+    freeze and the served features drift stale (stale VALUES, not missing games — lower severity than
+    the spine's missing slate). WARN (stderr → ALERT tier) if the per-game rolling defense mart does
+    not reach today. Never raises — pure observability. game_date is ISO-VARCHAR in the parquet
+    (INC-23) so try_cast."""
+    try:
+        row = conn.execute(
+            "select max(try_cast(game_date as date)) as mx, "
+            "(max(try_cast(game_date as date)) >= current_date) as covers_today "
+            "from mart_team_defense_quality_rolling"
+        ).fetchone()
+    except Exception as e:  # noqa: BLE001 — observability only; never fail the build
+        print(f"  (w5b-staleness check skipped: {e})", file=sys.stderr)
+        return
+    mx, covers_today = (row[0] if row else None), (row[1] if row else False)
+    if not covers_today:
+        print(
+            f"WARNING: [w5b-staleness] mart_team_defense_quality_rolling does not reach today "
+            f"(max game_date {mx}); the W5b park/defense/bullpen-effectiveness feature VALUES the "
+            f"aggregator reads are stale. Ensure --w5b-only runs daily (between --w8a and --w8b).",
+            file=sys.stderr,
+        )
+    else:
+        print(f"[w5b-staleness] OK: mart_team_defense_quality_rolling reaches today (max game_date {mx}).")
+
+
+def _build_w5b(conn, dry_run: bool) -> None:
+    """Build ONLY the W5 Group-B marts (the 4 W4-deferred park/defense/bullpen-effectiveness marts +
+    the stg_batter_sprint_speed precursor), reusing the existing Group-A + W2 parquet.
+
+    WHY --w5b-only exists (2026-07-02, sibling of the spine fix): the W8b cutover made these marts
+    serving-relevant — the --w8b aggregator reads their feature VALUES — but --w5 isn't in the daily
+    build, so they froze at the last manual --w5 run and drift stale (stale VALUES, not missing games).
+    W5b reads the W8a EB posteriors (eb_bullpen_team_posteriors parquet) so it must run AFTER --w8a;
+    the aggregator reads W5b so it must run BEFORE --w8b → the daily slot is between --w8a and --w8b
+    (Group A / --w5-group-a-only still runs before --w8a — it's the game universe). Registers the
+    Group-A marts it reads (mart_game_spine etc.) + the W2 mart_starting_pitcher_game_log from their
+    existing parquet; the raw inputs (eb_park_factors_raw, oaa_team_season_raw,
+    eb_bullpen_team_posteriors, sprint_speed_raw) are read directly via read_parquet in each model."""
+    print("\nW5b Group-B marts (reuse existing Group-A/W2 parquet for --w5b-only):")
+    # Register the Group-A deps as views (read the existing parquet on a real run; recomputed from the
+    # seed + W3pre precursor views in --dry-run, hence registering those first).
+    _register_s3_glob_views(conn, W5_SEED_VIEWS + W5_PRECURSOR_VIEWS)
+    _register_mart_views(conn, ["dim_team_name_lookup", "mart_game_results", "mart_game_spine"], dry_run)
+    _register_s3_glob_views(conn, ["mart_starting_pitcher_game_log"])
+    for model in W5B_PRECURSOR_MODELS + W5B_MART_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+    _alert_stale_w5b(conn)
+
+
 def _build_archetype(conn, dry_run: bool) -> None:
     """Build the E11.1-W5b archetype mart (mart_batter_archetype_vs_pitcher_cluster). It
     reads the W1 mart_pitch_play_event (registered as a DuckDB view) + the
@@ -1482,6 +1535,7 @@ def run(
     w5: bool = False,
     w5_only: bool = False,
     w5_group_a_only: bool = False,
+    w5b_only: bool = False,
     archetype: bool = False,
     archetype_only: bool = False,
     w6: bool = False,
@@ -1644,6 +1698,17 @@ def run(
         _build_w5(conn, dry_run, group_b=not w5_group_a_only)
         conn.close()
         print("\nW5 marts run complete (--w5-only).")
+        return
+
+    # E11.1-W5b: --w5b-only rebuilds JUST the W5 Group-B marts (park/defense/bullpen-effectiveness),
+    # reusing the existing Group-A/W2 parquet. The daily job runs this BETWEEN --w8a (whose
+    # eb_bullpen_team_posteriors parquet W5b reads) and --w8b (whose aggregator reads W5b). See
+    # _build_w5b for the full rationale.
+    if w5b_only:
+        print("\nBuilding W5b Group-B marts (reuse existing Group-A/W2 parquet for --w5b-only):")
+        _build_w5b(conn, dry_run)
+        conn.close()
+        print("\nW5b Group-B marts run complete (--w5b-only).")
         return
 
     # E11.1-W5b: --archetype-only rebuilds just the archetype mart, reusing the existing W1
@@ -1878,6 +1943,7 @@ if __name__ == "__main__":
         w5="--w5" in sys.argv,
         w5_only="--w5-only" in sys.argv,
         w5_group_a_only="--w5-group-a-only" in sys.argv,
+        w5b_only="--w5b-only" in sys.argv,
         archetype="--archetype" in sys.argv,
         archetype_only="--archetype-only" in sys.argv,
         w6="--w6" in sys.argv,

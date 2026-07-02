@@ -565,6 +565,13 @@ def run_w1_lakehouse_op(context):
     # ~1-day-stale at this point in the daily order (run_w1_lakehouse_op precedes the dbt feature
     # build), which parity_check_w8b surfaces; acceptable for those slow-moving features.
     if _w8b_mirror_on():
+        # E11.1-W5b (2026-07-02, spine-fix sibling): rebuild the W5 Group-B marts (park/defense/
+        # bullpen-effectiveness feature VALUES the aggregator reads) HERE — AFTER --w8a (W5b reads the
+        # eb_bullpen_team_posteriors parquet --w8a wrote above) and BEFORE --w8b-only. Without a daily
+        # rebuild these froze at the last manual --w5 run → the served park/defense/bullpen features
+        # drift stale (stale VALUES, not missing games — the lower-severity sibling of the spine
+        # freeze). Emits a w5b-staleness ALERT at the source. Same tier as the W8b mirror.
+        _run_w8b_mirror(context, "run_w1_lakehouse.py", ["--w5b-only"])
         _run_w8b_mirror(context, "export_w8b_precursors_to_s3.py")
         _run_w8b_mirror(context, "run_w1_lakehouse.py", ["--w8b-only"])
         _run_w8b_mirror(context, "refresh_w1_external_tables.py", ["--w8b"])
