@@ -633,6 +633,48 @@ eb_agg as (
     group by game_pk, home_away
 ),
 
+-- ── E1.11 Phase 2 — RECENTLY-ACQUIRED / traded-BATTER context (lineup-level) ──
+-- Batters are the LARGER traded cohort. Each slot's rolling 30d/season line (feeding
+-- la.avg_woba_30d etc.) BLENDS old-team + new-team games — mart_batter_rolling_stats
+-- partitions by batter_id ONLY, never team — so a lineup with several just-acquired
+-- hitters carries stale-context form the market is slow to re-rate. Per-slot acquired_date
+-- = the most recent team-change transaction (TR/ACQ/CLW/OBT/PUR; Stats-API team_id = the
+-- ACQUIRING team, verified) on/before official_date, bounded 400d (max() takes the most
+-- recent). LEAKAGE-safe (transaction_date <= official_date). Offseason moves clear 30d by
+-- opening day ⇒ correctly not flagged. Aggregated to the side so a model can DOWN-WEIGHT
+-- the blended lineup form when a chunk of the order just switched context.
+-- NOTE: the per-batter same-team ROLLING wOBA (a team-scoped recompute over each hitter's
+-- post-acquisition game history) is a scoped follow-up — it needs the CURRENT-game team,
+-- which lives here, not in the as-of W2 rolling row. The flags below already let the model
+-- gate the blended aggregate; the pitcher side carries the full same-team form.
+slot_acquisition as (
+    select
+        ls.game_pk,
+        ls.official_date,
+        ls.home_away,
+        ls.batter_id,
+        datediff('day', max(t.transaction_date::date), ls.official_date) as days_on_team
+    from lineup_slots ls
+    inner join {{ ref('stg_statsapi_transactions') }} t
+        on  t.player_id = ls.batter_id
+        and t.type_code in ('TR','ACQ','CLW','OBT','PUR','CP')
+        and t.transaction_date::date <= ls.official_date
+        and datediff('day', t.transaction_date::date, ls.official_date) <= 400
+    where ls.batter_id is not null
+    group by ls.game_pk, ls.official_date, ls.home_away, ls.batter_id
+),
+
+acquisition_agg as (
+    select
+        game_pk,
+        home_away,
+        sum(case when days_on_team <= 30 then 1 else 0 end)              as recently_acquired_count,
+        min(case when days_on_team <= 30 then days_on_team end)          as min_days_on_team,
+        round(avg(case when days_on_team <= 30 then days_on_team end), 1) as avg_days_on_team_recent
+    from slot_acquisition
+    group by game_pk, home_away
+),
+
 final as (
     select
         l.game_pk,
@@ -680,6 +722,16 @@ final as (
         coalesce(ia.injured_player_count, 0)    as injured_player_count,
         ia.injury_adj_avg_woba_30d,
         ia.injury_adj_avg_xwoba_30d,
+
+        -- ── E1.11 Phase 2 — recently-acquired / traded-batter context ─────────
+        -- lineup_recently_acquired_count: # of this side's 9 slots acquired ≤30d ago;
+        -- lineup_pct_recently_acquired: that / 9 (share of the order in a new context);
+        -- min / avg days_on_team over the recently-acquired slots. A model can use these
+        -- to down-weight the blended la.avg_woba_30d / avg_woba_std above. NULLs → 0 slots.
+        coalesce(acq.recently_acquired_count, 0)        as lineup_recently_acquired_count,
+        round(coalesce(acq.recently_acquired_count, 0)::double / 9.0, 3) as lineup_pct_recently_acquired,
+        acq.min_days_on_team                            as lineup_min_days_on_team,
+        acq.avg_days_on_team_recent                     as lineup_avg_days_on_team_recent,
 
         -- Hitter vs. starter pitch-archetype matchup features (Card 7.J)
         -- Prior-season archetype lookup; shrinkage-adjusted for small samples
@@ -805,6 +857,10 @@ final as (
     left join batter_archetype_dist bad
         on  bad.game_pk   = l.game_pk
         and bad.home_away = l.home_away
+    -- E1.11 Phase 2 — recently-acquired / traded-batter context
+    left join acquisition_agg acq
+        on  acq.game_pk   = l.game_pk
+        and acq.home_away = l.home_away
 )
 
 select * from final

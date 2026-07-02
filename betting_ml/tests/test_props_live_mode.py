@@ -12,7 +12,7 @@ Player Props page fresh on par with the other odds crons. It must:
 Pure/mocked — no network or S3. A fixed 2025 in-season date keeps the season lookup
 deterministic (2025 range is static, unlike the current-year range which ends today-1).
 """
-from datetime import date
+from datetime import date, timedelta
 
 import scripts.backfill_multisport_props_to_s3 as bf
 
@@ -73,6 +73,20 @@ def test_live_no_upcoming_games_writes_nothing(monkeypatch):
                 sleep_secs=0, markets_override=["pitcher_strikeouts"])
 
     assert writes == [], "no upcoming games must not write (and cost) anything"
+
+
+def test_live_season_resolves_today_past_the_backfill_end_cap(monkeypatch):
+    # Regression for the 2026-07-02 box smoke: the CURRENT season's range END is capped at
+    # today-1 (a HISTORICAL-backfill artifact — no archived props for today). _season_for_date
+    # therefore rejects TODAY, which is exactly the date the live feed targets → the pull
+    # silently skipped as "offseason". _live_season_for_date must accept today.
+    today = date(2026, 7, 2)
+    ranges = {2026: (date(2026, 3, 26), today - timedelta(days=1))}  # end = yesterday (the cap)
+    monkeypatch.setitem(bf.SPORTS_CONFIG["baseball_mlb"], "season_ranges", ranges)
+    assert bf._season_for_date("baseball_mlb", today) is None        # the bug
+    assert bf._live_season_for_date("baseball_mlb", today) == 2026   # the fix
+    # a genuine offseason date (before the season start) still resolves to None → live no-ops
+    assert bf._live_season_for_date("baseball_mlb", date(2026, 1, 15)) is None
 
 
 def test_us_baseball_day_falls_back_without_helper(monkeypatch):

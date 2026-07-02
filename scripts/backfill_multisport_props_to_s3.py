@@ -1020,6 +1020,24 @@ def run_backfill(
 
 # ── Live mode ────────────────────────────────────────────────────────────────────
 
+def _live_season_for_date(sport: str, d: date) -> int | None:
+    """Season LABEL for a LIVE (today) pull.
+
+    `_season_for_date` caps the CURRENT season's range end at `_today - 1` (a HISTORICAL
+    backfill artifact — the historical endpoint has no data for today), so it returns None
+    for TODAY, which is exactly the date the live feed targets. Here we resolve the season
+    by START (the season a date belongs to), tolerating a date that sits just past the
+    capped end, but still bounding to a plausible in-season window (~250 days from start,
+    covering a full MLB season) so a genuine OFFSEASON date returns None (→ live no-ops).
+    """
+    for season, (start, end) in sorted(
+        SPORTS_CONFIG[sport]["season_ranges"].items(), reverse=True
+    ):
+        if start <= d <= max(end, start + timedelta(days=250)):
+            return season
+    return None
+
+
 def _us_baseball_day() -> date:
     """Today on the US baseball calendar (America/Los_Angeles), NOT UTC. The box runs
     UTC, so a bare date.today() rolls to UTC-tomorrow in the US evening (INC-22 class) —
@@ -1068,9 +1086,9 @@ def run_live(
         if not markets:
             log.warning("  %s — no markets to fetch; skipping.", cfg["display"])
             continue
-        season = _season_for_date(sport, game_date)
+        season = _live_season_for_date(sport, game_date)
         if season is None:
-            log.info("  %s — %s is outside all configured season ranges (offseason); skipping.",
+            log.info("  %s — %s is outside the configured season window (offseason); skipping.",
                      cfg["display"], game_date)
             continue
         cr_per_event = _credits_per_event(markets, regions)

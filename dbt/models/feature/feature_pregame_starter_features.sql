@@ -199,6 +199,7 @@ sp_form as (
     select
         pp.game_pk,
         pp.pitcher_id,
+        gl.game_date::date                      as start_date,
         gl.strikeouts,
         gl.walks,
         gl.batters_faced,
@@ -226,6 +227,69 @@ sp_form_stats as (
         sum(case when recency_rank <= 3 then batters_faced end)                        as sp_form_bf_l3,
         sum(case when recency_rank <= 3 then 1 else 0 end)                             as sp_form_start_count
     from sp_form
+    group by game_pk, pitcher_id
+),
+
+-- ── E1.11 Phase 2 — RECENTLY-ACQUIRED / traded-pitcher context ────────────────
+-- A mid-season-acquired starter's calendar (*_7d/_30d) AND start-indexed (sp_*_l3) form
+-- BLEND his old-team and new-team starts — the rolling marts partition by pitcher_id
+-- ONLY, never team — and the market + our own features are slow to re-rate a pitcher in
+-- a new context (the information-timing signal). acquired_date = the most recent
+-- team-change transaction (Trade/Acquired/Claimed-off-Waivers/Obtained/Purchase; the
+-- Stats-API team_id is the ACQUIRING team, verified against post-trade game logs) on or
+-- before this game. LEAKAGE-safe (transaction_date <= pp.game_date). Bounded to 400 days
+-- so an ancient rookie call-up cannot register as the "current" acquisition; max() then
+-- takes the most recent. Offseason moves clear the 30-day window by opening day and are
+-- correctly NOT flagged (a full spring to adjust ⇒ not a live context switch).
+pitcher_acquisition as (
+    select
+        pp.game_pk,
+        pp.pitcher_id,
+        max(t.transaction_date::date) as acquired_date
+    from probable_pitchers pp
+    inner join {{ ref('stg_statsapi_transactions') }} t
+        on  t.player_id = pp.pitcher_id
+        and t.type_code in ('TR','ACQ','CLW','OBT','PUR','CP')
+        and t.transaction_date::date <= pp.game_date
+        and datediff('day', t.transaction_date::date, pp.game_date) <= 400
+    group by pp.game_pk, pp.pitcher_id
+),
+
+-- NEW-CONTEXT (same-team) start-indexed form: sp_*_l3 restricted to starts made ON or
+-- AFTER acquired_date (the new team only), re-ranked within the post-acquisition subset.
+-- NULL when a just-acquired starter has no post-acquisition starts yet — honestly
+-- signalling "no new-team form" rather than silently reusing the blended pre-trade numbers.
+sp_form_same_team as (
+    select
+        sf.game_pk,
+        sf.pitcher_id,
+        sf.strikeouts,
+        sf.walks,
+        sf.batters_faced,
+        sf.xwoba_against,
+        row_number() over (
+            partition by sf.game_pk, sf.pitcher_id
+            order by sf.start_date desc
+        ) as recency_rank_st
+    from sp_form sf
+    inner join pitcher_acquisition acq
+        on  acq.game_pk    = sf.game_pk
+        and acq.pitcher_id = sf.pitcher_id
+    where sf.start_date >= acq.acquired_date
+),
+
+sp_form_same_team_stats as (
+    select
+        game_pk,
+        pitcher_id,
+        round(sum(case when recency_rank_st <= 3 then strikeouts end)
+              / nullif(sum(case when recency_rank_st <= 3 then batters_faced end), 0), 4) as sp_k_pct_l3_same_team,
+        round(sum(case when recency_rank_st <= 3 then walks end)
+              / nullif(sum(case when recency_rank_st <= 3 then batters_faced end), 0), 4) as sp_bb_pct_l3_same_team,
+        round(sum(case when recency_rank_st <= 3 then xwoba_against * batters_faced end)
+              / nullif(sum(case when recency_rank_st <= 3 then batters_faced end), 0), 4) as sp_xwoba_against_l3_same_team,
+        sum(case when recency_rank_st <= 3 then 1 else 0 end)                             as sp_form_start_count_same_team
+    from sp_form_same_team
     group by game_pk, pitcher_id
 ),
 
@@ -677,6 +741,26 @@ final as (
         -- IL return). Makes a large, correct days_rest (e.g. 189) legible to the model.
         (datediff('day', ps.last_start_date, pp.game_date) > 30)::boolean    as starter_long_layoff,
 
+        -- ── E1.11 Phase 2 — recently-acquired / traded-pitcher context ────────
+        -- starter_days_on_team: days since the pitcher's most recent team-change txn
+        -- (NULL = no acquisition in the last 400d ⇒ settled / homegrown / long tenure).
+        -- starter_is_recently_acquired: acquired ≤30d ago (the in-season context-switch
+        -- window). starter_starts_since_acquired: post-acquisition starts backing the
+        -- new-context form. sp_*_l3_same_team: the gap-immune l3 form over NEW-TEAM starts
+        -- only (NULL for a just-acquired starter with no new-team start yet — honest, not
+        -- the blend). starter_form_spans_team_change: the last-3 form mixes old + new team.
+        datediff('day', acq.acquired_date, pp.game_date)                     as starter_days_on_team,
+        coalesce(datediff('day', acq.acquired_date, pp.game_date) <= 30, false)::boolean as starter_is_recently_acquired,
+        coalesce(sfst.sp_form_start_count_same_team, 0)                      as starter_starts_since_acquired,
+        sfst.sp_k_pct_l3_same_team,
+        sfst.sp_bb_pct_l3_same_team,
+        sfst.sp_xwoba_against_l3_same_team,
+        coalesce(
+            datediff('day', acq.acquired_date, pp.game_date) <= 30
+            and coalesce(sfst.sp_form_start_count_same_team, 0) < coalesce(sfs.sp_form_start_count, 0),
+            false
+        )::boolean                                                           as starter_form_spans_team_change,
+
         -- ── Sample size flags: appearances in each rolling window ─────────────
         pgr.games_30d                                as appearances_30d,
         pgr.games_std                                as appearances_std,
@@ -820,6 +904,13 @@ final as (
     left join sp_form_stats sfs
         on  sfs.game_pk     = pp.game_pk
         and sfs.pitcher_id  = pp.pitcher_id
+    -- E1.11 Phase 2 — recently-acquired context + new-team (same-team) form
+    left join pitcher_acquisition acq
+        on  acq.game_pk     = pp.game_pk
+        and acq.pitcher_id  = pp.pitcher_id
+    left join sp_form_same_team_stats sfst
+        on  sfst.game_pk    = pp.game_pk
+        and sfst.pitcher_id = pp.pitcher_id
     left join velo_stats vs
         on  vs.game_pk      = pp.game_pk
         and vs.pitcher_id   = pp.pitcher_id
