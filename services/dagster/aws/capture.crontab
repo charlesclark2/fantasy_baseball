@@ -48,19 +48,32 @@ SHELL=/bin/bash
 # Weather forecast checkpoints T-24/6/3/1h + observed-at-first-pitch (entrypoint self-guards 10:00-02:00 UTC).
 0 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml run --rm weather-capture >> /home/ec2-user/capture-cron.log 2>&1
 
-# MLB player-prop forward catch-up → S3 mlb/props/ (E5.1b). ONCE/day: the Odds-API
-# historical endpoint only gains yesterday's snapshots once/day, so a 30-min cadence
-# would just re-skip. Advances all 8 player props (batter_*/pitcher_*) to yesterday via
-# the dynamic season-end (today-1) + idempotent partition skip (~14 events × 2 snaps ≈
-# 2k cr/day, ~60k/mo, single-region us; fits the post-7/17 100k/mo). Runs via `exec` on
-# the always-up code-server (no dedicated image needed), exactly like the freshness check
-# below. AWS_DEFAULT_REGION pinned us-east-2 — the artifacts bucket is us-east-2, but the
-# `run --rm` capture images set us-east-1, so an inherited region would break the S3 write.
-# ODDS_API_KEY comes from the container's env_file: .env; S3 auth = the instance IAM role.
+# MLB pitcher-strikeout props → S3 mlb/props/market=pitcher_strikeouts/ (E5.1b). TWO crons:
+#   (1) LIVE (below, hourly game-hours) = the CURRENT-lines feed for TODAY (the Player Props
+#       page), on par with the h2h/totals odds crons.
+#   (2) HISTORICAL archive/gap-fill (this line, once/day) = yesterday-&-earlier canonical
+#       snapshots. The historical endpoint only gains yesterday once/day, so a faster cadence
+#       would just re-skip; idempotent partition-skip means it costs ~nothing when history is
+#       already complete (it is, for pitcher_strikeouts) and only pays to fill genuine gaps.
+# SCOPED to pitcher_strikeouts (2026-07-02) — the ONLY market the app's Player Props page
+# surfaces (E5.5; write_pitcher_k_projections reads only mlb/props/market=pitcher_strikeouts/).
+# 10 cr/event vs 80 for the full 8-market set. Widen `--markets` only if the page shows more props.
+# Runs via `exec` on the always-up code-server. AWS_DEFAULT_REGION pinned us-east-2 (artifacts
+# bucket is us-east-2; the `run --rm` capture images set us-east-1 → an inherited region breaks
+# the S3 write). ODDS_API_KEY from the container's env_file: .env; S3 auth = the instance IAM role.
 # WARN/supplemental tier — a failure logs + is non-blocking (never gates predictions).
 # ✅ RE-ENABLED 2026-07-01 — paid Odds-API credits refreshed at the 00:00 flip-back
 # (was DISABLED 2026-06-30 for the free/Starter-key window). See E5_1b_session_recap_2026-06-30.md.
-0 13 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/backfill_multisport_props_to_s3.py --mode backfill --sport baseball_mlb --player-props-only >> /home/ec2-user/capture-cron.log 2>&1
+0 13 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/backfill_multisport_props_to_s3.py --mode backfill --sport baseball_mlb --markets pitcher_strikeouts >> /home/ec2-user/capture-cron.log 2>&1
+
+# (1) LIVE pitcher-strikeout props — CURRENT lines for TODAY's slate → overwrites date=<today>
+# each run, so the Player Props page refreshes intraday like the other odds offerings (2026-07-02).
+# HOURLY, game-hours 13:00–04:00 UTC (props post ~morning ET through the last first-pitches). Off
+# that window the live events endpoint returns no upcoming games → the run no-ops cheaply. ~15
+# games × 10 cr ≈ 150 cr/run × ~16 runs ≈ 2.4k cr/day (~63k/mo — under the post-7/17 100k/mo).
+# --mode live uses the LIVE per-event endpoint (no `date` param); the US-baseball-day resolver
+# (America/LA) keeps it off the UTC-tomorrow roll (INC-22). Same container/region/auth as above.
+0 13-23,0-4 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/backfill_multisport_props_to_s3.py --mode live --sport baseball_mlb --markets pitcher_strikeouts >> /home/ec2-user/capture-cron.log 2>&1
 
 # ── INC-16-P6 observability (host-cron) ──────────────────────────────────────
 # Service-liveness healthcheck every 5 min (core containers up + reachable; pages

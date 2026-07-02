@@ -495,6 +495,83 @@ def fetch_event_props(
         return None, -1
 
 
+# ── Live (current-lines) API calls — the intraday /props feed (E5.5) ─────────────
+# The historical endpoint only serves ARCHIVED snapshots (yesterday and earlier). The
+# LIVE per-event endpoint serves the CURRENT lines for UPCOMING games, so the Player
+# Props page can refresh intraday on the same cadence as the other odds crons. Same
+# two-step shape as the historical path, minus the `date` snapshot param. (Mirrors
+# derivative_odds_backfill.fetch_live_event_derivative_odds.)
+
+def fetch_live_events(
+    sport: str,
+    game_date: date,
+    api_key: str,
+) -> tuple[list[dict], int]:
+    """GET /v4/sports/{sport}/events (LIVE) for games commencing on game_date.
+
+    Returns (events_list, credits_remaining).  Cost: 1 credit.  Server-side filtered
+    to the day's commence window (00:00Z → next-day 07:00Z, to catch late Pacific games).
+    """
+    url = f"{ODDS_API_BASE_URL}/sports/{sport}/events"
+    params = {
+        "apiKey"           : api_key,
+        "commenceTimeFrom" : f"{game_date}T00:00:00Z",
+        "commenceTimeTo"   : f"{game_date + timedelta(days=1)}T07:00:00Z",
+        "dateFormat"       : "iso",
+    }
+    resp = _fetch_with_retry(url, params=params, timeout=20)
+    resp.raise_for_status()
+    remaining = resp.headers.get("x-requests-remaining", "?")
+    data = resp.json()
+    events = data if isinstance(data, list) else data.get("data", [])
+    try:
+        remaining_int = int(remaining)
+    except (ValueError, TypeError):
+        remaining_int = -1
+    return events, remaining_int
+
+
+def fetch_live_event_props(
+    sport: str,
+    event_id: str,
+    markets: list[str],
+    regions: list[str],
+    api_key: str,
+) -> tuple[dict | None, int]:
+    """GET /v4/sports/{sport}/events/{eventId}/odds (LIVE — no date param → CURRENT lines).
+
+    Returns (event_dict_or_None, credits_remaining).  Cost: 10 × markets × regions.
+    Returns None on 404 (event not found) / 422 (no data for these markets).
+    """
+    url = f"{ODDS_API_BASE_URL}/sports/{sport}/events/{event_id}/odds"
+    params = {
+        "apiKey"     : api_key,
+        "markets"    : ",".join(markets),
+        "regions"    : ",".join(regions),
+        "oddsFormat" : "american",
+    }
+    try:
+        resp = _fetch_with_retry(url, params=params, timeout=30)
+        remaining = resp.headers.get("x-requests-remaining", "?")
+        try:
+            remaining_int = int(remaining)
+        except (ValueError, TypeError):
+            remaining_int = -1
+        if resp.status_code in (404, 422):
+            return None, remaining_int
+        resp.raise_for_status()
+        data = resp.json()
+        event = data.get("data") or data
+        if isinstance(event, list):
+            event = event[0] if event else None
+        return event, remaining_int
+    except (requests.exceptions.HTTPError,
+            requests.exceptions.Timeout,
+            requests.exceptions.ConnectionError) as exc:
+        log.warning("Live fetch error for event %s (all retries exhausted): %s", event_id, exc)
+        return None, -1
+
+
 # ── Row extraction ─────────────────────────────────────────────────────────────
 
 def _pivot_prop_outcomes(outcomes: list[dict]) -> dict[str, dict]:
@@ -941,6 +1018,105 @@ def run_backfill(
              calls_made, credits_est)
 
 
+# ── Live mode ────────────────────────────────────────────────────────────────────
+
+def _us_baseball_day() -> date:
+    """Today on the US baseball calendar (America/Los_Angeles), NOT UTC. The box runs
+    UTC, so a bare date.today() rolls to UTC-tomorrow in the US evening (INC-22 class) —
+    which would make the live pull fetch the wrong slate and write a date=<tomorrow>
+    partition the K-projection writer (which reads the US baseball day) never sees. Use
+    the canonical helper when available; fall back to UTC date only if it can't import."""
+    try:
+        from betting_ml.utils.game_day import current_game_date
+        return current_game_date()
+    except Exception:  # noqa: BLE001 — standalone/local fallback
+        return date.today()
+
+
+def run_live(
+    sports: list[str],
+    regions: list[str],
+    api_key: str,
+    s3_client,
+    sleep_secs: float,
+    markets_override: list[str] | None = None,
+    player_props_only: bool = False,
+) -> None:
+    """Intraday CURRENT-lines pull for today's slate (the Player Props page feed).
+
+    Unlike run_backfill (historical, idempotent, yesterday-and-earlier), this ALWAYS
+    re-fetches today's upcoming games from the LIVE endpoint and OVERWRITES the
+    date=<today> partition with the latest snapshot — so an hourly cron keeps the served
+    prop lines fresh, on par with the h2h/totals odds crons. snapshot_ts = fetch time.
+    Off-hours the live events endpoint returns no upcoming games → the run no-ops cheaply.
+    """
+    ingested_at = datetime.now(timezone.utc).isoformat()
+    load_id     = str(uuid.uuid4())
+    snap_ts_str = ingested_at  # the live snapshot IS "now"
+    game_date   = _us_baseball_day()
+    calls_made  = 0
+    credits_est = 0
+
+    log.info("══ LIVE props pull — game_date=%s (US baseball day) ══", game_date)
+
+    for sport in sports:
+        cfg     = SPORTS_CONFIG[sport]
+        label   = cfg["label"]
+        markets = markets_override if markets_override else cfg["markets"]
+        if player_props_only:
+            markets = _filter_player_props(markets)
+        if not markets:
+            log.warning("  %s — no markets to fetch; skipping.", cfg["display"])
+            continue
+        season = _season_for_date(sport, game_date)
+        if season is None:
+            log.info("  %s — %s is outside all configured season ranges (offseason); skipping.",
+                     cfg["display"], game_date)
+            continue
+        cr_per_event = _credits_per_event(markets, regions)
+
+        # Step 1: today's upcoming events (live, 1 credit)
+        try:
+            events, remaining = fetch_live_events(sport, game_date, api_key)
+            calls_made += 1
+        except requests.exceptions.RequestException as exc:
+            log.warning("Live events fetch failed for %s %s: %s", sport, game_date, exc)
+            continue
+        log.info("  %s  %s  %d upcoming events  markets=%s  cr/event≈%d  api_remaining=%s",
+                 cfg["display"], game_date, len(events), ",".join(markets), cr_per_event, remaining)
+        if not events:
+            log.info("    no upcoming events — nothing to write (off-window or offday).")
+            continue
+
+        # Step 2: current props per event
+        rows_by_market: dict[str, list[dict]] = {}
+        for event in events:
+            event_id = event.get("id", "")
+            event_data, remaining = fetch_live_event_props(
+                sport, event_id, markets, regions, api_key
+            )
+            calls_made  += 1
+            credits_est += cr_per_event
+            time.sleep(sleep_secs)
+            if not event_data:
+                continue
+            event_rows = event_to_rows(event_data, season, snap_ts_str, load_id, ingested_at)
+            for mkt_key, rows in event_rows.items():
+                rows_by_market.setdefault(mkt_key, []).extend(rows)
+
+        # Step 3: OVERWRITE today's partition per market with the latest snapshot
+        for mkt_key, rows in rows_by_market.items():
+            if not rows:
+                continue
+            key = s3_key(label, mkt_key, season, game_date)
+            write_to_s3(rows, key, s3_client, BUCKET)
+
+        log.info("  %s live done  calls=%d  est_credits=%d  api_remaining=%s",
+                 cfg["display"], calls_made, credits_est, remaining)
+
+    log.info("Live pull complete.  Total calls: %d  Est. credits: %d", calls_made, credits_est)
+
+
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -950,10 +1126,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--mode",
-        choices=["probe", "backfill"],
+        choices=["probe", "backfill", "live"],
         default="probe",
         help="probe (default): confirm availability + project cost.  "
-             "backfill: run the full historical pull.",
+             "backfill: full HISTORICAL pull (yesterday & earlier, idempotent).  "
+             "live: intraday CURRENT-lines pull for today's slate (overwrites date=today; "
+             "the /props page feed — run hourly during game hours).",
     )
     p.add_argument(
         "--sport",
@@ -1029,6 +1207,15 @@ def main() -> None:
     if args.mode == "probe":
         run_probe(sports, regions, api_key, args.sleep_seconds, markets_override,
                   args.player_props_only)
+        return
+
+    if args.mode == "live":
+        s3_client = boto3.client(
+            "s3",
+            region_name=os.getenv("AWS_DEFAULT_REGION", AWS_REGION),
+        )
+        run_live(sports, regions, api_key, s3_client, args.sleep_seconds,
+                 markets_override, args.player_props_only)
         return
 
     # Backfill mode — needs S3

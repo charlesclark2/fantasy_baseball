@@ -545,6 +545,18 @@ def run_w1_lakehouse_op(context):
     # the parallel window). The build emits a spine-staleness ALERT at the source if the universe is stale.
     if _w8a_mirror_on():
         _run_w8a_mirror(context, "run_w1_lakehouse.py", ["--w5-only", "--w5-group-a-only"])
+        # 2026-07-02 ODDS-BRIDGE FREEZE fix (E1_11_BUG Defect 3). The --w6 build ABOVE builds
+        # mart_game_odds_bridge off the spine as it stood at op START — i.e. the PREVIOUS run's spine,
+        # because the spine is only rebuilt HERE (line above), AFTER --w6. When that prior spine was
+        # frozen (the sibling spine-freeze incident), the bridge froze with it → has_odds=0 for the
+        # current slate → predict_today runs MARKET-BLIND with no error. Now that the spine is fresh
+        # THIS run, rebuild the odds-serving hot set off it: mart_odds_outcomes (_current bucket) +
+        # mart_game_odds_bridge (full ~26k rows, cheap) + refresh those two external tables. This is the
+        # same targeted path the intraday odds cycle uses (--w6-odds-current). Same tier as the spine
+        # rebuild (HALT once W8A_LAKEHOUSE_S3=1 — the bridge is serving-critical; ALERT pre-cutover).
+        # check_odds_coverage_op (refresh_w1_external_tables_op → next op) verifies the result.
+        _run_w8a_mirror(context, "run_w1_lakehouse.py", ["--w6-odds-current"])
+        _run_w8a_mirror(context, "refresh_w1_external_tables.py", ["--w6-odds"])
     # E11.1-W8a: when the S3 build is on (cutover OR parallel), ALSO mirror the W8a Python-table/
     # seed precursors and build the upstream feature layer + EB posteriors parquet so the dbt else
     # branches (cutover) resolve and parity_check_w8a (parallel) has fresh S3 data. Mirror-tier per
@@ -648,6 +660,44 @@ def refresh_w1_external_tables_op(context):
     # the generator runs) — the FanGraphs/posteriors/savant marts + precursor subtree.
     # Promote W4_TABLES to the `required` set once --w4 is default-on above.
     _run_script(context, "refresh_w1_external_tables.py")
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def check_odds_coverage_op(context):
+    """Durable odds-coverage DQ guard (2026-07-02 incident — E1_11_BUG Defect 3).
+
+    Detects the "bridge freeze" class: mart_game_odds_bridge has 0 has_odds rows for the
+    CURRENT slate even though mart_game_spine (games) AND mart_odds_outcomes (odds events)
+    are both fresh — i.e. the bridge parquet did not rebuild, so predict_today would run
+    MARKET-BLIND with no error, no null-alert. Placed right after the odds marts are
+    (re)built + external tables refreshed (run_w1_lakehouse_op --w6 → refresh_w1_external_
+    tables_op) and before the prediction path, so a freeze is caught before predict.
+
+    Tier: ALERT-loud-but-continue by DEFAULT (RUNTIME-GATE-safe rollout). check_odds_coverage.py
+    exits 0 and only WARNs unless ODDS_COVERAGE_STRICT=1, which promotes a CURRENT-slate FREEZE
+    to a non-zero exit → HALT here. The FREEZE test requires odds_events>0, so it can NEVER
+    false-fire when books simply have not posted yet (that path is NO_ODDS_YET, benign). Flip
+    ODDS_COVERAGE_STRICT=1 in the box env_file after confirming it does not false-fire."""
+    strict = os.environ.get("ODDS_COVERAGE_STRICT") == "1"
+    try:
+        stdout = _run_script(context, "check_odds_coverage.py", ["--env", _target_env()])
+    except Exception as e:
+        # Non-strict: never take down serving during rollout (ALERT-continue). Strict: the
+        # script exited non-zero on a current-slate FREEZE (or a genuine crash) → let it HALT.
+        if strict:
+            raise
+        context.log.warning(
+            "[ALERT] check_odds_coverage flagged an odds-coverage problem "
+            f"(non-blocking; set ODDS_COVERAGE_STRICT=1 to HALT): {e}"
+        )
+        return
+    for line in stdout.splitlines():
+        if line.startswith("[METRIC] odds_coverage_score="):
+            try:
+                score = float(line.split("=", 1)[1])
+                context.add_output_metadata({"odds_coverage_score": MetadataValue.float(score)})
+            except ValueError:
+                pass
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -1333,4 +1383,67 @@ def write_pitcher_k_projections_op(context):
         context.log.warning(
             "WARNING: write_pitcher_k_projections_op failed (non-fatal — the /props page may be "
             f"stale for today; predictions and serving are unaffected): {exc}"
+        )
+
+
+# ── E5.1b — daily pitcher-strikeout prop catch-up (the /props surface) ─────────
+
+# The ONLY player-prop market the app's Player Props page surfaces (E5.5 K-projection
+# model-vs-book). write_pitcher_k_projections.py reads ONLY
+# mlb/props/market=pitcher_strikeouts/, so the daily forward pull is scoped to that one
+# market — 10 cr/event vs 80 for the full 8-market player-prop set (8× cheaper). Widen
+# this list if/when the page starts surfacing batter props.
+_PROPS_DAILY_MARKETS = "pitcher_strikeouts"
+
+
+def _props_daily_ingest_on() -> bool:
+    """E5.1b daily pitcher-strikeout prop forward catch-up. Default-OFF so the op is a
+    safe no-op until the operator flips PROPS_DAILY_INGEST=1. The flag ALSO gates external
+    paid Odds API spend, so it must not run implicitly."""
+    return os.environ.get("PROPS_DAILY_INGEST") == "1"
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def ingest_player_props_op(context):
+    """Advance mlb/props/market=pitcher_strikeouts/ to yesterday (the Player Props page feed).
+
+    WARN-tier (E11.7): peripheral / non-serving. Player props write STRAIGHT to S3
+    (no Snowflake table, no dbt model) and are NOT on the predict/serving path — a
+    failure here must never block predictions. Runs `backfill_multisport_props_to_s3.py
+    --markets pitcher_strikeouts`, which is idempotent: existing (market, season, date) S3
+    partitions auto-skip, so a daily run only pays credits for the new slate. Scoped to
+    pitcher_strikeouts — the ONLY market the app's Player Props page consumes (E5.5
+    K-projection); write_pitcher_k_projections_op downstream reads only that market.
+
+    Source = Odds API *historical* events endpoint → the run inherently lands today-1
+    (a date's props are not archived until it is in the past; today's live props are
+    never available from this endpoint). Gated behind PROPS_DAILY_INGEST (default OFF)
+    because it spends external paid API credits — a gated-off run logs a loud skip
+    (ALERT tier) rather than silently no-op'ing.
+
+    ⚠️ REDUNDANT with the ALREADY-ACTIVE host cron `services/dagster/aws/capture.crontab`
+    (the `0 13 * * *` props line, re-enabled 2026-07-01 — verified firing: the 7/1 slate
+    landed at 13:02 UTC on 7/2). This op is the Dagster-native ALTERNATIVE (observable in
+    the run UI; a step toward retiring host-cron). Enable EXACTLY ONE — running both
+    double-pays credits for the same idempotent pull. Default OFF ⇒ host cron stays the
+    live mechanism.
+
+    Writes: s3://baseball-betting-ml-artifacts/mlb/props/market=pitcher_strikeouts/season=<yr>/date=<d>/
+    """
+    if not _props_daily_ingest_on():
+        context.log.warning(
+            "WARNING: ingest_player_props_op skipped — PROPS_DAILY_INGEST != 1 (no-op; the "
+            "mlb/props/ pitcher_strikeouts surface will NOT advance until the operator sets the flag)."
+        )
+        return
+    try:
+        _run_script(
+            context,
+            "backfill_multisport_props_to_s3.py",
+            ["--mode", "backfill", "--sport", "baseball_mlb", "--markets", _PROPS_DAILY_MARKETS],
+        )
+    except Exception as exc:  # noqa: BLE001
+        context.log.warning(
+            "WARNING: ingest_player_props_op failed (non-fatal — the /props page K-prop lines may "
+            f"lag by a day; predictions and serving are unaffected): {exc}"
         )
