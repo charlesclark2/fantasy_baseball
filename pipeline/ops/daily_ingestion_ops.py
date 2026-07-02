@@ -1386,24 +1386,34 @@ def write_pitcher_k_projections_op(context):
         )
 
 
-# ── E5.1b — daily player-prop odds catch-up (the /props surface) ───────────────
+# ── E5.1b — daily pitcher-strikeout prop catch-up (the /props surface) ─────────
+
+# The ONLY player-prop market the app's Player Props page surfaces (E5.5 K-projection
+# model-vs-book). write_pitcher_k_projections.py reads ONLY
+# mlb/props/market=pitcher_strikeouts/, so the daily forward pull is scoped to that one
+# market — 10 cr/event vs 80 for the full 8-market player-prop set (8× cheaper). Widen
+# this list if/when the page starts surfacing batter props.
+_PROPS_DAILY_MARKETS = "pitcher_strikeouts"
+
 
 def _props_daily_ingest_on() -> bool:
-    """E5.1b daily player-prop forward catch-up. Default-OFF so the op is a safe no-op
-    until the operator flips PROPS_DAILY_INGEST=1. The flag ALSO gates external paid
-    Odds API spend (~a few hundred credits/day), so it must not run implicitly."""
+    """E5.1b daily pitcher-strikeout prop forward catch-up. Default-OFF so the op is a
+    safe no-op until the operator flips PROPS_DAILY_INGEST=1. The flag ALSO gates external
+    paid Odds API spend, so it must not run implicitly."""
     return os.environ.get("PROPS_DAILY_INGEST") == "1"
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def ingest_player_props_op(context):
-    """Advance mlb/props/ to yesterday for the player-prop markets (pitcher_*/batter_*).
+    """Advance mlb/props/market=pitcher_strikeouts/ to yesterday (the Player Props page feed).
 
     WARN-tier (E11.7): peripheral / non-serving. Player props write STRAIGHT to S3
     (no Snowflake table, no dbt model) and are NOT on the predict/serving path — a
     failure here must never block predictions. Runs `backfill_multisport_props_to_s3.py
-    --player-props-only`, which is idempotent: existing (market, season, date) S3
-    partitions auto-skip, so a daily run only pays credits for the new slate.
+    --markets pitcher_strikeouts`, which is idempotent: existing (market, season, date) S3
+    partitions auto-skip, so a daily run only pays credits for the new slate. Scoped to
+    pitcher_strikeouts — the ONLY market the app's Player Props page consumes (E5.5
+    K-projection); write_pitcher_k_projections_op downstream reads only that market.
 
     Source = Odds API *historical* events endpoint → the run inherently lands today-1
     (a date's props are not archived until it is in the past; today's live props are
@@ -1418,22 +1428,22 @@ def ingest_player_props_op(context):
     double-pays credits for the same idempotent pull. Default OFF ⇒ host cron stays the
     live mechanism.
 
-    Writes: s3://baseball-betting-ml-artifacts/mlb/props/market=<mkt>/season=<yr>/date=<d>/
+    Writes: s3://baseball-betting-ml-artifacts/mlb/props/market=pitcher_strikeouts/season=<yr>/date=<d>/
     """
     if not _props_daily_ingest_on():
         context.log.warning(
             "WARNING: ingest_player_props_op skipped — PROPS_DAILY_INGEST != 1 (no-op; the "
-            "mlb/props/ S3 surface will NOT advance until the operator sets the flag)."
+            "mlb/props/ pitcher_strikeouts surface will NOT advance until the operator sets the flag)."
         )
         return
     try:
         _run_script(
             context,
             "backfill_multisport_props_to_s3.py",
-            ["--mode", "backfill", "--sport", "baseball_mlb", "--player-props-only"],
+            ["--mode", "backfill", "--sport", "baseball_mlb", "--markets", _PROPS_DAILY_MARKETS],
         )
     except Exception as exc:  # noqa: BLE001
         context.log.warning(
-            "WARNING: ingest_player_props_op failed (non-fatal — the /props page prop lines may "
+            "WARNING: ingest_player_props_op failed (non-fatal — the /props page K-prop lines may "
             f"lag by a day; predictions and serving are unaffected): {exc}"
         )

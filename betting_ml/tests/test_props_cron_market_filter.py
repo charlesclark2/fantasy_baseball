@@ -1,8 +1,10 @@
-"""Guards the daily forward props cron's market scoping (E5.1b).
+"""Guards the props `--player-props-only` market filter (E5.1b).
 
-`backfill_multisport_props_to_s3.py --player-props-only` keys the daily catch-up
-off `_filter_player_props`. If a derivative/spread key ever leaked through that
-filter the cron would silently multiply its credit burn, so we pin:
+NOTE (2026-07-02): the DAILY forward cron is now scoped via `--markets pitcher_strikeouts`
+(the only market the app's Player Props page surfaces) — see capture.crontab. This test
+still guards `_filter_player_props`, which backs the `--player-props-only` FULL-SET path
+used for broader backfills. If a derivative/spread key ever leaked through that filter a
+`--player-props-only` run would silently multiply its credit burn, so we pin:
   - only batter_*/pitcher_*/player_* survive (derivatives/spreads are dropped),
   - input order is preserved,
   - the MLB canonical set resolves to exactly the 8 player props we capture,
