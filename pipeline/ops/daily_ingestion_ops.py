@@ -701,6 +701,45 @@ def check_odds_coverage_op(context):
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def check_feature_block_coverage_op(context):
+    """Durable served-feature-block coverage guard (F2 / F2-recurrence — E1_11_BUG).
+
+    Detects the "silently-zeroed block" class: a whole feature block (the umpire z-scores
+    fired 2026-07-02 AND again 2026-07-03) materializes ~100% NULL in served
+    feature_pregame_game_features while every other block + the row COUNT stay intact — an
+    ext-table VALUE:-case mismatch or a precursor build not wired into the daily job (the
+    deferred W11b umpire cutover). Predictions then run on an amputated feature set with no
+    error. Placed after the external tables are refreshed (refresh_w1_external_tables_op) and
+    before predict, alongside check_odds_coverage_op. Self-calibrating: it compares each
+    block's coverage on recently-PLAYED slates to the block's own older baseline, so it fires
+    only when a normally-full block collapses (never on posting-timing or coverage-gapped blocks).
+
+    Tier: ALERT-loud-but-continue by DEFAULT (RUNTIME-GATE-safe rollout). The script exits 0
+    and only WARNs unless FEATURE_COVERAGE_STRICT=1, which promotes any DEGRADED block to a
+    non-zero exit → HALT here. Flip FEATURE_COVERAGE_STRICT=1 in the box env_file after the
+    W11b umpire cutover restores the block and it is confirmed not to false-fire."""
+    strict = os.environ.get("FEATURE_COVERAGE_STRICT") == "1"
+    try:
+        stdout = _run_script(context, "check_feature_block_coverage.py", ["--env", _target_env()])
+    except Exception as e:
+        if strict:
+            raise
+        context.log.warning(
+            "[ALERT] check_feature_block_coverage flagged a collapsed feature block "
+            f"(non-blocking; set FEATURE_COVERAGE_STRICT=1 to HALT): {e}"
+        )
+        return
+    for line in stdout.splitlines():
+        if line.startswith("[METRIC] feature_block_min_cov_ratio="):
+            try:
+                ratio = float(line.split("=", 1)[1])
+                context.add_output_metadata(
+                    {"feature_block_min_cov_ratio": MetadataValue.float(ratio)})
+            except ValueError:
+                pass
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def compute_elo(context):
     _run_script(context, "/app/betting_ml/scripts/compute_elo.py")
 

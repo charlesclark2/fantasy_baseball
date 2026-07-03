@@ -13,7 +13,7 @@ stale-data miscalculation and whole feature blocks that are **empty in productio
 |---|---|
 | **Severity** | **HIGH** — affects the live prediction inputs, silently (no error, no null-alert). |
 | **Customer-facing?** | Indirect. Predictions still render; they're just computed on partly-wrong/partly-missing inputs. No incorrect *claims* are shown to users. |
-| **Status** | **UPDATED 2026-07-02.** Defect 1 (stale form): **fix shipped in code, CI-green** — pending a box data-rebuild. Defect 2 (umpire + odds-metadata empty): **✅ RESOLVED** — stale external-table definition (wrong key-casing); fixed by regenerating the definitions. Defect 3 (odds blackout, 07-01+): **root cause CONFIRMED (bridge froze off a frozen spine); pipeline fix + durable DQ guard shipped in code, CI-green** — pending the immediate box remediation + a box run of the fixed daily op. |
+| **Status** | **UPDATED 2026-07-03 (pre-Phase-3 revalidation).** Defect 1 (stale form): **✅ RESOLVED** — start-indexed form + staleness flags verified (Teheran `sp_k_pct_l3=0.1154`). Defect 2 (umpire empty): **⚠️ REGRESSED 2026-07-03** — the 7/2 ext-DDL regen did NOT hold (patched a fragile mirror source); umpire is empty AGAIN in the external tables (native historical still intact → Phase-3 substrate unaffected). Durable fix = the deferred **W11b umpire box cutover**; a durable **feature-block coverage guard shipped** this session so it can't fire silently a 3rd time. Defect 3 (odds blackout): **✅ RESOLVED** — bridge-freeze fix + odds DQ guard shipped; store now fresh (reaches 07-05, native==ext). **Phase-3 revalidation verdict: the 2021–2025 native substrate is CLEAN; the only open item is the live umpire cutover.** |
 | **Blocks** | The planned pre-All-Star-break edge re-test. Re-testing on these inputs would produce a false result either way. |
 
 ---
@@ -30,9 +30,15 @@ stale-data miscalculation and whole feature blocks that are **empty in productio
   exactly the situations where "recent form" matters most.
 - **Also implicated (same root):** traded / newly-acquired pitchers get form + team-context attributed
   to the wrong team on their debut with a new club (104 such starts since 2021, trade-deadline-heavy).
-- **Fix status:** a corrected, gap-immune **start-indexed** form metric + honest staleness flags are
-  **built and validated** in the feature code, but **not yet wired into the served feature set** (that
-  step is a data-platform rebuild, deferred).
+- **Fix status: ✅ RESOLVED 2026-07-02 — surfaced + verified in the served store.** The corrected,
+  gap-immune **start-indexed** form metric (`*_sp_k_pct_l3` / `_sp_bb_pct_l3` / `_sp_xwoba_against_l3` /
+  `_sp_form_start_count`) + honest staleness flags (`_form_source_age_days` / `_form_stale` /
+  `_long_layoff`, 7 per side / 14 total) are now live in `feature_pregame_game_features(_raw)` after the
+  box `--w8b` rebuild + external-table regen/refresh. Verified against the served external table: columns
+  ~97–99% populated across 2021 and on the current slate; the Teheran proof row (game_pk 634573) now reads
+  `sp_k_pct_l3 = 0.1154` (the true last-3-starts value, NOT the stale 0.188), with
+  `form_source_age_days = 189`, `form_stale = true`, `long_layoff = true` — the honest flags now EXPOSE
+  the 189-day gap instead of silently showing a populated "7-day form" beside it.
 
 ## Defect 2 — umpire + odds-metadata read back empty → ✅ RESOLVED 2026-07-02
 - **What it was:** the umpire block and the odds-timing metadata read back **100% empty** in the served
@@ -51,6 +57,38 @@ stale-data miscalculation and whole feature blocks that are **empty in productio
 - **Lesson for the migration track:** whenever a lakehouse file's writer changes column casing, the
   external-table definition must be **regenerated against the actual file** — a case drift reads as
   "100% empty" silently (this is the documented `VALUE:`-case landmine).
+
+### ⚠️ Defect 2 REGRESSED 2026-07-03 (F2-recurrence — the 7/2 regen did NOT hold)
+- **Found during the pre-Phase-3 data revalidation.** The **umpire block is empty AGAIN** in the served
+  external tables: `lakehouse_ext.feature_pregame_umpire_features` = **0.000** umpire coverage across
+  every season (data present — 26,223 rows — read as null), and the W8b aggregator's external table has
+  the umpire columns **entirely absent** (a 2025 parquet row has 740 keys, *zero* containing `ump`/`zscore`).
+  The native `betting_features` tables are still populated **historically** (standalone umpire model =
+  26,223 rows @ **1.000**; aggregator 2021–2025 @ 0.97–1.0), but the native incremental MERGEs the null
+  umpire into the **current slate** — recent-2-week aggregator umpire coverage has collapsed to **0.502**
+  (last-7-days **0.077**) and is falling.
+- **Why it came back:** the 7/2 "fix" regenerated the external-table DDL against the **SF export-mirror
+  parquet** (uppercase, written by `export_features_to_s3.py`) — a fragile source. The **durable** source
+  is the native duckdb build of `feature_pregame_umpire_features` (`--w11b`), whose **box cutover was never
+  done** (`W11B_UMPIRE_NIGHTLY` unset — see [[project_e11_1_w11b_umpire]]). So the aggregator still reads
+  the mirror parquet and the block nulls out. Root cause is the **deferred W11b umpire cutover**, not a new
+  code regression (git history clean).
+- **Impact on Phase 3:** NONE on the trustable window — Phase 3 reads native `betting_features` 2021–2025,
+  where umpire is intact. The break is a **live-serving** correctness bug (current slate + external tables).
+- **Durable fix = complete the W11b umpire cutover on the box** (operator, RUNTIME-GATE): `W11B_UMPIRE_NIGHTLY=1`
+  → `run_w1_lakehouse.py --w11b-only` (native lowercase umpire parquet overwrites the mirror's `data.parquet`,
+  last-writer-wins) → `refresh_w1_external_tables.py --w11b` → `--w8b-only` rebuild (aggregator precursor view
+  now picks up the native parquet) → regen + refresh the w8b ext DDL → dbt run `feature_pregame_game_features_raw`
+  + `feature_pregame_game_features` → **per-ROW** fetch through `lakehouse_ext.feature_pregame_umpire_features`
+  (non-null) + `check_feature_block_coverage.py --env prod` green → then trim umpire from
+  `export_features_to_s3.FEATURE_TABLES`. Full runbook in [[project_e11_1_w11b_umpire]] steps 4–9.
+- **Durable GUARD (shipped this session, CI-green):** `scripts/check_feature_block_coverage.py` +
+  `check_feature_block_coverage_op` (wired into the daily job after `refresh_w1_external_tables_op`, beside
+  the odds guard). Self-calibrating: compares each served feature BLOCK's coverage on recently-played slates
+  to its own older baseline → fires **DEGRADED** when a normally-full block silently collapses (umpire:
+  baseline 1.000 → recent 0.077 on live data), **SKIPs** coverage-gapped blocks (odds), never false-fires on
+  posting-timing. ALERT-continue by default; `FEATURE_COVERAGE_STRICT=1` → HALT after the cutover restores it.
+  12 unit tests (`test_feature_block_coverage_guard.py`). This closes the "F2 fired twice, silently" gap.
 
 ---
 
