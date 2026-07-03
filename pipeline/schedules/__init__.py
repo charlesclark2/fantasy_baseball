@@ -1,6 +1,7 @@
 from pipeline.schedules.daily_ingestion_schedule import daily_ingestion_schedule
 from pipeline.schedules.intraday_schedules import all_intraday_schedules
-from pipeline.schedules.historical_matches_schedule import historical_matches_weekly_schedule
+# E11.1-W11-E: parlay_api DECOMMISSIONED (Parlay platform retired). historical_matches_weekly_schedule
+# — the last live parlay ingestion — is removed with its asset/schedule/job files.
 from pipeline.schedules.weekly_player_profiles_schedule import weekly_player_profiles_schedule
 from pipeline.schedules.weekly_clv_monitoring_schedule import weekly_clv_monitoring_schedule
 from pipeline.schedules.weekly_ml_schedules import weekly_meta_model_schedule, weekly_ml_schedule
@@ -11,7 +12,6 @@ from pipeline.schedules.magnitude_monitor_schedule import magnitude_monitor_sche
 
 all_schedules = [
     daily_ingestion_schedule,
-    historical_matches_weekly_schedule,
     weekly_player_profiles_schedule,
     weekly_clv_monitoring_schedule,
     weekly_ml_schedule,

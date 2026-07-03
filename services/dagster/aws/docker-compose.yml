@@ -250,7 +250,9 @@ services:
     image: credence-derivative-capture:latest
     env_file: [.env]
     environment:
-      AWS_DEFAULT_REGION: us-east-1
+      # E11.1-W11-E: the gated S3 dual-write (write_raw_rows_s3) targets baseball-betting-ml-artifacts,
+      # which lives in us-east-2 — a us-east-1 client PermanentRedirects on put_object. Must be us-east-2.
+      AWS_DEFAULT_REGION: us-east-2
     profiles: [capture]
     restart: "no"
 

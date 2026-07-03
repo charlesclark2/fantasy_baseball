@@ -98,6 +98,48 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
+# E11.1-W11-E: gated Snowflake→S3 dual-write for the LIVE derivative capture (cmd_capture).
+# Flipping the writer S3-native lets the daily W11_W3PRE_DAILY export bridge be retired — the
+# live rows land directly in lakehouse_raw/derivative_odds_raw/, which stg_derivative_odds already
+# reads (duckdb branch). Uses the SHARED W11 wave switch W11_RAW_WRITE_MODE (default 'snowflake' =
+# unchanged), NOT the odds family's LAKEHOUSE_RAW_WRITE_MODE — that shared env is already 's3'/'both'
+# in prod, which would flip this writer the instant it deploys, before the operator validates. The
+# lean derivative-capture image (services/derivative_capture/Dockerfile) now COPYs scripts/utils/ +
+# installs boto3 so write_raw_rows_s3 resolves; the script runs from /app OR scripts/, so make the
+# utils package importable from either cwd.
+import sys as _sys  # noqa: E402
+
+_sys.path.insert(0, str(Path(__file__).resolve().parent))
+from utils.lakehouse_raw_writer import (  # noqa: E402
+    lakehouse_write_legs,
+    w11_write_mode,
+    write_raw_rows_s3,
+)
+
+_LAKEHOUSE_SOURCE = "derivative_odds_raw"
+
+# The exact column set stg_derivative_odds reads + the §3 export bridge emits (NO fetch_status —
+# the bridge does not export it and the stg filters on raw_json). Project the live rows to this set
+# so the writer-written S3 parts are schema-identical to the bridge-written parts (union_by_name).
+_DERIVATIVE_S3_COLS = (
+    "ingestion_ts", "load_id", "event_id",
+    "requested_snapshot_ts", "actual_snapshot_ts", "previous_snapshot_ts", "next_snapshot_ts",
+    "markets_requested", "regions_requested", "x_requests_remaining", "x_requests_last",
+    "raw_json",
+)
+
+
+def _derivative_mirror_rows(rows: list[dict]) -> list[dict]:
+    """Project live-capture rows to the S3 raw schema (drop fetch_status; keep only successful,
+    bookmaker-bearing rows — mirrors the stg's `where raw_json is not null` filter so failed/no-data
+    rows never bloat the mirror). raw_json is already a JSON STRING (json.dumps'd in cmd_capture) →
+    write_raw_rows_s3 passes it through unchanged."""
+    return [
+        {c: r.get(c) for c in _DERIVATIVE_S3_COLS}
+        for r in rows
+        if r.get("raw_json") is not None
+    ]
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(message)s",
@@ -1043,25 +1085,35 @@ def cmd_capture(args: argparse.Namespace) -> None:
         log.info("no rows to write")
         return
 
-    # 3. Write Parquet -> Snowflake (same two-phase pattern as historical backfill)
-    ts_str = now.strftime("%Y%m%d_%H%M%S")
-    output_path = args.output or Path(f"/tmp/deriv_live_{ts_str}.parquet")
-    write_parquet(rows, output_path)
+    # 3. Write — E11.1-W11-E gated dual-write (W11_RAW_WRITE_MODE, default 'snowflake' = unchanged).
+    #    SF leg = the two-phase Parquet→Snowflake bulk load; S3 leg = append the same rows to
+    #    lakehouse_raw/derivative_odds_raw/ (retires the daily export bridge once mode='s3').
+    do_sf, do_s3 = lakehouse_write_legs(w11_write_mode())
 
-    conn = connect_snowflake()
-    try:
-        inserted = bulk_load_parquet(
-            conn, output_path, _target_fqn(), _staging_fqn(), _staging_stage(),
-        )
-        log.info("DONE — %d rows inserted into %s", inserted, _target_fqn())
-        if args.output is None:
-            try:
-                output_path.unlink()
-                log.debug("cleaned up %s", output_path)
-            except Exception:
-                pass
-    finally:
-        conn.close()
+    if do_sf:
+        ts_str = now.strftime("%Y%m%d_%H%M%S")
+        output_path = args.output or Path(f"/tmp/deriv_live_{ts_str}.parquet")
+        write_parquet(rows, output_path)
+
+        conn = connect_snowflake()
+        try:
+            inserted = bulk_load_parquet(
+                conn, output_path, _target_fqn(), _staging_fqn(), _staging_stage(),
+            )
+            log.info("DONE — %d rows inserted into %s", inserted, _target_fqn())
+            if args.output is None:
+                try:
+                    output_path.unlink()
+                    log.debug("cleaned up %s", output_path)
+                except Exception:
+                    pass
+        finally:
+            conn.close()
+
+    if do_s3:
+        mirror_rows = _derivative_mirror_rows(rows)
+        n_s3 = write_raw_rows_s3(_LAKEHOUSE_SOURCE, mirror_rows, mode="append") if mirror_rows else 0
+        log.info("mirrored %d row(s) → S3 lakehouse_raw/%s/", n_s3, _LAKEHOUSE_SOURCE)
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────────

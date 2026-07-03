@@ -1,6 +1,8 @@
 -- =============================================================================
 -- mart_derivative_closes.sql
--- Grain: one row per (game_pk, market_key, bookmaker_key, outcome_name)
+-- Grain: one row per (game_pk, market_key, bookmaker_key, outcome_name,
+--        outcome_description, outcome_point)  [outcome_description = team for
+--        team_totals; outcome_point = the alt line for alternate_totals]
 -- Purpose: Closing derivative-market odds (team totals, alternate totals, F5
 --          totals / moneyline). "Closing" = last pre-game snapshot in
 --          stg_derivative_odds (actual_snapshot_ts <= commence_time).
@@ -33,8 +35,15 @@ with derivative_odds as (
         outcome_price_american,
         outcome_price_decimal,
         outcome_point,
+        -- E11.1-W11-E (item 2, E13.14 finding): team_totals is a PER-TEAM market whose
+        -- outcome_name is only Over/Under — the team identity lives in outcome_description.
+        -- Partitioning without it collapsed both teams' "Over" rows to one snap_rank=1 →
+        -- one team per game was silently dropped. alternate_totals is the same class across
+        -- outcome_point (each alt line is a distinct quote). Add both to the natural key so
+        -- "closing" keeps the last snapshot PER (team, point), not per outcome_name.
         row_number() over (
-            partition by event_id, market_key, bookmaker_key, outcome_name
+            partition by event_id, market_key, bookmaker_key,
+                         outcome_name, outcome_description, outcome_point
             order by actual_snapshot_ts desc
         ) as snap_rank
     from stg_derivative_odds

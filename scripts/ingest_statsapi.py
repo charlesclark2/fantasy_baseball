@@ -408,8 +408,21 @@ def run_venues(conn: snowflake.connector.SnowflakeConnection, venue_ids: list[in
     today = date.today()
     total = len(venue_ids)
 
-    log.info("Venue ingest: %d venue(s)", total)
+    # E11.1-W11-E: gated Snowflake→S3 dual-write for venues_raw (retires the export_w6_raw bridge —
+    # stg_statsapi_venues already reads lakehouse_raw/venues_raw/). Uses the shared W11 wave switch
+    # W11_RAW_WRITE_MODE (default 'snowflake' = unchanged). The import is LAZY (inside run_venues, only
+    # reached by the manual `venues` subcommand run in the FULL dagster container) so the lean
+    # schedule-capture image — which copies this script but never runs venues — cannot break on a
+    # missing utils/ package. The S3 mirror matches the bridge schema exactly: venue_id, ingest_date,
+    # ingestion_ts (= ingest_date so the dt= partition is stable/idempotent), json_field (dict → JSON
+    # string). mode='overwrite_partition' → a same-day re-run is idempotent (clears dt= first).
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from utils.lakehouse_raw_writer import lakehouse_write_legs, w11_write_mode, write_raw_rows_s3
+    do_sf, do_s3 = lakehouse_write_legs(w11_write_mode())
 
+    log.info("Venue ingest: %d venue(s)  [sf=%s s3=%s]", total, do_sf, do_s3)
+
+    mirror_rows: list[dict] = []
     for idx, venue_id in enumerate(venue_ids, start=1):
         log.info("[%d/%d] Fetching venue %d", idx, total, venue_id)
 
@@ -424,13 +437,26 @@ def run_venues(conn: snowflake.connector.SnowflakeConnection, venue_ids: list[in
             time.sleep(REQUEST_DELAY)
             continue
 
-        try:
-            insert_venue(conn, venue_id, payload, today)
-            log.info("  Inserted venue %d to Snowflake", venue_id)
-        except Exception as exc:
-            log.error("  Snowflake write failed for venue %d: %s — skipping", venue_id, exc)
+        if do_sf:
+            try:
+                insert_venue(conn, venue_id, payload, today)
+                log.info("  Inserted venue %d to Snowflake", venue_id)
+            except Exception as exc:
+                log.error("  Snowflake write failed for venue %d: %s — skipping", venue_id, exc)
+
+        if do_s3:
+            mirror_rows.append({
+                "venue_id":     venue_id,
+                "ingest_date":  today.isoformat(),
+                "ingestion_ts": today.isoformat(),  # drives the (stable) dt= partition
+                "json_field":   payload,            # dict → JSON string by write_raw_rows_s3
+            })
 
         time.sleep(REQUEST_DELAY)
+
+    if do_s3 and mirror_rows:
+        n_s3 = write_raw_rows_s3("venues_raw", mirror_rows, mode="overwrite_partition")
+        log.info("  mirrored %d venue(s) → S3 lakehouse_raw/venues_raw/", n_s3)
 
     log.info("Venue ingest complete — processed %d venue(s)", total)
 

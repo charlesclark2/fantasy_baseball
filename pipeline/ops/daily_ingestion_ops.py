@@ -252,12 +252,16 @@ def _w3pre_daily_on() -> bool:
     # leans on it). The daily op's --w6 call REGISTERS stg_derivative_odds as a view over
     # the existing parquet but never REBUILDS it; only --w3pre (_build_w3pre) rebuilds that
     # parquet from lakehouse_raw/derivative_odds_raw/. With this flag ON the daily op also
-    # re-exports the derivative-odds raw tier (the recurring bridge — the live derivative
-    # writer is not S3-flipped yet) and passes --w3pre so stg_derivative_odds is fresh
-    # before --w6 builds mart_derivative_closes. Mirrors the proven intraday-schedule
-    # pattern (_schedule_lakehouse_intraday: export raw → --w3pre → refresh). Default OFF
-    # (W11 coordination discipline) so merging is a no-op until the operator runs the
-    # one-time derivative_odds_raw gap-fill backfill + validates on the box, then flips it.
+    # re-exports the derivative-odds raw tier (the recurring bridge) and passes --w3pre so
+    # stg_derivative_odds is fresh before --w6 builds mart_derivative_closes. Mirrors the proven
+    # intraday-schedule pattern (_schedule_lakehouse_intraday: export raw → --w3pre → refresh).
+    # NOTE (E11.1-W11-E, 2026-07-03): the live derivative writer (derivative_odds_backfill.py
+    # cmd_capture) can now ALSO dual-write S3 directly (gated by W11_RAW_WRITE_MODE). So this
+    # bridge is OPTION A (keep it ON via this gate — proven, works from the full container) and
+    # the writer flip is OPTION B (retire this bridge once the rebuilt derivative-capture image is
+    # validated writing to lakehouse_raw/derivative_odds_raw/ on the box). Default OFF (W11
+    # coordination discipline) so merging is a no-op until the operator runs the one-time
+    # derivative_odds_raw gap-fill backfill + validates on the box, then flips it.
     return os.environ.get("W11_W3PRE_DAILY") == "1"
 
 
@@ -337,8 +341,29 @@ def ingest_action_network(context):
     _run_script(context, "ingest_actionnetwork_betting.py", ["--date", _today()])
 
 
+def _batter_pitches_sf_retired() -> bool:
+    """E11.1-W11-E: retire the REDUNDANT savant.batter_pitches Snowflake write.
+
+    `savant_ingestion.py batter_pitches` (write_pandas DELETE+INSERT → savant.batter_pitches) is
+    fully SHADOWED by ingest_statcast_to_s3_op, which writes the S3 stg_batter_pitches parquet that
+    stg_batter_pitches' duckdb branch reads (the SF table is read only by the SF-target dbt build,
+    never on the box/serving path). ingest_statcast_to_s3_op runs immediately AFTER this op in the
+    daily job (s5b depends on s5) and is itself HALT-tier — so once parity is confirmed on the box,
+    the SF write is pure cost. With W11_BATTER_PITCHES_SF_RETIRED=1 this op skips the SF ingestion
+    (the S3 op feeds stg_batter_pitches). Default OFF → merging is a no-op until the operator verifies
+    parity and opts in; then the operator can DROP savant.batter_pitches. ALERT-continue on skip."""
+    return os.environ.get("W11_BATTER_PITCHES_SF_RETIRED") == "1"
+
+
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def ingest_statcast(context):
+    if _batter_pitches_sf_retired():
+        context.log.warning(
+            "WARNING: [W11-E] savant.batter_pitches SF write RETIRED "
+            "(W11_BATTER_PITCHES_SF_RETIRED=1) — ingest_statcast_to_s3_op feeds stg_batter_pitches. "
+            "Skipping the redundant Snowflake ingestion."
+        )
+        return
     _run_script(context, "savant_ingestion.py", ["batter_pitches"])
 
 
