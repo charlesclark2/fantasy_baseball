@@ -46,7 +46,7 @@ def _query_slate(et_date: str):
     S3 lakehouse via DuckDB (instance-role credential_chain — Snowflake-free). game_date is
     stored as a tz-aware UTC timestamp, so MIN/MAX already give the first/last first-pitch
     instant in UTC."""
-    from betting_ml.utils.lakehouse_monitor import duck, lh
+    from betting_ml.utils.lakehouse_monitor import duck, lh, to_utc_datetime
 
     conn = duck()
     try:
@@ -60,7 +60,8 @@ def _query_slate(et_date: str):
         conn.close()
     if first is None or last is None:
         return None, None
-    return first.astimezone(timezone.utc), last.astimezone(timezone.utc)
+    # game_date reads back as an ISO VARCHAR from the lakehouse (INC-23) — coerce, don't .astimezone().
+    return to_utc_datetime(first), to_utc_datetime(last)
 
 
 @sensor(job=odds_current_rebuild_job, minimum_interval_seconds=600)
