@@ -5,15 +5,25 @@ requires-python = ">=3.11"
 dependencies = [
     "pandas>=2.0",
     "numpy>=1.26",
-    "scikit-learn>=1.3",
-    "joblib>=1.3",
+    # PICKLE-FRAGILE SERVING LIBS — pinned EXACT (== not >=). Every served model
+    # artifact is a joblib/pickle of a scikit-learn / ngboost / lightgbm / xgboost /
+    # catboost estimator (see betting_ml/models/*, sub_models/*). These libraries
+    # embed version-specific Cython internals in their pickles, so a train/serve
+    # version skew fails to unpickle at serve time (e.g. sklearn 1.8→1.9 moved
+    # sklearn._loss → "No module named '_loss'" broke strikeout_glm_v1). The
+    # container Dockerfile MUST install these SAME exact versions (it pins to match)
+    # so serving == the training env that created the artifacts. Bump these only
+    # alongside a full re-fit + re-promote of every affected artifact, and update
+    # the Dockerfile pins in the same PR.
+    "scikit-learn==1.8.0",
+    "joblib==1.5.3",
     "snowflake-connector-python>=3.6",
     "cryptography>=41.0",
     "pytest>=7.0",
     "statsmodels>=0.14",
     "scipy>=1.11",
-    "xgboost>=2.0",
-    "ngboost>=0.4",
+    "xgboost==3.2.0",
+    "ngboost==0.5.10",
     "shap>=0.44",
     "optuna>=4.8.0",
     "pyarrow>=4.0.0",
@@ -23,8 +33,8 @@ dependencies = [
     "python-dotenv>=1.0",
     "plotly>=6.7.0",
     "curl-cffi>=0.7",
-    "lightgbm>=4.6.0",
-    "catboost>=1.2.10",
+    "lightgbm==4.6.0",
+    "catboost==1.2.10",
     "dagster>=1.11.5",
     "dagster-cloud",
     "dagster-webserver",

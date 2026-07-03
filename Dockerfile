@@ -27,6 +27,18 @@ COPY pyproject.toml uv.lock* ./
 
 # Install project Python deps + Dagster stack
 # (dbt-core's `dbt` CLI is installed here as a side-effect of dagster-dbt)
+#
+# 🔒 PICKLE-FRAGILE ML LIBS ARE PINNED EXACT — and MUST stay in lockstep with the
+# `==` pins in pyproject.toml / uv.lock. Every served model artifact is a
+# joblib/pickle of a scikit-learn / ngboost / lightgbm / xgboost / catboost
+# estimator; those pickles embed version-specific (often Cython) internals, so a
+# train/serve version skew fails to UNPICKLE at serve time. This image is the
+# SERVING runtime — it must match the training env that created the S3 artifacts.
+# Historically this block used bare, UNPINNED names, so every rebuild floated all
+# ML libs to latest PyPI (e.g. scikit-learn drifted to 1.9.0 while the lock said
+# 1.8.0 → sklearn._loss moved → "No module named '_loss'" broke strikeout_glm_v1
+# on the box). Bump a version here only alongside a re-fit + re-promote of every
+# affected artifact AND the matching pyproject/uv.lock bump, in the same PR.
 RUN pip install --no-cache-dir \
     "dagster>=1.11.5" \
     dagster-cloud \
@@ -35,25 +47,25 @@ RUN pip install --no-cache-dir \
     dagster-dbt \
     dagster-snowflake \
     dagster-postgres \
-    pandas \
-    numpy \
-    scikit-learn \
-    joblib \
+    pandas==2.3.3 \
+    numpy==2.4.4 \
+    scikit-learn==1.8.0 \
+    joblib==1.5.3 \
     "snowflake-connector-python>=3.6" \
     cryptography \
-    statsmodels \
-    scipy \
-    xgboost \
-    ngboost \
-    shap \
+    statsmodels==0.14.6 \
+    scipy==1.17.1 \
+    xgboost==3.2.0 \
+    ngboost==0.5.10 \
+    shap==0.49.1 \
     optuna \
     pyarrow \
     "mlb-statsapi>=0.0.44" \
     python-dotenv \
     plotly \
     curl-cffi \
-    lightgbm \
-    catboost \
+    lightgbm==4.6.0 \
+    catboost==1.2.10 \
     requests \
     pyyaml \
     mlflow \
@@ -64,6 +76,17 @@ RUN pip install --no-cache-dir \
     h5py \
     pymc \
     "duckdb>=1.1.0"
+
+# Guard: fail the image build NOW if any pickle-fragile serving lib resolved to a
+# version other than the pinned/locked one (belt-and-suspenders over the == pins —
+# catches a stale cached layer or a transitive override). A serving pickle failing
+# to load is a silent WARN-tier degrade in prod; catching skew here makes it loud.
+RUN python -c "\
+import importlib.metadata as m; \
+want={'scikit-learn':'1.8.0','ngboost':'0.5.10','lightgbm':'4.6.0','xgboost':'3.2.0','catboost':'1.2.10','joblib':'1.5.3','numpy':'2.4.4','scipy':'1.17.1','pandas':'2.3.3'}; \
+bad={p:(m.version(p),v) for p,v in want.items() if m.version(p)!=v}; \
+assert not bad, f'PICKLE-FRAGILE LIB VERSION SKEW (got,want): {bad} — serving artifacts will fail to unpickle; align Dockerfile+pyproject+uv.lock'; \
+print('pickle-fragile serving libs pinned OK:', want)"
 
 # Smoke-check: fail the image build now if any heavy Bayesian dep is missing,
 # rather than silently dying in the weekly Dagster op a day later.
