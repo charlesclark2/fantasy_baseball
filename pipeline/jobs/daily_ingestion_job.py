@@ -7,6 +7,7 @@ from pipeline.ops.daily_ingestion_ops import (
     write_pitcher_k_projections_op,
     check_data_freshness,
     check_odds_coverage_op,
+    check_feature_block_coverage_op,
     check_prediction_coverage,
     compute_elo,
     compute_model_health,
@@ -83,7 +84,12 @@ def daily_ingestion_job():
     # for the current slate while spine + outcomes are both fresh — before the prediction path.
     # ALERT-continue by default; HALTs here only when ODDS_COVERAGE_STRICT=1 (see the op docstring).
     s5e = check_odds_coverage_op(start=s5d)
-    s6 = ingest_statsapi_schedule(start=s5e)
+    # Durable served-feature-block coverage guard (F2 / F2-recurrence — umpire block collapsed
+    # 2026-07-02 AND 2026-07-03). Detects a whole feature block silently zeroing in
+    # feature_pregame_game_features (ext VALUE:-case mismatch / precursor not wired) before predict.
+    # ALERT-continue by default; HALTs only when FEATURE_COVERAGE_STRICT=1 (see the op docstring).
+    s5f = check_feature_block_coverage_op(start=s5e)
+    s6 = ingest_statsapi_schedule(start=s5f)
     s7 = ingest_weather(start=s6)
     s8 = ingest_umpires_early(start=s7)
     s9 = ingest_fangraphs_stuff_plus(start=s8)
