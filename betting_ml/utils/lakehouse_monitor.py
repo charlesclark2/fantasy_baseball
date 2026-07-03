@@ -26,6 +26,7 @@ locations + region mirror ``scripts/utils/lakehouse_read.py`` / ``dbt/macros/lak
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 
 # ── S3 lakehouse locations (mirror scripts/utils/lakehouse_read.py) ──────────────
 BUCKET = "s3://baseball-betting-ml-artifacts"
@@ -58,6 +59,26 @@ def lh_year(table: str, year: int) -> str:
     table (e.g. ``stg_batter_pitches``). Reading the single partition avoids a metadata
     scan across every season's parquet (10s → ~2s for the pitch table)."""
     return f"{LAKEHOUSE}/{table}/year={int(year)}/**/*.parquet"
+
+
+def to_utc_datetime(value) -> datetime | None:
+    """Coerce a lakehouse timestamp value (as returned by a DuckDB ``MIN/MAX(game_date)``) to a
+    tz-aware UTC ``datetime`` — the ONE place sensors should convert a lakehouse first-pitch read.
+
+    INC-23 landmine: the lakehouse stores every ``TIMESTAMP*`` column as ISO **VARCHAR** (the cure
+    for Snowflake misreading binary parquet timestamps), and ``union_by_name`` over mixed
+    SF-typed + writer-typed parquet collapses to VARCHAR — so ``MIN(game_date)`` returns a **str**,
+    not a datetime. Calling ``.astimezone()`` / ``.tzinfo`` on it raises ``AttributeError`` and the
+    sensor fail-opens to a SkipReason forever (broke odds_current_rebuild / pregame_alert /
+    conviction_pick sensors 2026-07-03 → served odds froze, no alert). Handles str (ISO, optional
+    trailing ``Z``), naive datetime (assumed UTC), and aware datetime; returns ``None`` for ``None``.
+    Route ALL sensor first-pitch reads through this so the landmine can't recur per-sensor.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
 def table_glob(table: str) -> str:

@@ -37,12 +37,12 @@ _ALERT_CLOSE_MIN = 30   # close the window (predictions should be live by this p
 
 
 def _get_earliest_first_pitch_utc(today: str) -> datetime | None:
-    from betting_ml.utils.lakehouse_monitor import duck, lh
+    from betting_ml.utils.lakehouse_monitor import duck, lh, to_utc_datetime
 
     conn = duck()
     try:
-        # game_date is stored tz-aware (UTC) in the lakehouse, so MIN already gives the
-        # earliest first-pitch instant in UTC — no CONVERT_TIMEZONE needed.
+        # game_date reads back as an ISO VARCHAR from the lakehouse (INC-23); MIN on ISO strings
+        # still gives the earliest first-pitch instant — to_utc_datetime coerces it (never .tzinfo it).
         row = conn.execute(
             f"""
             SELECT MIN(game_date) AS earliest_utc
@@ -53,7 +53,7 @@ def _get_earliest_first_pitch_utc(today: str) -> datetime | None:
         ).fetchone()
         if row is None or row[0] is None:
             return None
-        return row[0].replace(tzinfo=UTC) if row[0].tzinfo is None else row[0].astimezone(UTC)
+        return to_utc_datetime(row[0])
     finally:
         conn.close()
 
