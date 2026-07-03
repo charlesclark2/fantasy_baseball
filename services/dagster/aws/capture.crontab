@@ -75,6 +75,16 @@ SHELL=/bin/bash
 # (America/LA) keeps it off the UTC-tomorrow roll (INC-22). Same container/region/auth as above.
 0 13-23,0-4 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/backfill_multisport_props_to_s3.py --mode live --sport baseball_mlb --markets pitcher_strikeouts >> /home/ec2-user/capture-cron.log 2>&1
 
+# (2) K-PROJECTION RE-RUN — re-score today's starters + re-join the live prop lines so the
+# Player Props page's model-vs-book actually REFRESHES intraday (2026-07-02). The daily job's
+# write_pitcher_k_projections_op runs ONCE at ~12:00 UTC — BEFORE (1) writes today's props — so
+# the daily payload has the projection but no book line. This re-run fires at :15 past, AFTER the
+# top-of-hour props pull lands, over the SAME window. Compute-only (no paid API): reads probable
+# pitchers + the cached feature frame (Snowflake) + the props S3 parquet, writes DynamoDB + S3.
+# WARN/supplemental tier — the writer already exits 0 on any internal error; never gates serving.
+# SF auth resolves from the container env (inline key), exactly as the daily op invokes it.
+15 13-23,0-4 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/write_pitcher_k_projections.py >> /home/ec2-user/capture-cron.log 2>&1
+
 # ── INC-16-P6 observability (host-cron) ──────────────────────────────────────
 # Service-liveness healthcheck every 5 min (core containers up + reachable; pages
 # via SNS on failure, self-cooldown 1h so a sustained outage doesn't spam).
