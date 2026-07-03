@@ -1,0 +1,35 @@
+[
+  {
+    "name": "f1_startform",
+    "extra": [
+      "opp_starter_sp_k_pct_l3", "opp_starter_sp_bb_pct_l3", "opp_starter_sp_xwoba_against_l3"
+    ]
+  },
+  {
+    "name": "f1_staleness",
+    "extra": [
+      "opp_starter_form_stale", "opp_starter_long_layoff", "opp_starter_form_source_age_days"
+    ]
+  },
+  {
+    "name": "traded_pitcher",
+    "extra": [
+      "opp_starter_is_recently_acquired", "opp_starter_form_spans_team_change", "opp_starter_starts_since_acquired"
+    ]
+  },
+  {
+    "name": "traded_lineup",
+    "extra": [
+      "off_lineup_recently_acquired_count"
+    ]
+  },
+  {
+    "name": "all_enriched",
+    "extra": [
+      "opp_starter_sp_k_pct_l3", "opp_starter_sp_bb_pct_l3", "opp_starter_sp_xwoba_against_l3",
+      "opp_starter_form_stale", "opp_starter_long_layoff", "opp_starter_form_source_age_days",
+      "opp_starter_is_recently_acquired", "opp_starter_form_spans_team_change", "opp_starter_starts_since_acquired",
+      "off_lineup_recently_acquired_count"
+    ]
+  }
+]

@@ -62,6 +62,11 @@ Usage (operator):
     uv run python betting_ml/scripts/incremental_lift_eval.py --target home_win \
         --add-features home_starter_tto3_xwoba_penalty,away_starter_tto3_xwoba_penalty \
         --run-name e13_4_b1_tto
+    # PRE-REGISTERED SUITE (E1.11 Phase 3): score every named config against the shared base in
+    # ONE run so PBO/DSR deflate by the WHOLE pre-registered set (not 1 per invocation).
+    uv run python betting_ml/scripts/incremental_lift_eval.py --target perside_runs \
+        --config-json quant_sports_intel_models/baseball/edge_program/phase3_configs/perside_suite.json \
+        --run-name e1_11_phase3
 """
 
 from __future__ import annotations
@@ -317,15 +322,56 @@ class Config:
     extra: list[str] = field(default_factory=list)
 
 
-def _build_configs(add_features: list[str], sanity: bool) -> list[Config]:
+_RESERVED_CONFIG_NAMES = {"base", "candidate", "sanity_noise", "sanity_dup"}
+
+
+def load_config_suite(path: str) -> list[Config]:
+    """Load a PRE-REGISTERED suite of named candidate configs from a JSON file:
+    `[{"name": "f1_startform", "extra": ["home_starter_sp_k_pct_l3", ...]}, ...]`.
+
+    Each item becomes a candidate config scored against the ONE shared base IN THE SAME RUN, so
+    PBO sees the whole set {base, c1..cN} and DSR deflates by the full config count (n_trials=N).
+    That is the §0.5 'count every config toward PBO<0.2/DSR>0' discipline — it makes a WIDE
+    pre-registered ablation deflation-honest, unlike one-candidate-per-run (which silently
+    deflates by 1 and hides the multiple-testing burden of the whole pre-registered set).
+
+    Names must be unique and not reserved; each `extra` must be a non-empty column list."""
+    spec = json.loads(Path(path).read_text())
+    if not isinstance(spec, list) or not spec:
+        raise SystemExit(f"--config-json {path}: expected a non-empty JSON array of "
+                         f"{{'name','extra'}} objects.")
+    seen: set[str] = set()
+    out: list[Config] = []
+    for i, item in enumerate(spec):
+        if not isinstance(item, dict):
+            raise SystemExit(f"--config-json {path}: item {i} is not an object.")
+        name = str(item.get("name", "")).strip()
+        extra = item.get("extra", [])
+        if not name:
+            raise SystemExit(f"--config-json {path}: item {i} missing 'name'.")
+        if name in _RESERVED_CONFIG_NAMES:
+            raise SystemExit(f"--config-json {path}: config name '{name}' is reserved.")
+        if name in seen:
+            raise SystemExit(f"--config-json {path}: duplicate config name '{name}'.")
+        if not isinstance(extra, list) or not extra:
+            raise SystemExit(f"--config-json {path}: config '{name}' needs a non-empty 'extra' list.")
+        seen.add(name)
+        out.append(Config(name, [str(c) for c in extra]))
+    return out
+
+
+def _build_configs(add_features: list[str], sanity: bool,
+                   suite: list[Config] | None = None) -> list[Config]:
     configs = [Config("base", [])]
+    if suite:
+        configs.extend(suite)          # pre-registered named configs, all deflated together
     if add_features:
         configs.append(Config("candidate", list(add_features)))
     if sanity:
         configs.append(Config("sanity_noise", [_NOISE_COL]))
         configs.append(Config("sanity_dup", []))   # dup col is resolved per backend (a real base col copy)
     if len(configs) == 1:
-        raise SystemExit("Nothing to evaluate: pass --add-features and/or --sanity.")
+        raise SystemExit("Nothing to evaluate: pass --add-features, --config-json, and/or --sanity.")
     return configs
 
 
@@ -674,10 +720,16 @@ def main() -> None:
                     help="Opt-in: a game_pk-keyed parquet of candidate column(s) built OUTSIDE "
                          "Snowflake (e.g. the E13.10 lakehouse zone-overlap feature) to left-join "
                          "before evaluation. Default None ⇒ Snowflake-only (unchanged).")
+    ap.add_argument("--config-json", default=None,
+                    help="Path to a PRE-REGISTERED suite JSON [{'name','extra':[cols]}, ...]. "
+                         "All named configs are scored against the shared base IN ONE RUN so PBO "
+                         "sees the whole set and DSR deflates by the full count (§0.5 deflation). "
+                         "Composable with --add-features/--sanity.")
     args = ap.parse_args()
 
     add = [c.strip() for c in args.add_features.split(",") if c.strip()]
-    configs = _build_configs(add, args.sanity)
+    suite = load_config_suite(args.config_json) if args.config_json else None
+    configs = _build_configs(add, args.sanity, suite)
 
     if args.target == "perside_runs":
         metric = args.metric or "crps"
