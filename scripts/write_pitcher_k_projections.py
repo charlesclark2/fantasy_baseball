@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -56,6 +57,13 @@ _S3_PROJECTION_PREFIX = "baseball/serving/pitcher_k_projection"
 _BUNDLE_S3 = f"s3://{_S3_BUCKET}/mlb/models/prop_pricing_v1/strikeout_glm_v1.pkl"
 _BUNDLE_LOCAL = PROJECT_ROOT / "betting_ml" / "models" / "sub_models" / "prop_pricing_v1" / "strikeout_glm_v1.pkl"
 _PROPS_GLOB = f"s3://{_S3_BUCKET}/mlb/props/market=pitcher_strikeouts/season=*/date={{date}}/data.parquet"
+# Serving self-heal: the K projection hard-depends on TODAY's starter_ip_v1 signal, which the daily
+# sub-model ops NEVER generate (they score only _recent_completed_dates() = T-2/T-1; today is excluded
+# by design as it anchors the completed-game signal history). We regenerate it on demand — see
+# _ensure_starter_ip_signal. The generator reads the pre-game feature_pregame_starter_features (present
+# for today), so today is scorable despite having no completed pitch data.
+_STARTER_IP_GEN = PROJECT_ROOT / "betting_ml" / "scripts" / "starter_v1" / "generate_starter_ip_signals.py"
+_STARTER_IP_TABLE = "baseball_data.betting_features.starter_ip_signals"
 
 # E5.2 served calib_80 (the calibration that makes the projection a product) — surfaced for context.
 _CALIB_80 = 0.8104
@@ -358,10 +366,63 @@ def _ddb_put_index(target: str, payload: dict) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
+def _ensure_starter_ip_signal(target: str) -> None:
+    """Serving self-heal for the K projection's hard dependency on the ``starter_ip_v1`` signal.
+
+    The daily sub-model signal ops only score ``_recent_completed_dates()`` (T-2/T-1) — today is
+    excluded by design (it anchors the *completed-game* signal history), and NOTHING else generates
+    today's signal. But the K projection needs today's pre-game ``starter_ip`` to score today's
+    starters, so without this the writer skips every day. Generate it on demand when the row count
+    for ``target`` is zero (idempotent MERGE; ~1 row/starter). Reads ``feature_pregame_starter_features``,
+    which is populated for today, so today is scorable. Covers BOTH the daily op and the hourly host
+    cron (both invoke this script). Fail-soft: any error logs + returns so the writer still runs on
+    whatever signal rows already exist.
+    """
+    from betting_ml.utils.data_loader import get_snowflake_connection
+
+    try:
+        conn = get_snowflake_connection(schema="betting_features")
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT COUNT(*) FROM {_STARTER_IP_TABLE} "
+                f"WHERE game_date = %(d)s AND model_version = 'starter_ip_v1'",
+                {"d": target},
+            )
+            present = cur.fetchone()[0]
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001
+        _warn(f"[{target}] starter_ip presence check failed ({exc}); attempting generation anyway.")
+        present = 0
+
+    if present:
+        print(f"[k-projection] starter_ip_v1 signal present for {target} ({present} rows) — no regen needed.")
+        return
+
+    # Match the schema the K writer READS (betting_features = prod); TARGET_ENV drives dev isolation.
+    env = "prod" if os.getenv("TARGET_ENV") == "prod" else "dev"
+    print(f"[k-projection] starter_ip_v1 signal MISSING for {target} — generating (serving self-heal, env={env}) ...")
+    result = subprocess.run(
+        [sys.executable, str(_STARTER_IP_GEN), "--date", target, "--env", env],
+        capture_output=True, text=True, cwd=str(PROJECT_ROOT),
+    )
+    if result.returncode != 0:
+        _warn(f"[{target}] starter_ip generation failed (exit {result.returncode}); K scoring may skip. "
+              f"stderr: {result.stderr[-400:]}")
+    else:
+        print(f"[k-projection] starter_ip_v1 signal generated for {target}.")
+
+
 def _run_for_date(target: str, args, bundle: dict, hist: pd.DataFrame, build_predictors, rng) -> None:
     """Score + write the K-projection payloads for ONE target date. Fail-soft (WARN, returns) at
     every step so a bad date in a backfill loop never aborts the rest."""
     print(f"[k-projection] target date = {target}")
+
+    # 0) Serving self-heal: today's starter_ip_v1 signal is never produced by the daily ops, so make
+    #    sure it exists before the join in _load_today_frame. Skipped in dry-run (read-only).
+    if not args.dry_run:
+        _ensure_starter_ip_signal(target)
 
     # 1) Today's pregame feature rows.
     try:
