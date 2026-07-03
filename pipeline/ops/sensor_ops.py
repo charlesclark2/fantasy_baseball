@@ -89,6 +89,15 @@ def _run_script(context: OpExecutionContext, script: str, args: list[str] | None
 @op(out=Out(Nothing), retry_policy=_CATCHUP_RETRY)
 def catchup_ingest_statcast(context: OpExecutionContext) -> None:
     """Re-attempt Statcast pitch ingestion for the not-yet-loaded day(s)."""
+    # E11.1-W11-E: same gate as ingest_statcast — the savant.batter_pitches SF write is shadowed by
+    # ingest_statcast_to_s3 (stg_batter_pitches reads the S3 parquet). When W11_BATTER_PITCHES_SF_RETIRED=1
+    # this no-ops the SF catchup (the statcast→S3 path keeps the parquet fresh). Default OFF.
+    if os.environ.get("W11_BATTER_PITCHES_SF_RETIRED") == "1":
+        context.log.warning(
+            "WARNING: [W11-E] savant.batter_pitches SF write RETIRED "
+            "(W11_BATTER_PITCHES_SF_RETIRED=1) — skipping the redundant Snowflake catchup ingestion."
+        )
+        return
     _run_script(context, "savant_ingestion.py", ["batter_pitches"])
 
 
