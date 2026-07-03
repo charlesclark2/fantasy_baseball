@@ -14,13 +14,6 @@ Run: uv run python scripts/refresh_w1_external_tables.py
 import os
 import sys
 
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.serialization import (
-    Encoding,
-    NoEncryption,
-    PrivateFormat,
-    load_pem_private_key,
-)
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -285,35 +278,19 @@ W11D_TABLES = [
 ]
 
 
-def _load_private_key():
-    key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
-    if not key_path:
-        return None
-    with open(key_path, "rb") as fh:
-        raw = fh.read()
-    passphrase = os.getenv("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
-    key = load_pem_private_key(
-        raw, password=passphrase.encode() if passphrase else None, backend=default_backend()
-    )
-    return key.private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())
-
-
 def get_snowflake_conn():
-    import snowflake.connector
-    kwargs = dict(
-        account=os.environ["SNOWFLAKE_ACCOUNT"],
-        user=os.environ["SNOWFLAKE_USER"],
-        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
-        role=os.environ.get("SNOWFLAKE_ROLE"),
-        database="baseball_data",
-        schema="lakehouse_ext",
-    )
-    pk = _load_private_key()
-    if pk:
-        kwargs["private_key"] = pk
-    else:
-        kwargs["password"] = os.environ["SNOWFLAKE_PASSWORD"]
-    return snowflake.connector.connect(**kwargs)
+    # INC-22: on the EC2 box Snowflake auth is the INLINE key (SNOWFLAKE_PRIVATE_KEY,
+    # raw/base64), NOT a key FILE — and there is NO SNOWFLAKE_PASSWORD. This script's
+    # own file-only resolver therefore KeyError'd on the box (SNOWFLAKE_PRIVATE_KEY_PATH
+    # unset → fell through to os.environ["SNOWFLAKE_PASSWORD"]). Delegate to the shared
+    # PATH-if-exists→inline→password resolver in data_loader (the same one the coverage
+    # guard + serving writers use). ALTER EXTERNAL TABLE statements are fully-qualified,
+    # so the connection's default schema is immaterial.
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _root not in sys.path:
+        sys.path.insert(0, _root)
+    from betting_ml.utils.data_loader import get_snowflake_connection
+    return get_snowflake_connection(schema="lakehouse_ext")
 
 
 def _refresh(tables, required: set) -> None:

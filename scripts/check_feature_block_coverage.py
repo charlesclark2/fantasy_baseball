@@ -84,6 +84,11 @@ _BLOCKS: dict[str, str] = {
     "lineup_woba": "home_lineup_woba_vs_starter_archetype",
     "park": "park_run_factor_3yr",
     "rest": "home_starter_days_rest",
+    # bullpen EB posteriors (mart_bullpen_effectiveness → team_features → aggregator). Collapsed to
+    # NULL for the 2026-06-30..07-02 outage window — the serving-guard/30.13-gate abstained on it but
+    # the coverage guard missed it because this block was not represented here. Now guarded so a
+    # future silent collapse of the bullpen-EB chain is caught.
+    "bullpen_eb": "home_bp_eb_xwoba",
 }
 
 
