@@ -119,20 +119,35 @@ def _w6_lakehouse_intraday(context: OpExecutionContext, scope: str) -> None:
     scope='clv'  — once/day post-game: export the daily_model_predictions mirror + today's raw
     → run_w1_lakehouse --w6 (full, incl. the post-hoc CLV/line-movement marts) → refresh
     --w6-clv (closing_line_value + prediction_clv + line_movement)."""
+    today = _today()
+
+    # ⭐ The RAW S3 odds mirror (lakehouse_raw/mlb_odds_raw) is mirror-tier and read 24/7 by the
+    # odds_freshness sensor + the W3pre flatten. Export it UNGATED on every odds cycle so it can't
+    # go stale when the 30-min host-cron `exec` is flaky (2026-07-03: the mirror stalled at 17:00
+    # UTC while Snowflake raw was fresh to 22:00). Idempotent (overwrite_partition) — redundant with
+    # the host cron but that redundancy is the point (belt + suspenders). ALERT-tier: never crash.
+    try:
+        _run_script(context, "export_odds_raw_to_s3.py", ["--source", "mlb_odds_raw", "--since", today])
+    except Exception as exc:  # ALERT-loud-but-continue
+        context.log.warning(
+            f"⚠️ odds raw S3 mirror export FAILED — the 24/7 odds-freshness read may lag: {exc}"
+        )
+
+    # The S3 MART rebuild + external-table refresh is cutover-sensitive (it rewrites the served
+    # mart_odds_outcomes parquet), so it stays gated behind W6_LAKEHOUSE_INTRADAY — a clean no-op
+    # until cutover. The raw mirror above still refreshes regardless.
     if not _W6_INTRADAY_ENABLED:
         context.log.info(
-            "W6 lakehouse intraday refresh disabled (set W6_LAKEHOUSE_INTRADAY=1 post-cutover) — skipping."
+            "W6 lakehouse intraday MART refresh disabled (set W6_LAKEHOUSE_INTRADAY=1 post-cutover) — "
+            "raw mirror refreshed above; skipping the mart rebuild."
         )
         return
     try:
-        today = _today()
         if scope == "odds":
-            _run_script(context, "export_odds_raw_to_s3.py", ["--source", "mlb_odds_raw", "--since", today])
             _run_script(context, "run_w1_lakehouse.py", ["--w6-odds-current"])
             _run_script(context, "refresh_w1_external_tables.py", ["--w6-odds"])
         else:  # clv
             _run_script(context, "export_w6_raw_to_s3.py", ["--table", "daily_model_predictions"])
-            _run_script(context, "export_odds_raw_to_s3.py", ["--source", "mlb_odds_raw", "--since", today])
             _run_script(context, "run_w1_lakehouse.py", ["--w6"])
             _run_script(context, "refresh_w1_external_tables.py", ["--w6-clv"])
     except Exception as exc:  # ALERT-loud-but-continue — never crash the capture op
@@ -172,27 +187,10 @@ def check_games_today(context: OpExecutionContext) -> bool:
     return has_games
 
 
-@op(ins={"has_games": In(bool)}, out=Out(Nothing))
-def odds_snapshot_ingest(context: OpExecutionContext, has_games: bool) -> None:
-    if not has_games:
-        context.log.info("No games today — skipping odds snapshot ingestion.")
-        return
-    _run_script(context, "parlay_api_ingestion.py", ["events"], timeout=_POLL_TIMEOUT)
-    _run_script(context, "parlay_api_ingestion.py", ["odds"], timeout=_POLL_TIMEOUT)
-    _run_script(context, "parlay_api_ingestion.py", ["line-movement"], timeout=_POLL_TIMEOUT)
-
-
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
-def odds_snapshot_dbt_rebuild(context: OpExecutionContext) -> None:
-    _run_dbt(context, [
-        "run",
-        "--select",
-        "stg_parlayapi_odds",
-        "mart_odds_outcomes",
-        "mart_closing_line_value",
-        "mart_prediction_clv",
-        "--target", "baseball_betting_and_fantasy",
-    ])
+# E11.1-W11-E: the parlay-based intraday odds ops (odds_snapshot_ingest → parlay_api_ingestion.py
+# events/odds/line-movement; odds_snapshot_dbt_rebuild → stg_parlayapi_odds) were already UNWIRED
+# (no @job referenced them — the Odds-API odds_current_rebuild path superseded them at the E11.6
+# Parlay decommission). Deleted here with the parlay_api ingestion + stg_parlayapi_* models.
 
 
 @op(out=Out(Nothing))
@@ -251,15 +249,24 @@ def odds_clv_dbt_rebuild(context: OpExecutionContext) -> None:
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def write_book_odds_op(context: OpExecutionContext) -> None:
-    """Push fresh per-book odds to the Railway PG serving store after each mart rebuild.
+    """Refresh the served per-book odds AND the game-detail blobs after each mart rebuild.
 
-    Runs write_serving_store.py --book-odds standalone — the script resolves today's
-    game_pks directly from daily_model_predictions when --picks is not also passed.
-    Failures are non-fatal (logged, not re-raised) so a PG outage doesn't kill the
+    Runs write_serving_store.py --book-odds --game-detail standalone — the script resolves
+    today's game_pks directly from daily_model_predictions when --picks is not also passed
+    (picks_rows are fetched whenever --game-detail is set).
+
+    ⭐ --game-detail is REQUIRED here (added 2026-07-03): the "Line Movement Over Time" chart
+    (`line_movement_series`) is produced ONLY by the game-detail serving write, which otherwise
+    runs just once/day in the daily job — so the served chart froze at the morning serve (~7:30
+    AM) while raw odds kept flowing. Re-writing the game-detail blob on the intraday odds cadence
+    (this op fires per odds_current_rebuild cycle) extends the chart through the day. It re-reads
+    mart_odds_outcomes (rebuilt by odds_current_dbt_rebuild just upstream) so the fresh snapshots
+    land; predictions are unchanged (pre-lineup), only the odds/line-movement fields refresh.
+    Failures are non-fatal (logged, not re-raised) so a serving-store outage doesn't kill the
     odds rebuild job.
     """
     try:
-        _run_script(context, "write_serving_store.py", ["--book-odds"])
+        _run_script(context, "write_serving_store.py", ["--book-odds", "--game-detail"])
     except Exception as exc:
         context.log.warning(f"write_book_odds_op failed (non-fatal): {exc}")
 
