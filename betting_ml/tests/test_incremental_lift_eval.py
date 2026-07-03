@@ -8,12 +8,21 @@ must read ~0 incremental lift, and the scoring/shrinkage helpers must be correct
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
+import pytest
 
 from betting_ml.scripts.incremental_lift_eval import (
-    candidate_dsr, candidate_is_degenerate, eb_shrink_toward_mean, max_abs_corr, negbin_crps,
-    negbin_nll, stratified_lift, time_sliced_perf,
+    Config, _build_configs, candidate_dsr, candidate_is_degenerate, eb_shrink_toward_mean,
+    load_config_suite, max_abs_corr, negbin_crps, negbin_nll, stratified_lift, time_sliced_perf,
+)
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_PHASE3_CONFIGS = (
+    _PROJECT_ROOT / "quant_sports_intel_models" / "baseball" / "edge_program" / "phase3_configs"
 )
 
 
@@ -143,3 +152,53 @@ def test_max_abs_corr_detects_redundancy():
     assert out["cand_redundant"]["max_abs_corr"] > 0.9    # ~ copy of base_a
     assert out["cand_redundant"]["vs"] == "base_a"
     assert out["cand_orthogonal"]["max_abs_corr"] < 0.4
+
+
+# ── suite mode (§0.5 deflation-honest pre-registered ablation) ────────────────
+
+def test_load_config_suite_parses_named_configs(tmp_path):
+    p = tmp_path / "suite.json"
+    p.write_text(json.dumps([{"name": "a", "extra": ["c1", "c2"]},
+                             {"name": "b", "extra": ["c3"]}]))
+    suite = load_config_suite(str(p))
+    assert [c.name for c in suite] == ["a", "b"]
+    assert suite[0].extra == ["c1", "c2"]
+
+
+def test_load_config_suite_rejects_reserved_and_duplicate_names(tmp_path):
+    for bad in ([{"name": "base", "extra": ["c1"]}],
+                [{"name": "a", "extra": ["c1"]}, {"name": "a", "extra": ["c2"]}],
+                [{"name": "a", "extra": []}], []):
+        p = tmp_path / "bad.json"
+        p.write_text(json.dumps(bad))
+        with pytest.raises(SystemExit):
+            load_config_suite(str(p))
+
+
+def test_build_configs_suite_scores_all_against_shared_base():
+    suite = [Config("a", ["c1"]), Config("b", ["c2"])]
+    configs = _build_configs([], False, suite)
+    # base + the two pre-registered configs → all deflated together (n_trials=2 downstream).
+    assert [c.name for c in configs] == ["base", "a", "b"]
+
+
+@pytest.mark.parametrize("suite_file,prefix", [
+    ("champion_suite.json", ("home_", "away_")),
+    ("perside_suite.json", ("off_", "opp_")),
+])
+def test_phase3_preregistered_suites_are_valid(suite_file, prefix):
+    """The committed E1.11 Phase-3 suites must load, name the expected 5 configs, and carry only
+    the side-prefixed columns the harness backend can resolve (no accidental conditional/low-cov
+    column leaking into the population suite)."""
+    suite = load_config_suite(str(_PHASE3_CONFIGS / suite_file))
+    names = [c.name for c in suite]
+    assert names == ["f1_startform", "f1_staleness", "traded_pitcher", "traded_lineup", "all_enriched"]
+    all_cols = {col for c in suite for col in c.extra}
+    assert all(col.startswith(prefix) for col in all_cols), all_cols
+    # all_enriched is exactly the union of the four sub-configs.
+    sub_union = {col for c in suite if c.name != "all_enriched" for col in c.extra}
+    enriched = {col for c in suite if c.name == "all_enriched" for col in c.extra}
+    assert enriched == sub_union
+    # The conditional (<50% coverage) columns must NOT appear (would trip the degenerate guard).
+    banned = ("same_team", "days_on_team", "pct_recently_acquired")
+    assert not any(b in col for col in all_cols for b in banned), all_cols

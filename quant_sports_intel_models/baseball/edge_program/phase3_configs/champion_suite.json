@@ -1,0 +1,41 @@
+[
+  {
+    "name": "f1_startform",
+    "extra": [
+      "home_starter_sp_k_pct_l3", "home_starter_sp_bb_pct_l3", "home_starter_sp_xwoba_against_l3",
+      "away_starter_sp_k_pct_l3", "away_starter_sp_bb_pct_l3", "away_starter_sp_xwoba_against_l3"
+    ]
+  },
+  {
+    "name": "f1_staleness",
+    "extra": [
+      "home_starter_form_stale", "home_starter_long_layoff", "home_starter_form_source_age_days",
+      "away_starter_form_stale", "away_starter_long_layoff", "away_starter_form_source_age_days"
+    ]
+  },
+  {
+    "name": "traded_pitcher",
+    "extra": [
+      "home_starter_is_recently_acquired", "home_starter_form_spans_team_change", "home_starter_starts_since_acquired",
+      "away_starter_is_recently_acquired", "away_starter_form_spans_team_change", "away_starter_starts_since_acquired"
+    ]
+  },
+  {
+    "name": "traded_lineup",
+    "extra": [
+      "home_lineup_recently_acquired_count", "away_lineup_recently_acquired_count"
+    ]
+  },
+  {
+    "name": "all_enriched",
+    "extra": [
+      "home_starter_sp_k_pct_l3", "home_starter_sp_bb_pct_l3", "home_starter_sp_xwoba_against_l3",
+      "away_starter_sp_k_pct_l3", "away_starter_sp_bb_pct_l3", "away_starter_sp_xwoba_against_l3",
+      "home_starter_form_stale", "home_starter_long_layoff", "home_starter_form_source_age_days",
+      "away_starter_form_stale", "away_starter_long_layoff", "away_starter_form_source_age_days",
+      "home_starter_is_recently_acquired", "home_starter_form_spans_team_change", "home_starter_starts_since_acquired",
+      "away_starter_is_recently_acquired", "away_starter_form_spans_team_change", "away_starter_starts_since_acquired",
+      "home_lineup_recently_acquired_count", "away_lineup_recently_acquired_count"
+    ]
+  }
+]
