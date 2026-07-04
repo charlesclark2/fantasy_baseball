@@ -90,6 +90,17 @@ _LEADERBOARD_PAGE_SIZE = 1000       # replaces pageitems=2000000; well above a s
 _LEADERBOARD_MIN_PAGE_SIZE = 250    # 5xx-retry floor before we give up
 _LEADERBOARD_MAX_PAGES = 60         # safety cap (60 * 250 = 15k rows) so a paginate-ignoring API can't loop forever
 
+
+def _leaderboard_max_timeout_ms() -> int:
+    """FlareSolverr maxTimeout for a leaderboard fetch. INC-26 follow-up: the qual=0 Stuff+
+    leaderboard over a date range takes >60s to compute at FanGraphs' origin, so the default 60s
+    solve window times out → FlareSolverr returns HTTP 500 (~61s elapsed). We give it more time.
+    Env-tunable (FANGRAPHS_LEADERBOARD_MAX_TIMEOUT_MS) so the box can adjust without a redeploy."""
+    try:
+        return int(os.environ.get("FANGRAPHS_LEADERBOARD_MAX_TIMEOUT_MS", "120000"))
+    except ValueError:
+        return 120000
+
 # Retained for non-FanGraphs callers (e.g. ingest_savant_park_factors.py): Baseball
 # Savant is NOT behind the Cloudflare JS challenge, so a plain Chrome-impersonating
 # curl_cffi session suffices there. The FanGraphs path no longer uses this.
@@ -154,8 +165,11 @@ def _extract_json(response_html: str):
     )
 
 
-def _flaresolverr_get(url: str, params: dict) -> tuple:
+def _flaresolverr_get(url: str, params: dict, max_timeout_ms: int | None = None) -> tuple:
     """Fetch ``url?params`` THROUGH FlareSolverr; return ``(parsed_json, http_status)``.
+
+    ``max_timeout_ms`` is FlareSolverr's browser solve+fetch budget (default 60s). A slow
+    origin (the qual=0 leaderboard) needs a longer window — see ``_leaderboard_max_timeout_ms``.
 
     FlareSolverr's headless browser issues the request from its own egress IP with
     a matching fingerprint and live Cloudflare clearance, so there is nothing to
@@ -169,14 +183,17 @@ def _flaresolverr_get(url: str, params: dict) -> tuple:
             "(e.g. http://flaresolverr.railway.internal:8191/v1). See Epic FG."
         )
 
+    timeout_ms = int(max_timeout_ms or _CHALLENGE_MAX_TIMEOUT_MS)
+    # The POST must outlast FlareSolverr's own solve+fetch budget (+30s slack).
+    post_timeout_s = max(_FLARESOLVERR_POST_TIMEOUT_S, timeout_ms / 1000 + 30)
     full_url = f"{url}?{urlencode(params)}"
-    payload = {"cmd": "request.get", "url": full_url, "maxTimeout": _CHALLENGE_MAX_TIMEOUT_MS}
-    log.info("Fetching via FlareSolverr: %s", url)
+    payload = {"cmd": "request.get", "url": full_url, "maxTimeout": timeout_ms}
+    log.info("Fetching via FlareSolverr (maxTimeout=%ds): %s", timeout_ms // 1000, url)
     last_exc: Exception | None = None
 
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            r = requests.post(FLARESOLVERR_URL, json=payload, timeout=_FLARESOLVERR_POST_TIMEOUT_S)
+            r = requests.post(FLARESOLVERR_URL, json=payload, timeout=post_timeout_s)
             r.raise_for_status()
             data = r.json()
 
@@ -315,7 +332,9 @@ def fetch_leaderboard(
         if first_params is None:
             first_params = params
         try:
-            payload, status = _flaresolverr_get(LEADERBOARD_URL, params)
+            payload, status = _flaresolverr_get(
+                LEADERBOARD_URL, params, max_timeout_ms=_leaderboard_max_timeout_ms()
+            )
         except FangraphsClientError as exc:
             # INC-26 retry path: a borderline page can still 500 at the origin → halve
             # the page and retry the SAME pagenum before giving up.

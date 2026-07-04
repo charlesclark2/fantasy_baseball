@@ -617,24 +617,46 @@ _INSERT_TEMP_SQL = """
 _MERGE_SQL = f"""
     MERGE INTO {TARGET_FQN} AS tgt
     USING (
+        -- Outer SELECT keeps one row per MERGE key. The source MUST be unique on the ON key or
+        -- Snowflake raises 100090 "Duplicate row detected during DML action". Two ways the buffered
+        -- date-set produces duplicates, both handled here (mirrors _MERGE_FROM_STAGING_SQL):
+        --   1. DOUBLEHEADERS — same (home_team, away_team, game_date) but distinct game_pk; game_pk
+        --      is therefore part of BOTH the dedup partition AND the ON clause so the two games map
+        --      to two target rows instead of colliding.
+        --   2. A snapshot re-fetched under two requested timestamps that resolve to the same stored
+        --      snapshot_ts — collapsed by ROW_NUMBER()=1.
         SELECT
-            TRY_CAST(game_pk_str    AS INTEGER)      AS game_pk,
-            TRY_CAST(game_date_str  AS DATE)         AS game_date,
-            TRY_CAST(snapshot_ts_str AS TIMESTAMP_TZ) AS snapshot_ts,
-            home_team,
-            away_team,
-            TRY_CAST(home_price_str AS INTEGER)      AS home_price,
-            TRY_CAST(away_price_str AS INTEGER)      AS away_price,
-            TRY_CAST(over_price_str AS INTEGER)      AS over_price,
-            TRY_CAST(under_price_str AS INTEGER)     AS under_price,
-            TRY_CAST(total_line_str AS FLOAT)        AS total_line,
-            bookmaker,
-            TRY_CAST(home_win_prob_str AS FLOAT)     AS home_win_prob,
-            TRY_CAST(away_win_prob_str AS FLOAT)     AS away_win_prob,
-            load_id
-        FROM tmp_odds_snaps
+            game_pk, game_date, snapshot_ts, home_team, away_team,
+            home_price, away_price, over_price, under_price, total_line,
+            bookmaker, home_win_prob, away_win_prob, load_id
+        FROM (
+            SELECT
+                TRY_CAST(game_pk_str    AS INTEGER)      AS game_pk,
+                TRY_CAST(game_date_str  AS DATE)         AS game_date,
+                TRY_CAST(snapshot_ts_str AS TIMESTAMP_TZ) AS snapshot_ts,
+                home_team,
+                away_team,
+                TRY_CAST(home_price_str AS INTEGER)      AS home_price,
+                TRY_CAST(away_price_str AS INTEGER)      AS away_price,
+                TRY_CAST(over_price_str AS INTEGER)      AS over_price,
+                TRY_CAST(under_price_str AS INTEGER)     AS under_price,
+                TRY_CAST(total_line_str AS FLOAT)        AS total_line,
+                bookmaker,
+                TRY_CAST(home_win_prob_str AS FLOAT)     AS home_win_prob,
+                TRY_CAST(away_win_prob_str AS FLOAT)     AS away_win_prob,
+                load_id,
+                ROW_NUMBER() OVER (
+                    PARTITION BY TRY_CAST(game_pk_str AS INTEGER), home_team, away_team,
+                                 TRY_CAST(game_date_str AS DATE),
+                                 TRY_CAST(snapshot_ts_str AS TIMESTAMP_TZ), bookmaker
+                    ORDER BY TRY_CAST(snapshot_ts_str AS TIMESTAMP_TZ)
+                ) AS _rn
+            FROM tmp_odds_snaps
+        )
+        WHERE _rn = 1
     ) AS src
-    ON  tgt.home_team   = src.home_team
+    ON  EQUAL_NULL(tgt.game_pk, src.game_pk)
+    AND tgt.home_team   = src.home_team
     AND tgt.away_team   = src.away_team
     AND tgt.game_date   = src.game_date
     AND tgt.snapshot_ts = src.snapshot_ts

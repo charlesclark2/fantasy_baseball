@@ -1829,6 +1829,18 @@ def _parse_args() -> argparse.Namespace:
         help="Skip writing to prediction_log (dry-run mode)",
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help=(
+            "Score + print the picks table but write NOTHING to Snowflake — skips BOTH "
+            "prediction_log AND daily_model_predictions (which --no-log-snowflake still writes to "
+            "the dev table). Combine with --s3 for a fully read-only local validation: reads the "
+            "feature matrix from the S3 lakehouse (DuckDB), scores, and touches no Snowflake write "
+            "path. Ideal for validating a lakehouse migration off-box before the real cutover."
+        ),
+    )
+    parser.add_argument(
         "--game-pks",
         metavar="PK1,PK2,...",
         default=None,
@@ -2378,9 +2390,17 @@ def main(target_date: str, args) -> None:
     else:
         print("\n0 output rows (no odds available — picks table above uses model probabilities only).")
 
-    if not args.no_log_snowflake:
+    # --dry-run implies --no-log-snowflake (skip prediction_log) AND skips the
+    # daily_model_predictions write below → a fully read-only local validation.
+    if not args.no_log_snowflake and not args.dry_run:
         _write_prediction_log(output_rows, target_date)
         _backfill_outcomes()
+
+    if args.dry_run:
+        print(f"\n[--dry-run] Skipping ALL Snowflake writes "
+              f"({len(output_rows)} prediction row(s) NOT written to daily_model_predictions / "
+              f"prediction_log). Read-only validation complete.")
+        return
 
     run_ts = datetime.now(timezone.utc).replace(tzinfo=None)
     _write_predictions_to_snowflake(

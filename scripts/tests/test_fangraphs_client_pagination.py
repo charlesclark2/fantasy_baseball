@@ -22,7 +22,7 @@ def test_paginates_and_concatenates(monkeypatch):
     """page_size=2: page 1 returns 2 (full) → continue; page 2 returns 1 (short) → stop. 3 rows total."""
     calls = []
 
-    def fake_get(url, params):
+    def fake_get(url, params, max_timeout_ms=None):
         calls.append(params)
         pagenum = int(params["pagenum"])
         return (_page([1, 2]) if pagenum == 1 else _page([3]), 200)
@@ -40,7 +40,7 @@ def test_paginates_and_concatenates(monkeypatch):
 
 def test_pagination_ignored_terminates_and_dedups(monkeypatch):
     """An API that returns the FULL set on every page must not loop: page 2 is all-seen → stop, no dupes."""
-    def fake_get(url, params):
+    def fake_get(url, params, max_timeout_ms=None):
         return (_page([1, 2, 3]), 200)  # same 3 rows regardless of pagenum
 
     monkeypatch.setattr(fc, "_flaresolverr_get", fake_get)
@@ -53,7 +53,7 @@ def test_upstream_5xx_halves_page_size_and_retries(monkeypatch):
     """A 500 on the full page → halve page_size and retry the SAME page (not re-solve the challenge)."""
     seen_page_sizes = []
 
-    def fake_get(url, params):
+    def fake_get(url, params, max_timeout_ms=None):
         ps = int(params["pageitems"])
         seen_page_sizes.append(ps)
         if ps == 1000:
@@ -71,7 +71,7 @@ def test_upstream_5xx_halves_page_size_and_retries(monkeypatch):
 
 def test_non_5xx_error_propagates(monkeypatch):
     """A challenge/solve failure (not a 5xx) is NOT a page-size problem → surfaces, not silently retried."""
-    def fake_get(url, params):
+    def fake_get(url, params, max_timeout_ms=None):
         raise fc.FangraphsClientError("FlareSolverr did not solve the request: timeout")
 
     monkeypatch.setattr(fc, "_flaresolverr_get", fake_get)
@@ -82,7 +82,7 @@ def test_non_5xx_error_propagates(monkeypatch):
 def test_qual_and_pagesize_threaded_into_params(monkeypatch):
     captured = {}
 
-    def fake_get(url, params):
+    def fake_get(url, params, max_timeout_ms=None):
         captured.update(params)
         return (_page([1]), 200)
 
