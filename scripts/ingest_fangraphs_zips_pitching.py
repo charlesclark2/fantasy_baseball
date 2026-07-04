@@ -36,6 +36,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "uti
 from fangraphs_client import fetch_projections, FangraphsClientError  # noqa: E402
 from snowflake_loader import get_snowflake_connection, append_raw_rows  # noqa: E402
 
+# E11.1-W11-FG (FINISH wave): the S3-capable dispatcher, gated by W11_RAW_WRITE_MODE
+# (default 'snowflake' → unchanged: Snowflake only). 'both' dual-writes (validate parity, then…)
+# and 's3' retires the Snowflake leg. raw_json/request_params land as JSON strings (matching
+# TO_JSON), so the stg_fangraphs__zips_pitching duckdb branch reads byte-identical rows whether
+# they came from the live writer or the one-time W4 export bridge (export_w4_raw_to_s3.py).
+try:  # 'utils.' under pytest (pythonpath=scripts); bare under the script runtime (utils on path)
+    from utils.lakehouse_raw_writer import append_raw_rows_lakehouse, w11_write_mode  # noqa: E402
+except ImportError:
+    from lakehouse_raw_writer import append_raw_rows_lakehouse, w11_write_mode  # noqa: E402
+
+_LAKEHOUSE_SOURCE = "fg_zips_pitching_raw"
+
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 logging.basicConfig(
@@ -90,7 +102,8 @@ def ingest_season(
         for player in data
     ]
 
-    inserted = append_raw_rows(TABLE_FQN, rows, conn)
+    # E11.1-W11-FG: gated Snowflake→S3 flip (W11_RAW_WRITE_MODE; default 'snowflake'=unchanged).
+    inserted = append_raw_rows_lakehouse(TABLE_FQN, _LAKEHOUSE_SOURCE, rows, conn, mode=w11_write_mode())
     log.info(
         "Loaded %d ZiPS pitching rows for season=%d, projection_type=%s",
         inserted, season, projection_type,

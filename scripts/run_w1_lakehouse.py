@@ -119,16 +119,18 @@ W3_MART_MODELS = [
 #   the 6 marts (mart_pitcher_arsenal_summary precedes mart_pitcher_profile_summary).
 # Raw/builder-output parquet is read DIRECTLY via read_parquet(lakehouse_loc("X")) in
 # each duckdb branch (no view registration needed):
-#   catcher_framing_raw, fg_stuff_plus_raw, fg_zips_hitting_raw,
+#   catcher_framing_raw, fg_stuff_plus_raw, fg_zips_pitching_raw, fg_zips_hitting_raw,
 #   fg_hitting_leaderboard_raw, player_profiles_raw, eb_park_factors_granular_raw,
 #   pitcher_clusters.
 W4_PRECURSOR_MODELS = [
     "stg_fangraphs__stuff_plus",          # ← fg_stuff_plus_raw (parquet)
+    "stg_fangraphs__zips_pitching",       # ← fg_zips_pitching_raw (parquet); E11.1-W11-FG
     "stg_fangraphs__pitcher_arsenal",     # ← fg_stuff_plus_raw (parquet)
     "stg_fangraphs__zips_hitting",        # ← fg_zips_hitting_raw (parquet)
     "stg_fangraphs__hitting_leaderboard", # ← fg_hitting_leaderboard_raw (parquet)
     "fct_fangraphs_pitcher_arsenal_wide", # ← stg_fangraphs__pitcher_arsenal + __stuff_plus
     "fct_fangraphs_hitting_analytics",    # ← stg_fangraphs__zips_hitting + __hitting_leaderboard
+    "fct_fangraphs_pitching_analytics",   # ← stg_fangraphs__stuff_plus + __zips_pitching; E11.1-W11-FG
     "stg_statsapi_player_profiles",       # ← player_profiles_raw (parquet)
 ]
 
@@ -1179,9 +1181,12 @@ def _build_sub_model_signals_consumer(conn, dry_run: bool) -> None:
 # and feature_league_contact_baseline. OPT-IN (--w8b) until cutover, like the prior waves: reads
 # precursor parquet that must exist first:
 #   • the W8b precursor mirrors (scripts/export_w8b_precursors_to_s3.py): feature_pregame_lineup_state
-#     (SCD-2; the INC-17-P2 source), team_sequential_posteriors (Epic 16.3), stg_actionnetwork_public_betting,
-#     fct_fangraphs_pitching_analytics (ZiPS FIP — its stg_fangraphs__zips_pitching subtree stays a
-#     Snowflake residual, flagged for a future wave; fg_zips_pitching_raw IS already in S3).
+#     (SCD-2; the INC-17-P2 source), team_sequential_posteriors (Epic 16.3), stg_actionnetwork_public_betting.
+#   • fct_fangraphs_pitching_analytics (ZiPS FIP) is now W4-BUILT natively in DuckDB (E11.1-W11-FG:
+#     stg_fangraphs__zips_pitching + fct dual-branched; fg_zips_pitching_raw from S3). It writes the SAME
+#     lakehouse/fct_fangraphs_pitching_analytics/data.parquet this build registers below, so it was
+#     DROPPED from the export mirror (its uppercase SELECT * cols would have broken the W4 ext table's
+#     lowercase VALUE: accessors). ZiPS 'zips' rows are pre-season static → no daily rebuild needed.
 #   • the W7b-1 feature mirror (scripts/export_features_to_s3.py) for the W11-deferred tail the
 #     aggregator still reads: feature_pregame_umpire_features, feature_pregame_weather_features.
 #   • the prior-wave (W1-W8a) marts/staging/feature-layer parquet already in S3 + the W7a clusters +
@@ -1227,7 +1232,10 @@ W8B_PRECURSOR_VIEWS = [
     "feature_pregame_umpire_features", "feature_pregame_weather_features",
     # W8b NEW precursor mirrors (export_w8b_precursors_to_s3.py)
     "feature_pregame_lineup_state", "team_sequential_posteriors",
-    "stg_actionnetwork_public_betting", "fct_fangraphs_pitching_analytics",
+    "stg_actionnetwork_public_betting",
+    # fct_fangraphs_pitching_analytics is now W4-BUILT (E11.1-W11-FG) — this registers its W4
+    # data.parquet as a view; the W4 build must have run so the parquet exists (ZiPS static).
+    "fct_fangraphs_pitching_analytics",
 ]
 
 # Dialect-clean feature/matchup models + the aggregator, DEPENDENCY-ORDERED (each registered as a

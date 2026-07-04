@@ -80,6 +80,16 @@ _FLARESOLVERR_POST_TIMEOUT_S = 180
 _MAX_RETRIES = 3
 _RETRY_DELAYS = [2, 4, 8]
 
+# INC-26 (2026-07-02): the leaderboard endpoint 500s at FanGraphs' *origin* (not a
+# Cloudflare/FlareSolverr clearance failure) when asked for one absurd page —
+# `pageitems=2000000&qual=0`. A 500 means the request reached the origin, so the cure
+# is to cap the page and paginate, not to re-solve the challenge. We request modest
+# pages and walk `pagenum` until a short/empty/all-seen page, and — belt-and-braces —
+# halve the page on any upstream 5xx and retry the same page (the "retry path").
+_LEADERBOARD_PAGE_SIZE = 1000       # replaces pageitems=2000000; well above a season's pitcher count per page
+_LEADERBOARD_MIN_PAGE_SIZE = 250    # 5xx-retry floor before we give up
+_LEADERBOARD_MAX_PAGES = 60         # safety cap (60 * 250 = 15k rows) so a paginate-ignoring API can't loop forever
+
 # Retained for non-FanGraphs callers (e.g. ingest_savant_park_factors.py): Baseball
 # Savant is NOT behind the Cloudflare JS challenge, so a plain Chrome-impersonating
 # curl_cffi session suffices there. The FanGraphs path no longer uses this.
@@ -195,6 +205,22 @@ def _flaresolverr_get(url: str, params: dict) -> tuple:
     raise FangraphsClientError(f"All {_MAX_RETRIES} attempts failed for {full_url}") from last_exc
 
 
+def _is_upstream_5xx(exc: Exception) -> bool:
+    """True if an origin 5xx is anywhere in the exception chain (INC-26 retry trigger).
+
+    ``_flaresolverr_get`` wraps the upstream-status error as the ``__cause__`` of its
+    "All N attempts failed" error, so we walk the chain and match ``HTTP 5xx``.
+    """
+    seen = exc
+    for _ in range(6):
+        if seen is None:
+            return False
+        if re.search(r"HTTP 5\d\d", str(seen)):
+            return True
+        seen = seen.__cause__
+    return False
+
+
 def fetch_projections(proj_type: str, stats: str, season: int) -> dict:
     """Fetch ZiPS / Steamer projections from the FanGraphs projections endpoint.
 
@@ -233,8 +259,15 @@ def fetch_leaderboard(
     season: int,
     startdate: Optional[str] = None,
     enddate: Optional[str] = None,
+    qual: str | int = "0",
+    page_size: Optional[int] = None,
 ) -> dict:
-    """Fetch a FanGraphs major-league leaderboard snapshot.
+    """Fetch a FanGraphs major-league leaderboard snapshot (INC-26 paginated).
+
+    Walks ``pagenum`` at a capped ``pageitems`` (default 1000) and concatenates the
+    pages — the old single ``pageitems=2000000`` request 500s at FanGraphs' origin.
+    Rows are de-duplicated by ``playerid`` so a pagination-ignoring API (returns the
+    full set every page) terminates on the first all-seen page instead of looping.
 
     Args:
         stats: 'pit' for pitching, 'bat' for hitting
@@ -242,12 +275,17 @@ def fetch_leaderboard(
         season: calendar year
         startdate: ISO date string e.g. '2026-04-01'; defaults to March 1 of season
         enddate: ISO date string e.g. '2026-04-07'; defaults to November 1 of season
+        qual: minimum PA/IP qualifier ('0' = every player; a small floor is another
+            lever against a borderline origin 500, but changes which rows return —
+            keep '0' for parity with the historical raws).
+        page_size: rows per page (default 1000). Halved automatically on an upstream 5xx.
     """
-    params = {
+    page_size = int(page_size or _LEADERBOARD_PAGE_SIZE)
+    base_params = {
         "pos": "all",
         "stats": stats,
         "lg": "all",
-        "qual": "0",
+        "qual": str(qual),
         "season": season,
         "season1": season,
         "startdate": startdate or f"{season}-03-01",
@@ -255,8 +293,6 @@ def fetch_leaderboard(
         "month": "1000",
         "hand": "",
         "team": "0",
-        "pageitems": "2000000",
-        "pagenum": "1",
         "ind": "0",
         "rost": "0",
         "players": "",
@@ -265,18 +301,64 @@ def fetch_leaderboard(
         "sortdir": "default",
         "sortstat": "WAR",
     }
-    payload, status = _flaresolverr_get(LEADERBOARD_URL, params)
-    rows = payload.get("data", []) if isinstance(payload, dict) else payload
+
+    all_rows: list = []
+    seen_ids: set = set()
+    load_id = str(uuid.uuid4())
+    first_params: dict | None = None
+    last_status = 0
+    pagenum = 1
+    pages_fetched = 0
+
+    while pages_fetched < _LEADERBOARD_MAX_PAGES:
+        params = dict(base_params, pageitems=str(page_size), pagenum=str(pagenum))
+        if first_params is None:
+            first_params = params
+        try:
+            payload, status = _flaresolverr_get(LEADERBOARD_URL, params)
+        except FangraphsClientError as exc:
+            # INC-26 retry path: a borderline page can still 500 at the origin → halve
+            # the page and retry the SAME pagenum before giving up.
+            if _is_upstream_5xx(exc) and page_size > _LEADERBOARD_MIN_PAGE_SIZE:
+                page_size = max(_LEADERBOARD_MIN_PAGE_SIZE, page_size // 2)
+                log.warning(
+                    "Leaderboard page %d returned upstream 5xx; retrying at smaller page_size=%d",
+                    pagenum, page_size,
+                )
+                continue
+            raise
+
+        last_status = status
+        page_rows = payload.get("data", []) if isinstance(payload, dict) else (payload or [])
+        pages_fetched += 1
+        if not page_rows:
+            break
+
+        new_rows = [r for r in page_rows if str(r.get("playerid", "")) not in seen_ids]
+        for r in new_rows:
+            seen_ids.add(str(r.get("playerid", "")))
+        all_rows.extend(new_rows)
+
+        # Last page (short) or the API ignored pagination (nothing new) → stop.
+        if len(page_rows) < page_size or not new_rows:
+            break
+        pagenum += 1
+    else:
+        log.warning(
+            "fetch_leaderboard hit the %d-page cap (stats=%s type=%d season=%d) — possible truncation",
+            _LEADERBOARD_MAX_PAGES, stats, type_id, season,
+        )
+
     log.info(
-        "fetch_leaderboard: stats=%s type=%d season=%d %s→%s → %d rows",
+        "fetch_leaderboard: stats=%s type=%d season=%d %s→%s → %d rows (%d page(s), page_size=%d)",
         stats, type_id, season,
         startdate or "(full)", enddate or "(full)",
-        len(rows),
+        len(all_rows), pages_fetched, page_size,
     )
     return {
-        "data": rows,
+        "data": all_rows,
         "source_endpoint": LEADERBOARD_URL,
-        "request_params": params,
-        "http_status_code": status,
-        "load_id": str(uuid.uuid4()),
+        "request_params": first_params,
+        "http_status_code": last_status or 200,
+        "load_id": load_id,
     }
