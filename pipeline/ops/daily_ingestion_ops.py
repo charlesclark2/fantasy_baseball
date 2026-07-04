@@ -764,6 +764,112 @@ def check_feature_block_coverage_op(context):
                 pass
 
 
+# ── E11.23 — silently-not-running guard (the cutover-runtime-landmine detector) ───────
+# The E11.1 cutover left a class of RUNTIME failures CI can't see (it mocks all IO): intraday
+# refresh jobs shipped GATED-OFF and serving-critical sensors/schedules that boot STOPPED, so
+# they SILENTLY NEVER RUN — odds froze 3 days with NO alert; the lineup monitor was dead 2 days.
+# The default_status=RUNNING flips on those sensors/schedules are the structural cure; THIS op is
+# the DETECTOR. It runs inside the daily job (itself now self-starting) and ALARMS if a
+# serving-critical monitor is manually STOPPED, or a permanently-on intraday flag is unset.
+#
+# Tier: ALERT-loud-but-continue (E11.7). It NEVER raises — a dead monitor must not also take down
+# the daily job; it emails CRITICAL + logs a WARNING so the silence becomes VISIBLE. The
+# intended-state table in BOX_OPERATIONS.md §10 is the source of truth for the sets below.
+
+# Serving-critical sensors that must always be RUNNING (each carries default_status=RUNNING).
+_CRITICAL_SENSORS = frozenset({
+    "run_failure_alert_sensor",
+    "odds_current_rebuild_sensor",
+    "odds_freshness_alert_sensor",
+    "schedule_freshness_alert_sensor",
+    "statcast_freshness_sensor",
+    "lineup_monitor_sensor",
+    "pregame_alert_sensor",
+    "conviction_pick_alert_sensor",
+    "morning_watchdog_sensor",
+    "clv_alert_sensor",
+    "model_health_alert_sensor",
+})
+# Serving-critical schedules that must always be RUNNING (each carries default_status=RUNNING).
+# The intraday_schedule_capture_* / intraday_public_betting_* schedules are deliberately EXCLUDED
+# — they stay operator-gated (double-ingest / paid-capture opt-in), so a STOPPED one is expected.
+_CRITICAL_SCHEDULES = frozenset({
+    "daily_ingestion_job_schedule",
+    "odds_clv_rebuild_daily",
+})
+# Intraday / cutover env flags that must be permanently "1" on the box. An unset one = a
+# silently-gated-off refresh (3 of the 5 incidents). Scoped to the flags we are confident should
+# be ON everywhere post-cutover; extend this AND the BOX_OPERATIONS.md §10 table together.
+_REQUIRED_INTRADAY_FLAGS = (
+    "SCHEDULE_LAKEHOUSE_INTRADAY",   # INC-22: keeps served game-state / lineups fresh
+    "LINEUP_INTRADAY_S3_REBUILD",    # intraday lineup re-score reaches the S3 feature parquet
+    "W8A_LAKEHOUSE_S3",              # feature-layer + EB served from S3 (cut over 2026-06-30)
+    "W8B_LAKEHOUSE_S3",              # serving aggregator served from S3 (cut over 2026-06-30)
+)
+
+
+def _flag_problems(env) -> list[str]:
+    """Pure: the required intraday/cutover flags in ``env`` that are not set to '1' (a
+    silently-gated-off refresh). Never raises."""
+    return [
+        f"required intraday flag not set to '1': {flag} (={env.get(flag)!r})"
+        for flag in _REQUIRED_INTRADAY_FLAGS
+        if env.get(flag) != "1"
+    ]
+
+
+def _stopped_critical_instigators(instance) -> list[str]:
+    """The serving-critical sensors/schedules that are EXPLICITLY STOPPED in the Dagster instance.
+    ``all_instigator_state(STOPPED)`` returns only instigators with a persisted STOPPED row (someone
+    toggled it off); a self-starting default-RUNNING instigator that was never toggled has NO row →
+    not flagged (correct: it is running by default). May raise (ephemeral/CI instance) — the caller
+    treats introspection as best-effort."""
+    from dagster._core.scheduler.instigation import InstigatorStatus
+
+    stopped = {
+        s.instigator_name
+        for s in instance.all_instigator_state(instigator_statuses={InstigatorStatus.STOPPED})
+    }
+    return [
+        f"critical instigator STOPPED in Dagster: {name}"
+        for name in sorted((_CRITICAL_SENSORS | _CRITICAL_SCHEDULES) & stopped)
+    ]
+
+
+@op(out=Out(Nothing))
+def check_monitors_healthy_op(context):
+    """ALARM (never HALT) if a serving-critical sensor/schedule is STOPPED or a permanently-on
+    intraday flag is unset — the E11.23 cure for the 'silently never runs' class the cutover left.
+    Standalone (no upstream): a heartbeat that runs every daily job regardless of the ingest chain."""
+    problems = _flag_problems(os.environ)
+    # Instance introspection is best-effort — an ephemeral/CI instance that can't answer must not
+    # crash the guard (ALERT-tier); the flag check above always runs.
+    try:
+        problems.extend(_stopped_critical_instigators(context.instance))
+    except Exception as e:  # noqa: BLE001
+        context.log.warning(
+            f"monitor-state introspection unavailable (intraday-flag check still ran): {e}"
+        )
+    context.add_output_metadata({"monitor_problems": MetadataValue.int(len(problems))})
+    if not problems:
+        context.log.info(
+            "Monitor health OK: no critical sensor/schedule STOPPED; all %d required intraday "
+            "flags set.", len(_REQUIRED_INTRADAY_FLAGS),
+        )
+        return
+    msg = (
+        "SILENTLY-NOT-RUNNING ALERT (E11.23): serving-critical monitors are OFF or intraday "
+        "refreshes are gated off — they FAIL SILENT (the odds-froze-3-days class). "
+        + "; ".join(problems)
+        + ". Fix: START the STOPPED sensor/schedule in Dagit (toggle on) and/or set the missing "
+        "flag(s) in the box env_file + redeploy. Intended-state table: "
+        "services/dagster/aws/BOX_OPERATIONS.md §10."
+    )
+    context.log.warning("[ALERT] " + msg)
+    from pipeline.utils.alerting import send_alert
+    send_alert("Monitor silently not running", msg, severity="CRITICAL", dedup_key="monitor_health")
+
+
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def compute_elo(context):
     _run_script(context, "/app/betting_ml/scripts/compute_elo.py")

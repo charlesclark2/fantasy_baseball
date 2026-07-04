@@ -23,7 +23,7 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-from dagster import SensorEvaluationContext, SkipReason, sensor
+from dagster import DefaultSensorStatus, SensorEvaluationContext, SkipReason, sensor
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -65,7 +65,8 @@ def _compute_rolling_stats() -> dict | None:
     }
 
 
-@sensor(minimum_interval_seconds=86400)  # run at most once per day
+# E11.23: default_status=RUNNING — self-start on the box / after a DB reset (INC-16 class).
+@sensor(minimum_interval_seconds=86400, default_status=DefaultSensorStatus.RUNNING)  # run at most once per day
 def clv_alert_sensor(context: SensorEvaluationContext):
     """
     Daily sensor: alerts if rolling 2-week pct_positive_clv drops below 0.35.

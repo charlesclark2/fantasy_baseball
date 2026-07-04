@@ -22,7 +22,7 @@ import sys
 from datetime import UTC, date, datetime, time
 from pathlib import Path
 
-from dagster import RunRequest, SensorEvaluationContext, SkipReason, sensor
+from dagster import DefaultSensorStatus, RunRequest, SensorEvaluationContext, SkipReason, sensor
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -71,7 +71,9 @@ def _has_games_today(today: str) -> bool:
         conn.close()
 
 
-@sensor(job=daily_ingestion_job, minimum_interval_seconds=900)
+# E11.23: default_status=RUNNING — self-start on the box / after a DB reset (INC-16 class).
+@sensor(job=daily_ingestion_job, minimum_interval_seconds=900,
+        default_status=DefaultSensorStatus.RUNNING)
 def morning_watchdog_sensor(context: SensorEvaluationContext):
     """
     Fallback trigger: fires daily_ingestion_job if morning predictions are

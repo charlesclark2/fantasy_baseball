@@ -10,14 +10,14 @@ failures are rare enough that emailing all of them beats silently dropping a
 WARN-tier break. (Sensor-TICK failures are NOT runs and are not caught here — the
 freshness sensors call send_alert directly; see their modules.)
 
-OPERATOR: this sensor boots STOPPED (repo convention — no default_status=RUNNING).
-Enable it in the Dagit UI (Sensors → run_failure_alert_sensor → toggle on) as part
-of the P6 turn-up, and confirm the SNS email subscription first.
+OPERATOR: as of E11.23 this sensor SELF-STARTS (default_status=RUNNING) so it can't
+silently boot STOPPED after a Dagster-DB reset / re-host (INC-16 class) and miss the very
+run-failures it exists to page on. Still confirm the SNS email subscription is active.
 """
 
 from __future__ import annotations
 
-from dagster import RunFailureSensorContext, run_failure_sensor
+from dagster import DefaultSensorStatus, RunFailureSensorContext, run_failure_sensor
 
 from pipeline.utils.alerting import send_alert
 
@@ -34,6 +34,7 @@ _HALT_TIER_JOBS = {
 @run_failure_sensor(
     name="run_failure_alert_sensor",
     description="Email on any job-run failure; LOUD for HALT-tier serving jobs (INC-16-P6).",
+    default_status=DefaultSensorStatus.RUNNING,  # E11.23: self-start; a stopped alarm is silent
 )
 def run_failure_alert_sensor(context: RunFailureSensorContext) -> None:
     run = context.dagster_run

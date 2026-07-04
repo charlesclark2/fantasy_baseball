@@ -4,7 +4,7 @@ import sys
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from dagster import RunRequest, SensorEvaluationContext, SkipReason, sensor
+from dagster import DefaultSensorStatus, RunRequest, SensorEvaluationContext, SkipReason, sensor
 
 from pipeline.jobs.sensor_jobs import lineup_monitor_job
 
@@ -45,7 +45,7 @@ def _minutes_to_next_first_pitch(now_et: datetime) -> float | None:
     to run every tick. `game_date` is the StatsAPI first-pitch instant stored as
     TIMESTAMP_TZ (tz-aware); a game already past first pitch but still flagged
     'Preview' clamps to 0 (treated as active)."""
-    from betting_ml.utils.lakehouse_monitor import duck, lh
+    from betting_ml.utils.lakehouse_monitor import duck, lh, to_utc_datetime
 
     conn = duck()
     try:
@@ -60,15 +60,19 @@ def _minutes_to_next_first_pitch(now_et: datetime) -> float | None:
 
     if not row or row[0] is None:
         return None
-    first_pitch = row[0]
-    if isinstance(first_pitch, str):
-        first_pitch = datetime.fromisoformat(first_pitch.replace("Z", "+00:00"))
-    if first_pitch.tzinfo is None:  # defensive — game_date is normally tz-aware
-        first_pitch = first_pitch.replace(tzinfo=ZoneInfo("UTC"))
+    # game_date reads back as an ISO VARCHAR from the lakehouse (INC-23); to_utc_datetime
+    # coerces str/naive/aware to a tz-aware UTC datetime so we never .tzinfo/.astimezone a str
+    # (the INC-23 sensor-crash class). Subtracting the ET-aware `now_et` is tz-correct.
+    first_pitch = to_utc_datetime(row[0])
     return max(0.0, (first_pitch - now_et).total_seconds() / 60.0)
 
 
-@sensor(job=lineup_monitor_job, minimum_interval_seconds=_FLOOR_SECONDS)
+# E11.23: default_status=RUNNING so the sensor SELF-STARTS on the box (and after any
+# Dagster-DB reset / re-host like INC-16) instead of booting STOPPED and silently never
+# firing (the class that killed this sensor for 2 days, 2026-07-02). check_monitors_healthy_op
+# alarms if it is ever manually STOPPED.
+@sensor(job=lineup_monitor_job, minimum_interval_seconds=_FLOOR_SECONDS,
+        default_status=DefaultSensorStatus.RUNNING)
 def lineup_monitor_sensor(context: SensorEvaluationContext):
     """
     Early-game-aware lineup monitor. Polls every 10 min while any game is within
