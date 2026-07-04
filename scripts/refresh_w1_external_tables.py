@@ -85,11 +85,14 @@ W3PRE_TABLES = [
 # the W4 read-path audit confirmed NONE are read at request time).
 W4_TABLES = [
     "stg_fangraphs__stuff_plus",
+    "stg_fangraphs__zips_pitching",        # E11.1-W11-FG
     "stg_fangraphs__pitcher_arsenal",
     "stg_fangraphs__zips_hitting",
     "stg_fangraphs__hitting_leaderboard",
     "fct_fangraphs_pitcher_arsenal_wide",
     "fct_fangraphs_hitting_analytics",
+    "fct_fangraphs_pitching_analytics",    # E11.1-W11-FG
+
     "stg_statsapi_player_profiles",
     "mart_pitcher_arsenal_summary",
     "mart_pitcher_profile_summary",

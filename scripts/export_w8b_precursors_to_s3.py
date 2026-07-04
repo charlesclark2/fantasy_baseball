@@ -17,12 +17,14 @@ wave (complex upstream + matchup models + the aggregator) builds entirely on Duc
   • stg_actionnetwork_public_betting (betting; dbt staging over a VARIANT raw) → read by the
       aggregator's public_betting CTE. Mirrored (not DuckDB-built) to avoid a VARIANT-flatten blind
       translation on the serving-critical path; its raw (actionnetwork.public_betting_raw) stays SF.
-  • fct_fangraphs_pitching_analytics (betting; dbt VIEW over stg_fangraphs__zips_pitching + __stuff_plus)
-      → read by feature_pregame_starter_features (ZiPS proj_fip/proj_xfip). Mirrored to avoid migrating
-      the stg_fangraphs__zips_pitching VARIANT-flatten subtree in this serving-critical wave. ⚠️ SF
-      RESIDUAL (flagged for a future wave): fct_fangraphs_pitching_analytics + stg_fangraphs__zips_pitching
-      stay Snowflake-built; fg_zips_pitching_raw is ALREADY in S3 (export_w4_raw_to_s3.py), so the clean
-      migration (dual-branch both, drop the mirror) is a bounded follow-up.
+
+  ✅ E11.1-W11-FG (2026-07-04): fct_fangraphs_pitching_analytics was DROPPED from this mirror — the
+     "bounded follow-up" the old note flagged is done. stg_fangraphs__zips_pitching + fct are now
+     dual-branched and W4-BUILT natively in DuckDB (run_w1_lakehouse W4_PRECURSOR_MODELS), writing the
+     SAME lakehouse/fct_fangraphs_pitching_analytics/data.parquet the W8b build registers. Keeping the
+     mirror here would OVERWRITE that parquet daily with SF's UPPERCASE SELECT * columns ("Do NOT force
+     lower" below), which would make the new lowercase-VALUE: W4 ext table read all-NULL. W8b still reads
+     the same S3 location (DuckDB is case-insensitive); the parquet is now W4-sourced.
 
 WHY a mirror (NOT a per-table DuckDB build) — same design as W8a/W9/W7b-1:
   lineup_state + team_sequential_posteriors are STATEFUL SCD-2 Python writes; re-implementing their
@@ -80,7 +82,7 @@ MIRROR_TABLES = {
     "feature_pregame_lineup_state":    "baseball_data.betting_features.feature_pregame_lineup_state",
     "team_sequential_posteriors":      "baseball_data.betting.team_sequential_posteriors",
     "stg_actionnetwork_public_betting": "baseball_data.betting.stg_actionnetwork_public_betting",
-    "fct_fangraphs_pitching_analytics": "baseball_data.betting.fct_fangraphs_pitching_analytics",
+    # fct_fangraphs_pitching_analytics DROPPED (E11.1-W11-FG) — now W4-built natively in DuckDB; see docstring.
 }
 ALL_NAMES = sorted(MIRROR_TABLES)
 

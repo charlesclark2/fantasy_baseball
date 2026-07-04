@@ -31,6 +31,31 @@ FILE_FORMAT = baseball_data.lakehouse_ext.parquet_snappy
 AUTO_REFRESH = FALSE
 COMMENT = 'E11.1-W4: stg_fangraphs__stuff_plus from S3 lakehouse parquet';
 
+-- ── stg_fangraphs__zips_pitching  (17 columns) ──
+CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.stg_fangraphs__zips_pitching (
+    FG_PITCHER_ID                      VARCHAR        AS (VALUE:fg_pitcher_id::VARCHAR),
+    PITCHER_NAME                       VARCHAR        AS (VALUE:pitcher_name::VARCHAR),
+    SEASON                             NUMBER(38,0)   AS (VALUE:season::NUMBER(38,0)),
+    PROJECTION_TYPE                    VARCHAR        AS (VALUE:projection_type::VARCHAR),
+    PROJ_ERA                           FLOAT          AS (VALUE:proj_era::FLOAT),
+    PROJ_FIP                           FLOAT          AS (VALUE:proj_fip::FLOAT),
+    PROJ_XFIP                          FLOAT          AS (VALUE:proj_xfip::FLOAT),
+    PROJ_K_PCT                         FLOAT          AS (VALUE:proj_k_pct::FLOAT),
+    PROJ_BB_PCT                        FLOAT          AS (VALUE:proj_bb_pct::FLOAT),
+    PROJ_K_PER_9                       FLOAT          AS (VALUE:proj_k_per_9::FLOAT),
+    PROJ_BB_PER_9                      FLOAT          AS (VALUE:proj_bb_per_9::FLOAT),
+    PROJ_IP                            FLOAT          AS (VALUE:proj_ip::FLOAT),
+    PROJ_WAR                           FLOAT          AS (VALUE:proj_war::FLOAT),
+    PROJ_WHIP                          FLOAT          AS (VALUE:proj_whip::FLOAT),
+    MLBAM_PITCHER_ID                   VARCHAR        AS (VALUE:mlbam_pitcher_id::VARCHAR),
+    INGESTION_TS                       TIMESTAMP_NTZ  AS (VALUE:ingestion_ts::TIMESTAMP_NTZ),
+    LOAD_ID                            VARCHAR        AS (VALUE:load_id::VARCHAR)
+)
+WITH LOCATION = @baseball_data.lakehouse_ext.s3_lakehouse/stg_fangraphs__zips_pitching/
+FILE_FORMAT = baseball_data.lakehouse_ext.parquet_snappy
+AUTO_REFRESH = FALSE
+COMMENT = 'E11.1-W4: stg_fangraphs__zips_pitching from S3 lakehouse parquet';
+
 -- ── stg_fangraphs__pitcher_arsenal  (13 columns) ──
 CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.stg_fangraphs__pitcher_arsenal (
     FG_PITCHER_ID                      VARCHAR        AS (VALUE:fg_pitcher_id::VARCHAR),
@@ -209,6 +234,36 @@ WITH LOCATION = @baseball_data.lakehouse_ext.s3_lakehouse/fct_fangraphs_hitting_
 FILE_FORMAT = baseball_data.lakehouse_ext.parquet_snappy
 AUTO_REFRESH = FALSE
 COMMENT = 'E11.1-W4: fct_fangraphs_hitting_analytics from S3 lakehouse parquet';
+
+-- ── fct_fangraphs_pitching_analytics  (22 columns) ──
+CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.fct_fangraphs_pitching_analytics (
+    FG_PITCHER_ID                      VARCHAR        AS (VALUE:fg_pitcher_id::VARCHAR),
+    PITCHER_NAME                       VARCHAR        AS (VALUE:pitcher_name::VARCHAR),
+    SEASON                             NUMBER(38,0)   AS (VALUE:season::NUMBER(38,0)),
+    STUFF_PLUS                         FLOAT          AS (VALUE:stuff_plus::FLOAT),
+    LOCATION_PLUS                      FLOAT          AS (VALUE:location_plus::FLOAT),
+    PITCHING_PLUS                      FLOAT          AS (VALUE:pitching_plus::FLOAT),
+    PRIMARY_PITCH_TYPE                 VARCHAR        AS (VALUE:primary_pitch_type::VARCHAR),
+    FASTBALL_PCT                       FLOAT          AS (VALUE:fastball_pct::FLOAT),
+    BREAKING_PCT                       FLOAT          AS (VALUE:breaking_pct::FLOAT),
+    OFFSPEED_PCT                       FLOAT          AS (VALUE:offspeed_pct::FLOAT),
+    STUFF_IP                           FLOAT          AS (VALUE:stuff_ip::FLOAT),
+    PROJ_ERA                           FLOAT          AS (VALUE:proj_era::FLOAT),
+    PROJ_FIP                           FLOAT          AS (VALUE:proj_fip::FLOAT),
+    PROJ_XFIP                          FLOAT          AS (VALUE:proj_xfip::FLOAT),
+    PROJ_K_PCT                         FLOAT          AS (VALUE:proj_k_pct::FLOAT),
+    PROJ_BB_PCT                        FLOAT          AS (VALUE:proj_bb_pct::FLOAT),
+    PROJ_K_PER_9                       FLOAT          AS (VALUE:proj_k_per_9::FLOAT),
+    PROJ_BB_PER_9                      FLOAT          AS (VALUE:proj_bb_per_9::FLOAT),
+    PROJ_IP                            FLOAT          AS (VALUE:proj_ip::FLOAT),
+    PROJ_WAR                           FLOAT          AS (VALUE:proj_war::FLOAT),
+    PROJ_WHIP                          FLOAT          AS (VALUE:proj_whip::FLOAT),
+    MLBAM_PITCHER_ID                   VARCHAR        AS (VALUE:mlbam_pitcher_id::VARCHAR)
+)
+WITH LOCATION = @baseball_data.lakehouse_ext.s3_lakehouse/fct_fangraphs_pitching_analytics/
+FILE_FORMAT = baseball_data.lakehouse_ext.parquet_snappy
+AUTO_REFRESH = FALSE
+COMMENT = 'E11.1-W4: fct_fangraphs_pitching_analytics from S3 lakehouse parquet';
 
 -- ── stg_statsapi_player_profiles  (8 columns) ──
 CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.stg_statsapi_player_profiles (

@@ -52,11 +52,13 @@ FILE_FORMAT = f"{SCHEMA}.parquet_snappy"
 W4_MODELS = [
     # FanGraphs precursor subtree (built on DuckDB so the 3 FG marts can read it)
     "stg_fangraphs__stuff_plus",
+    "stg_fangraphs__zips_pitching",        # E11.1-W11-FG
     "stg_fangraphs__pitcher_arsenal",
     "stg_fangraphs__zips_hitting",
     "stg_fangraphs__hitting_leaderboard",
     "fct_fangraphs_pitcher_arsenal_wide",
     "fct_fangraphs_hitting_analytics",
+    "fct_fangraphs_pitching_analytics",    # E11.1-W11-FG
     "stg_statsapi_player_profiles",
     # The 6 W4 marts
     "mart_pitcher_arsenal_summary",
@@ -66,6 +68,20 @@ W4_MODELS = [
     "mart_batter_woba_vs_cluster",
     "mart_catcher_framing",
 ]
+
+# ⚠️ TIMESTAMP columns stored as ISO **VARCHAR** in the raw-mirror parquet (lakehouse_raw_writer
+# stamps ingestion_ts as an ISO string; the stg duckdb branch passes it through unchanged). Snowflake
+# misreads BINARY parquet timestamps per-row (the W8a 24h outage), so these columns land as strings and
+# the external table declares them TIMESTAMP_NTZ AS (VALUE:col::TIMESTAMP_NTZ) — a reliable STRING parse
+# (the W8a generator pattern). Without this override duckdb_to_snowflake_type would emit VARCHAR for the
+# now-VARCHAR ingestion_ts, silently changing the existing FG ext-table contract on a full regen.
+TS_STRING_COLS = {
+    "stg_fangraphs__stuff_plus":         {"ingestion_ts"},
+    "stg_fangraphs__zips_pitching":      {"ingestion_ts"},   # E11.1-W11-FG
+    "stg_fangraphs__pitcher_arsenal":    {"ingestion_ts"},
+    "stg_fangraphs__zips_hitting":       {"ingestion_ts"},
+    "stg_fangraphs__hitting_leaderboard": {"ingestion_ts"},
+}
 
 
 def duckdb_to_snowflake_type(duck_type: str) -> str:
@@ -117,9 +133,12 @@ def describe_parquet(conn, model: str) -> list[tuple[str, str]]:
 
 
 def emit_external_table(model: str, cols: list[tuple[str, str]]) -> str:
+    # ⚠️ VALUE: is CASE-SENSITIVE — match the parquet's stored (lowercase) field name exactly. ISO-VARCHAR
+    # timestamp columns are force-declared TIMESTAMP_NTZ via a STRING parse (TS_STRING_COLS) — see above.
+    ts_string = {c.lower() for c in TS_STRING_COLS.get(model, ())}
     col_lines = []
     for name, duck_type in cols:
-        sf_type = duckdb_to_snowflake_type(duck_type)
+        sf_type = "TIMESTAMP_NTZ" if name.lower() in ts_string else duckdb_to_snowflake_type(duck_type)
         col_lines.append(
             f"    {name.upper():<34} {sf_type:<14} AS (VALUE:{name.lower()}::{sf_type})"
         )

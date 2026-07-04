@@ -1,16 +1,17 @@
-{{
-    config(
-        materialized='view'
-    )
-}}
+-- E11.1-W11-FG dual-branch (tag w4_lakehouse): the duckdb branch rebuilds from the
+-- registered DuckDB views of its refs (stg_fangraphs__stuff_plus + stg_fangraphs__zips_pitching);
+-- the Snowflake branch is a thin view over the lakehouse_ext external table.
+{{ config(materialized='view', tags=['w4_lakehouse']) }}
+
+{% if target.name == 'duckdb' %}
 
 with stuff as (
-    select * from {{ ref('stg_fangraphs__stuff_plus') }}
+    select * from stg_fangraphs__stuff_plus
 ),
 
 zips as (
     select *
-    from {{ ref('stg_fangraphs__zips_pitching') }}
+    from stg_fangraphs__zips_pitching
     where projection_type = 'zips'
 )
 
@@ -43,3 +44,9 @@ from stuff s
 left join zips z
     on  s.fg_pitcher_id = z.fg_pitcher_id
     and s.season        = z.season
+
+{% else %}
+
+select * from baseball_data.lakehouse_ext.fct_fangraphs_pitching_analytics
+
+{% endif %}
