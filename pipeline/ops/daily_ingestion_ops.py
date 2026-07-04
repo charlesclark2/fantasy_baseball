@@ -776,76 +776,24 @@ def check_feature_block_coverage_op(context):
 # the daily job; it emails CRITICAL + logs a WARNING so the silence becomes VISIBLE. The
 # intended-state table in BOX_OPERATIONS.md §10 is the source of truth for the sets below.
 
-# Serving-critical sensors that must always be RUNNING (each carries default_status=RUNNING).
-_CRITICAL_SENSORS = frozenset({
-    "run_failure_alert_sensor",
-    "odds_current_rebuild_sensor",
-    "odds_freshness_alert_sensor",
-    "schedule_freshness_alert_sensor",
-    "statcast_freshness_sensor",
-    "lineup_monitor_sensor",
-    "pregame_alert_sensor",
-    "conviction_pick_alert_sensor",
-    "morning_watchdog_sensor",
-    "clv_alert_sensor",
-    "model_health_alert_sensor",
-})
-# Serving-critical schedules that must always be RUNNING (each carries default_status=RUNNING).
-# The intraday_schedule_capture_* / intraday_public_betting_* schedules are deliberately EXCLUDED
-# — they stay operator-gated (double-ingest / paid-capture opt-in), so a STOPPED one is expected.
-_CRITICAL_SCHEDULES = frozenset({
-    "daily_ingestion_job_schedule",
-    "odds_clv_rebuild_daily",
-})
-# Intraday / cutover env flags that must be permanently "1" on the box. An unset one = a
-# silently-gated-off refresh (3 of the 5 incidents). Scoped to the flags we are confident should
-# be ON everywhere post-cutover; extend this AND the BOX_OPERATIONS.md §10 table together.
-_REQUIRED_INTRADAY_FLAGS = (
-    "SCHEDULE_LAKEHOUSE_INTRADAY",   # INC-22: keeps served game-state / lineups fresh
-    "LINEUP_INTRADAY_S3_REBUILD",    # intraday lineup re-score reaches the S3 feature parquet
-    "W8A_LAKEHOUSE_S3",              # feature-layer + EB served from S3 (cut over 2026-06-30)
-    "W8B_LAKEHOUSE_S3",              # serving aggregator served from S3 (cut over 2026-06-30)
-)
-
-
-def _flag_problems(env) -> list[str]:
-    """Pure: the required intraday/cutover flags in ``env`` that are not set to '1' (a
-    silently-gated-off refresh). Never raises."""
-    return [
-        f"required intraday flag not set to '1': {flag} (={env.get(flag)!r})"
-        for flag in _REQUIRED_INTRADAY_FLAGS
-        if env.get(flag) != "1"
-    ]
-
-
-def _stopped_critical_instigators(instance) -> list[str]:
-    """The serving-critical sensors/schedules that are EXPLICITLY STOPPED in the Dagster instance.
-    ``all_instigator_state(STOPPED)`` returns only instigators with a persisted STOPPED row (someone
-    toggled it off); a self-starting default-RUNNING instigator that was never toggled has NO row →
-    not flagged (correct: it is running by default). May raise (ephemeral/CI instance) — the caller
-    treats introspection as best-effort."""
-    from dagster._core.scheduler.instigation import InstigatorStatus
-
-    stopped = {
-        s.instigator_name
-        for s in instance.all_instigator_state(instigator_statuses={InstigatorStatus.STOPPED})
-    }
-    return [
-        f"critical instigator STOPPED in Dagster: {name}"
-        for name in sorted((_CRITICAL_SENSORS | _CRITICAL_SCHEDULES) & stopped)
-    ]
-
-
 @op(out=Out(Nothing))
 def check_monitors_healthy_op(context):
     """ALARM (never HALT) if a serving-critical sensor/schedule is STOPPED or a permanently-on
     intraday flag is unset — the E11.23 cure for the 'silently never runs' class the cutover left.
-    Standalone (no upstream): a heartbeat that runs every daily job regardless of the ingest chain."""
-    problems = _flag_problems(os.environ)
+    Standalone (no upstream): a heartbeat that runs every daily job regardless of the ingest chain.
+    The critical sets + required flags + pure detectors live in
+    ``betting_ml.monitoring.monitor_health`` (import-safe / unit-testable without the dbt manifest)."""
+    from betting_ml.monitoring.monitor_health import (
+        REQUIRED_INTRADAY_FLAGS,
+        flag_problems,
+        stopped_critical_instigators,
+    )
+
+    problems = flag_problems(os.environ)
     # Instance introspection is best-effort — an ephemeral/CI instance that can't answer must not
     # crash the guard (ALERT-tier); the flag check above always runs.
     try:
-        problems.extend(_stopped_critical_instigators(context.instance))
+        problems.extend(stopped_critical_instigators(context.instance))
     except Exception as e:  # noqa: BLE001
         context.log.warning(
             f"monitor-state introspection unavailable (intraday-flag check still ran): {e}"
@@ -854,7 +802,7 @@ def check_monitors_healthy_op(context):
     if not problems:
         context.log.info(
             "Monitor health OK: no critical sensor/schedule STOPPED; all %d required intraday "
-            "flags set.", len(_REQUIRED_INTRADAY_FLAGS),
+            "flags set.", len(REQUIRED_INTRADAY_FLAGS),
         )
         return
     msg = (
