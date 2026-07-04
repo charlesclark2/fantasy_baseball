@@ -30,7 +30,7 @@ import sys
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from dagster import SensorEvaluationContext, SkipReason, sensor
+from dagster import DefaultSensorStatus, SensorEvaluationContext, SkipReason, sensor
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -125,7 +125,8 @@ def _format_pick(p: dict) -> str:
             f"(model {mp_str} vs market {kp_str}; estimator agreement Δ={agree_str})")
 
 
-@sensor(minimum_interval_seconds=600)
+# E11.23: default_status=RUNNING — self-start on the box / after a DB reset (INC-16 class).
+@sensor(minimum_interval_seconds=600, default_status=DefaultSensorStatus.RUNNING)
 def conviction_pick_alert_sensor(context: SensorEvaluationContext):
     """Email today's H2H conviction picks once, in the pre-game window."""
     today = date.today().isoformat()

@@ -6,6 +6,7 @@ from pipeline.ops.daily_ingestion_ops import (
     ingest_player_props_op,
     write_pitcher_k_projections_op,
     check_data_freshness,
+    check_monitors_healthy_op,
     check_odds_coverage_op,
     check_feature_block_coverage_op,
     check_prediction_coverage,
@@ -71,6 +72,11 @@ def daily_ingestion_job():
     predict (or write_api_cache/write_serving_store) ahead of any rebuild op; the
     `start=`/`predict_done=` threading is the guarantee. Serve-time freshness is the
     backstop if a rebuild silently fails (Story 30.13 Task 4 gate in predict_today)."""
+    # E11.23 — silently-not-running heartbeat. Standalone (no upstream / downstream): runs every
+    # daily job and ALARMS (never HALTs) if a serving-critical sensor/schedule is STOPPED or a
+    # permanently-on intraday flag is unset — the cure for the class where a cutover left an
+    # intraday refresh gated-off or a sensor booted STOPPED and silently never ran.
+    check_monitors_healthy_op()
     s4 = ingest_action_network()
     s5 = ingest_statcast(start=s4)
     # E11.1-W1d: S3 lakehouse build is now HALT/serving-critical — mart_pitch_* are

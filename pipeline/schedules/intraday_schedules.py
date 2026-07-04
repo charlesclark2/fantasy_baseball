@@ -1,4 +1,4 @@
-from dagster import ScheduleDefinition
+from dagster import DefaultScheduleStatus, ScheduleDefinition
 
 from pipeline.jobs.intraday_jobs import (
     intraday_public_betting_job,
@@ -27,6 +27,13 @@ odds_clv_rebuild_schedule = ScheduleDefinition(
     job=odds_clv_rebuild_job,
     cron_schedule="0 8 * * *",
     name="odds_clv_rebuild_daily",
+    # E11.23: default_status=RUNNING — the daily CLV / line-movement rebuild is serving-adjacent
+    # (the pick-detail line-movement chart + CLV monitoring read it); self-start on the box / after
+    # a DB reset instead of silently booting STOPPED. NOTE: the intraday_schedule_capture_* and
+    # intraday_public_betting_* schedules below stay default-STOPPED ON PURPOSE — they need an
+    # explicit operator opt-in (disable the lean host-cron / set W11_RAW_WRITE_MODE) to avoid
+    # double-ingest, so they are NOT in the self-start / silently-not-running critical set.
+    default_status=DefaultScheduleStatus.RUNNING,
 )
 
 # ── Intraday Weather ──────────────────────────────────────────────────────────

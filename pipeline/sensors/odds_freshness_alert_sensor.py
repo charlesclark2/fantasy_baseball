@@ -43,7 +43,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from dagster import SensorEvaluationContext, SkipReason, sensor
+from dagster import DefaultSensorStatus, SensorEvaluationContext, SkipReason, sensor
 
 # ── thresholds ────────────────────────────────────────────────────────────────
 _STALE_MINUTES = 90      # ≈3 missed 30-min host-cron fires → capture is down
@@ -56,7 +56,10 @@ _STARTER_CAP = 500       # starter key's monthly allotment; readings ≤ this ar
 _QUOTA_FLOOR = 10000
 
 
-@sensor(minimum_interval_seconds=1800)  # every ~30 min, aligned to the capture cadence
+# E11.23: default_status=RUNNING — this is the single-vendor odds alarm; it MUST self-start
+# on the box / after a DB reset (the 3-day silent odds outage had no alert precisely because
+# a fail-open monitor was not firing).
+@sensor(minimum_interval_seconds=1800, default_status=DefaultSensorStatus.RUNNING)  # every ~30 min, aligned to the capture cadence
 def odds_freshness_alert_sensor(context: SensorEvaluationContext):
     """Alert if the Odds-API live capture goes stale or its monthly quota runs low."""
     from betting_ml.utils.lakehouse_monitor import duck, lh_raw

@@ -29,7 +29,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from dagster import RunRequest, SensorEvaluationContext, SkipReason, sensor
+from dagster import DefaultSensorStatus, RunRequest, SensorEvaluationContext, SkipReason, sensor
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -87,7 +87,7 @@ def _first_pitch_et(conn, d: date) -> datetime | None:
     """Earliest first-pitch for date d, as an aware US/Eastern datetime.
     game_date is the StatsAPI first-pitch instant stored as a tz-aware UTC timestamp in the
     lakehouse; a naive value is defensively treated as UTC."""
-    from betting_ml.utils.lakehouse_monitor import lh
+    from betting_ml.utils.lakehouse_monitor import lh, to_utc_datetime
 
     row = conn.execute(
         f"SELECT MIN(game_date) FROM read_parquet('{lh('stg_statsapi_games')}', union_by_name=true) "
@@ -96,15 +96,14 @@ def _first_pitch_et(conn, d: date) -> datetime | None:
     ).fetchone()
     if not row or row[0] is None:
         return None
-    val = row[0]
-    if isinstance(val, str):
-        val = datetime.fromisoformat(val.replace("Z", "+00:00"))
-    if val.tzinfo is None:
-        val = val.replace(tzinfo=ZoneInfo("UTC"))
-    return val.astimezone(_ET)
+    # game_date reads back as an ISO VARCHAR from the lakehouse (INC-23); to_utc_datetime coerces
+    # str/naive/aware to a tz-aware UTC datetime (never .astimezone/.tzinfo a str) before the ET view.
+    return to_utc_datetime(row[0]).astimezone(_ET)
 
 
-@sensor(job=statcast_catchup_job, minimum_interval_seconds=1800)
+# E11.23: default_status=RUNNING — self-start on the box / after a DB reset (INC-16 class).
+@sensor(job=statcast_catchup_job, minimum_interval_seconds=1800,
+        default_status=DefaultSensorStatus.RUNNING)
 def statcast_freshness_sensor(context: SensorEvaluationContext):
     now_et = datetime.now(_ET)
     today = now_et.date()

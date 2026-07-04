@@ -31,7 +31,7 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-from dagster import SensorEvaluationContext, SkipReason, sensor
+from dagster import DefaultSensorStatus, SensorEvaluationContext, SkipReason, sensor
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -54,7 +54,8 @@ _GATE_FLOOR_DATE = date(2026, 6, 23)
 _MODEL_VERSION = "v6"
 
 
-@sensor(minimum_interval_seconds=86400)  # at most once per day
+# E11.23: default_status=RUNNING — self-start on the box / after a DB reset (INC-16 class).
+@sensor(minimum_interval_seconds=86400, default_status=DefaultSensorStatus.RUNNING)  # at most once per day
 def model_health_alert_sensor(context: SensorEvaluationContext):
     """Alert if the deployed model's live skill degrades (serving/calibration regression)."""
     from betting_ml.monitoring import model_health_metrics as mh

@@ -31,7 +31,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from dagster import RunRequest, SensorEvaluationContext, SkipReason, sensor
+from dagster import DefaultSensorStatus, RunRequest, SensorEvaluationContext, SkipReason, sensor
 
 from pipeline.jobs.intraday_jobs import odds_current_rebuild_job
 
@@ -64,7 +64,10 @@ def _query_slate(et_date: str):
     return to_utc_datetime(first), to_utc_datetime(last)
 
 
-@sensor(job=odds_current_rebuild_job, minimum_interval_seconds=600)
+# E11.23: default_status=RUNNING — the served-price freshness rebuild MUST self-start on the
+# box / after a DB reset (INC-16 class); a stopped rebuild = stale displayed odds.
+@sensor(job=odds_current_rebuild_job, minimum_interval_seconds=600,
+        default_status=DefaultSensorStatus.RUNNING)
 def odds_current_rebuild_sensor(context: SensorEvaluationContext):
     """Evaluate every ~10 min; fire the light current-odds rebuild on the dynamic window.
 

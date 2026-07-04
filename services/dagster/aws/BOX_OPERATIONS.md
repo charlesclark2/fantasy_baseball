@@ -123,3 +123,47 @@ Compose `env_file:` can't carry real PEM newlines, so the key arrives as **`SNOW
 - **Run/validate dbt:** `scripts/dbt_state.sh build --select state:modified+ --target dev` locally; on the box it goes through `dbt-runner`.
 - **Check the box / containers:** SSM in → `docker compose -f ~/app/services/dagster/aws/docker-compose.yml ps`; logs at `~/capture-cron.log`.
 - **Ship a code change to the box:** merge to main (CD) OR SSM in + `deploy.sh` — and remember it needs `--build`.
+
+---
+
+## 10. Flag / schedule / sensor INTENDED-STATE table (E11.23 — the cutover-runtime-landmine cure)
+The E11.1 cutover left a class of RUNTIME failures CI can't see (it mocks all IO): **intraday refresh jobs shipped GATED-OFF** and **serving-critical sensors/schedules that boot STOPPED** → they silently NEVER RUN (odds froze 3 days with NO alert; the lineup monitor was dead 2 days; K-page empty). This section is the source of truth for what MUST be on. Two structural cures back it up:
+- **Self-start in code:** every serving-critical sensor + the primary schedules now declare `default_status=RUNNING`, so they auto-start on the box and after any Dagster-DB reset / re-host (the INC-16 class) instead of booting STOPPED.
+- **A heartbeat detector:** `check_monitors_healthy_op` runs inside every `daily_ingestion_job` and ALARMS (email CRITICAL, ALERT-tier — never HALT) if a critical sensor/schedule is manually STOPPED or a permanently-on intraday flag is unset. Its critical sets + required flags mirror the tables below — **extend both together.**
+
+> 🟥 **RUNTIME GATE:** the "Intended" column is the target; the box's ACTUAL state is only verifiable ON the box. After any change here, confirm on the box (`docker compose … exec -T dagster-codeloc env | grep <FLAG>`, and Dagit → Sensors/Schedules) — CI cannot see it.
+
+### 10a. Serving-critical env flags — must be permanently `1` on the box
+These four are enforced by `check_monitors_healthy_op` (an unset one = a silently-gated-off refresh):
+
+| Flag | Intended | Why (incident) |
+|---|---|---|
+| `SCHEDULE_LAKEHOUSE_INTRADAY` | **`1`** | INC-22: the in-Dagster intraday schedule/game-state capture that refreshes the S3 parquet prod serves. Off → game-state stuck in "Preview", stale lineups. Also START `intraday_schedule_capture_daytime/_overnight` AND disable the lean host-cron `schedule-capture` (don't double-ingest). |
+| `LINEUP_INTRADAY_S3_REBUILD` | **`1`** | The intraday lineup-confirm re-score reaches the S3 W8b feature parquet (the 824819 loop). Off → a confirmed lineup never re-scores. |
+| `W8A_LAKEHOUSE_S3` | **`1`** | Feature layer + EB posteriors served from S3 (cut over 2026-06-30). |
+| `W8B_LAKEHOUSE_S3` | **`1`** | Serving pregame aggregator served from S3 (cut over 2026-06-30). |
+
+### 10b. Other cutover / gating flags — intended state (NOT auto-enforced; confirm per cutover)
+| Flag | Intended | Note |
+|---|---|---|
+| `W6_LAKEHOUSE_INTRADAY` | `1` **post-cutover** | Gates the intraday MART rebuild (served-price freshness). The RAW odds S3 mirror export is UNGATED (always runs), so odds don't freeze even with this off; flip to `1` once the W6 external tables exist + parity is validated. NOT in the enforced set (avoids false pages pre-cutover). |
+| `W7A_LAKEHOUSE_S3`, `W7B_LAKEHOUSE_S3` | `1` | Matchup consumers + prediction path off SF (cut over). `*_PARALLEL` variants are validation-only. |
+| `W9_LAKEHOUSE_S3` | `0` | W9 signal-store SF writes STAY; only the output-mirror ships. `W9_LAKEHOUSE_S3_READS` follows the W-plan. |
+| `ODDS_COVERAGE_STRICT` | `0` → `1` | ALERT today; flip to `1` (HALT on a current-slate odds freeze) once confirmed it doesn't false-fire. |
+| `FEATURE_COVERAGE_STRICT` | `0` → `1` | ALERT today; flip to `1` after the W11b umpire cutover restores the block. |
+| `PROPS_DAILY_INGEST` | `0` | Redundant with the host-cron `0 13` props line — enable EXACTLY ONE (else double-pay Odds API credits). |
+| `W11_RAW_WRITE_MODE` / `LAKEHOUSE_RAW_WRITE_MODE` | per-cutover (`snowflake`→`both`→`s3`) | Tier-A raw writers' dual-write mode; advance per the W11 cutover, not blindly. |
+| `W11_W4W5_NIGHTLY`, `W11B_UMPIRE_NIGHTLY`, `W11C_WEATHER_NIGHTLY`, `W11D_PUBLIC_BETTING_NIGHTLY`, `W11_W3PRE_DAILY`, `W11_BATTER_PITCHES_SF_RETIRED` | per-cutover | Nightly-rebuild / SF-retire gates; each flips with its wave's box cutover. |
+
+### 10c. Sensors — ALL self-start (`default_status=RUNNING`); the critical set is heartbeat-checked
+All 11 sensors carry `default_status=RUNNING`. `check_monitors_healthy_op` alarms if any of these is manually STOPPED: `run_failure_alert_sensor`, `odds_current_rebuild_sensor`, `odds_freshness_alert_sensor`, `schedule_freshness_alert_sensor`, `statcast_freshness_sensor`, `lineup_monitor_sensor`, `pregame_alert_sensor`, `conviction_pick_alert_sensor`, `morning_watchdog_sensor`, `clv_alert_sensor`, `model_health_alert_sensor`.
+
+### 10d. Schedules — intended boot state
+| Schedule | Intended | Note |
+|---|---|---|
+| `daily_ingestion_job_schedule` | **RUNNING** (self-start) | the primary serving pipeline; heartbeat-checked. |
+| `odds_clv_rebuild_daily` | **RUNNING** (self-start) | daily CLV / line-movement rebuild; heartbeat-checked. |
+| `intraday_schedule_capture_daytime` / `_overnight` | operator-gated STOPPED | START only WITH `SCHEDULE_LAKEHOUSE_INTRADAY=1` AND after disabling the lean host-cron `schedule-capture` (double-ingest). NOT self-start / not heartbeat-checked. |
+| `intraday_public_betting_daytime` / `_overnight` | operator-gated STOPPED | START only with `W11_RAW_WRITE_MODE=s3\|both` (paid ActionNetwork capture opt-in). |
+| `weekly_ml_job_schedule`, `weekly_meta_model_job_schedule`, `weekly_player_profiles_job_schedule`, `clv_monitoring_job_schedule`, `magnitude_monitor_job_schedule` | STOPPED (optional) | heavy/optional; operator toggles as needed. |
+| `w1_parity_schedule` | STOPPED (one-shot legacy) | fires only on its pinned parity date; leave off. |
