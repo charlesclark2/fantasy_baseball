@@ -38,9 +38,20 @@ select * from read_parquet('{{ lakehouse_loc("stg_batter_pitches") }}**/*.parque
         materialized='incremental',
         incremental_strategy='delete+insert',
         unique_key='game_date',
-        on_schema_change='append_new_columns'
+        on_schema_change='append_new_columns',
+        enabled=false
     )
 }}
+
+-- E11.1-W11-E (2026-07-03): DISABLED on the Snowflake target. This SF-native incremental
+-- (from source('savant','batter_pitches')) was the LAST live consumer of savant.batter_pitches,
+-- but it is itself a vestigial leaf: its only downstream (mart_pa_outcome_substrate) is duckdb-only
+-- (enabled=(target.name=='duckdb')), and every real pitch consumer (mart_pitch_*, the pa_outcome
+-- training, the feature store) reads the S3 parquet via the duckdb branch above. Serving already
+-- runs entirely off S3 (parity verified EXACT vs savant, 2026-07-03). Disabling it here removes the
+-- last SF reader of savant.batter_pitches so that feed can be retired (W11_BATTER_PITCHES_SF_RETIRED=1
+-- stops the write; then DROP savant.batter_pitches + the orphaned betting/dev_betting.stg_batter_pitches).
+-- The SQL below is retained (dead on SF) only as documentation of the historical transform.
 
 with
 
