@@ -16,18 +16,23 @@ _FCT = "fct_fangraphs_pitching_analytics"
 _SOURCE = "fg_zips_pitching_raw"
 
 
-def test_zips_pitching_writer_uses_shared_dispatcher():
+def test_zips_pitching_writer_stays_snowflake_only():
+    """E11.1-W11-FG: the writer is SF-only (matches zips_hitting) — NO dual-write dispatcher, because
+    the stg reads the export-bridge snapshot, not a live-writer lakehouse_raw/ mirror."""
     mod = importlib.import_module("ingest_fangraphs_zips_pitching")
-    assert getattr(mod, "_LAKEHOUSE_SOURCE") == _SOURCE
-    assert hasattr(mod, "append_raw_rows_lakehouse") and hasattr(mod, "w11_write_mode")
+    assert not hasattr(mod, "_LAKEHOUSE_SOURCE"), "writer should NOT dual-write (no _LAKEHOUSE_SOURCE)"
+    assert not hasattr(mod, "append_raw_rows_lakehouse")
+    assert hasattr(mod, "append_raw_rows"), "writer uses the SF-only append_raw_rows"
 
 
-def test_default_write_mode_is_snowflake_only(monkeypatch):
-    """The flip is NON-BREAKING by default: no W11_RAW_WRITE_MODE / LAKEHOUSE_RAW_WRITE_MODE set → 'snowflake'."""
-    lrw = importlib.import_module("utils.lakehouse_raw_writer")
-    monkeypatch.delenv("W11_RAW_WRITE_MODE", raising=False)
-    monkeypatch.delenv("LAKEHOUSE_RAW_WRITE_MODE", raising=False)
-    assert lrw.w11_write_mode() == "snowflake"
+def test_stg_reads_export_bridge_path_not_live_mirror():
+    """The stg MUST read lakehouse/ (export-bridge snapshot, like zips_hitting), NOT lakehouse_raw/ (the
+    in-season live-writer mirror) — the empty-lakehouse_raw build failure the fix corrects."""
+    run_w1 = importlib.import_module("run_w1_lakehouse")
+    stg_sql = run_w1.extract_duckdb_sql(_STG)
+    assert "read_parquet" in stg_sql and _SOURCE in stg_sql, "stg must read the fg_zips_pitching_raw parquet"
+    assert "/lakehouse/fg_zips_pitching_raw/" in stg_sql, "stg must read the export-bridge lakehouse/ path"
+    assert "/lakehouse_raw/fg_zips_pitching_raw/" not in stg_sql, "stg must NOT read the empty lakehouse_raw/ path"
 
 
 def test_models_render_clean_duckdb_branch():
@@ -35,13 +40,36 @@ def test_models_render_clean_duckdb_branch():
     for m in (_STG, _FCT):
         sql = run_w1.extract_duckdb_sql(m)
         assert "{{" not in sql and "{%" not in sql, f"{m}: unresolved Jinja"
-        assert "lakehouse_ext" not in sql.lower(), f"{m}: else-branch ext ref leaked into DuckDB SQL"
-    stg_sql = run_w1.extract_duckdb_sql(_STG)
-    assert "read_parquet" in stg_sql and _SOURCE in stg_sql, "stg must read the fg_zips_pitching_raw parquet"
+        assert "lakehouse_ext" not in sql.lower(), f"{m}: nested flag branch leaked into DuckDB SQL"
     # The DuckDB fct joins the two registered stg VIEWS by bare name (no ext ref, no {{ ref() }}).
     fct_sql = run_w1.extract_duckdb_sql(_FCT).lower()
     assert "stg_fangraphs__stuff_plus" in fct_sql and "stg_fangraphs__zips_pitching" in fct_sql
     assert "projection_type = 'zips'" in fct_sql, "fct must keep the pre-season 'zips' filter (parity)"
+
+
+def test_models_are_flag_gated_sf_native_default():
+    """Defect B guard: both models must be SAFE to deploy before the ext table exists. The Snowflake side
+    defaults to the ORIGINAL SF-native SQL and only reads lakehouse_ext behind W11FG_LAKEHOUSE_S3=1, so a
+    deploy-before-cutover can't red the daily build. The flag branch must be NESTED (not a flat elif) so
+    extract_duckdb_sql (which cuts at the first {% else %}) never captures the ext-table read."""
+    import re as _re
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    paths = {
+        _STG: root / "dbt/models/staging/fangraphs/stg_fangraphs__zips_pitching.sql",
+        _FCT: root / "dbt/models/marts/fangraphs/fct_fangraphs_pitching_analytics.sql",
+    }
+    for name, p in paths.items():
+        src = p.read_text()
+        assert "env_var('W11FG_LAKEHOUSE_S3', '0')" in src, f"{name}: missing the W11FG_LAKEHOUSE_S3 flag gate"
+        assert "baseball_data.lakehouse_ext." + name in src, f"{name}: missing the gated ext-table read"
+        # SF-native default present (source() for the stg, ref() for the fct)
+        assert ("source('fangraphs'" in src) or ("ref('stg_fangraphs__stuff_plus'" in src), \
+            f"{name}: missing the SF-native default branch"
+        # the flag {% if %} must come AFTER the outer {% else %} (nested, not a flat elif)
+        outer_else = _re.search(r"\{%\s*else\s*%\}", src)
+        flag_if = src.find("env_var('W11FG_LAKEHOUSE_S3'")
+        assert outer_else and flag_if > outer_else.start(), f"{name}: flag gate must be nested inside the outer else"
 
 
 def test_build_refresh_generator_lists_agree():
