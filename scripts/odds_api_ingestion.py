@@ -1391,12 +1391,28 @@ def main() -> None:
         log.info("[DRY RUN] No Snowflake writes will be performed.")
 
     events_target, odds_target = resolve_targets()
-    log.info(
-        "Connecting to Snowflake  events→%s  odds→%s",
-        events_target.qualified_name,
-        odds_target.qualified_name,
-    )
-    conn = get_snowflake_connection(events_target.database, events_target.schema)
+
+    # E11.1-W3pre: in strictly-S3 mode the live `odds`/`events` legs write ONLY the S3
+    # lakehouse mirror (the Snowflake INSERT is gated off), so skip the Snowflake connect
+    # entirely — no idle login, truly S3-native. Historical backfill (historical-events /
+    # historical-odds) is still Snowflake-based, so it always connects.
+    write_mode = _lakehouse_write_mode()
+    skip_snowflake = write_mode == "s3" and args.command in ("odds", "events")
+
+    conn = None
+    if skip_snowflake:
+        log.info(
+            "Strictly-S3 mode (write_mode=s3, command=%s) — skipping Snowflake connect; "
+            "writing S3 lakehouse mirror only.",
+            args.command,
+        )
+    else:
+        log.info(
+            "Connecting to Snowflake  events→%s  odds→%s",
+            events_target.qualified_name,
+            odds_target.qualified_name,
+        )
+        conn = get_snowflake_connection(events_target.database, events_target.schema)
 
     try:
         if args.command == "events":
@@ -1440,8 +1456,9 @@ def main() -> None:
             )
 
     finally:
-        conn.close()
-        log.info("Snowflake connection closed")
+        if conn is not None:
+            conn.close()
+            log.info("Snowflake connection closed")
 
 
 if __name__ == "__main__":
