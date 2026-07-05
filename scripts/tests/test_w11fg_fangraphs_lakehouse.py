@@ -40,11 +40,36 @@ def test_models_render_clean_duckdb_branch():
     for m in (_STG, _FCT):
         sql = run_w1.extract_duckdb_sql(m)
         assert "{{" not in sql and "{%" not in sql, f"{m}: unresolved Jinja"
-        assert "lakehouse_ext" not in sql.lower(), f"{m}: else-branch ext ref leaked into DuckDB SQL"
+        assert "lakehouse_ext" not in sql.lower(), f"{m}: nested flag branch leaked into DuckDB SQL"
     # The DuckDB fct joins the two registered stg VIEWS by bare name (no ext ref, no {{ ref() }}).
     fct_sql = run_w1.extract_duckdb_sql(_FCT).lower()
     assert "stg_fangraphs__stuff_plus" in fct_sql and "stg_fangraphs__zips_pitching" in fct_sql
     assert "projection_type = 'zips'" in fct_sql, "fct must keep the pre-season 'zips' filter (parity)"
+
+
+def test_models_are_flag_gated_sf_native_default():
+    """Defect B guard: both models must be SAFE to deploy before the ext table exists. The Snowflake side
+    defaults to the ORIGINAL SF-native SQL and only reads lakehouse_ext behind W11FG_LAKEHOUSE_S3=1, so a
+    deploy-before-cutover can't red the daily build. The flag branch must be NESTED (not a flat elif) so
+    extract_duckdb_sql (which cuts at the first {% else %}) never captures the ext-table read."""
+    import re as _re
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    paths = {
+        _STG: root / "dbt/models/staging/fangraphs/stg_fangraphs__zips_pitching.sql",
+        _FCT: root / "dbt/models/marts/fangraphs/fct_fangraphs_pitching_analytics.sql",
+    }
+    for name, p in paths.items():
+        src = p.read_text()
+        assert "env_var('W11FG_LAKEHOUSE_S3', '0')" in src, f"{name}: missing the W11FG_LAKEHOUSE_S3 flag gate"
+        assert "baseball_data.lakehouse_ext." + name in src, f"{name}: missing the gated ext-table read"
+        # SF-native default present (source() for the stg, ref() for the fct)
+        assert ("source('fangraphs'" in src) or ("ref('stg_fangraphs__stuff_plus'" in src), \
+            f"{name}: missing the SF-native default branch"
+        # the flag {% if %} must come AFTER the outer {% else %} (nested, not a flat elif)
+        outer_else = _re.search(r"\{%\s*else\s*%\}", src)
+        flag_if = src.find("env_var('W11FG_LAKEHOUSE_S3'")
+        assert outer_else and flag_if > outer_else.start(), f"{name}: flag gate must be nested inside the outer else"
 
 
 def test_build_refresh_generator_lists_agree():
