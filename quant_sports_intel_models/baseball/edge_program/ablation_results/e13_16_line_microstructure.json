@@ -1,0 +1,856 @@
+{
+  "synthetic": false,
+  "meta": {
+    "n_snaps": 695100,
+    "n_games": 7278,
+    "n_decisions": 554615,
+    "seasons": [
+      2023,
+      2024,
+      2025,
+      2026
+    ],
+    "stale_filter": {
+      "n_in": 696774,
+      "n_stale_dropped": 1674,
+      "pct_dropped": 0.24,
+      "totals_tol": 0.75,
+      "h2h_tol": 0.06,
+      "min_books": 3
+    },
+    "status": {
+      "n_snaps": 696774,
+      "n_games": 7278,
+      "seasons": [
+        2023,
+        2024,
+        2025,
+        2026
+      ],
+      "hist_snaps": 696774,
+      "live_snaps": 0,
+      "fine_2026_games": 980,
+      "median_snaps_per_game_book_mkt": 8.0
+    }
+  },
+  "markets": {
+    "totals": {
+      "n_games": 7262,
+      "deflation": {
+        "pbo": {
+          "pbo": 0.0,
+          "n_combos": 2000,
+          "n_configs": 104,
+          "n_splits": 16,
+          "clears_live_pbo": true
+        },
+        "dsr": {
+          "dsr": 0.05085367211607418,
+          "observed_sr": 0.7652072717079333,
+          "sr0": 0.9276691514375542,
+          "n_trials": 260,
+          "n_obs": 55,
+          "passes_live": false,
+          "best_config": "sharp_convergence|totals|bovada|all|\u03b81|t50",
+          "best_roi": 1.2
+        },
+        "fdr": {
+          "threshold": 0.035040957688249524,
+          "n_survive": 130,
+          "n_tested": 260,
+          "q": 0.1
+        },
+        "n_selectable": 260
+      }
+    },
+    "h2h": {
+      "n_games": 7262,
+      "deflation": {
+        "pbo": {
+          "pbo": 0.0,
+          "n_combos": 2000,
+          "n_configs": 36,
+          "n_splits": 16,
+          "clears_live_pbo": true
+        },
+        "dsr": {
+          "dsr": 0.9351158532816081,
+          "observed_sr": 0.5790426526953378,
+          "sr0": 0.4109918184422545,
+          "n_trials": 69,
+          "n_obs": 64,
+          "passes_live": false,
+          "best_config": "sharp_convergence|h2h|bovada|all|\u03b80.04|t50",
+          "best_roi": 0.0722424822732777
+        },
+        "fdr": {
+          "threshold": 0.015983253241287923,
+          "n_survive": 29,
+          "n_tested": 69,
+          "q": 0.1
+        },
+        "n_selectable": 69
+      }
+    }
+  },
+  "pooled_fdr": {
+    "n_survive": 159,
+    "n_tested": 329,
+    "threshold": 0.035040957688249524,
+    "q": 0.1
+  },
+  "candidates": {
+    "candidates": [
+      {
+        "name": "static_over|totals|all|low|\u03b8na|open",
+        "signal": "static_over",
+        "market": "totals",
+        "n": 1757,
+        "clv_mean": 0.17066292652519174,
+        "clv_p": 1.772342166572886e-36,
+        "realized_roi": -0.025515883523347133,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "pinnacle",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.3081,
+          "2024": 0.1607,
+          "2025": 0.1369,
+          "2026": 0.0965
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "static_under|totals|all|high|\u03b8na|open",
+        "signal": "static_under",
+        "market": "totals",
+        "n": 1323,
+        "clv_mean": 0.18171453766691859,
+        "clv_p": 3.910711779521623e-21,
+        "realized_roi": -0.010375312071399636,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "pinnacle",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.1632,
+          "2024": 0.2081,
+          "2025": 0.199,
+          "2026": 0.158
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "reversion|totals|all|all|\u03b80.5|t50",
+        "signal": "reversion",
+        "market": "totals",
+        "n": 4375,
+        "clv_mean": 0.11906149659863945,
+        "clv_p": 3.2414726974863114e-68,
+        "realized_roi": -0.06489641991884018,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "pinnacle",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.1374,
+          "2024": 0.1231,
+          "2025": 0.1142,
+          "2026": 0.0819
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "reversion|totals|all|all|\u03b80.5|t75",
+        "signal": "reversion",
+        "market": "totals",
+        "n": 4805,
+        "clv_mean": 0.066534116247956,
+        "clv_p": 2.1217876472270944e-52,
+        "realized_roi": -0.0659025530943971,
+        "book_groups": [
+          "all",
+          "bovada",
+          "pinnacle",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.0685,
+          "2024": 0.0717,
+          "2025": 0.0791,
+          "2026": 0.0227
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "reversion|totals|all|all|\u03b81|t50",
+        "signal": "reversion",
+        "market": "totals",
+        "n": 662,
+        "clv_mean": 0.28284239677744205,
+        "clv_p": 4.706661245301019e-16,
+        "realized_roi": -0.008408772105895563,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.3555,
+          "2024": 0.3356,
+          "2025": 0.1829,
+          "2026": 0.1514
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "reversion|totals|all|low|\u03b80.5|t50",
+        "signal": "reversion",
+        "market": "totals",
+        "n": 951,
+        "clv_mean": 0.16544113965249613,
+        "clv_p": 4.451126622687452e-22,
+        "realized_roi": -0.041321437541954574,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "pinnacle",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.2444,
+          "2024": 0.1677,
+          "2025": 0.1528,
+          "2026": 0.0966
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "reversion|totals|all|low|\u03b81|t50",
+        "signal": "reversion",
+        "market": "totals",
+        "n": 159,
+        "clv_mean": 0.5087975441749027,
+        "clv_p": 2.68848920298845e-10,
+        "realized_roi": 0.025366512214707992,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "pinnacle",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.7692,
+          "2024": 0.5429,
+          "2025": 0.3069,
+          "2026": 0.4124
+        },
+        "is_control": false,
+        "fragile": true
+      },
+      {
+        "name": "reversion|totals|all|mid|\u03b80.5|t50",
+        "signal": "reversion",
+        "market": "totals",
+        "n": 2918,
+        "clv_mean": 0.08939913182545123,
+        "clv_p": 9.754997765321894e-46,
+        "realized_roi": -0.08147860153970697,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "pinnacle",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.0884,
+          "2024": 0.0834,
+          "2025": 0.1027,
+          "2026": 0.0746
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "reversion|totals|all|mid|\u03b80.5|t75",
+        "signal": "reversion",
+        "market": "totals",
+        "n": 3157,
+        "clv_mean": 0.061403230915426044,
+        "clv_p": 5.703045103427092e-35,
+        "realized_roi": -0.07327995060826854,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "pinnacle",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.0601,
+          "2024": 0.0622,
+          "2025": 0.0696,
+          "2026": 0.0409
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "reversion|totals|all|mid|\u03b81|t50",
+        "signal": "reversion",
+        "market": "totals",
+        "n": 340,
+        "clv_mean": 0.1175280112044818,
+        "clv_p": 1.0123299112175303e-07,
+        "realized_roi": -0.07047129458041167,
+        "book_groups": [
+          "all",
+          "majors",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.0707,
+          "2024": 0.1594,
+          "2025": 0.1258,
+          "2026": 0.0901
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "reversion|totals|all|mid|\u03b81|t75",
+        "signal": "reversion",
+        "market": "totals",
+        "n": 434,
+        "clv_mean": 0.08774687294272547,
+        "clv_p": 2.8185753251951594e-09,
+        "realized_roi": -0.10832155776862515,
+        "book_groups": [
+          "all",
+          "majors",
+          "pinnacle",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.0691,
+          "2024": 0.1201,
+          "2025": 0.0652,
+          "2026": 0.0719
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "reversion|totals|all|high|\u03b80.5|t50",
+        "signal": "reversion",
+        "market": "totals",
+        "n": 860,
+        "clv_mean": 0.18419296788482836,
+        "clv_p": 1.2225256434747595e-14,
+        "realized_roi": -0.03566722629889181,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "pinnacle",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.1924,
+          "2024": 0.2567,
+          "2025": 0.145,
+          "2026": 0.1297
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "reversion|totals|all|high|\u03b81|t50",
+        "signal": "reversion",
+        "market": "totals",
+        "n": 194,
+        "clv_mean": 0.3651755031909671,
+        "clv_p": 5.4492790681763945e-05,
+        "realized_roi": 0.06945109905118356,
+        "book_groups": [
+          "all"
+        ],
+        "per_season_clv": {
+          "2023": 0.4807,
+          "2024": 0.6349,
+          "2025": 0.1511,
+          "2026": 0.0901
+        },
+        "is_control": false,
+        "fragile": true
+      },
+      {
+        "name": "reversion|totals|bovada|low|\u03b80.5|t75",
+        "signal": "reversion",
+        "market": "totals",
+        "n": 656,
+        "clv_mean": 0.06478658536585366,
+        "clv_p": 7.599021126237619e-07,
+        "realized_roi": -0.036352117747928986,
+        "book_groups": [
+          "bovada"
+        ],
+        "per_season_clv": {
+          "2023": 0.0625,
+          "2024": 0.0703,
+          "2025": 0.0928,
+          "2026": 0.0046
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "sharp_convergence|totals|all|all|\u03b80.5|t50",
+        "signal": "sharp_convergence",
+        "market": "totals",
+        "n": 3122,
+        "clv_mean": 0.29568385650224216,
+        "clv_p": 1.0095872154835758e-255,
+        "realized_roi": -0.006871089425243381,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.2852,
+          "2024": 0.282,
+          "2025": 0.3148,
+          "2026": 0.3131
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "sharp_convergence|totals|all|all|\u03b80.5|t75",
+        "signal": "sharp_convergence",
+        "market": "totals",
+        "n": 2679,
+        "clv_mean": 0.24037887271369915,
+        "clv_p": 1.0118617709407946e-268,
+        "realized_roi": -0.0025548858179047056,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.2366,
+          "2024": 0.2151,
+          "2025": 0.2598,
+          "2026": 0.2684
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "sharp_convergence|totals|all|all|\u03b81|t50",
+        "signal": "sharp_convergence",
+        "market": "totals",
+        "n": 128,
+        "clv_mean": 0.9509765625,
+        "clv_p": 2.7798836232311815e-20,
+        "realized_roi": 0.11116940399872152,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 1.0858,
+          "2024": 1.0414,
+          "2025": 0.7278,
+          "2026": 0.8316
+        },
+        "is_control": false,
+        "fragile": true
+      },
+      {
+        "name": "sharp_convergence|totals|all|all|\u03b81|t75",
+        "signal": "sharp_convergence",
+        "market": "totals",
+        "n": 56,
+        "clv_mean": 0.7424107142857143,
+        "clv_p": 3.6655178688772647e-17,
+        "realized_roi": -0.0711102718541534,
+        "book_groups": [
+          "all",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.2083,
+          "2024": 0.7,
+          "2025": 0.715,
+          "2026": 1.6286
+        },
+        "is_control": false,
+        "fragile": true
+      },
+      {
+        "name": "sharp_convergence|totals|all|low|\u03b80.5|t50",
+        "signal": "sharp_convergence",
+        "market": "totals",
+        "n": 569,
+        "clv_mean": 0.2849443468072642,
+        "clv_p": 4.025377518765845e-30,
+        "realized_roi": -0.04337706200307009,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.2312,
+          "2024": 0.2779,
+          "2025": 0.3252,
+          "2026": 0.3214
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "sharp_convergence|totals|all|low|\u03b80.5|t75",
+        "signal": "sharp_convergence",
+        "market": "totals",
+        "n": 526,
+        "clv_mean": 0.20922053231939164,
+        "clv_p": 5.09904856451655e-36,
+        "realized_roi": -0.04643911170727176,
+        "book_groups": [
+          "all",
+          "majors",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.2417,
+          "2024": 0.1972,
+          "2025": 0.2045,
+          "2026": 0.2057
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "sharp_convergence|totals|all|mid|\u03b80.5|t50",
+        "signal": "sharp_convergence",
+        "market": "totals",
+        "n": 2061,
+        "clv_mean": 0.28356380397865116,
+        "clv_p": 4.621392357633739e-301,
+        "realized_roi": -0.0005670821990454606,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.2612,
+          "2024": 0.2829,
+          "2025": 0.3093,
+          "2026": 0.2713
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "sharp_convergence|totals|all|mid|\u03b80.5|t75",
+        "signal": "sharp_convergence",
+        "market": "totals",
+        "n": 1704,
+        "clv_mean": 0.2412754303599374,
+        "clv_p": 2.2129755499462963e-229,
+        "realized_roi": 0.011168981396579297,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.223,
+          "2024": 0.2152,
+          "2025": 0.2717,
+          "2026": 0.2814
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "sharp_convergence|totals|all|mid|\u03b81|t50",
+        "signal": "sharp_convergence",
+        "market": "totals",
+        "n": 67,
+        "clv_mean": 0.6129353233830845,
+        "clv_p": 1.705773237381586e-19,
+        "realized_roi": -0.011904230624615651,
+        "book_groups": [
+          "all",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.6406,
+          "2024": 0.5382,
+          "2025": 0.7267,
+          "2026": 0.3889
+        },
+        "is_control": false,
+        "fragile": true
+      },
+      {
+        "name": "sharp_convergence|totals|all|high|\u03b80.5|t50",
+        "signal": "sharp_convergence",
+        "market": "totals",
+        "n": 536,
+        "clv_mean": 0.3667599502487562,
+        "clv_p": 4.565628359182037e-30,
+        "realized_roi": 0.01030719074193092,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.3748,
+          "2024": 0.3344,
+          "2025": 0.3399,
+          "2026": 0.4504
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "sharp_convergence|totals|all|high|\u03b80.5|t75",
+        "signal": "sharp_convergence",
+        "market": "totals",
+        "n": 468,
+        "clv_mean": 0.27970085470085465,
+        "clv_p": 1.3187830271354793e-37,
+        "realized_roi": -0.006286812217282575,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.2649,
+          "2024": 0.2581,
+          "2025": 0.2835,
+          "2026": 0.36
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "static_home|h2h|all|all|\u03b8na|open",
+        "signal": "static_home",
+        "market": "h2h",
+        "n": 7262,
+        "clv_mean": 0.001614039458188951,
+        "clv_p": 0.0016626038627315064,
+        "realized_roi": -0.029993631686455195,
+        "book_groups": [
+          "all",
+          "majors",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.0001,
+          "2024": 0.0021,
+          "2025": 0.0009,
+          "2026": 0.0053
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "reversion|h2h|all|all|\u03b80.02|t50",
+        "signal": "reversion",
+        "market": "h2h",
+        "n": 2716,
+        "clv_mean": 0.005019438170501205,
+        "clv_p": 6.084649874862177e-10,
+        "realized_roi": 0.01239826550190275,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "pinnacle",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.0058,
+          "2024": 0.0053,
+          "2025": 0.0043,
+          "2026": 0.0042
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "reversion|h2h|all|all|\u03b80.04|t50",
+        "signal": "reversion",
+        "market": "h2h",
+        "n": 913,
+        "clv_mean": 0.013612983790301906,
+        "clv_p": 8.586168122854029e-10,
+        "realized_roi": 0.08595937950553177,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "pinnacle",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.0146,
+          "2024": 0.0149,
+          "2025": 0.0143,
+          "2026": 0.0055
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "sharp_convergence|h2h|all|all|\u03b80.02|t75",
+        "signal": "sharp_convergence",
+        "market": "h2h",
+        "n": 637,
+        "clv_mean": 0.015602648480838777,
+        "clv_p": 3.998644501353261e-18,
+        "realized_roi": 0.061329695485265956,
+        "book_groups": [
+          "all",
+          "bovada",
+          "majors",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.0169,
+          "2024": 0.0092,
+          "2025": 0.0179,
+          "2026": 0.0221
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "sharp_convergence|h2h|all|all|\u03b80.04|t75",
+        "signal": "sharp_convergence",
+        "market": "h2h",
+        "n": 69,
+        "clv_mean": 0.03714579544018798,
+        "clv_p": 0.0054321740325491055,
+        "realized_roi": 0.00011802264193838995,
+        "book_groups": [
+          "all",
+          "soft"
+        ],
+        "per_season_clv": {
+          "2023": 0.0374,
+          "2024": 0.0068,
+          "2025": 0.034,
+          "2026": 0.0703
+        },
+        "is_control": false,
+        "fragile": true
+      },
+      {
+        "name": "sharp_convergence|h2h|bovada|all|\u03b80.02|t50",
+        "signal": "sharp_convergence",
+        "market": "h2h",
+        "n": 306,
+        "clv_mean": 0.019121726305858035,
+        "clv_p": 0.00012651387627738556,
+        "realized_roi": 0.07497890731743365,
+        "book_groups": [
+          "bovada"
+        ],
+        "per_season_clv": {
+          "2023": 0.0141,
+          "2024": 0.0197,
+          "2025": 0.0261,
+          "2026": 0.0097
+        },
+        "is_control": false,
+        "fragile": false
+      },
+      {
+        "name": "sharp_convergence|h2h|bovada|all|\u03b80.04|t50",
+        "signal": "sharp_convergence",
+        "market": "h2h",
+        "n": 64,
+        "clv_mean": 0.0722424822732777,
+        "clv_p": 1.8077680164988403e-06,
+        "realized_roi": 0.40711945709753145,
+        "book_groups": [
+          "bovada"
+        ],
+        "per_season_clv": {
+          "2023": 0.1349,
+          "2024": 0.0592,
+          "2025": 0.0726,
+          "2026": 0.047
+        },
+        "is_control": false,
+        "fragile": true
+      }
+    ],
+    "control_breaks": [
+      {
+        "name": "placebo|totals|pinnacle|low|\u03b8na|open",
+        "signal": "placebo",
+        "market": "totals",
+        "n": 1300,
+        "clv_mean": 0.028076923076923076,
+        "clv_p": 0.035040957688249524,
+        "realized_roi": -0.02956144592982972,
+        "book_groups": [
+          "pinnacle"
+        ],
+        "per_season_clv": {
+          "2023": 0.0365,
+          "2024": 0.0261,
+          "2025": 0.0401,
+          "2026": 0.0059
+        },
+        "is_control": true,
+        "fragile": false
+      }
+    ],
+    "control_present": true,
+    "n_fragile": 7,
+    "verdict": "\u26a0\ufe0f METHOD CHECK FAILED \u2014 the `placebo` NEGATIVE CONTROL produced a 'candidate'; the harness manufactures CLV where none exists. Investigate before trusting any result."
+  }
+}
