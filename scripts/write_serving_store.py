@@ -729,8 +729,11 @@ _STARTERS_BATCH = """
 WITH game_meta AS (
     -- INC-23: game_date from stg_statsapi_games is an ISO VARCHAR in the S3 lakehouse view
     -- (TIMESTAMP-origin, stringified by the W8a cure) → year(VARCHAR) HALTs DuckDB in --s3 mode.
-    -- Cast ::date at the use-site (no-op on the native Snowflake DATE/TS). See CLAUDE.md INC-23.
-    SELECT game_pk, game_date, YEAR(game_date::date) AS game_year
+    -- Cast ::date so game_meta.game_date is a real DATE: it's compared below against
+    -- mart_starting_pitcher_game_log.game_date (native DATE in the lakehouse) at
+    -- ``g.game_date < gm.game_date`` — a VARCHAR here HALTs with DATE↔VARCHAR. The cast is a
+    -- no-op on the native Snowflake DATE/TS. See CLAUDE.md INC-23.
+    SELECT game_pk, game_date::date AS game_date, YEAR(game_date::date) AS game_year
     FROM baseball_data.betting.stg_statsapi_games
     WHERE game_pk IN ({game_pk_list})
 ),
