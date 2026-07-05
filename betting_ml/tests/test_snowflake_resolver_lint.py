@@ -61,15 +61,59 @@ def _delegates_to_shared(tree: ast.AST) -> bool:
     return False
 
 
+def _rolls_own_pem_parse(tree: ast.AST) -> bool:
+    """True if the script calls ``serialization.load_pem_private_key`` itself — i.e. it
+    hand-rolls the inline-key → DER conversion instead of using the shared resolver. This is
+    the EXACT gap that let ``settle_user_bets.py`` slip the guard during INC-27/INC-28: it
+    referenced the inline key ``SNOWFLAKE_PRIVATE_KEY`` (so ``inline_ok`` was True) but its own
+    parser did NOT unescape the box's ``\\n``-escaped value → ``InvalidByte(0, 92)`` at runtime.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr == "load_pem_private_key":
+            return True
+        if isinstance(node, ast.Name) and node.id == "load_pem_private_key":
+            return True
+    return False
+
+
+def _unescapes_inline_key(tree: ast.AST) -> bool:
+    r"""True if the script's own inline-key parser unescapes ``\n`` (``key_val.replace("\\n", "\n")``,
+    the box authenticates with a ``\n``-escaped single-line SNOWFLAKE_PRIVATE_KEY). This is what
+    the blessed shared resolver does (data_loader ``_load_private_key``) and what settle_user_bets
+    was MISSING. A hand-rolled PEM parser is inline-safe iff it either delegates OR unescapes.
+    """
+    for node in ast.walk(tree):
+        # match a string constant containing a backslash-n escape (the "\\n" search literal)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and "\\n" in node.value:
+            return True
+    return False
+
+
 @pytest.mark.parametrize("path", SCRIPTS, ids=lambda p: p.name)
 def test_script_snowflake_resolver_is_inline_safe(path):
     tree = ast.parse(path.read_text())
     consts = _string_constants(tree)
     does_own_auth = bool(_OWN_AUTH & consts)
-    if not does_own_auth:
-        return  # no hand-rolled Snowflake auth → nothing to check
+    rolls_own_pem = _rolls_own_pem_parse(tree)
+    if not does_own_auth and not rolls_own_pem:
+        return  # no hand-rolled Snowflake auth / key parsing → nothing to check
     inline_ok = _INLINE in consts
     delegates = _delegates_to_shared(tree)
+
+    # A script that parses the PEM itself is inline-safe iff it DELEGATES to the shared resolver
+    # OR unescapes the box's \n-escaped inline key — mentioning SNOWFLAKE_PRIVATE_KEY is NOT
+    # enough (that's exactly how settle_user_bets.py passed while its parser silently broke).
+    if rolls_own_pem:
+        assert delegates or _unescapes_inline_key(tree), (
+            f"{path.name} calls serialization.load_pem_private_key itself (hand-rolled inline-key "
+            f"parsing) but neither delegates to betting_ml.utils.data_loader.get_snowflake_connection "
+            f"NOR unescapes the box's \\n-escaped SNOWFLAKE_PRIVATE_KEY (key_val.replace('\\\\n','\\n')). "
+            f"This is the INC-28 straggler class that crashes on the EC2 box at runtime "
+            f"(InvalidByte(0, 92)). Delegate to the shared resolver (preferred) or unescape. "
+            f"See CLAUDE.md INC-22."
+        )
+        return
+
     assert inline_ok or delegates, (
         f"{path.name} does its own Snowflake auth (references {sorted(_OWN_AUTH & consts)}) but "
         f"neither supports the INLINE key '{_INLINE}' nor delegates to "
