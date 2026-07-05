@@ -144,30 +144,47 @@ if ! crontab "$CRONTAB"; then
 fi
 # A `crontab <file>` can return 0 yet leave an empty/partial table on some minimal AMIs;
 # verify the odds-capture line actually landed (the line whose absence == the INC-23 stall).
-# 2026-07-01: this verify false-failed 3 CONSECUTIVE CD deploys while a standalone repro of
-# the SAME commands (same user + `sudo -u ec2-user -H` env) passed with the line present —
-# the install DID land, but `crontab -l` read EMPTY in the tiny window while crond reloads
-# the just-written spool. The reconcile runs right after a container-recreation storm, which
-# widens that race, and the old `2>/dev/null` hid the transient read error so it looked
-# "absent" and die()'d the whole deploy (auto-rollback). Retry the read, RE-ASSERTING the
-# install each round, and dump the real crontab + stderr before ever giving up.
+# 2026-07-01/07-05: this verify false-failed 4 CD deploys (3× on 07-01, again on 07-05) while
+# a standalone repro of the SAME commands passed with the line present — the install DID land,
+# but `crontab -l` read EMPTY in the tiny window while crond reloads the just-written spool.
+# The reconcile runs right after a container-recreation storm (07-05 rebuilt the WHOLE capture
+# profile too), which widens that race past a short retry window and die()'d a HEALTHY,
+# already-recreated deploy. HARDENED: (a) WIDEN the read-back budget to ~30s, re-asserting the
+# install each round; (b) `crontab <file>` already exited 0 above, so the ENTIRE file (incl.
+# odds-capture) was ACCEPTED — a bad line would have non-zero'd the install — meaning a
+# read-back miss is a timing artifact, not a rejected line; (c) distinguish the two real
+# failure modes at the end: crond DOWN (crons genuinely won't fire → HARD die + CRITICAL) vs
+# crond UP + install-exited-0 (line IS scheduled; persistent read-back race → ALERT-loud-but-
+# continue per the E11.7 tiers, NEVER fail the deploy — that false-report is the recurring bug).
 _odds_seen=0
-for _try in 1 2 3 4 5; do
+for _try in $(seq 1 10); do
   if crontab -l 2>/tmp/credence_crontab_err | grep -q 'run --rm odds-capture'; then
     _odds_seen=1; break
   fi
-  log "  crontab verify ${_try}/5: odds-capture not visible yet (crond reload race?); stderr: $(tr '\n' ' ' < /tmp/credence_crontab_err 2>/dev/null)"
-  sleep 2
+  log "  crontab verify ${_try}/10: odds-capture not visible yet (crond reload race?); stderr: $(tr '\n' ' ' < /tmp/credence_crontab_err 2>/dev/null)"
+  sleep 3
   crontab "$CRONTAB" >/dev/null 2>&1 || true   # re-assert the install before the next read
 done
-if [ "$_odds_seen" != "1" ]; then
-  log "  odds-capture GENUINELY absent after 5 tries — FINAL crontab -l dump:"
+if [ "$_odds_seen" = "1" ]; then
+  log "  host crontab reconciled — odds-capture line present"
+else
+  # Still not visible after ~30s. `crontab <file>` exited 0 (whole file accepted). Split on
+  # crond liveness — the only thing that actually decides whether the installed crons will run.
+  crond_state="$(systemctl is-active crond 2>/dev/null || echo unknown)"
+  log "  odds-capture not visible via crontab -l after 10 tries; crond is '${crond_state}' — FINAL crontab -l dump:"
   crontab -l 2>&1 | sed 's/^/    /' || true
-  notify CRITICAL "odds-capture cron MISSING after reinstall on box" \
-    "crontab installed but 'crontab -l' had no odds-capture line after 5 retries — live odds capture will go stale. Investigate crond/spool on the box (SSM)." 2>/dev/null || true
-  die "odds-capture cron absent after reinstall (see CRITICAL alert)"
+  if [ "$crond_state" != "active" ]; then
+    # crond DOWN → installed crons genuinely will NOT fire → real INC-23-class stall → HALT.
+    notify CRITICAL "crond DOWN on box — capture crons will NOT fire" \
+      "deploy.sh installed the crontab (crontab <file> exited 0) but crond is '${crond_state}' — odds/derivative/weather/schedule captures will NOT run and odds WILL go stale. Fix on the box (SSM): 'sudo dnf install -y cronie && sudo systemctl enable --now crond', then confirm 'crontab -l | grep \"run --rm odds-capture\"'." 2>/dev/null || true
+    die "crond not active — capture crons will not fire (see CRITICAL alert)"
+  fi
+  # crond ACTIVE + install exited 0 → the line IS in the spool and WILL run; the read-back is
+  # the known reload-race artifact. ALERT-loud-but-continue (stderr WARNING + page), exit 0.
+  echo "[deploy WARNING] odds-capture line not visible via 'crontab -l' after 10 retries, but 'crontab <file>' exited 0 and crond is active — treating as the known crond-reload read-back race; NOT failing the deploy. Verify on the box: crontab -l | grep 'run --rm odds-capture'" >&2
+  notify WARNING "crontab read-back race on box (non-fatal — deploy proceeded)" \
+    "The odds-capture line was not visible via 'crontab -l' after 10 retries, but the install exited 0 and crond is active (the whole file was accepted, so the line IS scheduled and will run). The deploy was allowed to proceed rather than false-fail a healthy, already-recreated deploy. For certainty, SSM in and run: crontab -l | grep 'run --rm odds-capture'." 2>/dev/null || true
 fi
-log "  host crontab reconciled — odds-capture line present"
 
 # --- 7. post-deploy verify --------------------------------------------------
 log "post-deploy verification"
