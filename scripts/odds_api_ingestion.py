@@ -82,6 +82,7 @@ Usage:
 """
 
 import argparse
+import base64
 import dataclasses
 import json
 import logging
@@ -215,26 +216,76 @@ def resolve_targets() -> tuple[SnowflakeTarget, SnowflakeTarget]:
 
 # ── Snowflake connection ───────────────────────────────────────────────────────
 
+def _load_private_key_der() -> bytes | None:
+    """PKCS8-DER private-key bytes from SNOWFLAKE_PRIVATE_KEY_PATH (a readable PEM file) or the inline
+    SNOWFLAKE_PRIVATE_KEY (\\n-escaped or base64), or None if neither is set (→ password fallback).
+
+    Kept SELF-CONTAINED (mirrors betting_ml.utils.data_loader._load_private_key) — see
+    get_snowflake_connection for why this script must not import betting_ml. Uses only cryptography,
+    which the lean odds-capture image installs.
+    """
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives import serialization
+
+    pk_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
+    if pk_path and os.path.exists(pk_path):
+        with open(pk_path, "rb") as fh:
+            pem_bytes = fh.read()
+    elif os.environ.get("SNOWFLAKE_PRIVATE_KEY", "").strip():
+        # A Compose env_file / cron env can't carry real newlines: handle the \n-escaped PEM first
+        # (still starts with "-----BEGIN"), then base64. Matches the odds_capture entrypoint + data_loader.
+        key_val = os.environ["SNOWFLAKE_PRIVATE_KEY"].strip()
+        if "\\n" in key_val:
+            key_val = key_val.replace("\\n", "\n").strip()
+        elif not key_val.startswith("-----"):
+            key_val = base64.b64decode(key_val).decode("utf-8")
+        pem_bytes = key_val.encode("utf-8")
+    else:
+        return None
+    p_key = serialization.load_pem_private_key(pem_bytes, password=None, backend=default_backend())
+    return p_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+
 def get_snowflake_connection(
     database: str, schema: str
 ) -> snowflake.connector.SnowflakeConnection:
     """Build a Snowflake connection scoped to the given schema.
 
-    INC-22 straggler cure (2026-07-05): the box authenticates via the INLINE key
-    (SNOWFLAKE_PRIVATE_KEY), NOT a key FILE, and has NO SNOWFLAKE_PASSWORD — the old
-    file-path→password resolver KeyError'd on the box. Delegate to the shared
-    PATH-if-exists→inline→password resolver (it also normalizes SNOWFLAKE_ACCOUNT). The
-    project is single-database (baseball_data); dev/prod differ by SCHEMA, and every query
-    here is schema-qualified, so `database` is retained only for the caller's signature.
-    See CLAUDE.md INC-22 landmine.
+    ⚠️ SELF-CONTAINED — MUST NOT import betting_ml (odds-capture lean-image cure, 2026-07-05):
+    this script runs in the LEAN odds-capture image, which copies ONLY odds_api_ingestion.py +
+    date_utils.py (Dockerfile: "self-contained, no betting_ml/pipeline imports") and installs only
+    requests/snowflake-connector/cryptography/python-dotenv. An earlier straggler-sweep repointed this
+    at `betting_ml.utils.data_loader.get_snowflake_connection` — but that module isn't in this image
+    (and pulls pandas), so it ImportError'd EVERY 30-min capture → mlb_odds_raw went 100+ min stale
+    (odds-freshness CRITICAL). Resolve the key INLINE, multi-tier (PATH-if-exists → inline
+    SNOWFLAKE_PRIVATE_KEY → SNOWFLAKE_PASSWORD), matching data_loader/write_serving_store. The
+    odds_capture entrypoint already materializes the inline key to a PEM + sets
+    SNOWFLAKE_PRIVATE_KEY_PATH, so PATH is the prod path; the inline branch keeps it working without
+    the entrypoint. `database` is honoured (queries here are schema-qualified). See CLAUDE.md INC-22.
     """
-    import os as _os
-    import sys as _sys
-    _root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
-    if _root not in _sys.path:
-        _sys.path.insert(0, _root)
-    from betting_ml.utils.data_loader import get_snowflake_connection as _shared
-    return _shared(schema=schema)
+    kwargs: dict[str, Any] = dict(
+        account=os.environ["SNOWFLAKE_ACCOUNT"],
+        user=os.environ["SNOWFLAKE_USER"],
+        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
+        role=os.environ.get("SNOWFLAKE_ROLE"),
+        database=database,
+        schema=schema,
+    )
+    pkb = _load_private_key_der()
+    if pkb is not None:
+        kwargs["private_key"] = pkb
+    elif os.environ.get("SNOWFLAKE_PASSWORD"):
+        kwargs["password"] = os.environ["SNOWFLAKE_PASSWORD"]
+    else:
+        raise EnvironmentError(
+            "No Snowflake credential for odds capture: set SNOWFLAKE_PRIVATE_KEY_PATH (file), "
+            "SNOWFLAKE_PRIVATE_KEY (inline PEM / base64), or SNOWFLAKE_PASSWORD."
+        )
+    return snowflake.connector.connect(**{k: v for k, v in kwargs.items() if v is not None})
 
 
 # ── Odds API request layer ─────────────────────────────────────────────────────
