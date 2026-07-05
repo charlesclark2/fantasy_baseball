@@ -176,8 +176,18 @@ services:
   #    breaking upstream image silently.
   # ⚠️ shm_size: Camoufox/Firefox crashes on the 64MB default /dev/shm → give it 2GB.
   flaresolverr:
-    image: ghcr.io/thephaseless/byparr:latest
+    # PIN (2026-07-05): pinned to a DIGEST, not :latest — an unpinned :latest floats the Cloudflare
+    # solver + Camoufox build under us (an `up -d` after a prune → a new image that may break FanGraphs
+    # or the container start, with no rollback). Refresh the digest DELIBERATELY on upgrade, only after
+    # re-verifying scripts/validate_flaresolverr.py pulls rows.
+    # Digest = the box's good image that pulled 6398 rows on 2026-07-05. To upgrade, re-inspect on the
+    # box after verifying validate_flaresolverr.py:  docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/thephaseless/byparr:latest
+    image: ghcr.io/thephaseless/byparr@sha256:01a46a2865d9a6db5eb8ead04ec0dd33b8fbe233e8565ae70b50d4cc0af4cfb0
     shm_size: '2gb'
+    # mem cap (INC-22 #4 cure): bound Camoufox so a runaway solve can't OOM-kill the HOST (which would
+    # take Dagster/Postgres down with it). 4g is generous headroom over the ~0.5g steady state on the 16g
+    # box; if Byparr exceeds it, IT is OOM-killed + `restart`ed rather than starving the box. Tune if it flaps.
+    mem_limit: 4g
     environment:
       LOG_LEVEL: info
       TZ: America/New_York
