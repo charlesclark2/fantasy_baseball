@@ -76,6 +76,7 @@ Environment:
 """
 
 import argparse
+import base64
 import json
 import logging
 import os
@@ -221,17 +222,61 @@ def _staging_stage() -> str:
 
 # ── Snowflake connection ───────────────────────────────────────────────────────
 
+def _load_private_key_der() -> bytes | None:
+    """PKCS8-DER key bytes from SNOWFLAKE_PRIVATE_KEY_PATH (a readable PEM) or the inline
+    SNOWFLAKE_PRIVATE_KEY (\\n-escaped / base64), or None (→ password). Cryptography-only;
+    mirrors data_loader._load_private_key, kept self-contained for the lean image."""
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives import serialization
+
+    pk_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
+    if pk_path and os.path.exists(pk_path):
+        with open(pk_path, "rb") as fh:
+            pem_bytes = fh.read()
+    elif os.environ.get("SNOWFLAKE_PRIVATE_KEY", "").strip():
+        key_val = os.environ["SNOWFLAKE_PRIVATE_KEY"].strip()
+        if "\\n" in key_val:
+            key_val = key_val.replace("\\n", "\n").strip()
+        elif not key_val.startswith("-----"):
+            key_val = base64.b64decode(key_val).decode("utf-8")
+        pem_bytes = key_val.encode("utf-8")
+    else:
+        return None
+    p_key = serialization.load_pem_private_key(pem_bytes, password=None, backend=default_backend())
+    return p_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+
 def connect_snowflake() -> snowflake.connector.SnowflakeConnection:
-    # INC-22 straggler cure (2026-07-05): the box authenticates via the INLINE key
-    # (SNOWFLAKE_PRIVATE_KEY), NOT a key FILE, and has NO SNOWFLAKE_PASSWORD — the old
-    # file-path→password resolver KeyError'd on the box. Delegate to the shared
-    # PATH-if-exists→inline→password resolver. Queries are fully-qualified, so the default
-    # schema is immaterial. See CLAUDE.md INC-22 landmine.
-    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if _root not in _sys.path:
-        _sys.path.insert(0, _root)
-    from betting_ml.utils.data_loader import get_snowflake_connection
-    return get_snowflake_connection()
+    """SELF-CONTAINED SF connection for the LEAN derivative-capture image.
+
+    ⚠️ MUST NOT import betting_ml: derivative-capture copies only this script + utils/__init__.py +
+    lakehouse_raw_writer.py and installs no betting_ml. An earlier straggler-sweep repointed this at
+    betting_ml.utils.data_loader → ImportError every capture → stale derivative odds. Resolve the key
+    inline (PATH → inline SNOWFLAKE_PRIVATE_KEY → password), cryptography-only. The capture entrypoint
+    materializes the inline key to a PEM + sets SNOWFLAKE_PRIVATE_KEY_PATH. See CLAUDE.md INC-22.
+    """
+    kwargs: dict[str, Any] = dict(
+        account=os.environ["SNOWFLAKE_ACCOUNT"],
+        user=os.environ["SNOWFLAKE_USER"],
+        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
+        role=os.environ.get("SNOWFLAKE_ROLE"),
+        database="baseball_data",
+    )
+    pkb = _load_private_key_der()
+    if pkb is not None:
+        kwargs["private_key"] = pkb
+    elif os.environ.get("SNOWFLAKE_PASSWORD"):
+        kwargs["password"] = os.environ["SNOWFLAKE_PASSWORD"]
+    else:
+        raise EnvironmentError(
+            "No Snowflake credential for derivative capture: set SNOWFLAKE_PRIVATE_KEY_PATH (file), "
+            "SNOWFLAKE_PRIVATE_KEY (inline PEM / base64), or SNOWFLAKE_PASSWORD."
+        )
+    return snowflake.connector.connect(**{k: v for k, v in kwargs.items() if v is not None})
 
 
 # ── Event discovery ────────────────────────────────────────────────────────────
