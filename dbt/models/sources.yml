@@ -352,34 +352,32 @@ sources:
 
       # ── Pitch data ────────────────────────────────────────────────────────────
       - name: batter_pitches
+        # ⚠️ RETIRED 2026-07-03 (E11.1-W11-E): the raw savant.batter_pitches Snowflake feed was
+        # decommissioned — the pitch substrate now lives as S3 parquet (stg_batter_pitches duckdb
+        # branch / lakehouse_ext), and the only SF reader (this source's stg model's else branch) is
+        # enabled=false. The table is DROPPED, so its source-level not_null tests were firing every
+        # daily run against a non-existent object (002003 "does not exist"). Tests REMOVED. The source
+        # + column docs are kept declared ONLY so the disabled model's {{ source() }} call still
+        # resolves at parse time; nothing queries this source anymore. Do NOT re-add the tests.
         description: >
-          Per-pitch Statcast data including pitch physics, batted ball tracking,
-          bat tracking (2023+), player identifiers, game context, and advanced
-          expected-stat metrics. Grain: one row per pitch per plate appearance
-          per game.
+          RETIRED (W11-E) — raw per-pitch Statcast feed, decommissioned to S3. Historical schema
+          kept for documentation; the live pitch substrate is stg_batter_pitches over S3 parquet.
 
         columns:
           - name: game_pk
             description: Unique MLB game identifier.
-            tests: [not_null]
           - name: at_bat_number
             description: Sequential plate appearance number within the game.
-            tests: [not_null]
           - name: pitch_number
             description: Pitch sequence number within the current plate appearance.
-            tests: [not_null]
           - name: batter
             description: MLB Player ID for the batter.
-            tests: [not_null]
           - name: pitcher
             description: MLB Player ID for the pitcher.
-            tests: [not_null]
           - name: game_date
             description: Date the game was played.
-            tests: [not_null]
           - name: game_year
             description: Season year.
-            tests: [not_null]
           - name: game_type
             description: >
               E=Exhibition, S=Spring Training, R=Regular Season,
