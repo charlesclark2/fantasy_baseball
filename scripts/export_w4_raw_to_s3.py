@@ -62,36 +62,18 @@ TABLES = {
 }
 
 
-# ── Snowflake connection (mirrors export_ref_players_to_s3.py) ───────────────
-
-def _load_private_key() -> bytes | None:
-    key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
-    if not key_path:
-        return None
-    with open(key_path, "rb") as fh:
-        raw = fh.read()
-    passphrase = os.getenv("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
-    key = load_pem_private_key(
-        raw, password=passphrase.encode() if passphrase else None, backend=default_backend()
-    )
-    return key.private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())
-
+# ── Snowflake connection ─────────────────────────────────────────────────────
+# E11.1-W11-FG (2026-07-05): delegate to the shared inline-key-safe resolver.
+# This script previously carried its OWN reader (SNOWFLAKE_PRIVATE_KEY_PATH else
+# os.environ["SNOWFLAKE_PASSWORD"]) — BOTH are UNSET on the EC2 box, which authenticates via the
+# INLINE SNOWFLAKE_PRIVATE_KEY → KeyError('SNOWFLAKE_PASSWORD'). Same straggler class CLAUDE.md
+# calls out (fixed the same way in refresh_w1_external_tables.py): route through the INC-22 shared
+# resolver (PATH-if-exists → inline key → password). Queries are fully-qualified, so the schema is
+# immaterial (kept 'savant' to preserve the prior default).
 
 def get_snowflake_conn():
-    kwargs = dict(
-        account=os.environ["SNOWFLAKE_ACCOUNT"],
-        user=os.environ["SNOWFLAKE_USER"],
-        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
-        role=os.environ.get("SNOWFLAKE_ROLE"),
-        database="baseball_data",
-        schema="savant",
-    )
-    pk = _load_private_key()
-    if pk:
-        kwargs["private_key"] = pk
-    else:
-        kwargs["password"] = os.environ["SNOWFLAKE_PASSWORD"]
-    return snowflake.connector.connect(**kwargs)
+    from betting_ml.utils.data_loader import get_snowflake_connection
+    return get_snowflake_connection(schema="savant")
 
 
 # ── VARIANT serialization ────────────────────────────────────────────────────
