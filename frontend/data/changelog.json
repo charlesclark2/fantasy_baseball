@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "fix",
+        "text": "Picks that were reconstructed after the fact — re-scored for a past date from the pregame data as it stood that morning, never a live call — now carry a clear 'Backfilled' label on the pick's detail page. These use only point-in-time information (no game outcomes leak in) and are marked so they are never mistaken for a real-time pick."
+      },
+      {
+        "tag": "fix",
         "text": "Dashboard no longer shows the previous day's games before a new day's predictions are published. The 'today' picks fallback was returning the last-cached slate regardless of the requested date; it now only serves picks that match the requested date, and shows an empty state until the day's predictions are ready."
       },
       {

@@ -223,7 +223,19 @@ export function MiniDriverList({ drivers }: { drivers: PickDriver[] }) {
 // ---------------------------------------------------------------------------
 
 export function ServedTierBadge({ tier }: { tier: string | null | undefined }) {
-  if (!tier || tier === "backfill") return null
+  if (!tier) return null
+  // INC-28 — a backfilled pick was reconstructed after the fact from point-in-time pregame
+  // data (never a live, real-time call). Label it explicitly so it is never mistaken for one.
+  if (tier === "backfill") {
+    return (
+      <span
+        className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-widest border bg-slate-500/10 text-slate-400 border-slate-500/25"
+        title="Reconstructed after the fact from point-in-time pregame data — not a live, real-time pick."
+      >
+        Backfilled
+      </span>
+    )
+  }
   const isPreLineup = tier === "pre_lineup"
   return (
     <span
