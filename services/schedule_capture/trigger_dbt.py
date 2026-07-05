@@ -42,12 +42,39 @@ headers = {"Authorization": f"Bearer {token}"} if token else {}
 payload = {"args": dbt_args, "env": {"DBT_JOB_NAME": job_name, "DAGSTER_JOB_NAME": job_name}}
 
 print(f"[trigger_dbt] POST {url}/run  args={dbt_args[:3]}…", flush=True)
-try:
-    resp = requests.post(f"{url}/run", json=payload, headers=headers, timeout=30)
-    resp.raise_for_status()
-except Exception as exc:
-    print(f"[trigger_dbt] failed to start run: {exc}", file=sys.stderr, flush=True)
-    sys.exit(1)
+# The dbt-runner serializes to ONE run at a time and returns 409 Conflict when busy
+# (daily build, an odds/intraday rebuild, or a duplicate schedule-capture tick). A bare
+# raise_for_status() here made a contended tick DROP the lineup-staging rebuild entirely
+# (non-fatal in the entrypoint) → the lineup feed silently lagged → lineup_monitor_sensor
+# saw no fresh lineups until a manual kick. So treat 409 as "runner busy → back off and
+# retry" (bounded); every other error still fails fast.
+_RETRY_409_MAX = 6          # ~6 attempts
+_RETRY_409_BACKOFF = 20     # seconds between attempts (runner runs are short)
+resp = None
+for _attempt in range(1, _RETRY_409_MAX + 1):
+    try:
+        resp = requests.post(f"{url}/run", json=payload, headers=headers, timeout=30)
+        if resp.status_code == 409:
+            if _attempt < _RETRY_409_MAX:
+                print(
+                    f"[trigger_dbt] runner busy (409) — attempt {_attempt}/{_RETRY_409_MAX}; "
+                    f"retrying in {_RETRY_409_BACKOFF}s",
+                    flush=True,
+                )
+                time.sleep(_RETRY_409_BACKOFF)
+                continue
+            print(
+                f"[trigger_dbt] runner still busy (409) after {_RETRY_409_MAX} attempts — "
+                "giving up this tick (next 30-min tick retries)",
+                file=sys.stderr,
+                flush=True,
+            )
+            sys.exit(1)
+        resp.raise_for_status()
+        break
+    except Exception as exc:
+        print(f"[trigger_dbt] failed to start run: {exc}", file=sys.stderr, flush=True)
+        sys.exit(1)
 
 run_id = resp.json()["run_id"]
 print(f"[trigger_dbt] run {run_id} started", flush=True)
