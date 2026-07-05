@@ -1,0 +1,30 @@
+[
+  {
+    "season": 2026,
+    "window_type": "30d",
+    "window_start": "2026-03-25",
+    "window_end": "2026-04-23",
+    "error": "FanGraphs is behind a Cloudflare JS challenge and FLARESOLVERR_URL is not configured. Point it at a FlareSolverr instance (e.g. http://flaresolverr.railway.internal:8191/v1). See Epic FG."
+  },
+  {
+    "season": 2026,
+    "window_type": "30d",
+    "window_start": "2026-04-24",
+    "window_end": "2026-05-23",
+    "error": "FanGraphs is behind a Cloudflare JS challenge and FLARESOLVERR_URL is not configured. Point it at a FlareSolverr instance (e.g. http://flaresolverr.railway.internal:8191/v1). See Epic FG."
+  },
+  {
+    "season": 2026,
+    "window_type": "30d",
+    "window_start": "2026-05-24",
+    "window_end": "2026-06-22",
+    "error": "FanGraphs is behind a Cloudflare JS challenge and FLARESOLVERR_URL is not configured. Point it at a FlareSolverr instance (e.g. http://flaresolverr.railway.internal:8191/v1). See Epic FG."
+  },
+  {
+    "season": 2026,
+    "window_type": "30d",
+    "window_start": "2026-06-23",
+    "window_end": "2026-07-04",
+    "error": "FanGraphs is behind a Cloudflare JS challenge and FLARESOLVERR_URL is not configured. Point it at a FlareSolverr instance (e.g. http://flaresolverr.railway.internal:8191/v1). See Epic FG."
+  }
+]
