@@ -223,6 +223,21 @@ def _load_current_seq(conn, season: int) -> dict[tuple[str, str], dict]:
 
 # ── Observation collection ─────────────────────────────────────────────────────
 
+def _as_date(v) -> date:
+    """Coerce a game_date to a native datetime.date.
+
+    INC-23/INC-27 bite: the offense/bullpen observations read baseball_data.betting.stg_batter_pitches,
+    which is now a VIEW over the S3 lakehouse parquet (INC-27) that returns game_date as an ISO VARCHAR,
+    while _RESULTS_SQL returns a native date. Mixing str + date breaks the chronological sort below
+    (`'<' not supported between 'datetime.date' and 'str'`) and would write a str into the DATE column.
+    Normalise at the use-site (same coercion already applied to the _DATES_SQL rows in run_all)."""
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, date):
+        return v
+    return date.fromisoformat(str(v)[:10])
+
+
 def _collect_observations(conn, target_date: date) -> list[dict]:
     """
     Chronologically-ordered per-(team, metric, game) observations:
@@ -233,21 +248,21 @@ def _collect_observations(conn, target_date: date) -> list[dict]:
 
     for r in _fetch_dicts(conn, _OFFENSE_SQL, {"game_date": d}):
         obs.append({"team": r["team"], "metric": _M_OFF, "dist": "normal",
-                    "game_pk": int(r["game_pk"]), "game_date": r["game_date"],
+                    "game_pk": int(r["game_pk"]), "game_date": _as_date(r["game_date"]),
                     "obs_value": float(r["obs_mean"]), "n_obs": int(r["n_obs"])})
 
     for r in _fetch_dicts(conn, _BULLPEN_SQL, {"game_date": d}):
         obs.append({"team": r["team"], "metric": _M_PEN, "dist": "normal",
-                    "game_pk": int(r["game_pk"]), "game_date": r["game_date"],
+                    "game_pk": int(r["game_pk"]), "game_date": _as_date(r["game_date"]),
                     "obs_value": float(r["obs_mean"]), "n_obs": int(r["n_obs"])})
 
     for r in _fetch_dicts(conn, _RESULTS_SQL, {"game_date": d}):
         home_won = bool(r["home_team_won"])
         obs.append({"team": r["home_team"], "metric": _M_WIN, "dist": "beta",
-                    "game_pk": int(r["game_pk"]), "game_date": r["game_date"],
+                    "game_pk": int(r["game_pk"]), "game_date": _as_date(r["game_date"]),
                     "obs_value": 1.0 if home_won else 0.0, "n_obs": 1})
         obs.append({"team": r["away_team"], "metric": _M_WIN, "dist": "beta",
-                    "game_pk": int(r["game_pk"]), "game_date": r["game_date"],
+                    "game_pk": int(r["game_pk"]), "game_date": _as_date(r["game_date"]),
                     "obs_value": 0.0 if home_won else 1.0, "n_obs": 1})
 
     obs.sort(key=lambda o: (o["game_date"], o["game_pk"], o["metric"], o["team"]))
