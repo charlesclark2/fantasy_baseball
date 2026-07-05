@@ -1061,7 +1061,10 @@ snaps AS (
     INNER JOIN bridge b ON b.event_id = o.event_id
     WHERE o.bookmaker_key IN ('pinnacle', 'betmgm', 'williamhill_us', 'fanduel', 'draftkings', 'fanatics', 'bovada')
       AND o.market_key IN ('h2h', 'totals')
-      AND o.ingestion_ts < o.commence_time
+      -- INC-23: mart_odds_outcomes.commence_time is string-wrapped (VARCHAR) in the S3 lakehouse
+      -- view while ingestion_ts is a real TIMESTAMP → a bare compare HALTs DuckDB (TIMESTAMP↔VARCHAR)
+      -- in --s3 mode. Cast ::timestamp (no-op on the native Snowflake TIMESTAMP_NTZ). CLAUDE.md INC-23.
+      AND o.ingestion_ts < o.commence_time::timestamp
 ),
 -- Group per LINE (outcome_point) so Over/Under prices pair within the same line;
 -- h2h rows have a NULL line → one group per snapshot. This avoids conflating a
