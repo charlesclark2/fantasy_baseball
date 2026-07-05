@@ -20,6 +20,16 @@ load_dotenv()
 
 _SCHEMA = "baseball_data.lakehouse_ext"
 
+# INC-27 (2026-07-04): stg_batter_pitches was DROPPED from Snowflake by W11-E, but ~6 hybrid
+# Python consumers (write_serving_store intraday, the team/bullpen posterior writers) still read
+# baseball_data.betting.stg_batter_pitches as a RAW SQL STRING on a Snowflake connection. It is
+# recreated as lakehouse_ext.stg_batter_pitches (external table over the S3 parquet the daily
+# ingest already writes) + a betting.stg_batter_pitches view over it — the same durable pattern as
+# every other decommissioned table. REQUIRED/HALT tier: the ext table is refreshed FIRST in the
+# daily job (right after ingest_statcast_to_s3 writes the parquet) so the view never serves stale
+# box scores / posteriors. Created by scripts/ddl/generate_stg_batter_pitches_external_table.py.
+STG_BATTER_PITCHES_TABLE = ["stg_batter_pitches"]
+
 W1_TABLES = [
     "mart_pitch_characteristics",
     "mart_pitch_play_event",
@@ -444,13 +454,17 @@ def main():
     # DAILY full refresh. W1+W2+W3 are REQUIRED (HALT) — they feed the morning build. W3pre/W4/
     # W5/W5b/W6 are BEST-EFFORT until their cutover (they don't exist until the generator runs,
     # so a "does not exist" is an expected skip, NOT a HALT that would fail the whole daily job).
-    required = set(W1_TABLES) | set(W2_TABLES) | set(W3_TABLES)
+    # INC-27: stg_batter_pitches is REQUIRED (serving-critical — its betting.* view backs the
+    # intraday box score + the posterior writers). Refreshed FIRST so the view is fresh before
+    # any downstream read. Grouped with W1 (the pitch substrate) since it shares its cadence.
+    required = set(STG_BATTER_PITCHES_TABLE) | set(W1_TABLES) | set(W2_TABLES) | set(W3_TABLES)
     _refresh(
-        W1_TABLES + W2_TABLES + W3_TABLES + W3PRE_TABLES
+        STG_BATTER_PITCHES_TABLE + W1_TABLES + W2_TABLES + W3_TABLES + W3PRE_TABLES
         + W4_TABLES + W5_TABLES + ARCHETYPE_TABLES + W6_TABLES + W7_TABLES,
         required=required,
     )
-    print("W1+W2+W3 external table refresh complete (W3pre + W4 + W5 + W5b + W6 + W7 best-effort).")
+    print("stg_batter_pitches + W1+W2+W3 external table refresh complete "
+          "(W3pre + W4 + W5 + W5b + W6 + W7 best-effort).")
 
 
 if __name__ == "__main__":
