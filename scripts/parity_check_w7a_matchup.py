@@ -33,13 +33,6 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 import snowflake.connector
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.serialization import (
-    Encoding,
-    NoEncryption,
-    PrivateFormat,
-    load_pem_private_key,
-)
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -78,26 +71,12 @@ _TOL_MEAN_ABS  = 0.005   # mean |Δ| on a joined numeric value column
 
 # ── Connections (house style, from parity_check_w5b.py) ───────────────────────
 
-def _load_private_key():
-    kp = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
-    if not kp:
-        return None
-    raw = open(kp, "rb").read()
-    ph = os.getenv("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
-    k = load_pem_private_key(raw, password=ph.encode() if ph else None, backend=default_backend())
-    return k.private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())
-
-
 def get_sf():
-    kw = dict(account=os.environ["SNOWFLAKE_ACCOUNT"], user=os.environ["SNOWFLAKE_USER"],
-              warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
-              role=os.environ.get("SNOWFLAKE_ROLE"), database="baseball_data", schema="betting")
-    pk = _load_private_key()
-    if pk:
-        kw["private_key"] = pk
-    else:
-        kw["password"] = os.environ["SNOWFLAKE_PASSWORD"]
-    return snowflake.connector.connect(**kw)
+    # INC-22 straggler cure (2026-07-05): the box authenticates via the INLINE key
+    # (SNOWFLAKE_PRIVATE_KEY), NOT a key FILE, and has NO SNOWFLAKE_PASSWORD — the old
+    # file-path→password resolver KeyError'd on the box. Delegate to the shared resolver.
+    from betting_ml.utils.data_loader import get_snowflake_connection
+    return get_snowflake_connection(schema="betting")
 
 
 def get_duck():

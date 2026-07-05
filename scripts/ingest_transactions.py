@@ -73,42 +73,16 @@ _LAKEHOUSE_SOURCE = "player_transactions"
 # ---------------------------------------------------------------------------
 
 def _get_snowflake_connection():
-    import snowflake.connector
-
-    account   = os.environ["SNOWFLAKE_ACCOUNT"]
-    user      = os.environ["SNOWFLAKE_USER"]
-    warehouse = os.environ.get("SNOWFLAKE_WAREHOUSE", "")
-    role      = os.environ.get("SNOWFLAKE_ROLE")
-    pk_path   = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
-
-    connect_kwargs: dict = {
-        "account":   account,
-        "user":      user,
-        "warehouse": warehouse,
-        "database":  "baseball_data",
-        "schema":    "statsapi",
-    }
-    if role:
-        connect_kwargs["role"] = role
-
-    if pk_path:
-        from cryptography.hazmat.primitives.serialization import (
-            load_pem_private_key,
-            Encoding,
-            PrivateFormat,
-            NoEncryption,
-        )
-        passphrase_str = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
-        passphrase = passphrase_str.encode() if passphrase_str else None
-        with open(pk_path, "rb") as fh:
-            private_key = load_pem_private_key(fh.read(), password=passphrase)
-        connect_kwargs["private_key"] = private_key.private_bytes(
-            Encoding.DER, PrivateFormat.PKCS8, NoEncryption()
-        )
-    else:
-        connect_kwargs["password"] = os.environ["SNOWFLAKE_PASSWORD"]
-
-    return snowflake.connector.connect(**connect_kwargs)
+    # INC-22 straggler cure (2026-07-05): the box authenticates via the INLINE key
+    # (SNOWFLAKE_PRIVATE_KEY), NOT a key FILE, and has NO SNOWFLAKE_PASSWORD — the old
+    # file-path→password resolver KeyError'd on the box. Delegate to the shared
+    # PATH-if-exists→inline→password resolver. Queries are fully-qualified, so the default
+    # schema is immaterial. See CLAUDE.md INC-22 landmine.
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _root not in sys.path:
+        sys.path.insert(0, _root)
+    from betting_ml.utils.data_loader import get_snowflake_connection
+    return get_snowflake_connection(schema="statsapi")
 
 
 # ---------------------------------------------------------------------------

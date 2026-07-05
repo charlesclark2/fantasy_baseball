@@ -31,18 +31,16 @@ import os
 import re
 import sys
 
+from pathlib import Path
+
 import duckdb
 import snowflake.connector
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.serialization import (
-    Encoding,
-    NoEncryption,
-    PrivateFormat,
-    load_pem_private_key,
-)
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Ensure repo root on sys.path for the delegating import below.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 _S3_BUCKET = "baseball-betting-ml-artifacts"
 _S3_PREFIX = "baseball/lakehouse"
@@ -80,34 +78,12 @@ W2_STALENESS_AWARE = {
 
 # ── Snowflake connection ─────────────────────────────────────────────────────
 
-def _load_private_key() -> bytes | None:
-    key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
-    if not key_path:
-        return None
-    with open(key_path, "rb") as fh:
-        raw = fh.read()
-    passphrase = os.getenv("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
-    key = load_pem_private_key(
-        raw, password=passphrase.encode() if passphrase else None, backend=default_backend()
-    )
-    return key.private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())
-
-
 def get_snowflake_conn():
-    kwargs = dict(
-        account=os.environ["SNOWFLAKE_ACCOUNT"],
-        user=os.environ["SNOWFLAKE_USER"],
-        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
-        role=os.environ.get("SNOWFLAKE_ROLE"),
-        database="baseball_data",
-        schema="betting",
-    )
-    pk = _load_private_key()
-    if pk:
-        kwargs["private_key"] = pk
-    else:
-        kwargs["password"] = os.environ["SNOWFLAKE_PASSWORD"]
-    return snowflake.connector.connect(**kwargs)
+    # INC-22 straggler cure (2026-07-05): the box authenticates via the INLINE key
+    # (SNOWFLAKE_PRIVATE_KEY), NOT a key FILE, and has NO SNOWFLAKE_PASSWORD — the old
+    # file-path→password resolver KeyError'd on the box. Delegate to the shared resolver.
+    from betting_ml.utils.data_loader import get_snowflake_connection
+    return get_snowflake_connection(schema="betting")
 
 
 def get_duckdb_conn() -> duckdb.DuckDBPyConnection:

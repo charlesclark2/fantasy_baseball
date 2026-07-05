@@ -37,14 +37,10 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import snowflake.connector
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.serialization import (
-    Encoding,
-    NoEncryption,
-    PrivateFormat,
-    load_pem_private_key,
-)
 from dotenv import load_dotenv
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_PROJECT_ROOT))
 
 load_dotenv()
 

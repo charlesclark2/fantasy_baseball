@@ -127,24 +127,16 @@ FROM tmp_catcher_framing_stage
 
 
 def _connect() -> snowflake.connector.SnowflakeConnection:
-    with open(_KEY_PATH, "rb") as f:
-        p_key = serialization.load_pem_private_key(
-            f.read(), password=None, backend=default_backend()
-        )
-    pkb = p_key.private_bytes(
-        encoding=serialization.Encoding.DER,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
-    return snowflake.connector.connect(
-        account=os.environ.get("SNOWFLAKE_ACCOUNT", "IHUPICS-DP59975"),
-        user=os.environ.get("SNOWFLAKE_USER", "dbt_rw"),
-        private_key=pkb,
-        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
-        role=os.environ.get("SNOWFLAKE_ROLE"),
-        database="baseball_data",
-        schema="savant",
-    )
+    # INC-22 straggler cure (2026-07-05): the box authenticates via the INLINE key
+    # (SNOWFLAKE_PRIVATE_KEY), NOT a key FILE — the ~/... default _KEY_PATH doesn't exist there.
+    # Delegate to the shared PATH-if-exists→inline→password resolver. Writes here use the
+    # fully-qualified TABLE_FQN; schema='savant' preserved for parity. See CLAUDE.md INC-22.
+    import sys as _sys
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _root not in _sys.path:
+        _sys.path.insert(0, _root)
+    from betting_ml.utils.data_loader import get_snowflake_connection
+    return get_snowflake_connection(schema="savant")
 
 
 def _safe_float(val: Any) -> float | None:

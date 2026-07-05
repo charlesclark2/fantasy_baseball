@@ -87,13 +87,6 @@ from typing import Any
 
 import requests
 import snowflake.connector
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.serialization import (
-    Encoding,
-    NoEncryption,
-    PrivateFormat,
-    load_pem_private_key,
-)
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
@@ -228,47 +221,17 @@ def _staging_stage() -> str:
 
 # ── Snowflake connection ───────────────────────────────────────────────────────
 
-def _load_private_key(path: str, passphrase: str | None) -> bytes:
-    with open(path, "rb") as fh:
-        pem = fh.read()
-    pwd = passphrase.encode() if passphrase else None
-    key = load_pem_private_key(pem, password=pwd, backend=default_backend())
-    return key.private_bytes(
-        encoding=Encoding.DER,
-        format=PrivateFormat.PKCS8,
-        encryption_algorithm=NoEncryption(),
-    )
-
-
 def connect_snowflake() -> snowflake.connector.SnowflakeConnection:
-    _raw_account = os.environ["SNOWFLAKE_ACCOUNT"]
-    account = _raw_account.strip()
-    if "://" in account:
-        account = account.split("://", 1)[1]
-    account = account.split("/", 1)[0]
-    account = account.split(".snowflakecomputing.com", 1)[0]
-    if account != _raw_account:
-        log.warning("SNOWFLAKE_ACCOUNT normalized: raw=%r -> used=%r", _raw_account, account)
-    if any(c in account for c in "./"):
-        log.warning(
-            "SNOWFLAKE_ACCOUNT still contains a dot/slash after normalization: %r "
-            "— the connector will reject this; fix the env var to the bare "
-            "org-account identifier (e.g. IHUPICS-DP59975).", account)
-    params: dict[str, Any] = {
-        "account":   account,
-        "user":      os.environ["SNOWFLAKE_USER"],
-        "warehouse": os.environ["SNOWFLAKE_WAREHOUSE"],
-    }
-    if role := os.environ.get("SNOWFLAKE_ROLE"):
-        params["role"] = role
-    key_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
-    if key_path:
-        params["private_key"] = _load_private_key(
-            key_path, os.environ.get("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
-        )
-    else:
-        params["password"] = os.environ["SNOWFLAKE_PASSWORD"]
-    return snowflake.connector.connect(**params)
+    # INC-22 straggler cure (2026-07-05): the box authenticates via the INLINE key
+    # (SNOWFLAKE_PRIVATE_KEY), NOT a key FILE, and has NO SNOWFLAKE_PASSWORD — the old
+    # file-path→password resolver KeyError'd on the box. Delegate to the shared
+    # PATH-if-exists→inline→password resolver. Queries are fully-qualified, so the default
+    # schema is immaterial. See CLAUDE.md INC-22 landmine.
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _root not in _sys.path:
+        _sys.path.insert(0, _root)
+    from betting_ml.utils.data_loader import get_snowflake_connection
+    return get_snowflake_connection()
 
 
 # ── Event discovery ────────────────────────────────────────────────────────────

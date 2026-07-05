@@ -44,14 +44,10 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import snowflake.connector
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.serialization import (
-    Encoding,
-    NoEncryption,
-    PrivateFormat,
-    load_pem_private_key,
-)
 from dotenv import load_dotenv
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_PROJECT_ROOT))
 
 load_dotenv()
 
@@ -69,34 +65,14 @@ TABLES = {
 
 # ── Snowflake connection (mirrors export_w5_raw_to_s3.py) ─────────────────────
 
-def _load_private_key() -> bytes | None:
-    key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
-    if not key_path:
-        return None
-    with open(key_path, "rb") as fh:
-        raw = fh.read()
-    passphrase = os.getenv("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
-    key = load_pem_private_key(
-        raw, password=passphrase.encode() if passphrase else None, backend=default_backend()
-    )
-    return key.private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())
-
-
 def get_snowflake_conn():
-    kwargs = dict(
-        account=os.environ["SNOWFLAKE_ACCOUNT"],
-        user=os.environ["SNOWFLAKE_USER"],
-        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
-        role=os.environ.get("SNOWFLAKE_ROLE"),
-        database="baseball_data",
-        schema="statsapi",
-    )
-    pk = _load_private_key()
-    if pk:
-        kwargs["private_key"] = pk
-    else:
-        kwargs["password"] = os.environ["SNOWFLAKE_PASSWORD"]
-    return snowflake.connector.connect(**kwargs)
+    # INC-22 straggler cure (2026-07-05): the box authenticates via the INLINE key
+    # (SNOWFLAKE_PRIVATE_KEY), NOT a key FILE, and has NO SNOWFLAKE_PASSWORD — this
+    # script's own file-path→password resolver KeyError'd on the box. Delegate to the
+    # shared PATH-if-exists→inline→password resolver. Queries are fully-qualified, so
+    # the default schema is immaterial. See CLAUDE.md "SNOWFLAKE MISREADS"/INC-22 landmine.
+    from betting_ml.utils.data_loader import get_snowflake_connection
+    return get_snowflake_connection(schema="statsapi")
 
 
 # ── VARIANT serialization ────────────────────────────────────────────────────

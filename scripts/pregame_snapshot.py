@@ -25,13 +25,6 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import snowflake.connector
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.serialization import (
-    Encoding,
-    NoEncryption,
-    PrivateFormat,
-    load_pem_private_key,
-)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -41,41 +34,18 @@ PREGAME_MIN_MINUTES = 5
 PREGAME_MAX_MINUTES = 40
 
 
-def _load_private_key(path: str, passphrase: str | None = None) -> bytes:
-    with open(path, "rb") as fh:
-        pem = fh.read()
-    pwd = passphrase.encode() if passphrase else None
-    key = load_pem_private_key(pem, password=pwd, backend=default_backend())
-    return key.private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())
-
-
 def get_connection() -> snowflake.connector.SnowflakeConnection:
-    required = ["SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_WAREHOUSE"]
-    missing = [k for k in required if not os.environ.get(k)]
-    if missing:
-        raise EnvironmentError(f"Missing required env vars: {', '.join(missing)}")
-
-    kwargs: dict = {
-        "account": os.environ["SNOWFLAKE_ACCOUNT"],
-        "user": os.environ["SNOWFLAKE_USER"],
-        "warehouse": os.environ["SNOWFLAKE_WAREHOUSE"],
-        "database": "baseball_data",
-    }
-    key_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
-    if key_path:
-        passphrase = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
-        kwargs["private_key"] = _load_private_key(key_path, passphrase)
-    else:
-        password = os.environ.get("SNOWFLAKE_PASSWORD")
-        if not password:
-            raise EnvironmentError(
-                "Either SNOWFLAKE_PRIVATE_KEY_PATH or SNOWFLAKE_PASSWORD must be set."
-            )
-        kwargs["password"] = password
-    role = os.environ.get("SNOWFLAKE_ROLE")
-    if role:
-        kwargs["role"] = role
-    return snowflake.connector.connect(**kwargs)
+    # INC-22 straggler cure (2026-07-05): the box authenticates via the INLINE key
+    # (SNOWFLAKE_PRIVATE_KEY), NOT a key FILE, and has NO SNOWFLAKE_PASSWORD — the old
+    # file-path→password resolver KeyError'd on the box. Delegate to the shared
+    # PATH-if-exists→inline→password resolver. Queries are fully-qualified, so the default
+    # schema is immaterial. See CLAUDE.md INC-22 landmine.
+    import sys as _sys
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _root not in _sys.path:
+        _sys.path.insert(0, _root)
+    from betting_ml.utils.data_loader import get_snowflake_connection
+    return get_snowflake_connection()
 
 
 def write_github_output(key: str, value: str) -> None:
