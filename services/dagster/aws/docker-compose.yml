@@ -248,7 +248,17 @@ services:
     image: credence-odds-capture:latest
     env_file: [.env]
     environment:
-      AWS_DEFAULT_REGION: us-east-1
+      # S3-NATIVE odds capture (Snowflake decommission, 2026-07-05): the writer lands the S3
+      # lakehouse_raw/mlb_odds_raw + /mlb_events_raw parquet DIRECTLY and does NOT write Snowflake — that
+      # reduces the SF footprint (the whole point) and retires the SF→S3 export_odds_raw_to_s3 cron (which
+      # would otherwise clobber the fresh S3 by re-mirroring the now-frozen SF table). The serving path
+      # already reads S3: stg_oddsapi_odds (lakehouse_raw parquet / lakehouse_ext), mart_bookmaker_disagreement,
+      # and the odds-freshness sensor (W12) all read lakehouse_raw/mlb_odds_raw. The image installs
+      # boto3+pyarrow + copies lakehouse_raw_writer so it CAN write S3.
+      # ⚠️ Region MUST be us-east-2 (the baseball-betting-ml-artifacts bucket; us-east-1 → PermanentRedirect
+      # on put_object — the same trap called out on derivative-capture).
+      AWS_DEFAULT_REGION: us-east-2
+      LAKEHOUSE_RAW_WRITE_MODE: s3
     profiles: [capture]
     restart: "no"
 

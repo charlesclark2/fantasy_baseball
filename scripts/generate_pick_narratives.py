@@ -19,7 +19,6 @@ BEFORE MERGING: test with dev schema first:
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import logging
 import os
@@ -28,8 +27,6 @@ from datetime import date as _date
 from pathlib import Path
 
 import snowflake.connector
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
@@ -38,38 +35,17 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
 
 
-def _load_private_key() -> bytes:
-    pk_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
-    if pk_path:
-        with open(pk_path, "rb") as fh:
-            pem_bytes = fh.read()
-    else:
-        key_val = os.environ.get("SNOWFLAKE_PRIVATE_KEY", "").strip()
-        if not key_val:
-            raise RuntimeError("Neither SNOWFLAKE_PRIVATE_KEY_PATH nor SNOWFLAKE_PRIVATE_KEY is set")
-        if not key_val.startswith("-----"):
-            key_val = base64.b64decode(key_val).decode("utf-8")
-        pem_bytes = key_val.encode("utf-8")
-    p_key = serialization.load_pem_private_key(pem_bytes, password=None, backend=default_backend())
-    return p_key.private_bytes(
-        encoding=serialization.Encoding.DER,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
-
-
 def _connect_snowflake() -> snowflake.connector.SnowflakeConnection:
-    kwargs = dict(
-        account=os.environ["SNOWFLAKE_ACCOUNT"],
-        user=os.environ["SNOWFLAKE_USER"],
-        warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
-        database="baseball_data",
-        private_key=_load_private_key(),
-    )
-    role = os.environ.get("SNOWFLAKE_ROLE")
-    if role:
-        kwargs["role"] = role
-    return snowflake.connector.connect(**kwargs)
+    # INC-22 straggler cure (2026-07-05): the previous hand-rolled inline-key parser did NOT
+    # unescape the box's \n-escaped SNOWFLAKE_PRIVATE_KEY (settle_user_bets crashed the same way:
+    # ValueError InvalidByte(0, 92)). Delegate to the shared PATH-if-exists→inline→password
+    # resolver (the only blessed parser). Cortex calls + queries are fully-qualified
+    # (baseball_data.*), so the default schema is immaterial. See CLAUDE.md INC-22.
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _root not in sys.path:
+        sys.path.insert(0, _root)
+    from betting_ml.utils.data_loader import get_snowflake_connection
+    return get_snowflake_connection(schema="betting")
 
 _SYSTEM_PROMPT = """\
 You write sharp, analytical explanations of why a baseball model landed on a prediction.

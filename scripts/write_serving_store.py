@@ -727,7 +727,10 @@ WHERE g.game_pk IN ({game_pk_list})
 
 _STARTERS_BATCH = """
 WITH game_meta AS (
-    SELECT game_pk, game_date, YEAR(game_date) AS game_year
+    -- INC-23: game_date from stg_statsapi_games is an ISO VARCHAR in the S3 lakehouse view
+    -- (TIMESTAMP-origin, stringified by the W8a cure) → year(VARCHAR) HALTs DuckDB in --s3 mode.
+    -- Cast ::date at the use-site (no-op on the native Snowflake DATE/TS). See CLAUDE.md INC-23.
+    SELECT game_pk, game_date, YEAR(game_date::date) AS game_year
     FROM baseball_data.betting.stg_statsapi_games
     WHERE game_pk IN ({game_pk_list})
 ),
@@ -1111,7 +1114,7 @@ home_recent AS (
     CROSS JOIN game_meta gm
     WHERE g.abstract_game_state = 'Final'
       AND g.game_date < gm.game_date
-      AND YEAR(g.game_date) = YEAR(gm.game_date)
+      AND YEAR(g.game_date::date) = YEAR(gm.game_date::date)  -- INC-23: stg_statsapi_games game_date is ISO VARCHAR in --s3
       AND g.home_is_winner IS NOT NULL
       AND (g.home_team_id = gm.home_team_id OR g.away_team_id = gm.home_team_id)
 ),
@@ -1126,7 +1129,7 @@ away_recent AS (
     CROSS JOIN game_meta gm
     WHERE g.abstract_game_state = 'Final'
       AND g.game_date < gm.game_date
-      AND YEAR(g.game_date) = YEAR(gm.game_date)
+      AND YEAR(g.game_date::date) = YEAR(gm.game_date::date)  -- INC-23: stg_statsapi_games game_date is ISO VARCHAR in --s3
       AND g.home_is_winner IS NOT NULL
       AND (g.home_team_id = gm.away_team_id OR g.away_team_id = gm.away_team_id)
 ),
@@ -1157,7 +1160,7 @@ h2h_games AS (
     FROM baseball_data.betting.stg_statsapi_games g
     CROSS JOIN game_meta gm
     WHERE g.abstract_game_state = 'Final'
-      AND YEAR(g.game_date) = YEAR(gm.game_date)
+      AND YEAR(g.game_date::date) = YEAR(gm.game_date::date)  -- INC-23: stg_statsapi_games game_date is ISO VARCHAR in --s3
       AND g.game_date < gm.game_date
       AND g.home_is_winner IS NOT NULL
       AND (
@@ -2925,7 +2928,7 @@ SELECT
     e.elo_after_game                        AS elo
 FROM baseball_data.betting.team_elo_history e
 JOIN baseball_data.betting.dim_team_name_lookup t ON t.canonical_abbrev = e.team_abbrev
-WHERE e.game_date >= DATEADD(day, -60, CURRENT_DATE)
+WHERE e.game_date::date >= DATEADD(day, -60, CURRENT_DATE)  -- INC-23: ::date safe on native DATE; parses ISO VARCHAR in --s3
 QUALIFY ROW_NUMBER() OVER (PARTITION BY t.team_id ORDER BY e.game_date DESC) <= 30
 ORDER BY t.team_id, e.game_date
 """
@@ -3006,9 +3009,9 @@ JOIN baseball_data.betting.dim_team_name_lookup opp
     ON opp.team_id = CASE WHEN g.home_team_id = t.team_id THEN g.away_team_id ELSE g.home_team_id END
 LEFT JOIN probable ph ON ph.game_pk = g.game_pk AND ph.side = 'home'
 LEFT JOIN probable pa ON pa.game_pk = g.game_pk AND pa.side = 'away'
-WHERE g.game_date BETWEEN CURRENT_DATE AND DATEADD(day, 7, CURRENT_DATE)
+WHERE g.game_date::date BETWEEN CURRENT_DATE AND DATEADD(day, 7, CURRENT_DATE)  -- INC-23: stg_statsapi_games game_date is ISO VARCHAR in --s3
   AND g.abstract_game_state NOT IN ('Final', 'Live')
-  AND YEAR(g.game_date) = YEAR(CURRENT_DATE)
+  AND YEAR(g.game_date::date) = YEAR(CURRENT_DATE)
 ORDER BY t.team_id, g.game_date
 """
 
