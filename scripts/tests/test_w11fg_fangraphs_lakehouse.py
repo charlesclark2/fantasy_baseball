@@ -16,18 +16,23 @@ _FCT = "fct_fangraphs_pitching_analytics"
 _SOURCE = "fg_zips_pitching_raw"
 
 
-def test_zips_pitching_writer_uses_shared_dispatcher():
+def test_zips_pitching_writer_stays_snowflake_only():
+    """E11.1-W11-FG: the writer is SF-only (matches zips_hitting) — NO dual-write dispatcher, because
+    the stg reads the export-bridge snapshot, not a live-writer lakehouse_raw/ mirror."""
     mod = importlib.import_module("ingest_fangraphs_zips_pitching")
-    assert getattr(mod, "_LAKEHOUSE_SOURCE") == _SOURCE
-    assert hasattr(mod, "append_raw_rows_lakehouse") and hasattr(mod, "w11_write_mode")
+    assert not hasattr(mod, "_LAKEHOUSE_SOURCE"), "writer should NOT dual-write (no _LAKEHOUSE_SOURCE)"
+    assert not hasattr(mod, "append_raw_rows_lakehouse")
+    assert hasattr(mod, "append_raw_rows"), "writer uses the SF-only append_raw_rows"
 
 
-def test_default_write_mode_is_snowflake_only(monkeypatch):
-    """The flip is NON-BREAKING by default: no W11_RAW_WRITE_MODE / LAKEHOUSE_RAW_WRITE_MODE set → 'snowflake'."""
-    lrw = importlib.import_module("utils.lakehouse_raw_writer")
-    monkeypatch.delenv("W11_RAW_WRITE_MODE", raising=False)
-    monkeypatch.delenv("LAKEHOUSE_RAW_WRITE_MODE", raising=False)
-    assert lrw.w11_write_mode() == "snowflake"
+def test_stg_reads_export_bridge_path_not_live_mirror():
+    """The stg MUST read lakehouse/ (export-bridge snapshot, like zips_hitting), NOT lakehouse_raw/ (the
+    in-season live-writer mirror) — the empty-lakehouse_raw build failure the fix corrects."""
+    run_w1 = importlib.import_module("run_w1_lakehouse")
+    stg_sql = run_w1.extract_duckdb_sql(_STG)
+    assert "read_parquet" in stg_sql and _SOURCE in stg_sql, "stg must read the fg_zips_pitching_raw parquet"
+    assert "/lakehouse/fg_zips_pitching_raw/" in stg_sql, "stg must read the export-bridge lakehouse/ path"
+    assert "/lakehouse_raw/fg_zips_pitching_raw/" not in stg_sql, "stg must NOT read the empty lakehouse_raw/ path"
 
 
 def test_models_render_clean_duckdb_branch():
@@ -36,8 +41,6 @@ def test_models_render_clean_duckdb_branch():
         sql = run_w1.extract_duckdb_sql(m)
         assert "{{" not in sql and "{%" not in sql, f"{m}: unresolved Jinja"
         assert "lakehouse_ext" not in sql.lower(), f"{m}: else-branch ext ref leaked into DuckDB SQL"
-    stg_sql = run_w1.extract_duckdb_sql(_STG)
-    assert "read_parquet" in stg_sql and _SOURCE in stg_sql, "stg must read the fg_zips_pitching_raw parquet"
     # The DuckDB fct joins the two registered stg VIEWS by bare name (no ext ref, no {{ ref() }}).
     fct_sql = run_w1.extract_duckdb_sql(_FCT).lower()
     assert "stg_fangraphs__stuff_plus" in fct_sql and "stg_fangraphs__zips_pitching" in fct_sql

@@ -94,6 +94,15 @@ SHELL=/bin/bash
 # page via SNS on non-zero exit (route its output to the same channel).
 30 12,17 * * * source /home/ec2-user/app/services/dagster/aws/notify.sh; docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e SNOWFLAKE_PRIVATE_KEY_PATH=/tmp/snowflake_rsa_key.pem dagster-codeloc python scripts/check_data_freshness.py >> /home/ec2-user/freshness-cron.log 2>&1 || notify ERROR "data-freshness check failed" "scripts/check_data_freshness.py exited non-zero — see /home/ec2-user/freshness-cron.log on the box (SSM)."
 
+# ── Weekly Docker disk cleanup (credence-box-disk alarm mitigation, 2026-07-05) ──
+# The 30 GB root volume drifts toward the 85% CWAgent alarm on every `up -d --build`
+# (dangling <none> image layers + build cache) — Byparr/Camoufox made the baseline
+# heavier. This reclaims stopped containers + dangling images + unused networks +
+# build cache. SAFE: it never removes images used by a RUNNING container. Sunday
+# 09:47 UTC (quiet — outside the 13:00-04:00 props/odds window). Pairs with the EBS
+# bump to 50 GB (aws_resources.md) as belt-and-suspenders.
+47 9 * * 0 docker system prune -f >> /home/ec2-user/docker-prune-cron.log 2>&1; docker builder prune -af >> /home/ec2-user/docker-prune-cron.log 2>&1
+
 # ── OPTIONAL (interim, until P4): refresh SERVED odds prices ──────────────────
 # P3 restores the RAW odds feed (above) → mlb_odds_raw is current. But DISPLAYED
 # prices read mart_odds_outcomes, which only refreshes when the odds marts rebuild

@@ -6,11 +6,12 @@
 {% if target.name == 'duckdb' %}
 
 with source as (
-    -- E11.1-W11-FG read-repoint: reads the raw mirror (lakehouse_raw/fg_zips_pitching_raw/) — the
-    -- one-time W4 export bridge (export_w4_raw_to_s3.py) landed history; the live API writer
-    -- (ingest_fangraphs_zips_pitching.py, dual-write under W11_RAW_WRITE_MODE) keeps it fresh.
-    -- ingestion_ts is stamped now() by the writer → the qualify below picks the freshest load.
-    select * from read_parquet('{{ lakehouse_raw_loc("fg_zips_pitching_raw") }}**/*.parquet', union_by_name=true)
+    -- E11.1-W11-FG: reads the W4 export-bridge SNAPSHOT (lakehouse/fg_zips_pitching_raw/, written by
+    -- export_w4_raw_to_s3.py from the whole SF table) — the SAME path + cadence as the already-migrated
+    -- zips_hitting sibling. ZiPS pitching is pre-season-static CSV data (the 'zips' rows fct uses come
+    -- from the SF-only CSV loader), so there is NO in-season live writer; freshness = re-run the bridge
+    -- after an annual CSV load. (Contrast: the in-season stuff_plus stg reads the lakehouse_raw/ live mirror.)
+    select * from read_parquet('{{ lakehouse_loc("fg_zips_pitching_raw") }}**/*.parquet', union_by_name=true)
 ),
 
 extracted as (
