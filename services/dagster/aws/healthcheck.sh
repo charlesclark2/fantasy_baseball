@@ -51,7 +51,12 @@ curl -fsS -o /dev/null --max-time 10 http://localhost:3000 2>/dev/null \
   || fails+=("dagit unreachable on localhost:3000")
 $COMPOSE exec -T dagster-codeloc curl -fsS --max-time 10 http://dbt-runner:8080/health 2>/dev/null | grep -q '"ok"' \
   || fails+=("dbt-runner /health not ok")
-$COMPOSE exec -T dagster-codeloc curl -fsS --max-time 10 http://flaresolverr:8191/ 2>/dev/null | grep -qi flaresolverr \
+# Byparr (INC-26, 2026-07-05 — replaced EOL FlareSolverr) is FlareSolverr-API-compatible but its GET /
+# does NOT echo the literal "flaresolverr" the old probe grepped for (and its / may not even 200 — it's a
+# FastAPI app), so that content-string assertion FALSE-PAGED CRITICAL every run while Byparr was Up
+# (healthy) and pulling rows. Probe /health for a 2xx (Byparr's own Docker HEALTHCHECK uses it), falling
+# back to / for a classic FlareSolverr — reachability only, NO response-body string match.
+$COMPOSE exec -T dagster-codeloc sh -c 'curl -fsS -o /dev/null --max-time 10 http://flaresolverr:8191/health || curl -fsS -o /dev/null --max-time 10 http://flaresolverr:8191/' 2>/dev/null \
   || fails+=("flaresolverr unreachable on :8191")
 
 if [ "${#fails[@]}" -eq 0 ]; then
