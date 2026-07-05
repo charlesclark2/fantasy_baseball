@@ -161,12 +161,23 @@ services:
       retries: 5
     <<: *restart
 
-  # --- flaresolverr: FanGraphs Cloudflare proxy (~1 GB Chromium) ---------------
-  # ghcr image is multi-arch (arm64 OK on t4g/Graviton). No host port — only
-  # codeloc reaches it on the compose network at http://flaresolverr:8191/v1.
-  # Shares the instance's egress IP (see header) → satisfies cf_clearance.
+  # --- flaresolverr → BYPARR: FanGraphs Cloudflare proxy (Camoufox) ------------
+  # INC-26 (2026-07-05): FlareSolverr v3.3.21 is END-OF-LIFE and can no longer solve the
+  # Cloudflare challenge FanGraphs serves in 2026 — EVERY request (incl. the homepage) hung
+  # the full maxTimeout then 500'd, while a non-Cloudflare control (example.com) returned 200
+  # in 2s (proven by scripts/spikes/diagnose_fangraphs_500.py + a FlareSolverr-health probe).
+  # Byparr is the maintained, Camoufox-backed drop-in: SAME /v1 API + SAME port 8191, so
+  # FLARESOLVERR_URL=http://flaresolverr:8191/v1 and scripts/utils/fangraphs_client.py are
+  # UNCHANGED. Service name kept as `flaresolverr` so the compose-network DNS name is stable.
+  # No host port — only codeloc reaches it on the compose network. Shares the instance egress
+  # IP (see header) → satisfies cf_clearance. Multi-arch (arm64 OK on Graviton).
+  # ⚠️ PIN (INC-16-P5/P7 discipline): :latest is used for the initial cutover ONLY — once a
+  #    tag is verified working, pin it to that release tag/digest so a CD rebuild can't pull a
+  #    breaking upstream image silently.
+  # ⚠️ shm_size: Camoufox/Firefox crashes on the 64MB default /dev/shm → give it 2GB.
   flaresolverr:
-    image: ghcr.io/flaresolverr/flaresolverr:v3.3.21   # INC-16-P5/P7: pinned (was :latest — auto-build CD could pull a breaking upstream image silently)
+    image: ghcr.io/thephaseless/byparr:latest
+    shm_size: '2gb'
     environment:
       LOG_LEVEL: info
       TZ: America/New_York
