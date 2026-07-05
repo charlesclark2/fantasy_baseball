@@ -113,8 +113,8 @@ CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.stg_fangraphs__hitt
     POSITION                           VARCHAR        AS (VALUE:position::VARCHAR),
     SEASON                             NUMBER(38,0)   AS (VALUE:season::NUMBER(38,0)),
     WINDOW_TYPE                        VARCHAR        AS (VALUE:window_type::VARCHAR),
-    WINDOW_START                       DATE           AS (VALUE:window_start::DATE),
-    WINDOW_END                         DATE           AS (VALUE:window_end::DATE),
+    WINDOW_START                       VARCHAR        AS (VALUE:window_start::VARCHAR),
+    WINDOW_END                         VARCHAR        AS (VALUE:window_end::VARCHAR),
     PA                                 FLOAT          AS (VALUE:pa::FLOAT),
     AB                                 FLOAT          AS (VALUE:ab::FLOAT),
     G                                  FLOAT          AS (VALUE:g::FLOAT),
@@ -274,7 +274,7 @@ CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.stg_statsapi_player
     WEIGHT_LBS                         FLOAT          AS (VALUE:weight_lbs::FLOAT),
     PRIMARY_POSITION_CODE              VARCHAR        AS (VALUE:primary_position_code::VARCHAR),
     ACTIVE                             BOOLEAN        AS (VALUE:active::BOOLEAN),
-    LAST_FETCHED_AT                    TIMESTAMP_NTZ  AS (VALUE:last_fetched_at::TIMESTAMP_NTZ)
+    LAST_FETCHED_AT                    VARCHAR        AS (VALUE:last_fetched_at::VARCHAR)
 )
 WITH LOCATION = @baseball_data.lakehouse_ext.s3_lakehouse/stg_statsapi_player_profiles/
 FILE_FORMAT = baseball_data.lakehouse_ext.parquet_snappy
@@ -435,11 +435,13 @@ COMMENT = 'E11.1-W4: mart_catcher_framing from S3 lakehouse parquet';
 
 -- Verification (run after CREATE):
 -- SELECT count(*) FROM baseball_data.lakehouse_ext.stg_fangraphs__stuff_plus;
+-- SELECT count(*) FROM baseball_data.lakehouse_ext.stg_fangraphs__zips_pitching;
 -- SELECT count(*) FROM baseball_data.lakehouse_ext.stg_fangraphs__pitcher_arsenal;
 -- SELECT count(*) FROM baseball_data.lakehouse_ext.stg_fangraphs__zips_hitting;
 -- SELECT count(*) FROM baseball_data.lakehouse_ext.stg_fangraphs__hitting_leaderboard;
 -- SELECT count(*) FROM baseball_data.lakehouse_ext.fct_fangraphs_pitcher_arsenal_wide;
 -- SELECT count(*) FROM baseball_data.lakehouse_ext.fct_fangraphs_hitting_analytics;
+-- SELECT count(*) FROM baseball_data.lakehouse_ext.fct_fangraphs_pitching_analytics;
 -- SELECT count(*) FROM baseball_data.lakehouse_ext.stg_statsapi_player_profiles;
 -- SELECT count(*) FROM baseball_data.lakehouse_ext.mart_pitcher_arsenal_summary;
 -- SELECT count(*) FROM baseball_data.lakehouse_ext.mart_pitcher_profile_summary;
