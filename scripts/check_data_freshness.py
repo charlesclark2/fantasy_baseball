@@ -127,17 +127,11 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
         "game_day_only": False,
     },
     # ── Odds ingestion (INC-2, 2026-06-22) ──────────────────────────────────
-    # The Odds API /events feed died silently on 2026-06-04 and went unnoticed for
-    # 18 days because NO odds feed was monitored — it froze mart_game_odds_bridge
-    # (event_id NULL → has_odds=false → null serving odds + null totals). Monitor
-    # the LIVE /odds ingest (mlb_odds_raw). The /events table is now orphaned (the
-    # bridge was repointed onto /odds), so /odds is the feed that matters. It pulls
-    # hourly, 24/7, so a tight BLOCKING threshold is safe and has no off-day gap.
-    "baseball_data.oddsapi.mlb_odds_raw": {
-        "ts_col": "ingestion_ts",
-        "max_stale_hours": 8,   # hourly feed; 8h catches a real stall with no false alarm
-        "game_day_only": False,
-    },
+    # ⛔ mlb_odds_raw REMOVED 2026-07-05 — odds capture is now S3-NATIVE (LAKEHOUSE_RAW_WRITE_MODE=s3),
+    # so the Snowflake oddsapi.mlb_odds_raw table is FROZEN by design and a SF-table staleness check here
+    # would false-warn forever. Odds freshness is now owned by the odds-freshness sensor (E11.1-W12),
+    # which reads the S3 lakehouse_raw/mlb_odds_raw/ mirror the writer lands directly. Do NOT re-add a
+    # SF-table odds entry unless odds capture is reverted to write Snowflake.
     # ── Model-feature posteriors (INC-2 sweep, 2026-06-22) ──────────────────
     # These archetype / sequential / EB posteriors feed the matchup + bullpen
     # contract blocks but were UNMONITORED. The sweep found
