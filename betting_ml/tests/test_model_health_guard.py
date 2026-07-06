@@ -142,3 +142,45 @@ def test_spread_real_collapse_fails_gate():
         f"Flat-output model (spread=0.016) should FAIL the spread gate "
         f"(MIN_SPREAD_PROB={mh.MIN_SPREAD_PROB}). Got: {metrics.get('fail_reasons')}"
     )
+
+
+# ---------------------------------------------------------------------------
+# INC-24 / E13.8 calibration: de-leaked home_win at the market ceiling must PASS.
+# corr ≈ 0 and Brier ≈ no-skill are the HONEST limit of an efficient H2H market, not a
+# regression — only the flat-output (spread) leg gates home_win now.
+# ---------------------------------------------------------------------------
+
+def test_home_win_at_market_ceiling_passes_not_fails():
+    """A de-leaked classifier with healthy spread but corr≈0 / Brier≈no-skill must PASS,
+    with the corr/Brier misses recorded as advisory_flags, never as fail_reasons (INC-24)."""
+    import pandas as pd
+    rng = np.random.default_rng(7)
+    n, base = 80, 0.50
+    calibrated = rng.normal(base, 0.04, n).clip(0.01, 0.99)  # healthy spread ~0.04 (> 0.025)
+    outcome = rng.integers(0, 2, n).astype(float)            # independent → corr≈0, Brier≈no-skill
+    df = pd.DataFrame({
+        "calibrated_win_prob":     calibrated,
+        "consensus_win_prob":      calibrated,
+        "h2h_market_implied_prob": np.full(n, base),
+        "home_final_score":        np.where(outcome == 1, 5.0, 3.0),
+        "away_final_score":        np.where(outcome == 0, 5.0, 3.0),
+    })
+    metrics = mh._eval_home_win(df, min_games=30)
+    assert metrics["calibrated_spread"] >= mh.MIN_SPREAD_PROB   # spread is healthy
+    assert metrics["verdict"] == "PASS", (
+        f"de-leaked home_win at the market ceiling must PASS, not FAIL. "
+        f"fail_reasons={metrics.get('fail_reasons')}"
+    )
+    fr = metrics.get("fail_reasons") or ""
+    assert "corr" not in fr and "Brier" not in fr, (
+        f"corr/Brier must not gate home_win post-calibration; found in fail_reasons: {fr}"
+    )
+
+
+def test_home_win_flat_still_fails_even_at_ceiling():
+    """Calibration must NOT swallow real corruption: a flat classifier (spread below floor)
+    still FAILs even when corr/Brier are also missing (the INC-24 market-blind signature)."""
+    df = _make_hw_df(n=60, calibrated_spread=0.010)
+    metrics = mh._eval_home_win(df, min_games=30)
+    assert metrics["verdict"] == "FAIL"
+    assert "spread" in (metrics.get("fail_reasons") or "")

@@ -9,6 +9,7 @@ from pipeline.ops.daily_ingestion_ops import (
     check_monitors_healthy_op,
     check_odds_coverage_op,
     check_feature_block_coverage_op,
+    check_served_prediction_integrity_op,
     check_prediction_coverage,
     compute_elo,
     compute_model_health,
@@ -203,6 +204,13 @@ def daily_ingestion_job():
     # E5.5 — daily K-projection payloads for the /props page. WARN-tier; fans out from
     # predict_today_morning in parallel with the zone overlays; writes DynamoDB + S3, never blocks.
     write_pitcher_k_projections_op(start=s19)
+    # E11.22 — served-prediction integrity gate (the permanent INPUT-integrity monitor). Reads
+    # TODAY's just-written daily_model_predictions and ALARMS per serving tier on the migration
+    # failure classes parity misses and the 30-day sensor only catches weeks later: wrong-date
+    # (INC-22), fell-to-intraday_fallback (INC-25), post_lineup coverage collapse (INC-17-P2), and
+    # FLAT output (INC-24). Fans out from predict (must run AFTER it writes) so it never blocks the
+    # serving writes. ALERT-continue by default; HALTs only when SERVED_INTEGRITY_STRICT=1.
+    check_served_prediction_integrity_op(start=s19)
     # E5.1b — daily player-prop odds catch-up (mlb/props/ S3). WARN-tier; hangs off predict so
     # its ~few-minute paid Odds API pull never delays the serving-critical predict path. Gated
     # PROPS_DAILY_INGEST (default OFF) → a no-op loud-skip until the operator flips it. Historical

@@ -65,6 +65,18 @@ MIN_SPREAD_TOTALS = 0.50       # std of pred_total_runs (runs); a useful model v
 MIN_SPREAD_RUNDIFF = 0.50      # std of pred_run_diff_loc (runs)
 BRIER_MARGIN = 0.002           # Brier must beat no-skill by at least this to count as skill
 
+# INC-24 / E13.8 CALIBRATION — gate home_win on FLAT OUTPUT only, not on beating the market.
+# A DE-LEAKED home_win classifier (E13.11 v6) sits at the market ceiling: MLB H2H is a
+# near-efficient market (E13.8), so an honest, non-leaky model has corr(prob, outcome) ≈ 0 and
+# Brier ≈ no-skill. Those are the HONEST LIMIT, not a regression — yet the original gate treated
+# them as FAIL legs and cried wolf across the migration window (INC-24: home_win pinned at the
+# no-skill floor was reported as a failure when it was simply the ceiling). So for home_win only
+# the SPREAD leg is a FAIL condition: a flat / near-constant probability output IS real corruption
+# (market-blind or constant-imputed features), whereas a corr/Brier miss is EXPECTED and recorded
+# as ADVISORY. total_runs / run_differential keep BOTH legs — a near-constant totals model is the
+# real signal there (also the concrete INC-24 symptom: total_runs spread 0.447).
+HOME_WIN_GATE_ON_SPREAD_ONLY = True
+
 # INC-17-P3: post_lineup matchup-block coverage check. When lineup data flows correctly,
 # feature_coverage_score for post_lineup predictions should average ≥ 0.85 (i.e., at most
 # one non-lineup block, like odds, can be missing). A drop below this threshold means the
@@ -193,14 +205,26 @@ def _eval_home_win(df: pd.DataFrame, min_games: int = MIN_GAMES) -> dict:
         else None
     )
 
-    # Gate: needs spread, needs corr, must beat no-skill Brier.
+    # Gate. FLAT OUTPUT (spread) is always a FAIL — it means the classifier stopped
+    # discriminating (market-blind / constant-imputed features, the INC-24 signature). The
+    # corr and beat-no-skill-Brier legs are the market-ceiling legs: for a de-leaked model
+    # they are EXPECTED to miss (E13.8), so under HOME_WIN_GATE_ON_SPREAD_ONLY they are recorded
+    # as ADVISORY rather than FAIL, so the standing gate stops crying wolf on the honest ceiling.
     reasons: list[str] = []
     if not (metrics["calibrated_spread"] >= MIN_SPREAD_PROB):
         reasons.append(f"spread {metrics['calibrated_spread']:.3f} < {MIN_SPREAD_PROB} (flat output)")
+    ceiling_notes: list[str] = []
     if not (metrics["calibrated_corr"] >= MIN_CORR_CLASS):
-        reasons.append(f"corr {metrics['calibrated_corr']:.3f} < {MIN_CORR_CLASS}")
+        ceiling_notes.append(f"corr {metrics['calibrated_corr']:.3f} < {MIN_CORR_CLASS}")
     if not (metrics["calibrated_brier"] < metrics["no_skill_brier"] - BRIER_MARGIN):
-        reasons.append(f"Brier {metrics['calibrated_brier']:.3f} not below no-skill {metrics['no_skill_brier']:.3f}-{BRIER_MARGIN}")
+        ceiling_notes.append(
+            f"Brier {metrics['calibrated_brier']:.3f} not below no-skill "
+            f"{metrics['no_skill_brier']:.3f}-{BRIER_MARGIN}")
+    if HOME_WIN_GATE_ON_SPREAD_ONLY:
+        metrics["advisory_flags"] = "; ".join(ceiling_notes)  # at-ceiling, not a failure
+    else:
+        reasons += ceiling_notes
+        metrics["advisory_flags"] = ""
     metrics["verdict"], metrics["fail_reasons"] = _verdict(n, reasons, min_games)
     return metrics
 
