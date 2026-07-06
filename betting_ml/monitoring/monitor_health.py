@@ -34,6 +34,12 @@ CRITICAL_SENSORS = frozenset({
 CRITICAL_SCHEDULES = frozenset({
     "daily_ingestion_job_schedule",
     "odds_clv_rebuild_daily",
+    # 2026-07-07: the reliable 30-min cron backstop for the lineup re-score (the
+    # lineup_monitor_sensor tick was unreliable → repeated manual kicks). Serving-critical —
+    # a manual STOP means post_lineup predictions silently stop refreshing. Two exprs cover
+    # the game-day window (cron can't wrap midnight).
+    "lineup_monitor_schedule_daytime",
+    "lineup_monitor_schedule_overnight",
 })
 # Intraday / cutover env flags that must be permanently "1" on the box. An unset one = a
 # silently-gated-off refresh (3 of the 5 incidents). Scoped to the flags we are confident should
