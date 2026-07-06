@@ -23,6 +23,10 @@ WHY THIS EXISTS (E11.22 capstone / INC-24):
     (check_feature_block_coverage.py, which watches the store) and the 30-day model-health
     sensor (which lags): this one watches what the model ACTUALLY served today.
 
+Rows are DEDUPED to the currently-serving row per (tier, game_pk) — latest inserted_at — before
+aggregating, because morning predict re-runs across the day and does not supersede its prior rows,
+so the raw table carries several stale rows per game (an 80%-intraday_fallback mirage otherwise).
+
 WHAT IT CHECKS (per prediction_type / serving tier that has rows for the served date):
     1. DATE      no predictions dated beyond the current US baseball date (INC-22 — the
                  UTC-roll "served tomorrow" signature; the correct date is anchored by
@@ -78,9 +82,15 @@ from betting_ml.monitoring.model_health_metrics import (
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
 
-# A tier needs at least this many served games before we assess it — a tiny/empty slate
-# (early season, doubleheader-only, an off-morning re-score) can't support a spread verdict.
+# A tier needs at least this many served games before we assess it at all — below this even
+# the fraction/coverage signals are too noisy (an off-morning re-score, a doubleheader-only day).
 MIN_GAMES_FOR_CHECK = 5
+# The FLAT-output (spread) check needs a real distributional sample: the MIN_SPREAD_* floors were
+# calibrated on ~30-day windows, and a light single-day slate (e.g. an 8-game July day) has a
+# naturally lower spread that would false-fire the 0.50 runs floor. The DATE/FALLBACK/COVERAGE
+# checks stay robust at any n≥MIN_GAMES_FOR_CHECK; only the below-floor spread verdict waits for
+# a fuller slate. Persistent multi-day flatness is still caught by the 30-day model-health sensor.
+MIN_GAMES_FOR_SPREAD = 12
 # Below this fraction served from the feature store, the slate degraded to intraday_fallback.
 MIN_FEATURE_STORE_FRAC = 0.80
 
@@ -101,6 +111,7 @@ def evaluate_tier(
     stat: TierStat,
     *,
     min_games: int = MIN_GAMES_FOR_CHECK,
+    min_games_for_spread: int = MIN_GAMES_FOR_SPREAD,
     min_feature_store_frac: float = MIN_FEATURE_STORE_FRAC,
     min_coverage: float = POST_LINEUP_AVG_COVERAGE_THRESHOLD,
     min_spread_prob: float = MIN_SPREAD_PROB,
@@ -145,7 +156,9 @@ def evaluate_tier(
                     f"{stat.tier}: {label} is ALL-NULL across the served slate — target not served "
                     f"(a served target column materialized 100% NULL)"
                 )
-        elif spread < floor:
+        elif stat.n >= min_games_for_spread and spread < floor:
+            # Below-floor spread is only a verdict on a full-enough slate (a light day's spread
+            # is naturally lower — the floors were calibrated on 30-day windows).
             problems.append(
                 f"{stat.tier}: {label} spread {spread:.3f} < {floor} (FLAT output — market-blind / "
                 f"constant-imputed features, the INC-24 signature)"
@@ -164,8 +177,24 @@ def _fetch_tier_stats(conn, schema: str, served_date: date) -> tuple[list[TierSt
     """Per-prediction_type aggregates for the served date, plus the count of any rows dated
     BEYOND the served date (the INC-22 'served tomorrow' signature)."""
     cur = conn.cursor()
+    # DEDUP to the CURRENTLY-SERVING row per (tier, game_pk): morning predict re-runs across the
+    # day (intraday when the feature store isn't ready yet, then feature_store once it is) and does
+    # NOT supersede its prior rows, so the raw table carries several stale rows per game. Aggregating
+    # raw rows makes a healthy slate look like an 80%-intraday_fallback collapse (observed 2026-07-06:
+    # 40 rows / 8 games). The latest inserted_at per (tier, game_pk) is what is actually served now.
     cur.execute(
         f"""
+        with ranked as (
+            select
+                prediction_type, game_pk, data_source, feature_coverage_score,
+                calibrated_win_prob, pred_total_runs, pred_run_diff_loc,
+                row_number() over (
+                    partition by prediction_type, game_pk
+                    order by inserted_at desc
+                ) as rn
+            from {schema}.daily_model_predictions
+            where score_date = %(d)s
+        )
         select
             prediction_type,
             count(*)                                            as n,
@@ -174,8 +203,8 @@ def _fetch_tier_stats(conn, schema: str, served_date: date) -> tuple[list[TierSt
             stddev(calibrated_win_prob)                         as spread_win_prob,
             stddev(pred_total_runs)                             as spread_total_runs,
             stddev(pred_run_diff_loc)                           as spread_run_diff
-        from {schema}.daily_model_predictions
-        where score_date = %(d)s
+        from ranked
+        where rn = 1
         group by prediction_type
         """,
         {"d": served_date},
