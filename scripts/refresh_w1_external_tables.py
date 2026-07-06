@@ -290,6 +290,12 @@ W11D_TABLES = [
     "feature_pregame_public_betting_features",
 ]
 
+# E11.22: player_transactions read-cutover — the external table over the run_w1_lakehouse.py --w11tx
+# parquet (generate_w11tx_external_table.py). TABLE on the Snowflake side (no incremental). Refreshed
+# via --w11tx. Once the SF raw is dropped, add this to the DAILY REQUIRED set (below) so the ext table
+# never goes stale (the model's serving read now depends on it).
+W11TX_TABLES = ["stg_statsapi_transactions"]
+
 
 def get_snowflake_conn():
     # INC-22: on the EC2 box Snowflake auth is the INLINE key (SNOWFLAKE_PRIVATE_KEY,
@@ -371,6 +377,9 @@ def main():
                          "tables (after run_w1_lakehouse.py --w11d). Best-effort — these don't "
                          "exist until the W11d build is enabled, so a missing table is an "
                          "expected skip.")
+    ap.add_argument("--w11tx", action="store_true",
+                    help="E11.22: refresh only the stg_statsapi_transactions external table (after "
+                         "run_w1_lakehouse.py --w11tx). Best-effort until the SF raw is dropped.")
     args = ap.parse_args()
 
     # E11.1-W8a: the W8a build op refreshes its own external tables right after the build
@@ -425,6 +434,15 @@ def main():
         print("Refreshing W11d public-betting stg + feature external tables (--w11d):")
         _refresh(W11D_TABLES, required=set())
         print("W11d public-betting external-table refresh complete (best-effort).")
+        return
+
+    # E11.22: refresh only the player_transactions stg external table (after run_w1_lakehouse.py
+    # --w11tx). Best-effort until the SF raw is dropped, at which point the serving read depends on
+    # it → move W11TX_TABLES into the DAILY REQUIRED set below.
+    if args.w11tx:
+        print("Refreshing W11tx transactions stg external table (--w11tx):")
+        _refresh(W11TX_TABLES, required=set())
+        print("W11tx transactions external-table refresh complete (best-effort).")
         return
 
     # E11.1-W9: the signal-store mirror op refreshes its own external tables right after writing

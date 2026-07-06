@@ -70,47 +70,12 @@ where rn = 1
 
 {{ config(materialized='table') }}
 
-with
-
-raw as (
-    select * from {{ source('statsapi', 'player_transactions') }}
-),
-
-deduped as (
-    select
-        transaction_id,
-        player_id,
-        player_name,
-        team_id,
-        team_name,
-        transaction_date,
-        effective_date,
-        resolution_date,
-        type_code,
-        type_description,
-        description,
-        ingestion_ts,
-        row_number() over (
-            partition by transaction_id
-            order by ingestion_ts desc
-        ) as rn
-    from raw
-)
-
-select
-    transaction_id,
-    player_id,
-    player_name,
-    team_id,
-    team_name,
-    transaction_date,
-    effective_date,
-    resolution_date,
-    type_code,
-    type_description,
-    description,
-    ingestion_ts
-from deduped
-where rn = 1
+-- E11.22 read-cutover: the Snowflake branch now reads the S3 lakehouse via the external table
+-- (baseball_data.lakehouse_ext.stg_statsapi_transactions), built by run_w1_lakehouse.py --w11tx from
+-- the player_transactions raw mirror (dedup by transaction_id happens in that DuckDB build). This
+-- replaces the last direct statsapi.player_transactions source read, so the SF raw table can be
+-- dropped like the rest of the A/B/C/D batch. Same pattern as stg_statsapi_umpire_game_log.
+-- (No Jinja source call in this comment on purpose — fusion evaluates Jinja inside comments.)
+select * from baseball_data.lakehouse_ext.stg_statsapi_transactions
 
 {% endif %}
