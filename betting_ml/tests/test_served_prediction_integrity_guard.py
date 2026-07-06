@@ -77,10 +77,18 @@ class TestEvaluateTier:
         assert not any("feature_coverage_score" in p for p in probs)
 
     def test_flat_total_runs_is_the_inc24_signature(self):
-        s = _healthy()
+        s = _healthy(n=15)   # ≥ MIN_GAMES_FOR_SPREAD
         s.spread_total_runs = 0.20   # < MIN_SPREAD_TOTALS → near-constant (INC-24)
         probs = spi.evaluate_tier(s)
         assert any("total_runs" in p and "FLAT" in p for p in probs)
+
+    def test_flat_spread_not_asserted_on_a_light_slate(self):
+        # The 2026-07-06 case: an 8-game slate served 100% from the feature store, but with a
+        # naturally lower total_runs spread. Below MIN_GAMES_FOR_SPREAD the flat verdict is NOT
+        # asserted (small-sample), so a healthy light day does not false-fire.
+        s = _healthy(n=8)
+        s.spread_total_runs = 0.44   # below the 0.50 floor but only 8 games
+        assert spi.evaluate_tier(s) == []
 
     def test_flat_home_win_is_flagged(self):
         s = _healthy()

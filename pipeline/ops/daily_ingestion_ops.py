@@ -1199,18 +1199,30 @@ def update_archetype_posteriors_op(context):
     # model-input refresh (the archetype-matchup block degrades gracefully — the pipeline
     # ran for weeks on stale posteriors with no serving outage), so a failure here must NOT
     # HALT the serving-critical daily job (predictions / dbt rebuilds run downstream).
-    # Log a loud WARNING and succeed; the source-scoped freshness monitor (E11.8) pages if
-    # the table goes stale. INC (2026-06-23): the op HALTed the whole daily job when the
-    # centroids/scaler pkls were missing from the image — now loaded from S3 + non-blocking.
+    # INC (2026-06-23): the op HALTed the whole daily job when the centroids/scaler pkls were
+    # missing from the image — now loaded from S3 + non-blocking.
+    #
+    # 2026-07-06 (E11.22): PROMOTED WARN → ALERT (send_alert). The prior WARN-tier swallow said
+    # "the source-scoped freshness monitor pages if the table goes stale" — but the W7a cutover
+    # (W7A_LAKEHOUSE_S3=1) made this op write the S3 parquet ONLY (the SF mart is frozen), while
+    # check_data_freshness.py still watches the FROZEN SF table → it CANNOT page. Result: the op
+    # failed silently 2026-06-28→07-05 (baked-image drift in the --s3 persist), serving 9-day-stale
+    # archetype posteriors → INC-17 post_lineup coverage 0.822 < 0.85, caught only downstream. So the
+    # op must page ITSELF. Still ALERT-tier (loud-but-continue): a failure never HALTs the serving job.
     try:
         _run_script(context, f"{_EB_DIR}/compute_archetype_posteriors.py",
                     ["--mode", "today"] + _w7a_s3_args())
     except Exception as exc:  # noqa: BLE001 — peripheral; never block the serving pipeline.
-        context.log.warning(
-            "WARNING: update_archetype_posteriors_op failed; continuing without a fresh "
-            "archetype refresh (mart_player_archetype_posteriors may be stale — the freshness "
-            f"monitor will alert if so). Error: {exc}"
+        msg = (
+            "update_archetype_posteriors_op failed; continuing without a fresh archetype refresh. "
+            "The archetype-matchup block (a heavy home_win component) will serve STALE and silently "
+            "degrade post_lineup feature_coverage until this lands — under W7A_LAKEHOUSE_S3 the write "
+            f"is S3-parquet-only, so the SF-watching freshness monitor will NOT catch it. Error: {exc}"
         )
+        context.log.warning("[ALERT] " + msg)
+        from pipeline.utils.alerting import send_alert
+        send_alert("Archetype posteriors refresh failed", msg,
+                   severity="ERROR", dedup_key="archetype_posteriors_refresh")
 
 
 # Story A2.11 — the forward-looking TODAY's-slate EB posteriors (starter + lineup)
