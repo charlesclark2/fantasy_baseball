@@ -142,6 +142,21 @@ if ! crontab "$CRONTAB"; then
     "deploy.sh could not install ${CRONTAB} (cronie missing / crond down / spool not writable). The capture crons (odds/derivative/weather/schedule) are NOT scheduled — odds WILL go stale. Fix on the box: 'sudo dnf install -y cronie && sudo systemctl enable --now crond', then re-run deploy." 2>/dev/null || true
   die "crontab reinstall failed — capture crons not scheduled (see CRITICAL alert)"
 fi
+# DOUBLE-FIRE GUARD (2026-07-05): the install above lands in the crontab of WHOEVER runs
+# deploy.sh — root when invoked by the CD via SSM, ec2-user for a manual `bash deploy.sh`
+# (and the original setup doc installed it under ec2-user). crond runs EVERY user's table,
+# so once both users carried it, every capture line fired TWICE per tick. That double-fire
+# was benign for idempotent captures but 409-collided the schedule-capture ticks on the
+# single-run dbt-runner → the lineup-staging dbt rebuild got dropped → stale lineups →
+# lineup_monitor_sensor had nothing to trigger (operator had to kick it manually). The
+# committed crontab is installed to THIS deploy's user above; now CLEAR the OTHER candidate
+# user's stray copy so the capture crons live under exactly one owner. `|| true` — best-effort
+# de-dup, never fails the deploy (falls back to prior behaviour if sudo is unavailable).
+if [ "$(id -un)" = "root" ]; then
+  sudo -u ec2-user crontab -r 2>/dev/null || true   # drop a stray ec2-user copy (manual-install legacy)
+else
+  sudo crontab -r 2>/dev/null || true                # drop a stray root copy (CD-as-root legacy)
+fi
 # A `crontab <file>` can return 0 yet leave an empty/partial table on some minimal AMIs;
 # verify the odds-capture line actually landed (the line whose absence == the INC-23 stall).
 # 2026-07-01/07-05: this verify false-failed 4 CD deploys (3× on 07-01, again on 07-05) while
