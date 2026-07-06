@@ -33,18 +33,14 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 FRESHNESS_THRESHOLDS: dict[str, dict] = {
-    # E11.12 antipattern fix: game_date is an EVENT date (the date games were played),
-    # not an ingest heartbeat. On multi-day off periods (e.g. All-Star break) it
-    # doesn't advance even though the daily job still fires — triggering false
-    # staleness alerts. game_day_only=True skips off-day checks; the HARD-ALERT
-    # statcast_freshness_sensor is the authoritative monitor for "is today's pitch
-    # data here?" and the check_data_freshness check is an auxiliary WARN backstop.
-    "baseball_data.savant.batter_pitches": {
-        "ts_col": "game_date",       # DATE; cast to TIMESTAMP_NTZ in query
-        "eod_offset_hours": 33,      # games end ~11pm ET; Statcast publishes ~9am ET next day ≈ 33h after UTC midnight
-        "max_stale_hours": 48,
-        "game_day_only": True,       # E11.12 fix: was False; event-date col → only check on game days
-    },
+    # ⛔ savant.batter_pitches REMOVED 2026-07-06 — the raw Snowflake table was DROPPED in the
+    # E11.1 lakehouse decommission (Statcast pitch data now lives as year-partitioned S3 parquet
+    # `stg_batter_pitches`). A SF-table freshness check here raised `002003 … Object … does not
+    # exist` and CRASHED the whole freshness run (blinding every OTHER check). Pitch freshness is
+    # owned by the HARD-ALERT statcast_freshness_sensor (E11.1-W12), which reads the S3 parquet via
+    # DuckDB and is the authoritative "is today's pitch data here?" monitor. Do NOT re-add a
+    # SF-table pitch entry. (The per-table try/except below now also degrades a future dropped
+    # object to a WARN instead of a total crash.)
     "baseball_data.fangraphs.fg_stuff_plus_raw": {
         "ts_col": "ingestion_ts",
         "max_stale_hours": 192,  # 8 days — weekly Sunday ingest
@@ -362,7 +358,18 @@ def run(check_date: date, dry_run: bool = False) -> None:
                 results.append({"table": table, "status": "SKIP (off day)", "hours_stale": None})
                 continue
 
-            max_ts = _max_ingestion_timestamp(query_table, ts_col, con, eod_offset_hours, where)
+            # Per-table isolation (2026-07-06): a single dropped/renamed/unauthorized object
+            # used to raise an uncaught ProgrammingError and crash the WHOLE run — one dead
+            # table blinded every other freshness check (the savant.batter_pitches decommission
+            # straggler). Catch per-table: record QUERY ERROR, breach only if blocking, continue.
+            try:
+                max_ts = _max_ingestion_timestamp(query_table, ts_col, con, eod_offset_hours, where)
+            except Exception as e:
+                log.warning("  %-55s QUERY ERROR (%s)", table, str(e).splitlines()[0][:120])
+                results.append({"table": table, "status": "QUERY ERROR", "hours_stale": None})
+                if not non_blocking:
+                    breaches.append(table)
+                continue
             if max_ts is None:
                 log.warning("  %-55s NO DATA", table)
                 results.append({"table": table, "status": "NO DATA", "hours_stale": None})
