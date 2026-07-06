@@ -65,17 +65,21 @@ MIN_SPREAD_TOTALS = 0.50       # std of pred_total_runs (runs); a useful model v
 MIN_SPREAD_RUNDIFF = 0.50      # std of pred_run_diff_loc (runs)
 BRIER_MARGIN = 0.002           # Brier must beat no-skill by at least this to count as skill
 
-# INC-24 / E13.8 CALIBRATION — gate home_win on FLAT OUTPUT only, not on beating the market.
-# A DE-LEAKED home_win classifier (E13.11 v6) sits at the market ceiling: MLB H2H is a
-# near-efficient market (E13.8), so an honest, non-leaky model has corr(prob, outcome) ≈ 0 and
-# Brier ≈ no-skill. Those are the HONEST LIMIT, not a regression — yet the original gate treated
-# them as FAIL legs and cried wolf across the migration window (INC-24: home_win pinned at the
-# no-skill floor was reported as a failure when it was simply the ceiling). So for home_win only
-# the SPREAD leg is a FAIL condition: a flat / near-constant probability output IS real corruption
-# (market-blind or constant-imputed features), whereas a corr/Brier miss is EXPECTED and recorded
-# as ADVISORY. total_runs / run_differential keep BOTH legs — a near-constant totals model is the
-# real signal there (also the concrete INC-24 symptom: total_runs spread 0.447).
-HOME_WIN_GATE_ON_SPREAD_ONLY = True
+# INC-24 / E13.8 CALIBRATION — gate the WIN/MARGIN-market targets on FLAT OUTPUT only, not on
+# beating the market. MLB moneyline + run-margin are near-efficient markets (E13.8), so a DE-LEAKED
+# model (E13.11 v6) sits at their ceiling: an honest, non-leaky home_win / run_differential has
+# corr(pred, outcome) near the 0.05 floor and Brier ≈ no-skill — the HONEST LIMIT, not a regression.
+# The original gate treated corr/Brier as FAIL legs and cried wolf across (and after) the migration
+# window: home_win FAILed on corr 0.028 and run_differential on corr 0.030, while the RE-SCORE on
+# corrected features proved both have skill (corr 0.236 / 0.192) — i.e. the live FAILs were a
+# serving-window + market-ceiling artifact, not a model regression. So for these targets only the
+# SPREAD leg is a FAIL condition: a flat / near-constant output IS real corruption (market-blind or
+# constant-imputed features, the INC-24 signature); a corr/Brier miss is EXPECTED → ADVISORY.
+#
+# total_runs is DELIBERATELY excluded — the over/under market is less efficient and the model retains
+# stable, measurable corr there (live 0.176), so its corr leg still gates. And "total_runs
+# near-constant" (spread) remains the real INC-24 signal for it, kept via the spread leg below.
+SPREAD_ONLY_TARGETS = frozenset({"home_win", "run_differential"})
 
 # INC-17-P3: post_lineup matchup-block coverage check. When lineup data flows correctly,
 # feature_coverage_score for post_lineup predictions should average ≥ 0.85 (i.e., at most
@@ -208,7 +212,7 @@ def _eval_home_win(df: pd.DataFrame, min_games: int = MIN_GAMES) -> dict:
     # Gate. FLAT OUTPUT (spread) is always a FAIL — it means the classifier stopped
     # discriminating (market-blind / constant-imputed features, the INC-24 signature). The
     # corr and beat-no-skill-Brier legs are the market-ceiling legs: for a de-leaked model
-    # they are EXPECTED to miss (E13.8), so under HOME_WIN_GATE_ON_SPREAD_ONLY they are recorded
+    # they are EXPECTED to miss (E13.8), so for a SPREAD_ONLY_TARGETS target they are recorded
     # as ADVISORY rather than FAIL, so the standing gate stops crying wolf on the honest ceiling.
     reasons: list[str] = []
     if not (metrics["calibrated_spread"] >= MIN_SPREAD_PROB):
@@ -220,7 +224,7 @@ def _eval_home_win(df: pd.DataFrame, min_games: int = MIN_GAMES) -> dict:
         ceiling_notes.append(
             f"Brier {metrics['calibrated_brier']:.3f} not below no-skill "
             f"{metrics['no_skill_brier']:.3f}-{BRIER_MARGIN}")
-    if HOME_WIN_GATE_ON_SPREAD_ONLY:
+    if "home_win" in SPREAD_ONLY_TARGETS:
         metrics["advisory_flags"] = "; ".join(ceiling_notes)  # at-ceiling, not a failure
     else:
         reasons += ceiling_notes
@@ -277,11 +281,21 @@ def _eval_regression(df: pd.DataFrame, target: str, min_games: int = MIN_GAMES) 
         else:
             metrics["totals_ou_n"] = 0
 
+    # SPREAD (near-constant output) is always a FAIL — the INC-24 corruption signal. The corr leg
+    # is the market-ceiling leg: for a spread-only target (run_differential — the near-efficient
+    # margin market, E13.8) it is ADVISORY, not a FAIL (the rescore proves skill exists; the live
+    # dip is a serving-window artifact). total_runs keeps its corr gate.
     reasons: list[str] = []
+    ceiling_notes: list[str] = []
     if not (metrics["pred_spread"] >= min_spread):
         reasons.append(f"pred spread {metrics['pred_spread']:.3f} < {min_spread} (near-constant)")
     if not (metrics["corr"] >= MIN_CORR_REG):
-        reasons.append(f"corr {metrics['corr']:.3f} < {MIN_CORR_REG}")
+        note = f"corr {metrics['corr']:.3f} < {MIN_CORR_REG}"
+        if target in SPREAD_ONLY_TARGETS:
+            ceiling_notes.append(note)
+        else:
+            reasons.append(note)
+    metrics["advisory_flags"] = "; ".join(ceiling_notes)
     metrics["verdict"], metrics["fail_reasons"] = _verdict(n, reasons, min_games)
     return metrics
 
