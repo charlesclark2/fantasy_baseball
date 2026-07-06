@@ -184,3 +184,62 @@ def test_home_win_flat_still_fails_even_at_ceiling():
     metrics = mh._eval_home_win(df, min_games=30)
     assert metrics["verdict"] == "FAIL"
     assert "spread" in (metrics.get("fail_reasons") or "")
+
+
+# ---------------------------------------------------------------------------
+# Regression targets: run_differential is spread-only (near-efficient margin market, E13.8);
+# total_runs KEEPS its corr gate (less-efficient O/U market, stable measurable corr).
+# ---------------------------------------------------------------------------
+
+def _make_reg_df(n: int, target: str, pred_spread: float, corr_target: float) -> "pd.DataFrame":
+    """Build a regression DataFrame with a chosen pred spread and pred↔actual correlation."""
+    import pandas as pd
+    rng = np.random.default_rng(11)
+    pred_base = 9.0 if target == "total_runs" else 0.0
+    pred = rng.normal(pred_base, 1.0, n)
+    pred = (pred - pred.mean()) / pred.std() * pred_spread + pred_base  # force the spread
+    noise = rng.normal(0, 1.0, n)
+    actual = corr_target * (pred - pred_base) + np.sqrt(max(1 - corr_target**2, 0.0)) * noise
+    cols = {"home_final_score": np.zeros(n), "away_final_score": np.zeros(n)}
+    if target == "total_runs":
+        cols["home_final_score"] = actual + pred_base            # home+away = actual+base
+        cols["pred_total_runs"] = pred
+        cols["total_line_consensus"] = np.full(n, np.nan)
+        cols["totals_p_over"] = np.full(n, np.nan)
+        cols["over_prob_consensus"] = np.full(n, np.nan)
+    else:
+        cols["run_differential"] = actual
+        cols["pred_run_diff_loc"] = pred
+    import pandas as pd
+    return pd.DataFrame(cols)
+
+
+def test_run_differential_low_corr_passes_when_spread_healthy():
+    """run_differential at the margin-market ceiling (corr < 0.05) but with a healthy spread must
+    PASS — corr is advisory for this spread-only target (INC-24: the live corr 0.030 FAIL was a
+    serving-window artifact; the rescore proved skill)."""
+    df = _make_reg_df(n=80, target="run_differential", pred_spread=1.30, corr_target=0.02)
+    m = mh._eval_regression(df, "run_differential", min_games=30)
+    assert m["pred_spread"] >= mh.MIN_SPREAD_RUNDIFF
+    assert m["verdict"] == "PASS", m.get("fail_reasons")
+    assert "corr" not in (m.get("fail_reasons") or "")
+    assert "corr" in (m.get("advisory_flags") or "")   # recorded, not fatal
+
+
+def test_run_differential_flat_still_fails():
+    """A near-constant run_differential (spread below floor) still FAILs — spread is the corruption
+    gate even for a spread-only target."""
+    df = _make_reg_df(n=80, target="run_differential", pred_spread=0.10, corr_target=0.30)
+    m = mh._eval_regression(df, "run_differential", min_games=30)
+    assert m["verdict"] == "FAIL"
+    assert "spread" in (m.get("fail_reasons") or "")
+
+
+def test_total_runs_keeps_its_corr_gate():
+    """total_runs is NOT spread-only: a healthy spread but low corr must still FAIL (the O/U market
+    is less efficient; the model retains measurable totals corr, so corr stays a gate)."""
+    df = _make_reg_df(n=80, target="total_runs", pred_spread=1.20, corr_target=0.01)
+    m = mh._eval_regression(df, "total_runs", min_games=30)
+    assert m["pred_spread"] >= mh.MIN_SPREAD_TOTALS
+    assert m["verdict"] == "FAIL"
+    assert "corr" in (m.get("fail_reasons") or "")
