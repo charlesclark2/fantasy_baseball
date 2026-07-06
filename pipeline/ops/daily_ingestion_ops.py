@@ -246,6 +246,21 @@ def _w11d_public_betting_nightly_on() -> bool:
     return os.environ.get("W11D_PUBLIC_BETTING_NIGHTLY") == "1"
 
 
+def _w11tx_transactions_nightly_on() -> bool:
+    # E11.22: ingest_transactions dual-writes the player_transactions raw mirror and
+    # stg_statsapi_transactions was repointed to read lakehouse_ext.stg_statsapi_transactions.
+    # run_w1_lakehouse.py --w11tx (the parquet REBUILD) is NOT in the daily op by default. This gate
+    # wires a nightly --w11tx-only rebuild + the --w11tx ext-table refresh so
+    # lakehouse_ext.stg_statsapi_transactions (read by the daily dbt build's stg_statsapi_transactions →
+    # injury-status chain after the read-cutover) stays fresh from the live raw mirror. Self-contained
+    # (reads only the raw mirror). Default OFF: flip to 1 only after (1) W11_RAW_WRITE_MODE=both/s3 keeps
+    # the raw mirror fresh, (2) the W11tx lakehouse_ext table exists (generate_w11tx_external_table.py),
+    # and (3) a box-validated --w11tx-only run + per-ROW ext fetch (the RUNTIME GATE). Once ON + verified,
+    # the SF raw player_transactions is droppable. Merging default-OFF is a true no-op (the un-gated glue
+    # is just this env read).
+    return os.environ.get("W11TX_TRANSACTIONS_NIGHTLY") == "1"
+
+
 def _w3pre_daily_on() -> bool:
     # E11.1-W11 / INC-23 residual: wire the W3pre odds/staging flatten into the daily
     # run_w1_lakehouse_op so mart_derivative_closes stops topping out at ~Apr-1 (E13.14
@@ -651,6 +666,18 @@ def run_w1_lakehouse_op(context):
     if _w11c_weather_nightly_on():
         _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w11c-only"])
         _run_w11_nightly(context, "refresh_w1_external_tables.py", ["--w11c"])
+
+    # E11.22 (player_transactions): rebuild the transactions stg parquet from the dual-written
+    # player_transactions raw mirror + refresh the W11tx external table, so
+    # lakehouse_ext.stg_statsapi_transactions (read by the daily dbt build after the read-cutover)
+    # stays fresh — without this the injury-feature chain would freeze once the SF raw is dropped
+    # (the spine-freeze class). Self-contained (reads only the raw mirror) so order-independent.
+    # Mirror-tier (ALERT-continue) — transactions feed slow-moving injury features and the dbt build
+    # retains its SF-native path pre-cutover, so a rebuild failure must NOT HALT the daily job. Gated
+    # default-OFF (W11TX_TRANSACTIONS_NIGHTLY); flip ON at cutover, BEFORE dropping the SF raw.
+    if _w11tx_transactions_nightly_on():
+        _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w11tx-only"])
+        _run_w11_nightly(context, "refresh_w1_external_tables.py", ["--w11tx"])
 
     # E11.1-W11 Tier-D (public betting): rebuild the public-betting stg + feature parquet from the
     # dual-written public_betting_raw mirror + refresh the W11d external tables, so lakehouse_ext.

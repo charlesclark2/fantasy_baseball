@@ -465,7 +465,14 @@ def main() -> None:
     parser.add_argument(
         "--s3", action="store_true",
         help="E11.1-W4: build on DuckDB — read savant_park_factors_raw from S3 parquet "
-             "and write eb_park_factors_granular_raw posteriors to S3 parquet (no Snowflake).",
+             "and write eb_park_factors_granular_raw posteriors to S3 parquet (no Snowflake). "
+             "NOTE: S3 is now the DEFAULT (E11.22), so this flag is redundant/back-compat.",
+    )
+    parser.add_argument(
+        "--snowflake", action="store_true",
+        help="E11.22: force the LEGACY Snowflake read/write path (reads the SF "
+             "savant_park_factors_raw table). Only for a one-off pre-decommission backfill — the "
+             "SF raw is being dropped, so the default (S3) is the supported path.",
     )
     args = parser.parse_args()
 
@@ -477,10 +484,12 @@ def main() -> None:
     else:
         seasons = [current_year]
 
-    if args.s3:
-        # E11.1-W4 build-on-DuckDB: read S3 → compute (unchanged numpy) → write S3 parquet.
-        # FULL rebuild across the requested seasons (replaces the per-season MERGE upsert):
-        # the mart reads all rows, so write one parquet holding every season fit this run.
+    if not args.snowflake:
+        # E11.22: S3 is the DEFAULT (only --snowflake takes the legacy SF path) so nothing reads the
+        # SF savant_park_factors_raw table once it is dropped. E11.1-W4 build-on-DuckDB: read S3 →
+        # compute (unchanged numpy) → write S3 parquet. FULL rebuild across the requested seasons
+        # (replaces the per-season MERGE upsert): the mart reads all rows, so write one parquet holding
+        # every season fit this run.
         duck = _get_duckdb()
         run_id = str(uuid.uuid4())
         fit_date = date.today()

@@ -1438,6 +1438,32 @@ def _build_w11b(conn, dry_run: bool) -> None:
         _register_mart_views(conn, [model], dry_run)
 
 
+# E11.22: player_transactions read-cutover. player_transactions was the ONE W7b-precursor whose stg
+# model's Snowflake (else) branch still read {{ source('statsapi','player_transactions') }} directly
+# (not lakehouse_ext), so its SF raw could not be dropped with the A/B/C/D batch. Build
+# stg_statsapi_transactions to lakehouse/<model>/data.parquet (self-contained: it reads the
+# lakehouse_raw/player_transactions/ mirror directly + dedups by transaction_id), so a lakehouse_ext
+# external table over it lets the else branch read S3, exactly like the umpire/fangraphs stg models.
+W11TX_MODELS = ["stg_statsapi_transactions"]
+
+
+def _build_w11tx(conn, dry_run: bool) -> None:
+    """Build the E11.22 player_transactions stg model from the player_transactions raw mirror.
+    Self-contained (reads lakehouse_raw/player_transactions/ directly), mirroring _build_w11b. A missing
+    raw parquet makes the build raise; --w11tx is gated (opt-in) so the daily HALT op never trips on it
+    pre-cutover."""
+    for _pragma in ("SET threads=2", f"SET memory_limit='{_safe_memory_limit_gb()}GB'"):
+        try:
+            conn.execute(_pragma)
+        except Exception as _e:
+            print(f"  (note: {_pragma} not applied: {_e})")
+
+    print("\nW11tx transactions staging (read lakehouse_raw/player_transactions/ directly):")
+    for model in W11TX_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+
 # E11.1-W11 Tier-D: the ActionNetwork PUBLIC-BETTING stg + feature layer. The writer dual-writes one
 # raw source (lakehouse_raw/public_betting_raw/); these 4 models read it. Unlike W11b (umpire), this
 # chain is NOT self-contained — stg_actionnetwork_public_betting_snapshots joins the pregame spine
@@ -1566,6 +1592,8 @@ def run(
     w11c_only: bool = False,
     w11d: bool = False,
     w11d_only: bool = False,
+    w11tx: bool = False,
+    w11tx_only: bool = False,
 ) -> None:
     import duckdb
 
@@ -1793,6 +1821,14 @@ def run(
         conn.close()
         print("\nW11b umpire wave run complete (--w11b-only).")
         return
+    # E11.22: --w11tx-only rebuilds just the player_transactions stg from its raw mirror. Self-contained
+    # (like --w11b-only) → ideal for the box RUNTIME GATE (rebuild transactions only, then per-ROW ext-validate).
+    if w11tx_only:
+        print("\nBuilding W11tx transactions staging (--w11tx-only):")
+        _build_w11tx(conn, dry_run)
+        conn.close()
+        print("\nW11tx transactions wave run complete (--w11tx-only).")
+        return
 
     # E11.1-W11 Tier-C: --w11c-only rebuilds just the weather stg + feature layer from the weather_raw
     # raw mirror (+ the ref_venues seed CSV). Self-contained (no prior-wave parquet needed), so it runs
@@ -1919,6 +1955,12 @@ def run(
     if w11b:
         _build_w11b(conn, dry_run)
 
+    # ── W11tx: player_transactions stg — OPT-IN (E11.22) ──
+    # Self-contained (reads only the player_transactions raw mirror). Enable with --w11tx once the
+    # ext table exists + the model repoint merges. Standalone use is --w11tx-only.
+    if w11tx:
+        _build_w11tx(conn, dry_run)
+
     # ── W11c: weather stg + feature layer — OPT-IN ──
     # Self-contained (reads only the weather_raw raw mirror + the ref_venues seed). Enable with --w11c
     # once the weather writers dual-write + the ext tables exist. Standalone use is --w11c-only.
@@ -1974,4 +2016,6 @@ if __name__ == "__main__":
         w11c_only="--w11c-only" in sys.argv,
         w11d="--w11d" in sys.argv,
         w11d_only="--w11d-only" in sys.argv,
+        w11tx="--w11tx" in sys.argv,
+        w11tx_only="--w11tx-only" in sys.argv,
     )
