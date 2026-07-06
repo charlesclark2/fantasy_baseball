@@ -764,6 +764,47 @@ def check_feature_block_coverage_op(context):
                 pass
 
 
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def check_served_prediction_integrity_op(context):
+    """E11.22 served-prediction integrity gate — the permanent INPUT-integrity monitor.
+
+    Reads TODAY's written daily_model_predictions right after predict and ALARMS, per
+    serving tier, on the exact migration failure classes that row-count parity misses and
+    the standing 30-day model-health sensor only surfaces WEEKS later downstream:
+      - INC-22   predictions dated beyond the US baseball date (UTC-roll / wrong-date serve)
+      - INC-25   the slate silently fell to intraday_fallback (data_source != feature_store)
+      - INC-17-P2 post_lineup feature_coverage_score collapsed (a lineup block went null)
+      - INC-24   a target's output went FLAT (near-constant / all-null — market-blind /
+                 constant-imputed features)
+    Reuses the model-health MIN_SPREAD_* / coverage thresholds so serve-time and the 30-day
+    gate can never drift. Placed AFTER predict (it inspects what predict actually served);
+    fans out from predict so it never blocks the serving writes.
+
+    Tier: ALERT-loud-but-continue by DEFAULT (RUNTIME-GATE-safe rollout). The script exits 0
+    and only WARNs unless SERVED_INTEGRITY_STRICT=1, which promotes any integrity problem to a
+    non-zero exit → HALT here. Flip SERVED_INTEGRITY_STRICT=1 in the box env_file after it is
+    confirmed on a live slate not to false-fire."""
+    strict = os.environ.get("SERVED_INTEGRITY_STRICT") == "1"
+    try:
+        stdout = _run_script(context, "check_served_prediction_integrity.py", ["--env", _target_env()])
+    except Exception as e:
+        if strict:
+            raise
+        context.log.warning(
+            "[ALERT] check_served_prediction_integrity flagged a served-slate integrity problem "
+            f"(non-blocking; set SERVED_INTEGRITY_STRICT=1 to HALT): {e}"
+        )
+        return
+    for line in stdout.splitlines():
+        if line.startswith("[METRIC] served_integrity_problem_count="):
+            try:
+                n = int(line.split("=", 1)[1])
+                context.add_output_metadata(
+                    {"served_integrity_problem_count": MetadataValue.int(n)})
+            except ValueError:
+                pass
+
+
 # ── E11.23 — silently-not-running guard (the cutover-runtime-landmine detector) ───────
 # The E11.1 cutover left a class of RUNTIME failures CI can't see (it mocks all IO): intraday
 # refresh jobs shipped GATED-OFF and serving-critical sensors/schedules that boot STOPPED, so
@@ -1262,7 +1303,13 @@ def predict_today_morning(context):
     # serving still reads Snowflake the mirror is parity-only and must NOT red-line the predict op.
     if _w7b_mirror_on():
         _run_mirror(context, "export_features_to_s3.py")
-    _run_script(context, "predict_today.py", ["--prediction-type", "morning"] + _w7b_s3_args())
+    # E9.9: --notify publishes a qualified-plays SNS alert (fans out to push/email/SMS)
+    # when qualified_bet>0. WARN tier inside predict_today (never crashes the op);
+    # idempotent per slate so the morning + post-lineup runs alert at most once/day.
+    _run_script(
+        context, "predict_today.py",
+        ["--prediction-type", "morning", "--notify"] + _w7b_s3_args(),
+    )
     # Re-export predictions Snowflake→S3 AFTER scoring (predict_today still WRITES to Snowflake
     # in W7b-1) so the downstream write_serving_store_op --s3 + the request-path last-resort serve
     # TODAY's picks from S3 (the W6 daily_model_predictions freshness contract). Mirror tier.

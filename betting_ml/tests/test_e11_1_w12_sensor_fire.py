@@ -234,14 +234,16 @@ def test_model_health_raises_on_gate_fail(monkeypatch):
     import betting_ml.monitoring.model_health_metrics as mh
     monkeypatch.setattr(alerting, "send_alert", lambda *a, **k: True)
     monkeypatch.setattr(lhm, "monitor_connection", lambda: _DummyConn())
-    # matchup coverage OK, but the skill gate FAILs for home_win.
+    # matchup coverage OK, but the skill gate FAILs for home_win. Post-INC-24 calibration, the
+    # home_win FAIL leg is FLAT OUTPUT (spread), not corr/Brier (which are at-ceiling advisory).
     monkeypatch.setattr(mh, "check_post_lineup_matchup_coverage",
                         lambda *a, **k: {"alert_fired": False, "avg_coverage": 1.0, "n_games": 15})
     monkeypatch.setattr(mh, "evaluate", lambda *a, **k: {
-        "home_win": {"verdict": "FAIL", "fail_reasons": "corr 0.01 < 0.05",
-                     "calibrated_corr": 0.01, "calibrated_spread": 0.03,
+        "home_win": {"verdict": "FAIL",
+                     "fail_reasons": "spread 0.012 < 0.025 (flat output)",
+                     "calibrated_corr": 0.01, "calibrated_spread": 0.012,
                      "calibrated_brier": 0.25, "no_skill_brier": 0.25, "calibrated_accuracy": 0.5,
-                     "get": dict().get},
+                     "advisory_flags": "corr 0.010 < 0.05", "get": dict().get},
         "total_runs": {"verdict": "PASS", "fail_reasons": ""},
         "run_differential": {"verdict": "PASS", "fail_reasons": ""},
     })
