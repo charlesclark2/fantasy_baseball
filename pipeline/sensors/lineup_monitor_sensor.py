@@ -4,7 +4,16 @@ import sys
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from dagster import DefaultSensorStatus, RunRequest, SensorEvaluationContext, SkipReason, sensor
+from dagster import (
+    DefaultScheduleStatus,
+    DefaultSensorStatus,
+    RunRequest,
+    ScheduleEvaluationContext,
+    SensorEvaluationContext,
+    SkipReason,
+    schedule,
+    sensor,
+)
 
 from pipeline.jobs.sensor_jobs import lineup_monitor_job
 
@@ -115,6 +124,20 @@ def lineup_monitor_sensor(context: SensorEvaluationContext):
     # Due to run — stamp the cursor now so the throttle measures real monitor runs.
     context.update_cursor(now_et.isoformat())
 
+    yield _evaluate_lineup_monitor(context.log, triggered_by="lineup_monitor_sensor")
+
+
+def _evaluate_lineup_monitor(log, triggered_by: str):
+    """Run lineup_monitor.py and return a RunRequest for newly-confirmed game_pks, or a
+    SkipReason if there is nothing new to score / the monitor errored.
+
+    Shared by lineup_monitor_sensor (cadence-throttled tick) and lineup_monitor_schedule_*
+    (fixed 30-min cron). The DEDUP lives entirely in lineup_monitor.py via lineup_monitor_state:
+    it emits has_new_games=true ONLY for games not yet triggered (or a game in state that still
+    lacks a post_lineup row / had a pitcher change), so firing this on a fixed cron re-scores each
+    confirmed lineup at most once — exactly "fire off one time, don't re-run" — while still catching
+    legitimate late scratches. Returns (not yields) so both a sensor and a schedule can wrap it.
+    """
     script = os.path.join(SCRIPTS_DIR, "lineup_monitor.py")
     try:
         result = subprocess.run(
@@ -124,31 +147,28 @@ def lineup_monitor_sensor(context: SensorEvaluationContext):
             cwd=APP_DIR,
         )
         if result.stdout:
-            context.log.info(result.stdout)
+            log.info(result.stdout)
         if result.stderr:
-            context.log.warning(result.stderr)
+            log.warning(result.stderr)
         if result.returncode != 0:
-            yield SkipReason(
+            return SkipReason(
                 f"lineup_monitor.py exited {result.returncode} — skipping tick. "
                 f"stderr: {result.stderr[:400]}"
             )
-            return
     except Exception as e:
-        yield SkipReason(f"lineup_monitor.py failed to run: {e}")
-        return
+        return SkipReason(f"lineup_monitor.py failed to run: {e}")
 
     has_new = _parse_output(result.stdout, "has_new_games")
     game_pks = _parse_output(result.stdout, "new_game_pks") or ""
 
     if has_new != "true":
-        yield SkipReason("No newly confirmed lineups — nothing to trigger.")
-        return
+        return SkipReason("No newly confirmed lineups — nothing to trigger.")
 
-    context.log.info(f"New lineups confirmed for game_pks: {game_pks}")
+    log.info(f"New lineups confirmed for game_pks: {game_pks}")
     # No run_key: deduplication is already handled by lineup_monitor_state in
     # Snowflake. Using run_key here would prevent pitcher-change re-triggers,
     # since the game_pks string would be identical to the original lineup trigger.
-    yield RunRequest(
+    return RunRequest(
         run_config={
             "ops": {
                 "lineup_predict": {
@@ -156,5 +176,33 @@ def lineup_monitor_sensor(context: SensorEvaluationContext):
                 }
             }
         },
-        tags={"triggered_by": "lineup_monitor_sensor", "game_pks": game_pks},
+        tags={"triggered_by": triggered_by, "game_pks": game_pks},
     )
+
+
+# ── Reliable 30-min cron backstop (2026-07-07) ────────────────────────────────
+# The lineup_monitor_SENSOR tick has been unreliable on the box (repeated manual kicks). The
+# daily-job + odds-CLV SCHEDULES fire dependably here, so drive the SAME lineup_monitor_job off a
+# fixed 30-min cron too. This does NOT re-score blindly: it runs lineup_monitor.py, whose
+# lineup_monitor_state dedup means a game fires at most once (plus legitimate scratch re-triggers),
+# so it satisfies "fire once, don't re-run already-made predictions". Two exprs cover the game-day
+# window 14:00-03:30 UTC (cron can't wrap midnight); offset to :15/:45 so it lands AFTER the
+# schedule_capture staging refresh (:00/:30) and staggers dbt-runner load. default_status=RUNNING
+# so it self-starts on the box / after a Dagster-DB reset (E11.23 self-start class); the sensor
+# stays RUNNING too as a faster complement — the state dedup makes a double-fire a harmless no-op.
+def _lineup_schedule_body(context: ScheduleEvaluationContext):
+    return _evaluate_lineup_monitor(context.log, triggered_by="lineup_monitor_schedule")
+
+
+@schedule(job=lineup_monitor_job, cron_schedule="15,45 14-23 * * *",
+          name="lineup_monitor_schedule_daytime",
+          default_status=DefaultScheduleStatus.RUNNING)
+def lineup_monitor_schedule_daytime(context: ScheduleEvaluationContext):
+    return _lineup_schedule_body(context)
+
+
+@schedule(job=lineup_monitor_job, cron_schedule="15,45 0-3 * * *",
+          name="lineup_monitor_schedule_overnight",
+          default_status=DefaultScheduleStatus.RUNNING)
+def lineup_monitor_schedule_overnight(context: ScheduleEvaluationContext):
+    return _lineup_schedule_body(context)

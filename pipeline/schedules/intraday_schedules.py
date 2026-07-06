@@ -6,6 +6,14 @@ from pipeline.jobs.intraday_jobs import (
     intraday_weather_job,
     odds_clv_rebuild_job,
 )
+# E11.23-follow-up (2026-07-07): the lineup re-score is ALSO driven by a reliable 30-min cron
+# schedule (lineup_monitor_schedule_*), not only the flaky lineup_monitor_sensor tick. Defined
+# next to the sensor so it shares the lineup_monitor.py dedup detection. Imported here to join
+# all_intraday_schedules.
+from pipeline.sensors.lineup_monitor_sensor import (
+    lineup_monitor_schedule_daytime,
+    lineup_monitor_schedule_overnight,
+)
 
 # E11.4 (2026-06-19) — intraday_schedule_job and intraday_weather_job have been
 # decomposed onto Railway cron services:
@@ -118,4 +126,6 @@ all_intraday_schedules = [
     intraday_schedule_capture_overnight,
     intraday_public_betting_daytime,
     intraday_public_betting_overnight,
+    lineup_monitor_schedule_daytime,
+    lineup_monitor_schedule_overnight,
 ]
