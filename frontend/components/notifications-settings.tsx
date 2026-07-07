@@ -37,6 +37,12 @@ interface Prefs {
 
 const E164_RE = /^\+[1-9]\d{7,14}$/
 
+// SMS is code-complete but can't deliver until AWS SMS origination (toll-free /
+// 10DLC) registration + sandbox exit are approved (~weeks). Until then the channel
+// is gated "Coming soon" so users don't opt into texts that silently never arrive.
+// Flip to true (and redeploy) once registration is live — no other change needed.
+const SMS_AVAILABLE = false
+
 function Row({
   title,
   desc,
@@ -206,46 +212,56 @@ export function NotificationsSettings({ accessToken }: { accessToken: string | n
           <div className="px-6 py-4 space-y-3">
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
-                <p className="text-sm font-medium text-white">SMS / text</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-white">SMS / text</p>
+                  {!SMS_AVAILABLE && (
+                    <span className="rounded-full border border-[#262626] bg-[#0a0a0a] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                      Coming soon
+                    </span>
+                  )}
+                </div>
                 <p className="max-w-sm text-xs text-gray-500 leading-relaxed">
-                  Text alerts to your phone. We store your number here — it isn&apos;t taken from
-                  your login. Standard message rates may apply.
+                  {SMS_AVAILABLE
+                    ? "Text alerts to your phone. We store your number here — it isn't taken from your login. Standard message rates may apply."
+                    : "Text alerts are almost ready — we're finishing carrier setup. Email and browser push are live now."}
                 </p>
               </div>
               <div className="shrink-0 pt-1">
                 <Switch
-                  checked={(prefs?.sms_enabled ?? false) && enabled}
-                  disabled={!enabled}
+                  checked={SMS_AVAILABLE && (prefs?.sms_enabled ?? false) && enabled}
+                  disabled={!SMS_AVAILABLE || !enabled}
                   onCheckedChange={(v) => saveSms(v)}
                 />
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 space-y-1">
-                <Label htmlFor="sms-phone" className="text-[11px] font-semibold uppercase tracking-widest text-gray-500">
-                  Phone number
-                </Label>
-                <Input
-                  id="sms-phone"
-                  type="tel"
-                  inputMode="tel"
-                  placeholder="+14155550123"
-                  value={phone}
-                  disabled={!enabled}
-                  onChange={(e) => { setPhone(e.target.value); setPhoneErr(null) }}
-                  className="bg-[#0a0a0a] border-[#262626] text-white focus:border-[#10b981]"
-                />
-                {phoneErr && <p className="text-[11px] text-[#ef4444]">{phoneErr}</p>}
+            {SMS_AVAILABLE && (
+              <div className="flex items-center gap-2">
+                <div className="flex-1 space-y-1">
+                  <Label htmlFor="sms-phone" className="text-[11px] font-semibold uppercase tracking-widest text-gray-500">
+                    Phone number
+                  </Label>
+                  <Input
+                    id="sms-phone"
+                    type="tel"
+                    inputMode="tel"
+                    placeholder="+14155550123"
+                    value={phone}
+                    disabled={!enabled}
+                    onChange={(e) => { setPhone(e.target.value); setPhoneErr(null) }}
+                    className="bg-[#0a0a0a] border-[#262626] text-white focus:border-[#10b981]"
+                  />
+                  {phoneErr && <p className="text-[11px] text-[#ef4444]">{phoneErr}</p>}
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => saveSms(prefs?.sms_enabled ?? false)}
+                  disabled={!enabled || putPrefs.isPending}
+                  className="mt-5 h-9 shrink-0 bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669] disabled:opacity-50 text-xs"
+                >
+                  {putPrefs.isPending ? "Saving…" : <span className="flex items-center gap-1"><Check className="h-3 w-3" /> Save</span>}
+                </Button>
               </div>
-              <Button
-                size="sm"
-                onClick={() => saveSms(prefs?.sms_enabled ?? false)}
-                disabled={!enabled || putPrefs.isPending}
-                className="mt-5 h-9 shrink-0 bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669] disabled:opacity-50 text-xs"
-              >
-                {putPrefs.isPending ? "Saving…" : <span className="flex items-center gap-1"><Check className="h-3 w-3" /> Save</span>}
-              </Button>
-            </div>
+            )}
           </div>
         </>
       )}

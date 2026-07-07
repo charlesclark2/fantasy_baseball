@@ -85,3 +85,7 @@ betting_ml/models/sub_models/bullpen_v3/*.parquet
 
 # E11.16 — local dbt State manifest baseline (downloaded by scripts/dbt_state.sh)
 dbt/state/
+
+# VAPID / Web Push private keys (E9.9) — never commit
+vapid_private.pem
+*.pem
