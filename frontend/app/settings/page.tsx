@@ -10,10 +10,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Bell, Check, ChevronDown, ChevronUp, Pencil, Plus, ShieldCheck, Trash2, X } from "lucide-react"
+import { Check, ChevronDown, ChevronUp, Pencil, Plus, ShieldCheck, Trash2, X } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLocalStorage } from "@/hooks/use-local-storage"
 import { apiFetch } from "@/lib/api"
+import { NotificationsSettings } from "@/components/notifications-settings"
 
 // ---------------------------------------------------------------------------
 // Curated sportsbooks — same set as Book Comparison
@@ -783,23 +784,9 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold text-white">Settings</h1>
 
         {/* ---------------------------------------------------------------- */}
-        {/* Notifications — coming soon                                       */}
+        {/* Notifications — live opt-in (E9.9 / A0.6)                         */}
         {/* ---------------------------------------------------------------- */}
-        <section className="rounded-lg border border-[#262626] bg-[#141414]">
-          <div className="px-6 pt-6 pb-4">
-            <h2 className="text-base font-semibold text-white">Notifications</h2>
-          </div>
-          <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#262626]">
-              <Bell className="h-5 w-5 text-gray-500" />
-            </div>
-            <p className="text-sm font-medium text-white">Coming soon</p>
-            <p className="max-w-sm text-xs text-gray-500 leading-relaxed">
-              Email alerts and browser push notifications are under development.
-              We&apos;ll let you know when they&apos;re available.
-            </p>
-          </div>
-        </section>
+        <NotificationsSettings accessToken={accessToken} />
 
         {/* ---------------------------------------------------------------- */}
         {/* Account card                                                      */}

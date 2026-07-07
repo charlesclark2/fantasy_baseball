@@ -236,14 +236,76 @@ Apply this authorizer to all routes except `GET /health`.
 
 ---
 
-## DynamoDB — Push Subscriptions (A0.6 prereq)
+## DynamoDB — Push Subscriptions / Notification Preferences (E9.9 / A0.6)
+
+One item per user; the master `enabled` flag plus per-channel toggles govern delivery.
 
 | Resource | Value |
 |---|---|
 | Table name | `credence-prod-dynamo-push-subscriptions` |
-| Partition key | `user_id` (String) |
+| Partition key | `user_id` (String, Cognito `sub`) |
 | Billing mode | Pay-per-request (on-demand) |
 | Region | `us-east-1` |
+
+> **Naming note:** the E9.9 story sketched a table `credence-prod-user-push-subscriptions`;
+> this already-provisioned table serves the identical purpose (PK is the Cognito `sub`), so
+> we reuse it rather than orphan it. Wired via `DYNAMO_PUSH_SUBSCRIPTIONS_TABLE`.
+
+**Item schema** (all attributes optional except `user_id`):
+
+| Attribute | Type | Meaning |
+|---|---|---|
+| `user_id` | S | Cognito `sub` (PK) |
+| `enabled` | BOOL | master opt-in — nothing delivers unless true |
+| `email_enabled` | BOOL | email channel toggle (default true) |
+| `push_enabled` | BOOL | Web Push toggle (set on subscribe, cleared on unsubscribe/410-prune) |
+| `sms_enabled` | BOOL | SMS toggle |
+| `email` | S | SES destination |
+| `phone_number` | S | E.164 (SMS; **not** from Cognito — entered in Settings) |
+| `push_subscription` | M | `{endpoint, keys:{p256dh, auth}}` from the browser |
+| `created_at` / `updated_at` | S | ISO-8601 |
+
+Managed by `app/backend/routers/alerts.py`
+(`GET/PUT /alerts/preferences`, `POST/DELETE /alerts/subscribe`).
+
+---
+
+## Notifications — Qualified-plays alerts (E9.9 / A0.6)
+
+`predict_today --notify` publishes ONE SNS message when the model posts
+`qualified_bet > 0` for today's slate (idempotent per day via a serving-cache
+conditional put). The `push-notification-sender` Lambda fans it out to opted-in
+users over Web Push (VAPID/pywebpush) + SES email + SNS SMS. Honest framing: the
+copy says the model posted N **qualified** plays — never a "+EV / you'll win" claim.
+
+| Resource | Value |
+|---|---|
+| SNS topic | `credence-prod-qualified-bets-today` (us-east-1) |
+| Lambda | `push-notification-sender` (py3.12 arm64; bundles pywebpush/py-vapid) |
+| Lambda role | `credence-push-sender-lambda-role` — Dynamo Scan/Get/Update + SES send + SNS Publish (SMS) + logs |
+| Box role grant | `credence-qualified-bets-publish` (inline on `credence-dagster-ec2-role`) — `sns:Publish` to the topic + `dynamodb:PutItem` on the serving cache (per-day idempotency claim) |
+| VAPID public key | frontend env `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (safe to ship) |
+| VAPID private key | Lambda env `VAPID_PRIVATE_KEY` ONLY (never the bundle) |
+| Box env | `QUALIFIED_BETS_SNS_TOPIC_ARN` (predict_today reads it; unset ⇒ loud skip) |
+| Box (predict_today runs here) | instance `i-07594af1679f81c38`, region `us-east-1`; `.env` at `/home/ec2-user/app/services/dagster/aws/.env`; redeploy via `.../deploy.sh` (pulls main + `up -d --build`) |
+
+`provision-notifications.sh` auto-wires the box (sets the env var + kicks `deploy.sh`
+via SSM) unless `SKIP_BOX_WIRING=1`. It prints the exact `aws ssm send-command`
+lines it ran (real instance-id/region/paths baked in) so they can be re-run by hand.
+⚠️ `deploy.sh` pulls **main** — merge before (re)deploying or the `--notify` code
+won't be on the box.
+
+```bash
+# One-time keys, then provision (operator, laptop with AWS admin + SES prod):
+uv run python services/notifications/push_sender/gen_vapid.py
+VAPID_PRIVATE_KEY="$(cat vapid_private.pem)" VAPID_SUBJECT=mailto:support@credencesports.com \
+  ./services/notifications/provision-notifications.sh
+```
+
+> **SMS caveat:** SNS SMS to arbitrary numbers needs SNS SMS **production access** (out
+> of sandbox) + a monthly spend limit; US delivery needs A2P 10DLC registration. The
+> email + push channels work without any of that. The SMS code path is live but gated
+> behind each user entering a number and toggling SMS on.
 
 ---
 
