@@ -1,0 +1,10 @@
+# push-notification-sender Lambda deps (bundled into the deploy zip).
+# boto3 is provided by the Lambda runtime; pin the Web Push stack here.
+# pywebpush pulls py-vapid + http-ece + requests + cryptography transitively.
+# NOTE: http-ece ships sdist-only (no wheel) → it CANNOT be installed under
+# `pip --platform ... --only-binary=:all:`. The deploy build therefore installs the
+# whole tree normally, then force-reinstalls ONLY cryptography (the one mandatory
+# native package) with its linux/aarch64 wheel. cryptography is pinned exactly so
+# both passes agree. See provision-notifications.sh.
+pywebpush==2.3.0
+cryptography==43.0.3

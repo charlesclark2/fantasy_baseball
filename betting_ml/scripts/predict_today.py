@@ -47,6 +47,7 @@ from betting_ml.utils.probability_layer import (
 from betting_ml.utils.win_prob_uncertainty import compute_win_prob_beta  # Story 19.7
 from betting_ml.utils.sigma_gate import evaluate_sigma_gate             # Story 22.4
 from betting_ml.utils.pick_explanations import build_pick_explanations  # E9.13 / Story 30.15
+from betting_ml.utils.qualified_bet_notifier import notify_qualified_plays_safe  # E9.9 / A0.6
 from betting_ml.models.total_runs_trainer import p_over_line
 from betting_ml.utils.ml_env import ml_schema
 
@@ -652,6 +653,18 @@ def _write_predictions_to_snowflake(
     except Exception as exc:
         print(f"\nWarning: Could not write predictions to Snowflake ({exc}).")
 
+    # E9.9 / A0.6 — qualified-plays alert (WARN tier: never crashes predict_today).
+    # Additive, at the very end, after compute_bet_permission has stamped qualified_bet
+    # on every row. Only fires when --notify is set (the daily morning/post-lineup ops
+    # opt in; audit/backfill runs do not), only for TODAY, only when qualified_bet>0,
+    # and at most once per slate (idempotent). notify_qualified_plays_safe swallows all
+    # errors, but wrap here too per the failure-semantics contract.
+    if notify:
+        try:
+            notify_qualified_plays_safe(target_date, rows)
+        except Exception as exc:  # noqa: BLE001 — belt-and-suspenders WARN
+            print(f"\nWarning: qualified-play alert failed (non-fatal): {exc}")
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1152,6 +1165,16 @@ def _parse_args() -> argparse.Namespace:
         default=False,
         help="Skip writing to prediction_log.",
     )
+    parser.add_argument(
+        "--notify",
+        action="store_true",
+        default=False,
+        help=(
+            "E9.9: after scoring TODAY's slate, publish a qualified-plays SNS alert "
+            "(fans out to push/email/SMS) when qualified_bet>0. Idempotent per day; "
+            "default OFF so audit/backfill runs never notify."
+        ),
+    )
     args = parser.parse_args()
 
     if args.date and (args.start_date or args.end_date):
@@ -1206,6 +1229,7 @@ def _score_date(
     home_win_tag: str | None = None,
     total_runs_tag: str | None = None,
     run_diff_tag: str | None = None,
+    notify: bool = False,
 ) -> None:
     home_win_tag = home_win_tag or model_tag
     total_runs_tag = total_runs_tag or model_tag
@@ -1506,6 +1530,7 @@ def main() -> None:
                 home_win_tag=home_win_tag,
                 total_runs_tag=total_runs_tag,
                 run_diff_tag=run_diff_tag,
+                notify=args.notify,
             )
         except Exception as exc:
             print(f"  Error scoring {target_date}: {exc}")

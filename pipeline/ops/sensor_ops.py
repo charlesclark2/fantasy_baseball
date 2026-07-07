@@ -288,7 +288,10 @@ def lineup_dbt_feature_rebuild(context: OpExecutionContext) -> None:
 def lineup_predict(context: OpExecutionContext) -> None:
     """Run post-lineup predictions for the newly confirmed game_pks."""
     game_pks = context.op_config["game_pks"]
-    args = ["--prediction-type", "post_lineup", "--lineup-confirmed"]
+    # E9.9: --notify here too — if the morning slate had 0 qualified plays but a
+    # confirmed lineup re-score produces some, users still get alerted. Idempotent
+    # per slate (DynamoDB conditional put) so morning + post-lineup fire at most once.
+    args = ["--prediction-type", "post_lineup", "--lineup-confirmed", "--notify"]
     if game_pks:
         args += ["--game-pks", game_pks]
     _run_script(context, "predict_today.py", args)
