@@ -66,6 +66,7 @@ from betting_ml.utils.feature_selection import load_retained_features
 from betting_ml.utils.model_io import load_model
 from betting_ml.utils.pick_explanations import build_pick_explanations  # Story 30.15
 from betting_ml.utils.win_prob_uncertainty import compute_win_prob_beta  # Story 19.7
+from betting_ml.utils.qualified_bet_notifier import notify_qualified_plays_safe  # E9.9 --notify
 from betting_ml.utils.meta_model import (  # Story 12.4 — Bayesian CLV meta-model serve
     compute_meta_model_prediction,
     load_latest_meta_model,
@@ -988,6 +989,7 @@ def _write_predictions_to_snowflake(
     picks: list[str],
     imputation_summary: list[dict] | None = None,
     pick_explanations: list[dict] | None = None,
+    notify: bool = False,
 ) -> None:
     def _f(arr, i) -> float | None:
         v = arr[i]
@@ -1415,6 +1417,14 @@ def _write_predictions_to_snowflake(
                   f"{_ML_SCHEMA}.daily_model_predictions "
                   f"(model_version={MODEL_VERSION}, inserted_at={inserted_at.isoformat()})")
             print(f"  [22.4] sigma_tier distribution: {_tier_summary}")
+            # E9.9 — fire the qualified-plays alert ONLY after a successful commit (never
+            # notify on a slate that failed to persist). The notifier is fully self-guarded
+            # and never raises: TODAY-only (skips backfill/historical dates), qualified_bet>0
+            # only, idempotent-per-slate (one send/day across morning + post_lineup), and a
+            # loud no-op when the SNS topic env var is unset. Backfill rows never reach here
+            # (they return at the batch buffer above), but gate on `not is_backfill` too.
+            if notify and not is_backfill:
+                notify_qualified_plays_safe(target_date, rows)
         finally:
             conn.close()
     except Exception as exc:
@@ -1872,6 +1882,19 @@ def _parse_args() -> argparse.Namespace:
             "the prior is_backfill rows of THIS model_version for that date (never live rows "
             "or other versions) before inserting. Use ONLY to backfill a promoted model over "
             "past games; never for live morning/post_lineup runs."
+        ),
+    )
+    parser.add_argument(
+        "--notify",
+        action="store_true",
+        default=False,
+        help=(
+            "E9.9 — after a successful live write, publish ONE 'qualified plays today' SNS alert "
+            "(fans out to opted-in push/email/SMS via the push-notification-sender Lambda) when the "
+            "model posts qualified_bet>0 for TODAY's slate. WARN-tier (never crashes the op) + "
+            "idempotent per slate (one send/day across the morning + post_lineup runs) + TODAY-only "
+            "(backfill/historical re-scores never notify). No-op when QUALIFIED_BETS_SNS_TOPIC_ARN "
+            "is unset (loud skip)."
         ),
     )
     parser.add_argument(
@@ -2426,6 +2449,7 @@ def main(target_date: str, args) -> None:
         picks=picks_list,
         imputation_summary=imputation_summary,
         pick_explanations=pick_explanations,
+        notify=getattr(args, "notify", False),
     )
 
 
