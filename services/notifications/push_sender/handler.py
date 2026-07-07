@@ -45,7 +45,7 @@ _VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "").strip()
 _VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:support@credencesports.com").strip()
 _SES_FROM = os.environ.get("SES_FROM_ADDRESS", "alerts@credencesports.com").strip()
 _SES_CONFIG_SET = os.environ.get("SES_CONFIGURATION_SET", "").strip()
-_APP_URL = os.environ.get("APP_URL", "https://credencesports.com").rstrip("/")
+_APP_URL = os.environ.get("APP_URL", "https://www.credencesports.com").rstrip("/")
 
 # Honest, model-relative disclaimer. Deliberately free of profitability / bet-rec
 # language (cf. the E5.5 honest-framing guard). Enforced by the unit tests here.

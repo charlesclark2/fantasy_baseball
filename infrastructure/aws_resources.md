@@ -247,6 +247,12 @@ One item per user; the master `enabled` flag plus per-channel toggles govern del
 | Billing mode | Pay-per-request (on-demand) |
 | Region | `us-east-1` |
 
+```bash
+# Provision the table (run once; idempotent), then grant the API Lambda role:
+./infrastructure/dynamo/create_push_subscriptions_table.sh
+./infrastructure/dynamo/grant_alerts_iam.sh
+```
+
 > **Naming note:** the E9.9 story sketched a table `credence-prod-user-push-subscriptions`;
 > this already-provisioned table serves the identical purpose (PK is the Cognito `sub`), so
 > we reuse it rather than orphan it. Wired via `DYNAMO_PUSH_SUBSCRIPTIONS_TABLE`.
@@ -267,6 +273,13 @@ One item per user; the master `enabled` flag plus per-channel toggles govern del
 
 Managed by `app/backend/routers/alerts.py`
 (`GET/PUT /alerts/preferences`, `POST/DELETE /alerts/subscribe`).
+
+> **IAM (required):** the API Lambda role `credence-prod-lambda-execution-role` needs
+> `GetItem`/`PutItem`/`UpdateItem`/`DeleteItem` on this table — otherwise opting in
+> 500s with `AccessDeniedException`. Grant it (idempotent; IAM is live, no redeploy):
+> ```bash
+> ./infrastructure/dynamo/grant_alerts_iam.sh
+> ```
 
 ---
 
@@ -302,10 +315,23 @@ VAPID_PRIVATE_KEY="$(cat vapid_private.pem)" VAPID_SUBJECT=mailto:support@creden
   ./services/notifications/provision-notifications.sh
 ```
 
-> **SMS caveat:** SNS SMS to arbitrary numbers needs SNS SMS **production access** (out
-> of sandbox) + a monthly spend limit; US delivery needs A2P 10DLC registration. The
-> email + push channels work without any of that. The SMS code path is live but gated
-> behind each user entering a number and toggling SMS on.
+> **SMS status (as of 2026-07-07): code-complete, NOT yet deliverable — gated "Coming
+> soon" in the UI.** The account is in the SNS SMS **sandbox** with **no origination
+> number**, so even sandbox verification fails (`No origination entities available to
+> send`). Email + push work without any of this. To enable SMS:
+> 1. **Request an origination number** (toll-free is cheapest to start, ~$2/mo + ~$0.008/msg):
+>    ```bash
+>    aws pinpoint-sms-voice-v2 request-phone-number --region us-east-1 \
+>      --iso-country-code US --message-type TRANSACTIONAL --number-type TOLL_FREE --number-capabilities SMS
+>    ```
+> 2. **Toll-free verification** — submit the registration form (company / use-case / sample
+>    messages / opt-in) in the **AWS End User Messaging SMS** console. Review ~1–3 weeks;
+>    unverified TFNs are rate-limited/filtered. (10DLC is the alternative — needs brand+campaign.)
+> 3. **Exit the SMS sandbox** (support request) to text arbitrary numbers, OR stay in
+>    sandbox and `create-sms-sandbox-phone-number` + `verify-sms-sandbox-phone-number` per recipient.
+> 4. **Flip the UI gate on:** set `SMS_AVAILABLE = true` in
+>    `frontend/components/notifications-settings.tsx` and redeploy the frontend.
+> The Lambda already has `sns:Publish` + reads `phone_number` — no backend change needed.
 
 ---
 
