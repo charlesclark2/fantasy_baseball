@@ -44,6 +44,7 @@ import os
 import re
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
@@ -525,10 +526,15 @@ def _build_marts(conn, models: list[str], dry_run: bool) -> None:
         # trailing comment is interior — but keep the newlines unconditionally for the no-ts path.)
         if dry_run:
             n = conn.execute(f"SELECT count(*) FROM (\n{body}\n) t").fetchone()[0]
-            print(f"  {model}: {n:,} rows  (dry-run — no S3 write)")
+            print(f"  {model}: {n:,} rows  (dry-run — no S3 write)", flush=True)
         else:
+            # Print BEFORE the COPY (+ flush) so a stalled S3/httpfs read pinpoints the exact
+            # mart: a hang shows "▶ building X …" with no matching "✔ X" — instead of the whole
+            # build being one silent black box. The elapsed time also surfaces the slow mart.
+            print(f"  ▶ building {model} …", flush=True)
+            _t0 = time.monotonic()
             conn.execute(f"COPY (\n{body}\n) TO '{loc}' (FORMAT PARQUET)")
-            print(f"  {model}: written → {loc}")
+            print(f"  ✔ {model}: written → {loc}  ({time.monotonic() - _t0:.1f}s)", flush=True)
 
 
 def _register_mart_views(conn, models: list[str], dry_run: bool) -> None:
@@ -1646,8 +1652,12 @@ def run(
     # per-request window (`Timeout was reached error for HTTP GET ...`). Raise the timeout
     # and add retries with backoff so a transient slow response is retried, not fatal.
     for _pragma in (
-        "SET http_timeout = 600000",      # 10 min per request (default 30_000 ms)
-        "SET http_retries = 8",           # default 3
+        # Hang-budget cap: timeout × retries bounds how long a stalled GET can park. Was
+        # 600000ms × 8 = ~80 min of silent parking (the recurring "--w6 ran 50 min, no output"
+        # stall). Keep a generous 5-min per-request window for a genuinely slow FanGraphs GET,
+        # but 4 retries → ≤~20 min worst case, safely under the op's 2700s wall-clock cap.
+        "SET http_timeout = 300000",      # 5 min per request (default 30_000 ms)
+        "SET http_retries = 4",           # default 3
         "SET http_retry_wait_ms = 500",
         "SET http_retry_backoff = 4",
     ):

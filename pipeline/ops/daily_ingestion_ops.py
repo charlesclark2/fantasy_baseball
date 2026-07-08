@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import threading
 from datetime import date, timedelta
 
 from dagster import HookContext, In, MetadataValue, Nothing, Out, failure_hook, op
@@ -13,21 +14,73 @@ APP_DIR = "/app"
 DBT_DIR = "/app/dbt"
 
 
-def _run_script(context, script: str, args: list[str] | None = None) -> str:
-    """Run a Python script and return its stdout. Raises on non-zero exit."""
+def _run_script(context, script: str, args: list[str] | None = None,
+                *, timeout: int | None = None) -> str:
+    """Run a Python script, STREAMING its stdout/stderr to the Dagster log line-by-line,
+    and return its stdout. Raises on non-zero exit, or (when `timeout` wall-clock seconds is
+    given) kills the process and raises if it overruns.
+
+    Why streaming, not capture_output: the previous `subprocess.run(capture_output=True)`
+    buffered ALL output until the child EXITED, so a long build like `run_w1_lakehouse.py
+    --w6` was a silent black box for its whole run — you couldn't tell a slow mart from a
+    hung S3 read. Popen + `-u`/PYTHONUNBUFFERED flush each `print()` live, and per-pipe drain
+    threads preserve the exact old contract (return = stdout only; stderr → log.warning; the
+    exception carries stderr). `timeout` gives a hard wall-clock ceiling so a stalled httpfs
+    read (http_timeout×http_retries can otherwise park ~tens of minutes) fails LOUD instead of
+    hanging the HALT-tier op indefinitely."""
     path = script if os.path.isabs(script) else f"{SCRIPTS_DIR}/{script}"
-    cmd = [sys.executable, path] + (args or [])
+    # -u: unbuffered child stdio so prints stream promptly (block-buffered otherwise off a tty).
+    cmd = [sys.executable, "-u", path] + (args or [])
     # E11.3 — propagate job name so script-level Snowflake sessions get QUERY_TAG set.
-    env = {**os.environ, "DAGSTER_JOB_NAME": context.job_name}
-    context.log.info(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, env=env, capture_output=True, text=True, cwd=APP_DIR)
-    if result.stdout:
-        context.log.info(result.stdout)
-    if result.stderr:
-        context.log.warning(result.stderr)
-    if result.returncode != 0:
-        raise Exception(f"{os.path.basename(script)} failed (exit {result.returncode})\n{result.stderr}")
-    return result.stdout or ""
+    env = {**os.environ, "DAGSTER_JOB_NAME": context.job_name, "PYTHONUNBUFFERED": "1"}
+    context.log.info(f"Running: {' '.join(cmd)}"
+                     + (f"  (wall-clock cap {timeout}s)" if timeout else ""))
+    proc = subprocess.Popen(
+        cmd, env=env, cwd=APP_DIR, text=True, bufsize=1,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    out_lines: list[str] = []
+    err_lines: list[str] = []
+
+    def _drain(pipe, sink, logfn):
+        for line in pipe:
+            line = line.rstrip("\n")
+            sink.append(line)
+            logfn(line)
+
+    t_out = threading.Thread(target=_drain, args=(proc.stdout, out_lines, context.log.info), daemon=True)
+    t_err = threading.Thread(target=_drain, args=(proc.stderr, err_lines, context.log.warning), daemon=True)
+    t_out.start()
+    t_err.start()
+
+    killed = {"flag": False}
+
+    def _kill():
+        killed["flag"] = True
+        proc.kill()
+
+    timer = threading.Timer(timeout, _kill) if timeout else None
+    if timer:
+        timer.start()
+    try:
+        proc.wait()
+    finally:
+        if timer:
+            timer.cancel()
+    t_out.join(timeout=5)
+    t_err.join(timeout=5)
+
+    stdout = "\n".join(out_lines)
+    stderr = "\n".join(err_lines)
+    if killed["flag"]:
+        raise Exception(
+            f"{os.path.basename(script)} exceeded its {timeout}s wall-clock cap and was KILLED "
+            f"(likely a stalled S3/httpfs read — see http_timeout/http_retries in run_w1_lakehouse.py). "
+            f"Last stdout:\n" + "\n".join(out_lines[-40:])
+        )
+    if proc.returncode != 0:
+        raise Exception(f"{os.path.basename(script)} failed (exit {proc.returncode})\n{stderr}")
+    return stdout
 
 
 # INC-22 — anchor "today" and every day-relative window to the canonical US baseball-day
@@ -565,7 +618,10 @@ def run_w1_lakehouse_op(context):
     # player_transactions precursor export (run by the operator/cutover wiring) to exist first.
     # W6 build is always HALT (mart_odds_outcomes serves from S3 external tables — live since W6).
     # w6_args is ["--w6"] normally, or ["--w3pre", "--w6"] when W11_W3PRE_DAILY=1 (INC-23, above).
-    _run_script(context, "run_w1_lakehouse.py", w6_args)
+    # 45-min wall-clock cap: a healthy --w6 is ~10-20 min; a stalled httpfs read (the
+    # recurring "--w3pre --w6 ran 50 min with no output" class) now fails LOUD with the last
+    # per-mart progress line, instead of parking this HALT-tier op indefinitely.
+    _run_script(context, "run_w1_lakehouse.py", w6_args, timeout=2700)
     # The W7b mini-wave + its precursor are mirror-tier: HALT once W7B_LAKEHOUSE_S3=1, else
     # ALERT-loud-but-continue during the parallel window (parity-only; must not take down the
     # W6-critical build). --w7b-only reuses the W6 parquet just built ≡ the old "--w6 --w7b".
