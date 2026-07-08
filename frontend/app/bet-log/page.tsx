@@ -55,6 +55,9 @@ interface ApiBet {
   ev: number | null
   model_prob: number | null
   total_line: number | null
+  // Player-prop fields (E9.42) — only present on strikeout-prop bets logged from /props.
+  prop_line: number | null
+  player_name: string | null
   notes: string | null
   placed_at: string
 }
@@ -103,6 +106,8 @@ function marketDisplay(m: string): string {
     "h2h away": "Away ML",
     "over": "Over",
     "under": "Under",
+    "strikeouts over": "K Over",
+    "strikeouts under": "K Under",
   }
   return map[m] ?? m
 }
@@ -774,7 +779,7 @@ function BetLogInner() {
                         <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 whitespace-nowrap">Date</TableHead>
                         <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 whitespace-nowrap">Game</TableHead>
                         <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 whitespace-nowrap">Market</TableHead>
-                        <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 text-right whitespace-nowrap">Runs</TableHead>
+                        <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 text-right whitespace-nowrap">Line</TableHead>
                         <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 whitespace-nowrap">Bookmaker</TableHead>
                         <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 text-right whitespace-nowrap">Odds</TableHead>
                         <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 text-right whitespace-nowrap">Stake</TableHead>
@@ -797,7 +802,7 @@ function BetLogInner() {
                             <TableCell className="px-4 py-3 text-sm text-white whitespace-nowrap">{bet.matchup ? normalizeMatchup(bet.matchup) : "—"}</TableCell>
                             <TableCell className="px-4 py-3 text-sm text-gray-300 whitespace-nowrap">{marketDisplay(bet.market)}</TableCell>
                             <TableCell className="px-4 py-3 text-sm text-gray-300 text-right whitespace-nowrap">
-                              {bet.total_line != null ? bet.total_line : "—"}
+                              {bet.prop_line ?? bet.total_line ?? "—"}
                             </TableCell>
                             <TableCell className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap">{bet.bookmaker ?? "—"}</TableCell>
                             <TableCell className="px-4 py-3 text-sm text-gray-300 text-right whitespace-nowrap">{fmtOdds(bet.american_odds)}</TableCell>

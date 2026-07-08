@@ -237,6 +237,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _FRONTEND_SURFACES = [
     _REPO_ROOT / "frontend" / "components" / "pitcher-k-projection.tsx",
     _REPO_ROOT / "frontend" / "app" / "props" / "page.tsx",
+    # E9.42: the "Log this prop" bookkeeping affordance ships from the props surface, so it
+    # is held to the same honest-framing bar (no +EV / edge / bet-rec language).
+    _REPO_ROOT / "frontend" / "components" / "log-prop-button.tsx",
 ]
 
 
