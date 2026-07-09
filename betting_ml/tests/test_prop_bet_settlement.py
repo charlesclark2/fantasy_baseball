@@ -109,4 +109,4 @@ def test_prop_starters_empty_on_miss(monkeypatch):
     from app.backend.routers import bets
     monkeypatch.setattr(bets, "lakehouse_query", lambda sql, params: [])
     out = bets.prop_starters(date="2026-07-01", _="uid")
-    assert out == {"date": "2026-07-01", "starters": []}
+    assert out == {"date": "2026-07-01", "source": "probable_pitchers", "starters": []}

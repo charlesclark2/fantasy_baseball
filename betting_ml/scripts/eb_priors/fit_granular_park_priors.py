@@ -45,15 +45,22 @@ _PRIOR_FIT_MIN_PA = 5_000     # venues with < 5k PAs excluded from prior fit
 _OUTPUT_TABLE     = "baseball_data.betting.eb_park_factors_granular_raw"
 
 # ── E11.1-W4 lakehouse: build-on-DuckDB I/O ───────────────────────────────────
-# `--s3` mode reads savant_park_factors_raw from the S3 parquet (exported by
-# scripts/export_w4_raw_to_s3.py) and writes the EB posteriors to S3 parquet,
-# so the BUILD runs on DuckDB with NO Snowflake compute (the numpy EB math is
-# unchanged → value-identical). The Snowflake MERGE path below is retained for
-# rollback. The mart_park_factors_granular duckdb branch reads the output parquet
-# via read_parquet(lakehouse_loc("eb_park_factors_granular_raw")).
+# `--s3` mode reads savant_park_factors_raw from the S3 parquet and writes the EB
+# posteriors to S3 parquet, so the BUILD runs on DuckDB with NO Snowflake compute
+# (the numpy EB math is unchanged → value-identical). The Snowflake MERGE path below
+# is retained for rollback. The mart_park_factors_granular duckdb branch reads the
+# output parquet via read_parquet(lakehouse_loc("eb_park_factors_granular_raw")).
+#
+# E11.22 read reconcile (2026-07-09): the INPUT now reads the LIVE-writer raw mirror
+# (lakehouse_raw/, dual-written by ingest_savant_park_factors.py under W11_RAW_WRITE_MODE)
+# instead of the export_w4 SF-derived mirror (baseball/lakehouse/). This removes the last
+# dependency on the Snowflake savant_park_factors_raw table so it can be DROPPED like the
+# rest of the A/B/C/D batch. The raw mirror is append-only (INC comment: dedup by latest
+# run happens downstream), so _load_savant_s3 dedups by (venue_id) keeping the latest
+# ingestion_ts — a no-op when the slice is already unique, correct if snapshots accumulate.
 _S3_BUCKET = "baseball-betting-ml-artifacts"
 _LAKEHOUSE = f"s3://{_S3_BUCKET}/baseball/lakehouse"
-_S3_INPUT  = f"{_LAKEHOUSE}/savant_park_factors_raw/**/*.parquet"
+_S3_INPUT  = f"s3://{_S3_BUCKET}/baseball/lakehouse_raw/savant_park_factors_raw/**/*.parquet"
 _S3_OUTPUT = f"{_LAKEHOUSE}/eb_park_factors_granular_raw/data.parquet"
 
 # Output column order — matches eb_park_factors_granular_raw (scripts/ddl/eb_park_factors_granular_raw.sql)
@@ -85,7 +92,12 @@ def _get_duckdb():
 
 
 def _load_savant_s3(duck, season: int) -> list[dict]:
-    """S3/DuckDB analogue of _load_savant — same projection, filter, and order."""
+    """S3/DuckDB analogue of _load_savant — same projection + filter, plus an append-mirror dedup.
+
+    E11.22: the input is the live-writer raw mirror (lakehouse_raw/, append-only), so QUALIFY to the
+    latest ingestion_ts per venue for the filtered slice. On a slice that is already unique per venue
+    (one ingest/season) this is an identity — but it guarantees one row/venue if snapshots accumulate,
+    matching the SF read's implicit single-row-per-grain and the downstream latest-run dedup intent."""
     cur = duck.execute(
         f"""
         SELECT venue_id, venue_name, season, n_pa,
@@ -95,6 +107,7 @@ def _load_savant_s3(duck, season: int) -> list[dict]:
         WHERE season = {int(season)}
           AND bat_side = 'All'
           AND num_years_rolling = 3
+        QUALIFY row_number() over (partition by venue_id order by ingestion_ts desc) = 1
         ORDER BY venue_id
         """
     )

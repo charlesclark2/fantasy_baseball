@@ -144,7 +144,10 @@ def prop_starters(date: str, _: str = Depends(get_user_id)) -> dict:
         }
         for r in rows
     ]
-    return {"date": date, "starters": starters}
+    # `source` identifies which build is live (the probable-pitcher feed, post-DH-fix). Extra
+    # field; the frontend ignores it. If a deployed /props/starters response lacks this key, the
+    # Lambda is still on the pre-fix build regardless of the (identical) empty-array shape.
+    return {"date": date, "source": "probable_pitchers", "starters": starters}
 
 
 @router.post("/users/login")
