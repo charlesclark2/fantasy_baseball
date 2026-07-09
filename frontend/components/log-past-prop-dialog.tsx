@@ -39,13 +39,22 @@ interface StartersResponse {
   starters: Starter[]
 }
 
-export function LogPastPropDialog() {
+export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
   const { accessToken } = useAuth()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  const [date, setDate] = useState<Date>(() => new Date())
+  // Clamp the seed date into the [today-14, today] window this dialog supports, so a Props page
+  // opened on an out-of-window date still starts somewhere valid.
+  const clampToWindow = (d: Date) => {
+    const today = new Date()
+    const floor = subDays(today, 14)
+    if (d > today) return today
+    if (d < floor) return floor
+    return d
+  }
+  const [date, setDate] = useState<Date>(() => clampToWindow(initialDate ?? new Date()))
   const [calOpen, setCalOpen] = useState(false)
   const dateStr = format(date, "yyyy-MM-dd")
 
@@ -116,7 +125,10 @@ export function LogPastPropDialog() {
       open={open}
       onOpenChange={(o) => {
         setOpen(o)
-        if (o) reset()
+        if (o) {
+          setDate(clampToWindow(initialDate ?? new Date()))
+          reset()
+        }
       }}
     >
       <DialogTrigger asChild>

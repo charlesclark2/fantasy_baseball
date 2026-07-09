@@ -29,6 +29,7 @@ import { CalendarIcon, CheckCircle, ChevronLeft, ChevronRight, Pencil, Trash2 } 
 import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
 import { normalizeTeam, normalizeMatchup } from "@/lib/teams"
+import { LogPastPropDialog } from "@/components/log-past-prop-dialog"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -567,7 +568,11 @@ function BetLogInner() {
               Log a Bet form
           ---------------------------------------------------------------- */}
           <div className="rounded-lg border border-[#262626] bg-[#141414] p-6">
-            <h2 className="mb-5 text-base font-semibold text-white">Log a Bet</h2>
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <h2 className="text-base font-semibold text-white">Log a Bet</h2>
+              {/* Manual strikeout-prop entry (E9.42) — back-log a prop from any game in the last ~14 days. */}
+              <LogPastPropDialog />
+            </div>
 
             {isPrefilled && (
               <div className="mb-5 rounded-md border border-[#10b981]/30 bg-[#10b981]/10 px-3 py-2 text-xs text-[#10b981]">
