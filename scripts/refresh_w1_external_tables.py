@@ -201,6 +201,17 @@ W7B_TABLES = [
     "stg_statsapi_lineups_wide",
 ]
 
+# INC-31 (2026-07-10): the two W7b SERVING marts whose S3 parquet is now rebuilt on the INTRADAY
+# cadence (run_w1_lakehouse.py --w7b-only inside _schedule_lakehouse_intraday) so a slate's lineups
+# are seen the SAME DAY they post — not only at the next morning build. Their lakehouse_ext tables
+# must be REFRESHed on that same cadence, or the SF view lineup_monitor.py reads (betting.
+# stg_statsapi_lineups_wide → lakehouse_ext → this parquet) stays stale and the lineup monitor is
+# blind to today's confirmed lineups (post_lineup predict never fires) + the pick-detail lineup card
+# is empty for the live slate. Added to the DEFAULT refresh (best-effort — WARN if the ext table
+# does not exist yet). Kept as a distinct constant (not the whole W7B_TABLES) to avoid re-refreshing
+# stg_statsapi_transactions, which is already in the W11TX required set.
+W7B_SERVING_TABLES = ["stg_statsapi_lineups_wide", "stg_statsapi_probable_pitchers"]
+
 # E11.1-W9: the 5 sub-model SIGNAL STORES mirrored to S3 by scripts/export_w9_signals_to_s3.py
 # (external tables created by scripts/ddl/generate_w9_external_tables.py). BEST-EFFORT (WARN if
 # missing) like W4/W5/W6/W7/W7b during the opt-in rollout — they don't exist until the export
@@ -483,11 +494,12 @@ def main():
                 | set(W3_TABLES) | set(W11TX_TABLES))
     _refresh(
         STG_BATTER_PITCHES_TABLE + W1_TABLES + W2_TABLES + W3_TABLES + W3PRE_TABLES
-        + W4_TABLES + W5_TABLES + ARCHETYPE_TABLES + W6_TABLES + W7_TABLES + W11TX_TABLES,
+        + W4_TABLES + W5_TABLES + ARCHETYPE_TABLES + W6_TABLES + W7_TABLES + W7B_SERVING_TABLES
+        + W11TX_TABLES,
         required=required,
     )
     print("stg_batter_pitches + W1+W2+W3 + W11tx external table refresh complete "
-          "(W3pre + W4 + W5 + W5b + W6 + W7 best-effort).")
+          "(W3pre + W4 + W5 + W5b + W6 + W7 + W7b-serving best-effort).")
 
 
 if __name__ == "__main__":

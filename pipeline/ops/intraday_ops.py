@@ -86,13 +86,28 @@ _SCHEDULE_INTRADAY_ENABLED = os.environ.get("SCHEDULE_LAKEHOUSE_INTRADAY", "0") 
 
 
 def _schedule_lakehouse_intraday(context: OpExecutionContext) -> None:
-    """Refresh the S3 lakehouse game-state (stg_statsapi_games) from the just-captured native
-    monthly_schedule snapshot, so prod stops serving a day-stale 'Preview' game-state.
+    """Refresh the S3 lakehouse game-state (stg_statsapi_games) AND the wide lineup table
+    (stg_statsapi_lineups_wide) from the just-captured native monthly_schedule snapshot, so prod
+    stops serving a day-stale 'Preview' game-state and TODAY's confirmed lineups are actually seen.
 
     Sequence mirrors the daily run_w1_lakehouse_op for this tier, scoped to today's raw:
       export_odds_raw_to_s3.py --source monthly_schedule --since <today>   (native → S3 raw)
       run_w1_lakehouse.py --w3pre-only                                     (rebuild games flatten)
+      run_w1_lakehouse.py --w7b-only                                       (rebuild lineups_wide etc.)
       refresh_w1_external_tables.py                                        (refresh ext-table metadata)
+
+    INC-31 (2026-07-10) — WHY --w7b-only is here: the S3 stg_statsapi_lineups_wide parquet is
+    otherwise rebuilt ONLY by the once-daily (morning) run, but a slate's lineups post through the
+    afternoon/evening. Everything downstream reads that parquet — lineup_monitor.py detects confirmed
+    lineups via betting.stg_statsapi_lineups_wide (→ lakehouse_ext → this parquet), and the --s3
+    serving reads (write_serving_store / picks.py) build the pick-detail lineup card from it. So a
+    stale parquet makes the lineup monitor BLIND to today's confirmations (post_lineup predict never
+    fires) AND leaves the pick-detail lineup card empty for the whole live slate. Rebuilding it on the
+    same intraday cadence as the games flatten — UPSTREAM of the lineup monitor's read — closes both.
+    The refresh below must cover stg_statsapi_lineups_wide so the SF view the monitor reads reflects it.
+    ⚠️ COST/fast-follow: --w7b-only rebuilds the whole W7b mini-wave (injury chain + probable_pitchers
+    + lineups_wide), reusing the existing W2/W4/W6 parquet (light, but not lineups-only). A scoped
+    --w7b-lineups-only build is the fast-follow if the per-tick cost matters.
     """
     if not _SCHEDULE_INTRADAY_ENABLED:
         context.log.info(
@@ -104,11 +119,13 @@ def _schedule_lakehouse_intraday(context: OpExecutionContext) -> None:
         today = _today()
         _run_script(context, "export_odds_raw_to_s3.py", ["--source", "monthly_schedule", "--since", today])
         _run_script(context, "run_w1_lakehouse.py", ["--w3pre-only"])
+        _run_script(context, "run_w1_lakehouse.py", ["--w7b-only"])
         _run_script(context, "refresh_w1_external_tables.py")
     except Exception as exc:  # ALERT-loud-but-continue — never crash the schedule capture op
         context.log.warning(
             f"⚠️ Intraday schedule lakehouse refresh FAILED — served game-state/lineups may be "
-            f"STALE (games may show as pre-game 'Preview'): {exc}"
+            f"STALE (games may show as pre-game 'Preview', or the lineup monitor may miss today's "
+            f"confirmed lineups): {exc}"
         )
 
 
