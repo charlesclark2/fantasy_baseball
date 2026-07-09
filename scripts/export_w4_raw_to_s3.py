@@ -48,12 +48,12 @@ _S3_BUCKET = "baseball-betting-ml-artifacts"
 
 # lakehouse_name → Snowflake fully-qualified table name.
 TABLES = {
-    "catcher_framing_raw": "baseball_data.savant.catcher_framing_raw",
+    # E11.22 DROPPED (2026-07-09): catcher_framing_raw, fg_stuff_plus_raw, fg_hitting_leaderboard_raw
+    # were dropped from Snowflake post both→s3 cutover — their consumers read the live lakehouse_raw/
+    # mirror now, so this SF-mirror bridge no longer applies to them. Remaining (not-yet-dropped):
     "savant_park_factors_raw": "baseball_data.fangraphs.savant_park_factors_raw",
     "player_profiles_raw": "baseball_data.statsapi.player_profiles_raw",
-    "fg_stuff_plus_raw": "baseball_data.fangraphs.fg_stuff_plus_raw",
     "fg_zips_hitting_raw": "baseball_data.fangraphs.fg_zips_hitting_raw",
-    "fg_hitting_leaderboard_raw": "baseball_data.fangraphs.fg_hitting_leaderboard_raw",
     "fg_zips_pitching_raw": "baseball_data.fangraphs.fg_zips_pitching_raw",
 }
 

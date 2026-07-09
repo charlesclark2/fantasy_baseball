@@ -82,3 +82,31 @@ def test_prop_outcome_none_without_line():
 
 def test_prop_outcome_unknown_market_is_none():
     assert _prop_outcome("over", 7, 6.5) is None
+
+
+# ── /props/starters endpoint (manual back-log picker source) ─────────────────
+
+def test_prop_starters_shapes_rows(monkeypatch):
+    from datetime import date as _date
+
+    from app.backend.routers import bets
+
+    fake = [{
+        "GAME_PK": 778899, "PITCHER_ID": 543037, "PITCHER_NAME": "Gerrit Cole",
+        "TEAM": "NYY", "OPPONENT": "BOS", "GAME_DATE": _date(2026, 7, 1),
+    }]
+    monkeypatch.setattr(bets, "lakehouse_query", lambda sql, params: fake)
+    out = bets.prop_starters(date="2026-07-01", _="uid")
+    assert out["date"] == "2026-07-01"
+    assert len(out["starters"]) == 1
+    s = out["starters"][0]
+    assert s["game_pk"] == 778899 and s["pitcher_id"] == 543037
+    assert s["pitcher_name"] == "Gerrit Cole" and s["opponent"] == "BOS"
+    assert s["game_date"] == "2026-07-01"  # date object sliced to ISO day
+
+
+def test_prop_starters_empty_on_miss(monkeypatch):
+    from app.backend.routers import bets
+    monkeypatch.setattr(bets, "lakehouse_query", lambda sql, params: [])
+    out = bets.prop_starters(date="2026-07-01", _="uid")
+    assert out == {"date": "2026-07-01", "starters": []}

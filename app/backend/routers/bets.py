@@ -114,21 +114,22 @@ def prop_starters(date: str, _: str = Depends(get_user_id)) -> dict:
     case; a scratched start simply won't settle (no game-log row) until voided.
     """
     sql = """
-        WITH pp AS (
-            SELECT game_pk, side, probable_pitcher_id, probable_pitcher_name, game_date
+        WITH ranked AS (
+            SELECT game_pk, side, probable_pitcher_id, probable_pitcher_name, game_date,
+                   row_number() OVER (PARTITION BY game_pk, side ORDER BY ingestion_ts DESC) AS rn
             FROM baseball_data.betting.stg_statsapi_probable_pitchers
             WHERE CAST(game_date AS DATE) = CAST(%(date)s AS DATE)
               AND probable_pitcher_id IS NOT NULL
-            QUALIFY row_number() OVER (PARTITION BY game_pk, side ORDER BY ingestion_ts DESC) = 1
         )
-        SELECT pp.game_pk,
-               pp.probable_pitcher_id   AS pitcher_id,
-               pp.probable_pitcher_name AS pitcher_name,
-               CASE WHEN pp.side = 'home' THEN gm.home_team_name ELSE gm.away_team_name END AS team,
-               CASE WHEN pp.side = 'home' THEN gm.away_team_name ELSE gm.home_team_name END AS opponent,
-               pp.game_date AS game_date
-        FROM pp
-        LEFT JOIN baseball_data.betting.stg_statsapi_games gm ON gm.game_pk = pp.game_pk
+        SELECT r.game_pk,
+               r.probable_pitcher_id   AS pitcher_id,
+               r.probable_pitcher_name AS pitcher_name,
+               CASE WHEN r.side = 'home' THEN gm.home_team_name ELSE gm.away_team_name END AS team,
+               CASE WHEN r.side = 'home' THEN gm.away_team_name ELSE gm.home_team_name END AS opponent,
+               r.game_date AS game_date
+        FROM ranked r
+        LEFT JOIN baseball_data.betting.stg_statsapi_games gm ON gm.game_pk = r.game_pk
+        WHERE r.rn = 1
         ORDER BY pitcher_name
     """
     rows = lakehouse_query(sql, {"date": date})

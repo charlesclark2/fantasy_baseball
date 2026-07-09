@@ -48,15 +48,13 @@ from utils.snowflake_loader import get_snowflake_connection
 # which is harmless: every W11 stg/mart dedups by a NATURAL key (player×season, game_pk, …), so
 # the dt= partition is a physical layout detail, never a semantic one.
 SOURCES = {
-    # JSON-VARIANT (raw_json blob) feeds — flattened by the stg duckdb branch
-    "fg_stuff_plus_raw":          ("baseball_data.fangraphs.fg_stuff_plus_raw",          "ingestion_ts"),
-    "fg_hitting_leaderboard_raw": ("baseball_data.fangraphs.fg_hitting_leaderboard_raw", "ingestion_ts"),
-    "catcher_framing_raw":        ("baseball_data.savant.catcher_framing_raw",           None),
-    "player_transactions":        ("baseball_data.statsapi.player_transactions",         None),
-    # Typed (columnar) feeds — read column-wise by the stg/mart duckdb branch (no raw_json)
-    "sprint_speed_raw":           ("baseball_data.savant.sprint_speed_raw",              "ingestion_timestamp"),
-    "oaa_team_season_raw":        ("baseball_data.external.oaa_team_season_raw",         "loaded_at"),
-    "savant_park_factors_raw":    ("baseball_data.fangraphs.savant_park_factors_raw",    None),
+    # E11.22 DROPPED (2026-07-09): fg_stuff_plus_raw, fg_hitting_leaderboard_raw, catcher_framing_raw,
+    # player_transactions, sprint_speed_raw, oaa_team_season_raw were dropped from Snowflake after the
+    # both→s3 cutover — their SF source no longer exists, so they can't (and needn't) be mirrored here.
+    # Their consumers read the live lakehouse_raw/ parquet (the Tier-A writers, s3-only). Only the
+    # not-yet-dropped feeds remain exportable:
+    # Typed (columnar) feed — read column-wise by the stg/mart duckdb branch (no raw_json)
+    "savant_park_factors_raw":    ("baseball_data.fangraphs.savant_park_factors_raw",    None),  # deferred — S3-input reconcile pending
     # E11.1-W11 Tier-B — the shared umpire feed (4 writers → one table). loaded_at is the stg
     # dedup tiebreaker (order by loaded_at desc); alias it to ingestion_ts for the dt= partition.
     "umpire_game_log":            ("baseball_data.statsapi.umpire_game_log",             "loaded_at"),
