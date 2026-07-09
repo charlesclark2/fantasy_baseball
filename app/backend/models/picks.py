@@ -359,23 +359,23 @@ class GameContext(BaseModel):
 class MarketScorecard(BaseModel):
     """Per-market settle of a completed game — factual, no profitability framing.
 
-    h2h grades the model's pick AND the closing favorite against the winner.
-    totals grades only the model's over/under call and reports the line result
-    as a plain fact (books balance a total to ~50/50, so there is no directional
-    market "call" to grade). Win-semantics mirror the performance page (E9.26):
-    the pick is the side the probability favors (>= 0.5 → home/over), one per
-    market; "push" on an exact tie.
+    Both the model's pick and the market's benchmark are graded against the
+    outcome: h2h against the winner (market = the closing favorite), totals
+    against the line (market = the de-vigged over/under lean — near-neutral, so
+    its implied % is always surfaced). Win-semantics mirror the performance page
+    (E9.26): the pick is the side the probability favors (>= 0.5 → home/over),
+    one per market; "push" on an exact tie.
     """
     market_type: str                    # "h2h" | "totals"
     # Model's directional pick (from model_prob >= 0.5)
     model_side: str | None = None       # "home"|"away"|"over"|"under"
     model_result: str | None = None     # "win"|"loss"|"push"
     model_prob: float | None = None     # oriented to the picked side
-    # h2h market benchmark — the closing favorite
-    market_side: str | None = None      # "home"|"away" (h2h only)
-    market_result: str | None = None    # "win"|"loss"|"push" (h2h only)
-    market_prob: float | None = None    # favorite's de-vigged implied prob
-    # totals line context — factual, not a market call
+    # Market benchmark — h2h: closing favorite; totals: de-vigged over/under lean
+    market_side: str | None = None      # "home"|"away"|"over"|"under"
+    market_result: str | None = None    # "win"|"loss"|"push"
+    market_prob: float | None = None    # oriented to the market's side
+    # totals line context (factual)
     total_line: float | None = None
     final_total: int | None = None
     landed: str | None = None           # "over"|"under"|"push" (totals only)

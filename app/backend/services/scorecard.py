@@ -17,13 +17,14 @@ same thing everywhere:
     convention the performance win-rate uses.)
   * A pick "wins" if that side matched the outcome; "push" on an exact tie.
 
-Market benchmark:
+Market benchmark (graded the same way as the model, for symmetry):
   * h2h: the market's pick = the closing **favorite** (de-vigged implied
     prob >= 0.5). It wins if the favorite won — a genuine, gradable market call.
-  * totals: books balance a total to ~50/50, so there is no directional market
-    "call" to grade. We therefore surface the **line** as a plain fact — the
-    closing line, the final combined total, and which way it landed
-    (over / under / push) — and do NOT assert a market win/loss on totals.
+  * totals: the market's lean = the de-vigged consensus over/under side
+    (P(over) >= 0.5 → over). Books balance a total to ~50/50, so this lean is
+    near-neutral — we always surface its implied % alongside the result so the
+    reader sees that, and we also report the plain facts (closing line, final
+    combined total, which way it landed).
 
 Framing is factual only: a model miss is reported as plainly as a hit. No
 +EV / edge / win-rate / profit language (honest-framing guardrail).
@@ -101,12 +102,16 @@ def _market_scorecard(
     if market_type == "totals":
         final_total = home_score + away_score
         model_side = _model_side("totals", model_prob)
+        market_side = _model_side("totals", market_prob)  # de-vig P(over) >= 0.5 → over lean
         landed = _totals_landed(final_total, total_line)
         return MarketScorecard(
             market_type="totals",
             model_side=model_side,
             model_result=_grade_totals(model_side, landed),
             model_prob=_oriented_prob(model_prob, model_side),
+            market_side=market_side,
+            market_result=_grade_totals(market_side, landed),
+            market_prob=_oriented_prob(market_prob, market_side),
             total_line=total_line,
             final_total=final_total,
             landed=landed,
