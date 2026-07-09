@@ -44,6 +44,7 @@ from app.backend.models.picks import (
     PickExplanationPayload,
     PickExplanationTarget,
     PublicBetting,
+    ScorecardListResponse,
     StarterStats,
     TeamPerfStats,
     TeamRecentForm,
@@ -55,6 +56,7 @@ from app.backend.dependencies import get_optional_user_id
 from app.backend.services import dynamo, serving_cache
 from app.backend.services.lakehouse_read import lakehouse_query
 from app.backend.services.s3_cache import get_cache, set_cache
+from app.backend.services.scorecard import build_scorecard_from_detail
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/picks", tags=["picks"])
@@ -1517,6 +1519,67 @@ def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaul
     return result
 
 
+def _read_game_detail_blob(game_pk: int, date_str: str) -> dict | None:
+    """Read a game-detail blob from the serving cache only (DynamoDB permanent-first,
+    then date-scoped, then S3). No lakehouse — used by the scorecard batch endpoint."""
+    blob = serving_cache.get_cache(f"picks/game/{game_pk}", date_str)
+    if blob is not None and blob.get("picks"):
+        return blob
+    s3_key = f"picks/game/{game_pk}.json"
+    blob = get_cache(s3_key, permanent=True) or get_cache(s3_key)
+    if blob is not None and blob.get("picks"):
+        return blob
+    return None
+
+
+@router.get("/scorecard", response_model=ScorecardListResponse)
+def get_scorecards(date: str = Query(default=None, description="YYYY-MM-DD; defaults to the current game date")) -> ScorecardListResponse:
+    """E9.40 — per-game "who called it" scorecards for the completed games on a date.
+
+    Reads settled results ONLY through the serving cache (DynamoDB → S3): the slate's
+    game_pks come from the cached picks/ev blob, and each game's final result + model
+    pick + market benchmark come from its cached game-detail blob. No lakehouse /
+    Snowflake / mart_game_results read (those marts may be mid-migration).
+
+    Only Final games produce a scorecard, so mid-slate / future dates return an empty
+    list. Framing is factual — a model miss is reported as plainly as a hit.
+    """
+    date_str = date or current_game_date_iso()
+    if date:
+        try:
+            datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+
+    # Enumerate the slate's game_pks from the cached EV blob (all games with a
+    # prediction that date), DynamoDB then S3.
+    ev_blob = serving_cache.get_cache("picks/ev", date_str)
+    if ev_blob is None and date_str == current_game_date_iso():
+        ev_blob = get_cache("picks/ev.json")
+    game_pks: list[int] = []
+    seen: set[int] = set()
+    for p in ((ev_blob or {}).get("picks") or []):
+        gp = p.get("game_pk")
+        if gp is not None and gp not in seen:
+            seen.add(gp)
+            game_pks.append(gp)
+
+    scorecards = []
+    for gp in game_pks:
+        blob = _read_game_detail_blob(gp, date_str)
+        if blob is None:
+            continue
+        try:
+            sc = build_scorecard_from_detail(blob, gp)
+        except Exception:
+            logger.warning("Could not build scorecard for game_pk=%s", gp)
+            continue
+        if sc is not None:
+            scorecards.append(sc)
+
+    return ScorecardListResponse(scorecards=scorecards, total=len(scorecards))
+
+
 @router.get("/{game_pk}/detail", response_model=GameDetailResponse)
 def get_game_detail(game_pk: int) -> GameDetailResponse:
     params = {"game_pk": game_pk}
@@ -1526,17 +1589,27 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     _game_pg_key = f"picks/game/{game_pk}"
     _game_cache_key = f"picks/game/{game_pk}.json"
 
+    def _respond(detail: dict) -> GameDetailResponse:
+        """Build the response from a serving-cache blob and attach the E9.40
+        scorecard, computed at read time from game_score + picks (no lakehouse)."""
+        resp = GameDetailResponse(**detail)
+        try:
+            resp.scorecard = build_scorecard_from_detail(detail, game_pk)
+        except Exception:
+            logger.warning("Could not build scorecard for game_pk=%s", game_pk)
+        return resp
+
     _pg_cached = serving_cache.get_cache(_game_pg_key, _today_str)
     if _pg_cached is not None and _pg_cached.get("picks"):
         try:
-            return GameDetailResponse(**_pg_cached)
+            return _respond(_pg_cached)
         except Exception:
             logger.warning("PG stale/invalid for game_pk=%s, re-fetching", game_pk)
 
     _cached = get_cache(_game_cache_key, permanent=True) or get_cache(_game_cache_key)
     if _cached is not None and _cached.get("picks"):
         try:
-            return GameDetailResponse(**_cached)
+            return _respond(_cached)
         except Exception:
             logger.warning("Stale/invalid S3 cache for game_pk=%s, re-fetching", game_pk)
 
@@ -1960,13 +2033,28 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
         pick_narrative=pick_narrative,
     )
 
-    # Write to cache: Final games are immutable → always permanent.
-    # Explanation presence does not gate caching; if explanation is backfilled later the
-    # permanent cache row is simply overwritten on the next request that misses.
+    # Write to cache: Final games are immutable → permanent — BUT only once lineups are
+    # attached (INC-31). The S3 stg_statsapi_lineups_wide parquet is re-exported only in the
+    # daily (morning) run, so an evening Final game built here via the S3 last-resort can miss
+    # that slate's lineups → lineups is None. A permanent blob is never re-read, so freezing a
+    # null-lineup Final would serve null lineups FOREVER (the frozen-null-finals bug). Keep it
+    # date-scoped until lineups attach; the next cycle (after the daily lineups_wide re-export)
+    # rebuilds it populated and it self-heals. A played game always has a lineup, so this only
+    # defers permanence, never suppresses it.
     _is_final = game_score is not None and game_score.status == "Final"
+    _lineups_ok = lineups is not None and bool(lineups.home or lineups.away)
+    _permanent = _is_final and _lineups_ok
     _payload = result.model_dump(mode="json")
-    serving_cache.set_cache(_game_pg_key, _today_str, _payload, is_permanent=_is_final)
-    set_cache(_game_cache_key, _payload, permanent=_is_final)
+    serving_cache.set_cache(_game_pg_key, _today_str, _payload, is_permanent=_permanent)
+    set_cache(_game_cache_key, _payload, permanent=_permanent)
+
+    # E9.40 — attach the "who called it" scorecard (Final games only). Derived from
+    # the payload just built (game_score + picks); the cache blobs stay scorecard-free
+    # so it's always recomputed fresh at read time.
+    try:
+        result.scorecard = build_scorecard_from_detail(_payload, game_pk)
+    except Exception:
+        logger.warning("Could not build scorecard for game_pk=%s", game_pk)
 
     return result
 

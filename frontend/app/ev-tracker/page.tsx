@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { normalizeTeam } from "@/lib/teams"
+import { ScorecardResults, type GameScorecardData } from "@/components/game-scorecard"
 
 // ---------------------------------------------------------------------------
 // API types
@@ -98,6 +99,12 @@ interface LineshoppingResponse {
   plays: LineshoppingPlay[]
   total: number
   is_preliminary?: boolean
+}
+
+// E9.40 — scorecard response
+interface ScorecardListResponse {
+  scorecards: GameScorecardData[]
+  total: number
 }
 
 // ---------------------------------------------------------------------------
@@ -506,7 +513,7 @@ function MobileNotRecommendedDivider() {
 // ---------------------------------------------------------------------------
 export default function EVTrackerPage() {
   const router = useRouter()
-  const { selectedDate, setSelectedDate, isoDate } = useSelectedDate()
+  const { selectedDate, setSelectedDate, isoDate, isToday } = useSelectedDate()
   const [calOpen, setCalOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<"ev" | "line-shopping">("ev")
   const [bankroll, setBankroll] = useLocalStorage<number>("ev_bankroll", 1000)
@@ -532,6 +539,14 @@ export default function EVTrackerPage() {
     queryFn: () => apiFetch(`/picks/line-shopping?date=${isoDate}`, {}, accessToken),
     staleTime: 5 * 60 * 1000,
     enabled: !!accessToken,
+  })
+
+  // E9.40 — "who called it" scorecards for completed games on a past date.
+  const { data: scorecardData } = useQuery<ScorecardListResponse>({
+    queryKey: ["picks-scorecard", isoDate, accessToken],
+    queryFn: () => apiFetch(`/picks/scorecard?date=${isoDate}`, {}, accessToken),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!accessToken && !isToday,
   })
 
   const allRows = useMemo(() => (data?.picks ?? []).map(p => computeRow(p, maxKelly)), [data, maxKelly])
@@ -979,6 +994,15 @@ export default function EVTrackerPage() {
             </div>
           </div>
         </div>
+
+        {/* ----------------------------------------------------------------
+            E9.40 — "who called it" results (completed games on a past date)
+        ---------------------------------------------------------------- */}
+        {!isToday && (scorecardData?.scorecards?.length ?? 0) > 0 && (
+          <div className="mb-6">
+            <ScorecardResults scorecards={scorecardData?.scorecards} title="Results — who called it" />
+          </div>
+        )}
 
         {/* ----------------------------------------------------------------
             Tab bar

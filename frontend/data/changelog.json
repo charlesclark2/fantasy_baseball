@@ -3,12 +3,20 @@
     "week": "2026-07-06",
     "items": [
       {
+        "tag": "fixed",
+        "text": "Fixed batting lineups sometimes not showing on a game's pick-details page. For a batch of completed games the lineup card was blank even though the lineups were known — a stale cached copy of the page had been saved before that day's lineups posted and was never refreshed. Game pages now only lock in a permanent copy once the lineups are attached, so a page saved too early self-corrects on the next update, and the affected past games have been refreshed. Lineups are factual roster information, not betting advice."
+      },
+      {
         "tag": "new",
         "text": "You can now log a strikeout prop into your Bet Log two ways. On a pitcher's Props projection detail, a 'Log this prop' button copies the strikeout line you're viewing — side, book, line, and posted odds — into your log, where you set your stake and save. And to back-log a prop you already placed, the Bet Log now has a 'Log a prop' button: pick a game date within the last 14 days, choose that day's starting pitcher, and enter your side, line, book, odds, and stake — no projection needed. Either way it settles automatically against the pitcher's actual strikeouts once the game is final (Over / Under / Push vs your logged line) and appears in your Bet History like any other bet. This is a bookkeeping convenience, not betting advice and no profitability claim — the logged line, stake, and odds are your own self-reported record; when you log from a projection we store that projection at log time alongside it purely for your reference."
       },
       {
         "tag": "new",
         "text": "Bet alerts are here. In Settings → Notifications you can now opt in to be told when the model posts qualified plays for the day's slate — by email or browser push (SMS/text is coming soon). Most days nothing fires; you're only notified when there are qualified plays. These are model outputs, not betting advice."
+      },
+      {
+        "tag": "new",
+        "text": "Completed games now show a 'who called it' scorecard. Open a past game's pick-detail page and, alongside the final score, you'll see which side the model favored on the moneyline and total runs and whether that call was correct or missed — and, for the moneyline, whether the closing favorite won too. Pick a past date on the Dashboard or the tracker and a Results section summarizes the same, one card per completed game. It's a factual record shown as plainly for a miss as for a hit — model outputs, not betting advice, with no profitability claim."
       }
     ]
   },

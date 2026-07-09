@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
 import { format } from "date-fns"
@@ -90,6 +90,15 @@ function fmtGameTime(raw: string | null): string | null {
   const d = new Date(iso)
   if (isNaN(d.getTime())) return null
   return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+}
+
+// Comparable first-pitch instant (ms) for sorting; same Z-append rule as fmtGameTime.
+// Missing/unparseable times sort last (Infinity).
+function gameTimeMs(raw: string | null): number {
+  if (!raw) return Infinity
+  const iso = raw.endsWith("Z") || /[+-]\d\d:?\d\d$/.test(raw) ? raw : raw + "Z"
+  const t = new Date(iso).getTime()
+  return isNaN(t) ? Infinity : t
 }
 
 // Compact range bar: 5th–95th band, 80% (p10–p90) emphasis, median tick, book-line marker.
@@ -220,7 +229,17 @@ function PropsPageInner() {
     staleTime: 1000 * 60 * 30,
   })
 
-  const pitchers = data?.pitchers ?? []
+  // Sort cards by first-pitch time ascending, then game_pk — so the two starters
+  // facing each other (same game) sit next to each other, in slate order.
+  const pitchers = useMemo(() => {
+    const rows = data?.pitchers ?? []
+    return [...rows].sort((a, b) => {
+      const ta = gameTimeMs(a.game_datetime)
+      const tb = gameTimeMs(b.game_datetime)
+      if (ta !== tb) return ta - tb
+      return (a.game_pk ?? 0) - (b.game_pk ?? 0)
+    })
+  }, [data])
 
   return (
     <>

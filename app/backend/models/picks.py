@@ -352,6 +352,55 @@ class GameContext(BaseModel):
     h2h: H2HRecord | None = None
 
 
+# ---------------------------------------------------------------------------
+# E9.40 — "who called it" scorecard (final result + model/market benchmark)
+# ---------------------------------------------------------------------------
+
+class MarketScorecard(BaseModel):
+    """Per-market settle of a completed game — factual, no profitability framing.
+
+    h2h grades the model's pick AND the closing favorite against the winner.
+    totals grades only the model's over/under call and reports the line result
+    as a plain fact (books balance a total to ~50/50, so there is no directional
+    market "call" to grade). Win-semantics mirror the performance page (E9.26):
+    the pick is the side the probability favors (>= 0.5 → home/over), one per
+    market; "push" on an exact tie.
+    """
+    market_type: str                    # "h2h" | "totals"
+    # Model's directional pick (from model_prob >= 0.5)
+    model_side: str | None = None       # "home"|"away"|"over"|"under"
+    model_result: str | None = None     # "win"|"loss"|"push"
+    model_prob: float | None = None     # oriented to the picked side
+    # h2h market benchmark — the closing favorite
+    market_side: str | None = None      # "home"|"away" (h2h only)
+    market_result: str | None = None    # "win"|"loss"|"push" (h2h only)
+    market_prob: float | None = None    # favorite's de-vigged implied prob
+    # totals line context — factual, not a market call
+    total_line: float | None = None
+    final_total: int | None = None
+    landed: str | None = None           # "over"|"under"|"push" (totals only)
+
+
+class GameScorecard(BaseModel):
+    """Final result + per-market "who called it" for one completed game."""
+    game_pk: int | None = None
+    game_date: str | None = None
+    home_team: str | None = None        # abbreviation
+    away_team: str | None = None
+    home_team_name: str | None = None   # full name
+    away_team_name: str | None = None
+    home_score: int | None = None
+    away_score: int | None = None
+    status: str = "Final"
+    markets: list[MarketScorecard] = []
+
+
+class ScorecardListResponse(BaseModel):
+    """GET /picks/scorecard?date= — per-game scorecards for completed games on a date."""
+    scorecards: list[GameScorecard] = []
+    total: int = 0
+
+
 class GameDetailResponse(BaseModel):
     picks: list[Pick]
     total: int
@@ -372,6 +421,8 @@ class GameDetailResponse(BaseModel):
     # Story 30.15 — model explanation
     pick_explanation: PickExplanationPayload | None = None
     pick_narrative: str | None = None
+    # E9.40 — "who called it" scorecard (populated only for Final games)
+    scorecard: GameScorecard | None = None
 
 
 # ---------------------------------------------------------------------------

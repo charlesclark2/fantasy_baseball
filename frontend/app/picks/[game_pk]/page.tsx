@@ -13,6 +13,7 @@ import Link from "next/link"
 import { ChevronLeft, ChevronDown, Info } from "lucide-react"
 import { normalizeTeam, espnLogoPath } from "@/lib/teams"
 import { Badge } from "@/components/ui/badge"
+import { GameScorecard, type GameScorecardData } from "@/components/game-scorecard"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -297,6 +298,8 @@ type GameDetailData = {
   // Story 30.15 — model explanation
   pick_explanation: PickExplanationPayload | null
   pick_narrative: string | null
+  // E9.40 — "who called it" scorecard (Final games only)
+  scorecard: GameScorecardData | null
 }
 
 // ---------------------------------------------------------------------------
@@ -2099,6 +2102,15 @@ export default function PickDetailPage() {
                   ))}
                 </div>
               </div>
+
+              {/* ============================================================
+                  1a. Scorecard — "who called it" for completed games (E9.40)
+              ============================================================ */}
+              {data?.scorecard && (
+                <div className="mt-4">
+                  <GameScorecard scorecard={data.scorecard} />
+                </div>
+              )}
 
               {/* ============================================================
                   1b. Why this pick — narrative + model reasoning (Story 30.15)

@@ -2772,8 +2772,19 @@ def main() -> int:
                 for gp, (detail_payload, is_final) in detail_map.items():
                     cache_key = f"picks/game/{gp}"
                     _has_expl = bool(detail_payload.get("pick_explanation"))
-                    _pg_set_cache(pg, cache_key, today, detail_payload, is_permanent=(is_final and _has_expl))
-                    if bucket and is_final:
+                    # INC-31: never FREEZE a Final game's blob PERMANENT while its lineups are
+                    # null. The S3 stg_statsapi_lineups_wide parquet is re-exported only in the
+                    # daily (morning) run, so an evening Final game read via --s3 can miss that
+                    # slate's lineups → lineups=None. A permanent blob is never re-read, so that
+                    # would serve null lineups FOREVER (the 26 frozen-null finals we found). Keep
+                    # it date-scoped until lineups attach; the next cycle (post daily lineups_wide
+                    # re-export) rebuilds it populated and it self-heals. A played game always has
+                    # a lineup, so this only defers permanence, never suppresses it.
+                    _ln = detail_payload.get("lineups") or {}
+                    _lineups_ok = bool(_ln.get("home") or _ln.get("away"))
+                    _permanent = is_final and _has_expl and _lineups_ok
+                    _pg_set_cache(pg, cache_key, today, detail_payload, is_permanent=_permanent)
+                    if bucket and is_final and _lineups_ok:
                         _write_s3(bucket, f"api-cache/permanent/{cache_key}.json", detail_payload)
                     elif bucket:
                         _write_s3(bucket, f"api-cache/{today}/{cache_key}.json", detail_payload)
