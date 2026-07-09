@@ -41,70 +41,17 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
     # DuckDB and is the authoritative "is today's pitch data here?" monitor. Do NOT re-add a
     # SF-table pitch entry. (The per-table try/except below now also degrades a future dropped
     # object to a WARN instead of a total crash.)
-    "baseball_data.fangraphs.fg_stuff_plus_raw": {
-        "ts_col": "ingestion_ts",
-        "max_stale_hours": 192,  # 8 days — weekly Sunday ingest
-        "game_day_only": False,
-    },
-    "baseball_data.fangraphs.fg_hitting_leaderboard_raw": {
-        "ts_col": "ingestion_ts",
-        "max_stale_hours": 36,   # daily ingest; it runs earlier in this same job, so a
-                                 # failed/skipped fetch shows as ~24h+ stale at check time.
-                                 # 36h tolerates one-off blips but catches a 2+ day outage.
-        "game_day_only": False,
-        # Non-blocking: this feeds analytics + FUTURE FANTASY, NOT the betting model —
-        # lineage dead-ends at mart_batter/pitcher_profile_summary and load_features uses
-        # zero FanGraphs hitting columns. Alert on staleness so a silent outage (e.g. the
-        # 2026-06 Cloudflare 403, or the rolling-window ingest stopping) is caught early,
-        # but never fail the betting ingest/predict job over fantasy-only data.
-        "non_blocking": True,
-    },
-    # Story 30.5 — umpire_game_log has TWO independent feeds; a table-level MAX
-    # masks one going stale while the other stays fresh (the exact failure that hid
-    # the assignment outage for a week and the tendency gap for 40 days). So check
-    # each `data_source` separately, scoped by game_date (= "do we have umps for
-    # recent GAMES", the meaningful signal — not just "did some row get written").
-    # BOTH are ALERT-ONLY (non_blocking): per-game gaps are expected (a game's HP
-    # ump may not be posted pre-game, e.g. 824589 on 2026-06-11) and settled games
-    # are backfilled from UmpScorecards post-hoc — so these must warn, never fail
-    # (a hard fail would death-spiral the predict job that carries the retry).
-    # E11.12 antipattern note: game_date is an EVENT date (the date of the game,
-    # not when we ingested). On off-days it doesn't advance. For the statsapi source,
-    # game_day_only=True limits checks to game days — correct behavior. For
-    # umpscorecards, the 96h threshold covers ~4 game-day gaps and is WARN-only,
-    # so false positives on off-day streaks are non-blocking and acceptable.
-    "umpire_game_log [statsapi HP assignment]": {
-        "table": "baseball_data.statsapi.umpire_game_log",
-        "where": "data_source = 'statsapi'",
-        "ts_col": "game_date",
-        "max_stale_hours": 48,   # healthy game-day feed is <24h; tolerates the
-                                 # morning-before-assignments-post window; a 2+ day
-                                 # gap (the 2026-06-04→ stall) alerts.
-        "game_day_only": True,
-        "non_blocking": True,
-    },
-    "umpire_game_log [umpscorecards tendency]": {
-        "table": "baseball_data.statsapi.umpire_game_log",
-        "where": "data_source = 'umpscorecards'",
-        "ts_col": "game_date",
-        "max_stale_hours": 96,   # scorecards lag the game ~1-2 days + the daily
-                                 # loader; 4 days tolerates that, a feed stop
-                                 # (the 2026-05-01→ gap) alerts.
-        "game_day_only": False,
-        "non_blocking": True,
-    },
-    # INC-12 (2026-06-23): effective_date is the transaction EVENT date, not the ingest
-    # heartbeat — during quiet periods (no roster moves) it goes stale even when the
-    # script runs fine, causing false alerts or masking real outages.
-    # ingestion_ts is set on every DELETE+INSERT in the 7-day lookback, so it ticks
-    # every day the script fires regardless of transaction volume.  36h = one missed
-    # daily fire before alert (was 168h / 7 days, which let a silent outage hide for
-    # an entire week before triggering).
-    "baseball_data.statsapi.player_transactions": {
-        "ts_col": "ingestion_ts",
-        "max_stale_hours": 36,
-        "game_day_only": False,
-    },
+    # ⛔ E11.22 DECOMMISSION (2026-07-09) — the following raw SF tables were DROPPED and their
+    # freshness entries REMOVED here. A SF-table freshness check on a dropped object false-alarms
+    # (QUERY ERROR / NO DATA) forever, so keeping them would just re-noise the daily summary:
+    #   fangraphs.fg_stuff_plus_raw, fangraphs.fg_hitting_leaderboard_raw,
+    #   savant.sprint_speed_raw, savant.catcher_framing_raw, external.oaa_team_season_raw,
+    #   statsapi.player_transactions, statsapi.umpire_game_log (both data_source scopes),
+    #   actionnetwork.public_betting_raw.
+    # These feeds are now S3-native (lakehouse_raw/ via the W11 leg-gated writers). Their SERVED
+    # freshness is owned by check_feature_block_coverage_op (per feature-block coverage vs its own
+    # trailing baseline) + each ingest op's WARN-tier logging. Do NOT re-add a SF-table entry for
+    # any of them — the raw no longer exists.
     # E11.12 antipattern note: month_end_date is a calendar-month boundary, NOT an
     # ingest heartbeat. It cannot detect mid-month feed failures — if the current
     # month's schedule was already loaded, month_end_date stays in the future
@@ -117,11 +64,8 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
         "max_stale_hours": 48,       # catches missed monthly load (shows weeks stale); NOT mid-month failures
         "game_day_only": True,
     },
-    "baseball_data.actionnetwork.public_betting_raw": {
-        "ts_col": "ingestion_timestamp",
-        "max_stale_hours": 36,
-        "game_day_only": False,
-    },
+    # ⛔ actionnetwork.public_betting_raw REMOVED 2026-07-09 (E11.22 decommission — see the
+    # consolidated note above). Public-betting is S3-native now; the raw SF table was dropped.
     # ── Odds ingestion (INC-2, 2026-06-22) ──────────────────────────────────
     # ⛔ mlb_odds_raw REMOVED 2026-07-05 — odds capture is now S3-NATIVE (LAKEHOUSE_RAW_WRITE_MODE=s3),
     # so the Snowflake oddsapi.mlb_odds_raw table is FROZEN by design and a SF-table staleness check here
@@ -188,35 +132,9 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
         "non_blocking": True,
     },
     # ── E11.12 additions — feeds with no prior monitor ───────────────────────
-    # Sprint speed — Sunday-only ingest (ingest_sprint_speed_op in daily job).
-    # snapshot_date is today's date when the script runs (ingest heartbeat, not
-    # event-date). 192h = 8 days covers one full weekly cycle with a 1-day buffer.
-    # WARN only: prior-season sprint speed imputes if stale; serving is not blocked.
-    "baseball_data.savant.sprint_speed_raw": {
-        "ts_col": "snapshot_date",  # DATE stored as VARCHAR ISO string; ingest heartbeat
-        "max_stale_hours": 192,     # 8 days — Sunday-only ingest
-        "game_day_only": False,
-        "non_blocking": True,
-    },
-    # Catcher framing — Sunday-only ingest (ingest_fangraphs_catcher_framing in daily job).
-    # snapshot_date is the ingest heartbeat. 192h = 8 days. WARN only: framing feeds
-    # the umpire/catcher block; missing a weekly refresh degrades but doesn't block.
-    "baseball_data.savant.catcher_framing_raw": {
-        "ts_col": "snapshot_date",  # DATE stored as VARCHAR ISO string; ingest heartbeat
-        "max_stale_hours": 192,     # 8 days — Sunday-only ingest
-        "game_day_only": False,
-        "non_blocking": True,
-    },
-    # OAA (Outs Above Average) — daily ingest (ingest_oaa_op in daily job, soft-fail).
-    # loaded_at = CURRENT_TIMESTAMP when each row is written (true ingest heartbeat).
-    # 48h threshold mirrors other daily non-critical feeds. Only prior-season OAA is
-    # used in features (leakage guard), so a missed daily refresh uses yesterday's value.
-    "baseball_data.external.oaa_team_season_raw": {
-        "ts_col": "loaded_at",   # TIMESTAMP_NTZ; ingest heartbeat (CURRENT_TIMESTAMP on insert)
-        "max_stale_hours": 48,
-        "game_day_only": False,
-        "non_blocking": True,
-    },
+    # ⛔ savant.sprint_speed_raw, savant.catcher_framing_raw, external.oaa_team_season_raw REMOVED
+    # 2026-07-09 (E11.22 decommission — see the consolidated note above). All three are S3-native
+    # now; their raw SF tables were dropped. Served freshness → check_feature_block_coverage_op.
     # Player profiles — weekly update mode (weekly_player_profiles_job, ingest_player_profiles.py update).
     # last_fetched_at = TIMESTAMP_NTZ ingest heartbeat set on every write. 192h = 8 days.
     # WARN only: player height/weight/position is slow-changing; a missed weekly run is
