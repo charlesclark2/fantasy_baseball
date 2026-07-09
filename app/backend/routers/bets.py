@@ -96,6 +96,40 @@ def update_bet_endpoint(bet_id: str, body: BetUpdate, user_id: str = Depends(get
     return Bet(**updated)
 
 
+@router.get("/props/starters")
+def prop_starters(date: str, _: str = Depends(get_user_id)) -> dict:
+    """Starting pitchers for a given date, for logging a strikeout prop into the Bet Log
+    (E9.42 — supports back-logging a past prop within the last ~14 days).
+
+    Returns each game's two starters with the `pitcher_id` + `game_pk` that settlement keys
+    on (see settle_user_bets.py), plus name / team / opponent for the picker. Read from the
+    S3 lakehouse via DuckDB (mart_player_game_starts, position_code '1' = the pitcher slot) —
+    zero-Snowflake request path. Never raises: an empty list on any miss (lakehouse_query
+    already returns [] on failure), so the picker just shows "no starters" rather than 500ing.
+    """
+    sql = """
+        SELECT game_pk, player_id AS pitcher_id, full_name AS pitcher_name,
+               team, opp_team AS opponent, official_date AS game_date
+        FROM baseball_data.betting.mart_player_game_starts
+        WHERE CAST(official_date AS DATE) = CAST(%(date)s AS DATE)
+          AND position_code = '1'
+        ORDER BY full_name
+    """
+    rows = lakehouse_query(sql, {"date": date})
+    starters = [
+        {
+            "game_pk": r["GAME_PK"],
+            "pitcher_id": r["PITCHER_ID"],
+            "pitcher_name": r["PITCHER_NAME"],
+            "team": r["TEAM"],
+            "opponent": r["OPPONENT"],
+            "game_date": str(r["GAME_DATE"])[:10] if r.get("GAME_DATE") is not None else date,
+        }
+        for r in rows
+    ]
+    return {"date": date, "starters": starters}
+
+
 @router.post("/users/login")
 def login_sync(body: LoginSyncRequest, user_id: str = Depends(get_user_id)) -> dict:
     """Called once by the frontend post-login. sub is trusted (JWT); email is
