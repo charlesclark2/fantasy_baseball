@@ -55,6 +55,31 @@ def test_publish_happy_path(monkeypatch):
     assert '"n_qualified": 2' in kwargs["Message"]
 
 
+def test_region_ignores_aws_default_region(monkeypatch):
+    # INC-31: AWS_DEFAULT_REGION=us-east-2 (set on the box for DuckDB/S3 lakehouse reads) must NOT
+    # leak into the notifier's region — the serving-cache idempotency table AND the SNS topic both
+    # live in us-east-1. region resolves via AWS_REGION only (default us-east-1).
+    monkeypatch.setenv("QUALIFIED_BETS_SNS_TOPIC_ARN", "arn:aws:sns:us-east-1:1:qb")
+    monkeypatch.delenv("AWS_REGION", raising=False)
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-2")
+    _freeze(monkeypatch)
+    seen: dict[str, str | None] = {}
+
+    def _client(svc, **k):
+        seen["client"] = k.get("region_name")
+        return MagicMock()
+
+    def _resource(svc, **k):
+        seen["resource"] = k.get("region_name")
+        return MagicMock(Table=lambda n: MagicMock())
+
+    monkeypatch.setattr("boto3.client", _client)
+    monkeypatch.setattr("boto3.resource", _resource)
+    qbn.notify_qualified_plays_safe(_TODAY, _ROWS)
+    assert seen.get("resource") == "us-east-1"  # DynamoDB idempotency table (credence-prod-serving-cache)
+    assert seen.get("client") == "us-east-1"    # SNS publish (topic is us-east-1)
+
+
 def test_backfill_date_never_notifies(monkeypatch):
     _env(monkeypatch)
     _freeze(monkeypatch, iso=_TODAY)

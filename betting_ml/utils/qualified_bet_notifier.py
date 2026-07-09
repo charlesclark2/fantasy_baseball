@@ -87,7 +87,12 @@ def notify_qualified_plays_safe(target_date: str, rows: list[dict], *, now=None)
         if msg["n_qualified"] <= 0:
             return False
 
-        region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+        # INC-31: resolve region via AWS_REGION only (default us-east-1) — do NOT fall through to
+        # AWS_DEFAULT_REGION. The box sets AWS_DEFAULT_REGION=us-east-2 for DuckDB/S3 lakehouse reads;
+        # consulting it here misdirects BOTH the idempotency-cache PutItem and the SNS publish to
+        # us-east-2, but the serving-cache table AND the SNS topic both live in us-east-1 → AccessDenied
+        # → alerts silently never fire. Mirrors serving_cache.py's region resolution (same table).
+        region = os.environ.get("AWS_REGION", "us-east-1")
         cache_table = os.environ.get("SERVING_CACHE_TABLE", "credence-prod-serving-cache")
         if not _claim_send_once(cache_table, target_date, region):
             logger.info("qualified-play alert already sent for %s — skipping", target_date)

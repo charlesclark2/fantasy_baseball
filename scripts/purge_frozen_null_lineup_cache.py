@@ -43,12 +43,19 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Purge frozen null-lineup PERMANENT game-detail cache rows (INC-31)")
     ap.add_argument("--apply", action="store_true", help="Actually delete (default: dry-run)")
     ap.add_argument("--no-s3", action="store_true", help="Skip the S3 permanent-blob delete")
+    ap.add_argument("--no-dynamo", action="store_true",
+                    help="Skip the DynamoDB delete (do S3 only). The api-cache DELETE perm is split: "
+                         "the LAPTOP (baseball-access) can DeleteObject on S3 but NOT DeleteItem on "
+                         "DynamoDB; the BOX role can DeleteItem but not S3. So run --no-dynamo on the "
+                         "laptop and --no-s3 on the box — BOTH halves must complete (the API falls "
+                         "back to the S3 permanent blob, so deleting only DynamoDB still serves null).")
     args = ap.parse_args()
 
     tbl = boto3.resource("dynamodb", region_name=_DDB_REGION).Table(_TABLE)
     s3 = None if (args.no_s3 or not _S3_BUCKET) else boto3.client("s3", region_name="us-east-1")
     if not _S3_BUCKET and not args.no_s3:
-        print("(CACHE_BUCKET unset — S3 permanent-blob delete skipped; DynamoDB delete still applies.)")
+        print("(CACHE_BUCKET unset — S3 permanent-blob delete skipped; run --no-dynamo on a host with "
+              "CACHE_BUCKET set to purge the S3 blobs.)")
 
     # Page through every picks/game/* row and keep the PERMANENT ones with null lineups.
     frozen: list[tuple[str, str]] = []  # (sk, game_pk)
@@ -76,22 +83,47 @@ def main() -> int:
             break
 
     print(f"Scanned {scanned} picks/game rows; {len(frozen)} PERMANENT rows have null lineups.")
+    ddb_ok = ddb_fail = s3_ok = s3_fail = 0
     for sk, gp in frozen:
         print(f"  {'DELETE' if args.apply else 'would delete'}: sk={sk} (game_pk={gp})")
-        if args.apply:
-            tbl.delete_item(Key={"pk": "picks", "sk": sk})
-            if s3 is not None:
-                key = f"api-cache/permanent/picks/game/{gp}.json"
-                try:
-                    s3.delete_object(Bucket=_S3_BUCKET, Key=key)
-                except Exception as exc:  # noqa: BLE001 — S3 blob may not exist; non-fatal
-                    print(f"    (s3 delete skipped for {key}: {exc})")
+        if not args.apply:
+            continue
+        if not args.no_dynamo:
+            try:
+                tbl.delete_item(Key={"pk": "picks", "sk": sk})
+                ddb_ok += 1
+            except Exception as exc:  # noqa: BLE001 — perm-split: laptop lacks DeleteItem
+                ddb_fail += 1
+                print(f"    (DynamoDB delete FAILED for {sk}: {type(exc).__name__} — run --no-s3 on the box)")
+        if s3 is not None:
+            key = f"api-cache/permanent/picks/game/{gp}.json"
+            try:
+                s3.delete_object(Bucket=_S3_BUCKET, Key=key)
+                s3_ok += 1
+            except Exception as exc:  # noqa: BLE001 — S3 blob may not exist / box lacks DeleteObject
+                s3_fail += 1
+                print(f"    (S3 delete FAILED for {key}: {type(exc).__name__})")
 
     if not args.apply:
-        print("\nDry-run only. Re-run with --apply to delete. Each purged row rebuilds fresh on "
-              "the next /picks/<pk>/detail request or write_serving_store --game-detail run.")
+        print("\nDry-run only. Re-run with --apply to delete. Each purged row rebuilds fresh on the next "
+              "/picks/<pk>/detail request. NOTE the delete perm is split across environments — run "
+              "`--apply --no-dynamo` on the LAPTOP (S3 blobs) and `--apply --no-s3` on the BOX (DynamoDB "
+              "rows); BOTH must complete or the API keeps serving the surviving null copy.")
+        return 0
+
+    print(f"\nApplied. DynamoDB: {ddb_ok} deleted, {ddb_fail} failed. S3: {s3_ok} deleted, {s3_fail} failed.")
+    need = []
+    if ddb_fail:
+        need.append("DynamoDB rows still frozen → run `--apply --no-s3` on the BOX (has DeleteItem)")
+    if s3_fail or (s3 is None and not args.no_s3):
+        need.append("S3 permanent blobs still frozen → run `--apply --no-dynamo` on the LAPTOP with "
+                    "CACHE_BUCKET set (has DeleteObject)")
+    if need:
+        print("⚠️ INCOMPLETE — the API falls back S3←→DynamoDB, so a game is only fixed once BOTH are gone:")
+        for n in need:
+            print(f"   • {n}")
     else:
-        print(f"\nPurged {len(frozen)} frozen-null PERMANENT rows. They will rebuild populated on next access.")
+        print(f"✅ All {len(frozen)} frozen finals purged on this backend's side; they rebuild populated on next access.")
     return 0
 
 
