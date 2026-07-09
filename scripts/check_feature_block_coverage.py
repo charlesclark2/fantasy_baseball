@@ -35,6 +35,21 @@ WHAT IT CHECKS:
     Keying the assertion off the block's OWN trailing baseline (not a hardcoded floor)
     makes it self-calibrating: it only fires when a block that WAS near-full goes sparse.
 
+    BLIND SPOT CLOSED (INC-31, 2026-07-09): the trailing-baseline check above SKIPS a
+    block that is dead across the WHOLE trailing window — both the baseline AND recent
+    windows read ~0, so base_cov < WELL_COVERED and the collapse "can't be asserted
+    against a soft baseline." That let a persistently-/born-dead block hide (umpire
+    ump_accuracy_zscore 100% NULL 07-02..07-08: the ext-table read broke, so the served
+    aggregator merged NULL on every recently-played slate → base_cov=0 → SKIPPED). The
+    served SF aggregator is an incremental MERGE, so rows merged BEFORE the break stay
+    populated — i.e. a HISTORICAL window (further back than the baseline) still shows the
+    block's true healthy level. So we add a third window and a rescue rule:
+        hist_cov = notnull-rate over [anchor-HIST_HI .. anchor-HIST_LO]  (well before baseline)
+        DEGRADED (collapsed-vs-history)  hist_cov >= WELL_COVERED AND recent_cov < REL_DROP * hist_cov
+    A block SKIPPED by the trailing baseline is RESCUED to DEGRADED when it was healthy
+    historically and is now sparse — so the next born-dead / whole-trailing-window-dead
+    block ALARMS instead of hiding.
+
 TIER (pipeline failure-handling contract):
     Default = ALERT-loud-but-continue: prints a loud stderr WARNING but exits 0, so it
     can never take down serving during rollout (RUNTIME GATE — validate on the box first).
@@ -65,11 +80,17 @@ from betting_ml.utils.game_day import current_game_date
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
 
-# A block must have been at least this well covered on the baseline window before we will
-# assert a collapse against it (below this it is a coverage-gapped block — reported, not fatal).
+# A block must have been at least this well covered on the (trailing or historical) baseline
+# window before we will assert a collapse against it (below this it is a coverage-gapped block —
+# reported, not fatal).
 _WELL_COVERED = 0.85
 # DEGRADED when recent coverage falls below this fraction of the block's own baseline.
 _REL_DROP = 0.70
+# INC-31 historical window (well BEFORE the trailing baseline) — catches a block dead across the
+# WHOLE trailing window (base_cov≈0), which the trailing-baseline check alone would SKIP. The SF
+# aggregator is an incremental MERGE, so rows from this far back retain the block's pre-break level.
+_HIST_LO_DAYS = 120  # window start = anchor - 120d
+_HIST_HI_DAYS = 46   # window end   = anchor - 46d  (abuts the baseline's anchor-45 start)
 
 # Feature BLOCK -> a representative column that is near-fully populated on played games when
 # the block is healthy. Column absence is handled gracefully (skipped with a warning), so this
@@ -109,14 +130,20 @@ def _present_columns(cur, schema: str, table: str, wanted: list[str]) -> set[str
     return {c for c in wanted if c.lower() in have}
 
 
-def _classify(base_cov: float | None, recent_cov: float | None) -> str:
+def _classify(base_cov: float | None, recent_cov: float | None,
+              hist_cov: float | None = None) -> str:
     if base_cov is None or recent_cov is None:
         return "NO_DATA"
-    if base_cov < _WELL_COVERED:
-        return "SKIPPED"
-    if recent_cov < _REL_DROP * base_cov:
+    if base_cov >= _WELL_COVERED:
+        # Normal path: assert the recent trailing week against the trailing baseline.
+        return "DEGRADED" if recent_cov < _REL_DROP * base_cov else "OK"
+    # base_cov < WELL_COVERED → the trailing baseline is too weak to assert against; the block is
+    # either legitimately partial OR dead across the WHOLE trailing window. Before SKIPPING, RESCUE
+    # the persistently-/born-dead case (INC-31): if the block was healthy in the HISTORICAL window
+    # but is now sparse, it collapsed vs history — a real, silent block-zeroing. DEGRADED.
+    if hist_cov is not None and hist_cov >= _WELL_COVERED and recent_cov < _REL_DROP * hist_cov:
         return "DEGRADED"
-    return "OK"
+    return "SKIPPED"
 
 
 def main() -> int:
@@ -133,10 +160,12 @@ def main() -> int:
     anchor = date.fromisoformat(args.date) if args.date else current_game_date()
     base_lo, base_hi = anchor - timedelta(days=45), anchor - timedelta(days=9)
     rec_lo, rec_hi = anchor - timedelta(days=8), anchor - timedelta(days=1)
+    hist_lo, hist_hi = anchor - timedelta(days=_HIST_LO_DAYS), anchor - timedelta(days=_HIST_HI_DAYS)
     schema = _mart_schema(args.env)
     table = "feature_pregame_game_features"
     log.info(f"[{args.env.upper()}] feature-block coverage — anchor {anchor}; "
-             f"baseline {base_lo}..{base_hi}, recent {rec_lo}..{rec_hi}; strict={args.strict}")
+             f"history {hist_lo}..{hist_hi}, baseline {base_lo}..{base_hi}, "
+             f"recent {rec_lo}..{rec_hi}; strict={args.strict}")
 
     conn = get_snowflake_connection()
     try:
@@ -153,22 +182,24 @@ def main() -> int:
             return 0
 
         sel = [
+            f"count_if(game_date between '{hist_lo}' and '{hist_hi}') as hist_n",
             f"count_if(game_date between '{base_lo}' and '{base_hi}') as base_n",
             f"count_if(game_date between '{rec_lo}' and '{rec_hi}') as recent_n",
         ]
         for b, c in blocks.items():
+            sel.append(f"count_if(game_date between '{hist_lo}' and '{hist_hi}' and {c} is not null) as hist_{b}")
             sel.append(f"count_if(game_date between '{base_lo}' and '{base_hi}' and {c} is not null) as base_{b}")
             sel.append(f"count_if(game_date between '{rec_lo}' and '{rec_hi}' and {c} is not null) as recent_{b}")
         cur.execute(f"""
             select {', '.join(sel)}
             from {schema}.{table}
-            where game_date between '{base_lo}' and '{rec_hi}'
+            where game_date between '{hist_lo}' and '{rec_hi}'
         """)
         row = dict(zip([d[0].lower() for d in cur.description], cur.fetchone()))
     finally:
         conn.close()
 
-    base_n, recent_n = int(row["base_n"]), int(row["recent_n"])
+    hist_n, base_n, recent_n = int(row["hist_n"]), int(row["base_n"]), int(row["recent_n"])
     if base_n == 0 or recent_n == 0:
         print("[METRIC] feature_block_min_cov_ratio=1.0000")
         log.warning(f"[ALERT] insufficient played games in the windows "
@@ -181,15 +212,27 @@ def main() -> int:
     for b in blocks:
         base_cov = int(row[f"base_{b}"]) / base_n
         recent_cov = int(row[f"recent_{b}"]) / recent_n
-        status = _classify(base_cov, recent_cov)
-        ratio = recent_cov / base_cov if base_cov else 1.0
-        msg = f"  block '{b}': baseline {base_cov:.1%} → recent {recent_cov:.1%}  [{status}]"
+        # hist_cov only defined when the historical window has played games (early-season guard).
+        hist_cov = (int(row[f"hist_{b}"]) / hist_n) if hist_n else None
+        status = _classify(base_cov, recent_cov, hist_cov)
+        # For a block SKIPPED by the trailing baseline but collapsed vs history, the meaningful
+        # ratio is recent/hist (recent/base would be ~1.0 when both trailing windows are dead).
+        collapsed_vs_hist = status == "DEGRADED" and base_cov < _WELL_COVERED
+        denom = hist_cov if collapsed_vs_hist else base_cov
+        ratio = recent_cov / denom if denom else 1.0
+        hist_str = f", history {hist_cov:.1%}" if hist_cov is not None else ""
+        msg = f"  block '{b}': baseline {base_cov:.1%} → recent {recent_cov:.1%}{hist_str}  [{status}]"
         if status == "DEGRADED":
             worst_ratio = min(worst_ratio, ratio)
             degraded.append(b)
-            log.error(msg + f" — recent < {_REL_DROP:.0%} of baseline; block SILENTLY COLLAPSED")
+            if collapsed_vs_hist:
+                log.error(msg + f" — dead across the whole trailing window but was "
+                                f"{hist_cov:.0%} historically; block SILENTLY COLLAPSED vs history (INC-31)")
+            else:
+                log.error(msg + f" — recent < {_REL_DROP:.0%} of baseline; block SILENTLY COLLAPSED")
         elif status == "SKIPPED":
-            log.info(msg + f" — baseline < {_WELL_COVERED:.0%}; coverage-gapped, not asserted")
+            log.info(msg + f" — baseline < {_WELL_COVERED:.0%} and no healthy history; "
+                           f"coverage-gapped, not asserted")
         else:
             log.info(msg)
 

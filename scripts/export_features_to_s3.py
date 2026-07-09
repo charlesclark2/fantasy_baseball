@@ -63,17 +63,22 @@ _S3_BUCKET = "baseball-betting-ml-artifacts"
 # data.parquet key), so this export-mirror is redundant for them and was removed:
 #   game_features, lineup_features, starter_features  (W8b dbt-built),
 #   sub_model_signals, odds_features                  (W8a dbt-built).
-# KEPT = the W11-deferred tail still read by the W8b DuckDB aggregator build + write_serving_store but
-# NOT yet migrated (umpire/weather blocked on RAW; public_betting reads the aggregator → W11):
-#   weather / umpire / public_betting features.
-# ⚠️ DEPLOY-ORDER: this trim ships WITH the --w8b cutover (W8B_LAKEHOUSE_S3=1) — never BEFORE, else
-# the migrated keys lose their only writer until --w8b runs and serving --s3 reads stale parquet.
-# Full retirement (drop weather/umpire/public_betting too) is the W11 step once those models migrate.
-FEATURE_TABLES = {
-    "feature_pregame_weather_features":       "baseball_data.betting_features.feature_pregame_weather_features",
-    "feature_pregame_public_betting_features":"baseball_data.betting_features.feature_pregame_public_betting_features",
-    "feature_pregame_umpire_features":        "baseball_data.betting_features.feature_pregame_umpire_features",
-}
+#
+# ⛔ FULL RETIREMENT (INC-31, 2026-07-09) — umpire / weather / public_betting REMOVED.
+# WHY: those three were the last-kept W11-deferred tail here, mirrored via `SELECT * FROM <sf model>`
+# which PRESERVES Snowflake's UPPERCASE column case (see _export's "do NOT force lower" comment). But
+# the W11b/W11c/W11d native builds (run_w1_lakehouse --w11b/c/d-only, gated ON on the box) now write
+# the SAME `feature_pregame_{umpire,weather,public_betting}_features/data.parquet` key with LOWERCASE
+# columns (DuckDB COPY), and the lakehouse_ext DDLs read LOWERCASE keys (GET(VALUE,'game_pk')). This
+# mirror ran LATER in the daily cycle and CLOBBERED the native lowercase parquet with an UPPERCASE one
+# → GET(VALUE,'game_pk') returned NULL for EVERY column (incl. game_pk) → all three served feature
+# BLOCKS materialized 100% NULL on the current slate (the F2 umpire-null recurrence + weather/public-
+# betting siblings). This is the exact "🔠 VALUE:<key> is CASE-SENSITIVE / SELECT*→UPPERCASE reads
+# ALL-NULL" landmine. Since the native builds are the sole authoritative writer post-cutover, retiring
+# them here removes the double-writer race entirely — the "Full retirement is the W11 step once those
+# models migrate" this file always anticipated. (After merge+deploy, one native --w11b/c/d rebuild +
+# ext refresh + a per-ROW ext-table verify repopulates them; see the INC-31 handoff.)
+FEATURE_TABLES: dict[str, str] = {}
 
 # Non-dbt SERVING marts the prediction/serving READERS need from S3 but that are NOT in any
 # dbt lakehouse wave (Python-written, not dbt models → no DuckDB build branch): team_elo_history
