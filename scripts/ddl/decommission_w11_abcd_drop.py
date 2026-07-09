@@ -35,10 +35,14 @@ player_transactions was cut over (E11.22): stg_statsapi_transactions now reads
 lakehouse_ext.stg_statsapi_transactions, so it moved into DROP_SAFE + NIGHTLY_PREREQ
 (W11TX_TRANSACTIONS_NIGHTLY must be ON so the ext table stays fresh — else it FREEZES on drop).
 
-EXCLUDED (still deferred; do NOT drop here):
-  * baseball_data.fangraphs.savant_park_factors_raw — fit_granular_park_priors.py now DEFAULTS to
-    --s3 (nothing reads SF by accident), but its S3 input path must be reconciled to the writer-
-    maintained lakehouse_raw mirror + box-verified before its drop.
+EXCLUDED (dropped SEPARATELY, not via this ext-consumer script):
+  * baseball_data.fangraphs.savant_park_factors_raw — E11.22 RECONCILED 2026-07-09:
+    fit_granular_park_priors.py now reads the LIVE lakehouse_raw/ mirror (not the export_w4
+    baseball/lakehouse/ SF-derived path), with an append-mirror dedup — so nothing reads the SF
+    table. It has no lakehouse_ext consumer (a script reads the raw parquet directly), so it does
+    NOT fit this script's consumer-non-empty model; drop it via a direct DDL AFTER box-verifying
+    (a) parity_check_w11.py --source savant_park_factors_raw shows no-loss missing-from-parquet=0
+    and (b) a test fit reads lakehouse_raw and yields sensible per-venue priors. See the handoff.
 
 Usage:
   # dry-run over the full certified-safe set (prints the plan; drops nothing):
