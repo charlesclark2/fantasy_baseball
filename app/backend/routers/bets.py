@@ -96,6 +96,57 @@ def update_bet_endpoint(bet_id: str, body: BetUpdate, user_id: str = Depends(get
     return Bet(**updated)
 
 
+@router.get("/props/starters")
+def prop_starters(date: str, _: str = Depends(get_user_id)) -> dict:
+    """Starting pitchers for a given date, for logging a strikeout prop into the Bet Log
+    (E9.42 — supports back-logging a past prop within the last ~14 days).
+
+    Returns each game's two starters with the `pitcher_id` + `game_pk` that settlement keys
+    on (see settle_user_bets.py), plus name / team / opponent for the picker. Read from the
+    S3 lakehouse via DuckDB (stg_statsapi_probable_pitchers, one row per game/side joined to
+    stg_statsapi_games for team names) — zero-Snowflake request path. Never raises: an empty
+    list on any miss (lakehouse_query already returns [] on failure), so the picker just shows
+    "no starters" rather than 500ing.
+
+    NOTE: the probable-pitcher feed is the right source (NOT mart_player_game_starts, whose
+    lineup-derived position_code '1' pitcher slot is empty in the universal-DH era — the
+    starter no longer bats). For a past game the probable is the actual starter in the common
+    case; a scratched start simply won't settle (no game-log row) until voided.
+    """
+    sql = """
+        WITH ranked AS (
+            SELECT game_pk, side, probable_pitcher_id, probable_pitcher_name, game_date,
+                   row_number() OVER (PARTITION BY game_pk, side ORDER BY ingestion_ts DESC) AS rn
+            FROM baseball_data.betting.stg_statsapi_probable_pitchers
+            WHERE CAST(game_date AS DATE) = CAST(%(date)s AS DATE)
+              AND probable_pitcher_id IS NOT NULL
+        )
+        SELECT r.game_pk,
+               r.probable_pitcher_id   AS pitcher_id,
+               r.probable_pitcher_name AS pitcher_name,
+               CASE WHEN r.side = 'home' THEN gm.home_team_name ELSE gm.away_team_name END AS team,
+               CASE WHEN r.side = 'home' THEN gm.away_team_name ELSE gm.home_team_name END AS opponent,
+               r.game_date AS game_date
+        FROM ranked r
+        LEFT JOIN baseball_data.betting.stg_statsapi_games gm ON gm.game_pk = r.game_pk
+        WHERE r.rn = 1
+        ORDER BY pitcher_name
+    """
+    rows = lakehouse_query(sql, {"date": date})
+    starters = [
+        {
+            "game_pk": r["GAME_PK"],
+            "pitcher_id": r["PITCHER_ID"],
+            "pitcher_name": r["PITCHER_NAME"],
+            "team": r["TEAM"],
+            "opponent": r["OPPONENT"],
+            "game_date": str(r["GAME_DATE"])[:10] if r.get("GAME_DATE") is not None else date,
+        }
+        for r in rows
+    ]
+    return {"date": date, "starters": starters}
+
+
 @router.post("/users/login")
 def login_sync(body: LoginSyncRequest, user_id: str = Depends(get_user_id)) -> dict:
     """Called once by the frontend post-login. sub is trusted (JWT); email is

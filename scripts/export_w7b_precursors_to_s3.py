@@ -54,13 +54,12 @@ load_dotenv()
 _S3_BUCKET = "baseball-betting-ml-artifacts"
 
 # lakehouse_name → Snowflake fully-qualified table name.
-TABLES = {
-    # ── Head of the mart_player_profile_identity injury chain ─────────────────
-    # player_transactions → stg_statsapi_transactions (duckdb branch reads this) →
-    # stg_statsapi_player_injury_status → feature_pregame_injury_status (SCD-2) →
-    # mart_player_profile_identity.
-    "player_transactions": "baseball_data.statsapi.player_transactions",
-}
+# E11.22 DEPRECATED (2026-07-09): this bridge's only precursor, player_transactions, was DROPPED from
+# Snowflake after the both→s3 cutover. Its stg (stg_statsapi_transactions) now reads
+# lakehouse_ext.stg_statsapi_transactions, built by run_w1_lakehouse.py --w11tx from the live
+# lakehouse_raw/ mirror — so this SF→S3 precursor export is obsolete. Left as an empty no-op; safe to
+# delete the whole script in a later cleanup.
+TABLES = {}
 
 
 # ── Snowflake connection (mirrors export_w5_raw_to_s3.py) ─────────────────────

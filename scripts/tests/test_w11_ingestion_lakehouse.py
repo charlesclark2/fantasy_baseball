@@ -20,7 +20,8 @@ from utils.lakehouse_raw_writer import (
     write_raw_rows_s3,
 )
 
-# The Tier-A sources this wave flips (writers + bridge + parity must all agree on this set).
+# The Tier-A sources this wave flips — the WRITERS all still exist and write S3 (they stay in
+# lakehouse_raw_writer.RAW_SOURCES), so this set is unchanged.
 W11_TIER_A_SOURCES = {
     "fg_stuff_plus_raw",
     "fg_hitting_leaderboard_raw",
@@ -29,6 +30,19 @@ W11_TIER_A_SOURCES = {
     "sprint_speed_raw",
     "oaa_team_season_raw",
     "savant_park_factors_raw",
+}
+
+# E11.22 (2026-07-09): these Tier-A feeds had their SF raw DROPPED after the both→s3 cutover. The live
+# S3 writers still write them, but the SF→S3 bridge + parity gate (which READ Snowflake) no longer apply,
+# so they were removed from export_w11_raw_to_s3.SOURCES + parity_check_w11.SOURCES. savant_park_factors_raw
+# is NOT here — it's deferred (SF raw not yet dropped) so it stays bridged.
+W11_DROPPED_SOURCES = {
+    "fg_stuff_plus_raw",
+    "fg_hitting_leaderboard_raw",
+    "catcher_framing_raw",
+    "player_transactions",
+    "sprint_speed_raw",
+    "oaa_team_season_raw",
 }
 
 
@@ -58,7 +72,12 @@ def test_bridge_and_parity_source_sets_agree_with_registry():
     # The bridge + parity must agree with EACH OTHER (a typo in one can't silently drift) and cover
     # at least Tier-A. Later tiers (B umpire, …) append to the same bridge/parity sets.
     assert set(bridge.SOURCES) == set(parity.SOURCES), "bridge/parity source sets drifted apart"
-    assert W11_TIER_A_SOURCES <= set(bridge.SOURCES), "a Tier-A source dropped out of the bridge"
+    # The still-bridged Tier-A sources (Tier-A minus the E11.22-dropped feeds) must remain in the bridge…
+    assert (W11_TIER_A_SOURCES - W11_DROPPED_SOURCES) <= set(bridge.SOURCES), \
+        "a still-live Tier-A source dropped out of the bridge"
+    # …and the DROPPED feeds must be GONE from the bridge/parity (their SF raw no longer exists).
+    assert W11_DROPPED_SOURCES.isdisjoint(set(bridge.SOURCES)), \
+        "a dropped source is still bridged — its SF raw was DROPPED, so the SF→S3 export would error"
     # Every bridged/parity source must be a valid dispatcher source (else write/read would reject).
     assert set(bridge.SOURCES) <= set(RAW_SOURCES)
     assert W11_TIER_A_SOURCES <= set(RAW_SOURCES)

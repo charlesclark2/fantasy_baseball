@@ -73,8 +73,9 @@ TABLES = {
     # lakehouse/eb_bullpen_team_posteriors/data.parquet (run_w1_lakehouse --w8a). Mirroring it
     # here too (as part-0.parquet) made the ext table / glob readers UNION both → ~2x rows. See
     # the docstring "W8a OWNERSHIP TRANSFER" note. Keep --w8a ordered before --w5.
-    "oaa_team_season_raw":        "baseball_data.external.oaa_team_season_raw",
-    "sprint_speed_raw":           "baseball_data.savant.sprint_speed_raw",
+    # E11.22 DROPPED (2026-07-09): oaa_team_season_raw + sprint_speed_raw were dropped from Snowflake
+    # post both→s3 cutover — their consumers (mart_team_fielding_oaa / stg_batter_sprint_speed) read
+    # the live lakehouse_raw/ mirror now, so this SF-mirror bridge no longer applies to them.
 }
 
 

@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pydantic import BaseModel, field_validator
 
-_MARKETS = {"h2h home", "h2h away", "over", "under"}
+# Game markets (h2h/totals) settle against the final score. The strikeouts prop
+# markets (E9.42) settle against the starter's actual K total — see settle_user_bets.py.
+_GAME_MARKETS = {"h2h home", "h2h away", "over", "under"}
+_PROP_MARKETS = {"strikeouts over", "strikeouts under"}
+_MARKETS = _GAME_MARKETS | _PROP_MARKETS
 
 
 class BetCreate(BaseModel):
@@ -19,6 +23,13 @@ class BetCreate(BaseModel):
     ev: float | None = None
     kelly_capped: float | None = None
     notes: str | None = None
+    # Player-prop fields (E9.42). Only set for _PROP_MARKETS bets logged from /props.
+    # prop_line is the posted strikeout line the wager is against; projection is OUR
+    # model's projected mean K at log time (bookkeeping context, never an edge claim).
+    player_id: int | None = None
+    player_name: str | None = None
+    prop_line: float | None = None
+    projection: float | None = None
 
     @field_validator("market")
     @classmethod
@@ -41,6 +52,7 @@ class BetUpdate(BaseModel):
     american_odds: int | None = None
     stake: float | None = None
     total_line: float | None = None
+    prop_line: float | None = None
     model_prob: float | None = None
     market_prob: float | None = None
     ev: float | None = None

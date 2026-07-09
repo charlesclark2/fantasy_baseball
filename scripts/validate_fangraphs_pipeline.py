@@ -49,30 +49,21 @@ def validate(season: int, conn) -> dict:
     results = {}
 
     # Step 1 — Raw table row counts
+    # E11.22 DROPPED (2026-07-09): fg_stuff_plus_raw + fg_hitting_leaderboard_raw were dropped from
+    # Snowflake post both→s3 cutover (now S3-only via lakehouse_raw/). Their freshness/coverage is now
+    # validated by parity_check_w11.py + the served feature-block coverage guard, NOT this SF-side tool.
+    # The window-type check on fg_hitting_leaderboard_raw was removed for the same reason. Only the
+    # not-yet-migrated ZiPS SF tables remain checkable here:
     log.info("Step 1: Raw table row counts")
     for table, label, minimum in [
-        ("baseball_data.fangraphs.fg_stuff_plus_raw",       "stuff_plus_raw",       350),
         ("baseball_data.fangraphs.fg_zips_pitching_raw",    "zips_pitching_raw",    400),
         ("baseball_data.fangraphs.fg_zips_hitting_raw",     "zips_hitting_raw",     700),
-        ("baseball_data.fangraphs.fg_hitting_leaderboard_raw", "hitting_leaderboard_raw", 1),
     ]:
         rows = _query(conn, f"SELECT COUNT(*) FROM {table}")[0][0]
         status = "PASS" if rows >= minimum else "FAIL"
         log.info("  %s: %d rows  [%s ≥ %d]", label, rows, status, minimum)
         results[f"{label}_count"] = rows
         results[f"{label}_count_status"] = status
-
-    # Check hitting leaderboard has all 4 window types
-    lb_windows = _query(
-        conn,
-        "SELECT DISTINCT window_type FROM baseball_data.fangraphs.fg_hitting_leaderboard_raw ORDER BY 1",
-    )
-    window_types = {r[0] for r in lb_windows}
-    expected_windows = {"7d", "14d", "30d", "season"}
-    windows_ok = expected_windows.issubset(window_types)
-    log.info("  hitting_leaderboard window types: %s  [%s]", sorted(window_types), "PASS" if windows_ok else "FAIL")
-    results["hitting_leaderboard_window_types"] = sorted(window_types)
-    results["hitting_leaderboard_windows_status"] = "PASS" if windows_ok else "FAIL"
 
     # Step 2 — MLBAM ID join rate for ZiPS pitchers (MLB-active only)
     # Minor league / prospect pitchers use 'sa'-prefixed fg_pitcher_id and are absent

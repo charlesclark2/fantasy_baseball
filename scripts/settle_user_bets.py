@@ -13,6 +13,10 @@ scores are OLAP data and live in Snowflake. This job bridges them:
      and `profit_loss`, and REMOVE `pending_game_pk` so the bet drops out of the
      pending index. Unfinished games are left pending.
 
+Game markets (h2h / totals) settle against the final score. Pitcher-strikeout props
+(E9.42, market 'strikeouts over'/'strikeouts under') settle against the starter's actual
+K total from mart_starting_pitcher_game_log — same Snowflake read path as the scores.
+
 Called by settle_user_bets_op in pipeline/ops/daily_ingestion_ops.py, wired into
 daily_ingestion_job after dbt_daily_build (scores are fresh there). Idempotent:
 only bets still in the pending index are touched, so re-running is a no-op.
@@ -50,6 +54,11 @@ log = logging.getLogger(__name__)
 _AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 _USER_BETS_TABLE = os.environ.get("USER_BETS_TABLE", "credence-prod-dynamo-user-bets")
 _PENDING_INDEX = "gsi-pending-by-game"
+
+# E9.42: pitcher-strikeout props settle against the starter's actual K total, not the
+# final score. Kept in sync with _PROP_MARKETS in app/backend/models/bets.py (defined
+# locally so this box script needs no app.backend / FastAPI import).
+_PROP_MARKETS = {"strikeouts over", "strikeouts under"}
 
 
 def _aws_session() -> boto3.Session:
@@ -103,7 +112,46 @@ def _final_scores(conn, game_pks: list[int]) -> dict[int, tuple[int, int]]:
     return {int(r["GAME_PK"]): (int(r["HOME_SCORE"]), int(r["AWAY_SCORE"])) for r in cur.fetchall()}
 
 
+def _starter_strikeouts(conn, game_pks: list[int]) -> dict[tuple[int, int], int]:
+    """(game_pk, pitcher_id) -> actual strikeouts for starters in the given games.
+
+    Reads mart_starting_pitcher_game_log (grain = one row per pitcher_id/game_pk,
+    starters only), the same Snowflake read path _final_scores uses. A row exists only
+    once the game is played, so a pending prop whose starter has no row yet (mart lag,
+    or a scratched start) simply stays pending — it is never mis-settled.
+    """
+    if not game_pks:
+        return {}
+    placeholders = ",".join(str(int(g)) for g in game_pks)
+    sql = (
+        "SELECT game_pk, pitcher_id, strikeouts "
+        "FROM baseball_data.betting.mart_starting_pitcher_game_log "
+        f"WHERE game_pk IN ({placeholders}) AND strikeouts IS NOT NULL"
+    )
+    cur = conn.cursor(snowflake.connector.DictCursor)
+    cur.execute(sql)
+    return {
+        (int(r["GAME_PK"]), int(r["PITCHER_ID"])): int(r["STRIKEOUTS"])
+        for r in cur.fetchall()
+    }
+
+
 # ── Settlement math ──────────────────────────────────────────────────────────
+
+def _prop_outcome(market: str, actual_k: int, prop_line) -> str | None:
+    """Settle a pitcher-strikeout prop vs the starter's actual K total (over/under/push)."""
+    if prop_line is None:
+        return None
+    line = float(prop_line)
+    if actual_k == line:
+        return "push"  # only possible on an integer line
+    higher = actual_k > line
+    if market == "strikeouts over":
+        return "win" if higher else "loss"
+    if market == "strikeouts under":
+        return "loss" if higher else "win"
+    return None
+
 
 def _outcome(market: str, home: int, away: int, total_line) -> str | None:
     if market == "h2h home":
@@ -172,8 +220,11 @@ def main() -> int:
         return 1
     try:
         scores = _final_scores(conn, game_pks)
+        # Only pay for the starter-K read when a prop bet is actually pending.
+        has_props = any(b.get("market") in _PROP_MARKETS for b in pending)
+        strikeouts = _starter_strikeouts(conn, game_pks) if has_props else {}
     except Exception:
-        log.exception("Failed to load final scores from Snowflake")
+        log.exception("Failed to load settlement data from Snowflake")
         return 1
     finally:
         conn.close()
@@ -183,10 +234,25 @@ def main() -> int:
         gp = int(bet["pending_game_pk"])
         if gp not in scores:
             continue  # game not final yet
-        home, away = scores[gp]
-        outcome = _outcome(bet["market"], home, away, bet.get("total_line"))
+        market = bet["market"]
+        if market in _PROP_MARKETS:
+            pid = bet.get("player_id")
+            if pid is None:
+                log.warning("Bet %s: prop market=%s missing player_id (skipping)", bet.get("bet_id"), market)
+                continue
+            actual_k = strikeouts.get((gp, int(pid)))
+            if actual_k is None:
+                # Game is final but the starter has no game-log row yet (mart lag) or
+                # did not start (scratch). Leave pending — never mis-settle.
+                log.warning("Bet %s: no strikeout row for pitcher %s in game %s yet (leaving pending)",
+                            bet.get("bet_id"), pid, gp)
+                continue
+            outcome = _prop_outcome(market, actual_k, bet.get("prop_line"))
+        else:
+            home, away = scores[gp]
+            outcome = _outcome(market, home, away, bet.get("total_line"))
         if outcome is None:
-            log.warning("Bet %s: cannot settle market=%s (skipping)", bet.get("bet_id"), bet.get("market"))
+            log.warning("Bet %s: cannot settle market=%s (skipping)", bet.get("bet_id"), market)
             continue
         pl = _profit_loss(outcome, Decimal(str(bet["stake"])), Decimal(str(bet["american_odds"])))
         try:

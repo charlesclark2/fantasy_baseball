@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "new",
+        "text": "You can now log a strikeout prop into your Bet Log two ways. On a pitcher's Props projection detail, a 'Log this prop' button copies the strikeout line you're viewing — side, book, line, and posted odds — into your log, where you set your stake and save. And to back-log a prop you already placed, the Bet Log now has a 'Log a prop' button: pick a game date within the last 14 days, choose that day's starting pitcher, and enter your side, line, book, odds, and stake — no projection needed. Either way it settles automatically against the pitcher's actual strikeouts once the game is final (Over / Under / Push vs your logged line) and appears in your Bet History like any other bet. This is a bookkeeping convenience, not betting advice and no profitability claim — the logged line, stake, and odds are your own self-reported record; when you log from a projection we store that projection at log time alongside it purely for your reference."
+      },
+      {
+        "tag": "new",
         "text": "Bet alerts are here. In Settings → Notifications you can now opt in to be told when the model posts qualified plays for the day's slate — by email or browser push (SMS/text is coming soon). Most days nothing fires; you're only notified when there are qualified plays. These are model outputs, not betting advice."
       }
     ]

@@ -44,12 +44,10 @@ _S3_RAW_PREFIX = "baseball/lakehouse_raw"
 # + dupe guard only (column names not confidently known offline; the box run can add one). The dupe
 # guard always uses the same coverage key when present, else compares parquet-count to SF source-count.
 SOURCES = {
-    "fg_stuff_plus_raw":          ("baseball_data.fangraphs.fg_stuff_plus_raw",          "load_id || '|' || fg_pitcher_id"),
-    "fg_hitting_leaderboard_raw": ("baseball_data.fangraphs.fg_hitting_leaderboard_raw", "load_id"),
-    "catcher_framing_raw":        ("baseball_data.savant.catcher_framing_raw",           None),
-    "player_transactions":        ("baseball_data.statsapi.player_transactions",         "transaction_id"),
-    "sprint_speed_raw":           ("baseball_data.savant.sprint_speed_raw",              "player_mlbam_id || '|' || season"),
-    "oaa_team_season_raw":        ("baseball_data.external.oaa_team_season_raw",         None),
+    # E11.22 DROPPED (2026-07-09): fg_stuff_plus_raw, fg_hitting_leaderboard_raw, catcher_framing_raw,
+    # player_transactions, sprint_speed_raw, oaa_team_season_raw were dropped from Snowflake post
+    # both→s3 cutover — parity-vs-SF is moot once the SF source is gone. Removed so this gate can't
+    # error on a dropped table. The not-yet-dropped feeds remain checkable:
     "savant_park_factors_raw":    ("baseball_data.fangraphs.savant_park_factors_raw",    None),
     # E11.1-W11 Tier-B — the shared umpire feed. No-loss key = (game_pk, data_source): the 4
     # writers key distinct assignment/tendency rows per game (statsapi / statsapi_backfill /

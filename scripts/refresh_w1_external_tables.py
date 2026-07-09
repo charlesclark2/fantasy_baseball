@@ -292,8 +292,8 @@ W11D_TABLES = [
 
 # E11.22: player_transactions read-cutover — the external table over the run_w1_lakehouse.py --w11tx
 # parquet (generate_w11tx_external_table.py). TABLE on the Snowflake side (no incremental). Refreshed
-# via --w11tx. Once the SF raw is dropped, add this to the DAILY REQUIRED set (below) so the ext table
-# never goes stale (the model's serving read now depends on it).
+# via --w11tx AND (since the SF raw was DROPPED 2026-07-09) in the DAILY REQUIRED set below — the
+# model's serving read now depends on it, so a missing refresh is HALT, not best-effort.
 W11TX_TABLES = ["stg_statsapi_transactions"]
 
 
@@ -475,13 +475,18 @@ def main():
     # INC-27: stg_batter_pitches is REQUIRED (serving-critical — its betting.* view backs the
     # intraday box score + the posterior writers). Refreshed FIRST so the view is fresh before
     # any downstream read. Grouped with W1 (the pitch substrate) since it shares its cadence.
-    required = set(STG_BATTER_PITCHES_TABLE) | set(W1_TABLES) | set(W2_TABLES) | set(W3_TABLES)
+    # E11.22: player_transactions SF raw DROPPED 2026-07-09 → stg_statsapi_transactions serving read
+    # now depends on the S3 ext table, so W11TX_TABLES is REQUIRED (HALT) in the daily refresh (per the
+    # comment at W11TX_TABLES). The --w11tx nightly path still runs the BUILD (dedup parquet) + a
+    # best-effort refresh; this REQUIRED refresh is the durable freshness guarantee decoupled from the flag.
+    required = (set(STG_BATTER_PITCHES_TABLE) | set(W1_TABLES) | set(W2_TABLES)
+                | set(W3_TABLES) | set(W11TX_TABLES))
     _refresh(
         STG_BATTER_PITCHES_TABLE + W1_TABLES + W2_TABLES + W3_TABLES + W3PRE_TABLES
-        + W4_TABLES + W5_TABLES + ARCHETYPE_TABLES + W6_TABLES + W7_TABLES,
+        + W4_TABLES + W5_TABLES + ARCHETYPE_TABLES + W6_TABLES + W7_TABLES + W11TX_TABLES,
         required=required,
     )
-    print("stg_batter_pitches + W1+W2+W3 external table refresh complete "
+    print("stg_batter_pitches + W1+W2+W3 + W11tx external table refresh complete "
           "(W3pre + W4 + W5 + W5b + W6 + W7 best-effort).")
 
 

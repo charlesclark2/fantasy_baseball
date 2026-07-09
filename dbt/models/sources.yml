@@ -209,37 +209,9 @@ sources:
           - name: last_fetched_at
             description: UTC timestamp of the most recent successful profile fetch.
 
-      - name: player_transactions
-        description: >
-          One row per roster transaction event per player. Fetched from the
-          Stats API /v1/transactions endpoint via scripts/ingest_transactions.py
-          with a 7-day lookback. Captures IL placements (10-Day IL, 60-Day IL,
-          7-Day IL), activations, reinstatements, and other roster moves.
-          The Stats API may return the same transaction_id across overlapping
-          date range queries; deduplication happens in stg_statsapi_transactions.
-          Ingested daily via daily_ingestion.yml.
-          Feeds stg_statsapi_player_injury_status for injury-adjusted lineup
-          quality features (Card 7.I).
-        columns:
-          - name: transaction_id
-            description: Stats API transaction identifier. Primary key.
-            tests:
-              - not_null
-              - unique:
-                  config:
-                    severity: warn
-          - name: player_id
-            description: MLBAM player ID (person.id from the API).
-            tests: [not_null]
-          - name: transaction_date
-            description: Date the transaction was recorded.
-            tests: [not_null]
-          - name: type_code
-            description: >
-              Transaction type code from the Stats API (e.g. '10-Day IL',
-              'Activated', 'Reinstated'). Provisional — confirm values
-              against live API output from first ingestion run.
-            tests: [not_null]
+      # E11.22 (2026-07-09): player_transactions DROPPED from Snowflake after the both→s3 cutover —
+      # stg_statsapi_transactions now reads lakehouse_ext.stg_statsapi_transactions (S3). No model reads
+      # source('statsapi','player_transactions') anymore, so the source def (+ its tests) is removed here.
 
       - name: umpire_game_log
         description: >
@@ -602,55 +574,9 @@ sources:
           - name: sv_id
             description: "Non-unique play event ID. Not suitable as a key."
 
-      # ── Catcher framing leaderboard (Card 8.K) ───────────────────────────────
-      - name: catcher_framing_raw
-        description: >
-          Season-level catcher framing data from the Baseball Savant catcher
-          framing leaderboard. One row per player_id × season. Ingested by
-          scripts/ingest_catcher_framing.py. Grain: player_id × season.
-        columns:
-          - name: player_id
-            description: MLB player ID.
-            tests: [not_null]
-          - name: season
-            description: Season year.
-            tests: [not_null]
-          - name: framing_runs_above_average
-            description: >
-              Catcher framing runs above average from Baseball Savant
-              (runs_above_average column). Positive = above average framer.
-          - name: n_called_pitches
-            description: Number of called pitches in the sample window.
-          - name: ingestion_timestamp
-            description: Timestamp when this row was last written/updated.
-
-      # ── Sprint speed leaderboard (Epic 4A) ───────────────────────────────────
-      - name: sprint_speed_raw
-        description: >
-          Baseball Savant sprint speed leaderboard. Sprint speed is measured in
-          ft/s (Statcast sprint speed) and is distinct from the FanGraphs Spd
-          speed score. Grain: player_mlbam_id × season × snapshot_date (weekly
-          Sunday snapshots). Ingested by scripts/ingest_sprint_speed.py.
-        columns:
-          - name: player_mlbam_id
-            description: MLBAM player ID.
-            tests: [not_null]
-          - name: season
-            description: Season year.
-            tests: [not_null]
-          - name: snapshot_date
-            description: Date this row was captured (weekly Sunday run).
-            tests: [not_null]
-          - name: sprint_speed_fts
-            description: Statcast sprint speed in ft/s.
-          - name: competitive_runs
-            description: Number of HP-to-2B sprint attempts used to compute the metric.
-          - name: hp_to_1b
-            description: Average time (seconds) from home plate to first base on right-handed contact.
-          - name: hp_to_2b
-            description: Average time (seconds) from home plate to second base.
-          - name: ingestion_timestamp
-            description: Timestamp when this row was written.
+      # E11.22 (2026-07-09): catcher_framing_raw + sprint_speed_raw DROPPED from Snowflake after the
+      # both→s3 cutover — their consumers (mart_catcher_framing / stg_batter_sprint_speed) read the live
+      # lakehouse_raw/ mirror now, and no model reads source('savant', ...) for them. Source defs removed.
 
       # ── Reference: players ────────────────────────────────────────────────────
       - name: ref_players
@@ -698,13 +624,8 @@ sources:
       TLS fingerprinting.
 
     tables:
-      - name: fg_stuff_plus_raw
-        description: >
-          Raw append-only table for FanGraphs Stuff+ pitching leaderboard (type=36).
-          Grain: one row per ingestion run × pitcher × rolling window. Full API
-          response stored in raw_json VARIANT. Stuff+ available from 2020 onward.
-          Rolling windows: 14d, 30d, and full season.
-
+      # E11.22 (2026-07-09): fg_stuff_plus_raw DROPPED from Snowflake after the both→s3 cutover —
+      # stg_fangraphs__stuff_plus reads the live lakehouse_raw/ mirror now (no source() read). Removed.
       - name: fg_zips_pitching_raw
         description: >
           Raw append-only table for FanGraphs ZiPS pitching projections.
@@ -720,11 +641,8 @@ sources:
           Pre-season full projection data loaded from manually-downloaded CSVs;
           in-season rolling ZiPS loaded via API.
 
-      - name: fg_hitting_leaderboard_raw
-        description: >
-          Raw append-only table for FanGraphs hitting leaderboard snapshots
-          (Dashboard type=8). Grain: one row per ingestion run × batter ×
-          window_type × window date range. Window types: 7d, 14d, 30d, season.
+      # E11.22 (2026-07-09): fg_hitting_leaderboard_raw DROPPED from Snowflake after the both→s3 cutover —
+      # stg_fangraphs__hitting_leaderboard reads the live lakehouse_raw/ mirror now (no source() read). Removed.
 
   - name: actionnetwork
     database: baseball_data
@@ -764,21 +682,9 @@ sources:
           - name: ingestion_timestamp
             description: Wall-clock UTC timestamp of the most recent upsert for this row.
 
-  - name: external
-    database: baseball_data
-    schema: external
-    description: >
-      Derived tables written by ingestion scripts that don't fit the raw source
-      schemas (oddsapi, statsapi, savant, fangraphs). Includes team fielding OAA
-      from FanGraphs and other script-produced seasonal aggregates.
-
-    tables:
-      - name: oaa_team_season_raw
-        description: >
-          Team-level Outs Above Average (OAA) and Defensive Runs Saved (DRS)
-          from the FanGraphs major-league team fielding leaderboard. Written by
-          scripts/ingest_oaa.py. Grain: team_abbrev × game_year. Season-level
-          totals only (not daily rolling). OAA coverage begins 2016 (Statcast era).
+  # E11.22 (2026-07-09): the `external` source — whose only table was oaa_team_season_raw — was DROPPED
+  # from Snowflake after the both→s3 cutover. mart_team_fielding_oaa reads the live lakehouse_raw/ mirror
+  # now (no source() read), so the entire source is removed (it had no other tables).
 
   - name: lakehouse_clusters
     database: baseball_data

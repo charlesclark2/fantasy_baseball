@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useAuth } from "@/lib/auth-context"
 import { useSelectedDate } from "@/lib/date-context"
 import { apiFetch } from "@/lib/api"
+import { LogPastPropDialog } from "@/components/log-past-prop-dialog"
 
 // ---------------------------------------------------------------------------
 // Prop types — extensible. Only Strikeouts (K) has a projection surface today; add more here as
@@ -256,6 +257,11 @@ function PropsPageInner() {
             <span className="hidden text-[11px] text-gray-600 sm:inline">More prop types coming soon</span>
           </div>
 
+          <div className="flex items-center gap-2">
+          {/* Log a strikeout prop you placed (any game in the last ~14 days) straight into your Bet Log —
+              a bookkeeping convenience, works even for past dates with no projection here. */}
+          <LogPastPropDialog initialDate={selectedDate} />
+
           {/* Date picker — the same shared control the other betting pages use */}
           <Popover open={calOpen} onOpenChange={setCalOpen}>
             <PopoverTrigger asChild>
@@ -282,6 +288,7 @@ function PropsPageInner() {
               />
             </PopoverContent>
           </Popover>
+          </div>
         </div>
 
         {isLoading ? (
@@ -301,7 +308,7 @@ function PropsPageInner() {
             </p>
             <p className="mt-1 text-xs text-gray-600">
               Projections appear once probable starters are announced for the day&apos;s slate. Try
-              another date.
+              another date. To record a prop you placed on a past game, use &quot;Log a prop&quot; above.
             </p>
           </div>
         ) : (

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Info } from "lucide-react"
 import { apiFetch } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
+import { LogPropButton } from "@/components/log-prop-button"
 
 // ---------------------------------------------------------------------------
 // Types — mirrors betting_ml/utils/k_projection_serving.build_k_projection_payload
@@ -40,6 +41,7 @@ export interface KProjection {
   full_name: string | null
   team: string | null
   opponent: string | null
+  game_pk: number | null
   game_date: string | null
   game_datetime: string | null
   last3_k: number[] | null
@@ -262,6 +264,11 @@ export function PitcherKProjection({ pitcherId, asOf }: { pitcherId: number; asO
             </span>
           )}
         </div>
+      </div>
+
+      {/* Bookkeeping affordance — copy this line into the user's own Bet Log. Not a recommendation. */}
+      <div className="mb-3 flex justify-end">
+        <LogPropButton projection={data} />
       </div>
 
       <div className="rounded-lg border border-[#262626] bg-[#111111] px-4 py-4">
