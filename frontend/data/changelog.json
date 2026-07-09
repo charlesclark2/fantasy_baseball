@@ -13,6 +13,10 @@
       {
         "tag": "new",
         "text": "Bet alerts are here. In Settings → Notifications you can now opt in to be told when the model posts qualified plays for the day's slate — by email or browser push (SMS/text is coming soon). Most days nothing fires; you're only notified when there are qualified plays. These are model outputs, not betting advice."
+      },
+      {
+        "tag": "new",
+        "text": "Completed games now show a 'who called it' scorecard. Open a past game's pick-detail page and, alongside the final score, you'll see which side the model favored on the moneyline and total runs and whether that call was correct or missed — and, for the moneyline, whether the closing favorite won too. Pick a past date on the Dashboard or the tracker and a Results section summarizes the same, one card per completed game. It's a factual record shown as plainly for a miss as for a hit — model outputs, not betting advice, with no profitability claim."
       }
     ]
   },

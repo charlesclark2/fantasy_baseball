@@ -35,6 +35,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils"
 import { useSelectedDate } from "@/lib/date-context"
 import { normalizeTeam } from "@/lib/teams"
+import { ScorecardResults, type GameScorecardData } from "@/components/game-scorecard"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -565,6 +566,14 @@ export default function DashboardPage() {
     enabled: !!accessToken && !isToday,
   })
 
+  // E9.40 — "who called it" scorecards for completed games on a past date.
+  const { data: scorecardData } = useQuery<{ scorecards: GameScorecardData[]; total: number }>({
+    queryKey: ["picks-scorecard", isoDate, accessToken],
+    queryFn: () => apiFetch(`/picks/scorecard?date=${isoDate}`, {}, accessToken),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!accessToken && !isToday,
+  })
+
   const isLoading = isToday ? todayLoading : evLoading
   const isError = isToday ? todayError : evError
   const picks: Pick[] = isToday
@@ -615,6 +624,11 @@ export default function DashboardPage() {
                   These picks are based on probable pitchers only. Do not bet until confirmed lineups are posted (~90 min before first pitch).
                 </span>
               </div>
+            </div>
+          )}
+          {!isToday && (scorecardData?.scorecards?.length ?? 0) > 0 && (
+            <div className="mx-auto max-w-6xl px-4 mt-6">
+              <ScorecardResults scorecards={scorecardData?.scorecards} title="Results — who called it" />
             </div>
           )}
           <div className="mt-6">
