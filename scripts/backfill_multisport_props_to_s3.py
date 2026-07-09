@@ -360,6 +360,15 @@ def _snap_ts(game_date: date, hhmm: str) -> str:
     return f"{game_date}T{h}:{m}:00Z"
 
 
+def _force_recent_cutoff(today: date, force_recent_days: int | None) -> date | None:
+    """Cutoff for --force-recent N: dates in [cutoff, today] are force-re-pulled even if
+    they already exist. N is inclusive of today (N=1 → today only; N=2 → today+yesterday).
+    Returns None when the flag is unset / non-positive (no forcing)."""
+    if not force_recent_days or force_recent_days < 1:
+        return None
+    return today - timedelta(days=force_recent_days - 1)
+
+
 def _date_range(start: date, end: date) -> list[date]:
     dates, d = [], start
     while d <= end:
@@ -858,6 +867,7 @@ def run_backfill(
     dry_run: bool,
     markets_override: list[str] | None = None,
     player_props_only: bool = False,
+    force_recent_days: int | None = None,
 ) -> None:
     if dry_run:
         print()
@@ -915,16 +925,28 @@ def run_backfill(
         )
         log.info("  %d existing (market, season, date) partitions found", len(existing))
 
+        # --force-recent N: re-pull the last N calendar days even when they already
+        # exist (the sparse-live-file cure — see the --force-recent help). A full
+        # --force supersedes it (existing is already empty). The window is bounded at
+        # `today` so we never spend a credit probing a future no-events date.
+        today = datetime.now(timezone.utc).date()
+        recent_cutoff = _force_recent_cutoff(today, force_recent_days) if not force else None
+
         # Collect all (season, date) pairs that are NOT fully covered
         all_dates: list[tuple[int, date]] = []
         for season, (start, end) in cfg["season_ranges"].items():
             for d in _date_range(start, end):
-                # A date is "complete" if ALL markets already exist for it
+                forced_recent = recent_cutoff is not None and recent_cutoff <= d <= today
+                # A date is "complete" if ALL markets already exist for it — but a
+                # forced-recent date is always re-pulled (overwrites the thin live file).
                 all_covered = all(
                     (mkt, season, d) in existing for mkt in markets
                 )
-                if not all_covered:
+                if forced_recent or not all_covered:
                     all_dates.append((season, d))
+        if recent_cutoff is not None:
+            log.info("  --force-recent %d → forcing dates >= %s (overwrite if present)",
+                     force_recent_days, recent_cutoff)
 
         if limit:
             all_dates = all_dates[:limit]
@@ -1180,6 +1202,22 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Re-fetch and overwrite existing S3 partitions.",
     )
     p.add_argument(
+        "--force-recent",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Re-fetch and overwrite ONLY the last N calendar days (today back through "
+            "today-N+1), even if those partitions already exist; older partitions still "
+            "auto-skip. This is the daily-cron cure for the sparse-recent-date problem: the "
+            "hourly --mode live cron leaves a thin end-of-day snapshot at date=<today>, and a "
+            "plain historical backfill then SKIPS it because the partition exists. "
+            "'--force-recent 2' makes the daily backfill re-pull the last two days with the "
+            "full pre-game snapshots, overwriting the sparse live file. Cheap (N days only) "
+            "and leaves the rest of the season untouched. Ignored if --force is set."
+        ),
+    )
+    p.add_argument(
         "--dry-run",
         action="store_true",
         help="Print credit estimates only; make no API or S3 calls.",
@@ -1256,6 +1294,7 @@ def main() -> None:
         dry_run          = args.dry_run,
         markets_override = markets_override,
         player_props_only = args.player_props_only,
+        force_recent_days = args.force_recent,
     )
 
 

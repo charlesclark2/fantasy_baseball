@@ -61,7 +61,14 @@ SHELL=/bin/bash
 # WARN/supplemental tier — a failure logs + is non-blocking (never gates predictions).
 # ✅ RE-ENABLED 2026-07-01 — paid Odds-API credits refreshed at the 00:00 flip-back
 # (was DISABLED 2026-06-30 for the free/Starter-key window). See E5_1b_session_recap_2026-06-30.md.
-0 13 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/backfill_multisport_props_to_s3.py --mode backfill --sport baseball_mlb --markets pitcher_strikeouts >> /home/ec2-user/capture-cron.log 2>&1
+# --force-recent 2 (2026-07-09): the LIVE cron (1) writes a THIN end-of-day snapshot at
+# date=<today>; a plain historical backfill then SKIPS that date (partition exists) and it stays
+# sparse forever (7/2–7/8 collapsed to 1–7 of ~30 pitchers this way). --force-recent 2 re-pulls
+# the last 2 days with the full pre-game snapshots, overwriting the thin live file; older dates
+# still idempotent-skip so the cost stays ~2 days. Yesterday's archived snapshots are complete by
+# this 13:00 UTC run; today's aren't archived yet so it's a no-op-write on today (never clobbers
+# the live file with an empty pull). One-off history repair (7/2–7/8 + 4/30) is a separate run.
+0 13 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/backfill_multisport_props_to_s3.py --mode backfill --sport baseball_mlb --markets pitcher_strikeouts --force-recent 2 >> /home/ec2-user/capture-cron.log 2>&1
 
 # (1) LIVE pitcher-strikeout props — CURRENT lines for TODAY's slate → overwrites date=<today>
 # each run, so the Player Props page refreshes intraday like the other odds offerings (2026-07-02).
