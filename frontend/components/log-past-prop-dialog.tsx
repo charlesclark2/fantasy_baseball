@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog"
 import { apiFetch } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
+import { normalizeTeam } from "@/lib/teams"
 
 const BOOKMAKER_OPTIONS = ["Bovada", "DraftKings", "FanDuel", "BetMGM", "Pinnacle", "Other"]
 
@@ -104,7 +105,7 @@ export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
 
   function handleSave() {
     if (!selected || !line || !odds || !stake) return
-    const opponent = selected.opponent ? ` vs ${selected.opponent}` : ""
+    const opponent = selected.opponent ? ` vs ${normalizeTeam(selected.opponent)}` : ""
     mutation.mutate({
       game_pk: selected.game_pk,
       score_date: selected.game_date,
@@ -194,7 +195,8 @@ export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
                     {starters.map((s) => (
                       <SelectItem key={`${s.game_pk}-${s.pitcher_id}`} value={String(s.pitcher_id)}
                         className="text-sm text-white focus:bg-[#1e1e1e] focus:text-white">
-                        {s.pitcher_name}{s.team ? ` (${s.team}${s.opponent ? ` vs ${s.opponent}` : ""})` : ""}
+                        {s.pitcher_name}
+                        {s.team ? ` (${normalizeTeam(s.team)}${s.opponent ? ` vs ${normalizeTeam(s.opponent)}` : ""})` : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>

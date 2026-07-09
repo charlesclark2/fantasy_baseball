@@ -103,17 +103,33 @@ def prop_starters(date: str, _: str = Depends(get_user_id)) -> dict:
 
     Returns each game's two starters with the `pitcher_id` + `game_pk` that settlement keys
     on (see settle_user_bets.py), plus name / team / opponent for the picker. Read from the
-    S3 lakehouse via DuckDB (mart_player_game_starts, position_code '1' = the pitcher slot) —
-    zero-Snowflake request path. Never raises: an empty list on any miss (lakehouse_query
-    already returns [] on failure), so the picker just shows "no starters" rather than 500ing.
+    S3 lakehouse via DuckDB (stg_statsapi_probable_pitchers, one row per game/side joined to
+    stg_statsapi_games for team names) — zero-Snowflake request path. Never raises: an empty
+    list on any miss (lakehouse_query already returns [] on failure), so the picker just shows
+    "no starters" rather than 500ing.
+
+    NOTE: the probable-pitcher feed is the right source (NOT mart_player_game_starts, whose
+    lineup-derived position_code '1' pitcher slot is empty in the universal-DH era — the
+    starter no longer bats). For a past game the probable is the actual starter in the common
+    case; a scratched start simply won't settle (no game-log row) until voided.
     """
     sql = """
-        SELECT game_pk, player_id AS pitcher_id, full_name AS pitcher_name,
-               team, opp_team AS opponent, official_date AS game_date
-        FROM baseball_data.betting.mart_player_game_starts
-        WHERE CAST(official_date AS DATE) = CAST(%(date)s AS DATE)
-          AND position_code = '1'
-        ORDER BY full_name
+        WITH pp AS (
+            SELECT game_pk, side, probable_pitcher_id, probable_pitcher_name, game_date
+            FROM baseball_data.betting.stg_statsapi_probable_pitchers
+            WHERE CAST(game_date AS DATE) = CAST(%(date)s AS DATE)
+              AND probable_pitcher_id IS NOT NULL
+            QUALIFY row_number() OVER (PARTITION BY game_pk, side ORDER BY ingestion_ts DESC) = 1
+        )
+        SELECT pp.game_pk,
+               pp.probable_pitcher_id   AS pitcher_id,
+               pp.probable_pitcher_name AS pitcher_name,
+               CASE WHEN pp.side = 'home' THEN gm.home_team_name ELSE gm.away_team_name END AS team,
+               CASE WHEN pp.side = 'home' THEN gm.away_team_name ELSE gm.home_team_name END AS opponent,
+               pp.game_date AS game_date
+        FROM pp
+        LEFT JOIN baseball_data.betting.stg_statsapi_games gm ON gm.game_pk = pp.game_pk
+        ORDER BY pitcher_name
     """
     rows = lakehouse_query(sql, {"date": date})
     starters = [
