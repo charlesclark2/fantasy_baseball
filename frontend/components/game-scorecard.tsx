@@ -95,27 +95,29 @@ function MarketRow({ market, sc }: { market: MarketScorecard; sc: GameScorecardD
         <ResultPill result={market.model_result} />
       </div>
 
-      {/* Market benchmark */}
-      {isH2h ? (
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-sm text-gray-300">
-            Market favored <span className="font-semibold text-white">{sideLabel("h2h", market.market_side, sc)}</span>
-            {market.market_prob != null && (
-              <span className="ml-1 font-mono text-xs text-gray-500">({pct(market.market_prob)})</span>
-            )}
-          </span>
-          <ResultPill result={market.market_result} />
-        </div>
-      ) : (
-        <div className="text-sm text-gray-400">
+      {/* Market benchmark — h2h: the closing favorite; totals: the de-vigged lean */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm text-gray-300">
+          {isH2h ? "Market favored" : "Market leaned"}{" "}
+          <span className="font-semibold text-white">{sideLabel(market.market_type, market.market_side, sc)}</span>
+          {market.market_prob != null && (
+            <span className="ml-1 font-mono text-xs text-gray-500">({pct(market.market_prob)})</span>
+          )}
+        </span>
+        <ResultPill result={market.market_result} />
+      </div>
+
+      {/* Totals: the plain line facts */}
+      {!isH2h && (
+        <div className="text-xs text-gray-500">
           Closing line{" "}
-          <span className="font-mono text-gray-300">{market.total_line != null ? market.total_line.toFixed(1) : "—"}</span>
+          <span className="font-mono text-gray-400">{market.total_line != null ? market.total_line.toFixed(1) : "—"}</span>
           {market.final_total != null && (
             <>
               {" · "}Final total{" "}
-              <span className="font-mono text-gray-300">{market.final_total}</span>
+              <span className="font-mono text-gray-400">{market.final_total}</span>
               {market.landed && (
-                <span className="ml-1 text-gray-500">
+                <span className="ml-1">
                   ({market.landed === "push" ? "Push" : market.landed.charAt(0).toUpperCase() + market.landed.slice(1)})
                 </span>
               )}
@@ -159,8 +161,9 @@ export function GameScorecard({ scorecard: sc, className }: { scorecard: GameSco
         ))}
       </div>
       <p className="text-[11px] leading-relaxed text-gray-600">
-        Factual result — the side the model favored vs. the outcome, and where the market stood.
-        These are model outputs, not betting advice.
+        Factual result — the side the model favored and the side the market favored, each vs. the
+        outcome. For total runs the market's lean is near-neutral (implied % shown). These are
+        model outputs, not betting advice.
       </p>
     </div>
   )
@@ -184,12 +187,20 @@ export function GameScorecardCompact({ scorecard: sc }: { scorecard: GameScoreca
         </span>
       </div>
       {sc.markets.map((m) => (
-        <div key={m.market_type} className="flex items-center justify-between gap-2 text-xs">
-          <span className="text-gray-400">
-            {marketName(m.market_type)}: model{" "}
-            <span className="font-medium text-gray-200">{sideLabel(m.market_type, m.model_side, sc)}</span>
-          </span>
-          <ResultPill result={m.model_result} />
+        <div key={m.market_type} className="flex flex-col gap-1 border-t border-[#1a1a1a] pt-1.5">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-gray-600">{marketName(m.market_type)}</div>
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-gray-400">
+              Model <span className="font-medium text-gray-200">{sideLabel(m.market_type, m.model_side, sc)}</span>
+            </span>
+            <ResultPill result={m.model_result} />
+          </div>
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-gray-400">
+              Market <span className="font-medium text-gray-200">{sideLabel(m.market_type, m.market_side, sc)}</span>
+            </span>
+            <ResultPill result={m.market_result} />
+          </div>
         </div>
       ))}
     </div>
@@ -210,11 +221,37 @@ export function ScorecardResults({
 }) {
   const finals = (scorecards ?? []).filter((s) => s && s.status === "Final" && s.markets?.length)
   if (!finals.length) return null
+
+  // Tally correct calls across every graded market (decisive = correct + missed; pushes excluded).
+  let modelCorrect = 0, modelDecisive = 0, marketCorrect = 0, marketDecisive = 0
+  for (const s of finals) {
+    for (const m of s.markets) {
+      if (m.model_result === "win" || m.model_result === "loss") {
+        modelDecisive++
+        if (m.model_result === "win") modelCorrect++
+      }
+      if (m.market_result === "win" || m.market_result === "loss") {
+        marketDecisive++
+        if (m.market_result === "win") marketCorrect++
+      }
+    }
+  }
+
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex items-baseline gap-2">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h2 className="text-base font-semibold text-white">{title}</h2>
         <span className="text-xs text-gray-500">{finals.length} completed {finals.length === 1 ? "game" : "games"}</span>
+        {(modelDecisive > 0 || marketDecisive > 0) && (
+          <span className="text-xs text-gray-500">
+            <span className="text-gray-400">Model</span>{" "}
+            <span className="font-mono text-gray-300">{modelCorrect}/{modelDecisive}</span>
+            <span className="mx-1 text-gray-600">·</span>
+            <span className="text-gray-400">Market</span>{" "}
+            <span className="font-mono text-gray-300">{marketCorrect}/{marketDecisive}</span>
+            <span className="ml-1 text-gray-600">calls correct</span>
+          </span>
+        )}
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {finals.map((s) => (
@@ -222,8 +259,9 @@ export function ScorecardResults({
         ))}
       </div>
       <p className="text-[11px] leading-relaxed text-gray-600">
-        The side the model favored vs. the final outcome, one call per market. A miss is shown as
-        plainly as a hit. Model outputs, not betting advice.
+        The side the model favored and the side the market favored, each vs. the final outcome — one
+        call per market, pushes excluded from the tally. A miss is shown as plainly as a hit. Model
+        outputs, not betting advice.
       </p>
     </section>
   )

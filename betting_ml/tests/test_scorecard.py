@@ -96,14 +96,30 @@ def test_h2h_underdog_upset_model_right_market_wrong():
 # ── totals grading (model call + factual line result, no market win/loss) ────
 
 def test_totals_over_model_right_landed_over():
-    # total 9 vs line 8.5 → over; model favors over (0.55)
-    sc = build_scorecard_from_detail(_detail(home_score=5, away_score=4, picks=[_totals(0.55, 0.50, 8.5)]))
+    # total 9 vs line 8.5 → over; model favors over (0.55); market leans over (0.52)
+    sc = build_scorecard_from_detail(_detail(home_score=5, away_score=4, picks=[_totals(0.55, 0.52, 8.5)]))
     m = sc.markets[0]
     assert m.market_type == "totals"
     assert m.model_side == "over" and m.model_result == "win"
     assert m.final_total == 9 and m.total_line == 8.5 and m.landed == "over"
-    # totals carries NO market win/loss (books balance ~50/50)
-    assert m.market_side is None and m.market_result is None
+    # totals market lean is graded too (from de-vig P(over) >= 0.5)
+    assert m.market_side == "over" and m.market_result == "win"
+    assert abs(m.market_prob - 0.52) < 1e-9
+
+
+def test_totals_market_leans_under_and_misses():
+    # total 9 → over; market P(over) 0.46 → leans under → missed
+    sc = build_scorecard_from_detail(_detail(home_score=5, away_score=4, picks=[_totals(0.55, 0.46, 8.5)]))
+    m = sc.markets[0]
+    assert m.market_side == "under" and m.market_result == "loss"
+    # under-oriented market prob = 1 - 0.46
+    assert abs(m.market_prob - 0.54) < 1e-9
+
+
+def test_totals_push_pushes_both_model_and_market():
+    sc = build_scorecard_from_detail(_detail(home_score=5, away_score=3, picks=[_totals(0.55, 0.46, 8.0)]))
+    m = sc.markets[0]
+    assert m.landed == "push" and m.model_result == "push" and m.market_result == "push"
 
 
 def test_totals_under_model_wrong_landed_over():
