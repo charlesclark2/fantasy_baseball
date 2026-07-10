@@ -1,7 +1,13 @@
-"""parlay_math.py — Edge Program Story E10.1 (Parlay decision-support CALCULATOR, honest MVP).
+"""parlay_calc.py — Edge Program Story E10.1 (Parlay decision-support CALCULATOR, honest MVP).
 
-Pure math for the "tell the user the TRUTH about the parlay they built" calculator:
+PURE-STDLIB math for the "tell the user the TRUTH about the parlay they built" calculator. This module
+lives INSIDE the backend and depends only on the standard-library `math` module — NO numpy, NO scipy,
+NO `betting_ml` import — because the FastAPI Lambda bundle installs neither numpy/scipy nor the
+`betting_ml` package (only `betting_ml/utils/game_day.py` is copied in). Importing anything heavier
+from a serving router crashes the whole app on boot (every endpoint then 500s → the browser reports a
+CORS error on all routes). Keep this module stdlib-only.
 
+What it computes:
   * per-leg odds conversions (American → decimal → book-implied probability),
   * the TRUE combined probability of a multi-leg parlay from our per-leg MODEL probabilities —
     independent (product) for legs in DIFFERENT games, correlation-ADJUSTED (Gaussian copula) for
@@ -10,46 +16,34 @@ Pure math for the "tell the user the TRUTH about the parlay they built" calculat
   * the book-implied probability + expected value from the parlay PRICE,
   * a plain-language, factual verdict.
 
-🔒 HONEST FRAMING (non-negotiable — the crux of E10.1). This is a CALCULATOR / education tool, NOT
-the +EV recommender (that is E10.3, hard-gated behind a proven edge we do NOT have; `best_alpha = 0`
-holds). It exists to show that *most parlays are −EV after the vig*. So this module DELIBERATELY:
-  * emits `best_alpha = 0` and `is_bet_recommendation = False` with every result,
-  * frames expected value factually (a negative number is reported as plainly as a positive one) and
-    NEVER as a "+EV play" / "value" / "edge" recommendation,
-  * bakes the "most parlays are −EV after vig" disclaimer into every payload.
-The banned-language guard (test_parlay_serving.py) fails the build if any promotional / bet-rec
-wording ("+EV" as a sell, "value play/bet", "edge", "lock", "smash", "hammer", win-rate, "profitable")
-ever creeps into this module or the shipped frontend. "Expected value" / "−EV" are the neutral,
-factual vocabulary of the computation and are allowed.
+🔒 HONEST FRAMING (non-negotiable). This is a CALCULATOR / education tool, NOT the +EV recommender
+(that is E10.3, hard-gated behind a proven advantage we do NOT have; `best_alpha = 0` holds). It
+exists to show that *most parlays are −EV after the vig*. So every result carries `best_alpha = 0` and
+`is_bet_recommendation = False`, frames expected value factually (a negative number reported as plainly
+as a positive one — never a "+EV play"/"value"/"edge" recommendation), and bakes in the "most parlays
+are −EV after vig" disclaimer. The banned-language guard (test_parlay_serving.py) fails the build if
+any promotional / bet-rec wording ever creeps into this module's prose or the shipped frontend.
 
 ── Same-game correlation (source-stamped, conservative) ─────────────────────────────────────────
 The measured pairwise-correlation source (Epic 22.1 `mart_bet_correlation_matrix`) is SPECCED but not
-built, and E10.1's parallel-safety rule forbids standing up a new correlation pipeline over the
-lakehouse mid-migration. So we do NOT silently assume independence for same-game legs — we apply a
-DOCUMENTED, deliberately CONSERVATIVE prior via a Gaussian copula, and stamp the source on every
-same-game group so the UI can flag it:
+built, and E10.1's parallel-safety rule forbids standing up a new correlation pipeline mid-migration.
+So we do NOT silently assume independence for same-game legs — we apply a DOCUMENTED, deliberately
+CONSERVATIVE prior via a Gaussian copula, stamped `source = "conservative_prior"` on every same-game
+group. The latent correlation is NEGATIVE on purpose so the reported combined probability sits at or
+BELOW the naive independent product — we err toward NEVER overstating a same-game parlay's chance (the
+honest direction for a −EV-warning tool). It is a prior, NOT a measurement: when Epic 22.1 lands, swap
+in the measured per-pair correlation and re-stamp `source = "historical_pairwise"`; the copula
+machinery below is unchanged.
 
-  * `source = "conservative_prior"` — a documented negative latent-correlation prior
-    (RHO_SAME_GAME_CONSERVATIVE) applied to same-game leg pairs. It is chosen NEGATIVE on purpose so
-    the reported combined probability sits at or BELOW the naive independent product — i.e. we err
-    toward NEVER overstating a same-game parlay's true chance (the honest, cautious direction for a
-    −EV-warning tool). It is a prior, NOT a measurement: when Epic 22.1 lands, swap in the measured
-    per-pair correlation matrix and re-stamp `source = "historical_pairwise"`; the copula machinery
-    below is unchanged.
-
-The math is pure NumPy + SciPy (multivariate-normal orthant probability) — no model, no Snowflake,
-no network — so it is fully unit-testable and safe to import in the fast test gate.
+The Gaussian machinery (standard-normal CDF/quantile, bivariate-normal orthant) is implemented in pure
+Python (Acklam's inverse-normal + the Drezner–Wesolowsky bivariate-normal), validated against SciPy in
+the tests — so the module is fully unit-tested and safe in the dependency-light Lambda bundle.
 """
 
 from __future__ import annotations
 
+import math
 from typing import Any, Sequence
-
-import numpy as np
-from scipy.stats import multivariate_normal, norm
-
-from betting_ml.utils.prop_edge import american_to_profit
-from betting_ml.utils.totals_probability import american_to_implied
 
 # ---------------------------------------------------------------------------
 # Honest-framing constants — baked into every payload, asserted by the guard test.
@@ -79,6 +73,138 @@ _EPS = 1e-9
 
 
 # ---------------------------------------------------------------------------
+# Pure-Python Gaussian helpers (no numpy / scipy)
+# ---------------------------------------------------------------------------
+
+def _norm_cdf(x: float) -> float:
+    """Standard-normal CDF via the error function (stdlib math.erf)."""
+    return 0.5 * math.erfc(-x / math.sqrt(2.0))
+
+
+def _norm_ppf(p: float) -> float:
+    """Standard-normal quantile (inverse CDF) — Acklam's rational approximation (|err| < 1.15e-9)."""
+    p = min(max(p, _EPS), 1.0 - _EPS)
+    a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
+         1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00]
+    b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
+         6.680131188771972e+01, -1.328068155288572e+01]
+    c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
+         -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00]
+    d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00,
+         3.754408661907416e+00]
+    plow, phigh = 0.02425, 1.0 - 0.02425
+    if p < plow:
+        q = math.sqrt(-2.0 * math.log(p))
+        return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / \
+               ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0)
+    if p > phigh:
+        q = math.sqrt(-2.0 * math.log(1.0 - p))
+        return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / \
+               ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0)
+    q = p - 0.5
+    r = q * q
+    return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / \
+           (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1.0)
+
+
+# Gauss–Legendre nodes/weights for Genz's bivariate-normal integral (three node sets by |r|).
+_GL = {
+    1: (  # |r| < 0.3
+        [0.1713244923791705, 0.3607615730481384, 0.4679139345726904],
+        [0.9324695142031522, 0.6612093864662647, 0.2386191860831970],
+    ),
+    2: (  # 0.3 <= |r| < 0.75
+        [0.04717533638651177, 0.1069393259953183, 0.1600783285433464,
+         0.2031674267230659, 0.2334925365383547, 0.2491470458134029],
+        [0.9815606342467191, 0.9041172563704750, 0.7699026741943050,
+         0.5873179542866171, 0.3678314989981802, 0.1252334085114692],
+    ),
+    3: (  # |r| >= 0.75
+        [0.01761400713915212, 0.04060142980038694, 0.06267204833410906,
+         0.08327674157670475, 0.1019301198172404, 0.1181945319615184,
+         0.1316886384491766, 0.1420961093183821, 0.1491729864726037,
+         0.1527533871307259],
+        [0.9931285991850949, 0.9639719272779138, 0.9122344282513259,
+         0.8391169718222188, 0.7463319064601508, 0.6360536807265150,
+         0.5108670019508271, 0.3737060887154196, 0.2277858511416451,
+         0.07652652113349733],
+    ),
+}
+
+
+def _bvn_upper(dh: float, dk: float, r: float) -> float:
+    """Standard bivariate-normal upper orthant P(X ≥ dh, Y ≥ dk), corr r.
+
+    Faithful pure-Python port of Alan Genz's `bvnu` (the reference routine behind SciPy's/MATLAB's
+    bivariate-normal CDF) — accurate to ~1e-14. Returns exactly what the copula joint needs, so no
+    lower-CDF conversion is required.
+    """
+    if abs(r) < 1e-15:
+        return _norm_cdf(-dh) * _norm_cdf(-dk)
+    tp = 2.0 * math.pi
+    h, k = dh, dk
+    hk = h * k
+    bvn = 0.0
+    ng = 1 if abs(r) < 0.3 else (2 if abs(r) < 0.75 else 3)
+    w, x = _GL[ng]
+    if abs(r) < 0.925:
+        hs = (h * h + k * k) / 2.0
+        asr = math.asin(r) / 2.0
+        for i in range(len(w)):
+            for sign in (-1.0, 1.0):
+                sn = math.sin(asr * (1.0 + sign * x[i]))
+                bvn += w[i] * math.exp((sn * hk - hs) / (1.0 - sn * sn))
+        bvn = bvn * asr / tp + _norm_cdf(-h) * _norm_cdf(-k)
+    else:
+        if r < 0.0:
+            k = -k
+            hk = -hk
+        if abs(r) < 1.0:
+            as_ = (1.0 - r) * (1.0 + r)
+            a = math.sqrt(as_)
+            bs = (h - k) ** 2
+            c = (4.0 - hk) / 8.0
+            d = (12.0 - hk) / 16.0
+            asr = -(bs / as_ + hk) / 2.0
+            if asr > -100.0:
+                bvn = a * math.exp(asr) * (1.0 - c * (bs - as_) * (1.0 - d * bs / 5.0) / 3.0
+                                           + c * d * as_ * as_ / 5.0)
+            if hk > -100.0:
+                b = math.sqrt(bs)
+                sp = math.sqrt(tp) * _norm_cdf(-b / a)
+                bvn = bvn - math.exp(-hk / 2.0) * sp * b * (1.0 - c * bs * (1.0 - d * bs / 5.0) / 3.0)
+            a = a / 2.0
+            for i in range(len(w)):
+                for sign in (-1.0, 1.0):
+                    xs = (a * (1.0 + sign * x[i])) ** 2
+                    rs = math.sqrt(1.0 - xs)
+                    asr1 = -(bs / xs + hk) / 2.0
+                    if asr1 > -100.0:
+                        sp = 1.0 + c * xs * (1.0 + d * xs)
+                        ep = math.exp(-hk * xs / (2.0 * (1.0 + rs) ** 2)) / rs
+                        bvn += a * w[i] * math.exp(asr1) * (ep - sp)
+            bvn = -bvn / tp
+        if r > 0.0:
+            bvn += _norm_cdf(-max(h, k))
+        elif h >= k:
+            bvn = -bvn
+        else:
+            if h < 0.0:
+                lhk = _norm_cdf(k) - _norm_cdf(h)
+            else:
+                lhk = _norm_cdf(-h) - _norm_cdf(-k)
+            bvn = lhk - bvn
+    return min(max(bvn, 0.0), 1.0)
+
+
+def _bvn_joint_hit(p_a: float, p_b: float, r: float) -> float:
+    """P(both legs hit) for two Bernoulli legs coupled by a Gaussian copula with latent corr r.
+
+    thresholds t = Φ⁻¹(1−p) → P(Z>t)=p; joint upper-orthant P(Z_a>t_a, Z_b>t_b) = bvnu(t_a, t_b, r)."""
+    return _bvn_upper(_norm_ppf(1.0 - p_a), _norm_ppf(1.0 - p_b), r)
+
+
+# ---------------------------------------------------------------------------
 # Per-leg odds conversions
 # ---------------------------------------------------------------------------
 
@@ -87,9 +213,13 @@ def american_to_decimal(american: float | int | None) -> float | None:
     if american is None:
         return None
     try:
-        return round(american_to_profit(float(american)) + 1.0, 6)
-    except (TypeError, ValueError, ZeroDivisionError):
+        a = float(american)
+    except (TypeError, ValueError):
         return None
+    if a == 0:
+        return None
+    dec = (a / 100.0 if a > 0 else 100.0 / abs(a)) + 1.0
+    return round(dec, 6)
 
 
 def decimal_to_implied(decimal_odds: float | None) -> float | None:
@@ -101,20 +231,14 @@ def decimal_to_implied(decimal_odds: float | None) -> float | None:
 
 def american_to_implied_prob(american: float | int | None) -> float | None:
     """American odds → book-implied probability (with vig)."""
-    if american is None:
-        return None
-    try:
-        return round(float(american_to_implied(float(american))), 6)
-    except (TypeError, ValueError, ZeroDivisionError):
-        return None
+    return decimal_to_implied(american_to_decimal(american))
 
 
 def combined_decimal_odds(leg_americans: Sequence[float | int | None]) -> float | None:
     """Cross-game parlay PRICE = product of per-leg decimal odds. None if any leg price is missing.
 
     Only valid for legs in DIFFERENT games — a same-game parlay (SGP) is priced by the book with its
-    own correlation model, so its price cannot be inferred from the leg prices (E10.2's gap). The
-    caller must fall back to a user-entered parlay price for any same-game parlay.
+    own correlation model, so its price cannot be inferred from the leg prices (E10.2's gap).
     """
     dec = 1.0
     for a in leg_americans:
@@ -137,13 +261,13 @@ def copula_joint_probability(
     hit_probs: Sequence[float],
     rho: float = RHO_SAME_GAME_CONSERVATIVE,
 ) -> float:
-    """Joint P(all legs hit) for correlated legs, via a Gaussian copula with common latent corr `rho`.
+    """Joint P(all legs hit) for correlated legs via a Gaussian copula with latent corr `rho`.
 
-    Each leg i has marginal P(hit) = p_i. Introduce standard-normal latents Z_i with an exchangeable
-    correlation matrix (rho off-diagonal) and thresholds t_i = Φ⁻¹(1 − p_i) so P(Z_i > t_i) = p_i.
-    The joint upper-orthant probability P(Z_1 > t_1, …, Z_n > t_n) is, by symmetry (W = −Z ~ N(0, R)),
-    the lower-orthant CDF of N(0, R) at (−t_1, …, −t_n). `rho` is clamped to keep R positive-definite
-    for any leg count (rho > −1/(n−1)).
+    * n == 1 → the leg's own probability.
+    * n == 2 → the exact bivariate-normal orthant (Drezner–Wesolowsky).
+    * n >= 3 → a documented CONSERVATIVE fallback: the naive product scaled by the SMALLEST pairwise
+      copula ratio across all leg pairs. With the negative prior every pairwise ratio ≤ 1, so the
+      result is ≤ the naive product (never overstated) and needs no multivariate-normal routine.
     """
     ps = [_clip_prob(p) for p in hit_probs]
     n = len(ps)
@@ -151,41 +275,37 @@ def copula_joint_probability(
         return 1.0
     if n == 1:
         return round(ps[0], 6)
-    # Keep the exchangeable correlation matrix positive-definite: rho ∈ (−1/(n−1), 1).
-    lo = -1.0 / (n - 1) + 1e-6
-    r = float(min(max(rho, lo), 1.0 - 1e-6))
-    thresholds = np.array([norm.ppf(1.0 - p) for p in ps])  # t_i
-    cov = np.full((n, n), r)
-    np.fill_diagonal(cov, 1.0)
-    joint = multivariate_normal(mean=np.zeros(n), cov=cov, allow_singular=True).cdf(-thresholds)
-    # Numerical guard: the joint can never exceed min(p_i) nor drop below 0.
-    joint = float(min(max(joint, 0.0), min(ps)))
-    return round(joint, 6)
+    if n == 2:
+        j = _bvn_joint_hit(ps[0], ps[1], rho)
+        return round(min(max(j, 0.0), min(ps)), 6)
+    naive = 1.0
+    for p in ps:
+        naive *= p
+    min_ratio = 1.0
+    for i in range(n):
+        for j in range(i + 1, n):
+            pair = _bvn_joint_hit(ps[i], ps[j], rho)
+            ratio = pair / (ps[i] * ps[j]) if ps[i] * ps[j] > 0 else 1.0
+            min_ratio = min(min_ratio, ratio)
+    joint = naive * min_ratio
+    return round(min(max(joint, 0.0), min(ps)), 6)
 
 
 def combined_true_probability(legs: Sequence[dict[str, Any]]) -> dict[str, Any]:
     """TRUE combined probability of a parlay from per-leg MODEL probabilities.
 
-    `legs` — each a dict with at least:
-        game_pk    : int|None   — same-game grouping key (None → treated as its own independent group)
-        hit_prob   : float      — the model's probability the leg HITS (already oriented to the side)
-        market_type, side, label … (carried through untouched for the UI)
+    `legs` — each a dict with at least `game_pk` (same-game grouping key; None → its own independent
+    group), `hit_prob` (the model's probability the leg HITS, side-oriented), plus display fields.
 
-    Legs in DIFFERENT games are independent → their group probabilities multiply. Legs in the SAME
-    game are correlation-adjusted with the conservative copula prior (never the naive product).
-
-    Returns:
-        combined_prob        : float — Π over groups of each group's (copula or single) joint
-        naive_product        : float — Π of every leg's hit_prob (independence — shown for contrast)
-        groups               : list  — per game_pk: legs, joint, naive_product, correlation_source,
-                                        is_same_game, is_correlation_estimated, note
+    Legs in DIFFERENT games multiply (independence); SAME-GAME legs are correlation-adjusted with the
+    conservative copula prior (never the naive product). Returns the combined probability, the naive
+    independent product (for contrast), and a per-group breakdown with source stamps.
     """
     resolved = [l for l in legs if l.get("hit_prob") is not None]
     naive_product = 1.0
     for l in resolved:
         naive_product *= _clip_prob(float(l["hit_prob"]))
 
-    # Group by game_pk; legs without a game_pk are each their own independent group.
     groups_by_key: dict[Any, list[dict[str, Any]]] = {}
     for i, l in enumerate(resolved):
         key = l.get("game_pk")
@@ -197,7 +317,9 @@ def combined_true_probability(legs: Sequence[dict[str, Any]]) -> dict[str, Any]:
     group_summaries: list[dict[str, Any]] = []
     for key, gl in groups_by_key.items():
         probs = [_clip_prob(float(l["hit_prob"])) for l in gl]
-        g_naive = float(np.prod(probs))
+        g_naive = 1.0
+        for p in probs:
+            g_naive *= p
         same_game = len(gl) > 1 and not str(key).startswith("__solo_")
         if same_game:
             joint = copula_joint_probability(probs, RHO_SAME_GAME_CONSERVATIVE)
@@ -207,8 +329,7 @@ def combined_true_probability(legs: Sequence[dict[str, Any]]) -> dict[str, Any]:
                 "same-game correlation is not yet available), so the combined probability is not "
                 "overstated in your favour."
             )
-            same_market = len({l.get("market_type") for l in gl}) < len(gl)
-            if same_market:
+            if len({l.get("market_type") for l in gl}) < len(gl):
                 note += (
                     " Heads up: two legs share the same game and market — an unusual same-game "
                     "combination; double-check they are not mutually exclusive."
@@ -225,7 +346,7 @@ def combined_true_probability(legs: Sequence[dict[str, Any]]) -> dict[str, Any]:
             "joint": round(joint, 6),
             "naive_product": round(g_naive, 6),
             "correlation_source": source,
-            "is_correlation_estimated": same_game,  # a prior, not a measurement
+            "is_correlation_estimated": same_game,
             "note": note,
         })
 
@@ -255,11 +376,10 @@ def resolve_parlay_price(
 ) -> dict[str, Any]:
     """Determine the parlay PRICE (decimal odds) + where it came from.
 
-    * A user-entered parlay price always wins (the only honest way to price a same-game parlay — the
-      book uses its own correlation model, so an SGP price cannot be inferred from the leg prices;
-      that gap is E10.2's feasibility spike).
-    * Otherwise, for a purely CROSS-game parlay we compute the price = product of leg decimal odds.
-    * A same-game parlay with no user-entered price has NO computable price → decimal None + a note.
+    A user-entered price always wins (the only honest way to price a same-game parlay — the book uses
+    its own correlation model, so an SGP price can't be inferred from the leg prices; that gap is
+    E10.2's feasibility spike). Otherwise a purely CROSS-game parlay price = product of leg decimals; a
+    same-game parlay with no user price has no computable price.
     """
     user_dec = american_to_decimal(user_parlay_american)
     if user_dec is not None:
@@ -293,9 +413,9 @@ def build_verdict(
     book_implied_prob: float | None,
     ev_per_dollar: float | None,
 ) -> str:
-    """A factual, plain-language verdict. A negative expected value is stated as plainly as a
-    positive one; NEVER a "+EV play" / "value" / recommendation. Always closes with the honest
-    reminder that most parlays are −EV after vig."""
+    """A factual, plain-language verdict. A negative expected value is stated as plainly as a positive
+    one; NEVER a "+EV play" / recommendation. Always closes with the honest reminder that most parlays
+    are −EV after vig."""
     tail = "Most parlays are negative expected value once the vig is priced in."
     if true_prob is None:
         return "Add at least one leg with a model probability to evaluate this parlay. " + tail
@@ -313,17 +433,13 @@ def build_verdict(
             f"expected value (−EV)."
         )
     elif ev_per_dollar > 0:
-        # Reported factually — NOT as a recommendation. E10.3 (a recommender) is hard-gated behind a
-        # proven edge we do not have; this remains a calculator.
         sign_txt = (
             f"Expected value is about +{ev_pct:.1f}% per $1 staked — the model's estimate is higher "
             f"than the book's implied price here. This is a factual calculation, not a recommendation."
         )
     else:
         sign_txt = "Expected value is about break-even per $1 staked at these odds."
-    return (
-        f"The book's price implies {imp}; the model estimates {tp}. {sign_txt} " + tail
-    )
+    return f"The book's price implies {imp}; the model estimates {tp}. {sign_txt} " + tail
 
 
 # ---------------------------------------------------------------------------
@@ -337,11 +453,9 @@ def evaluate_parlay(
 ) -> dict[str, Any]:
     """Assemble the full parlay-calculator result from resolved legs.
 
-    `legs` — each a dict with (at least): game_pk, market_type, side, hit_prob (model P the leg hits,
-    already side-oriented; None if unresolvable), book_odds_american (the price the user is taking;
-    may be None), plus any display fields (label, home_team, away_team, line, …) carried through.
-
-    The no-edge posture (`best_alpha = 0`, `is_bet_recommendation = False`) and the honest disclaimer
+    `legs` — each a dict with (at least) game_pk, market_type, side, hit_prob (model P the leg hits,
+    already side-oriented; None if unresolvable), book_odds_american (may be None), + display fields.
+    The no-edge posture (`best_alpha = 0`, `is_bet_recommendation = False`) + the honest disclaimer
     travel WITH the payload."""
     legs = list(legs)
     resolved = [l for l in legs if l.get("hit_prob") is not None]
@@ -350,7 +464,6 @@ def evaluate_parlay(
     prob = combined_true_probability(resolved)
     true_prob = prob["combined_prob"]
 
-    # Only legs that actually count toward the combined probability contribute their price.
     leg_americans = [l.get("book_odds_american") for l in resolved]
     price = resolve_parlay_price(leg_americans, prob["has_same_game"], user_parlay_american)
     decimal = price["decimal"]
@@ -401,7 +514,6 @@ def evaluate_parlay(
         "flags": flags,
         "caption": CAPTION,
         "disclaimer": DISCLAIMER,
-        # The no-edge posture travels with the data (honest framing — see module docstring).
         "best_alpha": 0,
         "is_bet_recommendation": False,
         "generated_at": generated_at,
@@ -411,9 +523,9 @@ def evaluate_parlay(
 def oriented_hit_prob(market_type: str, side: str, model_prob: float | None) -> float | None:
     """Orient a served model probability to the chosen side (= P the leg HITS).
 
-    * h2h:   model_prob = P(home win)   → 'home' → p, 'away' → 1−p
-    * totals:model_prob = P(over)       → 'over' → p, 'under' → 1−p
-    * strikeouts: model_prob = P(over the line) → 'over' → p, 'under' → 1−p
+    * h2h:    model_prob = P(home win)     → 'home' → p, 'away' → 1−p
+    * totals: model_prob = P(over)         → 'over' → p, 'under' → 1−p
+    * strikeouts: model_prob = P(over line)→ 'over' → p, 'under' → 1−p
     Returns None if the probability is missing or the side is unrecognised.
     """
     if model_prob is None:

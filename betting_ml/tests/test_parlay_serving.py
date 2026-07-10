@@ -21,8 +21,8 @@ from pathlib import Path
 
 import pytest
 
-from betting_ml.utils import parlay_math as pm
-from betting_ml.utils.parlay_math import (
+from app.backend.services import parlay_calc as pm
+from app.backend.services.parlay_calc import (
     CAPTION,
     DISCLAIMER,
     american_to_decimal,

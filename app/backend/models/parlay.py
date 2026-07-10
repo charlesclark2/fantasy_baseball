@@ -1,7 +1,7 @@
 """Pydantic models for the E10.1 parlay decision-support calculator (honest MVP).
 
 Request/response shapes for the stateless `/parlay` calc endpoints. The heavy lifting (combined
-probability, correlation copula, EV, verdict) lives in `betting_ml.utils.parlay_math`; these models
+probability, correlation copula, EV, verdict) lives in `app.backend.services.parlay_calc`; these models
 just type the HTTP surface. The calculator reads per-leg model probabilities from the SERVING CACHE
 (DynamoDB → S3) only — never a direct mart / lakehouse query (E9.40 discipline).
 """

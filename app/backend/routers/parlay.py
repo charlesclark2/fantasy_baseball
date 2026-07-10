@@ -18,7 +18,7 @@ latest per game by `write_serving_store`. No `daily_model_predictions` / mart / 
 the calculator is insulated from the E11.20 Delta migration. No serving-store write, no dbt, no box.
 
 🔒 HONEST FRAMING. Every response carries `best_alpha = 0`, `is_bet_recommendation = False`, and the
-"most parlays are −EV after vig" disclaimer (baked in `parlay_math`). The banned-language guard
+"most parlays are −EV after vig" disclaimer (baked in `parlay_calc`). The banned-language guard
 (test_parlay_serving.py) fails the build on any +EV/value/edge/bet-rec wording here or on the frontend.
 """
 
@@ -28,11 +28,11 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from betting_ml.utils import parlay_math as pm
 from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
 
 from app.backend.dependencies import get_user_id
 from app.backend.models.parlay import ParlayEvaluateRequest
+from app.backend.services import parlay_calc as pm  # pure-stdlib math (no numpy/scipy — Lambda-safe)
 from app.backend.services import serving_cache
 
 logger = logging.getLogger(__name__)
