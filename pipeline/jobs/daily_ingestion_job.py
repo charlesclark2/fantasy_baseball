@@ -46,6 +46,18 @@ from pipeline.ops.daily_ingestion_ops import (
     ingest_sprint_speed,
     ingest_statcast,
     ingest_statcast_to_s3_op,
+    lakehouse_schedule_export_op,
+    lakehouse_w1_pitch_marts_op,
+    lakehouse_w2_marts_op,
+    lakehouse_w3_marts_op,
+    lakehouse_w3pre_flatten_op,
+    lakehouse_w6_odds_marts_op,
+    lakehouse_w7b_serving_op,
+    lakehouse_spine_odds_bridge_op,
+    lakehouse_w8a_feature_layer_op,
+    lakehouse_w8b_aggregator_op,
+    lakehouse_w11_nightly_op,
+    lakehouse_delta_maintenance_op,
     refresh_w1_external_tables_op,
     ingest_statsapi_schedule,
     ingest_transactions,
@@ -54,7 +66,6 @@ from pipeline.ops.daily_ingestion_ops import (
     ingest_umpires_late,
     ingest_weather,
     predict_today_morning,
-    run_w1_lakehouse_op,
     settle_user_bets_op,
     update_lineup_state_scd2,
     update_market_features_scd2,
@@ -80,12 +91,32 @@ def daily_ingestion_job():
     check_monitors_healthy_op()
     s4 = ingest_action_network()
     s5 = ingest_statcast(start=s4)
-    # E11.1-W1d: S3 lakehouse build is now HALT/serving-critical — mart_pitch_* are
-    # served via Snowflake external tables backed by these parquets.  Must complete
-    # BEFORE dbt_daily_build so the feature build reads fresh pitch data.
+    # E11.1-W1d: S3 lakehouse build is HALT/serving-critical — mart_pitch_* are served
+    # via Snowflake external tables backed by these parquets. Must complete BEFORE
+    # dbt_daily_build so the feature build reads fresh pitch data.
+    # ⭐ E11.20: run_w1_lakehouse_op is DECOMPOSED into the per-wave chain below — the
+    # old monolith's internal sequence is now graph edges, so each wave is independently
+    # retryable and its Dagster duration attributes the daily wall clock (E11.21). The
+    # ordering invariants are load-bearing: schedule export before the W6 Group-C
+    # flattens; W1→W2→W3 (each reads the prior wave); W3pre before W6 (fresh
+    # stg_derivative_odds); spine before the odds bridge; W8a before W8b (the aggregator
+    # reads the W8a layer); the W11 nightly tail after W8b (W11d joins the W8b spine).
     s5b = ingest_statcast_to_s3_op(start=s5)
-    s5c = run_w1_lakehouse_op(start=s5b)
+    lk1 = lakehouse_schedule_export_op(start=s5b)
+    lk2 = lakehouse_w1_pitch_marts_op(start=lk1)
+    lk3 = lakehouse_w2_marts_op(start=lk2)
+    lk4 = lakehouse_w3_marts_op(start=lk3)
+    lk5 = lakehouse_w3pre_flatten_op(start=lk4)
+    lk6 = lakehouse_w6_odds_marts_op(start=lk5)
+    lk7 = lakehouse_w7b_serving_op(start=lk6)
+    lk8 = lakehouse_spine_odds_bridge_op(start=lk7)
+    lk9 = lakehouse_w8a_feature_layer_op(start=lk8)
+    lk10 = lakehouse_w8b_aggregator_op(start=lk9)
+    s5c = lakehouse_w11_nightly_op(start=lk10)
     s5d = refresh_w1_external_tables_op(start=s5c)
+    # E11.20 — Delta compaction/vacuum (WARN tier, off the critical path: nothing
+    # downstream depends on it; a failure defers maintenance to tomorrow).
+    lakehouse_delta_maintenance_op(start=s5d)
     # Durable odds-coverage DQ guard (2026-07-02 incident). The odds marts (mart_odds_outcomes
     # + mart_game_odds_bridge) are now fresh; detect the "bridge freeze" class — 0 has_odds rows
     # for the current slate while spine + outcomes are both fresh — before the prediction path.

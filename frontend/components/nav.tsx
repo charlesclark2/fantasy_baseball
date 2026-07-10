@@ -21,6 +21,7 @@ type ActiveLink =
   | "teams"
   | "players"
   | "props"
+  | "parlay"
   | null
 
 const latestWeek = changelog[0]?.week
@@ -42,6 +43,7 @@ const BETTING_ITEMS = [
   { label: "Dashboard", href: "/dashboard", key: "dashboard" },
   { label: "EV Tracker", href: "/ev-tracker", key: "ev-tracker" },
   { label: "Props", href: "/props", key: "props" },
+  { label: "Parlay Calculator", href: "/parlay", key: "parlay" },
 ] as const
 
 const MAIN_NAV_ITEMS = [

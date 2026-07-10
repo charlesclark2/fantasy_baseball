@@ -75,7 +75,9 @@ RUN pip install --no-cache-dir \
     h5netcdf \
     h5py \
     pymc \
-    "duckdb>=1.1.0"
+    "duckdb>=1.1.0" \
+    deltalake==1.6.1 \
+    polars==1.42.1
 
 # Guard: fail the image build NOW if any pickle-fragile serving lib resolved to a
 # version other than the pinned/locked one (belt-and-suspenders over the == pins —
@@ -94,6 +96,20 @@ print('pickle-fragile serving libs pinned OK:', want)"
 # writes fail at runtime without h5py, so we must check both explicitly.
 RUN python -c "import pymc; import pytensor; import arviz; import h5netcdf; import h5py; print('Bayesian deps OK')"
 RUN python -c "import duckdb; print('duckdb OK')"
+# E11.20 — Delta lakehouse deps: fail the build NOW on a deltalake/polars version skew
+# (delta-rs 1.x had breaking API churn; scripts/utils/delta_lake.py is written against
+# 1.6), and PRE-BAKE the DuckDB `delta` + `httpfs` extensions into the image so the
+# HALT-tier daily ops never depend on a runtime `INSTALL delta` network fetch.
+RUN python -c "\
+import importlib.metadata as m; \
+want={'deltalake':'1.6.1','polars':'1.42.1'}; \
+bad={p:(m.version(p),v) for p,v in want.items() if m.version(p)!=v}; \
+assert not bad, f'DELTA DEP VERSION SKEW (got,want): {bad} — align Dockerfile+pyproject+uv.lock'; \
+import deltalake, polars; print('delta deps OK:', want)"
+RUN python -c "\
+import duckdb; c=duckdb.connect(); \
+c.execute('INSTALL httpfs'); c.execute('INSTALL delta'); c.execute('LOAD delta'); \
+print('duckdb delta extension baked OK')"
 # E11.15 — OSS self-host stores run/event/schedule state in Postgres; the storage class
 # dagster_postgres.DagsterPostgresStorage must import or the instance won't load.
 RUN python -c "from dagster_postgres import DagsterPostgresStorage; print('dagster_postgres OK')"

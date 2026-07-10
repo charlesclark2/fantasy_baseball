@@ -3,6 +3,10 @@
     "week": "2026-07-06",
     "items": [
       {
+        "tag": "new",
+        "text": "A Parlay Calculator is here, under Betting → Parlay Calculator. Build any parlay from the day's slate — moneyline, total runs, and pitcher-strikeout legs — and it shows you the truth about it: our model's estimate of the parlay's true combined probability next to the probability the sportsbook's price implies, plus the expected value per dollar and a plain-language verdict. Pick the sportsbook you're betting with and each leg fills in that book's latest line and odds automatically — including the exact total-runs line that book is posting — and every leg shows the model's probability side by side with that book's no-vig probability so you can compare the two. Legs in different games are combined independently; legs in the same game are correlation-adjusted rather than naively multiplied (with a deliberately conservative prior, since a measured same-game correlation isn't available yet), so a same-game parlay's chances are never overstated in your favor. Because sportsbooks price a same-game parlay with their own correlation model, enter the book's posted parlay odds for those and the calculator uses that price. This is a transparency and decision-support tool, not betting advice and not a bet recommendation, with no profitability claim — most parlays are negative expected value once the book's vig is priced in, and the calculator is built to show you that."
+      },
+      {
         "tag": "fixed",
         "text": "Fixed batting lineups sometimes not showing on a game's pick-details page. For a batch of completed games the lineup card was blank even though the lineups were known — a stale cached copy of the page had been saved before that day's lineups posted and was never refreshed. Game pages now only lock in a permanent copy once the lineups are attached, so a page saved too early self-corrects on the next update, and the affected past games have been refreshed. Lineups are factual roster information, not betting advice."
       },

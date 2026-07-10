@@ -545,210 +545,233 @@ def ingest_statcast_to_s3_op(context):
     _run_script(context, "ingest_statcast_to_s3.py")
 
 
+# ═════════════════════════════════════════════════════════════════════════════════════
+# E11.20 ⭐ THE run_w1_lakehouse_op DECOMPOSITION (operator-requested 2026-07-06)
+#
+# run_w1_lakehouse_op had grown into a MONOLITH: one HALT-tier op running 8+ sequential
+# subprocess stages (schedule export → W1+W2+W3+W6 build → W7b → spine/odds-bridge → W8a
+# → W5b/W8b → the 6 gated W11 nightly tiers) behind a single 45-min wall cap — one Dagster
+# duration for everything, one retry unit (a W8b failure re-ran the whole 20+-min pitch
+# rebuild), and no per-wave timing to attribute the daily job's 40+ min.
+#
+# It is now DECOMPOSED into the per-wave ops below. Design rules:
+#   • Each op preserves EXACTLY the tier + gate + subprocess command of its stage in the
+#     old monolith (--w6 split into --w1-only/--w2-only/--w3-only/[--w3pre-only]/--w6-only,
+#     which run() defines as value-identical partial paths reusing the prior wave's S3
+#     output — the old combined process also re-read each wave's output from S3).
+#   • The daily job graph (daily_ingestion_job.py) wires them in the old in-op order —
+#     the ordering invariants (schedule export before W6 Group-C; spine before the odds
+#     bridge; --w8a before --w5b before --w8b; W11d after W8b) are now GRAPH EDGES.
+#   • A gated-off stage logs a WARNING (ALERT tier — a graceful skip must be loud, never
+#     an invisible `if`), then succeeds.
+#   • Per-op wall caps replace the shared 2700s cap: a stalled httpfs read fails loudly
+#     inside its own wave, and each op's Dagster duration is the E11.21 timing table.
+#   • E11.20 Delta: the W1 op is Delta-mode-aware via run_w1_lakehouse.py
+#     (LAKEHOUSE_DELTA_W1 off|mirror|cutover — daily O(current-season) partition swap
+#     under mirror/cutover; lakehouse_delta_maintenance_op compacts/vacuums after).
+# ═════════════════════════════════════════════════════════════════════════════════════
+
+
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
-def run_w1_lakehouse_op(context):
-    # E11.1-W1d HALT: rebuilds all 7 mart_pitch_* S3 Parquets. Now on the
-    # critical path — the Snowflake external tables (and the downstream feature
-    # build) depend on this write completing successfully.
-    # E11.1-W2: run_w1_lakehouse.py ALSO builds the 8 W2 pitch-derived marts
-    # (registering the W1 marts as views first). Kept in THIS op (not a separate
-    # Railway cron) — the E11.0b "use a cron" guidance existed to avoid Dagster+
-    # serverless run-minute billing, which E11.15 eliminated by self-hosting
-    # Dagster (cost = held RAM, not run-minutes). Ordered before dbt_daily_build
-    # so the W2 external tables are fresh for the morning feature build.
-    # E11.1-W3: the no-arg call ALSO builds the 11 W3 pitch-derived marts
-    # (handedness/archetype/tto splits + the bullpen/reliever marts) right after W2 — same
-    # default-on rationale (their whole upstream closure is already in S3). They feed
-    # feature_pregame_* + write_serving_store, so they ride this HALT-tier op too.
-    # E11.1-W3pre / W11 (INC-23): run_w1_lakehouse.py can ALSO build the odds/staging flatten
-    # tier (stg_oddsapi_*, stg_derivative_odds, stg_statsapi_games) under the --w3pre flag.
-    # This is NOW WIRED IN behind the W11_W3PRE_DAILY gate (_w3pre_daily_on): when ON, the op
-    # re-exports the derivative-odds raw tier (recurring bridge — the live derivative writer is
-    # not S3-flipped) and passes --w3pre so stg_derivative_odds is rebuilt from fresh raw before
-    # --w6 builds mart_derivative_closes (which had topped out at ~Apr-1 — E13.14 leans on it).
-    # _build_w3pre defensively SKIPs any source with no raw parquet, so it can't fail this HALT
-    # op. Default OFF until the operator runs the one-time derivative_odds_raw gap-fill backfill
-    # and validates on the box (W11 runtime-gate + parallel-session discipline). The bridge uses
-    # a 7-day --since lookback (INC-20 retention: bounded per-day partitions, not full-history
-    # snapshots — each dt= is overwritten idempotently) to recover a missed run.
-    # E11.1-W4: run_w1_lakehouse.py can ALSO build the FanGraphs/posteriors-cluster/raw-savant
-    # marts (6) + their FanGraphs precursor subtree under the opt-in --w4 flag (NOT passed
-    # here yet). Like W3pre, it needs the precursor parquet first (scripts/export_w4_raw_to_s3.py
-    # + the migrated DuckDB builders fit_granular_park_priors.py --s3 / cluster_pitchers.py
-    # --seed,--s3) and the cutover validated — else an empty precursor tier would fail this
-    # HALT-tier op. Flip to "--w4" once validated. (W4 read-path audit: none request-time read.)
-    #
-    # E11.1-W5: run_w1_lakehouse.py can ALSO build the mart_game_results/mart_game_spine
-    # team/game chain (Group A, 10 marts) + the 4 W4-deferred marts + stg_batter_sprint_speed
-    # (Group B) under the opt-in --w5 flag (NOT passed here yet). Like W3pre/W4, it needs the
-    # precursor parquet first (scripts/export_w5_raw_to_s3.py: the seeds + eb_park_factors_raw +
-    # eb_bullpen_team_posteriors + oaa_team_season_raw + sprint_speed_raw) and the W3pre
-    # stg_statsapi_games parquet, plus cutover validated — else an empty precursor tier would
-    # fail this HALT-tier op. Flip to "--w5" once validated. (W5 careful tier: only the
-    # game-detail Snowflake FALLBACK reads mart_team_pythagorean_rolling, behind the DynamoDB
-    # serving cache — no other request-time read; post-cutover it serves the S3-backed view.)
-    #
-    # E11.1-W6: run_w1_lakehouse.py ALSO builds the 13 odds/CLV + odds-serving marts + the 2
-    # Group-C staging flattens under --w6 (flipped ON at the W6 cutover, after the lakehouse_ext
-    # W6 external tables were created + parity validated). Precursors:
-    #   • monthly_schedule re-export (the line BELOW, BEFORE the --w6 build): the 3 Group-C lineup
-    #     marts (stg_statsapi_lineups → mart_player_game_starts / mart_team_schedule_context)
-    #     flatten it, and ingest_statsapi.py is Snowflake-only (W3pre never S3-flipped its writer),
-    #     so a stale snapshot drops today's lineups → matchup features NULL for live serving (the
-    #     INC-17 P2 class). Parity at backfill showed DuckDB ~1.4% < Snowflake purely from this lag.
-    #   • daily_model_predictions is NOT re-exported here — this op runs BEFORE predict_today, so
-    #     the CLV marts (mart_prediction_clv / mart_clv_labeled_games) are refreshed POST-predict
-    #     by the gated intraday odds_clv_dbt_rebuild path (export dmp → --w6 → refresh --w6-clv).
-    # ⭐ mart_odds_outcomes is date-bucketed (_history/_current); this daily --w6 rewrites BOTH
-    # buckets, while the intraday odds_current_rebuild path (pipeline/ops/intraday_ops.py, gated
-    # W6_LAKEHOUSE_INTRADAY) rewrites ONLY _current each odds cycle so served prices stay fresh.
+def lakehouse_schedule_export_op(context):
+    # HALT — monthly_schedule raw re-export, BEFORE the lakehouse builds that flatten it
+    # (the W6 Group-C lineup marts + W7b/W8a snapshot models): ingest_statsapi.py is
+    # Snowflake-only, so a stale S3 snapshot drops today's lineups → matchup features
+    # NULL for live serving (the INC-17-P2 class). First stage of the old monolith.
     _run_script(context, "export_odds_raw_to_s3.py", ["--source", "monthly_schedule"])
-    # E11.1-W11 (INC-23): when W11_W3PRE_DAILY=1, refresh the derivative-odds raw bridge (7-day
-    # --since lookback — bounded per-day partitions, idempotent overwrite_partition; INC-20-safe)
-    # and pass --w3pre so the W3pre flatten rebuilds stg_derivative_odds from fresh raw before the
-    # --w6 build below registers it as a view and builds mart_derivative_closes. Gated default-OFF.
-    w6_args = ["--w6"]
-    if _w3pre_daily_on():
-        _run_script(context, "export_odds_raw_to_s3.py",
-                    ["--source", "derivative_odds_raw", "--since", _seven_days_ago()])
-        w6_args = ["--w3pre", "--w6"]
-    # E11.1-W7b: when the S3 mirror is on, ALSO build the prediction/serving mini-wave parquet
-    # (mart_player_profile_identity injury chain + the probable_pitchers/lineups_wide serving-mart
-    # backlog) so the --s3 readers + the request-path last-resort resolve them. Requires the
-    # player_transactions precursor export (run by the operator/cutover wiring) to exist first.
-    # W6 build is always HALT (mart_odds_outcomes serves from S3 external tables — live since W6).
-    # w6_args is ["--w6"] normally, or ["--w3pre", "--w6"] when W11_W3PRE_DAILY=1 (INC-23, above).
-    # 45-min wall-clock cap: a healthy --w6 is ~10-20 min; a stalled httpfs read (the
-    # recurring "--w3pre --w6 ran 50 min with no output" class) now fails LOUD with the last
-    # per-mart progress line, instead of parking this HALT-tier op indefinitely.
-    _run_script(context, "run_w1_lakehouse.py", w6_args, timeout=2700)
-    # The W7b mini-wave + its precursor are mirror-tier: HALT once W7B_LAKEHOUSE_S3=1, else
-    # ALERT-loud-but-continue during the parallel window (parity-only; must not take down the
-    # W6-critical build). --w7b-only reuses the W6 parquet just built ≡ the old "--w6 --w7b".
-    if _w7b_mirror_on():
-        _run_mirror(context, "export_w7b_precursors_to_s3.py")
-        _run_mirror(context, "run_w1_lakehouse.py", ["--w7b-only"])
-    # E11.1-W8-SPINE (2026-07-02) — the W8b cutover made mart_game_spine (a W5 Group-A model)
-    # SERVING-CRITICAL: the --w8a/--w8b feature build below reads it as a precursor VIEW, and the served
-    # feature_pregame_game_features is only as fresh as the spine's scheduled-game universe. But --w5 is
-    # NOT in the daily build (only the gated W11_W4W5_NIGHTLY rebuild, placed AFTER --w8b), so the spine
-    # froze at its last manual build → the pregame feature store lost the current slate → predict_today
-    # silently degraded to the intraday-assembly fallback (patchy post_lineup coverage). Rebuild the spine
-    # (W5 Group A = mart_game_results/spine + team/game chain; NOT W5b, which reads the W8a EB posteriors
-    # built below → stays in the W11 nightly's post-w8a slot) HERE, BEFORE --w8a/--w8b, so the SAME-day
-    # feature build sees today's scheduled games. Reuses the W1/W2/W3pre parquet the --w6 build just wrote.
-    # Same tier as the W8a mirror (HALT once W8A_LAKEHOUSE_S3=1 — serving depends on it now; ALERT during
-    # the parallel window). The build emits a spine-staleness ALERT at the source if the universe is stale.
-    if _w8a_mirror_on():
-        _run_w8a_mirror(context, "run_w1_lakehouse.py", ["--w5-only", "--w5-group-a-only"])
-        # 2026-07-02 ODDS-BRIDGE FREEZE fix (E1_11_BUG Defect 3). The --w6 build ABOVE builds
-        # mart_game_odds_bridge off the spine as it stood at op START — i.e. the PREVIOUS run's spine,
-        # because the spine is only rebuilt HERE (line above), AFTER --w6. When that prior spine was
-        # frozen (the sibling spine-freeze incident), the bridge froze with it → has_odds=0 for the
-        # current slate → predict_today runs MARKET-BLIND with no error. Now that the spine is fresh
-        # THIS run, rebuild the odds-serving hot set off it: mart_odds_outcomes (_current bucket) +
-        # mart_game_odds_bridge (full ~26k rows, cheap) + refresh those two external tables. This is the
-        # same targeted path the intraday odds cycle uses (--w6-odds-current). Same tier as the spine
-        # rebuild (HALT once W8A_LAKEHOUSE_S3=1 — the bridge is serving-critical; ALERT pre-cutover).
-        # check_odds_coverage_op (refresh_w1_external_tables_op → next op) verifies the result.
-        _run_w8a_mirror(context, "run_w1_lakehouse.py", ["--w6-odds-current"])
-        _run_w8a_mirror(context, "refresh_w1_external_tables.py", ["--w6-odds"])
-    # E11.1-W8a: when the S3 build is on (cutover OR parallel), ALSO mirror the W8a Python-table/
-    # seed precursors and build the upstream feature layer + EB posteriors parquet so the dbt else
-    # branches (cutover) resolve and parity_check_w8a (parallel) has fresh S3 data. Mirror-tier per
-    # _run_w8a_mirror (HALT once W8A_LAKEHOUSE_S3=1, else ALERT-continue). The W9 signal stores
-    # this build reads are mirrored by export_w9_signals_to_s3_op (its own graph node); the prior-
-    # wave marts were just rebuilt above (--w6) / are in S3. --w8a-only reuses that parquet.
-    if _w8a_mirror_on():
-        _run_w8a_mirror(context, "export_w8a_precursors_to_s3.py")
-        _run_w8a_mirror(context, "run_w1_lakehouse.py", ["--w8a-only"])
-        _run_w8a_mirror(context, "refresh_w1_external_tables.py", ["--w8a"])
 
-    # E11.1-W8b: the SERVING-AGGREGATOR wave. Runs AFTER --w8a (the aggregator reads the W8a feature
-    # layer). Mirrors the W8a Python-table precursors (lineup_state / team_sequential_posteriors /
-    # public_betting / fct_fangraphs_pitching_analytics), builds the complex upstream + matchup
-    # models + the aggregator + wrapper, and refreshes the W8b external tables. Mirror-tier per
-    # _run_w8b_mirror (HALT once W8B_LAKEHOUSE_S3=1, else ALERT-continue). The W11-deferred umpire/
-    # weather tail the aggregator reads is mirrored by export_features_to_s3.py (predict path) — it is
-    # ~1-day-stale at this point in the daily order (run_w1_lakehouse_op precedes the dbt feature
-    # build), which parity_check_w8b surfaces; acceptable for those slow-moving features.
-    if _w8b_mirror_on():
-        # E11.1-W5b (2026-07-02, spine-fix sibling): rebuild the W5 Group-B marts (park/defense/
-        # bullpen-effectiveness feature VALUES the aggregator reads) HERE — AFTER --w8a (W5b reads the
-        # eb_bullpen_team_posteriors parquet --w8a wrote above) and BEFORE --w8b-only. Without a daily
-        # rebuild these froze at the last manual --w5 run → the served park/defense/bullpen features
-        # drift stale (stale VALUES, not missing games — the lower-severity sibling of the spine
-        # freeze). Emits a w5b-staleness ALERT at the source. Same tier as the W8b mirror.
-        _run_w8b_mirror(context, "run_w1_lakehouse.py", ["--w5b-only"])
-        _run_w8b_mirror(context, "export_w8b_precursors_to_s3.py")
-        _run_w8b_mirror(context, "run_w1_lakehouse.py", ["--w8b-only"])
-        _run_w8b_mirror(context, "refresh_w1_external_tables.py", ["--w8b"])
 
-    # E11.1-W11 (ingestion FINISH wave): rebuild the W4 (FanGraphs stuff+/arsenal/hitting, catcher) +
-    # W5 (sprint, OAA ×2) marts from the repointed raw mirror so their lakehouse/ parquet — and thus the
-    # lakehouse_ext tables refresh_w1_external_tables_op refreshes next — stays fresh (the 8 duckdb
-    # branches now read lakehouse_raw/, written by the dual-writing Tier-A ingests). --w4-only/--w5-only
-    # REUSE the W1/W2/W3pre parquet the base --w6 build just wrote (light incremental mart rebuilds, not
-    # a history rebuild). Placed AFTER --w8a (W5b's mart_bullpen_effectiveness/defense_quality read the
-    # W8a EB posteriors just built — the documented --w8a-before-w5 order) and after --w8b (does not
-    # perturb the serving-critical blocks). Mirror-tier (ALERT-continue) — W4/W5 have no request-time
-    # read. The 1-day feature-propagation lag (--w8a this run used yesterday's W4/W5 marts) is immaterial:
-    # the fangraphs/sprint/catcher feeds are Sunday-only and OAA is season-cumulative. Gated default-OFF.
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def lakehouse_w1_pitch_marts_op(context):
+    # HALT — the 7 mart_pitch_* pitch-level marts (E11.1-W1d: served via external tables /
+    # the feature build; on the critical path). E11.20: Delta-mode-aware —
+    # LAKEHOUSE_DELTA_W1=off → legacy full-history parquet COPY; mirror → parquet +
+    # Delta season-partition write (validation window); cutover → Delta (DuckDB readers
+    # via delta_scan) + the SF-COMPAT season-bucket parquet mirror (keeps the ext tables
+    # fresh for the raw-SQL SF stragglers — the INC-27 class), BOTH daily writes
+    # O(current-season) (the measured-perf headline; the full-history rebuild is the
+    # explicit opt-in `--delta-full` backfill, NOT the daily default).
+    _run_script(context, "run_w1_lakehouse.py", ["--w1-only"], timeout=1800)
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def lakehouse_w2_marts_op(context):
+    # HALT — the 8 W2 pitch-derived batch marts (rolling stats / game logs; feed the
+    # feature build). Reads the W1 output just written (parquet, or delta_scan under
+    # cutover — run_w1_lakehouse._register_mart_views is Delta-aware).
+    _run_script(context, "run_w1_lakehouse.py", ["--w2-only"], timeout=1800)
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def lakehouse_w3_marts_op(context):
+    # HALT — the 11 W3 handedness/archetype/tto splits + bullpen/reliever marts (feed
+    # feature_pregame_* + write_serving_store).
+    _run_script(context, "run_w1_lakehouse.py", ["--w3-only"], timeout=1800)
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def lakehouse_w3pre_flatten_op(context):
+    # Gated (W11_W3PRE_DAILY, INC-23): re-export the derivative-odds raw bridge (7-day
+    # --since lookback — bounded per-day partitions, idempotent; INC-20-safe) and rebuild
+    # the W3pre odds/staging flatten so stg_derivative_odds is fresh before the W6 build
+    # registers it. HALT when ON (same as the old monolith, where --w3pre rode the HALT
+    # call; _build_w3pre defensively SKIPs any source with no raw parquet). ALERT-loud
+    # skip when OFF.
+    if not _w3pre_daily_on():
+        context.log.warning(
+            "[lakehouse-w3pre] W11_W3PRE_DAILY unset — skipping the derivative-odds "
+            "bridge + W3pre flatten rebuild (stg_derivative_odds stays at its last build)."
+        )
+        return
+    _run_script(context, "export_odds_raw_to_s3.py",
+                ["--source", "derivative_odds_raw", "--since", _seven_days_ago()])
+    _run_script(context, "run_w1_lakehouse.py", ["--w3pre-only"], timeout=1800)
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def lakehouse_w6_odds_marts_op(context):
+    # HALT — the 13 W6 odds/CLV + odds-serving marts + the 2 Group-C staging flattens
+    # (mart_odds_outcomes serves from S3 — live since W6; the _history/_current date
+    # buckets are BOTH rewritten here daily, while the intraday odds cycle rewrites only
+    # _current). daily_model_predictions is NOT re-exported here — this runs BEFORE
+    # predict_today; the CLV marts refresh post-predict via the gated odds_clv path.
+    _run_script(context, "run_w1_lakehouse.py", ["--w6-only"], timeout=2700)
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def lakehouse_w7b_serving_op(context):
+    # Mirror-tier (HALT once W7B_LAKEHOUSE_S3=1, ALERT-continue in the parallel window) —
+    # the W7b prediction/serving mini-wave (mart_player_profile_identity injury chain +
+    # probable_pitchers/lineups_wide serving backlog). ALERT-loud skip when gated off.
+    if not _w7b_mirror_on():
+        context.log.warning(
+            "[lakehouse-w7b] W7B_LAKEHOUSE_S3/PARALLEL unset — skipping the W7b "
+            "mini-wave rebuild (its parquet stays at the last build)."
+        )
+        return
+    _run_mirror(context, "export_w7b_precursors_to_s3.py")
+    _run_mirror(context, "run_w1_lakehouse.py", ["--w7b-only"])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def lakehouse_spine_odds_bridge_op(context):
+    # W8a-mirror tier — the 2026-07-02 spine-freeze + odds-bridge-freeze cures, verbatim
+    # from the monolith: rebuild mart_game_spine (W5 Group A — the scheduled-game universe
+    # the --w8a/--w8b feature build reads; a frozen spine silently degrades predict_today
+    # to the intraday fallback) and then the odds-serving hot set off the FRESH spine
+    # (mart_odds_outcomes _current + mart_game_odds_bridge + their ext-table refresh —
+    # E1_11_BUG Defect 3: a bridge built off the previous run's spine froze has_odds=0 →
+    # market-blind predict). check_odds_coverage_op (downstream) verifies the result.
+    if not _w8a_mirror_on():
+        context.log.warning(
+            "[lakehouse-spine] W8A_LAKEHOUSE_S3/PARALLEL unset — skipping the spine + "
+            "odds-bridge rebuild (spine-staleness ALERTs would fire at the source on use)."
+        )
+        return
+    _run_w8a_mirror(context, "run_w1_lakehouse.py", ["--w5-only", "--w5-group-a-only"])
+    _run_w8a_mirror(context, "run_w1_lakehouse.py", ["--w6-odds-current"])
+    _run_w8a_mirror(context, "refresh_w1_external_tables.py", ["--w6-odds"])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def lakehouse_w8a_feature_layer_op(context):
+    # W8a-mirror tier (HALT once W8A_LAKEHOUSE_S3=1) — the W8a Python-table/seed
+    # precursor mirrors + the upstream feature layer + EB posteriors DuckDB build + the
+    # W8a ext-table refresh. The W9 signal stores it reads are mirrored by
+    # export_w9_signals_to_s3_op (its own graph node, INC-25 ordering).
+    if not _w8a_mirror_on():
+        context.log.warning(
+            "[lakehouse-w8a] W8A_LAKEHOUSE_S3/PARALLEL unset — skipping the W8a feature "
+            "layer + EB posteriors rebuild."
+        )
+        return
+    _run_w8a_mirror(context, "export_w8a_precursors_to_s3.py")
+    _run_w8a_mirror(context, "run_w1_lakehouse.py", ["--w8a-only"])
+    _run_w8a_mirror(context, "refresh_w1_external_tables.py", ["--w8a"])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def lakehouse_w8b_aggregator_op(context):
+    # W8b-mirror tier (HALT once W8B_LAKEHOUSE_S3=1) — the SERVING-AGGREGATOR wave, AFTER
+    # W8a (the aggregator reads the W8a feature layer): W5b Group-B marts first (they read
+    # the eb_bullpen_team_posteriors parquet W8a just wrote; the aggregator reads W5b —
+    # the 2026-07-02 W5b-staleness cure), then the W8b precursor mirrors, the complex
+    # upstream + matchup models + the aggregator + wrapper, and the W8b ext-table refresh.
+    if not _w8b_mirror_on():
+        context.log.warning(
+            "[lakehouse-w8b] W8B_LAKEHOUSE_S3/PARALLEL unset — skipping the W5b + W8b "
+            "serving-aggregator rebuild."
+        )
+        return
+    _run_w8b_mirror(context, "run_w1_lakehouse.py", ["--w5b-only"])
+    _run_w8b_mirror(context, "export_w8b_precursors_to_s3.py")
+    _run_w8b_mirror(context, "run_w1_lakehouse.py", ["--w8b-only"])
+    _run_w8b_mirror(context, "refresh_w1_external_tables.py", ["--w8b"])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def lakehouse_w11_nightly_op(context):
+    # Mirror-tier (ALERT-continue) — the gated W11/E11.22 nightly rebuilds, verbatim from
+    # the monolith's tail: W4/W5 (FanGraphs/sprint/OAA marts off the repointed raw
+    # mirrors; AFTER --w8a per the documented order), the umpire (W11b), weather (W11c),
+    # transactions (W11tx) and public-betting (W11d — AFTER --w8b: its snapshots stg joins
+    # feature_pregame_game_features) tiers. Each sub-tier keeps its own gate; a gated-off
+    # tier logs a WARNING (loud skip).
+    ran_any = False
     if _w11_w4w5_nightly_on():
+        ran_any = True
         _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w4-only"])
         _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w5-only"])
-
-    # E11.1-W11 Tier-B (umpire): rebuild the umpire stg + feature parquet from the dual-written
-    # umpire_game_log raw mirror + refresh the W11b external tables, so lakehouse_ext.
-    # feature_pregame_umpire_* stays fresh (the W8b aggregator reads feature_pregame_umpire_features
-    # as a precursor from the SAME S3 path — this native build replaces the W7b-1 export_features_to_s3
-    # mirror at that key). Self-contained (reads only the raw mirror) so order-independent. Mirror-tier
-    # (ALERT-continue) — umpire features are slow-moving and the dbt build retains its Snowflake-native
-    # path pre-cutover, so a rebuild failure must NOT HALT the daily job. Gated default-OFF.
+    else:
+        context.log.warning("[lakehouse-w11] W11_W4W5_NIGHTLY unset — skipping the W4/W5 nightly rebuild.")
     if _w11b_umpire_nightly_on():
+        ran_any = True
         _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w11b-only"])
         _run_w11_nightly(context, "refresh_w1_external_tables.py", ["--w11b"])
-
-    # E11.1-W11 Tier-C (weather): rebuild the weather stg + feature parquet from the dual-written
-    # weather_raw raw mirror + refresh the W11c external tables, so lakehouse_ext.feature_pregame_
-    # weather_* stays fresh (the W8b aggregator + feature_pregame_game_features chain read
-    # feature_pregame_weather_features as a precursor from the SAME S3 path — this native build replaces
-    # the W7b-1 export_features_to_s3 mirror at that key). Self-contained (reads only the raw mirror +
-    # the ref_venues seed CSV) so order-independent. Mirror-tier (ALERT-continue) — weather features are
-    # slow-moving and the dbt build retains its Snowflake-native path pre-cutover, so a rebuild failure
-    # must NOT HALT the daily job. Gated default-OFF. NOTE: the raw mirror is kept fresh by the live
-    # writers' dual-write; the hourly all-slate-park series (weather_intraday_series) is a SEPARATE
-    # S3-only source not read by any dbt model, so it is not part of this rebuild.
+    else:
+        context.log.warning("[lakehouse-w11] W11B_UMPIRE_NIGHTLY unset — skipping the umpire nightly rebuild.")
     if _w11c_weather_nightly_on():
+        ran_any = True
         _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w11c-only"])
         _run_w11_nightly(context, "refresh_w1_external_tables.py", ["--w11c"])
-
-    # E11.22 (player_transactions): rebuild the transactions stg parquet from the dual-written
-    # player_transactions raw mirror + refresh the W11tx external table, so
-    # lakehouse_ext.stg_statsapi_transactions (read by the daily dbt build after the read-cutover)
-    # stays fresh — without this the injury-feature chain would freeze once the SF raw is dropped
-    # (the spine-freeze class). Self-contained (reads only the raw mirror) so order-independent.
-    # Mirror-tier (ALERT-continue) — transactions feed slow-moving injury features and the dbt build
-    # retains its SF-native path pre-cutover, so a rebuild failure must NOT HALT the daily job. Gated
-    # default-OFF (W11TX_TRANSACTIONS_NIGHTLY); flip ON at cutover, BEFORE dropping the SF raw.
+    else:
+        context.log.warning("[lakehouse-w11] W11C_WEATHER_NIGHTLY unset — skipping the weather nightly rebuild.")
     if _w11tx_transactions_nightly_on():
+        ran_any = True
         _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w11tx-only"])
         _run_w11_nightly(context, "refresh_w1_external_tables.py", ["--w11tx"])
-
-    # E11.1-W11 Tier-D (public betting): rebuild the public-betting stg + feature parquet from the
-    # dual-written public_betting_raw mirror + refresh the W11d external tables, so lakehouse_ext.
-    # feature_pregame_public_betting_* stays fresh (the W8b aggregator reads feature_pregame_public_
-    # betting_features as a precursor from the SAME S3 path — this native build replaces the W7b-1
-    # export_features_to_s3 mirror at that key; the plain stg_actionnetwork_public_betting native
-    # parquet replaces the export_w8b_precursors_to_s3 mirror likewise). Placed AFTER --w8b (the
-    # snapshots stg joins feature_pregame_game_features, built by --w8b — --w11d-only registers that
-    # spine parquet as a view). Mirror-tier (ALERT-continue) — public betting is slow-moving and the
-    # dbt build retains its Snowflake-native path pre-cutover, so a rebuild failure must NOT HALT the
-    # daily job. Gated default-OFF. NOTE: this rebuilds from the DAILY-capture snapshot; the hourly
-    # pre-game series (intraday_public_betting_capture) keeps the raw mirror rich between rebuilds.
+    else:
+        context.log.warning("[lakehouse-w11] W11TX_TRANSACTIONS_NIGHTLY unset — skipping the transactions nightly rebuild.")
     if _w11d_public_betting_nightly_on():
+        ran_any = True
         _run_w11_nightly(context, "run_w1_lakehouse.py", ["--w11d-only"])
         _run_w11_nightly(context, "refresh_w1_external_tables.py", ["--w11d"])
+    else:
+        context.log.warning("[lakehouse-w11] W11D_PUBLIC_BETTING_NIGHTLY unset — skipping the public-betting nightly rebuild.")
+    if not ran_any:
+        context.log.warning("[lakehouse-w11] every W11 nightly gate is unset — op was a full no-op.")
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def lakehouse_delta_maintenance_op(context):
+    # E11.20 — WARN-but-continue: Delta compaction + vacuum for the migrated tables (the
+    # REQUIRED companion to the daily partition write — spike gotcha #7: every incremental
+    # write adds small files; unmaintained, read planning degrades). Vacuum retention is
+    # clamped ≥168h in scripts/utils/delta_lake.py (below that, time-travel is physically
+    # destroyed — spike gotcha #3). Off the critical path: a maintenance failure defers
+    # compaction to tomorrow, never blocks serving. ALERT-loud skip when Delta is off.
+    from betting_ml.utils.delta_lakehouse import delta_w1_mode
+
+    if delta_w1_mode() == "off":
+        context.log.warning(
+            "[delta-maintenance] LAKEHOUSE_DELTA_W1=off — skipping Delta compaction/vacuum."
+        )
+        return
+    try:
+        _run_script(context, "delta_maintenance.py", timeout=1200)
+    except Exception as e:  # noqa: BLE001 — maintenance defers to the next run; never HALT
+        context.log.warning(f"[delta-maintenance] compaction/vacuum failed (non-fatal; "
+                            f"retried on the next daily run): {e}")
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

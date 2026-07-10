@@ -490,6 +490,13 @@ def main():
     # now depends on the S3 ext table, so W11TX_TABLES is REQUIRED (HALT) in the daily refresh (per the
     # comment at W11TX_TABLES). The --w11tx nightly path still runs the BUILD (dedup parquet) + a
     # best-effort refresh; this REQUIRED refresh is the durable freshness guarantee decoupled from the flag.
+    # E11.20 (Delta cutover): the W1 pitch marts stay in this REQUIRED refresh set even
+    # under LAKEHOUSE_DELTA_W1=cutover — the daily build then writes the season-bucketed
+    # SF-COMPAT mirror (lakehouse/<t>/season_YYYY/data.parquet; the ext glob unions it),
+    # which keeps lakehouse_ext.mart_pitch_* / betting.mart_pitch_* FRESH for the raw-SQL
+    # SF stragglers (update_player_posteriors etc. — the INC-27 class). The W1 rows leave
+    # this set only in phase 1.5, when the stragglers are repointed and the SF objects
+    # are DROPPED (docs/e11_20_delta_rollout.md §6).
     required = (set(STG_BATTER_PITCHES_TABLE) | set(W1_TABLES) | set(W2_TABLES)
                 | set(W3_TABLES) | set(W11TX_TABLES))
     _refresh(

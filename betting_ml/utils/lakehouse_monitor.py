@@ -28,6 +28,15 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 
+# E11.20: the Delta rollout registry — a betting_ml sibling (PURE stdlib), so the
+# sensor import rule holds. Under LAKEHOUSE_DELTA_W1=cutover any Delta-backed table a
+# monitor reads resolves via delta_scan instead of the frozen legacy parquet glob.
+from betting_ml.utils.delta_lakehouse import (
+    delta_read_enabled,
+    delta_scan_view_sql,
+    delta_w1_mode,
+)
+
 # ── S3 lakehouse locations (mirror scripts/utils/lakehouse_read.py) ──────────────
 BUCKET = "s3://baseball-betting-ml-artifacts"
 LAKEHOUSE = f"{BUCKET}/baseball/lakehouse"
@@ -119,6 +128,11 @@ def duck():
         f"CREATE OR REPLACE SECRET baseball_monitor_s3 "
         f"(TYPE S3, PROVIDER credential_chain, REGION '{S3_REGION}')"
     )
+    # E11.20: under Delta CUTOVER a monitored Delta-backed table (the W1 pitch marts)
+    # resolves via delta_scan — load the read-only delta extension. Loud on failure:
+    # a sensor silently reading the frozen parquet is the INC-31 stale-key class.
+    if delta_w1_mode() == "cutover":
+        conn.execute("INSTALL delta; LOAD delta")
     for pragma in (
         "SET http_timeout = 600000",
         "SET http_retries = 8",
@@ -185,6 +199,10 @@ class _MonitorCursor:
     def execute(self, sql, params=None):
         # Register a DuckDB view for every FQN-addressed table so the FQN-stripped SQL resolves.
         for t in referenced_tables(sql):
+            if delta_read_enabled(t):
+                # E11.20 cutover: Delta-backed table — its legacy parquet glob is frozen.
+                self._conn.execute(f"CREATE OR REPLACE VIEW {t} AS {delta_scan_view_sql(t)}")
+                continue
             self._conn.execute(
                 f"CREATE OR REPLACE VIEW {t} AS "
                 f"SELECT * FROM read_parquet('{table_glob(t)}', union_by_name=true)"

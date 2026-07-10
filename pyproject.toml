@@ -28,6 +28,13 @@ dependencies = [
     "optuna>=4.8.0",
     "pyarrow>=4.0.0",
     "duckdb>=1.1.0",
+    # E11.20 Delta lakehouse — deltalake (delta-rs) is the WRITE path (DuckDB's delta
+    # extension is READ-ONLY); pinned EXACT per the spike (1.x API churn: files()→
+    # file_uris(), schema().to_pyarrow()→.to_arrow()). polars pinned to the spike-tested
+    # version (Arrow-native Delta reads; the Polars→pandas model boundary lives at
+    # model.predict()). Keep in lockstep with the Dockerfile pins.
+    "deltalake==1.6.1",
+    "polars==1.42.1",
     "mlb-statsapi>=0.0.44",
     "streamlit>=1.56.0",
     "python-dotenv>=1.0",

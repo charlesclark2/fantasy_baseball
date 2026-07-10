@@ -74,8 +74,17 @@ _S3_BUCKET = "baseball-betting-ml-artifacts"
 MIRROR_TABLES = {
     "feature_pregame_lineup_state":    "baseball_data.betting_features.feature_pregame_lineup_state",
     "team_sequential_posteriors":      "baseball_data.betting.team_sequential_posteriors",
-    "stg_actionnetwork_public_betting": "baseball_data.betting.stg_actionnetwork_public_betting",
     # fct_fangraphs_pitching_analytics DROPPED (E11.1-W11-FG) — now W4-built natively in DuckDB; see docstring.
+    # ⛔ stg_actionnetwork_public_betting RETIRED (E11.20 INC-31 audit, 2026-07-10): the W11d
+    # native build (run_w1_lakehouse --w11d-only, W11D_PUBLIC_BETTING_NIGHTLY=1 on the box)
+    # writes the SAME lakehouse/stg_actionnetwork_public_betting/data.parquet key with
+    # LOWERCASE columns; this SELECT*-mirror preserved Snowflake's UPPERCASE case and ran
+    # EARLIER in the daily chain — two writers, one key, case-differing = the exact INC-31
+    # umpire-clobber pattern (any lakehouse_ext read between the mirror write and the W11d
+    # rebuild saw GET(VALUE,'…') = ALL-NULL). The native build is the SOLE writer now; its
+    # 1-cycle propagation lag into the W8b aggregator is the documented, accepted behavior
+    # (public betting is slow-moving/non-serving-critical — see the W11d op note).
+    # ⚠️ Requires W11D_PUBLIC_BETTING_NIGHTLY=1 (verified live on the box) or the key freezes.
 }
 ALL_NAMES = sorted(MIRROR_TABLES)
 
