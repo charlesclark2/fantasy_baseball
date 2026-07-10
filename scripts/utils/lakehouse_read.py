@@ -29,6 +29,29 @@ from __future__ import annotations
 
 import re
 
+# E11.20: the Delta rollout registry (PURE stdlib — keeps this module's "importing pulls
+# in no Snowflake/heavy deps" contract intact). Under LAKEHOUSE_DELTA_W1=cutover the W1
+# pitch marts resolve via delta_scan instead of the frozen legacy parquet glob.
+# Imported from the scripts/utils SIBLING home (byte-identical to
+# betting_ml/utils/delta_lakehouse.py, guard-tested) — the lean capture images COPY
+# scripts/utils/ wholesale, so this file may not carry a betting_ml import node
+# (test_lean_capture_images_selfcontained / INC-29 class).
+# ⚠️ The backend sibling copy (app/backend/services/lakehouse_read.py) intentionally does
+# NOT carry this branch: the Lambda bundle cannot import scripts/betting_ml, and no
+# Delta-backed table is backend-served today — revisit if a phase-2 family adds one.
+try:
+    from scripts.utils.delta_lakehouse import (
+        delta_read_enabled,
+        delta_scan_view_sql,
+        delta_w1_mode,
+    )
+except ImportError:  # pragma: no cover — lean image layout (COPY scripts/utils/ → ./utils/)
+    from utils.delta_lakehouse import (
+        delta_read_enabled,
+        delta_scan_view_sql,
+        delta_w1_mode,
+    )
+
 # ── S3 lakehouse locations (mirror dbt/macros/lakehouse.sql + run_w1_lakehouse.py) ──
 BUCKET        = "s3://baseball-betting-ml-artifacts"
 LAKEHOUSE     = f"{BUCKET}/baseball/lakehouse"
@@ -98,6 +121,12 @@ def duck_connect():
         f"CREATE OR REPLACE SECRET baseball_s3 "
         f"(TYPE S3, PROVIDER credential_chain, REGION '{S3_REGION}')"
     )
+    # E11.20: under Delta CUTOVER the W1 views resolve via delta_scan — the read-only
+    # `delta` extension must load, and a failure must be LOUD (a silent fallback to the
+    # frozen parquet is the INC-31 stale-key class). Under off/mirror nothing reads
+    # Delta, so a pre-Delta image stays green.
+    if delta_w1_mode() == "cutover":
+        conn.execute("INSTALL delta; LOAD delta")
     for pragma in (
         "SET http_timeout = 600000",
         "SET http_retries = 8",
@@ -126,6 +155,11 @@ def _view_sql(table: str) -> str:
     re-flattened to the SAME S3 path by the 30-min intraday re-export
     (SCHEDULE_LAKEHOUSE_INTRADAY=1), so a fresh read just re-globs — no special-casing
     needed as long as the glob points at the live path (it does)."""
+    if delta_read_enabled(table):
+        # E11.20 cutover: Delta-backed table — the legacy parquet glob is FROZEN; the
+        # Delta table (ACID, single-writer) is authoritative. delta_scan latency is on
+        # par with read_parquet (spike §2).
+        return delta_scan_view_sql(table)
     if table in _TYPED_VIEWS:
         return _TYPED_VIEWS[table].format(loc=f"{LAKEHOUSE}/{table}/**/*.parquet")
     return (

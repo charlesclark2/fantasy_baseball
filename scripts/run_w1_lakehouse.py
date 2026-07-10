@@ -22,7 +22,19 @@ Usage (run from anywhere in the repo):
   python3 scripts/run_w1_lakehouse.py             # default: W1 + W2 + W3  (writes to S3)
   python3 scripts/run_w1_lakehouse.py --dry-run   # row-count only, no S3 writes
   python3 scripts/run_w1_lakehouse.py --w1-only   # only the W1 pitch marts (skip W2 + W3)
+  python3 scripts/run_w1_lakehouse.py --w2-only   # only the W2 marts (reuse existing W1 parquet/Delta)
   python3 scripts/run_w1_lakehouse.py --skip-w1   # only W2 + W3 (reuse existing W1 parquet)
+
+E11.20 (Delta Lake rollout, phase 1 — the W1 pitch-mart family): the env var
+LAKEHOUSE_DELTA_W1 = off|mirror|cutover selects the W1 storage backend (see
+betting_ml/utils/delta_lakehouse.py). Under mirror/cutover the daily W1 build writes the
+CURRENT-SEASON game_year partition only (delta-rs replaceWhere — O(season), not
+O(history)); `--w1-only --delta-full` is the explicit opt-in full-history backfill that
+seeds/rebuilds every season partition. Under cutover the W1 DuckDB views (here and in
+every *-only subprocess) resolve via delta_scan, while the SF-COMPAT season-bucket
+mirror (lakehouse/<t>/season_YYYY/data.parquet, current season rewritten daily) keeps
+the lakehouse_ext.mart_pitch_* external tables fresh for the raw-SQL SF stragglers;
+the legacy single data.parquet is retired (glob-dup guard).
   python3 scripts/run_w1_lakehouse.py --w3-only   # only the W3 marts (reuse existing W1+W2 parquet)
   python3 scripts/run_w1_lakehouse.py --w3pre     # W1 + W2 + W3 + the W3pre odds/staging tier (opt-in)
   python3 scripts/run_w1_lakehouse.py --w3pre-only # only the W3pre odds/staging flatten tier
@@ -50,6 +62,28 @@ from pathlib import Path
 # ── Paths ─────────────────────────────────────────────────────────────────────
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = REPO_ROOT / "dbt" / "models"
+
+# E11.20: the Delta-lakehouse rollout registry (PURE stdlib — importing it pulls in no
+# deltalake/duckdb). Single source of truth shared with scripts/utils/lakehouse_read.py +
+# betting_ml/utils/lakehouse_monitor.py so the write side and every read choke point agree
+# on which tables are Delta-backed and what the mode is. betting_ml resolves on the box
+# (PYTHONPATH=/app) and in the uv env; the sys.path fallback covers a bare
+# `python3 scripts/run_w1_lakehouse.py` from outside the project env.
+try:
+    from betting_ml.utils.delta_lakehouse import (
+        DELTA_PARTITION_COL,
+        delta_scan_view_sql,
+        delta_read_enabled,
+        delta_w1_mode,
+    )
+except ModuleNotFoundError:  # bare invocation without the project on sys.path
+    sys.path.insert(0, str(REPO_ROOT))
+    from betting_ml.utils.delta_lakehouse import (
+        DELTA_PARTITION_COL,
+        delta_scan_view_sql,
+        delta_read_enabled,
+        delta_w1_mode,
+    )
 
 # ── S3 locations (mirrors lakehouse_loc() macro in dbt/macros/lakehouse.sql) ──
 BUCKET = "s3://baseball-betting-ml-artifacts"
@@ -547,6 +581,12 @@ def _register_mart_views(conn, models: list[str], dry_run: bool) -> None:
     for model in models:
         if dry_run:
             conn.execute(f"CREATE OR REPLACE VIEW {model} AS {extract_duckdb_sql(model)}")
+        elif delta_read_enabled(model):
+            # E11.20 cutover: this model's DuckDB-reader source of truth is the Delta
+            # table (the season-bucket parquet under lakehouse/<model>/ is the SF-compat
+            # mirror for the ext tables, not the DuckDB read path). Register via
+            # delta_scan (read-only DuckDB delta extension, loaded in run()).
+            conn.execute(f"CREATE OR REPLACE VIEW {model} AS {delta_scan_view_sql(model)}")
         elif model in W6_PARTITIONED:
             # Partitioned mart (mart_odds_outcomes): glob both date-bucket subdirs
             # (_history + _current) so downstream W6 marts read the full table.
@@ -561,6 +601,172 @@ def _register_mart_views(conn, models: list[str], dry_run: bool) -> None:
                 f"CREATE OR REPLACE VIEW {model} AS SELECT * FROM read_parquet('{loc}')"
             )
         print(f"  registered view: {model}")
+
+
+def _current_season_year(conn) -> int:
+    """The season the daily incremental rebuilds — the LA baseball-day's calendar year
+    (INC-22 discipline: never the box's UTC year, which rolls a day early)."""
+    return int(_la_today(conn)[:4])
+
+
+def _compat_season_years(conn, model: str) -> set[int]:
+    """The seasons that already have an SF-compat season-bucket parquet
+    (lakehouse/<model>/season_YYYY/data.parquet) — see _build_w1_marts cutover notes."""
+    try:
+        rows = conn.execute(
+            f"SELECT file FROM glob('{LAKEHOUSE}/{model}/season_*/data.parquet')"
+        ).fetchall()
+    except Exception:  # noqa: BLE001 — no matches → DuckDB IO error → none exist yet
+        return set()
+    out: set[int] = set()
+    for (path,) in rows:
+        m = re.search(r"/season_(\d{4})/data\.parquet$", path)
+        if m:
+            out.add(int(m.group(1)))
+    return out
+
+
+def _retire_legacy_w1_parquet(model: str) -> None:
+    """Delete the legacy single-file lakehouse/<model>/data.parquet AFTER the season-bucket
+    compat files exist. MUST succeed once season files are written: the lakehouse_ext
+    external tables glob <model>/**/*.parquet, so leaving BOTH layouts live double-counts
+    every row through Snowflake (the glob-dup landmine) → raise loudly on failure."""
+    import botocore.exceptions
+
+    from scripts.utils.lakehouse_raw_writer import make_s3_client  # instance-role-safe
+
+    s3 = make_s3_client()
+    bucket = BUCKET.replace("s3://", "")
+    key = f"baseball/lakehouse/{model}/data.parquet"
+    try:
+        s3.head_object(Bucket=bucket, Key=key)
+    except botocore.exceptions.ClientError:
+        return  # already retired
+    s3.delete_object(Bucket=bucket, Key=key)
+    print(f"  🗑  retired legacy {key} (season-bucket compat files are now the sole "
+          f"parquet under the ext-table glob)")
+
+
+def _build_w1_marts(conn, dry_run: bool, delta_full: bool = False) -> None:
+    """Build the 7 W1 pitch marts, dispatching on the E11.20 Delta rollout mode.
+
+    off      → the legacy full-history parquet COPY (value-identical to pre-E11.20).
+    mirror   → legacy parquet COPY (authoritative, full) + a Delta season-partition write
+               for validation (parity_check_delta_w1.py compares the two).
+    cutover  → Delta (the DuckDB-reader source of truth, via delta_scan) + the
+               ⭐ SF-COMPAT SEASON MIRROR: lakehouse/<model>/season_YYYY/data.parquet —
+               historical seasons written once (self-healing on the first cutover run),
+               ONLY the current LA-season rewritten daily. Both writes are O(current
+               season) daily (the AC-B perf win), and the season files keep the
+               lakehouse_ext.mart_pitch_* external tables + betting.mart_pitch_* views
+               FULLY FRESH — load-bearing because real SF stragglers still read those
+               views daily (update_player_posteriors + the eb_priors/matchup scripts +
+               ingest_player_profiles read `baseball_data.betting.mart_pitch_play_event`
+               as raw SQL — the INC-27 class; they repoint in phase 1.5, THEN the SF
+               objects drop). The legacy single-file data.parquet is DELETED once the
+               season files exist (the ext glob unions <model>/**/*.parquet — both
+               layouts live at once would double-count: the glob-dup landmine). The dir
+               is `season_YYYY` (no `=`) so DuckDB's hive-partition inference never
+               fabricates a phantom column. This is the W6 _history/_current pattern
+               generalized per-season.
+
+    --delta-full is the explicit, opt-in full-history rebuild (one partition-overwrite per
+    season, memory-bounded to one season per mart — never a whole-history .arrow() on the
+    16 GiB box) — required once to seed the tables, then only for backfills/type
+    migrations. Correctness precondition (verified 2026-07-10): every W1 mart is a pure
+    row-local pitch-level projection (no window functions), so season-partition rebuilds
+    are value-identical to the full rebuild. NOTE the stg_ref_players name join means a
+    late player-name correction only reaches HISTORICAL partitions on the next
+    --delta-full; the weekly maintenance cadence in the rollout doc covers this.
+    """
+    mode = delta_w1_mode()
+    if mode == "off":
+        if delta_full:
+            raise RuntimeError(
+                "--delta-full given but LAKEHOUSE_DELTA_W1=off — set the mode to "
+                "mirror|cutover first (a backfill under 'off' would write Delta tables "
+                "nothing reads, silently)."
+            )
+        _build_marts(conn, MART_MODELS, dry_run)
+        return
+
+    if mode == "mirror":
+        # Parquet stays authoritative + full-history (production unchanged during the
+        # parallel window); Delta is written after it from the same session. No compat
+        # season files in mirror — data.parquet is still live, and both under the ext
+        # glob at once would double-count (they only appear at cutover, which retires it).
+        _build_marts(conn, MART_MODELS, dry_run)
+
+    if dry_run:
+        print(f"  (dry-run — Delta writes skipped; mode={mode})")
+        if mode == "cutover":
+            _build_marts(conn, MART_MODELS, dry_run)  # row counts only, no writes
+        return
+
+    from scripts.utils.delta_lake import overwrite_partition  # lazy: needs deltalake
+
+    all_years = [int(r[0]) for r in conn.execute(
+        "SELECT DISTINCT game_year FROM stg_batter_pitches "
+        "WHERE game_year IS NOT NULL ORDER BY 1"
+    ).fetchall()]
+    current_year = _current_season_year(conn)
+    if delta_full:
+        print(f"\nW1 Delta FULL backfill (--delta-full): seasons {all_years}")
+    else:
+        print(f"\nW1 Delta incremental (mode={mode}): season partition {current_year} only")
+
+    for model in MART_MODELS:
+        body = _string_timestamp_wrap(conn, extract_duckdb_sql(model))
+        if delta_full:
+            years = list(all_years)
+        else:
+            years = [current_year]
+            if mode == "cutover":
+                # Self-heal the SF-compat mirror: any HISTORICAL season missing its
+                # season-bucket file is (re)built this run (first cutover run migrates
+                # the whole history once; steady-state adds nothing).
+                missing = sorted(set(all_years) - _compat_season_years(conn, model)
+                                 - {current_year})
+                if missing:
+                    print(f"  {model}: back-filling missing SF-compat seasons {missing}")
+                    years = missing + years
+        for year in years:
+            _t0 = time.monotonic()
+            # Materialize ONE season per mart (arrow) — bounded memory; the season filter
+            # prunes the stg_batter_pitches parquet scan via row-group stats.
+            tbl = conn.execute(
+                f"SELECT * FROM (\n{body}\n) _d WHERE {DELTA_PARTITION_COL} = {year}"
+            ).arrow()
+            if tbl.num_rows == 0:
+                # Never replace a partition with emptiness (off-season / early-season
+                # boundary) — an empty replaceWhere would DELETE the partition's rows.
+                print(f"  ⚠️  SKIP {model} Δ {DELTA_PARTITION_COL}={year}: 0 rows "
+                      f"(empty season slice — partition left untouched)", file=sys.stderr)
+                continue
+            overwrite_partition(model, tbl, year, create_ok=delta_full)
+            if mode == "cutover":
+                # SF-compat season mirror — written from the SAME arrow slice (no
+                # recompute) so Delta and the compat parquet cannot diverge.
+                conn.register("_delta_season_tmp", tbl)
+                conn.execute(
+                    f"COPY (SELECT * FROM _delta_season_tmp) TO "
+                    f"'{LAKEHOUSE}/{model}/season_{year}/data.parquet' (FORMAT PARQUET)"
+                )
+                conn.unregister("_delta_season_tmp")
+            print(f"  ✔ {model} Δ {DELTA_PARTITION_COL}={year}: {tbl.num_rows:,} rows "
+                  f"({time.monotonic() - _t0:.1f}s)", flush=True)
+        if mode == "cutover":
+            # The season files now cover the table → the legacy single data.parquet must
+            # go (both under the ext glob = double-count). Raises on failure (loud).
+            _retire_legacy_w1_parquet(model)
+
+    if mode == "cutover":
+        print(
+            "NOTE: [delta-cutover] W1 DuckDB readers resolve via delta_scan; the "
+            "lakehouse_ext.mart_pitch_* external tables stay FRESH off the season-bucket "
+            "compat mirror (SF stragglers keep working). The SF objects drop in phase "
+            "1.5, after the straggler repoint (docs/e11_20_delta_rollout.md §6).",
+        )
 
 
 def _raw_source_for(model: str) -> str:
@@ -656,6 +862,10 @@ def _register_s3_glob_views(conn, names: list[str]) -> None:
     these are year-partitioned, so a flat `<name>/*.parquet` glob matches both the
     part-0/data file naming without a recursive walk."""
     for name in names:
+        if delta_read_enabled(name):
+            conn.execute(f"CREATE OR REPLACE VIEW {name} AS {delta_scan_view_sql(name)}")
+            print(f"  registered Delta view: {name}")
+            continue
         glob = f"{LAKEHOUSE}/{name}/*.parquet"
         conn.execute(
             f"CREATE OR REPLACE VIEW {name} AS SELECT * FROM read_parquet('{glob}')"
@@ -1116,6 +1326,12 @@ def _register_w8a_views(conn, names: list[str]) -> None:
     part-0.parquet, year-partitioned tables, AND W6 date-bucketed marts all resolve
     through one code path (same contract as scripts/utils/lakehouse_read.register_views)."""
     for name in names:
+        if delta_read_enabled(name):
+            # E11.20 cutover: Delta-backed precursor (e.g. mart_pitch_play_event in
+            # W8A_PRECURSOR_VIEWS) — the legacy parquet glob is frozen; read the Delta table.
+            conn.execute(f"CREATE OR REPLACE VIEW {name} AS {delta_scan_view_sql(name)}")
+            print(f"  registered Delta view: {name}")
+            continue
         glob = f"{LAKEHOUSE}/{name}/**/*.parquet"
         conn.execute(
             f"CREATE OR REPLACE VIEW {name} AS "
@@ -1571,6 +1787,8 @@ def run(
     dry_run: bool = False,
     skip_w1: bool = False,
     w1_only: bool = False,
+    w2_only: bool = False,
+    delta_full: bool = False,
     w3pre: bool = False,
     w3pre_only: bool = False,
     w3_only: bool = False,
@@ -1630,6 +1848,13 @@ def run(
         print(f"  (note: SET TimeZone='UTC' not applied: {_e})")
 
     conn.execute("INSTALL httpfs; LOAD httpfs")
+    # E11.20: under Delta CUTOVER the W1 pitch marts are read via delta_scan (this run's
+    # own W2/W3 view registrations + every *-only subprocess that registers W1 precursor
+    # views), so the read-only `delta` extension MUST load — a failure here must HALT
+    # loudly, not degrade to a frozen-parquet read (the INC-31 stale-key class). Under
+    # mirror/off no Delta read happens; skip (a pre-Delta box image stays green).
+    if delta_w1_mode() == "cutover":
+        conn.execute("INSTALL delta; LOAD delta")
     # E11.1-W6: the odds/CLV marts use timezone conversion (mart_odds_outcomes /
     # mart_odds_events commence_date, mart_closing_line_value / mart_bookmaker_disagreement
     # ET-window guards). Snowflake's convert_timezone(src, tgt, ts) is reimplemented in the
@@ -1862,10 +2087,26 @@ def run(
         print("\nW11d public-betting wave run complete (--w11d-only).")
         return
 
+    # E11.20: --w2-only rebuilds just the 8 W2 pitch-derived marts, reusing the existing
+    # W1 parquet/Delta (registered as views — Delta-aware under cutover). Companion to the
+    # existing --w3-only; together with --w1-only these are the per-wave entry points the
+    # DECOMPOSED daily ops chain uses (one op per wave, independently runnable/retryable).
+    if w2_only:
+        print("\nRegistering W1 marts as views (reuse existing parquet/Delta for --w2-only):")
+        _register_mart_views(conn, MART_MODELS, dry_run)
+        print("\nW2 marts:")
+        _build_marts(conn, W2_MART_MODELS, dry_run)
+        conn.close()
+        print("\nW2 marts run complete (--w2-only).")
+        return
+
     # ── W1: pitch-level marts ────────────────────────────────────────────────
+    # E11.20: Delta-mode-aware — off = legacy full parquet COPY; mirror = parquet + Delta
+    # season write; cutover = Delta only, daily O(current season) (--delta-full = the
+    # explicit opt-in full-history backfill).
     if not skip_w1:
         print("\nW1 marts:")
-        _build_marts(conn, MART_MODELS, dry_run)
+        _build_w1_marts(conn, dry_run, delta_full)
 
     if w1_only:
         conn.close()
@@ -1999,6 +2240,8 @@ if __name__ == "__main__":
         dry_run="--dry-run" in sys.argv,
         skip_w1="--skip-w1" in sys.argv,
         w1_only="--w1-only" in sys.argv,
+        w2_only="--w2-only" in sys.argv,
+        delta_full="--delta-full" in sys.argv,
         w3pre="--w3pre" in sys.argv,
         w3pre_only="--w3pre-only" in sys.argv,
         w3_only="--w3-only" in sys.argv,
