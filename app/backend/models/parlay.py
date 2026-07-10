@@ -17,6 +17,7 @@ class ParlayLegInput(BaseModel):
     game_pk: int | None = None
     market_type: str  # 'h2h' | 'totals' | 'strikeouts'
     side: str         # 'home' | 'away' | 'over' | 'under'
+    book_key: str | None = None    # the book the user is placing this leg with (per-book odds + line)
     book_odds_american: float | None = None
     pitcher_id: int | None = None  # strikeouts legs
     line: float | None = None      # totals / strikeouts posted line (display + K resolve)

@@ -252,7 +252,25 @@ def test_frontend_surface_has_no_bet_rec_language(surface):
     assert "not a bet recommendation" in src.lower()
 
 
-# ── backend leg-resolution (serving-cache-sourced, graceful) ─────────────────
+# ── backend leg-resolution (serving-cache-sourced, book-aware, graceful) ─────
+
+# A representative picks/book-odds blob: Bovada + FanDuel (US) + Pinnacle (sharp ref). FanDuel posts
+# the total at a different line (9.0) than Bovada/consensus (8.5), so its model P(over) differs.
+_BOOK_BLOB = {
+    "h2h": [
+        {"book_key": "bovada", "book_name": "Bovada", "home_american": -140, "away_american": 120,
+         "market_bet_pct_home": 0.585, "model_prob_home": 0.62},
+        {"book_key": "pinnacle", "book_name": "Pinnacle", "is_sharp_reference": True,
+         "home_american": -150, "away_american": 130, "market_bet_pct_home": 0.60, "model_prob_home": 0.62},
+    ],
+    "totals": [
+        {"book_key": "bovada", "book_name": "Bovada", "line": 8.5, "over_american": -110,
+         "under_american": -110, "market_bet_pct_over": 0.50, "model_prob_over": 0.48, "model_prob_under": 0.52},
+        {"book_key": "fanduel", "book_name": "FanDuel", "line": 9.0, "over_american": 105,
+         "under_american": -125, "market_bet_pct_over": 0.46, "model_prob_over": 0.41, "model_prob_under": 0.59},
+    ],
+}
+
 
 def test_router_resolves_legs_from_serving_cache(monkeypatch):
     """The /parlay/evaluate resolution re-derives each leg's model prob from the cached blobs and
@@ -267,12 +285,14 @@ def test_router_resolves_legs_from_serving_cache(monkeypatch):
     kidx = [{"pitcher_id": 543, "game_pk": 1, "primary_line": 5.5, "model_p_over": 0.61, "full_name": "Ace"}]
     monkeypatch.setattr(pr, "_picks_blob", lambda date: picks)
     monkeypatch.setattr(pr, "_k_index", lambda date: kidx)
+    monkeypatch.setattr(pr, "_book_odds_blob", lambda gp: _BOOK_BLOB)
 
     req = ParlayEvaluateRequest(
         date="2026-07-10",
         parlay_odds_american=None,
         legs=[
-            ParlayLegInput(game_pk=1, market_type="h2h", side="away", book_odds_american=120),
+            # h2h away, no odds sent → backend fills from the selected book (bovada away +120)
+            ParlayLegInput(game_pk=1, market_type="h2h", side="away", book_key="bovada", book_odds_american=None),
             ParlayLegInput(game_pk=1, market_type="strikeouts", side="over", pitcher_id=543, line=5.5, book_odds_american=-115),
             ParlayLegInput(game_pk=99, market_type="h2h", side="home", book_odds_american=-110),  # not in cache
         ],
@@ -280,13 +300,35 @@ def test_router_resolves_legs_from_serving_cache(monkeypatch):
     r = pr.evaluate_parlay(req, _="user")
     by = {(l["market_type"], l["side"]): l for l in r["legs"]}
     assert by[("h2h", "away")]["hit_prob"] == pytest.approx(0.38, abs=1e-6)   # 1 − 0.62
+    assert by[("h2h", "away")]["book_odds_american"] == 120                   # auto-filled from bovada
     assert by[("strikeouts", "over")]["hit_prob"] == pytest.approx(0.61, abs=1e-6)
     assert by[("h2h", "home")]["resolved"] is False                          # game 99 absent → graceful
     assert r["has_same_game"] is True                                        # legs share game_pk 1
     assert r["best_alpha"] == 0 and r["is_bet_recommendation"] is False
 
 
-def test_router_leg_universe_shape(monkeypatch):
+def test_router_evaluate_totals_uses_selected_book_line(monkeypatch):
+    """A totals leg's model prob is resolved at the SELECTED BOOK's line, not the consensus line."""
+    from app.backend.routers import parlay as pr
+    from app.backend.models.parlay import ParlayEvaluateRequest, ParlayLegInput
+
+    picks = [{"game_pk": 1, "market_type": "totals", "model_prob": 0.48, "market_total_line": 8.5}]
+    monkeypatch.setattr(pr, "_picks_blob", lambda date: picks)
+    monkeypatch.setattr(pr, "_k_index", lambda date: [])
+    monkeypatch.setattr(pr, "_book_odds_blob", lambda gp: _BOOK_BLOB)
+
+    # FanDuel posts the total at 9.0 with model P(over)=0.41 — distinct from the 8.5 consensus (0.48).
+    req = ParlayEvaluateRequest(date="2026-07-10", legs=[
+        ParlayLegInput(game_pk=1, market_type="totals", side="over", book_key="fanduel", book_odds_american=None),
+    ])
+    r = pr.evaluate_parlay(req, _="user")
+    leg = r["legs"][0]
+    assert leg["hit_prob"] == pytest.approx(0.41, abs=1e-6)   # fanduel line, NOT the 0.48 consensus
+    assert leg["line"] == 9.0
+    assert leg["book_odds_american"] == 105                   # auto-filled from fanduel over price
+
+
+def test_router_leg_universe_shape_and_books(monkeypatch):
     from app.backend.routers import parlay as pr
 
     picks = [
@@ -296,10 +338,23 @@ def test_router_leg_universe_shape(monkeypatch):
     kidx = [{"pitcher_id": 543, "game_pk": 1, "primary_line": 5.5, "model_p_over": 0.61, "full_name": "Ace"}]
     monkeypatch.setattr(pr, "_picks_blob", lambda date: picks)
     monkeypatch.setattr(pr, "_k_index", lambda date: kidx)
+    monkeypatch.setattr(pr, "_book_odds_blob", lambda gp: _BOOK_BLOB)
 
     out = pr.get_parlay_legs(date="2026-07-10", _="user")
     assert out["best_alpha"] == 0 and out["is_bet_recommendation"] is False
-    assert len(out["games"]) == 1
-    mkts = {m["market_type"] for m in out["games"][0]["markets"]}
+    # book selector: US books first (bovada default), Pinnacle sharp-ref last
+    assert out["default_book_key"] == "bovada"
+    assert [b["book_key"] for b in out["books"]] == ["bovada", "fanduel", "pinnacle"]
+    assert out["books"][-1]["is_sharp_reference"] is True
+    game = out["games"][0]
+    mkts = {m["market_type"] for m in game["markets"]}
     assert mkts == {"h2h", "totals", "strikeouts"}
+    # h2h home side carries per-book odds (bovada -140) + model prob + no-vig book prob
+    h2h_home = next(m for m in game["markets"] if m["market_type"] == "h2h")["sides"][0]
+    assert h2h_home["books"]["bovada"]["american"] == -140
+    assert h2h_home["books"]["bovada"]["book_devig_prob"] == pytest.approx(0.585)
+    # totals over carries each book's own line (fanduel 9.0) + model prob at that line
+    over = next(m for m in game["markets"] if m["market_type"] == "totals")["sides"][0]
+    assert over["books"]["fanduel"]["line"] == 9.0
+    assert over["books"]["fanduel"]["model_prob"] == pytest.approx(0.41)
     json.dumps(out)  # serialisable
