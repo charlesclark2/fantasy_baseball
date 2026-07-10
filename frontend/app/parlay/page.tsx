@@ -371,7 +371,7 @@ function ParlayPageInner() {
                             })}
                           </div>
                           {m.market_type === "strikeouts" && (
-                            <p className="mt-1 text-[10px] text-gray-600">Enter your book&apos;s K odds in the slip — strikeout lines vary by book.</p>
+                            <p className="mt-1 text-[10px] text-gray-600">Strikeout lines vary by book; odds fill in when your book posts this line, otherwise enter them in the slip.</p>
                           )}
                         </div>
                       ))}
