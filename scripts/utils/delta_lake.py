@@ -73,6 +73,29 @@ def storage_options() -> dict[str, str]:
     return opts
 
 
+def _reject_unsigned(data, context: str) -> None:
+    """The Delta protocol has NO unsigned types — delta-rs casts uint columns to signed
+    and OVERFLOWS on any uint64 value above 2^63 (the 2026-07-10 pitch_sk backfill crash,
+    with a cryptic 'Cast error' pointing nowhere). Fail HERE with the cure instead: pin
+    unsigned columns to value-preserving signed types BEFORE the write
+    (run_w1_lakehouse._delta_signed_wrap — UBIGINT→DECIMAL(20,0) etc.)."""
+    schema = getattr(data, "schema", None)
+    if schema is None:
+        return
+    import pyarrow.types as pat
+
+    bad = [f.name for f in schema
+           if pat.is_unsigned_integer(getattr(f, "type", None) or f.type)]
+    if bad:
+        raise ValueError(
+            f"{context}: unsigned arrow column(s) {bad} cannot be stored in Delta "
+            f"(the protocol has no unsigned types; uint64 overflows Int64). Pin them to "
+            f"signed types first — see run_w1_lakehouse._delta_signed_wrap "
+            f"(UBIGINT→DECIMAL(20,0) is exact, and DuckDB compares "
+            f"UBIGINT ⋈ DECIMAL(20,0) exactly)."
+        )
+
+
 def table_exists(table: str) -> bool:
     """True if the Delta table (its _delta_log) exists at the registry URI."""
     from deltalake import DeltaTable
@@ -104,6 +127,7 @@ def overwrite_partition(table: str, data, year: int, *, create_ok: bool = False)
     """
     from deltalake import write_deltalake
 
+    _reject_unsigned(data, f"overwrite_partition({table!r}, year={year})")
     uri = delta_table_uri(table)
     if not table_exists(table):
         if not create_ok:
@@ -141,6 +165,7 @@ def merge_upsert(table: str, data, predicate: str) -> dict:
         )
     from deltalake import DeltaTable
 
+    _reject_unsigned(data, f"merge_upsert({table!r})")
     dt = DeltaTable(delta_table_uri(table), storage_options=storage_options())
     return (
         dt.merge(source=data, predicate=predicate, source_alias="s", target_alias="t")

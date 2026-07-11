@@ -603,6 +603,39 @@ def _register_mart_views(conn, models: list[str], dry_run: bool) -> None:
         print(f"  registered view: {model}")
 
 
+# UNSIGNED→SIGNED pins for the Delta write path (E11.20, 2026-07-10 backfill crash #2):
+# the Delta protocol has NO unsigned types, so delta-rs casts a uint64 arrow column to
+# Int64 and OVERFLOWS on any value above 2^63 — pitch_sk (the pre-computed md5-upper64
+# surrogate key in stg_batter_pitches, carried by every W1 mart) crashed the very first
+# write. DECIMAL(20,0) holds the full uint64 range EXACTLY, and DuckDB compares
+# UBIGINT ⋈ DECIMAL(20,0) exactly (empirically verified 2026-07-10: adjacent 2^63 values
+# do NOT collide; the comparison promotes to DECIMAL, never DOUBLE), so joins between a
+# delta_scan/compat read (decimal) and stg_batter_pitches (ubigint) stay value-correct.
+# The smaller unsigned types widen losslessly into the next signed type.
+_UNSIGNED_PINS = {
+    "UTINYINT": "smallint",
+    "USMALLINT": "integer",
+    "UINTEGER": "bigint",
+    "UBIGINT": "decimal(20,0)",
+    "UHUGEINT": "decimal(38,0)",  # defensive — no current column, but never crash cryptically
+}
+
+
+def _delta_signed_wrap(conn, mart_sql: str) -> str:
+    """Pin every UNSIGNED output column to its value-preserving SIGNED type before a Delta
+    write (mirror of _string_timestamp_wrap's DESCRIBE-based mechanics). Applied ONCE to
+    the season slice in _build_w1_marts so the Delta table AND the SF-compat season mirror
+    are written from the SAME SQL with IDENTICAL types — a per-store transform would split
+    the stored type across stores (the INC-23 mixed-type class)."""
+    desc = conn.execute(f"DESCRIBE SELECT * FROM (\n{mart_sql}\n) _d").fetchall()
+    pins = {r[0]: _UNSIGNED_PINS[str(r[1]).upper()]
+            for r in desc if str(r[1]).upper() in _UNSIGNED_PINS}
+    if not pins:
+        return mart_sql
+    repl = ", ".join(f'"{c}"::{t} AS "{c}"' for c, t in pins.items())
+    return f"SELECT * REPLACE ({repl}) FROM (\n{mart_sql}\n) _d"
+
+
 def _current_season_year(conn) -> int:
     """The season the daily incremental rebuilds — the LA baseball-day's calendar year
     (INC-22 discipline: never the box's UTC year, which rolls a day early)."""
@@ -716,7 +749,10 @@ def _build_w1_marts(conn, dry_run: bool, delta_full: bool = False) -> None:
         print(f"\nW1 Delta incremental (mode={mode}): season partition {current_year} only")
 
     for model in MART_MODELS:
-        body = _string_timestamp_wrap(conn, extract_duckdb_sql(model))
+        # Two DESCRIBE-based pins, both value-preserving: TIMESTAMP→ISO VARCHAR (the W8a
+        # binary-ts cure — kept so Delta/compat types match the legacy parquet exactly)
+        # and UNSIGNED→SIGNED (Delta protocol has no unsigned types; uint64 overflows).
+        body = _delta_signed_wrap(conn, _string_timestamp_wrap(conn, extract_duckdb_sql(model)))
         if delta_full:
             years = list(all_years)
         else:
@@ -734,9 +770,13 @@ def _build_w1_marts(conn, dry_run: bool, delta_full: bool = False) -> None:
             _t0 = time.monotonic()
             # Materialize ONE season per mart (arrow) — bounded memory; the season filter
             # prunes the stg_batter_pitches parquet scan via row-group stats.
+            # ⚠️ fetch_arrow_table(), NOT .arrow(): on newer DuckDB (the box floats
+            # `duckdb>=1.1.0`) .arrow() returns a RecordBatchReader (no .num_rows) —
+            # the 2026-07-10 backfill crash. fetch_arrow_table() is a pyarrow.Table on
+            # every DuckDB version in play (guarded by test_delta_local_roundtrip.py).
             tbl = conn.execute(
                 f"SELECT * FROM (\n{body}\n) _d WHERE {DELTA_PARTITION_COL} = {year}"
-            ).arrow()
+            ).fetch_arrow_table()
             if tbl.num_rows == 0:
                 # Never replace a partition with emptiness (off-season / early-season
                 # boundary) — an empty replaceWhere would DELETE the partition's rows.

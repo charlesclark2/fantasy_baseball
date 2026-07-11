@@ -61,6 +61,7 @@ interface GameLegs {
   game_pk: number
   home_team: string | null
   away_team: string | null
+  matchup: string | null // fallback label ("TEAM vs OPP") when home/away names aren't available
   game_start_utc: string | null
   markets: Market[]
 }
@@ -335,7 +336,9 @@ function ParlayPageInner() {
                   <div key={g.game_pk} className="rounded-lg border border-[#262626] bg-[#111111] p-4">
                     <div className="mb-2 flex items-center justify-between">
                       <div className="text-sm font-semibold text-white">
-                        {g.away_team ?? "Away"} @ {g.home_team ?? "Home"}
+                        {g.away_team && g.home_team
+                          ? `${g.away_team} @ ${g.home_team}`
+                          : g.matchup ?? "Matchup TBD"}
                       </div>
                       {fmtGameTime(g.game_start_utc) && (
                         <div className="text-[11px] text-gray-500">{fmtGameTime(g.game_start_utc)}</div>

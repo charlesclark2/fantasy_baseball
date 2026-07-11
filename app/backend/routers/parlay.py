@@ -220,11 +220,18 @@ def get_parlay_legs(date: str | None = None, _: str = Depends(get_user_id)) -> d
     slate = date or current_game_date_iso()
     games: dict[int, dict] = {}
     book_names: dict[str, dict] = {}
+    _bo_cache: dict[int, dict] = {}
+
+    def bo(game_pk: int) -> dict:
+        """Memoized book-odds blob read (one DynamoDB round-trip per game per request)."""
+        if game_pk not in _bo_cache:
+            _bo_cache[game_pk] = _book_odds_blob(game_pk)
+        return _bo_cache[game_pk]
 
     def _game(game_pk: int, home: str | None, away: str | None, start_utc=None) -> dict:
         g = games.get(game_pk)
         if g is None:
-            g = {"game_pk": game_pk, "home_team": home, "away_team": away,
+            g = {"game_pk": game_pk, "home_team": home, "away_team": away, "matchup": None,
                  "game_start_utc": start_utc, "markets": []}
             games[game_pk] = g
         return g
@@ -237,7 +244,7 @@ def get_parlay_legs(date: str | None = None, _: str = Depends(get_user_id)) -> d
         if gp is None or mp is None or mt not in ("h2h", "totals"):
             continue
         g = _game(gp, p.get("home_team"), p.get("away_team"), p.get("game_start_utc"))
-        blob = _book_odds_blob(gp)
+        blob = bo(gp)
         if mt == "h2h":
             home_books, away_books, names = _h2h_books(blob)
             book_names.update(names)
@@ -273,6 +280,17 @@ def get_parlay_legs(date: str | None = None, _: str = Depends(get_user_id)) -> d
             continue
         over_books, under_books = _k_books(_k_detail_blob(pid, slate), float(line), book_names)
         g = _game(gp, None, None, row.get("game_datetime"))
+        # A strikeout-only game (no h2h/totals pick) is created without team names. Recover them from
+        # the book-odds blob (properly home/away-oriented); if that's absent, fall back to a
+        # "pitcher's team vs opponent" matchup label from the K row so the header is never "Away @ Home".
+        if not g.get("home_team") or not g.get("away_team"):
+            ob = bo(gp)
+            g["home_team"] = g.get("home_team") or ob.get("home_team")
+            g["away_team"] = g.get("away_team") or ob.get("away_team")
+            if (not g.get("home_team") or not g.get("away_team")) and not g.get("matchup"):
+                team, opp = row.get("team"), row.get("opponent")
+                if team or opp:
+                    g["matchup"] = f"{team or '?'} vs {opp or '?'}"
         g["markets"].append({
             "market_type": "strikeouts",
             "label": f"{row.get('full_name') or 'Pitcher'} Strikeouts",
