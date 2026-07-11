@@ -271,6 +271,17 @@ _BOOK_BLOB = {
     ],
 }
 
+# A pitcher K detail blob: two books at the primary line (5.5) + one at a different line (6.5) that
+# must NOT auto-fill at the primary line.
+_K_DETAIL = {"book_comparisons": [
+    {"book": "bovada", "line": 5.5, "over_odds": -115, "under_odds": -105,
+     "book_implied_p_over": 0.53, "model_p_over": 0.61, "model_p_under": 0.39},
+    {"book": "draftkings", "line": 5.5, "over_odds": -110, "under_odds": -110,
+     "book_implied_p_over": 0.50, "model_p_over": 0.61, "model_p_under": 0.39},
+    {"book": "fanduel", "line": 6.5, "over_odds": 120, "under_odds": -140,
+     "book_implied_p_over": 0.44, "model_p_over": 0.47, "model_p_under": 0.53},
+]}
+
 
 def test_router_resolves_legs_from_serving_cache(monkeypatch):
     """The /parlay/evaluate resolution re-derives each leg's model prob from the cached blobs and
@@ -286,6 +297,7 @@ def test_router_resolves_legs_from_serving_cache(monkeypatch):
     monkeypatch.setattr(pr, "_picks_blob", lambda date: picks)
     monkeypatch.setattr(pr, "_k_index", lambda date: kidx)
     monkeypatch.setattr(pr, "_book_odds_blob", lambda gp: _BOOK_BLOB)
+    monkeypatch.setattr(pr, "_k_detail_blob", lambda pid, d: _K_DETAIL)
 
     req = ParlayEvaluateRequest(
         date="2026-07-10",
@@ -339,12 +351,13 @@ def test_router_leg_universe_shape_and_books(monkeypatch):
     monkeypatch.setattr(pr, "_picks_blob", lambda date: picks)
     monkeypatch.setattr(pr, "_k_index", lambda date: kidx)
     monkeypatch.setattr(pr, "_book_odds_blob", lambda gp: _BOOK_BLOB)
+    monkeypatch.setattr(pr, "_k_detail_blob", lambda pid, d: _K_DETAIL)
 
     out = pr.get_parlay_legs(date="2026-07-10", _="user")
     assert out["best_alpha"] == 0 and out["is_bet_recommendation"] is False
-    # book selector: US books first (bovada default), Pinnacle sharp-ref last
+    # book selector: US books first (bovada default), Pinnacle sharp-ref last; draftkings (K-only) present
     assert out["default_book_key"] == "bovada"
-    assert [b["book_key"] for b in out["books"]] == ["bovada", "fanduel", "pinnacle"]
+    assert [b["book_key"] for b in out["books"]] == ["bovada", "fanduel", "draftkings", "pinnacle"]
     assert out["books"][-1]["is_sharp_reference"] is True
     game = out["games"][0]
     mkts = {m["market_type"] for m in game["markets"]}
@@ -357,4 +370,52 @@ def test_router_leg_universe_shape_and_books(monkeypatch):
     over = next(m for m in game["markets"] if m["market_type"] == "totals")["sides"][0]
     assert over["books"]["fanduel"]["line"] == 9.0
     assert over["books"]["fanduel"]["model_prob"] == pytest.approx(0.41)
+    # strikeouts over carries per-book K odds at the primary line (5.5); the 6.5 book is excluded
+    k_over = next(m for m in game["markets"] if m["market_type"] == "strikeouts")["sides"][0]
+    assert set(k_over["books"]) == {"bovada", "draftkings"}     # fanduel posts 6.5, not the 5.5 primary
+    assert k_over["books"]["bovada"]["american"] == -115
+    assert k_over["books"]["bovada"]["line"] == 5.5
     json.dumps(out)  # serialisable
+
+
+def test_router_strikeout_only_game_recovers_team_names(monkeypatch):
+    """A strikeout-only game (no h2h/totals pick) must not render as 'Away @ Home' — team names are
+    recovered from the book-odds blob (oriented), else a 'team vs opponent' matchup from the K row."""
+    from app.backend.routers import parlay as pr
+
+    monkeypatch.setattr(pr, "_picks_blob", lambda date: [])  # no h2h/totals for either game
+    monkeypatch.setattr(pr, "_k_index", lambda date: [
+        {"pitcher_id": 11, "game_pk": 1, "primary_line": 5.5, "model_p_over": 0.60,
+         "full_name": "Nola", "team": "PHI", "opponent": "ATL", "game_datetime": "2026-07-10T23:00:00Z"},
+        {"pitcher_id": 22, "game_pk": 2, "primary_line": 4.5, "model_p_over": 0.66,
+         "full_name": "Weathers", "team": "MIA", "opponent": "WSH", "game_datetime": "2026-07-10T23:05:00Z"},
+    ])
+    monkeypatch.setattr(pr, "_k_detail_blob", lambda pid, d: {})
+    # Game 1 has an odds blob (oriented home/away); game 2 has none.
+    monkeypatch.setattr(pr, "_book_odds_blob",
+                        lambda gp: {"home_team": "ATL", "away_team": "PHI"} if gp == 1 else {})
+
+    out = pr.get_parlay_legs(date="2026-07-10", _="user")
+    by_pk = {g["game_pk"]: g for g in out["games"]}
+    assert by_pk[1]["home_team"] == "ATL" and by_pk[1]["away_team"] == "PHI"  # oriented from odds blob
+    assert by_pk[2]["home_team"] is None and by_pk[2]["matchup"] == "MIA vs WSH"  # K-row fallback
+
+
+def test_router_evaluate_strikeouts_uses_book_odds(monkeypatch):
+    """A strikeouts leg auto-fills the selected book's K price + model P at that book's posted line."""
+    from app.backend.routers import parlay as pr
+    from app.backend.models.parlay import ParlayEvaluateRequest, ParlayLegInput
+
+    monkeypatch.setattr(pr, "_picks_blob", lambda date: [])
+    monkeypatch.setattr(pr, "_k_index", lambda date: [
+        {"pitcher_id": 543, "game_pk": 1, "primary_line": 5.5, "model_p_over": 0.61, "full_name": "Ace"}])
+    monkeypatch.setattr(pr, "_k_detail_blob", lambda pid, d: _K_DETAIL)
+
+    req = ParlayEvaluateRequest(date="2026-07-11", legs=[
+        ParlayLegInput(game_pk=1, market_type="strikeouts", side="over", pitcher_id=543,
+                       line=5.5, book_key="draftkings", book_odds_american=None)])
+    r = pr.evaluate_parlay(req, _="user")
+    leg = r["legs"][0]
+    assert leg["book_odds_american"] == -110      # draftkings over at 5.5, auto-filled
+    assert leg["hit_prob"] == pytest.approx(0.61, abs=1e-6)
+    assert leg["line"] == 5.5

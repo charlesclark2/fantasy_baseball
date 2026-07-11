@@ -603,6 +603,39 @@ def _register_mart_views(conn, models: list[str], dry_run: bool) -> None:
         print(f"  registered view: {model}")
 
 
+# UNSIGNED→SIGNED pins for the Delta write path (E11.20, 2026-07-10 backfill crash #2):
+# the Delta protocol has NO unsigned types, so delta-rs casts a uint64 arrow column to
+# Int64 and OVERFLOWS on any value above 2^63 — pitch_sk (the pre-computed md5-upper64
+# surrogate key in stg_batter_pitches, carried by every W1 mart) crashed the very first
+# write. DECIMAL(20,0) holds the full uint64 range EXACTLY, and DuckDB compares
+# UBIGINT ⋈ DECIMAL(20,0) exactly (empirically verified 2026-07-10: adjacent 2^63 values
+# do NOT collide; the comparison promotes to DECIMAL, never DOUBLE), so joins between a
+# delta_scan/compat read (decimal) and stg_batter_pitches (ubigint) stay value-correct.
+# The smaller unsigned types widen losslessly into the next signed type.
+_UNSIGNED_PINS = {
+    "UTINYINT": "smallint",
+    "USMALLINT": "integer",
+    "UINTEGER": "bigint",
+    "UBIGINT": "decimal(20,0)",
+    "UHUGEINT": "decimal(38,0)",  # defensive — no current column, but never crash cryptically
+}
+
+
+def _delta_signed_wrap(conn, mart_sql: str) -> str:
+    """Pin every UNSIGNED output column to its value-preserving SIGNED type before a Delta
+    write (mirror of _string_timestamp_wrap's DESCRIBE-based mechanics). Applied ONCE to
+    the season slice in _build_w1_marts so the Delta table AND the SF-compat season mirror
+    are written from the SAME SQL with IDENTICAL types — a per-store transform would split
+    the stored type across stores (the INC-23 mixed-type class)."""
+    desc = conn.execute(f"DESCRIBE SELECT * FROM (\n{mart_sql}\n) _d").fetchall()
+    pins = {r[0]: _UNSIGNED_PINS[str(r[1]).upper()]
+            for r in desc if str(r[1]).upper() in _UNSIGNED_PINS}
+    if not pins:
+        return mart_sql
+    repl = ", ".join(f'"{c}"::{t} AS "{c}"' for c, t in pins.items())
+    return f"SELECT * REPLACE ({repl}) FROM (\n{mart_sql}\n) _d"
+
+
 def _current_season_year(conn) -> int:
     """The season the daily incremental rebuilds — the LA baseball-day's calendar year
     (INC-22 discipline: never the box's UTC year, which rolls a day early)."""
@@ -647,7 +680,8 @@ def _retire_legacy_w1_parquet(model: str) -> None:
           f"parquet under the ext-table glob)")
 
 
-def _build_w1_marts(conn, dry_run: bool, delta_full: bool = False) -> None:
+def _build_w1_marts(conn, dry_run: bool, delta_full: bool = False,
+                    delta_only: bool = False) -> None:
     """Build the 7 W1 pitch marts, dispatching on the E11.20 Delta rollout mode.
 
     off      → the legacy full-history parquet COPY (value-identical to pre-E11.20).
@@ -681,20 +715,23 @@ def _build_w1_marts(conn, dry_run: bool, delta_full: bool = False) -> None:
     """
     mode = delta_w1_mode()
     if mode == "off":
-        if delta_full:
+        if delta_full or delta_only:
             raise RuntimeError(
-                "--delta-full given but LAKEHOUSE_DELTA_W1=off — set the mode to "
-                "mirror|cutover first (a backfill under 'off' would write Delta tables "
-                "nothing reads, silently)."
+                "--delta-full/--delta-only given but LAKEHOUSE_DELTA_W1=off — set the "
+                "mode to mirror|cutover first (a backfill under 'off' would write Delta "
+                "tables nothing reads, silently)."
             )
         _build_marts(conn, MART_MODELS, dry_run)
         return
 
-    if mode == "mirror":
+    if mode == "mirror" and not delta_only:
         # Parquet stays authoritative + full-history (production unchanged during the
         # parallel window); Delta is written after it from the same session. No compat
         # season files in mirror — data.parquet is still live, and both under the ext
         # glob at once would double-count (they only appear at cutover, which retires it).
+        # --delta-only skips this re-COPY: for a mirror-window BACKFILL (re-)run the
+        # legacy data.parquet is already fresh (the box daily rewrites it every morning),
+        # so re-writing a prod serving key from a laptop is pure risk + wall-clock.
         _build_marts(conn, MART_MODELS, dry_run)
 
     if dry_run:
@@ -704,6 +741,16 @@ def _build_w1_marts(conn, dry_run: bool, delta_full: bool = False) -> None:
         return
 
     from scripts.utils.delta_lake import overwrite_partition  # lazy: needs deltalake
+
+    # INC-22 discipline (2026-07-11 — a laptop --delta-full run swap-froze the host): the
+    # W1 path was the ONE wave without a memory_limit cap, so DuckDB defaulted to ~80% of
+    # RAM and the arrow materializations pushed the machine into swap. Cap like every
+    # other wave builder; spillable operators spill to the temp_directory set in run().
+    for _pragma in ("SET threads=2", f"SET memory_limit='{_safe_memory_limit_gb()}GB'"):
+        try:
+            conn.execute(_pragma)
+        except Exception as _e:
+            print(f"  (note: {_pragma} not applied: {_e})")
 
     all_years = [int(r[0]) for r in conn.execute(
         "SELECT DISTINCT game_year FROM stg_batter_pitches "
@@ -716,7 +763,10 @@ def _build_w1_marts(conn, dry_run: bool, delta_full: bool = False) -> None:
         print(f"\nW1 Delta incremental (mode={mode}): season partition {current_year} only")
 
     for model in MART_MODELS:
-        body = _string_timestamp_wrap(conn, extract_duckdb_sql(model))
+        # Two DESCRIBE-based pins, both value-preserving: TIMESTAMP→ISO VARCHAR (the W8a
+        # binary-ts cure — kept so Delta/compat types match the legacy parquet exactly)
+        # and UNSIGNED→SIGNED (Delta protocol has no unsigned types; uint64 overflows).
+        body = _delta_signed_wrap(conn, _string_timestamp_wrap(conn, extract_duckdb_sql(model)))
         if delta_full:
             years = list(all_years)
         else:
@@ -730,13 +780,29 @@ def _build_w1_marts(conn, dry_run: bool, delta_full: bool = False) -> None:
                 if missing:
                     print(f"  {model}: back-filling missing SF-compat seasons {missing}")
                     years = missing + years
+        # Materialize the mart ONCE into a spillable temp table, then slice seasons from
+        # it locally (2026-07-11 laptop swap-freeze fix, part 2): the previous per-season
+        # `SELECT … WHERE game_year=y` re-executed the FULL mart query per season — a
+        # 12-season backfill = 12 full 7.8M-row substrate scans PER MART (84 total, each
+        # over S3/httpfs). One scan per mart is both ~12× less IO and memory-bounded
+        # (CREATE TEMP TABLE spills to temp_directory under the memory_limit cap above;
+        # each per-season arrow slice is then a cheap local read).
+        _t_scan = time.monotonic()
+        year_filter = "" if len(years) > 1 else f" WHERE {DELTA_PARTITION_COL} = {years[0]}"
+        conn.execute(
+            f"CREATE OR REPLACE TEMP TABLE _w1_delta_src AS "
+            f"SELECT * FROM (\n{body}\n) _d{year_filter}"
+        )
+        print(f"  {model}: source materialized once ({time.monotonic() - _t_scan:.1f}s)", flush=True)
         for year in years:
             _t0 = time.monotonic()
-            # Materialize ONE season per mart (arrow) — bounded memory; the season filter
-            # prunes the stg_batter_pitches parquet scan via row-group stats.
+            # ⚠️ fetch_arrow_table(), NOT .arrow(): on newer DuckDB (the box floats
+            # `duckdb>=1.1.0`) .arrow() returns a RecordBatchReader (no .num_rows) —
+            # the 2026-07-10 backfill crash. fetch_arrow_table() is a pyarrow.Table on
+            # every DuckDB version in play (guarded by test_delta_local_roundtrip.py).
             tbl = conn.execute(
-                f"SELECT * FROM (\n{body}\n) _d WHERE {DELTA_PARTITION_COL} = {year}"
-            ).arrow()
+                f"SELECT * FROM _w1_delta_src WHERE {DELTA_PARTITION_COL} = {year}"
+            ).fetch_arrow_table()
             if tbl.num_rows == 0:
                 # Never replace a partition with emptiness (off-season / early-season
                 # boundary) — an empty replaceWhere would DELETE the partition's rows.
@@ -755,6 +821,8 @@ def _build_w1_marts(conn, dry_run: bool, delta_full: bool = False) -> None:
                 conn.unregister("_delta_season_tmp")
             print(f"  ✔ {model} Δ {DELTA_PARTITION_COL}={year}: {tbl.num_rows:,} rows "
                   f"({time.monotonic() - _t0:.1f}s)", flush=True)
+        # Free this mart's materialization (and any spill it holds) before the next one.
+        conn.execute("DROP TABLE IF EXISTS _w1_delta_src")
         if mode == "cutover":
             # The season files now cover the table → the legacy single data.parquet must
             # go (both under the ext glob = double-count). Raises on failure (loud).
@@ -1789,6 +1857,7 @@ def run(
     w1_only: bool = False,
     w2_only: bool = False,
     delta_full: bool = False,
+    delta_only: bool = False,
     w3pre: bool = False,
     w3pre_only: bool = False,
     w3_only: bool = False,
@@ -2106,7 +2175,7 @@ def run(
     # explicit opt-in full-history backfill).
     if not skip_w1:
         print("\nW1 marts:")
-        _build_w1_marts(conn, dry_run, delta_full)
+        _build_w1_marts(conn, dry_run, delta_full, delta_only)
 
     if w1_only:
         conn.close()
@@ -2242,6 +2311,7 @@ if __name__ == "__main__":
         w1_only="--w1-only" in sys.argv,
         w2_only="--w2-only" in sys.argv,
         delta_full="--delta-full" in sys.argv,
+        delta_only="--delta-only" in sys.argv,
         w3pre="--w3pre" in sys.argv,
         w3pre_only="--w3pre-only" in sys.argv,
         w3_only="--w3-only" in sys.argv,

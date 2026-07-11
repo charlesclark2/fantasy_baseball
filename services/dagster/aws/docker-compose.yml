@@ -39,6 +39,17 @@ x-dagster-env: &dagster-env
 
 x-restart: &restart
   restart: unless-stopped
+  # 2026-07-10 credence-box-disk ALARM (root >85%) fix: docker's json-file logs have NO
+  # default size cap, and the streaming _run_script ops log every build line — unrotated
+  # logs + un-pruned build debris accreted until the disk alarm fired. Cap every
+  # long-running service at 50MB × 3 files (Dagster's own event log lives in Postgres,
+  # so rotated-away container logs lose nothing durable). Takes effect on the next
+  # `up -d` recreation. (The deploy-time image/build-cache prune lives in deploy.sh.)
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "3"
 
 services:
   # --- Metadata Postgres (Dagster's OWN run/event/schedule storage) ------------

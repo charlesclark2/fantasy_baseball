@@ -243,4 +243,14 @@ $COMPOSE exec -T dagster-codeloc python -c "import boto3; boto3.client('sts').ge
 
 # --- success ----------------------------------------------------------------
 for img in "${ROLLBACK_IMAGES[@]}"; do docker image inspect "${img}:rollback" >/dev/null 2>&1 && docker rmi "${img}:rollback" >/dev/null 2>&1 || true; done
+# Disk hygiene (2026-07-10 credence-box-disk >85% ALARM): `up -d --build` leaves the
+# previous image layers + BuildKit cache behind, and with no prune anywhere every deploy
+# accreted GBs until the root disk alarmed. Prune ON SUCCESS ONLY — the :rollback tags
+# were just removed above, so the retired image layers are now dangling and reclaimable;
+# on a failed deploy this never runs, so the rollback image is always preserved. Keep
+# 2GB of build cache so routine rebuilds stay fast; never fail a green deploy over hygiene.
+log "pruning dangling images + build cache (disk hygiene)"
+docker image prune -f >/dev/null 2>&1 || true
+docker builder prune -f --keep-storage 2GB >/dev/null 2>&1 || true
+log "root disk after prune: $(df -h / | awk 'NR==2 {print $5" used, "$4" free"}')"
 log "✅ deploy OK — main (${NEW_HEAD:0:8}) live on the box; all checks passed"

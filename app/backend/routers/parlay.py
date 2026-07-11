@@ -53,6 +53,13 @@ _VALID_SIDES = {
 # Bovada is the documented target book, so it leads (and is the default selection when present).
 _BOOK_PREF = ["bovada", "betmgm", "fanduel", "draftkings", "caesars", "fanatics", "pinnacle"]
 
+# Fallback display names for books that appear only in the K-prop feed (its comparison rows carry the
+# bookmaker_key but no display name); the h2h/totals blobs supply names for the rest.
+_BOOK_DISPLAY = {
+    "bovada": "Bovada", "betmgm": "BetMGM", "fanduel": "FanDuel", "draftkings": "DraftKings",
+    "caesars": "Caesars", "fanatics": "Fanatics", "pinnacle": "Pinnacle",
+}
+
 
 def _one_minus(x) -> float | None:
     return None if x is None else round(1.0 - float(x), 6)
@@ -89,6 +96,47 @@ def _k_index(date: str) -> list[dict]:
     if not payload:
         payload = serving_cache.get_cache_latest("pitcher_k_projection/index")
     return (payload or {}).get("pitchers") or []
+
+
+def _k_detail_blob(pitcher_id: int, date: str) -> dict:
+    """A pitcher's full K-projection payload for `date` (or latest) — carries `book_comparisons`, the
+    per-book posted strikeout line + over/under price + de-vigged implied + model P at that line."""
+    payload = serving_cache.get_cache(f"pitcher_k_projection/{pitcher_id}", date)
+    if not payload:
+        payload = serving_cache.get_cache_latest(f"pitcher_k_projection/{pitcher_id}")
+    return payload or {}
+
+
+def _k_comparison_row(detail: dict, book_key: str, line: float | None) -> dict | None:
+    """The book_comparisons row for a book at a given posted line (or that book's first row when
+    `line` is None), else None."""
+    for c in detail.get("book_comparisons") or []:
+        if c.get("book") != book_key or c.get("over_odds") is None and c.get("under_odds") is None:
+            continue
+        if line is None or (c.get("line") is not None and float(c["line"]) == float(line)):
+            return c
+    return None
+
+
+def _k_books(detail: dict, line: float, book_names: dict) -> tuple[dict, dict]:
+    """Per-book odds maps for the over / under strikeout sides AT the given (primary) line. Each entry
+    is {american, book_devig_prob, model_prob, line}; also records book display names into `book_names`."""
+    over: dict[str, dict] = {}
+    under: dict[str, dict] = {}
+    for c in detail.get("book_comparisons") or []:
+        bk = c.get("book")
+        if not bk or c.get("line") is None or float(c["line"]) != float(line):
+            continue
+        book_names.setdefault(bk, {"book_key": bk, "book_name": _BOOK_DISPLAY.get(bk, bk.title()),
+                                   "is_sharp_reference": bk == "pinnacle"})
+        bimp = c.get("book_implied_p_over")
+        if c.get("over_odds") is not None:
+            over[bk] = {"american": c.get("over_odds"), "line": float(line),
+                        "book_devig_prob": bimp, "model_prob": c.get("model_p_over")}
+        if c.get("under_odds") is not None:
+            under[bk] = {"american": c.get("under_odds"), "line": float(line),
+                         "book_devig_prob": _one_minus(bimp), "model_prob": c.get("model_p_under")}
+    return over, under
 
 
 def _h2h_book_row(blob: dict, book_key: str) -> dict | None:
@@ -172,11 +220,18 @@ def get_parlay_legs(date: str | None = None, _: str = Depends(get_user_id)) -> d
     slate = date or current_game_date_iso()
     games: dict[int, dict] = {}
     book_names: dict[str, dict] = {}
+    _bo_cache: dict[int, dict] = {}
+
+    def bo(game_pk: int) -> dict:
+        """Memoized book-odds blob read (one DynamoDB round-trip per game per request)."""
+        if game_pk not in _bo_cache:
+            _bo_cache[game_pk] = _book_odds_blob(game_pk)
+        return _bo_cache[game_pk]
 
     def _game(game_pk: int, home: str | None, away: str | None, start_utc=None) -> dict:
         g = games.get(game_pk)
         if g is None:
-            g = {"game_pk": game_pk, "home_team": home, "away_team": away,
+            g = {"game_pk": game_pk, "home_team": home, "away_team": away, "matchup": None,
                  "game_start_utc": start_utc, "markets": []}
             games[game_pk] = g
         return g
@@ -189,7 +244,7 @@ def get_parlay_legs(date: str | None = None, _: str = Depends(get_user_id)) -> d
         if gp is None or mp is None or mt not in ("h2h", "totals"):
             continue
         g = _game(gp, p.get("home_team"), p.get("away_team"), p.get("game_start_utc"))
-        blob = _book_odds_blob(gp)
+        blob = bo(gp)
         if mt == "h2h":
             home_books, away_books, names = _h2h_books(blob)
             book_names.update(names)
@@ -214,22 +269,36 @@ def get_parlay_legs(date: str | None = None, _: str = Depends(get_user_id)) -> d
                 ],
             })
 
-    # strikeouts (E5.5) — model prob only (per-book K lines vary by book; the user enters those odds).
+    # strikeouts (E5.5) — enriched with each book's posted K line + over/under price at the pitcher's
+    # primary (most-common) line, from the per-pitcher K detail blob.
     for row in _k_index(slate):
         gp = row.get("game_pk")
         line = row.get("primary_line")
         p_over = row.get("model_p_over")
-        if gp is None or line is None or p_over is None:
+        pid = row.get("pitcher_id")
+        if gp is None or line is None or p_over is None or pid is None:
             continue
+        over_books, under_books = _k_books(_k_detail_blob(pid, slate), float(line), book_names)
         g = _game(gp, None, None, row.get("game_datetime"))
+        # A strikeout-only game (no h2h/totals pick) is created without team names. Recover them from
+        # the book-odds blob (properly home/away-oriented); if that's absent, fall back to a
+        # "pitcher's team vs opponent" matchup label from the K row so the header is never "Away @ Home".
+        if not g.get("home_team") or not g.get("away_team"):
+            ob = bo(gp)
+            g["home_team"] = g.get("home_team") or ob.get("home_team")
+            g["away_team"] = g.get("away_team") or ob.get("away_team")
+            if (not g.get("home_team") or not g.get("away_team")) and not g.get("matchup"):
+                team, opp = row.get("team"), row.get("opponent")
+                if team or opp:
+                    g["matchup"] = f"{team or '?'} vs {opp or '?'}"
         g["markets"].append({
             "market_type": "strikeouts",
             "label": f"{row.get('full_name') or 'Pitcher'} Strikeouts",
-            "pitcher_id": row.get("pitcher_id"), "pitcher_name": row.get("full_name"),
+            "pitcher_id": pid, "pitcher_name": row.get("full_name"),
             "line": float(line),
             "sides": [
-                {"side": "over", "model_prob": round(float(p_over), 4), "books": {}},
-                {"side": "under", "model_prob": round(1.0 - float(p_over), 4), "books": {}},
+                {"side": "over", "model_prob": round(float(p_over), 4), "books": over_books},
+                {"side": "under", "model_prob": round(1.0 - float(p_over), 4), "books": under_books},
             ],
         })
 
@@ -257,7 +326,7 @@ def get_parlay_legs(date: str | None = None, _: str = Depends(get_user_id)) -> d
 # POST /parlay/evaluate — evaluate a user-built parlay
 # ---------------------------------------------------------------------------
 
-def _resolve_leg(leg, picks_by_key: dict[tuple, dict], k_by_pitcher: dict[int, dict]) -> dict:
+def _resolve_leg(leg, picks_by_key: dict[tuple, dict], k_by_pitcher: dict[int, dict], date: str) -> dict:
     """Resolve one leg from the serving cache → (oriented hit_prob, book_odds, line, display fields).
 
     * h2h:    model P(home win) from picks/today (book-independent); odds from the selected book.
@@ -305,9 +374,23 @@ def _resolve_leg(leg, picks_by_key: dict[tuple, dict], k_by_pitcher: dict[int, d
             return out
         primary = row.get("primary_line")
         out["pitcher_name"] = row.get("full_name")
-        out["line"] = primary
+        out["line"] = leg.line if leg.line is not None else primary
+        # Auto-fill the odds + use the model P at the SELECTED BOOK's posted line, from the K detail
+        # blob's per-book comparison rows (mirrors the totals book-line handling).
+        if book_key and leg.pitcher_id is not None:
+            comp = _k_comparison_row(_k_detail_blob(leg.pitcher_id, date), book_key, out["line"])
+            if comp is not None:
+                out["line"] = comp.get("line", out["line"])
+                mp_over = comp.get("model_p_over")
+                out["hit_prob"] = mp_over if side == "over" else _one_minus(mp_over) if mp_over is not None else None
+                if out["book_odds_american"] is None:
+                    out["book_odds_american"] = comp.get("over_odds") if side == "over" else comp.get("under_odds")
+                if out["hit_prob"] is not None:
+                    return out
+        # Fallback: the index model prob at the primary line (a non-primary line has no served prob).
         if leg.line is not None and primary is not None and float(leg.line) != float(primary):
-            return out  # a non-primary line has no served prob → excluded gracefully
+            return out  # excluded gracefully
+        out["line"] = primary
         out["hit_prob"] = pm.oriented_hit_prob("strikeouts", side, row.get("model_p_over"))
         return out
 
@@ -338,7 +421,7 @@ def evaluate_parlay(req: ParlayEvaluateRequest, _: str = Depends(get_user_id)) -
 
     math_legs: list[dict] = []
     for leg in req.legs:
-        r = _resolve_leg(leg, picks_by_key, k_by_pitcher)
+        r = _resolve_leg(leg, picks_by_key, k_by_pitcher, slate)
         math_legs.append({
             "game_pk": leg.game_pk,
             "market_type": leg.market_type,
