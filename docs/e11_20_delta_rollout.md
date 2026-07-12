@@ -203,13 +203,56 @@ grep -E "W11D_PUBLIC_BETTING_NIGHTLY|W7B_LAKEHOUSE_S3" .env  # BOX: W11D_PUBLIC_
 Leave `LAKEHOUSE_DELTA_W1` unset. Let ONE scheduled daily cycle run green → in Dagit,
 record every `lakehouse_*_op` duration (the per-wave BEFORE row of the AC-B table).
 
-**Step 2 — mirror mode + the one-time Delta backfill (BOX; backfill ≈ a full W1 rebuild, >1 min).**
+**Step 2 — mirror mode + the one-time Delta backfill (backfill ≈ a full W1 rebuild, >1 min).**
+⚠️ **Set the persistent `.env` flag ONLY on an image that carries the current code.** The
+2026-07-10 backfill crash (`.arrow()` → RecordBatchReader on the box's DuckDB) happened
+with `LAKEHOUSE_DELTA_W1=mirror` already appended to `.env` — in that state every DAILY
+`lakehouse_w1_pitch_marts_op` would hit the same crash and HALT the serving-critical
+chain. If the deployed image predates a Delta-path fix, revert first:
+`sed -i '/^LAKEHOUSE_DELTA_W1=/d' ~/app/services/dagster/aws/.env && cd ~/app/services/dagster/aws && docker compose up -d`.
+🧪 **Laptop pre-prod gate (run BEFORE any box attempt — no deploy needed):** the delta-rs
+write path is exercised end-to-end against local FS by
+`uv run pytest betting_ml/tests/test_delta_local_roundtrip.py -q` (in the fast gate; it
+runs the REAL overwrite_partition/compact/vacuum/delta_scan code, so a deltalake/duckdb
+API-shape regression fails HERE, not on the box).
+💻 **Laptop alternative for the backfill itself:** the write path is identical from the
+laptop (credential chain resolves the ambient AWS keys; region is pinned in code), so the
+one-time backfill can run WITHOUT waiting on a deploy. `--delta-only` skips the redundant
+legacy-parquet re-COPY (the box daily refreshes `data.parquet` every morning — rewriting a
+prod serving key from a laptop is pure risk + wall-clock). The build is memory-capped
+(`_safe_memory_limit_gb` — 60% of RAM) and scans each mart's substrate ONCE (spillable
+temp table, then per-season slices), after a 2026-07-11 laptop run swap-froze the host on
+the uncapped per-season-rescan design:
+```bash
+# LAPTOP, repo root (>1 min; ~1 substrate scan per mart):
+LAKEHOUSE_DELTA_W1=mirror uv run python scripts/run_w1_lakehouse.py --w1-only --delta-full --delta-only
+```
+Box-native form (REQUIRES the Step-1 deploy — the pre-E11.20 image has neither
+`deltalake` nor the three backfill-crash fixes). The flag is passed at the `exec` level
+ONLY; it is persisted to `.env` AFTER the backfill succeeds (a persisted flag + a failed
+backfill = tomorrow's daily HALTs on the missing Delta tables):
+```bash
+# BOX shell (SSM in first): nohup survives an SSM session drop; -u = unbuffered progress
+nohup docker compose -f ~/app/services/dagster/aws/docker-compose.yml exec -T \
+  -e AWS_DEFAULT_REGION=us-east-2 -e LAKEHOUSE_DELTA_W1=mirror \
+  dagster-codeloc python -u scripts/run_w1_lakehouse.py --w1-only --delta-full --delta-only \
+  > /tmp/delta_backfill.log 2>&1 &
+tail -f /tmp/delta_backfill.log                              # BOX: live progress (Ctrl-C detaches the tail only)
+# BOX, optional second SSM session — container-level memory/CPU alongside the in-run readout:
+docker stats $(docker ps --format '{{.Names}}' | grep codeloc)
+```
+**Reading the progress lines (memory instrumentation, added 2026-07-12):** the run prints
+a settings banner (`[w1-delta] duckdb memory_limit=… threads=… temp_directory=…`), then
+per mart `source materialized once (Ns) [rss=… duck=… spill=…]` followed by ~12 per-season
+`✔ <mart> Δ game_year=YYYY: N rows (Ns) [rss=… duck=… spill=…]` lines. `rss` = the whole
+python process (includes the arrow slice + delta-rs, which DuckDB does NOT account for);
+`duck` = DuckDB's tracked buffers vs its limit; `spill` = bytes pushed to temp_directory.
+`duck` pinned at the limit with `spill` growing = spilling as designed (slow, safe);
+`rss` climbing season-over-season without returning = report it (a leak in the write path).
+On SUCCESS only, persist the flag for the mirror daily cycles:
 ```bash
 echo 'LAKEHOUSE_DELTA_W1=mirror' >> ~/app/services/dagster/aws/.env
 cd ~/app/services/dagster/aws && docker compose up -d        # recreate so dagster-codeloc picks up the flag
-docker compose -f ~/app/services/dagster/aws/docker-compose.yml exec -T \
-  -e AWS_DEFAULT_REGION=us-east-2 -e LAKEHOUSE_DELTA_W1=mirror \
-  dagster-codeloc python -u scripts/run_w1_lakehouse.py --w1-only --delta-full
 ```
 
 **Step 3 — parity (BOX), then 2–3 mirror daily cycles.**
