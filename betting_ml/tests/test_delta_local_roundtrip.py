@@ -42,16 +42,20 @@ def local_delta(tmp_path, monkeypatch):
 
 def _season_slice(conn, year: int, n: int = 40, extra_col: bool = False):
     """A tiny mart-shaped season slice via the SAME fetch the builder uses —
-    fetch_arrow_table(), the call whose .arrow() sibling regressed on the box."""
+    to_arrow_table() with a fetch_arrow_table() fallback (the .arrow() sibling regressed
+    on the box 2026-07-10; fetch_arrow_table() went deprecated on the box's DuckDB
+    2026-07-12 — this mirrors the builder's preference order exactly)."""
     extra = ", 99.9 AS stuff_plus" if extra_col else ""
-    tbl = conn.execute(
+    res = conn.execute(
         f"SELECT {year} AS game_year, (1000 + i) AS game_pk, "
         f"       ('{year}-06-' || lpad(((i % 28) + 1)::varchar, 2, '0')) AS game_date, "
         f"       (i * 0.1) AS launch_speed{extra} "
         f"FROM range({n}) t(i)"
-    ).fetch_arrow_table()
+    )
+    fetch = getattr(res, "to_arrow_table", None)
+    tbl = fetch() if fetch is not None else res.fetch_arrow_table()
     # the exact attribute the box crash hit — a reader has no num_rows
-    assert tbl.num_rows == n, "fetch_arrow_table must return a pyarrow.Table (box crash class)"
+    assert tbl.num_rows == n, "the arrow fetch must return a pyarrow.Table (box crash class)"
     return tbl
 
 

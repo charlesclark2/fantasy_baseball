@@ -492,6 +492,50 @@ def _safe_memory_limit_gb() -> int:
     return max(2, min(11, int(ram * 0.6)))
 
 
+def _rss_gb() -> tuple[float | None, float]:
+    """(current_rss_gb | None, peak_rss_gb) — pure stdlib (the box image carries no psutil).
+    Linux: current from /proc/self/status VmRSS, peak from ru_maxrss (KILOBYTES there).
+    macOS: no /proc → current unavailable (None); ru_maxrss is BYTES on darwin."""
+    import resource
+
+    peak_raw = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    peak = peak_raw / (1024 ** 3) if sys.platform == "darwin" else peak_raw / (1024 ** 2)
+    cur = None
+    try:
+        with open("/proc/self/status") as fh:
+            for line in fh:
+                if line.startswith("VmRSS:"):
+                    cur = int(line.split()[1]) / (1024 ** 2)  # kB → GiB
+                    break
+    except OSError:
+        pass
+    return cur, peak
+
+
+def _mem_status(conn) -> str:
+    """Compact live memory readout for the W1-Delta progress lines (2026-07-12, after the
+    laptop swap-freeze): rss = THIS python process (includes the arrow season slice, which
+    DuckDB does NOT account for), duck = DuckDB's tracked buffer usage vs its limit,
+    spill = bytes it has pushed to temp_directory. rss climbing while duck stays flat ⇒
+    the arrow slice / delta-rs write is the consumer; duck at its limit with spill>0 ⇒
+    DuckDB is spilling as designed (slow but safe). Never raises — observability must not
+    kill a build."""
+    cur, peak = _rss_gb()
+    parts = [f"rss={cur:.1f}G peak={peak:.1f}G" if cur is not None
+             else f"rss_peak={peak:.1f}G"]
+    try:
+        used, spill = conn.execute(
+            "SELECT coalesce(sum(memory_usage_bytes),0), "
+            "       coalesce(sum(temporary_storage_bytes),0) FROM duckdb_memory()"
+        ).fetchone()
+        parts.append(f"duck={used / 1024**3:.1f}G")
+        if spill:
+            parts.append(f"spill={spill / 1024**3:.1f}G")
+    except Exception:  # noqa: BLE001 — older DuckDB without duckdb_memory(); skip quietly
+        pass
+    return " ".join(parts)
+
+
 def _string_timestamp_wrap(conn, mart_sql: str) -> str:
     """Store every TIMESTAMP-family output column as an ISO **VARCHAR** in the parquet.
 
@@ -751,6 +795,15 @@ def _build_w1_marts(conn, dry_run: bool, delta_full: bool = False,
             conn.execute(_pragma)
         except Exception as _e:
             print(f"  (note: {_pragma} not applied: {_e})")
+    try:
+        _lim, _thr, _tmp = conn.execute(
+            "SELECT current_setting('memory_limit'), current_setting('threads'), "
+            "       current_setting('temp_directory')"
+        ).fetchone()
+        print(f"  [w1-delta] duckdb memory_limit={_lim} threads={_thr} "
+              f"temp_directory={_tmp or '(unset!)'} | {_mem_status(conn)}", flush=True)
+    except Exception:  # noqa: BLE001 — banner is observability only
+        pass
 
     all_years = [int(r[0]) for r in conn.execute(
         "SELECT DISTINCT game_year FROM stg_batter_pitches "
@@ -793,16 +846,21 @@ def _build_w1_marts(conn, dry_run: bool, delta_full: bool = False,
             f"CREATE OR REPLACE TEMP TABLE _w1_delta_src AS "
             f"SELECT * FROM (\n{body}\n) _d{year_filter}"
         )
-        print(f"  {model}: source materialized once ({time.monotonic() - _t_scan:.1f}s)", flush=True)
+        print(f"  {model}: source materialized once ({time.monotonic() - _t_scan:.1f}s) "
+              f"[{_mem_status(conn)}]", flush=True)
         for year in years:
             _t0 = time.monotonic()
-            # ⚠️ fetch_arrow_table(), NOT .arrow(): on newer DuckDB (the box floats
+            # ⚠️ Materialized-Table fetch, NOT .arrow(): on newer DuckDB (the box floats
             # `duckdb>=1.1.0`) .arrow() returns a RecordBatchReader (no .num_rows) —
-            # the 2026-07-10 backfill crash. fetch_arrow_table() is a pyarrow.Table on
-            # every DuckDB version in play (guarded by test_delta_local_roundtrip.py).
-            tbl = conn.execute(
+            # the 2026-07-10 backfill crash. to_arrow_table() is the current API;
+            # fetch_arrow_table() is its deprecated alias (the box's 2026-07-12 backfill
+            # warned per-call) — prefer the new name, fall back for older DuckDB
+            # (guarded by test_delta_local_roundtrip.py).
+            _res = conn.execute(
                 f"SELECT * FROM _w1_delta_src WHERE {DELTA_PARTITION_COL} = {year}"
-            ).fetch_arrow_table()
+            )
+            _fetch = getattr(_res, "to_arrow_table", None)
+            tbl = _fetch() if _fetch is not None else _res.fetch_arrow_table()
             if tbl.num_rows == 0:
                 # Never replace a partition with emptiness (off-season / early-season
                 # boundary) — an empty replaceWhere would DELETE the partition's rows.
@@ -819,8 +877,12 @@ def _build_w1_marts(conn, dry_run: bool, delta_full: bool = False,
                     f"'{LAKEHOUSE}/{model}/season_{year}/data.parquet' (FORMAT PARQUET)"
                 )
                 conn.unregister("_delta_season_tmp")
-            print(f"  ✔ {model} Δ {DELTA_PARTITION_COL}={year}: {tbl.num_rows:,} rows "
-                  f"({time.monotonic() - _t0:.1f}s)", flush=True)
+            # Release the arrow slice BEFORE the mem readout so the line reflects the
+            # steady-state footprint, not the just-freed slice.
+            _rows = tbl.num_rows
+            del tbl
+            print(f"  ✔ {model} Δ {DELTA_PARTITION_COL}={year}: {_rows:,} rows "
+                  f"({time.monotonic() - _t0:.1f}s) [{_mem_status(conn)}]", flush=True)
         # Free this mart's materialization (and any spill it holds) before the next one.
         conn.execute("DROP TABLE IF EXISTS _w1_delta_src")
         if mode == "cutover":

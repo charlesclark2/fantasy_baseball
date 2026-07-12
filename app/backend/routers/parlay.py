@@ -39,6 +39,7 @@ from app.backend.dependencies import get_user_id
 from app.backend.models.parlay import ParlayEvaluateRequest
 from app.backend.services import parlay_calc as pm  # pure-stdlib math (no numpy/scipy — Lambda-safe)
 from app.backend.services import serving_cache
+from app.backend.services.lakehouse_read import lakehouse_query  # fail-open DuckDB→S3 (never raises)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/parlay", tags=["parlay"])
@@ -206,6 +207,41 @@ def _totals_books(blob: dict) -> tuple[dict, dict, dict]:
     return over, under, names
 
 
+_GAMES_TEAMS_QUERY = (
+    "SELECT game_pk, home_team_name, away_team_name "
+    "FROM baseball_data.betting.stg_statsapi_games WHERE game_pk IN ({ids})"
+)
+
+
+def _fill_missing_team_names(games: dict[int, dict]) -> None:
+    """Backfill home/away team names for any game still missing them, from stg_statsapi_games (the
+    schedule table the pick-detail page uses). Fail-open: on any error the games keep whatever label
+    they had. Bounded to the unnamed game_pks."""
+    unnamed = [gp for gp, g in games.items() if not (g.get("home_team") and g.get("away_team"))]
+    if not unnamed:
+        return
+    ids = ",".join(str(int(gp)) for gp in unnamed)
+    rows = lakehouse_query(_GAMES_TEAMS_QUERY.format(ids=ids))  # never raises → [] on failure
+    by_pk: dict[int, dict] = {}
+    for r in rows:
+        gpk = r.get("GAME_PK")
+        if gpk is None:
+            continue
+        gpk = int(gpk)
+        # Prefer a snapshot that actually carries the names (schedule parquet can hold dupes).
+        if by_pk.get(gpk) is None or (r.get("HOME_TEAM_NAME") and not by_pk[gpk].get("HOME_TEAM_NAME")):
+            by_pk[gpk] = r
+    for gp in unnamed:
+        r = by_pk.get(gp)
+        if not r:
+            continue
+        g = games[gp]
+        g["home_team"] = g.get("home_team") or r.get("HOME_TEAM_NAME")
+        g["away_team"] = g.get("away_team") or r.get("AWAY_TEAM_NAME")
+        if g.get("home_team") and g.get("away_team"):
+            g["matchup"] = None  # proper oriented names supersede the "team vs opponent" fallback
+
+
 @router.get("/legs")
 def get_parlay_legs(date: str | None = None, _: str = Depends(get_user_id)) -> dict:
     """Return the selectable parlay legs for a slate — games × markets × sides that carry a served
@@ -301,6 +337,13 @@ def get_parlay_legs(date: str | None = None, _: str = Depends(get_user_id)) -> d
                 {"side": "under", "model_prob": round(1.0 - float(p_over), 4), "books": under_books},
             ],
         })
+
+    # Team-name backfill for any game still missing home/away names — almost always a strikeout-only
+    # game (a K projection with no served h2h/totals pick or odds blob; the K writer's team/opponent
+    # is best-effort and often null). Resolve them from stg_statsapi_games — the same stable schedule
+    # table the pick-detail page uses — via the fail-open DuckDB→S3 reader (never raises; zero
+    # Snowflake). Bounded to the unnamed game_pks; a miss just leaves the "team vs opponent" matchup.
+    _fill_missing_team_names(games)
 
     # Book selector — union across games, US books first (Bovada leads), Pinnacle (sharp ref) last.
     def _rank(bk: str) -> int:
