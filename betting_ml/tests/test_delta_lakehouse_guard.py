@@ -107,13 +107,18 @@ def test_registry_matches_builder_w1_list():
 def test_storage_options_never_emits_empty_creds(monkeypatch):
     import sys
     sys.path.insert(0, str(REPO))
+    from scripts.utils import delta_lake
     from scripts.utils.delta_lake import storage_options
+
+    # Pin the botocore-chain fallback to "no credentials found" so these asserts test the
+    # env handling, not whatever this machine's ambient AWS profile resolves to.
+    monkeypatch.setattr(delta_lake, "_chain_credentials", lambda: None)
 
     for var in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"):
         monkeypatch.delenv(var, raising=False)
     opts = storage_options()
     assert "AWS_ACCESS_KEY_ID" not in opts and "AWS_SECRET_ACCESS_KEY" not in opts, \
-        "unset env keys must be OMITTED so delta-rs resolves the instance role"
+        "unset env keys (+ an empty chain) must yield NO cred entries — never empty strings"
     assert opts.get("AWS_REGION") == "us-east-2", \
         "region must be PINNED to the artifacts bucket, never inherited from AWS_DEFAULT_REGION"
 
@@ -129,6 +134,38 @@ def test_storage_options_never_emits_empty_creds(monkeypatch):
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret")
     opts = storage_options()
     assert opts["AWS_ACCESS_KEY_ID"] == "AKIAEXAMPLE"
+
+
+def test_storage_options_resolves_the_chain_when_env_is_empty_strings(monkeypatch):
+    """The 2026-07-12 box --delta-full failure: compose `${AWS_ACCESS_KEY_ID}` of an
+    UNSET host var lands in the container as an EMPTY STRING; delta-rs's object_store
+    reads the env ITSELF and signs with the empty AKID (AuthorizationHeaderMalformed)
+    unless storage_options passes explicit credentials. So with empty-string env,
+    storage_options must (a) not forward the empty strings and (b) forward the
+    botocore-chain credentials (the instance role on the box) explicitly."""
+    import sys
+    from collections import namedtuple
+
+    sys.path.insert(0, str(REPO))
+    from scripts.utils import delta_lake
+
+    Frozen = namedtuple("Frozen", "access_key secret_key token")
+    monkeypatch.setattr(delta_lake, "_chain_credentials",
+                        lambda: Frozen("AKIAROLE", "rolesecret", "roletoken"))
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "")
+    opts = delta_lake.storage_options()
+    assert opts["AWS_ACCESS_KEY_ID"] == "AKIAROLE", \
+        "empty-string env must be ignored and the chain-resolved role creds passed explicitly"
+    assert opts["AWS_SECRET_ACCESS_KEY"] == "rolesecret"
+    assert opts["AWS_SESSION_TOKEN"] == "roletoken", \
+        "instance-role creds are temporary — dropping the session token breaks the signature"
+
+    # a chain hit WITHOUT a token (plain long-lived keys in a profile) must omit the token key
+    monkeypatch.setattr(delta_lake, "_chain_credentials",
+                        lambda: Frozen("AKIAPROF", "profsecret", None))
+    opts = delta_lake.storage_options()
+    assert opts["AWS_ACCESS_KEY_ID"] == "AKIAPROF" and "AWS_SESSION_TOKEN" not in opts
 
 
 # ── 5: retention floor + partition-pinned merge ─────────────────────────────────────
