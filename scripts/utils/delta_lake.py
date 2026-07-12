@@ -18,11 +18,13 @@ Spike-anchored design (docs/e11_20a_delta_polars_spike.md — do NOT re-derive):
     betting_ml/tests/test_delta_lakehouse_guard.py).
 
 🪪 S3 AUTH (the AKID landmine in delta-rs dress — W7b-1 / CLAUDE.md): delta-rs takes
-`storage_options`, NOT boto3, but the same rule applies — NEVER pass
-`os.environ.get("AWS_ACCESS_KEY_ID")` through when it is unset (None/empty kills the
-credential chain). `storage_options()` passes explicit keys ONLY when both are present
-(laptop/dev); otherwise it passes region alone so delta-rs' object-store resolves the
-EC2 instance role (IMDS), exactly like lakehouse_raw_writer.make_s3_client().
+`storage_options`, NOT boto3, and here even OMITTING the keys is not enough — its
+object_store reads the AWS_* env vars itself, and a compose-interpolated EMPTY
+`AWS_ACCESS_KEY_ID=""` in the container gets signed with verbatim (the 2026-07-12 box
+backfill 400). `storage_options()` therefore forwards explicit non-empty env keys when
+present (laptop/dev), else resolves the botocore chain ITSELF (`_chain_credentials` —
+the proven make_s3_client chain, which correctly skips empty env vars and reaches the
+instance role) and passes those credentials explicitly.
 
 `deltalake` is imported LAZILY inside each function so importing this module never
 requires the dep — callers are all gated behind delta_w1_mode() != "off", and a box
@@ -53,11 +55,38 @@ except ImportError:  # pragma: no cover — lean image layout (COPY scripts/util
 DEFAULT_REGION = "us-east-2"  # the artifacts bucket's region (DuckDB + delta-rs both need it explicit)
 
 
+def _chain_credentials():
+    """Resolve AWS credentials through botocore's FULL chain (env → config/profile →
+    IMDS instance role) and return the frozen credentials, or None. This is the same
+    chain every post-INC-16 S3 exporter uses in the box container (make_s3_client) —
+    proven to reach the instance role there, including the empty-string-env case
+    (botocore treats `AWS_ACCESS_KEY_ID=""` as unset and moves on; object_store does
+    NOT — see storage_options). Never raises: no boto3 / no creds → None."""
+    try:
+        import boto3
+
+        creds = boto3.session.Session().get_credentials()
+        if creds is None:
+            return None
+        return creds.get_frozen_credentials()
+    except Exception:  # noqa: BLE001 — fall through; delta-rs tries its own chain
+        return None
+
+
 def storage_options() -> dict[str, str]:
-    """delta-rs S3 storage_options that resolve the EC2 instance role when no explicit
-    keys are present. Explicit keys are forwarded ONLY when BOTH id+secret are set and
-    non-empty — a None/empty AKID must never reach the option dict (the
-    AuthorizationHeaderMalformed class)."""
+    """delta-rs S3 storage_options that ALWAYS carry concrete credentials when the
+    environment can produce them. Explicit env keys are forwarded ONLY when BOTH
+    id+secret are set and non-empty; otherwise the botocore chain is resolved HERE and
+    its credentials passed explicitly.
+
+    ⚠️ WHY omitting the keys is NOT enough (2026-07-12 box --delta-full failure,
+    AuthorizationHeaderMalformed): delta-rs's object_store reads the AWS_* env vars
+    ITSELF — and docker-compose `${AWS_ACCESS_KEY_ID}` interpolation of a var that is
+    UNSET on the host lands in the container as an EMPTY STRING, which object_store
+    signs with verbatim (empty AKID → 400) instead of falling through to IMDS. Passing
+    chain-resolved credentials explicitly means delta-rs never consults the env. Resolved
+    fresh on every call — each overwrite_partition/maintenance call re-resolves, so a
+    multi-hour backfill never outlives the instance role's rotating credentials."""
     # Region is PINNED to the artifacts bucket's region — never inherited from
     # AWS_DEFAULT_REGION (a laptop/serving env pointing at us-east-1 would misroute the
     # bucket; the INC-31 qualified_bet_notifier lesson: pin region per RESOURCE).
@@ -70,6 +99,13 @@ def storage_options() -> dict[str, str]:
         token = os.environ.get("AWS_SESSION_TOKEN")
         if token:
             opts["AWS_SESSION_TOKEN"] = token
+        return opts
+    frozen = _chain_credentials()
+    if frozen is not None and frozen.access_key and frozen.secret_key:
+        opts["AWS_ACCESS_KEY_ID"] = frozen.access_key
+        opts["AWS_SECRET_ACCESS_KEY"] = frozen.secret_key
+        if frozen.token:
+            opts["AWS_SESSION_TOKEN"] = frozen.token
     return opts
 
 
