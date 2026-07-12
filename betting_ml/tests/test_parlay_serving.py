@@ -394,11 +394,34 @@ def test_router_strikeout_only_game_recovers_team_names(monkeypatch):
     # Game 1 has an odds blob (oriented home/away); game 2 has none.
     monkeypatch.setattr(pr, "_book_odds_blob",
                         lambda gp: {"home_team": "ATL", "away_team": "PHI"} if gp == 1 else {})
+    monkeypatch.setattr(pr, "lakehouse_query", lambda sql, params=None: [])  # schedule backfill empty
 
     out = pr.get_parlay_legs(date="2026-07-10", _="user")
     by_pk = {g["game_pk"]: g for g in out["games"]}
     assert by_pk[1]["home_team"] == "ATL" and by_pk[1]["away_team"] == "PHI"  # oriented from odds blob
     assert by_pk[2]["home_team"] is None and by_pk[2]["matchup"] == "MIA vs WSH"  # K-row fallback
+
+
+def test_router_team_names_backfilled_from_schedule(monkeypatch):
+    """A strikeout-only game with no served names/odds is backfilled from stg_statsapi_games (the same
+    schedule table the pick-detail page uses), superseding the 'team vs opponent' matchup fallback."""
+    from app.backend.routers import parlay as pr
+
+    monkeypatch.setattr(pr, "_picks_blob", lambda date: [])
+    monkeypatch.setattr(pr, "_k_index", lambda date: [
+        {"pitcher_id": 11, "game_pk": 1, "primary_line": 5.5, "model_p_over": 0.60,
+         "full_name": "Nola", "team": None, "opponent": None, "game_datetime": "2026-07-12T23:00:00Z"}])
+    monkeypatch.setattr(pr, "_k_detail_blob", lambda pid, d: {})
+    monkeypatch.setattr(pr, "_book_odds_blob", lambda gp: {})
+    # Schedule parquet can hold dupes; the name-bearing snapshot must win.
+    monkeypatch.setattr(pr, "lakehouse_query", lambda sql, params=None: [
+        {"GAME_PK": 1, "HOME_TEAM_NAME": None, "AWAY_TEAM_NAME": None},
+        {"GAME_PK": 1, "HOME_TEAM_NAME": "Atlanta Braves", "AWAY_TEAM_NAME": "Philadelphia Phillies"},
+    ])
+
+    g = pr.get_parlay_legs(date="2026-07-12", _="user")["games"][0]
+    assert g["home_team"] == "Atlanta Braves" and g["away_team"] == "Philadelphia Phillies"
+    assert g["matchup"] is None
 
 
 def test_router_evaluate_strikeouts_uses_book_odds(monkeypatch):
