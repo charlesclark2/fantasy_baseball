@@ -1,5 +1,14 @@
 [
   {
+    "week": "2026-07-13",
+    "items": [
+      {
+        "tag": "improved",
+        "text": "The 'Results — who called it' section on the Expected Value Tracker and Dashboard is now collapsible. The summary stays visible at a glance — how many games completed and the model-vs-market call tally — while the per-game breakdown is tucked away by default to keep the page compact. Click the header to expand or hide the individual game cards. These remain factual model outputs, not betting advice."
+      }
+    ]
+  },
+  {
     "week": "2026-07-06",
     "items": [
       {

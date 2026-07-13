@@ -12,6 +12,8 @@
 // favorite; for total runs there is no directional market call to grade, so the
 // closing line and the final combined total are reported as a plain fact.
 
+import { ChevronDown } from "lucide-react"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { normalizeTeam } from "@/lib/teams"
 import { cn } from "@/lib/utils"
 
@@ -211,13 +213,19 @@ export function GameScorecardCompact({ scorecard: sc }: { scorecard: GameScoreca
  * A "Results" section rendering a responsive grid of compact scorecards. Renders
  * nothing when there are no completed games (so callers can drop it in
  * unconditionally for the selected date).
+ *
+ * Collapsible: the header (title + completed count + the model/market call tally) stays visible so
+ * the at-a-glance summary is always there, and the per-game grid collapses to keep the surface
+ * compact. Starts collapsed by default (`defaultOpen`).
  */
 export function ScorecardResults({
   scorecards,
   title = "Results",
+  defaultOpen = false,
 }: {
   scorecards: GameScorecardData[] | undefined
   title?: string
+  defaultOpen?: boolean
 }) {
   const finals = (scorecards ?? []).filter((s) => s && s.status === "Final" && s.markets?.length)
   if (!finals.length) return null
@@ -238,8 +246,9 @@ export function ScorecardResults({
   }
 
   return (
-    <section className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+    <Collapsible defaultOpen={defaultOpen} className="flex flex-col gap-3">
+      <CollapsibleTrigger className="group flex w-full flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md text-left transition-colors hover:opacity-90">
+        <ChevronDown className="h-4 w-4 shrink-0 self-center text-gray-500 transition-transform duration-200 group-data-[state=open]:rotate-180" />
         <h2 className="text-base font-semibold text-white">{title}</h2>
         <span className="text-xs text-gray-500">{finals.length} completed {finals.length === 1 ? "game" : "games"}</span>
         {(modelDecisive > 0 || marketDecisive > 0) && (
@@ -252,17 +261,21 @@ export function ScorecardResults({
             <span className="ml-1 text-gray-600">calls correct</span>
           </span>
         )}
-      </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {finals.map((s) => (
-          <GameScorecardCompact key={s.game_pk ?? Math.random()} scorecard={s} />
-        ))}
-      </div>
-      <p className="text-[11px] leading-relaxed text-gray-600">
-        The side the model favored and the side the market favored, each vs. the final outcome — one
-        call per market, pushes excluded from the tally. A miss is shown as plainly as a hit. Model
-        outputs, not betting advice.
-      </p>
-    </section>
+        <span className="ml-auto self-center text-[11px] text-gray-600 group-data-[state=open]:hidden">Show</span>
+        <span className="ml-auto hidden self-center text-[11px] text-gray-600 group-data-[state=open]:inline">Hide</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {finals.map((s) => (
+            <GameScorecardCompact key={s.game_pk ?? Math.random()} scorecard={s} />
+          ))}
+        </div>
+        <p className="text-[11px] leading-relaxed text-gray-600">
+          The side the model favored and the side the market favored, each vs. the final outcome — one
+          call per market, pushes excluded from the tally. A miss is shown as plainly as a hit. Model
+          outputs, not betting advice.
+        </p>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
