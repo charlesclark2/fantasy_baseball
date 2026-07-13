@@ -1,8 +1,37 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Annotated, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, BeforeValidator
+
+
+# ---------------------------------------------------------------------------
+# Loose-timestamp tolerance (INC-23 class) — DEFENSIVE, do not remove.
+#
+# In --s3 (DuckDB/lakehouse) mode a TIMESTAMP column can be stored/returned as a VARCHAR like
+# '2026-07-12 17:35:00+00' (space separator, 2-digit '+00' offset). Pydantic's strict datetime
+# parser REJECTS that form. Because the routers wrap `Model(**blob)` in a try/except that falls
+# through to an (often empty) last-resort read, ONE malformed timestamp silently blanked the whole
+# EV Tracker for a date (observed 2026-07-04 and 2026-07-12).
+#
+# `datetime.fromisoformat` (3.11+) accepts the loose forms, so coerce before validation. The writer
+# is also fixed to emit canonical ISO (write_serving_store._ts) — this is the belt-and-braces half:
+# it heals blobs ALREADY written with the loose form, with no backfill required.
+# ---------------------------------------------------------------------------
+
+def _coerce_loose_ts(v: Any) -> Any:
+    """Coerce a loose ISO-ish timestamp string into a datetime; pass anything else through."""
+    if isinstance(v, str):
+        try:
+            return datetime.fromisoformat(v.strip())
+        except ValueError:
+            return v  # let pydantic raise its normal error for a genuinely bad value
+    return v
+
+
+# A datetime field that tolerates the loose lakehouse/VARCHAR timestamp forms.
+LooseDatetime = Annotated[datetime, BeforeValidator(_coerce_loose_ts)]
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +67,7 @@ class PickExplanationPayload(BaseModel):
 
 class DataQuality(BaseModel):
     signal_completeness_score: float | None = None
-    last_updated_at: datetime | None = None
+    last_updated_at: LooseDatetime | None = None
     pipeline_status: str = "unknown"
 
 
@@ -63,10 +92,10 @@ class Pick(BaseModel):
     home_team: str | None = None
     away_team: str | None = None
     pick_side: str | None = None
-    game_start_utc: datetime | None = None
+    game_start_utc: LooseDatetime | None = None
     model_total_runs: float | None = None
     market_total_line: float | None = None
-    predicted_at: datetime | None = None
+    predicted_at: LooseDatetime | None = None
 
 
 class TodayPicksResponse(BaseModel):
@@ -122,7 +151,7 @@ class HistoryPicksResponse(BaseModel):
 class EVPick(BaseModel):
     game_pk: int
     game_date: date | None = None
-    game_start_utc: datetime | None = None
+    game_start_utc: LooseDatetime | None = None
     market_type: str
     model_prob: float | None = None
     bovada_devig_prob: float | None = None

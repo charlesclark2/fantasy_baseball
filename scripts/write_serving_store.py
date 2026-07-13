@@ -1472,10 +1472,26 @@ WHERE game_date = %(today)s
 # ── Payload builders ──────────────────────────────────────────────────────────
 
 def _ts(val) -> str | None:
+    """Normalise any timestamp representation to a strict ISO-8601 string.
+
+    ⚠️ INC-23 class: in --s3 (DuckDB/lakehouse) mode a TIMESTAMP column can come back as a VARCHAR
+    like '2026-07-12 17:35:00+00' (space separator, 2-digit '+00' offset). Returning that verbatim
+    (the old `str(val)`) writes a NON-ISO timestamp into the serving blob, which pydantic REFUSES to
+    parse — so /picks/ev 500s its own validation, silently falls through to an empty last-resort read,
+    and the EV Tracker renders blank for that whole date (observed 2026-07-04 and 2026-07-12).
+    `datetime.fromisoformat` (3.11+) accepts the loose forms, so parse-then-re-emit canonical ISO.
+    Unparseable values fall back to str() so a surprise format degrades to the old behaviour rather
+    than raising in the write path."""
     if val is None:
         return None
     if isinstance(val, datetime):
         return val.isoformat()
+    if isinstance(val, str):
+        try:
+            return datetime.fromisoformat(val.strip()).isoformat()
+        except ValueError:
+            log.warning("_ts: unparseable timestamp %r — writing as-is", val)
+            return val
     return str(val)
 
 
