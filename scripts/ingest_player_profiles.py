@@ -221,8 +221,36 @@ def insert_profiles(conn: snowflake.connector.SnowflakeConnection, profiles: lis
 
 # ── Snowflake queries ─────────────────────────────────────────────────────────
 
-def query_all_historical_player_ids(conn: snowflake.connector.SnowflakeConnection) -> set[int]:
+def _maybe_duck(use_s3: bool):
+    """E11.20 phase 1.5: a DuckDB connection with the mart_pitch_play_event lakehouse view
+    registered (delta-aware via lakehouse_read), when --s3. The SF mart_pitch_* views drop
+    in the phase-1.5 decommission — this script's ID-universe scans are among their last
+    readers. Everything else (profile writes, cluster/profile queries) stays on Snowflake."""
+    if not use_s3:
+        return None
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _root not in sys.path:
+        sys.path.insert(0, _root)
+    from scripts.utils.lakehouse_read import duck_connect, register_views
+    log.info("[--s3] Reading the mart_pitch_play_event ID universe from the S3 lakehouse")
+    duck = duck_connect()
+    register_views(duck, ["mart_pitch_play_event"])
+    return duck
+
+
+def query_all_historical_player_ids(
+    conn: snowflake.connector.SnowflakeConnection, duck=None,
+) -> set[int]:
     """Union all batter and pitcher IDs from mart_pitch_play_event (2020+)."""
+    if duck is not None:
+        rows = duck.execute("""
+            SELECT DISTINCT batter_id AS player_id
+            FROM mart_pitch_play_event WHERE game_year >= 2020
+            UNION
+            SELECT DISTINCT pitcher_id AS player_id
+            FROM mart_pitch_play_event WHERE game_year >= 2020
+        """).fetchall()
+        return {int(row[0]) for row in rows if row[0] is not None}
     sql = """
         SELECT DISTINCT batter_id AS player_id
         FROM baseball_data.betting.mart_pitch_play_event
@@ -262,8 +290,28 @@ def query_missing_cluster_player_ids(conn: snowflake.connector.SnowflakeConnecti
         return {int(row[0]) for row in cur.fetchall() if row[0] is not None}
 
 
-def query_missing_recent_player_ids(conn: snowflake.connector.SnowflakeConnection) -> set[int]:
-    """Return player IDs in the last 14 days of game data not yet in player_profiles."""
+def query_missing_recent_player_ids(
+    conn: snowflake.connector.SnowflakeConnection, duck=None,
+) -> set[int]:
+    """Return player IDs in the last 14 days of game data not yet in player_profiles.
+
+    E11.20 phase 1.5 (--s3): the recent-ID universe comes from the lakehouse (DuckDB;
+    game_date is VARCHAR ISO in parquet → ::date cast, INC-23) and the anti-join against
+    the SF profiles table happens in Python — the two sides live in different engines."""
+    if duck is not None:
+        recent = {int(r[0]) for r in duck.execute("""
+            SELECT DISTINCT batter_id FROM mart_pitch_play_event
+            WHERE game_date::date >= current_date - 14
+            UNION
+            SELECT DISTINCT pitcher_id FROM mart_pitch_play_event
+            WHERE game_date::date >= current_date - 14
+        """).fetchall() if r[0] is not None}
+        if not recent:
+            return set()
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT DISTINCT player_id FROM {TARGET_DB}.{TARGET_SCHEMA}.{TARGET_TABLE}")
+            existing = {int(r[0]) for r in cur.fetchall() if r[0] is not None}
+        return recent - existing
     sql = f"""
         WITH recent_ids AS (
             SELECT DISTINCT batter_id AS player_id
@@ -357,9 +405,9 @@ def run_cluster_backfill(conn: snowflake.connector.SnowflakeConnection) -> None:
     log.info("Next step: run `dbtf run --select stg_statsapi_player_profiles` to refresh downstream")
 
 
-def run_backfill(conn: snowflake.connector.SnowflakeConnection) -> None:
-    log.info("Backfill: collecting all historical player IDs from Snowflake (2020+)")
-    all_ids = query_all_historical_player_ids(conn)
+def run_backfill(conn: snowflake.connector.SnowflakeConnection, duck=None) -> None:
+    log.info("Backfill: collecting all historical player IDs (2020+)")
+    all_ids = query_all_historical_player_ids(conn, duck=duck)
     log.info("Found %d unique player IDs", len(all_ids))
 
     if not all_ids:
@@ -370,7 +418,7 @@ def run_backfill(conn: snowflake.connector.SnowflakeConnection) -> None:
     log.info("Backfill complete — %d total rows inserted", total)
 
 
-def run_update(conn: snowflake.connector.SnowflakeConnection) -> None:
+def run_update(conn: snowflake.connector.SnowflakeConnection, duck=None) -> None:
     log.info("Update: fetching changed profiles and new player IDs")
 
     # 1. Changed profiles via people/changes with 1-day overlap guard
@@ -391,7 +439,7 @@ def run_update(conn: snowflake.connector.SnowflakeConnection) -> None:
         log.info("  Inserted %d changed profile(s)", n)
 
     # 2. New player IDs from recent game data not yet in player_profiles
-    new_ids = query_missing_recent_player_ids(conn)
+    new_ids = query_missing_recent_player_ids(conn, duck=duck)
     if new_ids:
         log.info("Found %d new player ID(s) not in player_profiles (call-ups/signings)", len(new_ids))
         fetch_and_insert_ids(conn, sorted(new_ids))
@@ -406,6 +454,13 @@ def run_update(conn: snowflake.connector.SnowflakeConnection) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Ingest StatsAPI player profiles (height, weight, birth_date) into Snowflake.",
+    )
+    parser.add_argument(
+        "--s3",
+        action="store_true",
+        help="E11.20 phase 1.5: read the mart_pitch_play_event ID universe from the S3 "
+             "lakehouse via DuckDB instead of Snowflake. REQUIRED once the SF "
+             "mart_pitch_* views are dropped.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("backfill", help="Fetch all historical player profiles (2020+). Idempotent.")
@@ -426,6 +481,7 @@ def main() -> None:
 
     log.info("Connecting to Snowflake (%s.%s)", TARGET_DB, TARGET_SCHEMA)
     conn = get_snowflake_connection()
+    duck = _maybe_duck(args.s3)
 
     try:
         with conn.cursor() as cur:
@@ -433,11 +489,11 @@ def main() -> None:
         log.info("player_profiles table ready")
 
         if args.command == "backfill":
-            run_backfill(conn)
+            run_backfill(conn, duck=duck)
         elif args.command == "cluster-backfill":
             run_cluster_backfill(conn)
         elif args.command == "update":
-            run_update(conn)
+            run_update(conn, duck=duck)
     finally:
         conn.close()
         log.info("Snowflake connection closed")

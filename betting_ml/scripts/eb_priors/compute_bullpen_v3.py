@@ -253,17 +253,18 @@ def _round_or_none(v: Any, nd: int = 4) -> float | None:
 
 # ── Heavy Snowflake loader: per-reliever expected-pen frame ────────────────────
 
-def _load_expected_pen(conn, game_date: date, season: int) -> pd.DataFrame:
+def _load_expected_pen(conn, game_date: date, season: int, duck=None) -> pd.DataFrame:
     """Per (game_pk, pitching_team, pitcher_id) trailing-30d relief pool for games on
     `game_date`, with expected-leverage weight, rest_days, recent-usage fatigue, age.
 
     Pool = relievers with ≥1 relief appearance in the prior 30 days for that team
     (leakage guard: appearance date STRICTLY < the game's date). This mirrors
     mart_reliever_top3_availability's `rolling` CTE but keeps ALL arms (not just top-3).
+
+    E11.20 phase 1.5: when `duck` is provided (--s3), this query — the script's ONLY
+    mart_pitch_play_event read — runs on DuckDB over the S3 lakehouse.
     """
-    cur = conn.cursor()
-    cur.execute(
-        """
+    sql = """
         with target_games as (
             -- mart_game_spine = completed + today's SCHEDULED games (A1.11), so the daily
             -- live op scores the upcoming slate (whose games are not yet in stg_batter_pitches).
@@ -328,9 +329,19 @@ def _load_expected_pen(conn, game_date: date, season: int) -> pd.DataFrame:
                      then day_pitches else 0 end)                         as pitches_prev_2d
         from pool
         group by game_pk, game_date, pitching_team, pitcher_id
-        """,
-        {"game_date": game_date.isoformat(), "season": season},
-    )
+        """
+    if duck is not None:
+        from betting_ml.scripts.eb_priors import _lakehouse_duck
+        # INC-23: the spine's parquet game_date can be VARCHAR ISO — cast at the compare.
+        duck_sql = (_lakehouse_duck.rewrite(sql)
+                    .replace("and game_date = %(game_date)s",
+                             f"and game_date::date = DATE '{game_date.isoformat()}'")
+                    .replace("%(season)s", str(int(season))))
+        cur = duck.execute(duck_sql)
+        cols = [d[0].lower() for d in cur.description]
+        return pd.DataFrame(cur.fetchall(), columns=cols)
+    cur = conn.cursor()
+    cur.execute(sql, {"game_date": game_date.isoformat(), "season": season})
     cols = [d[0].lower() for d in cur.description]
     df = pd.DataFrame(cur.fetchall(), columns=cols)
     cur.close()
@@ -408,14 +419,18 @@ def build_per_reliever_frame(
     season: int,
     priors: dict,
     prior_ali_map: dict[int, float],
+    duck=None,
 ) -> pd.DataFrame:
     """Assemble the per-(game_pk, team, reliever) cache row for one game date.
 
     Joins: expected-pen pool (leverage/rest/fatigue/age) ⋈ season-to-date xwOBA ⋈ prior
     cell (role from prior-season aLI + age band) ⋈ team handedness splits. The output is
     k-agnostic — aggregate_team_v3 forms the posterior for any shrinkage k.
+
+    E11.20 phase 1.5: when `duck` is provided (--s3), the expected-pen pool (the only
+    mart_pitch_play_event read) comes from the S3 lakehouse; the other loads stay SF.
     """
-    pool = _load_expected_pen(conn, game_date, season)
+    pool = _load_expected_pen(conn, game_date, season, duck=duck)
     if pool.empty:
         return pool
 
@@ -604,20 +619,34 @@ def _game_dates_for_season(conn, season: int) -> list[date]:
     return out
 
 
-def run_backfill_season(season: int, shrinkage_k: float, write: bool) -> None:
+def _maybe_duck(use_s3: bool):
+    """E11.20 phase 1.5: a registered DuckDB/S3 connection when --s3, else None."""
+    if not use_s3:
+        return None
+    from betting_ml.scripts.eb_priors import _lakehouse_duck
+    print("  [--s3] Reading the expected-pen substrate from the S3 lakehouse via DuckDB...")
+    duck = _lakehouse_duck.get_duckdb()
+    _lakehouse_duck.register_views(duck)
+    return duck
+
+
+def run_backfill_season(season: int, shrinkage_k: float, write: bool,
+                        use_s3: bool = False) -> None:
     print(f"\n═══ bullpen_v3 per-reliever cache — season {season} ═══")
     priors = _load_prior(season)
+    duck = _maybe_duck(use_s3)
     conn = get_snowflake_connection()
     try:
         print(f"  loading prior-season ({season - 1}) aLI map (leverage roles)...")
-        prior_ali_map = _load_normalized_ali_map(conn, season - 1)
+        prior_ali_map = _load_normalized_ali_map(conn, season - 1, duck=duck)
         print(f"  {len(prior_ali_map)} relievers in prior-season aLI map")
 
         dates = _game_dates_for_season(conn, season)
         print(f"  {len(dates)} game dates to process")
         frames: list[pd.DataFrame] = []
         for i, gd in enumerate(dates, 1):
-            frames.append(build_per_reliever_frame(conn, gd, season, priors, prior_ali_map))
+            frames.append(build_per_reliever_frame(conn, gd, season, priors, prior_ali_map,
+                                                   duck=duck))
             if i % 50 == 0 or i == len(dates):
                 tot = sum(len(f) for f in frames)
                 print(f"  [{i}/{len(dates)}] {gd}  cumulative reliever-rows: {tot:,}")
@@ -646,13 +675,16 @@ def run_backfill_season(season: int, shrinkage_k: float, write: bool) -> None:
         conn.close()
 
 
-def run_single_date(game_date: date, shrinkage_k: float, write: bool) -> None:
+def run_single_date(game_date: date, shrinkage_k: float, write: bool,
+                    use_s3: bool = False) -> None:
     season = game_date.year
     priors = _load_prior(season)
+    duck = _maybe_duck(use_s3)
     conn = get_snowflake_connection()
     try:
-        prior_ali_map = _load_normalized_ali_map(conn, season - 1)
-        per_reliever = build_per_reliever_frame(conn, game_date, season, priors, prior_ali_map)
+        prior_ali_map = _load_normalized_ali_map(conn, season - 1, duck=duck)
+        per_reliever = build_per_reliever_frame(conn, game_date, season, priors, prior_ali_map,
+                                                duck=duck)
         if per_reliever.empty:
             print(f"  no relief pool for {game_date} — nothing to write.")
             return
@@ -673,12 +705,17 @@ def main() -> None:
                     help="Prior-precision multiplier for the per-reliever EB (k>1 ⇒ more shrink). "
                          "Default 1.0 = compute_bullpen_posteriors parity. Pick via eval_bullpen_v3_cv.py.")
     ap.add_argument("--write", action="store_true", help="Materialise the team table (MERGE).")
+    ap.add_argument("--s3", action="store_true",
+                    help="E11.20 phase 1.5: read the expected-pen substrate "
+                         "(mart_pitch_play_event join) from the S3 lakehouse via DuckDB "
+                         "instead of Snowflake. REQUIRED once the SF mart_pitch_* views drop.")
     args = ap.parse_args()
 
     if args.backfill_season:
-        run_backfill_season(args.backfill_season, args.shrinkage_k, args.write)
+        run_backfill_season(args.backfill_season, args.shrinkage_k, args.write, use_s3=args.s3)
     else:
-        run_single_date(args.game_date or date.today(), args.shrinkage_k, args.write)
+        run_single_date(args.game_date or date.today(), args.shrinkage_k, args.write,
+                        use_s3=args.s3)
 
 
 if __name__ == "__main__":

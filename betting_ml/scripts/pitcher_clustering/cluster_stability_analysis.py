@@ -86,7 +86,20 @@ WHERE game_year = {season}
 
 # ── Data loading ──────────────────────────────────────────────────────────────
 
-def _load_game_data(season: int) -> pd.DataFrame:
+def _duck_for_s3():
+    """E11.20 phase 1.5: both source marts live in the S3 lakehouse — the whole read
+    side runs on DuckDB under --s3 (the SF mart_pitch_* views drop in the decommission)."""
+    from betting_ml.scripts.eb_priors import _lakehouse_duck
+    duck = _lakehouse_duck.get_duckdb()
+    _lakehouse_duck.register_views(duck, _lakehouse_duck.CLUSTER_STABILITY_TABLES)
+    return duck, _lakehouse_duck.rewrite
+
+
+def _load_game_data(season: int, use_s3: bool = False) -> pd.DataFrame:
+    if use_s3:
+        duck, rewrite = _duck_for_s3()
+        cur = duck.execute(rewrite(_GAME_QUERY.format(season=season)))
+        return pd.DataFrame(cur.fetchall(), columns=[d[0].lower() for d in cur.description])
     conn = get_snowflake_connection()
     try:
         cur = conn.cursor()
@@ -98,7 +111,11 @@ def _load_game_data(season: int) -> pd.DataFrame:
         conn.close()
 
 
-def _load_stuff_plus(season: int) -> pd.DataFrame:
+def _load_stuff_plus(season: int, use_s3: bool = False) -> pd.DataFrame:
+    if use_s3:
+        duck, rewrite = _duck_for_s3()
+        cur = duck.execute(rewrite(_STUFF_QUERY.format(season=season)))
+        return pd.DataFrame(cur.fetchall(), columns=[d[0].lower() for d in cur.description])
     conn = get_snowflake_connection()
     try:
         cur = conn.cursor()
@@ -280,10 +297,14 @@ def main() -> None:
     parser.add_argument("--n-bootstrap", type=int, default=20, help="Bootstrap replicates per threshold")
     parser.add_argument("--min-k", type=int, default=4)
     parser.add_argument("--max-k", type=int, default=10)
+    parser.add_argument("--s3", action="store_true",
+                        help="E11.20 phase 1.5: read both source marts from the S3 "
+                             "lakehouse via DuckDB instead of Snowflake. REQUIRED once "
+                             "the SF mart_pitch_* views are dropped.")
     args = parser.parse_args()
 
     print(f"Loading per-game pitch data for {args.season}...")
-    game_df = _load_game_data(args.season)
+    game_df = _load_game_data(args.season, use_s3=args.s3)
     print(f"  {len(game_df):,} pitcher-game-category rows loaded.")
 
     if game_df.empty:
@@ -291,7 +312,7 @@ def main() -> None:
         sys.exit(1)
 
     print("Loading Stuff+ from mart...")
-    stuff_df = _load_stuff_plus(args.season)
+    stuff_df = _load_stuff_plus(args.season, use_s3=args.s3)
 
     # ── Full-season baseline ──────────────────────────────────────────────────
     print("\nBuilding full-season baseline clusters...")

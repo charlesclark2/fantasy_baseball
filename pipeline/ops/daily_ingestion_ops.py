@@ -1277,7 +1277,11 @@ def dbt_build_bullpen_posteriors_op(context):
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def update_player_posteriors_op(context):
-    _run_script(context, f"{_SEQ_DIR}/update_player_posteriors.py", ["--date", _one_day_ago()])
+    # E11.20 phase 1.5: under W7A_LAKEHOUSE_S3=1 (cut over on the box) the PA substrate
+    # reads from the S3 lakehouse — the last DAILY Snowflake read of the W1 pitch-mart
+    # family, a precondition for dropping the SF mart_pitch_* views (rollout doc §6 step 6).
+    _run_script(context, f"{_SEQ_DIR}/update_player_posteriors.py",
+                ["--date", _one_day_ago()] + _w7a_s3_args())
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -1537,8 +1541,10 @@ def dbt_lineup_feature_rebuild(context):
 
 @op(out=Out(Nothing))
 def ingest_player_profiles_update(context):
-    """Weekly update: fetch changed profiles via people/changes + detect new call-ups."""
-    _run_script(context, "ingest_player_profiles.py", ["update"])
+    """Weekly update: fetch changed profiles via people/changes + detect new call-ups.
+    E11.20 phase 1.5: under W7A_LAKEHOUSE_S3=1 the mart_pitch_play_event ID-universe scan
+    reads from the S3 lakehouse (precondition for dropping the SF mart_pitch_* views)."""
+    _run_script(context, "ingest_player_profiles.py", _w7a_s3_args() + ["update"])
 
 
 # ── API cache warm (A0.3) ────────────────────────────────────────────────────
