@@ -72,6 +72,18 @@ from dotenv import load_dotenv
 load_dotenv(_PROJECT_ROOT / ".env")
 
 from betting_ml.utils.data_loader import get_snowflake_connection
+# E11.20 phase 1.5 (the W1 SF decommission): reuse the canonical W7a DuckDB/S3 helpers
+# (one source of truth for the connection + view registration + the table-name rewrite)
+# so `--s3` can read the mart_pitch_play_event PA substrate from the lakehouse instead of
+# Snowflake — the LAST daily Snowflake read of the W1 pitch-mart family. The EB prior /
+# role reads and the SCD-2 seq-posterior read/write STAY on Snowflake (dual-connection
+# pattern, exactly like the sibling update_matchup_cell_posteriors.py --s3).
+from betting_ml.scripts.eb_priors.generate_matchup_signals import (
+    _get_duckdb,
+    _register_s3_views,
+    _duck_sql_for,
+    _fetch_duck,
+)
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -246,6 +258,29 @@ def _fetch_dicts(conn, sql: str, params: dict) -> list[dict]:
     rows = [dict(zip(cols, r)) for r in cur.fetchall()]
     cur.close()
     return rows
+
+
+def _load_pas(conn, target_date: date, duck=None) -> list[dict]:
+    # E11.20 phase 1.5: --s3 reads mart_pitch_play_event from the S3 lakehouse via DuckDB.
+    # game_date is VARCHAR ISO in the parquet, so equality vs the ISO literal matches as a
+    # string compare (same note as the sibling update_matchup_cell_posteriors._load_pas);
+    # downstream _collect_observations already coerces str → date.
+    if duck is not None:
+        sql = _duck_sql_for(_PA_SQL).replace("%(game_date)s", f"'{target_date.isoformat()}'")
+        return _fetch_duck(duck, sql)
+    return _fetch_dicts(conn, _PA_SQL, {"game_date": target_date.isoformat()})
+
+
+def _load_game_dates_for_season(conn, season: int, duck=None) -> list[date]:
+    # E11.20 phase 1.5: --s3 reads mart_pitch_play_event from the S3 lakehouse via DuckDB.
+    # VARCHAR ISO game_date sorts correctly lexicographically; caller coerces str → date.
+    if duck is not None:
+        sql = _duck_sql_for(_PA_SEASON_DATES_SQL).replace("%(season)s", str(int(season)))
+        rows = _fetch_duck(duck, sql)
+    else:
+        rows = _fetch_dicts(conn, _PA_SEASON_DATES_SQL, {"season": season})
+    return [r["game_date"] if isinstance(r["game_date"], date)
+            else date.fromisoformat(str(r["game_date"])) for r in rows]
 
 
 def _load_eb_priors(conn, season: int) -> dict[str, dict[str, tuple[float, float]]]:
@@ -487,13 +522,17 @@ def update_for_date(
     sigma_obs: float,
     prior_neff_cap: int,
     dry_run: bool,
+    duck=None,
 ) -> dict[str, int]:
+    """E11.20 phase 1.5: when `duck` is provided (--s3), the PA substrate reads from the
+    S3 lakehouse via DuckDB. The EB role reads + seq-posterior read/write below STILL use
+    the Snowflake `conn`."""
     season    = target_date.year
     update_ts = datetime.now(timezone.utc).replace(tzinfo=None)
 
     conn = get_snowflake_connection()
     try:
-        pas = _fetch_dicts(conn, _PA_SQL, {"game_date": target_date.isoformat()})
+        pas = _load_pas(conn, target_date, duck=duck)
         if not pas:
             print(f"    {target_date}: no PAs found — skipping.")
             return {"players_updated": 0, "obs_processed": 0, "skipped": 0, "closed": 0, "inserted": 0}
@@ -551,25 +590,37 @@ def _load_priors_and_prep(season: int, sigma_obs: float, prior_neff_cap: int, dr
     return eb_priors
 
 
-def run_single_date(target_date: date, sigma_obs: float, prior_neff_cap: int, dry_run: bool) -> None:
+def _maybe_duck(use_s3: bool):
+    """E11.20 phase 1.5: a registered DuckDB/S3 connection when --s3, else None."""
+    if not use_s3:
+        return None
+    print("\n[--s3] Reading the PA substrate from the S3 lakehouse via DuckDB...")
+    duck = _get_duckdb()
+    _register_s3_views(duck)
+    return duck
+
+
+def run_single_date(target_date: date, sigma_obs: float, prior_neff_cap: int, dry_run: bool,
+                    use_s3: bool = False) -> None:
     eb_priors = _load_priors_and_prep(target_date.year, sigma_obs, prior_neff_cap, dry_run)
+    duck = _maybe_duck(use_s3)
     print(f"\nUpdating sequential player posteriors for {target_date}...")
-    result = update_for_date(target_date, eb_priors, sigma_obs, prior_neff_cap, dry_run)
+    result = update_for_date(target_date, eb_priors, sigma_obs, prior_neff_cap, dry_run, duck=duck)
     print(f"\n  players_updated={result['players_updated']}  obs_processed={result['obs_processed']}  "
           f"skipped={result['skipped']}  closed={result['closed']}  inserted={result['inserted']}")
 
 
-def run_backfill(season: int, sigma_obs: float, prior_neff_cap: int, dry_run: bool) -> None:
+def run_backfill(season: int, sigma_obs: float, prior_neff_cap: int, dry_run: bool,
+                 use_s3: bool = False) -> None:
     eb_priors = _load_priors_and_prep(season, sigma_obs, prior_neff_cap, dry_run)
+    duck = _maybe_duck(use_s3)
 
     print(f"\nFetching game dates for season {season}...")
     conn = get_snowflake_connection()
     try:
-        rows = _fetch_dicts(conn, _PA_SEASON_DATES_SQL, {"season": season})
+        game_dates = _load_game_dates_for_season(conn, season, duck=duck)
     finally:
         conn.close()
-    game_dates = [r["game_date"] if isinstance(r["game_date"], date)
-                  else date.fromisoformat(str(r["game_date"])) for r in rows]
     print(f"  {len(game_dates)} game dates found")
     if not game_dates:
         print("No game dates found. Exiting.")
@@ -578,7 +629,7 @@ def run_backfill(season: int, sigma_obs: float, prior_neff_cap: int, dry_run: bo
     tot = {"players_updated": 0, "obs_processed": 0, "skipped": 0, "inserted": 0}
     print(f"\nProcessing {len(game_dates)} dates in chronological order...")
     for gd in game_dates:
-        r = update_for_date(gd, eb_priors, sigma_obs, prior_neff_cap, dry_run)
+        r = update_for_date(gd, eb_priors, sigma_obs, prior_neff_cap, dry_run, duck=duck)
         for k in tot:
             tot[k] += r.get(k, 0)
 
@@ -604,6 +655,11 @@ def main() -> None:
                              f"(default {_PRIOR_NEFF_CAP_DEFAULT})")
     parser.add_argument("--dry-run", action="store_true",
                         help="Compute updates but do not write to Snowflake")
+    parser.add_argument("--s3", action="store_true",
+                        help="E11.20 phase 1.5: read the mart_pitch_play_event PA substrate "
+                             "from the S3 lakehouse via DuckDB instead of Snowflake (the EB "
+                             "prior/role reads and the seq-posterior read/write stay on "
+                             "Snowflake). Precondition for dropping the SF mart_pitch_* views.")
     args = parser.parse_args()
 
     if args.backfill and not args.season:
@@ -613,11 +669,13 @@ def main() -> None:
 
     if args.backfill:
         print(f"update_player_posteriors  backfill season={args.season}  dry_run={args.dry_run}")
-        run_backfill(args.season, args.sigma_obs, args.prior_neff_cap, dry_run=args.dry_run)
+        run_backfill(args.season, args.sigma_obs, args.prior_neff_cap, dry_run=args.dry_run,
+                     use_s3=args.s3)
     else:
         target_date = date.fromisoformat(args.date)
         print(f"update_player_posteriors  date={target_date}  dry_run={args.dry_run}")
-        run_single_date(target_date, args.sigma_obs, args.prior_neff_cap, dry_run=args.dry_run)
+        run_single_date(target_date, args.sigma_obs, args.prior_neff_cap, dry_run=args.dry_run,
+                        use_s3=args.s3)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,14 @@
 [
   {
+    "week": "2026-07-13",
+    "items": [
+      {
+        "tag": "improved",
+        "text": "The 'Results — who called it' section on the Expected Value Tracker and Dashboard is now collapsible, and its summary tally is clearer. The header stays visible at a glance while the per-game breakdown is tucked away by default to keep the page compact — click it to expand or hide the individual game cards. The call tally is now broken out by market (moneyline and total runs shown separately, each over the number of completed games) instead of combined into a single doubled-looking count. These remain factual model outputs, not betting advice."
+      }
+    ]
+  },
+  {
     "week": "2026-07-06",
     "items": [
       {

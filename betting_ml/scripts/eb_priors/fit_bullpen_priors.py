@@ -64,7 +64,7 @@ _OUTPUT_DIR = _PROJECT_ROOT / "betting_ml" / "models" / "eb_priors"
 
 # ── Data loading ──────────────────────────────────────────────────────────────
 
-def _load_prior_season_ali(conn, prior_season: int) -> dict[int, dict]:
+def _load_prior_season_ali(conn, prior_season: int, duck=None) -> dict[int, dict]:
     """
     Return per-reliever normalized aLI (average Leverage Index) for the prior season.
 
@@ -76,10 +76,11 @@ def _load_prior_season_ali(conn, prior_season: int) -> dict[int, dict]:
     Minimum qualification: ≥ MIN_APPEARANCES games in the prior season.
 
     Returns dict: {pitcher_id: {"ali": float (normalized), "appearances": int}}
+
+    E11.20 phase 1.5: when `duck` is provided (--s3), this query — the script's ONLY
+    mart_pitch_play_event read — runs on DuckDB over the S3 lakehouse.
     """
-    cur = conn.cursor()
-    cur.execute(
-        """
+    sql = """
         with reliever_at_bats as (
             select
                 bp.game_pk,
@@ -138,19 +139,27 @@ def _load_prior_season_ali(conn, prior_season: int) -> dict[int, dict]:
         from pitcher_season ps
         cross join season_avg sa
         where ps.appearances >= %(min_app)s
-        """,
-        {
+        """
+    if duck is not None:
+        from betting_ml.scripts.eb_priors import _lakehouse_duck
+        duck_sql = (_lakehouse_duck.rewrite(sql)
+                    .replace("%(season)s", str(int(prior_season)))
+                    .replace("%(min_app)s", str(int(_MIN_APPEARANCES))))
+        rows = duck.execute(duck_sql).fetchall()
+    else:
+        cur = conn.cursor()
+        cur.execute(sql, {
             "season": prior_season,
             "min_app": _MIN_APPEARANCES,
-        },
-    )
+        })
+        rows = cur.fetchall()
+        cur.close()
     result = {}
-    for row in cur.fetchall():
+    for row in rows:
         result[int(row[0])] = {
             "ali": float(row[2]) if row[2] is not None else 0.0,
             "appearances": int(row[1]),
         }
-    cur.close()
     return result
 
 
@@ -380,7 +389,14 @@ def _write_json(priors: dict, season: int, fit_date: date, prior_season: int) ->
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main(seasons: list[int]) -> None:
+def main(seasons: list[int], use_s3: bool = False) -> None:
+    duck = None
+    if use_s3:
+        # E11.20 phase 1.5: the aLI substrate reads from the S3 lakehouse via DuckDB.
+        from betting_ml.scripts.eb_priors import _lakehouse_duck
+        print("[--s3] Reading the aLI substrate from the S3 lakehouse via DuckDB...")
+        duck = _lakehouse_duck.get_duckdb()
+        _lakehouse_duck.register_views(duck)
     conn = get_snowflake_connection()
     try:
         for season in seasons:
@@ -388,7 +404,7 @@ def main(seasons: list[int]) -> None:
             print(f"\n── Season {season} (role assignments from {prior_season}) ─────────────")
 
             print(f"  Loading prior-season ({prior_season}) aLI per reliever...")
-            prior_ali_map = _load_prior_season_ali(conn, prior_season)
+            prior_ali_map = _load_prior_season_ali(conn, prior_season, duck=duck)
             print(f"  {len(prior_ali_map)} relievers qualified for role assignment")
 
             print(f"  Loading season {season} reliever stats...")
@@ -449,6 +465,13 @@ if __name__ == "__main__":
         metavar="YEAR",
         help="Season(s) to fit (repeat for multiple). Default: current year.",
     )
+    parser.add_argument(
+        "--s3",
+        action="store_true",
+        help="E11.20 phase 1.5: read the aLI substrate (mart_pitch_play_event join) from "
+             "the S3 lakehouse via DuckDB instead of Snowflake. REQUIRED once the SF "
+             "mart_pitch_* views are dropped.",
+    )
     args = parser.parse_args()
     seasons = args.seasons if args.seasons else [date.today().year]
-    main(seasons)
+    main(seasons, use_s3=args.s3)

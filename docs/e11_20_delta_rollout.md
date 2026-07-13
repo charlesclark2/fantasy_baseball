@@ -200,8 +200,14 @@ aws ssm start-session --target i-07594af1679f81c38          # LAPTOP → BOX she
 cd ~/app/services/dagster/aws && ./deploy.sh                 # BOX (>1 min: git pull + up -d --build; single-owner crontab per INC-30)
 grep -E "W11D_PUBLIC_BETTING_NIGHTLY|W7B_LAKEHOUSE_S3" .env  # BOX: W11D_PUBLIC_BETTING_NIGHTLY=1 REQUIRED (the retired w8b public-betting mirror's precondition)
 ```
-Leave `LAKEHOUSE_DELTA_W1` unset. Let ONE scheduled daily cycle run green → in Dagit,
-record every `lakehouse_*_op` duration (the per-wave BEFORE row of the AC-B table).
+Leave `LAKEHOUSE_DELTA_W1` unset. Let ONE scheduled daily cycle run green → record every
+`lakehouse_*_op` duration (the per-wave BEFORE row of the AC-B table). One command pulls
+them from the Dagster run DB (read-only; also prints the paste-ready markdown table —
+use this same command for the mirror-day BEFORE rows and the post-cutover AFTER rows):
+```bash
+docker compose -f ~/app/services/dagster/aws/docker-compose.yml exec -T \
+  dagster-codeloc python -u scripts/report_lakehouse_op_timings.py --runs 14
+```
 
 **Step 2 — mirror mode + the one-time Delta backfill (backfill ≈ a full W1 rebuild, >1 min).**
 ⚠️ **Set the persistent `.env` flag ONLY on an image that carries the current code.** The
@@ -327,12 +333,31 @@ REPOINTED to the lakehouse before anything drops — they are why the compat mir
 exists; (2) the daily `dbt_daily_build` rebuilds the SF `mart_pitch_*` views every run,
 so dropping their ext tables before retiring those dbt models would fail the HALT-tier
 dbt run. The sequence is:
-(a0) **Straggler repoint (a follow-up story/PR):** route `update_player_posteriors.py`'s
-PA-substrate read through the W7a dual-connection pattern its sibling
-`update_matchup_cell_posteriors.py --s3` already uses; repoint `ingest_player_profiles.py`
-+ the eb_priors offline scripts via `scripts/utils/lakehouse_read` (delta-aware). Gate:
-one green daily cycle with `W7A`-style flags on + the INC-27 grep returning zero
-`betting.mart_pitch_` raw-SQL hits outside DDL/parity tooling.
+(a0) **Straggler repoint — ✅ CODE-COMPLETE 2026-07-13.** Every raw-SQL consumer of
+`betting.mart_pitch_*` now carries an `--s3` lakehouse path:
+- `update_player_posteriors.py` (DAILY op) — W7a dual-connection: PA substrate via DuckDB,
+  EB priors/roles + the SCD-2 seq write stay SF; `update_player_posteriors_op` passes
+  `_w7a_s3_args()` (live under `W7A_LAKEHOUSE_S3=1`, already on per BOX_OPERATIONS §10).
+  Validated end-to-end from the laptop: `--date 2026-07-11 --dry-run --s3` → 1,161 PAs →
+  451 updates, and duck vs SF PA counts agree EXACTLY on 3 recent dates (incl. both empty
+  on the not-yet-ingested date).
+- `ingest_player_profiles.py` (WEEKLY op) — ID-universe scans via delta-aware
+  `lakehouse_read`; the recent-IDs anti-join vs the SF profiles table moves to Python
+  (two engines). Op passes the flag. Smoked: 3,002 historical / 900 recent-14d IDs.
+- Bullpen trio (`compute_bullpen_posteriors` / `compute_bullpen_v3` /
+  `fit_bullpen_priors`, all OFFLINE/unscheduled) — new shared
+  `betting_ml/scripts/eb_priors/_lakehouse_duck.py` (INC-22 memory-capped; translates
+  Snowflake `dateadd`; INC-23 `::date` casts at use sites). All three query shapes smoked
+  against the real lakehouse (pitch_sk UBIGINT⋈DECIMAL(20,0) join verified sane).
+- `cluster_stability_analysis.py` — both marts (W1 + W2) read via DuckDB under `--s3`.
+- `build_matchup_training_data` / `generate_matchup_signals` /
+  `update_matchup_cell_posteriors` already had `--s3` (W7a); `train_matchup_v1`'s
+  reference is registry-metadata prose, not a read.
+**Guard:** `betting_ml/tests/test_phase15_straggler_repoint.py` (fast gate) mechanizes
+the INC-27 sweep — fails on any NEW raw-SQL `betting.mart_pitch_` consumer without a
+registered `--s3` path, and on the two scheduled ops dropping `_w7a_s3_args()`.
+**Remaining gate before (a):** one green daily cycle on the box after this deploys
+(the RUNTIME GATE — `update_player_posteriors_op` runs `--s3` for real), then proceed.
 (a) **Zero-reader verification (LAPTOP, Snowflake MCP):**
 ```sql
 select query_start_time, user_name, direct_objects_accessed

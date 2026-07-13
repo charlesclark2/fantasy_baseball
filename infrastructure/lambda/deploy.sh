@@ -114,6 +114,12 @@ cp betting_ml/utils/__init__.py "$PACKAGE_DIR/betting_ml/utils/__init__.py"
 cp betting_ml/utils/game_day.py "$PACKAGE_DIR/betting_ml/utils/game_day.py"
 
 # ── 4. Zip the package ────────────────────────────────────────────────────────
+# Prune bytecode caches / dist-info that pip may leave behind — smaller zip = faster,
+# more reliable upload (every KB off the 59 MB package lowers the multipart-drop risk).
+echo "Pruning bytecode caches..."
+find "$PACKAGE_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+find "$PACKAGE_DIR" -type f -name "*.pyc" -delete 2>/dev/null || true
+
 echo "Creating deployment.zip..."
 cd .lambda_build/package
 zip -r ../deployment.zip . --quiet
@@ -130,8 +136,31 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 
 # ── 5. Deploy to Lambda (via S3 to avoid the ~70 MB direct-upload request cap) ──
+# The ~59 MB zip goes up as an S3 multipart upload; on a flaky link a part can drop
+# ("Connection was closed before we received a valid response…"), which with no retry
+# aborts the whole deploy. Harden it: adaptive per-request retries (env, no persistent
+# config change) + no read-timeout kill + an OUTER retry loop that restarts the cp.
+export AWS_RETRY_MODE="${AWS_RETRY_MODE:-adaptive}"
+export AWS_MAX_ATTEMPTS="${AWS_MAX_ATTEMPTS:-10}"
+
 echo "Uploading package to s3://${S3_DEPLOY_BUCKET}/${S3_DEPLOY_KEY}..."
-aws s3 cp "$ZIP_PATH" "s3://${S3_DEPLOY_BUCKET}/${S3_DEPLOY_KEY}" --region "$REGION"
+upload_ok=false
+for attempt in 1 2 3 4 5; do
+  if aws s3 cp "$ZIP_PATH" "s3://${S3_DEPLOY_BUCKET}/${S3_DEPLOY_KEY}" \
+       --region "$REGION" --only-show-errors \
+       --cli-connect-timeout 60 --cli-read-timeout 0; then
+    upload_ok=true
+    break
+  fi
+  echo "  upload attempt ${attempt} failed; retrying in $((attempt * 5))s..." >&2
+  sleep $((attempt * 5))
+done
+if [[ "$upload_ok" != "true" ]]; then
+  echo "ERROR: S3 upload failed after 5 attempts — likely a flaky network/VPN. The package is" >&2
+  echo "       built at ${ZIP_PATH}; re-run the script (it resumes from the upload) once the" >&2
+  echo "       connection is stable, or run on a wired connection." >&2
+  exit 1
+fi
 
 echo "Pointing Lambda at the S3 object..."
 OUTPUT=$(aws lambda update-function-code \

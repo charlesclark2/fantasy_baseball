@@ -127,16 +127,24 @@ def _load_normalized_ali_map(
     conn,
     season: int,
     as_of_date: date | None = None,
+    duck=None,
 ) -> dict[int, float]:
     """
     Normalized aLI per reliever for the given season.
     as_of_date: if set, restricts to game_date < as_of_date.
     Returns {pitcher_id (int): normalized_ali}.
+
+    E11.20 phase 1.5: when `duck` is provided (--s3), this query — the script's ONLY
+    mart_pitch_play_event read — runs on DuckDB over the S3 lakehouse. Everything else
+    stays on the Snowflake `conn`.
     """
-    date_filter = "and bp.game_date < %(as_of_date)s" if as_of_date else ""
-    cur = conn.cursor()
-    cur.execute(
-        f"""
+    if duck is not None:
+        # INC-23: parquet game_date can be VARCHAR ISO — cast ::date at the compare.
+        date_filter = (f"and bp.game_date::date < DATE '{as_of_date.isoformat()}'"
+                       if as_of_date else "")
+    else:
+        date_filter = "and bp.game_date < %(as_of_date)s" if as_of_date else ""
+    sql = f"""
         with reliever_at_bats as (
             select
                 bp.game_pk,
@@ -188,18 +196,26 @@ def _load_normalized_ali_map(
         from pitcher_season ps
         cross join season_avg sa
         where ps.appearances >= %(min_app)s
-        """,
-        {
+        """
+    if duck is not None:
+        from betting_ml.scripts.eb_priors import _lakehouse_duck
+        duck_sql = (_lakehouse_duck.rewrite(sql)
+                    .replace("%(season)s", str(int(season)))
+                    .replace("%(min_app)s", str(int(_MIN_APPEARANCES))))
+        rows = duck.execute(duck_sql).fetchall()
+    else:
+        cur = conn.cursor()
+        cur.execute(sql, {
             "season":     season,
             "min_app":    _MIN_APPEARANCES,
             "as_of_date": as_of_date.isoformat() if as_of_date else None,
-        },
-    )
+        })
+        rows = cur.fetchall()
+        cur.close()
     result: dict[int, float] = {}
-    for row in cur.fetchall():
+    for row in rows:
         if row[1] is not None:
             result[int(row[0])] = float(row[1])
-    cur.close()
     return result
 
 
@@ -827,21 +843,33 @@ def _compute_date_rows(
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main(game_date: date) -> None:
+def _maybe_duck(use_s3: bool):
+    """E11.20 phase 1.5: a registered DuckDB/S3 connection when --s3, else None."""
+    if not use_s3:
+        return None
+    from betting_ml.scripts.eb_priors import _lakehouse_duck
+    print("  [--s3] Reading the aLI substrate from the S3 lakehouse via DuckDB...")
+    duck = _lakehouse_duck.get_duckdb()
+    _lakehouse_duck.register_views(duck)
+    return duck
+
+
+def main(game_date: date, use_s3: bool = False) -> None:
     season = game_date.year
     run_id = str(uuid.uuid4())
     print(f"game_date={game_date}  season={season}  run_id={run_id[:8]}...")
 
     priors = _load_prior(season)
+    duck = _maybe_duck(use_s3)
 
     conn = get_snowflake_connection()
     try:
         print(f"  Loading prior-season ({season - 1}) aLI map...")
-        prior_ali_map = _load_normalized_ali_map(conn, season - 1)
+        prior_ali_map = _load_normalized_ali_map(conn, season - 1, duck=duck)
         print(f"  {len(prior_ali_map)} relievers in prior-season aLI map")
 
         print(f"  Loading current-season ({season}) aLI (as of {game_date}) for role_changed...")
-        current_ali_map = _load_normalized_ali_map(conn, season, as_of_date=game_date)
+        current_ali_map = _load_normalized_ali_map(conn, season, as_of_date=game_date, duck=duck)
         print(f"  {len(current_ali_map)} relievers in current-season aLI map")
 
         game_rows = _load_game_relievers(conn, game_date)
@@ -920,19 +948,20 @@ def main(game_date: date) -> None:
         conn.close()
 
 
-def main_backfill_season(season: int) -> None:
+def main_backfill_season(season: int, use_s3: bool = False) -> None:
     """Process every game date in a season in chronological order."""
     print(f"\n═══ Backfill season {season} ═══")
     priors = _load_prior(season)
+    duck = _maybe_duck(use_s3)
 
     conn = get_snowflake_connection()
     try:
         print(f"  Loading prior-season ({season - 1}) aLI map...")
-        prior_ali_map = _load_normalized_ali_map(conn, season - 1)
+        prior_ali_map = _load_normalized_ali_map(conn, season - 1, duck=duck)
         print(f"  {len(prior_ali_map)} relievers in prior-season aLI map")
 
         print(f"  Loading current-season ({season}) full-season aLI (approx for role_changed)...")
-        current_ali_map = _load_normalized_ali_map(conn, season)
+        current_ali_map = _load_normalized_ali_map(conn, season, duck=duck)
         print(f"  {len(current_ali_map)} relievers in current-season aLI map")
 
         cur = conn.cursor()
@@ -994,9 +1023,16 @@ if __name__ == "__main__":
         metavar="YEAR",
         help="Backfill all game dates in the given season",
     )
+    parser.add_argument(
+        "--s3",
+        action="store_true",
+        help="E11.20 phase 1.5: read the aLI substrate (mart_pitch_play_event join) from "
+             "the S3 lakehouse via DuckDB instead of Snowflake. REQUIRED once the SF "
+             "mart_pitch_* views are dropped.",
+    )
     args = parser.parse_args()
 
     if args.backfill_season:
-        main_backfill_season(args.backfill_season)
+        main_backfill_season(args.backfill_season, use_s3=args.s3)
     else:
-        main(args.game_date or date.today())
+        main(args.game_date or date.today(), use_s3=args.s3)
