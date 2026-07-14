@@ -124,15 +124,43 @@ def _export(conn, lakehouse_name: str, fqn: str, dry_run: bool) -> int:
         # Preserve the SELECT * identifier case (the DuckDB reader addresses columns by that case; the
         # matchup/lineup CTEs read lineup_state's lowercase slot_*_player_id / valid_from). Do NOT force lower.
         col_names = [desc[0] for desc in cur.description]
+        # 🧨 NULLABLE-INT→DOUBLE MIRROR POISONING (2026-07-15, the INC-17-class avg_eb_woba
+        # outage, broken since 07-03): a Snowflake NUMBER(38,0) column with ANY NULLs
+        # (SLOT_6..9_PLAYER_ID pre-lineup rows) lands in pandas as float64 → parquet DOUBLE.
+        # Downstream, lineup_features UNIONs all 9 slot ids → the whole batter_id coerces
+        # to DOUBLE → `batter_id::varchar` renders '664983.0' → the VARCHAR join to
+        # eb_batter_posteriors_raw matches 0 rows → avg_eb_woba NULL for EVERY game (the
+        # W11 dtype=str VARCHAR-mirror landmine's numeric sibling). CURE: pin every FIXED
+        # scale-0 column to pandas nullable Int64 BEFORE the parquet write.
+        # ResultMetadata: (name, type_code, …, precision, scale, is_nullable); type_code 0 = FIXED.
+        int_cols = [d[0] for d in cur.description if d[1] == 0 and (d[5] or 0) == 0]
     finally:
         cur.close()
     df = _coerce_variant_cells(pd.DataFrame(rows, columns=col_names))
-    print(f"  fetched {len(df):,} rows | {len(df.columns)} columns")
+    for c in int_cols:
+        try:
+            df[c] = df[c].astype("Int64")
+        except (TypeError, ValueError, OverflowError) as exc:
+            print(f"  WARNING: [int-pin] could not pin {c} to Int64 ({exc}) — left as-is",
+                  file=sys.stderr)
+    print(f"  fetched {len(df):,} rows | {len(df.columns)} columns "
+          f"| {len(int_cols)} integer col(s) pinned Int64")
     if dry_run:
         print("  dry-run — no S3 write")
         return len(df)
     tmp = Path(f"/tmp/{lakehouse_name}.parquet")
-    pq.write_table(pa.Table.from_pandas(df, preserve_index=False), str(tmp))
+    table = pa.Table.from_pandas(df, preserve_index=False)
+    # Loud write-time contract: a pinned column must land as a parquet INT type — a DOUBLE
+    # here would silently re-poison every VARCHAR-cast join downstream (this op is
+    # HALT-tier post-W8b-cutover; failing beats silent NULLs).
+    for c in int_cols:
+        f = table.schema.field(c)
+        if not (pa.types.is_integer(f.type) or pa.types.is_null(f.type)):
+            raise RuntimeError(
+                f"[int-pin] {lakehouse_name}.{c} would write as {f.type} (not int) — "
+                f"the nullable-int→DOUBLE mirror poisoning; refusing to clobber the mirror."
+            )
+    pq.write_table(table, str(tmp))
     print(f"  uploading {tmp.stat().st_size / 1e6:.1f} MB → s3://{_S3_BUCKET}/{s3_key} ...", flush=True)
     _s3_client().upload_file(str(tmp), _S3_BUCKET, s3_key)
     tmp.unlink(missing_ok=True)
