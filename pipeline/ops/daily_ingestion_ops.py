@@ -1602,6 +1602,43 @@ def write_serving_store_intraday_op(context):
     _run_script(context, "write_serving_store.py", ["--picks", "--game-detail", "--book-odds"])
 
 
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def finalize_prior_slate_game_detail_op(context):
+    """Re-write YESTERDAY's game-detail blobs so they land status='Final' with box scores.
+
+    ROOT CAUSE this closes (found 2026-07-15): the model-vs-market "who called it" scorecards
+    require the cached game-detail blob to be status='Final' with both scores, but NOTHING was
+    re-writing a slate's game-detail blobs AFTER its games ended:
+
+      • The intraday refresher `write_book_odds_op` runs on `odds_current_rebuild_sensor`, whose
+        window CLOSES at the last game's first pitch (odds don't matter after that) — so the last
+        game-detail write of the day catches every game still mid-`Live`, never `Final`.
+      • The daily `write_serving_store_op` writes game-detail for TODAY only; it never revisits the
+        completed slate.
+
+    Net effect: game-detail blobs froze at 'Live'/'Preview', `build_scorecard_from_detail` returned
+    None, and whole dates showed 0 model-vs-market scorecards (24 dates were only ever healed by
+    manual backfills). This op is that backfill made a daily, once-post-game step: it runs in the
+    morning daily job (~08:00 UTC / 05:00 PT), by which point every prior-day game — including the
+    latest West-coast night game — is Final in the source. `--game-detail` alone re-resolves the
+    slate's game_pks from predictions and re-assembles each blob (it does NOT touch picks/today or
+    picks/ev, which guard on --picks); a Final blob with lineups is then permanentized by the writer.
+
+    Targets `current_game_date() - 1` (the completed slate) — never today's in-progress slate. Uses
+    the SAME `--s3` gating as write_serving_store_op (`_w7b_s3_args`) so it reads whichever backend
+    production serves from. WARN-tier (post-game enrichment, per the failure-handling contract): a
+    failure logs LOUD and the op still succeeds — finalizing historical scorecards must never HALT
+    the daily serving path.
+    """
+    yesterday = _one_day_ago()
+    try:
+        _run_script(context, "write_serving_store.py",
+                    ["--game-detail", "--date", yesterday, *_w7b_s3_args()])
+    except Exception as exc:
+        context.log.warning(
+            f"finalize_prior_slate_game_detail_op failed for {yesterday} (non-fatal): {exc}")
+
+
 # ── User bet settlement (Performance page redesign, story B1) ─────────────────
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
