@@ -65,6 +65,7 @@ from pipeline.ops.daily_ingestion_ops import (
     ingest_umpires_early,
     ingest_umpires_late,
     ingest_weather,
+    finalize_prior_slate_game_detail_op,
     predict_today_morning,
     settle_user_bets_op,
     update_lineup_state_scd2,
@@ -248,7 +249,13 @@ def daily_ingestion_job():
     # endpoint → lands yesterday's slate; idempotent partition-skip → only pays for the new day.
     ingest_player_props_op(start=s19)
     write_api_cache_op(predict_done=s19n)
-    write_serving_store_op(predict_done=s19n)
+    s_serve = write_serving_store_op(predict_done=s19n)
+    # 2026-07-15 — finalize YESTERDAY's game-detail blobs to status='Final' so the model-vs-market
+    # scorecards populate. Nothing else re-writes a slate's game-detail after its games end (the
+    # intraday odds sensor window closes at last first pitch; the daily serving write is TODAY-only),
+    # so completed slates were freezing at 'Live'. WARN-tier, terminal leaf — runs after the serving
+    # write so it never delays today's picks and a failure can't block the daily path.
+    finalize_prior_slate_game_detail_op(start=s_serve)
     s19b = update_pipeline_status(start=s19n)
     s20 = check_prediction_coverage(start=s19b)
     s21 = dbt_mart_prediction_clv(start=s20)
