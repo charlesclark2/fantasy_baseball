@@ -26,6 +26,7 @@ import logging
 
 from . import s3io
 from .handler import _parse_seasons, load_env, run_ingest
+from .sources import build_ctx
 
 log = logging.getLogger(__name__)
 
@@ -52,11 +53,14 @@ def main() -> None:
 
     log.info("Backfill NCAAF seasons=%s sources=%s → %s",
              seasons, sources or "ALL(24)", args.local_root or f"s3://{args.bucket}/ncaaf/raw")
+    # ONE ctx/client for the whole backfill so the CFBD adaptive throttle (self-tunes up on
+    # 429) persists across seasons instead of resetting to the fast default each season.
+    ctx = build_ctx()
     # Run season-by-season so a budget stop-out leaves completed seasons durably landed.
     total = {}
     for season in seasons:
         manifest = run_ingest([season], sources=sources, weeks=weeks,
-                              local_root=args.local_root, bucket=args.bucket)
+                              local_root=args.local_root, bucket=args.bucket, ctx=ctx)
         rem = manifest.get("_cfbd_calls_remaining")
         total.update({k: v for k, v in manifest.items() if not k.startswith("_")})
         log.info("  season %s done; CFBD calls remaining: %s", season, rem)
