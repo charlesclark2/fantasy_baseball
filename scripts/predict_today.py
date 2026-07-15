@@ -1032,10 +1032,21 @@ def _write_predictions_to_snowflake(
     _n_serving_guard = 0    # Story 30.3 — games abstained for value-degraded serving
     _n_lineup_deferred = 0  # Story 30.3 — pre-lineup games whose edge defers to the post_lineup re-score
     # Story 30.13 Task 4 — SLATE-LEVEL serve-time freshness gate (one check, not per game).
-    # Skipped for historical backfills (the check is about TODAY's build-vs-ingestion).
+    # Skipped for ALL historical scoring — backfill-flagged OR any past-date re-score —
+    # not just is_backfill: the gate asserts "TODAY's build was refreshed from TODAY's
+    # ingestion", and for a completed slate the EB build date can never equal the game
+    # date, so it would abstain EVERY historical re-score while protecting nothing (the
+    # games are over; no actionable bet exists to suppress). Observed 2026-07-15: the
+    # degraded-window correction re-scores (post_lineup --lineup-confirmed, deliberately
+    # NOT --is-backfill) had all 13 games' sigma_tier forced to `abstain` by this gate.
+    # ISO-string compare against the INC-22 game-day clock (never the UTC box clock).
     serving_stale, _serving_stale_reason = (False, "")
-    if not is_backfill:
+    _is_historical_rescore = str(target_date)[:10] < current_game_date_iso()
+    if not is_backfill and not _is_historical_rescore:
         serving_stale, _serving_stale_reason = _serving_freshness_stale(target_date)
+    elif _is_historical_rescore and not is_backfill:
+        print(f"  [30.13 FRESHNESS-GATE] historical re-score ({target_date} < today) — "
+              f"gate skipped (build-vs-ingestion freshness is a live-serve concern).")
     _n_freshness_abstained = 0
 
     for i in range(len(df_today)):
