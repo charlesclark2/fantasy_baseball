@@ -8,7 +8,9 @@ sports_lake:
   outputs:
     dev:
       type: duckdb
-      path: "{{ env_var('SPORTS_DUCKDB_PATH', 'build/sports.duckdb') }}"
+      # Default DB path is the project root (NOT build/…) — DuckDB won't create a missing
+      # parent dir, so a subdir default fails on a fresh checkout. Gitignored via *.duckdb.
+      path: "{{ env_var('SPORTS_DUCKDB_PATH', 'sports.duckdb') }}"
       extensions:
         - httpfs
         - parquet
