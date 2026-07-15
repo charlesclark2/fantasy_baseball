@@ -49,6 +49,11 @@ REQUIRED_INTRADAY_FLAGS = (
     "LINEUP_INTRADAY_S3_REBUILD",    # intraday lineup re-score reaches the S3 feature parquet
     "W8A_LAKEHOUSE_S3",              # feature-layer + EB served from S3 (cut over 2026-06-30)
     "W8B_LAKEHOUSE_S3",              # serving aggregator served from S3 (cut over 2026-06-30)
+    # E11.20-COST (2026-07-16): W7B was found NEVER SET on the box — intended ON since the
+    # W7b cutover, but unenforced flags silently drift (daily predict/serving read SF for
+    # weeks, and the intraday book-odds --s3 gate stayed off). Enforce both like W8A/W8B.
+    "W7A_LAKEHOUSE_S3",              # matchup/posterior/profile consumer reads from S3 (W7a)
+    "W7B_LAKEHOUSE_S3",              # predict_today / write_serving_store read from S3 (W7b)
 )
 
 
