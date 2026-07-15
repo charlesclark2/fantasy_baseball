@@ -63,14 +63,19 @@ def run_ingest(
     bucket: str = s3io.DEFAULT_BUCKET,
     cfbd_key: str | None = None,
     odds_key: str | None = None,
+    ctx=None,
 ) -> dict[str, Any]:
     """Fetch + land each (source, season). Returns a manifest {source/season: rows|error}.
 
     `local_root` writes Delta to a local FS tree instead of S3 (offline smoke / pre-bucket
     dev). `weeks` scopes week-grained/per-game pulls (the smoke path; None = whole season).
+    `ctx` lets a caller REUSE one client across calls — the backfill passes a single ctx for
+    all seasons so the CFBD client's ADAPTIVE throttle (self-tunes up on 429) persists instead
+    of resetting to the fast default each season.
     """
     src_names = _resolve_sources(sources)
-    ctx = build_ctx(cfbd_key=cfbd_key, odds_key=odds_key)
+    if ctx is None:
+        ctx = build_ctx(cfbd_key=cfbd_key, odds_key=odds_key)
     manifest: dict[str, Any] = {}
 
     for name in src_names:

@@ -88,18 +88,23 @@ class CFBDClient:
         timeout: float = 30.0,
         max_retries: int = 6,
         throttle_seconds: float | None = None,
+        max_throttle_seconds: float = 5.0,
         session: requests.Session | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.max_retries = max_retries
         # A steady minimum interval between requests so the per-game play_stats loop (~920
-        # calls/season, back-to-back) doesn't burst past CFBD's per-minute rate limit → 429.
-        # Env-tunable; a one-time backfill can afford ~0.1s/call. (0 = no throttle, for tests.)
+        # calls/season, back-to-back) doesn't burst past CFBD's (undocumented) per-window rate
+        # limit → 429. Env-tunable START value; it self-tunes UP on any 429 (adaptive, below).
+        # An in-region box fires far faster than a laptop, so a fixed guess is fragile — the
+        # adaptive bump converges to a sustainable rate without the operator guessing the limit.
+        # (0 = no throttle, for tests.)
         self.throttle_seconds = (
             throttle_seconds if throttle_seconds is not None
-            else float(os.environ.get("CFBD_THROTTLE_SECONDS", "0.1"))
+            else float(os.environ.get("CFBD_THROTTLE_SECONDS", "0.5"))
         )
+        self.max_throttle_seconds = max_throttle_seconds
         self._last_request_ts: float | None = None
         self._session = session or requests.Session()
         self._session.headers.update(
@@ -163,10 +168,23 @@ class CFBDClient:
                     f"CFBD {resp.status_code} on {path} — bad key or a Patreon-tier-gated "
                     f"endpoint (e.g. /live/plays needs Tier 2+). Body: {resp.text[:200]!r}"
                 )
-            if resp.status_code == 429 or 500 <= resp.status_code < 600:
-                # rate-limited (429) / server error (5xx) → Retry-After-aware backoff and retry.
-                # A 429 needs a real cooldown (per-minute limit); a lone-game 5xx usually
-                # recovers on retry, and if it doesn't the per-game loop skips just that game.
+            if resp.status_code == 429:
+                # ADAPTIVE rate-limit cure: permanently raise the steady throttle after a 429
+                # so the client self-tunes DOWN to a sustainable request rate (CFBD's exact
+                # per-window limit is undocumented + the box fires much faster than a laptop).
+                # Persists across seasons because the backfill reuses ONE client (build ctx once)
+                # → it converges after the first season and stops skipping games.
+                self.throttle_seconds = min(
+                    self.throttle_seconds * 1.5 + 0.1, self.max_throttle_seconds
+                )
+                last_exc = CFBDError(
+                    f"CFBD 429 on {path} (throttle→{self.throttle_seconds:.2f}s)"
+                )
+                time.sleep(self._retry_after(resp, attempt))
+                continue
+            if 500 <= resp.status_code < 600:
+                # server error → Retry-After-aware backoff; a lone-game 5xx usually recovers,
+                # and if it doesn't the per-game loop skips just that game (not the season).
                 last_exc = CFBDError(f"CFBD {resp.status_code} on {path}")
                 time.sleep(self._retry_after(resp, attempt))
                 continue

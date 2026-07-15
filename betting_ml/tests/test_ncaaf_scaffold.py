@@ -17,6 +17,7 @@ from quant_sports_intel_models.football.ncaaf.ingest.cfbd_client import (
     CFBDAuthError,
     CFBDClient,
     CFBDContentError,
+    CFBDError,
 )
 from quant_sports_intel_models.football.ncaaf.ingest import sources as src
 from quant_sports_intel_models.football.ncaaf.ingest.handler import (
@@ -95,6 +96,18 @@ def test_cfbd_429_then_success(monkeypatch):
     resps = [_FakeResp(status=429, text="rate limited"), _FakeResp(status=200, body=[{"id": 1}])]
     c = CFBDClient(api_key="x", throttle_seconds=0, session=_SeqSession(resps))
     assert c.get("/plays", {"year": 2024, "week": 1}) == [{"id": 1}]
+
+
+def test_cfbd_429_bumps_throttle_adaptively(monkeypatch):
+    # A 429 must self-tune the steady throttle UP so the client converges to a sustainable
+    # rate (the box fires faster than a laptop → a fixed throttle guess is fragile).
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    c = CFBDClient(api_key="x", throttle_seconds=0.1, session=_FakeSession(_FakeResp(status=429)))
+    start = c.throttle_seconds
+    with pytest.raises(CFBDError):
+        c.get("/plays/stats", {"gameId": 1})
+    assert c.throttle_seconds > start                 # grew on 429s
+    assert c.throttle_seconds <= c.max_throttle_seconds  # but capped
 
 
 def test_cfbd_retry_after_header_honored():
