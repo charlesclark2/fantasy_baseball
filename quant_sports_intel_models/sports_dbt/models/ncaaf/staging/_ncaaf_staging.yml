@@ -1,0 +1,30 @@
+version: 2
+
+models:
+  - name: stg_ncaaf_games
+    description: >
+      Flattened CFBD /games — one row per game, sport-tagged. The minimum-bar box-score
+      spine (ncaaf_data_inventory.md §2.1). Reads the raw Delta table via the ncaaf_delta()
+      macro (delta_scan). FBS-only matchups flagged (is_fbs_matchup).
+    columns:
+      - name: game_id
+        description: CFBD game id (ESPN-style).
+        data_tests: [not_null, unique]
+      - name: season
+        data_tests: [not_null]
+      - name: sport
+        data_tests: [not_null]
+
+  - name: stg_ncaaf_odds
+    description: >
+      Flattened Odds API NCAAF game lines — one row per (event, bookmaker, market, outcome).
+      h2h/spreads/totals across US books incl. Bovada. Reads the raw Delta table via
+      ncaaf_delta(). Intraday cadence in-season.
+    columns:
+      - name: event_id
+        data_tests: [not_null]
+      - name: market
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["h2h", "spreads", "totals"]
