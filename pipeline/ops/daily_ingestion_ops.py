@@ -437,7 +437,17 @@ def ingest_statcast(context):
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def ingest_statsapi_schedule(context):
-    _run_script(context, "ingest_statsapi.py", ["schedule"])
+    # Start the pull at YESTERDAY, not the default (first-of-current-month). run_schedule iterates
+    # whole months, so on a normal day start=yesterday is in the current month → still ONE month
+    # fetch (no extra cost); only on the 1st does it also re-pull the PREVIOUS month.
+    #
+    # WHY (found 2026-07-15): the default current-month-only pull strands the LAST day of a month.
+    # Late West-coast games still 'In Progress' at the final same-month schedule capture were never
+    # re-fetched once the calendar rolled — statsapi kept reporting them 'Live' in the lakehouse
+    # forever (6/30's 4 frozen games). This also blinded finalize_prior_slate_game_detail_op on the
+    # 1st: it reads stg_statsapi_games for yesterday, which the month-only pull hadn't refreshed.
+    # Re-pulling from yesterday guarantees the prior day's finals land regardless of month boundary.
+    _run_script(context, "ingest_statsapi.py", ["schedule", "--start-date", _one_day_ago()])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

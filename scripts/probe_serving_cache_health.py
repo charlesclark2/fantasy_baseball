@@ -10,10 +10,16 @@ Answers the two questions behind the 2026-07-13 serving-data incident:
 
   2. How many of each date's games have a SCORECARD-READY game-detail blob?
      The model-vs-market "who called it" scorecards require the cached game-detail blob to be
-     status='Final' with both scores. A blob frozen mid-game at status='Live' produces NO scorecard,
-     so the date shows no model-vs-market data. Game-detail blobs are refreshed intraday by
-     write_book_odds_op (--book-odds --game-detail); if that stops running, games that finish after
-     the last refresh freeze at 'Live' forever.
+     status='Final' with both scores. Games without a scorecard are classified into two buckets so
+     an expected gap isn't mistaken for a failure:
+       • NEEDS BACKFILL (actionable) — a blob frozen mid-game at 'Live'/'Preview', or missing. Root
+         cause is a game-detail refresh that stopped before the game went Final; healed by
+         finalize_prior_slate_game_detail_op (daily) or a manual `--game-detail --date D` re-run.
+         If it persists, the game is stuck Live/Preview in the SOURCE schedule feed itself and that
+         date's statsapi schedule needs re-ingesting (a game-detail write only mirrors the source).
+       • postponed (expected) — the game is Final-in-the-feed with NULL scores because it was
+         POSTPONED/cancelled and moved to a future date. It was never played on this date, so it
+         has no result and no backfill can produce one. These do NOT count against date health.
 
 Use it to (a) find dates needing a `write_serving_store.py --picks --game-detail --s3 --date D`
 re-run, and (b) verify a backfill afterwards.
@@ -88,25 +94,46 @@ def main() -> int:
 
         gps = sorted({p.get("game_pk") for p in (blob.get("picks") or [])
                       if p.get("game_pk") is not None})
-        final = 0
+        final = 0        # scorecard-ready (Final + both scores)
+        no_result = 0    # postponed/cancelled — Final in the feed but NULL scores (never played this date)
+        stale = 0        # genuinely actionable: no blob, or still Live/Preview on a past date
         for gp in gps:
             it = by_sk.get(f"game/{gp}#PERMANENT") or by_sk.get(f"game/{gp}#{d}")
             if not it:
+                stale += 1
                 continue
             try:
-                if build_scorecard_from_detail(json.loads(it["value"]), gp) is not None:
+                detail = json.loads(it["value"])
+                if build_scorecard_from_detail(detail, gp) is not None:
                     final += 1
+                    continue
             except Exception:
                 pass
+            # No scorecard produced — classify WHY, so a postponed game isn't a false alarm.
+            # A postponed/cancelled game is Final-in-the-feed with NULL scores: it was moved to a
+            # future date and never played on THIS one, so it legitimately has no result here and
+            # no backfill can ever produce one. Anything else (stuck Live/Preview) IS actionable.
+            gs = (detail.get("game_score") or {}) if isinstance(detail, dict) else {}
+            if gs.get("status") == "Final" and gs.get("home_score") is None and gs.get("away_score") is None:
+                no_result += 1
+            else:
+                stale += 1
 
-        sc_ok = not gps or final == len(gps)
+        # A date is healthy when its EV blob parses AND every PLAYED game has a scorecard. Postponed
+        # (no_result) games are expected gaps, not failures — they don't count against health.
+        sc_ok = stale == 0
         if not (ev_ok and sc_ok):
             unhealthy.append(d)
-        note = "" if (ev_ok and sc_ok) else "NEEDS BACKFILL"
+        note = ""
+        if not ev_ok or stale:
+            note = "NEEDS BACKFILL"
+        elif no_result:
+            note = f"({no_result} postponed)"
         print(f"{d:<12} {ev_txt:<9} {len(gps):<7} {final:<7} {note}")
 
     print(f"\n{len(dates) - len(unhealthy)}/{len(dates)} dates healthy; "
-          f"{len(unhealthy)} need a re-run.")
+          f"{len(unhealthy)} genuinely need attention "
+          f"(postponed/no-result games are expected gaps, not failures).")
     if unhealthy:
         print("Unhealthy dates:", " ".join(unhealthy))
     if args.backfill_cmd and unhealthy:
@@ -114,8 +141,11 @@ def main() -> int:
         print("for D in " + " ".join(unhealthy) + "; do")
         print("  docker compose -f services/dagster/aws/docker-compose.yml exec -T \\")
         print("    -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc \\")
-        print('    python scripts/write_serving_store.py --picks --game-detail --s3 --date "$D"')
+        print('    python scripts/write_serving_store.py --game-detail --s3 --date "$D"')
         print("done")
+        print("# NOTE: if a date stays unhealthy after this, its games are stuck Live/Preview in the")
+        print("#       SOURCE schedule feed (stg_statsapi_games) — re-ingest that date's statsapi")
+        print("#       schedule first (a game-detail re-run only mirrors whatever the source says).")
     return 0
 
 
