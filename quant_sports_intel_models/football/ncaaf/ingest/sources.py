@@ -159,26 +159,47 @@ def _game_ids(ctx: Ctx, year: int, weeks=None, *, fbs_only: bool = True) -> list
     ]
 
 
+def _iter_games_safe(gids, fetch_one, label: str) -> list[dict]:
+    """Run a per-GAME fetch over gids, SKIPPING (not aborting on) a single game's failure.
+
+    A per-game endpoint must not let one bad game sink the whole season — older games can
+    500 on /game/box/advanced (no advanced box exists), and a residual 429 after retries
+    should cost one game, not the partition. Each skip is logged; a summary count surfaces
+    the gap so the operator can spot + re-run a heavily-skipped season."""
+    out: list[dict] = []
+    skipped: list[int] = []
+    for gid in gids:
+        try:
+            out.extend(fetch_one(gid))
+        except Exception as exc:  # noqa: BLE001 — per-game resilience
+            skipped.append(gid)
+            log.warning("  [%s] gameId=%s skipped: %s", label, gid, str(exc)[:120])
+    if skipped:
+        log.warning("  [%s] %d/%d games skipped (data gap — re-run to backfill)",
+                    label, len(skipped), len(gids))
+    return out
+
+
 def _play_stats(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
     """/plays/stats — 2,000-row cap ⇒ per gameId (the ~960-call/season dominant cost).
-    Scoped by `weeks` (via the games list) for the smoke; whole season otherwise."""
+    Scoped by `weeks` (via the games list) for the smoke; whole season otherwise. FBS-only."""
     gids = _game_ids(ctx, year, weeks=weeks)
-    out: list[dict] = []
-    for gid in gids:
-        out.extend(_tag(ctx.cfbd.get_play_stats_by_game(gid), _game_id=gid))
-    return out
+    return _iter_games_safe(
+        gids, lambda g: _tag(ctx.cfbd.get_play_stats_by_game(g), _game_id=g), "play_stats")
 
 
 def _box_advanced(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
-    """/game/box/advanced takes id= (not gameId=) ⇒ per gameId (P0.1 §1)."""
+    """/game/box/advanced takes id= (not gameId=) ⇒ per gameId (P0.1 §1). FBS-only."""
     gids = _game_ids(ctx, year, weeks=weeks)
-    out: list[dict] = []
-    for gid in gids:
+
+    def one(gid: int) -> list[dict]:
         rec = ctx.cfbd.get_box_advanced(gid)
         if isinstance(rec, dict):
             rec["_game_id"] = gid
-            out.append(rec)
-    return out
+            return [rec]
+        return []
+
+    return _iter_games_safe(gids, one, "box_advanced")
 
 
 def _per_week(path: str, *, season_type: str | None = None) -> FetchFn:
