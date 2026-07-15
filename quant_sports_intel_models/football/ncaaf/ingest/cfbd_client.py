@@ -86,18 +86,50 @@ class CFBDClient:
         *,
         base_url: str = CFBD_BASE,
         timeout: float = 30.0,
-        max_retries: int = 4,
+        max_retries: int = 6,
+        throttle_seconds: float | None = None,
         session: requests.Session | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.max_retries = max_retries
+        # A steady minimum interval between requests so the per-game play_stats loop (~920
+        # calls/season, back-to-back) doesn't burst past CFBD's per-minute rate limit → 429.
+        # Env-tunable; a one-time backfill can afford ~0.1s/call. (0 = no throttle, for tests.)
+        self.throttle_seconds = (
+            throttle_seconds if throttle_seconds is not None
+            else float(os.environ.get("CFBD_THROTTLE_SECONDS", "0.1"))
+        )
+        self._last_request_ts: float | None = None
         self._session = session or requests.Session()
         self._session.headers.update(
             {"Authorization": f"Bearer {_api_key(api_key)}", "Accept": "application/json"}
         )
         # Surfaced from X-Calllimit-Remaining on the latest response (None until first call).
         self.last_calls_remaining: int | None = None
+
+    def _throttle(self) -> None:
+        """Enforce the steady min-interval between requests (rate-limit avoidance)."""
+        if self.throttle_seconds <= 0:
+            return
+        now = time.monotonic()
+        if self._last_request_ts is not None:
+            wait = self.throttle_seconds - (now - self._last_request_ts)
+            if wait > 0:
+                time.sleep(wait)
+        self._last_request_ts = time.monotonic()
+
+    @staticmethod
+    def _retry_after(resp, attempt: int) -> float:
+        """Seconds to wait after a 429/5xx — honor Retry-After when present, else exponential
+        backoff capped at 30s (a 429 needs a real cooldown, not the old ~1s)."""
+        ra = resp.headers.get("Retry-After") if resp is not None else None
+        if ra is not None:
+            try:
+                return min(float(ra), 60.0)
+            except ValueError:
+                pass
+        return min(2 ** attempt, 30)
 
     # ── the ONE choke point every fetch flows through ──────────────────────────────────
     def get(self, path: str, params: dict[str, Any] | None = None) -> list | dict:
@@ -110,11 +142,12 @@ class CFBDClient:
         url = f"{self.base_url}/{path.lstrip('/')}"
         last_exc: Exception | None = None
         for attempt in range(self.max_retries):
+            self._throttle()  # steady min-interval so bursts don't trip the per-minute 429
             try:
                 resp = self._session.get(url, params=params, timeout=self.timeout)
             except requests.RequestException as exc:  # transport error → backoff+retry
                 last_exc = exc
-                time.sleep(min(2 ** attempt, 8))
+                time.sleep(self._retry_after(None, attempt))
                 continue
 
             # Surface the free-tier budget meter (case-insensitive; header is X-Calllimit-Remaining).
@@ -131,9 +164,11 @@ class CFBDClient:
                     f"endpoint (e.g. /live/plays needs Tier 2+). Body: {resp.text[:200]!r}"
                 )
             if resp.status_code == 429 or 500 <= resp.status_code < 600:
-                # rate-limited / server error → exponential backoff and retry
+                # rate-limited (429) / server error (5xx) → Retry-After-aware backoff and retry.
+                # A 429 needs a real cooldown (per-minute limit); a lone-game 5xx usually
+                # recovers on retry, and if it doesn't the per-game loop skips just that game.
                 last_exc = CFBDError(f"CFBD {resp.status_code} on {path}")
-                time.sleep(min(2 ** attempt, 8))
+                time.sleep(self._retry_after(resp, attempt))
                 continue
             if resp.status_code == 400:
                 # a validation error (e.g. /plays without week) — do NOT retry, surface it

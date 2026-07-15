@@ -52,8 +52,20 @@ class _FakeSession:
         return self._resp
 
 
+class _SeqSession:
+    """Returns a queued sequence of responses (last one repeats) — for retry tests."""
+
+    def __init__(self, resps):
+        self._resps = list(resps)
+        self.headers = {}
+
+    def get(self, url, params=None, timeout=None):
+        return self._resps.pop(0) if len(self._resps) > 1 else self._resps[0]
+
+
 def _client(resp):
-    return CFBDClient(api_key="x", session=_FakeSession(resp))
+    # throttle_seconds=0 keeps the unit tests instant (the real default is 0.1s/call).
+    return CFBDClient(api_key="x", throttle_seconds=0, session=_FakeSession(resp))
 
 
 # ── the landmine guard: a 200 text/html Swagger page must RAISE, not return HTML ─────────
@@ -75,6 +87,36 @@ def test_cfbd_valid_json_returns_and_tracks_budget():
     out = c.get("/games", {"year": 2024})
     assert out == [{"id": 1}, {"id": 2}]
     assert c.last_calls_remaining == 876  # X-Calllimit-Remaining surfaced
+
+
+def test_cfbd_429_then_success(monkeypatch):
+    # A 429 must back off and retry (not fail after ~15s) — the backfill rate-limit fix.
+    monkeypatch.setattr("time.sleep", lambda s: None)  # no real waiting
+    resps = [_FakeResp(status=429, text="rate limited"), _FakeResp(status=200, body=[{"id": 1}])]
+    c = CFBDClient(api_key="x", throttle_seconds=0, session=_SeqSession(resps))
+    assert c.get("/plays", {"year": 2024, "week": 1}) == [{"id": 1}]
+
+
+def test_cfbd_retry_after_header_honored():
+    resp = _FakeResp(status=429)
+    resp.headers["Retry-After"] = "7"
+    assert CFBDClient._retry_after(resp, 0) == 7.0
+
+
+def test_per_game_loop_skips_bad_game():
+    # One game's 500 must skip that game, NOT abort the whole season (box_advanced/2014).
+    class _G:
+        def get_games(self, year, week=None):
+            return [{"id": 1, "homeClassification": "fbs"}, {"id": 2, "homeClassification": "fbs"}]
+
+        def get_play_stats_by_game(self, gid):
+            if gid == 2:
+                raise RuntimeError("CFBD 500 on /plays/stats")
+            return [{"stat": "x"}]
+
+    ctx = src.Ctx(cfbd=_G())
+    rows = src._play_stats(ctx, 2024)
+    assert len(rows) == 1 and rows[0]["_game_id"] == 1  # game 2 skipped, game 1 kept
 
 
 def test_cfbd_tier_gate_401_raises_auth():
