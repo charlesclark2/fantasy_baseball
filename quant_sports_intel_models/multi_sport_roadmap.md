@@ -1,8 +1,10 @@
 # Multi-Sport Program Roadmap
 
-**Status:** v1.0 — strategy + scaffold
-**Last updated:** 2026-06-18 _(refresh on any material change)_
+**Status:** v1.1 — strategy + scaffold; **NCAAF Phase-0 in flight (activated at the ASB)**
+**Last updated:** 2026-07-13 _(refresh on any material change)_
 **Date:** 2026-06-17
+
+> 🏈 **NCAAF ACTIVE (post-ASB dedicated Opus session; own docs at `football/ncaaf/`).** ✅ **NCAAF-P0.1 DONE 2026-07-13** — `football/ncaaf/ncaaf_data_inventory.md` is the ground-truthed master data file. Headlines: **buy CFBD Patreon Tier-3 ($10/mo — the ONE Phase-0 cost)**; backfill window **2014–2025** (player-advanced is zero pre-2014); ⭐ **the NFL-feeder spine is SOLVED and is NOT an ID join** — CFBD⇄nflverse share no player ID, but the **draft slot `(season, overall pick)` matches 99.7%** to `gsis_id` (so §4's "player-ID xref" is really draft-slot join + UDFA fuzzy-match); **PFF is a licensing project, not a $120 buy** → Tier-A-first is locked. ⚠️ **CROSS-SPORT: the `nfl_data_py` recommendation (this doc §? / `sport_data_platform.md §4/§10`) is STALE — it's abandoned + won't build on py3.12 → use nflverse release Parquet via DuckDB `read_parquet`; also "Railway PG" serving is decommissioned → DynamoDB→S3.** Both corrected in `sport_data_platform.md`'s top banner (affects NFL + NCAAB too). Next: NCAAF-P0.3 (xref — zero deps, can start now) + P0.2 (scaffold — backfill gated on the Tier-3 key).
 **Purpose:** how we extend the platform beyond MLB to **NFL, NCAA Basketball (NCAAB), and NCAA Football (NCAAF)** for the fall-2026 seasons — without rebuilding the methodology each time.
 
 ---

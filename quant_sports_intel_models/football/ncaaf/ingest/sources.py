@@ -139,9 +139,24 @@ def _drives(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
     return out
 
 
-def _game_ids(ctx: Ctx, year: int, weeks=None) -> list[int]:
+def _is_fbs_game(g: dict) -> bool:
+    """A game involving ≥1 FBS team — the modelling universe (ncaaf_data_inventory.md §9
+    gap 8). /games year-only returns ALL divisions (~3,800/season incl DII/NAIA); the
+    per-GAME endpoints must NOT iterate those or the call budget blows up (§6 assumes
+    ~60 FBS games/week). CFBD marks the division on each side as home/awayClassification."""
+    return g.get("homeClassification") == "fbs" or g.get("awayClassification") == "fbs"
+
+
+def _game_ids(ctx: Ctx, year: int, weeks=None, *, fbs_only: bool = True) -> list[int]:
+    """Game ids for the per-GAME endpoints (play_stats / box_advanced). FBS-only by default
+    so the ~960-call/season budget (§6) holds — an unfiltered list is ~4× larger and mostly
+    non-FBS junk. Bulk week-grained pulls (games/plays/drives) land ALL divisions cheaply and
+    are FBS-filtered downstream in dbt (is_fbs_matchup) — only the per-game fan-out is gated here."""
     games = _games(ctx, year, weeks=weeks)
-    return [int(g["id"]) for g in games if g.get("id") is not None]
+    return [
+        int(g["id"]) for g in games
+        if g.get("id") is not None and (not fbs_only or _is_fbs_game(g))
+    ]
 
 
 def _play_stats(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
