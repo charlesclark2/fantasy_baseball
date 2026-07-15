@@ -1,6 +1,8 @@
 # NCAA Football (NCAAF) — Implementation Guide (stub)
 
-**Status:** v0.1 — scaffold (Phase 0 not yet started)
+> ⭐ **THIS SPORT NOW HAS ITS OWN ROADMAP + PROMPTS (operator 2026-07-08):** `ncaaf_roadmap.md` (phased plan + the exact by-position data requirements + the ✅free/💰paid/⛔gap source map) and `ncaaf_story_prompts.md` (runnable Phase-0 prompts: P0.1 data-source eval + inventory → P0.2 lakehouse scaffold → P0.3 college↔NFL ID xref). This guide is the methodology reference; the roadmap/prompts drive the work. NCAAF activates at the MLB ASB as the dedicated 2nd Opus session.
+
+**Status:** v0.2 — roadmap + Phase-0 prompts written (2026-07-08); execution starts at the ASB
 **Parent:** `quant_sports_intel_models/multi_sport_roadmap.md`
 **Reference implementation:** MLB `baseball/edge_program/` + the MiLB→MLB translation (Edge **E7**) — NCAAF's feeder model is the football analog of E7.
 **Master data file:** `football/ncaaf/ncaaf_data_inventory.md` *(to be created in Phase 0)*.

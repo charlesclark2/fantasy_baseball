@@ -150,6 +150,22 @@ attributable. Residual spend after phase 1 = Cortex + the not-yet-migrated famil
 name the next-biggest ext-table read families from `query_history` in the AFTER report
 to seed phase 2's migration order.
 
+**✅ BEFORE captured 2026-07-13 (7 trailing full days, 07-06 → 07-12):**
+- `mart_pitch` family (`lakehouse_ext.mart_pitch%` + `betting.mart_pitch%` query text):
+  **405–714 queries/day, 176–620 s elapsed/day, ~0.024–0.033 cloud-services credits/day**
+  (this counts the daily dbt view rebuilds, ext-table REFRESHes, and straggler reads —
+  all of which phase 1.5 removes).
+- Whole-account anchor: **4.23–5.10 total credits/day** (compute 3.87–4.61 + cloud
+  services 0.30–0.50). The AFTER report re-runs both queries 7 days post-drop and
+  reports the deltas against these rows.
+- Phase-2 seeding (top `lakehouse_ext.*` families by 7-day elapsed): the pregame feature
+  family dominates — `feature_pregame_game_features` 1,043 s + `_raw` 972 s +
+  `starter/team/lineup` 634/522/482 s (≈9 min/day combined, low query count = the big
+  dbt materializations), then `stg_statsapi_lineups` (624 q / 237 s) and the odds pair
+  `mart_odds_outcomes` / `stg_oddsapi_odds` (428 q / 188 s, 320 q / 155 s). The
+  mart_pitch family itself is mid-table (205 q / 105 s via ext) — its saving is mostly
+  the SF-side view rebuild + REFRESH churn, not ext reads.
+
 ## 5. INC-31 systemic audit result (DO #6)
 
 - **Writer-uniqueness:** no export mirror writes any `lakehouse/mart_pitch_*` key —
@@ -208,6 +224,45 @@ use this same command for the mirror-day BEFORE rows and the post-cutover AFTER 
 docker compose -f ~/app/services/dagster/aws/docker-compose.yml exec -T \
   dagster-codeloc python -u scripts/report_lakehouse_op_timings.py --runs 14
 ```
+
+**✅ AC-B BEFORE captured 2026-07-13** from the two clean REAL-GAME-DAY runs on the
+decomposed ops with Delta OFF (07-11 + 07-12; break-day runs would understate — do NOT
+replace these rows with All-Star-break cycles):
+
+| op (BEFORE, Delta off) | 07-11 | 07-12 |
+|---|---|---|
+| `lakehouse_w6_odds_marts_op` | 9m25s | 9m47s |
+| `lakehouse_w2_marts_op` | 4m12s | 3m51s |
+| `lakehouse_w8a_feature_layer_op` | 3m54s | 3m54s |
+| `lakehouse_w3_marts_op` | 3m25s | 3m26s |
+| `lakehouse_w8b_aggregator_op` | 3m19s | 3m24s |
+| `lakehouse_spine_odds_bridge_op` | 3m02s | 3m03s |
+| **`lakehouse_w1_pitch_marts_op`** (the Delta target) | **2m48s** | **2m42s** |
+| `lakehouse_w3pre_flatten_op` | 2m30s | 2m42s |
+| `lakehouse_w11_nightly_op` | 1m59s | 1m59s |
+| `lakehouse_w7b_serving_op` | 39s | 39s |
+| `lakehouse_schedule_export_op` | 14s | 14s |
+| **total daily job** | **56m30s** | **60m33s** |
+
+**✅ MIRROR-phase rows captured 2026-07-15** (3 green mirror cycles 07-13→07-15, All-Star
+break — break-day totals understate real-game days, but the W1 op is date-insensitive
+(full-history rebuild) so its mirror overhead reads true):
+
+| op (MIRROR, Delta write added) | 07-13 | 07-14 | 07-15 |
+|---|---|---|---|
+| **`lakehouse_w1_pitch_marts_op`** (rebuild + Delta write) | **3m29s** | **3m12s** | **3m12s** |
+| `lakehouse_delta_maintenance_op` | 5s | 5s | 5s |
+| **total daily job** | 62m56s | 53m27s | 52m13s |
+
+Mirror overhead on the W1 op ≈ +25–45s over the 2m42–2m48s BEFORE (the parallel Delta
+current-season write) — disappears at cutover when the full-history legacy rebuild is
+dropped. Parity re-PASSED (84/84 partitions) after the 3rd mirror cycle on 2026-07-15.
+
+AFTER expectation at cutover: the W1 op drops from the ~2m45s full-history rebuild to an
+O(current-season) partition swap + one compat season file. The w6 odds op (~9.5m) is the
+confirmed biggest remaining op → phase 2's first runtime target (with the pregame feature
+family as the SF-credit target, per the §4 seeding). Per-wave timing attribution across
+the whole pipeline = the absorbed E11.21 audit, now a standing one-command report.
 
 **Step 2 — mirror mode + the one-time Delta backfill (backfill ≈ a full W1 rebuild, >1 min).**
 ⚠️ **Set the persistent `.env` flag ONLY on an image that carries the current code.** The

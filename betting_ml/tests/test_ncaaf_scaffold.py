@@ -197,6 +197,25 @@ def test_week_grained_fetchers_never_call_year_only():
     assert len(rows) == len(src._default_weeks())
 
 
+def test_game_ids_fbs_only_gates_per_game_budget():
+    # The per-game endpoints (play_stats/box_advanced) must iterate FBS games only, or the
+    # ~960-call/season budget blows up (~4x). CFBD /games returns all divisions.
+    games = [
+        {"id": 1, "homeClassification": "fbs", "awayClassification": "fbs"},   # FBS vs FBS
+        {"id": 2, "homeClassification": "fbs", "awayClassification": "fcs"},    # FBS vs FCS (kept)
+        {"id": 3, "homeClassification": "ii", "awayClassification": None},      # DII vs NAIA (dropped)
+        {"id": 4, "homeClassification": "fcs", "awayClassification": "fcs"},    # FCS vs FCS (dropped)
+    ]
+
+    class _G:
+        def get_games(self, year, week=None):
+            return games
+
+    ctx = src.Ctx(cfbd=_G())
+    assert src._game_ids(ctx, 2024, fbs_only=True) == [1, 2]
+    assert src._game_ids(ctx, 2024, fbs_only=False) == [1, 2, 3, 4]
+
+
 def test_handler_parse_seasons():
     assert _parse_seasons("2024") == [2024]
     assert _parse_seasons("2014-2016") == [2014, 2015, 2016]
