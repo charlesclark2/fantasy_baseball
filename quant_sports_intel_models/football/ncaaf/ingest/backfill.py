@@ -25,7 +25,7 @@ import argparse
 import logging
 
 from . import s3io
-from .handler import _parse_seasons, run_ingest
+from .handler import _parse_seasons, load_env, run_ingest
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +45,7 @@ def main() -> None:
     args = p.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    load_env()  # pick up CFBD_API_KEY / ODDS_API_KEY from .env for standalone laptop runs
     seasons = _parse_seasons(args.seasons)
     sources = args.sources.split(",") if args.sources else None
     weeks = [int(w) for w in args.weeks.split(",")] if args.weeks else None

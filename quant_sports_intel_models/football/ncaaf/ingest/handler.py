@@ -27,6 +27,24 @@ from .sources import SOURCES, SPORT, build_ctx
 log = logging.getLogger(__name__)
 
 
+def load_env() -> None:
+    """Load a repo/cwd `.env` into the environment for STANDALONE CLI runs (laptop backfills)
+    so CFBD_API_KEY / ODDS_API_KEY don't have to be manually exported — `uv run` does NOT
+    auto-load `.env`, and a fresh terminal won't have them (the 2026-07-16 laptop backfill:
+    every CFBD/Odds source failed with cfbd=None / 'ODDS_API_KEY not set').
+
+    No-op when python-dotenv is absent (the box container gets its env via docker env_file, not
+    a repo .env) or no .env is found. NEVER overrides an already-set var, so the box/CI env wins.
+    """
+    try:
+        from dotenv import find_dotenv, load_dotenv
+    except ImportError:
+        return
+    path = find_dotenv(usecwd=True)
+    if path:
+        load_dotenv(path, override=False)
+
+
 def _resolve_sources(names) -> list[str]:
     if not names:
         return list(SOURCES)
@@ -100,6 +118,7 @@ def _cli() -> None:
     args = p.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    load_env()  # pick up CFBD_API_KEY / ODDS_API_KEY from .env for standalone runs
     seasons = _parse_seasons(args.seasons)
     sources = args.sources.split(",") if args.sources else None
     weeks = [int(w) for w in args.weeks.split(",")] if args.weeks else None
