@@ -26,7 +26,11 @@ from datetime import datetime, timezone
 
 JOB_NAME = "daily_ingestion_job"
 # Anchor (non-lakehouse) ops worth a row for context in the AC-B narrative.
-CONTEXT_OPS = ("ingest_statcast_to_s3_op", "dbt_daily_build", "predict_today_morning")
+# run_w1_lakehouse_op = the RETIRED pre-E11.20 monolith — including it lets the report
+# show the monolith's single-op duration on historical runs next to the decomposed
+# per-wave ops on current runs (the E11.21 attribution story in one table).
+CONTEXT_OPS = ("ingest_statcast_to_s3_op", "dbt_daily_build", "predict_today_morning",
+               "run_w1_lakehouse_op")
 
 
 def _fmt_secs(s: float | None) -> str:

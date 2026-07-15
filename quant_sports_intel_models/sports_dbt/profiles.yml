@@ -1,0 +1,24 @@
+# dbt-duckdb profile for the shared new-sports project (NCAAF-P0.2).
+#
+# DuckDB reads S3 Delta directly — no warehouse, free compute (sport_data_platform.md §6/§7A).
+# S3 auth via the credential chain (the instance role on the box; ambient keys on a laptop) —
+# NO inline keys (the AKID landmine). Region pinned per resource.
+sports_lake:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('SPORTS_DUCKDB_PATH', 'build/sports.duckdb') }}"
+      extensions:
+        - httpfs
+        - parquet
+        - delta
+      secrets:
+        - type: s3
+          provider: credential_chain
+          region: "{{ env_var('SPORTS_LAKE_REGION', 'us-east-2') }}"
+      settings:
+        # Box-aware: the daily/weekly build runs on the shared EC2 box; keep DuckDB from
+        # over-committing RAM (the INC-22 OOM class). Overridable per host.
+        memory_limit: "{{ env_var('SPORTS_DUCKDB_MEMORY', '4GB') }}"
+        threads: 4
