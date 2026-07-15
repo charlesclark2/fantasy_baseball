@@ -157,6 +157,46 @@ def test_registry_groupings():
     assert src.SOURCES["nflverse_players"].season_scoped is False
 
 
+class _FakeCFBD:
+    """Records calls; mimics CFBD requiring `week` for the week-grained endpoints (a
+    year-only call raises, like the live 400 'either week, team, or conference are required')."""
+
+    def __init__(self):
+        self.calls = []
+
+    def get_game_team_stats(self, year, week=None):
+        if week is None:
+            raise RuntimeError("400: week required")
+        self.calls.append(("teams", week))
+        return [{"team": "A", "week": week}]
+
+    def get_game_player_stats(self, year, week=None):
+        if week is None:
+            raise RuntimeError("400: week required")
+        self.calls.append(("players", week))
+        return [{"player": "x", "week": week}]
+
+    def get(self, path, params):
+        if "week" not in params:
+            raise RuntimeError("400: week required")
+        self.calls.append((path, params["week"]))
+        return [{"ppa": 1.0}]
+
+
+def test_week_grained_fetchers_never_call_year_only():
+    # game_team_stats / game_player_stats / ppa_players_games must loop weeks, never year-only
+    # (the 2026-07-15 backfill 400). Scope to a couple weeks so the test is cheap.
+    ctx = src.Ctx(cfbd=_FakeCFBD())
+    for name in ["game_team_stats", "game_player_stats", "ppa_players_games"]:
+        rows = src.SOURCES[name].fetch(ctx, 2024, weeks=[1, 2])
+        assert len(rows) == 2, name
+        assert all("_week" in r for r in rows), name
+    # and with weeks=None the fetchers still loop the default weeks (no year-only fallback)
+    ctx2 = src.Ctx(cfbd=_FakeCFBD())
+    rows = src.SOURCES["game_team_stats"].fetch(ctx2, 2024)
+    assert len(rows) == len(src._default_weeks())
+
+
 def test_handler_parse_seasons():
     assert _parse_seasons("2024") == [2024]
     assert _parse_seasons("2014-2016") == [2014, 2015, 2016]

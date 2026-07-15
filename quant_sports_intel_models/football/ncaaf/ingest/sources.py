@@ -108,13 +108,20 @@ def _games(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
 
 
 def _game_team_stats(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
-    return ctx.cfbd.get_game_team_stats(year) if weeks is None else \
-        [r for wk in weeks for r in _tag(ctx.cfbd.get_game_team_stats(year, week=wk), _week=wk)]
+    # /games/teams REQUIRES a filter — "either week, team, or conference are required"
+    # (verified live 2026-07-15; year-only 400s). Always loop weeks (never year-only).
+    out: list[dict] = []
+    for wk in (weeks or _default_weeks()):
+        out.extend(_tag(ctx.cfbd.get_game_team_stats(year, week=wk), _week=wk))
+    return out
 
 
 def _game_player_stats(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
-    return ctx.cfbd.get_game_player_stats(year) if weeks is None else \
-        [r for wk in weeks for r in _tag(ctx.cfbd.get_game_player_stats(year, week=wk), _week=wk)]
+    # /games/players REQUIRES a filter too (same 400 as /games/teams). Per-week loop.
+    out: list[dict] = []
+    for wk in (weeks or _default_weeks()):
+        out.extend(_tag(ctx.cfbd.get_game_player_stats(year, week=wk), _week=wk))
+    return out
 
 
 def _plays(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
@@ -157,6 +164,23 @@ def _box_advanced(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
             rec["_game_id"] = gid
             out.append(rec)
     return out
+
+
+def _per_week(path: str, *, season_type: str | None = None) -> FetchFn:
+    """Build a fetcher for a WEEK-GRAINED endpoint that REQUIRES `week` (a per-week loop).
+    e.g. /ppa/players/games 400s on year-only ("week is required") — verified live 2026-07-15.
+    (Contrast the year-only endpoints below, which take year with no filter.)"""
+    def fetch(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
+        out: list[dict] = []
+        for wk in (weeks or _default_weeks()):
+            params = {"year": year, "week": wk}
+            if season_type:
+                params["seasonType"] = season_type
+            rows = ctx.cfbd.get(path, params)
+            out.extend(_tag(rows if isinstance(rows, list) else [rows], _week=wk))
+        return out
+    fetch.__name__ = f"_per_week{path.replace('/', '_')}"
+    return fetch
 
 
 def _year_only(path: str) -> FetchFn:
@@ -228,8 +252,8 @@ SOURCES: dict[str, SourceSpec] = {s.name: s for s in [
                "season", "weekly", notes="year-accepting; the per-game advanced modelling grain"),
     SourceSpec("box_advanced", _box_advanced, "cfbd", "team", "season/week", "weekly",
                notes="id= param; overlaps game_advanced (optional)"),
-    SourceSpec("ppa_players_games", _year_only("/ppa/players/games"), "cfbd", "player",
-               "season", "weekly", notes="2014+ only"),
+    SourceSpec("ppa_players_games", _per_week("/ppa/players/games"), "cfbd", "player",
+               "season/week", "weekly", notes="2014+ only; /ppa/players/games REQUIRES week"),
     # 10–13 season-grained CFBD (year-only — ONE call/season)
     SourceSpec("player_usage", _year_only("/player/usage"), "cfbd", "player", "season", "weekly"),
     SourceSpec("roster", _year_only("/roster"), "cfbd", "player", "season", "weekly"),
