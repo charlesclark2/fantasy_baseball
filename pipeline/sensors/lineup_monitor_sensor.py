@@ -38,6 +38,31 @@ _FLOOR_SECONDS = 600                       # sensor wakes at most every 10 min
 _TIGHT_INTERVAL = timedelta(minutes=10)    # active window: act on every floor tick
 _IDLE_INTERVAL = timedelta(minutes=60)     # quiet window: hourly baseline
 _ACTIVE_LEAD = timedelta(hours=5)          # "active" once first pitch is <= 5h out
+# E11.20-COST (2026-07-16): beyond this horizon the monitor subprocess is SKIPPED entirely —
+# no Snowflake session at all. MLB lineups post ~1–4h before first pitch (the active lead is
+# 5h), so a tick with the next first pitch >8h out (overnight before an evening slate, the
+# All-Star break, post-last-first-pitch) can only ever find nothing — yet each such run cost
+# a warehouse resume (SELECT state + probables join + pipeline_run_log INSERT + COMMIT),
+# 24/7, ~50 sessions/day. Measured: the lineup-monitor tick touched 273/336 30-min buckets/wk
+# and ran through the break days at full cadence. The lineup_monitor_state dedup makes the
+# skip safe: on re-entering the horizon every confirmed-but-unseen lineup is caught on the
+# first tick. The no-games gate reads the S3 lakehouse via DuckDB (no SF wake) — the same
+# proven read the sensor's cadence gate has used since W12. Fail-open: a lookup error runs
+# the monitor anyway.
+_MONITOR_HORIZON = timedelta(hours=8)
+
+
+def _beyond_monitor_horizon(mins: float | None) -> str | None:
+    """Return a human skip-reason when the monitor should not run at all this tick:
+    no upcoming Preview games today (break day / post-last-first-pitch), or the next
+    first pitch is beyond _MONITOR_HORIZON. None → run the monitor."""
+    if mins is None:
+        return "no upcoming games today — monitor skipped (no Snowflake session)"
+    horizon_min = _MONITOR_HORIZON.total_seconds() / 60.0
+    if mins > horizon_min:
+        return (f"next first pitch in {mins:.0f} min (> {horizon_min:.0f} min horizon) — "
+                f"monitor skipped (no Snowflake session)")
+    return None
 
 
 def _parse_output(stdout: str, key: str) -> str | None:
@@ -102,6 +127,13 @@ def lineup_monitor_sensor(context: SensorEvaluationContext):
         # Don't go dark if the schedule lookup hiccups — act this tick.
         context.log.warning(f"first-pitch lookup failed ({e}); running monitor anyway.")
         mins = 0.0
+
+    # E11.20-COST: outside the monitor horizon, don't run the SF-querying subprocess at all
+    # (previously the idle path still ran it hourly, 24/7 — even on no-game days).
+    horizon_skip = _beyond_monitor_horizon(mins)
+    if horizon_skip is not None:
+        yield SkipReason(f"Horizon gate — {horizon_skip}.")
+        return
 
     active = mins is not None and mins <= _ACTIVE_LEAD.total_seconds() / 60.0
     desired = _TIGHT_INTERVAL if active else _IDLE_INTERVAL
@@ -191,6 +223,19 @@ def _evaluate_lineup_monitor(log, triggered_by: str):
 # so it self-starts on the box / after a Dagster-DB reset (E11.23 self-start class); the sensor
 # stays RUNNING too as a faster complement — the state dedup makes a double-fire a harmless no-op.
 def _lineup_schedule_body(context: ScheduleEvaluationContext):
+    # E11.20-COST (2026-07-16): the cron backstop previously ran the SF-querying monitor
+    # subprocess UNCONDITIONALLY 28×/day (14:00–03:30 UTC) — including break days and hours
+    # with no first pitch anywhere near. Same horizon gate as the sensor (DuckDB-over-S3
+    # slate read, no SF wake); fail-open on lookup errors so the backstop never goes dark.
+    now_et = datetime.now(_ET)
+    try:
+        mins = _minutes_to_next_first_pitch(now_et)
+    except Exception as e:
+        context.log.warning(f"first-pitch lookup failed ({e}); running monitor anyway.")
+        mins = 0.0
+    horizon_skip = _beyond_monitor_horizon(mins)
+    if horizon_skip is not None:
+        return SkipReason(f"Horizon gate — {horizon_skip}.")
     return _evaluate_lineup_monitor(context.log, triggered_by="lineup_monitor_schedule")
 
 

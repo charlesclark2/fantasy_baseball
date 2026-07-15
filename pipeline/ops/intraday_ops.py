@@ -281,9 +281,21 @@ def write_book_odds_op(context: OpExecutionContext) -> None:
     land; predictions are unchanged (pre-lineup), only the odds/line-movement fields refresh.
     Failures are non-fatal (logged, not re-raised) so a serving-store outage doesn't kill the
     odds rebuild job.
+
+    E11.20-COST (2026-07-16): append --s3 when BOTH W7B_LAKEHOUSE_S3 (the serving read cutover,
+    same flag the daily write_serving_store_op keys on) AND W6_LAKEHOUSE_INTRADAY (the intraday
+    S3 mart_odds_outcomes rebuild, run just upstream in this same job) are on. Without --s3 this
+    op read Snowflake on EVERY odds cycle through game hours (~15 warehouse-waking sessions/day
+    of probable-pitcher/game-detail SELECTs, measured 72–85 30-min buckets/wk). Both flags
+    required: --s3 with the intraday S3 rebuild OFF would re-freeze the line-movement chart at
+    the morning serve — the exact regression the 2026-07-03 --game-detail fix cured. The --s3
+    read path itself is the daily-proven one (INC-23 audited).
     """
+    args = ["--book-odds", "--game-detail"]
+    if os.environ.get("W7B_LAKEHOUSE_S3", "0") == "1" and _W6_INTRADAY_ENABLED:
+        args.append("--s3")
     try:
-        _run_script(context, "write_serving_store.py", ["--book-odds", "--game-detail"])
+        _run_script(context, "write_serving_store.py", args)
     except Exception as exc:
         context.log.warning(f"write_book_odds_op failed (non-fatal): {exc}")
 

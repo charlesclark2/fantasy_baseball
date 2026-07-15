@@ -35,7 +35,16 @@ SHELL=/bin/bash
 # */30 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/export_odds_raw_to_s3.py --source mlb_odds_raw --since $(date -u -d '1 day ago' +\%F) >> /home/ec2-user/capture-cron.log 2>&1
 
 # Intraday schedule re-ingest + lineup-staging dbt rebuild (entrypoint self-guards 14:00-03:00 UTC).
-*/30 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml run --rm schedule-capture >> /home/ec2-user/capture-cron.log 2>&1
+# 🛑 DISABLED 2026-07-16 (E11.20-COST) — this was the INC-22 Option-2 step 3 that never happened:
+# the Dagster intraday_schedule_capture_daytime/_overnight schedules (operator-STARTED, per the
+# query_history GRANT tags) run the SAME capture + dbt staging rebuild PLUS the S3 propagation
+# chain this lean cron cannot do. Both running = every 30-min tick double-fires the SF
+# monthly_schedule INSERT + the 3-model dbt rebuild (the #1 warehouse-waker family, 288/336
+# half-hour buckets/wk) and contends for the single-tenant dbt-runner (the INC-30 409 class).
+# The Dagster path is the functional superset — this cron's SF-only rebuild was already a NO-OP
+# for served data (see the INC-22 note in pipeline/schedules/intraday_schedules.py). Re-enable
+# ONLY if the Dagster schedules are deliberately stopped (mutually exclusive — never both).
+# */30 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml run --rm schedule-capture >> /home/ec2-user/capture-cron.log 2>&1
 
 # Derivative odds (team_totals / *_1st_5_innings F5 / etc.) → oddsapi schema.
 # ✅ RE-ENABLED 2026-07-01 — paid Odds-API credits refreshed at the 00:00 flip-back
