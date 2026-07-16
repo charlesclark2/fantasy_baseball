@@ -64,6 +64,7 @@ def run_ingest(
     cfbd_key: str | None = None,
     odds_key: str | None = None,
     ctx=None,
+    skip_existing: bool = False,
 ) -> dict[str, Any]:
     """Fetch + land each (source, season). Returns a manifest {source/season: rows|error}.
 
@@ -72,6 +73,8 @@ def run_ingest(
     `ctx` lets a caller REUSE one client across calls — the backfill passes a single ctx for
     all seasons so the CFBD client's ADAPTIVE throttle (self-tunes up on 429) persists instead
     of resetting to the fast default each season.
+    `skip_existing` skips any (source, season) whose Delta partition already exists — a pure
+    S3/metadata check (ZERO CFBD calls) so a resumed backfill doesn't re-pull landed seasons.
     """
     src_names = _resolve_sources(sources)
     if ctx is None:
@@ -80,11 +83,21 @@ def run_ingest(
 
     for name in src_names:
         spec = SOURCES[name]
+        present = (
+            s3io.existing_seasons(SPORT, name, bucket=bucket, local_root=local_root)
+            if skip_existing else set()
+        )
         for season in seasons:
             key = f"{name}/{season}"
+            part_season = int(season) if spec.season_scoped else 0
+            if skip_existing and part_season in present:
+                manifest[key] = "skipped (already ingested)"
+                log.info("  [%s/%s] already ingested — skip (no CFBD calls)", name, season)
+                if not spec.season_scoped:
+                    break
+                continue
             try:
                 records = spec.fetch(ctx, int(season), weeks=weeks)
-                part_season = int(season) if spec.season_scoped else 0
                 n = s3io.write_records(
                     records, sport=SPORT, source=name, season=part_season,
                     bucket=bucket, local_root=local_root,
@@ -120,6 +133,8 @@ def _cli() -> None:
     p.add_argument("--weeks", help="comma list to scope week-grained/per-game pulls (default: whole season)")
     p.add_argument("--local-root", help="write Delta to this local dir instead of S3 (offline dev)")
     p.add_argument("--bucket", default=s3io.DEFAULT_BUCKET)
+    p.add_argument("--skip-existing", action="store_true",
+                   help="skip (source, season) partitions already landed (zero CFBD calls)")
     args = p.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -128,7 +143,8 @@ def _cli() -> None:
     sources = args.sources.split(",") if args.sources else None
     weeks = [int(w) for w in args.weeks.split(",")] if args.weeks else None
     manifest = run_ingest(seasons, sources=sources, weeks=weeks,
-                          local_root=args.local_root, bucket=args.bucket)
+                          local_root=args.local_root, bucket=args.bucket,
+                          skip_existing=args.skip_existing)
     for k, v in manifest.items():
         print(f"  {k}: {v}")
 

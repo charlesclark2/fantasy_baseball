@@ -277,6 +277,31 @@ def test_handler_parse_seasons():
     assert _parse_seasons("2020,2022") == [2020, 2022]
 
 
+def test_existing_seasons_and_skip(tmp_path):
+    # Land two seasons locally, then existing_seasons must report them (pure FS listing, no CFBD).
+    for yr in (2014, 2015):
+        s3io.write_records([{"id": yr}], sport="ncaaf", source="games", season=yr,
+                           local_root=str(tmp_path))
+    present = s3io.existing_seasons("ncaaf", "games", local_root=str(tmp_path))
+    assert present == {2014, 2015}
+    assert s3io.existing_seasons("ncaaf", "plays", local_root=str(tmp_path)) == set()
+
+    # run_ingest with skip_existing must NOT re-fetch a present season (fetch would raise here).
+    from quant_sports_intel_models.football.ncaaf.ingest import handler
+
+    def _boom(*a, **k):
+        raise AssertionError("fetch must not be called for an already-ingested season")
+
+    orig = src.SOURCES["games"].fetch
+    src.SOURCES["games"].fetch = _boom
+    try:
+        m = handler.run_ingest([2014], sources=["games"], local_root=str(tmp_path),
+                               skip_existing=True, ctx=src.Ctx(cfbd=None))
+        assert m["games/2014"] == "skipped (already ingested)"
+    finally:
+        src.SOURCES["games"].fetch = orig
+
+
 def test_handler_resolve_sources_rejects_unknown():
     assert _resolve_sources(["games"]) == ["games"]
     with pytest.raises(ValueError):
