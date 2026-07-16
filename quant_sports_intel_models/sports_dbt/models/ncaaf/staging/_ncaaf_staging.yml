@@ -28,3 +28,32 @@ models:
           - accepted_values:
               arguments:
                 values: ["h2h", "spreads", "totals"]
+
+  - name: stg_ncaaf_cfbd_draft_picks
+    description: >
+      Flattened CFBD /draft/picks — the COLLEGE side of the NFL-feeder draft-slot key
+      (NCAAF-P0.3). One row per draft slot (year, overall). collegeAthleteId bridges back to
+      the CFBD college universe. Consumed by the feeder xref builder + downstream P1A.
+    columns:
+      - name: draft_year
+        data_tests: [not_null]
+      - name: overall_pick
+        data_tests: [not_null]
+      - name: sport
+        data_tests: [not_null]
+
+  - name: stg_nflverse_draft_picks
+    description: >
+      Flattened nflverse draft_picks — the NFL side of the draft-slot key (`pick` = overall)
+      PLUS the feeder TARGET outcomes (target_car_av/…). ⚠️ target_* are POST-draft — the P1A
+      modelling target, NOT features. cfb_player_id is the sports-reference slug (combine
+      attach), NOT joinable to CFBD's numeric collegeAthleteId.
+    columns:
+      - name: draft_year
+        data_tests: [not_null]
+      - name: overall_pick
+        data_tests: [not_null]
+      - name: gsis_id
+        description: NFL player key. Non-null for the vast majority of picks (a few pre-gsis historical picks can be null); unique within the deduped table.
+      - name: sport
+        data_tests: [not_null]

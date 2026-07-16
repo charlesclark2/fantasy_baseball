@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  - name: xref_college_nfl_players
+    description: >
+      The college↔NFL player-ID crosswalk (NCAAF-P0.3) — the NFL-feeder spine (MLB Edge-E7
+      analog). One row per matched NFL player, keyed to a CFBD college_athlete_id via the
+      deterministic draft slot (99.7% of drafted players) or a fuzzy UDFA match. Built by
+      football/ncaaf/feeder/xref.py, landed as a Delta mart, read here as a typed view.
+      match_confidence + match_method source-stamp how each row was resolved. target_* are
+      POST-draft NFL outcomes (the P1A modelling target) — NEVER use them as features.
+    columns:
+      - name: gsis_id
+        description: The NFL player key (nflverse). Unique across the crosswalk; may be null only if a fuzzy source lacked one (it does not here).
+        data_tests:
+          - not_null
+          - unique
+      - name: sport
+        data_tests: [not_null]
+      - name: college_athlete_id
+        description: CFBD ESPN-numeric athlete id — the bridge to college production. Null for a UDFA whose fuzzy match failed.
+      - name: match_method
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["deterministic_slot", "fuzzy_udfa"]
+      - name: match_confidence
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["high", "medium", "low"]
+      - name: match_score
+        description: 1.0 for a deterministic slot match; the Jaro-Winkler name similarity for a fuzzy UDFA match.
+        data_tests: [not_null]
+      - name: is_udfa
+        data_tests: [not_null]
