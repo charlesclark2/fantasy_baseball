@@ -424,10 +424,38 @@ class GameScorecard(BaseModel):
     markets: list[MarketScorecard] = []
 
 
+class MarketRecord(BaseModel):
+    """Canonical per-market record (E9.26). One call per game; pushes excluded
+    from the rate denominator; `low_sample` flags a rate below the trust floor."""
+    wins: int = 0
+    losses: int = 0
+    pushes: int = 0
+    decisive: int = 0          # wins + losses (the win_rate denominator)
+    win_rate: float | None = None
+    low_sample: bool = True
+
+
+class MarketRecordPair(BaseModel):
+    """Model vs market benchmark record for one market_type."""
+    market_type: str
+    n_games: int = 0
+    model: MarketRecord
+    market: MarketRecord
+
+
+class ScorecardSummary(BaseModel):
+    """Server-computed canonical tally for a slate — the ONE definition the
+    frontend Results header renders (never a market-combined count)."""
+    n_games: int = 0
+    small_sample_n: int = 0     # the low_sample threshold, surfaced for honest copy
+    markets: list[MarketRecordPair] = []
+
+
 class ScorecardListResponse(BaseModel):
     """GET /picks/scorecard?date= — per-game scorecards for completed games on a date."""
     scorecards: list[GameScorecard] = []
     total: int = 0
+    summary: ScorecardSummary | None = None
 
 
 class GameDetailResponse(BaseModel):

@@ -7,6 +7,8 @@ import { AuthGuard } from "@/components/auth-guard"
 import { useAuth } from "@/lib/auth-context"
 import { Nav } from "@/components/nav"
 import { apiFetch } from "@/lib/api"
+// E9.26 — canonical win-rate formatting + color shared across surfaces.
+import { fmtPct, winRateColor, recordFromOutcomes, SMALL_SAMPLE_N } from "@/lib/metrics"
 import {
   LineChart,
   Line,
@@ -97,11 +99,6 @@ interface PerformanceBetsResponse {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function fmtPct(val: number | null | undefined) {
-  if (val == null) return "—"
-  return `${(val * 100).toFixed(1)}%`
-}
-
 function fmtSignedPct(val: number | null | undefined) {
   if (val == null) return "—"
   return `${val >= 0 ? "+" : ""}${(val * 100).toFixed(1)}%`
@@ -130,13 +127,6 @@ function clvColor(val: number | null | undefined) {
 
 function pnlColor(val: number | null | undefined) {
   return (val ?? 0) >= 0 ? "text-[#10b981]" : "text-[#ef4444]"
-}
-
-function winRateColor(val: number | null | undefined) {
-  if (val == null) return "text-gray-400"
-  if (val > 0.52) return "text-[#10b981]"
-  if (val >= 0.5) return "text-[#f59e0b]"
-  return "text-[#ef4444]"
 }
 
 // ---------------------------------------------------------------------------
@@ -269,6 +259,8 @@ interface BetSummary {
   pushes: number
   settled: number
   winRate: number | null
+  lowSample: boolean
+  decisive: number
   netPnl: number | null
   totalStake: number
   roi: number | null
@@ -277,16 +269,18 @@ interface BetSummary {
 
 function deriveSummary(data: PerformanceBetsResponse | undefined): BetSummary {
   const bets = data?.bets ?? []
-  const wins = bets.filter(b => b.outcome === "win").length
-  const losses = bets.filter(b => b.outcome === "loss").length
-  const pushes = bets.filter(b => b.outcome === "push").length
+  // E9.26 — canonical: win rate excludes pushes; ROI is realized settlement (net
+  // of vig) over settled stake — `bets` are the settled bets the backend returns.
+  const record = recordFromOutcomes(bets.map(b => b.outcome))
   const settled = data?.settled_count ?? 0
-  const decisive = wins + losses
-  const winRate = decisive > 0 ? wins / decisive : null
   const netPnl = data?.net_pnl ?? null
   const totalStake = bets.reduce((s, b) => s + (b.stake ?? 0), 0)
   const roi = totalStake > 0 && netPnl != null ? netPnl / totalStake : null
-  return { wins, losses, pushes, settled, winRate, netPnl, totalStake, roi, total: data?.total ?? 0 }
+  return {
+    wins: record.wins, losses: record.losses, pushes: record.pushes,
+    settled, winRate: record.winRate, lowSample: record.lowSample, decisive: record.decisive,
+    netPnl, totalStake, roi, total: data?.total ?? 0,
+  }
 }
 
 function StatTiles({
@@ -307,7 +301,9 @@ function StatTiles({
     {
       label: "Win Rate",
       value: fmtPct(summary.winRate),
-      sub: "excl. pushes",
+      sub: summary.lowSample && summary.decisive > 0
+        ? `excl. pushes · small sample (${summary.decisive} of ${SMALL_SAMPLE_N})`
+        : "excl. pushes",
       valueClass: winRateColor(summary.winRate),
       tooltip: undefined,
     },

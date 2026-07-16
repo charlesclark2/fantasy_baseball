@@ -32,50 +32,25 @@ Framing is factual only: a model miss is reported as plainly as a hit. No
 
 from __future__ import annotations
 
-from app.backend.models.picks import GameScorecard, MarketScorecard
+from app.backend.models.picks import (
+    GameScorecard,
+    MarketRecord,
+    MarketRecordPair,
+    MarketScorecard,
+    ScorecardSummary,
+)
 
-
-def _model_side(market_type: str, prob: float | None) -> str | None:
-    """The side the model's probability favors (>= 0.5 → home/over)."""
-    if prob is None:
-        return None
-    if market_type == "h2h":
-        return "home" if prob >= 0.5 else "away"
-    if market_type == "totals":
-        return "over" if prob >= 0.5 else "under"
-    return None
-
-
-def _oriented_prob(prob: float | None, side: str | None) -> float | None:
-    """Probability oriented to the chosen side (confidence in the pick)."""
-    if prob is None or side is None:
-        return None
-    return prob if side in ("home", "over") else 1.0 - prob
-
-
-def _grade_h2h(side: str | None, home_score: int, away_score: int) -> str | None:
-    if side is None:
-        return None
-    if home_score == away_score:  # MLB has no ties; guard defensively
-        return "push"
-    winner = "home" if home_score > away_score else "away"
-    return "win" if side == winner else "loss"
-
-
-def _totals_landed(final_total: int, line: float | None) -> str | None:
-    if line is None:
-        return None
-    if final_total == line:
-        return "push"
-    return "over" if final_total > line else "under"
-
-
-def _grade_totals(side: str | None, landed: str | None) -> str | None:
-    if side is None or landed is None:
-        return None
-    if landed == "push":
-        return "push"
-    return "win" if side == landed else "loss"
+# E9.26 — the pick/grade rules live in ONE canonical module so the scorecard, the
+# performance page and every other surface mean the same thing by "correct".
+from app.backend.services.metric_semantics import (
+    SMALL_SAMPLE_N,
+    aggregate_scorecard_records,
+    grade_h2h as _grade_h2h,
+    grade_totals as _grade_totals,
+    oriented_prob as _oriented_prob,
+    pick_side as _model_side,
+    totals_landed as _totals_landed,
+)
 
 
 def _market_scorecard(
@@ -185,4 +160,29 @@ def build_scorecard_from_detail(detail: dict, game_pk: int | None = None) -> Gam
         away_score=away_score,
         status="Final",
         markets=markets,
+    )
+
+
+def build_scorecard_summary(scorecards: list[GameScorecard]) -> ScorecardSummary:
+    """Canonical per-market tally over a slate's graded scorecards (E9.26).
+
+    The ONE definition — computed server-side from the same graded markets the
+    per-game cards show — so the Results header can render a single trusted count
+    instead of re-tallying client-side. Per market, pushes excluded, never combined.
+    """
+    finals = [s for s in scorecards if s and s.status == "Final" and s.markets]
+    agg = aggregate_scorecard_records(finals)
+    pairs = [
+        MarketRecordPair(
+            market_type=mt,
+            n_games=rec["n_games"],
+            model=MarketRecord(**rec["model"]),
+            market=MarketRecord(**rec["market"]),
+        )
+        for mt, rec in agg.items()
+    ]
+    return ScorecardSummary(
+        n_games=len(finals),
+        small_sample_n=SMALL_SAMPLE_N,
+        markets=pairs,
     )

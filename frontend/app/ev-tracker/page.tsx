@@ -46,7 +46,7 @@ import {
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { normalizeTeam } from "@/lib/teams"
-import { ScorecardResults, type GameScorecardData } from "@/components/game-scorecard"
+import { ScorecardResults, type GameScorecardData, type ScorecardSummary } from "@/components/game-scorecard"
 
 // ---------------------------------------------------------------------------
 // API types
@@ -104,6 +104,7 @@ interface LineshoppingResponse {
 // E9.40 — scorecard response
 interface ScorecardListResponse {
   scorecards: GameScorecardData[]
+  summary?: ScorecardSummary | null
   total: number
 }
 
@@ -1000,7 +1001,7 @@ export default function EVTrackerPage() {
         ---------------------------------------------------------------- */}
         {!isToday && (scorecardData?.scorecards?.length ?? 0) > 0 && (
           <div className="mb-6">
-            <ScorecardResults scorecards={scorecardData?.scorecards} title="Results — who called it" />
+            <ScorecardResults scorecards={scorecardData?.scorecards} summary={scorecardData?.summary} title="Results — who called it" />
           </div>
         )}
 

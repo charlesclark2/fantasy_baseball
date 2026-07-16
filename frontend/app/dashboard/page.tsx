@@ -35,7 +35,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils"
 import { useSelectedDate } from "@/lib/date-context"
 import { normalizeTeam } from "@/lib/teams"
-import { ScorecardResults, type GameScorecardData } from "@/components/game-scorecard"
+import { ScorecardResults, type GameScorecardData, type ScorecardSummary } from "@/components/game-scorecard"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -567,7 +567,7 @@ export default function DashboardPage() {
   })
 
   // E9.40 — "who called it" scorecards for completed games on a past date.
-  const { data: scorecardData } = useQuery<{ scorecards: GameScorecardData[]; total: number }>({
+  const { data: scorecardData } = useQuery<{ scorecards: GameScorecardData[]; summary?: ScorecardSummary | null; total: number }>({
     queryKey: ["picks-scorecard", isoDate, accessToken],
     queryFn: () => apiFetch(`/picks/scorecard?date=${isoDate}`, {}, accessToken),
     staleTime: 5 * 60 * 1000,
@@ -628,7 +628,7 @@ export default function DashboardPage() {
           )}
           {!isToday && (scorecardData?.scorecards?.length ?? 0) > 0 && (
             <div className="mx-auto max-w-6xl px-4 mt-6">
-              <ScorecardResults scorecards={scorecardData?.scorecards} title="Results — who called it" />
+              <ScorecardResults scorecards={scorecardData?.scorecards} summary={scorecardData?.summary} title="Results — who called it" />
             </div>
           )}
           <div className="mt-6">
