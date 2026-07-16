@@ -31,6 +31,14 @@ GATE/AC: `ncaaf_data_inventory.md` exists + is ground-truthed against live endpo
    year-only no-team-loop, box/advanced id=, nflverse-as-parquet). 16 fast-gate tests. ⏳ OPERATOR: create the
    `credence-sports-lakehouse` S3 bucket + instance-role grant, provision the CFBD Tier-3 key, then run the S3 backfill
    (same code path, proven local). Serving = DynamoDB→S3. See `football/ncaaf/ingest/README.md`.
+✅ DONE 2026-07-16 (box-verified, merged) — the NCAAF lean lakehouse scaffold is LIVE: `football/ncaaf/ingest/` (CFBD/Odds/nflverse → season-partitioned **Delta** on `s3://credence-sports-lakehouse/ncaaf/raw/<source>/season=YYYY/`) + a NEW separate `quant_sports_intel_models/sports_dbt/` dbt-duckdb project (disjoint from MLB's Snowflake dbt) with `stg_ncaaf_games`/`stg_ncaaf_odds`; full 2014–2025 backfill landed + read-verified (games/play_stats 12/12 seasons). Cost = **$10/mo CFBD Tier-3** (the one recurring spend). Infra durable: bucket `credence-sports-lakehouse` (us-east-2) + IAM (box RW, Lambda RO); Tier-3 key in the box `.env` only.
+🚩 **DOWNSTREAM FLAGS (P0.3 / P1.1+ MUST heed — from the P0.2 recap):**
+ • ⚠️ **`odds_ncaaf` is CURRENT odds, NOT historical closing lines** (936 rows, fetched live, mis-tagged `season=YYYY`). Real historical NCAAF closing lines = inventory #21 `odds_ncaaf_historical` (paid Odds-API `/historical`) — **NOT built → a NEW story (P0.6) gating any NCAAF market-benchmark / CLV / edge work** (incl. P1.4's vs-market eval + all of Phase 2). Do NOT treat the 936 current rows as closing lines.
+ • ⚠️ **`games` lands ALL divisions** (1,586–3,831/season); FBS-vs-FBS ≈ 760–808. **FBS filter is in dbt (`is_fbs_matchup`), NOT at ingest → every downstream model MUST apply it** or it pulls in FCS/D-II junk. (Only `play_stats` is FBS-gated at ingest, for CFBD budget.)
+ • **Backfills run ON THE BOX, not the laptop** (in-region multipart PUT + instance-role write; laptop IAM is RO). Reuse the single-client + adaptive-throttle path (`CFBD_THROTTLE_SECONDS`, ×1.5 on 429) + `--skip-existing`; never hand-roll a client per season. Boto3/delta-rs: reuse `s3io.storage_options()` (the AKID cure) — never `aws_access_key_id=os.environ.get(...)`.
+ • **dbt-duckdb is NOT on the box yet** (`sports_dbt` runs on the laptop) + **`sports_dbt` has NO CI** → **P1.1 must budget for: wiring the NCAAF dbt build into a Dagster job on the box + standing up the first NCAAF CI gate** (the MLB gates don't cover it).
+ • CFBD quirks are encoded (`cfbd_client` asserts `application/json` so a wrong-path 200-HTML RAISES); still, each of the ~21 non-smoked fetchers gets a live ground-truth pull the FIRST time it's consumed (P0.1 discipline).
+✅ UNBLOCKED: P0.3 (xref) + P1.1 (dims/facts — absorbs the box-dbt wiring + first CI gate). (Orig prompt ↓.)
 ▶ NCAAF-P0.2 — LEAN LAKEHOUSE SCAFFOLD (instantiate `sport_data_platform.md`)   [Data/Infra · 🧭 OPUS · Phase 0 · after P0.1 locks the sources]
 🎯 GOAL: stand up the `ncaaf/` ingest→S3→dbt-duckdb pipeline per the SHARED platform pattern — do NOT reinvent it; copy MLB's proven lakehouse-write patterns. Weekly-batch, cheap.
 Read: `../../sport_data_platform.md` (esp. §1 pattern + §2 repo layout) + `ncaaf_data_inventory.md` (P0.1) + MLB's `scripts/utils/lakehouse_raw_writer.py` + `run_w1_lakehouse` pattern (the DuckDB-over-S3 build) + ⚠️ **the E11.20 Delta/Polars patterns (NCAAF should be Delta-native from day one — inherit, don't rebuild raw parquet).**
@@ -43,6 +51,26 @@ DO: build `ncaaf/ingest/` per §2 — `s3io.py` (DataFrame→partitioned Parquet
 GATE/AC: a live ingest of ≥1 CFBD source + Odds API NCAAF → S3 Parquet/Delta (a real Lambda or off-box run, per the runtime gate — CI can't see it); a `dbt-duckdb` staging model reads it; the backfill runner does a multi-season pull; repo layout matches `sport_data_platform.md §2`; costs stated. Operator handoff: box-vs-laptop run-order + `git add`.
 ```
 ```
+✅ DONE 2026-07-16 — NCAAF-P0.3 built the college↔NFL player-ID xref (the NFL-feeder spine; MLB Edge-E7 analog, feeds P1A).
+   KEY = the DRAFT SLOT, not an ID: `CFBD /draft/picks (year, overall)` ⇄ `nflverse draft_picks (season, pick)` (99.7% →
+   gsis_id); combine attaches nflverse-internally on the cfb_player_id slug. Deliverable = a Python DuckDB-over-Delta builder
+   `football/ncaaf/feeder/xref.py` (mirrors MLB run_w1_lakehouse; PARITY — same code on the S3 box + local Delta fixtures) that
+   lands `ncaaf/marts/xref_college_nfl_players` as a versioned Delta mart, + `feeder/name_norm.py` (shared suffix/apostrophe/
+   accent normalisation, Python+SQL, parity-tested) + dbt views (`stg_ncaaf_cfbd_draft_picks`, `stg_nflverse_draft_picks`, mart
+   VIEW `xref_college_nfl_players` + schema tests). match_method source-stamped: `deterministic_slot` (high, score 1.0) |
+   `fuzzy_udfa` (medium/low, Jaro-Winkler name+school+position). Residuals handled: UDFAs (fuzzy nflverse players⇄CFBD roster),
+   transfers (slot is school-agnostic; collegeAthleteId stable across schools), name-norm (the 2–8% surname disagreement).
+   ⚠️ `target_*` (car_av/w_av/games/…) are the P1A TARGET (POST-draft) — prefixed so they can't be fed as features (leakage-safe).
+   ANTI-CARTESIAN: SQL joins are immune to the pandas NaN-to-NaN trap, but the builder STILL drops null keys + dedups 1-per-key +
+   ASSERTS row counts after every join + raises `XrefValidationError` on inflation/dup-gsis. Offline session (no AWS/GitHub net) →
+   validated on local Delta fixtures: `betting_ml/tests/test_ncaaf_xref.py` (14 fast-gate tests, 0.8s) proves slot baseline 100%
+   reproduced + no cartesian + NaN-slug no-multiply + Jr.-surname agrees + UDFA resolve/exclude-drafted/no-false-match + transfer
+   stable id + unique gsis_id; the full dbt build+tests over the fixture are GREEN (18 nodes).
+   ⏳ OPERATOR (the box runtime gate — CI/laptop can't see S3): run `docker compose -f services/dagster/aws/docker-compose.yml
+   exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python -m quant_sports_intel_models.football.ncaaf.feeder.xref
+   --draft-seasons 2015-2025 --write` → must reproduce ~99.7% slot baseline with NO cartesian inflation (the CLI prints per-class
+   %). On first real read, confirm `nflverse_players` carries college_name/draft_number/entry_year/display_name (else the UDFA
+   residual degrades to 0 gracefully; the slot spine is unaffected). ✅ UNBLOCKS P1A (college→NFL translation).
 ▶ NCAAF-P0.3 — COLLEGE↔NFL PLAYER-ID XREF (the NFL-feeder spine)   [Data/Model · 🧭 OPUS · Phase 0 · the highest-ROI Phase-0 asset]
 🎯 GOAL: build the college↔pro player-ID crosswalk — the spine of the NFL feeder (college production → NFL rookie projections; the E7 MiLB→MLB analog). Do this EARLY; everything downstream keys on it.
 Read: `../../multi_sport_roadmap.md` §4 (draft-continuity) + MLB Edge **E7** (the MiLB→MLB MLE pattern — the direct analog) + `ncaaf_data_inventory.md`.
@@ -67,6 +95,12 @@ DO: (1) **HEAD COACH — FREE via CFBD `/coaches`** (verify live, the P0.1 200-t
 GATE/AC: HC change/tenure + prior-SP+-profile landed FREE from CFBD `/coaches` (verified live); OC/DC source + cost documented + shipped best-effort-or-deferred (not a blocker); leakage-safe; feeds P1.3. Operator handoff + `git add`.
 ```
 ```
+▶ NCAAF-P0.6 — HISTORICAL NCAAF CLOSING-LINE ODDS (paid Odds-API `/historical`) — GATES all market/CLV/edge work   [Data · 🧭 OPUS · Phase 0/2 boundary]   (2026-07-16, from the P0.2 flag)
+🎯 WHY: P0.2's `odds_ncaaf` (936 rows) is a CURRENT-odds feed, NOT historical closing lines (mis-tagged `season=YYYY`, fetched live). ⚠️ **without real historical closing lines there is NO market benchmark + NO CLV** → this GATES P1.4's vs-market eval + all of Phase 2 (sharp-anchor/microstructure). Inventory table #21 `odds_ncaaf_historical` (paid Odds-API `/historical`) is the source, NOT built.
+DO: build the `odds_ncaaf_historical` ingest (paid Odds-API `/historical` endpoint, existing sub — confirm credits + the NCAAF historical floor is 2020, per P0.1) → season-partitioned Delta on the `credence-sports-lakehouse` lake, same pattern as P0.2's `sources.py`. Capture CLOSING lines (h2h/spread/total, the 11 books incl. Bovada) with commence-time so a leakage-safe closing snapshot is derivable. Cost-aware (historical pulls burn Odds-API credits — scope the seasons + markets deliberately). ⚠️ do NOT conflate with the live `odds_ncaaf` feed — this is the backtest/CLV source.
+GATE/AC: `odds_ncaaf_historical` closing lines landed (2020+, h2h/spread/total, commence-time for leakage-safe close), Delta on the lake, credits stated; ⇒ unblocks P1.4's market-relative eval + Phase 2. Operator handoff + `git add`. **SEQUENCE: before P1.4's vs-market leg / Phase 2 — NOT a blocker for P1.1–P1.3 (which train on game outcomes) or the feeder.**
+```
+```
 ▶ NCAAF-P1.2b — FRESHMAN-PRODUCTION PROJECTION (recruit → college; the HS→college MLE)   [Model · 🧭 OPUS · Phase 1 · feeds P1.3]   (operator-scoped 2026-07-13)
 🎯 WHY (operator): we must project TRUE FRESHMEN (no college snaps) somehow → use their recruiting rating as the prior. This is the recruiting-level analog of the college→NFL feeder (E7 pattern, one level down).
 Read: MLB Edge **E7** (the MiLB→MLB MLE — the direct analog) + the P1.1 marts + `ncaaf_data_inventory.md` (recruiting endpoints).
@@ -77,8 +111,9 @@ GATE/AC: a position-specific recruit→production prior (mean + uncertainty), va
 ▶ NCAAF-P1.1 — ANALYTIC DATA MODELING (the supportable dimensional structure — BEFORE features)   [Data/dbt · 🧭 OPUS · Phase 1 · the "don't become a mess" story]   (operator-scoped 2026-07-13)
 🎯 GOAL: turn the raw lake (P0.2) into a PROPER conformed dimensional model so the structure is supportable + doesn't rot. Do this BEFORE feature engineering — features build on these marts.
 Read: `ncaaf_data_inventory.md` §8 (the 24 lake tables) + MLB's `baseball_data_mart_inventory.md` + `scd2_convention.md` (the modeling conventions to mirror) + the `dbt-duckdb` new-sports project (per `sport_data_platform.md` cross-sport decisions — SEPARATE from MLB's Snowflake dbt).
-DO: build the NCAAF marts in the new-sports `dbt-duckdb` project: **DIMS** `dim_team` / `dim_player` / `dim_game` / `dim_conference` (+ SCD-2 where an attribute drifts, e.g. conference realignment — the MLB `scd2_convention` pattern); **FACTS** `fact_team_game` / `fact_player_game` / `fact_drive` / `fact_play`; **ROLLUPS** season + week point-in-time (as-of-week, **leakage-safe** — never fold post-kickoff data into a pregame row) + **opponent-adjusted** efficiency (adjust raw for schedule strength). ⭐ every row **SPORT-TAGGED** (the multi-sport serving/entitlement decision — bake it in now). Grain + partition + cadence per inventory §8; Delta-native.
-GATE/AC: the conformed dims+facts+rollups build in the new-sports dbt-duckdb project over the S3 lake; point-in-time correctness proven (an as-of-week row contains NO post-kickoff info — a leakage spot-check); opponent-adjustment applied; sport-tagged; a real box/laptop build (runtime gate). Operator handoff + `git add`.
+🚩 **ABSORBS 3 P0.2 flags (budget for them — they're part of THIS story):** (a) ⚠️ **`games` lands ALL divisions → APPLY the `is_fbs_matchup` FBS filter** in the dims/facts (or downstream pulls in FCS/D-II junk); (b) **dbt-duckdb is NOT on the box yet** → wire the `sports_dbt` build into a Dagster job on the box (`dbt.adapters.duckdb` install + the box orchestration); (c) **`sports_dbt` has NO CI** → stand up the FIRST NCAAF CI gate (the MLB dbt-fusion/Snowflake gates don't cover it) for the serving-critical models.
+DO: build the NCAAF marts in the new-sports `quant_sports_intel_models/sports_dbt/` project: **DIMS** `dim_team` / `dim_player` / `dim_game` / `dim_conference` (+ SCD-2 where an attribute drifts, e.g. conference realignment — the MLB `scd2_convention` pattern); **FACTS** `fact_team_game` / `fact_player_game` / `fact_drive` / `fact_play`; **ROLLUPS** season + week point-in-time (as-of-week, **leakage-safe** — never fold post-kickoff data into a pregame row) + **opponent-adjusted** efficiency (adjust raw for schedule strength). ⭐ every row **SPORT-TAGGED** + **FBS-filtered** (`is_fbs_matchup`). Grain + partition + cadence per inventory §8; Delta-native; read the lake via the `ncaaf_delta()` macro (P0.2).
+GATE/AC: the conformed dims+facts+rollups build in `sports_dbt` over the S3 lake, FBS-filtered + sport-tagged; point-in-time correctness proven (as-of-week row has NO post-kickoff info — leakage spot-check); opponent-adjustment applied; **the dbt build wired into a box Dagster job (dbt-duckdb on the box) + the first NCAAF CI gate stood up**; a real box build (runtime gate). Operator handoff + `git add`.
 ```
 ```
 ▶ NCAAF-P1.2 — CONFERENCE / TEAM-STRENGTH MIXED-EFFECTS MODEL (partial pooling)   [Model · 🧭 OPUS · Phase 1 · produces the strength feature]   (operator-scoped 2026-07-13)
