@@ -132,6 +132,21 @@ def test_per_game_loop_skips_bad_game():
     assert len(rows) == 1 and rows[0]["_game_id"] == 1  # game 2 skipped, game 1 kept
 
 
+def test_per_game_circuit_breaker_bails_on_systemic_failure():
+    # A per-game endpoint 500-ing for EVERY game (box_advanced on old seasons) must bail early,
+    # not grind through all games. fetch_one counts calls; only the first `early_abort` run.
+    calls = {"n": 0}
+
+    def _always_500(gid):
+        calls["n"] += 1
+        raise RuntimeError("CFBD 500")
+
+    gids = list(range(100))
+    out = src._iter_games_safe(gids, _always_500, "box_advanced", early_abort=15)
+    assert out == []
+    assert calls["n"] == 15  # bailed after 15 straight failures, not 100
+
+
 def test_cfbd_tier_gate_401_raises_auth():
     resp = _FakeResp(status=401, text="requires a Patreon subscription at Tier 2")
     with pytest.raises(CFBDAuthError):
