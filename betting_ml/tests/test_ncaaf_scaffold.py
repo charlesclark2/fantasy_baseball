@@ -132,6 +132,21 @@ def test_per_game_loop_skips_bad_game():
     assert len(rows) == 1 and rows[0]["_game_id"] == 1  # game 2 skipped, game 1 kept
 
 
+def test_per_game_circuit_breaker_bails_on_systemic_failure():
+    # A per-game endpoint 500-ing for EVERY game (box_advanced on old seasons) must bail early,
+    # not grind through all games. fetch_one counts calls; only the first `early_abort` run.
+    calls = {"n": 0}
+
+    def _always_500(gid):
+        calls["n"] += 1
+        raise RuntimeError("CFBD 500")
+
+    gids = list(range(100))
+    out = src._iter_games_safe(gids, _always_500, "box_advanced", early_abort=15)
+    assert out == []
+    assert calls["n"] == 15  # bailed after 15 straight failures, not 100
+
+
 def test_cfbd_tier_gate_401_raises_auth():
     resp = _FakeResp(status=401, text="requires a Patreon subscription at Tier 2")
     with pytest.raises(CFBDAuthError):
@@ -275,6 +290,31 @@ def test_handler_parse_seasons():
     assert _parse_seasons("2024") == [2024]
     assert _parse_seasons("2014-2016") == [2014, 2015, 2016]
     assert _parse_seasons("2020,2022") == [2020, 2022]
+
+
+def test_existing_seasons_and_skip(tmp_path):
+    # Land two seasons locally, then existing_seasons must report them (pure FS listing, no CFBD).
+    for yr in (2014, 2015):
+        s3io.write_records([{"id": yr}], sport="ncaaf", source="games", season=yr,
+                           local_root=str(tmp_path))
+    present = s3io.existing_seasons("ncaaf", "games", local_root=str(tmp_path))
+    assert present == {2014, 2015}
+    assert s3io.existing_seasons("ncaaf", "plays", local_root=str(tmp_path)) == set()
+
+    # run_ingest with skip_existing must NOT re-fetch a present season (fetch would raise here).
+    from quant_sports_intel_models.football.ncaaf.ingest import handler
+
+    def _boom(*a, **k):
+        raise AssertionError("fetch must not be called for an already-ingested season")
+
+    orig = src.SOURCES["games"].fetch
+    src.SOURCES["games"].fetch = _boom
+    try:
+        m = handler.run_ingest([2014], sources=["games"], local_root=str(tmp_path),
+                               skip_existing=True, ctx=src.Ctx(cfbd=None))
+        assert m["games/2014"] == "skipped (already ingested)"
+    finally:
+        src.SOURCES["games"].fetch = orig
 
 
 def test_handler_resolve_sources_rejects_unknown():

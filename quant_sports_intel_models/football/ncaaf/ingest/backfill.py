@@ -26,7 +26,7 @@ import logging
 
 from . import s3io
 from .handler import _parse_seasons, load_env, run_ingest
-from .sources import build_ctx
+from .sources import SOURCES, build_ctx
 
 log = logging.getLogger(__name__)
 
@@ -38,17 +38,25 @@ def main() -> None:
     p = argparse.ArgumentParser(description="NCAAF full-history backfill (off-Lambda).")
     p.add_argument("--seasons", default=DEFAULT_BACKFILL, help=f"default {DEFAULT_BACKFILL}")
     p.add_argument("--sources", help="comma list (default: all 24). Start narrow to prove the path.")
+    p.add_argument("--exclude", help="comma list of sources to drop (e.g. box_advanced — the "
+                                     "optional per-game endpoint that overlaps game_advanced)")
     p.add_argument("--weeks", help="scope week-grained/per-game pulls (default: whole season)")
     p.add_argument("--local-root", help="write Delta to a local dir instead of S3 (dry backfill)")
     p.add_argument("--bucket", default=s3io.DEFAULT_BUCKET)
     p.add_argument("--min-calls", type=int, default=200,
                    help="stop before a season if CFBD calls-remaining drops below this")
+    p.add_argument("--skip-existing", action="store_true",
+                   help="skip (source, season) partitions already landed — a pure S3/metadata "
+                        "check (ZERO CFBD calls); use to RESUME without re-pulling landed seasons")
     args = p.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     load_env()  # pick up CFBD_API_KEY / ODDS_API_KEY from .env for standalone laptop runs
     seasons = _parse_seasons(args.seasons)
     sources = args.sources.split(",") if args.sources else None
+    if args.exclude:
+        excl = set(args.exclude.split(","))
+        sources = [s for s in (sources or list(SOURCES)) if s not in excl]
     weeks = [int(w) for w in args.weeks.split(",")] if args.weeks else None
 
     log.info("Backfill NCAAF seasons=%s sources=%s → %s",
@@ -60,7 +68,8 @@ def main() -> None:
     total = {}
     for season in seasons:
         manifest = run_ingest([season], sources=sources, weeks=weeks,
-                              local_root=args.local_root, bucket=args.bucket, ctx=ctx)
+                              local_root=args.local_root, bucket=args.bucket, ctx=ctx,
+                              skip_existing=args.skip_existing)
         rem = manifest.get("_cfbd_calls_remaining")
         total.update({k: v for k, v in manifest.items() if not k.startswith("_")})
         log.info("  season %s done; CFBD calls remaining: %s", season, rem)

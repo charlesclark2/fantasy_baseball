@@ -242,6 +242,54 @@ def write_records(
     return n
 
 
+def existing_seasons(
+    sport: str,
+    source: str,
+    *,
+    bucket: str = DEFAULT_BUCKET,
+    local_root: str | None = None,
+    tier: str = "raw",
+) -> set[int]:
+    """The set of `season` partition values already written for (sport, source) — a PURE
+    S3/filesystem listing, ZERO CFBD calls. Used by `--skip-existing` to resume a backfill
+    without re-fetching seasons already landed.
+
+    Parses `season=YYYY` from the Delta data-file paths (partition dirs). Presence of a
+    season's parquet = that season's atomic season-partition write completed. ⚠️ CAVEAT: this
+    is SEASON-granular — a per-GAME endpoint (play_stats/box_advanced) whose prior write
+    completed with a few games skipped (429/500) counts as present. With the adaptive throttle
+    + per-game resilience a clean run has no skips, so a completed season is complete; if you
+    suspect a partial per-game season, delete its `season=YYYY/` prefix to force a re-pull.
+    """
+    import re
+
+    pat = re.compile(r"season=(\d+)")
+    seasons: set[int] = set()
+
+    if local_root:
+        base = local_table_uri(local_root, sport, source, tier=tier)
+        if os.path.isdir(base):
+            for entry in os.listdir(base):
+                m = pat.match(entry)
+                if m:
+                    seasons.add(int(m.group(1)))
+        return seasons
+
+    # S3 — instance-role-safe client (default chain, NO explicit keys → the AKID cure).
+    import boto3
+
+    s3 = boto3.client("s3", region_name=DEFAULT_REGION)
+    prefix = f"{sport}/{tier}/{source}/"
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            if obj["Key"].endswith(".parquet"):
+                m = pat.search(obj["Key"])
+                if m:
+                    seasons.add(int(m.group(1)))
+    return seasons
+
+
 def write_dataframe(
     df,
     *,

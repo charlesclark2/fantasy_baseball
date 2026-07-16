@@ -159,21 +159,33 @@ def _game_ids(ctx: Ctx, year: int, weeks=None, *, fbs_only: bool = True) -> list
     ]
 
 
-def _iter_games_safe(gids, fetch_one, label: str) -> list[dict]:
+def _iter_games_safe(gids, fetch_one, label: str, *, early_abort: int = 15) -> list[dict]:
     """Run a per-GAME fetch over gids, SKIPPING (not aborting on) a single game's failure.
 
     A per-game endpoint must not let one bad game sink the whole season — older games can
     500 on /game/box/advanced (no advanced box exists), and a residual 429 after retries
     should cost one game, not the partition. Each skip is logged; a summary count surfaces
-    the gap so the operator can spot + re-run a heavily-skipped season."""
+    the gap so the operator can spot + re-run a heavily-skipped season.
+
+    CIRCUIT BREAKER: if the FIRST `early_abort` games all fail with ZERO successes, the
+    endpoint is unavailable for this season (e.g. box_advanced pre-~2015 → every game 500s)
+    → bail instead of grinding through ~900 games × 6 retries of wasted calls/time."""
     out: list[dict] = []
     skipped: list[int] = []
-    for gid in gids:
+    consecutive = 0
+    for i, gid in enumerate(gids):
         try:
             out.extend(fetch_one(gid))
+            consecutive = 0
         except Exception as exc:  # noqa: BLE001 — per-game resilience
             skipped.append(gid)
+            consecutive += 1
             log.warning("  [%s] gameId=%s skipped: %s", label, gid, str(exc)[:120])
+            if consecutive >= early_abort and not out:
+                log.warning("  [%s] first %d games all failed (0 successes) — endpoint "
+                            "unavailable for this season; ABORTING (skipping remaining %d games "
+                            "to avoid wasted calls)", label, consecutive, len(gids) - i - 1)
+                break
     if skipped:
         log.warning("  [%s] %d/%d games skipped (data gap — re-run to backfill)",
                     label, len(skipped), len(gids))
