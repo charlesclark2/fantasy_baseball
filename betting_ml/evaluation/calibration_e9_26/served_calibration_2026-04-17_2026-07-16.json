@@ -4,7 +4,7 @@
   "window": {
     "start": "2026-04-17",
     "end": "2026-07-16",
-    "n_final_games": 852
+    "n_final_games": 1117
   },
   "notes": {
     "h2h": "served model_prob = calibrated_win_prob (E13.6 TemperatureCalibrator T=6.30)",
@@ -12,16 +12,16 @@
   },
   "markets": {
     "h2h": {
-      "n": 852,
+      "n": 1117,
       "model": {
-        "n": 852,
-        "brier": 0.2514,
-        "log_loss": 0.6979,
-        "ece": 0.0286,
-        "spread": 0.0865,
-        "mean_pred": 0.5087,
-        "base_rate": 0.5188,
-        "corr": 0.0677,
+        "n": 1117,
+        "brier": 0.2501,
+        "log_loss": 0.6948,
+        "ece": 0.0304,
+        "spread": 0.0777,
+        "mean_pred": 0.5075,
+        "base_rate": 0.5103,
+        "corr": 0.0757,
         "reliability": [
           {
             "bin_lo": 0.0,
@@ -54,22 +54,22 @@
           {
             "bin_lo": 0.4,
             "bin_hi": 0.5,
-            "n": 316,
-            "avg_pred": 0.4739,
-            "avg_actual": 0.462
+            "n": 446,
+            "avg_pred": 0.4737,
+            "avg_actual": 0.4484
           },
           {
             "bin_lo": 0.5,
             "bin_hi": 0.6,
-            "n": 440,
-            "avg_pred": 0.536,
-            "avg_actual": 0.5477
+            "n": 572,
+            "avg_pred": 0.5349,
+            "avg_actual": 0.5472
           },
           {
             "bin_lo": 0.6,
             "bin_hi": 0.7,
-            "n": 24,
-            "avg_pred": 0.633,
+            "n": 27,
+            "avg_pred": 0.6303,
             "avg_actual": 0.6667
           },
           {
@@ -96,64 +96,64 @@
         ]
       },
       "market": {
-        "n": 852,
-        "brier": 0.2458,
-        "log_loss": 0.6847,
-        "ece": 0.0164,
-        "spread": 0.07,
-        "mean_pred": 0.5262,
-        "base_rate": 0.5188,
-        "corr": 0.1259,
+        "n": 1117,
+        "brier": 0.2456,
+        "log_loss": 0.6842,
+        "ece": 0.0165,
+        "spread": 0.0699,
+        "mean_pred": 0.5254,
+        "base_rate": 0.5103,
+        "corr": 0.1353,
         "reliability": [
           {
             "bin_lo": 0.3,
             "bin_hi": 0.4,
-            "n": 31,
-            "avg_pred": 0.3694,
-            "avg_actual": 0.2903
+            "n": 40,
+            "avg_pred": 0.3707,
+            "avg_actual": 0.275
           },
           {
             "bin_lo": 0.4,
             "bin_hi": 0.5,
-            "n": 243,
-            "avg_pred": 0.458,
-            "avg_actual": 0.4527
+            "n": 327,
+            "avg_pred": 0.4578,
+            "avg_actual": 0.4343
           },
           {
             "bin_lo": 0.5,
             "bin_hi": 0.6,
-            "n": 468,
+            "n": 611,
             "avg_pred": 0.5453,
-            "avg_actual": 0.5534
+            "avg_actual": 0.5466
           },
           {
             "bin_lo": 0.6,
             "bin_hi": 0.7,
-            "n": 99,
-            "avg_pred": 0.6303,
-            "avg_actual": 0.5657
+            "n": 126,
+            "avg_pred": 0.6331,
+            "avg_actual": 0.5952
           },
           {
             "bin_lo": 0.7,
             "bin_hi": 0.8,
-            "n": 11,
-            "avg_pred": 0.7254,
-            "avg_actual": 0.7273
+            "n": 13,
+            "avg_pred": 0.722,
+            "avg_actual": 0.6154
           }
         ]
       }
     },
     "totals": {
-      "n": 851,
+      "n": 1115,
       "model": {
-        "n": 851,
-        "brier": 0.2568,
-        "log_loss": 0.7078,
-        "ece": 0.079,
-        "spread": 0.0823,
-        "mean_pred": 0.5517,
-        "base_rate": 0.5006,
-        "corr": 0.0315,
+        "n": 1115,
+        "brier": 0.2551,
+        "log_loss": 0.7043,
+        "ece": 0.0609,
+        "spread": 0.0808,
+        "mean_pred": 0.5467,
+        "base_rate": 0.4978,
+        "corr": 0.047,
         "reliability": [
           {
             "bin_lo": 0.0,
@@ -165,37 +165,37 @@
           {
             "bin_lo": 0.2,
             "bin_hi": 0.3,
-            "n": 6,
-            "avg_pred": 0.2604,
-            "avg_actual": 0.3333
+            "n": 10,
+            "avg_pred": 0.2694,
+            "avg_actual": 0.4
           },
           {
             "bin_lo": 0.3,
             "bin_hi": 0.4,
-            "n": 32,
-            "avg_pred": 0.3559,
-            "avg_actual": 0.4062
+            "n": 44,
+            "avg_pred": 0.36,
+            "avg_actual": 0.4545
           },
           {
             "bin_lo": 0.4,
             "bin_hi": 0.5,
-            "n": 138,
-            "avg_pred": 0.4642,
-            "avg_actual": 0.529
+            "n": 196,
+            "avg_pred": 0.4626,
+            "avg_actual": 0.4643
           },
           {
             "bin_lo": 0.5,
             "bin_hi": 0.6,
-            "n": 435,
-            "avg_pred": 0.5526,
-            "avg_actual": 0.4828
+            "n": 580,
+            "avg_pred": 0.5523,
+            "avg_actual": 0.4914
           },
           {
             "bin_lo": 0.6,
             "bin_hi": 0.7,
-            "n": 223,
-            "avg_pred": 0.6332,
-            "avg_actual": 0.5291
+            "n": 268,
+            "avg_pred": 0.6311,
+            "avg_actual": 0.541
           },
           {
             "bin_lo": 0.7,
@@ -207,28 +207,28 @@
         ]
       },
       "market": {
-        "n": 851,
-        "brier": 0.2495,
-        "log_loss": 0.6921,
-        "ece": 0.0131,
-        "spread": 0.01,
+        "n": 1115,
+        "brier": 0.2494,
+        "log_loss": 0.6919,
+        "ece": 0.012,
+        "spread": 0.0096,
         "mean_pred": 0.5002,
-        "base_rate": 0.5006,
-        "corr": 0.063,
+        "base_rate": 0.4978,
+        "corr": 0.0718,
         "reliability": [
           {
             "bin_lo": 0.4,
             "bin_hi": 0.5,
-            "n": 411,
-            "avg_pred": 0.4924,
-            "avg_actual": 0.4793
+            "n": 536,
+            "avg_pred": 0.4926,
+            "avg_actual": 0.4776
           },
           {
             "bin_lo": 0.5,
             "bin_hi": 0.6,
-            "n": 440,
-            "avg_pred": 0.5074,
-            "avg_actual": 0.5205
+            "n": 579,
+            "avg_pred": 0.5071,
+            "avg_actual": 0.5164
           }
         ]
       }
