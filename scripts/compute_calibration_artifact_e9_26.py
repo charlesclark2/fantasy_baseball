@@ -141,10 +141,15 @@ def _daterange(start: date, end: date):
         d += timedelta(days=1)
 
 
-def _read_ev_game_pks(serving_cache, s3_get, date_str: str) -> list[int]:
+def _read_ev_game_pks(serving_cache, s3_get, date_str: str, today_str: str) -> list[int]:
     blob = serving_cache.get_cache("picks/ev", date_str)
     if blob is None:
-        blob = s3_get(f"picks/ev/{date_str}.json") or s3_get("picks/ev.json")
+        # S3 fallback: a per-date key, then the undated "today" blob ONLY for today
+        # (otherwise it false-hits today's slate for every historical date → wrong
+        # attribution + a redundant game-detail miss storm).
+        blob = s3_get(f"picks/ev/{date_str}.json")
+        if blob is None and date_str == today_str:
+            blob = s3_get("picks/ev.json")
     pks, seen = [], set()
     for p in ((blob or {}).get("picks") or []):
         gp = p.get("game_pk")
@@ -168,19 +173,33 @@ def gather_pairs(start: date, end: date) -> tuple[dict[str, list[dict]], dict]:
     from app.backend.services import serving_cache
     from app.backend.services.s3_cache import get_cache as s3_get
 
+    today_str = end.isoformat()
+    all_dates = list(_daterange(start, end))
+    total = len(all_dates)
     pairs: dict[str, list[dict]] = {}
     n_final = 0
-    for d in _daterange(start, end):
+    n_dates_with_games = 0
+    for i, d in enumerate(all_dates, 1):
         date_str = d.isoformat()
-        for gp in _read_ev_game_pks(serving_cache, s3_get, date_str):
+        gpks = _read_ev_game_pks(serving_cache, s3_get, date_str, today_str)
+        day_final = 0
+        for gp in gpks:
             detail = _read_game_detail(serving_cache, s3_get, gp, date_str)
             if detail is None:
                 continue
             extracted = extract_calibration_pairs(detail)
             if extracted:
                 n_final += 1
+                day_final += 1
             for mt, rows in extracted.items():
                 pairs.setdefault(mt, []).extend(rows)
+        if gpks:
+            n_dates_with_games += 1
+        # Progress heartbeat: one line per date so a long run is observable.
+        logger.info("  [%3d/%3d] %s  ev_games=%-3d final=%-3d  (running: %d final games)",
+                    i, total, date_str, len(gpks), day_final, n_final)
+    logger.info("Done gathering: %d/%d dates had EV blobs, %d Final games scored.",
+                n_dates_with_games, total, n_final)
     window = {"start": start.isoformat(), "end": end.isoformat(), "n_final_games": n_final}
     return pairs, window
 
