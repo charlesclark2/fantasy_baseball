@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api"
 import { normalizeTeam, normalizeMatchup } from "@/lib/teams"
 import { LogPastPropDialog } from "@/components/log-past-prop-dialog"
+import { recordFromOutcomes, realizedRoi, fmtPct, fmtRecord, SMALL_SAMPLE_N } from "@/lib/metrics"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -342,27 +343,41 @@ function StatusBadge({ status }: { status: BetStatus }) {
 // Summary tiles — computed from live API bets
 // ---------------------------------------------------------------------------
 function SummaryTiles({ bets }: { bets: ApiBet[] }) {
-  const settled    = bets.filter(b => b.outcome !== null && b.outcome !== "void")
-  const won        = bets.filter(b => b.outcome === "win")
-  const netPnl     = settled.reduce((acc, b) => acc + (b.profit_loss ?? 0), 0)
+  const settled     = bets.filter(b => b.outcome !== null && b.outcome !== "void")
+  const netPnl      = settled.reduce((acc, b) => acc + (b.profit_loss ?? 0), 0)
   const totalStaked = settled.reduce((acc, b) => acc + b.stake, 0)
-  const roi        = totalStaked > 0 ? (netPnl / totalStaked) * 100 : 0
-  const winRate    = settled.length > 0 ? (won.length / settled.length) * 100 : 0
+  // E9.26 — canonical semantics (shared with the Performance page): win rate
+  // EXCLUDES pushes; ROI is realized settlement net of vig, a factual record.
+  const record  = recordFromOutcomes(settled.map(b => b.outcome))
+  const roi     = realizedRoi(netPnl, totalStaked)
+  const winRate = record.winRate
 
   const tiles = [
-    { label: "Net P&L",  value: fmtPnl(netPnl),                             positive: netPnl >= 0 },
-    { label: "ROI",      value: `${roi >= 0 ? "+" : ""}${roi.toFixed(1)}%`, positive: roi >= 0 },
-    { label: "Win Rate", value: `${winRate.toFixed(1)}%`,                    positive: winRate >= 50 },
+    { label: "Net P&L", value: fmtPnl(netPnl), sub: undefined as string | undefined,
+      positive: netPnl >= 0 },
+    { label: "ROI", value: roi == null ? "—" : `${roi >= 0 ? "+" : ""}${(roi * 100).toFixed(1)}%`,
+      sub: "realized, net of vig", positive: (roi ?? 0) >= 0 },
+    { label: "Win Rate", value: fmtPct(winRate),
+      sub: `${fmtRecord(record)} · excl. pushes`, positive: (winRate ?? 0) >= 0.5 },
   ]
 
   return (
-    <div className="grid grid-cols-3 gap-4 mb-6">
-      {tiles.map(t => (
-        <div key={t.label} className="rounded-lg border border-[#262626] bg-[#141414] px-5 py-4">
-          <p className="text-xs text-gray-500 mb-1">{t.label}</p>
-          <p className={cn("text-xl font-bold", t.positive ? "text-[#10b981]" : "text-[#ef4444]")}>{t.value}</p>
-        </div>
-      ))}
+    <div className="mb-6">
+      <div className="grid grid-cols-3 gap-4">
+        {tiles.map(t => (
+          <div key={t.label} className="rounded-lg border border-[#262626] bg-[#141414] px-5 py-4">
+            <p className="text-xs text-gray-500 mb-1">{t.label}</p>
+            <p className={cn("text-xl font-bold", t.positive ? "text-[#10b981]" : "text-[#ef4444]")}>{t.value}</p>
+            {t.sub && <p className="mt-1 text-[11px] text-gray-500">{t.sub}</p>}
+          </div>
+        ))}
+      </div>
+      {record.lowSample && record.decisive > 0 && (
+        <p className="mt-2 text-[11px] leading-relaxed text-gray-500">
+          Small sample — {record.decisive} settled {record.decisive === 1 ? "bet" : "bets"} (fewer than{" "}
+          {SMALL_SAMPLE_N} decisive). These rates are noisy; read them as early signal, not a track record.
+        </p>
+      )}
     </div>
   )
 }

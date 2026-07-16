@@ -43,6 +43,30 @@ export interface GameScorecardData {
   markets: MarketScorecard[]
 }
 
+// E9.26 — the server-computed canonical per-market tally (app/backend/services/
+// metric_semantics.aggregate_scorecard_records). When present the Results header
+// renders THIS instead of re-tallying client-side, so the count has one source of
+// truth. Shape mirrors ScorecardSummary in app/backend/models/picks.py.
+export interface MarketRecord {
+  wins: number
+  losses: number
+  pushes: number
+  decisive: number
+  win_rate: number | null
+  low_sample: boolean
+}
+export interface MarketRecordPair {
+  market_type: string
+  n_games: number
+  model: MarketRecord
+  market: MarketRecord
+}
+export interface ScorecardSummary {
+  n_games: number
+  small_sample_n: number
+  markets: MarketRecordPair[]
+}
+
 function marketName(t: string): string {
   if (t === "h2h") return "Moneyline"
   if (t === "totals") return "Total Runs"
@@ -220,35 +244,49 @@ export function GameScorecardCompact({ scorecard: sc }: { scorecard: GameScoreca
  */
 export function ScorecardResults({
   scorecards,
+  summary,
   title = "Results",
   defaultOpen = false,
 }: {
   scorecards: GameScorecardData[] | undefined
+  summary?: ScorecardSummary | null
   title?: string
   defaultOpen?: boolean
 }) {
   const finals = (scorecards ?? []).filter((s) => s && s.status === "Final" && s.markets?.length)
   if (!finals.length) return null
 
-  // Tally correct calls PER MARKET (moneyline vs total runs are distinct calls; combining them into a
-  // single "/2N" made the count look doubled). Decisive = correct + missed; pushes excluded.
-  const tally: Record<string, { modelC: number; modelD: number; mktC: number; mktD: number }> = {}
-  for (const s of finals) {
-    for (const m of s.markets) {
-      const t = (tally[m.market_type] ??= { modelC: 0, modelD: 0, mktC: 0, mktD: 0 })
-      if (m.model_result === "win" || m.model_result === "loss") {
-        t.modelD++
-        if (m.model_result === "win") t.modelC++
-      }
-      if (m.market_result === "win" || m.market_result === "loss") {
-        t.mktD++
-        if (m.market_result === "win") t.mktC++
+  // E9.26 — prefer the SERVER-computed canonical tally (one source of truth,
+  // per market, pushes excluded, never combined). Fall back to an identical
+  // client-side tally when an older backend response omits `summary`.
+  let tallyRows: { key: string; modelC: number; modelD: number; mktC: number; mktD: number }[]
+  if (summary && summary.markets.length) {
+    tallyRows = summary.markets
+      .filter((m) => m.model.decisive > 0 || m.market.decisive > 0)
+      .map((m) => ({
+        key: m.market_type,
+        modelC: m.model.wins, modelD: m.model.decisive,
+        mktC: m.market.wins, mktD: m.market.decisive,
+      }))
+  } else {
+    const tally: Record<string, { modelC: number; modelD: number; mktC: number; mktD: number }> = {}
+    for (const s of finals) {
+      for (const m of s.markets) {
+        const t = (tally[m.market_type] ??= { modelC: 0, modelD: 0, mktC: 0, mktD: 0 })
+        if (m.model_result === "win" || m.model_result === "loss") {
+          t.modelD++
+          if (m.model_result === "win") t.modelC++
+        }
+        if (m.market_result === "win" || m.market_result === "loss") {
+          t.mktD++
+          if (m.market_result === "win") t.mktC++
+        }
       }
     }
+    tallyRows = ["h2h", "totals"]
+      .filter((k) => tally[k] && (tally[k].modelD > 0 || tally[k].mktD > 0))
+      .map((k) => ({ key: k, ...tally[k] }))
   }
-  const tallyRows = ["h2h", "totals"]
-    .filter((k) => tally[k] && (tally[k].modelD > 0 || tally[k].mktD > 0))
-    .map((k) => ({ key: k, ...tally[k] }))
 
   return (
     <Collapsible defaultOpen={defaultOpen} className="flex flex-col gap-3">

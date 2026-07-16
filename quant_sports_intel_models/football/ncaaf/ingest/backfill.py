@@ -79,10 +79,13 @@ def main() -> None:
                         args.min_calls, season)
             break
 
-    ok = sum(1 for v in total.values() if isinstance(v, int))
-    errs = [k for k, v in total.items() if isinstance(v, str)]
-    log.info("Backfill complete: %d (source,season) landed, %d errors%s",
-             ok, len(errs), (": " + ", ".join(errs)) if errs else "")
+    # Distinguish the THREE outcomes — a "skipped (already ingested)" is NOT an error (the
+    # earlier summary conflated them, so a clean resume looked like it had 237 failures).
+    landed = [k for k, v in total.items() if isinstance(v, int)]
+    skipped = [k for k, v in total.items() if isinstance(v, str) and v.startswith("skipped")]
+    errs = [k for k, v in total.items() if isinstance(v, str) and v.startswith("ERROR")]
+    log.info("Backfill complete: %d landed, %d skipped (already ingested), %d ERRORS%s",
+             len(landed), len(skipped), len(errs), (": " + ", ".join(errs)) if errs else "")
 
 
 if __name__ == "__main__":

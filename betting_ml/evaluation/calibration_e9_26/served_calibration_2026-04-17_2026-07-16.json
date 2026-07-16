@@ -1,0 +1,237 @@
+{
+  "story": "E9.26",
+  "source": "serving_cache (DynamoDB -> S3 game-detail blobs); no Snowflake/lakehouse",
+  "window": {
+    "start": "2026-04-17",
+    "end": "2026-07-16",
+    "n_final_games": 1117
+  },
+  "notes": {
+    "h2h": "served model_prob = calibrated_win_prob (E13.6 TemperatureCalibrator T=6.30)",
+    "totals": "served model_prob = totals_model_prob (raw distributional P(over); not temperature/isotonic-calibrated at serving \u2014 its ECE here is the genuine served-calibration measurement)"
+  },
+  "markets": {
+    "h2h": {
+      "n": 1117,
+      "model": {
+        "n": 1117,
+        "brier": 0.2501,
+        "log_loss": 0.6948,
+        "ece": 0.0304,
+        "spread": 0.0777,
+        "mean_pred": 0.5075,
+        "base_rate": 0.5103,
+        "corr": 0.0757,
+        "reliability": [
+          {
+            "bin_lo": 0.0,
+            "bin_hi": 0.1,
+            "n": 1,
+            "avg_pred": 0.0989,
+            "avg_actual": 1.0
+          },
+          {
+            "bin_lo": 0.1,
+            "bin_hi": 0.2,
+            "n": 11,
+            "avg_pred": 0.1676,
+            "avg_actual": 0.4545
+          },
+          {
+            "bin_lo": 0.2,
+            "bin_hi": 0.3,
+            "n": 14,
+            "avg_pred": 0.2618,
+            "avg_actual": 0.7143
+          },
+          {
+            "bin_lo": 0.3,
+            "bin_hi": 0.4,
+            "n": 21,
+            "avg_pred": 0.3528,
+            "avg_actual": 0.3333
+          },
+          {
+            "bin_lo": 0.4,
+            "bin_hi": 0.5,
+            "n": 446,
+            "avg_pred": 0.4737,
+            "avg_actual": 0.4484
+          },
+          {
+            "bin_lo": 0.5,
+            "bin_hi": 0.6,
+            "n": 572,
+            "avg_pred": 0.5349,
+            "avg_actual": 0.5472
+          },
+          {
+            "bin_lo": 0.6,
+            "bin_hi": 0.7,
+            "n": 27,
+            "avg_pred": 0.6303,
+            "avg_actual": 0.6667
+          },
+          {
+            "bin_lo": 0.7,
+            "bin_hi": 0.8,
+            "n": 14,
+            "avg_pred": 0.7394,
+            "avg_actual": 0.5714
+          },
+          {
+            "bin_lo": 0.8,
+            "bin_hi": 0.9,
+            "n": 10,
+            "avg_pred": 0.8365,
+            "avg_actual": 0.7
+          },
+          {
+            "bin_lo": 0.9,
+            "bin_hi": 1.0,
+            "n": 1,
+            "avg_pred": 0.9029,
+            "avg_actual": 1.0
+          }
+        ]
+      },
+      "market": {
+        "n": 1117,
+        "brier": 0.2456,
+        "log_loss": 0.6842,
+        "ece": 0.0165,
+        "spread": 0.0699,
+        "mean_pred": 0.5254,
+        "base_rate": 0.5103,
+        "corr": 0.1353,
+        "reliability": [
+          {
+            "bin_lo": 0.3,
+            "bin_hi": 0.4,
+            "n": 40,
+            "avg_pred": 0.3707,
+            "avg_actual": 0.275
+          },
+          {
+            "bin_lo": 0.4,
+            "bin_hi": 0.5,
+            "n": 327,
+            "avg_pred": 0.4578,
+            "avg_actual": 0.4343
+          },
+          {
+            "bin_lo": 0.5,
+            "bin_hi": 0.6,
+            "n": 611,
+            "avg_pred": 0.5453,
+            "avg_actual": 0.5466
+          },
+          {
+            "bin_lo": 0.6,
+            "bin_hi": 0.7,
+            "n": 126,
+            "avg_pred": 0.6331,
+            "avg_actual": 0.5952
+          },
+          {
+            "bin_lo": 0.7,
+            "bin_hi": 0.8,
+            "n": 13,
+            "avg_pred": 0.722,
+            "avg_actual": 0.6154
+          }
+        ]
+      }
+    },
+    "totals": {
+      "n": 1115,
+      "model": {
+        "n": 1115,
+        "brier": 0.2551,
+        "log_loss": 0.7043,
+        "ece": 0.0609,
+        "spread": 0.0808,
+        "mean_pred": 0.5467,
+        "base_rate": 0.4978,
+        "corr": 0.047,
+        "reliability": [
+          {
+            "bin_lo": 0.0,
+            "bin_hi": 0.1,
+            "n": 2,
+            "avg_pred": 0.0703,
+            "avg_actual": 0.5
+          },
+          {
+            "bin_lo": 0.2,
+            "bin_hi": 0.3,
+            "n": 10,
+            "avg_pred": 0.2694,
+            "avg_actual": 0.4
+          },
+          {
+            "bin_lo": 0.3,
+            "bin_hi": 0.4,
+            "n": 44,
+            "avg_pred": 0.36,
+            "avg_actual": 0.4545
+          },
+          {
+            "bin_lo": 0.4,
+            "bin_hi": 0.5,
+            "n": 196,
+            "avg_pred": 0.4626,
+            "avg_actual": 0.4643
+          },
+          {
+            "bin_lo": 0.5,
+            "bin_hi": 0.6,
+            "n": 580,
+            "avg_pred": 0.5523,
+            "avg_actual": 0.4914
+          },
+          {
+            "bin_lo": 0.6,
+            "bin_hi": 0.7,
+            "n": 268,
+            "avg_pred": 0.6311,
+            "avg_actual": 0.541
+          },
+          {
+            "bin_lo": 0.7,
+            "bin_hi": 0.8,
+            "n": 15,
+            "avg_pred": 0.718,
+            "avg_actual": 0.6
+          }
+        ]
+      },
+      "market": {
+        "n": 1115,
+        "brier": 0.2494,
+        "log_loss": 0.6919,
+        "ece": 0.012,
+        "spread": 0.0096,
+        "mean_pred": 0.5002,
+        "base_rate": 0.4978,
+        "corr": 0.0718,
+        "reliability": [
+          {
+            "bin_lo": 0.4,
+            "bin_hi": 0.5,
+            "n": 536,
+            "avg_pred": 0.4926,
+            "avg_actual": 0.4776
+          },
+          {
+            "bin_lo": 0.5,
+            "bin_hi": 0.6,
+            "n": 579,
+            "avg_pred": 0.5071,
+            "avg_actual": 0.5164
+          }
+        ]
+      }
+    }
+  }
+}

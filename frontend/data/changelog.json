@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "improved",
+        "text": "We made the performance numbers we show consistent everywhere. Win rate, record, and ROI now mean exactly the same thing on the Performance page, the Bet Log, and the 'who called it' Results section: a win rate always excludes pushes, records are counted one call per market (moneyline and total runs never combined into a doubled-looking number), and ROI is your realized result net of the sportsbook's cut — a factual record, not a market-advantage claim. Rates based on only a handful of settled bets now carry a plain 'small sample' caveat so an early streak isn't mistaken for a track record, and the number of bets behind a rate is shown alongside it. We also documented how well-calibrated the model's probabilities have actually been, market by market (how often a stated 60% really wins ~60% of the time). These are factual model outputs, not betting advice, with no profitability claim."
+      },
+      {
+        "tag": "improved",
         "text": "The 'Results — who called it' section on the Expected Value Tracker and Dashboard is now collapsible, and its summary tally is clearer. The header stays visible at a glance while the per-game breakdown is tucked away by default to keep the page compact — click it to expand or hide the individual game cards. The call tally is now broken out by market (moneyline and total runs shown separately, each over the number of completed games) instead of combined into a single doubled-looking count. These remain factual model outputs, not betting advice."
       }
     ]

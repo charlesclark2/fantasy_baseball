@@ -56,7 +56,7 @@ from app.backend.dependencies import get_optional_user_id
 from app.backend.services import dynamo, serving_cache
 from app.backend.services.lakehouse_read import lakehouse_query
 from app.backend.services.s3_cache import get_cache, set_cache
-from app.backend.services.scorecard import build_scorecard_from_detail
+from app.backend.services.scorecard import build_scorecard_from_detail, build_scorecard_summary
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/picks", tags=["picks"])
@@ -1577,7 +1577,10 @@ def get_scorecards(date: str = Query(default=None, description="YYYY-MM-DD; defa
         if sc is not None:
             scorecards.append(sc)
 
-    return ScorecardListResponse(scorecards=scorecards, total=len(scorecards))
+    # E9.26 — attach the ONE canonical per-market tally (server-computed from the
+    # same graded markets) so the frontend renders a single trusted count.
+    summary = build_scorecard_summary(scorecards)
+    return ScorecardListResponse(scorecards=scorecards, total=len(scorecards), summary=summary)
 
 
 @router.get("/{game_pk}/detail", response_model=GameDetailResponse)
