@@ -1,0 +1,36 @@
+# NFL — Roadmap (per-sport, its own doc)
+
+**Status:** v0.1 — activated 2026-07-17 (deadline-driven: **NFL ready by 9/9/2026**). Own docs per the each-sport-own-roadmap decision.
+**Parents:** `../../multi_sport_roadmap.md` · `../../sport_data_platform.md` (the shared stack — INSTANTIATE it) · MLB `../../baseball/edge_program/` (reference impl).
+**Sibling docs (this folder):** `nfl_guide.md` (methodology + the detailed brownfield PORT PLAN — read it) · `nfl_story_prompts.md` (runnable P0 prompts) · `nfl_data_inventory.md` (**v1.0 — N0.1 done 2026-07-17**: live-verified source set + lake-table plan LOCKED).
+**Story-ID scheme: `N<phase>.<story>` (N = NFL — distinct from NCAAF `P…` + MLB `E…` so numbers don't collide across sports).**
+
+> **Session model:** NFL runs as its own track. ⚠️ **The reference NCAAF infra is PROVEN — reuse it, don't reinvent:** the `credence-sports-lakehouse` S3 bucket (`nfl/` prefix), the `quant_sports_intel_models/sports_dbt/` dbt-duckdb project, the `football/ncaaf/ingest/` pattern (`s3io.py` etc.), Delta-native, orchestrated on the existing Dagster EC2.
+
+---
+
+## 0. Strategic frame (operator 2026-07-17 — read first)
+**NFL = PRODUCT / FANTASY / FEEDER value, NOT an edge hunt.** NFL is the most heavily-bet, most efficient US market (like MLB — 9 nulls) → out-predicting the full-game line is a near-lost cause (also ~17 games/team = tiny samples). ⇒ **we do NOT chase head-on NFL game-model edge.** NFL's value: (a) **props** (the deep market — passing/rushing/receiving yards/TDs/receptions), (b) **CLV / sharp-anchor** (NFL lines move sharply on injury/inactive news — CLV is the right scoreboard), (c) **parlay/SGP** (huge in NFL), (d) **fantasy** (the largest fantasy market + Dynasty), (e) **rookie projections FED BY the NCAAF feeder** (P1A) — where the market is otherwise priors-only.
+⭐ **NCAAF > NFL for EDGE (operator): the softer college markets are where inefficiency lives; NFL is efficient.** ⇒ keep the *edge*-seeking weight on NCAAF; NFL is *product-completeness by kickoff* + the fantasy/feeder value. Don't over-invest in NFL edge modeling.
+
+## 1. Brownfield reality (why NFL P0 is FASTER than NCAAF's greenfield)
+The model IP already exists: a working `raw→staging→refined` dbt stack in `~/Documents/machine_learning/football/jaffle_shop/` (Snowflake `FOOTBALL_DATA`) — 16 raw tables + a **player-week fact** (`fct_player_week`), NGS satellites, season rollups, a **preseason projections mart**, and a **betting dimension** (`dim_nfl_betting`). It's STALE + the source (nflverse) is free/re-pullable ⇒ **RE-HOME, don't migrate stale rows: re-pull fresh → S3/Delta lake, port the dbt models (the real IP) to `sports_dbt`.** Snowflake `FOOTBALL_DATA` = reference-for-logic only, NOT the runtime target. NFL is the program's **first brownfield port — it proves the porting story** for other sports.
+
+## 2. 🚩 TWO STALENESS CORRECTIONS to the guide's port plan (MANDATORY)
+1. **`nfl_data_py` is ABANDONED** (pins `pandas==1.5.3`, won't build on py3.12 — the NCAAF-P0.1 finding + the `sport_data_platform.md` banner). ⇒ **DO NOT use `nfl_data_py`.** Read the **nflverse release Parquet DIRECTLY via DuckDB** `read_parquet('https://github.com/nflverse/nflverse-data/releases/download/<asset>/<asset>.parquet')` — dependency-free, lakehouse-native, and ALREADY VALIDATED by the NCAAF feeder (P0.3 read nflverse draft_picks/players/combine this way).
+2. **Orchestration = the existing Dagster EC2, NOT Lambda + EventBridge** (the guide's Lambda plan predates the cross-sport decision; self-hosted Dagster OSS is unmetered + the box runs 24/7). Weekly-batch NFL ops on the box, isolated per-sport.
+
+## 3. Data (NFL is data-RICH + cheap — its advantage over NCAAF)
+Unlike NCAAF (where advanced individual stats are PFF-paid), **NFL's advanced data is FREE via nflverse**: play-by-play (nflfastR), weekly/seasonal player stats, rosters, depth charts, snap counts, schedules, **Next Gen Stats** (NGS passing/rushing/receiving — the tracking advanced stats college lacks free), combine, draft, **injuries/inactives**, PFR advanced, QBR, FTN charting. Net-new (not in the old stack): **The Odds API** (NFL odds + the DEEP prop markets + scores) + injuries/inactives. Cost = **$0 new** (nflverse free; Odds API existing sub). No CFBD-Patreon-style spend.
+
+## 4. Phased plan
+- **Phase 0 — DATA (the brownfield port — start here):** N0.1 (data eval + refresh the inventory against the live nflverse releases, correct the staleness) → N0.2 (lakehouse scaffold + fresh nflverse backfill → S3/Delta on the `sports_dbt`/bucket pattern) → N0.3 (PORT the existing dbt models to `sports_dbt` over the lake) → N0.4 (net-new: Odds API NFL odds/props/scores + injuries/inactives).
+- **Phase 1 — honest surfaces by 9/9 kickoff:** the parlay CALCULATOR (E10.1 analog), per-book/CLV transparency (E3), **NFL fantasy projections** (from the ported `mart_projections_preseason` + the NCAAF-feeder rookie projections). No validated edge required.
+- **Phase 2 — gated PRODUCT edge (post-kickoff, MODEST — NFL is efficient):** props (E5) + sharp-anchor (E4) + CLV (E3) under PBO<0.2/DSR≥0.95/FDR — but expect efficiency (like MLB); the honest scoreboard is CLV, not a claimed win-rate. NFL fantasy (F-series) is its own later track.
+
+## 5. Timeline / deadline
+- **NFL ready by 9/9/2026** (season opener) = Phase 0 (data ported) + Phase 1 (honest surfaces + fantasy/rookie projections) LIVE. Phase 2 edge follows post-kickoff.
+- ~7 weeks out (from 2026-07-17); the brownfield port + the proven NCAAF stack make this achievable IF the P0 port starts now.
+
+---
+_The rookie-projection feeder is NCAAF-P1A (college→NFL translation, keyed on the P0.3 draft-slot xref); it plugs into the NFL fantasy/props surfaces._
