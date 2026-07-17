@@ -121,6 +121,16 @@ def _j(expr_col: str, key: str) -> str:
     return f"json_extract_string({expr_col}, '$.{key}')"
 
 
+def _num(key: str) -> str:
+    """A NaN-safe numeric cast of a raw_json field to DOUBLE. nflverse floats land as NaN when
+    missing (json.dumps writes `NaN`), and `try_cast('NaN' as double)` yields a NON-null NaN
+    double — so a naive cast makes a `is not null` flag over-count (has_forty read 81.8% when
+    only ~65.7% truly have a time). Collapse NaN → NULL so both the value and its presence flag
+    are honest."""
+    e = f"try_cast({_j('raw_json', key)} as double)"
+    return f"case when isnan({e}) then null else {e} end"
+
+
 def _season_list_sql(seasons) -> str:
     return ", ".join(str(int(s)) for s in seasons)
 
@@ -201,15 +211,15 @@ def _stage_combine(con, lake) -> None:
         create or replace temp view _combine as
         with base as (
             select
-                {_j('raw_json','cfb_id')}                       as cfb_id,
-                try_cast({_j('raw_json','forty')} as double)    as forty,
-                try_cast({_j('raw_json','vertical')} as double) as vertical,
-                try_cast({_j('raw_json','bench')} as double)    as bench,
-                try_cast({_j('raw_json','broad_jump')} as double) as broad_jump,
-                try_cast({_j('raw_json','cone')} as double)     as cone,
-                try_cast({_j('raw_json','shuttle')} as double)  as shuttle,
-                {_j('raw_json','ht')}                           as combine_ht,
-                try_cast({_j('raw_json','wt')} as double)       as combine_wt
+                {_j('raw_json','cfb_id')}   as cfb_id,
+                {_num('forty')}             as forty,
+                {_num('vertical')}          as vertical,
+                {_num('bench')}             as bench,
+                {_num('broad_jump')}        as broad_jump,
+                {_num('cone')}              as cone,
+                {_num('shuttle')}           as shuttle,
+                {_j('raw_json','ht')}       as combine_ht,
+                {_num('wt')}                as combine_wt
             from {lake('nflverse_combine')}
             where {_j('raw_json','cfb_id')} is not null
               and length({_j('raw_json','cfb_id')}) > 0
@@ -295,15 +305,19 @@ def _stage_udfa(con, lake, seasons, min_score: float) -> int:
             {_j('raw_json','display_name')} as nfl_name,
             {_j('raw_json','position')}     as nfl_position,
             {_j('raw_json','college_name')} as nfl_college,
-            try_cast({_j('raw_json','entry_year')} as int) as entry_year,
+            try_cast({_j('raw_json','rookie_season')} as int) as rookie_season,
             {norm_full_sql(_j('raw_json','display_name'))} as nfl_norm_full,
             {norm_last_sql(_j('raw_json','display_name'))} as nfl_norm_last,
             {norm_full_sql(_j('raw_json','college_name'))} as nfl_norm_school
         from {lake('nflverse_players')}
         where {_j('raw_json','gsis_id')} is not null
-          and {_j('raw_json','draft_number')} is null          -- undrafted only
+          -- undrafted = no draft pick AND no draft round (nflverse leaves both null for a UDFA).
+          -- ⚠️ real nflverse_players columns are draft_pick/draft_round/rookie_season — NOT the
+          -- draft_number/entry_year the P0.1 notes implied (verified on the box 2026-07-17).
+          and {_j('raw_json','draft_pick')} is null
+          and {_j('raw_json','draft_round')} is null
           and {_j('raw_json','college_name')} is not null
-          and try_cast({_j('raw_json','entry_year')} as int) >= {int(entry_lo)}
+          and try_cast({_j('raw_json','rookie_season')} as int) >= {int(entry_lo)}
           and {_j('raw_json','gsis_id')} not in (select gsis_id from _slot_xref where gsis_id is not null)
     """)
     con.execute(f"""
@@ -325,7 +339,7 @@ def _stage_udfa(con, lake, seasons, min_score: float) -> int:
         create or replace temp table _udfa_xref as
         with cand as (
             select
-                u.gsis_id, u.nfl_name, u.nfl_position, u.nfl_college, u.entry_year,
+                u.gsis_id, u.nfl_name, u.nfl_position, u.nfl_college, u.rookie_season,
                 r.college_athlete_id, r.roster_team, r.roster_season,
                 jaro_winkler_similarity(u.nfl_norm_full, r.r_norm_full) as score
             from _nfl_udfa u
@@ -349,7 +363,7 @@ def _stage_udfa(con, lake, seasons, min_score: float) -> int:
             nfl_position           as position,
             roster_team            as college,
             cast(null as varchar)  as college_conference,
-            entry_year             as draft_year,
+            cast(null as int)      as draft_year,     -- a UDFA has no draft slot (rookie_season ≠ draft year)
             cast(null as int)      as draft_overall,
             cast(null as int)      as draft_round,
             'fuzzy_udfa'           as match_method,
