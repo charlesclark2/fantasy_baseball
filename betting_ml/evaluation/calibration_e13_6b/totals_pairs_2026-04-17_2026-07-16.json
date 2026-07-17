@@ -3402,6 +3402,13 @@
     "outcome": 0
   },
   {
+    "game_pk": 824838,
+    "game_date": "2026-05-25",
+    "model_prob": 0.6601757150643238,
+    "market_prob": 0.507483879387,
+    "outcome": 1
+  },
+  {
     "game_pk": 825005,
     "game_date": "2026-05-25",
     "model_prob": 0.3901360409842766,

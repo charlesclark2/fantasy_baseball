@@ -2,21 +2,21 @@
   "story": "E13.6b",
   "objective": "calibration (ECE/Brier/log-loss); best_alpha=0 (no edge claim)",
   "source": "serving_cache S3 permanent game blobs (api-cache/permanent/picks/game/*.json); no Snowflake/lakehouse",
-  "generated_at": "2026-07-17T00:57:08.982974+00:00",
+  "generated_at": "2026-07-17T02:38:26.831854+00:00",
   "window": {
     "start": "2026-04-17",
     "end": "2026-07-16",
-    "n": 1108
+    "n": 1109
   },
   "served_raw": {
-    "n": 1108,
-    "brier": 0.255,
-    "log_loss": 0.7041,
-    "ece": 0.0603,
-    "spread": 0.0809,
-    "mean_pred": 0.5465,
-    "base_rate": 0.4982,
-    "corr": 0.0473,
+    "n": 1109,
+    "brier": 0.2549,
+    "log_loss": 0.7038,
+    "ece": 0.0599,
+    "spread": 0.081,
+    "mean_pred": 0.5466,
+    "base_rate": 0.4986,
+    "corr": 0.0485,
     "reliability": [
       {
         "bin_lo": 0.0,
@@ -56,9 +56,9 @@
       {
         "bin_lo": 0.6,
         "bin_hi": 0.7,
-        "n": 265,
-        "avg_pred": 0.631,
-        "avg_actual": 0.5434
+        "n": 266,
+        "avg_pred": 0.6311,
+        "avg_actual": 0.5451
       },
       {
         "bin_lo": 0.7,
@@ -86,35 +86,35 @@
         "n": 259,
         "brier": 0.2492,
         "log_loss": 0.6915,
-        "ece": 0.0304,
-        "spread": 0.0082,
-        "mean_pred": 0.4976,
+        "ece": 0.0533,
+        "spread": 0.0086,
+        "mean_pred": 0.4981,
         "base_rate": 0.4942,
         "corr": 0.104,
         "method": "platt"
       },
       "isotonic": {
         "n": 259,
-        "brier": 0.248,
-        "log_loss": 0.6891,
-        "ece": 0.0375,
-        "spread": 0.0292,
-        "mean_pred": 0.4912,
+        "brier": 0.2479,
+        "log_loss": 0.689,
+        "ece": 0.0373,
+        "spread": 0.0295,
+        "mean_pred": 0.4914,
         "base_rate": 0.4942,
-        "corr": 0.0971,
+        "corr": 0.0988,
         "method": "isotonic"
       },
       "temperature": {
         "n": 259,
         "brier": 0.2491,
-        "log_loss": 0.6914,
-        "ece": 0.0545,
-        "spread": 0.0102,
-        "mean_pred": 0.5041,
+        "log_loss": 0.6913,
+        "ece": 0.0539,
+        "spread": 0.0109,
+        "mean_pred": 0.5044,
         "base_rate": 0.4942,
         "corr": 0.1024,
         "method": "temperature",
-        "T": 7.4064
+        "T": 6.9483
       }
     },
     "reliability_eval": {
@@ -159,16 +159,16 @@
         {
           "bin_lo": 0.4,
           "bin_hi": 0.5,
-          "n": 143,
-          "avg_pred": 0.4922,
-          "avg_actual": 0.4615
+          "n": 133,
+          "avg_pred": 0.4918,
+          "avg_actual": 0.4361
         },
         {
           "bin_lo": 0.5,
           "bin_hi": 0.6,
-          "n": 116,
-          "avg_pred": 0.5043,
-          "avg_actual": 0.5345
+          "n": 126,
+          "avg_pred": 0.5048,
+          "avg_actual": 0.5556
         }
       ],
       "isotonic": [
@@ -190,7 +190,7 @@
           "bin_lo": 0.5,
           "bin_hi": 0.6,
           "n": 49,
-          "avg_pred": 0.5325,
+          "avg_pred": 0.5334,
           "avg_actual": 0.6327
         }
       ],
@@ -199,42 +199,42 @@
           "bin_lo": 0.4,
           "bin_hi": 0.5,
           "n": 72,
-          "avg_pred": 0.4909,
+          "avg_pred": 0.4903,
           "avg_actual": 0.375
         },
         {
           "bin_lo": 0.5,
           "bin_hi": 0.6,
           "n": 187,
-          "avg_pred": 0.5092,
+          "avg_pred": 0.5098,
           "avg_actual": 0.5401
         }
       ]
     },
-    "train_n": 834,
+    "train_n": 835,
     "eval_n": 259,
     "train_cut_date": "2026-06-22",
     "eval_start_date": "2026-06-24",
     "embargo_days": 1,
     "ece_pick": "identity",
     "brier_pick": "identity",
-    "temperature_T": 7.4064
+    "temperature_T": 6.9483
   },
   "walk_forward_oof": {
     "n_blocks": 6,
-    "n_oof": 662,
+    "n_oof": 663,
     "warmup_frac": 0.4,
     "embargo_days": 1,
     "stats": {
       "identity": {
-        "n": 662,
-        "brier": 0.2528,
-        "log_loss": 0.6992,
-        "ece": 0.048,
+        "n": 663,
+        "brier": 0.2526,
+        "log_loss": 0.6988,
+        "ece": 0.0474,
         "spread": 0.083,
-        "mean_pred": 0.5382,
-        "base_rate": 0.5045,
-        "corr": 0.0623,
+        "mean_pred": 0.5383,
+        "base_rate": 0.5053,
+        "corr": 0.0644,
         "reliability": [
           {
             "bin_lo": 0.2,
@@ -267,9 +267,9 @@
           {
             "bin_lo": 0.6,
             "bin_hi": 0.7,
-            "n": 144,
-            "avg_pred": 0.6302,
-            "avg_actual": 0.5556
+            "n": 145,
+            "avg_pred": 0.6304,
+            "avg_actual": 0.5586
           },
           {
             "bin_lo": 0.7,
@@ -281,40 +281,40 @@
         ]
       },
       "platt": {
-        "n": 662,
+        "n": 663,
         "brier": 0.25,
         "log_loss": 0.6932,
-        "ece": 0.0076,
-        "spread": 0.0091,
-        "mean_pred": 0.4982,
-        "base_rate": 0.5045,
-        "corr": 0.0061,
+        "ece": 0.0067,
+        "spread": 0.0093,
+        "mean_pred": 0.4986,
+        "base_rate": 0.5053,
+        "corr": 0.0095,
         "reliability": [
           {
             "bin_lo": 0.4,
             "bin_hi": 0.5,
-            "n": 351,
-            "avg_pred": 0.4912,
-            "avg_actual": 0.5043
+            "n": 341,
+            "avg_pred": 0.4911,
+            "avg_actual": 0.5015
           },
           {
             "bin_lo": 0.5,
             "bin_hi": 0.6,
-            "n": 311,
-            "avg_pred": 0.5062,
-            "avg_actual": 0.5048
+            "n": 322,
+            "avg_pred": 0.5066,
+            "avg_actual": 0.5093
           }
         ]
       },
       "isotonic": {
-        "n": 662,
-        "brier": 0.2511,
-        "log_loss": 0.7126,
-        "ece": 0.0149,
-        "spread": 0.0463,
-        "mean_pred": 0.4971,
-        "base_rate": 0.5045,
-        "corr": 0.0226,
+        "n": 663,
+        "brier": 0.251,
+        "log_loss": 0.7124,
+        "ece": 0.0153,
+        "spread": 0.0466,
+        "mean_pred": 0.4975,
+        "base_rate": 0.5053,
+        "corr": 0.0249,
         "reliability": [
           {
             "bin_lo": 0.3,
@@ -333,9 +333,9 @@
           {
             "bin_lo": 0.5,
             "bin_hi": 0.6,
-            "n": 173,
-            "avg_pred": 0.5307,
-            "avg_actual": 0.5434
+            "n": 174,
+            "avg_pred": 0.532,
+            "avg_actual": 0.546
           },
           {
             "bin_lo": 0.6,
@@ -368,28 +368,28 @@
         ]
       },
       "temperature": {
-        "n": 662,
-        "brier": 0.2494,
-        "log_loss": 0.6919,
-        "ece": 0.0166,
-        "spread": 0.0117,
-        "mean_pred": 0.5053,
-        "base_rate": 0.5045,
-        "corr": 0.0651,
+        "n": 663,
+        "brier": 0.2493,
+        "log_loss": 0.6918,
+        "ece": 0.017,
+        "spread": 0.012,
+        "mean_pred": 0.5055,
+        "base_rate": 0.5053,
+        "corr": 0.0671,
         "reliability": [
           {
             "bin_lo": 0.4,
             "bin_hi": 0.5,
             "n": 173,
-            "avg_pred": 0.4899,
+            "avg_pred": 0.4897,
             "avg_actual": 0.4566
           },
           {
             "bin_lo": 0.5,
             "bin_hi": 0.6,
-            "n": 489,
-            "avg_pred": 0.5108,
-            "avg_actual": 0.5215
+            "n": 490,
+            "avg_pred": 0.5111,
+            "avg_actual": 0.5224
           }
         ]
       }
