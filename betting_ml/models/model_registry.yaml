@@ -822,6 +822,38 @@ total_runs:
       \ vs market-blind champion v3 (MAE 3.5521) \u2014 0.15 MAE improvement apples-to-apples.\
       \ Promoted 2026-06-02 via compare_model_versions.py: MAE \u0394 \u22120.039,\
       \ Pct_Over_Line 61.7% (healthy), verdict PROMOTE.\n"
+  # ── Story E13.6b (2026-07-17) — served P(over) SERVING calibration (the totals analog of E13.6) ──
+  # E9.26 measured the served totals P(over) at ECE ~0.060 vs the moneyline's ~0.029 — the served
+  # `totals_model_prob` is the RAW distributional P(over) with NO serve-time calibration (unlike h2h,
+  # which serves the E13.6 TemperatureCalibrator). Fit off the serving cache (n=1108, 2026-04-17..07-16;
+  # betting_ml/scripts/fit_totals_calibrator_e13_6b.py — S3 permanent game blobs, DynamoDB-free, no
+  # Snowflake). VERDICT (pooled walk-forward OOF, the robust instrument — 662 preds / 6 date-aligned
+  # blocks, embargo 1d): RECALIBRATE via ISOTONIC — the only candidate that both clears the 0.03
+  # A2.9/E13.6 discrimination floor (OOF spread 0.046 vs Platt 0.009 / temperature 0.012, which collapse
+  # P(over) to a constant band near the base rate) AND materially improves calibration (OOF ECE 0.048
+  # identity -> 0.015, at/under moneyline parity). Monotone correction of a mild systematic over-lean
+  # (raw mean_pred 0.547 vs base 0.498). Totals discrimination is near-zero regardless (best_alpha=0; OOF
+  # corr ~0.06->0.02) so this is PRODUCT-honesty value, not edge. Class:
+  # sklearn.isotonic.IsotonicRegression (picklable -> resolves in predict_today/backfill).
+  # Report: ablation_results/totals_calibration_e13_6b.md; JSON:
+  # betting_ml/evaluation/calibration_e13_6b/served_totals_calibration_2026-04-17_2026-07-16.json.
+  totals_serving_calibration:
+    story: E13.6b
+    status: CANDIDATE_PART_A  # fit + validated OFF-BOX; NOT wired into predict_today
+    method: isotonic
+    calibrator_candidate: betting_ml/models/total_runs/calibrator_e13_6b_isotonic_candidate.joblib
+    fit_window: '2026-04-17..2026-07-16'  # n=1108 served totals games, pushes dropped
+    served_raw_ece: 0.0603      # moneyline was ~0.029 (E9.26)
+    oof_ece_isotonic: 0.0149    # pooled walk-forward, spread-honest (0.046 >= 0.03 floor)
+    fit_source: serving_cache (S3 permanent picks/game blobs); no Snowflake/lakehouse
+    # PART B (HELD until E11.20's full-slate cutover gate is confirmed clean — never change two things in
+    # one verification window): wire isotonic into predict_today at the totals emit (scripts/
+    # predict_today.py — p_over_v -> totals_model_prob, analog of the h2h _apply_calibrator path), serve
+    # the artifact from S3 (upload -> set calibrator_artifact), then re-measure served ECE on a fresh box
+    # slate as Part-B's runtime gate.
+    part_b_wire_in_site: scripts/predict_today.py  # p_over_v (~L1111) -> totals_model_prob (~L1257)
+    refit_required_after:
+      - total_runs_model_rebuild  # a genuinely more-discriminating P(over) could change this verdict
 layer3_totals:
   artifact_path: s3://baseball-betting-ml-artifacts/sub_models/totals_v1.pkl
   feature_columns_path: betting_ml/models/layer3/layer3_feature_columns.json

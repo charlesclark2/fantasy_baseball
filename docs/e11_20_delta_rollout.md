@@ -258,7 +258,22 @@ Mirror overhead on the W1 op ≈ +25–45s over the 2m42–2m48s BEFORE (the par
 current-season write) — disappears at cutover when the full-history legacy rebuild is
 dropped. Parity re-PASSED (84/84 partitions) after the 3rd mirror cycle on 2026-07-15.
 
-AFTER expectation at cutover: the W1 op drops from the ~2m45s full-history rebuild to an
+**✅ AC-B AFTER captured 2026-07-16 (first cutover daily cycle, run 3efa9fff, SUCCESS):**
+
+| op | AFTER (cutover, 07-16) | vs BEFORE (2m42–48s) | vs MIRROR (3m12–29s) |
+|---|---|---|---|
+| **`lakehouse_w1_pitch_marts_op`** | **1m47s** | **−35%** | −45% |
+| `lakehouse_delta_maintenance_op` | 5s | — | unchanged |
+| **total daily job** | 52m28s | (break-day baseline ≈52–63m) | — |
+
+The W1 daily is now an O(current-season) Delta partition swap + one SF-compat season file
+instead of a 12-season full rebuild. The per-op table above doubles as the absorbed-E11.21
+attribution: `lakehouse_w6_odds_marts_op` (8m58s this run) is confirmed the #1 runtime
+target for phase 2. NOTE (E11.20-COST, `docs/e11_20_cost_flips.md`): the W1 family's
+SF-credit saving is ~0.03 credits/day — the measured credit lever is wake-kill, not mart
+migration; phase-2 order is re-ranked there.
+
+AFTER expectation at cutover (met): the W1 op drops from the ~2m45s full-history rebuild to an
 O(current-season) partition swap + one compat season file. The w6 odds op (~9.5m) is the
 confirmed biggest remaining op → phase 2's first runtime target (with the pregame feature
 family as the SF-credit target, per the §4 seeding). Per-wave timing attribution across

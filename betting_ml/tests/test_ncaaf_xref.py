@@ -79,14 +79,16 @@ def lake(tmp_path_factory):
         {"cfb_id": None, "forty": 4.4, "ht": "6-0", "wt": 200},                 # NULL slug → dropped, no multiply
     ])
 
-    # nflverse players — the UDFA universe.
+    # nflverse players — the UDFA universe. Real columns: rookie_season / draft_pick /
+    # draft_round (NOT entry_year / draft_number — verified on the box 2026-07-17). Undrafted =
+    # draft_pick AND draft_round both null.
     _land(root, "nflverse_players", 0, [
         {"gsis_id": "00-0099001", "display_name": "Chris Moore", "position": "WR",
-         "college_name": "Cincinnati", "entry_year": 2016, "draft_number": None},           # UDFA → matches roster
+         "college_name": "Cincinnati", "rookie_season": 2016, "draft_pick": None, "draft_round": None},   # UDFA → matches roster
         {"gsis_id": "00-0033104", "display_name": "Jared Goff", "position": "QB",
-         "college_name": "California", "entry_year": 2016, "draft_number": 1},               # drafted → excluded
+         "college_name": "California", "rookie_season": 2016, "draft_pick": 1, "draft_round": 1},          # drafted → excluded
         {"gsis_id": "00-0099002", "display_name": "Ghost Player", "position": "LB",
-         "college_name": "Nowhere State", "entry_year": 2016, "draft_number": None},         # no roster → no match
+         "college_name": "Nowhere State", "rookie_season": 2016, "draft_pick": None, "draft_round": None}, # no roster → no match
     ])
 
     # roster — the UDFA's college identity + a transfer with a STABLE id across two schools.
@@ -137,6 +139,19 @@ def test_combine_attach_no_multiply(lake):
     assert mariota["forty"] == 4.52          # the real row won the dedup, not the 9.99 junk row
     assert rep["combine_attached"] == 2
     assert rep["has_forty"] == 2
+
+
+# ── a missing combine measurable lands as NaN → must collapse to NULL (honest has_forty) ─
+def test_nan_measurable_collapses_to_null(tmp_path):
+    # nflverse writes a missing 40-time as NaN; try_cast('NaN' as double) is a NON-null NaN, so
+    # a naive flag over-counts (the box read has_forty=81.8% vs the true ~65.7%). _num collapses it.
+    root = str(tmp_path)
+    _land(root, "nflverse_combine", 2015, [{"cfb_id": "x-1", "forty": float("nan"), "vertical": 30.0}])
+    con = xref._local_con()
+    xref._stage_combine(con, xref.local_lake(root))
+    forty, vertical = con.execute("select forty, vertical from _combine").fetchone()
+    assert forty is None          # NaN → NULL (so `forty is not null` = has_forty is honest)
+    assert vertical == 30.0       # a real value is untouched
 
 
 # ── name normalisation: the Jr. surname must agree ──────────────────────────────────────

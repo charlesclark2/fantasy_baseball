@@ -1368,6 +1368,24 @@ def _build_w7b(conn, dry_run: bool) -> None:
         _build_marts(conn, [model], dry_run)
         _register_mart_views(conn, [model], dry_run)
 
+    # INC-31-B2 (2026-07-16): rebuild the lineups FLATTEN from the fresh raw BEFORE the
+    # lineups_wide pivot. The 2026-07-10 INC-31 fix put --w7b-only on the intraday cadence,
+    # but the pivot reads stg_statsapi_lineups — a W6 stg model materialized ONLY by the
+    # daily-morning --w6 build (hours before any lineup posts). So the pivot was rebuilt
+    # fresh every 30 min from a permanently morning-stale flatten → same-day confirmed
+    # lineups NEVER reached stg_statsapi_lineups_wide → the lineup monitor read (SF ext
+    # view over that parquet) was structurally blind: zero organic lineup_monitor_state
+    # triggers since 2026-07-07; the 7/16 PHI@NYM slate missed its post_lineup re-score
+    # with the lineups sitting in lakehouse_raw 2.6h before first pitch. The flatten's
+    # duckdb branch reads lakehouse_raw/monthly_schedule directly (no precursor views),
+    # so rebuilding it here is self-contained; the daily --w6 build of the same model
+    # stays (idempotent, same output key). RULE (INC-25 cousin): an intraday rebuild must
+    # rebuild the chain from RAW to the consumer read — a fresh pivot over a stale
+    # flatten is still stale.
+    print("\nW7b lineups flatten (fresh from raw — INC-31-B2):")
+    _build_marts(conn, ["stg_statsapi_lineups"], dry_run)
+    _register_mart_views(conn, ["stg_statsapi_lineups"], dry_run)
+
     print("\nW7b serving-mart backlog (probable_pitchers / lineups_wide):")
     for model in W7B_BACKLOG_MODELS:
         _build_marts(conn, [model], dry_run)

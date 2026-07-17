@@ -104,9 +104,18 @@ docker compose -f services/dagster/aws/docker-compose.yml exec -T \
 must reproduce the ~99.7% slot baseline with **no cartesian inflation** — the CLI prints the
 per-class match %, and the builder raises if a row-count invariant fails.
 
-## Verify on first real box run (P0.1 discipline)
+## Box-verified result (2026-07-17, real S3 lake, 2015–2025)
 
-The fetchers were ground-truthed in P0.1, but the flatten reads specific `nflverse_players`
-fields (`college_name`, `draft_number`, `entry_year`, `display_name`). Confirm they exist on
-the first real read — if absent, the UDFA path degrades gracefully to 0 (the slot spine is
-unaffected). The `target_*` names (`car_av`, `w_av`, …) are nflverse `draft_picks` columns.
+`slot 2821 matched, 2796 → gsis_id (99.11%), combine 2307 (81.8% — exact P0.1 parity),
+surname-agree 99.86%`. The slot KEY resolved 100% (all 2,821 CFBD picks found an nflverse
+`(season, pick)` partner, no cartesian); 25 partners carry a null `gsis_id` (nflverse coverage
+vintage, concentrated in 2015–17) → the 99.11% resolved figure, a faithful reproduction of the
+~99.7% baseline. Mart written to `s3://credence-sports-lakehouse/ncaaf/marts/xref_college_nfl_players`.
+
+**nflverse column names — CONFIRMED on the box** (they differed from the P0.1 notes):
+`nflverse_players` uses `rookie_season` / `draft_pick` / `draft_round` (NOT `entry_year` /
+`draft_number`) and `display_name` / `college_name`; the initial run's `entry_year >= …` filter
+was always-NULL → `udfa_matched: 0` until this was fixed. Combine floats land as **NaN** when
+missing (`try_cast('NaN')` is a non-null NaN double), so `_num()` collapses NaN→NULL to keep
+`has_forty` honest (~65.7%, not the combine-attach 81.8%). The `target_*` names (`car_av`,
+`w_av`, …) are nflverse `draft_picks` columns.
