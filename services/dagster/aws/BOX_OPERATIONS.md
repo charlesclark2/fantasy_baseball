@@ -154,9 +154,12 @@ These four are enforced by `check_monitors_healthy_op` (an unset one = a silentl
 | `PROPS_DAILY_INGEST` | `0` | Redundant with the host-cron `0 13` props line — enable EXACTLY ONE (else double-pay Odds API credits). |
 | `W11_RAW_WRITE_MODE` / `LAKEHOUSE_RAW_WRITE_MODE` | per-cutover (`snowflake`→`both`→`s3`) | Tier-A raw writers' dual-write mode; advance per the W11 cutover, not blindly. |
 | `W11_W4W5_NIGHTLY`, `W11B_UMPIRE_NIGHTLY`, `W11C_WEATHER_NIGHTLY`, `W11D_PUBLIC_BETTING_NIGHTLY`, `W11_W3PRE_DAILY`, `W11_BATTER_PITCHES_SF_RETIRED` | per-cutover | Nightly-rebuild / SF-retire gates; each flips with its wave's box cutover. |
+| `W11TX_TRANSACTIONS_NIGHTLY` | `1` **once cut over** | INC-32 hygiene: gates the nightly `--w11tx-only` rebuild + `--w11tx` ext refresh that keeps `lakehouse_ext.stg_statsapi_transactions` (the injury-status chain) fresh from the live raw mirror. MUST be `1` before the SF raw `player_transactions` is dropped, else the ext table FREEZES on drop (`decommission_w11_abcd_drop.py`). Flip on only after `W11_RAW_WRITE_MODE=both\|s3` + the ext table exists + a box-validated `--w11tx-only` run (per-ROW ext fetch = the runtime gate). |
 
 ### 10c. Sensors — ALL self-start (`default_status=RUNNING`); the critical set is heartbeat-checked
 All 11 sensors carry `default_status=RUNNING`. `check_monitors_healthy_op` alarms if any of these is manually STOPPED: `run_failure_alert_sensor`, `odds_current_rebuild_sensor`, `odds_freshness_alert_sensor`, `schedule_freshness_alert_sensor`, `statcast_freshness_sensor`, `lineup_monitor_sensor`, `pregame_alert_sensor`, `conviction_pick_alert_sensor`, `morning_watchdog_sensor`, `clv_alert_sensor`, `model_health_alert_sensor`.
+
+**INC-32 (2026-07-18) — tick-STALENESS heartbeat:** the STOPPED check above is blind to a sensor that is still nominally RUNNING but whose evaluations have *stalled* (the sensor-daemon wedged mid-slate — 7/17, all evals stopped ~21:30Z after `lineup_monitor.py` hung the daemon thread). `check_monitors_healthy_op` now ALSO pages if any critical sensor's most-recent tick is older than `SENSOR_TICK_STALE_SECONDS` (default 60 min) — the daemon ticks every RUNNING sensor continuously (even a SkipReason is a tick), so a stale tick = a wedged daemon. Structural cure: every sensor subprocess (op AND the `_evaluate_lineup_monitor` sensor-eval path) now has a hard subprocess timeout so a wedge can't block the daemon in the first place.
 
 ### 10d. Schedules — intended boot state
 | Schedule | Intended | Note |

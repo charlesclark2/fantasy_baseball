@@ -105,6 +105,21 @@ def test_mirror_tier_swallows_failure_and_never_raises():
         )
 
 
+def test_mirror_tier_failure_pages_via_send_alert():
+    """INC-32: 'works manually but fails silently in organic runs' — the mirror-tier except must
+    now PAGE (SNS send_alert) in addition to the WARNING, so an organic-run failure is visible
+    instead of dying in op logs while post_lineup coverage silently degrades (7/17: 0.833)."""
+    fn = _func(_SENSOR_OPS, _OP)
+    handlers = [n for n in ast.walk(fn) if isinstance(n, ast.ExceptHandler)]
+    # the OUTER mirror-tier handler (wrapping the steps loop) must call send_alert
+    outer = max(handlers, key=lambda h: len(ast.unparse(h)))
+    body = ast.unparse(outer)
+    assert "send_alert(" in body, "mirror-tier except must page via send_alert (INC-32)"
+    assert "CRITICAL" in body, "the page must be severity=CRITICAL"
+    # and it must record WHICH step failed so the organic-vs-manual difference is diagnosable
+    assert "failed_step" in ast.unparse(fn), "must capture the failing step for the alert"
+
+
 def test_wired_between_staging_and_feature_copy():
     src = _SENSOR_JOBS.read_text()
     # consumes the staging rebuild (s2) and feeds the feature copy (s2b) — order is the invariant

@@ -67,6 +67,59 @@ def flag_problems(env) -> list[str]:
     ]
 
 
+# INC-32 (2026-07-18) — the "daemon stopped mid-slate" detector. E11.23's stopped-instigator check
+# only catches a sensor that was EXPLICITLY toggled STOPPED. It is BLIND to a sensor that is still
+# nominally RUNNING but whose evaluations have STALLED — e.g. a sensor eval that blocked forever on an
+# un-timed-out subprocess (the lineup_monitor.py wedge that stopped ALL sensor evals ~21:30Z on 7/17,
+# so 7 of 15 games never got post_lineup). The daemon evaluates every RUNNING sensor continuously and
+# records a tick each time (even a SkipReason ticks), so a critical sensor whose most-recent tick is
+# hours old means the daemon/sensor is wedged. Default staleness ceiling 60 min (env-overridable):
+# every critical sensor ticks well inside that when the daemon is healthy (the slowest floor is the
+# 10-min lineup monitor).
+import os as _os
+
+_SENSOR_TICK_STALE_SECONDS = float(_os.environ.get("SENSOR_TICK_STALE_SECONDS", "3600"))
+
+
+def stale_sensor_ticks(last_tick_ages: dict, max_age_s: float) -> list[str]:
+    """Pure: the CRITICAL_SENSORS whose most-recent tick is older than ``max_age_s``.
+
+    ``last_tick_ages`` maps sensor name → seconds since its last tick. A ``None`` age (no tick data
+    / never evaluated) is NOT flagged here — 'never started' is the STOPPED check's job; this
+    targets 'was ticking, now stalled'. Sorted, deterministic, never raises."""
+    problems: list[str] = []
+    for name in sorted(CRITICAL_SENSORS):
+        age = last_tick_ages.get(name)
+        if age is not None and age > max_age_s:
+            problems.append(
+                f"critical sensor tick STALE: {name} (last tick {age / 60:.0f} min ago > "
+                f"{max_age_s / 60:.0f} min ceiling) — the sensor-daemon has likely wedged and "
+                f"evaluations STOPPED (INC-32)"
+            )
+    return problems
+
+
+def stale_running_sensor_ticks(instance, now_ts: float,
+                               max_age_s: float | None = None) -> list[str]:
+    """The CRITICAL_SENSORS registered in ``instance`` whose last tick is older than ``max_age_s``
+    (default ``_SENSOR_TICK_STALE_SECONDS``). Reads each sensor's persisted ``last_tick_timestamp``
+    and defers the decision to the pure ``stale_sensor_ticks``. Best-effort — may raise on an
+    ephemeral/CI instance; the caller treats introspection as best-effort (ALERT-tier)."""
+    if max_age_s is None:
+        max_age_s = _SENSOR_TICK_STALE_SECONDS
+    ages: dict = {}
+    # Match by name (CRITICAL_SENSORS are all sensors; names are unambiguous) — avoids depending on
+    # the exact InstigatorType import path across Dagster versions.
+    for state in instance.all_instigator_state():
+        name = getattr(state, "instigator_name", None)
+        if name not in CRITICAL_SENSORS:
+            continue
+        data = getattr(state, "instigator_data", None)
+        last_tick = getattr(data, "last_tick_timestamp", None) if data is not None else None
+        ages[name] = (now_ts - last_tick) if last_tick else None
+    return stale_sensor_ticks(ages, max_age_s)
+
+
 def stopped_critical_instigators(instance) -> list[str]:
     """The serving-critical sensors/schedules that are EXPLICITLY STOPPED in the Dagster instance.
     ``all_instigator_state(STOPPED)`` returns only instigators with a persisted STOPPED row (someone

@@ -481,3 +481,68 @@ class TestServerExecute:
         select_val = captured["cmd"][select_idx + 1]
         assert "source_status:fresher+" in select_val, "must keep incremental selector"
         assert "config.materialized:view" in select_val, "INC-13: views must always be rebuilt"
+
+    # ── INC-32: the wedge that held the single-tenant lock forever ────────────────
+    def test_run_cmd_passes_hard_timeout(self):
+        """_run_cmd must pass a finite timeout so a wedged dbtf is KILLED, not hung forever."""
+        captured: dict = {}
+
+        def fake_run(cmd, **kw):
+            captured["timeout"] = kw.get("timeout")
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        with patch("subprocess.run", side_effect=fake_run):
+            self._server._run_cmd(["dbtf", "run"], {})
+        assert captured["timeout"] is not None and captured["timeout"] > 0, (
+            "INC-32: _run_cmd must set a finite subprocess timeout"
+        )
+
+    def test_wedged_dbtf_timeout_marks_run_failed_and_frees_lock(self):
+        """A wedged dbtf (TimeoutExpired) must transition the run to 'failed' — NOT leave it
+        'running' (which would 409 every subsequent /run forever)."""
+        import subprocess as _sp
+        self._server._runs["wedged"] = {"status": "running", "started_monotonic": 0.0}
+
+        def fake_run(cmd, **_kw):
+            raise _sp.TimeoutExpired(cmd=cmd, timeout=5, output=b"partial")
+
+        with patch("subprocess.run", side_effect=fake_run):
+            self._server._execute("wedged", ["run"], {})
+
+        assert self._server._runs["wedged"]["status"] == "failed", (
+            "INC-32: a timed-out run must be marked failed so the single-tenant lock frees"
+        )
+        assert self._server._runs["wedged"]["returncode"] == 124
+
+    def test_execute_crash_marks_run_failed(self):
+        """Any unexpected exception in _execute must still set a terminal status (lock frees)."""
+        self._server._runs["boom"] = {"status": "running", "started_monotonic": 0.0}
+        with patch.object(self._server, "_execute_impl", side_effect=RuntimeError("kaboom")):
+            self._server._execute("boom", ["run"], {})
+        assert self._server._runs["boom"]["status"] == "failed"
+        assert "kaboom" in self._server._runs["boom"]["stderr"]
+
+    def test_reaper_frees_dead_running_entry(self):
+        """A 'running' entry older than the ceiling is reaped → a new /run is not 409'd forever."""
+        ceiling = self._server._MAX_RUN_SECONDS + self._server._REAP_GRACE_SECONDS
+        now = 1_000_000.0
+        self._server._runs.clear()
+        self._server._runs["dead"] = {
+            "status": "running", "started_monotonic": now - ceiling - 10,
+        }
+        self._server._reap_stale_runs(now)
+        assert self._server._runs["dead"]["status"] == "failed", (
+            "INC-32: a run stuck 'running' past the ceiling must be reaped so the lock frees"
+        )
+
+    def test_reaper_leaves_healthy_running_entry(self):
+        """A fresh in-flight run must NOT be reaped (real concurrency still 409s correctly)."""
+        now = 1_000_000.0
+        self._server._runs.clear()
+        self._server._runs["live"] = {"status": "running", "started_monotonic": now - 5}
+        self._server._reap_stale_runs(now)
+        assert self._server._runs["live"]["status"] == "running"

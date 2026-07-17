@@ -51,6 +51,21 @@ _ACTIVE_LEAD = timedelta(hours=5)          # "active" once first pitch is <= 5h 
 # the monitor anyway.
 _MONITOR_HORIZON = timedelta(hours=8)
 
+# INC-32 (2026-07-18) — HARD ceiling on the lineup_monitor.py subprocess run INSIDE the
+# sensor evaluation. The op-side helpers got a 30-min ceiling on 2026-06-15 (a wedged dbt
+# subprocess hung a whole run), but the SENSOR path's own subprocess.run below was left with
+# NO timeout. When lineup_monitor.py wedges (its state table is still Snowflake — a warehouse
+# resume / hung connection that never returns), the sensor evaluation BLOCKS the Dagster
+# sensor-daemon worker thread FOREVER. The daemon evaluates sensors on a bounded thread pool,
+# so one permanently-blocked eval starves the pool → sensor evaluations STOP mid-slate (7/17:
+# evals ceased ~21:30Z, 7 of 15 games never got post_lineup). This is the "silently not
+# running" mode E11.23's default_status=RUNNING self-start does NOT cover — the sensor is still
+# nominally RUNNING, it just never produces a tick. A hard timeout converts the infinite hang
+# into a fast, visible SkipReason so the next tick (and the daemon) keep going. lineup_monitor.py
+# is a quick state query (seconds when healthy); 300s is a generous ceiling well under the 600s
+# sensor floor. The heartbeat in check_monitors_healthy_op is the backstop if a tick still stalls.
+_MONITOR_SUBPROCESS_TIMEOUT = 300  # seconds (5 min) — hard ceiling per lineup_monitor.py run
+
 
 def _beyond_monitor_horizon(mins: float | None) -> str | None:
     """Return a human skip-reason when the monitor should not run at all this tick:
@@ -172,11 +187,15 @@ def _evaluate_lineup_monitor(log, triggered_by: str):
     """
     script = os.path.join(SCRIPTS_DIR, "lineup_monitor.py")
     try:
+        # INC-32: hard timeout so a wedged lineup_monitor.py (hung Snowflake connection) can
+        # NEVER block the sensor-daemon worker thread indefinitely (→ all sensor evals stop
+        # mid-slate). On timeout the child is killed and we skip this tick; the next tick retries.
         result = subprocess.run(
             [sys.executable, script],
             capture_output=True,
             text=True,
             cwd=APP_DIR,
+            timeout=_MONITOR_SUBPROCESS_TIMEOUT,
         )
         if result.stdout:
             log.info(result.stdout)
@@ -187,6 +206,18 @@ def _evaluate_lineup_monitor(log, triggered_by: str):
                 f"lineup_monitor.py exited {result.returncode} — skipping tick. "
                 f"stderr: {result.stderr[:400]}"
             )
+    except subprocess.TimeoutExpired:
+        # The killed child freed the daemon thread — page loud (a persistent timeout means the
+        # monitor's Snowflake state read is wedging every tick) but never block the daemon.
+        log.warning(
+            f"[ALERT] lineup_monitor.py exceeded {_MONITOR_SUBPROCESS_TIMEOUT}s and was KILLED "
+            "(INC-32 sensor-daemon-block guard). Skipping this tick; investigate the "
+            "lineup_monitor_state Snowflake read if this recurs."
+        )
+        return SkipReason(
+            f"lineup_monitor.py exceeded {_MONITOR_SUBPROCESS_TIMEOUT}s hard timeout — killed, "
+            "tick skipped so the daemon keeps evaluating."
+        )
     except Exception as e:
         return SkipReason(f"lineup_monitor.py failed to run: {e}")
 
