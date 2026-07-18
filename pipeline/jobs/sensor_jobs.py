@@ -14,6 +14,7 @@ from pipeline.ops.daily_ingestion_ops import (
     compute_elo,
     dbt_build_bullpen_posteriors_op,
     dbt_umpire_feature_rebuild,
+    finalize_prior_slate_game_detail_op,
     generate_pick_narratives_op,
     predict_today_morning,
     update_archetype_posteriors_op,
@@ -114,4 +115,17 @@ def statcast_catchup_job():
     el = compute_elo(start=ar)
     s3 = dbt_umpire_feature_rebuild(start=el)
     s4 = predict_today_morning(start=s3)
-    write_serving_store_intraday_op(predict_done=s4)
+    serve = write_serving_store_intraday_op(predict_done=s4)
+    # E9.41b — settle YESTERDAY's stored game-detail Finals (→ the model-vs-market "who
+    # called it" scorecards) the moment its late Statcast lands, not only at the next 08:00
+    # daily run. The intraday serve above re-writes TODAY's blobs only; a late (West-coast)
+    # game's outcome is INNER-JOINed off the pitch-derived mart_game_results VIEW, so once
+    # catchup_ingest_statcast lands yesterday's pitches the view is fresh and this re-resolves
+    # the completed prior slate's game-detail blobs to status='Final' from it. Terminal
+    # WARN-tier leaf (finalize catches its own exceptions) — a failure logs loud and can never
+    # fail the catch-up. Scope note: the sensor stops firing this job past today's first-pitch
+    # deadline (protective — re-running predict_today_morning post-first-pitch would race the
+    # lineup_monitor's intraday re-scores), so the rare "Savant publishes after the deadline"
+    # tail still settles at the next 08:00 daily finalize; the featured recap self-heals on read
+    # (E9.41) regardless.
+    finalize_prior_slate_game_detail_op(start=serve)
