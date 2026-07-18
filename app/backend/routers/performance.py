@@ -200,6 +200,15 @@ ORDER BY 1, 2
 """
 
 
+def _model_cache_is_populated(cached: dict | list | None) -> bool:
+    """True only when a cached /performance/model blob carries a NON-empty per-market
+    tally. INC-31 anti-freeze: an empty ``markets:[]`` result (E9.26b — the compute
+    transiently returned nothing at the first request of the day, before the daily
+    lakehouse export landed / a swallowed DuckDB-S3 read error) must NOT be treated as
+    a legitimate cache hit, or it freezes the page EMPTY for the rest of the day."""
+    return isinstance(cached, dict) and bool(cached.get("markets"))
+
+
 @router.get("/model", response_model=ModelMetricsResponse)
 def get_model_metrics(
     season: Optional[int] = None,
@@ -208,7 +217,10 @@ def get_model_metrics(
     degrad_tag = "incl" if include_degraded else "excl"
     cache_key = f"performance/model_{season or 'all'}_{degrad_tag}.json"
     cached = get_cache(cache_key)
-    if cached is not None:
+    # INC-31 anti-freeze (E9.26b): serve the cache ONLY when it is populated. An empty
+    # markets:[] blob is ignored (treated as a miss) so a ship-day / first-request-of-day
+    # degenerate result can never stick — the endpoint recomputes and self-heals.
+    if _model_cache_is_populated(cached):
         return ModelMetricsResponse(**cached)
 
     season_filter = "AND YEAR(m.game_date) = %(season)s" if season else ""
@@ -238,7 +250,17 @@ def get_model_metrics(
         for r in rows
     ]
     result = ModelMetricsResponse(season=season, markets=markets)
-    set_cache(cache_key, result.model_dump(mode="json"))
+    # INC-31 anti-freeze (E9.26b): only CACHE a populated tally. A degenerate empty result
+    # (transient read miss during the export window) is returned to the caller but left
+    # UNCACHED so the very next request re-attempts the compute instead of freezing empty.
+    if markets:
+        set_cache(cache_key, result.model_dump(mode="json"))
+    else:
+        logger.warning(
+            "performance/model computed EMPTY markets for season=%s degraded=%s — "
+            "NOT caching (INC-31 anti-freeze); will recompute next request",
+            season, include_degraded,
+        )
     return result
 
 
