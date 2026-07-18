@@ -232,6 +232,39 @@ def test_historical_closing_line_is_leakage_safe(monkeypatch):
     assert out[0]["_snapshot_ts"] < out[0]["commence_time"]
 
 
+def test_props_historical_dedups_and_pins_own_commence(monkeypatch):
+    # The credit bug guard: overlapping ±30-min kickoff windows must NOT re-fetch an event's
+    # props. Two distinct kickoffs 20 min apart (20:05 / 20:25); each events-list returns BOTH
+    # games → props must fire ONCE per unique event, each at ITS OWN commence − buffer.
+    from datetime import datetime, timezone
+    calls: list = []
+    g1 = {"id": "g1", "commence_time": "2024-09-08T20:05:00Z"}
+    g2 = {"id": "g2", "commence_time": "2024-09-08T20:25:00Z"}
+
+    def responder(url, params):
+        if url.endswith("/events"):                 # both windows list BOTH games (the overlap)
+            return _FakeResp({"timestamp": params["date"], "data": [g1, g2]})
+        # event-odds: echo which event + snapshot was requested
+        eid = url.rstrip("/odds").rsplit("/", 1)[-1]
+        return _FakeResp({"timestamp": params["date"],
+                          "data": [{"id": eid, "_req_date": params["date"], "bookmakers": []}]})
+
+    _patch_requests(monkeypatch, calls, responder)
+    monkeypatch.setattr(src, "_season_kickoffs", lambda ctx, year, weeks=None: [
+        datetime(2024, 9, 8, 20, 5, tzinfo=timezone.utc),
+        datetime(2024, 9, 8, 20, 25, tzinfo=timezone.utc),
+    ])
+    ctx = src.build_ctx(odds_key="k", sleep_seconds=0, snapshot_buffer_min=5)
+    out = src._odds_nfl_props_historical(ctx, 2024)
+    prop_calls = [(u, p) for u, p in calls if "/events/" in u and u.endswith("/odds")]
+    # exactly 2 per-event props calls (NOT 4) — each unique event fetched ONCE despite the overlap
+    assert len(prop_calls) == 2
+    fetched = {u.rstrip("/odds").rsplit("/", 1)[-1]: p["date"] for u, p in prop_calls}
+    assert fetched == {"g1": "2024-09-08T20:00:00Z",   # g1 commence 20:05 − 5min
+                       "g2": "2024-09-08T20:20:00Z"}   # g2 commence 20:25 − 5min (its OWN, not g1's)
+    assert len(out) == 2
+
+
 def test_season_kickoffs_et_to_utc_distinct(monkeypatch):
     # gameday(ET date) + gametime(ET HH:MM) → distinct UTC kickoff datetimes (DST-correct).
     # Two 13:00 ET games collapse to ONE distinct kickoff; a null gametime is skipped.
