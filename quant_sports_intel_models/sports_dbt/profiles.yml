@@ -24,3 +24,19 @@ sports_lake:
         # over-committing RAM (the INC-22 OOM class). Overridable per host.
         memory_limit: "{{ env_var('SPORTS_DUCKDB_MEMORY', '4GB') }}"
         threads: 4
+    # `ci` target (NFL-N0.3): the OFFLINE parse+compile gate. NO `secrets` block — dbt-duckdb
+    # runs the profile's secrets on connect, and `CREATE SECRET (... PROVIDER credential_chain)`
+    # HARD-FAILS on a runner with no AWS creds ("Secret Validation Failure"). compile only RENDERS
+    # the delta_scan(...) SQL (it never scans S3), so it needs no S3 secret at all → this target
+    # opens a plain local DuckDB and the structural gate runs credential-free. Do NOT `dbt run`
+    # with this target (a real build needs the S3 secret → use `dev`).
+    ci:
+      type: duckdb
+      path: "{{ env_var('SPORTS_DUCKDB_PATH', 'sports.duckdb') }}"
+      extensions:
+        - httpfs
+        - parquet
+        - delta
+      settings:
+        memory_limit: "{{ env_var('SPORTS_DUCKDB_MEMORY', '4GB') }}"
+        threads: 4

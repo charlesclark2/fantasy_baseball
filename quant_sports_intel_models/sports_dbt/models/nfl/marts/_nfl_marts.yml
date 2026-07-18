@@ -1,0 +1,164 @@
+version: 2
+
+# N0.3 — the ported `refined` IP (jaffle_shop → sports_dbt over the S3/Delta lake). Every model
+# is sport-tagged ('nfl') and point-in-time / leakage-safe (as-of-week: a week's row carries only
+# that-week roster/role/opponent state, never post-game info folded backward). Tests target the
+# genuinely-unique keys — dim_player carries name-variant dupes on player_id (the jaffle qualify
+# partitions on player_id+player_name) and fct_player_week carries expected role-window dupes on
+# (player_id, season, week, team_id), so uniqueness is asserted on the surrogate / game keys only.
+
+models:
+  # ---- calendars ----
+  - name: team_week_calendar
+    description: >
+      (season, week, team) spine including BYE weeks, with the ET week window
+      [Tue 00:00 → next Tue 00:00). The point-in-time backbone dim_player_role + fct_player_week
+      anchor on. Sport-tagged.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+      - name: week
+        data_tests: [not_null]
+      - name: team_id
+        data_tests: [not_null]
+
+  - name: week_clock_bounds
+    description: Per (season, week) ET week window (the team-agnostic clock). Sport-tagged.
+    columns:
+      - name: season
+        data_tests: [not_null]
+      - name: week
+        data_tests: [not_null]
+
+  # ---- dimensions ----
+  - name: dim_player
+    description: >
+      Player ID/bio dimension + cross-ID rosetta (one current row per player_id+player_name).
+      player_id is NOT unique (name-variant rows survive the qualify, per jaffle) — the surrogate
+      key is. Sport-tagged.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: player_id
+        data_tests: [not_null]
+      - name: player_surrogate_key
+        data_tests: [not_null, unique]
+
+  - name: dim_player_role
+    description: >
+      Type-2 SCD of a player's weekly role (team/position/status/depth-rank). Contiguous,
+      non-overlapping [record_effective_ts, record_end_ts] intervals; the open segment ends
+      2100-12-31 with current_record_indicator='Y'. Pure-SQL SCD-2 (no Python). Sport-tagged.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: player_id
+        data_tests: [not_null]
+      - name: current_record_indicator
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["Y", "N"]
+
+  # ---- core fact ----
+  - name: fct_player_week
+    description: >
+      The core weekly player fact (box score + snaps + team totals + as-of SCD-2 role) on the
+      team-week spine. One row per player-week-role-segment (so (player_id, season, week, team_id)
+      may repeat when a player's role window overlaps the week — mart_opportunity/efficiency dedupe
+      via qualify). Carries PPR/STD + the_league custom fantasy points. Sport-tagged, leakage-safe.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: player_id
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+
+  # ---- NGS + snap satellites ----
+  - name: sat_passing_ngs_weekly
+    description: QB Next Gen Stats satellite on the fct spine (2016+, QB). Sport-tagged.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: player_id
+        data_tests: [not_null]
+  - name: sat_receiving_ngs_weekly
+    description: WR/TE Next Gen Stats satellite on the fct spine (2016+, non-K). Sport-tagged.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: player_id
+        data_tests: [not_null]
+  - name: sat_rushing_ngs_weekly
+    description: RB Next Gen Stats satellite on the fct spine (2016+, non-K). Sport-tagged.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: player_id
+        data_tests: [not_null]
+  - name: sat_snap_counts_weekly
+    description: Offense/ST snap-usage satellite on the fct spine (keyed pfr id). Sport-tagged.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: player_id
+        data_tests: [not_null]
+
+  # ---- derived analytics marts ----
+  - name: mart_opportunity_player_week
+    description: >
+      Usage/volume driver per player-week (target/air-yards/carry/dropback/snap shares, pressure
+      context, starter flags). Deduped fct + PFR advanced + NGS satellites. Excludes K. Sport-tag.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: player_id
+        data_tests: [not_null]
+  - name: mart_efficiency_player_week
+    description: >
+      Per-play efficiency per player-week (completion%/YPA/CPOE/sack-rate, YPC/EPA-per-rush/RYOE,
+      catch-rate/YPT/YAC-OE). Deduped fct + PFR advanced + NGS satellites. Excludes K. Sport-tag.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: player_id
+        data_tests: [not_null]
+  - name: mart_player_season
+    description: >
+      Season rollup per player — per-game opportunity/efficiency means over played games, season
+      totals, stability (SD), last-5 rolling form. The fantasy-projection input. Sport-tagged.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: player_id
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+
+  - name: mart_projections_preseason
+    description: >
+      The fantasy head-start: prior-season per-game rates regressed to league mean (70/30) × team
+      pace → projected weekly + full-season PPR. Base season is DYNAMIC (max completed season).
+      Sport-tagged; point-in-time-safe (completed-season aggregates only).
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: player_id
+        data_tests: [not_null]
+      - name: projected_fantasy_points_ppr_week
+        data_tests: [not_null]
+
+  - name: dim_nfl_betting
+    description: >
+      The betting head-start: one row per game with the FREE nflverse consensus lines
+      (moneyline/spread/total) + the game-key rosetta. All seasons 1999+. N0.4 layers the per-book
+      Odds API (Bovada/CLV) onto game_id. Sport-tagged.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: game_id
+        data_tests: [not_null, unique]

@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "fixed",
+        "text": "Fixed a browser tab left open for a long time silently breaking. Your signed-in session's access token expires after a while, and previously the app read it once when the tab loaded and never refreshed it — so if you came back to a tab you'd left open, sections like Performance or your Bet Log could load empty or error even though you were still logged in. The app now renews your session automatically: ahead of expiry, whenever you return to the tab, and — as a safety net — the moment any request comes back unauthorized, it silently refreshes and retries that request so the section fills in instead of breaking. You're only sent to the login screen if your session has genuinely expired and can't be renewed. No change to how you log in or out."
+      },
+      {
+        "tag": "fixed",
         "text": "Fixed the 'Model Skill' panel on the Performance page showing 'No model data available.' Its per-market summary (picks, calibration, closing-line value, and how often the model's favored side won, moneyline and total runs shown separately) is computed once a day and saved so the page loads fast. The summary now comes straight from the settled-results table it belongs to, and the optional 'exclude degraded predictions' filter is applied as a separate best-effort step — so that filter can no longer come up empty and blank out the whole panel. The page also refuses to save an empty result and recomputes instead, and the affected saved copies have been cleared, so a bad computation can't get stuck. These are factual model outputs, not betting advice, with no profitability claim."
       },
       {
