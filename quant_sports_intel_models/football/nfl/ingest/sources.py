@@ -47,6 +47,12 @@ ODDS_BASE = "https://api.the-odds-api.com/v4"
 # nflverse release-Parquet base (read DIRECTLY via DuckDB — nfl_data_py is abandoned).
 NFLVERSE_RELEASE = "https://github.com/nflverse/nflverse-data/releases/download"
 
+# Columns nflverse types INCONSISTENTLY across season-files → VARCHAR-pin them so the Delta
+# column type is stable across every season partition (the cross-season type-drift cure; see
+# `_projection`). Both live in rosters + weekly_rosters: VARCHAR ≤2015 (dirty values like '79D'),
+# INTEGER 2016+ → an un-pinned merge write fails `Cannot cast string '79D' to Int32`.
+_ROSTER_STR_COLS = ("jersey_number", "draft_number")
+
 
 @dataclass
 class Ctx:
@@ -83,6 +89,7 @@ class SourceSpec:
     cadence: str = "weekly"         # weekly | seasonal | intraday
     typed: bool = True              # True = DataFrame → write_dataframe; False = list[dict] → write_records
     season_scoped: bool = True      # False = not season-grained (nflverse_players); season=0
+    str_cols: tuple = ()            # columns to force to VARCHAR at read (the cross-season type-drift cure)
     notes: str = ""
 
 
@@ -92,21 +99,44 @@ def _is_http_404(exc: Exception) -> bool:
     return "404" in s or "HTTP GET error" in s
 
 
-def _nflverse_seasonal(tag: str, file_prefix: str, *, has_season_col: bool = True) -> FetchFn:
+def _projection(con, url: str, str_cols: tuple) -> str:
+    """Build the SELECT projection, casting any `str_cols` present in the file to VARCHAR — the
+    CROSS-SEASON TYPE-DRIFT cure (N0.2 box backfill). nflverse types a column per-season-file:
+    `jersey_number` / `draft_number` are VARCHAR ≤2015 (dirty values like '79D') but INTEGER
+    2016+. Landed as separate season partitions with `schema_mode='merge'`, the first-written
+    season fixes the Delta column type and a later season with the other type fails the merge
+    cast (`Cannot cast string '79D' to Int32`). Forcing these id-like columns to VARCHAR for
+    EVERY season makes the Delta column stably string (semantically right — jersey '00'/'79D').
+    `::VARCHAR` keeps NULLs NULL and renders ints without a '.0' (unlike a pandas float cast)."""
+    if not str_cols:
+        return "*"
+    cols = con.execute("SELECT * FROM read_parquet(?) LIMIT 0", [url]).df().columns.tolist()
+    present = [c for c in str_cols if c in cols]
+    if not present:
+        return "*"
+    excl = ", ".join(present)
+    casts = ", ".join(f"{c}::VARCHAR AS {c}" for c in present)
+    return f"* EXCLUDE ({excl}), {casts}"
+
+
+def _nflverse_seasonal(tag: str, file_prefix: str, *, has_season_col: bool = True,
+                       str_cols: tuple = ()) -> FetchFn:
     """A per-season nflverse asset: `<tag>/<file_prefix>_YYYY.parquet` — read the ONE file for
     `year`. Below an asset's coverage floor the file 404s → returned as an empty DataFrame (a
     clean skip, not an error) so a 2016–2025 backfill doesn't ALERT on FTN 2016–2021 etc.
 
     ALWAYS stamps a `season` column from the URL year when the asset lacks one (`pbp_participation`
     is keyed `nflverse_game_id` with no season col — `has_season_col=False` documents the expected
-    shape) so the returned DataFrame is self-describing for the season-partitioned Delta write."""
+    shape) so the returned DataFrame is self-describing for the season-partitioned Delta write.
+    `str_cols` are cast to VARCHAR (the cross-season type-drift cure — see `_projection`)."""
     def fetch(ctx: Ctx, year: int, *, weeks=None):
         import pandas as pd
 
         url = f"{NFLVERSE_RELEASE}/{tag}/{file_prefix}_{int(year)}.parquet"
         con = ctx.duck()
         try:
-            df = con.execute("SELECT * FROM read_parquet(?)", [url]).df()
+            proj = _projection(con, url, str_cols)
+            df = con.execute(f"SELECT {proj} FROM read_parquet(?)", [url]).df()
         except Exception as exc:  # noqa: BLE001
             if _is_http_404(exc):
                 log.info("  [%s] season=%s not published (404) — empty slice", file_prefix, year)
@@ -120,18 +150,20 @@ def _nflverse_seasonal(tag: str, file_prefix: str, *, has_season_col: bool = Tru
     return fetch
 
 
-def _nflverse_single(tag: str, asset: str, season_col: str | None) -> FetchFn:
-    """A single-file nflverse asset holding ALL seasons: `<tag>/<asset>.parquet`. If
-    `season_col`, filter `WHERE <season_col> = year` (one partition/season); else read the whole
-    file (not season-scoped — `players`)."""
+def _nflverse_single(tag: str, asset: str, season_col: str | None, *,
+                     str_cols: tuple = ()) -> FetchFn:
+    """A single-file nflverse asset holding ALL seasons: `<tag>/<asset>.parquet`. If `season_col`,
+    filter `WHERE <season_col> = year` (one partition/season); else read the whole file (not
+    season-scoped — `players`). `str_cols` cast to VARCHAR (the type-drift cure — see `_projection`)."""
     def fetch(ctx: Ctx, year: int, *, weeks=None):
         url = f"{NFLVERSE_RELEASE}/{tag}/{asset}.parquet"
         con = ctx.duck()
+        proj = _projection(con, url, str_cols)
         if season_col:
             return con.execute(
-                f"SELECT * FROM read_parquet(?) WHERE {season_col} = ?", [url, int(year)]
+                f"SELECT {proj} FROM read_parquet(?) WHERE {season_col} = ?", [url, int(year)]
             ).df()
-        return con.execute("SELECT * FROM read_parquet(?)", [url]).df()
+        return con.execute(f"SELECT {proj} FROM read_parquet(?)", [url]).df()
 
     fetch.__name__ = f"_nflverse_single_{asset}"
     return fetch
@@ -182,10 +214,12 @@ SOURCES: dict[str, SourceSpec] = {s.name: s for s in [
     SourceSpec("stats_team_week", _nflverse_seasonal("stats_team", "stats_team_week"),
                "nflverse", "team", "season", "weekly", notes="133-col team-week mirror"),
     # ── rosters / depth / snaps / schedule (dimensions) ─────────────────────────────────
-    SourceSpec("rosters", _nflverse_seasonal("rosters", "roster"),
-               "nflverse", "player", "season", "weekly", notes="season roster; file is roster_YYYY"),
-    SourceSpec("weekly_rosters", _nflverse_seasonal("weekly_rosters", "roster_weekly"),
-               "nflverse", "player", "season", "weekly", notes="point-in-time weekly roster"),
+    SourceSpec("rosters", _nflverse_seasonal("rosters", "roster", str_cols=_ROSTER_STR_COLS),
+               "nflverse", "player", "season", "weekly", str_cols=_ROSTER_STR_COLS,
+               notes="season roster; file is roster_YYYY; jersey/draft_number VARCHAR-pinned (type-drift)"),
+    SourceSpec("weekly_rosters", _nflverse_seasonal("weekly_rosters", "roster_weekly", str_cols=_ROSTER_STR_COLS),
+               "nflverse", "player", "season", "weekly", str_cols=_ROSTER_STR_COLS,
+               notes="point-in-time weekly roster; jersey/draft_number VARCHAR-pinned (type-drift)"),
     SourceSpec("depth_charts", _nflverse_seasonal("depth_charts", "depth_charts"),
                "nflverse", "player", "season", "weekly"),
     SourceSpec("snap_counts", _nflverse_seasonal("snap_counts", "snap_counts"),

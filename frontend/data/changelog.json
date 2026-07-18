@@ -3,6 +3,10 @@
     "week": "2026-07-13",
     "items": [
       {
+        "tag": "fixed",
+        "text": "Fixed the 'Model Skill' panel on the Performance page showing up empty. Its per-market summary (picks, calibration, closing-line value, and how often the model's favored side won, moneyline and total runs shown separately) is computed once a day and saved so the page loads fast — but on some days it was saved before that day's completed-game data had finished loading, so it saved an empty result and then showed nothing for the rest of the day even though the numbers were available. The page now refuses to save an empty result and re-computes instead, so an early-morning gap self-corrects, and the affected saved copies have been cleared. These are factual model outputs, not betting advice, with no profitability claim."
+      },
+      {
         "tag": "improved",
         "text": "We made the performance numbers we show consistent everywhere. Win rate, record, and ROI now mean exactly the same thing on the Performance page, the Bet Log, and the 'who called it' Results section: a win rate always excludes pushes, records are counted one call per market (moneyline and total runs never combined into a doubled-looking number), and ROI is your realized result net of the sportsbook's cut — a factual record, not a market-advantage claim. Rates based on only a handful of settled bets now carry a plain 'small sample' caveat so an early streak isn't mistaken for a track record, and the number of bets behind a rate is shown alongside it. We also documented how well-calibrated the model's probabilities have actually been, market by market (how often a stated 60% really wins ~60% of the time). These are factual model outputs, not betting advice, with no profitability claim."
       },
