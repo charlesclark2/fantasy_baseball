@@ -74,5 +74,13 @@ Odds API **$0 incremental** (existing sub; ~97.7k req remaining) · compute = Du
 - **Wide-PBP `void` landmine (N0.2 smoke):** an all-null column in a season slice → pyarrow
   `null` type → Delta `void` → `delta_scan` read FAILS. `s3io._sanitize_null_columns` recasts
   null → string before every typed write.
+- **Cross-season type-drift (N0.2 box backfill):** nflverse types a column per-season-file —
+  `jersey_number` / `draft_number` are VARCHAR ≤2015 (dirty values like `'79D'`) but INTEGER
+  2016+. Landed as separate season partitions with `schema_mode='merge'`, the first-written
+  season fixes the Delta column type → a later season with the other type fails the merge cast
+  (`Cannot cast string '79D' to Int32`). Cure: the registry `str_cols` VARCHAR-pins those columns
+  at read (`_projection`) so the Delta type is stable across seasons. ⚠️ if a column's stored
+  Delta type already drifted, the table must be DROPPED + rebuilt (INC-19 discipline) — a
+  `--full-refresh` won't change a stored type.
 - **Two nflverse URL shapes:** per-season `<tag>/<prefix>_YYYY.parquet` vs single-file
   `<tag>/<asset>.parquet` (filter by `season`).

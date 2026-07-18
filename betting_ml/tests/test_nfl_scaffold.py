@@ -161,6 +161,29 @@ def test_single_file_fetcher_filters_by_season():
     assert "nextgen_stats/ngs_passing.parquet" in params[0]
 
 
+def test_roster_str_cols_cast_to_varchar():
+    # The cross-season type-drift cure: jersey_number/draft_number are VARCHAR ≤2015 but INTEGER
+    # 2016+ → the fetcher must force them to VARCHAR so the Delta column type is stable across
+    # season partitions (else the merge write fails `Cannot cast string '79D' to Int32`).
+    duck = _FakeDuck(df=pd.DataFrame({"season": [2013], "jersey_number": ["79D"],
+                                      "draft_number": ["1A"]}))
+    ctx = src.Ctx(_duck=duck)
+    src.SOURCES["weekly_rosters"].fetch(ctx, 2013)
+    sql, _ = duck.calls[-1]  # the main SELECT (a LIMIT 0 schema-probe precedes it)
+    assert "jersey_number::VARCHAR AS jersey_number" in sql
+    assert "draft_number::VARCHAR AS draft_number" in sql
+    assert "EXCLUDE (jersey_number, draft_number)" in sql
+    # the registry advertises the pin (metadata for introspection)
+    assert set(src.SOURCES["weekly_rosters"].str_cols) == {"jersey_number", "draft_number"}
+    assert set(src.SOURCES["rosters"].str_cols) == {"jersey_number", "draft_number"}
+
+
+def test_projection_noop_without_or_absent_str_cols():
+    duck = _FakeDuck()  # canned df has columns season,x — not the drift cols
+    assert src._projection(duck, "u", ()) == "*"           # no str_cols → plain select, no probe
+    assert src._projection(duck, "u", ("nonexistent",)) == "*"  # absent col → still "*", no crash
+
+
 def test_players_single_file_not_season_filtered():
     duck = _FakeDuck(df=pd.DataFrame({"gsis_id": ["00-1"], "x": [1]}))
     ctx = src.Ctx(_duck=duck)
