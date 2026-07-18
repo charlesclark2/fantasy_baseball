@@ -123,6 +123,36 @@ def test_endpoint_populates_and_does_not_cache_when_degraded_read_fails(monkeypa
     assert not writes, "an empty result must NOT be cached (INC-31 anti-freeze)"
 
 
+def test_base_tally_survives_a_failing_degraded_refinement(monkeypatch):
+    """E9.26b reorder: the reliable base query runs FIRST; if the degraded re-aggregation
+    then fails or returns empty, the base (all-games) tally is KEPT — never zeroed."""
+    import app.backend.routers.performance as perf
+
+    monkeypatch.setattr(perf, "get_cache", lambda key: None)
+    monkeypatch.setattr(perf, "set_cache", lambda key, data: None)
+    # There ARE degraded games (so the refinement path is taken).
+    monkeypatch.setattr(perf, "_fetch_degraded_game_pks", lambda: {823812, 824335})
+
+    base_rows = [
+        {"SEASON": 2026, "MARKET_TYPE": "h2h", "N_PREDICTIONS": 1311, "BRIER_SCORE": 0.24,
+         "AVG_CLV": 0.0, "CLV_POSITIVE_PCT": 0.49, "WIN_RATE": 0.546},
+        {"SEASON": 2026, "MARKET_TYPE": "totals", "N_PREDICTIONS": 1176, "BRIER_SCORE": 0.25,
+         "AVG_CLV": 0.0, "CLV_POSITIVE_PCT": 0.50, "WIN_RATE": 0.520},
+    ]
+    calls = {"n": 0}
+
+    def fake_lakehouse_query(sql, params=None):
+        calls["n"] += 1
+        # 1st call = base (no exclusion) → populated; 2nd call = excl re-aggregation → EMPTY.
+        return base_rows if calls["n"] == 1 else []
+
+    monkeypatch.setattr(perf, "lakehouse_query", fake_lakehouse_query)
+    resp = perf.get_model_metrics(season=2026, include_degraded=False)
+    assert calls["n"] == 2, "base query then excl re-aggregation should both be attempted"
+    assert [m.n_predictions for m in resp.markets] == [1311, 1176], \
+        "a failing/empty excl re-aggregation must KEEP the base all-games tally, not zero it"
+
+
 def test_read_ignores_empty_cache_blob():
     src = _src(_PERF)
     assert "_model_cache_is_populated" in src, "lost the anti-freeze cache-populated gate"

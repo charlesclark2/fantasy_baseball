@@ -260,41 +260,64 @@ def get_model_metrics(
         return ModelMetricsResponse(**cached)
 
     season_filter = "AND YEAR(m.game_date) = %(season)s" if season else ""
+    params = {"season": season} if season else None
 
-    # E9.26b — degraded exclusion is a SEPARATE best-effort step so its fragile wide-table
-    # read can never zero the page. Build a NOT IN filter from the fetched pks; on failure
-    # the set is empty → no exclusion → the tally still populates (all games).
-    degraded_filter = ""
-    if not include_degraded:
+    def _rows_to_markets(rows) -> list[MarketMetrics]:
+        return [
+            MarketMetrics(
+                season=r["SEASON"],
+                market_type=r["MARKET_TYPE"],
+                n_predictions=r.get("N_PREDICTIONS") or 0,
+                brier_score=r.get("BRIER_SCORE"),
+                avg_clv=r.get("AVG_CLV"),
+                clv_positive_pct=r.get("CLV_POSITIVE_PCT"),
+                win_rate=r.get("WIN_RATE"),
+            )
+            for r in rows
+        ]
+
+    # E9.26b — run the RELIABLE base query FIRST (mart_clv_labeled_games alone, no exclusion).
+    # This is the guaranteed-populated tally: it reads only the narrow mart the Lambda reads
+    # fine (the /performance/summary path proves it). It runs BEFORE any daily_model_predictions
+    # read so a failure of that fragile wide read (which historically zeroed the page — and
+    # could even leave the shared DuckDB connection unusable for a follow-on query) can never
+    # take the base tally down with it.
+    try:
+        base_rows = lakehouse_query(
+            _MODEL_METRICS_QUERY.format(season_filter=season_filter, degraded_filter=""),
+            params,
+        )
+    except Exception as exc:
+        logger.exception("Lakehouse base query failed for /performance/model")
+        raise HTTPException(status_code=503, detail="Data unavailable") from exc
+
+    markets = _rows_to_markets(base_rows)
+
+    # Degraded exclusion is a pure best-effort REFINEMENT applied on top of the base tally.
+    # Only if we successfully learn the degraded game_pks do we re-aggregate excluding them;
+    # if that fetch OR the re-aggregation comes back empty/failing, we keep the base tally
+    # (all games) rather than blanking the page. A ~170-row peripheral filter must never zero
+    # the surface (E11.7 WARN-but-continue tier applied to a serving read).
+    if not include_degraded and markets:
         degraded_pks = _fetch_degraded_game_pks()
         if degraded_pks:
             pk_list = ", ".join(str(int(pk)) for pk in degraded_pks)  # ints from DB — injection-safe
-            degraded_filter = f"AND m.game_pk NOT IN ({pk_list})"
+            try:
+                excl_rows = lakehouse_query(
+                    _MODEL_METRICS_QUERY.format(
+                        season_filter=season_filter,
+                        degraded_filter=f"AND m.game_pk NOT IN ({pk_list})",
+                    ),
+                    params,
+                )
+            except Exception:  # noqa: BLE001 — refinement only; keep the base tally
+                logger.warning("excl-degraded re-aggregation failed — keeping all-games tally", exc_info=True)
+                excl_rows = []
+            if excl_rows:
+                markets = _rows_to_markets(excl_rows)
+            else:
+                logger.warning("excl-degraded re-aggregation empty — keeping all-games tally")
 
-    query = _MODEL_METRICS_QUERY.format(
-        season_filter=season_filter,
-        degraded_filter=degraded_filter,
-    )
-    params = {"season": season} if season else None
-
-    try:
-        rows = lakehouse_query(query, params)
-    except Exception as exc:
-        logger.exception("Lakehouse last-resort query failed for /performance/model")
-        raise HTTPException(status_code=503, detail="Data unavailable") from exc
-
-    markets = [
-        MarketMetrics(
-            season=r["SEASON"],
-            market_type=r["MARKET_TYPE"],
-            n_predictions=r.get("N_PREDICTIONS") or 0,
-            brier_score=r.get("BRIER_SCORE"),
-            avg_clv=r.get("AVG_CLV"),
-            clv_positive_pct=r.get("CLV_POSITIVE_PCT"),
-            win_rate=r.get("WIN_RATE"),
-        )
-        for r in rows
-    ]
     result = ModelMetricsResponse(season=season, markets=markets)
     # INC-31 anti-freeze (E9.26b): only CACHE a populated tally. A degenerate empty result
     # (transient read miss during the export window) is returned to the caller but left
