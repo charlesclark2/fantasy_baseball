@@ -166,6 +166,7 @@ All 11 sensors carry `default_status=RUNNING`. `check_monitors_healthy_op` alarm
 |---|---|---|
 | `daily_ingestion_job_schedule` | **RUNNING** (self-start) | the primary serving pipeline; heartbeat-checked. |
 | `odds_clv_rebuild_daily` | **RUNNING** (self-start) | daily CLV / line-movement rebuild; heartbeat-checked. |
+| `lineup_monitor_schedule_daytime` / `_overnight` | **STOPPED** (manual fallback) | INC-32: DEMOTED 2026-07-18. The `lineup_monitor_sensor` (10-min, un-wedgeable, staleness-heartbeat-checked) is now the SOLE driver of `lineup_monitor_job`; running these too double-fired the job (check-then-act race → 2 runs per confirmed lineup → doubled dbt-runner 409 contention). NOT critical / not heartbeat-checked — a STOPPED one is expected. Re-enabling one reintroduces the double-fire. |
 | `intraday_schedule_capture_daytime` / `_overnight` | operator-gated STOPPED | START only WITH `SCHEDULE_LAKEHOUSE_INTRADAY=1` AND after disabling the lean host-cron `schedule-capture` (double-ingest). NOT self-start / not heartbeat-checked. |
 | `intraday_public_betting_daytime` / `_overnight` | operator-gated STOPPED | START only with `W11_RAW_WRITE_MODE=s3\|both` (paid ActionNetwork capture opt-in). |
 | `weekly_ml_job_schedule`, `weekly_meta_model_job_schedule`, `weekly_player_profiles_job_schedule`, `clv_monitoring_job_schedule`, `magnitude_monitor_job_schedule` | STOPPED (optional) | heavy/optional; operator toggles as needed. |
