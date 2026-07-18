@@ -82,13 +82,31 @@ def test_write_dataframe_empty_slice_skips(tmp_path):
 
 # ── registry completeness ───────────────────────────────────────────────────────────────
 def test_registry_size_and_split():
-    # 32 = 30 nflverse + 2 Odds API (nfl_data_inventory.md §7; the ×3 NGS/×4 PFR expansions).
-    assert len(src.SOURCES) == 32
+    # 35 = 30 nflverse + 5 Odds API (N0.2's 2 live + N0.4's 3 net-new: props + 2 historical).
+    assert len(src.SOURCES) == 35
     assert len(src.NFLVERSE_SOURCES) == 30
-    assert len(src.ODDS_SOURCES) == 2
+    assert len(src.ODDS_SOURCES) == 5
     for name in ["stats_player_week", "schedules", "ngs_receiving", "pbp",
-                 "pfr_advstats_week_def", "nflverse_players", "odds_nfl"]:
+                 "pfr_advstats_week_def", "nflverse_players", "odds_nfl",
+                 "odds_nfl_props", "odds_nfl_historical", "odds_nfl_props_historical"]:
         assert name in src.SOURCES
+
+
+def test_odds_on_demand_gating():
+    # N0.4: the paid/per-event odds sources are on_demand → EXCLUDED from a default (unnamed)
+    # run so a plain nflverse backfill never burns Odds-API credits; named explicitly they run.
+    assert src.ODDS_LIVE == ["odds_nfl", "odds_nfl_scores"]           # cheap recurring feeds (default-in)
+    assert set(src.ODDS_ON_DEMAND) == {"odds_nfl_props", "odds_nfl_historical",
+                                       "odds_nfl_props_historical"}
+    assert set(src.ODDS_HISTORICAL) == {"odds_nfl_historical", "odds_nfl_props_historical"}
+    assert len(src.DEFAULT_SOURCES) == 32                             # the pre-N0.4 default set
+    for name in src.ODDS_ON_DEMAND:
+        assert name not in src.DEFAULT_SOURCES
+        assert src.SOURCES[name].on_demand is True
+    # handler: unnamed run drops on_demand; explicit names bypass the gate
+    default = set(_resolve_sources(None))
+    assert default.isdisjoint(src.ODDS_ON_DEMAND)
+    assert _resolve_sources(["odds_nfl_historical"]) == ["odds_nfl_historical"]
 
 
 def test_stats_player_week_not_legacy():
@@ -104,6 +122,145 @@ def test_registry_typing_and_scoping():
     assert src.SOURCES["stats_player_week"].typed is True   # DataFrame → write_dataframe
     assert src.SOURCES["nflverse_players"].season_scoped is False  # not season-grained (season=0)
     assert src.SOURCES["schedules"].season_scoped is True
+    for name in ("odds_nfl_props", "odds_nfl_historical", "odds_nfl_props_historical"):
+        assert src.SOURCES[name].typed is False            # raw_json (event arrays flatten in dbt)
+
+
+# ── N0.4 odds fetchers (props + historical closing lines) — no network (fake requests) ────
+class _FakeResp:
+    """A stand-in requests.Response: canned JSON + credit headers, raises on 4xx/5xx."""
+
+    def __init__(self, payload, *, used="100", remaining="9900", status=200,
+                 content_type="application/json"):
+        self._payload = payload
+        self.headers = {"x-requests-used": used, "x-requests-remaining": remaining,
+                        "Content-Type": content_type}
+        self.status_code = status
+        self.text = "err"
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            import requests
+            raise requests.HTTPError(f"HTTP {self.status_code}")
+
+
+def _patch_requests(monkeypatch, capture, responder):
+    """Patch requests.get so the odds fetchers hit `responder(path, params)` instead of the net.
+    Records every (url, params) into `capture` for call-shape assertions."""
+    import requests
+
+    def fake_get(url, params=None, timeout=None):
+        capture.append((url, params or {}))
+        return responder(url, params or {})
+
+    monkeypatch.setattr(requests, "get", fake_get)
+
+
+def test_odds_request_captures_credits_and_unwraps_historical(monkeypatch):
+    # The /historical envelope {timestamp, data:[...]} unwraps to a flat list + the served
+    # snapshot ts; credit headers land on ctx.
+    calls: list = []
+    envelope = {"timestamp": "2024-09-08T16:55:00Z", "previous_timestamp": "2024-09-08T16:50:00Z",
+                "data": [{"id": "e1", "commence_time": "2024-09-08T17:00:00Z"}]}
+    _patch_requests(monkeypatch, calls, lambda u, p: _FakeResp(envelope, used="250", remaining="9750"))
+    ctx = src.build_ctx(odds_key="k", sleep_seconds=0)
+    data, snap = src._odds_request(ctx, "historical/sports/x/odds", {"date": "z"})
+    assert data == envelope["data"] and snap == "2024-09-08T16:55:00Z"
+    assert ctx.credits_used == 250 and ctx.credits_remaining == 9750
+    # a bare live list is passed through with snapshot None
+    _patch_requests(monkeypatch, calls, lambda u, p: _FakeResp([{"id": "e2"}]))
+    data2, snap2 = src._odds_request(ctx, "sports/x/odds", {})
+    assert data2 == [{"id": "e2"}] and snap2 is None
+
+
+def test_odds_missing_key_raises(monkeypatch):
+    monkeypatch.delenv("ODDS_API_KEY", raising=False)
+    ctx = src.Ctx(odds_api_key=None)
+    with pytest.raises(RuntimeError, match="ODDS_API_KEY"):
+        src._odds_request(ctx, "historical/sports/x/odds", {})
+
+
+def test_current_props_event_endpoint_shape(monkeypatch):
+    # odds_nfl_props: one /events call → one /events/{id}/odds per event, carrying the prop
+    # markets. max_events caps the fan-out (the cheap verification pull).
+    calls: list = []
+
+    def responder(url, params):
+        if url.endswith("/events"):
+            return _FakeResp([{"id": "evA"}, {"id": "evB"}, {"id": "evC"}])
+        return _FakeResp([{"id": params.get("_eid", "ev"), "bookmakers": []}])
+
+    _patch_requests(monkeypatch, calls, responder)
+    ctx = src.build_ctx(odds_key="k", sleep_seconds=0, max_events=2)
+    out = src._odds_nfl_props(ctx, 2024)
+    event_calls = [u for u, _ in calls if "/events/" in u and u.endswith("/odds")]
+    assert len(event_calls) == 2                      # capped to 2 of 3 events
+    assert all(f"sports/{src.ODDS_SPORT_KEY}/events/" in u for u in event_calls)
+    prop_params = [p for u, p in calls if "/events/" in u][0]
+    assert prop_params["markets"] == ",".join(src.NFL_PROP_MARKETS)  # DEEP prop set
+    assert prop_params["regions"] == "us"
+    assert len(out) == 2
+
+
+def test_historical_closing_line_is_leakage_safe(monkeypatch):
+    # odds_nfl_historical: for each kickoff K the snapshot `date` is K − buffer (strictly before
+    # kickoff) and commenceTimeFrom/To bracket K → leakage-safe close; rows carry _snapshot_ts.
+    calls: list = []
+    kickoff = "2024-09-08T17:00:00Z"
+    envelope = {"timestamp": "2024-09-08T16:55:00Z",
+                "data": [{"id": "e1", "commence_time": kickoff, "bookmakers": []}]}
+    _patch_requests(monkeypatch, calls, lambda u, p: _FakeResp(envelope))
+
+    # one distinct kickoff at 17:00Z
+    from datetime import datetime, timezone
+    monkeypatch.setattr(src, "_season_kickoffs",
+                        lambda ctx, year, weeks=None: [datetime(2024, 9, 8, 17, 0, tzinfo=timezone.utc)])
+    ctx = src.build_ctx(odds_key="k", sleep_seconds=0, snapshot_buffer_min=5)
+    out = src._odds_nfl_historical(ctx, 2024)
+    assert len(calls) == 1
+    url, params = calls[0]
+    assert f"historical/sports/{src.ODDS_SPORT_KEY}/odds" in url
+    assert params["date"] == "2024-09-08T16:55:00Z"           # K − 5min (pre-kickoff)
+    assert params["markets"] == src.NFL_GAME_LINE_MARKETS
+    assert params["commenceTimeFrom"] < kickoff < params["commenceTimeTo"]  # window brackets K
+    # the served snapshot is recorded AND is < the event commence_time (the hard leakage guard)
+    assert out[0]["_snapshot_ts"] == "2024-09-08T16:55:00Z"
+    assert out[0]["_requested_snapshot"] == "2024-09-08T16:55:00Z"
+    assert out[0]["_snapshot_ts"] < out[0]["commence_time"]
+
+
+def test_season_kickoffs_et_to_utc_distinct(monkeypatch):
+    # gameday(ET date) + gametime(ET HH:MM) → distinct UTC kickoff datetimes (DST-correct).
+    # Two 13:00 ET games collapse to ONE distinct kickoff; a null gametime is skipped.
+    rows = [("2024-09-08", "13:00"), ("2024-09-08", "13:00"),  # dup window → 1 kickoff
+            ("2024-09-08", "16:25"), ("2024-09-05", "20:20"),  # opener (Thu)
+            ("2024-09-08", None)]                               # not scheduled → skipped
+
+    class _SchedDuck:
+        def execute(self, sql, params=None):
+            self._rows = rows
+            return self
+
+        def fetchall(self):
+            return [r for r in self._rows]
+
+    ctx = src.Ctx(_duck=_SchedDuck())
+    kicks = src._season_kickoffs(ctx, 2024)
+    iso = sorted(k.strftime("%Y-%m-%dT%H:%M:%SZ") for k in kicks)
+    # Sep 2024 is EDT (UTC−4): 13:00→17:00Z, 16:25→20:25Z, 20:20(Sep5)→00:20Z(Sep6)
+    assert iso == ["2024-09-06T00:20:00Z", "2024-09-08T17:00:00Z", "2024-09-08T20:25:00Z"]
+
+
+def test_build_ctx_odds_knobs():
+    ctx = src.build_ctx(odds_key="k", regions="us,us2", snapshot_buffer_min=3,
+                        sleep_seconds=0.0, max_events=5, prop_markets=("player_pass_yds",))
+    assert ctx.odds_regions == "us,us2" and ctx.odds_snapshot_buffer_min == 3
+    assert ctx.odds_max_events == 5 and ctx.odds_prop_markets == ("player_pass_yds",)
+    # default prop set when not overridden
+    assert src.build_ctx().odds_prop_markets == src.NFL_PROP_MARKETS
 
 
 # ── nflverse fetcher logic (no network — fake DuckDB conn) ───────────────────────────────

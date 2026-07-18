@@ -34,7 +34,9 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 log = logging.getLogger(__name__)
@@ -43,6 +45,25 @@ SPORT = "nfl"
 
 ODDS_SPORT_KEY = "americanfootball_nfl"
 ODDS_BASE = "https://api.the-odds-api.com/v4"
+
+# ── NFL player-prop markets (N0.4 net-new) ───────────────────────────────────────────────
+# The DEEP NFL prop set N0.1 §3 ground-truthed as returning across up to 7 US books incl.
+# Bovada (a non-marquee 2024 game snapshot). Curated to the markets a props / CLV / parlay
+# surface actually consumes (pass/rush/rec yds+tds+attempts+receptions + anytime-TD) so the
+# credit math is bounded + explicit: an event-odds call costs 10 × len(markets) × #regions.
+# Props are the EVENT endpoint only — the bulk /odds feed (`odds_nfl`) carries game lines ONLY.
+NFL_PROP_MARKETS: tuple[str, ...] = (
+    "player_pass_yds", "player_pass_tds", "player_pass_completions", "player_pass_attempts",
+    "player_pass_interceptions", "player_rush_yds", "player_rush_attempts", "player_rush_tds",
+    "player_reception_yds", "player_receptions", "player_reception_tds", "player_anytime_td",
+)
+
+# Game-line markets for the historical closing-line pull (leakage-safe CLV source).
+NFL_GAME_LINE_MARKETS = "h2h,spreads,totals"
+
+# nflverse schedules release — the FREE source of season kickoff datetimes (ET) that drive the
+# leakage-safe historical closing-line snapshots (read live via DuckDB, no credits, no lake dep).
+NFL_SCHEDULES_URL_TMPL = "{base}/schedules/games.parquet"
 
 # nflverse release-Parquet base (read DIRECTLY via DuckDB — nfl_data_py is abandoned).
 NFLVERSE_RELEASE = "https://github.com/nflverse/nflverse-data/releases/download"
@@ -57,10 +78,23 @@ _ROSTER_STR_COLS = ("jersey_number", "draft_number")
 @dataclass
 class Ctx:
     """Everything the fetchers need — the Odds key + a lazy DuckDB conn for the nflverse
-    release reads. Built once per run (handler/backfill)."""
+    release reads. Built once per run (handler/backfill).
+
+    N0.4 adds the odds-ingest config (regions / prop markets / snapshot buffer / rate-limit
+    sleep / event cap) + running credit accounting (the x-requests-used/remaining headers the
+    Odds API returns on every call), so the paid `/historical` backfill can budget + report."""
 
     odds_api_key: str | None = None
     _duck: Any = None
+    # ── odds ingest config (N0.4) ──────────────────────────────────────────────────────────
+    odds_regions: str = "us"                                    # US books incl. Bovada (target)
+    odds_prop_markets: tuple[str, ...] = NFL_PROP_MARKETS       # DEEP prop set (N0.1 §3)
+    odds_snapshot_buffer_min: int = 5                           # snapshot = kickoff − buffer (leakage-safe close)
+    odds_sleep_seconds: float = 0.5                             # inter-call politeness / 429 cushion
+    odds_max_events: int | None = None                         # cap events/snapshot for a small verify pull
+    # running credit accounting (latest header values seen this run)
+    credits_used: int | None = None
+    credits_remaining: int | None = None
 
     def duck(self):
         """A lazy DuckDB connection with httpfs (nflverse reads over HTTPS)."""
@@ -90,6 +124,9 @@ class SourceSpec:
     typed: bool = True              # True = DataFrame → write_dataframe; False = list[dict] → write_records
     season_scoped: bool = True      # False = not season-grained (nflverse_players); season=0
     str_cols: tuple = ()            # columns to force to VARCHAR at read (the cross-season type-drift cure)
+    on_demand: bool = False         # excluded from the default all-sources run (paid /historical, per-event
+                                    #   props) — must be named explicitly (odds_backfill.py / a Dagster op)
+                                    #   so a plain nflverse backfill never burns Odds-API credits (N0.4)
     notes: str = ""
 
 
@@ -170,33 +207,255 @@ def _nflverse_single(tag: str, asset: str, season_col: str | None, *,
 
 
 # ── Odds API fetchers (raw_json, mirror NCAAF) ───────────────────────────────────────────
-def _odds_get(ctx: Ctx, path: str, params: dict) -> list[dict]:
+def _int_header(v: str | None) -> int | None:
+    try:
+        return int(v) if v is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _iso(dt: datetime) -> str:
+    """ISO-8601 UTC with a trailing Z (the Odds API `date` / commenceTime shape)."""
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _odds_request(ctx: Ctx, path: str, params: dict) -> tuple[list[dict], str | None]:
+    """One Odds-API GET → (records, snapshot_ts). Captures the credit headers into `ctx`
+    (x-requests-used / -remaining) and unwraps the `/historical/` envelope
+    ({timestamp, previous_timestamp, next_timestamp, data}) so callers always get a flat
+    `list[dict]` + the actual snapshot timestamp the API served (None for live endpoints).
+
+    A per-call `ctx.odds_sleep_seconds` sleep cushions the rate limit on the long historical
+    loops. The MAIN key is required for `/historical/` — the starter tier does NOT support it."""
     import requests
 
     key = ctx.odds_api_key or os.environ.get("ODDS_API_KEY")
     if not key:
-        raise RuntimeError("ODDS_API_KEY not set (operator provisions it).")
+        raise RuntimeError(
+            "ODDS_API_KEY not set (operator provisions the MAIN key; the starter tier does "
+            "NOT support the /historical/ path)."
+        )
     resp = requests.get(f"{ODDS_BASE}/{path.lstrip('/')}", params={"apiKey": key, **params}, timeout=30)
+    used = _int_header(resp.headers.get("x-requests-used"))
+    remaining = _int_header(resp.headers.get("x-requests-remaining"))
+    if used is not None:
+        ctx.credits_used = used
+    if remaining is not None:
+        ctx.credits_remaining = remaining
     resp.raise_for_status()
     if "application/json" not in resp.headers.get("Content-Type", "").lower():
         raise RuntimeError(f"Odds API {path} non-JSON body: {resp.text[:120]!r}")
-    data = resp.json()
-    return data if isinstance(data, list) else [data]
+    payload = resp.json()
+    snapshot_ts: str | None = None
+    if isinstance(payload, dict) and "data" in payload and (
+        "timestamp" in payload or "previous_timestamp" in payload
+    ):
+        snapshot_ts = payload.get("timestamp")           # /historical/ envelope → the served snapshot
+        data = payload["data"]
+    else:
+        data = payload                                   # live endpoint → bare list / object
+    if not isinstance(data, list):
+        data = [data]
+    if ctx.odds_sleep_seconds:
+        time.sleep(ctx.odds_sleep_seconds)
+    return data, snapshot_ts
+
+
+def _odds_get(ctx: Ctx, path: str, params: dict) -> list[dict]:
+    """Back-compat thin wrapper (used by the live game-line/score feeds) — drops the snapshot."""
+    data, _ = _odds_request(ctx, path, params)
+    return data
 
 
 def _odds_nfl(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
     """Current NFL game lines (h2h/spreads/totals) across US books (Bovada = target). Bulk
-    `/odds` endpoint (3 credits/pull); props + alt markets are the EVENT endpoint (N0.4)."""
+    `/odds` endpoint (10×markets credits/pull); props + alt markets are the EVENT endpoint."""
     return _odds_get(
         ctx,
         f"sports/{ODDS_SPORT_KEY}/odds",
-        {"regions": "us", "markets": "h2h,spreads,totals", "oddsFormat": "american"},
+        {"regions": ctx.odds_regions, "markets": NFL_GAME_LINE_MARKETS, "oddsFormat": "american"},
     )
 
 
 def _odds_scores(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
-    """Final scores for settlement (daysFrom ≤ 3)."""
+    """Final scores for settlement — the NFL scoreboard (daysFrom ≤ 3). The Odds API has NO
+    historical scores endpoint (confirmed 2026-06-23) → historical outcomes come from the FREE
+    nflverse `schedules` feed (home/away score), not here (`backfill_multisport_odds_to_s3` note)."""
     return _odds_get(ctx, f"sports/{ODDS_SPORT_KEY}/scores", {"daysFrom": 3})
+
+
+# ── EVENT endpoint (player props) — current + historical (N0.4 net-new) ──────────────────
+def _odds_events(ctx: Ctx, *, historical_date: str | None = None,
+                 commence_from: str | None = None, commence_to: str | None = None) -> list[dict]:
+    """Event list [{id, commence_time, home_team, away_team, …}]. Live (`/events`) or a
+    historical snapshot (`/historical/.../events?date=…`) scoped to a kickoff window."""
+    if historical_date:
+        params: dict = {"date": historical_date}
+        if commence_from:
+            params["commenceTimeFrom"] = commence_from
+        if commence_to:
+            params["commenceTimeTo"] = commence_to
+        data, _ = _odds_request(ctx, f"historical/sports/{ODDS_SPORT_KEY}/events", params)
+        return data
+    data, _ = _odds_request(ctx, f"sports/{ODDS_SPORT_KEY}/events", {})
+    return data
+
+
+def _event_props(ctx: Ctx, event_id: str, *, historical_date: str | None = None) -> list[dict]:
+    """One event's player-prop odds (the per-event `/events/{id}/odds` endpoint — props are NOT
+    on the bulk `/odds` feed). Returns the event object (bookmakers[]→markets[]→outcomes[]),
+    stamped with the served snapshot ts on the historical path so a closing-line pick is
+    derivable. Cost = 10 × len(prop_markets) × #regions credits per event."""
+    markets = ",".join(ctx.odds_prop_markets)
+    params: dict = {"regions": ctx.odds_regions, "markets": markets, "oddsFormat": "american"}
+    if historical_date:
+        params["date"] = historical_date
+        path = f"historical/sports/{ODDS_SPORT_KEY}/events/{event_id}/odds"
+    else:
+        path = f"sports/{ODDS_SPORT_KEY}/events/{event_id}/odds"
+    data, snap = _odds_request(ctx, path, params)
+    out: list[dict] = []
+    for ev in data:
+        if isinstance(ev, dict) and snap:
+            ev = {**ev, "_snapshot_ts": snap}
+        out.append(ev)
+    return out
+
+
+def _odds_nfl_props(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
+    """CURRENT NFL player props (event endpoint). One `/events` call → one `/events/{id}/odds`
+    per event. `ctx.odds_max_events` caps the fan-out for a cheap verification pull. A single
+    event's failure ALERT-skips (never sinks the batch — the peripheral-feed contract)."""
+    events = _odds_events(ctx)
+    if ctx.odds_max_events is not None:
+        events = events[: ctx.odds_max_events]
+    out: list[dict] = []
+    for ev in events:
+        eid = ev.get("id") if isinstance(ev, dict) else None
+        if not eid:
+            continue
+        try:
+            out.extend(_event_props(ctx, eid))
+        except Exception as exc:  # noqa: BLE001 — per-event resilience
+            log.warning("  [odds_nfl_props] event %s skipped: %s", eid, str(exc)[:120])
+    return out
+
+
+# ── HISTORICAL closing lines (leakage-safe CLV source) — paid /historical ────────────────
+def _season_kickoffs(ctx: Ctx, year: int, *, weeks=None) -> list[datetime]:
+    """The DISTINCT kickoff datetimes (UTC) of a season's games, read live+FREE from the
+    nflverse `schedules` release (`gameday` date + `gametime` HH:MM in ET → UTC). These drive
+    the closing-line snapshots: for each kickoff K we snapshot the market at K−buffer, so the
+    captured state is strictly pre-kickoff (leakage-safe). A tight per-kickoff commence window
+    then isolates exactly that window's games (the next NFL window is ≥3h away → no bleed).
+
+    ET→UTC uses `America/New_York` (DST-correct). A game with a NULL/blank `gametime` (a
+    not-yet-scheduled future game) is skipped — it has no closing line to capture."""
+    try:
+        from zoneinfo import ZoneInfo
+        et = ZoneInfo("America/New_York")
+    except Exception:  # noqa: BLE001 — no tzdata → fall back to a fixed −4h offset (EDT, in-season)
+        et = timezone(timedelta(hours=-4))
+    url = NFL_SCHEDULES_URL_TMPL.format(base=NFLVERSE_RELEASE)
+    con = ctx.duck()
+    sql = ("SELECT DISTINCT gameday, gametime FROM read_parquet(?) "
+           "WHERE season = ? AND gameday IS NOT NULL AND gametime IS NOT NULL AND gametime <> ''")
+    params: list = [url, int(year)]
+    if weeks:
+        placeholders = ",".join(str(int(w)) for w in weeks)
+        sql += f" AND week IN ({placeholders})"
+    rows = con.execute(sql, params).fetchall()
+    kicks: set[datetime] = set()
+    for gameday, gametime in rows:
+        day = str(gameday)[:10]
+        try:
+            local = datetime.strptime(f"{day} {gametime}", "%Y-%m-%d %H:%M").replace(tzinfo=et)
+            kicks.add(local.astimezone(timezone.utc))
+        except (ValueError, TypeError):
+            continue
+    return sorted(kicks)
+
+
+def _season_game_count(ctx: Ctx, year: int, *, weeks=None) -> int:
+    """The number of scheduled games in a season (≈ #events for the props credit estimate) —
+    read FREE from nflverse schedules. Only games with a set kickoff (a real, playable slate)."""
+    url = NFL_SCHEDULES_URL_TMPL.format(base=NFLVERSE_RELEASE)
+    sql = ("SELECT count(*) FROM read_parquet(?) "
+           "WHERE season = ? AND gameday IS NOT NULL AND gametime IS NOT NULL AND gametime <> ''")
+    params: list = [url, int(year)]
+    if weeks:
+        sql += f" AND week IN ({','.join(str(int(w)) for w in weeks)})"
+    return int(ctx.duck().execute(sql, params).fetchone()[0])
+
+
+def _odds_nfl_historical(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
+    """HISTORICAL CLOSING game lines (h2h/spreads/totals) for a season — the leakage-safe CLV
+    benchmark (NOT the mis-tagged live `odds_nfl` feed). For each distinct kickoff K we call
+    `/historical/.../odds?date=K−buffer` scoped to K's game window; the API returns the last
+    snapshot ≤ that time = the closing line. Every event carries the API's own `commence_time`
+    and we stamp `_snapshot_ts` / `_requested_snapshot`, so a downstream CLV mart enforces the
+    hard leakage guard (keep only snapshot_ts < commence_time) belt-and-suspenders.
+
+    Paid `/historical`: 10 × 3 markets × #regions credits per kickoff snapshot (~90/season)."""
+    kicks = _season_kickoffs(ctx, year, weeks=weeks)
+    buf = timedelta(minutes=ctx.odds_snapshot_buffer_min)
+    out: list[dict] = []
+    for k in kicks:
+        snap = _iso(k - buf)
+        params = {
+            "date": snap, "regions": ctx.odds_regions, "markets": NFL_GAME_LINE_MARKETS,
+            "oddsFormat": "american",
+            # ±30min tolerates a small nflverse-vs-OddsAPI kickoff discrepancy without ever
+            # reaching the next NFL window (≥3h away) — isolates exactly this window's games.
+            "commenceTimeFrom": _iso(k - timedelta(minutes=30)),
+            "commenceTimeTo": _iso(k + timedelta(minutes=30)),
+        }
+        try:
+            data, snap_ts = _odds_request(ctx, f"historical/sports/{ODDS_SPORT_KEY}/odds", params)
+        except Exception as exc:  # noqa: BLE001 — per-snapshot resilience
+            log.warning("  [odds_nfl_historical] snapshot %s skipped: %s", snap, str(exc)[:120])
+            continue
+        for ev in data:
+            if isinstance(ev, dict):
+                out.append({**ev, "_snapshot_ts": snap_ts or snap, "_requested_snapshot": snap})
+    return out
+
+
+def _odds_nfl_props_historical(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
+    """HISTORICAL closing player props for a season — the CLV/props backtest source. For each
+    kickoff K: `/historical/.../events?date=K−buffer` (scoped to K's window) → per-event
+    `/historical/.../events/{id}/odds?date=K−buffer`. Leakage-safe by the same K−buffer snapshot
+    + the recorded `commence_time`.
+
+    ⚠️ COST-HEAVY: 10 × len(prop_markets) × #regions credits PER EVENT × ~285 events/season →
+    scope seasons + markets deliberately (odds_backfill.py --dry-run estimates before firing;
+    `ctx.odds_max_events` caps the per-snapshot fan-out for a verification pull)."""
+    kicks = _season_kickoffs(ctx, year, weeks=weeks)
+    buf = timedelta(minutes=ctx.odds_snapshot_buffer_min)
+    out: list[dict] = []
+    for k in kicks:
+        snap = _iso(k - buf)
+        try:
+            events = _odds_events(
+                ctx, historical_date=snap,
+                commence_from=_iso(k - timedelta(minutes=30)),
+                commence_to=_iso(k + timedelta(minutes=30)),
+            )
+        except Exception as exc:  # noqa: BLE001 — per-snapshot resilience
+            log.warning("  [odds_nfl_props_historical] events @ %s skipped: %s", snap, str(exc)[:120])
+            continue
+        if ctx.odds_max_events is not None:
+            events = events[: ctx.odds_max_events]
+        for ev in events:
+            eid = ev.get("id") if isinstance(ev, dict) else None
+            if not eid:
+                continue
+            try:
+                out.extend(_event_props(ctx, eid, historical_date=snap))
+            except Exception as exc:  # noqa: BLE001 — per-event resilience
+                log.warning("  [odds_nfl_props_historical] event %s @ %s skipped: %s",
+                            eid, snap, str(exc)[:120])
+    return out
 
 
 # ── THE REGISTRY — the locked Phase-0 lake tables (`nfl_data_inventory.md` §7) ───────────
@@ -275,21 +534,58 @@ SOURCES: dict[str, SourceSpec] = {s.name: s for s in [
                notes="the NFL ID universe; NO season col → not season-grained (season=0)"),
     SourceSpec("officials", _nflverse_single("officials", "officials", "season"),
                "nflverse", "game", "season", "seasonal", notes="crew per game; referee tendencies; 2015+"),
-    # ── Odds API (raw_json) ─────────────────────────────────────────────────────────────
+    # ── Odds API — LIVE feeds (raw_json; cheap bulk /odds) ──────────────────────────────
     SourceSpec("odds_nfl", _odds_nfl, "odds", "game", "season/week", "intraday", typed=False,
-               notes="h2h/spreads/totals, 11 US books incl. Bovada"),
-    SourceSpec("odds_nfl_scores", _odds_scores, "odds", "game", "season/week", "intraday", typed=False),
+               notes="CURRENT h2h/spreads/totals, US books incl. Bovada (bulk /odds; NOT closing lines)"),
+    SourceSpec("odds_nfl_scores", _odds_scores, "odds", "game", "season/week", "intraday", typed=False,
+               notes="live scores (daysFrom≤3); historical outcomes come FREE from nflverse schedules"),
+    # ── Odds API — EVENT-endpoint props + paid /historical (N0.4 net-new; on_demand) ─────
+    # on_demand=True → NEVER pulled by a plain nflverse backfill (per-event / paid-credit burn);
+    # named explicitly by odds_backfill.py or a Dagster op. `odds_nfl_props` is the CURRENT
+    # per-event props feed; the two `*_historical` are the leakage-safe CLV backtest sources.
+    SourceSpec("odds_nfl_props", _odds_nfl_props, "odds", "player", "season/week", "intraday",
+               typed=False, on_demand=True,
+               notes="CURRENT player props (event endpoint): pass/rush/rec yds+tds+att+receptions+anytime-TD"),
+    SourceSpec("odds_nfl_historical", _odds_nfl_historical, "odds", "game", "season/week", "seasonal",
+               typed=False, on_demand=True,
+               notes="paid /historical CLOSING game lines — leakage-safe close for CLV (h2h/spread/total, 2020+)"),
+    SourceSpec("odds_nfl_props_historical", _odds_nfl_props_historical, "odds", "player",
+               "season/week", "seasonal", typed=False, on_demand=True,
+               notes="paid /historical CLOSING player props for CLV/props backtest — COST-HEAVY, scope deliberately"),
 ]}
 
 
-def build_ctx(*, odds_key: str | None = None) -> Ctx:
-    """Construct the run context. nflverse-only runs don't need the Odds key."""
-    return Ctx(odds_api_key=odds_key or os.environ.get("ODDS_API_KEY"))
+def build_ctx(
+    *,
+    odds_key: str | None = None,
+    regions: str = "us",
+    prop_markets: tuple[str, ...] | None = None,
+    snapshot_buffer_min: int = 5,
+    sleep_seconds: float = 0.5,
+    max_events: int | None = None,
+) -> Ctx:
+    """Construct the run context. nflverse-only runs don't need the Odds key; the odds knobs
+    (regions / prop markets / snapshot buffer / rate-limit sleep / event cap) let odds_backfill
+    tune the paid `/historical` pull (a verify pull caps `max_events`; a full pull uses all)."""
+    return Ctx(
+        odds_api_key=odds_key or os.environ.get("ODDS_API_KEY"),
+        odds_regions=regions,
+        odds_prop_markets=tuple(prop_markets) if prop_markets else NFL_PROP_MARKETS,
+        odds_snapshot_buffer_min=snapshot_buffer_min,
+        odds_sleep_seconds=sleep_seconds,
+        odds_max_events=max_events,
+    )
 
 
 # Convenience groupings the handler/backfill/schedule payloads use.
 NFLVERSE_SOURCES = [n for n, s in SOURCES.items() if s.tier == "nflverse"]
 ODDS_SOURCES = [n for n, s in SOURCES.items() if s.tier == "odds"]
+# Odds split by orchestration: recurring LIVE feeds vs the paid /historical CLV backfill.
+ODDS_LIVE = [n for n, s in SOURCES.items() if s.tier == "odds" and not s.on_demand]
+ODDS_HISTORICAL = [n for n, s in SOURCES.items() if s.tier == "odds" and s.cadence == "seasonal"]
+ODDS_ON_DEMAND = [n for n, s in SOURCES.items() if s.tier == "odds" and s.on_demand]
 # The advanced stack (2016–2025 floor); the box/team/roster set can extend to 1999 (§7).
 NFLVERSE_WEEKLY = [n for n, s in SOURCES.items() if s.tier == "nflverse" and s.cadence == "weekly"]
 NFLVERSE_SEASONAL = [n for n, s in SOURCES.items() if s.tier == "nflverse" and s.cadence == "seasonal"]
+# Everything a DEFAULT (unnamed) run pulls — excludes the on_demand paid odds sources (N0.4).
+DEFAULT_SOURCES = [n for n, s in SOURCES.items() if not s.on_demand]

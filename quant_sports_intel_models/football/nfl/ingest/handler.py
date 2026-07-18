@@ -44,8 +44,11 @@ def load_env() -> None:
 
 
 def _resolve_sources(names) -> list[str]:
+    # A DEFAULT (unnamed) run excludes on_demand sources — the paid /historical + per-event
+    # props feeds (N0.4) must be named explicitly (odds_backfill.py / a Dagster op) so a plain
+    # nflverse backfill never burns Odds-API credits. Explicit names bypass the gate.
     if not names:
-        return list(SOURCES)
+        return [n for n, s in SOURCES.items() if not s.on_demand]
     unknown = [n for n in names if n not in SOURCES]
     if unknown:
         raise ValueError(f"Unknown source(s) {unknown}. Valid: {sorted(SOURCES)}")
