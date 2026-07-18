@@ -1313,20 +1313,40 @@ def _apply_portfolio_filter(result: "TodayPicksResponse", user_id: str) -> "Toda
         return result
 
 
+def _resolve_slate_date(date: str | None) -> str:
+    """Resolve a request date to a served slate date, never in the FUTURE of the
+    canonical US baseball game-date (America/LA, ``current_game_date_iso``).
+
+    E9.41 / INC-22 class: next-day odds & schedule are posted early, so a client
+    that computes "today" from ``new Date()`` (browser-local tz) — or any UTC-based
+    date — can be a calendar day AHEAD of the US baseball day and would otherwise
+    sweep tomorrow's already-posted games into "today's" picks. No date, or a
+    future date, resolves to the canonical current game-date; past dates pass
+    through unchanged for legitimate historical lookups.
+    """
+    today = current_game_date_iso()
+    if not date:
+        return today
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    if date > today:
+        logger.warning(
+            "picks: requested date %s is ahead of the canonical game-date %s — clamping to today",
+            date, today,
+        )
+        return today
+    return date
+
+
 @router.get("/today", response_model=TodayPicksResponse)
 def get_picks_today(
     apply_portfolio: bool = Query(False, description="Filter picks by the authenticated user's portfolio preferences"),
     user_id: str | None = Depends(get_optional_user_id),
-    date: str | None = Query(None, description="YYYY-MM-DD; defaults to ET today. Pass the client's local date to avoid midnight timezone seams."),
+    date: str | None = Query(None, description="YYYY-MM-DD; defaults to the canonical US baseball game-date (America/LA). Do NOT pass a client new Date()/local date — a future date is clamped to today (E9.41)."),
 ) -> TodayPicksResponse:
-    if date:
-        try:
-            datetime.strptime(date, "%Y-%m-%d")
-            today = date
-        except ValueError:
-            raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
-    else:
-        today = current_game_date_iso()
+    today = _resolve_slate_date(date)
 
     # PG primary read path (A2.12)
     pg_hit = serving_cache.get_cache("picks/today", today)
@@ -1450,13 +1470,11 @@ def get_picks_history() -> HistoryPicksResponse:
 
 
 @router.get("/ev", response_model=EVPicksResponse)
-def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaults to today")) -> EVPicksResponse:
+def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaults to the canonical US baseball game-date. A future date is clamped to today (E9.41).")) -> EVPicksResponse:
     today_str = current_game_date_iso()
+    if date:
+        date = _resolve_slate_date(date)  # validates + caps a future date to today
     if date and date != today_str:
-        try:
-            datetime.strptime(date, "%Y-%m-%d")
-        except ValueError:
-            raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
         pg_hit = serving_cache.get_cache("picks/ev", date)
         if pg_hit is not None:
             try:

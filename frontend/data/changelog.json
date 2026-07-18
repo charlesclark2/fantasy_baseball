@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "fixed",
+        "text": "Fixed the Dashboard occasionally showing the NEXT day's games as 'today's' picks. Because the next slate's odds and schedule are posted well in advance, and the page was deciding which day is 'today' from your device's own clock and time zone, a browser running ahead of U.S. baseball time could pull in tomorrow's games a day early. The app no longer trusts the browser's local date for the live slate — the current baseball day is now decided on the server (U.S. Pacific baseball calendar), and the picks endpoints refuse to serve a future day, so 'today's' picks are always the current day's slate no matter your device's clock or where you are. Viewing past dates from the calendar is unchanged."
+      },
+      {
+        "tag": "fixed",
         "text": "Fixed a browser tab left open for a long time silently breaking. Your signed-in session's access token expires after a while, and previously the app read it once when the tab loaded and never refreshed it — so if you came back to a tab you'd left open, sections like Performance or your Bet Log could load empty or error even though you were still logged in. The app now renews your session automatically: ahead of expiry, whenever you return to the tab, and — as a safety net — the moment any request comes back unauthorized, it silently refreshes and retries that request so the section fills in instead of breaking. You're only sent to the login screen if your session has genuinely expired and can't be renewed. No change to how you log in or out."
       },
       {
