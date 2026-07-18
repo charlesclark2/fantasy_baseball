@@ -252,6 +252,54 @@ LIMIT 1
 
 _ET = ZoneInfo("America/New_York")
 
+# E9.41 follow-up — pending-yesterday self-heal. Re-resolves the SAME yesterday featured
+# pick the serving writer picked (mirrors write_serving_store._FEATURED_YESTERDAY_SERVING_SQL:
+# market-data-first, post_lineup, latest inserted_at; ORDER BY game_datetime ASC LIMIT 1) and
+# returns its pick_side + settled actual_outcome. NARROW column list on purpose — a `SELECT *`
+# over the 94-col predictions table silently fails inside the API Lambda (E9.26b landmine).
+_FEATURED_YESTERDAY_HEAL_QUERY = f"""
+WITH ranked AS (
+    SELECT
+        game_pk, home_team, away_team, game_datetime,
+        layer4_h2h_decision, layer4_totals_decision, layer4_h2h_conviction_flag,
+        ROW_NUMBER() OVER (
+            PARTITION BY game_pk
+            ORDER BY
+                CASE WHEN (h2h_market_implied_prob IS NOT NULL OR over_prob_consensus IS NOT NULL) THEN 0 ELSE 1 END,
+                CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
+                inserted_at DESC
+        ) AS _rn
+    FROM {_ML_SCHEMA}.daily_model_predictions
+    WHERE game_date = DATEADD(day, -1, %(today)s::DATE)
+      AND prediction_type IN ('post_lineup', 'morning')
+),
+base AS (SELECT * FROM ranked WHERE _rn = 1),
+h2h AS (
+    SELECT b.game_pk, b.home_team, b.away_team, 'h2h' AS market_type,
+           b.layer4_h2h_decision AS pick_side, b.game_datetime, clv.actual_outcome
+    FROM base b
+    LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
+        ON clv.game_pk = b.game_pk AND clv.market_type = 'h2h'
+    WHERE b.layer4_h2h_conviction_flag = TRUE
+      AND b.layer4_h2h_decision IN ('home', 'away')
+),
+totals AS (
+    SELECT b.game_pk, b.home_team, b.away_team, 'totals' AS market_type,
+           b.layer4_totals_decision AS pick_side, b.game_datetime, clv.actual_outcome
+    FROM base b
+    LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
+        ON clv.game_pk = b.game_pk AND clv.market_type = 'totals'
+    WHERE b.layer4_h2h_conviction_flag = TRUE
+      AND b.layer4_totals_decision IN ('over', 'under')
+)
+SELECT game_pk, home_team, away_team, market_type, pick_side, actual_outcome, game_datetime
+FROM h2h UNION ALL
+SELECT game_pk, home_team, away_team, market_type, pick_side, actual_outcome, game_datetime
+FROM totals
+ORDER BY game_datetime ASC NULLS LAST, game_pk ASC
+LIMIT 1
+"""
+
 # Story 30.15 — per-game explanation (pick_explanation JSON + pick_narrative VARCHAR).
 # Separate lightweight query so the complex UNION ALL game queries don't need extra columns.
 _EXPLANATION_QUERY = f"""
@@ -381,6 +429,64 @@ def _build_featured_result(
     )
 
 
+def _resolve_yesterday_recap(row: dict) -> dict | None:
+    """Build the featured 'yesterday' recap dict from a heal-query row, mirroring
+    write_serving_store's pick_side→won/lost mapping (h2h: 1=home won; totals: 1=over)."""
+    if not row:
+        return None
+    outcome_flag = row.get("ACTUAL_OUTCOME")
+    pick_side = (row.get("PICK_SIDE") or "").lower()
+    away = row.get("AWAY_TEAM") or ""
+    home = row.get("HOME_TEAM") or ""
+    market_type = row.get("MARKET_TYPE") or ""
+    if outcome_flag is None:
+        status, outcome_str = "pending", "Pending"
+    else:
+        if pick_side in ("home", "over"):
+            won = int(outcome_flag) == 1
+        elif pick_side in ("away", "under"):
+            won = int(outcome_flag) == 0
+        else:
+            won = bool(outcome_flag)
+        status = "win" if won else "loss"
+        outcome_str = "Won" if won else "Lost"
+    return {"matchup": f"{away} @ {home}", "market_type": market_type,
+            "outcome": outcome_str, "status": status}
+
+
+def _heal_pending_featured_yesterday(payload: dict, today: str) -> dict:
+    """Self-heal a stuck 'Yesterday: Pending' recap on the featured pick (E9.41 follow-up).
+
+    Late (esp. West-coast) games often aren't in Savant/statcast when the morning
+    serving write runs, so the featured payload's yesterday recap freezes on 'pending'
+    (the outcome is INNER-JOINed off statcast-derived mart_game_results). This re-checks
+    the CLV mart once on read and patches the recap to Won/Lost the moment it settles —
+    regardless of whether the statcast catch-up job re-ran that day. Best-effort: any
+    failure returns the payload unchanged. On a successful heal it writes the patched
+    payload back to the serving cache so the re-check runs at most once.
+    """
+    y = payload.get("yesterday")
+    if not isinstance(y, dict) or y.get("status") != "pending":
+        return payload
+    try:
+        rows = lakehouse_query(_FEATURED_YESTERDAY_HEAL_QUERY, params={"today": today})
+    except Exception:
+        logger.warning("featured: pending-yesterday self-heal query failed", exc_info=True)
+        return payload
+    if not rows:
+        return payload
+    recap = _resolve_yesterday_recap(rows[0])
+    if not recap or recap.get("status") == "pending":
+        return payload
+    patched = dict(payload)
+    patched["yesterday"] = recap
+    try:
+        serving_cache.set_cache("picks/featured", today, patched)  # durable one-time heal
+    except Exception:
+        logger.warning("featured: pending-yesterday heal write-back failed (serving unaffected)")
+    return patched
+
+
 @router.get("/featured", response_model=FeaturedPickResponse)
 def get_featured_pick() -> FeaturedPickResponse:
     today = current_game_date_iso()
@@ -389,6 +495,7 @@ def get_featured_pick() -> FeaturedPickResponse:
     # written by write_serving_store.py after each predict run. No Snowflake query on a cache hit.
     _pg_hit = serving_cache.get_cache("picks/featured", today)
     if _pg_hit is not None and _pg_hit.get("game_pk") is not None:
+        _pg_hit = _heal_pending_featured_yesterday(_pg_hit, today)  # E9.41 follow-up
         try:
             return FeaturedPickResponse(**_pg_hit)
         except Exception:
