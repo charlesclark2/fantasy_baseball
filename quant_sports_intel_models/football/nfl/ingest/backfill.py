@@ -32,7 +32,7 @@ import logging
 
 from . import s3io
 from .handler import _parse_seasons, load_env, run_ingest
-from .sources import SOURCES, build_ctx
+from .sources import DEFAULT_SOURCES, SOURCES, build_ctx
 
 log = logging.getLogger(__name__)
 
@@ -60,11 +60,12 @@ def main() -> None:
     sources = args.sources.split(",") if args.sources else None
     if args.exclude:
         excl = set(args.exclude.split(","))
-        sources = [s for s in (sources or list(SOURCES)) if s not in excl]
+        # default base = DEFAULT_SOURCES (excludes the on_demand paid odds feeds — N0.4)
+        sources = [s for s in (sources or DEFAULT_SOURCES) if s not in excl]
     weeks = [int(w) for w in args.weeks.split(",")] if args.weeks else None
 
     log.info("Backfill NFL seasons=%s sources=%s → %s",
-             seasons, sources or f"ALL({len(SOURCES)})",
+             seasons, sources or f"DEFAULT({len(DEFAULT_SOURCES)}; excl. paid on_demand odds)",
              args.local_root or f"s3://{args.bucket}/nfl/raw")
     # ONE ctx for the whole backfill so the DuckDB httpfs connection persists across seasons.
     ctx = build_ctx()

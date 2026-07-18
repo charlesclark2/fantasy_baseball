@@ -56,10 +56,67 @@ uv run python -m quant_sports_intel_models.football.nfl.ingest.backfill --season
 dbt build --project-dir . --profiles-dir . --select "nfl.staging.*"
 ```
 
+## N0.4 — net-new market + status data (Odds API historical/props + injuries/inactives)
+The net-new betting data the old stack LACKS: leakage-safe **closing lines** (for CLV), the
+**DEEP player props**, and the injury/inactive status that moves NFL lines. Three `on_demand`
+registry sources drive the paid feeds — `on_demand=True` means a plain nflverse `backfill`
+NEVER pulls them (no accidental Odds-API credit burn); they are named explicitly by
+`odds_backfill.py` (or a Dagster op):
+
+| source | endpoint | what | floor | landing |
+|---|---|---|---|---|
+| `odds_nfl_props` | `/events/{id}/odds` (live) | CURRENT player props (pass/rush/rec yds+tds+att+receptions+anytime-TD) | live only | `nfl/raw/odds_nfl_props/` |
+| `odds_nfl_historical` | `/historical/.../odds` | CLOSING game lines (h2h/spread/total) — the CLV benchmark | **2020** | `nfl/raw/odds_nfl_historical/` |
+| `odds_nfl_props_historical` | `/historical/.../events/{id}/odds` | CLOSING player props (CLV/props backtest) | **2020** | `nfl/raw/odds_nfl_props_historical/` |
+
+The live game lines (`odds_nfl`) + scores (`odds_nfl_scores`) already landed in N0.2 stay the
+recurring cheap feeds.
+
+**Leakage-safe close (the AC):** for each distinct season kickoff `K` (read FREE from nflverse
+`schedules`, ET→UTC, DST-correct) the historical snapshot is taken at `K − buffer` (default 5
+min) → the captured market is strictly pre-kickoff. Every row also carries the API's own
+`commence_time` + `_snapshot_ts`/`_requested_snapshot`, so a Phase-1 CLV mart can enforce the
+hard guard (keep only `snapshot_ts < commence_time`) belt-and-suspenders. A tight ±30-min
+`commenceTimeFrom/To` isolates exactly that kickoff window's games (the next NFL window is ≥3h
+away → no bleed).
+
+**Credits (the AC — Odds-API cost = 10 × #markets × #regions per call):**
+`--dry-run` reads schedules (free) and prints the estimate before any paid call. Per season
+(`us` region): **game lines ≈ 4,100 cr** (~137 kickoff snapshots × 3 markets × 10); **props
+≈ 34,200 cr** (~285 games × 12 markets × 10 — the heavy one). The paid `/historical` path needs
+the **MAIN** Odds-API key (the starter tier does not support it).
+
+```bash
+# instant credit estimate (NO paid calls):
+uv run python -m quant_sports_intel_models.football.nfl.ingest.odds_backfill \
+    --sources odds_nfl_historical,odds_nfl_props_historical --seasons 2020-2024 --dry-run
+
+# tiny live VERIFICATION pull (proves the path; caps events/snapshot):
+uv run python -m quant_sports_intel_models.football.nfl.ingest.odds_backfill \
+    --sources odds_nfl_historical --seasons 2024 --weeks 1 --max-events 3
+
+# BOX — full closing-line backfill (operator; resumable via --skip-existing):
+docker compose -f services/dagster/aws/docker-compose.yml exec -T \
+    -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc \
+    python -m quant_sports_intel_models.football.nfl.ingest.odds_backfill \
+    --sources odds_nfl_historical --seasons 2020-2024 --skip-existing
+```
+
+**Injuries / inactives (`injuries`, already in the registry from N0.2, `nfl/raw/injuries/`):**
+nflverse `injuries` = the official weekly injury report — `report_status` (Out/Doubtful/
+Questionable) + `practice_status`, keyed (season, week, gsis_id), stamped `date_modified`
+(point-in-time / as-of, leakage-safe: a report is known before kickoff). ⚠️ **there is NO
+dedicated nflverse game-day inactives release** — the 90-min-pre-kickoff inactive LIST is not
+published; the leakage-safe pre-kickoff "inactive" signal is `report_status = 'Out'`, and who
+actually played is recoverable post-hoc from `pbp_participation` / `snap_counts` (both landed).
+Cadence is weekly in-season (a Dagster op / cron names it; ops-scoped, not this data story).
+
 ## Cost
 nflverse **$0** (free public release Parquet — no API budget, unlike NCAAF's CFBD $10/mo) ·
-Odds API **$0 incremental** (existing sub; ~97.7k req remaining) · compute = DuckDB over S3
-(pennies). **Total new Phase-0 spend: $0.**
+live Odds API **$0 incremental** (existing sub) · the paid `/historical` CLV backfill is
+credit-metered (see N0.4 above — ~4.1k cr/season game lines; props ~34k cr/season → scope
+deliberately) · compute = DuckDB over S3 (pennies). **New Phase-0 spend beyond the historical
+odds credits: $0.**
 
 ## N0.1 landmines encoded here (do not rediscover — `nfl_data_inventory.md` §1)
 - **No `nfl_data_py`** (abandoned; pins pandas==1.5.3 → won't build on py3.12) → read release

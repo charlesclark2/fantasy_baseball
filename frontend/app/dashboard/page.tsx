@@ -550,11 +550,16 @@ export default function DashboardPage() {
   const { accessToken, email } = useAuth()
   const { selectedDate, setSelectedDate, isoDate, isToday } = useSelectedDate()
   const [calOpen, setCalOpen] = useState(false)
+  // E9.41: cache-key token ONLY (forces a daily refetch across a local midnight).
+  // NEVER sent to the server — the slate date is resolved server-side by the
+  // canonical US baseball game-date (America/LA). Passing a client new Date()
+  // here previously swept in tomorrow's already-posted slate for any client
+  // whose local date runs ahead of the US baseball day (INC-22 class).
   const todayIso = format(new Date(), "yyyy-MM-dd")
 
   const { data: todayData, isLoading: todayLoading, isError: todayError } = useQuery({
     queryKey: ["picks-today", accessToken, todayIso],
-    queryFn: () => apiFetch(`/picks/today?date=${todayIso}`, {}, accessToken),
+    queryFn: () => apiFetch(`/picks/today`, {}, accessToken),
     staleTime: 5 * 60 * 1000,
     enabled: !!accessToken && isToday,
   })
