@@ -61,6 +61,15 @@ NFL_PROP_MARKETS: tuple[str, ...] = (
 # Game-line markets for the historical closing-line pull (leakage-safe CLV source).
 NFL_GAME_LINE_MARKETS = "h2h,spreads,totals"
 
+# The Odds-API historical FLOORS differ by market class (probed live 2026-07-18):
+#   • FEATURED markets (h2h/spreads/totals) — 2020 (the `odds_nfl_historical` game-line floor).
+#   • ADDITIONAL markets (player props/alternates) — the API only began COLLECTING these ~2023-05,
+#     so an NFL SEASON < 2023 (the 2022 season ends Feb-2023, all pre-coverage) returns HTTP 422
+#     `Unprocessable Entity` on EVERY per-event props call. Probe: 2021/2022 → 422; 2023/2024 → OK
+#     (9/7 books, 10 prop markets). So a below-floor props season is skipped whole (a clean empty
+#     slice, like an nflverse below-floor 404) — no 422 grinding, no wasted events-list credits.
+NFL_PROPS_HISTORICAL_FLOOR = 2023
+
 # nflverse schedules release — the FREE source of season kickoff datetimes (ET) that drive the
 # leakage-safe historical closing-line snapshots (read live via DuckDB, no credits, no lake dep).
 NFL_SCHEDULES_URL_TMPL = "{base}/schedules/games.parquet"
@@ -445,7 +454,16 @@ def _odds_nfl_props_historical(ctx: Ctx, year: int, *, weeks=None) -> list[dict]
 
     ⚠️ COST-HEAVY: ~285 events/season × ~120 cr → scope seasons + markets deliberately
     (odds_backfill.py --dry-run estimates first). `ctx.odds_max_events` caps the unique-event set
-    for a verification pull."""
+    for a verification pull.
+
+    ⛔ BELOW-FLOOR SKIP: player-prop historical coverage starts season 2023 (the API collected no
+    additional markets pre-~2023-05 → every per-event call 422s AND wastes events-list credits).
+    A season < `NFL_PROPS_HISTORICAL_FLOOR` returns an empty slice (clean skip, ALERT-loud)."""
+    if int(year) < NFL_PROPS_HISTORICAL_FLOOR:
+        log.warning("ALERT [odds_nfl_props_historical] season %s < props floor %s — no historical "
+                    "props exist (Odds-API additional-markets coverage starts ~2023-05); skipping "
+                    "(empty slice, no credits spent).", year, NFL_PROPS_HISTORICAL_FLOOR)
+        return []
     kicks = _season_kickoffs(ctx, year, weeks=weeks)
     buf = timedelta(minutes=ctx.odds_snapshot_buffer_min)
 
