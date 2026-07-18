@@ -4,7 +4,7 @@
     "items": [
       {
         "tag": "fixed",
-        "text": "Fixed the 'Model Skill' panel on the Performance page showing up empty. Its per-market summary (picks, calibration, closing-line value, and how often the model's favored side won, moneyline and total runs shown separately) is computed once a day and saved so the page loads fast — but on some days it was saved before that day's completed-game data had finished loading, so it saved an empty result and then showed nothing for the rest of the day even though the numbers were available. The page now refuses to save an empty result and re-computes instead, so an early-morning gap self-corrects, and the affected saved copies have been cleared. These are factual model outputs, not betting advice, with no profitability claim."
+        "text": "Fixed the 'Model Skill' panel on the Performance page showing 'No model data available.' Its per-market summary (picks, calibration, closing-line value, and how often the model's favored side won, moneyline and total runs shown separately) is computed once a day and saved so the page loads fast. The summary now comes straight from the settled-results table it belongs to, and the optional 'exclude degraded predictions' filter is applied as a separate best-effort step — so that filter can no longer come up empty and blank out the whole panel. The page also refuses to save an empty result and recomputes instead, and the affected saved copies have been cleared, so a bad computation can't get stuck. These are factual model outputs, not betting advice, with no profitability claim."
       },
       {
         "tag": "improved",

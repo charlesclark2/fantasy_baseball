@@ -175,6 +175,16 @@ def get_performance_by_model() -> PerformanceByModelResponse:
 #   avg_clv          = CLV in the direction of the model's pick
 #   clv_positive_pct = % of picks whose side gained closing-line value
 # Brier stays a proper home/over-perspective probability score (orientation-invariant).
+#
+# E9.26b — the tally is computed from mart_clv_labeled_games ALONE (a NARROW, 13-column
+# mart the Lambda reads reliably — the /performance/summary path proves it). The degraded
+# exclusion used to LEFT JOIN the 94-column daily_model_predictions typed view INSIDE this
+# query; that wide-table lakehouse read failed in the Lambda (lakehouse_query swallows the
+# error → [] → the WHOLE page rendered empty every day since ship, incl. AND excl. degraded,
+# because the join was in both paths). Degraded-exclusion is now a SEPARATE best-effort step
+# (see _DEGRADED_GAME_PKS_QUERY): a ~60-row peripheral filter can no longer zero the entire
+# serving surface — if it can't be computed the tally still populates (all games), loudly
+# logged. This is the E11.7 WARN-but-continue tier applied to a serving read.
 _MODEL_METRICS_QUERY = """
 SELECT
     YEAR(m.game_date)                                             AS season,
@@ -187,17 +197,43 @@ SELECT
     AVG(CASE WHEN (m.model_prob >= 0.5) = (m.actual_outcome = 1)
              THEN 1.0 ELSE 0.0 END)                              AS win_rate
 FROM baseball_data.betting.mart_clv_labeled_games m
-LEFT JOIN (
-    SELECT game_pk, MAX(CASE WHEN is_degraded THEN 1 ELSE 0 END) AS is_degraded
-    FROM baseball_data.betting_ml.daily_model_predictions
-    GROUP BY game_pk
-) d ON m.game_pk = d.game_pk
 WHERE m.actual_outcome IS NOT NULL
   {season_filter}
   {degraded_filter}
 GROUP BY 1, 2
 ORDER BY 1, 2
 """
+
+# Best-effort degraded-game lookup. Read NARROWLY (game_pk + is_degraded only) so DuckDB
+# projection-pushdown skips the wide table's 92 other columns and its VARCHAR-ts casts —
+# and run it in its OWN try/except so a failure DEGRADES to "no exclusion" instead of
+# taking the whole page down (E9.26b).
+_DEGRADED_GAME_PKS_QUERY = """
+SELECT DISTINCT game_pk
+FROM baseball_data.betting_ml.daily_model_predictions
+WHERE is_degraded
+"""
+
+
+def _fetch_degraded_game_pks() -> set[int]:
+    """Return the set of game_pks with any degraded prediction, or an EMPTY set if the
+    (fragile, wide) daily_model_predictions lakehouse read fails. Best-effort by design:
+    the caller falls back to including all games so the page still populates (E9.26b)."""
+    try:
+        rows = lakehouse_query(_DEGRADED_GAME_PKS_QUERY)
+    except Exception:  # noqa: BLE001 — belt-and-suspenders; lakehouse_query already swallows
+        logger.warning("degraded-game lookup raised — including all games", exc_info=True)
+        return set()
+    pks = {int(r["GAME_PK"]) for r in rows if r.get("GAME_PK") is not None}
+    if not rows:
+        # Empty could mean "genuinely none degraded" OR a swallowed read error. Either way
+        # we include all games (the honest, non-empty result); log so a real read failure is
+        # visible rather than silently masquerading as "nothing degraded".
+        logger.warning(
+            "degraded-game lookup returned 0 rows — excl-degraded will include all games "
+            "(daily_model_predictions read empty/failed?)"
+        )
+    return pks
 
 
 def _model_cache_is_populated(cached: dict | list | None) -> bool:
@@ -224,7 +260,17 @@ def get_model_metrics(
         return ModelMetricsResponse(**cached)
 
     season_filter = "AND YEAR(m.game_date) = %(season)s" if season else ""
-    degraded_filter = "" if include_degraded else "AND COALESCE(d.is_degraded, 0) = 0"
+
+    # E9.26b — degraded exclusion is a SEPARATE best-effort step so its fragile wide-table
+    # read can never zero the page. Build a NOT IN filter from the fetched pks; on failure
+    # the set is empty → no exclusion → the tally still populates (all games).
+    degraded_filter = ""
+    if not include_degraded:
+        degraded_pks = _fetch_degraded_game_pks()
+        if degraded_pks:
+            pk_list = ", ".join(str(int(pk)) for pk in degraded_pks)  # ints from DB — injection-safe
+            degraded_filter = f"AND m.game_pk NOT IN ({pk_list})"
+
     query = _MODEL_METRICS_QUERY.format(
         season_filter=season_filter,
         degraded_filter=degraded_filter,

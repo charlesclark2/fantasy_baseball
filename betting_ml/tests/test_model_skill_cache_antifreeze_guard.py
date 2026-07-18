@@ -48,6 +48,81 @@ def _load_helper(path: Path, name: str, attr: str):
     raise AssertionError(f"{attr} not found in {path}")
 
 
+def test_base_query_does_not_join_wide_predictions_table():
+    """E9.26b: the per-market tally must come from mart_clv_labeled_games ALONE. The old
+    LEFT JOIN to the 94-column daily_model_predictions typed view (present in BOTH the incl
+    and excl paths) is the read that failed in the Lambda and zeroed the page — it must be
+    gone from the aggregation query."""
+    src = _src(_PERF)
+    # Isolate the aggregation-query constant.
+    start = src.index("_MODEL_METRICS_QUERY = ")
+    q = src[start:src.index('"""', src.index('"""', start) + 3) + 3]
+    assert "mart_clv_labeled_games" in q, "base query lost its source mart"
+    assert "daily_model_predictions" not in q, \
+        "base tally query must NOT join daily_model_predictions (E9.26b — that wide read zeroed the page)"
+    assert "LEFT JOIN" not in q.upper(), "base tally query must be a single-table read"
+
+
+def test_degraded_exclusion_is_best_effort_and_isolated():
+    src = _src(_PERF)
+    assert "_fetch_degraded_game_pks" in src, "lost the best-effort degraded lookup"
+    assert "_DEGRADED_GAME_PKS_QUERY" in src, "lost the narrow degraded-pk query"
+    # It must be called from the endpoint to build the NOT IN filter.
+    assert "degraded_pks = _fetch_degraded_game_pks()" in src, \
+        "endpoint must fetch degraded pks as a separate step"
+    assert "NOT IN" in src, "degraded exclusion must be a NOT IN filter built from the fetched pks"
+    # And it must degrade to an EMPTY set (include all) rather than raise.
+    assert "return set()" in src, "degraded lookup must degrade to an empty set on failure"
+
+
+def test_fetch_degraded_game_pks_degrades_gracefully(monkeypatch):
+    """A failing/empty wide-table read must NOT propagate — it returns an empty set so the
+    caller includes all games (page still populates)."""
+    import app.backend.routers.performance as perf
+
+    # lakehouse_query raising → empty set (belt-and-suspenders path).
+    monkeypatch.setattr(perf, "lakehouse_query", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert perf._fetch_degraded_game_pks() == set()
+
+    # lakehouse_query returning [] (the observed Lambda symptom) → empty set, no raise.
+    monkeypatch.setattr(perf, "lakehouse_query", lambda *a, **k: [])
+    assert perf._fetch_degraded_game_pks() == set()
+
+    # Normal rows → the pk set.
+    monkeypatch.setattr(perf, "lakehouse_query", lambda *a, **k: [{"GAME_PK": 1}, {"GAME_PK": 2}, {"GAME_PK": None}])
+    assert perf._fetch_degraded_game_pks() == {1, 2}
+
+
+def test_endpoint_populates_and_does_not_cache_when_degraded_read_fails(monkeypatch):
+    """End-to-end: even when the degraded read fails, the tally populates from the base mart,
+    and (anti-freeze) a populated result IS cached while an empty one is NOT."""
+    import app.backend.routers.performance as perf
+
+    writes: dict[str, object] = {}
+    monkeypatch.setattr(perf, "get_cache", lambda key: None)  # cache miss
+    monkeypatch.setattr(perf, "set_cache", lambda key, data: writes.__setitem__(key, data))
+    # Degraded read fails; base tally read returns two populated markets.
+    monkeypatch.setattr(perf, "_fetch_degraded_game_pks", lambda: set())
+
+    base_rows = [
+        {"SEASON": 2026, "MARKET_TYPE": "h2h", "N_PREDICTIONS": 1311, "BRIER_SCORE": 0.24,
+         "AVG_CLV": 0.0, "CLV_POSITIVE_PCT": 0.49, "WIN_RATE": 0.546},
+        {"SEASON": 2026, "MARKET_TYPE": "totals", "N_PREDICTIONS": 1176, "BRIER_SCORE": 0.25,
+         "AVG_CLV": 0.0, "CLV_POSITIVE_PCT": 0.50, "WIN_RATE": 0.520},
+    ]
+    monkeypatch.setattr(perf, "lakehouse_query", lambda *a, **k: base_rows)
+    resp = perf.get_model_metrics(season=2026, include_degraded=False)
+    assert len(resp.markets) == 2, "page must populate from the base mart even when degraded read fails"
+    assert writes, "a populated result must be cached"
+
+    # Empty compute → returned but NOT cached (anti-freeze).
+    writes.clear()
+    monkeypatch.setattr(perf, "lakehouse_query", lambda *a, **k: [])
+    resp2 = perf.get_model_metrics(season=2026, include_degraded=False)
+    assert resp2.markets == [], "empty compute returns empty markets"
+    assert not writes, "an empty result must NOT be cached (INC-31 anti-freeze)"
+
+
 def test_read_ignores_empty_cache_blob():
     src = _src(_PERF)
     assert "_model_cache_is_populated" in src, "lost the anti-freeze cache-populated gate"
