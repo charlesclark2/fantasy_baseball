@@ -421,18 +421,36 @@ def _odds_nfl_historical(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
     return out
 
 
-def _odds_nfl_props_historical(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
-    """HISTORICAL closing player props for a season — the CLV/props backtest source. For each
-    kickoff K: `/historical/.../events?date=K−buffer` (scoped to K's window) → per-event
-    `/historical/.../events/{id}/odds?date=K−buffer`. Leakage-safe by the same K−buffer snapshot
-    + the recorded `commence_time`.
+def _parse_iso(ts: str) -> datetime:
+    """Parse an Odds-API ISO-8601 UTC timestamp (trailing Z) → tz-aware datetime."""
+    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
 
-    ⚠️ COST-HEAVY: 10 × len(prop_markets) × #regions credits PER EVENT × ~285 events/season →
-    scope seasons + markets deliberately (odds_backfill.py --dry-run estimates before firing;
-    `ctx.odds_max_events` caps the per-snapshot fan-out for a verification pull)."""
+
+def _odds_nfl_props_historical(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
+    """HISTORICAL closing player props for a season — the CLV/props backtest source. TWO passes:
+
+      Pass 1 (cheap, ~1cr/call) — enumerate the season's UNIQUE events via the historical
+        `/events` list at each kickoff K−buffer (±30-min window). Dedupe by event id, keeping the
+        API's OWN `commence_time` per event.
+      Pass 2 (the paid per-event cost) — fetch EACH unique event's props EXACTLY ONCE at that
+        event's own `commence_time − buffer`.
+
+    WHY the dedup matters (a real credit bug, unlike the harmless game-line over-capture): a
+    per-event props call is 10 × len(prop_markets) × #regions credits (~120), so if overlapping
+    ±30-min kickoff windows re-fetched an event (e.g. 20:05 + 20:25 games each fall in BOTH
+    windows) we'd PAY that per-event cost twice AND write duplicate rows. Deduping to one
+    fetch/event keeps the cost at exactly (unique events) × per-event (matching the --dry-run
+    estimate) AND yields the TIGHTEST closing line (snapshot pinned to the event's own commence,
+    not a neighbour's), which is also strictly pre-kickoff → leakage-safe by construction.
+
+    ⚠️ COST-HEAVY: ~285 events/season × ~120 cr → scope seasons + markets deliberately
+    (odds_backfill.py --dry-run estimates first). `ctx.odds_max_events` caps the unique-event set
+    for a verification pull."""
     kicks = _season_kickoffs(ctx, year, weeks=weeks)
     buf = timedelta(minutes=ctx.odds_snapshot_buffer_min)
-    out: list[dict] = []
+
+    # Pass 1 — unique events (id → commence_time), from the cheap historical events lists.
+    seen: dict[str, str] = {}
     for k in kicks:
         snap = _iso(k - buf)
         try:
@@ -444,17 +462,35 @@ def _odds_nfl_props_historical(ctx: Ctx, year: int, *, weeks=None) -> list[dict]
         except Exception as exc:  # noqa: BLE001 — per-snapshot resilience
             log.warning("  [odds_nfl_props_historical] events @ %s skipped: %s", snap, str(exc)[:120])
             continue
-        if ctx.odds_max_events is not None:
-            events = events[: ctx.odds_max_events]
         for ev in events:
-            eid = ev.get("id") if isinstance(ev, dict) else None
-            if not eid:
+            if not isinstance(ev, dict):
                 continue
-            try:
-                out.extend(_event_props(ctx, eid, historical_date=snap))
-            except Exception as exc:  # noqa: BLE001 — per-event resilience
-                log.warning("  [odds_nfl_props_historical] event %s @ %s skipped: %s",
-                            eid, snap, str(exc)[:120])
+            eid, ct = ev.get("id"), ev.get("commence_time")
+            if eid and eid not in seen:
+                seen[eid] = ct
+
+    items = list(seen.items())
+    if ctx.odds_max_events is not None:
+        items = items[: ctx.odds_max_events]
+    log.info("  [odds_nfl_props_historical] season %s: %d unique events → per-event props "
+             "(≈%d credits at %d markets)", year, len(items),
+             len(items) * 10 * len(ctx.odds_prop_markets) * max(1, len(ctx.odds_regions.split(","))),
+             len(ctx.odds_prop_markets))
+
+    # Pass 2 — each unique event's props ONCE, at its OWN commence − buffer (the tightest close).
+    out: list[dict] = []
+    for eid, ct in items:
+        try:
+            snap = _iso(_parse_iso(ct) - buf) if ct else _iso(kicks[0] - buf)
+        except (ValueError, TypeError, IndexError):
+            log.warning("  [odds_nfl_props_historical] event %s has no parseable commence_time "
+                        "(%r) — skipped", eid, ct)
+            continue
+        try:
+            out.extend(_event_props(ctx, eid, historical_date=snap))
+        except Exception as exc:  # noqa: BLE001 — per-event resilience
+            log.warning("  [odds_nfl_props_historical] event %s @ %s skipped: %s",
+                        eid, snap, str(exc)[:120])
     return out
 
 
