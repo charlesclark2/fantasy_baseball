@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "fixed",
+        "text": "Fixed the featured pick's 'Yesterday' recap sometimes staying stuck on 'Pending' after that game had finished. The recap settles to Won or Lost only once the previous game's final result has been ingested, and a late-finishing game (often a West-coast start) frequently isn't available yet when the morning update runs — so the badge could read 'Pending' all day even though the game was long over. The home page now re-checks a still-'Pending' recap when you load it and updates it to Won or Lost the moment the result is in, so it no longer lingers. This is a factual result recap, not betting advice."
+      },
+      {
+        "tag": "fixed",
         "text": "Fixed the Dashboard occasionally showing the NEXT day's games as 'today's' picks. Because the next slate's odds and schedule are posted well in advance, and the page was deciding which day is 'today' from your device's own clock and time zone, a browser running ahead of U.S. baseball time could pull in tomorrow's games a day early. The app no longer trusts the browser's local date for the live slate — the current baseball day is now decided on the server (U.S. Pacific baseball calendar), and the picks endpoints refuse to serve a future day, so 'today's' picks are always the current day's slate no matter your device's clock or where you are. Viewing past dates from the calendar is unchanged."
       },
       {
