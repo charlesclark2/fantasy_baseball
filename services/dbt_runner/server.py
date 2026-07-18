@@ -23,6 +23,7 @@ retry (the Dagster op already polls for up to 45 minutes).
 import os
 import subprocess
 import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,19 @@ from pydantic import BaseModel
 
 _AUTH_TOKEN: str = os.environ.get("DBT_RUNNER_AUTH_TOKEN", "")
 _DBT_PROJECT_DIR: str = os.environ.get("DBT_PROJECT_DIR", "/dbt")
+
+# INC-32 (2026-07-18) — SERVER-SIDE hard ceiling on a single dbtf run. The single-tenant lock
+# below (start_run 409s while any run is "running") had no server-side timeout: a wedged dbtf
+# process (documented 2026-06-15 — "the dbt-fusion CLI process simply stopped exiting") hung the
+# worker thread FOREVER, so the dead-but-"running" entry held the lock permanently → EVERY
+# subsequent /run 409'd until an operator manually restarted the container. Downstream that
+# stalled the daily build's dbt op (daily fired ~1.2h late), dropped schedule_capture's staging
+# rebuild (stale lineups), and blocked the lineup_monitor rebuild ops (the manual run's 5h stall).
+# A finite timeout + a stale-run reaper guarantee the lock ALWAYS frees on its own. Default 60 min
+# bounds a true wedge while still accommodating a Sunday --full-refresh build (a healthy run that
+# finishes normally releases the lock the moment it returns, well before this ceiling).
+_MAX_RUN_SECONDS: int = int(os.environ.get("DBT_RUNNER_MAX_RUN_SECONDS", "3600"))
+_REAP_GRACE_SECONDS: int = 120  # extra slack before start_run treats a "running" entry as dead
 
 # E11.2 Task 2 — S3 state persistence for source_status:fresher+ daily builds.
 # State files: manifest.json (dbt graph) + sources.json (freshness timestamps).
@@ -112,9 +126,25 @@ def _extract_target_args(args: list[str]) -> list[str]:
 
 
 def _run_cmd(cmd: list[str], env: dict[str, str]) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        cmd, capture_output=True, text=True, env=env, cwd=_DBT_PROJECT_DIR
-    )
+    # INC-32: hard timeout so a wedged dbtf is KILLED (child + its process group) and surfaced as
+    # a non-zero result instead of hanging the worker thread forever. subprocess.run() kills the
+    # child on timeout; the caller (_execute) then marks the run "failed", which FREES the
+    # single-tenant lock so the next /run is served instead of 409-ing indefinitely.
+    try:
+        return subprocess.run(
+            cmd, capture_output=True, text=True, env=env, cwd=_DBT_PROJECT_DIR,
+            timeout=_MAX_RUN_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        out = exc.stdout if isinstance(exc.stdout, str) else (exc.stdout or b"").decode(errors="replace")
+        err = exc.stderr if isinstance(exc.stderr, str) else (exc.stderr or b"").decode(errors="replace")
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=124,  # conventional timeout exit code
+            stdout=out,
+            stderr=(err + f"\n[dbt-runner] KILLED: exceeded {_MAX_RUN_SECONDS}s hard timeout "
+                    "(INC-32 wedge guard — the single-tenant lock is now freed).").strip(),
+        )
 
 
 class RunRequest(BaseModel):
@@ -130,10 +160,32 @@ def health() -> dict[str, bool]:
     return {"ok": True}
 
 
+def _reap_stale_runs(now: float) -> None:
+    """INC-32: mark any 'running' entry whose worker thread has clearly died (started longer ago
+    than the hard timeout + grace, yet never transitioned to success/failed) as failed, so a dead
+    thread can NEVER hold the single-tenant lock forever. Belt-and-suspenders behind the _run_cmd
+    timeout: covers the case where the worker thread dies before it can set the terminal status.
+    Called under _lock."""
+    ceiling = _MAX_RUN_SECONDS + _REAP_GRACE_SECONDS
+    for rid, entry in _runs.items():
+        if entry.get("status") != "running":
+            continue
+        started = entry.get("started_monotonic")
+        if started is not None and (now - started) > ceiling:
+            entry["status"] = "failed"
+            entry["returncode"] = 124
+            entry["stderr"] = (entry.get("stderr", "") +
+                               f"\n[dbt-runner] REAPED: run stuck 'running' > {ceiling}s with no "
+                               "terminal status — worker thread presumed dead; lock freed "
+                               "(INC-32).").strip()
+
+
 @app.post("/run")
 def start_run(body: RunRequest, authorization: str | None = Header(None)) -> dict[str, str]:
     _check_auth(authorization)
     with _lock:
+        now = time.monotonic()
+        _reap_stale_runs(now)  # free the lock if a prior run's worker thread died
         in_flight = [r for r in _runs.values() if r["status"] == "running"]
         if in_flight:
             raise HTTPException(
@@ -141,7 +193,10 @@ def start_run(body: RunRequest, authorization: str | None = Header(None)) -> dic
                 detail="A dbt run is already in progress — retry after it completes",
             )
         run_id = uuid.uuid4().hex[:8]
-        _runs[run_id] = {"status": "running", "stdout": "", "stderr": "", "returncode": None}
+        _runs[run_id] = {
+            "status": "running", "stdout": "", "stderr": "", "returncode": None,
+            "started_monotonic": now,
+        }
 
     threading.Thread(
         target=_execute, args=(run_id, body.args, body.env, body.use_state), daemon=True
@@ -159,6 +214,22 @@ def get_status(run_id: str, authorization: str | None = Header(None)) -> dict[st
 
 
 def _execute(run_id: str, args: list[str], extra_env: dict[str, str], use_state: bool = False) -> None:
+    # INC-32: any unexpected exception in the body (state download, boto3, subprocess spawn) must
+    # still transition the run to a TERMINAL status — otherwise the entry stays "running" and holds
+    # the single-tenant lock forever (the exact wedge this story fixes). The reaper is the last
+    # resort; this makes the common failure paths self-clear immediately.
+    try:
+        _execute_impl(run_id, args, extra_env, use_state)
+    except Exception as exc:  # noqa: BLE001 — must never leave the run "running"
+        _runs[run_id] = {
+            "status": "failed",
+            "returncode": 1,
+            "stdout": "",
+            "stderr": f"[dbt-runner] _execute crashed ({type(exc).__name__}): {exc} — lock freed (INC-32)",
+        }
+
+
+def _execute_impl(run_id: str, args: list[str], extra_env: dict[str, str], use_state: bool = False) -> None:
     env = {
         **os.environ,
         **extra_env,

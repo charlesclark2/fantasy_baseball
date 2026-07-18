@@ -1,9 +1,11 @@
 # NFL — Implementation Guide (stub)
 
-**Status:** v0.1 — scaffold (Phase 0 not yet started)
+> ⭐ **NFL NOW HAS ITS OWN ROADMAP + P0 PROMPTS (operator 2026-07-17, deadline 9/9):** `nfl_roadmap.md` + `nfl_story_prompts.md` (story IDs `N<phase>.<story>`: N0.1 data eval → N0.2 scaffold+backfill → N0.3 port the dbt IP → N0.4 Odds/injuries). ⚠️ **TWO CORRECTIONS to this guide's port plan below:** (1) NO `nfl_data_py` (abandoned) → nflverse release Parquet via DuckDB `read_parquet`; (2) orchestrate on the existing **Dagster EC2**, not Lambda+EventBridge. ♻️ Reuse the PROVEN NCAAF stack (`credence-sports-lakehouse`/`nfl/` prefix, `sports_dbt`, the `ncaaf/ingest/` pattern). 🎯 **NFL = product/fantasy/feeder (efficient market → props/CLV/fantasy, NOT head-on edge); NCAAF is the edge play.** This guide = methodology + the detailed port plan; the roadmap/prompts drive the work.
+
+**Status:** v0.2 — roadmap + P0 prompts written 2026-07-17 (deadline-driven); Phase 0 = the brownfield port
 **Parent:** `quant_sports_intel_models/multi_sport_roadmap.md`
 **Reference implementation:** the MLB `baseball/edge_program/` guides + `baseball/fantasy/` — NFL **instantiates** those patterns; cite them rather than re-deriving.
-**Master data file:** `football/nfl/nfl_data_inventory.md` — **v0.1 drafted** (reconstructed from the prior dbt project; needs live verification per its §5).
+**Master data file:** `football/nfl/nfl_data_inventory.md` — **v1.0 (N0.1, 2026-07-17)**: ground-truthed live against nflverse release Parquet (25 assets) + The Odds API; source set + lake-table plan LOCKED.
 
 > **Brownfield migration (not greenfield, not preserve-in-place).** `FOOTBALL_DATA` (Snowflake) already holds a working **`raw → staging → refined` dbt stack** (from `~/Documents/machine_learning/football/jaffle_shop/`), sourced from **nflverse + PFR + Next Gen Stats + Combine**: ~16 raw tables, `stg_*` views, and `refined` marts including a **player-week fact** (`fct_player_week`), NGS satellites, season rollups, a **preseason projections mart** (`mart_projections_preseason`), and a **betting dimension** (`dim_nfl_betting`). **But the data is stale (untouched a while), and `nfl_data_py` is free + re-pullable — so we re-home onto the pre-profit stack (S3 lake + Lambda + dbt-duckdb; roadmap §6), re-pull fresh rather than migrate stale rows, and port the dbt models (the real IP).** Snowflake `FOOTBALL_DATA` is kept only as a **reference for the existing model logic**, not the runtime target. NFL is the **first brownfield migration onto the new stack — it proves the porting story** for the other sports. (Prior code is exploratory, not production-ready.)
 

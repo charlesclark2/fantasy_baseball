@@ -943,6 +943,7 @@ def check_monitors_healthy_op(context):
     from betting_ml.monitoring.monitor_health import (
         REQUIRED_INTRADAY_FLAGS,
         flag_problems,
+        stale_running_sensor_ticks,
         stopped_critical_instigators,
     )
 
@@ -955,6 +956,14 @@ def check_monitors_healthy_op(context):
         context.log.warning(
             f"monitor-state introspection unavailable (intraday-flag check still ran): {e}"
         )
+    # INC-32: also page if a critical sensor is still RUNNING but its ticks have STALLED (the
+    # sensor-daemon-wedged mode E11.23's STOPPED check is blind to — 7/17 all evals stopped
+    # ~21:30Z). Best-effort / never crashes the guard.
+    try:
+        import time as _time
+        problems.extend(stale_running_sensor_ticks(context.instance, _time.time()))
+    except Exception as e:  # noqa: BLE001
+        context.log.warning(f"sensor-tick staleness check unavailable: {e}")
     context.add_output_metadata({"monitor_problems": MetadataValue.int(len(problems))})
     if not problems:
         context.log.info(

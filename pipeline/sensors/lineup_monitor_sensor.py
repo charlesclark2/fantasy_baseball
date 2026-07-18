@@ -51,6 +51,21 @@ _ACTIVE_LEAD = timedelta(hours=5)          # "active" once first pitch is <= 5h 
 # the monitor anyway.
 _MONITOR_HORIZON = timedelta(hours=8)
 
+# INC-32 (2026-07-18) — HARD ceiling on the lineup_monitor.py subprocess run INSIDE the
+# sensor evaluation. The op-side helpers got a 30-min ceiling on 2026-06-15 (a wedged dbt
+# subprocess hung a whole run), but the SENSOR path's own subprocess.run below was left with
+# NO timeout. When lineup_monitor.py wedges (its state table is still Snowflake — a warehouse
+# resume / hung connection that never returns), the sensor evaluation BLOCKS the Dagster
+# sensor-daemon worker thread FOREVER. The daemon evaluates sensors on a bounded thread pool,
+# so one permanently-blocked eval starves the pool → sensor evaluations STOP mid-slate (7/17:
+# evals ceased ~21:30Z, 7 of 15 games never got post_lineup). This is the "silently not
+# running" mode E11.23's default_status=RUNNING self-start does NOT cover — the sensor is still
+# nominally RUNNING, it just never produces a tick. A hard timeout converts the infinite hang
+# into a fast, visible SkipReason so the next tick (and the daemon) keep going. lineup_monitor.py
+# is a quick state query (seconds when healthy); 300s is a generous ceiling well under the 600s
+# sensor floor. The heartbeat in check_monitors_healthy_op is the backstop if a tick still stalls.
+_MONITOR_SUBPROCESS_TIMEOUT = 300  # seconds (5 min) — hard ceiling per lineup_monitor.py run
+
 
 def _beyond_monitor_horizon(mins: float | None) -> str | None:
     """Return a human skip-reason when the monitor should not run at all this tick:
@@ -172,11 +187,15 @@ def _evaluate_lineup_monitor(log, triggered_by: str):
     """
     script = os.path.join(SCRIPTS_DIR, "lineup_monitor.py")
     try:
+        # INC-32: hard timeout so a wedged lineup_monitor.py (hung Snowflake connection) can
+        # NEVER block the sensor-daemon worker thread indefinitely (→ all sensor evals stop
+        # mid-slate). On timeout the child is killed and we skip this tick; the next tick retries.
         result = subprocess.run(
             [sys.executable, script],
             capture_output=True,
             text=True,
             cwd=APP_DIR,
+            timeout=_MONITOR_SUBPROCESS_TIMEOUT,
         )
         if result.stdout:
             log.info(result.stdout)
@@ -187,6 +206,18 @@ def _evaluate_lineup_monitor(log, triggered_by: str):
                 f"lineup_monitor.py exited {result.returncode} — skipping tick. "
                 f"stderr: {result.stderr[:400]}"
             )
+    except subprocess.TimeoutExpired:
+        # The killed child freed the daemon thread — page loud (a persistent timeout means the
+        # monitor's Snowflake state read is wedging every tick) but never block the daemon.
+        log.warning(
+            f"[ALERT] lineup_monitor.py exceeded {_MONITOR_SUBPROCESS_TIMEOUT}s and was KILLED "
+            "(INC-32 sensor-daemon-block guard). Skipping this tick; investigate the "
+            "lineup_monitor_state Snowflake read if this recurs."
+        )
+        return SkipReason(
+            f"lineup_monitor.py exceeded {_MONITOR_SUBPROCESS_TIMEOUT}s hard timeout — killed, "
+            "tick skipped so the daemon keeps evaluating."
+        )
     except Exception as e:
         return SkipReason(f"lineup_monitor.py failed to run: {e}")
 
@@ -212,16 +243,26 @@ def _evaluate_lineup_monitor(log, triggered_by: str):
     )
 
 
-# ── Reliable 30-min cron backstop (2026-07-07) ────────────────────────────────
-# The lineup_monitor_SENSOR tick has been unreliable on the box (repeated manual kicks). The
-# daily-job + odds-CLV SCHEDULES fire dependably here, so drive the SAME lineup_monitor_job off a
-# fixed 30-min cron too. This does NOT re-score blindly: it runs lineup_monitor.py, whose
-# lineup_monitor_state dedup means a game fires at most once (plus legitimate scratch re-triggers),
-# so it satisfies "fire once, don't re-run already-made predictions". Two exprs cover the game-day
-# window 14:00-03:30 UTC (cron can't wrap midnight); offset to :15/:45 so it lands AFTER the
-# schedule_capture staging refresh (:00/:30) and staggers dbt-runner load. default_status=RUNNING
-# so it self-starts on the box / after a Dagster-DB reset (E11.23 self-start class); the sensor
-# stays RUNNING too as a faster complement — the state dedup makes a double-fire a harmless no-op.
+# ── 30-min cron backstop (2026-07-07) — DEMOTED to manual-fallback (INC-32, 2026-07-18) ──────────
+# HISTORY: added 2026-07-07 because the lineup_monitor_SENSOR tick was unreliable on the box
+# (repeated manual kicks). It drove the SAME lineup_monitor_job off a fixed 30-min cron as a
+# reliable complement, relying on lineup_monitor.py's lineup_monitor_state dedup to keep a game
+# firing at most once.
+#
+# WHY DEMOTED (INC-32): running BOTH the sensor (every 10 min) AND these schedules (:15/:45) is a
+# check-then-act RACE — when a sensor tick and a schedule tick evaluate within the same window,
+# BOTH spawn lineup_monitor.py and read lineup_monitor_state BEFORE either inserts, so BOTH see the
+# game as "new" and BOTH emit a RunRequest → TWO full job runs, each firing its own dbt-runner
+# POSTs. The concurrency cap serializes them but both still run the whole graph → wasted work +
+# multiplied 409/queue contention (a direct contributor to the INC-32 stall/late-daily cluster).
+# The sensor's unreliability — the ONLY reason for this backstop — is now fixed at the source
+# (INC-32: the sensor's lineup_monitor.py subprocess has a hard timeout so it can no longer wedge
+# the daemon) AND a tick-staleness heartbeat in check_monitors_healthy_op PAGES if the sensor ever
+# goes dark. So the redundant second driver buys nothing and costs contention → the SENSOR is now
+# the SOLE driver. These schedules stay DEFINED (default_status=STOPPED) as an operator-toggled
+# manual fallback; if you ever re-enable one, expect the double-fire above to return.
+# Two exprs cover the game-day window 14:00-03:30 UTC (cron can't wrap midnight); :15/:45 offset
+# lands after the schedule_capture staging refresh (:00/:30).
 def _lineup_schedule_body(context: ScheduleEvaluationContext):
     # E11.20-COST (2026-07-16): the cron backstop previously ran the SF-querying monitor
     # subprocess UNCONDITIONALLY 28×/day (14:00–03:30 UTC) — including break days and hours
@@ -239,15 +280,17 @@ def _lineup_schedule_body(context: ScheduleEvaluationContext):
     return _evaluate_lineup_monitor(context.log, triggered_by="lineup_monitor_schedule")
 
 
+# INC-32: default_status=STOPPED — the SENSOR is the sole driver; these are a manual fallback only
+# (re-enabling one reintroduces the double-fire race documented above).
 @schedule(job=lineup_monitor_job, cron_schedule="15,45 14-23 * * *",
           name="lineup_monitor_schedule_daytime",
-          default_status=DefaultScheduleStatus.RUNNING)
+          default_status=DefaultScheduleStatus.STOPPED)
 def lineup_monitor_schedule_daytime(context: ScheduleEvaluationContext):
     return _lineup_schedule_body(context)
 
 
 @schedule(job=lineup_monitor_job, cron_schedule="15,45 0-3 * * *",
           name="lineup_monitor_schedule_overnight",
-          default_status=DefaultScheduleStatus.RUNNING)
+          default_status=DefaultScheduleStatus.STOPPED)
 def lineup_monitor_schedule_overnight(context: ScheduleEvaluationContext):
     return _lineup_schedule_body(context)

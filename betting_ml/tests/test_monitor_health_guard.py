@@ -14,8 +14,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from betting_ml.monitoring.monitor_health import (
+    CRITICAL_SENSORS,
     REQUIRED_INTRADAY_FLAGS,
     flag_problems,
+    stale_running_sensor_ticks,
+    stale_sensor_ticks,
     stopped_critical_instigators,
 )
 
@@ -75,3 +78,60 @@ def test_non_critical_stopped_instigator_ignored():
 
 def test_no_stopped_instigators_clean():
     assert stopped_critical_instigators(_FakeInstance([])) == []
+
+
+# ── INC-32 stale-tick detector (the sensor-daemon-wedged-mid-slate mode) ──────────
+_A_CRITICAL = sorted(CRITICAL_SENSORS)[0]  # any critical sensor name
+
+
+def test_stale_sensor_tick_flagged_over_ceiling():
+    # 90 min since last tick, ceiling 60 min → flagged
+    problems = stale_sensor_ticks({_A_CRITICAL: 90 * 60}, max_age_s=3600)
+    assert any(_A_CRITICAL in p and "STALE" in p for p in problems)
+
+
+def test_fresh_sensor_tick_not_flagged():
+    assert stale_sensor_ticks({_A_CRITICAL: 5 * 60}, max_age_s=3600) == []
+
+
+def test_none_age_not_flagged():
+    """No tick data (never evaluated / DB reset) is the STOPPED check's job, not staleness."""
+    assert stale_sensor_ticks({_A_CRITICAL: None}, max_age_s=3600) == []
+
+
+def test_non_critical_sensor_staleness_ignored():
+    assert stale_sensor_ticks({"some_random_sensor": 999 * 60}, max_age_s=3600) == []
+
+
+class _TickInstance:
+    """Instance stand-in whose all_instigator_state() returns sensor states carrying an
+    instigator_data.last_tick_timestamp (epoch seconds)."""
+
+    def __init__(self, name_to_last_tick_ts):
+        self._states = [
+            SimpleNamespace(
+                instigator_name=n,
+                instigator_data=SimpleNamespace(last_tick_timestamp=ts),
+            )
+            for n, ts in name_to_last_tick_ts.items()
+        ]
+
+    def all_instigator_state(self, *a, **k):  # noqa: ARG002
+        return self._states
+
+
+def test_stale_running_sensor_ticks_reads_instance():
+    now = 1_000_000.0
+    inst = _TickInstance({
+        _A_CRITICAL: now - 2 * 3600,            # 2h stale → flagged
+        "not_a_critical_sensor": now - 10 * 3600,  # ignored (not critical)
+    })
+    problems = stale_running_sensor_ticks(inst, now, max_age_s=3600)
+    assert any(_A_CRITICAL in p for p in problems)
+    assert all("not_a_critical_sensor" not in p for p in problems)
+
+
+def test_stale_running_sensor_ticks_fresh_clean():
+    now = 1_000_000.0
+    inst = _TickInstance({_A_CRITICAL: now - 60})  # 1 min ago
+    assert stale_running_sensor_ticks(inst, now, max_age_s=3600) == []

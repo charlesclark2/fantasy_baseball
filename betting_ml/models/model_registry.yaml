@@ -842,9 +842,9 @@ total_runs:
     status: CANDIDATE_PART_A  # fit + validated OFF-BOX; NOT wired into predict_today
     method: isotonic
     calibrator_candidate: betting_ml/models/total_runs/calibrator_e13_6b_isotonic_candidate.joblib
-    fit_window: '2026-04-17..2026-07-16'  # n=1108 served totals games, pushes dropped
-    served_raw_ece: 0.0603      # moneyline was ~0.029 (E9.26)
-    oof_ece_isotonic: 0.0149    # pooled walk-forward, spread-honest (0.046 >= 0.03 floor)
+    fit_window: '2026-04-17..2026-07-17'  # n=1110 served totals games, pushes dropped
+    served_raw_ece: 0.0595      # moneyline was ~0.029 (E9.26)
+    oof_ece_isotonic: 0.0145    # pooled walk-forward, spread-honest (0.0465 >= 0.03 floor)
     fit_source: serving_cache (S3 permanent picks/game blobs); no Snowflake/lakehouse
     # PART B (HELD until E11.20's full-slate cutover gate is confirmed clean — never change two things in
     # one verification window): wire isotonic into predict_today at the totals emit (scripts/

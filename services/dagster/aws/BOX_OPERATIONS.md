@@ -154,15 +154,19 @@ These four are enforced by `check_monitors_healthy_op` (an unset one = a silentl
 | `PROPS_DAILY_INGEST` | `0` | Redundant with the host-cron `0 13` props line — enable EXACTLY ONE (else double-pay Odds API credits). |
 | `W11_RAW_WRITE_MODE` / `LAKEHOUSE_RAW_WRITE_MODE` | per-cutover (`snowflake`→`both`→`s3`) | Tier-A raw writers' dual-write mode; advance per the W11 cutover, not blindly. |
 | `W11_W4W5_NIGHTLY`, `W11B_UMPIRE_NIGHTLY`, `W11C_WEATHER_NIGHTLY`, `W11D_PUBLIC_BETTING_NIGHTLY`, `W11_W3PRE_DAILY`, `W11_BATTER_PITCHES_SF_RETIRED` | per-cutover | Nightly-rebuild / SF-retire gates; each flips with its wave's box cutover. |
+| `W11TX_TRANSACTIONS_NIGHTLY` | `1` **once cut over** | INC-32 hygiene: gates the nightly `--w11tx-only` rebuild + `--w11tx` ext refresh that keeps `lakehouse_ext.stg_statsapi_transactions` (the injury-status chain) fresh from the live raw mirror. MUST be `1` before the SF raw `player_transactions` is dropped, else the ext table FREEZES on drop (`decommission_w11_abcd_drop.py`). Flip on only after `W11_RAW_WRITE_MODE=both\|s3` + the ext table exists + a box-validated `--w11tx-only` run (per-ROW ext fetch = the runtime gate). |
 
 ### 10c. Sensors — ALL self-start (`default_status=RUNNING`); the critical set is heartbeat-checked
 All 11 sensors carry `default_status=RUNNING`. `check_monitors_healthy_op` alarms if any of these is manually STOPPED: `run_failure_alert_sensor`, `odds_current_rebuild_sensor`, `odds_freshness_alert_sensor`, `schedule_freshness_alert_sensor`, `statcast_freshness_sensor`, `lineup_monitor_sensor`, `pregame_alert_sensor`, `conviction_pick_alert_sensor`, `morning_watchdog_sensor`, `clv_alert_sensor`, `model_health_alert_sensor`.
+
+**INC-32 (2026-07-18) — tick-STALENESS heartbeat:** the STOPPED check above is blind to a sensor that is still nominally RUNNING but whose evaluations have *stalled* (the sensor-daemon wedged mid-slate — 7/17, all evals stopped ~21:30Z after `lineup_monitor.py` hung the daemon thread). `check_monitors_healthy_op` now ALSO pages if any critical sensor's most-recent tick is older than `SENSOR_TICK_STALE_SECONDS` (default 60 min) — the daemon ticks every RUNNING sensor continuously (even a SkipReason is a tick), so a stale tick = a wedged daemon. Structural cure: every sensor subprocess (op AND the `_evaluate_lineup_monitor` sensor-eval path) now has a hard subprocess timeout so a wedge can't block the daemon in the first place.
 
 ### 10d. Schedules — intended boot state
 | Schedule | Intended | Note |
 |---|---|---|
 | `daily_ingestion_job_schedule` | **RUNNING** (self-start) | the primary serving pipeline; heartbeat-checked. |
 | `odds_clv_rebuild_daily` | **RUNNING** (self-start) | daily CLV / line-movement rebuild; heartbeat-checked. |
+| `lineup_monitor_schedule_daytime` / `_overnight` | **STOPPED** (manual fallback) | INC-32: DEMOTED 2026-07-18. The `lineup_monitor_sensor` (10-min, un-wedgeable, staleness-heartbeat-checked) is now the SOLE driver of `lineup_monitor_job`; running these too double-fired the job (check-then-act race → 2 runs per confirmed lineup → doubled dbt-runner 409 contention). NOT critical / not heartbeat-checked — a STOPPED one is expected. Re-enabling one reintroduces the double-fire. |
 | `intraday_schedule_capture_daytime` / `_overnight` | operator-gated STOPPED | START only WITH `SCHEDULE_LAKEHOUSE_INTRADAY=1` AND after disabling the lean host-cron `schedule-capture` (double-ingest). NOT self-start / not heartbeat-checked. |
 | `intraday_public_betting_daytime` / `_overnight` | operator-gated STOPPED | START only with `W11_RAW_WRITE_MODE=s3\|both` (paid ActionNetwork capture opt-in). |
 | `weekly_ml_job_schedule`, `weekly_meta_model_job_schedule`, `weekly_player_profiles_job_schedule`, `clv_monitoring_job_schedule`, `magnitude_monitor_job_schedule` | STOPPED (optional) | heavy/optional; operator toggles as needed. |

@@ -6,10 +6,11 @@ from pipeline.jobs.intraday_jobs import (
     intraday_weather_job,
     odds_clv_rebuild_job,
 )
-# E11.23-follow-up (2026-07-07): the lineup re-score is ALSO driven by a reliable 30-min cron
-# schedule (lineup_monitor_schedule_*), not only the flaky lineup_monitor_sensor tick. Defined
-# next to the sensor so it shares the lineup_monitor.py dedup detection. Imported here to join
-# all_intraday_schedules.
+# lineup_monitor_schedule_* — a 30-min cron alternate driver for the lineup re-score, added
+# 2026-07-07 when the sensor was unreliable. INC-32 (2026-07-18) DEMOTED them to default_status=
+# STOPPED (manual fallback): the lineup_monitor_sensor is now the sole driver (un-wedgeable +
+# staleness-heartbeat-checked), and running both double-fired lineup_monitor_job. Still registered
+# here (join all_intraday_schedules) so an operator can toggle one on if ever needed.
 from pipeline.sensors.lineup_monitor_sensor import (
     lineup_monitor_schedule_daytime,
     lineup_monitor_schedule_overnight,
