@@ -38,10 +38,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install dependencies
+      - name: Install dependencies (dbt-duckdb is a main dep — always installed)
         working-directory: .
-        run: uv sync --no-dev-packages || uv sync
+        run: uv sync
+      # --target ci uses the secrets-free profile output — compile opens a plain local DuckDB and
+      # never runs CREATE SECRET (credential_chain), which hard-fails on a credential-less runner.
       - name: dbt parse (manifest builds — refs/sources resolve)
-        run: uv run dbt parse --project-dir . --profiles-dir .
+        run: uv run dbt parse --project-dir . --profiles-dir . --target ci
       - name: dbt compile (all Jinja/SQL renders — the structural gate)
-        run: uv run dbt compile --project-dir . --profiles-dir .
+        run: uv run dbt compile --project-dir . --profiles-dir . --target ci
