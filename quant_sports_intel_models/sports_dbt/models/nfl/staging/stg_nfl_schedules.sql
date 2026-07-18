@@ -12,11 +12,22 @@ select
     season,
     week,
     game_type                      as season_type,
-    gameday                        as game_date,     -- native DATE in the parquet
+    gameday                        as game_date,     -- ISO date string in the parquet (VARCHAR)
     gametime,
+    -- kickoff timestamp (N0.3): the calendar/week-clock marts anchor the NFL week on it.
+    -- gameday+gametime are VARCHAR → try_cast (null gametime → null datetime). INC-23 use-site.
+    try_cast(gameday || ' ' || gametime as timestamp) as game_datetime,
     weekday,
-    away_team,
-    home_team,
+    -- team codes normalized to the canonical franchise (N0.3) so the calendar joins the
+    -- normalized roster/depth/snap teams: LA/STL→LAR, SD→LAC, OAK→LV (relocations).
+    case when away_team in ('LA', 'STL') then 'LAR'
+         when away_team in ('SD', 'LAC') then 'LAC'
+         when away_team in ('OAK', 'LV') then 'LV'
+         else away_team end        as away_team,
+    case when home_team in ('LA', 'STL') then 'LAR'
+         when home_team in ('SD', 'LAC') then 'LAC'
+         when home_team in ('OAK', 'LV') then 'LV'
+         else home_team end        as home_team,
     away_score,
     home_score,
     result,                                           -- home margin (home_score - away_score)
@@ -51,6 +62,7 @@ select
     gsis                           as gsis_game_id,
     pfr                            as pfr_game_id,
     pff                            as pff_game_id,
-    espn                           as espn_game_id
+    espn                           as espn_game_id,
+    ftn                            as ftn_game_id
 from {{ nfl_delta('schedules') }}
 where game_id is not null

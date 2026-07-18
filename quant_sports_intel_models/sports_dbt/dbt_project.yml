@@ -34,6 +34,17 @@ models:
     nfl:
       staging:
         +schema: nfl_staging
-        +materialized: view
-      # marts: (N0.3 adds the first nfl mart + re-enables this config block — ports the
-      # `refined` IP: fct_player_week, NGS satellites, mart_player_season, dim_nfl_betting)
+        # N0.3: materialized as TABLES, not views. The raw tier is Delta; DuckDB's delta
+        # extension cannot serialize a DeltaScan operator inside a complex plan (multiple stacked
+        # window fns / heavy joins) → a mart reading staging-views-over-delta_scan fails with
+        # "DeltaScan serialization not implemented" (hit by dim_player_role + fct_player_week).
+        # Physical staging tables read each Delta table ONCE into the local DuckDB, so mart plans
+        # contain no delta_scan → the limit is sidestepped (and repeated mart reads are cheaper).
+        +materialized: table
+      marts:
+        # N0.3: the ported `refined` IP (fct_player_week, dim_player[_role], calendars, NGS/snap
+        # satellites, opportunity/efficiency/season/projections, dim_nfl_betting). Tables in the
+        # nfl_marts schema. dim_player_role + mart_projections_preseason set materialized='table'
+        # inline (jaffle carried the config in-model).
+        +schema: nfl_marts
+        +materialized: table

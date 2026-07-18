@@ -1,0 +1,47 @@
+name: Sports dbt CI
+
+# NFL-N0.3 — the FIRST CI gate for the shared `sports_dbt` (dbt-duckdb over the S3/Delta lake).
+# The MLB dbt-fusion/Snowflake gates (dbt_build_ci.yml) do NOT cover this project — it is a
+# disjoint DuckDB-native DAG (NCAAF + NFL). This gate runs OFFLINE: `dbt parse` + `dbt compile`
+# resolve every ref/source, render all Jinja/SQL, and build the manifest WITHOUT touching S3 (no
+# model runs, no delta_scan) — so it needs no AWS secrets and catches the structural break class
+# (bad ref, missing model, macro/Jinja error, malformed schema.yml). Extend with per-sport
+# selections as the project grows. A real build over the lake is the box runtime gate (separate).
+on:
+  pull_request:
+    paths:
+      - "quant_sports_intel_models/sports_dbt/**"
+      - ".github/workflows/sports_dbt_ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "quant_sports_intel_models/sports_dbt/**"
+      - ".github/workflows/sports_dbt_ci.yml"
+
+jobs:
+  sports-dbt-compile:
+    name: sports_dbt parse + compile (offline, no S3)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: quant_sports_intel_models/sports_dbt
+    env:
+      # local scratch DB so DuckDB never needs the S3 lake for parse/compile
+      SPORTS_DUCKDB_PATH: /tmp/sports_ci.duckdb
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        working-directory: .
+        run: uv sync --no-dev-packages || uv sync
+      - name: dbt parse (manifest builds — refs/sources resolve)
+        run: uv run dbt parse --project-dir . --profiles-dir .
+      - name: dbt compile (all Jinja/SQL renders — the structural gate)
+        run: uv run dbt compile --project-dir . --profiles-dir .
