@@ -77,7 +77,8 @@ RUN pip install --no-cache-dir \
     pymc \
     "duckdb>=1.1.0" \
     deltalake==1.6.1 \
-    polars==1.42.1
+    polars==1.42.1 \
+    "dbt-duckdb>=1.9,<2.0"
 
 # Guard: fail the image build NOW if any pickle-fragile serving lib resolved to a
 # version other than the pinned/locked one (belt-and-suspenders over the == pins —
@@ -110,6 +111,12 @@ RUN python -c "\
 import duckdb; c=duckdb.connect(); \
 c.execute('INSTALL httpfs'); c.execute('INSTALL delta'); c.execute('LOAD delta'); \
 print('duckdb delta extension baked OK')"
+# NFL-N0.3 — the sports_dbt build (pipeline/jobs/sports_dbt_job.py runs `python -m dbt.cli.main`)
+# needs the dbt-duckdb ADAPTER, which `dagster-dbt`→dbt-core does NOT pull in. Fail the build NOW
+# if it's missing (the box otherwise dies with "Could not find adapter type duckdb!" at run time).
+# Coexists with dbt-fusion: fusion's /usr/local/bin/dbt stays the MLB Snowflake path; the sports
+# job invokes the dbt-core python module + duckdb adapter, a separate DuckDB-native DAG.
+RUN python -c "import dbt.adapters.duckdb; print('dbt-duckdb adapter OK')"
 # E11.15 — OSS self-host stores run/event/schedule state in Postgres; the storage class
 # dagster_postgres.DagsterPostgresStorage must import or the instance won't load.
 RUN python -c "from dagster_postgres import DagsterPostgresStorage; print('dagster_postgres OK')"
