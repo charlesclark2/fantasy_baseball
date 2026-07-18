@@ -149,6 +149,81 @@ def _fit_ngb_reg(X, y, cfg):
     return m
 
 
+def _pooled_gate_metric(target: str, tier: str) -> tuple[str, float] | None:
+    """(metric_name, n-weighted pooled CHALLENGER metric) from the (target, tier) promotion-gate
+    JSON — the honest de-leaked purged-CV number to stamp on the lineage row. The gate filename
+    uses the --target alias (home_win / run_diff / total_runs). Returns None if the gate JSON is
+    absent/unreadable; a gate is a promotion prerequisite, so absence is warned-on, never faked."""
+    gate = (PROJECT_ROOT / "betting_ml" / "evaluation" / "feature_selection" / "promotion_gate"
+            / f"gate_v6_vs_v5_{target}_{tier}.json")
+    if not gate.exists():
+        return None
+    try:
+        d = json.loads(gate.read_text())
+        ps = d.get("per_season") or []
+        den = sum(s["n"] for s in ps)
+        if den <= 0:
+            return None
+        num = sum(s["challenger"] * s["n"] for s in ps)
+        return str(d.get("gate_metric") or "metric"), round(num / den, 4)
+    except Exception:  # noqa: BLE001 — a malformed gate file must not fake a metric
+        return None
+
+
+def _record_champion_lineage(target: str, reg_key: str, model_class: str, s3_uri: str,
+                             reg_cols_path: str, n_served: int, training_rows: int,
+                             promoted_date: str) -> None:
+    """Record the v6 promotion in the Snowflake champion-lineage table right after the S3 upload,
+    so serving and the ledger never diverge.
+
+    E9.26b — this is the missing link the lag came from: finalize updated only model_registry.yaml
+    (the served-artifact source) + S3, while the SF `model_registry` lineage table is maintained
+    ONLY by record_promotion(). That step was never run for the E13.11 v6 swap, so the ledger
+    stuck at v5 and the Admin → Model Artifact Freshness panel read `ledger_behind`.
+
+    Idempotent (record_promotion() no-ops if v6 is already current) and NON-FATAL: the S3 upload
+    already succeeded, so a lineage failure must never fail the deploy. On a missing gate JSON
+    (no honest CV to stamp) it warns LOUDLY and skips, pointing at reconcile_v6_ledger.py rather
+    than recording a fabricated metric."""
+    metric = _pooled_gate_metric(target, "post_lineup")
+    if metric is None:
+        print(f"  ⚠️  LINEAGE NOT RECORDED — gate_v6_vs_v5_{target}_post_lineup.json not found, so "
+              "there is no honest CV to stamp. Run the promotion gate first, or reconcile manually: "
+              "uv run python scripts/ops/reconcile_v6_ledger.py --apply")
+        return
+    metric_name, metric_value = metric
+    # Lazy import — only a real deploy touches Snowflake (keeps --smoke/--no-upload SF-free).
+    from betting_ml.utils.model_registry_tracker import record_promotion
+    try:
+        rec = record_promotion(
+            target=reg_key,
+            new_version="v6",
+            model_name=f"{model_class}_deleaked",
+            artifact_path=s3_uri,
+            feature_columns_path=reg_cols_path,
+            features=int(n_served),
+            training_rows=int(training_rows),
+            training_cutoff="2021+",
+            cv_metric_name=metric_name,
+            cv_metric_value=metric_value,
+            promoted_date=promoted_date,
+            notes=(
+                f"E13.11 de-leaked v6 champion (post_lineup, {n_served}-served {model_class}). "
+                "Recorded by finalize_v6_champion.py after the S3 upload (E9.26b lineage-on-promote "
+                f"wiring). CV {metric_name} {metric_value} = n-weighted pooled challenger on the "
+                "de-leaked purged-CV promotion gate."
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001 — deploy already succeeded; never fail on lineage
+        print(f"  ⚠️  LINEAGE record_promotion FAILED ({type(exc).__name__}: {exc}); reconcile "
+              "manually: uv run python scripts/ops/reconcile_v6_ledger.py --apply")
+        return
+    if rec.already_current:
+        print("  ✓ SF champion-lineage: v6 already current — no-op (idempotent).")
+    else:
+        print(f"  ✓ SF champion-lineage: recorded v6 (deprecated {rec.deprecated_version or '(none)'}).")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Fit + persist the de-leaked v6 champion (E13.11).")
     ap.add_argument("--target", required=True, choices=list(_TARGET_SPEC))
@@ -165,6 +240,13 @@ def main() -> None:
     ap.add_argument("--smoke", action="store_true", help="Fast 400-rows/season sanity fit.")
     ap.add_argument("--n-estimators", type=int, default=None, help="Override ngboost n_estimators.")
     ap.add_argument("--learning-rate", type=float, default=None, help="Override ngboost lr.")
+    ap.add_argument("--no-record-lineage", action="store_true",
+                    help="Skip recording the v6 promotion in the Snowflake champion-lineage table. "
+                         "By default a real post_lineup deploy records it (E9.26b — stop the ledger "
+                         "lagging serving; the Admin freshness panel read `ledger_behind` otherwise).")
+    ap.add_argument("--promoted-date", default=None,
+                    help="ISO date ('YYYY-MM-DD') to stamp as the v6 promotion date on the lineage "
+                         "row (default: today).")
     args = ap.parse_args()
 
     reg_key, tcol, kind, model_class, subdir = _TARGET_SPEC[args.target]
@@ -273,6 +355,15 @@ def main() -> None:
         print(f"    pre_lineup_feature_columns_path: {reg_cols_path}")
         print(f"    pre_lineup_model_version: v6")
     print("────────────────────────────────────────────────────────────────────")
+
+    # ── SF champion-lineage recording (E9.26b) — keep the ledger from lagging serving ──
+    # Only the post_lineup tier records a lineage row: the table is keyed on (target, version),
+    # so the pre_lineup fit is the SAME v6 champion row (a tier variant, not a new lineage entry).
+    # Skipped on --no-upload/--smoke (no real deploy) and --no-record-lineage.
+    if args.tier == "post_lineup" and not (args.no_upload or args.smoke) and not args.no_record_lineage:
+        promoted_date = args.promoted_date or date.today().isoformat()
+        _record_champion_lineage(args.target, reg_key, model_class, s3_uri, reg_cols_path,
+                                 len(served_cols), len(df), promoted_date)
 
 
 if __name__ == "__main__":

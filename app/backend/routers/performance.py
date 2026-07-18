@@ -175,6 +175,16 @@ def get_performance_by_model() -> PerformanceByModelResponse:
 #   avg_clv          = CLV in the direction of the model's pick
 #   clv_positive_pct = % of picks whose side gained closing-line value
 # Brier stays a proper home/over-perspective probability score (orientation-invariant).
+#
+# E9.26b — the tally is computed from mart_clv_labeled_games ALONE (a NARROW, 13-column
+# mart the Lambda reads reliably — the /performance/summary path proves it). The degraded
+# exclusion used to LEFT JOIN the 94-column daily_model_predictions typed view INSIDE this
+# query; that wide-table lakehouse read failed in the Lambda (lakehouse_query swallows the
+# error → [] → the WHOLE page rendered empty every day since ship, incl. AND excl. degraded,
+# because the join was in both paths). Degraded-exclusion is now a SEPARATE best-effort step
+# (see _DEGRADED_GAME_PKS_QUERY): a ~60-row peripheral filter can no longer zero the entire
+# serving surface — if it can't be computed the tally still populates (all games), loudly
+# logged. This is the E11.7 WARN-but-continue tier applied to a serving read.
 _MODEL_METRICS_QUERY = """
 SELECT
     YEAR(m.game_date)                                             AS season,
@@ -187,17 +197,43 @@ SELECT
     AVG(CASE WHEN (m.model_prob >= 0.5) = (m.actual_outcome = 1)
              THEN 1.0 ELSE 0.0 END)                              AS win_rate
 FROM baseball_data.betting.mart_clv_labeled_games m
-LEFT JOIN (
-    SELECT game_pk, MAX(CASE WHEN is_degraded THEN 1 ELSE 0 END) AS is_degraded
-    FROM baseball_data.betting_ml.daily_model_predictions
-    GROUP BY game_pk
-) d ON m.game_pk = d.game_pk
 WHERE m.actual_outcome IS NOT NULL
   {season_filter}
   {degraded_filter}
 GROUP BY 1, 2
 ORDER BY 1, 2
 """
+
+# Best-effort degraded-game lookup. Read NARROWLY (game_pk + is_degraded only) so DuckDB
+# projection-pushdown skips the wide table's 92 other columns and its VARCHAR-ts casts —
+# and run it in its OWN try/except so a failure DEGRADES to "no exclusion" instead of
+# taking the whole page down (E9.26b).
+_DEGRADED_GAME_PKS_QUERY = """
+SELECT DISTINCT game_pk
+FROM baseball_data.betting_ml.daily_model_predictions
+WHERE is_degraded
+"""
+
+
+def _fetch_degraded_game_pks() -> set[int]:
+    """Return the set of game_pks with any degraded prediction, or an EMPTY set if the
+    (fragile, wide) daily_model_predictions lakehouse read fails. Best-effort by design:
+    the caller falls back to including all games so the page still populates (E9.26b)."""
+    try:
+        rows = lakehouse_query(_DEGRADED_GAME_PKS_QUERY)
+    except Exception:  # noqa: BLE001 — belt-and-suspenders; lakehouse_query already swallows
+        logger.warning("degraded-game lookup raised — including all games", exc_info=True)
+        return set()
+    pks = {int(r["GAME_PK"]) for r in rows if r.get("GAME_PK") is not None}
+    if not rows:
+        # Empty could mean "genuinely none degraded" OR a swallowed read error. Either way
+        # we include all games (the honest, non-empty result); log so a real read failure is
+        # visible rather than silently masquerading as "nothing degraded".
+        logger.warning(
+            "degraded-game lookup returned 0 rows — excl-degraded will include all games "
+            "(daily_model_predictions read empty/failed?)"
+        )
+    return pks
 
 
 def _model_cache_is_populated(cached: dict | list | None) -> bool:
@@ -224,31 +260,64 @@ def get_model_metrics(
         return ModelMetricsResponse(**cached)
 
     season_filter = "AND YEAR(m.game_date) = %(season)s" if season else ""
-    degraded_filter = "" if include_degraded else "AND COALESCE(d.is_degraded, 0) = 0"
-    query = _MODEL_METRICS_QUERY.format(
-        season_filter=season_filter,
-        degraded_filter=degraded_filter,
-    )
     params = {"season": season} if season else None
 
+    def _rows_to_markets(rows) -> list[MarketMetrics]:
+        return [
+            MarketMetrics(
+                season=r["SEASON"],
+                market_type=r["MARKET_TYPE"],
+                n_predictions=r.get("N_PREDICTIONS") or 0,
+                brier_score=r.get("BRIER_SCORE"),
+                avg_clv=r.get("AVG_CLV"),
+                clv_positive_pct=r.get("CLV_POSITIVE_PCT"),
+                win_rate=r.get("WIN_RATE"),
+            )
+            for r in rows
+        ]
+
+    # E9.26b — run the RELIABLE base query FIRST (mart_clv_labeled_games alone, no exclusion).
+    # This is the guaranteed-populated tally: it reads only the narrow mart the Lambda reads
+    # fine (the /performance/summary path proves it). It runs BEFORE any daily_model_predictions
+    # read so a failure of that fragile wide read (which historically zeroed the page — and
+    # could even leave the shared DuckDB connection unusable for a follow-on query) can never
+    # take the base tally down with it.
     try:
-        rows = lakehouse_query(query, params)
+        base_rows = lakehouse_query(
+            _MODEL_METRICS_QUERY.format(season_filter=season_filter, degraded_filter=""),
+            params,
+        )
     except Exception as exc:
-        logger.exception("Lakehouse last-resort query failed for /performance/model")
+        logger.exception("Lakehouse base query failed for /performance/model")
         raise HTTPException(status_code=503, detail="Data unavailable") from exc
 
-    markets = [
-        MarketMetrics(
-            season=r["SEASON"],
-            market_type=r["MARKET_TYPE"],
-            n_predictions=r.get("N_PREDICTIONS") or 0,
-            brier_score=r.get("BRIER_SCORE"),
-            avg_clv=r.get("AVG_CLV"),
-            clv_positive_pct=r.get("CLV_POSITIVE_PCT"),
-            win_rate=r.get("WIN_RATE"),
-        )
-        for r in rows
-    ]
+    markets = _rows_to_markets(base_rows)
+
+    # Degraded exclusion is a pure best-effort REFINEMENT applied on top of the base tally.
+    # Only if we successfully learn the degraded game_pks do we re-aggregate excluding them;
+    # if that fetch OR the re-aggregation comes back empty/failing, we keep the base tally
+    # (all games) rather than blanking the page. A ~170-row peripheral filter must never zero
+    # the surface (E11.7 WARN-but-continue tier applied to a serving read).
+    if not include_degraded and markets:
+        degraded_pks = _fetch_degraded_game_pks()
+        if degraded_pks:
+            pk_list = ", ".join(str(int(pk)) for pk in degraded_pks)  # ints from DB — injection-safe
+            try:
+                excl_rows = lakehouse_query(
+                    _MODEL_METRICS_QUERY.format(
+                        season_filter=season_filter,
+                        degraded_filter=f"AND m.game_pk NOT IN ({pk_list})",
+                    ),
+                    params,
+                )
+            except Exception:  # noqa: BLE001 — refinement only; keep the base tally
+                logger.warning("excl-degraded re-aggregation failed — keeping all-games tally", exc_info=True)
+                excl_rows = []
+            if excl_rows:
+                markets = _rows_to_markets(excl_rows)
+            else:
+                logger.warning("excl-degraded re-aggregation empty — keeping all-games tally")
+
     result = ModelMetricsResponse(season=season, markets=markets)
     # INC-31 anti-freeze (E9.26b): only CACHE a populated tally. A degenerate empty result
     # (transient read miss during the export window) is returned to the caller but left
