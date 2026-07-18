@@ -35,6 +35,10 @@ dependencies = [
     # model.predict()). Keep in lockstep with the Dockerfile pins.
     "deltalake==1.6.1",
     "polars==1.42.1",
+    # NFL/NCAAF sports_dbt build tool (NFL-N0.3): dbt-duckdb builds the disjoint DuckDB-native
+    # sports DAG over the S3/Delta lake (separate from MLB's dbt-fusion/Snowflake path). Pulls in
+    # dbt-core + dbt-adapters. Required by the sports_dbt CI gate AND the box sports-dbt build job.
+    "dbt-duckdb>=1.9,<2.0",
     "mlb-statsapi>=0.0.44",
     "streamlit>=1.56.0",
     "python-dotenv>=1.0",

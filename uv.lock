@@ -477,6 +477,7 @@ dependencies = [
     { name = "dagster-postgres" },
     { name = "dagster-snowflake" },
     { name = "dagster-webserver" },
+    { name = "dbt-duckdb" },
     { name = "deltalake" },
     { name = "duckdb" },
     { name = "fastapi" },
@@ -528,6 +529,7 @@ requires-dist = [
     { name = "dagster-postgres" },
     { name = "dagster-snowflake" },
     { name = "dagster-webserver" },
+    { name = "dbt-duckdb", specifier = ">=1.9,<2.0" },
     { name = "deltalake", specifier = "==1.6.1" },
     { name = "duckdb", specifier = ">=1.1.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
@@ -1343,6 +1345,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/cf/d1/54125cdf64932b076a669efd43fb4c1ce79c988b379ae65b6dfc755f4259/dbt_core-1.11.10.tar.gz", hash = "sha256:b261aff38824ccf032d56862fd3453ef176b9c1bb271fd45904fc9258ef0aeae", size = 973077, upload-time = "2026-05-14T10:48:05.12Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3d/7e/a78ca7bc9c19b1a51558586f9f2bbb4cbeb90de39152964f21f649c74847/dbt_core-1.11.10-py3-none-any.whl", hash = "sha256:7f54ac2a55e65f4eac4232653d28305d1258a89c9106d849e24f61ea73ec13db", size = 1061920, upload-time = "2026-05-14T10:48:03.116Z" },
+]
+
+[[package]]
+name = "dbt-duckdb"
+version = "1.10.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dbt-adapters" },
+    { name = "dbt-common" },
+    { name = "dbt-core" },
+    { name = "duckdb" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c5/d3/0f9f6a4de94e0f95dcfabbba5e8ef7670de695483345edd9e5b36e93d024/dbt_duckdb-1.10.1.tar.gz", hash = "sha256:5d6df1589d4ba21fe20ac08454a32763d3263798c9f5914280eabd1dc285cbc0", size = 145907, upload-time = "2026-02-17T17:29:04.283Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c5/26/0ce2b1aeecdd1a18a9fac6f02d08f60c95944f036866f3fe37146298d4e4/dbt_duckdb-1.10.1-py3-none-any.whl", hash = "sha256:90658ecb367082786c5ea2ffbf9e35bb4116fa5ad1bc2f287c4dc1f3984bafa1", size = 85089, upload-time = "2026-02-17T17:29:03.117Z" },
 ]
 
 [[package]]
