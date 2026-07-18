@@ -31,3 +31,9 @@ models:
       marts:
         +schema: ncaaf_marts
         +materialized: table
+    nfl:
+      staging:
+        +schema: nfl_staging
+        +materialized: view
+      # marts: (N0.3 adds the first nfl mart + re-enables this config block — ports the
+      # `refined` IP: fct_player_week, NGS satellites, mart_player_season, dim_nfl_betting)

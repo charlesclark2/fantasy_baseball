@@ -1,0 +1,75 @@
+version: 2
+
+models:
+  - name: stg_nfl_schedules
+    description: >
+      The NFL game spine (nflverse schedules/games) — one row per game, 1999–2026, sport-tagged.
+      Carries nflverse's FREE consensus betting lines + the cross-ID game-key rosetta. Reads the
+      typed raw Delta table via the nfl_delta() macro (delta_scan) — plain renames, no
+      json_extract (the NFL typed divergence from NCAAF).
+    columns:
+      - name: game_id
+        description: nflverse game id (e.g. 2024_01_KC_BAL).
+        data_tests: [not_null, unique]
+      - name: season
+        data_tests: [not_null]
+      - name: sport
+        data_tests: [not_null]
+
+  - name: stg_nfl_player_week
+    description: >
+      The core weekly player fact (nflverse stats_player_week, 145 cols → curated projection).
+      The P1 fantasy/props backbone (fct_player_week port target). season_type disambiguates
+      REG (1–18) from POST (19–22).
+    columns:
+      - name: player_id
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+      - name: sport
+        data_tests: [not_null]
+
+  - name: stg_nfl_snap_counts
+    description: >
+      Player game-level snap usage (nflverse snap_counts) — ⭐ the all-position usage feed NCAAF
+      lacks free. Keyed pfr_player_id + game_id. 2012+.
+    columns:
+      - name: pfr_player_id
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+
+  - name: stg_nfl_injuries
+    description: >
+      Weekly injury report/practice status (nflverse injuries) — ⭐ the net-new NFL status feed
+      (CLV moves on report_status). Keyed gsis_id + season/week. 2009+.
+    columns:
+      - name: gsis_id
+        data_tests: [not_null]
+      - name: report_status
+        description: Out / Doubtful / Questionable / (null). Free-text, not enum-constrained upstream.
+
+  - name: stg_nfl_players
+    description: >
+      The NFL player ID universe + cross-ID rosetta (nflverse players). NOT season-grained
+      (season=0). The dimension every fact joins to + the props name→gsis resolver bridge (N0.4).
+    columns:
+      - name: gsis_id
+        description: NFL player key. Non-null + unique in the deduped ID universe.
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+
+  - name: stg_nfl_odds
+    description: >
+      Flattened Odds API NFL game lines — one row per (event, bookmaker, market, outcome).
+      h2h/spreads/totals across the 11 US books incl. Bovada. The one JSON feed in NFL (raw_json
+      Delta); reads via nfl_delta(). Intraday cadence in-season (N0.4).
+    columns:
+      - name: event_id
+        data_tests: [not_null]
+      - name: market
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["h2h", "spreads", "totals"]
