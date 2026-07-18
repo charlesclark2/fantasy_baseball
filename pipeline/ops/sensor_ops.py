@@ -227,13 +227,14 @@ def lineup_intraday_s3_feature_rebuild(context: OpExecutionContext) -> None:
         failed_step = None
         context.log.info("Intraday S3 W8b feature parquet regenerated — ext tables refreshed.")
     except Exception as e:  # ALERT-loud-but-continue (mirror tier)
-        # INC-32 (2026-07-18): this op "works manually but fails silently in organic runs" —
-        # the mirror-tier except only did context.log.warning, which nobody watches, so an
-        # organic-run failure sat INVISIBLE while post_lineup coverage silently degraded (7/17:
-        # 0.833 < the 0.85 INC-17 gate). A mirror-tier op must still be ALERT-LOUD per E11.7 —
-        # so PAGE (SNS email) AND record WHICH step failed, so the next organic failure is
-        # diagnosable on a live slate instead of dying in op logs. Still NON-RAISING (predict
-        # must run on the last-good S3 features; the next sensor tick retries).
+        # INC-32 (2026-07-18): the mirror-tier except only did context.log.warning, which nobody
+        # watches — so a failure here degrades post_lineup coverage SILENTLY. (The 7/17 0.833 <
+        # 0.85 INC-17 miss was root-caused to the sensor-daemon stop + the dbt-runner wedge, NOT
+        # this op — the 4 rebuild scripts verified HEALTHY on the box, incl. region-robust DuckDB
+        # S3 reads. But a transient S3/SF/OOM here would still hide unseen.) A mirror-tier op must
+        # be ALERT-LOUD per E11.7 — so PAGE (SNS email) AND record WHICH step failed, so the next
+        # failure is diagnosable on a live slate instead of dying in op logs. Still NON-RAISING
+        # (predict must run on the last-good S3 features; the next sensor tick retries).
         msg = (
             f"lineup_intraday_s3_feature_rebuild FAILED at step {failed_step!r} ({e}) — CONTINUING "
             f"so the post-lineup re-score still runs on the last-good S3 features. A PERSISTENT "
