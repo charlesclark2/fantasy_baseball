@@ -55,6 +55,7 @@ from .handler import _parse_seasons, load_env, run_ingest
 from .sources import (
     NFL_GAME_LINE_MARKETS,
     NFL_PROP_MARKETS,
+    NFL_PROPS_HISTORICAL_FLOOR,
     ODDS_ON_DEMAND,
     SOURCES,
     build_ctx,
@@ -62,8 +63,10 @@ from .sources import (
 
 log = logging.getLogger(__name__)
 
-# The Odds-API historical floor for NFL (N0.1 §3 — 6-season CLV window). The CURRENT-season
-# live feeds (odds_nfl / odds_nfl_props) are cadence-driven, not backfilled here.
+# The Odds-API historical floors for NFL (probed live 2026-07-18): FEATURED game lines (h2h/
+# spreads/totals) reach 2020; player PROPS only 2023 (`NFL_PROPS_HISTORICAL_FLOOR` — additional-
+# markets collection starts ~2023-05, so a pre-2023 season 422s on every event). The CURRENT-
+# season live feeds (odds_nfl / odds_nfl_props) are cadence-driven, not backfilled here.
 DEFAULT_HIST_SEASONS = "2020-2024"
 CREDITS_PER_CALL_PER_MARKET_REGION = 10  # Odds-API cost model: 10 × #markets × #regions per call
 
@@ -83,6 +86,11 @@ def _estimate_credits(ctx, source: str, seasons, weeks, regions: str, prop_marke
             cr = n_kicks * CREDITS_PER_CALL_PER_MARKET_REGION * n_markets * n_regions
             per_season[yr] = {"kickoff_snapshots": n_kicks, "markets": n_markets, "credits": cr}
         elif source == "odds_nfl_props_historical":
+            if yr < NFL_PROPS_HISTORICAL_FLOOR:
+                # below the props floor → no data exists (would 422); skipped whole, 0 credits.
+                per_season[yr] = {"below_props_floor": NFL_PROPS_HISTORICAL_FLOOR,
+                                  "note": "no historical props pre-2023 → SKIPPED", "credits": 0}
+                continue
             # per-event props call (10×markets×regions) is the dominant cost; #events ≈ #games.
             n_games = _season_game_count(ctx, yr, weeks=weeks)
             n_markets = len(prop_markets)

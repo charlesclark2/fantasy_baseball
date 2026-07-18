@@ -265,6 +265,21 @@ def test_props_historical_dedups_and_pins_own_commence(monkeypatch):
     assert len(out) == 2
 
 
+def test_props_historical_below_floor_skips_without_calls(monkeypatch):
+    # Player-prop historical coverage starts season 2023 (Odds-API additional markets ~2023-05);
+    # a pre-floor season must skip WHOLE (no events-list / no per-event 422 grinding, 0 credits).
+    calls: list = []
+    _patch_requests(monkeypatch, calls, lambda u, p: _FakeResp([]))
+    # guard even if _season_kickoffs would return something — the floor check precedes it
+    monkeypatch.setattr(src, "_season_kickoffs",
+                        lambda ctx, year, weeks=None: (_ for _ in ()).throw(
+                            AssertionError("must not enumerate kickoffs below the props floor")))
+    ctx = src.build_ctx(odds_key="k", sleep_seconds=0)
+    assert src.NFL_PROPS_HISTORICAL_FLOOR == 2023
+    assert src._odds_nfl_props_historical(ctx, 2022) == []   # below floor → empty, no calls
+    assert calls == []
+
+
 def test_season_kickoffs_et_to_utc_distinct(monkeypatch):
     # gameday(ET date) + gametime(ET HH:MM) → distinct UTC kickoff datetimes (DST-correct).
     # Two 13:00 ET games collapse to ONE distinct kickoff; a null gametime is skipped.

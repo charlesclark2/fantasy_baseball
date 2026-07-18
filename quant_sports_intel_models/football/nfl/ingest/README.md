@@ -67,7 +67,13 @@ NEVER pulls them (no accidental Odds-API credit burn); they are named explicitly
 |---|---|---|---|---|
 | `odds_nfl_props` | `/events/{id}/odds` (live) | CURRENT player props (pass/rush/rec yds+tds+att+receptions+anytime-TD) | live only | `nfl/raw/odds_nfl_props/` |
 | `odds_nfl_historical` | `/historical/.../odds` | CLOSING game lines (h2h/spread/total) — the CLV benchmark | **2020** | `nfl/raw/odds_nfl_historical/` |
-| `odds_nfl_props_historical` | `/historical/.../events/{id}/odds` | CLOSING player props (CLV/props backtest) | **2020** | `nfl/raw/odds_nfl_props_historical/` |
+| `odds_nfl_props_historical` | `/historical/.../events/{id}/odds` | CLOSING player props (CLV/props backtest) | **2023** | `nfl/raw/odds_nfl_props_historical/` |
+
+⚠️ **Historical floors differ by market class** (probed live 2026-07-18): FEATURED game lines
+(h2h/spread/total) reach **2020**, but player **PROPS only 2023** — the Odds API began collecting
+additional markets ~2023-05, so a pre-2023 NFL season 422s on every per-event props call. The
+props fetcher skips a below-`NFL_PROPS_HISTORICAL_FLOOR` season WHOLE (clean empty slice, no
+wasted credits). So the props backfill is effectively **2023–2024** even if you pass `2020-2024`.
 
 The live game lines (`odds_nfl`) + scores (`odds_nfl_scores`) already landed in N0.2 stay the
 recurring cheap feeds.
