@@ -17,6 +17,7 @@ from betting_ml.monitoring.monitor_health import (
     CRITICAL_SENSORS,
     REQUIRED_INTRADAY_FLAGS,
     flag_problems,
+    SENSOR_TICK_CEILING_OVERRIDES,
     stale_running_sensor_ticks,
     stale_sensor_ticks,
     stopped_critical_instigators,
@@ -81,13 +82,36 @@ def test_no_stopped_instigators_clean():
 
 
 # ── INC-32 stale-tick detector (the sensor-daemon-wedged-mid-slate mode) ──────────
-_A_CRITICAL = sorted(CRITICAL_SENSORS)[0]  # any critical sensor name
+# A continuously-ticking critical sensor (NOT in the once-daily override map — sorted[0] is
+# clv_alert_sensor, which IS overridden, so pick the first non-overridden one).
+_A_CRITICAL = next(
+    n for n in sorted(CRITICAL_SENSORS) if n not in SENSOR_TICK_CEILING_OVERRIDES
+)
 
 
 def test_stale_sensor_tick_flagged_over_ceiling():
     # 90 min since last tick, ceiling 60 min → flagged
     problems = stale_sensor_ticks({_A_CRITICAL: 90 * 60}, max_age_s=3600)
     assert any(_A_CRITICAL in p and "STALE" in p for p in problems)
+
+
+# ── 2026-07-19 per-sensor ceiling overrides (once-daily sensors false-paged daily) ──
+def test_once_daily_sensor_not_flagged_at_19h():
+    """clv/model_health tick once per day by design (minimum_interval=86400): a ~19h age is
+    NORMAL and must not page — this exact case fired a false CRITICAL two days running."""
+    ages = {"clv_alert_sensor": 1152 * 60, "model_health_alert_sensor": 1152 * 60}
+    assert stale_sensor_ticks(ages, max_age_s=3600) == []
+
+
+def test_once_daily_sensor_flagged_past_override_ceiling():
+    """A once-daily sensor silent past its 30h ceiling IS a real wedge → flagged."""
+    problems = stale_sensor_ticks({"clv_alert_sensor": 31 * 3600}, max_age_s=3600)
+    assert any("clv_alert_sensor" in p and "STALE" in p for p in problems)
+
+
+def test_override_sensors_are_critical_sensors():
+    """Every override key must be a real critical sensor (catch renames going stale)."""
+    assert set(SENSOR_TICK_CEILING_OVERRIDES) <= CRITICAL_SENSORS
 
 
 def test_fresh_sensor_tick_not_flagged():
