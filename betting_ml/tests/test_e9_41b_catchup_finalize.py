@@ -151,3 +151,57 @@ def test_old_catchup_dbt_rebuild_op_is_removed():
     assert "catchup_dbt_rebuild" not in jobs_imports_calls, (
         "sensor_jobs.py must reference catchup_refresh_ext_tables, not catchup_dbt_rebuild"
     )
+
+
+# --------------------------------------------------------------------------
+# E9.41 (2026-07-19) — the settled-outcome mirror-freshness fix. mart_clv_labeled_games
+# was structurally a day stale (daily W6 lk6 builds it BEFORE the W5 mart_game_results
+# refresh at lk8), so the featured recap + /performance never settled yesterday. The
+# fix: a --clv-labels-only rebuild after mart_game_results is fresh (daily lk8 + the
+# catch-up), and the catch-up rebuilds the outcome MIRROR parquets so late games settle.
+# --------------------------------------------------------------------------
+
+_DAILY_OPS = _REPO / "pipeline" / "ops" / "daily_ingestion_ops.py"
+_RUNW1 = _REPO / "scripts" / "run_w1_lakehouse.py"
+
+
+def _string_lits(fn: ast.FunctionDef) -> set[str]:
+    return {n.value for n in ast.walk(fn) if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+
+
+def test_runw1_has_clv_labels_only_routing():
+    """run_w1_lakehouse must define the --clv-labels-only build + its model list."""
+    src = _RUNW1.read_text()
+    assert "clv_labels_only" in src and "--clv-labels-only" in src
+    assert "W6_CLV_LABEL_MODELS" in src
+    fn = _func(_tree(_RUNW1), "_build_clv_labels")
+    # It must register the mart_closing_line_value PARQUET (not re-derive its SQL) + build the marts.
+    assert "_register_s3_glob_views" in {
+        n.func.id for n in ast.walk(fn) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+    }
+
+
+def test_daily_lk8_rebuilds_clv_after_game_results():
+    """lakehouse_spine_odds_bridge_op must run --clv-labels-only AFTER --w5-group-a (mart_game_results
+    fresh) so the CLV-label mirror is current for the writer + /performance."""
+    fn = _func(_tree(_DAILY_OPS), "lakehouse_spine_odds_bridge_op")
+    body = _DAILY_OPS.read_text()
+    seg = body[body.index("def lakehouse_spine_odds_bridge_op"):]
+    seg = seg[: seg.index("\n@op") if "\n@op" in seg else len(seg)]
+    assert "--w5-group-a-only" in seg and "--clv-labels-only" in seg
+    assert seg.index("--w5-group-a-only") < seg.index("--clv-labels-only"), (
+        "CLV-label rebuild must come AFTER the mart_game_results (--w5-group-a) refresh"
+    )
+    assert "--w6-clv" in seg  # ext-table refresh for the CLV marts
+
+
+def test_catchup_rebuilds_outcome_mirrors():
+    """catchup_rebuild_outcome_mirrors must rebuild mart_game_results (--w5-group-a) then the
+    CLV-label mirrors (--clv-labels-only), and be wired into the catch-up job before the posteriors."""
+    fn = _func(_tree(_OPS), "catchup_rebuild_outcome_mirrors")
+    lits = _string_lits(fn)
+    assert "--w5-group-a-only" in lits and "--clv-labels-only" in lits
+    # Wired into the job.
+    job = _func(_tree(_JOBS), "statcast_catchup_job")
+    called = {n.func.id for n in ast.walk(job) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    assert "catchup_rebuild_outcome_mirrors" in called
