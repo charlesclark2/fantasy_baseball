@@ -14,6 +14,12 @@ Secrets are never printed.
 Usage:
     python3 scripts/ops/dagster_runs.py [job] [limit]
     # e.g. python3 scripts/ops/dagster_runs.py lineup_monitor_job 12
+
+    # INC-32 run-stall diagnosis — per-OP durations of the most recent run, slowest first
+    # (finds which op ate the predict→serve tail):
+    python3 scripts/ops/dagster_runs.py daily_ingestion_job --steps
+    # a specific run:
+    python3 scripts/ops/dagster_runs.py daily_ingestion_job --steps <runId>
 """
 import base64
 import datetime
@@ -22,8 +28,12 @@ import os
 import sys
 import urllib.request
 
-JOB = sys.argv[1] if len(sys.argv) > 1 else "daily_ingestion_job"
-LIMIT = int(sys.argv[2]) if len(sys.argv) > 2 else 10
+_ARGV = [a for a in sys.argv[1:] if a != "--steps"]
+STEPS_MODE = "--steps" in sys.argv
+JOB = _ARGV[0] if len(_ARGV) > 0 else "daily_ingestion_job"
+# In --steps mode the 2nd positional is an optional runId; otherwise it's the run LIMIT.
+STEP_RUN_ID = _ARGV[1] if (STEPS_MODE and len(_ARGV) > 1) else None
+LIMIT = int(_ARGV[1]) if (not STEPS_MODE and len(_ARGV) > 1) else 10
 ENDPOINT = os.environ.get("DAGSTER_GRAPHQL_URL", "https://dagster.credencesports.com/graphql")
 
 
@@ -42,10 +52,11 @@ def _headers() -> dict:
 
 
 def main() -> None:
+    # stepStats carries per-op start/end so --steps can attribute wall-clock (INC-32 run-stall).
     query = (
         "query($f: RunsFilter, $n: Int){ runsOrError(filter:$f, limit:$n){ __typename "
         "... on Runs { results { runId status startTime endTime "
-        "stepStats { stepKey status } tags { key value } } } "
+        "stepStats { stepKey status startTime endTime } tags { key value } } } "
         "... on PythonError { message } } }"
     )
     body = json.dumps({"query": query, "variables": {"f": {"pipelineName": JOB}, "n": LIMIT}}).encode()
@@ -59,7 +70,32 @@ def main() -> None:
     def ts(x):
         return datetime.datetime.fromtimestamp(x).strftime("%Y-%m-%d %H:%M") if x else "—"
 
+    def tsp(x):
+        return datetime.datetime.fromtimestamp(x).strftime("%H:%M:%S") if x else "—"
+
     res = node["results"]
+
+    if STEPS_MODE:
+        run = None
+        if STEP_RUN_ID:
+            run = next((r for r in res if r["runId"].startswith(STEP_RUN_ID)), None)
+        elif res:
+            run = res[0]  # most recent
+        if run is None:
+            sys.exit(f"No matching run for {JOB} (runId={STEP_RUN_ID}).")
+        print(f"== per-op durations: {JOB}  [{run['runId']}]  {run['status']}  "
+              f"start {ts(run.get('startTime'))} ==")
+        rows = []
+        for s in run.get("stepStats") or []:
+            st, en = s.get("startTime"), s.get("endTime")
+            dur = (en - st) if (st and en) else None
+            rows.append((dur, s["stepKey"], s.get("status"), st, en))
+        # Slowest first; unfinished (dur=None) last.
+        rows.sort(key=lambda x: (x[0] is None, -(x[0] or 0)))
+        for dur, key, status, st, en in rows:
+            dstr = f"{dur/60:6.1f} min" if dur is not None else "   —    "
+            print(f"  {dstr}  {status:<11}  {tsp(st)}→{tsp(en)}  {key}")
+        return
     print(f"== last {len(res)} runs of {JOB} ==")
     for r in res:
         steps = r.get("stepStats") or []
