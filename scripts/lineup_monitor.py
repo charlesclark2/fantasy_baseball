@@ -7,7 +7,11 @@ trigger a dbt feature rebuild.
 
 Logic:
   1. Query stg_statsapi_lineups_wide for today's games where both home and
-     away lineups are confirmed (slot_1_player_id populated for both sides).
+     away lineups are posted, and apply the INC-32 readiness gate: a game is
+     only eligible to score once BOTH sides carry a COMPLETE 9-slot order (or,
+     best-effort, a still-incomplete lineup within the SLA window). Games with
+     a partial order are HELD and retried on the next sensor tick, so a
+     re-score never freezes on a half-posted lineup (select_ready_games).
   2. Compare against lineup_monitor_state to find games not yet triggered.
   3. For already-triggered games, check if the starting pitcher changed —
      if so, re-trigger so updated features and predictions are produced.
@@ -31,7 +35,7 @@ Usage:
 
 import logging
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 import snowflake.connector
@@ -40,6 +44,64 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
 TASK = "lineup_monitor"
+
+# INC-32 (2026-07-19) — PER-GAME LINEUP-READINESS GATE + retry.
+# ROOT CAUSE of the 0.811 post_lineup coverage (14/15 games' lineup block dead on 7/19):
+# a RE-SCORE-TOO-EARLY race. The old detection was "both sides have posted SOME lineup"
+# (stg_statsapi_lineups_wide keeps a row per side as soon as slot_1 is non-null, and the
+# monitor only required COUNT(DISTINCT home_away)=2). MLB posts a batting order slot-by-slot,
+# and the capture→flatten→lineups_wide chain can surface a PARTIAL order (e.g. slots 1–4)
+# minutes before the full 9. Firing the re-score on that partial state rebuilds the SCD-2 /
+# aggregator from an incomplete lineup → the served lineup block (avg_eb_woba etc.) is dead.
+# And post_lineup is ONE-AND-DONE: once a game has a post_lineup row it is never re-triggered
+# (Step 2b only re-fires games MISSING a post_lineup row), so that first degraded attempt is
+# frozen forever — the actual defect.
+# FIX: a game is only "ready" to score once BOTH sides carry a COMPLETE 9-slot lineup. An
+# incomplete game is HELD (not triggered, not recorded in lineup_monitor_state, no post_lineup
+# row) so it stays eligible and the sensor's next tick (~10 min in the active window) retries —
+# by which time the full order has landed. SLA safety valve: if a lineup is still incomplete
+# within _SLA_FALLBACK_MINUTES of first pitch we score it best-effort anyway, so the readiness
+# gate can never make us BLOW the Epic A1 "post_lineup >= 30 min pre-pitch" SLA on the rare
+# never-completes-to-9 game.
+_FULL_LINEUP_SLOTS = 9
+_SLA_FALLBACK_MINUTES = 40.0
+
+
+def select_ready_games(candidates, first_pitch, now):
+    """PURE readiness-gate decision (unit-tested; no IO).
+
+    candidates: {game_pk: {"home": starter_id|None, "away": starter_id|None,
+                           "min_slots_filled": int}}  — one entry per game whose BOTH sides
+        have posted at least a partial lineup (COUNT(DISTINCT home_away)=2). min_slots_filled
+        is the MIN over the two sides of how many of the 9 batting slots are filled, so it is
+        9 only when BOTH sides carry a complete order.
+    first_pitch: {game_pk: tz-aware datetime | None} — first-pitch instant (UTC).
+    now: tz-aware datetime (UTC).
+
+    Returns (ready, held):
+      ready: {game_pk: (home_starter_id, away_starter_id)} — games safe to trigger/score.
+      held:  [(game_pk, min_slots_filled, reason)] — games withheld this tick (retry next tick).
+    """
+    ready: dict[int, tuple] = {}
+    held: list[tuple] = []
+    for pk, info in candidates.items():
+        filled = info.get("min_slots_filled") or 0
+        pair = (info.get("home"), info.get("away"))
+        if filled >= _FULL_LINEUP_SLOTS:
+            ready[pk] = pair
+            continue
+        # Incomplete lineup — only score best-effort if we're up against the SLA deadline.
+        fp = first_pitch.get(pk)
+        mins = None
+        if fp is not None:
+            mins = (fp - now).total_seconds() / 60.0
+        if mins is not None and mins <= _SLA_FALLBACK_MINUTES:
+            ready[pk] = pair
+            held.append((pk, filled, f"SLA-fallback: {filled}/9 slots, first pitch in {mins:.0f} min"))
+        else:
+            when = "unknown" if mins is None else f"{mins:.0f} min"
+            held.append((pk, filled, f"held: {filled}/9 slots, first pitch in {when}"))
+    return ready, held
 
 
 def get_connection() -> snowflake.connector.SnowflakeConnection:
@@ -54,6 +116,36 @@ def get_connection() -> snowflake.connector.SnowflakeConnection:
         _sys.path.insert(0, _root)
     from betting_ml.utils.data_loader import get_snowflake_connection
     return get_snowflake_connection()
+
+
+def _first_pitch_by_game(today_iso: str) -> dict[int, datetime | None]:
+    """Per-game first-pitch instant (UTC) for today's regular-season slate, read from the S3
+    lakehouse (stg_statsapi_games) via DuckDB — the same proven, Snowflake-free read the
+    lineup sensor uses for its cadence gate. Used ONLY for the readiness gate's SLA safety
+    valve (see select_ready_games); a lookup miss returns {} (fail-open → no SLA fallback,
+    completeness gate still applies). game_date is stored ISO-VARCHAR in the lakehouse
+    (INC-23), so it is coerced via the shared to_utc_datetime helper. Postponed rows are
+    EXCLUDED so a rained-out game's past first-pitch instant (MLB reuses the gamePk for the
+    makeup) can't spuriously trip the SLA fallback (2026-07-19 postponed-DH landmine)."""
+    try:
+        from betting_ml.utils.lakehouse_monitor import duck, lh, to_utc_datetime
+    except Exception as e:  # noqa: BLE001 — the SLA fallback is optional; never break the monitor
+        log.warning("first-pitch lakehouse import failed (%s); SLA fallback disabled this tick.", e)
+        return {}
+    conn = duck()
+    try:
+        rows = conn.execute(
+            f"SELECT game_pk, MIN(game_date) FROM read_parquet('{lh('stg_statsapi_games')}', "
+            f"union_by_name=true) WHERE official_date = ? AND game_type = 'R' "
+            f"AND coalesce(detailed_state, '') != 'Postponed' GROUP BY game_pk",
+            [today_iso],
+        ).fetchall()
+    except Exception as e:  # noqa: BLE001
+        log.warning("first-pitch lakehouse read failed (%s); SLA fallback disabled this tick.", e)
+        return {}
+    finally:
+        conn.close()
+    return {int(r[0]): to_utc_datetime(r[1]) for r in rows}
 
 
 def write_github_output(key: str, value: str) -> None:
@@ -75,17 +167,34 @@ def main() -> None:
     cur = conn.cursor()
 
     try:
-        # Step 1 — confirmed games (both batting lineups posted) with current probable pitchers.
-        # In the universal DH era pitchers don't appear in batting lineups, so we join
-        # stg_statsapi_probable_pitchers to track starter changes separately.
+        # Step 1 — candidate games (both batting lineups posted) with current probable pitchers
+        # AND per-game lineup COMPLETENESS. In the universal DH era pitchers don't appear in
+        # batting lineups, so we join stg_statsapi_probable_pitchers to track starter changes
+        # separately. min_slots_filled = the MIN over the two sides of how many of the 9 batting
+        # slots are non-null, so it is 9 only when BOTH sides carry a complete order — the
+        # INC-32 readiness-gate signal (see select_ready_games): a re-score must not fire on a
+        # partially-posted lineup.
         cur.execute(
             """
             SELECT
                 l.game_pk,
                 p_home.probable_pitcher_id AS home_starter_id,
-                p_away.probable_pitcher_id AS away_starter_id
+                p_away.probable_pitcher_id AS away_starter_id,
+                l.min_slots_filled
             FROM (
-                SELECT game_pk
+                SELECT
+                    game_pk,
+                    MIN(
+                        (CASE WHEN slot_1_player_id IS NOT NULL THEN 1 ELSE 0 END)
+                      + (CASE WHEN slot_2_player_id IS NOT NULL THEN 1 ELSE 0 END)
+                      + (CASE WHEN slot_3_player_id IS NOT NULL THEN 1 ELSE 0 END)
+                      + (CASE WHEN slot_4_player_id IS NOT NULL THEN 1 ELSE 0 END)
+                      + (CASE WHEN slot_5_player_id IS NOT NULL THEN 1 ELSE 0 END)
+                      + (CASE WHEN slot_6_player_id IS NOT NULL THEN 1 ELSE 0 END)
+                      + (CASE WHEN slot_7_player_id IS NOT NULL THEN 1 ELSE 0 END)
+                      + (CASE WHEN slot_8_player_id IS NOT NULL THEN 1 ELSE 0 END)
+                      + (CASE WHEN slot_9_player_id IS NOT NULL THEN 1 ELSE 0 END)
+                    ) AS min_slots_filled
                 FROM baseball_data.betting.stg_statsapi_lineups_wide
                 WHERE official_date = %s::date
                 GROUP BY game_pk
@@ -98,10 +207,34 @@ def main() -> None:
             """,
             [today],
         )
-        confirmed: dict[int, tuple[int | None, int | None]] = {
-            row[0]: (row[1], row[2]) for row in cur.fetchall()
+        candidates: dict[int, dict] = {
+            row[0]: {"home": row[1], "away": row[2], "min_slots_filled": row[3]}
+            for row in cur.fetchall()
         }
-        log.info("Confirmed games today: %d", len(confirmed))
+        log.info("Candidate games today (both sides posted): %d", len(candidates))
+
+        # INC-32 readiness gate — only games whose BOTH sides carry a COMPLETE 9-slot lineup are
+        # eligible to trigger/score (or, best-effort, a still-incomplete game within the SLA
+        # window). Held games are simply not in `confirmed` this tick, so they are neither
+        # recorded in lineup_monitor_state nor scored — the sensor's next tick retries them once
+        # the full order lands. This is the fix for the one-and-done partial-lineup freeze.
+        first_pitch = _first_pitch_by_game(today)
+        ready, held = select_ready_games(candidates, first_pitch, datetime.now(timezone.utc))
+        confirmed: dict[int, tuple[int | None, int | None]] = ready
+        log.info("Ready (complete-lineup) games today: %d", len(confirmed))
+        if held:
+            log.info(
+                "Held %d game(s) with incomplete lineups (readiness gate; will retry next tick): %s",
+                len(held), held,
+            )
+            # Loud line for any SLA-fallback score (an incomplete lineup scored to protect the SLA).
+            for pk, filled, reason in held:
+                if reason.startswith("SLA-fallback"):
+                    log.warning(
+                        "[ALERT] game_pk=%d scored with INCOMPLETE lineup — %s. Full order never "
+                        "reached lineups_wide before the Epic A1 SLA deadline; investigate the "
+                        "schedule capture→flatten chain if this recurs.", pk, reason,
+                    )
 
         # Step 2 — games already triggered today, with stored starter IDs
         cur.execute(
