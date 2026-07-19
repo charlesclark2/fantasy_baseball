@@ -82,3 +82,59 @@ models:
         data_tests: [not_null]
       - name: team_talent
         description: 247Sports team talent composite (level). Null for 2014 and a couple of 2025 expansion teams (left-joined).
+
+  - name: ncaaf_team_coaching_change
+    description: >
+      The per-team-season HEAD-COACHING-continuity signal (NCAAF-P0.5) — the game model's
+      coaching-change input. ONE row per (season, team), FBS universe (spine = CFBD returning
+      production, same as P0.4). FREE from CFBD /coaches. Carries: HC identity + tenure,
+      year-over-year HC-change flag, mid-season-change flag, and ⭐ the coach's PRIOR SP+
+      track record (career-to-date avg + most-recent prior season) so a new coach's expected
+      impact ≈ their history, not just a binary flag. ⭐ Leakage-safe / point-in-time: HC
+      identity + change/tenure are known pre-season; the prior-SP+ profile aggregates STRICTLY
+      over seasons before `season` (never the current season's outcome). Feeds P1.3 (coaching
+      feature block). The OC/DC coordinator layer is a GAP not in CFBD (no free API) —
+      documented + DEFERRED (ncaaf_data_inventory.md §11), NOT a dependency here.
+      Coverage caveats: 2014 is the history floor → hc_change_from_prev is NULL and
+      tenure/prior-SP+ are left-censored there (is_hc_history_censored flags it); a first-time
+      HC has NULL prior-SP+ (is_first_time_hc); ~7% of cells had a mid-season change
+      (hc_midseason_change; coach of record = the most-games coach).
+    columns:
+      - name: team_season_key
+        description: season||'-'||team grain surrogate — one row per team per season (the grain contract).
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+      - name: team
+        data_tests: [not_null]
+      - name: head_coach
+        description: The coach of record (most games that season). Null only if /coaches lacks the team-season (rare — a spine team with no coach row).
+      - name: hc_change_from_prev
+        description: >
+          True when this season's HC differs from last season's HC. NULL at the 2014 history
+          floor (no prior year — unknown, not false). Populated for every later season with a
+          prior-year coach of record.
+        data_tests:
+          - not_null:
+              config:
+                where: "season > 2014 and prev_head_coach is not null"
+          - accepted_values:
+              arguments:
+                values: [true, false]
+      - name: hc_tenure_years
+        description: Consecutive seasons the coach of record has led this team through `season` (left-censored at the 2014 floor). ≥ 1.
+      - name: is_first_time_hc
+        description: True when the coach has NO prior head-coaching season in-window (2014+) → prior-SP+ columns are NULL by absence, not a real zero.
+        data_tests: [not_null]
+      - name: hc_prior_seasons
+        description: Count of the coach's prior head-coaching seasons in-window (any school). 0 = first-time/censored.
+        data_tests: [not_null]
+      - name: hc_prior_sp_overall_avg
+        description: The coach's career-to-date average SP+ overall (strictly seasons before `season`; leakage-safe). NULL for a first-time HC.
+      - name: hc_recent_sp_overall
+        description: The coach's most-recent prior season's SP+ overall (freshest track-record read; leakage-safe). NULL for a first-time HC.
+      - name: is_hc_history_censored
+        description: True for season=2014 (the backfill floor left-censors change/tenure/prior history).
+        data_tests: [not_null]

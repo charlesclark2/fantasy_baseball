@@ -1,6 +1,6 @@
 # NCAAF raw lake tables (dbt source reference)
 
-The 24 locked Phase-0 raw tables (`ncaaf_data_inventory.md §8`) land as **Delta** tables at
+The 24 locked Phase-0 raw tables (`ncaaf_data_inventory.md §8`) + `coaches` (added by P0.5) land as **Delta** tables at
 `s3://<lake_bucket>/ncaaf/raw/<source>/` (season is a Delta partition). Staging models read
 them via the `{{ ncaaf_delta('<source>') }}` macro rather than dbt `source()` external
 tables, because the raw tier is Delta (`delta_scan`) not a parquet glob, and the macro also
@@ -32,6 +32,7 @@ routes to a local-FS Delta tree for offline dev (`--vars 'lake_root: /path'`).
 | 22 | nflverse_draft_picks | nflverse release parquet | player | season | seasonal |
 | 23 | nflverse_combine | nflverse release parquet | player | season | seasonal |
 | 24 | nflverse_players | nflverse release parquet | player | (season=0) | seasonal |
+| 25 | coaches | CFBD /coaches (year-only; HC history w/ SP+ splits, P0.5) | team | season | seasonal |
 
 Backfill window **2014–2025** (player-advanced floor). Cost: CFBD $10/mo (Tier 3) · Odds $0
 incremental · nflverse $0.

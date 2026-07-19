@@ -555,6 +555,7 @@ def get_featured_pick() -> FeaturedPickResponse:
                 matchup=f"{away} @ {home}",
                 market_type=yr.get("MARKET_TYPE") or "",
                 outcome="Won" if outcome_flag == 1 else "Lost",
+                status="win" if outcome_flag == 1 else "loss",
             )
 
     if rows:

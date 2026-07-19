@@ -97,6 +97,25 @@ models:
       - name: sport
         data_tests: [not_null]
 
+  - name: stg_ncaaf_coaches
+    description: >
+      Flattened CFBD /coaches (NCAAF-P0.5) — the head-coach history, EXPLODED to one row per
+      (coach, team, season). Carries each coach-year's SP+ splits (sp_overall/sp_offense/
+      sp_defense) — the raw material for the coaching-change mart's HC-change flags, tenure, and
+      each coach's PRIOR-season track record. season is taken from the season ROW ($.year), not
+      the partition. coach_name (first+last) is the only stable cross-school key (no coach id).
+      Materialized as a TABLE (the delta_scan-stacking cure). ⚠️ sp_*/wins on a row are that
+      season's OUTCOME — leakage-safe only when read strictly-prior (the mart enforces this).
+    columns:
+      - name: season
+        data_tests: [not_null]
+      - name: team
+        data_tests: [not_null]
+      - name: coach_name
+        data_tests: [not_null]
+      - name: sport
+        data_tests: [not_null]
+
   - name: stg_nflverse_draft_picks
     description: >
       Flattened nflverse draft_picks — the NFL side of the draft-slot key (`pick` = overall)
