@@ -80,9 +80,22 @@ import os as _os
 
 _SENSOR_TICK_STALE_SECONDS = float(_os.environ.get("SENSOR_TICK_STALE_SECONDS", "3600"))
 
+# 2026-07-19 — per-sensor ceiling overrides. The flat 60-min ceiling assumed every critical
+# sensor ticks continuously, but clv_alert_sensor and model_health_alert_sensor declare
+# minimum_interval_seconds=86400 (once per day BY DESIGN) — so the flat ceiling paged a false
+# "STALE (1152 min)" CRITICAL every single day at the daily-job check. A once-daily sensor is
+# only genuinely stale past ~a day + slack; 30h tolerates daily-job drift without masking a
+# real multi-day wedge. Keep this map in sync with any sensor whose minimum_interval exceeds
+# the flat ceiling.
+SENSOR_TICK_CEILING_OVERRIDES: dict = {
+    "clv_alert_sensor": 30 * 3600.0,
+    "model_health_alert_sensor": 30 * 3600.0,
+}
+
 
 def stale_sensor_ticks(last_tick_ages: dict, max_age_s: float) -> list[str]:
-    """Pure: the CRITICAL_SENSORS whose most-recent tick is older than ``max_age_s``.
+    """Pure: the CRITICAL_SENSORS whose most-recent tick is older than the sensor's ceiling —
+    ``SENSOR_TICK_CEILING_OVERRIDES`` when present (once-daily sensors), else ``max_age_s``.
 
     ``last_tick_ages`` maps sensor name → seconds since its last tick. A ``None`` age (no tick data
     / never evaluated) is NOT flagged here — 'never started' is the STOPPED check's job; this
@@ -90,10 +103,11 @@ def stale_sensor_ticks(last_tick_ages: dict, max_age_s: float) -> list[str]:
     problems: list[str] = []
     for name in sorted(CRITICAL_SENSORS):
         age = last_tick_ages.get(name)
-        if age is not None and age > max_age_s:
+        ceiling = SENSOR_TICK_CEILING_OVERRIDES.get(name, max_age_s)
+        if age is not None and age > ceiling:
             problems.append(
                 f"critical sensor tick STALE: {name} (last tick {age / 60:.0f} min ago > "
-                f"{max_age_s / 60:.0f} min ceiling) — the sensor-daemon has likely wedged and "
+                f"{ceiling / 60:.0f} min ceiling) — the sensor-daemon has likely wedged and "
                 f"evaluations STOPPED (INC-32)"
             )
     return problems

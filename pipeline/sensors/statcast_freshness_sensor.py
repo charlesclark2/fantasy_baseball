@@ -89,9 +89,12 @@ def _first_pitch_et(conn, d: date) -> datetime | None:
     lakehouse; a naive value is defensively treated as UTC."""
     from betting_ml.utils.lakehouse_monitor import lh, to_utc_datetime
 
+    # 2026-07-19: exclude Postponed rows — a postponed game keeps its ORIGINAL (past) first-pitch
+    # instant under the makeup official_date, so an unfiltered MIN can be hours in the past and
+    # instantly "breach" the deadline (the 823523 rained-out-Saturday false CRITICAL).
     row = conn.execute(
         f"SELECT MIN(game_date) FROM read_parquet('{lh('stg_statsapi_games')}', union_by_name=true) "
-        f"WHERE official_date = ? AND game_type = 'R'",
+        f"WHERE official_date = ? AND game_type = 'R' AND detailed_state <> 'Postponed'",
         [d.isoformat()],
     ).fetchone()
     if not row or row[0] is None:

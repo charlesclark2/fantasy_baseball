@@ -61,6 +61,15 @@ games_flattened as (
 -- order FIRST by state rank (Final > Live > Preview), THEN by a SANE-RANGE ingestion_ts
 -- (out-of-range sorts last), then the postponed-DH / gameNumber tiebreaks. Correct even
 -- when every snapshot's ingestion_ts is uniformly corrupt.
+-- 2026-07-19 postponed-makeup fix: "game state only advances" is FALSE for postponements —
+-- MLB marks a Postponed game abstractGameState='Final', then the SAME gamePk reappears as
+-- the makeup with state 'Preview' (both entries coexist in one snapshot: the postponed
+-- original under the old dates[] date, the makeup under the new one). Rank 3 vs 1 meant the
+-- STALE postponed row won until the makeup itself went Final (served game time showed the
+-- rained-out slot; the Statcast SLA "first pitch" read a past instant and false-fired).
+-- Cure: demote detailedState='Postponed' to rank 1 (tie with Preview) — a postponed-only
+-- game still wins over OLDER Preview snapshots via ingestion_ts, and a coexisting makeup
+-- beats it via the explicit postponed-last tiebreak (then the doubleHeader tiebreak).
 deduped as (
 
     select ingestion_ts, game
@@ -68,11 +77,14 @@ deduped as (
     qualify row_number() over (
         partition by json_extract_string(game, '$.gamePk')::integer
         order by
-            case json_extract_string(game, '$.status.abstractGameState')
-                 when 'Final' then 3 when 'Live' then 2 when 'Preview' then 1 else 0 end desc,
+            case when json_extract_string(game, '$.status.detailedState') = 'Postponed' then 1
+                 else case json_extract_string(game, '$.status.abstractGameState')
+                      when 'Final' then 3 when 'Live' then 2 when 'Preview' then 1 else 0 end
+            end desc,
             (case when try_cast(ingestion_ts as timestamp)
                        between timestamp '2015-01-01' and timestamp '2035-01-01'
                   then try_cast(ingestion_ts as timestamp) end) desc nulls last,
+            case when json_extract_string(game, '$.status.detailedState') = 'Postponed' then 1 else 0 end asc,
             case when json_extract_string(game, '$.doubleHeader') in ('Y', 'S') then 0 else 1 end asc,
             json_extract_string(game, '$.gameNumber')::integer desc nulls last
     ) = 1
