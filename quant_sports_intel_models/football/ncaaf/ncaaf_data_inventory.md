@@ -379,8 +379,41 @@ compute = Lambda + DuckDB-over-S3 (pennies). **⇒ Total new Phase-0 spend: $10/
 6. **⚠️ NCAAF player props are thin** (marquee games/top players only) — do **not** assume an MLB-style prop surface.
 7. **UDFA feeder coverage** — the draft-slot key covers drafted players only; UDFAs need fuzzy matching (P0.3).
 8. **Non-FBS (FCS) opponents** — CFBD covers them unevenly; decide an FBS-only modelling universe in P0.2.
+9. **⛔ NIL $ valuations** — the paid/scraped talent-money signal. **Documented + deferred in §10** (P0.4 shipped the FREE transfer/roster-continuity signal instead). *(edge-gated, PFF-class)*
+
+---
+
+## 10. 💰 The NIL-$ decision — **DEFER (PFF-class; ship the FREE portal/continuity signal first)** — P0.4
+
+**The thesis (roadmap P0.4):** the transfer portal + NIL money are re-shaping lower-conference power — talent moves fast now,
+so the game model needs a **roster-continuity / talent-flux** input or it will misprice teams whose roster turned over.
+
+**✅ What P0.4 SHIPPED (FREE, CFBD-only, landed + validated):** the derived mart **`ncaaf_team_roster_continuity`**
+(`sports_dbt/models/ncaaf/marts/`, one row per season+team, FBS, 2014–2025), a leakage-safe (pre-season, as-of) per-team-season
+signal combining:
+- **Returning production** — CFBD `/player/returning` (`returning_ppa_pct` = the headline "returning production %", + pass/rec/rush splits + usage).
+- **Transfer-portal flux** — CFBD `/player/portal` (in/out counts, star- & 247-rating-weighted, blue-chip in/out, attrition/uncommitted). Portal era = **2021+** (`portal_data_covered` flags it).
+- **Roster year-over-year continuity** — CFBD `/roster` head-count overlap (same player, same team, N & N-1).
+- **Talent level + flux** — CFBD `/talent` (247 composite + YoY delta; 2015+).
+
+All four raw feeds were already locked in the §8 Phase-0 set (P0.2), so P0.4 added **zero new ingest / cost** — it is a pure dbt
+derivation. Feeds **P1.2** (a team-strength covariate) + **P1.3** (features).
+
+**⛔ NIL $ valuations — NOT cleanly buyable (the PFF pattern, §5).** The known sources are **On3 NIL Valuation / On3 NIL 100**
+and **Rivals** (On3 merged into Rivals/Yahoo in 2024) — per-athlete $ valuations + team "roster value" / collective rankings,
+computed by a proprietary algorithm. **⚠️ Source-honesty note: unlike every CFBD claim in this doc, these were NOT ground-truthed
+on a live pull — there is no public bulk API to pull.** Ingesting NIL $ would mean **scraping a paywalled / ToS-protected website
+product**, or a **quote-based enterprise data licence (price not public)** — exactly the PFF licensing-project class, not a clean
+line item. (Adjacent: **Opendorse** holds transactional NIL-deal data, also private/marketplace-gated.)
+
+**RECOMMENDATION:** ship on the FREE transfer/roster-continuity signal (done). Revisit NIL $ **only** if (a) the Phase-1 model
+demonstrably earns, **and** (b) an ablation shows residual error concentrating where roster-money would explain it *beyond* what
+returning-production + portal-star-flux + talent already capture (they proxy much of the same talent-retention/acquisition
+axis for free). Treat NIL $ as an **edge-gated, licence-negotiated** buy — **never a Phase-0 dependency.**
 
 ---
 
 _Ground-truthed 2026-07-13 against CFBD v2 (live, free-tier key), The Odds API v4 (live), and nflverse release Parquet.
 Row counts and field lists are observed, not documented. Re-verify before any tier/licence purchase._
+_§10 (NIL / roster-continuity) added 2026-07-19 (P0.4) — the CFBD `/player/returning`, `/player/portal`, `/talent`,
+`/roster` schemas were re-pulled live; the NIL-$ (On3/Rivals) claims are documented-as-unavailable, NOT live-pulled (no public API)._

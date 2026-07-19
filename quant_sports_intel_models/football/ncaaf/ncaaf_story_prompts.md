@@ -83,6 +83,22 @@ DO: land the xref as a versioned mart built on the **draft-slot key** (not fuzzy
 GATE/AC: a college↔NFL ID xref mart with match-confidence, validated on a known draft class (the 99.7% slot baseline must be REPRODUCED, no cartesian inflation — assert row counts); UDFA/transfer/duplicate cases handled; feeds the NFL guide's rookie projections. Operator handoff + `git add`.
 ```
 ```
+✅ DONE 2026-07-19 — NCAAF-P0.4 shipped the FREE transfer/roster-continuity signal as the derived dbt mart
+`ncaaf_team_roster_continuity` (`sports_dbt/models/ncaaf/marts/`; one row per season+team, FBS, 2014–2025, 1,555 rows) +
+4 new staging views-as-tables (`stg_ncaaf_returning_production` / `_transfer_portal` / `_talent` / `_roster`). The signal
+combines: **returning production %** (CFBD `/player/returning`, the headline continuity metric + pass/rec/rush splits + usage),
+**transfer-portal flux** (`/player/portal` — in/out counts, star- & 247-rating-weighted, blue-chip, attrition; portal era 2021+,
+flagged `portal_data_covered`), **roster year-over-year continuity** (`/roster` head-count overlap, N∩N-1; NULL at the 2014 floor
+= unknown, not 0), and **247 talent level + YoY delta** (`/talent`, 2015+). ⭐ Leakage-safe / point-in-time (every input set
+pre-season; joined by season as-of kickoff). **Zero new ingest/cost** — pure dbt over the P0.2-locked §8 raw feeds. Feeds
+**P1.2** (strength covariate) + **P1.3** (features). NIL-$ documented + DEFERRED (inventory §10 — On3/Rivals = PFF-class,
+no public bulk API, NOT ground-truthed, edge-gated, never a Phase-0 dep). Validated: dbtf compile + `dbtf build … --target dev`
+GREEN (10 tests inc. grain-unique), values ground-truthed on real CFBD pulls (SMU-2024 etc.). ✅ UNBLOCKS the P0.4 covariate in
+P1.2 + the roster features in P1.3.
+🩹 LANDMINE (added to the pile): `returning` is a **reserved keyword** in DuckDB/dbt-fusion — a CTE named `with returning as (…)`
+fails with a MIS-SURFACED "Error while decoding UTF-8 … 1:11" from fusion (not a parse error) → renamed `ret_prod`. The
+multi-`delta_scan`-stacking mart hits the N0.3 "DeltaScan serialization not implemented" limit → the 4 new staging models are
+`materialized='table'` (read each Delta once) so the mart plan holds no `delta_scan`.
 ▶ NCAAF-P0.4 — NIL + TRANSFER-PORTAL DATA (source eval + ingest — a data-source add; do EARLY, feeds the features)   [Data · 🧭 OPUS · Phase 0/1 boundary]   (operator-scoped 2026-07-13)
 🎯 WHY: the transfer portal + NIL money are RE-SHAPING lower-conference power (talent moves fast now) — the game model needs a roster-continuity / talent-flux signal or it will misprice teams whose roster turned over. Data-first + source-honest, like P0.1.
 DO: (1) **Transfer portal (mostly FREE):** derive portal moves from **CFBD roster year-over-year deltas** (who left / who arrived) + `/player/portal` if live + `teamStints`; build a per-team **roster-continuity / returning-production** signal (returning starters, returning production %, talent in vs out). (2) **NIL $ valuations (PAID/scraped — treat like PFF):** On3 NIL valuations / Rivals are NOT a clean API → **do NOT gate the model on NIL $; ship on the FREE transfer/roster-continuity signal first**, add $-valuations only as an edge-gated later buy (state the source + cost if found). (3) land both as versioned lake tables (sport-tagged), point-in-time (as-of the season/week, leakage-safe — a team's transfer class is known pre-season). Ground-truth every "available" claim on a real pull (the P0.1 discipline; watch the CFBD 200-text/html gotcha).
@@ -97,7 +113,8 @@ GATE/AC: HC change/tenure + prior-SP+-profile landed FREE from CFBD `/coaches` (
 ```
 ▶ NCAAF-P0.6 — HISTORICAL NCAAF CLOSING-LINE ODDS (paid Odds-API `/historical`) — GATES all market/CLV/edge work   [Data · 🧭 OPUS · Phase 0/2 boundary]   (2026-07-16, from the P0.2 flag)
 🎯 WHY: P0.2's `odds_ncaaf` (936 rows) is a CURRENT-odds feed, NOT historical closing lines (mis-tagged `season=YYYY`, fetched live). ⚠️ **without real historical closing lines there is NO market benchmark + NO CLV** → this GATES P1.4's vs-market eval + all of Phase 2 (sharp-anchor/microstructure). Inventory table #21 `odds_ncaaf_historical` (paid Odds-API `/historical`) is the source, NOT built.
-DO: build the `odds_ncaaf_historical` ingest (paid Odds-API `/historical` endpoint, existing sub — confirm credits + the NCAAF historical floor is 2020, per P0.1) → season-partitioned Delta on the `credence-sports-lakehouse` lake, same pattern as P0.2's `sources.py`. Capture CLOSING lines (h2h/spread/total, the 11 books incl. Bovada) with commence-time so a leakage-safe closing snapshot is derivable. Cost-aware (historical pulls burn Odds-API credits — scope the seasons + markets deliberately). ⚠️ do NOT conflate with the live `odds_ncaaf` feed — this is the backtest/CLV source.
+⭐ **REUSE THE NFL-N0.4 PROVEN PATTERN (just built this exact Odds-API `/historical` ingest for NFL):** copy `nfl/ingest/odds_backfill.py` — the **`--dry-run` free credit estimate** (reads schedules, no API calls, before any paid run), **on-demand gating** (paid per-event sources excluded from the default backfill → no accidental credit burn), the **closing snapshot at commence − buffer** + **below-floor season skip** (pre-floor seasons skip cleanly, no 422 storm). Same `sources.py` typed/JSON routing.
+DO: build the `odds_ncaaf_historical` ingest (paid Odds-API `/historical` endpoint, existing sub — confirm credits; **game-line floor 2020, per P0.1 + N0.4-confirmed**; ⚠️ **props have a HARDER 2023 vendor floor if ever wanted, but NCAAF props are THIN → game lines h2h/spread/total only here**) → season-partitioned Delta on `credence-sports-lakehouse`. Capture CLOSING lines (h2h/spread/total, 11 books incl. Bovada) with commence-time → leakage-safe closing snapshot (enforce `snapshot_ts < commence_time`, the N0.4 belt-and-suspenders). Cost-aware (`--dry-run` first). ⚠️ do NOT conflate with the live `odds_ncaaf` feed — this is the backtest/CLV source.
 GATE/AC: `odds_ncaaf_historical` closing lines landed (2020+, h2h/spread/total, commence-time for leakage-safe close), Delta on the lake, credits stated; ⇒ unblocks P1.4's market-relative eval + Phase 2. Operator handoff + `git add`. **SEQUENCE: before P1.4's vs-market leg / Phase 2 — NOT a blocker for P1.1–P1.3 (which train on game outcomes) or the feeder.**
 ```
 ```
