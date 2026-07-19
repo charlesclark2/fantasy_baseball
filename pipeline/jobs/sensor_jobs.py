@@ -1,8 +1,8 @@
 from dagster import in_process_executor, job
 
 from pipeline.ops.sensor_ops import (
-    catchup_dbt_rebuild,
     catchup_ingest_statcast,
+    catchup_refresh_ext_tables,
     lineup_dbt_clv_rebuild,
     lineup_dbt_feature_rebuild,
     lineup_dbt_staging_rebuild,
@@ -91,11 +91,16 @@ def lineup_monitor_job():
 @job(executor_def=in_process_executor, tags={"concurrency_group": "statcast_catchup"})
 def statcast_catchup_job():
     # Fired by statcast_freshness_sensor once yesterday's Statcast finally lands.
-    # Ingest pitches → rebuild the pitch-derived marts/feature store → refresh the
-    # posteriors that depend on the now-complete games → fold them into the feature
-    # marts → re-score today so the live slate reflects the caught-up data.
+    # Ingest pitches to S3 → REFRESH the pitch external tables so the SF-target views see them
+    # → refresh the posteriors that depend on the now-complete games (they read the pitch-derived
+    # mart_game_results VIEW) → fold them into the feature marts → re-score today so the live
+    # slate reflects the caught-up data → settle yesterday's game-detail (E9.41b).
+    # E9.41b (2026-07-18): both head ops had silently no-op'd since the W11-E lakehouse migration
+    # (SF savant.batter_pitches write retired + stg_batter_pitches enabled=false on the SF target),
+    # so the catch-up landed NOTHING. catchup_ingest_statcast now runs the S3 ingest and
+    # catchup_refresh_ext_tables (was catchup_dbt_rebuild) refreshes the ext tables.
     s1 = catchup_ingest_statcast()
-    s2 = catchup_dbt_rebuild(start=s1)
+    s2 = catchup_refresh_ext_tables(start=s1)
     # Story A2.11 — bullpen EB posteriors (dbt) before the sequential team update.
     eb = dbt_build_bullpen_posteriors_op(start=s2)
     pp = update_player_posteriors_op(start=eb)

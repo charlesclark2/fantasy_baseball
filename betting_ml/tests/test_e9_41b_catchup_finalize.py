@@ -19,17 +19,29 @@ import pytest
 
 _REPO = Path(__file__).parents[2]
 _JOBS = _REPO / "pipeline" / "jobs" / "sensor_jobs.py"
+_OPS = _REPO / "pipeline" / "ops" / "sensor_ops.py"
 
 
-def _tree() -> ast.Module:
-    return ast.parse(_JOBS.read_text())
+def _tree(path: Path = _JOBS) -> ast.Module:
+    return ast.parse(path.read_text())
 
 
 def _func(tree: ast.Module, name: str) -> ast.FunctionDef:
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name == name:
             return node
-    pytest.fail(f"{name} not found in {_JOBS.name}")
+    pytest.fail(f"{name} not found")
+
+
+def _run_script_names(fn: ast.FunctionDef) -> list[str]:
+    """The first string arg of every _run_script(context, "<script>", ...) call in fn."""
+    out = []
+    for n in ast.walk(fn):
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                and n.func.id == "_run_script" and len(n.args) >= 2
+                and isinstance(n.args[1], ast.Constant)):
+            out.append(n.args[1].value)
+    return out
 
 
 def test_finalize_op_is_imported():
@@ -81,3 +93,61 @@ def test_finalize_is_terminal_leaf():
         and s.value.func.id == "finalize_prior_slate_game_detail_op"
     ]
     assert expr_stmts, "finalize must be a terminal leaf (bare expression statement, not assigned)"
+
+
+# --------------------------------------------------------------------------
+# E9.41b — the catch-up job's two head ops must actually land + expose statcast.
+# Both silently no-op'd after W11-E (SF savant.batter_pitches retired +
+# stg_batter_pitches enabled=false on the SF target), so the catch-up self-heal was
+# dead. The fix: ingest runs the S3 pull; the (renamed) rebuild refreshes ext tables.
+# --------------------------------------------------------------------------
+
+def test_catchup_ingest_runs_s3_ingest():
+    """catchup_ingest_statcast must run ingest_statcast_to_s3.py (not a bare no-op return)."""
+    fn = _func(_tree(_OPS), "catchup_ingest_statcast")
+    scripts = _run_script_names(fn)
+    assert "ingest_statcast_to_s3.py" in scripts, (
+        "E9.41b: catchup_ingest_statcast must run ingest_statcast_to_s3.py so late statcast "
+        "actually lands to S3 (the pre-fix SF-retired branch just returned → landed nothing)"
+    )
+
+
+def test_catchup_refresh_op_refreshes_ext_tables_not_dead_dbt():
+    """The renamed op refreshes ext tables; it no longer runs dbt with the dead selector."""
+    fn = _func(_tree(_OPS), "catchup_refresh_ext_tables")
+    assert "refresh_w1_external_tables.py" in _run_script_names(fn), (
+        "E9.41b: catchup_refresh_ext_tables must run refresh_w1_external_tables.py"
+    )
+    # The op body must NOT run dbt at all (the stg_batter_pitches+ selector is a no-op on the
+    # SF target where the model is enabled=false). A historical mention in a comment is fine —
+    # this checks the executable calls, not prose.
+    call_names = {
+        n.func.id for n in ast.walk(fn)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+    }
+    assert "_run_dbt" not in call_names, (
+        "E9.41b: catchup_refresh_ext_tables must not call _run_dbt (the pitch marts are S3 "
+        "views; the selector matched nothing on the SF target)"
+    )
+    # And the dead selector must not appear as a string literal anywhere in the function.
+    lits = {n.value for n in ast.walk(fn) if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+    assert "stg_batter_pitches+" not in lits
+
+
+def test_old_catchup_dbt_rebuild_op_is_removed():
+    """The misleading 'dbt_rebuild' op must be gone as a definition and from the job wiring
+    (a historical mention in a comment is fine; a live def/import/call is not)."""
+    op_names = {
+        n.name for n in ast.walk(_tree(_OPS)) if isinstance(n, ast.FunctionDef)
+    }
+    assert "catchup_dbt_rebuild" not in op_names, "the catchup_dbt_rebuild op def must be removed"
+    assert "catchup_refresh_ext_tables" in op_names
+    # No live import/call of the old name in the job graph.
+    jobs_imports_calls = {
+        n.id for n in ast.walk(_tree(_JOBS)) if isinstance(n, ast.Name)
+    } | {
+        a.name for n in ast.walk(_tree(_JOBS)) if isinstance(n, ast.ImportFrom) for a in n.names
+    }
+    assert "catchup_dbt_rebuild" not in jobs_imports_calls, (
+        "sensor_jobs.py must reference catchup_refresh_ext_tables, not catchup_dbt_rebuild"
+    )
