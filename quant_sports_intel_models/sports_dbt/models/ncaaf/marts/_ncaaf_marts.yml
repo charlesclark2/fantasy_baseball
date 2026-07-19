@@ -36,3 +36,49 @@ models:
         data_tests: [not_null]
       - name: is_udfa
         data_tests: [not_null]
+
+  - name: ncaaf_team_roster_continuity
+    description: >
+      The per-team-season roster-continuity / talent-flux signal (NCAAF-P0.4) — the FREE
+      transfer/roster signal the game model needs so it doesn't misprice teams whose roster
+      turned over. ONE row per (season, team), FBS universe (spine = CFBD returning production).
+      Combines: returning production % (CFBD /player/returning), transfer-portal flux
+      (/player/portal — in/out counts, star- & rating-weighted, blue-chip, attrition), roster
+      year-over-year continuity (/roster head-count overlap), and the 247 talent composite +
+      its YoY delta (/talent). ⭐ Leakage-safe / point-in-time: every input is set PRE-SEASON
+      for `season`, so a downstream model joins it by season as-of kickoff with no future leak;
+      it carries no in-season/outcome columns. Feeds P1.2 (team-strength covariate) + P1.3
+      (features). The PAID NIL-$ valuations (On3/Rivals) are documented + DEFERRED
+      (ncaaf_data_inventory.md §10) — NOT a dependency of this model.
+      Coverage caveats: portal is 0/covered only from 2021 (portal_data_covered flags it);
+      talent is NULL for 2014 (CFBD talent starts 2015) and a couple of 2025 expansion teams.
+    columns:
+      - name: team_season_key
+        description: season||'-'||team grain surrogate — one row per team per season (the grain contract).
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+      - name: team
+        data_tests: [not_null]
+      - name: returning_ppa_pct
+        description: The headline CFBD returning-production % (share of prior-season PPA returning). 0-1-ish (can slightly exceed 1).
+        data_tests: [not_null]
+      - name: roster_continuity_pct
+        description: >
+          roster_returning_players / roster_size — share of THIS year's roster that was also on
+          the team last year. NULL for the 2014 backfill-floor season (no prior-year roster to
+          compare — unknown, not zero); populated for every later season.
+        data_tests:
+          - not_null:
+              config:
+                where: "roster_prev_size is not null"
+      - name: portal_data_covered
+        description: True from 2021 (CFBD portal era); false pre-2021 where portal_* are 0 by absence, not by a zero-churn team.
+        data_tests: [not_null]
+      - name: portal_net_count
+        description: portal_in_count − portal_out_count (negative = net roster exodus).
+        data_tests: [not_null]
+      - name: team_talent
+        description: 247Sports team talent composite (level). Null for 2014 and a couple of 2025 expansion teams (left-joined).

@@ -42,6 +42,61 @@ models:
       - name: sport
         data_tests: [not_null]
 
+  - name: stg_ncaaf_returning_production
+    description: >
+      Flattened CFBD /player/returning (NCAAF-P0.4) — CFBD's returning-production metric per
+      (season, team): the share of prior-season PPA/usage carried by returning players.
+      returning_ppa_pct is the headline "returning production %". Leakage-safe (known
+      pre-season). Materialized as a TABLE (the delta_scan-stacking cure). Feeds P0.4 mart.
+    columns:
+      - name: season
+        data_tests: [not_null]
+      - name: team
+        data_tests: [not_null]
+      - name: sport
+        data_tests: [not_null]
+
+  - name: stg_ncaaf_transfer_portal
+    description: >
+      Flattened CFBD /player/portal (NCAAF-P0.4) — one row per portal entry. season = the
+      season the window PRECEDES (a season-N entry is the N-1/N off-season) ⇒ leakage-safe.
+      origin=team left, destination=team joined (null=uncommitted/left CFB). CFBD coverage
+      2021+. Materialized as a TABLE. Feeds the P0.4 mart's portal-flux aggregates.
+    columns:
+      - name: season
+        data_tests: [not_null]
+      - name: sport
+        data_tests: [not_null]
+
+  - name: stg_ncaaf_talent
+    description: >
+      Flattened CFBD /talent (NCAAF-P0.4) — the 247 team talent composite per (season, team).
+      A roster-talent LEVEL indicator complementing the flux signals. CFBD coverage 2015+.
+      Leakage-safe (recruiting-based, pre-season). Materialized as a TABLE. Feeds the P0.4 mart.
+    columns:
+      - name: season
+        data_tests: [not_null]
+      - name: team
+        data_tests: [not_null]
+      - name: sport
+        data_tests: [not_null]
+
+  - name: stg_ncaaf_roster
+    description: >
+      Flattened CFBD /roster (NCAAF-P0.4) — one row per player on a team's season roster
+      (athlete id = stable key; season from the Delta partition, not the JSON). Covers all
+      divisions; the P0.4 mart's returning-production spine restricts to FBS. Feeds the
+      year-over-year roster-continuity computation. Leakage-safe. Materialized as a TABLE.
+    columns:
+      - name: season
+        data_tests: [not_null]
+      - name: player_id
+        data_tests: [not_null]
+      - name: team
+        data_tests: [not_null]
+      - name: sport
+        data_tests: [not_null]
+
   - name: stg_nflverse_draft_picks
     description: >
       Flattened nflverse draft_picks — the NFL side of the draft-slot key (`pick` = overall)
