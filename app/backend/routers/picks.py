@@ -255,13 +255,24 @@ _ET = ZoneInfo("America/New_York")
 # E9.41 follow-up — pending-yesterday self-heal. Re-resolves the SAME yesterday featured
 # pick the serving writer picked (mirrors write_serving_store._FEATURED_YESTERDAY_SERVING_SQL:
 # market-data-first, post_lineup, latest inserted_at; ORDER BY game_datetime ASC LIMIT 1) and
-# returns its pick_side + settled actual_outcome. NARROW column list on purpose — a `SELECT *`
-# over the 94-col predictions table silently fails inside the API Lambda (E9.26b landmine).
+# computes its outcome from the FRESH mart_game_results (final score), NOT mart_clv_labeled_games.
+#
+# ⚠️ WHY NOT mart_clv_labeled_games (the 2026-07-19 SF/SEA finding): that mart is served as an S3
+# parquet MIRROR rebuilt only by the daily `run_w1_lakehouse --w6`; a late game (or a late/stalled
+# daily run) leaves it a full day stale — SF/SEA was Final 4-3 in mart_game_results while the CLV
+# mirror was still frozen at the prior date, so the recap read a NULL actual_outcome → "pending"
+# forever. mart_game_results is a live view over the statcast S3 (kept current by the E9.41b
+# catch-up ext refresh), so the recap settles as soon as the game's pitches land. h2h outcome =
+# home_team_won; totals outcome = (home+away runs) vs the pick's own consensus line — neither needs
+# the CLV mart. NARROW column list on purpose (E9.26b: a `SELECT *` over the 94-col predictions
+# table silently fails in the API Lambda). INNER join → an unfinished/postponed game yields no row
+# (no statcast) → the recap correctly stays pending rather than guessing.
 _FEATURED_YESTERDAY_HEAL_QUERY = f"""
 WITH ranked AS (
     SELECT
         game_pk, home_team, away_team, game_datetime,
         layer4_h2h_decision, layer4_totals_decision, layer4_h2h_conviction_flag,
+        total_line_consensus,
         ROW_NUMBER() OVER (
             PARTITION BY game_pk
             ORDER BY
@@ -276,25 +287,29 @@ WITH ranked AS (
 base AS (SELECT * FROM ranked WHERE _rn = 1),
 h2h AS (
     SELECT b.game_pk, b.home_team, b.away_team, 'h2h' AS market_type,
-           b.layer4_h2h_decision AS pick_side, b.game_datetime, clv.actual_outcome
+           b.layer4_h2h_decision AS pick_side, b.game_datetime,
+           r.home_team_won, r.home_final_score, r.away_final_score,
+           CAST(NULL AS DOUBLE) AS total_line
     FROM base b
-    LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
-        ON clv.game_pk = b.game_pk AND clv.market_type = 'h2h'
+    JOIN baseball_data.betting.mart_game_results r ON r.game_pk = b.game_pk
     WHERE b.layer4_h2h_conviction_flag = TRUE
       AND b.layer4_h2h_decision IN ('home', 'away')
 ),
 totals AS (
     SELECT b.game_pk, b.home_team, b.away_team, 'totals' AS market_type,
-           b.layer4_totals_decision AS pick_side, b.game_datetime, clv.actual_outcome
+           b.layer4_totals_decision AS pick_side, b.game_datetime,
+           CAST(NULL AS BOOLEAN) AS home_team_won, r.home_final_score, r.away_final_score,
+           b.total_line_consensus AS total_line
     FROM base b
-    LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
-        ON clv.game_pk = b.game_pk AND clv.market_type = 'totals'
+    JOIN baseball_data.betting.mart_game_results r ON r.game_pk = b.game_pk
     WHERE b.layer4_h2h_conviction_flag = TRUE
       AND b.layer4_totals_decision IN ('over', 'under')
 )
-SELECT game_pk, home_team, away_team, market_type, pick_side, actual_outcome, game_datetime
+SELECT game_pk, home_team, away_team, market_type, pick_side, game_datetime,
+       home_team_won, home_final_score, away_final_score, total_line
 FROM h2h UNION ALL
-SELECT game_pk, home_team, away_team, market_type, pick_side, actual_outcome, game_datetime
+SELECT game_pk, home_team, away_team, market_type, pick_side, game_datetime,
+       home_team_won, home_final_score, away_final_score, total_line
 FROM totals
 ORDER BY game_datetime ASC NULLS LAST, game_pk ASC
 LIMIT 1
@@ -430,24 +445,40 @@ def _build_featured_result(
 
 
 def _resolve_yesterday_recap(row: dict) -> dict | None:
-    """Build the featured 'yesterday' recap dict from a heal-query row, mirroring
-    write_serving_store's pick_side→won/lost mapping (h2h: 1=home won; totals: 1=over)."""
+    """Build the featured 'yesterday' recap from a heal-query row, computing the outcome from the
+    FRESH mart_game_results final score (NOT the lagging mart_clv_labeled_games mirror — see the
+    _FEATURED_YESTERDAY_HEAL_QUERY note). h2h: picked side wins iff it's the game winner
+    (home_team_won). totals: over hits iff home+away runs > the pick's consensus line. A missing
+    score/line (or an unfinished game with no mart_game_results row) → 'pending', never a guess."""
     if not row:
         return None
-    outcome_flag = row.get("ACTUAL_OUTCOME")
-    pick_side = (row.get("PICK_SIDE") or "").lower()
     away = row.get("AWAY_TEAM") or ""
     home = row.get("HOME_TEAM") or ""
     market_type = row.get("MARKET_TYPE") or ""
-    if outcome_flag is None:
+    pick_side = (row.get("PICK_SIDE") or "").lower()
+    home_score = row.get("HOME_FINAL_SCORE")
+    away_score = row.get("AWAY_FINAL_SCORE")
+
+    won: bool | None = None
+    if market_type == "h2h":
+        home_won = row.get("HOME_TEAM_WON")
+        if home_won is not None:
+            if pick_side == "home":
+                won = bool(home_won)
+            elif pick_side == "away":
+                won = not bool(home_won)
+    elif market_type == "totals":
+        total_line = row.get("TOTAL_LINE")
+        if home_score is not None and away_score is not None and total_line is not None:
+            over_hit = (home_score + away_score) > total_line
+            if pick_side == "over":
+                won = over_hit
+            elif pick_side == "under":
+                won = not over_hit
+
+    if won is None:
         status, outcome_str = "pending", "Pending"
     else:
-        if pick_side in ("home", "over"):
-            won = int(outcome_flag) == 1
-        elif pick_side in ("away", "under"):
-            won = int(outcome_flag) == 0
-        else:
-            won = bool(outcome_flag)
         status = "win" if won else "loss"
         outcome_str = "Won" if won else "Lost"
     return {"matchup": f"{away} @ {home}", "market_type": market_type,

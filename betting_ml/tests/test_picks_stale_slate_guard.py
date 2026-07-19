@@ -85,36 +85,61 @@ def test_invalid_format_rejected(pinned_today):
 
 
 # --------------------------------------------------------------------------
-# E9.41 follow-up — featured "Yesterday: Pending" self-heal. A late West-coast
-# game isn't in Savant/statcast when the morning serving write runs, so the
-# recap freezes on 'pending'; /picks/featured re-checks the CLV mart on read
-# and patches it to Won/Lost once the game settles.
+# E9.41 follow-up — featured "Yesterday: Pending" self-heal. The recap outcome is
+# computed from the FRESH mart_game_results final score (2026-07-19: the CLV mirror
+# it used to read lagged a full day → SF/SEA stuck 'pending' though mart_game_results
+# already had the 4-3 Final). /picks/featured re-checks on read and patches Won/Lost.
 # --------------------------------------------------------------------------
 
-def _row(outcome, pick_side="home", market="h2h"):
-    return {"GAME_PK": 1, "HOME_TEAM": "AZ", "AWAY_TEAM": "STL",
-            "MARKET_TYPE": market, "PICK_SIDE": pick_side, "ACTUAL_OUTCOME": outcome}
+def _h2h_row(home_won, pick_side="home"):
+    return {"GAME_PK": 1, "HOME_TEAM": "SEA", "AWAY_TEAM": "SF", "MARKET_TYPE": "h2h",
+            "PICK_SIDE": pick_side, "HOME_TEAM_WON": home_won,
+            "HOME_FINAL_SCORE": 4 if home_won else 3,
+            "AWAY_FINAL_SCORE": 3 if home_won else 4, "TOTAL_LINE": None}
+
+
+def _totals_row(home_score, away_score, total_line, pick_side="over"):
+    return {"GAME_PK": 1, "HOME_TEAM": "SEA", "AWAY_TEAM": "SF", "MARKET_TYPE": "totals",
+            "PICK_SIDE": pick_side, "HOME_TEAM_WON": None,
+            "HOME_FINAL_SCORE": home_score, "AWAY_FINAL_SCORE": away_score, "TOTAL_LINE": total_line}
 
 
 def test_recap_home_pick_wins_when_home_won():
-    r = _resolve_yesterday_recap(_row(1, "home"))
+    r = _resolve_yesterday_recap(_h2h_row(True, "home"))
     assert r["status"] == "win" and r["outcome"] == "Won"
 
 
 def test_recap_away_pick_wins_when_home_lost():
-    # actual_outcome is home-perspective (1=home won); an away pick wins when home lost.
-    r = _resolve_yesterday_recap(_row(0, "away"))
+    r = _resolve_yesterday_recap(_h2h_row(False, "away"))
     assert r["status"] == "win" and r["outcome"] == "Won"
 
 
-def test_recap_over_pick_loses_when_under():
-    r = _resolve_yesterday_recap(_row(0, "over", "totals"))
+def test_recap_home_pick_loses_when_home_lost():
+    r = _resolve_yesterday_recap(_h2h_row(False, "home"))
     assert r["status"] == "loss" and r["outcome"] == "Lost"
 
 
-def test_recap_null_outcome_is_pending():
-    r = _resolve_yesterday_recap(_row(None))
-    assert r["status"] == "pending" and r["outcome"] == "Pending"
+def test_recap_totals_sfsea_real_case_over_wins():
+    # The actual 2026-07-19 case: SF/SEA totals OVER, line 6.78, final 4-3 = 7 runs > line → Won.
+    r = _resolve_yesterday_recap(_totals_row(4, 3, 6.78, "over"))
+    assert r["status"] == "win" and r["outcome"] == "Won"
+    assert r["matchup"] == "SF @ SEA"
+
+
+def test_recap_over_pick_loses_when_under():
+    r = _resolve_yesterday_recap(_totals_row(2, 3, 6.5, "over"))  # 5 < 6.5
+    assert r["status"] == "loss" and r["outcome"] == "Lost"
+
+
+def test_recap_under_pick_wins_when_under():
+    r = _resolve_yesterday_recap(_totals_row(2, 3, 6.5, "under"))  # 5 < 6.5 → under hits
+    assert r["status"] == "win" and r["outcome"] == "Won"
+
+
+def test_recap_pending_when_score_or_line_missing():
+    # h2h with no result yet, and totals with no line → can't settle → pending (never a guess).
+    assert _resolve_yesterday_recap(_h2h_row(None))["status"] == "pending"
+    assert _resolve_yesterday_recap(_totals_row(4, 3, None, "over"))["status"] == "pending"
 
 
 def test_heal_noop_when_not_pending(monkeypatch):
@@ -134,11 +159,11 @@ def test_heal_noop_when_no_yesterday(monkeypatch):
 
 
 def test_heal_patches_settled_and_writes_back(monkeypatch):
-    monkeypatch.setattr(picks_mod, "lakehouse_query", lambda *a, **k: [_row(1, "home")])
+    monkeypatch.setattr(picks_mod, "lakehouse_query", lambda *a, **k: [_h2h_row(True, "home")])
     writes = {}
     monkeypatch.setattr(picks_mod.serving_cache, "set_cache",
                         lambda key, date, payload, *a, **k: writes.update({"key": key, "payload": payload}))
-    payload = {"game_pk": 1, "yesterday": {"matchup": "STL @ AZ", "status": "pending", "outcome": "Pending"}}
+    payload = {"game_pk": 1, "yesterday": {"matchup": "SF @ SEA", "status": "pending", "outcome": "Pending"}}
     out = _heal_pending_featured_yesterday(payload, "2026-07-18")
     assert out["yesterday"]["status"] == "win"
     assert payload["yesterday"]["status"] == "pending"  # original not mutated
@@ -146,7 +171,8 @@ def test_heal_patches_settled_and_writes_back(monkeypatch):
 
 
 def test_heal_stays_pending_when_still_unsettled(monkeypatch):
-    monkeypatch.setattr(picks_mod, "lakehouse_query", lambda *a, **k: [_row(None, "home")])
+    # Game not final in mart_game_results yet (heal query returns no row) → stays pending.
+    monkeypatch.setattr(picks_mod, "lakehouse_query", lambda *a, **k: [])
     payload = {"game_pk": 1, "yesterday": {"status": "pending", "outcome": "Pending"}}
     out = _heal_pending_featured_yesterday(payload, "2026-07-18")
     assert out["yesterday"]["status"] == "pending"
