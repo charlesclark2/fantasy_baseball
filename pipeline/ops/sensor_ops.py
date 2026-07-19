@@ -17,15 +17,16 @@ _EB_DIR = "/app/betting_ml/scripts/eb_priors"
 # Snowflake hiccup (warehouse resume, incremental-MERGE lock, network blip) should
 # self-heal rather than page.
 #
-# Story A2.15 (2026-06-15) — FIXED the recurring failure this comment used to
-# describe: catchup_dbt_rebuild had failed EVERY run since 2026-06-11 (all 3 retries
-# exhausted) because it ran `dbtf build` (models + TESTS) on the stg_batter_pitches+
-# subtree, so a single data-quality TEST failing on the recent statcast batch redded
-# the whole catchup (and the 3× retry tripled the wasted Snowflake + Dagster compute)
-# while the weekday daily job — which runs `dbtf run` — stayed green. catchup_dbt_-
-# rebuild now also runs `dbtf run` (models only); the test suite runs once in the
-# daily job's build op (see _dbt_daily_build_args). If a real data-quality issue
-# needs surfacing, the daily build is the gate, not every catch-up tick.
+# Story A2.15 (2026-06-15) — FIXED a recurring failure: the then-`catchup_dbt_rebuild` ran
+# `dbtf build` (models + TESTS) on the stg_batter_pitches+ subtree, so a single data-quality
+# TEST failing on the recent statcast batch redded the whole catchup (3× retry tripling the
+# wasted compute) while the weekday daily job — which runs `dbtf run` — stayed green. It was
+# switched to `dbtf run` (models only); the test suite runs once in the daily build op.
+# E9.41b (2026-07-18) — that dbt step is now OBSOLETE: post-W11-E the pitch marts are S3
+# views and stg_batter_pitches is enabled=false on the SF target, so the selector matched
+# nothing (silent no-op). The op was repurposed to `catchup_refresh_ext_tables` (an external-
+# table REFRESH), and `catchup_ingest_statcast` was fixed to actually run the S3 ingest — both
+# had silently no-op'd since W11-E, leaving the whole catch-up self-heal dead.
 _CATCHUP_RETRY = RetryPolicy(max_retries=2, delay=60)  # delay in seconds
 
 # Incident 2026-06-15 — a `lineup_dbt_clv_rebuild` `dbtf run` subprocess WEDGED
@@ -88,30 +89,41 @@ def _run_script(context: OpExecutionContext, script: str, args: list[str] | None
 
 @op(out=Out(Nothing), retry_policy=_CATCHUP_RETRY)
 def catchup_ingest_statcast(context: OpExecutionContext) -> None:
-    """Re-attempt Statcast pitch ingestion for the not-yet-loaded day(s)."""
-    # E11.1-W11-E: same gate as ingest_statcast — the savant.batter_pitches SF write is shadowed by
-    # ingest_statcast_to_s3 (stg_batter_pitches reads the S3 parquet). When W11_BATTER_PITCHES_SF_RETIRED=1
-    # this no-ops the SF catchup (the statcast→S3 path keeps the parquet fresh). Default OFF.
+    """Land yesterday's not-yet-loaded Statcast pitch data — the sensor's whole purpose.
+
+    E11.1-W11-E / E9.41b — the LIVE pitch substrate is the S3 `stg_batter_pitches` parquet written
+    by ingest_statcast_to_s3.py (pulls Baseball Savant, incremental → auto-resumes from last-loaded
+    to yesterday, idempotent per-day delete+write). The Snowflake `savant.batter_pitches` write is
+    RETIRED (W11_BATTER_PITCHES_SF_RETIRED=1) and the SF-target stg_batter_pitches model is
+    enabled=false. So on the box this MUST run the S3 ingest: the pre-fix behaviour (skip the SF
+    write and RETURN) landed NOTHING, so the freshness sensor — which polls the S3 parquet for
+    yesterday's pitches — spun uselessly every 30 min until the next 08:00 daily
+    ingest_statcast_to_s3_op, silently breaking the whole catch-up self-heal after W11-E. Mirrors
+    the daily ingest_statcast_to_s3_op exactly (idempotent → safe across the sensor's retries).
+    """
     if os.environ.get("W11_BATTER_PITCHES_SF_RETIRED") == "1":
-        context.log.warning(
-            "WARNING: [W11-E] savant.batter_pitches SF write RETIRED "
-            "(W11_BATTER_PITCHES_SF_RETIRED=1) — skipping the redundant Snowflake catchup ingestion."
-        )
+        _run_script(context, "ingest_statcast_to_s3.py")
         return
     _run_script(context, "savant_ingestion.py", ["batter_pitches"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing), retry_policy=_CATCHUP_RETRY)
-def catchup_dbt_rebuild(context: OpExecutionContext) -> None:
-    """Rebuild the pitch-derived subtree so the newly-landed completed games flow
-    into mart_game_results → mart_game_spine → rolling marts → feature store.
-    Posteriors run next (they read mart_game_results), then dbt_umpire_feature_-
-    rebuild folds them into the feature marts before the re-score."""
-    _run_dbt(context, [
-        "run",
-        "--select", "stg_batter_pitches+",
-        "--target", "baseball_betting_and_fantasy",
-    ])
+def catchup_refresh_ext_tables(context: OpExecutionContext) -> None:
+    """Make the just-landed pitch data VISIBLE to the Snowflake-target reads (was catchup_dbt_rebuild).
+
+    E11.1-W11-E / E9.41b — the pitch-derived marts (mart_game_results, mart_clv_labeled_games, the
+    rolling marts, the feature precursors) are now VIEWS over the S3 stg_batter_pitches parquet, so
+    they need no dbt rebuild. The old `dbtf run --select stg_batter_pitches+` was a silent NO-OP on
+    the Snowflake target — stg_batter_pitches is enabled=false there (duckdb-target view only) →
+    `NoNodesForSelectionCriteria` / "Nothing to do". What the SF-target reads DO need is the external
+    tables REFRESHed to pick up the file the catch-up just wrote (AUTO_REFRESH=FALSE) — exactly the
+    daily refresh_w1_external_tables_op after ingest_statcast_to_s3_op. A cheap ALTER … REFRESH of
+    the REQUIRED tier (stg_batter_pitches + the W1 pitch marts); harmless when serving reads S3
+    directly (--s3). The downstream posteriors + dbt_umpire_feature_rebuild then read the now-fresh
+    mart_game_results before the re-score, and finalize_prior_slate_game_detail_op settles
+    yesterday's game-detail Finals → the "who called it" scorecards same-day (E9.41b).
+    """
+    _run_script(context, "refresh_w1_external_tables.py")
 
 
 # ── Lineup Monitor job ops ────────────────────────────────────────────────────
