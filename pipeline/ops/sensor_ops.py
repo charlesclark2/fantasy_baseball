@@ -126,6 +126,24 @@ def catchup_refresh_ext_tables(context: OpExecutionContext) -> None:
     _run_script(context, "refresh_w1_external_tables.py")
 
 
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), retry_policy=_CATCHUP_RETRY)
+def catchup_rebuild_outcome_mirrors(context: OpExecutionContext) -> None:
+    """E9.41 — rebuild the settled-outcome S3 MIRROR parquets after a late game's Statcast lands.
+
+    The serving reads (the featured "Yesterday" recap self-heal, finalize_prior_slate_game_detail_op,
+    the /performance tally) read mart_game_results + mart_clv_labeled_games as S3 MIRROR parquets
+    written by the daily --w5-group-a / --clv-labels-only build. catchup_ingest_statcast refreshes
+    only the stg_batter_pitches parquet, so WITHOUT this the late game's outcome never reaches those
+    mirrors until the next 08:00 daily run (2026-07-19 SF/SEA: mart_game_results was a day behind and
+    mart_clv_labeled_games two — the recap stayed 'pending'). Rebuild mart_game_results (--w5-group-a)
+    off the fresh pitches, then the CLV-label marts (--clv-labels-only) off the fresh
+    mart_game_results, then refresh the CLV ext tables. Runs before the posteriors (which read
+    mart_game_results) so they too reflect the completed games. Idempotent (parquet COPYs)."""
+    _run_script(context, "run_w1_lakehouse.py", ["--w5-only", "--w5-group-a-only"])
+    _run_script(context, "run_w1_lakehouse.py", ["--clv-labels-only"])
+    _run_script(context, "refresh_w1_external_tables.py", ["--w6-clv"])
+
+
 # ── Lineup Monitor job ops ────────────────────────────────────────────────────
 
 @op(out=Out(Nothing))

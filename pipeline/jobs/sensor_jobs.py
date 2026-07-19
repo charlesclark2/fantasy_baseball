@@ -2,6 +2,7 @@ from dagster import in_process_executor, job
 
 from pipeline.ops.sensor_ops import (
     catchup_ingest_statcast,
+    catchup_rebuild_outcome_mirrors,
     catchup_refresh_ext_tables,
     lineup_dbt_clv_rebuild,
     lineup_dbt_feature_rebuild,
@@ -101,8 +102,13 @@ def statcast_catchup_job():
     # catchup_refresh_ext_tables (was catchup_dbt_rebuild) refreshes the ext tables.
     s1 = catchup_ingest_statcast()
     s2 = catchup_refresh_ext_tables(start=s1)
+    # E9.41 — rebuild the settled-outcome S3 MIRROR parquets (mart_game_results → CLV-label marts)
+    # off the just-landed pitches, so a late game's outcome reaches the serving reads (featured
+    # recap heal + finalize + /performance) THIS run, not only at the next 08:00 daily. Before the
+    # posteriors, which read mart_game_results.
+    s2b = catchup_rebuild_outcome_mirrors(start=s2)
     # Story A2.11 — bullpen EB posteriors (dbt) before the sequential team update.
-    eb = dbt_build_bullpen_posteriors_op(start=s2)
+    eb = dbt_build_bullpen_posteriors_op(start=s2b)
     pp = update_player_posteriors_op(start=eb)
     pt = update_team_posteriors_op(start=pp)
     pm = update_matchup_cell_posteriors_op(start=pt)

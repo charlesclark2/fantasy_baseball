@@ -681,6 +681,14 @@ def lakehouse_spine_odds_bridge_op(context):
     _run_w8a_mirror(context, "run_w1_lakehouse.py", ["--w5-only", "--w5-group-a-only"])
     _run_w8a_mirror(context, "run_w1_lakehouse.py", ["--w6-odds-current"])
     _run_w8a_mirror(context, "refresh_w1_external_tables.py", ["--w6-odds"])
+    # E9.41 (2026-07-19) — mart_game_results is NOW fresh (--w5-group-a above), so rebuild the 3
+    # CLV-label marts off it. The daily W6 build (lk6) ran BEFORE this refresh, so it built
+    # mart_clv_labeled_games against a DAY-OLD mart_game_results → the mirror was a full day stale
+    # (the featured "Yesterday" recap + /performance never settled yesterday). This targeted pass
+    # (mart_closing_line_value already built at lk6) makes the CLV-label mirror current, then
+    # refreshes its ext tables so the SF-target reads see it too.
+    _run_w8a_mirror(context, "run_w1_lakehouse.py", ["--clv-labels-only"])
+    _run_w8a_mirror(context, "refresh_w1_external_tables.py", ["--w6-clv"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

@@ -308,6 +308,20 @@ W6_MART_MODELS = [
     "mart_player_game_starts",     # ← mart_game_spine + stg_statsapi_lineups   (Group-C)
 ]
 
+# E9.41 (2026-07-19) — the 3 W6 models that INNER-JOIN mart_game_results (settled outcomes).
+# The full W6 build (--w6, daily lk6) runs BEFORE the W5 game-chain rebuild (lk8 --w5-group-a),
+# so these read a DAY-OLD mart_game_results and drop yesterday's completed games → the
+# mart_clv_labeled_games mirror is structurally a day stale (→ /performance + the featured
+# "Yesterday" recap never settle yesterday). --clv-labels-only rebuilds JUST these three AFTER
+# mart_game_results is fresh (wired into lk8 + the statcast catch-up), reading the fresh W5 game
+# chain + the mart_closing_line_value already built at lk6. Order matters: labeled_games →
+# label_count (reads it) ; prediction_clv is independent.
+W6_CLV_LABEL_MODELS = [
+    "mart_clv_labeled_games",  # ← daily_model_predictions + mart_closing_line_value + mart_game_results
+    "mart_clv_label_count",    # ← mart_clv_labeled_games (view)
+    "mart_prediction_clv",     # ← daily_model_predictions + mart_closing_line_value
+]
+
 # E11.1-W6 INTRADAY REFRESH (operator-decided 2026-06-28, option b — TODAY-SCOPED
 # PARTITIONED REBUILD): mart_odds_outcomes (~2.26M rows of mostly-immutable history)
 # rebuilds INTRADAY on the odds-capture cycle (odds_current_rebuild_sensor), unlike the
@@ -1303,6 +1317,28 @@ def _build_w6(conn, dry_run: bool) -> None:
         _register_mart_views(conn, [model], dry_run)
 
 
+def _build_clv_labels(conn, dry_run: bool) -> None:
+    """E9.41 (--clv-labels-only): rebuild ONLY the 3 CLV-label marts (mart_clv_labeled_games,
+    mart_clv_label_count, mart_prediction_clv) AFTER mart_game_results has been refreshed.
+
+    WHY a separate pass: those 3 INNER-JOIN mart_game_results, but the daily W6 build (lk6) runs
+    BEFORE the W5 game-chain rebuild (lk8 --w5-group-a) → they'd read a day-old mart_game_results
+    and drop yesterday's completed games (the mart_clv_labeled_games mirror was found a full day
+    stale on 2026-07-19 → the featured recap + /performance never settled yesterday). Run this
+    AFTER --w5-group-a (mart_game_results fresh); mart_closing_line_value was already built by the
+    daily W6 lk6 (or the intraday odds pass), so register it + the fresh W5 game chain as views,
+    then rebuild the 3. Idempotent (each is a parquet COPY re-globbed downstream)."""
+    _build_w6_precursor_views(conn)  # registers the FRESH W5 game chain + daily_model_predictions
+    print("\nCLV-label precursor: register mart_closing_line_value over its lk6-built parquet:")
+    # Register the MIRROR PARQUET (already built by the daily W6 lk6 pass), NOT its compiled SQL —
+    # _register_mart_views would re-derive it from mart_odds_outcomes etc. which we don't register.
+    _register_s3_glob_views(conn, ["mart_closing_line_value"])
+    print("\nCLV-label marts (rebuilt off the fresh mart_game_results):")
+    for model in W6_CLV_LABEL_MODELS:
+        _build_marts(conn, [model], dry_run)
+        _register_mart_views(conn, [model], dry_run)
+
+
 # E11.1-W7b: the prediction/serving-path mini-wave — the mart_player_profile_identity injury
 # chain + the serving-mart backlog (stg_statsapi_probable_pitchers / stg_statsapi_lineups_wide).
 # OPT-IN (--w7b) until cutover, like W3pre/W4/W5/W6: reads the player_transactions precursor
@@ -1952,6 +1988,7 @@ def run(
     w6: bool = False,
     w6_only: bool = False,
     w6_odds_current: bool = False,
+    clv_labels_only: bool = False,
     w7b: bool = False,
     w7b_only: bool = False,
     w8a: bool = False,
@@ -2156,6 +2193,16 @@ def run(
         _build_w6(conn, dry_run)
         conn.close()
         print("\nW6 marts run complete (--w6-only).")
+        return
+
+    # E9.41 (--clv-labels-only): rebuild JUST the 3 CLV-label marts off the FRESH mart_game_results,
+    # reusing the existing W5 game chain + mart_closing_line_value parquet. Run AFTER --w5-group-a so
+    # mart_clv_labeled_games no longer lags a day (the daily W6 lk6 builds it before the W5 refresh).
+    if clv_labels_only:
+        print("\nBuilding CLV-label marts off the fresh mart_game_results (--clv-labels-only):")
+        _build_clv_labels(conn, dry_run)
+        conn.close()
+        print("\nCLV-label marts run complete (--clv-labels-only).")
         return
 
     # E11.1-W7b: --w7b-only rebuilds just the prediction/serving mini-wave (the
@@ -2406,6 +2453,7 @@ if __name__ == "__main__":
         w6="--w6" in sys.argv,
         w6_only="--w6-only" in sys.argv,
         w6_odds_current="--w6-odds-current" in sys.argv,
+        clv_labels_only="--clv-labels-only" in sys.argv,
         w7b="--w7b" in sys.argv,
         w7b_only="--w7b-only" in sys.argv,
         w8a="--w8a" in sys.argv,
