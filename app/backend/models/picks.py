@@ -108,6 +108,11 @@ class FeaturedYesterday(BaseModel):
     matchup: str
     market_type: str
     outcome: str
+    # win | loss | pending — drives the green/red/Clock styling on the home featured card.
+    # Was omitted (2026-07-19): the writer + heal both stamp status into DynamoDB, but this
+    # model dropped it on serialization, so the recap always fell through to the pending
+    # Clock icon even when the pick had settled Won/Lost.
+    status: str | None = None
 
 
 class FeaturedPickResponse(BaseModel):

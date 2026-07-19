@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "fixed",
+        "text": "Fixed the featured pick's 'Yesterday' recap showing 'Won' (or 'Lost') without its color — a settled result was rendering with the gray 'pending' clock icon instead of the green check for a win or red mark for a loss. The recap's win/loss/pending state was being computed correctly behind the scenes but dropped before it reached the page, so the badge fell back to the neutral pending style. Settled recaps now show green for a win and red for a loss as intended. This is a factual result recap, not betting advice."
+      },
+      {
+        "tag": "fixed",
         "text": "Fixed the featured pick's 'Yesterday' recap sometimes staying stuck on 'Pending' after that game had finished. The recap settles to Won or Lost only once the previous game's final result has been ingested, and a late-finishing game (often a West-coast start) frequently isn't available yet when the morning update runs — so the badge could read 'Pending' all day even though the game was long over. The home page now re-checks a still-'Pending' recap when you load it and updates it to Won or Lost the moment the result is in, so it no longer lingers. This is a factual result recap, not betting advice."
       },
       {
