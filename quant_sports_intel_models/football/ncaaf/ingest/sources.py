@@ -2,7 +2,8 @@
 ================================================================
 The one file that IS NCAAF-specific (sport_data_platform.md §2: "only `sources.py`, the
 dbt models, and the schedule payload are sport-specific"). It maps every locked Phase-0
-lake table (ncaaf_data_inventory.md §8, 24 tables) → a fetch function + grain + partition +
+lake table (ncaaf_data_inventory.md §8, 24 tables + `coaches` added by P0.5 = 25) → a fetch
+function + grain + partition +
 cadence, so `handler.py` / `backfill.py` are pure registry drivers.
 
 Every fetcher returns a flat `list[dict]` of raw records for ONE season (the handler writes
@@ -285,7 +286,8 @@ def _nflverse(asset_key: str, season_col: str | None) -> FetchFn:
     return fetch
 
 
-# ── THE REGISTRY — the 24 locked Phase-0 lake tables (ncaaf_data_inventory.md §8) ────────
+# ── THE REGISTRY — the 24 locked Phase-0 lake tables (ncaaf_data_inventory.md §8) + the
+# `coaches` source added by P0.5 (HC history w/ SP+ splits; §11) = 25 sources ──────────────
 SOURCES: dict[str, SourceSpec] = {s.name: s for s in [
     # 1–9 week-grained CFBD (the modelling core)
     SourceSpec("games", _games, "cfbd", "game", "season/week", "weekly"),
@@ -316,6 +318,11 @@ SOURCES: dict[str, SourceSpec] = {s.name: s for s in [
     SourceSpec("returning_production", _year_only("/player/returning"), "cfbd", "team",
                "season", "seasonal"),
     SourceSpec("teams", _year_only("/teams/fbs"), "cfbd", "season", "season", "seasonal"),
+    SourceSpec("coaches", _year_only("/coaches"), "cfbd", "team", "season", "seasonal",
+               notes="HC↔school↔year history WITH per-coach-year SP+ splits (P0.5). Year-only "
+                     "(1 call/season) — a year= pull returns each coach with THAT season's row; "
+                     "dbt reads all partitions to reconstruct the full coach-school-year grid + "
+                     "each HC's prior-season SP+ track record. OC/DC not in CFBD (inventory §11)."),
     SourceSpec("cfbd_draft_picks", _year_only("/draft/picks"), "cfbd", "player", "season",
                "seasonal", notes="the CFBD side of the NFL-feeder draft-slot key (P0.3)"),
     # 18–21 Odds API

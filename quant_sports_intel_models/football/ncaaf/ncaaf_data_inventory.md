@@ -413,7 +413,49 @@ axis for free). Treat NIL $ as an **edge-gated, licence-negotiated** buy — **n
 
 ---
 
+## 11. 🧭 Coaching-change data — **HC FREE from CFBD (shipped); OC/DC DEFERRED (gap, no free API)** — P0.5
+
+**The thesis (roadmap P0.5):** a new HC/OC/DC can flip a team's scheme + scoring profile overnight (~63–71 new Power-4
+coordinators in the 2026 cycle alone) → the game model needs a **coaching-continuity** input or it will misprice a team whose
+staff turned over.
+
+**✅ HEAD COACH — SHIPPED FREE (CFBD `/coaches`, ground-truthed live 2026-07-19).** The endpoint is **year-only** (1 call/season,
+no team loop) and returns one record per coach with a `seasons` array of per-year rows carrying **school, year, wins/losses, srs,
+and ⭐ the SP+ splits `spOverall`/`spOffense`/`spDefense`**. A `minYear/maxYear` pull returns each coach's FULL multi-season
+career (e.g. Jeff Brohm, 12 seasons across schools) — confirming the endpoint carries the **prior-track-record** signal the story
+called for. Live pull (2014–2025): **381 coaches, 1,568 (school,year) cells, ~133 FBS schools/season**; **107 cells (~7%) had >1
+coach** = a mid-season change/interim. `spOverall` is present on 1,623/1,678 season-rows (nulls = early/FCS).
+
+Landed as:
+- **`coaches`** — the 25th §8 lake table (CFBD `/coaches`, year-only, season-partitioned Delta; added to `ingest/sources.py`).
+- staging **`stg_ncaaf_coaches`** — the `seasons` array EXPLODED to a coach-school-season grain (SP+ splits typed).
+- mart **`ncaaf_team_coaching_change`** (`sports_dbt/models/ncaaf/marts/`) — ONE row per (season, team), FBS spine (same
+  returning-production universe as P0.4). Emits: **HC identity + tenure**, **year-over-year HC-change flag**
+  (`hc_change_from_prev`, NULL at the 2014 floor), **mid-season-change flag** (`hc_midseason_change`, coach of record = most
+  games), and ⭐ **the coach's PRIOR SP+ profile** (`hc_prior_sp_overall/offense/defense_avg` career-to-date + `hc_recent_sp_*`
+  most-recent-prior-season + `is_first_time_hc`). ⭐ **Leakage-safe:** HC identity/change/tenure are known pre-season; the
+  prior-SP+ aggregates read **strictly seasons before `season`** — the current-season SP+ row is used only to identify the coach,
+  never emitted as a feature. Feeds **P1.3** (the coaching feature block).
+
+**⛔ OC/DC (coordinators) — NOT in CFBD → DEFERRED (gated like NIL-$, §10).** CFBD `/coaches` is **head-coach only**; there is no
+CFBD coordinator endpoint (verified — the coach record has no coordinator field). The **known trackers are editorial, not APIs:**
+- **FootballScoop** — the industry OC/DC coaching-change tracker (also **ESPN** / **CBS Sports** hire trackers). ⚠️ **Source-honesty
+  note: like the NIL-$ sources in §10, these were NOT ground-truthed on a live pull — there is no public bulk/free API.** Ingesting
+  OC/DC would mean **scraping an editorial/ToS-protected site** or **maintaining a small hand-curated season table** (labor, not a
+  clean feed).
+- **SportsDataIO** — a PAID vendor that *does* expose coordinators via a licensed API (price quote-based, not public) — the paid
+  alternative, same class as PFF/On3: an edge-gated licence, **never a Phase-0 dependency.**
+
+**RECOMMENDATION:** ship the FREE HC-continuity signal (done). Add OC/DC **only** as a best-effort scraped/manual layer if a
+Phase-1 ablation shows residual error where a coordinator change would explain it beyond the HC signal + returning-production +
+roster flux (P0.4) — and even then prefer a **small curated season seed** over a fragile scraper. Treat OC/DC as **best-effort /
+edge-gated**, gated exactly like NIL-$ (§10) — **not a blocker for P1.3.**
+
+---
+
 _Ground-truthed 2026-07-13 against CFBD v2 (live, free-tier key), The Odds API v4 (live), and nflverse release Parquet.
 Row counts and field lists are observed, not documented. Re-verify before any tier/licence purchase._
 _§10 (NIL / roster-continuity) added 2026-07-19 (P0.4) — the CFBD `/player/returning`, `/player/portal`, `/talent`,
 `/roster` schemas were re-pulled live; the NIL-$ (On3/Rivals) claims are documented-as-unavailable, NOT live-pulled (no public API)._
+_§11 (coaching-change) added 2026-07-19 (P0.5) — CFBD `/coaches` re-pulled live (year-only + minYear/maxYear); the HC signal is
+shipped free, the OC/DC (FootballScoop/ESPN/CBS/SportsDataIO) claims are documented-as-unavailable-free, NOT live-pulled._

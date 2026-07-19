@@ -210,12 +210,16 @@ def test_table_uri_layout():
 
 
 # ── registry completeness ───────────────────────────────────────────────────────────────
-def test_registry_has_24_locked_tables():
-    assert len(src.SOURCES) == 24
+def test_registry_has_locked_tables():
+    # 24 P0.2-locked §8 tables + `coaches` added by P0.5 (year-only HC history w/ SP+ splits).
+    assert len(src.SOURCES) == 25
     # spot-check the load-bearing ones from ncaaf_data_inventory.md §8
     for name in ["games", "play_stats", "cfbd_draft_picks", "odds_ncaaf",
-                 "nflverse_draft_picks", "nflverse_players"]:
+                 "nflverse_draft_picks", "nflverse_players", "coaches"]:
         assert name in src.SOURCES
+    # coaches is a year-only seasonal CFBD source (1 call/season, no team loop)
+    assert src.SOURCES["coaches"].tier == "cfbd"
+    assert src.SOURCES["coaches"].cadence == "seasonal"
 
 
 def test_registry_groupings():
