@@ -12,6 +12,7 @@ from pipeline.ops.sensor_ops import (
     lineup_predict,
 )
 from pipeline.ops.daily_ingestion_ops import (
+    build_zone_matchup_overlay_op,
     compute_elo,
     dbt_build_bullpen_posteriors_op,
     dbt_umpire_feature_rebuild,
@@ -86,7 +87,15 @@ def lineup_monitor_job():
     # Soft-fail: Cortex outage must not block the serving write.
     s3n = generate_pick_narratives_op(start=s3)
     clv = lineup_dbt_clv_rebuild(start=s3n)
-    write_serving_store_intraday_op(predict_done=clv)
+    serve = write_serving_store_intraday_op(predict_done=clv)
+    # E11.20 phase-2a (2026-07-20) — the zone-overlay generator's ONLY trigger used to be the
+    # pre-dawn daily job (~11:40pm PT), when today's lineups cannot exist yet, so it wrote ZERO
+    # overlays on the organic path for three weeks and the app's Matchup Zone Analysis surface sat
+    # empty. WARN-tier and deliberately the TERMINAL leaf — it runs where lineups actually are
+    # confirmed, but downstream of the serving write so its (~1 min) profile build can never delay
+    # the Epic A1 post_lineup SLA. Idempotent: it overwrites the same as_of= keys, so re-running it
+    # on every trigger through the slate just accumulates overlays as more lineups post.
+    build_zone_matchup_overlay_op(start=serve)
 
 
 @job(executor_def=in_process_executor, tags={"concurrency_group": "statcast_catchup"})

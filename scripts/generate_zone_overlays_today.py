@@ -1,8 +1,25 @@
 """E9.31b — daily zone-overlay generator.
 
-Queries Snowflake for batter × opposing-starter pairs from today's (or --date's)
-lineup and probable-pitcher tables, builds zone profiles from the S3 lakehouse
-(DuckDB, 3-year rolling window), and writes overlay JSONs to the serving S3 prefix.
+Resolves batter × opposing-starter pairs from today's (or --date's) lineup and
+probable-pitcher tables, builds zone profiles from the S3 lakehouse (DuckDB,
+3-year rolling window), and writes overlay JSONs to the serving S3 prefix.
+
+⭐ E11.20 phase-2a REVIVAL (2026-07-20). This generator produced ZERO overlays on the
+organic path between 2026-06-30 and 2026-07-20 — the app's "Matchup Zone Analysis"
+surface was dead for three weeks and NOBODY noticed, because the script is WARN-tier and
+exits 0 whether it writes 500 overlays or none. Three compounding defects, all fixed here
+plus one in the caller:
+  (a) the target date came from `date.today()` — the RAW UTC box clock (INC-22). Now routed
+      through betting_ml.utils.game_day.current_game_date_iso() (the US baseball-day).
+  (b) the ONLY trigger was the pre-dawn daily job (~11:40pm PT), when today's lineups
+      CANNOT exist yet, so `pairs` was always empty. Fixed in the caller: the op is now
+      also a WARN-tier leaf of lineup_monitor_job, which fires when lineups actually
+      confirm (see pipeline/jobs/sensor_jobs.py).
+  (c) the pair query hit Snowflake. Now DuckDB over the S3 lakehouse — this script is one
+      of the last intraday Snowflake consumers whose freshness the 30-min capture tick's
+      external-table refresh existed to serve.
+⇒ This script is now SNOWFLAKE-FREE end to end. Verifying it "exits 0" proves nothing;
+verify the overlay COUNT for a live slate.
 
 WARN-tier: peripheral/app-cosmetic.  Any failure logs a warning to stderr and the
 script exits 0 so the Dagster op never blocks predictions or serving.
@@ -23,8 +40,8 @@ Usage:
     # specific date smoke test:
     uv run python scripts/generate_zone_overlays_today.py --date 2026-06-27 --dry-run
 
-Lakehouse-only: ALL heavy pitch aggregation is DuckDB over S3 (never Snowflake).
-Snowflake is queried ONCE per target date for lineup / probable-pitcher IDs only.
+Lakehouse-only: ALL reads — the heavy pitch aggregation AND the lineup / probable-pitcher
+IDs — are DuckDB over S3. Snowflake is never opened.
 """
 
 from __future__ import annotations
@@ -42,7 +59,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from betting_ml.scripts.zone_matchup import lakehouse, profiles, viz
 from betting_ml.scripts.zone_matchup.grid import GridSpec
-from betting_ml.utils.data_loader import get_snowflake_connection
+from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — US baseball-day, not UTC
 
 _S3_BUCKET = "baseball-betting-ml-artifacts"
 _S3_OVERLAY_PREFIX = "baseball/serving/zone_matchup/overlay"
@@ -61,20 +78,27 @@ def _s3_put(key: str, body: bytes, content_type: str) -> str:
 
 
 def _get_matchup_pairs(date_str: str) -> list[tuple[int, int]]:
-    """Snowflake: batter × opposing-starter pairs for date_str.
+    """Batter × opposing-starter pairs for date_str, from the S3 lakehouse (DuckDB).
 
     Batters from stg_statsapi_lineups (batting_order ≤ 9) crossed with the
     probable starter from the OPPOSING side in stg_statsapi_probable_pitchers.
     Returns list of (batter_id, pitcher_id) deduplicated pairs.
     Returns [] when lineup / starter data is not yet posted.
+
+    Views are registered through the Delta-aware registrar — never a hardcoded
+    lakehouse glob (the 2026-07-20 P0). Both date columns are real DATE types in
+    the parquet (checked 2026-07-20), so no INC-23 VARCHAR cast is needed.
     """
+    from betting_ml.utils.delta_lakehouse import register_lakehouse_views
+    from betting_ml.utils.lakehouse_monitor import duck
+
     sql = """
     WITH lineups AS (
         SELECT game_pk,
                home_away,
                player_id AS batter_id
-        FROM baseball_data.betting.stg_statsapi_lineups
-        WHERE official_date = %(d)s
+        FROM stg_statsapi_lineups
+        WHERE official_date = ?::date
           AND player_id IS NOT NULL
           AND batting_order <= 9
     ),
@@ -82,8 +106,8 @@ def _get_matchup_pairs(date_str: str) -> list[tuple[int, int]]:
         SELECT game_pk,
                side AS starter_side,
                probable_pitcher_id AS pitcher_id
-        FROM baseball_data.betting.stg_statsapi_probable_pitchers
-        WHERE game_date::date = %(d)s
+        FROM stg_statsapi_probable_pitchers
+        WHERE game_date = ?::date
           AND probable_pitcher_id IS NOT NULL
     )
     SELECT DISTINCT l.batter_id, s.pitcher_id
@@ -96,11 +120,13 @@ def _get_matchup_pairs(date_str: str) -> list[tuple[int, int]]:
       )
     ORDER BY l.batter_id, s.pitcher_id
     """
-    conn = get_snowflake_connection()
+    conn = duck()
     try:
-        cur = conn.cursor()
-        cur.execute(sql, {"d": date_str})
-        return [(int(r[0]), int(r[1])) for r in cur.fetchall()]
+        register_lakehouse_views(
+            conn, ["stg_statsapi_lineups", "stg_statsapi_probable_pitchers"]
+        )
+        rows = conn.execute(sql, [date_str, date_str]).fetchall()
+        return [(int(r[0]), int(r[1])) for r in rows]
     finally:
         conn.close()
 
@@ -164,7 +190,12 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    today_str = args.date or date.today().isoformat()
+    # INC-22 — the US baseball-day, NOT the raw UTC box clock. This op fires from the daily job
+    # AND (post-E11.20-phase-2a) from lineup_monitor_job through the evening; a UTC date.today()
+    # rolls to TOMORROW after ~17:00 PT, so the pair query asked for a date with no lineups and
+    # the generator wrote nothing while still exiting 0. That is defect (a) of the three-week
+    # zone-overlay outage.
+    today_str = args.date or current_game_date_iso()
     today_dt = date.fromisoformat(today_str)
 
     # --- Step 1: Build profiles (once; reused for every target date) ---
@@ -209,19 +240,29 @@ def main() -> None:
     total_skipped = 0
 
     for target_date in target_dates:
-        print(f"[zone-overlay] fetching pairs for {target_date} from Snowflake ...")
+        print(f"[zone-overlay] fetching pairs for {target_date} from the S3 lakehouse ...")
         try:
             pairs = _get_matchup_pairs(target_date)
         except Exception as e:  # noqa: BLE001
             print(
-                f"WARNING [zone-overlay] Snowflake query failed for {target_date} "
+                f"WARNING [zone-overlay] pair query failed for {target_date} "
                 f"(non-fatal, skipping date): {e}",
                 file=sys.stderr,
             )
             continue
 
         if not pairs:
-            print(f"[zone-overlay] {target_date}: no pairs found — lineup/starter data may not be posted yet")
+            # ALERT-loud-but-continue, not a silent skip. A stdout note here is precisely how the
+            # 2026-06-30 → 07-20 outage stayed invisible: every organic run found 0 pairs, said so
+            # on stdout, and exited 0. On the pre-dawn daily run this is EXPECTED (no lineups yet);
+            # from lineup_monitor_job it means something is actually wrong.
+            print(
+                f"WARNING [zone-overlay] {target_date}: 0 batter×starter pairs — no overlays will "
+                f"be written for this date. Expected on a pre-lineup (pre-dawn) run; from an "
+                f"intraday/lineup-triggered run it means lineups or probable pitchers are missing "
+                f"from the lakehouse.",
+                file=sys.stderr,
+            )
             continue
 
         if args.dry_run:
@@ -274,6 +315,12 @@ def main() -> None:
         print(f"[zone-overlay] DRY-RUN complete — {total_written} pairs would be written across {len(target_dates)} date(s)")
     else:
         print(f"[zone-overlay] done — {total_written} overlays written, {total_skipped} skipped")
+        if total_written == 0:
+            print(
+                "WARNING [zone-overlay] wrote ZERO overlays across every target date — the "
+                "Matchup Zone Analysis surface will have no data for this slate.",
+                file=sys.stderr,
+            )
 
 
 if __name__ == "__main__":

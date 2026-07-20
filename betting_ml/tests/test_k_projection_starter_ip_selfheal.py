@@ -6,7 +6,13 @@ hard-depends on it (it joins `starter_ip_signals` and skips starters with a null
 `_ensure_starter_ip_signal` closes that gap: it generates today's signal on demand when absent,
 so both the daily op and the hourly host cron (which both invoke this script) self-heal.
 
-Pure/mocked — no Snowflake, no subprocess. Asserts the generate-only-when-missing contract, the
+E11.20 phase-2a (2026-07-20): the PRESENCE CHECK moved from Snowflake to the S3 lakehouse mirror
+(so the steady state opens no warehouse session), and a successful generation is now followed by a
+RE-MIRROR back to S3 — without it the signal would exist only in Snowflake and the writer's own
+read would still see nothing (the INC-25 ordering rule). These tests patch the DuckDB helper
+instead of the Snowflake connector, and assert the mirror step.
+
+Pure/mocked — no S3, no subprocess. Asserts the generate-only-when-missing contract, the
 env→schema resolution, and fail-soft behaviour (a bad presence check or a failed generation must
 never raise out of this WARN-tier writer).
 """
@@ -15,38 +21,31 @@ import scripts.write_pitcher_k_projections as wk
 _DAY = "2026-07-03"
 
 
-class _Cur:
+class _Conn:
+    """Minimal stand-in for the DuckDB connection the presence check now uses."""
+
     def __init__(self, count):
         self._count = count
         self.executed = None
 
     def execute(self, sql, params=None):
         self.executed = (sql, params)
+        return self
 
     def fetchone(self):
         return (self._count,)
-
-
-class _Conn:
-    def __init__(self, count):
-        self._cur = _Cur(count)
-
-    def cursor(self):
-        return self._cur
 
     def close(self):
         pass
 
 
 def _patch_conn(monkeypatch, count=0, raises=False):
-    import betting_ml.utils.data_loader as dl
-
     def _factory(*a, **k):
         if raises:
-            raise RuntimeError("snowflake down")
+            raise RuntimeError("lakehouse read failed")
         return _Conn(count)
 
-    monkeypatch.setattr(dl, "get_snowflake_connection", _factory)
+    monkeypatch.setattr(wk, "_duck_lakehouse", _factory)
 
 
 def _patch_run(monkeypatch, returncode=0):
@@ -74,11 +73,18 @@ def test_generates_when_signal_missing(monkeypatch):
 
     wk._ensure_starter_ip_signal(_DAY)
 
-    assert len(calls) == 1, "missing signal must trigger exactly one generation"
+    assert len(calls) == 2, "missing signal must trigger one generation + one S3 re-mirror"
     cmd = calls[0]
     assert str(wk._STARTER_IP_GEN) in cmd
     assert "--date" in cmd and cmd[cmd.index("--date") + 1] == _DAY
     assert "--env" in cmd and cmd[cmd.index("--env") + 1] == "prod"
+    # The generator reads its feature sources from S3 too — only its MERGE write is Snowflake.
+    assert "--s3" in cmd
+    # INC-25: without the re-mirror the signal lands in Snowflake only and the writer's own
+    # lakehouse read would still find nothing, so scoring would keep skipping.
+    mirror = calls[1]
+    assert str(wk._STARTER_IP_MIRROR) in mirror
+    assert "--table" in mirror and mirror[mirror.index("--table") + 1] == wk._STARTER_IP_TABLE
 
 
 def test_skips_generation_when_signal_present(monkeypatch):
@@ -104,20 +110,24 @@ def test_env_defaults_to_dev_without_target_env(monkeypatch):
 
 
 def test_presence_check_failure_falls_through_to_generation(monkeypatch):
-    """A flaky Snowflake presence check must not abort — treat as missing and generate."""
+    """A flaky lakehouse presence check must not abort — treat as missing and generate."""
     monkeypatch.setenv("TARGET_ENV", "prod")
     _patch_conn(monkeypatch, raises=True)
     calls = _patch_run(monkeypatch, returncode=0)
 
     wk._ensure_starter_ip_signal(_DAY)  # must not raise
 
-    assert len(calls) == 1
+    assert len(calls) == 2
 
 
 def test_generation_failure_is_fail_soft(monkeypatch):
     """A non-zero generator exit is logged, not raised (WARN-tier writer never blocks serving)."""
     monkeypatch.setenv("TARGET_ENV", "prod")
     _patch_conn(monkeypatch, count=0)
-    _patch_run(monkeypatch, returncode=1)
+    calls = _patch_run(monkeypatch, returncode=1)
 
     wk._ensure_starter_ip_signal(_DAY)  # must not raise
+
+    # A failed generation must NOT go on to mirror — that would overwrite the S3 parquet from a
+    # Snowflake table the generator just failed to update.
+    assert len(calls) == 1
