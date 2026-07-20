@@ -82,13 +82,16 @@ def get_duckdb():
 
 
 def register_views(duck, tables: list[str] | None = None) -> None:
-    """Register each source table as a bare-name view over its lakehouse glob."""
-    for name in (tables if tables is not None else BULLPEN_SOURCE_TABLES):
-        glob = f"{_LAKEHOUSE}/{name}/**/*.parquet"
-        duck.execute(
-            f"CREATE OR REPLACE VIEW {name} AS "
-            f"SELECT * FROM read_parquet('{glob}', union_by_name=true)"
-        )
+    """Register each source table as a bare-name view over its correct storage backend.
+
+    E11.20 phase 1.5 (2026-07-20): delegates to the shared Delta-aware registrar. The old
+    hardcoded lakehouse/<table>/**/*.parquet glob assumed the W1 compat parquet existed —
+    phase 1.5 DELETED it (the SF ext tables that needed it are dropped), so under cutover
+    a W1 mart (mart_pitch_play_event here, mart_pitch_characteristics in the cluster set)
+    resolves ONLY through delta_scan. The stale glob is what broke the daily job."""
+    from betting_ml.utils.delta_lakehouse import register_lakehouse_views
+
+    register_lakehouse_views(duck, tables if tables is not None else BULLPEN_SOURCE_TABLES)
 
 
 def rewrite(sql: str) -> str:

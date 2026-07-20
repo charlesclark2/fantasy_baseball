@@ -103,3 +103,42 @@ def delta_scan_view_sql(table: str) -> str:
     """The CREATE-VIEW body for a Delta-backed table (DuckDB `delta` extension —
     READ-ONLY, the spike's roadmap correction: DuckDB cannot WRITE Delta)."""
     return f"SELECT * FROM delta_scan('{delta_table_uri(table)}')"
+
+
+# ── Reader-side routing (E11.20 phase 1.5, 2026-07-20 — the post-drop outage cure) ──────
+# Every DuckDB consumer that registers a lakehouse table as a bare-name view MUST route
+# through lakehouse_view_sql(). Phase 1.5 DELETED the legacy/compat parquet under
+# lakehouse/<w1 table>/ (the SF ext tables that needed it are dropped), so a hardcoded
+# `read_parquet('<lakehouse>/<table>/**/*.parquet')` on a W1 mart now raises
+# "IO Error: No files found that match the pattern" — which is exactly how the daily job
+# broke on 2026-07-20 (generate_matchup_signals_op died → predict_today never ran → a
+# whole slate served nothing). Under cutover the W1 marts live ONLY in Delta.
+LAKEHOUSE = f"{BUCKET}/baseball/lakehouse"
+
+
+def lakehouse_view_sql(table: str) -> str:
+    """The CREATE-VIEW body for ANY lakehouse table, routed by storage backend: Delta
+    (delta_scan) for a cut-over W1 mart, the parquet glob for everything else. Callers
+    must load the DuckDB `delta` extension first — use ensure_delta_extension(conn)."""
+    if delta_read_enabled(table):
+        return delta_scan_view_sql(table)
+    return f"SELECT * FROM read_parquet('{LAKEHOUSE}/{table}/**/*.parquet', union_by_name=true)"
+
+
+def ensure_delta_extension(conn) -> None:
+    """Load the read-only DuckDB `delta` extension when any cut-over table may be read.
+    Best-effort by design: on a build with no delta extension available this leaves the
+    connection usable for pure-parquet reads instead of hard-failing at connect time."""
+    if delta_w1_mode() != "cutover":
+        return
+    try:
+        conn.execute("INSTALL delta; LOAD delta")
+    except Exception:  # noqa: BLE001 — surfaced later by the delta_scan itself
+        pass
+
+
+def register_lakehouse_views(conn, tables) -> None:
+    """Register each table as a bare-name DuckDB view over its correct backend."""
+    ensure_delta_extension(conn)
+    for name in tables:
+        conn.execute(f"CREATE OR REPLACE VIEW {name} AS {lakehouse_view_sql(name)}")
