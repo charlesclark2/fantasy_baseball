@@ -26,7 +26,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 
 from .cfbd_client import CFBDClient
@@ -50,6 +50,31 @@ NCAAF_GAME_LINE_MARKETS = "h2h,spreads,totals"
 # ⚠️ NCAAF player PROPS have a HARDER 2023 vendor floor AND are THIN → NOT pulled here (P0.6 is
 # GAME LINES ONLY: h2h/spread/total); the props floor is moot for this source.
 NCAAF_HISTORICAL_FLOOR = 2020
+
+
+def last_completed_season(today: "date | None" = None) -> int:
+    """The most recent NCAAF season whose games are ALL played — the clock-derived upper bound
+    for a historical backfill (never hardcode it; a pinned year silently rots — P0.6 shipped with
+    `2020-2024` and was already stale by one season the day it merged).
+
+    A season YYYY runs Aug YYYY → mid-Jan YYYY+1. So from FEBRUARY onward the season that began
+    LAST calendar year is complete. During JANUARY the prior season's bowls/CFP are still being
+    played, so we conservatively fall back one further — defaulting into an IN-PROGRESS season
+    would land a PARTIAL partition, which `--skip-existing` then protects forever (the P0.6
+    2024-stub trap). An operator wanting the just-finishing season passes `--seasons` explicitly.
+
+    Self-contained stdlib only: this package ships as a LEAN image (its Dockerfile COPYs just
+    `ncaaf/ingest/` + its own requirements) — importing `betting_ml.utils.game_day` here would
+    ImportError at runtime. Injectable `today` keeps it unit-testable.
+    """
+    d = today or datetime.now(timezone.utc).date()
+    return d.year - 1 if d.month >= 2 else d.year - 2
+
+
+def default_backfill_seasons(today: "date | None" = None) -> str:
+    """`<floor>-<last completed season>` — the clock-derived default season range (a string in
+    the `_parse_seasons` A-B shape) shared by odds_backfill.py and verify_odds_historical.py."""
+    return f"{NCAAF_HISTORICAL_FLOOR}-{last_completed_season(today)}"
 
 # nflverse release-Parquet asset URLs (read DIRECTLY via DuckDB — nfl_data_py is abandoned;
 # it pins pandas==1.5.3 which won't build on py3.12. P0.1 §1 landmine).

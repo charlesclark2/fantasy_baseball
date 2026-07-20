@@ -22,9 +22,12 @@ that actually gate P1.4's vs-market eval + Phase 2:
      run only above `ORPHAN_FAIL_FRAC` of all games (a systemic snapshot/time bug), not a handful.
   E. Distinct sportsbooks present (incl. Bovada, the target book).
 
+The asserted season range defaults CLOCK-DERIVED (floor → last COMPLETED season), so a newly
+finished season shows up as a MISSING partition instead of silently going unnoticed.
+
 Run on the LAPTOP (has AWS read creds), repo root — a pure read, instant:
   uv run python -m quant_sports_intel_models.football.ncaaf.ingest.verify_odds_historical
-  uv run python -m quant_sports_intel_models.football.ncaaf.ingest.verify_odds_historical --seasons 2020-2024
+  uv run python -m quant_sports_intel_models.football.ncaaf.ingest.verify_odds_historical --seasons 2020-2025
 
 Exit code 0 = PASS, 1 = FAIL (a genuinely missing/partial partition, a below-floor partition, or
 a systemic orphan rate) — so it can gate a CI/handoff step, not just print.
@@ -38,7 +41,7 @@ import pandas as pd
 
 from .handler import _parse_seasons
 from .query_lake import delta, q
-from .sources import NCAAF_HISTORICAL_FLOOR
+from .sources import NCAAF_HISTORICAL_FLOOR, default_backfill_seasons
 
 # A partition covering < this fraction of the CFBD FBS schedule is a partial/stub pull → FAIL.
 COVERAGE_MIN_FRAC = 0.80
@@ -204,9 +207,13 @@ def verify(seasons: list[int], *, source: str = "odds_ncaaf_historical") -> bool
 
 
 def main() -> None:
+    # CLOCK-DERIVED default so the asserted range tracks the calendar (a pinned year would go
+    # stale and stop flagging a newly-completed season as missing — see P0.6's 2025 gap).
+    default_seasons = default_backfill_seasons()
     p = argparse.ArgumentParser(description="Verify the odds_ncaaf_historical backfill (P0.6).")
-    p.add_argument("--seasons", default=f"{NCAAF_HISTORICAL_FLOOR}-2024",
-                   help=f"expected season partitions to assert present (default {NCAAF_HISTORICAL_FLOOR}-2024)")
+    p.add_argument("--seasons", default=default_seasons,
+                   help=f"expected season partitions to assert present (default {default_seasons} — "
+                        f"clock-derived through the last COMPLETED season)")
     p.add_argument("--source", default="odds_ncaaf_historical")
     args = p.parse_args()
     ok = verify(_parse_seasons(args.seasons), source=args.source)

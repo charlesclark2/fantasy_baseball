@@ -69,11 +69,11 @@ from .sources import (
     ODDS_ON_DEMAND,
     SOURCES,
     build_ctx,
+    default_backfill_seasons,
 )
 
 log = logging.getLogger(__name__)
 
-DEFAULT_HIST_SEASONS = "2020-2024"
 CREDITS_PER_CALL_PER_MARKET_REGION = 10  # Odds-API cost model: 10 × #markets × #regions per call
 
 
@@ -101,12 +101,15 @@ def _estimate_credits(ctx, seasons, weeks, regions: str) -> dict:
 
 
 def main() -> None:
+    # CLOCK-DERIVED default (computed per invocation, never a pinned literal — see
+    # sources.last_completed_season): floor → the most recent FULLY-PLAYED season.
+    default_seasons = default_backfill_seasons()
     p = argparse.ArgumentParser(description="NCAAF PAID Odds-API historical closing-line backfill (P0.6).")
     p.add_argument("--sources", default="odds_ncaaf_historical",
                    help=f"comma list from {ODDS_ON_DEMAND} (default: odds_ncaaf_historical)")
-    p.add_argument("--seasons", default=DEFAULT_HIST_SEASONS,
-                   help=f"comma list or A-B range (default {DEFAULT_HIST_SEASONS}; NCAAF /historical floor="
-                        f"{NCAAF_HISTORICAL_FLOOR})")
+    p.add_argument("--seasons", default=default_seasons,
+                   help=f"comma list or A-B range (default {default_seasons} — clock-derived through the "
+                        f"last COMPLETED season; NCAAF /historical floor={NCAAF_HISTORICAL_FLOOR})")
     p.add_argument("--weeks", help="scope to these week(s) (comma list) — a small verification pull")
     p.add_argument("--regions", default="us", help="Odds-API regions (default us; US books incl. Bovada)")
     p.add_argument("--buffer-min", type=int, default=5,
