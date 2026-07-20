@@ -131,3 +131,112 @@ models:
         description: NFL player key. Non-null for the vast majority of picks (a few pre-gsis historical picks can be null); unique within the deduped table.
       - name: sport
         data_tests: [not_null]
+
+  # ── NCAAF-P1.1 — the raw tables the dimensional model is built from ────────────────────
+
+  - name: stg_ncaaf_teams
+    description: >
+      Flattened CFBD /teams/fbs (P1.1) — one row per (season, team_id): the FBS registry as it
+      stood that season, carrying the DRIFTING attributes (conference, division, classification)
+      plus the stable identity/venue block. The raw record has no season field (a year-only pull),
+      so season comes from the Delta PARTITION — which is exactly what makes realignment
+      observable. Source for the SCD-2 dim_ncaaf_team and for dim_ncaaf_conference.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+      - name: team_id
+        data_tests: [not_null]
+      - name: team
+        data_tests: [not_null]
+
+  - name: stg_ncaaf_game_team_stats
+    description: >
+      Flattened CFBD /games/teams (P1.1) — one row per (game_id, team_id), the team-game box line.
+      Explodes teams[] -> stats[] and PIVOTS the ~35 string categories into typed columns.
+      Composites are split ONCE here rather than re-parsed by every consumer: completionAttempts
+      "27-39" → completions/pass_attempts, third/fourthDownEff → conversions/attempts,
+      totalPenaltiesYards → penalties/penalty_yards, possessionTime "31:14" → possession_seconds.
+      season from the Delta partition; week from the ingest's _week tag.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: game_id
+        data_tests: [not_null]
+      - name: team_id
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+
+  - name: stg_ncaaf_game_player_stats
+    description: >
+      Flattened CFBD /games/players (P1.1) — four chained UNNESTs (teams -> categories -> types ->
+      athletes) producing the LONG grain CFBD publishes: one row per (game_id, player_id, category,
+      stat_type). ⚠️ Stays LONG on purpose — the stat vocabulary differs per category and CFBD adds
+      types over time, so a pivot here would silently drop anything not enumerated;
+      fact_ncaaf_player_game pivots the modelled subset and the rest stays reachable.
+      Values remain STRINGS (CFBD's wire format), including composites like passing C/ATT.
+      ⚠️ /games/players carries no teamId — the team key is the NAME; dim_ncaaf_team resolves it.
+      🧯 Pinned to threads=1 + preserve_insertion_order=false: ~13.8k records explode to ~5.2M rows
+      and the model OOMs a 4 GB / 4-thread DuckDB otherwise.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: game_id
+        data_tests: [not_null]
+      - name: player_id
+        data_tests: [not_null]
+      - name: category
+        data_tests: [not_null]
+      - name: stat_type
+        data_tests: [not_null]
+
+  - name: stg_ncaaf_drives
+    description: >
+      Flattened CFBD /drives (P1.1) — one row per drive, the unit for scoring-opportunity and
+      field-position efficiency. CFBD's {minutes, seconds} objects are flattened to
+      elapsed_seconds. season from the Delta partition; week from the _week tag.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: drive_id
+        data_tests: [not_null, unique]
+      - name: game_id
+        data_tests: [not_null]
+
+  - name: stg_ncaaf_plays
+    description: >
+      Flattened CFBD /plays (P1.1) — ~2.2M rows, the raw material every efficiency metric
+      decomposes to (ppa is CFBD's EPA-analog). ⭐ Defines success rate ONCE on the standard
+      convention (1st down >= 50% of distance, 2nd >= 70%, 3rd/4th >= 100%) plus is_scrimmage_play,
+      is_pass/rush_play and is_passing_down, so no two consumers can disagree. Non-scrimmage plays
+      are FLAGGED, not dropped. ⚠️ wallclock stays VARCHAR (INC-23 — the reader casts at use-site).
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: play_id
+        data_tests: [not_null, unique]
+      - name: game_id
+        data_tests: [not_null]
+      - name: is_scrimmage_play
+        data_tests: [not_null]
+
+  - name: stg_ncaaf_game_advanced
+    description: >
+      Flattened CFBD /stats/game/advanced (P1.1) — one row per (game_id, team): the PBP-derived
+      advanced box for BOTH sides, with the down splits (standard/passing downs) and run-game block
+      (line/second-level/open-field yards, power success, stuff rate). ⚠️ def_* is what THIS team's
+      DEFENSE ALLOWED (CFBD emits both sides on each team's record) — the off_/def_ prefixes exist
+      so the perspective cannot be misread. The offense/defense sub-objects are extracted once per
+      row: reaching into the full document ~100x re-parses the JSON per column and OOM'd a 4 GB
+      DuckDB. Unlike the box/PBP tables this record carries its own season/week/team.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: game_id
+        data_tests: [not_null]
+      - name: team
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]

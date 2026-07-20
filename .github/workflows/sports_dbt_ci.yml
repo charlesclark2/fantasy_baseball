@@ -47,3 +47,49 @@ jobs:
         run: uv run dbt parse --project-dir . --profiles-dir . --target ci
       - name: dbt compile (all Jinja/SQL renders — the structural gate)
         run: uv run dbt compile --project-dir . --profiles-dir . --target ci
+
+      # ── NCAAF-P1.1 — the first NCAAF-specific CI gate ────────────────────────────────
+      # The whole-project compile above already renders these models, but selecting the NCAAF
+      # slice explicitly means a break in it is attributed to NCAAF in the job log instead of
+      # being buried in a 55-model compile, and it fails loudly if the selector itself ever stops
+      # matching (a renamed folder, a model moved out of ncaaf/) — which would otherwise silently
+      # shrink what the box job builds.
+      - name: dbt compile — NCAAF slice (staging + marts)
+        run: |
+          uv run dbt compile --project-dir . --profiles-dir . --target ci \
+            --select ncaaf.staging ncaaf.marts
+
+      # The three P1.1 LEAKAGE gates are singular tests: their SQL only renders if every ref and
+      # column they touch resolves. Compiling them offline catches a rename or a dropped column
+      # that would otherwise turn a leakage gate into a silently-skipped test on the box.
+      - name: dbt compile — NCAAF leakage gates (point-in-time contract)
+        run: |
+          uv run dbt compile --project-dir . --profiles-dir . --target ci \
+            --select assert_asof_week_has_no_future_games \
+                     assert_opponent_adjustment_is_point_in_time \
+                     assert_season_order_week_is_monotone_in_date
+
+      # A selector that matches NOTHING still exits 0 in dbt — so an empty NCAAF selection would
+      # sail through the steps above. Assert the model count is non-zero and roughly what P1.1
+      # ships, so silently losing the slice is a RED build, not a quiet no-op.
+      - name: Assert the NCAAF slice is non-empty (a no-op selector must not pass)
+        run: |
+          set -euo pipefail
+          # --quiet is REQUIRED: without it `dbt list` prints its "Running with dbt=…" preamble
+          # to STDOUT and every count is inflated by 2.
+          n_models=$(uv run dbt --quiet list --project-dir . --profiles-dir . --target ci \
+                       --select ncaaf.staging ncaaf.marts --resource-type model | wc -l | tr -d ' ')
+          n_gates=$(uv run dbt --quiet list --project-dir . --profiles-dir . --target ci \
+                       --select assert_asof_week_has_no_future_games \
+                                assert_opponent_adjustment_is_point_in_time \
+                                assert_season_order_week_is_monotone_in_date \
+                       --resource-type test | wc -l | tr -d ' ')
+          echo "NCAAF models selected: $n_models ; leakage gates selected: $n_gates"
+          if [ "$n_models" -lt 20 ]; then
+            echo "::error::NCAAF model slice collapsed to $n_models (<20) — the selector or the folder layout broke."
+            exit 1
+          fi
+          if [ "$n_gates" -ne 3 ]; then
+            echo "::error::Expected 3 NCAAF leakage gates, found $n_gates — a point-in-time contract test was lost."
+            exit 1
+          fi

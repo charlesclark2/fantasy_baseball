@@ -1,0 +1,13 @@
+# Docker build-context excludes for the root `Dockerfile` (image: credence-dagster).
+#
+# ⚠️ DELIBERATELY MINIMAL. The Dockerfile ends in `COPY . .` and the box job resolves
+# SPORTS_DBT_DIR=/app/quant_sports_intel_models/sports_dbt out of that copy — so an over-broad
+# ignore here silently removes code the box needs and the failure shows up only at runtime.
+# Add a pattern only when you are sure nothing in the image reads it.
+#
+# NCAAF-P1.1: `sports_dbt` materializes its DuckDB into the project dir on a laptop run (the
+# profile's default path is the project root). Those files are gitignored, so a CD build from a
+# clean clone never sees them — but .dockerignore is a SEPARATE list, and a build from a working
+# tree would COPY a multi-hundred-MB database into the image (311 MB observed 2026-07-20).
+*.duckdb
+*.duckdb.wal
