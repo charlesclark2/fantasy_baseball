@@ -32,6 +32,14 @@ model = 10 × #markets × #regions per call. NCAAF slates are DENSER than the NF
 college start times) so per-season kickoff counts — hence credits — run materially higher than
 the NFL's ~90/season; ALWAYS `--dry-run` first and scope seasons before firing.
 
+⚙️ RUN THIS ON THE LAPTOP (repo root), NOT the box. It is a one-time, I/O-bound paid pull
+(Odds-API calls with inter-call sleeps + raw-JSON Delta writes) — zero heavy compute — so it
+should NOT compete with the box's live serving resources. The laptop has everything it needs:
+`load_env()` picks up ODDS_API_KEY (the MAIN key) + CFBD_API_KEY from `.env`, and the S3 Delta
+write resolves AWS creds through the botocore chain (env / `~/.aws` profile) with the region
+defaulting to us-east-2 (`SPORTS_LAKE_REGION`) — no box instance role / `AWS_DEFAULT_REGION`
+export needed.
+
 USAGE (a full season is >1 min → hand the LIVE runs to the operator; --dry-run is quick):
   # Credit estimate (reads CFBD schedule; NO paid Odds calls), 2020-2024:
   uv run python -m quant_sports_intel_models.football.ncaaf.ingest.odds_backfill \
@@ -41,10 +49,8 @@ USAGE (a full season is >1 min → hand the LIVE runs to the operator; --dry-run
   uv run python -m quant_sports_intel_models.football.ncaaf.ingest.odds_backfill \
       --seasons 2024 --weeks 1 --max-events 3
 
-  # BOX — full historical game-line backfill (operator; resumable via --skip-existing):
-  docker compose -f services/dagster/aws/docker-compose.yml exec -T \
-      -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc \
-      python -m quant_sports_intel_models.football.ncaaf.ingest.odds_backfill \
+  # LAPTOP — full historical game-line backfill (resumable via --skip-existing):
+  uv run python -m quant_sports_intel_models.football.ncaaf.ingest.odds_backfill \
       --seasons 2020-2024 --skip-existing
 
 Idempotent: each season is a Delta partition overwrite (resume with --skip-existing to skip
