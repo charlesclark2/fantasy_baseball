@@ -8435,9 +8435,13 @@ models:
       alternate lines share the same snapshot timestamp, the surviving outcome_point is
       arbitrary. Use raw stg_derivative_odds when all alternate lines are needed.
     tests:
+      # 2026-07-20: key corrected to the model's DOCUMENTED grain (header): the old
+      # 4-column key omitted outcome_description + outcome_point, so every alternate-line
+      # ladder (37 alt-total lines per outcome) and team-total side "violated" it. Only
+      # surfaced when a CI full-test balloon ran this normally-unselected test.
       - dbt_utils.unique_combination_of_columns:
           arguments:
-            combination_of_columns: [game_pk, market_key, bookmaker_key, outcome_name]
+            combination_of_columns: [game_pk, market_key, bookmaker_key, outcome_name, outcome_description, outcome_point]
     columns:
       - name: game_pk
         description: >

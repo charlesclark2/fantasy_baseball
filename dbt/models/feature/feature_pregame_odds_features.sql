@@ -60,6 +60,12 @@ bridge as (
 -- Current lowvig h2h snapshot from the SCD-2 market features table.
 -- is_current = TRUE is equivalent to the prior "most recent pre-game snapshot"
 -- logic. For point-in-time replay, replace with valid_from/valid_to filter.
+-- 2026-07-20 rescheduled-game guard: the SCD-2 keys currency PER COMMENCE_TIME, so a
+-- postponed→rescheduled game carries a ZOMBIE is_current row at its ORIGINAL slot
+-- alongside the makeup's row (2 per market → the ×4 game_pk fan-out in this model +
+-- the aggregator; pks 823356/823357/824414). Until the SCD-2 closes superseded-commence
+-- rows itself, keep exactly one current row per game: latest commence wins (the makeup),
+-- freshest snapshot as tiebreak.
 h2h as (
     select
         game_pk,
@@ -76,13 +82,17 @@ h2h as (
     where bookmaker_key = 'lowvig'
       and market_type   = 'h2h'
       and is_current    = true
+    qualify row_number() over (
+        partition by game_pk
+        order by commence_time desc, valid_from desc
+    ) = 1
 ),
 
 consensus_odds as (
     select * from mart_odds_consensus
 ),
 
--- Current lowvig totals snapshot.
+-- Current lowvig totals snapshot. (Same rescheduled-game zombie-current guard as h2h.)
 totals as (
     select
         game_pk,
@@ -96,6 +106,10 @@ totals as (
     where bookmaker_key = 'lowvig'
       and market_type   = 'totals'
       and is_current    = true
+    qualify row_number() over (
+        partition by game_pk
+        order by commence_time desc, valid_from desc
+    ) = 1
 )
 
 select
