@@ -76,14 +76,23 @@ def get_cached_df(
     pull_fn: Callable[[], pd.DataFrame],
     max_age_hours: float = 24.0,
     refresh: bool = False,
+    source_label: str = "source",
 ) -> pd.DataFrame:
     """Return a DataFrame, reading from Parquet cache when fresh.
 
     Args:
         cache_key: Identifier for the cache file (e.g. "run_env_training").
-        pull_fn: Zero-argument callable that fetches data from Snowflake.
+        pull_fn: Zero-argument callable that fetches the data on a cache miss.
         max_age_hours: Cache is considered stale after this many hours.
-        refresh: If True, bypass cache and re-pull from Snowflake.
+        refresh: If True, bypass cache and re-pull.
+        source_label: What `pull_fn` reads from, for the log line only.
+
+    ⚠️ `source_label` defaults to the NEUTRAL "source" on purpose. These messages used to say
+    "pulling from Snowflake" unconditionally, which became actively misleading once callers
+    started passing lakehouse loaders (E11.20 phase-2a): the box's first post-deploy K-projection
+    run printed "pulling from Snowflake" while genuinely reading S3 — the row count (26,918 vs
+    Snowflake's 26,930) was the only tell. A hardcoded source name in a shared helper is a
+    future misdiagnosis; callers that know their source should name it.
     """
     age = _cache_age_hours(cache_key)
     cache_file = _cache_path(cache_key)
@@ -92,12 +101,12 @@ def get_cached_df(
         print(
             f"[cache] HIT {cache_key} "
             f"({age:.1f}h old, {pd.read_parquet(cache_file).shape[0]:,} rows) "
-            f"— skipping Snowflake"
+            f"— skipping the {source_label} pull"
         )
         return pd.read_parquet(cache_file, engine="pyarrow")
 
     reason = "refresh requested" if refresh else ("no cache" if age is None else f"stale ({age:.1f}h)")
-    print(f"[cache] MISS {cache_key} ({reason}) — pulling from Snowflake...")
+    print(f"[cache] MISS {cache_key} ({reason}) — pulling from {source_label}...")
     df = pull_fn()
     _save_cache(df, cache_key)
     print(f"[cache] Saved {len(df):,} rows → {cache_file}")

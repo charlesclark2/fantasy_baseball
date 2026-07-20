@@ -163,6 +163,15 @@ on deploying the `lineup_predict` S3 mirror (see §5b), not on new code. The K-w
 removes a further ~9 wake-minutes/9h (four query shapes, all confirmed present in `query_history`
 before the change).
 
+**Box verification (post-deploy, 2026-07-20):** both writers ran clean in `dagster-codeloc` —
+K projections scored 30 starters, zone overlays found **234 pairs** (up from 189 as more lineups
+posted). ⚠️ **The K run prints `[cache] MISS … — pulling from Snowflake...` and this is a LIE** —
+that string was hardcoded in `betting_ml/utils/training_cache.get_cached_df` regardless of the
+loader passed in. The tell that S3 really was used is the ROW COUNT: **26,918** (Snowflake returns
+26,930 — the ×4 zombie fan-out). Fixed: `get_cached_df` now takes a `source_label` defaulting to
+the neutral `"source"`, and `load_frame_cached` passes `"the S3 lakehouse"` / `"Snowflake"`. A
+hardcoded source name in a shared cache helper is a future misdiagnosis waiting to happen.
+
 ### 5b. lineup_monitor flip gate — RUN, and its result
 
 `scripts/parity_check_lineup_monitor.py`, 2026-07-20 21:21 UTC (mid-interval, 10 games posted):
@@ -172,7 +181,10 @@ candidates      : SF=10  S3=10     ✅  (incl. min_slots_filled + starters — t
 post_lineup set : SF=10  S3=0      ❌
 ```
 
-**The mismatch is expected and is NOT a defect** — it is the un-deployed image, not the code. The
+**✅ RE-RUN POST-DEPLOY (same day) — PARITY PASSED: candidates 13=13, post_lineup 13=13.** The
+deploy was the entire fix, exactly as diagnosed below. `LINEUP_MONITOR_S3=1` is now cleared to set.
+
+**The original mismatch was expected and NOT a defect** — it was the un-deployed image, not the code. The
 `lineup_predict` → `export_w6_raw_to_s3.py --table daily_model_predictions` mirror is committed but
 the box still runs the pre-mirror baked image, so today's post_lineup rows cannot be in S3 yet.
 Confirmed in the parquet: 7/17–7/19 all carry post_lineup rows (mirrored by the next morning's
