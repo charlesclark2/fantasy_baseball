@@ -237,9 +237,8 @@ _TARGET = "runs_scored"
 # Data loading + per-side assembly
 # ---------------------------------------------------------------------------
 
-def load_wide(min_year: int) -> pd.DataFrame:
-    """Load the wide per-game feature mart + both final scores (regular season, full data)."""
-    query = f"""
+def _wide_query(min_year: int) -> str:
+    return f"""
     SELECT f.*, r.home_final_score, r.away_final_score
     FROM baseball_data.betting_features.feature_pregame_game_features f
     JOIN baseball_data.betting.mart_game_results r USING (game_pk)
@@ -248,10 +247,42 @@ def load_wide(min_year: int) -> pd.DataFrame:
       AND r.home_final_score IS NOT NULL
       AND f.game_year >= {int(min_year)}
     """
+
+
+def load_wide_lakehouse(min_year: int) -> pd.DataFrame:
+    """Load the wide per-game mart from the **S3 lakehouse via DuckDB** (E2.1-r).
+
+    Snowflake-FREE (CLAUDE.md §0.5 post-E11.1: a Snowflake pull for training data is a RED
+    FLAG — `feature_pregame_game_features` and `mart_game_results` both live as S3 parquet).
+    Needs AWS creds only (DuckDB `credential_chain`) + `AWS_DEFAULT_REGION=us-east-2`.
+    """
+    from scripts.utils.lakehouse_read import (
+        duck_connect,
+        referenced_tables,
+        register_views,
+        strip_fqn,
+    )
+
+    sql = _wide_query(min_year)
+    conn = duck_connect()
+    register_views(conn, referenced_tables(sql))
+    df = conn.execute(strip_fqn(sql)).fetch_df()
+    df.columns = [c.lower() for c in df.columns]
+    return _numeric_convert(df)
+
+
+def load_wide(min_year: int, *, source: str = "lakehouse") -> pd.DataFrame:
+    """Load the wide per-game feature mart + both final scores (regular season, full data).
+
+    `source="lakehouse"` (DEFAULT) reads S3 parquet via DuckDB. `source="snowflake"` is the
+    legacy path, retained only for a parity spot-check — it is NOT the sanctioned route.
+    """
+    if source == "lakehouse":
+        return load_wide_lakehouse(min_year)
     conn = get_snowflake_connection()
     try:
         cur = conn.cursor()
-        cur.execute(query)
+        cur.execute(_wide_query(min_year))
         cols = [d[0].lower() for d in cur.description]
         rows = cur.fetchall()
     finally:
@@ -337,10 +368,14 @@ def build_perside_frame(wide: pd.DataFrame) -> tuple[pd.DataFrame, list[str], li
         + [f"opp_{b}" for b in opp_cats]
         + shared_cat
     )
-    # coerce numerics (Snowflake Decimals / bool already handled), drop the target out of features
+    # Coerce numerics (Snowflake Decimals / bool already handled), drop the target out of
+    # features. The `.astype("float64")` is load-bearing, not cosmetic: the DuckDB/lakehouse
+    # read (E2.1-r) returns integer columns as pandas NULLABLE Int64, and a nullable-int column
+    # rejects a float mean in `_prepare_matrix`'s fillna ("Invalid value ... for dtype Int64").
+    # Pinning float64 here makes the Snowflake and lakehouse paths dtype-identical.
     for c in numeric_cols:
-        df[c] = pd.to_numeric(df[c], errors="coerce")
-    df[_TARGET] = pd.to_numeric(df[_TARGET], errors="coerce")
+        df[c] = pd.to_numeric(df[c], errors="coerce").astype("float64")
+    df[_TARGET] = pd.to_numeric(df[_TARGET], errors="coerce").astype("float64")
     df = df[df[_TARGET].notna()].reset_index(drop=True)
     _ = id_cols  # retained for clarity
     return df, numeric_cols, cat_cols

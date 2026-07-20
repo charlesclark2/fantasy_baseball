@@ -518,6 +518,37 @@ def test_season_kickoffs_from_cfbd_startdate():
     assert iso == ["2024-08-24T16:00:00Z", "2024-08-24T19:30:00Z"]
 
 
+def test_last_completed_season_is_clock_derived():
+    # A season YYYY runs Aug YYYY → mid-Jan YYYY+1. The backfill default must NEVER be a pinned
+    # year (P0.6 shipped `2020-2024` and was stale by one season the day it merged).
+    from datetime import date
+
+    # Feb onward: the season that began LAST calendar year is fully played.
+    assert src.last_completed_season(date(2026, 2, 1)) == 2025
+    assert src.last_completed_season(date(2026, 7, 19)) == 2025   # mid-summer, 2026 not started
+    assert src.last_completed_season(date(2026, 10, 1)) == 2025   # 2026 IN PROGRESS → still 2025
+    assert src.last_completed_season(date(2026, 12, 31)) == 2025
+    assert src.last_completed_season(date(2027, 2, 1)) == 2026    # 2026 done (ended Jan 2027)
+    # JANUARY is the conservative edge: the prior season's bowls/CFP are still being played, so
+    # fall back one further rather than default-pulling an IN-PROGRESS season (a partial
+    # partition that --skip-existing would then protect forever — the 2024-stub trap).
+    assert src.last_completed_season(date(2027, 1, 5)) == 2025
+    assert src.last_completed_season(date(2026, 1, 31)) == 2024
+
+
+def test_default_backfill_seasons_spans_floor_to_last_complete():
+    from datetime import date
+
+    assert src.default_backfill_seasons(date(2026, 7, 19)) == "2020-2025"
+    assert src.default_backfill_seasons(date(2027, 3, 1)) == "2020-2026"
+    # parses through the handler's range syntax (the shape odds_backfill/verify feed it)
+    assert _parse_seasons(src.default_backfill_seasons(date(2026, 7, 19))) == [
+        2020, 2021, 2022, 2023, 2024, 2025]
+    # and always starts at the documented /historical floor
+    assert src.default_backfill_seasons(date(2026, 7, 19)).startswith(
+        f"{src.NCAAF_HISTORICAL_FLOOR}-")
+
+
 def test_build_ctx_odds_knobs():
     ctx = src.build_ctx(odds_key="k", regions="us,us2", snapshot_buffer_min=3,
                         sleep_seconds=0.0, max_events=5)

@@ -60,6 +60,7 @@ from dotenv import load_dotenv
 load_dotenv(_PROJECT_ROOT / ".env")
 
 from betting_ml.utils.data_loader import get_snowflake_connection
+from betting_ml.utils.delta_lakehouse import register_lakehouse_views
 from betting_ml.utils.artifact_store import load_artifact
 from betting_ml.scripts.scd2_writer import scd2_upsert, _SCHEMA_PROD, _SCHEMA_DEV
 
@@ -149,12 +150,11 @@ def _get_duckdb():
 def _register_s3_views(duck) -> None:
     """Register every source table this script reads as a DuckDB view under its bare Snowflake
     name, so _duck_sql_for's table-name rewrite resolves."""
-    for name in _S3_SOURCE_TABLES:
-        glob = f"{_LAKEHOUSE}/{name}/**/*.parquet"
-        duck.execute(
-            f"CREATE OR REPLACE VIEW {name} AS "
-            f"SELECT * FROM read_parquet('{glob}', union_by_name=true)"
-        )
+    # E11.20 phase 1.5 (2026-07-20): route through the shared Delta-aware registrar. The
+    # old hardcoded lakehouse/<table>/**/*.parquet glob broke the moment phase 1.5 deleted
+    # the W1 compat parquet — under cutover those marts live ONLY in Delta (this is what
+    # took the whole daily job down: generate_matchup_signals_op → no predict_today).
+    register_lakehouse_views(duck, _S3_SOURCE_TABLES)
 
 
 def _duck_sql_for(sql: str) -> str:
