@@ -359,7 +359,7 @@ grass / timezone** (`/venues`) · SP+/FPI/Elo/SRS. ⇒ the **talent-mismatch reg
 | 18 | `odds_ncaaf` | Odds API `/odds` (h2h, spreads, totals) | 🏟️ | season/week | **intraday in-season** |
 | 19 | `odds_ncaaf_props` | Odds API event endpoint | 🏟️🧍 | season/week | in-season (thin) |
 | 20 | `odds_ncaaf_scores` | Odds API `/scores` | 🏟️ | season/week | daily in-season |
-| 21 | `odds_ncaaf_historical` | Odds API `/historical/*` (**2020+**) | 🏟️ | season | one-time backfill |
+| 21 | `odds_ncaaf_historical` | Odds API `/historical/*` (**2020+**) | 🏟️ | season | one-time backfill · ✅ **built P0.6** (leakage-safe CLOSING game lines; on_demand paid; `--dry-run` credit gate) |
 | 22 | **`nflverse_draft_picks`** | nflverse release Parquet | 🧍 | season | seasonal (**feeder target**) |
 | 23 | **`nflverse_combine`** | nflverse release Parquet | 🧍 | season | seasonal |
 | 24 | `nflverse_players` | nflverse release Parquet | 🧍 | — | seasonal |

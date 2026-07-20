@@ -26,7 +26,7 @@ import logging
 
 from . import s3io
 from .handler import _parse_seasons, load_env, run_ingest
-from .sources import SOURCES, build_ctx
+from .sources import DEFAULT_SOURCES, build_ctx
 
 log = logging.getLogger(__name__)
 
@@ -37,7 +37,8 @@ DEFAULT_BACKFILL = "2014-2025"
 def main() -> None:
     p = argparse.ArgumentParser(description="NCAAF full-history backfill (off-Lambda).")
     p.add_argument("--seasons", default=DEFAULT_BACKFILL, help=f"default {DEFAULT_BACKFILL}")
-    p.add_argument("--sources", help="comma list (default: all 24). Start narrow to prove the path.")
+    p.add_argument("--sources", help="comma list (default: all non-paid sources; the on_demand "
+                                     "/historical odds pull is excluded). Start narrow to prove the path.")
     p.add_argument("--exclude", help="comma list of sources to drop (e.g. box_advanced — the "
                                      "optional per-game endpoint that overlaps game_advanced)")
     p.add_argument("--weeks", help="scope week-grained/per-game pulls (default: whole season)")
@@ -56,11 +57,13 @@ def main() -> None:
     sources = args.sources.split(",") if args.sources else None
     if args.exclude:
         excl = set(args.exclude.split(","))
-        sources = [s for s in (sources or list(SOURCES)) if s not in excl]
+        # base = DEFAULT_SOURCES (excludes the paid on_demand /historical odds pull — P0.6)
+        sources = [s for s in (sources or DEFAULT_SOURCES) if s not in excl]
     weeks = [int(w) for w in args.weeks.split(",")] if args.weeks else None
 
     log.info("Backfill NCAAF seasons=%s sources=%s → %s",
-             seasons, sources or "ALL(24)", args.local_root or f"s3://{args.bucket}/ncaaf/raw")
+             seasons, sources or f"DEFAULT({len(DEFAULT_SOURCES)}; excl. paid on_demand odds)",
+             args.local_root or f"s3://{args.bucket}/ncaaf/raw")
     # ONE ctx/client for the whole backfill so the CFBD adaptive throttle (self-tunes up on
     # 429) persists across seasons instead of resetting to the fast default each season.
     ctx = build_ctx()
