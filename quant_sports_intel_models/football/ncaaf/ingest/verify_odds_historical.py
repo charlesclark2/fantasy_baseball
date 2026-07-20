@@ -15,11 +15,17 @@ that actually gate P1.4's vs-market eval + Phase 2:
   D. Leakage guard — the belt-and-suspenders `_snapshot_ts < commence_time`. A ~20-25% row-level
      "violation" rate is EXPECTED and harmless: the ±30-min window captures a game under a
      neighbouring FBS kickoff's snapshot too, and P1.4 keeps only the latest snapshot < commence
-     per event. What matters is that every distinct game retains ≥1 leakage-safe close. A small
-     ORPHAN count (a game with NO safe row) is also expected: `_season_kickoffs` anchors snapshots
-     on FBS kickoffs ONLY, so a non-FBS game swept in as ±30-min collateral can lack an own-window
-     snapshot. Those are outside the modelling universe and P1.4 drops them — so orphans FAIL the
-     run only above `ORPHAN_FAIL_FRAC` of all games (a systemic snapshot/time bug), not a handful.
+     per event. What matters is that every distinct game retains ≥1 leakage-safe close. ORPHANS
+     (a game with NO safe row) are split FBS vs non-FBS, because they have DIFFERENT meanings:
+       · non-FBS orphan = inert. `_season_kickoffs` anchors on FBS kickoffs ONLY, so a non-FBS
+         game swept in as ±30-min collateral can lack an own-window snapshot. Outside the
+         modelling universe; P1.4 drops it. Informational only.
+       · FBS orphan = a REAL (if tiny) lost close: CFBD's `startDate` disagreed with the Odds
+         API's `commence_time` by enough that the game's own ±30-min anchor window missed its
+         true kickoff, so only a post-commence neighbour snapshot caught it. Seen 2× in 2025
+         (Georgia–Austin Peay, CFBD 19:30 vs actual 18:30). Only the FBS rate gates the run
+         (`ORPHAN_FAIL_FRAC`) — a spike there means systemic kickoff-time drift, which must not
+         hide behind the benign non-FBS label.
   E. Distinct sportsbooks present (incl. Bovada, the target book).
 
 The asserted season range defaults CLOCK-DERIVED (floor → last COMPLETED season), so a newly
@@ -139,6 +145,11 @@ def verify(seasons: list[int], *, source: str = "odds_ncaaf_historical") -> bool
     d["viol_pct"] = (100.0 * d["violations"] / d["total"]).round(2)
     print(_fmt(d))
 
+    # Orphans split FBS vs non-FBS by joining back to the CFBD schedule on team-name prefix
+    # (Odds "Texas A&M Aggies" ⊃ CFBD "Texas A&M"). The split MATTERS: a non-FBS orphan is
+    # inert collateral, whereas an FBS orphan is a real (if tiny) lost close caused by a
+    # CFBD-vs-OddsAPI kickoff disagreement — if CFBD times ever drift systematically, FBS
+    # orphans spike and that must NOT hide under a "benign collateral" label.
     orphans = q(f"""
         with ev as (
             select json_extract_string(raw_json,'$.id') event_id,
@@ -149,17 +160,39 @@ def verify(seasons: list[int], *, source: str = "odds_ncaaf_historical") -> bool
                    max((json_extract_string(raw_json,'$._snapshot_ts')
                         < json_extract_string(raw_json,'$.commence_time'))::int) has_safe
             from {D} group by 1
+        ),
+        g as (
+            select json_extract_string(raw_json,'$.season')::int season,
+                   json_extract_string(raw_json,'$.homeTeam') h,
+                   json_extract_string(raw_json,'$.awayTeam') a,
+                   json_extract_string(raw_json,'$.startDate') cfbd_start,
+                   (json_extract_string(raw_json,'$.homeClassification')='fbs'
+                 or json_extract_string(raw_json,'$.awayClassification')='fbs') is_fbs
+            from {delta('games')}
         )
-        select part_season, home, away, commence from ev where has_safe = 0 order by commence
+        select ev.part_season, ev.home, ev.away, ev.commence, g.cfbd_start,
+               coalesce(g.is_fbs, false) as fbs_universe
+        from ev left join g
+          on g.season = ev.part_season::int
+         and ev.home like g.h || '%' and ev.away like g.a || '%'
+        where ev.has_safe = 0 order by ev.part_season, ev.commence
     """)
     n_games = int(q(f"select count(distinct json_extract_string(raw_json,'$.id')) n from {D}")["n"].iloc[0])
     n_orphan = len(orphans)
+    fbs_orphans = orphans[orphans["fbs_universe"] == True]  # noqa: E712 — pandas mask
+    n_fbs_orphan = len(fbs_orphans)
     orphan_frac = n_orphan / n_games if n_games else 0.0
+    fbs_orphan_frac = n_fbs_orphan / n_games if n_games else 0.0
     print(f"\n  distinct games={n_games}  orphaned (no leakage-safe close)={n_orphan} "
-          f"({orphan_frac:.2%})")
-    if n_orphan:
-        print("  orphaned games (expected: non-FBS collateral swept into an FBS kickoff window):")
-        print(_fmt(orphans))
+          f"({orphan_frac:.2%}) — of which FBS-universe={n_fbs_orphan} ({fbs_orphan_frac:.2%})")
+    if n_orphan - n_fbs_orphan:
+        print(f"  • {n_orphan - n_fbs_orphan} non-FBS orphan(s): inert collateral swept into an FBS "
+              f"kickoff window; outside the modelling universe, P1.4 drops them.")
+    if n_fbs_orphan:
+        print(f"  • {n_fbs_orphan} FBS-universe orphan(s) — a CFBD-vs-OddsAPI kickoff disagreement "
+              f"put the true commence outside the game's own ±30min anchor window, so only a "
+              f"post-commence neighbour snapshot caught it. These lose their close in P1.4:")
+        print(_fmt(fbs_orphans[["part_season", "home", "away", "commence", "cfbd_start"]]))
 
     print("\n" + "=" * 90)
     print("E. Distinct sportsbooks across the table (unnest bookmakers[])")
@@ -195,12 +228,15 @@ def verify(seasons: list[int], *, source: str = "odds_ncaaf_historical") -> bool
         print(f"  ⚠ a season has <90% coverage of a core market — inspect:\n{_fmt(bad_mkt)}")
     else:
         print("  ✓ h2h/spreads/totals each cover >90% of events every season")
-    if orphan_frac > ORPHAN_FAIL_FRAC:
-        print(f"  ✗ orphan rate {orphan_frac:.2%} > {ORPHAN_FAIL_FRAC:.0%} — SYSTEMIC (not just non-FBS "
-              f"collateral); check the snapshot/kickoff-time logic"); ok = False
+    # The FBS-universe orphan rate is the gate — non-FBS collateral is inert by construction.
+    if fbs_orphan_frac > ORPHAN_FAIL_FRAC:
+        print(f"  ✗ FBS-universe orphan rate {fbs_orphan_frac:.2%} > {ORPHAN_FAIL_FRAC:.0%} — SYSTEMIC "
+              f"kickoff-time drift between CFBD and the Odds API; widen the anchor window or "
+              f"re-derive kickoffs before trusting the closes"); ok = False
     else:
-        print(f"  ✓ orphan rate {orphan_frac:.2%} ≤ {ORPHAN_FAIL_FRAC:.0%} (expected non-FBS neighbour-window "
-              f"collateral; P1.4 filters — no FBS close lost)")
+        print(f"  ✓ FBS-universe orphan rate {fbs_orphan_frac:.2%} ≤ {ORPHAN_FAIL_FRAC:.0%} "
+              f"({n_fbs_orphan} game(s) lose a close to a CFBD/OddsAPI kickoff disagreement; "
+              f"{n_orphan - n_fbs_orphan} further orphan(s) are inert non-FBS collateral)")
     print(f"  {'✓' if has_bovada else '⚠'} Bovada present (the target book): {has_bovada}")
     print("\n  OVERALL:", "PASS ✓" if ok else "FAIL ✗ — see above")
     return ok
