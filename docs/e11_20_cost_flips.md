@@ -182,7 +182,23 @@ post_lineup set : SF=10  S3=0      ❌
 ```
 
 **✅ RE-RUN POST-DEPLOY (same day) — PARITY PASSED: candidates 13=13, post_lineup 13=13.** The
-deploy was the entire fix, exactly as diagnosed below. `LINEUP_MONITOR_S3=1` is now cleared to set.
+deploy was the entire fix, exactly as diagnosed below.
+
+**✅ FLIPPED + CONVERGED 2026-07-20 22:11–22:35 UTC.** `LINEUP_MONITOR_S3=1` set in the box `.env`,
+`up -d`, live container env verified `1`.
+
+⚠️ **Expect a ONE-TIME re-trigger wave on any mid-day state-backend switch.** `lineup_monitor.py`
+branches `if pk not in already_triggered: trigger` FIRST — the `games_with_post_lineup` guard only
+covers the `elif`. DynamoDB starts empty while the day's triggers live in Snowflake
+`lineup_monitor_state`, so every still-`Preview` complete-lineup game re-triggers once. Observed
+exactly: the 22:17 run fired all **13** games = the precise union of everything triggered
+19:15→21:37. Benign and self-limiting (the trigger writes the state item). Convergence confirmed —
+no run after 22:17 despite eligible `Preview` candidates, DynamoDB Count stable at 13.
+
+**Discriminator vs the INC-32 loop**, both visible in one `dagster_runs.py` output: INC-32 = the
+SAME pk every tick forever (7/19 `823523` × 10+); healthy = each pk once as its lineup completes,
+plus one wave at the switch. 🔧 On the BOX that script needs
+`DAGSTER_GRAPHQL_URL=http://localhost:3000/graphql` — the default public Caddy URL returns 401.
 
 **The original mismatch was expected and NOT a defect** — it was the un-deployed image, not the code. The
 `lineup_predict` → `export_w6_raw_to_s3.py --table daily_model_predictions` mirror is committed but
