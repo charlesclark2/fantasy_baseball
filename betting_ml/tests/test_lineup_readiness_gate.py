@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from scripts.lineup_monitor import (
     _FULL_LINEUP_SLOTS,
     _SLA_FALLBACK_MINUTES,
+    is_real_pitcher_change,
     select_ready_games,
 )
 
@@ -89,3 +90,34 @@ def test_none_slot_count_treated_as_zero():
     ready, held = select_ready_games(cands, {666: FAR}, NOW)
     assert ready == {}
     assert held[0][0] == 666
+
+
+# ── is_real_pitcher_change — the 823523 flip-flop guard ──────────────────────────
+def test_real_starter_change_is_detected():
+    assert is_real_pitcher_change((100, 200), (100, 999)) is True   # away starter scratched
+    assert is_real_pitcher_change((100, 200), (111, 200)) is True   # home starter scratched
+
+
+def test_no_change_is_not_a_change():
+    assert is_real_pitcher_change((100, 200), (100, 200)) is False
+
+
+def test_type_mismatch_is_not_a_change():
+    # stored INT vs a str/Decimal staging read of the SAME id must NOT read as a change
+    # (the verbatim `!=` flip-flop that re-triggered 823523 every tick).
+    from decimal import Decimal
+    assert is_real_pitcher_change((100, 200), ("100", "200")) is False
+    assert is_real_pitcher_change((100, 200), (Decimal("100"), Decimal("200"))) is False
+
+
+def test_null_current_probable_is_not_a_change():
+    # A transient LEFT-JOIN gap (current probable comes back None) is a data gap, not a scratch —
+    # must not churn a re-score.
+    assert is_real_pitcher_change((100, 200), (100, None)) is False
+    assert is_real_pitcher_change((100, 200), (None, None)) is False
+
+
+def test_null_stored_waits_rather_than_churns():
+    # Pre-migration / not-yet-populated stored starters → wait (no re-trigger).
+    assert is_real_pitcher_change((None, 200), (100, 999)) is False
+    assert is_real_pitcher_change((None, None), (100, 200)) is False

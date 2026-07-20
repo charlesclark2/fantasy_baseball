@@ -118,31 +118,66 @@ def get_connection() -> snowflake.connector.SnowflakeConnection:
     return get_snowflake_connection()
 
 
-def _first_pitch_by_game(today_iso: str) -> dict[int, datetime | None]:
-    """Per-game first-pitch instant (UTC) for today's regular-season slate, read from the S3
-    lakehouse (stg_statsapi_games) via DuckDB — the same proven, Snowflake-free read the
-    lineup sensor uses for its cadence gate. Used ONLY for the readiness gate's SLA safety
-    valve (see select_ready_games); a lookup miss returns {} (fail-open → no SLA fallback,
-    completeness gate still applies). game_date is stored ISO-VARCHAR in the lakehouse
-    (INC-23), so it is coerced via the shared to_utc_datetime helper. Postponed rows are
-    EXCLUDED so a rained-out game's past first-pitch instant (MLB reuses the gamePk for the
-    makeup) can't spuriously trip the SLA fallback (2026-07-19 postponed-DH landmine)."""
+def _norm_pid(x) -> int | None:
+    """Normalize a probable-pitcher id to int|None so a stored INT never miscompares against a
+    Decimal/str the staging read may return. A verbatim `!=` on mixed types reads as a change
+    every tick → the 823523 pitcher-change flip-flop (2026-07-19)."""
+    if x is None:
+        return None
+    try:
+        return int(x)
+    except (TypeError, ValueError):
+        return None
+
+
+def is_real_pitcher_change(stored: tuple, current: tuple) -> bool:
+    """PURE (unit-tested) — True ONLY when a game's probable starters genuinely changed
+    side-for-side. Guards the 823523 flip-flop (2026-07-19, re-triggered every tick for 4h):
+    a transient NULL current probable (a LEFT JOIN gap in stg_statsapi_probable_pitchers) or a
+    stored-INT-vs-Decimal/str type mismatch is NOT a scratch. Both stored AND current must be
+    fully known and differ after int-normalization. stored=(home,away), current=(home,away)."""
+    sh, sa = _norm_pid(stored[0]), _norm_pid(stored[1])
+    ch, ca = _norm_pid(current[0]), _norm_pid(current[1])
+    if sh is None or sa is None:   # stored unknown (pre-migration rows) — wait, don't churn
+        return False
+    if ch is None or ca is None:   # current probable temporarily missing — a data gap, not a scratch
+        return False
+    return sh != ch or sa != ca
+
+
+def _pregame_first_pitch(today_iso: str) -> dict[int, datetime | None] | None:
+    """{game_pk: first-pitch instant (UTC)} for today's PRE-GAME (`abstract_game_state='Preview'`)
+    regular-season games, read Snowflake-free from the S3 lakehouse (stg_statsapi_games) via
+    DuckDB — the same proven read the lineup sensor's cadence gate uses. Returns None on a read
+    failure so the caller can FAIL-OPEN (no pregame filter) rather than go dark.
+
+    Two jobs:
+      1. PRE-GAME GATE — the monitor must only ever trigger a re-score for a game that has NOT
+         started. A Live/Final game's post_lineup re-score is pointless (the bet is off the board)
+         and past the Epic A1 30-min SLA; scoring one drove game 823523's infinite re-trigger loop
+         (2026-07-19, every tick 14:10→18:11, incl. ~10 AFTER its 16:35 first pitch). Restricting
+         candidates to this Preview set excludes Live/Final AND Postponed (postponed reads
+         abstract_game_state='Final' — the DH landmine — plus the explicit exclusion below).
+      2. SLA SAFETY VALVE — supplies first pitch to the readiness gate (select_ready_games).
+
+    game_date is stored ISO-VARCHAR in the lakehouse (INC-23) → coerced via to_utc_datetime."""
     try:
         from betting_ml.utils.lakehouse_monitor import duck, lh, to_utc_datetime
-    except Exception as e:  # noqa: BLE001 — the SLA fallback is optional; never break the monitor
-        log.warning("first-pitch lakehouse import failed (%s); SLA fallback disabled this tick.", e)
-        return {}
+    except Exception as e:  # noqa: BLE001 — never break the monitor on an optional read
+        log.warning("pregame lakehouse import failed (%s); proceeding without the pregame filter.", e)
+        return None
     conn = duck()
     try:
         rows = conn.execute(
             f"SELECT game_pk, MIN(game_date) FROM read_parquet('{lh('stg_statsapi_games')}', "
             f"union_by_name=true) WHERE official_date = ? AND game_type = 'R' "
-            f"AND coalesce(detailed_state, '') != 'Postponed' GROUP BY game_pk",
+            f"AND abstract_game_state = 'Preview' AND coalesce(detailed_state, '') != 'Postponed' "
+            f"GROUP BY game_pk",
             [today_iso],
         ).fetchall()
     except Exception as e:  # noqa: BLE001
-        log.warning("first-pitch lakehouse read failed (%s); SLA fallback disabled this tick.", e)
-        return {}
+        log.warning("pregame lakehouse read failed (%s); proceeding without the pregame filter.", e)
+        return None
     finally:
         conn.close()
     return {int(r[0]): to_utc_datetime(r[1]) for r in rows}
@@ -213,12 +248,30 @@ def main() -> None:
         }
         log.info("Candidate games today (both sides posted): %d", len(candidates))
 
+        # INC-32 PRE-GAME GATE (2026-07-19) — restrict candidates to games that have NOT started.
+        # A post_lineup re-score only makes sense before first pitch; scoring a Live/Final game is
+        # pointless + past the SLA and drove game 823523's infinite re-trigger loop. Fail-open: if
+        # the game-state read is unavailable (None), keep all candidates (old behavior) so the
+        # monitor never goes dark.
+        pregame = _pregame_first_pitch(today)
+        if pregame is not None:
+            dropped = [pk for pk in candidates if pk not in pregame]
+            if dropped:
+                log.info(
+                    "Dropping %d non-pregame game(s) (Live/Final/Postponed — no re-score): %s",
+                    len(dropped), sorted(dropped),
+                )
+            candidates = {pk: v for pk, v in candidates.items() if pk in pregame}
+            first_pitch: dict[int, datetime | None] = pregame
+        else:
+            log.warning("Pregame game-state lookup unavailable — proceeding without the pregame filter.")
+            first_pitch = {}
+
         # INC-32 readiness gate — only games whose BOTH sides carry a COMPLETE 9-slot lineup are
         # eligible to trigger/score (or, best-effort, a still-incomplete game within the SLA
         # window). Held games are simply not in `confirmed` this tick, so they are neither
         # recorded in lineup_monitor_state nor scored — the sensor's next tick retries them once
         # the full order lands. This is the fix for the one-and-done partial-lineup freeze.
-        first_pitch = _first_pitch_by_game(today)
         ready, held = select_ready_games(candidates, first_pitch, datetime.now(timezone.utc))
         confirmed: dict[int, tuple[int | None, int | None]] = ready
         log.info("Ready (complete-lineup) games today: %d", len(confirmed))
@@ -285,11 +338,12 @@ def main() -> None:
                 new_game_pks.append(pk)
             else:
                 stored_home, stored_away = already_triggered[pk]
-                # If stored starters are NULL (pre-migration rows), skip — treat as unknown.
-                # On the next run the starters will be populated and changes can be detected.
-                if stored_home is None or stored_away is None:
-                    continue
-                if stored_home != home_starter or stored_away != away_starter:
+                # Only re-trigger on a GENUINE side-for-side starter change. is_real_pitcher_change
+                # guards the 823523 flip-flop (2026-07-19): a NULL current probable (LEFT JOIN gap)
+                # or a stored-INT-vs-Decimal/str type mismatch is NOT a scratch — comparing those
+                # verbatim re-triggered the game every tick for 4h. Both stored and current must be
+                # fully known and differ after int-normalization.
+                if is_real_pitcher_change((stored_home, stored_away), (home_starter, away_starter)):
                     log.info(
                         "Pitcher change detected for game_pk=%d: "
                         "home %s→%s, away %s→%s",
