@@ -54,6 +54,12 @@ REQUIRED_INTRADAY_FLAGS = (
     # weeks, and the intraday book-odds --s3 gate stayed off). Enforce both like W8A/W8B.
     "W7A_LAKEHOUSE_S3",              # matchup/posterior/profile consumer reads from S3 (W7a)
     "W7B_LAKEHOUSE_S3",              # predict_today / write_serving_store read from S3 (W7b)
+    # E11.20 phase-2a (2026-07-20): the lineup-monitor DETECTION tick reads S3 + DynamoDB instead
+    # of waking COMPUTE_WH every ~10 min. Flipped + converged 2026-07-20 (docs/e11_20_cost_flips.md
+    # §5b). Enforced so it can't silently drift off (the W7B lesson). ⚠️ COUPLED to the soak: if
+    # post_lineup coverage regresses, the rollback is LINEUP_MONITOR_S3=0 AND removing it here (else
+    # this heartbeat false-pages on the intended-`0` rollback).
+    "LINEUP_MONITOR_S3",             # lineup-monitor detection tick is Snowflake-free (S3+DynamoDB)
 )
 
 

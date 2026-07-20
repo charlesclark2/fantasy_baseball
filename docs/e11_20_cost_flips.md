@@ -148,6 +148,9 @@ Two findings that overturn the planned change:
    buckets-vs-queries trap §2/F1 already paid for once. The real prerequisite is flipping the
    `monthly_schedule` RAW WRITER to S3 (the W11 Tier-A pattern), which retires both the native write
    and the export bridge. That is the next story, and it must land *before* the refresh leg is cut.
+   **Design worked out in `docs/monthly_schedule_s3_flip_design.md`** (exact 2-col S3 contract, the
+   INC-20 latest-per-month retention replicated as a same-month prune, the lean `schedule-capture`
+   image S3-capability decision, the consumer audit, and the box runtime gate).
 2. **The tick's dbt leg is load-bearing, not waste.** `intraday_lineup_rebuild`'s Snowflake branch
    for `stg_statsapi_lineups_wide` is `materialized='table'` — the observed
    `create or replace transient table ... as (...)` at **84.8s over 20 runs**, not a view no-op. Its

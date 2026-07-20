@@ -26,6 +26,7 @@ import datetime
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 _ARGV = [a for a in sys.argv[1:] if a != "--steps"]
@@ -35,6 +36,10 @@ JOB = _ARGV[0] if len(_ARGV) > 0 else "daily_ingestion_job"
 STEP_RUN_ID = _ARGV[1] if (STEPS_MODE and len(_ARGV) > 1) else None
 LIMIT = int(_ARGV[1]) if (not STEPS_MODE and len(_ARGV) > 1) else 10
 ENDPOINT = os.environ.get("DAGSTER_GRAPHQL_URL", "https://dagster.credencesports.com/graphql")
+# ON THE BOX the webserver is published at 127.0.0.1:3000 with NO auth (Caddy terminates
+# basic-auth only for the public host). So the public default 401s when you run this on the box
+# without exporting DAGIT_BASIC_AUTH_*; we fall back to this on a 401-with-no-auth (see main()).
+_LOCAL_FALLBACK = "http://localhost:3000/graphql"
 
 
 def _headers() -> dict:
@@ -60,8 +65,23 @@ def main() -> None:
         "... on PythonError { message } } }"
     )
     body = json.dumps({"query": query, "variables": {"f": {"pipelineName": JOB}, "n": LIMIT}}).encode()
-    req = urllib.request.Request(ENDPOINT, data=body, headers=_headers())
-    d = json.loads(urllib.request.urlopen(req, timeout=30).read())
+
+    def _post(url: str) -> dict:
+        req = urllib.request.Request(url, data=body, headers=_headers())
+        return json.loads(urllib.request.urlopen(req, timeout=30).read())
+
+    try:
+        d = _post(ENDPOINT)
+    except urllib.error.HTTPError as e:
+        # 401 with no basic-auth configured + still on the public default = you're on the box.
+        # Retry the local webserver (127.0.0.1:3000, no auth) instead of dumping a traceback.
+        no_auth = not (os.environ.get("DAGIT_BASIC_AUTH_USER") and os.environ.get("DAGIT_BASIC_AUTH_PASSWORD"))
+        if e.code == 401 and no_auth and "DAGSTER_GRAPHQL_URL" not in os.environ:
+            print(f"[dagster_runs] {ENDPOINT} → 401 (no auth); retrying {_LOCAL_FALLBACK} "
+                  f"(set DAGSTER_GRAPHQL_URL to silence this).", file=sys.stderr)
+            d = _post(_LOCAL_FALLBACK)
+        else:
+            raise
 
     node = d.get("data", {}).get("runsOrError", {})
     if node.get("__typename") != "Runs":
