@@ -349,6 +349,34 @@ def lineup_predict(context: OpExecutionContext) -> None:
         args += ["--game-pks", game_pks]
     _run_script(context, "predict_today.py", args)
 
+    # E11.20 phase-2a (2026-07-20) — MIRROR the just-written post_lineup rows to S3.
+    # predict_today_morning has always done this; lineup_predict did NOT, so the S3
+    # daily_model_predictions parquet carried ZERO post_lineup rows for the current slate
+    # until the next morning's daily run re-exported it. Found by
+    # scripts/parity_check_lineup_monitor.py: SF had 9 post_lineup games, S3 had 0.
+    #
+    # Why it matters (the flip blocker): under LINEUP_MONITOR_S3=1 the monitor's Step-2b
+    # "does this game already have a post_lineup row?" check reads that parquet. A stale
+    # ZERO makes every already-triggered game look like a failed run, so the monitor
+    # re-triggers it on EVERY tick — the infinite re-trigger loop INC-32 just fixed
+    # (game 823523, ~4h of re-fires). The parity gate caught it before the flag flipped.
+    #
+    # Serving is NOT affected either way: write_serving_store_intraday_op deliberately
+    # reads Snowflake (no --s3) in W7b-1, which is why post_lineup picks reach users today.
+    # This export also freshens the API's direct-S3 LAST-RESORT read of intraday picks,
+    # which until now could only ever see the morning rows.
+    # ALERT-loud-but-continue: a mirror failure must never fail the re-score that already
+    # succeeded — but it must be visible, because a silent miss re-arms the loop above.
+    try:
+        _run_script(context, "export_w6_raw_to_s3.py", ["--table", "daily_model_predictions"])
+    except Exception as exc:  # noqa: BLE001 — mirror tier
+        context.log.warning(
+            f"⚠️ post_lineup S3 mirror FAILED — the S3 daily_model_predictions parquet is "
+            f"now STALE for this slate. Serving is unaffected (intraday serve reads "
+            f"Snowflake), but do NOT run with LINEUP_MONITOR_S3=1 until this is healthy: "
+            f"the monitor's Step-2b would re-trigger every game every tick. Error: {exc}"
+        )
+
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def lineup_dbt_clv_rebuild(context: OpExecutionContext) -> None:
