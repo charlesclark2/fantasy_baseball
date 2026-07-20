@@ -27,7 +27,13 @@ jobs:
     name: dbt Compilation Check
     runs-on: ubuntu-latest
     env:
-      DBT_FUSION_VERSION: latest
+      # PINNED (2026-07-20): was `latest`, which let the baseline-producing compile job
+      # (push to main) and the PR build job run DIFFERENT fusion binaries (cache keyed on
+      # the literal string, evicted independently) — cross-version manifest fingerprints
+      # differ for EVERY test node, so `state:modified+` ballooned to all ~1,400 tests on
+      # a 7-model PR (surfaced dead-source rot + 503-timed-out the warehouse). Bump this
+      # pin deliberately; the first main merge after a bump republishes the baseline.
+      DBT_FUSION_VERSION: 2.0.0-preview.200
       SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
       SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
       SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
@@ -51,7 +57,7 @@ jobs:
           SHELL: /bin/bash
         run: |
           mkdir -p ~/.local/bin
-          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to ~/.local/bin
+          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to ~/.local/bin --version "$DBT_FUSION_VERSION"
 
       - name: Create dbtf symlink
         run: ln -sf ~/.local/bin/dbt ~/.local/bin/dbtf
@@ -101,7 +107,13 @@ jobs:
       actions: read
       contents: read
     env:
-      DBT_FUSION_VERSION: latest
+      # PINNED (2026-07-20): was `latest`, which let the baseline-producing compile job
+      # (push to main) and the PR build job run DIFFERENT fusion binaries (cache keyed on
+      # the literal string, evicted independently) — cross-version manifest fingerprints
+      # differ for EVERY test node, so `state:modified+` ballooned to all ~1,400 tests on
+      # a 7-model PR (surfaced dead-source rot + 503-timed-out the warehouse). Bump this
+      # pin deliberately; the first main merge after a bump republishes the baseline.
+      DBT_FUSION_VERSION: 2.0.0-preview.200
       SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
       SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
       SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
@@ -125,7 +137,7 @@ jobs:
           SHELL: /bin/bash
         run: |
           mkdir -p ~/.local/bin
-          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to ~/.local/bin
+          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to ~/.local/bin --version "$DBT_FUSION_VERSION"
 
       - name: Create dbtf symlink
         run: ln -sf ~/.local/bin/dbt ~/.local/bin/dbtf

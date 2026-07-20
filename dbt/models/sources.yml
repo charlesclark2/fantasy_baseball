@@ -222,25 +222,24 @@ sources:
           carry tendency metrics; Stats API rows carry only umpire_name/id.
 
       - name: weather_raw
+        # ⚠️ RETIRED (E11.1-W11-C): the SF statsapi.weather_raw table was decommissioned — weather
+        # lands as S3 parquet (lakehouse_raw/weather_raw). The SF object is DROPPED, so the old
+        # source-level not_null tests error 002003 "does not exist" whenever a wide selection runs
+        # them (surfaced by the 2026-07-20 CI full-build balloon). Tests REMOVED — same playbook as
+        # savant.batter_pitches below. Entry + docs kept as historical schema. Do NOT re-add tests.
         description: >
-          One row per game_pk × venue_id. Stores weather conditions at or near
-          first pitch for outdoor-park MLB games. Ingested via
-          scripts/ingest_weather.py using the Open-Meteo API (no key required)
-          or OpenWeatherMap (OPENWEATHERMAP_API_KEY required). Dome parks
-          (roof_type = 'fixed') are excluded at ingest time and have no rows.
-          The grain allows multiple fetches per game (intraday refresh);
-          a PRIMARY KEY constraint on (game_pk, venue_id) ensures the most
-          recent fetch is retained via MERGE INTO upsert.
+          RETIRED (W11-C) — SF weather feed decommissioned to S3
+          (lakehouse_raw/weather_raw). Historical schema kept for documentation.
+          One row per game_pk × venue_id; weather at/near first pitch for
+          outdoor parks, via scripts/ingest_weather.py (Open-Meteo /
+          OpenWeatherMap).
         columns:
           - name: game_pk
             description: MLB Stats API game identifier.
-            tests: [not_null]
           - name: venue_id
             description: MLB Stats API venue identifier.
-            tests: [not_null]
           - name: game_datetime_utc
             description: Scheduled first pitch in UTC.
-            tests: [not_null]
           - name: fetch_offset_hours
             description: >
               Hours before first pitch when the weather was fetched. Negative
@@ -653,16 +652,19 @@ sources:
 
     tables:
       - name: public_betting_raw
+        # ⚠️ RETIRED (E11.1-W11-D): the SF actionnetwork.public_betting_raw table was decommissioned —
+        # public betting lands as S3 parquet (lakehouse_raw/public_betting_raw). The SF object is
+        # DROPPED, so the old source-level not_null test errors 002003 "does not exist" on any wide
+        # selection (surfaced by the 2026-07-20 CI full-build balloon). Tests REMOVED — same playbook
+        # as savant.batter_pitches. Entry + docs kept as historical schema. Do NOT re-add tests.
         description: >
-          One row per (game_date, an_game_id). Aggregated public money% and
-          ticket% for the moneyline and total markets. Action Network only
-          populates these percentages on book 15 (FanDuel) in practice; the
-          ingestion script prefers that book and falls back to any other book
-          with non-zero percentages.
+          RETIRED (W11-D) — SF public-betting feed decommissioned to S3
+          (lakehouse_raw/public_betting_raw). Historical schema kept for
+          documentation. One row per (game_date, an_game_id); public money% /
+          ticket% for moneyline + totals (Action Network, book 15 preferred).
         columns:
           - name: game_date
             description: Calendar date the game was scheduled (Action Network "date" param).
-            tests: [not_null]
           - name: an_game_id
             description: Action Network game identifier (string form).
           - name: home_team_abbr
