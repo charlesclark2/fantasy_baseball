@@ -61,6 +61,12 @@ quant_sports_intel_models/<sport>/
 ```
 `s3io.py`, `handler.py`, `backfill.py`, `tools/query_lake.py` (§7A), the dbt-duckdb `profiles.yml`, and the EventBridge module are **shared boilerplate** — only `sources.py`, the dbt models, and the schedule payload are sport-specific.
 
+> 🧨 **REUSABLE BACKFILL LANDMINES (carry across ALL sports — surfaced by NCAAF-P0.6, apply equally to NFL-N0.4 + MLB backfills):**
+> 1. **Season defaults MUST be clock-derived, never pinned.** A hard-coded season range (e.g. `2020–2024`) is **stale by a full season the day it merges** — P0.6 shipped pinned and silently missed 2025. Derive the default from the clock (`last_completed_season()`), and handle January conservatively so a default run never pulls an in-progress season.
+> 2. **`--skip-existing` will silently PROTECT a partial/stub partition.** A 3-event `--max-events N` verification stub was preserved by a later full backfill because `--skip-existing` saw the partition as "present" — caught only by the coverage check, not the run. ⇒ re-pull a stubbed season WITHOUT the flag; never trust partition-presence as completeness.
+> 3. **Ship a re-runnable acceptance check with exit 0/1** (like P0.6's `verify_odds_historical.py`) so coverage/quality can gate CI or a handoff — it's what caught both #2 and an FBS-orphan misclassification here.
+> 4. **Paid per-event sources: `on_demand`-gate them out of the default backfill** so a routine free pull can never burn paid credits; the paid source must be named explicitly.
+
 ## 3. S3 lake conventions
 - **Key scheme:** `s3://<bucket>/<sport>/raw/<source>/season=YYYY/part-0000.parquet` (one logical table per `source`; partition by `season`, add `/week=NN/` only where natural).
 - **Idempotent writes:** each run **overwrites the (source, season) partition** (delete-prefix → put). Weekly incremental = re-pull the *current* season and rewrite just that partition. Backfill = all seasons, once, off-Lambda.
