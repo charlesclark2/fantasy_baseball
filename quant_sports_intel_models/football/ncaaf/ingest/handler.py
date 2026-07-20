@@ -46,8 +46,11 @@ def load_env() -> None:
 
 
 def _resolve_sources(names) -> list[str]:
+    # A DEFAULT (unnamed) run EXCLUDES on_demand sources — the paid /historical odds pull
+    # (P0.6) — so a plain CFBD/nflverse backfill never burns Odds-API credits. Naming the
+    # source explicitly (odds_backfill.py / a Dagster op) bypasses the gate.
     if not names:
-        return list(SOURCES)
+        return [n for n, s in SOURCES.items() if not s.on_demand]
     unknown = [n for n in names if n not in SOURCES]
     if unknown:
         raise ValueError(f"Unknown source(s) {unknown}. Valid: {sorted(SOURCES)}")

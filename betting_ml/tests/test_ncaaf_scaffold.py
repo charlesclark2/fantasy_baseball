@@ -211,10 +211,11 @@ def test_table_uri_layout():
 
 # ── registry completeness ───────────────────────────────────────────────────────────────
 def test_registry_has_locked_tables():
-    # 24 P0.2-locked §8 tables + `coaches` added by P0.5 (year-only HC history w/ SP+ splits).
-    assert len(src.SOURCES) == 25
+    # 24 P0.2-locked §8 tables + `coaches` (P0.5, year-only HC history w/ SP+ splits) +
+    # `odds_ncaaf_historical` (P0.6, paid /historical CLOSING lines — inventory §8 table #21).
+    assert len(src.SOURCES) == 26
     # spot-check the load-bearing ones from ncaaf_data_inventory.md §8
-    for name in ["games", "play_stats", "cfbd_draft_picks", "odds_ncaaf",
+    for name in ["games", "play_stats", "cfbd_draft_picks", "odds_ncaaf", "odds_ncaaf_historical",
                  "nflverse_draft_picks", "nflverse_players", "coaches"]:
         assert name in src.SOURCES
     # coaches is a year-only seasonal CFBD source (1 call/season, no team loop)
@@ -229,6 +230,24 @@ def test_registry_groupings():
         "nflverse_draft_picks", "nflverse_combine", "nflverse_players"}
     # nflverse_players is not season-grained
     assert src.SOURCES["nflverse_players"].season_scoped is False
+
+
+# ── P0.6 on_demand gating: the paid /historical odds pull is excluded from a default run ──
+def test_odds_on_demand_gating():
+    # P0.6: the paid /historical source is on_demand → EXCLUDED from a default (unnamed) run so
+    # a plain CFBD/nflverse backfill never burns Odds-API credits. It must be named explicitly.
+    assert src.ODDS_ON_DEMAND == ["odds_ncaaf_historical"]
+    assert set(src.ODDS_LIVE) == {"odds_ncaaf", "odds_ncaaf_scores"}
+    assert "odds_ncaaf_historical" not in src.DEFAULT_SOURCES
+    assert set(src.DEFAULT_SOURCES) == set(src.SOURCES) - {"odds_ncaaf_historical"}
+    assert src.SOURCES["odds_ncaaf_historical"].on_demand is True
+    assert src.SOURCES["odds_ncaaf_historical"].cadence == "seasonal"
+    # the live feeds stay in a default run
+    assert src.SOURCES["odds_ncaaf"].on_demand is False
+    # handler: an unnamed run drops the on_demand source; an explicit name bypasses the gate
+    assert "odds_ncaaf_historical" not in _resolve_sources(None)
+    assert "odds_ncaaf" in _resolve_sources(None)
+    assert _resolve_sources(["odds_ncaaf_historical"]) == ["odds_ncaaf_historical"]
 
 
 class _FakeCFBD:
@@ -350,3 +369,160 @@ def test_local_delta_roundtrip(tmp_path):
                        local_root=str(tmp_path))
     cnt = con.execute(f"SELECT count(*) FROM delta_scan('{uri}')").fetchone()[0]
     assert cnt == 2
+
+
+# ── P0.6 paid /historical closing-line fetchers — no network (fake requests) ─────────────
+class _FakeOddsResp:
+    """A stand-in requests.Response: canned JSON + credit headers, raises on 4xx/5xx."""
+
+    def __init__(self, payload, *, used="100", remaining="9900", status=200,
+                 content_type="application/json"):
+        self._payload = payload
+        self.headers = {"x-requests-used": used, "x-requests-remaining": remaining,
+                        "Content-Type": content_type}
+        self.status_code = status
+        self.text = "err"
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            import requests
+            raise requests.HTTPError(f"HTTP {self.status_code}")
+
+
+def _patch_odds_requests(monkeypatch, capture, responder):
+    """Patch requests.get so the odds fetchers hit `responder(url, params)` instead of the net;
+    record every (url, params) into `capture` for call-shape assertions."""
+    import requests
+
+    def fake_get(url, params=None, timeout=None):
+        capture.append((url, params or {}))
+        return responder(url, params or {})
+
+    monkeypatch.setattr(requests, "get", fake_get)
+
+
+def test_odds_request_captures_credits_and_unwraps_historical(monkeypatch):
+    # The /historical envelope {timestamp, data:[...]} unwraps to a flat list + the served
+    # snapshot ts; the credit headers land on ctx.
+    calls: list = []
+    envelope = {"timestamp": "2024-08-24T15:55:00Z", "previous_timestamp": "2024-08-24T15:50:00Z",
+                "data": [{"id": "e1", "commence_time": "2024-08-24T16:00:00Z"}]}
+    _patch_odds_requests(monkeypatch, calls,
+                         lambda u, p: _FakeOddsResp(envelope, used="250", remaining="9750"))
+    ctx = src.build_ctx(odds_key="k", sleep_seconds=0)
+    data, snap = src._odds_request(ctx, "historical/sports/x/odds", {"date": "z"})
+    assert data == envelope["data"] and snap == "2024-08-24T15:55:00Z"
+    assert ctx.credits_used == 250 and ctx.credits_remaining == 9750
+    # a bare live list is passed through with snapshot None
+    _patch_odds_requests(monkeypatch, calls, lambda u, p: _FakeOddsResp([{"id": "e2"}]))
+    data2, snap2 = src._odds_request(ctx, "sports/x/odds", {})
+    assert data2 == [{"id": "e2"}] and snap2 is None
+
+
+def test_odds_request_missing_key_raises(monkeypatch):
+    monkeypatch.delenv("ODDS_API_KEY", raising=False)
+    ctx = src.Ctx(odds_api_key=None)
+    with pytest.raises(RuntimeError, match="ODDS_API_KEY"):
+        src._odds_request(ctx, "historical/sports/x/odds", {})
+
+
+def test_historical_closing_line_is_leakage_safe(monkeypatch):
+    # odds_ncaaf_historical: for each kickoff K the snapshot `date` is K − buffer (strictly before
+    # kickoff) and commenceTimeFrom/To bracket K → leakage-safe close; rows carry _snapshot_ts.
+    from datetime import datetime, timezone
+    calls: list = []
+    kickoff = "2024-08-24T16:00:00Z"
+    envelope = {"timestamp": "2024-08-24T15:55:00Z",
+                "data": [{"id": "e1", "commence_time": kickoff, "bookmakers": []}]}
+    _patch_odds_requests(monkeypatch, calls, lambda u, p: _FakeOddsResp(envelope))
+    monkeypatch.setattr(src, "_season_kickoffs",
+                        lambda ctx, year, weeks=None: [datetime(2024, 8, 24, 16, 0, tzinfo=timezone.utc)])
+    ctx = src.build_ctx(odds_key="k", sleep_seconds=0, snapshot_buffer_min=5)
+    out = src._odds_ncaaf_historical(ctx, 2024)
+    assert len(calls) == 1
+    url, params = calls[0]
+    assert f"historical/sports/{src.ODDS_SPORT_KEY}/odds" in url
+    assert params["date"] == "2024-08-24T15:55:00Z"           # K − 5min (pre-kickoff)
+    assert params["markets"] == src.NCAAF_GAME_LINE_MARKETS
+    assert params["commenceTimeFrom"] < kickoff < params["commenceTimeTo"]  # window brackets K
+    # the served snapshot is recorded AND is < the event commence_time (the hard leakage guard)
+    assert out[0]["_snapshot_ts"] == "2024-08-24T15:55:00Z"
+    assert out[0]["_requested_snapshot"] == "2024-08-24T15:55:00Z"
+    assert out[0]["_snapshot_ts"] < out[0]["commence_time"]
+
+
+def test_historical_below_floor_skips_without_calls(monkeypatch):
+    # FEATURED historical coverage starts 2020 (NCAAF_HISTORICAL_FLOOR); a pre-floor season must
+    # skip WHOLE (no kickoff enumeration / no per-snapshot 422 grinding, 0 credits).
+    calls: list = []
+    _patch_odds_requests(monkeypatch, calls, lambda u, p: _FakeOddsResp([]))
+    # guard even if _season_kickoffs would return something — the floor check precedes it
+    monkeypatch.setattr(src, "_season_kickoffs",
+                        lambda ctx, year, weeks=None: (_ for _ in ()).throw(
+                            AssertionError("must not enumerate kickoffs below the floor")))
+    ctx = src.build_ctx(odds_key="k", sleep_seconds=0)
+    assert src.NCAAF_HISTORICAL_FLOOR == 2020
+    assert src._odds_ncaaf_historical(ctx, 2019) == []   # below floor → empty, no calls
+    assert calls == []
+
+
+def test_historical_max_events_caps_snapshots(monkeypatch):
+    # --max-events caps the kickoff-snapshot fan-out for a cheap verification pull.
+    from datetime import datetime, timezone
+    calls: list = []
+    _patch_odds_requests(monkeypatch, calls,
+                         lambda u, p: _FakeOddsResp({"timestamp": p["date"], "data": []}))
+    monkeypatch.setattr(src, "_season_kickoffs", lambda ctx, year, weeks=None: [
+        datetime(2024, 8, 24, 16, 0, tzinfo=timezone.utc),
+        datetime(2024, 8, 24, 19, 30, tzinfo=timezone.utc),
+        datetime(2024, 8, 24, 23, 0, tzinfo=timezone.utc),
+    ])
+    ctx = src.build_ctx(odds_key="k", sleep_seconds=0, max_events=2)
+    src._odds_ncaaf_historical(ctx, 2024)
+    assert len(calls) == 2                                 # capped to 2 of 3 kickoffs
+
+
+class _KickoffCFBD:
+    """A fake CFBD returning a season's /games (all divisions) with CFBD's startDate shape."""
+
+    def __init__(self, games):
+        self._games = games
+
+    def get_games(self, year, week=None, *, season_type="both"):
+        return self._games
+
+
+def test_season_kickoffs_from_cfbd_startdate():
+    # startDate is already ISO-UTC → parsed directly (no ET conversion). FBS-only; a dup start
+    # collapses to ONE kickoff; startTimeTBD / null startDate are skipped (no real kickoff).
+    games = [
+        {"id": 1, "homeClassification": "fbs", "awayClassification": "fbs",
+         "startDate": "2024-08-24T16:00:00.000Z"},
+        {"id": 2, "homeClassification": "fbs", "awayClassification": "fbs",
+         "startDate": "2024-08-24T16:00:00.000Z"},                       # dup window → 1 kickoff
+        {"id": 3, "homeClassification": "fbs", "awayClassification": "fbs",
+         "startDate": "2024-08-24T19:30:00.000Z"},
+        {"id": 4, "homeClassification": "fbs", "awayClassification": "fcs",
+         "startDate": "2024-08-25T00:00:00.000Z", "startTimeTBD": True},  # TBD → skipped
+        {"id": 5, "homeClassification": "fcs", "awayClassification": "fcs",
+         "startDate": "2024-08-24T18:00:00.000Z"},                       # not FBS → skipped
+        {"id": 6, "homeClassification": "fbs", "awayClassification": "fbs",
+         "startDate": None},                                             # no kickoff → skipped
+    ]
+    ctx = src.Ctx(cfbd=_KickoffCFBD(games))
+    kicks = src._season_kickoffs(ctx, 2024)
+    iso = sorted(k.strftime("%Y-%m-%dT%H:%M:%SZ") for k in kicks)
+    assert iso == ["2024-08-24T16:00:00Z", "2024-08-24T19:30:00Z"]
+
+
+def test_build_ctx_odds_knobs():
+    ctx = src.build_ctx(odds_key="k", regions="us,us2", snapshot_buffer_min=3,
+                        sleep_seconds=0.0, max_events=5)
+    assert ctx.odds_regions == "us,us2" and ctx.odds_snapshot_buffer_min == 3
+    assert ctx.odds_max_events == 5 and ctx.odds_sleep_seconds == 0.0
+    # defaults when not overridden
+    assert src.build_ctx().odds_regions == "us"
+    assert src.build_ctx().odds_snapshot_buffer_min == 5
