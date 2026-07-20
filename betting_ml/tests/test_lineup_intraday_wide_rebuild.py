@@ -45,5 +45,6 @@ def test_default_refresh_covers_lineups_wide_ext_table():
     const = _slice(src, "W7B_SERVING_TABLES = [", "]")
     assert "stg_statsapi_lineups_wide" in const
     # …and it is wired into the DEFAULT (no-flag) refresh call so the monitor's SF view reflects it.
-    default_refresh = _slice(src, "STG_BATTER_PITCHES_TABLE + W1_TABLES", "required=required,")
+    # (Anchor updated for E11.20 phase 1.5: W1_TABLES left the daily refresh list.)
+    default_refresh = _slice(src, "STG_BATTER_PITCHES_TABLE + W2_TABLES", "required=required,")
     assert "W7B_SERVING_TABLES" in default_refresh, "W7B_SERVING_TABLES must be in the default refresh set"

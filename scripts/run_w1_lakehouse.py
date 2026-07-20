@@ -31,10 +31,10 @@ betting_ml/utils/delta_lakehouse.py). Under mirror/cutover the daily W1 build wr
 CURRENT-SEASON game_year partition only (delta-rs replaceWhere — O(season), not
 O(history)); `--w1-only --delta-full` is the explicit opt-in full-history backfill that
 seeds/rebuilds every season partition. Under cutover the W1 DuckDB views (here and in
-every *-only subprocess) resolve via delta_scan, while the SF-COMPAT season-bucket
-mirror (lakehouse/<t>/season_YYYY/data.parquet, current season rewritten daily) keeps
-the lakehouse_ext.mart_pitch_* external tables fresh for the raw-SQL SF stragglers;
-the legacy single data.parquet is retired (glob-dup guard).
+every *-only subprocess) resolve via delta_scan; the legacy single data.parquet is
+retired (glob-dup guard). PHASE 1.5 (2026-07-20): the SF-COMPAT season-bucket mirror
+(lakehouse/<t>/season_YYYY/data.parquet) is RETIRED by default — the SF mart_pitch_*
+objects it fed are DROPPED; W1_SF_COMPAT_MIRROR=1 resumes it (rollback only).
   python3 scripts/run_w1_lakehouse.py --w3-only   # only the W3 marts (reuse existing W1+W2 parquet)
   python3 scripts/run_w1_lakehouse.py --w3pre     # W1 + W2 + W3 + the W3pre odds/staging tier (opt-in)
   python3 scripts/run_w1_lakehouse.py --w3pre-only # only the W3pre odds/staging flatten tier
@@ -700,6 +700,17 @@ def _current_season_year(conn) -> int:
     return int(_la_today(conn)[:4])
 
 
+def _sf_compat_mirror_enabled() -> bool:
+    """E11.20 phase 1.5 (2026-07-20): the SF-compat season mirror is RETIRED by default —
+    the lakehouse_ext.mart_pitch_* external tables + betting.mart_pitch_* views it fed are
+    DROPPED (zero readers; stragglers repointed in §6 a0). Set W1_SF_COMPAT_MIRROR=1 to
+    resume the mirror writes + season self-heal (the phase-1 rollback path: re-run the DDL
+    in scripts/ddl/w1_external_tables.sql, set the flag, and the next daily re-freshens).
+    ⚠️ Without this gate, deleting the mirror S3 files after the drop would be futile —
+    the cutover self-heal would rebuild EVERY season's compat file on the next run."""
+    return os.environ.get("W1_SF_COMPAT_MIRROR", "0") == "1"
+
+
 def _compat_season_years(conn, model: str) -> set[int]:
     """The seasons that already have an SF-compat season-bucket parquet
     (lakehouse/<model>/season_YYYY/data.parquet) — see _build_w1_marts cutover notes."""
@@ -838,7 +849,7 @@ def _build_w1_marts(conn, dry_run: bool, delta_full: bool = False,
             years = list(all_years)
         else:
             years = [current_year]
-            if mode == "cutover":
+            if mode == "cutover" and _sf_compat_mirror_enabled():
                 # Self-heal the SF-compat mirror: any HISTORICAL season missing its
                 # season-bucket file is (re)built this run (first cutover run migrates
                 # the whole history once; steady-state adds nothing).
@@ -882,9 +893,11 @@ def _build_w1_marts(conn, dry_run: bool, delta_full: bool = False,
                       f"(empty season slice — partition left untouched)", file=sys.stderr)
                 continue
             overwrite_partition(model, tbl, year, create_ok=delta_full)
-            if mode == "cutover":
+            if mode == "cutover" and _sf_compat_mirror_enabled():
                 # SF-compat season mirror — written from the SAME arrow slice (no
-                # recompute) so Delta and the compat parquet cannot diverge.
+                # recompute) so Delta and the compat parquet cannot diverge. Phase 1.5:
+                # gated OFF by default (_sf_compat_mirror_enabled) — the SF objects it
+                # fed are dropped.
                 conn.register("_delta_season_tmp", tbl)
                 conn.execute(
                     f"COPY (SELECT * FROM _delta_season_tmp) TO "
@@ -905,12 +918,18 @@ def _build_w1_marts(conn, dry_run: bool, delta_full: bool = False,
             _retire_legacy_w1_parquet(model)
 
     if mode == "cutover":
-        print(
-            "NOTE: [delta-cutover] W1 DuckDB readers resolve via delta_scan; the "
-            "lakehouse_ext.mart_pitch_* external tables stay FRESH off the season-bucket "
-            "compat mirror (SF stragglers keep working). The SF objects drop in phase "
-            "1.5, after the straggler repoint (docs/e11_20_delta_rollout.md §6).",
-        )
+        if _sf_compat_mirror_enabled():
+            print(
+                "NOTE: [delta-cutover] W1 DuckDB readers resolve via delta_scan; the "
+                "lakehouse_ext.mart_pitch_* external tables stay FRESH off the season-bucket "
+                "compat mirror (W1_SF_COMPAT_MIRROR=1 — the phase-1 rollback path).",
+            )
+        else:
+            print(
+                "NOTE: [delta-cutover] W1 DuckDB readers resolve via delta_scan; the "
+                "SF-compat season mirror is RETIRED (phase 1.5 — the SF mart_pitch_* "
+                "objects are dropped; set W1_SF_COMPAT_MIRROR=1 only for rollback).",
+            )
 
 
 def _raw_source_for(model: str) -> str:

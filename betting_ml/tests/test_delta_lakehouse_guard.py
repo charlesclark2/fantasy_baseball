@@ -251,16 +251,22 @@ def test_read_choke_points_carry_delta_branch():
         "_register_w8a_views) must all be Delta-aware"
 
 
-def test_refresh_script_keeps_w1_required_for_the_compat_mirror():
-    # Under cutover the daily build writes the SF-COMPAT season-bucket mirror
-    # (lakehouse/<t>/season_YYYY/data.parquet) precisely SO the ext tables stay fresh for
-    # the raw-SQL SF stragglers (update_player_posteriors etc. — the INC-27 class). The
-    # W1 tables therefore must STAY in the default REQUIRED refresh set until phase 1.5.
+def test_refresh_script_w1_retired_from_daily_refresh():
+    # E11.20 PHASE 1.5 (2026-07-20): the SF mart_pitch_* objects are DROPPED, so the W1
+    # tables must be OUT of the daily refresh entirely — refreshing a dropped ext table
+    # raises → the refresh op is HALT-tier → the whole daily job dies. (This inverts the
+    # phase-1 pin that kept W1 REQUIRED for the compat mirror.)
     default_required = REFRESH_SRC[REFRESH_SRC.index("required = (set(STG_BATTER_PITCHES_TABLE)"):]
+    refresh_call = default_required[default_required.index("_refresh("):]
+    refresh_call = refresh_call[:refresh_call.index(")")]
     default_required = default_required[:default_required.index("_refresh(")]
-    assert "set(W1_TABLES)" in default_required, (
-        "W1_TABLES must remain in the default REQUIRED refresh set — the cutover compat "
-        "mirror keeps the ext tables fresh; they only leave at the phase-1.5 SF drop"
+    assert "set(W1_TABLES)" not in default_required, (
+        "W1_TABLES must NOT be in the default REQUIRED refresh set — the SF mart_pitch_* "
+        "ext tables are dropped (phase 1.5); refreshing them HALTs the daily"
+    )
+    assert "W1_TABLES" not in refresh_call, (
+        "W1_TABLES must NOT be in the daily _refresh() list at all — even best-effort "
+        "refreshes of dropped ext tables are daily error noise"
     )
 
 
@@ -275,15 +281,25 @@ def test_builder_daily_delta_is_partition_scoped_with_empty_guard():
 
 
 def test_builder_cutover_writes_sf_compat_mirror_and_retires_legacy_key():
-    # The cutover branch must (a) write the season-bucket SF-compat parquet from the SAME
-    # arrow slice as the Delta write (SF stragglers read betting.mart_pitch_* as raw SQL —
-    # freezing the ext tables would silently stale the daily posterior updaters), and
-    # (b) retire the legacy single data.parquet once season files exist (both layouts
-    # under the ext glob at once = the glob-dup double-count).
+    # PHASE 1.5 update (2026-07-20): the SF-compat season mirror is RETIRED by default —
+    # its write + season self-heal must BOTH be gated on _sf_compat_mirror_enabled()
+    # (W1_SF_COMPAT_MIRROR=1 = the rollback path). Without the gate, deleting the mirror
+    # S3 files after the SF drop is futile: the self-heal rebuilds every season next run.
+    # The mirror code path itself must survive (rollback), as must the legacy-key
+    # retirement (glob-dup guard — unconditional).
     body = BUILDER_SRC[BUILDER_SRC.index("def _build_w1_marts"):]
     body = body[:body.index("\ndef _raw_source_for")]
     assert "season_{year}/data.parquet" in body, \
-        "cutover must write the SF-compat season-bucket mirror"
+        "the SF-compat mirror write path must survive for rollback (W1_SF_COMPAT_MIRROR=1)"
+    assert body.count('if mode == "cutover" and _sf_compat_mirror_enabled()') >= 2, (
+        "BOTH the compat-mirror season self-heal AND the season-mirror COPY must be "
+        "gated on _sf_compat_mirror_enabled() — an ungated leg either rebuilds the "
+        "mirror after the SF drop (self-heal) or keeps writing dead files (COPY)"
+    )
+    helper_src = BUILDER_SRC[BUILDER_SRC.index("def _sf_compat_mirror_enabled"):]
+    helper_src = helper_src[:helper_src.index("\ndef ")]
+    assert '"W1_SF_COMPAT_MIRROR", "0"' in helper_src, \
+        "the compat mirror must default OFF (phase 1.5 — the SF objects are dropped)"
     assert "_retire_legacy_w1_parquet(" in body, \
         "cutover must retire the legacy data.parquet (glob-dup guard)"
     # the compat dir name must NOT be hive `key=value` style — DuckDB hive-partition
