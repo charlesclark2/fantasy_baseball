@@ -10,9 +10,14 @@
 {{
     config(
         materialized = 'view',
+        enabled      = (target.name == 'duckdb'),
         tags         = ['w1_lakehouse']
     )
 }}
+-- E11.20 phase 1.5 (2026-07-20): SF side RETIRED via enabled=(target.name=='duckdb') —
+-- the SF thin view over lakehouse_ext is dropped (zero readers since 7/13; stragglers
+-- repointed in a0). The duckdb branch stays: run_w1_lakehouse.py extracts it for the
+-- Delta build (it strips the config call, so the flag is invisible to the box build).
 
 {% if target.name == 'duckdb' %}
 

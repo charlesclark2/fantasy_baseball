@@ -398,6 +398,20 @@ cd ~/app/services/dagster/aws && docker compose up -d
 (from mirror, rollback is just the `sed` + `up -d` — data.parquet never left.)
 
 **Step 6 — PHASE 1.5: straggler repoint + SF decommission of the W1 family → the AC-C numbers.**
+> **STATUS 2026-07-20 — the phase-1.5 PR is CODE-COMPLETE; only the operator DDL + S3
+> cleanup remain.** (a0) runtime gate met (3 green daily cycles with W7A/W7B=1 since
+> 07-17); (a) zero-reader PASSED 07-18. (b) shipped as `enabled=(target.name=='duckdb')`
+> on all 7 models — NOT deletion: the duckdb branch is the source run_w1 extracts for the
+> Delta build (its config-strip regex ignores the flag; verified via extract_duckdb_sql).
+> (c) is now a script: `scripts/ddl/drop_w1_mart_pitch_snowflake.py --apply` (delegates to
+> data_loader; MCP can't DDL). PLUS one addition the plan below missed: the **SF-compat
+> mirror write is retired** (`W1_SF_COMPAT_MIRROR`, default 0, in run_w1_lakehouse) —
+> without that gate, step (d)'s `s3 rm` is futile because the cutover SELF-HEAL rebuilds
+> every missing season file on the next run. W1_TABLES is also fully OUT of the daily
+> refresh list (not just the REQUIRED set — best-effort refreshing a dropped table is
+> daily error noise). Pins updated: `test_refresh_script_w1_retired_from_daily_refresh` +
+> the gated-mirror asserts in `test_delta_lakehouse_guard.py`. **Order for the operator:
+> deploy code → run the DDL script → THEN step (d)'s s3 rm → next daily = runtime gate.**
 ⚠️ **ORDER MATTERS twice over:** (1) the raw-SQL SF stragglers (§1b list) must be
 REPOINTED to the lakehouse before anything drops — they are why the compat mirror
 exists; (2) the daily `dbt_daily_build` rebuilds the SF `mart_pitch_*` views every run,

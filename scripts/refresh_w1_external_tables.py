@@ -30,6 +30,11 @@ _SCHEMA = "baseball_data.lakehouse_ext"
 # box scores / posteriors. Created by scripts/ddl/generate_stg_batter_pitches_external_table.py.
 STG_BATTER_PITCHES_TABLE = ["stg_batter_pitches"]
 
+# ⚰️ E11.20 PHASE 1.5 (2026-07-20): RETIRED from the daily refresh — the SF
+# lakehouse_ext.mart_pitch_* ext tables + betting.mart_pitch_* views are DROPPED
+# (scripts/ddl/drop_w1_mart_pitch_snowflake.py). The list is kept ONLY for the
+# rollback path (docs/e11_20_delta_rollout.md §6): recreate via
+# scripts/ddl/w1_external_tables.sql, set W1_SF_COMPAT_MIRROR=1, re-add below.
 W1_TABLES = [
     "mart_pitch_characteristics",
     "mart_pitch_play_event",
@@ -490,23 +495,24 @@ def main():
     # now depends on the S3 ext table, so W11TX_TABLES is REQUIRED (HALT) in the daily refresh (per the
     # comment at W11TX_TABLES). The --w11tx nightly path still runs the BUILD (dedup parquet) + a
     # best-effort refresh; this REQUIRED refresh is the durable freshness guarantee decoupled from the flag.
-    # E11.20 (Delta cutover): the W1 pitch marts stay in this REQUIRED refresh set even
-    # under LAKEHOUSE_DELTA_W1=cutover — the daily build then writes the season-bucketed
-    # SF-COMPAT mirror (lakehouse/<t>/season_YYYY/data.parquet; the ext glob unions it),
-    # which keeps lakehouse_ext.mart_pitch_* / betting.mart_pitch_* FRESH for the raw-SQL
-    # SF stragglers (update_player_posteriors etc. — the INC-27 class). The W1 rows leave
-    # this set only in phase 1.5, when the stragglers are repointed and the SF objects
-    # are DROPPED (docs/e11_20_delta_rollout.md §6).
-    required = (set(STG_BATTER_PITCHES_TABLE) | set(W1_TABLES) | set(W2_TABLES)
+    # E11.20 PHASE 1.5 (2026-07-20): the W1 pitch marts are OUT of the daily refresh
+    # entirely — the lakehouse_ext.mart_pitch_* external tables + betting.mart_pitch_*
+    # views are DROPPED (zero readers; stragglers repointed in §6 a0; the SF-compat
+    # season mirror write is retired behind W1_SF_COMPAT_MIRROR in run_w1_lakehouse).
+    # Refreshing a dropped ext table would HALT the daily. Rollback: re-run the DDL in
+    # scripts/ddl/w1_external_tables.sql, set W1_SF_COMPAT_MIRROR=1, re-add W1_TABLES
+    # here (docs/e11_20_delta_rollout.md §6).
+    required = (set(STG_BATTER_PITCHES_TABLE) | set(W2_TABLES)
                 | set(W3_TABLES) | set(W11TX_TABLES))
     _refresh(
-        STG_BATTER_PITCHES_TABLE + W1_TABLES + W2_TABLES + W3_TABLES + W3PRE_TABLES
+        STG_BATTER_PITCHES_TABLE + W2_TABLES + W3_TABLES + W3PRE_TABLES
         + W4_TABLES + W5_TABLES + ARCHETYPE_TABLES + W6_TABLES + W7_TABLES + W7B_SERVING_TABLES
         + W11TX_TABLES,
         required=required,
     )
-    print("stg_batter_pitches + W1+W2+W3 + W11tx external table refresh complete "
-          "(W3pre + W4 + W5 + W5b + W6 + W7 + W7b-serving best-effort).")
+    print("stg_batter_pitches + W2+W3 + W11tx external table refresh complete "
+          "(W3pre + W4 + W5 + W5b + W6 + W7 + W7b-serving best-effort; "
+          "W1 mart_pitch_* RETIRED — phase 1.5).")
 
 
 if __name__ == "__main__":
