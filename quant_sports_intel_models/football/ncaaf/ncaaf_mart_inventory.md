@@ -1,7 +1,19 @@
 # NCAAF — Analytic Mart Inventory (the conformed dimensional model)
 
-**Status:** v1.0 — produced by **NCAAF-P1.1** (2026-07-20). Every row count below is **observed on a
-real build over the S3 Delta lake**, not estimated.
+**Status:** v1.1 — produced by **NCAAF-P1.1** (2026-07-20). Every row count below is **observed on a
+real build over the S3 Delta lake**, not estimated, and was **re-measured after the
+`season_order_week` fix** — see the note below.
+**✅ Box-verified 2026-07-20:** `sports_ncaaf_dbt_build_job` ran green on the EC2 box in **2m59s**
+(run op ~3 min), reproducing these counts exactly (`rollup_ncaaf_team_week_asof` = 25,565;
+`ncaaf_team_coaching_change` = 1,555). The runtime gate is CLOSED.
+
+> ⚠️ **Provenance note (why v1.1).** v1.0 quoted 24,000 for the two week-grained rollups. That was
+> a PRE-FIX measurement carried forward by mistake: it was taken before `season_order_week` existed,
+> when the postseason still collapsed onto week 1. The fix adds the real postseason weeks (16, 17)
+> to the spine, which adds exactly one as-of week per team-season — 1,565 rows — giving 25,565.
+> The box run surfaced the discrepancy. **Lesson: re-measure after a fix; never carry a pre-fix
+> number into the docs.** Every other figure here was re-audited against the post-fix build and
+> was already correct.
 **Parents:** `ncaaf_data_inventory.md` §8 (the 25 raw lake tables this is built from) ·
 `../../baseball/baseball_data_mart_inventory.md` (the MLB analog) ·
 `../../baseball/scd2_convention.md` (the SCD-2 convention mirrored here).
@@ -92,6 +104,9 @@ change-detection rule, and `is_current ⇔ valid_to IS NULL` are the convention'
 **⚠️ Every fact here is POST-KICKOFF.** They describe games that were played. Nothing in them may be
 read into a pregame row for the *same* game.
 
+**Play subsets** (`fact_ncaaf_play`, for anyone computing their own splits):
+all rows **1,550,367** → `is_scrimmage_play` **1,222,754** → also non-garbage **1,112,244**.
+
 **Coverage honesty:** 18,032 of 18,124 team-games have a CFBD advanced row (99.5%);
 `has_advanced_stats` flags the rest rather than letting NULL read as zero. `/plays` coverage has
 genuine per-game holes (2014 Washington week 1 has **0** plays), so a team can have `games_played > 0`
@@ -101,7 +116,7 @@ and still have a NULL efficiency rating.
 
 | Definition | Where | Rule |
 |---|---|---|
-| **Success rate** | `stg_ncaaf_plays` | 1st down ≥ 50% of distance · 2nd ≥ 70% · 3rd/4th ≥ 100%. Observed on clean scrimmage plays: **43.5%** (matches the CFB norm). |
+| **Success rate** | `stg_ncaaf_plays` | 1st down ≥ 50% of distance · 2nd ≥ 70% · 3rd/4th ≥ 100%. Observed on clean (garbage-excluded) scrimmage plays: **43.7%** (matches the CFB norm). |
 | **Passing down** | `stg_ncaaf_plays` | 2nd & ≥8, or 3rd/4th & ≥5. |
 | **Garbage time** | `fact_ncaaf_play` | Margin by quarter > 43 / 37 / 27 / 22. **8.8%** of plays. |
 | **Scoring opportunity** | `fact_ncaaf_drive` | Drive reached the opponent's 40. Observed rate **49.1%**; **2.04** points/drive; **26.0%** three-and-out. |
@@ -117,8 +132,8 @@ dropped** — the rollups exclude them, anything wanting the full game still can
 | Mart | Grain | Rows | Pregame-safe? |
 |---|---|---|---|
 | `rollup_ncaaf_team_season` | (season, team_id) | 1,565 | ⛔ **NO — not for its own season** |
-| `rollup_ncaaf_team_week_asof` | (season, team_id, as_of_week) | **24,000** | ✅ **YES — this is the surface** |
-| `rollup_ncaaf_team_week_opponent_adjusted` | (season, team_id, as_of_week) | 24,000 | ✅ YES |
+| `rollup_ncaaf_team_week_asof` | (season, team_id, as_of_week) | **25,565** | ✅ **YES — this is the surface** |
+| `rollup_ncaaf_team_week_opponent_adjusted` | (season, team_id, as_of_week) | 25,565 | ✅ YES |
 
 ### 3.1 The leakage contract
 
@@ -147,8 +162,8 @@ Two passes: pass 1 against opponents' raw ratings, pass 2 against their pass-1 r
 your opponents play" enters). Everything — this team's rating, the opponent list, and each
 opponent's rating — is read at the **same** `as_of_week`.
 
-**Observed behaviour** (2024, `as_of_week = 10`): correlation with raw is 0.95 and the mean absolute
-shift is 0.027 PPA against a raw SD of 0.107 — it moves ~25% of a standard deviation, meaningful but
+**Observed behaviour**: correlation with raw is 0.958 and the mean absolute
+shift is 0.024 PPA against a raw SD of 0.104 — it moves ~23% of a standard deviation, meaningful but
 not wild. The direction is right where it should be:
 
 - **Indiana** (SOS +0.055, a soft schedule at that point) — offense adjusted **up** 0.354 → 0.422 but
@@ -226,7 +241,248 @@ why.** Do not delete the test, and do not bump it reflexively to whatever today'
 
 ---
 
-## 6. Open gaps carried into P1.2 / P1.3
+---
+
+## 6. Column reference
+
+Generated from `information_schema` on the **box-verified build** (2026-07-20), so this is what the
+tables actually contain — not what the models were intended to contain. Repetitive metric families
+are shown as a pattern row rather than enumerated 24 times; the pattern expands to every
+combination listed.
+
+**Conventions used throughout:** `sport` is on every row (always `'ncaaf'`). `*_key` /
+`*_surrogate_key` are the grain contract (unique, not-null, tested). ⚠️ marks a column with a
+semantic trap. ⛔ marks a POST-KICKOFF column that must not reach a pregame feature row.
+
+### 6.1 `dim_ncaaf_conference` — 11 cols · grain: conference
+
+| Column | Type | Notes |
+|---|---|---|
+| `sport` | VARCHAR | always `'ncaaf'` |
+| `conference` | VARCHAR | the natural key |
+| `conference_key` | VARCHAR | `ncaaf-<conference>` — grain contract (unique) |
+| `first_season`, `last_season`, `latest_season` | BIGINT | observed lifespan |
+| `n_teams_latest_season`, `min_teams`, `max_teams` | BIGINT | membership-size trace |
+| `is_defunct` | BOOLEAN | last seen before the newest ingested season (folded / left FBS) |
+| `is_power_conference` | BOOLEAN | ⚠️ coarse slicing label at CURRENT alignment, deliberately not season-varying. Not a strength measure — use the opponent-adjusted rollup. |
+
+### 6.2 `dim_ncaaf_team` — 26 cols · grain: (team_id, version) · SCD-2
+
+| Column | Type | Notes |
+|---|---|---|
+| `team_surrogate_key` | VARCHAR | `ncaaf-<team_id>-v<n>` — grain contract (unique, not-null) |
+| `team_id` | BIGINT | CFBD team id — stable across versions |
+| `version_number` | HUGEINT | 1-based; increments on a payload change or a membership gap |
+| **`team`, `conference`, `conference_division`, `classification`** | VARCHAR | **the SCD-2 PAYLOAD** — a change in any opens a new version. `team` is in the payload so `(season, team-name)` is a sound join key for the name-only CFBD sources. |
+| `is_fbs` | BOOLEAN | `classification = 'fbs'` |
+| `valid_from_season` | BIGINT | INCLUSIVE lower bound |
+| `valid_to_season` | BIGINT | INCLUSIVE upper bound; **NULL ⇔ `is_current`** |
+| `is_current` | BOOLEAN | ⚠️ a team that LEFT FBS (Idaho, after 2017) correctly has NO current row |
+| `record_hash` | VARCHAR | MD5 over the payload (`scd2_convention.md` formula; NULL → `''`) |
+| `seasons_in_version` | BIGINT | span length |
+| `mascot`, `abbreviation` | VARCHAR | descriptive, as of the version's last season |
+| `venue_name/_city/_state/_timezone` | VARCHAR | descriptive — NOT payload (a renovation must not open a version) |
+| `venue_latitude`, `venue_longitude`, `venue_elevation_m` | DOUBLE | travel / altitude features |
+| `venue_capacity` | INTEGER | |
+| `venue_is_dome`, `venue_is_grass` | BOOLEAN | |
+
+### 6.3 `dim_ncaaf_player` — 24 cols · grain: (player_id, version) · SCD-2
+
+| Column | Type | Notes |
+|---|---|---|
+| `player_surrogate_key` | VARCHAR | `ncaaf-<player_id>-v<n>` — grain contract (unique, not-null) |
+| `player_id` | VARCHAR | CFBD athlete id (string, not numeric) |
+| `version_number` | HUGEINT | increments on a REAL roster change only |
+| **`team`, `position`** | VARCHAR | **the SCD-2 PAYLOAD** — a transfer or position switch opens a version |
+| `team_id` | BIGINT | resolved point-in-time through `dim_ncaaf_team`'s SCD-2 range |
+| `conference` | VARCHAR | the conference AS OF that version's seasons |
+| `class_year_first`, `class_year_last` | INTEGER | ⚠️ descriptive, **deliberately NOT payload** — class advances every season, and hashing it made 20,672 of 30,433 version breaks class-only noise vs 9,761 real changes |
+| `player_name`, `first_name`, `last_name` | VARCHAR | |
+| `valid_from_season`, `valid_to_season`, `is_current`, `record_hash`, `seasons_in_version` | — | SCD-2 block, same semantics as `dim_ncaaf_team` |
+| `is_post_change_version` | BOOLEAN | `version_number > 1` |
+| `first_fbs_season`, `last_fbs_season`, `fbs_seasons`, `n_teams` | BIGINT | career context (constant across a player's versions) |
+| `is_transfer_career` | BOOLEAN | appeared for >1 FBS team |
+
+### 6.4 `dim_ncaaf_game` — 37 cols · grain: game_id
+
+| Column | Type | Notes |
+|---|---|---|
+| `game_key`, `game_id` | VARCHAR / BIGINT | grain contract (both unique, not-null) |
+| `season` | INTEGER | |
+| `week` | INTEGER | ⚠️ **CFBD-native. NOT a season ordering** — postseason restarts at 1. Reporting only. |
+| **`season_order_week`** | INTEGER | ⭐ **the ONLY safe season ordering.** Regular weeks as-is; postseason offset past the last regular week. Monotone in `game_date`. Every window/filter uses this. |
+| `season_type`, `is_postseason` | VARCHAR / BOOLEAN | `is_postseason` = `season_type <> 'regular'` |
+| `start_date`, `game_date` | TIMESTAMP / DATE | kickoff; `game_date` is what the date-based leakage gate uses |
+| `home_team_id`, `home_team`, `home_conference`, `home_classification` | — | participants |
+| `away_team_id`, `away_team`, `away_conference`, `away_classification` | — | participants |
+| **`is_fbs_matchup`** | BOOLEAN | ⭐ BOTH sides FBS — **the modelling universe every fact filters on.** NULL-safe (unknown classification ⇒ false) |
+| `is_fbs_involved` | BOOLEAN | either side FBS — the right universe for a team's RECORD |
+| `is_conference_game`, `is_neutral_site` | BOOLEAN | |
+| `venue_*` (8 cols) | — | ⚠️ **NULL on neutral sites by design** — attributing the home team's stadium to a bowl would be plainly wrong |
+| `is_completed` | BOOLEAN | ⚠️ a scheduled-but-unplayed game has NULL points — never treat as 0–0 |
+| ⛔ `home_points`, `away_points`, `total_points`, `home_margin`, `winning_team_id`, `is_tie` | — | POST-KICKOFF outcome |
+
+### 6.5 `fact_ncaaf_team_game` — 101 cols · grain: (game_id, team_id) · ⛔ POST-KICKOFF
+
+**Identity + context (18):** `team_game_key` (grain contract), `sport`, `game_id`, `team_id`,
+`season`, `week`, `season_order_week`, `season_type`, `game_date`, `team`, `conference`, `is_home`,
+`is_neutral_site`, `is_conference_game`, `is_postseason`, `opponent_team_id`, `opponent_team`,
+`opponent_conference`.
+
+**⛔ Result (5):** `is_completed`, `points_for`, `points_against`, `margin`, `is_win`
+(NULL on a tie).
+
+**Box line (27):** `first_downs`, `total_yards`, `net_passing_yards`, `rushing_yards`,
+`rushing_attempts`, `rushing_tds`, `passing_tds`, `completions`, `pass_attempts`, `yards_per_pass`,
+`yards_per_rush_attempt`, `third_down_conversions`, `third_down_attempts`,
+`fourth_down_conversions`, `fourth_down_attempts`, `turnovers`, `fumbles_lost`,
+`interceptions_thrown`, `passes_intercepted`, `sacks`, `tackles_for_loss`, `qb_hurries`,
+`passes_deflected`, `penalties`, `penalty_yards`, `possession_seconds`, `kicking_points`.
+
+**Derived rates (4)** — defined once here so no two consumers disagree: `third_down_rate`,
+`fourth_down_rate`, `completion_rate`, `scrimmage_plays_box`.
+
+**CFBD advanced (47):** `has_advanced_stats` (BOOLEAN — ⚠️ **check it**; 18,032 of 18,124 rows have
+one, and a NULL must not read as zero), plus the `off_` / `def_` families below.
+⚠️ **`def_*` is what THIS team's DEFENSE ALLOWED**, not the opponent's offense row.
+
+| Family | Expands to |
+|---|---|
+| `{off,def}_{plays,drives,ppa,total_ppa,success_rate,explosiveness,power_success,stuff_rate,line_yards,second_level_yards,open_field_yards}` | 22 cols |
+| `{off,def}_{standard_downs,passing_downs,rushing_plays,passing_plays}_{ppa,success_rate,explosiveness}` | 24 cols |
+
+### 6.6 `fact_ncaaf_player_game` — 52 cols · grain: (game_id, player_id) · ⛔ POST-KICKOFF
+
+**Identity + context (18):** `player_game_key` (grain contract), `sport`, `game_id`, `player_id`,
+`season`, `week`, `season_order_week`, `season_type`, `game_date`, `player_name`, `team`, `team_id`
+(⚠️ point-in-time resolved — `/games/players` carries no teamId), `conference`, `is_home`,
+`opponent_team`, `is_neutral_site`, `is_conference_game`, `is_postseason`.
+
+| Line | Columns |
+|---|---|
+| Passing | `completions`, `pass_attempts` (⚠️ split from the composite `C/ATT` string), `passing_yards`, `passing_tds`, `interceptions_thrown`, `passing_yards_per_attempt`, `qbr` |
+| Rushing | `rushing_attempts`, `rushing_yards`, `rushing_tds`, `rushing_yards_per_carry`, `rushing_long` |
+| Receiving | `receptions`, `receiving_yards`, `receiving_tds`, `receiving_yards_per_catch`, `receiving_long` |
+| Defensive | `tackles_total`, `tackles_solo`, `sacks`, `tackles_for_loss`, `qb_hurries`, `passes_defended`, `defensive_tds` |
+| Turnovers | `fumbles`, `fumbles_lost`, `fumbles_recovered`, `interceptions_caught`, `interception_return_yards`, `interception_return_tds` |
+| Participation | `has_passing_line`, `has_rushing_line`, `has_receiving_line`, `has_defensive_line` |
+
+⚠️ Stat values are DOUBLE because CFBD ships them as strings and they are `try_cast` — a
+non-numeric stat becomes NULL rather than 0. ⚠️ Special teams (kicking / punting / returns) is
+**not pivoted here** — it stays long in `stg_ncaaf_game_player_stats` (§7 gap 1).
+
+### 6.7 `fact_ncaaf_drive` — 37 cols · grain: drive_id · ⛔ POST-KICKOFF
+
+**Identity + context (16):** `drive_key` (grain contract), `sport`, `drive_id`, `game_id`,
+`season`, `week`, `season_order_week`, `season_type`, `game_date`, `drive_number`, `offense_team`,
+`offense_team_id`, `offense_conference`, `defense_team`, `defense_team_id`, `defense_conference`,
+`is_home_offense`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `drive_result` | VARCHAR | CFBD's label (`TD`, `PUNT`, `END OF HALF`, …) |
+| `is_scoring_drive`, `plays`, `yards`, `elapsed_seconds` | — | drive shape |
+| `start_period`, `end_period`, `start_yardline`, `start_yards_to_goal`, `end_yardline`, `end_yards_to_goal` | INTEGER | field position |
+| **`is_scoring_opportunity`** | BOOLEAN | ⭐ reached the opponent's 40 — the points-per-opportunity DENOMINATOR. Observed 49.1%. |
+| **`points_scored`** | INTEGER | ⚠️ from the OFFENSE's score delta, so a defensive / special-teams score is NOT credited to the offense. Observed 2.04/drive. |
+| `is_three_and_out`, `is_explosive_drive`, `yards_per_play` | — | tails + efficiency. 26.0% three-and-out. |
+| `start_offense_score`, `start_defense_score`, `end_offense_score`, `end_defense_score` | INTEGER | score state |
+
+### 6.8 `fact_ncaaf_play` — 41 cols · grain: play_id · ⛔ POST-KICKOFF
+
+**Identity + context (19):** `play_key` (grain contract), `sport`, `play_id`, `game_id`,
+`drive_id`, `season`, `week`, `season_order_week`, `season_type`, `game_date`, `drive_number`,
+`play_number`, `offense_team`, `offense_team_id`, `offense_conference`, `defense_team`,
+`defense_team_id`, `defense_conference`, `is_home_offense`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `period`, `clock_seconds_remaining`, `down`, `distance`, `yardline`, `yards_to_goal`, `yards_gained` | INTEGER | situation |
+| `offense_score`, `defense_score`, `offense_score_margin` | INTEGER | score state |
+| `is_red_zone` | BOOLEAN | `yards_to_goal <= 20` |
+| `play_type`, `play_text` | VARCHAR | CFBD labels |
+| `is_scrimmage_play`, `is_pass_play`, `is_rush_play`, `is_passing_down` | BOOLEAN | classification — defined ONCE in `stg_ncaaf_plays` |
+| **`is_successful_play`** | BOOLEAN | ⭐ the ONE success definition (50/70/100% of distance by down). 43.7% on clean scrimmage plays. |
+| `ppa` | DOUBLE | CFBD's EPA-analog. ⚠️ **NULL on 23.5% of ALL rows but only 3.0% of SCRIMMAGE plays** — CFBD does not score kickoffs/punts/PATs. Averaging `ppa` over the unfiltered fact silently mixes those in; always filter `is_scrimmage_play` first (the rollups do). |
+| **`is_garbage_time`** | BOOLEAN | ⭐ margin by quarter > 43/37/27/22. **8.8% of plays.** Flagged, never dropped — the rollups exclude it. |
+| `wallclock` | VARCHAR | ⚠️ ISO string, NOT a timestamp (INC-23 — the reader casts at the use-site) |
+
+### 6.9 `rollup_ncaaf_team_season` — 57 cols · grain: (season, team_id) · ⛔ NOT PREGAME-SAFE
+
+`team_season_key` (grain contract), `sport`, `season`, `team_id`, `team`, `conference`, then:
+
+| Group | Columns |
+|---|---|
+| Record | `games_played`, `wins`, `losses`, `win_pct` |
+| Scoring | `points_for_per_game`, `points_against_per_game`, `margin_per_game` |
+| Box per-game | `total_yards_per_game`, `rushing_yards_per_game`, `passing_yards_per_game`, `turnovers_per_game`, `third_down_rate`, `fourth_down_rate`, `completion_rate`, `possession_seconds_per_game`, `penalties_per_game`, `penalty_yards_per_game` |
+| Advanced (play-weighted) | `{off,def}_{ppa,success_rate,explosiveness,line_yards,stuff_rate,power_success}`, `off_plays_per_game`, `off_plays_total`, `def_plays_total` |
+| Drive quality | `drives`, `points_per_drive`, `scoring_opportunity_rate`, `three_and_out_rate`, `explosive_drive_rate`, `drive_yards_per_play`, `avg_start_yards_to_goal` |
+| ⭐ Garbage-excluded | `{off,def}_clean_{plays,ppa,success_rate,passing_down_success_rate,pass_ppa,rush_ppa}` |
+
+### 6.10 `rollup_ncaaf_team_week_asof` — 47 cols · grain: (season, team_id, as_of_week) · ✅ PREGAME
+
+| Column | Type | Notes |
+|---|---|---|
+| `team_week_key` | VARCHAR | `<season>-<team_id>-w<as_of_week>` — grain contract (unique, not-null) |
+| **`as_of_week`** | INTEGER | ⭐ **this is `season_order_week`, never CFBD's raw `week`.** The row is pregame FOR this week. |
+| `games_played` | BIGINT | strictly-prior completed games. **0 at `as_of_week` 1** by construction |
+| `has_sufficient_sample` | BOOLEAN | `games_played >= 3` — shrink toward a prior below this |
+| `last_game_order_week` | INTEGER | most recent contributing game |
+| Record / scoring | `wins`, `losses`, `win_pct`, `points_for_per_game`, `points_against_per_game`, `margin_per_game` |
+| Box | `total_yards_per_game`, `rushing_yards_per_game`, `passing_yards_per_game`, `turnovers_per_game`, `third_down_rate`, `completion_rate`, `possession_seconds_per_game`, `penalty_yards_per_game` |
+| Advanced | `{off,def}_{ppa,success_rate,explosiveness,line_yards,stuff_rate}`, `off_plays_per_game` |
+| Drive | `drives`, `points_per_drive`, `scoring_opportunity_rate`, `three_and_out_rate`, `explosive_drive_rate`, `avg_start_yards_to_goal` |
+| ⭐ Garbage-excluded | `{off,def}_clean_{plays,ppa,success_rate}` — the cleanest strength read, and what the opponent adjustment consumes |
+
+⚠️ **Every metric is NULL when `games_played = 0`** (week 1, and any team before its opener). That
+NULL is the honest "unknown" — **do not coalesce it to 0**, which would tell a model the team
+scores zero points per game.
+
+### 6.11 `rollup_ncaaf_team_week_opponent_adjusted` — 29 cols · grain: (season, team_id, as_of_week) · ✅ PREGAME
+
+| Column | Type | Notes |
+|---|---|---|
+| `team_week_key`, `as_of_week`, `games_played`, `has_sufficient_sample` | — | same grain + sample semantics as §6.10 |
+| `raw_off_ppa`, `raw_def_ppa`, `raw_off_success_rate`, `raw_def_success_rate`, `raw_points_for_per_game`, `raw_points_against_per_game` | DOUBLE | the unadjusted inputs, carried so raw and adjusted are always comparable |
+| **`adj_off_ppa`, `adj_def_ppa`, `adj_off_success_rate`, `adj_def_success_rate`, `adj_points_for_per_game`, `adj_points_against_per_game`** | DOUBLE | ⭐ 2-pass schedule-adjusted. Falls back pass-2 → pass-1 → raw. |
+| **`adj_net_ppa`** | DOUBLE | ⭐ `adj_off_ppa − adj_def_ppa` — the single-number team-strength read |
+| `opponents_counted`, `min_opponent_games` | BIGINT | adjustment support. `min_opponent_games` is what the point-in-time leakage gate recomputes. |
+| `sos_opponent_off_ppa`, `sos_opponent_def_ppa`, `sos_opponent_net_ppa` | DOUBLE | ⭐ strength of schedule as a first-class output (the adjustment's residual) |
+| `adjustment_applied` | BOOLEAN | ⚠️ **false ⇒ the adjusted columns ARE the raw columns** — never a NULL that silently drops the row from a feature join |
+| `has_reliable_adjustment` | BOOLEAN | this team AND every opponent had ≥3 games. Early-season rows are honestly `false`. |
+
+### 6.12 Inherited NCAAF marts (built by this job, owned by earlier stories)
+
+These predate P1.1 but the box job materializes them, so they belong in this inventory.
+
+| Mart | Story | Grain | Rows | Columns |
+|---|---|---|---|---|
+| `ncaaf_team_roster_continuity` | P0.4 | (season, team) | 1,555 | 32 — returning production (`returning_{ppa,pass_ppa,rec_ppa,rush_ppa}_pct`, `returning_usage`), roster overlap (`roster_size`, `roster_returning_players`, `roster_continuity_pct`, `roster_retention_pct`), portal flux (`portal_{in,out,net}_count`, `*_stars_sum`, `*_rating_sum`, `*_blue_chip`, `portal_out_uncommitted`), talent (`team_talent`, `team_talent_prev`, `team_talent_yoy_delta`). ⚠️ **`portal_data_covered`** — pre-2021 portal zeros are UNKNOWN, not "no churn". |
+| `ncaaf_team_coaching_change` | P0.5 | (season, team) | 1,555 | 25 — `head_coach`, `hc_tenure_years`, `is_first_year_at_school`, `hc_change_from_prev` (⚠️ NULL at the 2014 floor), `hc_midseason_change`, `n_coaches_in_season`, and the ⭐ prior track record `hc_prior_{seasons,sp_overall_avg,sp_offense_avg,sp_defense_avg,wins,losses}` + `hc_recent_sp_{overall,offense,defense}`. `is_first_time_hc` / `is_hc_history_censored` mark honest NULLs. |
+| `xref_college_nfl_players` | P0.3 | gsis_id | 4,211 | 37 — the draft-slot crosswalk + combine measurables + ⛔ `target_*` POST-draft NFL outcomes (the P1A modelling target, **never features**). ⚠️ `gsis_id` NULL on 8 rows — see §5. |
+
+### 6.13 Staging column counts (the flattening layer)
+
+Full column lists live in `models/ncaaf/staging/_ncaaf_staging.yml`; these are the shapes.
+
+| Model | Cols | Grain |
+|---|---|---|
+| `stg_ncaaf_teams` ⭐new | 19 | (season, team_id) |
+| `stg_ncaaf_games` | 20 | game_id |
+| `stg_ncaaf_game_team_stats` ⭐new | 49 | (game_id, team_id) — pivoted from CFBD's long string categories |
+| `stg_ncaaf_game_player_stats` ⭐new | 13 | (game_id, player_id, category, stat_type) — **stays LONG**, 5.19M rows |
+| `stg_ncaaf_drives` ⭐new | 26 | drive_id |
+| `stg_ncaaf_plays` ⭐new | 33 | play_id |
+| `stg_ncaaf_game_advanced` ⭐new | 59 | (game_id, team) |
+| `stg_ncaaf_roster` | 8 | (season, player_id) |
+| `stg_ncaaf_coaches` | 14 | (coach, team, season) |
+| `stg_ncaaf_returning_production` | 16 | (season, team) |
+| `stg_ncaaf_transfer_portal`, `stg_ncaaf_talent`, `stg_ncaaf_cfbd_draft_picks`, `stg_nflverse_draft_picks`, `stg_ncaaf_odds` | — | P0.3–P0.5 sources |
+
+---
+
+## 7. Open gaps carried into P1.2 / P1.3
 
 1. **Special teams is thin.** Kicking/punting live in the long player-stat table but are not pivoted
    into `fact_ncaaf_player_game`. Add if a P1.3 ablation wants them.

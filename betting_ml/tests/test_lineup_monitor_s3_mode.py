@@ -85,6 +85,22 @@ def test_readiness_gate_slot_count_preserved_in_s3_query():
     assert "range(1, _FULL_LINEUP_SLOTS + 1)" in s3_fn
 
 
+def test_lineup_predict_mirrors_predictions_to_s3():
+    """THE FLIP BLOCKER (found by the parity gate 2026-07-20, SF=9 post_lineup vs S3=0):
+    lineup_predict must export daily_model_predictions to S3 after scoring, like
+    predict_today_morning always has. Without it the monitor's Step-2b reads a stale ZERO
+    under LINEUP_MONITOR_S3=1 and re-triggers every game on every tick (the INC-32
+    infinite re-trigger loop). Serving is unaffected — the intraday serve reads Snowflake."""
+    ops = (Path(__file__).resolve().parents[2] / "pipeline" / "ops" / "sensor_ops.py").read_text()
+    body = ops[ops.index("def lineup_predict"):]
+    body = body[:body.index("\n@op")]
+    assert '"export_w6_raw_to_s3.py", ["--table", "daily_model_predictions"]' in body, (
+        "lineup_predict must mirror post_lineup rows to S3 or the LINEUP_MONITOR_S3 flip "
+        "re-arms the infinite re-trigger loop"
+    )
+    assert "context.log.warning" in body, "the mirror must be ALERT-tier, not a silent swallow"
+
+
 def test_parity_script_exists_and_covers_both_backends():
     parity = (Path(__file__).resolve().parents[2] / "scripts"
               / "parity_check_lineup_monitor.py").read_text()
