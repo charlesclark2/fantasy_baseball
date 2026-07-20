@@ -178,6 +178,62 @@ _FEATURE_COLS = [
 # Data loading + leak-clean predictor assembly
 # ---------------------------------------------------------------------------
 
+# ── E11.20 phase-2a: the same frame, read from the S3 lakehouse ─────────────────────────
+# Every table _FRAME_QUERY touches exists as lakehouse parquet, so the DuckDB variant is a pure
+# NAME rewrite of the SQL above — deliberately derived by replacement rather than copy-pasted, so
+# the two can never drift (the generate_matchup_signals.py precedent). Only two real dialect
+# concerns: the window frames are identical in DuckDB, and starter_ip_signals.GAME_PK is a VARCHAR
+# in the W9 mirror (Snowflake typing) so its join key needs an explicit ::bigint.
+_LAKEHOUSE_NAMES = {
+    "baseball_data.betting.mart_starting_pitcher_game_log": "mart_starting_pitcher_game_log",
+    "baseball_data.betting_features.starter_ip_signals": "starter_ip_signals",
+    "baseball_data.betting_features.feature_pregame_lineup_features": "feature_pregame_lineup_features",
+    "baseball_data.betting_features.feature_pregame_game_features": "feature_pregame_game_features",
+    "baseball_data.betting_features.feature_pregame_starter_features": "feature_pregame_starter_features",
+}
+
+
+def _duckdb_frame_query(min_year: int, max_year: int) -> str:
+    sql = _FRAME_QUERY.format(min_year=min_year, max_year=max_year)
+    for fqn, bare in _LAKEHOUSE_NAMES.items():
+        sql = sql.replace(fqn, bare)
+    sql = sql.replace("sig.game_pk = t.game_pk", "sig.game_pk::bigint = t.game_pk")
+    # TRAILING is a reserved word in DuckDB (TRIM(TRAILING …)) but not in Snowflake, so the CTE
+    # name has to be quoted. Both occurrences, anchored so the `reach_rate_trailing` column is
+    # never touched.
+    sql = sql.replace("trailing AS (", '"trailing" AS (').replace("FROM trailing t", 'FROM "trailing" t')
+    if "baseball_data." in sql:
+        # A renamed/added Snowflake reference would otherwise silently fall through to a
+        # missing-view error deep in DuckDB — fail loudly at the rewrite instead.
+        raise RuntimeError(
+            "_duckdb_frame_query: unmapped Snowflake reference left in the frame query — add it "
+            "to _LAKEHOUSE_NAMES."
+        )
+    return sql
+
+
+def load_frame_s3(min_year: int, max_year: int) -> pd.DataFrame:
+    """`load_frame` over the S3 lakehouse via DuckDB — no Snowflake session.
+
+    Used by the hourly serving writer (scripts/write_pitcher_k_projections.py): with a 168h cache
+    TTL and a container filesystem that starts EMPTY after every deploy (betting_ml/data/cache is
+    gitignored, so the image never carries it), the Snowflake path meant a full 2021-present
+    windowed pull from a 15×/day cron — a warehouse wake plus real compute. The offline bake-off /
+    gate keep the Snowflake path as their default so research runs are unchanged."""
+    from betting_ml.utils.delta_lakehouse import register_lakehouse_views
+    from betting_ml.utils.lakehouse_monitor import duck
+
+    conn = duck()
+    try:
+        register_lakehouse_views(conn, sorted(_LAKEHOUSE_NAMES.values()))
+        cur = conn.execute(_duckdb_frame_query(min_year, max_year))
+        cols = [d[0].lower() for d in cur.description]
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+    return _coerce_frame(pd.DataFrame(rows, columns=cols))
+
+
 def load_frame(min_year: int, max_year: int) -> pd.DataFrame:
     """ONE Snowflake query assembling the per-start frame. Wrap with `load_frame_cached` so the
     bake-off + gate runs reuse a parquet cache instead of re-querying (the Snowflake-spend guard)."""
@@ -190,7 +246,10 @@ def load_frame(min_year: int, max_year: int) -> pd.DataFrame:
         rows = cur.fetchall()
     finally:
         conn.close()
-    df = pd.DataFrame(rows, columns=cols)
+    return _coerce_frame(pd.DataFrame(rows, columns=cols))
+
+
+def _coerce_frame(df: pd.DataFrame) -> pd.DataFrame:
     df["game_date"] = pd.to_datetime(df["game_date"], errors="coerce")     # keep DATE as datetime
     # numeric-coerce everything EXCEPT the string `side` and the datetime `game_date` (a blanket
     # to_numeric would clobber game_date → NaN, silently breaking the purged-CV date-ordinal band).
@@ -200,16 +259,22 @@ def load_frame(min_year: int, max_year: int) -> pd.DataFrame:
 
 
 def load_frame_cached(min_year: int, max_year: int, *, refresh: bool = False,
-                      max_age_hours: float = 168.0) -> pd.DataFrame:
+                      max_age_hours: float = 168.0, use_s3: bool = False) -> pd.DataFrame:
     """Snowflake-once frame: pull via `load_frame`, cache to parquet, reuse across runs.
 
     Hits Snowflake on the first call (or `refresh=True` / stale cache); every later run — bake-off
     iterations AND the gate — reads `betting_ml/data/cache/e5_2_strikeout_frame_{years}.parquet`
     (off Snowflake). The historical 2021–present frame is stable, so a 7-day TTL is safe; pass
-    `--refresh-cache` after new games land. Matches the `model_bakeoff.py` cache pattern."""
+    `--refresh-cache` after new games land. Matches the `model_bakeoff.py` cache pattern.
+
+    `use_s3=True` sources the frame from the S3 lakehouse instead (E11.20 phase-2a). The cache KEY
+    is deliberately shared: the lakehouse parquet is a mirror of the very Snowflake tables the
+    other path queries, so the two frames are the same data and a cache written by either is valid
+    for the other."""
     from betting_ml.utils.training_cache import get_cached_df
     key = f"e5_2_strikeout_frame_{min_year}_{max_year}"
-    df = get_cached_df(key, lambda: load_frame(min_year, max_year),
+    loader = load_frame_s3 if use_s3 else load_frame
+    df = get_cached_df(key, lambda: loader(min_year, max_year),
                        max_age_hours=max_age_hours, refresh=refresh)
     df["game_date"] = pd.to_datetime(df["game_date"], errors="coerce")     # parquet round-trip safety
     return df.reset_index(drop=True)

@@ -116,6 +116,71 @@ where start_time >= dateadd('day',-10,current_timestamp) group by 1 order by 1 d
 plus the buckets-touched query on the three waker families (expect capture-dbt ≈ half,
 lineup-monitor ≈ game-window-only, book-odds SF ≈ 0).
 
+### 5a. Phase-2a-2 (2026-07-20) — consumers repointed; ⛔ the tick leg NOT deleted, and why
+
+**Shipped (code, pending deploy):** `write_pitcher_k_projections.py` and
+`generate_zone_overlays_today.py` now read the S3 lakehouse via DuckDB (`register_lakehouse_views`)
+— zero Snowflake sessions in the steady state. The K writer's history frame moved too
+(`load_frame_cached(..., use_s3=True)`): `betting_ml/data/cache` is gitignored, so a CD-built image
+starts with an EMPTY cache and the FIRST hourly run of every deploy was pulling the whole
+2021-present windowed frame from the warehouse. Frame parity vs Snowflake: **exact on all 25
+columns × 26,918 rows** — the only delta was 12 rows Snowflake fans out ×4 on pks 823356/823357
+(the known SCD-2 zombie-current defect, already healed in the parquet), i.e. S3 is strictly cleaner.
+Zone overlays also got the INC-22 clock fix + a real intraday trigger and now find **189 pairs** for
+a live slate where the organic path had produced 0 since 2026-06-30.
+
+**⛔ Step 3 (delete the capture tick's `refresh_w1_external_tables` + dbt legs) was NOT executed.
+Minute-level `query_history` shows it would bank ≈ nothing and would break serving.** Evidence from
+a 9h window on 2026-07-20 (quiet hours 08:00–10:00 PT, no daily job, no games):
+
+| tick component | queries/hr | distinct wake-MINUTES/hr |
+|---|---|---|
+| `ext_table_refresh` | ~150 | 4 |
+| `monthly_schedule` read + write | ~10 | 4–6 |
+| everything else (`other`) | ~31–45 | 5–7 |
+
+Two findings that overturn the planned change:
+
+1. **The refresh is not the first SF touch of the tick.** Each tick fires
+   `ingest_statsapi.py schedule` (a native Snowflake WRITE to `statsapi.monthly_schedule`) and
+   `export_odds_raw_to_s3.py --source monthly_schedule` (a Snowflake READ) *before* the refresh, in
+   the SAME minutes. Deleting the refresh removes ~150 queries and **zero wake-minutes** — the exact
+   buckets-vs-queries trap §2/F1 already paid for once. The real prerequisite is flipping the
+   `monthly_schedule` RAW WRITER to S3 (the W11 Tier-A pattern), which retires both the native write
+   and the export bridge. That is the next story, and it must land *before* the refresh leg is cut.
+2. **The tick's dbt leg is load-bearing, not waste.** `intraday_lineup_rebuild`'s Snowflake branch
+   for `stg_statsapi_lineups_wide` is `materialized='table'` — the observed
+   `create or replace transient table ... as (...)` at **84.8s over 20 runs**, not a view no-op. Its
+   consumers (`write_serving_store_intraday_op`, which still runs WITHOUT `--s3` per W7b-1, plus
+   `picks.py` and `predict_today.py`) read those Snowflake objects on the live slate. Dropping the
+   rebuild would stale the intraday serving path for no credit gain.
+
+**What DOES bank now, in measured order:** `lineup_monitor` is the largest single remaining waker
+(~21–22 distinct wake-minutes per 9h across four query shapes: the candidates join, the
+`lineup_monitor_state` read, the `pipeline_run_log` INSERT, and the `daily_model_predictions`
+DISTINCT). The `LINEUP_MONITOR_S3=1` path that kills all four is already built — it is blocked only
+on deploying the `lineup_predict` S3 mirror (see §5b), not on new code. The K-writer repoint
+removes a further ~9 wake-minutes/9h (four query shapes, all confirmed present in `query_history`
+before the change).
+
+### 5b. lineup_monitor flip gate — RUN, and its result
+
+`scripts/parity_check_lineup_monitor.py`, 2026-07-20 21:21 UTC (mid-interval, 10 games posted):
+
+```
+candidates      : SF=10  S3=10     ✅  (incl. min_slots_filled + starters — the INC-32 readiness signal)
+post_lineup set : SF=10  S3=0      ❌
+```
+
+**The mismatch is expected and is NOT a defect** — it is the un-deployed image, not the code. The
+`lineup_predict` → `export_w6_raw_to_s3.py --table daily_model_predictions` mirror is committed but
+the box still runs the pre-mirror baked image, so today's post_lineup rows cannot be in S3 yet.
+Confirmed in the parquet: 7/17–7/19 all carry post_lineup rows (mirrored by the next morning's
+daily export); 7/20 carries only `morning`. **Do not flip on this result.** Correct order:
+deploy → re-run the parity check on a live slate → both halves must match → then set
+`LINEUP_MONITOR_S3=1`. Flipping before the deploy would re-arm the INC-32 infinite re-trigger loop
+(Step-2b would see zero post_lineup rows and re-fire every game every tick).
+
 ## 6. Phase-2 build plan (REVISED priorities — code not built this week, by measurement)
 
 The story's DO-3 assumed pregame = the SF-credit target; measurement demoted it (~0.03

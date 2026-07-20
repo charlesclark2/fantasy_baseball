@@ -15,12 +15,26 @@ writer (`generate_zone_overlays_today.py`): write ONLY to the S3 serving prefix
 The backend endpoint tries today → yesterday → 2-days-ago, so writing at today's as-of date keeps a
 just-played slate reachable without per-date keys.
 
-DATA PATH (offline writer — Snowflake/DuckDB at WRITE time is fine; the REQUEST path stays cache→S3):
+DATA PATH — ⭐ SNOWFLAKE-FREE READS (E11.20 phase-2a, 2026-07-20). This writer fires from an HOURLY
+host cron (capture.crontab, 13-23,0-4 UTC ≈ 15×/day), and every run used to open a Snowflake session
+for the pregame frame + the cosmetic name/recent-K lookups. E11.20-COST proved ~80% of the warehouse
+bill is WAKE/IDLE, not query compute, so a 24/7 hourly consumer is a top-tier waker regardless of how
+cheap its queries are. All four reads now go to DuckDB over the S3 lakehouse:
   * served model bundle: S3 (load_artifact) → local fallback (gitignored .pkl).
-  * pregame K feature frame for today's starters: ONE Snowflake query mirroring the E5.2 _FRAME_QUERY
-    (trailing windows as-of the target date + the pregame signal/feature marts), concatenated with the
-    cached historical frame so `build_predictors` derives league/EB/log5/framing exactly as at fit time.
+  * pregame K feature frame for today's starters: ONE DuckDB query over the S3 lakehouse mirroring the
+    E5.2 _FRAME_QUERY (trailing windows as-of the target date + the pregame signal/feature marts),
+    concatenated with the cached historical frame so `build_predictors` derives league/EB/log5/framing
+    exactly as at fit time.
+  * pitcher names/teams/first-pitch + last-3-K context: DuckDB over the same lakehouse.
   * live K-prop lines: DuckDB over the S3 props parquet (mlb/props/market=pitcher_strikeouts/...).
+The ONLY residual Snowflake touch is the starter_ip_v1 self-heal FALLBACK (see
+_ensure_starter_ip_signal) — it fires only when today's signal is missing from S3, because that
+signal store's writer is still a Snowflake MERGE. In the steady state this script opens no Snowflake
+session at all.
+
+⚠️ Lakehouse views are registered ONLY through betting_ml.utils.delta_lakehouse.register_lakehouse_views
+— never a hardcoded `lakehouse/<t>/**/*.parquet` glob. Phase 1.5 deleted the compat parquet for the
+Delta-migrated W1 marts, and a pinned glob is exactly what caused the 2026-07-20 P0 outage.
 
 Usage:
     # daily (Dagster / cron — scores the current US baseball-day slate):
@@ -63,7 +77,8 @@ _PROPS_GLOB = f"s3://{_S3_BUCKET}/mlb/props/market=pitcher_strikeouts/season=*/d
 # _ensure_starter_ip_signal. The generator reads the pre-game feature_pregame_starter_features (present
 # for today), so today is scorable despite having no completed pitch data.
 _STARTER_IP_GEN = PROJECT_ROOT / "betting_ml" / "scripts" / "starter_v1" / "generate_starter_ip_signals.py"
-_STARTER_IP_TABLE = "baseball_data.betting_features.starter_ip_signals"
+_STARTER_IP_TABLE = "starter_ip_signals"          # lakehouse (S3) name — the read side
+_STARTER_IP_MIRROR = PROJECT_ROOT / "scripts" / "export_w9_signals_to_s3.py"
 
 # E5.2 served calib_80 (the calibration that makes the projection a product) — surfaced for context.
 _CALIB_80 = 0.8104
@@ -82,13 +97,19 @@ def _warn(msg: str) -> None:
 # pregame signal/feature marts are joined at the target game_pk (they are pregame by construction).
 # ---------------------------------------------------------------------------
 
+# `?` = the target date, bound positionally FOUR times, in the order they appear below.
+# NB on types (verified against the real parquet 2026-07-20): probable_pitchers.game_date and
+# mart_starting_pitcher_game_log.game_date are real DATE columns (no INC-23 VARCHAR cast needed),
+# but starter_ip_signals.GAME_PK is a VARCHAR (the W9 mirror's Snowflake typing) — hence the
+# explicit ::bigint on that join key. DuckDB identifiers are case-insensitive, so the UPPERCASE
+# column names in the W9/feature mirrors bind fine against the lowercase SQL below.
 _TODAY_FRAME_QUERY = """
 WITH starters AS (
     SELECT game_pk, game_date, side,
            CASE WHEN side = 'home' THEN TRUE ELSE FALSE END AS is_home_team,
            probable_pitcher_id AS pitcher_id
-    FROM baseball_data.betting.stg_statsapi_probable_pitchers
-    WHERE game_date::date = %(d)s
+    FROM stg_statsapi_probable_pitchers
+    WHERE game_date = ?::date
       AND probable_pitcher_id IS NOT NULL
 ),
 -- Leak-clean trailing aggregates as-of the target date (strictly prior games only).
@@ -97,8 +118,8 @@ hist AS (
            SUM(strikeouts)    AS k_career,
            SUM(batters_faced) AS bf_career,
            SUM(outs_recorded) AS outs_career
-    FROM baseball_data.betting.mart_starting_pitcher_game_log
-    WHERE game_date::date < %(d)s
+    FROM mart_starting_pitcher_game_log
+    WHERE game_date < ?::date
       AND batters_faced >= 1 AND outs_recorded >= 1
     GROUP BY pitcher_id
 ),
@@ -107,15 +128,16 @@ hist_season AS (
            SUM(strikeouts)    AS k_season,
            SUM(batters_faced) AS bf_season,
            SUM(outs_recorded) AS outs_season
-    FROM baseball_data.betting.mart_starting_pitcher_game_log
-    WHERE game_date::date < %(d)s
-      AND game_year = YEAR(%(d)s::date)
+    FROM mart_starting_pitcher_game_log
+    WHERE game_date < ?::date
+      AND game_year = year(?::date)
       AND batters_faced >= 1 AND outs_recorded >= 1
     GROUP BY pitcher_id
 )
 SELECT
-    s.game_pk, s.game_date, YEAR(s.game_date)::int AS game_year, s.pitcher_id, s.side, s.is_home_team,
-    CAST(NULL AS FLOAT) AS strikeouts, CAST(NULL AS FLOAT) AS batters_faced, CAST(NULL AS FLOAT) AS outs_recorded,
+    s.game_pk, s.game_date, year(s.game_date)::int AS game_year, s.pitcher_id, s.side, s.is_home_team,
+    CAST(NULL AS DOUBLE) AS strikeouts, CAST(NULL AS DOUBLE) AS batters_faced,
+    CAST(NULL AS DOUBLE) AS outs_recorded,
     h.k_career, h.bf_career, h.outs_career,
     hs.k_season, hs.bf_season, hs.outs_season,
     sig.starter_ip_mu, sig.starter_ip_dispersion,
@@ -127,17 +149,26 @@ SELECT
 FROM starters s
 LEFT JOIN hist        h  ON h.pitcher_id  = s.pitcher_id
 LEFT JOIN hist_season hs ON hs.pitcher_id = s.pitcher_id
-LEFT JOIN baseball_data.betting_features.starter_ip_signals sig
-    ON sig.game_pk = s.game_pk AND sig.side = s.side AND sig.model_version = 'starter_ip_v1'
-LEFT JOIN baseball_data.betting_features.feature_pregame_lineup_features lf
+LEFT JOIN starter_ip_signals sig
+    ON sig.game_pk::bigint = s.game_pk AND sig.side = s.side AND sig.model_version = 'starter_ip_v1'
+LEFT JOIN feature_pregame_lineup_features lf
     ON lf.game_pk = s.game_pk
    AND lf.side = CASE WHEN s.is_home_team THEN 'away' ELSE 'home' END
-LEFT JOIN baseball_data.betting_features.feature_pregame_game_features gf
+LEFT JOIN feature_pregame_game_features gf
     ON gf.game_pk = s.game_pk
-LEFT JOIN baseball_data.betting_features.feature_pregame_starter_features sf
+LEFT JOIN feature_pregame_starter_features sf
     ON sf.game_pk = s.game_pk AND sf.side = s.side
 ORDER BY s.game_pk, s.side
 """
+
+_FRAME_TABLES = [
+    "stg_statsapi_probable_pitchers",
+    "mart_starting_pitcher_game_log",
+    "starter_ip_signals",
+    "feature_pregame_lineup_features",
+    "feature_pregame_game_features",
+    "feature_pregame_starter_features",
+]
 
 # Column order the historical cached frame uses — the today-frame is aligned to it before concat.
 _FRAME_COLS = [
@@ -149,13 +180,23 @@ _FRAME_COLS = [
 ]
 
 
+def _duck_lakehouse(tables: list[str]):
+    """A DuckDB connection with the given lakehouse tables registered as bare-name views, routed
+    per storage backend by the phase-1.5 Delta-aware registrar. NEVER build a raw parquet glob
+    here — see the module docstring (the 2026-07-20 P0)."""
+    from betting_ml.utils.delta_lakehouse import register_lakehouse_views
+    from betting_ml.utils.lakehouse_monitor import duck
+
+    conn = duck()
+    register_lakehouse_views(conn, tables)
+    return conn
+
+
 def _load_today_frame(target: str) -> pd.DataFrame:
-    """One Snowflake query: today's probable-pitcher pregame K-feature rows (mirrors _FRAME_QUERY)."""
-    from betting_ml.utils.data_loader import get_snowflake_connection
-    conn = get_snowflake_connection(schema="betting_features")
+    """One DuckDB/S3 query: today's probable-pitcher pregame K-feature rows (mirrors _FRAME_QUERY)."""
+    conn = _duck_lakehouse(_FRAME_TABLES)
     try:
-        cur = conn.cursor()
-        cur.execute(_TODAY_FRAME_QUERY, {"d": target})
+        cur = conn.execute(_TODAY_FRAME_QUERY, [target, target, target, target])
         cols = [c[0].lower() for c in cur.description]
         rows = cur.fetchall()
     finally:
@@ -176,26 +217,26 @@ def _pitcher_meta(target: str, pitcher_ids: list[int]) -> dict[int, dict]:
     if not pitcher_ids:
         return meta
     try:
-        from betting_ml.utils.data_loader import get_snowflake_connection
-        conn = get_snowflake_connection()
+        conn = _duck_lakehouse(["stg_statsapi_probable_pitchers", "stg_statsapi_games"])
         try:
-            cur = conn.cursor()
-            cur.execute(
+            cur = conn.execute(
                 """
                 SELECT pp.probable_pitcher_id AS pid, pp.probable_pitcher_name AS nm,
                        pp.side AS side, g.home_team_name AS home_team, g.away_team_name AS away_team,
-                       -- g.game_date is a naive TIMESTAMP_NTZ that is ALREADY stored in UTC
-                       -- (e.g. 2026-06-29 22:40:00 = 6:40 PM EDT first pitch). Do NOT CONVERT_TIMEZONE:
-                       -- that reinterprets the naive value as the box's session TZ (PT) and shifts it
-                       -- +7h. Just format as-is and stamp 'Z' so it's an unambiguous UTC instant, which
-                       -- the browser renders in the VIEWER's local zone. (Mirrors how the EV Tracker
-                       -- consumes stg_statsapi_games.game_date — no conversion.)
-                       TO_VARCHAR(g.game_date, 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS game_dt
-                FROM baseball_data.betting.stg_statsapi_probable_pitchers pp
-                LEFT JOIN baseball_data.betting.stg_statsapi_games g ON g.game_pk = pp.game_pk
-                WHERE pp.game_date::date = %(d)s AND pp.probable_pitcher_id IS NOT NULL
+                       -- INC-23: in the lakehouse, stg_statsapi_games.game_date is an ISO VARCHAR
+                       -- ('2026-07-20 23:07:00+00') — the binary-timestamp cure — NOT the Snowflake
+                       -- TIMESTAMP_NTZ. Casting the string to a NAIVE ::timestamp drops the +00
+                       -- offset and keeps the wall value (23:07), which is exactly the Snowflake NTZ
+                       -- semantics this payload has always used: the instant is ALREADY UTC, so we
+                       -- format as-is and stamp 'Z'. Do NOT cast to ::timestamptz and re-render —
+                       -- that reinterprets it in the session TZ and shifts first pitch (the +7h
+                       -- box-PT bug E5.5 already fixed once on the Snowflake side).
+                       strftime(g.game_date::timestamp, '%Y-%m-%dT%H:%M:%SZ') AS game_dt
+                FROM stg_statsapi_probable_pitchers pp
+                LEFT JOIN stg_statsapi_games g ON g.game_pk = pp.game_pk
+                WHERE pp.game_date = ?::date AND pp.probable_pitcher_id IS NOT NULL
                 """,
-                {"d": target},
+                [target],
             )
             for r in cur.fetchall():
                 pid, nm, side, home_team, away_team, game_dt = r
@@ -218,23 +259,21 @@ def _recent_k(target: str, pitcher_ids: list[int]) -> dict[int, list[int]]:
     if not pitcher_ids:
         return out
     try:
-        from betting_ml.utils.data_loader import get_snowflake_connection
         idlist = ",".join(str(int(p)) for p in pitcher_ids)
-        conn = get_snowflake_connection()
+        conn = _duck_lakehouse(["mart_starting_pitcher_game_log"])
         try:
-            cur = conn.cursor()
-            cur.execute(
+            cur = conn.execute(
                 f"""
                 SELECT pitcher_id, strikeouts FROM (
                     SELECT pitcher_id, strikeouts, game_date,
                            ROW_NUMBER() OVER (PARTITION BY pitcher_id ORDER BY game_date DESC) AS rn
-                    FROM baseball_data.betting.mart_starting_pitcher_game_log
-                    WHERE game_date::date < %(d)s AND batters_faced >= 1
+                    FROM mart_starting_pitcher_game_log
+                    WHERE game_date < ?::date AND batters_faced >= 1
                       AND pitcher_id IN ({idlist})
                 ) WHERE rn <= 3
                 ORDER BY pitcher_id, rn
                 """,
-                {"d": target},
+                [target],
             )
             for pid, k in cur.fetchall():
                 out.setdefault(int(pid), []).append(int(k) if k is not None else 0)
@@ -377,19 +416,24 @@ def _ensure_starter_ip_signal(target: str) -> None:
     which is populated for today, so today is scorable. Covers BOTH the daily op and the hourly host
     cron (both invoke this script). Fail-soft: any error logs + returns so the writer still runs on
     whatever signal rows already exist.
-    """
-    from betting_ml.utils.data_loader import get_snowflake_connection
 
+    ⭐ E11.20 phase-2a — this is the ONE place the writer can still touch Snowflake, and ONLY on the
+    miss branch. The PRESENCE CHECK now reads the S3 lakehouse mirror (the same parquet
+    _load_today_frame joins), so the steady state — signal already present — is fully Snowflake-free.
+    The generator itself still MERGEs into the Snowflake signal store (that store has no S3 writer;
+    re-implementing MERGE-accumulate on parquet is out of scope), so after a successful regeneration
+    we must RE-MIRROR it to S3 or the read below would still see nothing. That is the INC-25 ordering
+    rule in miniature: a consumer cut over to an S3 mirror needs the mirror rebuilt downstream of the
+    write, in the SAME run.
+    """
     try:
-        conn = get_snowflake_connection(schema="betting_features")
+        conn = _duck_lakehouse([_STARTER_IP_TABLE])
         try:
-            cur = conn.cursor()
-            cur.execute(
+            (present,) = conn.execute(
                 f"SELECT COUNT(*) FROM {_STARTER_IP_TABLE} "
-                f"WHERE game_date = %(d)s AND model_version = 'starter_ip_v1'",
-                {"d": target},
-            )
-            present = cur.fetchone()[0]
+                f"WHERE game_date = ?::date AND model_version = 'starter_ip_v1'",
+                [target],
+            ).fetchone()
         finally:
             conn.close()
     except Exception as exc:  # noqa: BLE001
@@ -402,16 +446,27 @@ def _ensure_starter_ip_signal(target: str) -> None:
 
     # Match the schema the K writer READS (betting_features = prod); TARGET_ENV drives dev isolation.
     env = "prod" if os.getenv("TARGET_ENV") == "prod" else "dev"
-    print(f"[k-projection] starter_ip_v1 signal MISSING for {target} — generating (serving self-heal, env={env}) ...")
+    _warn(f"[{target}] starter_ip_v1 signal MISSING from the S3 mirror — falling back to the Snowflake "
+          f"self-heal (generate + re-mirror, env={env}). A run that logs this is NOT Snowflake-free.")
     result = subprocess.run(
-        [sys.executable, str(_STARTER_IP_GEN), "--date", target, "--env", env],
+        [sys.executable, str(_STARTER_IP_GEN), "--date", target, "--env", env, "--s3"],
         capture_output=True, text=True, cwd=str(PROJECT_ROOT),
     )
     if result.returncode != 0:
         _warn(f"[{target}] starter_ip generation failed (exit {result.returncode}); K scoring may skip. "
               f"stderr: {result.stderr[-400:]}")
+        return
+    print(f"[k-projection] starter_ip_v1 signal generated for {target} — re-mirroring to S3 ...")
+    mirror = subprocess.run(
+        [sys.executable, str(_STARTER_IP_MIRROR), "--table", _STARTER_IP_TABLE],
+        capture_output=True, text=True, cwd=str(PROJECT_ROOT),
+    )
+    if mirror.returncode != 0:
+        _warn(f"[{target}] starter_ip S3 re-mirror failed (exit {mirror.returncode}) — the signal now "
+              f"exists in Snowflake but NOT in the parquet this writer reads, so scoring will still "
+              f"skip. stderr: {mirror.stderr[-400:]}")
     else:
-        print(f"[k-projection] starter_ip_v1 signal generated for {target}.")
+        print(f"[k-projection] starter_ip_v1 signal mirrored to S3 for {target}.")
 
 
 def _run_for_date(target: str, args, bundle: dict, hist: pd.DataFrame, build_predictors, rng) -> None:
@@ -542,7 +597,10 @@ def main() -> int:
     # Load the historical league/EB context frame ONCE (reused across every backfill date).
     try:
         from betting_ml.scripts.prop_pricing.fit_prop_pricing import build_predictors, load_frame_cached
-        hist = load_frame_cached(args.min_year, int(target[:4]))
+        # use_s3: this writer must not open a Snowflake session. The cache is gitignored, so the
+        # container starts EMPTY after every deploy — without this the very first hourly run of a
+        # new image pulled the whole 2021-present windowed frame from the warehouse.
+        hist = load_frame_cached(args.min_year, int(target[:4]), use_s3=True)
     except Exception as exc:  # noqa: BLE001
         _warn(f"history frame load failed — nothing written: {exc}")
         return 0
