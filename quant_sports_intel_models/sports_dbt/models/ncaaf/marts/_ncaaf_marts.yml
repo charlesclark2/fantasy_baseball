@@ -449,3 +449,117 @@ models:
           - not_null:
               config:
                 where: "raw_off_ppa is not null and raw_def_ppa is not null"
+
+  - name: ncaaf_team_strength_week
+    description: >
+      ⭐ The NCAAF-P1.2 TEAM-STRENGTH POSTERIOR — a hierarchical partial-pooling estimate of
+      how many points better than an average FBS team each team was BEFORE week `as_of_week`
+      kicked off, with honest posterior uncertainty. Team is nested in conference, so a thin
+      or lopsided sample is shrunk toward its conference mean rather than trusted at face
+      value — which CFB's huge talent disparity and sparse cross-conference schedule make
+      mandatory (raw records are simply not comparable across leagues). Grain (season,
+      team_id, as_of_week) matches rollup_ncaaf_team_week_asof exactly, so P1.3 joins the two
+      on `team_week_key`.
+
+      ⚠️ NOT COMPUTED IN dbt. This is a read-only view over the parquet written by
+      quant_sports_intel_models/football/ncaaf/models/run_team_strength.py to
+      `ncaaf/derived/team_strength_week` in the lake. The estimator is an iterative
+      mixed-effects fit (~200 leakage-safe refits, each with a variance-component
+      optimization) and is not expressible in SQL.
+
+      🚨 BUILD ORDER (the INC-25 lesson): dbt run (P1.1 marts) → run_team_strength.py →
+      dbt run (this model). Building this in the same pass that produces its inputs serves
+      the PREVIOUS run's strengths — a silent one-slate staleness. Tagged `ncaaf_p1_2` so it
+      is opt-in and does not break a build before the script has ever run.
+
+      🚨 SIGN CONVENTION: strength_offense and strength_defense are BOTH higher-is-better
+      (defense = points PREVENTED). Net strength is their SUM. Subtracting them returns ~0
+      for every team — use strength_margin.
+
+      LEAKAGE: a row for as_of_week W is fit only on games with season_order_week < W
+      (strictly), and the covariate coefficients / variance components come from STRICTLY
+      PRIOR seasons. 2014 is the history floor and is deliberately NOT emitted — it seeds the
+      first hyperparameter fit and gives 2015 its prior-season covariate. Gated by
+      assert_team_strength_is_point_in_time (count parity + a DATE-based clock check).
+
+      NULLS: strength_margin is never NULL. A week-1 row has games_in_window = 0 and is a
+      legitimate PRESEASON POSTERIOR (conference level + pre-season covariates) with an
+      honestly large strength_margin_sd — unlike rollup_ncaaf_team_week_asof, whose week-1
+      row is correctly all-NULL. A rollup of nothing is unknown; a posterior with no data is
+      the prior. That is the point of partial pooling.
+
+      ⚠️ Honest framing: this is a strength PRIOR, not an edge claim. It is a candidate
+      FEATURE that P1.4 ablation-tests under the §0.5 bake-off discipline. best_alpha = 0.
+    columns:
+      - name: team_week_key
+        description: season||'-'||team_id||'-w'||as_of_week — the grain contract. Joins 1:1 to rollup_ncaaf_team_week_asof.
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: season
+        description: 2015+ — 2014 is the un-emitted hyperparameter seed (history floor, no season prior exists).
+        data_tests: [not_null]
+      - name: team_id
+        data_tests: [not_null]
+      - name: as_of_week
+        description: >
+          ⭐ season_order_week, NEVER CFBD's raw `week`. The row describes what was known
+          BEFORE this week kicked off.
+        data_tests: [not_null]
+      - name: games_in_window
+        description: >
+          The team's completed games strictly before as_of_week — the model's own account of
+          what it saw. assert_team_strength_is_point_in_time recomputes it from the fact and
+          cross-checks it against the clock. 0 at the season's first week, by construction.
+        data_tests: [not_null]
+      - name: strength_margin
+        description: >
+          ⭐ THE FEATURE. Neutral-field points above an average FBS team. Never NULL — a
+          zero-game row is the preseason prior, not an unknown.
+        data_tests: [not_null]
+      - name: strength_margin_sd
+        description: >
+          Posterior standard deviation of strength_margin, in points. Wide early in a season
+          and for thin-sample teams; that is the honest signal, not noise to be smoothed.
+          Includes the stage-A uncertainty in the covariate coefficients. Slightly
+          OPTIMISTIC overall because the variance components are plugged in empirical-Bayes
+          style rather than integrated over (quantified in the P1.2 report §6).
+        data_tests: [not_null]
+      - name: strength_conference_component
+        description: The pooling level — how strong this team's conference is. Sums with the other two components to strength_margin exactly.
+      - name: strength_covariate_component
+        description: What the PRE-SEASON covariates say (talent, roster continuity, portal flux, coaching, last season's finish). This is the prior mean the team is shrunk toward.
+      - name: strength_team_component
+        description: What THIS season's games add on top of the prior mean. Exactly 0 at week 1.
+      - name: covariate_component_roster_flux
+        description: >
+          ⭐ Points of pre-season strength attributable to returning production + roster
+          continuity + net portal stars — the operator's NIL/transfer signal, made auditable.
+          This is what would vanish if those covariates were dropped.
+      - name: covariate_component_coaching
+        description: Points attributable to the head-coaching block (change flag, first year at school, the coach's recent prior SP+).
+      - name: covariate_component_talent
+        description: Points attributable to the 247 team-talent composite.
+      - name: covariate_component_carryover
+        description: Points attributable to this same model's FINAL estimate from the previous season. NULL-equivalent (0 contribution + a missing indicator) for a team with no prior season.
+      - name: covariate_component_unknown
+        description: >
+          What the model pays for NOT KNOWING a covariate — the contribution of the
+          `<covariate>_missing` indicators. Kept SEPARATE from the four real groups on
+          purpose: folding missingness into roster_flux made first-year FBS transition
+          programs (Sam Houston, Jacksonville State, Kennesaw State), whose covariates are
+          simply absent, appear as the biggest roster movers in the league. A large value
+          here means "we know little about this team", not "this team is unusual".
+      - name: strength_offense
+        description: Points GENERATED above an average offense. Higher is better. See the sign convention — net strength is offense + defense.
+      - name: strength_defense
+        description: Points PREVENTED relative to an average defense. Higher is better. NOT to be subtracted from strength_offense.
+      - name: hyper_n_prior_seasons
+        description: >
+          How many prior seasons the shrinkage and covariate coefficients were calibrated on.
+          The FIRST emitted season has only 1 and is measurably weaker — disclosed here so a
+          consumer can down-weight or drop it rather than discover it downstream.
+      - name: hyper_n_games
+        description: Games in the hyperparameter fit backing this row.
+      - name: model_version
+        data_tests: [not_null]

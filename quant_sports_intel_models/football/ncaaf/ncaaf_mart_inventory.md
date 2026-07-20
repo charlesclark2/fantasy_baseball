@@ -480,6 +480,66 @@ Full column lists live in `models/ncaaf/staging/_ncaaf_staging.yml`; these are t
 | `stg_ncaaf_returning_production` | 16 | (season, team) |
 | `stg_ncaaf_transfer_portal`, `stg_ncaaf_talent`, `stg_ncaaf_cfbd_draft_picks`, `stg_nflverse_draft_picks`, `stg_ncaaf_odds` | — | P0.3–P0.5 sources |
 
+
+### 6.13 `ncaaf_team_strength_week` — 30 cols · grain: (season, team_id, as_of_week) · ✅ PREGAME · ⭐ P1.2
+
+The **team-strength posterior**: how many points better than an average FBS team each team was
+BEFORE `as_of_week` kicked off, with honest uncertainty. Hierarchical partial pooling, **team
+nested in conference**, so a thin or lopsided sample is shrunk toward its conference mean instead
+of trusted at face value. Grain matches `rollup_ncaaf_team_week_asof` exactly → join on
+`team_week_key`.
+
+⚠️ **NOT COMPUTED IN dbt.** This model is a read-only view over the parquet written by
+`football/ncaaf/models/run_team_strength.py` to `ncaaf/derived/team_strength_week` in the lake.
+The estimator is an iterative mixed-effects fit (~200 leakage-safe refits, each with a
+variance-component optimization) and is not expressible in SQL.
+
+🚨 **BUILD ORDER (the INC-25 lesson).** `dbt run` (P1.1 marts) → `run_team_strength.py` →
+`dbt run --select ncaaf_team_strength_week`. Building it in the same pass that produces its inputs
+serves the PREVIOUS run's strengths — a silent one-slate staleness. Tagged `ncaaf_p1_2` so it is
+opt-in and cannot break a build before the script has ever run.
+
+🚨 **SIGN CONVENTION — the one thing consumers get wrong.** `strength_offense` and
+`strength_defense` are BOTH higher-is-better (defense = points **PREVENTED**). Net strength is
+their **SUM**:  `margin = (O_home + D_home) - (O_away + D_away)`. Subtracting them returns ~0 for
+every team, because a good team is good at both and the two large positive components cancel. Use
+`strength_margin`.
+
+| Group | Columns |
+|---|---|
+| Grain | `sport`, `season`, `team_id`, `team`, `conference`, `as_of_week`, `team_week_key` |
+| Sample | `games_in_window`, `has_sufficient_sample` |
+| ⭐ Feature | `strength_margin`, `strength_margin_sd` |
+| Decomposition (sums to `strength_margin` exactly) | `strength_conference_component` (the pooling level), `strength_covariate_component` (what the pre-season covariates say), `strength_team_component` (what this season's games add) |
+| Covariate attribution | `covariate_component_carryover`, `covariate_component_talent`, `covariate_component_roster_flux`, `covariate_component_coaching` |
+| Scoring split (for P1.4's totals leg) | `strength_offense`, `strength_offense_sd`, `strength_defense`, `strength_defense_sd`, `league_base_points` |
+| Fit provenance | `home_field_advantage`, `residual_sigma`, `tau_team`, `tau_conference`, `hyper_seasons`, `hyper_n_prior_seasons`, `hyper_n_games`, `model_version` |
+
+**Leakage contract.** A row for `as_of_week = W` is fit only on games with
+`season_order_week < W` — strictly, and never on raw `week`. The covariate coefficients, the
+home-field advantage and the variance components come from **strictly prior seasons** and are then
+held fixed. **2014 is NOT emitted**: it is the seed that bootstraps the first hyperparameter fit
+and gives 2015 its prior-season covariate, so every emitted row has out-of-sample hyperparameters.
+Gated by `assert_team_strength_is_point_in_time`, which checks count parity AND a DATE-based clock
+condition (a week-based test would re-use the very ordering it is meant to police — the P1.1 trap).
+
+**⚠️ NULLs differ from the rollups on purpose.** `strength_margin` is **never NULL**, including at
+week 1 where `games_in_window = 0`. A rollup of nothing is unknown and must stay NULL; a posterior
+with no data is the **prior** — here the conference level plus the pre-season covariates — carried
+with an honestly large `strength_margin_sd`. That is the entire point of partial pooling, and it is
+why this surface can price a week-1 game that `rollup_ncaaf_team_week_asof` cannot.
+
+**⚠️ The first emitted season (2015) is thinly calibrated** — one prior season of hyperparameter
+data instead of the full lookback. Disclosed per row via `hyper_n_prior_seasons` / `hyper_n_games`
+so P1.3/P1.4 can down-weight or drop it.
+
+**Observed behaviour on the real 2014–2025 build** (see
+`ablation_results/ncaaf_p1_2_team_strength.md`): posterior sd decays monotonically from ~6.7 pts at
+week 1 to ~2.7 by season's end; 2024's final top three (Ohio State, Notre Dame, Texas) reproduces
+the actual CFP semifinal field with **no ranking input**; walk-forward MAE vs realized margin is
+~13.1 pts against ~15.7 for a home-field-only baseline. ⚠️ That is accuracy against REALITY, not
+against a market — no edge is claimed, and P1.4 is what tests this feature against a closing line.
+
 ---
 
 ## 7. Open gaps carried into P1.2 / P1.3
@@ -491,8 +551,10 @@ Full column lists live in `models/ncaaf/staging/_ncaaf_staging.yml`; these are t
    precursor.
 3. **`box_advanced` (lake table #8) is not staged** — it overlaps `game_advanced`, which is already
    the modelling grain. Stage it only if a specific field is missing.
-4. **Opponent adjustment is 2-pass, unweighted per opponent.** A full iterative solve or a
-   play-count-weighted opponent average is a possible P1.2 refinement; the residual movement after
-   pass 2 is small relative to ≤12-game noise.
+4. **Opponent adjustment is 2-pass, unweighted per opponent.** ✅ **Partly addressed by P1.2**,
+   which is an INDEPENDENT route to opponent-adjusted strength (a full hierarchical solve rather
+   than 2 passes) — §6.13. The two are deliberately NOT fused: keeping them independent lets P1.3
+   compare them instead of making one depend on the other. The 2-pass rollup remains as-is.
 5. **2014 is the floor** for everything player-advanced (`ncaaf_data_inventory.md` §2.7), so
-   season-over-season priors do not exist for 2014.
+   season-over-season priors do not exist for 2014. P1.2 consumes 2014 as an un-emitted seed and
+   starts emitting at 2015 (§6.13).

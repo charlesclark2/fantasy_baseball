@@ -1,0 +1,75 @@
+{
+  "model_version": "ncaaf_team_strength_v1",
+  "generated_at": "2026-07-20T22:22:52.627390+00:00",
+  "rows": 22992,
+  "seasons": [
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "gates_passed": [
+    "season_order_week is monotone in game_date (date-based, not week-based)",
+    "seed season 2014 not emitted (its hyperparameters are in-sample)",
+    "every emitted row's hyperparameters were fit on strictly prior seasons",
+    "the first as-of week of each season is a pure preseason prior (0 games)",
+    "grain (season, team_id, as_of_week) is unique",
+    "strength_margin / _sd are finite and the sd is strictly positive",
+    "strength_margin_sd is physically plausible (max 13.8 pts, ceiling 50.0)"
+  ],
+  "backtest": [
+    {
+      "predictor": "strength model",
+      "n_games": 8303,
+      "mae": 13.00115120768699,
+      "rmse": 16.428733707504943,
+      "winner_accuracy": 0.7232325665422137
+    },
+    {
+      "predictor": "home-field only",
+      "n_games": 8303,
+      "mae": 16.43636362097222,
+      "rmse": 20.985611513373872,
+      "winner_accuracy": 0.577742984463447
+    },
+    {
+      "predictor": "zero (coin flip)",
+      "n_games": 8303,
+      "mae": 16.742743586655426,
+      "rmse": 21.291655122686514,
+      "winner_accuracy": 0.4196073708298205
+    }
+  ],
+  "uncertainty_calibration": {
+    "n": 8303,
+    "z_sd": 1.4687107509336719,
+    "z_mean": 0.023936999621782057,
+    "coverage_80": 0.6294110562447308,
+    "coverage_95": 0.8225942430446826
+  },
+  "config": {
+    "half_life_days": 75.0,
+    "season_decay": 0.75,
+    "hyper_lookback_seasons": 4,
+    "sufficient_sample_games": 3,
+    "init_sigma2": 289.0,
+    "init_tau2": 100.0,
+    "fit_points_model": true
+  },
+  "notes": [
+    "season 2014: no prior season available; hyperparameters fit in-sample (seed season, NOT emitted)",
+    "season 2018 [points]: variance-component optimizer did not converge: Maximum number of function evaluations has been exceeded.",
+    "season 2019 [points]: variance-component optimizer did not converge: Maximum number of function evaluations has been exceeded.",
+    "season 2020 [points]: variance-component optimizer did not converge: Maximum number of function evaluations has been exceeded.",
+    "season 2021 [points]: variance-component optimizer did not converge: Maximum number of function evaluations has been exceeded.",
+    "season 2023 [points]: variance-component optimizer did not converge: Maximum number of function evaluations has been exceeded.",
+    "season 2025 [points]: variance component 'conf_def' hit a bound at 0.001 (unidentified)"
+  ]
+}
