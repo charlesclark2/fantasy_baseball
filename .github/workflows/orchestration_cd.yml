@@ -27,6 +27,12 @@ on:
       # is rebuilt. Trigger the rebuild-deploy on those changes too (E11.1-W3pre).
       - "dbt/**"
       - "scripts/**"
+      # NCAAF-P1.1: the SPORTS dbt project (dbt-duckdb, NCAAF + NFL) is likewise COPY'd into
+      # credence-dagster by the root Dockerfile's `COPY . .` — so a model-only change to
+      # sports_dbt runs STALE on the box until the image is rebuilt, and the box job would
+      # silently keep materializing the OLD marts with a green run. Same baked-image-drift class
+      # as dbt/** above. (This path was missing since NFL-N0.3 — it covered NFL too.)
+      - "quant_sports_intel_models/sports_dbt/**"
   workflow_dispatch: {}
 
 # Serialize deploys — never two box deploys racing (singleton daemon).

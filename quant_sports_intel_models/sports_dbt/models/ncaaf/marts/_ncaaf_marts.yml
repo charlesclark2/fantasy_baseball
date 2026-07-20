@@ -11,9 +11,27 @@ models:
       POST-draft NFL outcomes (the P1A modelling target) — NEVER use them as features.
     columns:
       - name: gsis_id
-        description: The NFL player key (nflverse). Unique across the crosswalk; may be null only if a fuzzy source lacked one (it does not here).
+        description: >
+          The NFL player key (nflverse). Unique across the crosswalk.
+          ⚠️ NULL for a drafted player who NEVER TOOK AN NFL SNAP — nflverse issues no gsis_id to a
+          player with no NFL game record (e.g. Bud Sasser, 2015 round 6 pick 201). Observed 8 of
+          4,211 rows (2026-07-20, NCAAF-P1.1). P0.3's original "it does not here" was wrong about
+          its own data — these are legitimate nulls, not match failures, so a hard not_null is the
+          wrong assertion.
         data_tests:
-          - not_null
+          # ⭐ RATCHET, not a blanket waiver. The 8 known nulls WARN (they are real and expected);
+          # a 9th ERRORS. The count can only go DOWN silently — any GROWTH means something new is
+          # broken (a regression in the deterministic slot match, or a fresh draft class whose
+          # players have not yet played), and that must fail the build rather than blend into an
+          # accepted background level.
+          # ⚠️ When this legitimately changes — a new draft class lands and undrafted-but-unplayed
+          # counts rise — RAISE the threshold DELIBERATELY in this file and say why. Do not delete
+          # the test, and do not bump it reflexively to whatever today's number happens to be.
+          - not_null:
+              config:
+                severity: error
+                warn_if: ">0"
+                error_if: ">8"
           - unique
       - name: sport
         data_tests: [not_null]
@@ -138,3 +156,296 @@ models:
       - name: is_hc_history_censored
         description: True for season=2014 (the backfill floor left-censors change/tenure/prior history).
         data_tests: [not_null]
+
+  # ══════════════════════════════════════════════════════════════════════════════════════
+  # NCAAF-P1.1 — the conformed dimensional model (dims → facts → rollups)
+  # ══════════════════════════════════════════════════════════════════════════════════════
+
+  - name: dim_ncaaf_conference
+    description: >
+      The conference dimension (P1.1). One row per FBS conference with its observed lifespan and
+      membership-size trace. Membership itself is NOT here — it drifts, so it lives on
+      dim_ncaaf_team's SCD-2 rows. is_power_conference is a coarse slicing label as of the current
+      alignment, deliberately not season-varying; use the opponent-adjusted rollups for strength.
+    columns:
+      - name: conference_key
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: conference
+        data_tests: [not_null]
+      - name: first_season
+        data_tests: [not_null]
+      - name: is_defunct
+        description: Last observed before the newest ingested season — the conference folded or left FBS.
+        data_tests: [not_null]
+
+  - name: dim_ncaaf_team
+    description: >
+      The team dimension, SCD-2 over the DRIFTING attributes (P1.1) — team name, conference,
+      conference division, classification. Season-grained validity (valid_from_season /
+      valid_to_season INCLUSIVE, is_current, record_hash), mirroring scd2_convention.md; season-
+      rather than timestamp-grained because CFBD /teams/fbs is a once-a-season snapshot.
+      ⭐ Conference realignment is the reason this is SCD-2: a type-1 dimension would retroactively
+      report 2021 Texas games as SEC games and corrupt every conference-strength feature.
+      Point-in-time lookup: join on team (or team_id) AND
+      `season between valid_from_season and coalesce(valid_to_season, 9999)`.
+      ⚠️ A team that LEAVES FBS (Idaho after 2017) correctly has NO is_current row — it is not
+      currently an FBS team. Do not "fix" that by forcing one.
+    columns:
+      - name: team_surrogate_key
+        description: ncaaf-<team_id>-v<version_number> — the grain contract, one row per team-version.
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: team_id
+        data_tests: [not_null]
+      - name: team
+        data_tests: [not_null]
+      - name: valid_from_season
+        data_tests: [not_null]
+      - name: is_current
+        description: True for the version reaching the newest ingested season. A team no longer in FBS has none.
+        data_tests: [not_null]
+      - name: record_hash
+        description: MD5 over the payload columns (scd2_convention.md formula), NULL → '' so NULL flips are detected.
+        data_tests: [not_null]
+      - name: is_fbs
+        data_tests: [not_null]
+
+  - name: dim_ncaaf_player
+    description: >
+      The player dimension, SCD-2 over team + position (P1.1). ⭐ In the portal era the roster IS
+      the drift — a type-1 "current team" would attribute a player's production at his old school
+      to his new one. class_year is deliberately NOT in the payload (it advances every season by
+      construction; on the real lake 20,672 of 30,433 version breaks were class-year-only vs 9,761
+      genuine team/position changes) — it is carried descriptively as class_year_first/_last.
+      ⭐ FBS-filtered through dim_ncaaf_team's SCD-2 range, i.e. by the membership OF THAT SEASON.
+      Roster is a pre-season snapshot ⇒ leakage-safe for its season.
+    columns:
+      - name: player_surrogate_key
+        description: ncaaf-<player_id>-v<version_number> — the grain contract.
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: player_id
+        data_tests: [not_null]
+      - name: valid_from_season
+        data_tests: [not_null]
+      - name: is_current
+        data_tests: [not_null]
+      - name: record_hash
+        data_tests: [not_null]
+      - name: is_transfer_career
+        description: The player appears on more than one FBS team across his career.
+        data_tests: [not_null]
+
+  - name: dim_ncaaf_game
+    description: >
+      The game dimension (P1.1) — the conformed spine every fact hangs off. ⭐ Absorbs the P0.2
+      FBS-filter flag: CFBD /games lands ALL divisions (~3,800 games/season vs ~800 FBS-vs-FBS),
+      so games are classified is_fbs_matchup (both sides — the modelling universe the facts filter
+      on) / is_fbs_involved (either side — the right universe for a team's record) / neither.
+      ⚠️ Outcome columns (points, margin, winner) are POST-KICKOFF; correct on this dimension but
+      never to be folded into a pregame row.
+      🚨 `season_order_week` is the ONLY safe season ordering — CFBD restarts `week` at 1 for the
+      postseason, so raw `week` places January's title game before September's week 2. Raw `week`
+      is retained for reporting only.
+    columns:
+      - name: game_key
+        data_tests: [not_null, unique]
+      - name: game_id
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+      - name: season_order_week
+        description: Monotone-in-date season ordering (regular weeks as-is, postseason offset past them). Use this, never `week`, for any window/filter.
+        data_tests: [not_null]
+      - name: is_fbs_matchup
+        data_tests: [not_null]
+      - name: is_fbs_involved
+        data_tests: [not_null]
+
+  - name: fact_ncaaf_team_game
+    description: >
+      The team-game fact (P1.1) — one row per (game_id, team_id), two per game, each from that
+      team's perspective. Conforms the CFBD box line, CFBD's advanced box (ppa / success /
+      explosiveness / line-yards), and game context onto one grain. ⭐ FBS-filtered
+      (is_fbs_matchup) + sport-tagged. The advanced block LEFT-joins on (game_id, team name) —
+      /stats/game/advanced carries no teamId — and has_advanced_stats flags absence honestly
+      rather than letting a NULL read as zero.
+      ⚠️ Every column is POST-KICKOFF; use rollup_ncaaf_team_week_asof for anything pregame.
+    columns:
+      - name: team_game_key
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: game_id
+        data_tests: [not_null]
+      - name: team_id
+        data_tests: [not_null]
+      - name: opponent_team_id
+        data_tests: [not_null]
+      - name: season_order_week
+        data_tests: [not_null]
+      - name: has_advanced_stats
+        data_tests: [not_null]
+
+  - name: fact_ncaaf_player_game
+    description: >
+      The player-game fact (P1.1) — one row per (game_id, player_id), pivoted from the long CFBD
+      stat vocabulary into the modelled passing/rushing/receiving/defensive/turnover lines.
+      ⚠️ Only ENUMERATED stat types are pivoted; anything else (CFBD's rare kicking.TOT, future
+      additions) remains in stg_ncaaf_game_player_stats rather than being silently lost — which is
+      why staging stays long. team_id is resolved point-in-time through dim_ncaaf_team's SCD-2
+      range. ⭐ FBS-filtered + sport-tagged. ⚠️ POST-KICKOFF.
+    columns:
+      - name: player_game_key
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: game_id
+        data_tests: [not_null]
+      - name: player_id
+        data_tests: [not_null]
+      - name: season_order_week
+        data_tests: [not_null]
+
+  - name: fact_ncaaf_drive
+    description: >
+      The drive fact (P1.1) — one row per drive; the only grain at which scoring-opportunity rate
+      and points-per-drive are definable. is_scoring_opportunity (reached the opponent's 40) and
+      points_scored (offense score delta, so a defensive/ST score is NOT credited to the offense)
+      are derived once here. ⭐ FBS-filtered + sport-tagged. ⚠️ POST-KICKOFF.
+    columns:
+      - name: drive_key
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: game_id
+        data_tests: [not_null]
+      - name: is_scoring_opportunity
+        data_tests: [not_null]
+
+  - name: fact_ncaaf_play
+    description: >
+      The play fact (P1.1) — one row per play (~1.5M FBS-vs-FBS), the finest grain in the model.
+      Success rate / scrimmage / passing-down definitions come from stg_ncaaf_plays (defined once).
+      ⭐ is_garbage_time (standard margin-by-quarter thresholds 43/37/27/22) is correctness, not
+      hygiene: blowout snaps are played by backups against a prevent defense and systematically
+      distort efficiency. Plays are FLAGGED, never dropped — the rollups exclude them.
+      ⭐ FBS-filtered + sport-tagged. ⚠️ POST-KICKOFF.
+    columns:
+      - name: play_key
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: game_id
+        data_tests: [not_null]
+      - name: is_garbage_time
+        data_tests: [not_null]
+      - name: is_scrimmage_play
+        data_tests: [not_null]
+
+  - name: rollup_ncaaf_team_season
+    description: >
+      The season-final team rollup (P1.1) — one row per (season, team_id): record, scoring, box
+      and advanced efficiency, drive quality, and garbage-time-excluded play efficiency.
+      ⛔⛔ NOT PREGAME-SAFE FOR ITS OWN SEASON — it contains every game the team played, including
+      ones that had not happened yet at any point in that season. ✅ Correct uses: season-over-
+      season priors (season S−1 → a game in season S), reporting. ❌ Never a feature for a game in
+      this season — use rollup_ncaaf_team_week_asof.
+    columns:
+      - name: team_season_key
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+      - name: team_id
+        data_tests: [not_null]
+      - name: games_played
+        data_tests: [not_null]
+
+  - name: rollup_ncaaf_team_week_asof
+    description: >
+      ⭐⭐ THE PREGAME-SAFE SURFACE (P1.1). One row per (season, team_id, as_of_week) answering
+      "everything known about this team BEFORE as_of_week kicked off."
+      ⭐ THE LEAKAGE CONTRACT: a row for as_of_week = W aggregates ONLY games with
+      season_order_week < W — strictly less-than. Enforced structurally by the join and asserted by
+      the singular test assert_asof_week_has_no_future_games, which is DATE-based on purpose: a
+      week-based recomputation test re-uses the model's own ordering and passes even when that
+      ordering is wrong (exactly what happened with the postseason week-1 collision during P1.1).
+      ⚠️ Week 1 is an HONEST EMPTY ROW — games_played = 0 and metrics NULL. Do not coalesce to 0;
+      "scores 0 points per game" is worse than "unknown". has_sufficient_sample flags n >= 3.
+      ⚠️ Bye weeks get a row whose metrics simply do not advance.
+    columns:
+      - name: team_week_key
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+      - name: team_id
+        data_tests: [not_null]
+      - name: as_of_week
+        description: The season_order_week the row is pregame FOR. Never CFBD's raw `week`.
+        data_tests: [not_null]
+      - name: games_played
+        description: Count of strictly-prior completed games. 0 at as_of_week 1 by construction.
+        data_tests: [not_null]
+      - name: has_sufficient_sample
+        data_tests: [not_null]
+      - name: points_for_per_game
+        description: NULL — not 0 — when games_played = 0. That NULL is the honest "unknown".
+        data_tests:
+          - not_null:
+              config:
+                where: "games_played > 0"
+
+  - name: rollup_ncaaf_team_week_opponent_adjusted
+    description: >
+      ⭐ Schedule-adjusted efficiency, point-in-time (P1.1) — same grain as
+      rollup_ncaaf_team_week_asof. Raw efficiency is nearly meaningless in a 136-team sport where
+      schedules barely overlap; an unadjusted model largely measures strength of schedule and calls
+      it team quality. Two iterative passes: adj_off = raw_off + (league_avg_def_allowed −
+      avg_def_allowed_by_opponents_faced), and the mirror for defense; pass 2 re-adjusts against
+      opponents' pass-1 ratings.
+      ⭐⭐ THE INHERITED LEAKAGE CONTRACT: this team's rating, the opponent list, AND each
+      opponent's rating are all read at the SAME as_of_week — never the opponent's season-final
+      rating, which is the classic opponent-adjustment leak. Asserted by the singular test
+      assert_opponent_adjustment_is_point_in_time.
+      ⚠️ Early-season adjustment is noise (opponents have 0–1 games); rows are KEPT but flagged via
+      has_reliable_adjustment (>= 3 games both sides). Where no opponent rating resolves, adjusted
+      falls back to RAW and adjustment_applied is false — never a NULL that drops the row.
+      SOS is a first-class output (sos_opponent_*), being the adjustment's residual.
+    columns:
+      - name: team_week_key
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+      - name: team_id
+        data_tests: [not_null]
+      - name: as_of_week
+        data_tests: [not_null]
+      - name: adjustment_applied
+        description: False when no opponent rating was resolvable — the adjusted values are the raw values.
+        data_tests: [not_null]
+      - name: has_reliable_adjustment
+        description: This team AND every opponent had >= 3 games at as_of_week. Early-season rows are honestly false.
+        data_tests: [not_null]
+      - name: adj_net_ppa
+        description: >
+          adj_off_ppa − adj_def_ppa — the single-number team-strength read. NULL where the raw
+          inputs are NULL. ⚠️ games_played > 0 does NOT imply a rating exists: CFBD's /plays
+          coverage has genuine per-game gaps (e.g. 2014 Washington week 1 has 0 plays), so a team
+          whose only prior game lacks play data has an honest NULL rating. The test is therefore
+          conditioned on the raw inputs, not on games_played.
+        data_tests:
+          - not_null:
+              config:
+                where: "raw_off_ppa is not null and raw_def_ppa is not null"

@@ -27,7 +27,13 @@ models:
     ncaaf:
       staging:
         +schema: ncaaf_staging
-        +materialized: view
+        # P1.1: materialized as TABLES, not views — the same delta_scan-stacking cure NFL-N0.3
+        # adopted. The raw tier is Delta, and DuckDB's delta extension cannot serialize a
+        # DeltaScan operator inside a complex plan, so a mart joining several staging VIEWS over
+        # delta_scan fails with "DeltaScan serialization not implemented". The P1.1 dims/facts
+        # join 3–5 staging models at once, which is squarely in that failure mode. Physical
+        # staging tables read each Delta table ONCE, so no mart plan contains a delta_scan.
+        +materialized: table
       marts:
         +schema: ncaaf_marts
         +materialized: table

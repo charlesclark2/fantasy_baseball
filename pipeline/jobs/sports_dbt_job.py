@@ -86,3 +86,160 @@ def sports_nfl_dbt_build_op(context):
 @job(executor_def=in_process_executor)
 def sports_nfl_dbt_build_job():
     sports_nfl_dbt_build_op()
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════
+# NCAAF-P1.1 — the NCAAF dbt build
+# ══════════════════════════════════════════════════════════════════════════════════════════
+# 🚩 WHY THIS EXISTS AT ALL: before P1.1 there was NO Dagster job for ANY NCAAF dbt model.
+# P0.4's `ncaaf_team_roster_continuity` and P0.5's `ncaaf_team_coaching_change` were HAND-BUILT on
+# a laptop and could silently rot — nothing rebuilt them when the lake advanced, and nothing would
+# have told anyone. So this job materializes the WHOLE NCAAF DAG (staging + every mart, those two
+# included), not just P1.1's new dims/facts/rollups.
+#
+# ⚙️ THREE STEPS, TWO TIERS (the CLAUDE.md INC-6 contract, with leakage carved out):
+#   1. `dbt run`        — HALT. The models are the deliverable; a failure fails the job.
+#   2. leakage gates    — HALT. The three point-in-time contract tests. A pregame rollup absorbing
+#      post-kickoff data is a correctness emergency; tiering it WARN would log it where nobody
+#      reads it, which is exactly how the postseason week-1 collision survived to a shipped model.
+#   3. the rest of `dbt test` — WARN-but-continue. Peripheral grain/not_null/accepted_values
+#      assertions must never mask a successful build.
+#
+# 🧰 STAGING IS BUILT SERIALLY, ON PURPOSE — two independent reasons, both load-bearing:
+#   • the P0.5 landmine: dbt-fusion preview-196 SEGFAULTS building 2+ delta_scan models in one
+#     invocation. (This project runs dbt-core + dbt-duckdb, not fusion, but the serial build costs
+#     ~85s and removes the whole class.)
+#   • MEASURED on the real lake: `stg_ncaaf_game_player_stats` explodes ~13.8k records into ~5.2M
+#     rows through four chained UNNESTs and OOMs a 4 GB DuckDB when threads compete for memory.
+#     The model pins DuckDB itself to 1 thread; running dbt serially keeps peak RSS predictable.
+#
+# Marts then build in a second invocation — by then every staging model is a physical table, so no
+# mart plan contains a delta_scan (the N0.3 "DeltaScan serialization not implemented" cure).
+
+
+def _run_sports_dbt(context, args, label):
+    """Invoke dbt-duckdb on the box for the sports project. Returns the CompletedProcess.
+
+    INC-32 discipline: a finite `timeout=` on every subprocess that runs on a Dagster worker —
+    an un-timed-out subprocess on a daemon path wedges the worker forever.
+    """
+    cmd = [
+        sys.executable, "-m", "dbt.cli.main",
+        *args,
+        "--project-dir", SPORTS_DBT_DIR,
+        "--profiles-dir", SPORTS_DBT_DIR,
+    ]
+    env = {
+        **os.environ,
+        "DAGSTER_JOB_NAME": context.job_name,
+        # DuckDB needs an explicit region for the S3 lake bucket (boto3 is region-less).
+        "SPORTS_LAKE_REGION": os.environ.get("SPORTS_LAKE_REGION", "us-east-2"),
+        "AWS_DEFAULT_REGION": os.environ.get("AWS_DEFAULT_REGION", "us-east-2"),
+        "SPORTS_DUCKDB_PATH": os.environ.get("SPORTS_DUCKDB_PATH", "/tmp/sports_ncaaf.duckdb"),
+    }
+    context.log.info(f"[{label}] {' '.join(cmd)}")
+    try:
+        result = subprocess.run(
+            cmd, env=env, capture_output=True, text=True,
+            cwd=SPORTS_DBT_DIR, timeout=DBT_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise Exception(
+            f"sports_dbt NCAAF {label} TIMED OUT after {DBT_TIMEOUT_SECONDS}s — dbt wedged."
+        ) from exc
+    if result.stdout:
+        context.log.info(result.stdout)
+    if result.stderr:
+        context.log.warning(result.stderr)
+    return result
+
+
+@op(out=Out(Nothing))
+def sports_ncaaf_dbt_run_op(context):
+    """HALT tier — materialize the FULL NCAAF DAG (staging serially, then all marts)."""
+    # Step 1: staging, ONE model at a time (see the serial-build rationale above).
+    staging = _run_sports_dbt(
+        context, ["run", "--select", "ncaaf.staging", "--threads", "1"], "ncaaf.staging (serial)"
+    )
+    if staging.returncode != 0:
+        raise Exception(
+            f"sports_dbt NCAAF STAGING build FAILED (exit {staging.returncode}). See logs above."
+        )
+
+    # Step 2: every NCAAF mart — P1.1's dims/facts/rollups AND P0.3's xref, P0.4's
+    # roster-continuity, P0.5's coaching-change. `ncaaf.marts` selects the folder, so a mart added
+    # by a later story is picked up automatically and cannot silently go un-built.
+    marts = _run_sports_dbt(
+        context, ["run", "--select", "ncaaf.marts", "--threads", "1"], "ncaaf.marts"
+    )
+    if marts.returncode != 0:
+        raise Exception(
+            f"sports_dbt NCAAF MARTS build FAILED (exit {marts.returncode}). See logs above."
+        )
+    context.log.info("sports_dbt NCAAF build PASSED — staging + all marts materialized.")
+
+
+# The three P1.1 point-in-time contract gates. A failure here means a PREGAME rollup has started
+# absorbing POST-KICKOFF data — a correctness emergency, not a data-quality nit — so they are the
+# one part of the test suite that HALTs.
+NCAAF_LEAKAGE_GATES = [
+    "assert_asof_week_has_no_future_games",
+    "assert_opponent_adjustment_is_point_in_time",
+    "assert_season_order_week_is_monotone_in_date",
+]
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def sports_ncaaf_leakage_gate_op(context):
+    """HALT tier — the three point-in-time leakage gates.
+
+    ⚠️ These are deliberately NOT lumped in with the rest of the test suite. Tiering the whole
+    suite as WARN (the INC-6 default for peripheral data-quality) would mean a silent pregame leak
+    logs a warning nobody reads while the job stays green — which is precisely the failure mode
+    that produced the postseason week-1 collision this model shipped with. Leakage fails the job.
+    """
+    result = _run_sports_dbt(
+        context,
+        ["test", "--select", *NCAAF_LEAKAGE_GATES, "--threads", "1"],
+        "ncaaf leakage gates",
+    )
+    if result.returncode != 0:
+        raise Exception(
+            "🚨 NCAAF LEAKAGE GATE FAILED (exit "
+            f"{result.returncode}) — a pregame rollup is absorbing post-kickoff data. "
+            "Do NOT train or serve off these marts until it is resolved. See logs above."
+        )
+    context.log.info("NCAAF leakage gates PASSED — the point-in-time contract holds.")
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def sports_ncaaf_dbt_test_op(context):
+    """WARN tier — the rest of the NCAAF data tests (grain, not_null, accepted_values).
+
+    The loud log is the whole point (the ALERT-continue contract): a silently-swallowed test
+    failure is indistinguishable from a green run. Grep the run logs for 'NCAAF dbt TESTS FAILED'.
+
+    Note `not_null_xref_college_nfl_players_gsis_id` (P0.3) is a RATCHET, not a plain assertion:
+    the 8 known nulls (drafted players who never took an NFL snap, so nflverse issues no gsis_id)
+    WARN, and a 9th ERRORS — so growth in that count fails this step rather than blending into an
+    accepted background level.
+    """
+    result = _run_sports_dbt(context, ["test", "--select", "ncaaf", "--threads", "1"], "ncaaf tests")
+    if result.returncode != 0:
+        context.log.warning(
+            "⚠️ NCAAF dbt TESTS FAILED (exit %s) — build kept, investigate above. "
+            "If the failure is not_null_xref_college_nfl_players_gsis_id, the ratchet has been "
+            "TRIPPED (>8 nulls) — that is a real regression, not the known background.",
+            result.returncode,
+        )
+    else:
+        context.log.info("sports_dbt NCAAF tests PASSED (warnings may still be present — see log).")
+
+
+@job(executor_def=in_process_executor)
+def sports_ncaaf_dbt_build_job():
+    # run (HALT) → leakage gates (HALT) → the rest of the tests (WARN-continue).
+    # The gates run BEFORE the broad suite so a leak surfaces even if a later peripheral test
+    # is noisy, and they fail the job on their own.
+    built = sports_ncaaf_dbt_run_op()
+    sports_ncaaf_dbt_test_op(start=sports_ncaaf_leakage_gate_op(start=built))

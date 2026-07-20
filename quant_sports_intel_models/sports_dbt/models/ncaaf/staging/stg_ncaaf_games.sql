@@ -30,7 +30,10 @@ select
     json_extract_string(raw_json, '$.awayConference')     as away_conference,
     json_extract_string(raw_json, '$.awayPoints')::int    as away_points,
     -- FBS-only modelling universe (ncaaf_data_inventory.md §9 gap 8): both sides 'fbs'.
-    (json_extract_string(raw_json, '$.homeClassification') = 'fbs'
-        and json_extract_string(raw_json, '$.awayClassification') = 'fbs') as is_fbs_matchup
+    -- ⚠️ coalesce → FALSE: CFBD leaves classification NULL on a few hundred games (mostly
+    -- non-FBS opponents). An UNKNOWN division is not FBS, and a NULL flag would propagate a
+    -- three-valued filter into every downstream `where is_fbs_matchup` (P1.1).
+    coalesce(json_extract_string(raw_json, '$.homeClassification') = 'fbs'
+        and json_extract_string(raw_json, '$.awayClassification') = 'fbs', false) as is_fbs_matchup
 from raw
 where json_extract_string(raw_json, '$.id') is not null
