@@ -1474,17 +1474,19 @@ def generate_pick_narratives_op(context):
     # Soft-fail: a Cortex outage must not block write_serving_store_op — the app
     # renders SHAP drivers from pick_explanation when pick_narrative is NULL.
     #
-    # INC-32 run-stall (2026-07-19): this op is the ONLY step on the predict→serve
+    # INC-32 hardening (2026-07-19): this op is the ONLY step on the daily's predict→serve
     # dependency edge (write_serving_store_op / write_api_cache_op wait on predict_done=this),
     # and it loops calling Snowflake Cortex COMPLETE sequentially per game with NO client-side
-    # timeout. A hung/slow Cortex call (warehouse queue, model backlog) parked the whole loop
-    # → the daily's predict→serve tail stalled ~2h20m on 7/19 (predict 12:56Z → serve 15:16Z;
-    # the 13:30Z deadman fired mid-gap). Same un-timed-subprocess class as INC-32(A/B). A hard
-    # wall-clock cap converts the unbounded stall into a bounded, LOUD degrade: the kill raises,
+    # timeout. The 7/19 daily verified CLEAN (Dagit --steps: this op ran 1.0 min, predict→serve
+    # 4 min — the story's "2h stall" was a misread of a normal intraday serve), so this is NOT a
+    # fix for an observed stall — it is defense-in-depth against the LATENT wedge: a hung/slow
+    # Cortex call (warehouse queue, model backlog) would park this loop and, since the serve waits
+    # on it, hold the serve hostage — the same un-timed-subprocess class as INC-32(A/B). A hard
+    # wall-clock cap converts that unbounded risk into a bounded, LOUD degrade: the kill raises,
     # the soft-fail except catches it, and the serve proceeds on the last-good narratives (the
     # app already renders SHAP drivers when pick_narrative is NULL). 900s is far above a healthy
-    # run (sequential Cortex ~1–3s/pick, pick-delta guard skips unchanged slates) and far below
-    # the 2h stall. The same op also fronts the serve in lineup_monitor_job — this covers both.
+    # run (sequential Cortex ~1–3s/pick, pick-delta guard skips unchanged slates). The same op
+    # also fronts the serve in lineup_monitor_job — this covers both.
     try:
         _run_script(context, "/app/betting_ml/scripts/generate_pick_narratives.py",
                     ["--date", _today(), "--pick-delta-guard"], timeout=900)
