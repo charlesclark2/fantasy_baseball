@@ -66,6 +66,142 @@ TASK = "lineup_monitor"
 _FULL_LINEUP_SLOTS = 9
 _SLA_FALLBACK_MINUTES = 40.0
 
+# ── E11.20 PHASE-2a — the SNOWFLAKE-FREE DETECTION TICK (2026-07-20) ────────────────────
+# The E11.20-COST measurement found ~80% of Snowflake spend is warehouse WAKE/IDLE, not
+# query compute, and named this monitor one of the last 24/7 wakers: the sensor evaluates
+# it every ~10 min through the game window, and EVERY tick opened a Snowflake session
+# (lineups/probables joins + the lineup_monitor_state read + an unconditional audit-log
+# INSERT) — so the warehouse could never suspend.
+#
+# ⭐ THE DESIGN LINE: the DETECTION TICK must be Snowflake-free; the TRIGGERED JOB may stay
+# on Snowflake. A tick that finds nothing must not touch SF at all (that is the wake we are
+# killing). When a lineup DOES confirm we fire lineup_monitor_job, which runs dbt/predict on
+# Snowflake anyway — one wake there is legitimate and unavoidable, so the audit-log write is
+# kept but made CONDITIONAL on an actual trigger instead of firing every quiet tick.
+#
+# Under LINEUP_MONITOR_S3=1:
+#   reads  → DuckDB over the S3 lakehouse (stg_statsapi_lineups_wide, probable_pitchers,
+#            daily_model_predictions). All three are rebuilt intraday by the capture chain /
+#            written by predict_today's own S3 export, so they are as fresh as the SF views
+#            were — the SF views are literally external tables over these same parquet files.
+#   state  → DynamoDB (the lineup_monitor_state replacement), same table + `pk="ops"` layout
+#            as the INC-16-P6 daily heartbeat; tiny, idempotent, single-digit items per day.
+# Flag OFF (default) = the byte-for-byte Snowflake path, unchanged. This is the W7a/W7b/W8a
+# convention: build gated, soak, then flip.
+#
+# Once this flips, the intraday capture tick's `refresh_w1_external_tables.py` leg exists
+# only for the remaining SF consumers (K-projection cron, zone overlays) — repoint those and
+# the whole 30-min chain goes SF-free, which is where the bulk of the remaining wake burn is.
+_S3_MODE = os.environ.get("LINEUP_MONITOR_S3", "0") == "1"
+_STATE_TABLE = os.environ.get("SERVING_CACHE_TABLE", "credence-prod-serving-cache")
+_STATE_SK_PREFIX = "lineup_monitor#"
+
+
+def _duck_lakehouse(tables: list[str]):
+    """A DuckDB connection with the given lakehouse tables registered as bare-name views,
+    routed per storage backend (the phase-1.5 Delta-aware registrar)."""
+    from betting_ml.utils.delta_lakehouse import register_lakehouse_views
+    from betting_ml.utils.lakehouse_monitor import duck
+
+    conn = duck()
+    register_lakehouse_views(conn, tables)
+    return conn
+
+
+def _candidates_s3(today_iso: str) -> dict[int, dict]:
+    """Step 1 (candidates + per-game lineup completeness), Snowflake-free. Mirrors the SF
+    query exactly: MIN over both sides of the filled-slot count, both sides required."""
+    conn = _duck_lakehouse(["stg_statsapi_lineups_wide", "stg_statsapi_probable_pitchers"])
+    try:
+        slots = " + ".join(
+            f"(CASE WHEN slot_{i}_player_id IS NOT NULL THEN 1 ELSE 0 END)"
+            for i in range(1, _FULL_LINEUP_SLOTS + 1)
+        )
+        rows = conn.execute(
+            f"""
+            SELECT l.game_pk, p_home.probable_pitcher_id, p_away.probable_pitcher_id,
+                   l.min_slots_filled
+            FROM (
+                SELECT game_pk, MIN({slots}) AS min_slots_filled
+                FROM stg_statsapi_lineups_wide
+                WHERE official_date::date = ?::date
+                GROUP BY game_pk
+                HAVING COUNT(DISTINCT home_away) = 2
+            ) l
+            LEFT JOIN (SELECT game_pk, probable_pitcher_id FROM stg_statsapi_probable_pitchers
+                       WHERE side = 'home') p_home ON l.game_pk = p_home.game_pk
+            LEFT JOIN (SELECT game_pk, probable_pitcher_id FROM stg_statsapi_probable_pitchers
+                       WHERE side = 'away') p_away ON l.game_pk = p_away.game_pk
+            """,
+            [today_iso],
+        ).fetchall()
+        return {
+            int(r[0]): {"home": r[1], "away": r[2], "min_slots_filled": r[3]}
+            for r in rows
+        }
+    finally:
+        conn.close()
+
+
+def _games_with_post_lineup_s3(today_iso: str) -> set[int]:
+    """Step 2b, Snowflake-free. predict_today exports daily_model_predictions to this same
+    parquet immediately after each write, so the S3 copy is current within one predict."""
+    conn = _duck_lakehouse(["daily_model_predictions"])
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT game_pk FROM daily_model_predictions "
+            "WHERE game_date::date = ?::date AND prediction_type = 'post_lineup'",
+            [today_iso],
+        ).fetchall()
+        return {int(r[0]) for r in rows}
+    finally:
+        conn.close()
+
+
+def _state_table():
+    import boto3
+
+    return boto3.resource("dynamodb").Table(_STATE_TABLE)
+
+
+def _already_triggered_dynamo(today_iso: str) -> dict[int, tuple]:
+    """Step 2 (games already triggered today), Snowflake-free. Query on the sk prefix for
+    this run_date — one small query per tick."""
+    from boto3.dynamodb.conditions import Key
+
+    resp = _state_table().query(
+        KeyConditionExpression=Key("pk").eq("ops")
+        & Key("sk").begins_with(f"{_STATE_SK_PREFIX}{today_iso}#")
+    )
+    out: dict[int, tuple] = {}
+    for item in resp.get("Items", []):
+        try:
+            pk = int(str(item["sk"]).rsplit("#", 1)[1])
+        except (KeyError, IndexError, ValueError):
+            continue
+        home, away = item.get("home_starter_id"), item.get("away_starter_id")
+        out[pk] = (int(home) if home is not None else None,
+                   int(away) if away is not None else None)
+    return out
+
+
+def _record_trigger_dynamo(today_iso: str, game_pk: int, home, away) -> None:
+    """Steps 3/3b, Snowflake-free. A plain put_item is the idempotent-insert AND the
+    starter-change update in one (the SF path needed separate INSERT-WHERE-NOT-EXISTS and
+    UPDATE statements; last-write-wins on a fixed key is equivalent here because the only
+    mutation is refreshing the starters + triggered_at)."""
+    _state_table().put_item(Item={
+        "pk": "ops",
+        "sk": f"{_STATE_SK_PREFIX}{today_iso}#{int(game_pk)}",
+        "run_date": today_iso,
+        "game_pk": int(game_pk),
+        "home_starter_id": int(home) if home is not None else None,
+        "away_starter_id": int(away) if away is not None else None,
+        "triggered_at": datetime.now(timezone.utc).isoformat(),
+        "is_permanent": False,
+        "cache_date": today_iso,
+    })
+
 
 def select_ready_games(candidates, first_pitch, now):
     """PURE readiness-gate decision (unit-tested; no IO).
@@ -183,6 +319,66 @@ def _pregame_first_pitch(today_iso: str) -> dict[int, datetime | None] | None:
     return {int(r[0]): to_utc_datetime(r[1]) for r in rows}
 
 
+# ── Snowflake read helpers (the DEFAULT path — unchanged behaviour, flag OFF) ───────────
+# Extracted verbatim from main() so the phase-2a S3 branch is a clean either/or rather than
+# interleaved conditionals inside one long function.
+def _candidates_sf(cur, today_iso: str) -> dict[int, dict]:
+    slots = "\n                      + ".join(
+        f"(CASE WHEN slot_{i}_player_id IS NOT NULL THEN 1 ELSE 0 END)"
+        for i in range(1, _FULL_LINEUP_SLOTS + 1)
+    )
+    cur.execute(
+        f"""
+        SELECT
+            l.game_pk,
+            p_home.probable_pitcher_id AS home_starter_id,
+            p_away.probable_pitcher_id AS away_starter_id,
+            l.min_slots_filled
+        FROM (
+            SELECT game_pk, MIN({slots}) AS min_slots_filled
+            FROM baseball_data.betting.stg_statsapi_lineups_wide
+            WHERE official_date = %s::date
+            GROUP BY game_pk
+            HAVING COUNT(DISTINCT home_away) = 2
+        ) l
+        LEFT JOIN baseball_data.betting.stg_statsapi_probable_pitchers p_home
+            ON l.game_pk = p_home.game_pk AND p_home.side = 'home'
+        LEFT JOIN baseball_data.betting.stg_statsapi_probable_pitchers p_away
+            ON l.game_pk = p_away.game_pk AND p_away.side = 'away'
+        """,
+        [today_iso],
+    )
+    return {
+        row[0]: {"home": row[1], "away": row[2], "min_slots_filled": row[3]}
+        for row in cur.fetchall()
+    }
+
+
+def _already_triggered_sf(cur, today_iso: str) -> dict[int, tuple]:
+    cur.execute(
+        """
+        SELECT game_pk, home_starter_id, away_starter_id
+        FROM baseball_data.config.lineup_monitor_state
+        WHERE run_date = %s::date
+        """,
+        [today_iso],
+    )
+    return {row[0]: (row[1], row[2]) for row in cur.fetchall()}
+
+
+def _games_with_post_lineup_sf(cur, today_iso: str) -> set[int]:
+    cur.execute(
+        """
+        SELECT DISTINCT game_pk
+        FROM baseball_data.betting_ml.daily_model_predictions
+        WHERE game_date = %s::date
+          AND prediction_type = 'post_lineup'
+        """,
+        [today_iso],
+    )
+    return {row[0] for row in cur.fetchall()}
+
+
 def write_github_output(key: str, value: str) -> None:
     gho = os.environ.get("GITHUB_OUTPUT")
     if gho:
@@ -198,8 +394,19 @@ def main() -> None:
     # GitHub Actions runs in UTC, so date.today() rolls over at 00:00 UTC and
     # would otherwise miss confirmations between 00:00 UTC and ~05:00 UTC.
     today = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
-    conn = get_connection()
-    cur = conn.cursor()
+    # PHASE-2a: under LINEUP_MONITOR_S3 the whole detection path is Snowflake-free, so we do
+    # not open a session at all — opening one is itself the warehouse wake we are killing.
+    # The connection is created LAZILY, only if a trigger fires (audit log) or on failure.
+    conn = None if _S3_MODE else get_connection()
+    cur = None if conn is None else conn.cursor()
+
+    def _sf_cursor():
+        """Lazily open the Snowflake session (trigger/audit/error paths only, in S3 mode)."""
+        nonlocal conn, cur
+        if cur is None:
+            conn = get_connection()
+            cur = conn.cursor()
+        return cur
 
     try:
         # Step 1 — candidate games (both batting lineups posted) with current probable pitchers
@@ -209,43 +416,10 @@ def main() -> None:
         # slots are non-null, so it is 9 only when BOTH sides carry a complete order — the
         # INC-32 readiness-gate signal (see select_ready_games): a re-score must not fire on a
         # partially-posted lineup.
-        cur.execute(
-            """
-            SELECT
-                l.game_pk,
-                p_home.probable_pitcher_id AS home_starter_id,
-                p_away.probable_pitcher_id AS away_starter_id,
-                l.min_slots_filled
-            FROM (
-                SELECT
-                    game_pk,
-                    MIN(
-                        (CASE WHEN slot_1_player_id IS NOT NULL THEN 1 ELSE 0 END)
-                      + (CASE WHEN slot_2_player_id IS NOT NULL THEN 1 ELSE 0 END)
-                      + (CASE WHEN slot_3_player_id IS NOT NULL THEN 1 ELSE 0 END)
-                      + (CASE WHEN slot_4_player_id IS NOT NULL THEN 1 ELSE 0 END)
-                      + (CASE WHEN slot_5_player_id IS NOT NULL THEN 1 ELSE 0 END)
-                      + (CASE WHEN slot_6_player_id IS NOT NULL THEN 1 ELSE 0 END)
-                      + (CASE WHEN slot_7_player_id IS NOT NULL THEN 1 ELSE 0 END)
-                      + (CASE WHEN slot_8_player_id IS NOT NULL THEN 1 ELSE 0 END)
-                      + (CASE WHEN slot_9_player_id IS NOT NULL THEN 1 ELSE 0 END)
-                    ) AS min_slots_filled
-                FROM baseball_data.betting.stg_statsapi_lineups_wide
-                WHERE official_date = %s::date
-                GROUP BY game_pk
-                HAVING COUNT(DISTINCT home_away) = 2
-            ) l
-            LEFT JOIN baseball_data.betting.stg_statsapi_probable_pitchers p_home
-                ON l.game_pk = p_home.game_pk AND p_home.side = 'home'
-            LEFT JOIN baseball_data.betting.stg_statsapi_probable_pitchers p_away
-                ON l.game_pk = p_away.game_pk AND p_away.side = 'away'
-            """,
-            [today],
-        )
-        candidates: dict[int, dict] = {
-            row[0]: {"home": row[1], "away": row[2], "min_slots_filled": row[3]}
-            for row in cur.fetchall()
-        }
+        if _S3_MODE:
+            candidates = _candidates_s3(today)
+        else:
+            candidates = _candidates_sf(cur, today)
         log.info("Candidate games today (both sides posted): %d", len(candidates))
 
         # INC-32 PRE-GAME GATE (2026-07-19) — restrict candidates to games that have NOT started.
@@ -290,17 +464,10 @@ def main() -> None:
                     )
 
         # Step 2 — games already triggered today, with stored starter IDs
-        cur.execute(
-            """
-            SELECT game_pk, home_starter_id, away_starter_id
-            FROM baseball_data.config.lineup_monitor_state
-            WHERE run_date = %s::date
-            """,
-            [today],
-        )
-        already_triggered: dict[int, tuple[int | None, int | None]] = {
-            row[0]: (row[1], row[2]) for row in cur.fetchall()
-        }
+        if _S3_MODE:
+            already_triggered = _already_triggered_dynamo(today)
+        else:
+            already_triggered = _already_triggered_sf(cur, today)
         log.info("Already triggered today: %d", len(already_triggered))
 
         # Step 2b — games that have a post_lineup prediction written for today.
@@ -309,16 +476,10 @@ def main() -> None:
         # lineup_predict completed (e.g., a dbt step errored mid-run). Without this
         # check, the game is skipped forever on subsequent ticks because it's already
         # in already_triggered.
-        cur.execute(
-            """
-            SELECT DISTINCT game_pk
-            FROM baseball_data.betting_ml.daily_model_predictions
-            WHERE game_date = %s::date
-              AND prediction_type = 'post_lineup'
-            """,
-            [today],
-        )
-        games_with_post_lineup: set[int] = {row[0] for row in cur.fetchall()}
+        if _S3_MODE:
+            games_with_post_lineup = _games_with_post_lineup_s3(today)
+        else:
+            games_with_post_lineup = _games_with_post_lineup_sf(cur, today)
         log.info("Games with existing post_lineup prediction: %d", len(games_with_post_lineup))
 
         new_game_pks: list[int] = []
@@ -361,6 +522,9 @@ def main() -> None:
         # Step 3 — record new entries; update starter IDs for pitcher changes
         for pk in new_game_pks:
             home_starter, away_starter = confirmed[pk]
+            if _S3_MODE:
+                _record_trigger_dynamo(today, pk, home_starter, away_starter)
+                continue
             # Probable pitcher may be NULL if not yet announced — store NULL rather than cast error
             home_cast = f"{home_starter}::int" if home_starter is not None else "NULL::int"
             away_cast = f"{away_starter}::int" if away_starter is not None else "NULL::int"
@@ -380,6 +544,10 @@ def main() -> None:
 
         for pk in pitcher_change_pks:
             home_starter, away_starter = confirmed[pk]
+            if _S3_MODE:
+                # put_item on the fixed (run_date, game_pk) key IS the update (last write wins).
+                _record_trigger_dynamo(today, pk, home_starter, away_starter)
+                continue
             home_cast = f"{home_starter}::int" if home_starter is not None else "NULL::int"
             away_cast = f"{away_starter}::int" if away_starter is not None else "NULL::int"
             cur.execute(
@@ -393,16 +561,22 @@ def main() -> None:
                 [today, pk],
             )
 
-        # Audit log
-        cur.execute(
-            """
-            INSERT INTO baseball_data.config.pipeline_run_log
-                (task_name, run_ts, status, rows_affected)
-            VALUES (%s, CURRENT_TIMESTAMP(), 'SUCCESS', %s)
-            """,
-            [TASK, len(all_trigger_pks)],
-        )
-        conn.commit()
+        # Audit log. PHASE-2a: in S3 mode a QUIET tick (nothing triggered) must not open a
+        # Snowflake session at all — that unconditional INSERT was the 24/7 wake. On a tick
+        # that DID trigger we still log it: the lineup_monitor_job it fires runs dbt/predict
+        # on Snowflake anyway, so the session is already being paid for.
+        if _S3_MODE and not all_trigger_pks:
+            log.info("[phase-2a] Quiet tick — Snowflake untouched (audit log skipped).")
+        else:
+            _sf_cursor().execute(
+                """
+                INSERT INTO baseball_data.config.pipeline_run_log
+                    (task_name, run_ts, status, rows_affected)
+                VALUES (%s, CURRENT_TIMESTAMP(), 'SUCCESS', %s)
+                """,
+                [TASK, len(all_trigger_pks)],
+            )
+            conn.commit()
 
         # Step 4 — write GHA outputs
         write_github_output("has_new_games", "true" if all_trigger_pks else "false")
@@ -412,7 +586,8 @@ def main() -> None:
     except Exception as e:
         log.error("lineup_monitor failed: %s", e)
         try:
-            cur.execute(
+            # A failure is worth a Snowflake session even in S3 mode (rare + diagnostic).
+            _sf_cursor().execute(
                 """
                 INSERT INTO baseball_data.config.pipeline_run_log
                     (task_name, run_ts, status, rows_affected, error_message)
@@ -425,8 +600,11 @@ def main() -> None:
             pass
         raise
     finally:
-        cur.close()
-        conn.close()
+        # In S3 mode the session may never have been opened (the point of the exercise).
+        if cur is not None:
+            cur.close()
+        if conn is not None:
+            conn.close()
 
 
 if __name__ == "__main__":
