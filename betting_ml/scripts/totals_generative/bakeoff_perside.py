@@ -86,13 +86,24 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 import warnings
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable
+
+# ⚠️ MUST precede `import numpy` — BLAS/OpenMP read their thread count at import time, and a
+# later env change is ignored. Default 0 = leave the libraries alone; set E2_1R_THREADS=N to
+# cap. Uncapped BLAS + an uncapped learner OVERSUBSCRIBE the CPU (N_blas × N_learner threads),
+# which is how a 60s fit becomes a 210s one that LOOKS hung. See --n-jobs for the learner side.
+_THREAD_CAP = os.environ.get("E2_1R_THREADS", "").strip()
+if _THREAD_CAP:
+    for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+               "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+        os.environ[_v] = _THREAD_CAP
 
 import numpy as np
 import pandas as pd
@@ -155,6 +166,53 @@ _META_PATH = _CACHE_DIR / "e2_1r_perside_matrix.meta.json"
 _RESULTS_DIR = (
     _PROJECT_ROOT / "quant_sports_intel_models" / "baseball" / "edge_program" / "ablation_results"
 )
+
+
+# ---------------------------------------------------------------------------
+# Progress logging
+#
+# WHY THIS IS NOT DECORATION: every heavy step here is a NATIVE call (LightGBM/XGBoost/CatBoost
+# OpenMP kernels, BLAS in the GLM). While one is running, the Python interpreter is not
+# executing — so there is no output AND Ctrl-C does not land until the native call returns.
+# A silent multi-minute native fit is indistinguishable from a hang. Logging every step with a
+# timestamp + elapsed is what makes "slow" distinguishable from "stuck".
+# ---------------------------------------------------------------------------
+
+_T0 = time.time()
+
+
+def _log(msg: str, *, indent: int = 0) -> None:
+    """Timestamped, FLUSHED progress line on stderr.
+
+    stderr because stdout is where the machine-readable leaderboard goes, and flushing because a
+    block-buffered pipe (`| tail`, `| tee`) is the other way a live run looks dead.
+    """
+    stamp = datetime.now().strftime("%H:%M:%S")
+    print(f"[{stamp} +{time.time() - _T0:6.0f}s] {'  ' * indent}{msg}", file=sys.stderr, flush=True)
+
+
+class _Step:
+    """Context manager that logs a step's start and its elapsed time on exit.
+
+    Logging the START is the load-bearing half: it names the step you are currently blocked
+    inside, which is exactly the information missing when a native fit appears to hang.
+    """
+
+    def __init__(self, msg: str, *, indent: int = 0):
+        self.msg = msg
+        self.indent = indent
+
+    def __enter__(self):
+        self.t0 = time.time()
+        _log(f"{self.msg} …", indent=self.indent)
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if exc_type is None:
+            _log(f"{self.msg} ✓ ({time.time() - self.t0:.1f}s)", indent=self.indent)
+        else:
+            _log(f"{self.msg} ✗ FAILED after {time.time() - self.t0:.1f}s: {exc}", indent=self.indent)
+        return False
 _TRIALS_DIR = _RESULTS_DIR / "e2_1r_configs"     # one JSON per evaluated config (stages 1+2)
 _DECISION_JSON = _RESULTS_DIR / "e2_1r_bakeoff.json"
 _DECISION_MD = _RESULTS_DIR / "e2_1r_bakeoff.md"
@@ -351,10 +409,31 @@ CONTRACTS: tuple[str, ...] = ("full", "clustered", "top_k")
 DISPERSION_MODES: tuple[str, ...] = ("train", "heldout", "native")
 
 
+#: Learner-level thread cap, set from --n-jobs. None = library default (all cores). Capping the
+#: learner AND the BLAS (E2_1R_THREADS) is what prevents the oversubscription that makes an
+#: otherwise-fine fit crawl. Applied at build time via the class's own thread parameter name.
+_N_JOBS: int | None = None
+
+_THREAD_PARAM: dict[str, str] = {
+    "lgbm_poisson": "n_jobs",
+    "xgb_poisson": "n_jobs",
+    "catboost_poisson": "thread_count",
+    # ngboost/sklearn GLM take their parallelism from the BLAS layer, not a constructor arg.
+}
+
+
+def set_n_jobs(n: int | None) -> None:
+    global _N_JOBS
+    _N_JOBS = n
+
+
 def build_candidate(model_class: str, params: dict | None = None) -> Candidate:
     if model_class not in _BUILDERS:
         raise KeyError(f"unknown model class {model_class!r}; known: {sorted(_BUILDERS)}")
-    return _BUILDERS[model_class](params)
+    merged = dict(params or {})
+    if _N_JOBS is not None and model_class in _THREAD_PARAM:
+        merged.setdefault(_THREAD_PARAM[model_class], _N_JOBS)
+    return _BUILDERS[model_class](merged)
 
 
 def default_dispersion(model_class: str) -> str:
@@ -455,15 +534,18 @@ def resolve_contract(
 # Downstream (convolved) scoring — the SELECTION metric
 # ---------------------------------------------------------------------------
 
-def convolved_metrics(
+def draw_predictive(
     game_frame: pd.DataFrame, rng: np.random.Generator, *, n_draws: int = _DEFAULT_DRAWS
-) -> dict[str, dict[str, float]]:
-    """Convolve per-side (μ, r) into total / run_diff / team totals and score calibration.
+) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """Convolve per-side (μ, r) → (sampled distributions, realised observations).
+
+    Split out from the scoring so a fold's draws can be taken ONCE and then SLICED for the PBO
+    buckets. Sampling dominates this harness's runtime (a fold's draw array is
+    n_games × n_draws), and each game's draws are independent, so a row-subset of the fold's
+    samples IS the sub-population's predictive — re-drawing per bucket was pure waste, and it
+    made the buckets independent redraws rather than exact sub-populations of the scored fold.
 
     `game_frame` is one row per game with mu_home, mu_away, r_home, r_away, y_home, y_away.
-    Reuses E2.3's own machinery (`draw_independent_samples`, `interval_coverage`,
-    `randomized_pit`, `pit_flatness`) so a bake-off winner is judged on EXACTLY the diagnostic
-    E2.3 will re-validate it with.
     """
     y_home, y_away = draw_independent_samples(
         game_frame["mu_home"].to_numpy(float),
@@ -473,23 +555,49 @@ def convolved_metrics(
         r_away=game_frame["r_away"].to_numpy(float),
         n_draws=n_draws,
     )
-    dists = derive_distributions(y_home, y_away)
+    obs_home = game_frame["y_home"].to_numpy(float)
+    obs_away = game_frame["y_away"].to_numpy(float)
     obs = {
-        "total": game_frame["y_home"].to_numpy(float) + game_frame["y_away"].to_numpy(float),
-        "run_diff": game_frame["y_home"].to_numpy(float) - game_frame["y_away"].to_numpy(float),
-        "home_total": game_frame["y_home"].to_numpy(float),
-        "away_total": game_frame["y_away"].to_numpy(float),
+        "total": obs_home + obs_away,
+        "run_diff": obs_home - obs_away,
+        "home_total": obs_home,
+        "away_total": obs_away,
     }
+    return derive_distributions(y_home, y_away), obs
+
+
+def score_predictive(
+    dists: dict[str, np.ndarray],
+    obs: dict[str, np.ndarray],
+    rng: np.random.Generator,
+    *,
+    rows: np.ndarray | None = None,
+) -> dict[str, dict[str, float]]:
+    """Calibration diagnostics for a drawn predictive, optionally on a ROW SUBSET (a PBO bucket).
+
+    Uses E2.3's own machinery (`interval_coverage`, `randomized_pit`, `pit_flatness`) so a
+    bake-off winner is judged on EXACTLY the diagnostic E2.3 will re-validate it with.
+    """
     out: dict[str, dict[str, float]] = {}
     for key, samples in dists.items():
-        pit = pit_flatness(randomized_pit(obs[key], samples, rng))
+        s = samples if rows is None else samples[rows]
+        o = obs[key] if rows is None else obs[key][rows]
+        pit = pit_flatness(randomized_pit(o, s, rng))
         out[key] = {
-            "calib_80": round(interval_coverage(obs[key], samples), 4),
+            "calib_80": round(interval_coverage(o, s), 4),
             "pit_max_decile_dev": pit["max_decile_dev"],
             "pit_mean_dev": pit["mean_dev_from_half"],
             "pit_is_flat": bool(pit["is_flat"]),
         }
     return out
+
+
+def convolved_metrics(
+    game_frame: pd.DataFrame, rng: np.random.Generator, *, n_draws: int = _DEFAULT_DRAWS
+) -> dict[str, dict[str, float]]:
+    """Draw + score in one call (the whole-frame convenience form)."""
+    dists, obs = draw_predictive(game_frame, rng, n_draws=n_draws)
+    return score_predictive(dists, obs, rng)
 
 
 #: the three distributions the per-side marginal is actually responsible for. `run_diff` is
@@ -501,17 +609,43 @@ SCORED_DISTS: tuple[str, ...] = ("total", "home_total", "away_total")
 def downstream_score(metrics: dict[str, dict[str, float]]) -> float:
     """Scalar selection metric (LOWER IS BETTER; 0 = perfectly calibrated).
 
-        Σ_{j ∈ total, home_total, away_total} ( |calib_80_j − 0.80| + PIT_maxdev_j )
+        Σ_{j ∈ total, home_total, away_total} PIT_max_decile_dev_j
 
-    Pre-registered with equal weights: miscalibrated coverage and a non-flat PIT are both
-    disqualifying for a distribution the product prices off, and neither dominates the other.
+    🩹 CORRECTED 2026-07-20 — the original metric added a `|calib_80_j − 0.80|` term and it
+    INVERTED THE RANKING. `interval_coverage` tests `y ∈ [Q10, Q90]` with INCLUSIVE bounds on an
+    INTEGER-valued predictive, so the boundary atoms are counted whole and coverage is
+    systematically inflated above the nominal 0.80. An ORACLE (truth drawn from exactly the
+    NegBin being scored, zero misspecification) measures:
+
+        total 0.823 · home_total 0.862 · away_total 0.850   ← a PERFECT model, not 0.80
+
+    So `|calib_80 − 0.80|` is minimised by a model that is genuinely TOO NARROW — it rewards
+    under-dispersion for cancelling a discreteness artefact. In the E2.1-r stage-1 bake-off that
+    handed the win to `ngboost_normal` at a score BETTER THAN THE ORACLE'S (0.1426 < 0.1624),
+    which is impossible for an honestly-calibrated model and is the tell that the metric, not
+    the model, was wrong. Its 3×-worse PIT deviation confirmed the under-dispersion
+    independently. `test_oracle_is_the_scoring_floor` is the permanent guard.
+
+    The randomised PIT (`randomized_pit`) spreads mass WITHIN each CDF step, so it is
+    discreteness-correct by construction, and PIT flatness is the STRICTER check anyway:
+    calib_80 interrogates one interval, PIT interrogates the whole distribution's shape. Hence
+    the score is PIT-only. `calib_80` is still measured and reported, and enforced as a FLOOR
+    (≥ 0.80, exactly as E2.3's shipped gate uses it) via `passes_calibration_floor` — a floor is
+    what it was always fit for; treating it as a target is what broke.
+
+    `run_diff` remains excluded — E2.2/E2.3 attributed its miss to the dropped home/away
+    dependence, which no choice of per-side marginal can repair.
     """
-    return float(
-        sum(
-            abs(metrics[j]["calib_80"] - _CALIB_TARGET) + metrics[j]["pit_max_decile_dev"]
-            for j in SCORED_DISTS
-        )
-    )
+    return float(sum(metrics[j]["pit_max_decile_dev"] for j in SCORED_DISTS))
+
+
+def passes_calibration_floor(metrics: dict[str, dict[str, float]]) -> bool:
+    """E2.3's own gate shape: every scored distribution must cover AT LEAST the nominal 80%.
+
+    A floor, never a target (see `downstream_score`) — an interval that is too wide is
+    conservative, one that is too narrow under-prices tail risk on a surface the product quotes.
+    """
+    return all(metrics[j]["calib_80"] >= _CALIB_TARGET for j in SCORED_DISTS)
 
 
 # ---------------------------------------------------------------------------
@@ -547,8 +681,9 @@ def build_folds(
     NegBin `r` on HELD-OUT residuals (E2.3's fix). It is strictly inside train, so the eval
     fold is never touched by the dispersion estimate.
     """
-    splitter = PurgedWalkForwardSplit(min_train_seasons=3)
-    folds_idx = list(splitter.split(df, feature_cols=numeric_cols))
+    with _Step("fold prologue: purged walk-forward split"):
+        splitter = PurgedWalkForwardSplit(min_train_seasons=3)
+        folds_idx = list(splitter.split(df, feature_cols=numeric_cols))
     out: list[FoldMatrices] = []
 
     for train_idx, eval_idx in folds_idx:
@@ -556,16 +691,26 @@ def build_folds(
         if eval_year == _EXCLUDE_EVAL_YEAR:
             continue
         tr, ev = df.loc[train_idx], df.loc[eval_idx]
-        means = _impute_means(tr, numeric_cols)
-        X_tr, X_ev, feat_cols = _prepare_matrix(tr, ev, numeric_cols, cat_cols, means, None)
+        _log(f"fold {eval_year}: {len(tr):,} train / {len(ev):,} eval rows", indent=1)
+
+        with _Step(f"fold {eval_year}: impute + OHE matrix", indent=2):
+            means = _impute_means(tr, numeric_cols)
+            X_tr, X_ev, feat_cols = _prepare_matrix(tr, ev, numeric_cols, cat_cols, means, None)
+            _log(f"matrix {X_tr.shape[0]:,} × {X_tr.shape[1]} features", indent=3)
 
         inner_year = int(tr["game_year"].max())
         inner_mask = (tr["game_year"] == inner_year).to_numpy()
         if inner_mask.sum() < 200 or (~inner_mask).sum() < 500:
             inner_mask = np.zeros(len(tr), dtype=bool)
             inner_mask[int(len(tr) * 0.85):] = True   # fallback: last 15% chronologically
+            _log(f"inner holdout: season split too small → last 15% chronologically", indent=3)
+        else:
+            _log(f"inner holdout: season {inner_year} ({inner_mask.sum():,} rows)", indent=3)
 
-        ranking = infold_importance(X_tr, tr[_TARGET].to_numpy(float), feat_cols)
+        # One LightGBM fit — the single slowest step of the prologue, and the one that used to
+        # run completely silently for minutes per fold.
+        with _Step(f"fold {eval_year}: in-fold importance ranking (LightGBM fit)", indent=2):
+            ranking = infold_importance(X_tr, tr[_TARGET].to_numpy(float), feat_cols)
 
         out.append(
             FoldMatrices(
@@ -654,37 +799,74 @@ def evaluate_config(
     cand = build_candidate(model_class, params)
     mode = dispersion or default_dispersion(model_class)
     rng = np.random.default_rng(seed)
+    cfg_id = f"{model_class}__{contract}__{mode}"
 
     fold_rows: list[dict] = []
     bucket_scores: list[float] = []
+    bucket_metrics: list[dict] = []
     per_side_nll: list[float] = []
     games_all: list[pd.DataFrame] = []
 
-    for fold in folds:
-        cols = resolve_contract(contract, fold.X_tr, fold.feat_cols, fold.ranking, top_k=top_k)
-        assert_market_blind(cols, context=f"{_STORY} {model_class}/{contract} fold {fold.eval_year}")
-        cols_idx = np.array([fold.feat_cols.index(c) for c in cols])
+    _log(f"CONFIG {cfg_id}  ({len(folds)} folds, {n_draws:,} draws, {n_slices} buckets/fold)")
+    for i, fold in enumerate(folds, start=1):
+        t_fold = time.time()
+        _log(f"[{i}/{len(folds)}] fold {fold.eval_year}", indent=1)
 
-        mu_ev, sigma_ev = cand.fit_predict(
-            fold.X_tr[:, cols_idx], fold.y_tr, fold.X_ev[:, cols_idx]
-        )
+        with _Step(f"contract '{contract}'", indent=2):
+            cols = resolve_contract(contract, fold.X_tr, fold.feat_cols, fold.ranking, top_k=top_k)
+            assert_market_blind(
+                cols, context=f"{_STORY} {model_class}/{contract} fold {fold.eval_year}"
+            )
+            cols_idx = np.array([fold.feat_cols.index(c) for c in cols])
+            _log(f"{len(cols)} of {len(fold.feat_cols)} features; market-blind ✅", indent=3)
+
+        # The mean fit is a NATIVE call — no Python runs inside it, so this is the step a run
+        # is most likely to be sitting in when it looks hung.
+        with _Step(f"mean fit: {model_class} on {len(fold.y_tr):,}×{len(cols)}", indent=2):
+            mu_ev, sigma_ev = cand.fit_predict(
+                fold.X_tr[:, cols_idx], fold.y_tr, fold.X_ev[:, cols_idx]
+            )
         sides_ev = fold.ev_meta["side"].to_numpy()
-        r_ev, r_info = _fit_dispersion(cand, fold, cols_idx, mode, mu_ev, sigma_ev, sides_ev)
+
+        # dispersion mode 'train'/'heldout' each cost a SECOND full fit — the usual surprise
+        # when a config takes ~2× the time the mean fit alone would suggest.
+        with _Step(f"dispersion '{mode}'" + ("" if mode == "native" else " (2nd fit)"), indent=2):
+            r_ev, r_info = _fit_dispersion(cand, fold, cols_idx, mode, mu_ev, sigma_ev, sides_ev)
+            _log(f"r → {r_info}", indent=3)
 
         nll = negbin_nll(fold.y_ev, mu_ev, float(np.median(r_ev)))
         per_side_nll.append(nll)
 
         games = _pivot_games(fold.ev_meta, mu_ev, r_ev, fold.y_ev)
         games_all.append(games)
-        metrics = convolved_metrics(games, rng, n_draws=n_draws)
-        score = downstream_score(metrics)
+        with _Step(f"convolution: {len(games):,} games × {n_draws:,} draws", indent=2):
+            dists, obs = draw_predictive(games, rng, n_draws=n_draws)
+        with _Step("calibration diagnostics", indent=2):
+            metrics = score_predictive(dists, obs, rng)
+            score = downstream_score(metrics)
 
-        # time-sliced buckets within the fold → the PBO/DSR performance matrix rows
-        slices = np.array_split(np.arange(len(games)), n_slices)
-        for sl in slices:
-            if len(sl) < 50:
-                continue
-            bucket_scores.append(downstream_score(convolved_metrics(games.iloc[sl], rng, n_draws=n_draws)))
+        # Time-sliced buckets → the PBO/DSR performance matrix rows. These SLICE the draws
+        # taken above rather than re-drawing (see draw_predictive) — the buckets are exact
+        # sub-populations of the scored fold, and cost ~nothing instead of n_slices× the
+        # convolution.
+        with _Step(f"{n_slices} PBO buckets (slicing the fold's draws)", indent=2):
+            for sl in np.array_split(np.arange(len(games)), n_slices):
+                if len(sl) < 50:
+                    continue
+                bm = score_predictive(dists, obs, rng, rows=sl)
+                bucket_scores.append(downstream_score(bm))
+                # Persist the FULL per-bucket metrics, not just the scalar. The 2026-07-20
+                # metric correction could not be applied by re-scoring because only the scalar
+                # had been stored — it forced a full re-fit of every config. Storing the raw
+                # diagnostics makes any future metric change a pure offline re-score.
+                bucket_metrics.append({j: dict(bm[j]) for j in bm})
+
+        _log(
+            f"fold {fold.eval_year} done: score {score:.5f}  "
+            f"calib80(total) {metrics['total']['calib_80']:.3f}  NLL {nll:.4f}  "
+            f"({time.time() - t_fold:.0f}s)",
+            indent=2,
+        )
 
         fold_rows.append(
             {
@@ -723,7 +905,9 @@ def evaluate_config(
         "pooled_metrics": pooled_metrics,
         "mean_per_side_negbin_nll": round(float(np.mean(per_side_nll)), 4),
         "bucket_scores": [round(float(b), 5) for b in bucket_scores],
+        "bucket_metrics": bucket_metrics,
         "n_buckets": len(bucket_scores),
+        "passes_calibration_floor": passes_calibration_floor(pooled_metrics),
     }
 
 
@@ -890,6 +1074,133 @@ def stage_optuna(args) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Verdict logic — a PURE function so it is unit-tested (the 2026-07-20 rewrite)
+#
+# The original binary PROMOTE / INCUMBENT-STANDS conflated TWO independent questions and, when
+# the incumbent FAILED the calibration floor, still printed "incumbent stands → proven best,
+# marginals unchanged" — self-contradictory (a floor-failing model cannot be the fallback). The
+# E2.1-r result forced the correction: the per-side design has two separable axes —
+#   (A) the LEARNER (mean model): the 5-way bake-off is a NULL — no learner robustly beats
+#       LightGBM; the top ~12 configs tie within ~4% and PBO over that tied cluster is HIGH
+#       (0.35) precisely because "which tied learner wins" is noise. That is the trustworthy
+#       learner null, NOT evidence the improvement is overfit.
+#   (B) the DISPERSION estimator: train-fit r (incumbent) → held-out r is a single pre-registered
+#       structural switch (E2.3's fix) that improves EVERY CV bucket, DSR→1. Held on one axis it
+#       carries no multiple-comparison exposure.
+# So the honest decision is: keep the incumbent LEARNER (A is null), promote the minimal
+# DISPERSION fix (B is robust). `decide_verdict` encodes exactly that precedence.
+# ---------------------------------------------------------------------------
+
+def _learner_of(config_id: str) -> str:
+    return config_id.split("__")[0]
+
+
+def _contract_of(config_id: str) -> str:
+    return config_id.split("__")[1]
+
+
+def decide_verdict(
+    results: list[dict], *, pbo_gate: float = _PBO_GATE, n_splits_cap: int = 16
+) -> dict[str, Any]:
+    """Turn a set of evaluated configs into a verdict. PURE (no IO) → unit-tested.
+
+    Verdict precedence:
+      1. `PROMOTE`            — a challenger beats the incumbent AND the WHOLE search is
+                                deflation-clean (PBO < gate, DSR > 0): the search cleanly
+                                identifies a single winner.
+      2. `PROMOTE_MINIMAL_FIX`— the full search is NOT clean (e.g. a tied learner cluster), but
+                                the minimal change from the incumbent — SAME learner + contract,
+                                dispersion switched to the best eligible layer — improves every
+                                bucket with DSR > 0. Promote that; the learner is left alone.
+      3. `FIX_REQUIRED`       — the incumbent FAILS the calibration floor (is broken) and no
+                                robust fix was found. Never silently keep shipping it.
+      4. `INCUMBENT_STANDS`   — the incumbent passes the floor and nothing robustly beats it
+                                (the genuine trustworthy-null case).
+    """
+    incumbent = next((r for r in results if r.get("is_incumbent")), None)
+    if incumbent is None:
+        raise ValueError("no incumbent config present")
+
+    def floor_ok(r: dict) -> bool:
+        if "passes_calibration_floor" in r:
+            return bool(r["passes_calibration_floor"])
+        return passes_calibration_floor(r["pooled_metrics"])
+
+    n_buckets = min(len(r["bucket_scores"]) for r in results)
+    perf = np.array([r["bucket_scores"][:n_buckets] for r in results], dtype=float).T
+    n_cfg = perf.shape[1]
+    n_splits = min(n_splits_cap, n_buckets - (n_buckets % 2))
+    full_pbo = float(pbo_cscv(perf, higher_is_better=False, n_splits=max(2, n_splits)).pbo)
+
+    eligible = [r for r in results if floor_ok(r)]
+    rejected = [r for r in results if not floor_ok(r)]
+    incumbent_ok = floor_ok(incumbent)
+    inc_buckets = np.array(incumbent["bucket_scores"][:n_buckets], dtype=float)
+
+    def _dsr_vs(challenger: dict, n_trials: int) -> tuple[float, bool]:
+        ch = np.array(challenger["bucket_scores"][:n_buckets], dtype=float)
+        improvement = inc_buckets - ch                 # >0 ⇔ challenger better (lower score)
+        d = float(deflated_sharpe(improvement, n_trials=max(1, n_trials), benchmark_sr=0.0).dsr)
+        return d, bool((improvement > 0).all())
+
+    # ── overall best eligible (the full-search winner) ──
+    best = min(eligible, key=lambda r: r["pooled_downstream_score"]) if eligible else None
+    full_clean = False
+    best_dsr = 0.0
+    if best is not None and best["config_id"] != incumbent["config_id"]:
+        best_gain = incumbent["pooled_downstream_score"] - best["pooled_downstream_score"]
+        best_dsr, _ = _dsr_vs(best, n_cfg)
+        full_clean = best_gain > 0 and full_pbo < pbo_gate and best_dsr > 0.0
+
+    # ── minimal change: same learner + contract, only the dispersion layer differs ──
+    inc_l, inc_c = _learner_of(incumbent["config_id"]), _contract_of(incumbent["config_id"])
+    minimal_pool = [
+        r for r in eligible
+        if _learner_of(r["config_id"]) == inc_l and _contract_of(r["config_id"]) == inc_c
+        and r["config_id"] != incumbent["config_id"]
+    ]
+    minimal_best = min(minimal_pool, key=lambda r: r["pooled_downstream_score"]) if minimal_pool else None
+    minimal_clean = False
+    minimal_dsr = 0.0
+    if minimal_best is not None:
+        # n_trials = the dispersion alternatives tried for this (learner, contract) cell — the
+        # honest deflation for a single-axis pre-registered switch, not the whole search.
+        n_disp = sum(
+            1 for r in results
+            if _learner_of(r["config_id"]) == inc_l and _contract_of(r["config_id"]) == inc_c
+        )
+        minimal_dsr, all_pos = _dsr_vs(minimal_best, n_disp)
+        minimal_gain = incumbent["pooled_downstream_score"] - minimal_best["pooled_downstream_score"]
+        minimal_clean = minimal_gain > 0 and all_pos and minimal_dsr > 0.0
+
+    if full_clean:
+        verdict, winner = "PROMOTE", best
+    elif minimal_clean:
+        verdict, winner = "PROMOTE_MINIMAL_FIX", minimal_best
+    elif not incumbent_ok:
+        verdict, winner = "FIX_REQUIRED", None
+    else:
+        verdict, winner = "INCUMBENT_STANDS", None
+
+    return {
+        "verdict": verdict,
+        "winner": winner,
+        "incumbent": incumbent,
+        "incumbent_passes_floor": incumbent_ok,
+        "best": best,
+        "minimal_best": minimal_best,
+        "full_pbo": round(full_pbo, 4),
+        "best_dsr": round(best_dsr, 4),
+        "minimal_dsr": round(minimal_dsr, 4),
+        "n_configs": n_cfg,
+        "n_buckets": n_buckets,
+        "eligible": eligible,
+        "rejected": rejected,
+        "requires_downstream_rerun": verdict in ("PROMOTE", "PROMOTE_MINIMAL_FIX"),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Stage 3 — deflate the whole search, pick the winner, write the decision
 # ---------------------------------------------------------------------------
 
@@ -898,84 +1209,92 @@ def stage_decide(args) -> None:
     if not results:
         raise SystemExit(f"[{_STORY}] no config results in {_TRIALS_DIR} — run --stage bakeoff first.")
 
-    incumbent = next((r for r in results if r.get("is_incumbent")), None)
-    if incumbent is None:
+    if not any(r.get("is_incumbent") for r in results):
         raise SystemExit(
             f"[{_STORY}] the incumbent config ({_INCUMBENT}/{_INCUMBENT_CONTRACT}/"
             f"{_INCUMBENT_DISPERSION}) is missing — it is the foil; re-run --stage bakeoff."
         )
 
-    n_buckets = min(len(r["bucket_scores"]) for r in results)
-    perf = np.array([r["bucket_scores"][:n_buckets] for r in results], dtype=float).T  # (buckets, configs)
-    n_cfg = perf.shape[1]
+    d = decide_verdict(results, pbo_gate=_PBO_GATE)
+    incumbent, best, winner = d["incumbent"], d["best"], d["winner"]
+    verdict = d["verdict"]
 
-    # PBO over the ENTIRE search (bake-off configs + every Optuna trial) — §0.5 deflation.
-    n_splits = min(16, n_buckets - (n_buckets % 2))
-    pbo = pbo_cscv(perf, higher_is_better=False, n_splits=max(2, n_splits))
+    if d["rejected"]:
+        _log(f"{len(d['rejected'])} config(s) REJECTED by the calib_80 ≥ {_CALIB_TARGET} floor:")
+        for r in sorted(d["rejected"], key=lambda x: x["pooled_downstream_score"]):
+            worst = min(r["pooled_metrics"][j]["calib_80"] for j in SCORED_DISTS)
+            inc = "  (THE INCUMBENT — it is BROKEN, not a fallback)" if r.get("is_incumbent") else ""
+            _log(f"  {r['config_id']:<46} worst calib_80 {worst:.3f}{inc}", indent=1)
+    if not d["eligible"]:
+        raise SystemExit(
+            f"[{_STORY}] every config failed the calib_80 ≥ {_CALIB_TARGET} floor — nothing to pick."
+        )
 
-    best = min(results, key=lambda r: r["pooled_downstream_score"])
-    inc_buckets = np.array(incumbent["bucket_scores"][:n_buckets], dtype=float)
-    best_buckets = np.array(best["bucket_scores"][:n_buckets], dtype=float)
-    improvement = inc_buckets - best_buckets            # >0 ⇔ the challenger is better calibrated
-    dsr = deflated_sharpe(improvement, n_trials=max(1, n_cfg), benchmark_sr=0.0)
-
-    gain = incumbent["pooled_downstream_score"] - best["pooled_downstream_score"]
-    beats = best["config_id"] != incumbent["config_id"] and gain > 0
-    deflated_ok = pbo.pbo < _PBO_GATE and dsr.dsr > 0.0
-    verdict = "PROMOTE" if (beats and deflated_ok) else "INCUMBENT STANDS"
+    gain = (
+        incumbent["pooled_downstream_score"] - winner["pooled_downstream_score"]
+        if winner else 0.0
+    )
 
     print("=" * 78)
-    print(f"{_STORY} DECISION — {n_cfg} configs, {n_buckets} buckets")
+    print(f"{_STORY} DECISION — {d['n_configs']} configs, {d['n_buckets']} buckets")
     print("=" * 78)
-    ranked = sorted(results, key=lambda r: r["pooled_downstream_score"])[:12]
-    for r in ranked:
-        tag = " ← INCUMBENT" if r.get("is_incumbent") else ""
+    for r in sorted(d["eligible"], key=lambda r: r["pooled_downstream_score"])[:12]:
+        marks = "".join([
+            " ← INCUMBENT" if r.get("is_incumbent") else "",
+            "  ★ WINNER" if winner and r["config_id"] == winner["config_id"] else "",
+        ])
         print(
             f"  {r['pooled_downstream_score']:.5f}  {r['config_id']:<44} "
             f"calib80 {r['pooled_metrics']['total']['calib_80']:.3f}"
-            f"  PITdev {r['pooled_metrics']['total']['pit_max_decile_dev']:.4f}{tag}"
+            f"  PITdev {r['pooled_metrics']['total']['pit_max_decile_dev']:.4f}{marks}"
         )
-    print(f"\n  incumbent : {incumbent['config_id']}  score {incumbent['pooled_downstream_score']:.5f}")
-    print(f"  best      : {best['config_id']}  score {best['pooled_downstream_score']:.5f}")
-    print(f"  gain      : {gain:+.5f}  (positive ⇒ better-calibrated downstream)")
-    print(f"  PBO       : {pbo.pbo:.3f}  ({'PASS' if pbo.pbo < _PBO_GATE else 'FAIL'} < {_PBO_GATE})")
-    print(f"  DSR       : {dsr.dsr:.3f}  ({'PASS' if dsr.dsr > 0 else 'FAIL'} > 0)")
+    inc_floor = "PASS" if d["incumbent_passes_floor"] else "FAIL — DISQUALIFIED"
+    print(f"\n  incumbent   : {incumbent['config_id']}  score {incumbent['pooled_downstream_score']:.5f}"
+          f"  [calib floor {inc_floor}]")
+    if winner:
+        print(f"  winner      : {winner['config_id']}  score {winner['pooled_downstream_score']:.5f}"
+              f"  (gain {gain:+.5f})")
+    print(f"  full-search PBO : {d['full_pbo']:.3f}  "
+          f"({'PASS' if d['full_pbo'] < _PBO_GATE else 'FAIL'} < {_PBO_GATE}) "
+          f"— high ⇒ the LEARNER choice is not identifiable (tied cluster), a learner NULL")
+    print(f"  minimal-fix DSR : {d['minimal_dsr']:.3f}  "
+          f"(same learner, dispersion switched; {'PASS' if d['minimal_dsr'] > 0 else 'FAIL'} > 0)")
     print(f"\n  VERDICT   : {verdict}")
-    if verdict == "PROMOTE":
-        print(
-            "  → re-emit totals_perside_v2, RE-RUN fit_totals_distribution.py to confirm the\n"
-            "    downstream gain, then register in sub_model_registry.yaml. E2.5/E2.6 need a re-run."
-        )
-    else:
-        print(
-            "  → the incumbent stands. E2.1's single-architecture choice is now a TRUSTWORTHY\n"
-            "    result (proven best over a deflated ≥3-class search), not an assumption.\n"
-            "    E2.5/E2.6 do NOT need a re-run — the marginals are unchanged."
-        )
+    _print_verdict_action(verdict, incumbent, winner)
     print("\n  Honest framing: this is a CALIBRATION result, not an edge claim (best_alpha = 0).")
+
+    def _slim(r):
+        return None if r is None else {
+            k: r.get(k) for k in
+            ("config_id", "params", "pooled_downstream_score", "pooled_metrics", "mean_per_side_negbin_nll")
+        }
 
     doc = {
         "story": _STORY,
         "decided_at": date.today().isoformat(),
-        "n_configs": n_cfg,
-        "n_buckets": n_buckets,
+        "n_configs": d["n_configs"],
+        "n_buckets": d["n_buckets"],
         "selection_metric": (
-            "sum over {total, home_total, away_total} of |calib_80 - 0.80| + PIT max decile dev "
-            "(lower is better); run_diff measured but excluded (E2.2/E2.3: dropped dependence)"
+            "sum over {total, home_total, away_total} of PIT max decile dev (lower is better); "
+            "calib_80 ≥ 0.80 enforced as a FLOOR not a target (discreteness inflates coverage — "
+            "an oracle covers ~0.82-0.86, so |calib_80-0.80| would reward under-dispersion); "
+            "run_diff measured but excluded (E2.2/E2.3: dropped dependence)"
         ),
-        "incumbent": {k: incumbent[k] for k in ("config_id", "pooled_downstream_score", "pooled_metrics", "mean_per_side_negbin_nll")},
-        "best": {k: best[k] for k in ("config_id", "params", "pooled_downstream_score", "pooled_metrics", "mean_per_side_negbin_nll")},
+        "verdict": verdict,
+        "incumbent_passes_calibration_floor": d["incumbent_passes_floor"],
+        "incumbent": _slim(incumbent),
+        "best": _slim(best),
+        "winner": _slim(winner),
         "gain_vs_incumbent": round(gain, 5),
-        "pbo": round(float(pbo.pbo), 4),
-        "dsr": round(float(dsr.dsr), 4),
+        "full_search_pbo": d["full_pbo"],
+        "best_dsr": d["best_dsr"],
+        "minimal_fix_dsr": d["minimal_dsr"],
         "gates": {
-            "beats_incumbent_downstream": bool(beats),
-            "pbo_lt_0_2": bool(pbo.pbo < _PBO_GATE),
-            "dsr_gt_0": bool(dsr.dsr > 0.0),
+            "full_search_deflated": bool(d["full_pbo"] < _PBO_GATE and d["best_dsr"] > 0.0),
+            "minimal_fix_deflated": bool(d["minimal_dsr"] > 0.0),
             "market_blind": True,
         },
-        "verdict": verdict,
-        "requires_e2_5_e2_6_rerun": verdict == "PROMOTE",
+        "requires_e2_5_e2_6_rerun": d["requires_downstream_rerun"],
         "leaderboard": [
             {
                 "config_id": r["config_id"],
@@ -983,6 +1302,10 @@ def stage_decide(args) -> None:
                 "calib_80_total": r["pooled_metrics"]["total"]["calib_80"],
                 "pit_maxdev_total": r["pooled_metrics"]["total"]["pit_max_decile_dev"],
                 "per_side_nll": r["mean_per_side_negbin_nll"],
+                "passes_floor": (
+                    r["passes_calibration_floor"] if "passes_calibration_floor" in r
+                    else passes_calibration_floor(r["pooled_metrics"])
+                ),
             }
             for r in sorted(results, key=lambda x: x["pooled_downstream_score"])
         ],
@@ -995,6 +1318,38 @@ def stage_decide(args) -> None:
     _ = args
 
 
+def _print_verdict_action(verdict: str, incumbent: dict, winner: dict | None) -> None:
+    if verdict == "PROMOTE":
+        print(
+            f"  → the search cleanly identifies a winner: re-emit {winner['config_id']} as\n"
+            "    totals_perside_v2, RE-RUN fit_totals_distribution.py, register in\n"
+            "    sub_model_registry.yaml. E2.5/E2.6 re-run."
+        )
+    elif verdict == "PROMOTE_MINIMAL_FIX":
+        print(
+            "  → TWO-AXIS result. LEARNER: the 5-way bake-off is a NULL — no learner robustly\n"
+            f"    beats the incumbent's ({_learner_of(incumbent['config_id'])}); the tied cluster's\n"
+            "    high PBO is that null, not overfitting. DISPERSION: the minimal single-axis switch\n"
+            f"    → {winner['config_id']} improves every CV bucket (DSR>0).\n"
+            "  → PROMOTE the minimal fix: KEEP the learner, switch the dispersion layer only.\n"
+            "    Re-emit totals_perside_v2 (same mean model, new dispersion), re-run\n"
+            "    fit_totals_distribution.py, register. ⚠️ Verify whether E2.5/E2.6 read the STORED\n"
+            "    dispersion or E2.3's re-calibrated r — if the latter, downstream may be unchanged."
+        )
+    elif verdict == "FIX_REQUIRED":
+        print(
+            "  → the incumbent FAILS the calibration floor (it under-covers — it is BROKEN), and\n"
+            "    no deflation-clean fix was found among the evaluated configs. Do NOT keep shipping\n"
+            "    it. Widen the search (more dispersion candidates / Optuna) before promoting."
+        )
+    else:  # INCUMBENT_STANDS
+        print(
+            "  → the incumbent passes the calibration floor and nothing robustly beats it. Its\n"
+            "    single-architecture choice is a TRUSTWORTHY result (proven best over a deflated\n"
+            "    ≥3-class search), not an assumption. E2.5/E2.6 do NOT re-run — marginals unchanged."
+        )
+
+
 def _render_md(doc: dict) -> str:
     lines = [
         f"# {_STORY} — Per-side count-model bake-off (revisit of the single-architecture E2.1)",
@@ -1003,11 +1358,19 @@ def _render_md(doc: dict) -> str:
         "",
         "## Verdict",
         "",
-        f"**{doc['verdict']}** — best `{doc['best']['config_id']}` vs incumbent "
-        f"`{doc['incumbent']['config_id']}`, downstream gain `{doc['gain_vs_incumbent']:+.5f}`.",
+        f"**{doc['verdict']}**"
+        + (f" — winner `{doc['winner']['config_id']}` vs incumbent "
+           f"`{doc['incumbent']['config_id']}`, downstream gain `{doc['gain_vs_incumbent']:+.5f}`."
+           if doc.get("winner") else
+           f" — incumbent `{doc['incumbent']['config_id']}`."),
         "",
-        f"- PBO `{doc['pbo']:.3f}` ({'PASS' if doc['gates']['pbo_lt_0_2'] else 'FAIL'} < 0.2)",
-        f"- DSR `{doc['dsr']:.3f}` ({'PASS' if doc['gates']['dsr_gt_0'] else 'FAIL'} > 0)",
+        f"- incumbent passes calib_80 floor: **{'YES' if doc['incumbent_passes_calibration_floor'] else 'NO — DISQUALIFIED'}**",
+        f"- full-search PBO `{doc['full_search_pbo']:.3f}` "
+        f"({'PASS' if doc['gates']['full_search_deflated'] else 'FAIL'} < 0.2) — high ⇒ the "
+        "learner choice is a tied cluster (a learner NULL), not overfitting",
+        f"- minimal-fix DSR `{doc['minimal_fix_dsr']:.3f}` "
+        f"({'PASS' if doc['gates']['minimal_fix_deflated'] else 'FAIL'} > 0) — same learner, "
+        "dispersion switched only",
         f"- E2.5 / E2.6 re-run required: **{'YES' if doc['requires_e2_5_e2_6_rerun'] else 'NO'}**",
         "",
         "## Selection metric",
@@ -1016,13 +1379,14 @@ def _render_md(doc: dict) -> str:
         "",
         "## Leaderboard",
         "",
-        "| config | score | calib_80 (total) | PIT maxdev (total) | per-side NegBin NLL |",
-        "|---|---|---|---|---|",
+        "| config | score | calib_80 (total) | PIT maxdev (total) | per-side NegBin NLL | floor |",
+        "|---|---|---|---|---|---|",
     ]
     for r in doc["leaderboard"][:25]:
         lines.append(
             f"| `{r['config_id']}` | {r['score']:.5f} | {r['calib_80_total']:.3f} | "
-            f"{r['pit_maxdev_total']:.4f} | {r['per_side_nll']:.4f} |"
+            f"{r['pit_maxdev_total']:.4f} | {r['per_side_nll']:.4f} | "
+            f"{'✅' if r.get('passes_floor', True) else '❌'} |"
         )
     lines += [
         "",
@@ -1057,8 +1421,22 @@ def main() -> None:
     ap.add_argument("--n-draws", type=int, default=_DEFAULT_DRAWS)
     ap.add_argument("--n-slices", type=int, default=4, help="PBO buckets per CV fold.")
     ap.add_argument("--max-folds", type=int, default=None, help="Cap folds (smoke runs).")
+    ap.add_argument("--n-jobs", type=int, default=None,
+                    help="Learner thread cap (LightGBM/XGBoost/CatBoost). Pair with the "
+                         "E2_1R_THREADS env var to also cap BLAS — uncapped, the two "
+                         "oversubscribe the CPU and a fine fit crawls.")
     ap.add_argument("--seed", type=int, default=_SEED)
     args = ap.parse_args()
+
+    set_n_jobs(args.n_jobs)
+    _log(
+        f"{_STORY} start · stage={args.stage or 'assemble'} "
+        f"· n_jobs={args.n_jobs or 'default'} · BLAS cap={_THREAD_CAP or 'default'} · pid={os.getpid()}"
+    )
+    # A native OpenMP/BLAS fit does not run Python, so Ctrl-C is QUEUED until the call returns —
+    # on a long fit that reads as "it won't die". `kill -9 <pid>` is the reliable stop; the pid
+    # is logged above precisely so it is to hand.
+    _log("Ctrl-C lands only between native fits — to stop immediately: kill -9 " + str(os.getpid()))
 
     if args.assemble:
         assemble_cache(args.min_year, source=args.source)
