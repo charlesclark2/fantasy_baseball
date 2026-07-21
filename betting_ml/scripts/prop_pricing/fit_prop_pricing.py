@@ -275,7 +275,8 @@ def load_frame_cached(min_year: int, max_year: int, *, refresh: bool = False,
     key = f"e5_2_strikeout_frame_{min_year}_{max_year}"
     loader = load_frame_s3 if use_s3 else load_frame
     df = get_cached_df(key, lambda: loader(min_year, max_year),
-                       max_age_hours=max_age_hours, refresh=refresh)
+                       max_age_hours=max_age_hours, refresh=refresh,
+                       source_label="the S3 lakehouse" if use_s3 else "Snowflake")
     df["game_date"] = pd.to_datetime(df["game_date"], errors="coerce")     # parquet round-trip safety
     return df.reset_index(drop=True)
 

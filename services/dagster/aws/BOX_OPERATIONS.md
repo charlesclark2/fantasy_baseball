@@ -134,7 +134,7 @@ The E11.1 cutover left a class of RUNTIME failures CI can't see (it mocks all IO
 > 🟥 **RUNTIME GATE:** the "Intended" column is the target; the box's ACTUAL state is only verifiable ON the box. After any change here, confirm on the box (`docker compose … exec -T dagster-codeloc env | grep <FLAG>`, and Dagit → Sensors/Schedules) — CI cannot see it.
 
 ### 10a. Serving-critical env flags — must be permanently `1` on the box
-These four are enforced by `check_monitors_healthy_op` (an unset one = a silently-gated-off refresh):
+These are enforced by `check_monitors_healthy_op` (an unset one = a silently-gated-off refresh):
 
 | Flag | Intended | Why (incident) |
 |---|---|---|
@@ -142,6 +142,7 @@ These four are enforced by `check_monitors_healthy_op` (an unset one = a silentl
 | `LINEUP_INTRADAY_S3_REBUILD` | **`1`** | The intraday lineup-confirm re-score reaches the S3 W8b feature parquet (the 824819 loop). Off → a confirmed lineup never re-scores. |
 | `W8A_LAKEHOUSE_S3` | **`1`** | Feature layer + EB posteriors served from S3 (cut over 2026-06-30). |
 | `W8B_LAKEHOUSE_S3` | **`1`** | Serving pregame aggregator served from S3 (cut over 2026-06-30). |
+| `LINEUP_MONITOR_S3` | **`1`** | E11.20 phase-2a: lineup-monitor detection tick reads S3+DynamoDB, not Snowflake (kills the ~10-min COMPUTE_WH wake). Flipped + converged 2026-07-20. Off → detection wakes the warehouse every tick. ⚠️ Rollback (a soak regression) = set `0` AND remove from the enforced set, else this heartbeat false-pages. |
 
 ### 10b. Other cutover / gating flags — intended state (NOT auto-enforced; confirm per cutover)
 | Flag | Intended | Note |

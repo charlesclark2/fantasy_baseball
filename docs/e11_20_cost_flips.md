@@ -148,6 +148,9 @@ Two findings that overturn the planned change:
    buckets-vs-queries trap §2/F1 already paid for once. The real prerequisite is flipping the
    `monthly_schedule` RAW WRITER to S3 (the W11 Tier-A pattern), which retires both the native write
    and the export bridge. That is the next story, and it must land *before* the refresh leg is cut.
+   **Design worked out in `docs/monthly_schedule_s3_flip_design.md`** (exact 2-col S3 contract, the
+   INC-20 latest-per-month retention replicated as a same-month prune, the lean `schedule-capture`
+   image S3-capability decision, the consumer audit, and the box runtime gate).
 2. **The tick's dbt leg is load-bearing, not waste.** `intraday_lineup_rebuild`'s Snowflake branch
    for `stg_statsapi_lineups_wide` is `materialized='table'` — the observed
    `create or replace transient table ... as (...)` at **84.8s over 20 runs**, not a view no-op. Its
@@ -163,6 +166,15 @@ on deploying the `lineup_predict` S3 mirror (see §5b), not on new code. The K-w
 removes a further ~9 wake-minutes/9h (four query shapes, all confirmed present in `query_history`
 before the change).
 
+**Box verification (post-deploy, 2026-07-20):** both writers ran clean in `dagster-codeloc` —
+K projections scored 30 starters, zone overlays found **234 pairs** (up from 189 as more lineups
+posted). ⚠️ **The K run prints `[cache] MISS … — pulling from Snowflake...` and this is a LIE** —
+that string was hardcoded in `betting_ml/utils/training_cache.get_cached_df` regardless of the
+loader passed in. The tell that S3 really was used is the ROW COUNT: **26,918** (Snowflake returns
+26,930 — the ×4 zombie fan-out). Fixed: `get_cached_df` now takes a `source_label` defaulting to
+the neutral `"source"`, and `load_frame_cached` passes `"the S3 lakehouse"` / `"Snowflake"`. A
+hardcoded source name in a shared cache helper is a future misdiagnosis waiting to happen.
+
 ### 5b. lineup_monitor flip gate — RUN, and its result
 
 `scripts/parity_check_lineup_monitor.py`, 2026-07-20 21:21 UTC (mid-interval, 10 games posted):
@@ -172,7 +184,26 @@ candidates      : SF=10  S3=10     ✅  (incl. min_slots_filled + starters — t
 post_lineup set : SF=10  S3=0      ❌
 ```
 
-**The mismatch is expected and is NOT a defect** — it is the un-deployed image, not the code. The
+**✅ RE-RUN POST-DEPLOY (same day) — PARITY PASSED: candidates 13=13, post_lineup 13=13.** The
+deploy was the entire fix, exactly as diagnosed below.
+
+**✅ FLIPPED + CONVERGED 2026-07-20 22:11–22:35 UTC.** `LINEUP_MONITOR_S3=1` set in the box `.env`,
+`up -d`, live container env verified `1`.
+
+⚠️ **Expect a ONE-TIME re-trigger wave on any mid-day state-backend switch.** `lineup_monitor.py`
+branches `if pk not in already_triggered: trigger` FIRST — the `games_with_post_lineup` guard only
+covers the `elif`. DynamoDB starts empty while the day's triggers live in Snowflake
+`lineup_monitor_state`, so every still-`Preview` complete-lineup game re-triggers once. Observed
+exactly: the 22:17 run fired all **13** games = the precise union of everything triggered
+19:15→21:37. Benign and self-limiting (the trigger writes the state item). Convergence confirmed —
+no run after 22:17 despite eligible `Preview` candidates, DynamoDB Count stable at 13.
+
+**Discriminator vs the INC-32 loop**, both visible in one `dagster_runs.py` output: INC-32 = the
+SAME pk every tick forever (7/19 `823523` × 10+); healthy = each pk once as its lineup completes,
+plus one wave at the switch. 🔧 On the BOX that script needs
+`DAGSTER_GRAPHQL_URL=http://localhost:3000/graphql` — the default public Caddy URL returns 401.
+
+**The original mismatch was expected and NOT a defect** — it was the un-deployed image, not the code. The
 `lineup_predict` → `export_w6_raw_to_s3.py --table daily_model_predictions` mirror is committed but
 the box still runs the pre-mirror baked image, so today's post_lineup rows cannot be in S3 yet.
 Confirmed in the parquet: 7/17–7/19 all carry post_lineup rows (mirrored by the next morning's
