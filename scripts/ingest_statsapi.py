@@ -71,7 +71,7 @@ import os
 import sys
 import time
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import requests
 import snowflake.connector
@@ -362,7 +362,7 @@ def load_venue_ids_from_file(path: str) -> list[int]:
 # ── Subcommand runners ────────────────────────────────────────────────────────
 
 def run_schedule(
-    conn: snowflake.connector.SnowflakeConnection,
+    conn: snowflake.connector.SnowflakeConnection | None,
     start: date,
     end: date,
     capture_reason: str = "daily_full_month",
@@ -370,10 +370,33 @@ def run_schedule(
     months = list(iter_months(start, end))
     total  = len(months)
 
-    log.info(
-        "Schedule ingest: %d month(s) from %s to %s (capture_reason=%s)",
-        total, start.strftime("%Y-%m"), end.strftime("%Y-%m"), capture_reason,
+    # E11.20 phase-2a — gated Snowflake→S3 dual-write for monthly_schedule. This retires the
+    # `export_odds_raw_to_s3.py --source monthly_schedule` bridge (which read Snowflake on every
+    # 30-min capture tick), making the tick's SCHEDULE capture Snowflake-free. Shared
+    # W11_RAW_WRITE_MODE switch (default 'snowflake' = the SF INSERT only, unchanged) — so merging
+    # this is a no-op until the operator sets 'both' (dual-write for the parity soak) then 's3'.
+    # LAZY import (mirrors run_venues): the schedule-capture image copies this script; it is now
+    # S3-capable (boto3/pyarrow + scripts/utils), but the import stays function-local so an import
+    # cost is only paid when the writer actually runs. See docs/monthly_schedule_s3_flip_design.md.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from utils.lakehouse_raw_writer import (
+        lakehouse_write_legs,
+        prune_same_month_partitions,
+        w11_write_mode,
+        write_raw_rows_s3,
     )
+    do_sf, do_s3 = lakehouse_write_legs(w11_write_mode())
+
+    log.info(
+        "Schedule ingest: %d month(s) from %s to %s (capture_reason=%s)  [sf=%s s3=%s]",
+        total, start.strftime("%Y-%m"), end.strftime("%Y-%m"), capture_reason, do_sf, do_s3,
+    )
+
+    # ONE ISO-UTC stamp shared by every month row this fire → the flatten's
+    # latest-ingestion-per-game_pk dedup treats the whole fire as one atomic snapshot (the
+    # public_betting_mirror_rows pattern). The dt= partition is this stamp's date (today, UTC).
+    fire_ts = datetime.now(timezone.utc).isoformat()
+    mirror_rows: list[dict] = []
 
     for idx, (month_start, month_end) in enumerate(months, start=1):
         label = month_start.strftime("%Y-%m")
@@ -393,13 +416,31 @@ def run_schedule(
         games_cnt = extract_games_count(payload)
         log.info("  %d game(s) found", games_cnt)
 
-        try:
-            insert_month(conn, month_start, month_end, games_cnt, payload, capture_reason)
-            log.info("  Inserted to Snowflake")
-        except Exception as exc:
-            log.error("  Snowflake write failed for %s: %s — skipping", label, exc)
+        if do_sf:
+            try:
+                insert_month(conn, month_start, month_end, games_cnt, payload, capture_reason)
+                log.info("  Inserted to Snowflake")
+            except Exception as exc:
+                log.error("  Snowflake write failed for %s: %s — skipping", label, exc)
+
+        if do_s3:
+            # Schema mirrors the export bridge EXACTLY (export_odds_raw_to_s3 SOURCES): ingestion_ts
+            # (ISO VARCHAR) + json_field (dict → JSON string by rows_to_arrow_table). One row/month.
+            mirror_rows.append({"ingestion_ts": fire_ts, "json_field": payload})
 
         time.sleep(REQUEST_DELAY)
+
+    if do_s3 and mirror_rows:
+        today_dt = fire_ts[:10]
+        n_s3 = write_raw_rows_s3("monthly_schedule", mirror_rows, mode="overwrite_partition")
+        # INC-20 latest-per-month retention, replicated live: collapse any earlier same-month
+        # snapshot to just today's. Prior months are untouched (never re-fetched here).
+        pruned = prune_same_month_partitions("monthly_schedule", today_dt)
+        log.info(
+            "  mirrored %d month(s) → S3 lakehouse_raw/monthly_schedule/dt=%s/ "
+            "(pruned %d stale same-month partition(s): %s)",
+            n_s3, today_dt, len(pruned), pruned,
+        )
 
     log.info("Schedule ingest complete — processed %d month(s)", total)
 
@@ -526,8 +567,19 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = build_parser().parse_args()
 
-    log.info("Connecting to Snowflake (%s.%s)", TARGET_DATABASE, TARGET_SCHEMA)
-    conn = get_snowflake_connection()
+    # E11.20 phase-2a — open a Snowflake session ONLY when the SF write leg is live. In 's3' mode
+    # the whole point is to NOT wake the warehouse (the connect IS the wake), so a mandatory
+    # connection here would defeat the flip. 'snowflake'/'both' still connect exactly as before.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from utils.lakehouse_raw_writer import lakehouse_write_legs, w11_write_mode
+    do_sf, _ = lakehouse_write_legs(w11_write_mode())
+
+    conn = None
+    if do_sf:
+        log.info("Connecting to Snowflake (%s.%s)", TARGET_DATABASE, TARGET_SCHEMA)
+        conn = get_snowflake_connection()
+    else:
+        log.info("W11_RAW_WRITE_MODE=%s → S3-only; skipping the Snowflake connection.", w11_write_mode())
 
     try:
         if args.command == "schedule":
@@ -552,8 +604,9 @@ def main() -> None:
             run_venues(conn, venue_ids)
 
     finally:
-        conn.close()
-        log.info("Snowflake connection closed")
+        if conn is not None:
+            conn.close()
+            log.info("Snowflake connection closed")
 
 
 if __name__ == "__main__":

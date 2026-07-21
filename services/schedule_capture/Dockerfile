@@ -22,14 +22,25 @@ RUN pip install --no-cache-dir \
     snowflake-connector-python \
     cryptography \
     python-dotenv \
-    tzdata
+    tzdata \
+    boto3 \
+    pyarrow
     # tzdata (INC-22): the slim image ships no system zoneinfo DB, so entrypoint.sh's
     # zoneinfo('America/Los_Angeles') baseball-day resolution needs the tzdata wheel.
+    # boto3 + pyarrow (E11.20 phase-2a): ingest_statsapi.py now imports utils.lakehouse_raw_writer
+    # (pyarrow at module load; boto3 at S3-write time) to gate the monthly_schedule S3 dual-write on
+    # W11_RAW_WRITE_MODE. Made S3-CAPABLE (not overridden to SF-only) so the flag can never reach
+    # this env_file image and break it — the odds-capture landmine cure (2026-07-05). This is a
+    # dormant fallback (the Dagster intraday_schedule_capture schedules own the tick), but it stays
+    # correct if reactivated. See docs/monthly_schedule_s3_flip_design.md.
 
 WORKDIR /app
 
-# ingest_statsapi.py is self-contained (stdlib + pip deps above; no betting_ml/pipeline imports).
+# ingest_statsapi.py + utils.lakehouse_raw_writer are self-contained (stdlib + the pip deps above;
+# NO betting_ml/pipeline/pandas imports — enforced by test_lean_capture_images_selfcontained.py).
 COPY scripts/ingest_statsapi.py ./
+COPY scripts/utils/__init__.py ./utils/__init__.py
+COPY scripts/utils/lakehouse_raw_writer.py ./utils/lakehouse_raw_writer.py
 COPY services/schedule_capture/trigger_dbt.py ./
 COPY services/schedule_capture/entrypoint.sh ./
 RUN chmod +x entrypoint.sh

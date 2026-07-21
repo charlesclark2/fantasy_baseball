@@ -280,7 +280,10 @@ services:
     image: credence-schedule-capture:latest
     env_file: [.env]
     environment:
-      AWS_DEFAULT_REGION: us-east-1
+      # us-east-2 = the lakehouse bucket's region (E11.20 phase-2a): the monthly_schedule S3
+      # dual-write (write_raw_rows_s3 → make_s3_client) reads AWS_DEFAULT_REGION, and the artifacts
+      # bucket is us-east-2. (Nothing else here needs a region; the SF/dbt-trigger paths ignore it.)
+      AWS_DEFAULT_REGION: us-east-2
       DBT_RUNNER_URL: http://dbt-runner:8080   # triggers the lineup-staging rebuild
     profiles: [capture]
     restart: "no"
