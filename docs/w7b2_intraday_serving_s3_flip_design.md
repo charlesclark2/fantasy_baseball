@@ -1,13 +1,28 @@
 # Design — W7b-2: flip the INTRADAY serving + post_lineup predict to `--s3`
 
-**Status:** SCOPED (2026-07-20). Not implemented. This is the LAST code gate before E11.20 phase-2a
-step 3 (deleting the capture tick's `refresh_w1_external_tables` + `intraday_lineup_rebuild` SF legs)
-can be done — the consumer audit (`monthly_schedule_s3_flip_design.md`) narrowed the game-hours
-SF-view readers to exactly the two scripts this flip moves.
+**Status:** BUILT default-OFF (2026-07-20); operator flip + box soak PENDING. This is the LAST code
+gate before E11.20 phase-2a step 3 (deleting the capture tick's `refresh_w1_external_tables` +
+`intraday_lineup_rebuild` SF legs) can be done — the consumer audit
+(`monthly_schedule_s3_flip_design.md`) narrowed the game-hours SF-view readers to exactly the two
+scripts this flip moves.
 
 **Serving-criticality: HIGH** (the live post_lineup picks + the intraday game-detail/book-odds
 blobs). Merge bar for the FLIP = a real box run (RUNTIME GATE). The CODE is default-OFF, so merging is
 a runtime no-op.
+
+**BUILT (this PR — a runtime no-op until `W7B_INTRADAY_S3=1` AND `W6_LAKEHOUSE_INTRADAY=1`):**
+- `_w7b_intraday_serving_on()` / `_w7b_intraday_s3_args()` (`pipeline/ops/daily_ingestion_ops.py`) —
+  gate on BOTH flags (truth-table verified: `--s3` only when both `1`).
+- `write_serving_store_intraday_op` appends the gated `--s3` (+ a loud log when `W7B_INTRADAY_S3=1`
+  but `W6` is off, so the flip can't silently no-op).
+- `lineup_predict` (`pipeline/ops/sensor_ops.py`) appends the same gated `--s3`. `predict_today --s3`
+  is READS-only (daily_model_predictions/prediction_log still WRITE to Snowflake + the S3 mirror), so
+  predict-`--s3`+serving-either stays consistent, and the predict write staying on SF is the
+  triggered-job wake (design line: the TRIGGERED job may stay on Snowflake).
+- Tests: `betting_ml/tests/test_cost_wake_gates.py::TestW7b2IntradayServingS3` (4, source-inspection —
+  fast-gate-safe). Fast gate green.
+
+**REMAINING (operator, box):** the runtime gate + soak (below); then E11.20 phase-2a step 3.
 
 ---
 

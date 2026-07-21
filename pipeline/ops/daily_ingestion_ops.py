@@ -156,6 +156,29 @@ def _w7b_s3_args() -> list[str]:
     return ["--s3"] if _w7b_serving_on() else []
 
 
+def _w7b_intraday_serving_on() -> bool:
+    # E11.20 phase-2a W7b-2: the INTRADAY predict + serving path (lineup_monitor_job's
+    # lineup_predict + write_serving_store_intraday_op) reads S3 instead of the Snowflake staging
+    # VIEWS — the last game-hours SF-view readers (per the monthly_schedule_s3_flip_design consumer
+    # audit), so this unblocks deleting the capture tick's ext-refresh + dbt-staging legs (step 3).
+    #
+    # SEPARATE default-OFF gate from W7B_LAKEHOUSE_S3 (which is enforced-ON for the morning/daily
+    # path): flipping the serving-critical post_lineup path deserves its own soak, and merging must
+    # be a runtime no-op. Instant rollback = unset W7B_INTRADAY_S3.
+    #
+    # COUPLED to W6_LAKEHOUSE_INTRADAY: the serving write includes --book-odds, whose --s3 read of
+    # mart_odds_outcomes is only intraday-FRESH when the W6 intraday rebuild is on. Without it the
+    # blob would serve stale morning odds AND clobber write_book_odds_op's fresh SF write (the
+    # 2026-07-03 line-movement-freeze class — write_book_odds_op guards its own --s3 the same way).
+    # Also depends on LINEUP_INTRADAY_S3_REBUILD=1 (s2b, enforced) keeping the S3 features fresh.
+    return os.environ.get("W7B_INTRADAY_S3") == "1" and os.environ.get("W6_LAKEHOUSE_INTRADAY") == "1"
+
+
+def _w7b_intraday_s3_args() -> list[str]:
+    """`--s3` for the intraday predict + serving callers, gated by W7b-2 (see _w7b_intraday_serving_on)."""
+    return ["--s3"] if _w7b_intraday_serving_on() else []
+
+
 def _w8a_serving_on() -> bool:
     # E11.1-W8a: the cutover switch. When 1, the Snowflake dbt build's else branches read the
     # W8a lakehouse_ext external tables (the upstream feature layer + EB posteriors compute on
@@ -1633,14 +1656,21 @@ def write_serving_store_intraday_op(context):
     once-daily daily_ingestion_job. This variant cuts each intraday fire to the
     three sections that actually change when a lineup or odds update posts.
 
-    E11.1-W7b: this INTRADAY path stays on Snowflake in W7b-1 (no --s3). The export-mirror is
-    daily-cadence (a full-history feature re-export every ~10-min intraday fire is too costly),
-    and today's lineup-driven feature freshness needs the W6-style _current-bucket split or the
-    W7b-2 DuckDB feature build → so the daily morning path goes S3 first; the intraday/post-lineup
-    serving path is the documented W7b remaining tail. (The request-path last-resort that serves
-    these intraday picks IS direct-S3 — it reads the daily-mirrored parquet + the W6 intraday odds.)
+    E11.20 phase-2a (W7b-2): the intraday path reads S3 when W7B_INTRADAY_S3=1 AND
+    W6_LAKEHOUSE_INTRADAY=1 (see _w7b_intraday_serving_on). The W7b-1 blocker — "intraday feature
+    freshness needs the W7b-2 DuckDB feature build" — is closed by lineup_intraday_s3_feature_rebuild
+    (s2b, --w8b-only, enforced via LINEUP_INTRADAY_S3_REBUILD), which rebuilds the S3 W8b feature
+    parquet upstream of predict. Default-OFF gate so merging is a no-op; instant rollback = unset the
+    flag. See docs/w7b2_intraday_serving_s3_flip_design.md.
     """
-    _run_script(context, "write_serving_store.py", ["--picks", "--game-detail", "--book-odds"])
+    s3_args = _w7b_intraday_s3_args()
+    if os.environ.get("W7B_INTRADAY_S3") == "1" and not s3_args:
+        context.log.warning(
+            "W7B_INTRADAY_S3=1 but W6_LAKEHOUSE_INTRADAY!=1 — intraday serving stays on Snowflake "
+            "(the --book-odds --s3 read needs the W6 intraday odds rebuild, or it serves stale odds "
+            "and clobbers write_book_odds_op). Set W6_LAKEHOUSE_INTRADAY=1 to complete the W7b-2 flip."
+        )
+    _run_script(context, "write_serving_store.py", ["--picks", "--game-detail", "--book-odds", *s3_args])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
