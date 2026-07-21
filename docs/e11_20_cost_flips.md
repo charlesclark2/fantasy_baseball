@@ -153,10 +153,17 @@ Two findings that overturn the planned change:
    image S3-capability decision, the consumer audit, and the box runtime gate).
 2. **The tick's dbt leg is load-bearing, not waste.** `intraday_lineup_rebuild`'s Snowflake branch
    for `stg_statsapi_lineups_wide` is `materialized='table'` — the observed
-   `create or replace transient table ... as (...)` at **84.8s over 20 runs**, not a view no-op. Its
-   consumers (`write_serving_store_intraday_op`, which still runs WITHOUT `--s3` per W7b-1, plus
-   `picks.py` and `predict_today.py`) read those Snowflake objects on the live slate. Dropping the
-   rebuild would stale the intraday serving path for no credit gain.
+   `create or replace transient table ... as (...)` at **84.8s over 20 runs**, not a view no-op.
+   Its game-hours consumers are the two W7b-2-tail scripts — `write_serving_store_intraday_op` and
+   the tick's `lineup_predict`→`predict_today.py`, both still WITHOUT `--s3` — so dropping the rebuild
+   would stale the intraday serving path for no credit gain. (The 2026-07-20 consumer audit —
+   `monthly_schedule_s3_flip_design.md` — CORRECTS an earlier note that listed `picks.py` here: the
+   live backend reads the S3 parquet directly via `lakehouse_query`, not the SF table. So the tick's
+   two SF legs are pinned by W7b-2 ALONE: flip those two scripts to `--s3` and the legs can be deleted.
+   **W7b-2 is SCOPED — `docs/w7b2_intraday_serving_s3_flip_design.md`**: its W7b-1 blocker is already
+   closed by the enforced-ON `lineup_intraday_s3_feature_rebuild` (the "W7b-2 DuckDB feature build");
+   the flip = a new default-OFF `W7B_INTRADAY_S3` gate on the 2 scripts, with `W6_LAKEHOUSE_INTRADAY=1`
+   a hard prereq for the book-odds leg.)
 
 **What DOES bank now, in measured order:** `lineup_monitor` is the largest single remaining waker
 (~21–22 distinct wake-minutes per 9h across four query shapes: the candidates join, the
