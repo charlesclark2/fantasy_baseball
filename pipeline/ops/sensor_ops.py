@@ -347,6 +347,14 @@ def lineup_predict(context: OpExecutionContext) -> None:
     args = ["--prediction-type", "post_lineup", "--lineup-confirmed", "--notify"]
     if game_pks:
         args += ["--game-pks", game_pks]
+    # E11.20 phase-2a (W7b-2): read features/marts from S3 instead of the Snowflake staging views
+    # when the flip is on. The S3 features are kept intraday-fresh by lineup_intraday_s3_feature_
+    # rebuild (s2b) upstream in this job; predict still WRITES daily_model_predictions to Snowflake
+    # (--s3 is reads-only) + mirrors to S3, so serving reads consistent picks either way. Shares the
+    # daily-ops gate helper (default-OFF W7B_INTRADAY_S3 + W6_LAKEHOUSE_INTRADAY). Instant rollback =
+    # unset the flag. See docs/w7b2_intraday_serving_s3_flip_design.md.
+    from pipeline.ops.daily_ingestion_ops import _w7b_intraday_s3_args
+    args += _w7b_intraday_s3_args()
     _run_script(context, "predict_today.py", args)
 
     # E11.20 phase-2a (2026-07-20) — MIRROR the just-written post_lineup rows to S3.

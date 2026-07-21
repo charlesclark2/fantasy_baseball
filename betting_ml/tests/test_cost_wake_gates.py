@@ -30,6 +30,8 @@ REPO = Path(__file__).resolve().parents[2]
 SENSOR = (REPO / "pipeline" / "sensors" / "lineup_monitor_sensor.py").read_text()
 INTRADAY = (REPO / "pipeline" / "ops" / "intraday_ops.py").read_text()
 CRONTAB = (REPO / "services" / "dagster" / "aws" / "capture.crontab").read_text()
+DAILY_OPS = (REPO / "pipeline" / "ops" / "daily_ingestion_ops.py").read_text()
+SENSOR_OPS = (REPO / "pipeline" / "ops" / "sensor_ops.py").read_text()
 
 
 class TestLineupMonitorHorizonGate:
@@ -101,4 +103,45 @@ class TestBookOddsIntradayS3:
             "the base args must stay --book-odds --game-detail with --s3 appended "
             "conditionally (hardcoding --s3 breaks pre-cutover boxes; dropping it "
             "re-opens ~15 SF warehouse-waking sessions/day through game hours)."
+        )
+
+
+class TestW7b2IntradayServingS3:
+    """E11.20 phase-2a W7b-2 — the intraday predict + serving read S3 instead of the Snowflake
+    staging views (the last game-hours SF-view readers), gated default-OFF so merging is a no-op
+    and the flip soaks independently of the enforced-ON morning/daily W7B_LAKEHOUSE_S3."""
+
+    def _helper(self) -> str:
+        return DAILY_OPS[DAILY_OPS.find("def _w7b_intraday_serving_on"):DAILY_OPS.find("def _w8a_serving_on")]
+
+    def test_gate_is_separate_default_off_flag(self):
+        assert 'os.environ.get("W7B_INTRADAY_S3") == "1"' in self._helper(), (
+            "W7b-2 must gate on its OWN default-OFF W7B_INTRADAY_S3, NOT reuse the enforced-ON "
+            "W7B_LAKEHOUSE_S3 — reusing it would flip the serving-critical intraday path on merge "
+            "with no soak."
+        )
+
+    def test_gate_requires_w6_intraday_for_book_odds_freshness(self):
+        assert re.search(
+            r'W7B_INTRADAY_S3.*==\s*"1"\s+and\s+os\.environ\.get\("W6_LAKEHOUSE_INTRADAY"\)\s*==\s*"1"',
+            self._helper()), (
+            "the intraday serving --s3 must require W6_LAKEHOUSE_INTRADAY too — its --book-odds leg "
+            "reads mart_odds_outcomes, only intraday-fresh when the W6 rebuild is on; else it serves "
+            "stale morning odds and clobbers write_book_odds_op (the 2026-07-03 freeze class)."
+        )
+
+    def test_intraday_serving_op_appends_the_gated_args_not_hardcoded_s3(self):
+        body = DAILY_OPS[DAILY_OPS.find("def write_serving_store_intraday_op"):
+                         DAILY_OPS.find("def finalize_prior_slate_game_detail_op")]
+        assert "_w7b_intraday_s3_args()" in body, (
+            "write_serving_store_intraday_op must append the W7b-2 gated --s3 args, so the flip is "
+            "flag-controlled (instant rollback) not a hardcoded read-path change."
+        )
+        assert '"--picks", "--game-detail", "--book-odds"' in body, "the base intraday args must stay"
+
+    def test_lineup_predict_appends_the_gated_args(self):
+        body = SENSOR_OPS[SENSOR_OPS.find("def lineup_predict"):SENSOR_OPS.find("def lineup_dbt_clv_rebuild")]
+        assert "_w7b_intraday_s3_args()" in body, (
+            "lineup_predict (the tick's post_lineup predict) must append the W7b-2 gated --s3 args — "
+            "it is one of the two game-hours SF-view readers the flip moves off Snowflake."
         )

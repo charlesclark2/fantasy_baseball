@@ -157,16 +157,37 @@ consumers — retire it per that audit.
 
 ---
 
-## Consumer audit (INC-27 rule: the dbt DAG is NOT the consumer list — grep the raw path)
+## Consumer audit — DONE 2026-07-20 (INC-27 rule: grep the raw PATH + string literals, not the dbt DAG)
 
-Before dropping the SF `monthly_schedule` table or the ext-table refresh, `grep -rIn
-"statsapi.monthly_schedule"` AND grep readers of the S3 PATH/layout (`lakehouse_raw/monthly_schedule`,
-`lakehouse_ext.stg_statsapi_*`). Known consumers of the four flattened staging models (from the
-2026-07-20 grep) — every one must be confirmed reading S3, not the SF view, before step 4:
-`write_serving_store.py` (still `--s3`-gated on `W7B_LAKEHOUSE_S3`), `picks.py`, `predict_today.py`,
-`generate_matchup_signals.py`, plus the app/backend routers. The dbt staging rebuild in the tick
-(`intraday_lineup_rebuild` — `stg_statsapi_lineups_wide` is `materialized='table'`, an 84.8s CTAS)
-stays until those SF-view readers are cut to DuckDB; it is load-bearing, not waste (§5a).
+`grep -rIn "betting\.stg_statsapi_{games,lineups,lineups_wide,probable_pitchers}"` across `.py`/`.sql`
++ string literals, classified by whether the reader is on the **game-hours / tick cadence** (only those
+pin the tick's SF legs). Result — the SF-view readers narrow to **exactly two**, both the known W7b-2
+tail:
+
+| Consumer class | Reads the SF staging views? | Gates the tick's SF legs? |
+|---|---|---|
+| **Live backend** `picks.py` / `bets.py` / `parlay.py` | **No** — `lakehouse_query` (`app/backend/services/lakehouse_read.py`) strips the `baseball_data.betting.` prefix and registers each name as a DuckDB view over `read_parquet(LAKEHOUSE/<t>/**/*.parquet)`. Zero-Snowflake request path; reads the S3 PARQUET directly (doesn't even need the ext-table refresh). | **No** |
+| `write_serving_store_intraday_op` (→ `write_serving_store.py`, **no `--s3`**, W7b-1) | **Yes** (SF views) — its `--s3` branch resolves the same FQNs to the S3 lakehouse but the intraday op doesn't pass it. | **YES — W7b-2** |
+| `lineup_predict` (→ `predict_today.py`, **no `--s3`**) | **Yes** (SF views — `_META_SERVE_QUERY` et al.). The MORNING predict passes `--s3`; the intraday post_lineup one does not. | **YES — W7b-2** |
+| `lineup_monitor.py` | No — S3+DynamoDB under `LINEUP_MONITOR_S3=1` (flipped 2026-07-20). | No |
+| `generate_matchup_signals.py` | No — `.replace(...)` → bare DuckDB names over S3. | No |
+| Deprecated Streamlit `app/pages/*` | Yes, but **NOT SHIPPED** (CLAUDE.md — do not edit). | No |
+| Offline / daily / training / backfill (`train_*`, `build_ip_*`, `compute_clv_monitoring`, `backfill_*`, `settle_user_bets`, `ingest_weather`, `odds_api_ingestion`, `starter_v1/*`, `a1_pipeline_timing_audit`, `check_prediction_coverage`, `write_api_cache`) | Yes (SF views) | **No** — daily/offline cadence, served by the DAILY ext-refresh (run_w1 / daily job), not the 30-min tick. |
+
+**Conclusion — step 3 (E11.20 phase-2a) is gated on the monthly_schedule writer flip (built) + W7b-2 only.**
+W7b-2 = flip the two intraday serving-path scripts to `--s3`: `write_serving_store_intraday_op` and the
+tick's `lineup_predict`→`predict_today.py`. Once both read the S3 parquet (as the backend already does),
+NO game-hours consumer reads the SF staging views, so the tick's `refresh_w1_external_tables` +
+`intraday_lineup_rebuild` (dbt) legs can be DELETED. The tick then = capture(writer→S3) + `--w3pre` +
+`--w7b` (the S3-parquet builds the backend/serving read — these STAY), fully Snowflake-free.
+Note this REFINES the §5a "the dbt leg is load-bearing" claim: it is load-bearing for the two W7b-2
+scripts, **not** for `picks.py` (which reads S3 parquet, not the SF table). The SF views/table simply
+lag to daily cadence intraday after step 3 — fine, since nothing reads them intraday post-W7b-2.
+
+⚠️ Before DROPPING the SF `monthly_schedule` table (a later step, not the tick delete): the daily/offline
+class above still reads the SF `stg_statsapi_*` VIEWS, which flatten the SF `monthly_schedule` ext table —
+so the table + its daily ext-refresh must survive until that class is cut to DuckDB too. The tick delete
+does NOT require the table drop.
 
 ## Runtime gate (box; the merge bar)
 
