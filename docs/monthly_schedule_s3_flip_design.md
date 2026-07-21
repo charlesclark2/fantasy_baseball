@@ -1,9 +1,24 @@
 # Design — flip the `monthly_schedule` raw writer to S3 (E11.20 phase-2a, step 3 prerequisite)
 
-**Status:** DESIGN ONLY (2026-07-20). Not implemented. This is the story that actually makes the
-30-min capture tick Snowflake-free — and thus the prerequisite for deleting the tick's
-`refresh_w1_external_tables` + dbt legs (E11.20 phase-2a step 3), which by itself banks ~0
-wake-minutes (see `e11_20_cost_flips.md` §5a).
+**Status:** WRITER BUILT default-OFF (2026-07-20); operator soak + bridge retirement PENDING. This
+is the story that actually makes the 30-min capture tick Snowflake-free — the prerequisite for
+deleting the tick's `refresh_w1_external_tables` + dbt legs (E11.20 phase-2a step 3), which by itself
+banks ~0 wake-minutes (see `e11_20_cost_flips.md` §5a).
+
+**BUILT (this PR — a runtime no-op until `W11_RAW_WRITE_MODE` is set):**
+- `run_schedule` (`scripts/ingest_statsapi.py`) gates a Snowflake→S3 dual-write on `W11_RAW_WRITE_MODE`
+  (default `snowflake` = SF INSERT only, unchanged). Writes the exact 2-col contract + the same-month
+  retention prune. `main()` now opens the SF connection ONLY when the SF leg is live (`s3` mode opens
+  no session — the connect IS the wake).
+- `prune_same_month_partitions` (`scripts/utils/lakehouse_raw_writer.py`) — the live INC-20 retention.
+- The lean `schedule-capture` image is S3-capable (`+boto3 +pyarrow`, COPYs `utils/lakehouse_raw_writer`,
+  region → `us-east-2`) so a leaked `W11_RAW_WRITE_MODE` can't `ImportError` it (odds-capture cure).
+- Tests: `betting_ml/tests/test_monthly_schedule_s3_writer.py` (9 — real writer→parquet contract +
+  retention + main() conditional-connect; fast gate green). Writer parquet schema confirmed identical
+  to prod `lakehouse_raw/monthly_schedule/` (`ingestion_ts`/`json_field` VARCHAR).
+
+**REMAINING (operator, box):** the runtime gate + soak (below), then the ORDERED bridge retirement
+(step 3), then E11.20 phase-2a step 3 (delete the tick's SF legs).
 
 **Serving-criticality: MAXIMUM.** `monthly_schedule` is the source of the entire game universe —
 `stg_statsapi_games`, `stg_statsapi_lineups`, `stg_statsapi_lineups_wide`,
@@ -116,13 +131,23 @@ on the service. Then the fallback image can honor the flag if it's ever re-activ
 `utils.` import is fine) — but re-run it to confirm. Do NOT rely on "the flag won't reach the lean
 image" — that's the odds-capture mistake (`env_file` leaked `LAKEHOUSE_RAW_WRITE_MODE`).
 
-### 3. Retire the export bridge + the native INSERT (AFTER parity)
+### 3. Retire the export bridge + the native INSERT (AFTER parity) — ORDER IS LOAD-BEARING
 
-- Remove `export_odds_raw_to_s3.py --source monthly_schedule` from `_schedule_lakehouse_intraday`
-  (`intraday_ops.py`) and from the daily `lakehouse_schedule_export_op` (`daily_ingestion_ops.py`
-  L591) — the writer is now the sole S3 author (INC-31 writer-uniqueness: one writer per key).
-- Flip `W11_RAW_WRITE_MODE=s3` (drop the SF INSERT). Keep `monthly_schedule` in
-  `check_data_freshness` only if a consumer still reads the SF table — see audit.
+⚠️ During `both` mode the NEW writer and the OLD bridge (`export_odds_raw_to_s3 --source
+monthly_schedule`, still called by `_schedule_lakehouse_intraday` + the daily
+`lakehouse_schedule_export_op`, `daily_ingestion_ops.py` L591) BOTH write
+`lakehouse_raw/monthly_schedule/dt=<today>/` (last-writer-wins; the rows are identical so it is
+benign, `overwrite_partition` is idempotent). **But flipping to `s3` while the bridge still runs is
+an INC-31 stale-mirror CLOBBER: `s3` stops the SF INSERT, so the bridge then reads a FROZEN SF table
+and re-mirrors OLD data over the writer's fresh S3 key.** Safe order:
+
+1. `both` (writer + bridge both write; SF INSERT live). Soak + parity (below).
+2. **Remove the bridge's `monthly_schedule` leg** from `_schedule_lakehouse_intraday` and
+   `lakehouse_schedule_export_op` — still in `both`, so the writer is now the SOLE S3 author while
+   the SF INSERT still backstops. Verify a daily + a few intraday fires.
+3. **Then** flip `W11_RAW_WRITE_MODE=s3` (drops the SF INSERT). Never before step 2.
+4. Drop the SF `monthly_schedule` table only after the consumer audit confirms zero SF-table readers;
+   remove it from `check_data_freshness` at the same time (else it false-warns on the frozen table).
 
 ### 4. THEN E11.20 phase-2a step 3 (the actual tick delete) becomes correct
 

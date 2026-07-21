@@ -275,6 +275,36 @@ def prune_partitions(source: str, keep_dts, *, s3_client=None) -> list[str]:
     return sorted(deleted)
 
 
+def prune_same_month_partitions(source: str, keep_dt: str, *, s3_client=None) -> list[str]:
+    """Delete dt= partitions in the SAME calendar month as `keep_dt`, EXCEPT keep_dt itself.
+
+    E11.20 phase-2a — the LIVE-writer equivalent of prune_partitions' INC-20 latest-per-month
+    retention, for a Snowflake-free raw writer (monthly_schedule) that owns its own S3 key. Each
+    fire overwrites dt=<today>; this then collapses any EARLIER same-month snapshot so the current
+    month keeps ONE partition (value-identical under the flatten's latest-ingestion-per-game_pk
+    dedup, and it stops the unbounded month-snapshot growth that OOM'd the flatten).
+
+    Unlike prune_partitions this is SCOPED to keep_dt's month: PRIOR months are UNTOUCHED (each
+    already holds its single latest-per-month partition, and the live writer never re-fetches them),
+    so passing keep_dt alone can never nuke history. The NULL_TS_PARTITION sentinel (9 chars, not a
+    'YYYY-MM' date) is never a calendar month, so it is never matched. Returns the deleted dt= keys.
+    """
+    if source not in RAW_SOURCES:
+        raise ValueError(f"Unknown raw source '{source}'. Valid: {sorted(RAW_SOURCES)}")
+    try:
+        datetime.strptime(keep_dt, "%Y-%m-%d")   # reject __nullts__ / any non-date sentinel
+    except ValueError:
+        raise ValueError(f"keep_dt must be an ISO 'YYYY-MM-DD' date, got {keep_dt!r}")
+    month = keep_dt[:7]  # 'YYYY-MM'
+    s3 = s3_client or _make_s3_client()
+    deleted: list[str] = []
+    for dt in list_partition_dts(s3, source):
+        if dt != keep_dt and len(dt) == 10 and dt[:7] == month:
+            _delete_partition(s3, source, dt)
+            deleted.append(dt)
+    return sorted(deleted)
+
+
 def write_raw_rows_s3(
     source: str,
     rows: list[dict],
