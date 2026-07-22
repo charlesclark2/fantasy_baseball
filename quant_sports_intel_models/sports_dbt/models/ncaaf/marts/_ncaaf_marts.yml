@@ -610,6 +610,42 @@ models:
           TRUE ⇒ the recruit logged ≥1 stat line in their arrival season (production observed).
           FALSE ⇒ on an FBS roster but no stat line — UNKNOWN production, not zero.
 
+  - name: ncaaf_draft_college_production_pairs
+    description: >
+      ⭐ NCAAF-P1A SUBSTRATE — one row per matched NFL player (gsis_id) in the P0.3 xref: their
+      PRE-DRAFT college body of work (final 1–2 FBS seasons of box production + combine + recruiting
+      pedigree) paired with their POST-draft NFL early-career outcome (target_*, the LABEL). This is
+      what run_college_nfl_translation.py learns the college→NFL translation from, and the population
+      it emits a per-player rookie projection for (the MLB Edge-E7 MiLB→MLB analog).
+
+      ⭐ STARTS FROM THE XREF (P0.3 — does NOT rebuild the draft-slot join): joins P1.1 college
+      production ONTO the spine on college_athlete_id = fact_ncaaf_player_game.player_id (both the
+      CFBD/ESPN athlete id). has_college_production is FALSE where a drafted player carries no P1.1
+      production (pre-2014 final season, an FCS/JUCO year, a missing box) — UNKNOWN, never 0. The
+      join coverage is surfaced in the run report (the P1.2b dead-bridge lesson).
+
+      FINAL 1–2 college seasons, strictly < draft_year and ≥ the 2014 box floor. LEAKAGE: every
+      feature (college production / combine / pedigree / draft slot) is a pre-first-NFL-snap fact;
+      target_* are POST-draft NFL outcomes = the LABEL, prefixed target_ so the Python feature build
+      cannot pick them up. The point-in-time discipline (fit only on strictly-prior draft classes)
+      lives in the Python model — this mart is the raw, class-tagged substrate.
+    columns:
+      - name: gsis_id
+        description: The NFL player key — the grain. One row per matched player.
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: draft_year
+        description: The draft class (2015–25). ≥ 2015 by the 2014 college box floor.
+        data_tests: [not_null]
+      - name: position_group
+        description: QB / RB / WR / TE / OL / DL / LB / DB / ST / OTHER — the NFL position collapsed to modelling groups. OL / ST are box-invisible (combine/pedigree-only downstream).
+        data_tests: [not_null]
+      - name: has_college_production
+        description: TRUE ⇒ P1.1 college production bridged from fact_ncaaf_player_game. FALSE ⇒ none — UNKNOWN, never 0 (the thin-join surface).
+      - name: has_nfl_outcome
+        description: TRUE ⇒ carries a target_* NFL outcome (drafted). FALSE ⇒ UDFA (no draft-pick outcome row) — emitted college-only, excluded from training.
+
   - name: ncaaf_freshman_priors
     description: >
       ⭐ NCAAF-P1.2b — the per-recruit freshman-production PRIOR. One row per (player_id,
@@ -671,6 +707,51 @@ models:
         data_tests: [not_null]
       - name: freshman_class_projected_production
         description: ⭐ Σ projected_production_z over the incoming class — the team-level pre-season freshman-contribution signal.
+      - name: model_version
+        data_tests: [not_null]
+
+  - name: ncaaf_nfl_rookie_projections
+    description: >
+      ⭐ NCAAF-P1A — the college→NFL translation OUTPUT (the NFL feeder; the MLB Edge-E7 analog).
+      One row per NFL player (gsis_id): their leakage-safe projected early-career NFL outcome,
+      translated from their PRE-DRAFT college production + combine + recruiting pedigree, fit on
+      STRICTLY-PRIOR draft classes via a §0.5 bake-off (partial-pooling / stratified-OLS / GBM /
+      null-floor, with a reported draft-slot benchmark) under leave-one-draft-class-out expanding-
+      window CV. The feeder N1.2 (rookie prop pricing) + N1.3 / fantasy-dynasty boards consume — a
+      market that is otherwise priors-only.
+
+      ⚠️ NOT COMPUTED IN dbt — a read-only view over the parquet run_college_nfl_translation.py
+      writes to ncaaf/derived/nfl_rookie_projections. 🚨 BUILD ORDER (INC-25): P1.1 marts + xref +
+      ncaaf_draft_college_production_pairs → run_college_nfl_translation.py → this view. Tagged
+      `ncaaf_p1a` (opt-in until the script has run once).
+
+      ⚠️ UNCERTAINTY: projected_nfl_z_sd is PARAMETER uncertainty (a RELATIVE confidence signal),
+      NOT a calibrated predictive interval — N1.2 (pricing) MUST recalibrate on held-out data (the
+      E13.6 pattern). ⚠️ box_production_available=false (OL / ST) ⇒ combine/pedigree-only, not a
+      validated production projection. is_udfa=true ⇒ no NFL-outcome training label (college-only,
+      lower conf). best_alpha = 0 — a prior feeding the NFL vertical, NOT an edge claim.
+    columns:
+      - name: nfl_rookie_projection_key
+        description: gsis_id — the grain contract (== the NFL-vertical join key).
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: gsis_id
+        description: ⭐ the NFL player key the NFL vertical joins on.
+        data_tests: [not_null]
+      - name: draft_year
+        description: 2016+ — 2015 is the un-emitted seed (no strictly-prior draft class exists).
+        data_tests: [not_null]
+      - name: projected_nfl_z
+        description: ⭐ THE FEEDER OUTPUT. Projected early-career NFL outcome, standardized within (position_group, draft class). Never NULL.
+        data_tests: [not_null]
+      - name: projected_nfl_z_sd
+        description: PARAMETER uncertainty (relative confidence only — NOT a calibrated predictive sd). Strictly positive.
+        data_tests: [not_null]
+      - name: box_production_available
+        description: FALSE ⇒ OL / specialists — a combine/pedigree-only projection, NOT a validated production projection.
+      - name: is_udfa
+        description: TRUE ⇒ undrafted — no NFL-outcome training label; a college-only projection, lower confidence.
       - name: model_version
         data_tests: [not_null]
 
