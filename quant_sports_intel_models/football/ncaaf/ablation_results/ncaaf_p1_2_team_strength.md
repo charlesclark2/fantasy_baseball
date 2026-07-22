@@ -1,6 +1,6 @@
 # NCAAF-P1.2 — conference/team-strength mixed-effects model
 
-**Model:** `ncaaf_team_strength_v1` · **generated:** 2026-07-20T23:18:19.065649+00:00
+**Model:** `ncaaf_team_strength_v1` · **generated:** 2026-07-22T04:41:40.561799+00:00
 **Seasons emitted:** 2015–2025 (22,992 team-week rows) · **seed (not emitted):** 2014
 
 > ⚠️ **This is a strength PRIOR, not an edge claim.** Every number below is measured against realized margins, never against a market price. No bet, no win rate, no ROI is implied or claimed; `best_alpha = 0` still holds. Whether this feature is worth anything against a closing line is P1.4's question, and P1.4 answers it under the §0.5 bake-off discipline (≥3 model classes, purged/embargoed CV, PBO/DSR).

@@ -673,3 +673,54 @@ models:
         description: ⭐ Σ projected_production_z over the incoming class — the team-level pre-season freshman-contribution signal.
       - name: model_version
         data_tests: [not_null]
+
+  - name: feature_ncaaf_pregame_matrix
+    description: >
+      ⭐⭐ NCAAF-P1.3 — the BROAD, leakage-safe, point-in-time pregame FEATURE MATRIX P1.4's
+      game-model bake-off trains on. GRAIN: one row per FBS-vs-FBS game (game_id), a MATCHUP row
+      carrying the home team's and away team's pregame features side by side, each snapshot AS OF
+      this game's own kickoff, plus situational context and (under a label_ prefix) the
+      POST-KICKOFF outcome P1.4 targets.
+
+      🔒 LEAKAGE CONTRACT: every home_*/away_* feature is read at as_of_week = this game's
+      season_order_week (upstream rollups define that as "only games with season_order_week < W"),
+      so no feature can see the game it describes. Week-grained families (rollup, opponent-adjusted,
+      strength) join 1:1 on (season, team_id, as_of_week); season-grained families (roster
+      continuity, coaching, freshman prior) are PRE-SEASON constants BROADCAST across weeks on
+      (season, team-name). Audited by the DATE-based singular test
+      assert_pregame_matrix_is_point_in_time (checks the clock, not the week ordering — the P1.1
+      lesson) and proven to fail on a tampered row by test_ncaaf_feature_matrix.py.
+
+      🚨 NULL = UNKNOWN, kept NULL (week-1, no-coverage teams, first-time HCs, pre-2021 portal,
+      2014 = no strength emitted). NEVER coalesced to 0. 🚨 label_* is the TARGET, NEVER a feature.
+      🚨 2014 rows carry NULL strength (P1.2 emits 2015+). Read the per-family coverage report in
+      ablation_results/ncaaf_p1_3_feature_matrix.md before using a family.
+
+      BUILD ORDER (INC-25): P1.1 marts → run_team_strength.py → run_freshman_projection.py →
+      dbt run (strength_week + team_freshman_prior) → dbt run (this model, tag ncaaf_p1_3) →
+      run_feature_matrix.py (reads this once → the cached parquet the bake-off consumes).
+    config:
+      tags: ['ncaaf_p1_3']
+    columns:
+      - name: game_id
+        description: Grain contract — one row per FBS-vs-FBS game.
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+      - name: season_order_week
+        description: ⭐ the as-of week every feature is snapshot at (season_order_week, NEVER raw week).
+        data_tests: [not_null]
+      - name: home_team
+        data_tests: [not_null]
+      - name: away_team
+        data_tests: [not_null]
+      - name: home_strength_margin
+        description: P1.2 team-strength (points above an average FBS team, pregame). NULL for 2014 (unemitted) — honest.
+      - name: away_strength_margin
+        description: P1.2 team-strength for the away side. NULL for 2014 — honest.
+      - name: home_adj_net_ppa
+        description: P1.1 opponent-adjusted net efficiency (home). NULL at week 1 / no coverage — kept NULL.
+      - name: label_home_win
+        description: ⛔ POST-KICKOFF TARGET (NULL for a tie or an unplayed game). NEVER a feature.
