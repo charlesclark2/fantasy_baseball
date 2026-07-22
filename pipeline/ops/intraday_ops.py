@@ -85,6 +85,27 @@ _W6_INTRADAY_ENABLED = os.environ.get("W6_LAKEHOUSE_INTRADAY", "0") == "1"
 _SCHEDULE_INTRADAY_ENABLED = os.environ.get("SCHEDULE_LAKEHOUSE_INTRADAY", "0") == "1"
 
 
+def _tick_sf_free() -> bool:
+    """E11.20 phase-2a STEP 3 gate (default-OFF): retire the 30-min capture tick's two
+    Snowflake legs — `intraday_lineup_rebuild` (dbt SF staging rebuild) and the trailing
+    `refresh_w1_external_tables.py` in `_schedule_lakehouse_intraday`.
+
+    REQUIRES `SCHEDULE_LAKEHOUSE_INTRADAY=1`: that is what runs the `--w7b-only` S3 rebuild
+    (+ the W7B_SERVING ext refresh) that keeps `stg_statsapi_lineups_wide`/`_probable_pitchers`
+    fresh in the S3 parquet — the thing the lineup monitor (LINEUP_MONITOR_S3=1) and the `--s3`
+    serving/predict (W7b-2) read INSTEAD of the SF tables. Dropping the dbt rebuild WITHOUT that
+    S3 rebuild would leave lineups stale on both paths → the monitor goes blind (post_lineup never
+    fires). So this returns False (KEEP the SF legs) unless BOTH flags are set — read fresh from the
+    env (not a module constant) so a box env flip takes effect on code reload without an import edit.
+
+    NOTE this flag owns ONLY the refresh + dbt legs. The capture INSERT + the export bridge are
+    retired by the monthly_schedule writer flip (W11_RAW_WRITE_MODE), which is order-coupled to its
+    own bridge retirement (INC-31). The tick is fully Snowflake-free only when BOTH flips are done.
+    """
+    return (os.environ.get("TICK_SF_FREE") == "1"
+            and os.environ.get("SCHEDULE_LAKEHOUSE_INTRADAY") == "1")
+
+
 def _schedule_lakehouse_intraday(context: OpExecutionContext) -> None:
     """Refresh the S3 lakehouse game-state (stg_statsapi_games) AND the wide lineup table
     (stg_statsapi_lineups_wide) from the just-captured native monthly_schedule snapshot, so prod
@@ -120,7 +141,19 @@ def _schedule_lakehouse_intraday(context: OpExecutionContext) -> None:
         _run_script(context, "export_odds_raw_to_s3.py", ["--source", "monthly_schedule", "--since", today])
         _run_script(context, "run_w1_lakehouse.py", ["--w3pre-only"])
         _run_script(context, "run_w1_lakehouse.py", ["--w7b-only"])
-        _run_script(context, "refresh_w1_external_tables.py")
+        # E11.20 phase-2a step 3: the trailing SF ext-table REFRESH is retired under TICK_SF_FREE.
+        # It refreshes a broad set, but the tick only REBUILT games/lineups (--w3pre/--w7b above) —
+        # every other group is a data no-op re-listing (rebuilt by the DAILY run, not the tick). So
+        # skipping it only stops the games/lineups SF ext tables updating intraday, and post-W7b-2 +
+        # LINEUP_MONITOR_S3=1 nothing reads those intraday (they lag to the daily refresh). The S3
+        # parquet built above is what the monitor + --s3 serving actually read.
+        if _tick_sf_free():
+            context.log.info(
+                "[TICK_SF_FREE] skipping refresh_w1_external_tables — no game-hours consumer reads "
+                "the SF ext tables intraday post-W7b-2; the --w3pre/--w7b S3 parquet is the read source."
+            )
+        else:
+            _run_script(context, "refresh_w1_external_tables.py")
     except Exception as exc:  # ALERT-loud-but-continue — never crash the schedule capture op
         context.log.warning(
             f"⚠️ Intraday schedule lakehouse refresh FAILED — served game-state/lineups may be "
@@ -381,7 +414,28 @@ def intraday_lineup_rebuild(context: OpExecutionContext) -> None:
     data as of the last dbt run. intraday_schedule_capture refreshes the raw
     monthly_schedule source every 30 min, but without this rebuild the sensor
     always queries a stale table built at 12:00 UTC morning.
+
+    E11.20 phase-2a step 3 (TICK_SF_FREE): once the lineup monitor reads the S3 parquet
+    (LINEUP_MONITOR_S3=1) and the intraday serving/predict read S3 (W7b-2), NO intraday
+    consumer reads these SF staging tables — the S3 parquet (kept fresh by the --w7b build
+    in _schedule_lakehouse_intraday) is the read source — so this SF dbt rebuild is retired.
     """
+    if _tick_sf_free():
+        context.log.warning(
+            "⚠️ [TICK_SF_FREE] intraday_lineup_rebuild SKIPPED — the SF staging dbt rebuild is "
+            "retired (E11.20 phase-2a step 3). The S3 stg_statsapi_lineups_wide/_probable_pitchers "
+            "parquet (built by _schedule_lakehouse_intraday --w7b-only) is the intraday read source "
+            "for the lineup monitor (LINEUP_MONITOR_S3) + the --s3 serving/predict (W7b-2)."
+        )
+        return
+    if os.environ.get("TICK_SF_FREE") == "1":
+        # Flag set but the S3 rebuild that REPLACES this leg isn't running — do NOT retire, or the
+        # monitor goes blind. Loud so the misconfig is visible (the flag looks on but is inert).
+        context.log.warning(
+            "⚠️ TICK_SF_FREE=1 but SCHEDULE_LAKEHOUSE_INTRADAY is OFF — NOT retiring the SF lineup "
+            "rebuild (the --w7b S3 rebuild that would replace it isn't running). Set "
+            "SCHEDULE_LAKEHOUSE_INTRADAY=1 first. Running the SF dbt rebuild as a safe fallback."
+        )
     _run_dbt(context, [
         "run",
         "--select",

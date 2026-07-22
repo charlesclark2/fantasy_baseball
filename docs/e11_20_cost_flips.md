@@ -241,3 +241,19 @@ posterior INSERTs (smaller) ≈ **≤1.5 credits/wk ≈ $15–20/mo**, all insid
 windows (not wake drivers). A Delta ACID/MERGE migration of serving-adjacent state is
 higher-risk than its return while the wake-kill banks 5–8× more. Re-measure after §5; the
 stretch only becomes worth it as the LAST step to a truly Cortex-only Snowflake.
+
+## 8. STEP 3 BUILT default-OFF (2026-07-21) — the capture-tick SF-leg retirement
+
+`TICK_SF_FREE` (default-OFF, `pipeline/ops/intraday_ops.py::_tick_sf_free`) retires the two SF legs of
+the 30-min `intraday_schedule_job` tick — `intraday_lineup_rebuild` (dbt SF staging) + the trailing
+`refresh_w1_external_tables.py` in `_schedule_lakehouse_intraday`. Gate REQUIRES
+`SCHEDULE_LAKEHOUSE_INTRADAY=1` (INERT + loud otherwise) so the `--w7b` S3 rebuild that replaces the dbt
+leg is running. Consumer audit (2026-07-21): the ONLY intraday readers of the 3 staging models are the
+lineup monitor (→ S3 under `LINEUP_MONITOR_S3=1`) + intraday serving/predict (→ S3 under W7b-2);
+everything else is daily/offline or deprecated Streamlit. The SF `else` branches of
+`stg_statsapi_lineups_wide`/`_probable_pitchers` are native TABLE materializations (not lakehouse_ext
+views), so the dbt leg genuinely materializes them — redundant once readers go S3. The capture INSERT +
+export bridge are NOT owned by this flag (writer flip, `W11_RAW_WRITE_MODE`, INC-31-ordered). Full
+tick-SF-free = writer flip + W7b-2 + `TICK_SF_FREE`. Design: `docs/tick_sf_free_step3_design.md`.
+Flip order (post-07-24, after AC-C): writer→bridge-retire→W7b-2→confirm `SCHEDULE_LAKEHOUSE_INTRADAY=1`
++ `LINEUP_MONITOR_S3=1`→`TICK_SF_FREE=1`→verify a slate + `query_history` shows no tick SF session.
