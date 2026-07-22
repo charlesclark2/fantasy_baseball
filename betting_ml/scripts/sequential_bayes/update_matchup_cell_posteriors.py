@@ -613,6 +613,53 @@ def run_backfill(season: int, dry_run: bool, use_s3: bool = False) -> None:
         duck.close()
 
 
+def run_catchup(lookback_days: int, dry_run: bool, use_s3: bool = False) -> None:
+    """Advance the chain over every completed date missing since the frontier (2026-07-22 durable
+    fix — replaces the fragile `--date yesterday`). Mirrors run_backfill's one-time artifact/ridge/
+    posterior setup, then drives the shared catch-up. See catchup.py."""
+    from betting_ml.utils.game_day import current_game_date
+    from betting_ml.scripts.sequential_bayes import catchup as _catchup
+
+    today = current_game_date()
+    season = today.year
+    print(f"update_matchup_cell_posteriors  CATCHUP  today={today}  lookback={lookback_days}d  "
+          f"dry_run={dry_run}  s3={use_s3}")
+
+    duck = None
+    if use_s3:
+        print("\n[--s3] Reading matchup sources from S3 lakehouse via DuckDB...")
+        duck = _get_duckdb()
+        _register_s3_views(duck)
+
+    artifact, eb = _load_artifacts()
+    src_conn = None if use_s3 else get_snowflake_connection()
+    try:
+        ridge_cell_means = _build_ridge_cell_means(artifact, eb, src_conn, season, duck=duck)
+        posteriors = _load_posteriors(src_conn, season, duck=duck)
+    finally:
+        if src_conn is not None:
+            src_conn.close()
+
+    if not dry_run:
+        conn = get_snowflake_connection()
+        try:
+            _ensure_table(conn)
+        finally:
+            conn.close()
+
+    _catchup.run_catchup(
+        label="matchup-seq-catchup",
+        target_table=_TARGET_TABLE,
+        today=today,
+        lookback_days=lookback_days,
+        get_connection=get_snowflake_connection,
+        process_date=lambda gd: update_for_date(
+            gd, artifact, eb, ridge_cell_means, posteriors, dry_run, duck=duck)["cells_updated"],
+    )
+    if duck is not None:
+        duck.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Story 8.5: update archetype cell sequential posteriors"
@@ -620,8 +667,13 @@ def main() -> None:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--date", metavar="YYYY-MM-DD",
                        help="Update posteriors using completed games on this date")
+    group.add_argument("--catchup", action="store_true",
+                       help="Advance the chain over every completed date missing since the frontier "
+                            "(in order, self-healing) — the daily default (replaces --date yesterday)")
     group.add_argument("--backfill", action="store_true",
                        help="Backfill entire season in chronological order (requires --season)")
+    parser.add_argument("--lookback-days", type=int, default=10,
+                        help="Catch-up window: max days back the chain can auto-advance (default 10)")
     parser.add_argument("--season", type=int,
                         help="Season year for --backfill (e.g. 2026)")
     parser.add_argument("--dry-run", action="store_true",
@@ -641,6 +693,8 @@ def main() -> None:
         print(f"update_matchup_cell_posteriors  backfill season={args.season}  "
               f"dry_run={args.dry_run}  s3={args.s3}")
         run_backfill(args.season, dry_run=args.dry_run, use_s3=args.s3)
+    elif args.catchup:
+        run_catchup(args.lookback_days, dry_run=args.dry_run, use_s3=args.s3)
     else:
         target_date = date.fromisoformat(args.date)
         print(f"update_matchup_cell_posteriors  date={target_date}  "

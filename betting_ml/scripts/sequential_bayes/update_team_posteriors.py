@@ -496,13 +496,41 @@ def run_backfill(season: int, sigma_obs, team_prior_neff, win_prior_strength, dr
     print(f"  total rows inserted: {tot['inserted']:,}")
 
 
+def run_catchup(season_lookback_days: int, sigma_obs: float, team_prior_neff: int,
+                win_prior_strength: float, dry_run: bool) -> None:
+    """Advance the chain over every completed date missing since the frontier (2026-07-22 durable
+    fix — replaces the fragile `--date yesterday`, which silently skipped a day whose source wasn't
+    ready). Order-preserving + self-healing; see betting_ml/scripts/sequential_bayes/catchup.py."""
+    from betting_ml.utils.game_day import current_game_date
+    from betting_ml.scripts.sequential_bayes import catchup as _catchup
+
+    today = current_game_date()
+    print(f"update_team_posteriors  CATCHUP  today={today}  lookback={season_lookback_days}d  dry_run={dry_run}")
+    _prep(today.year, sigma_obs, team_prior_neff, win_prior_strength, dry_run)
+    _catchup.run_catchup(
+        label="team-seq-catchup",
+        target_table=_TARGET_TABLE,
+        today=today,
+        lookback_days=season_lookback_days,
+        get_connection=get_snowflake_connection,
+        fetch_dicts=_fetch_dicts,
+        process_date=lambda gd: update_for_date(
+            gd, sigma_obs, team_prior_neff, win_prior_strength, dry_run)["rows"],
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Story 16.3: team-level sequential belief state")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--date", metavar="YYYY-MM-DD",
                        help="Update team posteriors using completed games on this date")
+    group.add_argument("--catchup", action="store_true",
+                       help="Advance the chain over every completed date missing since the frontier "
+                            "(in order, self-healing) — the daily default (replaces --date yesterday)")
     group.add_argument("--backfill", action="store_true",
                        help="Backfill entire season in chronological order (requires --season)")
+    parser.add_argument("--lookback-days", type=int, default=10,
+                        help="Catch-up window: max days back the chain can auto-advance (default 10)")
     parser.add_argument("--season", type=int, help="Season year for --backfill (e.g. 2026)")
     parser.add_argument("--sigma-obs", type=float, default=_SIGMA_OBS_DEFAULT,
                         help=f"Per-PA xwOBA observation std (default {_SIGMA_OBS_DEFAULT})")
@@ -522,6 +550,9 @@ def main() -> None:
     if args.backfill:
         print(f"update_team_posteriors  backfill season={args.season}  dry_run={args.dry_run}")
         run_backfill(args.season, args.sigma_obs, args.team_prior_neff, args.win_prior_strength, args.dry_run)
+    elif args.catchup:
+        run_catchup(args.lookback_days, args.sigma_obs, args.team_prior_neff,
+                    args.win_prior_strength, args.dry_run)
     else:
         target_date = date.fromisoformat(args.date)
         print(f"update_team_posteriors  date={target_date}  dry_run={args.dry_run}")
