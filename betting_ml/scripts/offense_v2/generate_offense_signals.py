@@ -151,8 +151,21 @@ SELECT
     lf.lineup_iso_vs_starter_archetype,
     lf.lineup_archetype_pa_coverage,
     lf.starter_pitch_archetype
+-- game_type='R' filter is sourced from stg_statsapi_games, NOT mart_game_results.
+-- WHY (2026-07-21 signal_freshness HALT): mart_game_results is a COMPLETED-games mart
+-- (one row per played game); its S3 parquet lands a slate's rows only after that slate's
+-- games finish AND the mart is rebuilt — so it lags feature_pregame_lineup_features, whose
+-- rows exist as soon as lineups are set. If this generator ran while mart_game_results was
+-- a rebuild behind (an ordering race, esp. during piecemeal re-runs), the INNER JOIN dropped
+-- the newest completed slate → offense wrote 0 rows for it → feature_pregame_sub_model_signals
+-- .pred_runs_mu_v2 NULL → signal_freshness_check BLOCKING HALT (a false positive: the data was
+-- fine, the input was momentarily stale). offense uses NO result column from the game table —
+-- only game_type — so stg_statsapi_games (one row per game_pk, game_type present, refreshed
+-- INTRADAY so it never lags for a scheduled/completed slate) is the correct, race-free source.
+-- Verified: for every completed slate the R game-set is identical to mart_game_results. This
+-- matches the existing starter_ip generator, which already joins stg_statsapi_games.
 FROM baseball_data.betting_features.feature_pregame_lineup_features lf
-JOIN baseball_data.betting.mart_game_results gr
+JOIN baseball_data.betting.stg_statsapi_games gr
     ON gr.game_pk = lf.game_pk
 WHERE gr.game_type = 'R'
   AND lf.game_date >= '{start_date}'

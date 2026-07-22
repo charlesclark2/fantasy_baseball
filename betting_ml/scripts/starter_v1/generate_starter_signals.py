@@ -206,8 +206,13 @@ SELECT
     sf.pitcher_hand,
     sf.starter_primary_pitch_type,
     sf.eb_data_source
+-- game_type='R' filter sourced from stg_statsapi_games (one row/game_pk, refreshed intraday),
+-- NOT the completed-only mart_game_results — same race-avoidance fix + reason as the offense
+-- generator (2026-07-21 signal_freshness HALT): mart_game_results lags the feature table, so a
+-- generator run during that lag drops the newest slate. This generator uses NO result column
+-- from the game table (only game_type), and starter_ip already joins stg_statsapi_games.
 FROM baseball_data.betting_features.feature_pregame_starter_features sf
-JOIN baseball_data.betting.mart_game_results gr
+JOIN baseball_data.betting.stg_statsapi_games gr
     ON gr.game_pk = sf.game_pk
 WHERE gr.game_type = 'R'
   AND sf.game_date >= '{start_date}'
