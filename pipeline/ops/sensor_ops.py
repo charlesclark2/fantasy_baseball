@@ -256,6 +256,16 @@ def lineup_intraday_s3_feature_rebuild(context: OpExecutionContext) -> None:
         # stg_statsapi_games) BEFORE --w8b-only so today's reschedule enters the feature slate
         # same-day. Ordered after the staging/SCD-2 mirror, before the aggregator reads it.
         ("run_w1_lakehouse.py", ["--game-spine-only"]),
+        # INTRADAY EB-BATTER REFRESH (2026-07-22, the avg_eb_woba lineup-block outage):
+        # eb_batter_posteriors_raw is a W8a model built from the CONFIRMED batting order
+        # (stg_statsapi_lineups), which lands ~3h pre-game — AFTER the daily --w8a build. The
+        # intraday op runs only --w8b-only, which reads eb as a FROZEN precursor, so today's
+        # post_lineup slate served the lineup block (avg_eb_woba / matchup / archetype) NULL →
+        # coverage collapse (INC-17 signature; served eb maxed at 7/20 while lineups had 7/22).
+        # Rebuild JUST eb_batter_posteriors_raw from the intraday-fresh stg_statsapi_lineups (cheap:
+        # no pitch read) BEFORE --w8b-only so the aggregator reads the fresh eb. eb_starter is NOT
+        # rebuilt — it reads probables (announced days ahead) and never lags.
+        ("run_w1_lakehouse.py", ["--eb-batter-only"]),
         ("run_w1_lakehouse.py", ["--w8b-only"]),
         ("refresh_w1_external_tables.py", ["--w8b"]),
     ]

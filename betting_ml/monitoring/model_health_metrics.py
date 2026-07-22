@@ -504,21 +504,34 @@ def check_post_lineup_matchup_coverage(
     if not alert_fired:
         fail_reason = ""
     else:
-        block = (
-            "the LINEUP/matchup block (avg_eb_woba / matchup woba / archetype)"
-            if lineup_block_hit
-            else "a NON-lineup block — see the imputed features above, NOT necessarily the lineup block"
-        )
         base_txt = "n/a" if not has_baseline else f"{baseline:.3f}"
+        # ATTRIBUTION (corrected 2026-07-22): `imputed_features` does NOT record the lineup coverage
+        # block (avg_eb_woba / matchup / archetype) — those aren't discriminative model features — so
+        # its ABSENCE never exonerates the lineup block; in practice a stale eb_batter_posteriors_raw
+        # (the most common cause) drops avg_eb_woba with NO imputed_features token. Report the
+        # imputed_features as one signal, but point the operator at the definitive checks rather than
+        # (mis)naming a block from a signal that can't see the usual culprit.
+        if lineup_block_hit:
+            attribution = (
+                f"A lineup/matchup token appears in imputed_features ({imp_label}) → the LINEUP "
+                f"block is directly implicated."
+            )
+        else:
+            attribution = (
+                f"Most-imputed features (imputed_features): {imp_label}. NOTE: the lineup block "
+                f"(avg_eb_woba / matchup / archetype) is NOT tracked in imputed_features, so its "
+                f"absence here does NOT rule it out — a stale eb_batter_posteriors_raw makes "
+                f"avg_eb_woba serve NULL with no token (the usual cause)."
+            )
         fail_reason = (
             f"INC-17 class: post_lineup feature-coverage regression on {check_date}. "
             f"slate avg feature_coverage_score={avg_cov:.3f} vs trailing-"
             f"{POST_LINEUP_COVERAGE_BASELINE_DAYS}d baseline={base_txt} across {n_games} games "
-            f"(hard floor {POST_LINEUP_AVG_COVERAGE_THRESHOLD}). Most-imputed features: {imp_label}. "
-            f"Likely null block: {block}. If the lineup block: check feature_pregame_lineup_features "
-            f"/ feature_pitcher_batter_h2h_matchups lineage AND mart_game_spine coverage of the slate "
-            f"(a game rescheduled after the daily --w5 spine build is absent from the store → "
-            f"intraday_assembly fallback, which also lowers coverage)."
+            f"(hard floor {POST_LINEUP_AVG_COVERAGE_THRESHOLD}). {attribution} "
+            f"Diagnose: (1) feature_pregame_lineup_features.avg_eb_woba coverage + "
+            f"eb_batter_posteriors_raw freshness (its max game_date must reach the slate — a stale "
+            f"EB build is the lineup-block outage); (2) mart_game_spine coverage of the slate (a "
+            f"rescheduled game absent from the store also drops coverage)."
         )
     return {
         "n_games": n_games,

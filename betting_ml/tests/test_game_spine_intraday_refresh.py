@@ -49,3 +49,36 @@ def test_intraday_op_refreshes_spine_before_w8b():
     i_spine = SENSOR_OPS.index('"--game-spine-only"')
     i_w8b = SENSOR_OPS.index('"--w8b-only"')
     assert i_spine < i_w8b, "spine refresh must precede the --w8b-only aggregator build"
+
+
+# ── --eb-batter-only: the intraday lineup-block (avg_eb_woba) refresh (2026-07-22) ──────
+def _eb_only_body() -> str:
+    return RUN_W1.split("def _build_eb_batter_only(")[1].split("\ndef ")[0]
+
+
+def test_eb_batter_only_flag_is_wired():
+    assert "def _build_eb_batter_only(" in RUN_W1
+    assert 'eb_batter_only="--eb-batter-only" in sys.argv' in RUN_W1
+    assert "if eb_batter_only:" in RUN_W1
+    assert "_build_eb_batter_only(conn, dry_run)" in RUN_W1
+
+
+def test_eb_batter_only_is_cheap_and_reads_fresh_lineups():
+    """Rebuild ONLY eb_batter_posteriors_raw from the intraday-fresh stg_statsapi_lineups + existing
+    precursor parquet — no pitch re-read, and NOT the heavy full --w8a."""
+    body = _eb_only_body()
+    assert '_build_marts(conn, ["eb_batter_posteriors_raw"]' in body
+    assert "W8A_EB_BATTER_PRECURSORS" in body
+    assert "stg_batter_pitches" not in body                       # no pitch re-read
+    assert '_build_marts(conn, ["eb_starter_posteriors"' not in body  # starter never lags → not rebuilt
+    # the confirmed-lineup source is in the precursor list
+    assert "stg_statsapi_lineups" in RUN_W1.split("W8A_EB_BATTER_PRECURSORS")[1].split("]")[0]
+
+
+def test_intraday_op_refreshes_eb_before_w8b():
+    """The intraday lineup rebuild must run --eb-batter-only BEFORE --w8b-only so the aggregator
+    (feature_pregame_lineup_features) reads fresh EB posteriors, not the daily-frozen ones."""
+    assert '"--eb-batter-only"' in SENSOR_OPS
+    i_eb = SENSOR_OPS.index('"--eb-batter-only"')
+    i_w8b = SENSOR_OPS.index('"--w8b-only"')
+    assert i_eb < i_w8b, "eb-batter refresh must precede the --w8b-only aggregator build"
