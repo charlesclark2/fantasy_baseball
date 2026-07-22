@@ -1,0 +1,670 @@
+{
+  "story": "E2.4",
+  "config_id": "xgb_poisson__top_k__heldout",
+  "model_class": "xgb_poisson",
+  "contract": "top_k",
+  "form": "heldout",
+  "params": {
+    "objective": "count:poisson",
+    "max_depth": 6,
+    "learning_rate": 0.03,
+    "n_estimators": 400,
+    "subsample": 0.85,
+    "colsample_bytree": 0.85,
+    "min_child_weight": 5.0,
+    "reg_lambda": 1.0,
+    "random_state": 42,
+    "tree_method": "hist",
+    "verbosity": 0
+  },
+  "top_k": 120,
+  "n_cap": null,
+  "is_incumbent": false,
+  "folds": [
+    {
+      "eval_year": 2021,
+      "n_games": 2317,
+      "downstream_score": 0.0492,
+      "per_side_nll": 2.0694,
+      "total_calib_80": 0.8597,
+      "total_pit_maxdev": 0.0114,
+      "run_diff_calib_80": 0.8209,
+      "run_diff_pit_maxdev": 0.0282,
+      "n_features": 120,
+      "r_source": "heldout",
+      "r_home": 2.78,
+      "r_away": 1.7423
+    },
+    {
+      "eval_year": 2022,
+      "n_games": 2375,
+      "downstream_score": 0.0423,
+      "per_side_nll": 2.0234,
+      "total_calib_80": 0.8556,
+      "total_pit_maxdev": 0.0145,
+      "run_diff_calib_80": 0.8328,
+      "run_diff_pit_maxdev": 0.0141,
+      "n_features": 120,
+      "r_source": "heldout",
+      "r_home": 2.1037,
+      "r_away": 1.9134
+    },
+    {
+      "eval_year": 2023,
+      "n_games": 2372,
+      "downstream_score": 0.0486,
+      "per_side_nll": 2.0884,
+      "total_calib_80": 0.8651,
+      "total_pit_maxdev": 0.0172,
+      "run_diff_calib_80": 0.8449,
+      "run_diff_pit_maxdev": 0.0159,
+      "n_features": 120,
+      "r_source": "heldout",
+      "r_home": 1.7642,
+      "r_away": 1.8003
+    },
+    {
+      "eval_year": 2024,
+      "n_games": 2370,
+      "downstream_score": 0.0421,
+      "per_side_nll": 2.0406,
+      "total_calib_80": 0.8654,
+      "total_pit_maxdev": 0.016,
+      "run_diff_calib_80": 0.8274,
+      "run_diff_pit_maxdev": 0.0127,
+      "n_features": 120,
+      "r_source": "heldout",
+      "r_home": 2.1989,
+      "r_away": 1.8368
+    },
+    {
+      "eval_year": 2025,
+      "n_games": 2228,
+      "downstream_score": 0.0472,
+      "per_side_nll": 2.0376,
+      "total_calib_80": 0.8671,
+      "total_pit_maxdev": 0.0111,
+      "run_diff_calib_80": 0.851,
+      "run_diff_pit_maxdev": 0.014,
+      "n_features": 120,
+      "r_source": "heldout",
+      "r_home": 1.9931,
+      "r_away": 2.0593
+    }
+  ],
+  "mean_downstream_score": 0.04588,
+  "pooled_downstream_score": 0.026,
+  "pooled_metrics": {
+    "total": {
+      "calib_80": 0.8624,
+      "pit_max_decile_dev": 0.0075,
+      "pit_mean_dev": 0.0041,
+      "pit_is_flat": true
+    },
+    "run_diff": {
+      "calib_80": 0.837,
+      "pit_max_decile_dev": 0.0062,
+      "pit_mean_dev": 0.0054,
+      "pit_is_flat": true
+    },
+    "home_total": {
+      "calib_80": 0.9142,
+      "pit_max_decile_dev": 0.0113,
+      "pit_mean_dev": 0.0049,
+      "pit_is_flat": true
+    },
+    "away_total": {
+      "calib_80": 0.9215,
+      "pit_max_decile_dev": 0.0072,
+      "pit_mean_dev": 0.0012,
+      "pit_is_flat": true
+    }
+  },
+  "mean_per_side_nll": 2.0519,
+  "bucket_scores": [
+    0.0827,
+    0.1021,
+    0.0552,
+    0.0707,
+    0.0885,
+    0.1003,
+    0.0835,
+    0.0613,
+    0.077,
+    0.0764,
+    0.0956,
+    0.0727,
+    0.0471,
+    0.0747,
+    0.0807,
+    0.0682,
+    0.0821,
+    0.0831,
+    0.0705,
+    0.0688
+  ],
+  "bucket_metrics": [
+    {
+      "total": {
+        "calib_80": 0.8414,
+        "pit_max_decile_dev": 0.0224,
+        "pit_mean_dev": 0.011,
+        "pit_is_flat": true
+      },
+      "run_diff": {
+        "calib_80": 0.8034,
+        "pit_max_decile_dev": 0.0362,
+        "pit_mean_dev": 0.0185,
+        "pit_is_flat": false
+      },
+      "home_total": {
+        "calib_80": 0.8931,
+        "pit_max_decile_dev": 0.031,
+        "pit_mean_dev": 0.0017,
+        "pit_is_flat": false
+      },
+      "away_total": {
+        "calib_80": 0.9241,
+        "pit_max_decile_dev": 0.0293,
+        "pit_mean_dev": 0.0248,
+        "pit_is_flat": false
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8584,
+        "pit_max_decile_dev": 0.0209,
+        "pit_mean_dev": 0.0203,
+        "pit_is_flat": false
+      },
+      "run_diff": {
+        "calib_80": 0.8083,
+        "pit_max_decile_dev": 0.0572,
+        "pit_mean_dev": 0.0363,
+        "pit_is_flat": false
+      },
+      "home_total": {
+        "calib_80": 0.886,
+        "pit_max_decile_dev": 0.0537,
+        "pit_mean_dev": 0.03,
+        "pit_is_flat": false
+      },
+      "away_total": {
+        "calib_80": 0.9465,
+        "pit_max_decile_dev": 0.0275,
+        "pit_mean_dev": 0.011,
+        "pit_is_flat": false
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8774,
+        "pit_max_decile_dev": 0.0206,
+        "pit_mean_dev": 0.0078,
+        "pit_is_flat": true
+      },
+      "run_diff": {
+        "calib_80": 0.8394,
+        "pit_max_decile_dev": 0.0223,
+        "pit_mean_dev": 0.0021,
+        "pit_is_flat": true
+      },
+      "home_total": {
+        "calib_80": 0.9033,
+        "pit_max_decile_dev": 0.0154,
+        "pit_mean_dev": 0.0007,
+        "pit_is_flat": true
+      },
+      "away_total": {
+        "calib_80": 0.9223,
+        "pit_max_decile_dev": 0.0192,
+        "pit_mean_dev": 0.0037,
+        "pit_is_flat": true
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8618,
+        "pit_max_decile_dev": 0.0188,
+        "pit_mean_dev": 0.0129,
+        "pit_is_flat": true
+      },
+      "run_diff": {
+        "calib_80": 0.8325,
+        "pit_max_decile_dev": 0.0485,
+        "pit_mean_dev": 0.0133,
+        "pit_is_flat": false
+      },
+      "home_total": {
+        "calib_80": 0.9136,
+        "pit_max_decile_dev": 0.0244,
+        "pit_mean_dev": 0.0035,
+        "pit_is_flat": true
+      },
+      "away_total": {
+        "calib_80": 0.9223,
+        "pit_max_decile_dev": 0.0275,
+        "pit_mean_dev": 0.0263,
+        "pit_is_flat": false
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8636,
+        "pit_max_decile_dev": 0.0293,
+        "pit_mean_dev": 0.0159,
+        "pit_is_flat": false
+      },
+      "run_diff": {
+        "calib_80": 0.8468,
+        "pit_max_decile_dev": 0.0242,
+        "pit_mean_dev": 0.0009,
+        "pit_is_flat": true
+      },
+      "home_total": {
+        "calib_80": 0.9242,
+        "pit_max_decile_dev": 0.0313,
+        "pit_mean_dev": 0.0161,
+        "pit_is_flat": false
+      },
+      "away_total": {
+        "calib_80": 0.9226,
+        "pit_max_decile_dev": 0.0279,
+        "pit_mean_dev": 0.0138,
+        "pit_is_flat": false
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8535,
+        "pit_max_decile_dev": 0.0411,
+        "pit_mean_dev": 0.0286,
+        "pit_is_flat": false
+      },
+      "run_diff": {
+        "calib_80": 0.8047,
+        "pit_max_decile_dev": 0.033,
+        "pit_mean_dev": 0.0169,
+        "pit_is_flat": false
+      },
+      "home_total": {
+        "calib_80": 0.8973,
+        "pit_max_decile_dev": 0.0296,
+        "pit_mean_dev": 0.0177,
+        "pit_is_flat": false
+      },
+      "away_total": {
+        "calib_80": 0.9141,
+        "pit_max_decile_dev": 0.0296,
+        "pit_mean_dev": 0.0063,
+        "pit_is_flat": false
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8485,
+        "pit_max_decile_dev": 0.0263,
+        "pit_mean_dev": 0.0136,
+        "pit_is_flat": false
+      },
+      "run_diff": {
+        "calib_80": 0.8451,
+        "pit_max_decile_dev": 0.0212,
+        "pit_mean_dev": 0.0007,
+        "pit_is_flat": true
+      },
+      "home_total": {
+        "calib_80": 0.9242,
+        "pit_max_decile_dev": 0.0296,
+        "pit_mean_dev": 0.0123,
+        "pit_is_flat": false
+      },
+      "away_total": {
+        "calib_80": 0.9293,
+        "pit_max_decile_dev": 0.0276,
+        "pit_mean_dev": 0.0065,
+        "pit_is_flat": false
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8567,
+        "pit_max_decile_dev": 0.0174,
+        "pit_mean_dev": 0.0007,
+        "pit_is_flat": true
+      },
+      "run_diff": {
+        "calib_80": 0.8347,
+        "pit_max_decile_dev": 0.0123,
+        "pit_mean_dev": 0.0016,
+        "pit_is_flat": true
+      },
+      "home_total": {
+        "calib_80": 0.914,
+        "pit_max_decile_dev": 0.0282,
+        "pit_mean_dev": 0.0092,
+        "pit_is_flat": false
+      },
+      "away_total": {
+        "calib_80": 0.9073,
+        "pit_max_decile_dev": 0.0157,
+        "pit_mean_dev": 0.0042,
+        "pit_is_flat": true
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8432,
+        "pit_max_decile_dev": 0.0241,
+        "pit_mean_dev": 0.0286,
+        "pit_is_flat": false
+      },
+      "run_diff": {
+        "calib_80": 0.8516,
+        "pit_max_decile_dev": 0.0265,
+        "pit_mean_dev": 0.0053,
+        "pit_is_flat": false
+      },
+      "home_total": {
+        "calib_80": 0.9174,
+        "pit_max_decile_dev": 0.0349,
+        "pit_mean_dev": 0.0298,
+        "pit_is_flat": false
+      },
+      "away_total": {
+        "calib_80": 0.9039,
+        "pit_max_decile_dev": 0.018,
+        "pit_mean_dev": 0.0169,
+        "pit_is_flat": true
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8651,
+        "pit_max_decile_dev": 0.0275,
+        "pit_mean_dev": 0.0171,
+        "pit_is_flat": false
+      },
+      "run_diff": {
+        "calib_80": 0.8381,
+        "pit_max_decile_dev": 0.0214,
+        "pit_mean_dev": 0.0102,
+        "pit_is_flat": true
+      },
+      "home_total": {
+        "calib_80": 0.9224,
+        "pit_max_decile_dev": 0.0282,
+        "pit_mean_dev": 0.0235,
+        "pit_is_flat": false
+      },
+      "away_total": {
+        "calib_80": 0.9106,
+        "pit_max_decile_dev": 0.0207,
+        "pit_mean_dev": 0.0039,
+        "pit_is_flat": true
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8718,
+        "pit_max_decile_dev": 0.0349,
+        "pit_mean_dev": 0.0113,
+        "pit_is_flat": false
+      },
+      "run_diff": {
+        "calib_80": 0.8533,
+        "pit_max_decile_dev": 0.0315,
+        "pit_mean_dev": 0.0112,
+        "pit_is_flat": false
+      },
+      "home_total": {
+        "calib_80": 0.914,
+        "pit_max_decile_dev": 0.0342,
+        "pit_mean_dev": 0.0137,
+        "pit_is_flat": false
+      },
+      "away_total": {
+        "calib_80": 0.9224,
+        "pit_max_decile_dev": 0.0265,
+        "pit_mean_dev": 0.0047,
+        "pit_is_flat": false
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8803,
+        "pit_max_decile_dev": 0.0315,
+        "pit_mean_dev": 0.0124,
+        "pit_is_flat": false
+      },
+      "run_diff": {
+        "calib_80": 0.8364,
+        "pit_max_decile_dev": 0.0248,
+        "pit_mean_dev": 0.0087,
+        "pit_is_flat": true
+      },
+      "home_total": {
+        "calib_80": 0.9258,
+        "pit_max_decile_dev": 0.0147,
+        "pit_mean_dev": 0.0024,
+        "pit_is_flat": true
+      },
+      "away_total": {
+        "calib_80": 0.9174,
+        "pit_max_decile_dev": 0.0265,
+        "pit_mean_dev": 0.0079,
+        "pit_is_flat": false
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8685,
+        "pit_max_decile_dev": 0.014,
+        "pit_mean_dev": 0.0042,
+        "pit_is_flat": true
+      },
+      "run_diff": {
+        "calib_80": 0.8263,
+        "pit_max_decile_dev": 0.0231,
+        "pit_mean_dev": 0.0025,
+        "pit_is_flat": true
+      },
+      "home_total": {
+        "calib_80": 0.9089,
+        "pit_max_decile_dev": 0.0174,
+        "pit_mean_dev": 0.0079,
+        "pit_is_flat": true
+      },
+      "away_total": {
+        "calib_80": 0.9275,
+        "pit_max_decile_dev": 0.0157,
+        "pit_mean_dev": 0.0035,
+        "pit_is_flat": true
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8567,
+        "pit_max_decile_dev": 0.0241,
+        "pit_mean_dev": 0.0134,
+        "pit_is_flat": true
+      },
+      "run_diff": {
+        "calib_80": 0.8094,
+        "pit_max_decile_dev": 0.0241,
+        "pit_mean_dev": 0.0167,
+        "pit_is_flat": true
+      },
+      "home_total": {
+        "calib_80": 0.9191,
+        "pit_max_decile_dev": 0.0224,
+        "pit_mean_dev": 0.0148,
+        "pit_is_flat": true
+      },
+      "away_total": {
+        "calib_80": 0.9191,
+        "pit_max_decile_dev": 0.0282,
+        "pit_mean_dev": 0.003,
+        "pit_is_flat": false
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8851,
+        "pit_max_decile_dev": 0.0375,
+        "pit_mean_dev": 0.0352,
+        "pit_is_flat": false
+      },
+      "run_diff": {
+        "calib_80": 0.8176,
+        "pit_max_decile_dev": 0.0132,
+        "pit_mean_dev": 0.0015,
+        "pit_is_flat": true
+      },
+      "home_total": {
+        "calib_80": 0.9054,
+        "pit_max_decile_dev": 0.0233,
+        "pit_mean_dev": 0.0231,
+        "pit_is_flat": false
+      },
+      "away_total": {
+        "calib_80": 0.9223,
+        "pit_max_decile_dev": 0.0199,
+        "pit_mean_dev": 0.0258,
+        "pit_is_flat": false
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8514,
+        "pit_max_decile_dev": 0.0216,
+        "pit_mean_dev": 0.0148,
+        "pit_is_flat": true
+      },
+      "run_diff": {
+        "calib_80": 0.8564,
+        "pit_max_decile_dev": 0.0233,
+        "pit_mean_dev": 0.0141,
+        "pit_is_flat": true
+      },
+      "home_total": {
+        "calib_80": 0.9291,
+        "pit_max_decile_dev": 0.0334,
+        "pit_mean_dev": 0.027,
+        "pit_is_flat": false
+      },
+      "away_total": {
+        "calib_80": 0.9206,
+        "pit_max_decile_dev": 0.0132,
+        "pit_mean_dev": 0.0057,
+        "pit_is_flat": true
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8725,
+        "pit_max_decile_dev": 0.021,
+        "pit_mean_dev": 0.0232,
+        "pit_is_flat": false
+      },
+      "run_diff": {
+        "calib_80": 0.8546,
+        "pit_max_decile_dev": 0.0418,
+        "pit_mean_dev": 0.0349,
+        "pit_is_flat": false
+      },
+      "home_total": {
+        "calib_80": 0.9336,
+        "pit_max_decile_dev": 0.0239,
+        "pit_mean_dev": 0.012,
+        "pit_is_flat": true
+      },
+      "away_total": {
+        "calib_80": 0.9246,
+        "pit_max_decile_dev": 0.0372,
+        "pit_mean_dev": 0.0485,
+        "pit_is_flat": false
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8618,
+        "pit_max_decile_dev": 0.0221,
+        "pit_mean_dev": 0.0173,
+        "pit_is_flat": true
+      },
+      "run_diff": {
+        "calib_80": 0.8797,
+        "pit_max_decile_dev": 0.03,
+        "pit_mean_dev": 0.0118,
+        "pit_is_flat": false
+      },
+      "home_total": {
+        "calib_80": 0.9336,
+        "pit_max_decile_dev": 0.0346,
+        "pit_mean_dev": 0.0156,
+        "pit_is_flat": false
+      },
+      "away_total": {
+        "calib_80": 0.9282,
+        "pit_max_decile_dev": 0.0264,
+        "pit_mean_dev": 0.0043,
+        "pit_is_flat": false
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8618,
+        "pit_max_decile_dev": 0.0131,
+        "pit_mean_dev": 0.0034,
+        "pit_is_flat": true
+      },
+      "run_diff": {
+        "calib_80": 0.8348,
+        "pit_max_decile_dev": 0.0246,
+        "pit_mean_dev": 0.0152,
+        "pit_is_flat": true
+      },
+      "home_total": {
+        "calib_80": 0.9264,
+        "pit_max_decile_dev": 0.0228,
+        "pit_mean_dev": 0.0097,
+        "pit_is_flat": true
+      },
+      "away_total": {
+        "calib_80": 0.921,
+        "pit_max_decile_dev": 0.0346,
+        "pit_mean_dev": 0.0161,
+        "pit_is_flat": false
+      }
+    },
+    {
+      "total": {
+        "calib_80": 0.8725,
+        "pit_max_decile_dev": 0.0257,
+        "pit_mean_dev": 0.0131,
+        "pit_is_flat": false
+      },
+      "run_diff": {
+        "calib_80": 0.8348,
+        "pit_max_decile_dev": 0.0138,
+        "pit_mean_dev": 0.0087,
+        "pit_is_flat": true
+      },
+      "home_total": {
+        "calib_80": 0.9031,
+        "pit_max_decile_dev": 0.0192,
+        "pit_mean_dev": 0.0185,
+        "pit_is_flat": true
+      },
+      "away_total": {
+        "calib_80": 0.9138,
+        "pit_max_decile_dev": 0.0239,
+        "pit_mean_dev": 0.0022,
+        "pit_is_flat": true
+      }
+    }
+  ],
+  "n_buckets": 20,
+  "passes_calibration_floor": true
+}
