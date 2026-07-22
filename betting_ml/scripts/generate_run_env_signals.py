@@ -77,10 +77,10 @@ def _resolve_tables(env: str) -> tuple[str, str]:
 _SIGNAL_QUERY_TEMPLATE = """
 select
     g.game_pk,
-    g.game_date,
+    g.official_date                              as game_date,
     p.venue_id,
     p.venue_name,
-    g.home_final_score + g.away_final_score      as total_runs,
+    g.home_score + g.away_score                  as total_runs,
 
     p.eb_park_run_factor,
     p.elevation_ft,
@@ -101,7 +101,18 @@ select
     sa.starter_proj_fip                          as away_starter_proj_fip,
     sa.xwoba_against_30d                         as away_starter_xwoba_30d
 
-from baseball_data.betting.mart_game_results g
+-- Game universe + realized total_runs sourced from stg_statsapi_games (one row per game_pk,
+-- refreshed INTRADAY), NOT mart_game_results. WHY (2026-07-21 signal_freshness HALT class):
+-- mart_game_results is a COMPLETED-games mart whose S3 parquet is rebuilt only by the heavy
+-- daily --w5-group-a step, so it LAGS — a generator run before that rebuild (or a
+-- re-execute-from-a-later-step during a soak) drops the newest completed slate → 0 coverage →
+-- BLOCKING HALT (a false positive). run_env DOES need the realized scores (total_runs), but
+-- stg_statsapi_games carries home_score/away_score for a game the moment it goes Final (verified
+-- EXACT parity vs mart_game_results' home_final_score+away_final_score, and official_date ==
+-- game_date), and it is refreshed far more frequently than the --w5 mart. `home_score is not null`
+-- preserves the completed-only semantics mart_game_results gave (postponed/scheduled excluded).
+-- official_date is a DATE (mart_game_results' game_date equivalent) — NOT the INC-23 VARCHAR game_date.
+from baseball_data.betting.stg_statsapi_games g
 left join baseball_data.betting_features.feature_pregame_park_features p
     on p.game_pk = g.game_pk
 left join baseball_data.betting_features.feature_pregame_weather_features w
@@ -117,11 +128,12 @@ left join baseball_data.betting_features.feature_pregame_starter_features sh
 left join baseball_data.betting_features.feature_pregame_starter_features sa
     on sa.game_pk = g.game_pk and sa.side = 'away'
 
-where g.game_date >= '{start_date}'
-  and g.game_date <= '{end_date}'
+where g.official_date >= '{start_date}'
+  and g.official_date <= '{end_date}'
   and g.game_type = 'R'
+  and g.home_score is not null   -- completed games only (mart_game_results semantics)
 
-order by g.game_date, g.game_pk
+order by g.official_date, g.game_pk
 """
 
 

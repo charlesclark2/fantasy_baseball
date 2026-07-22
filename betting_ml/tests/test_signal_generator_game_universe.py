@@ -13,9 +13,11 @@ refreshed intraday, so it never lags for a scheduled/completed slate). The R gam
 identical to `mart_game_results` for every completed slate (verified), and neither offense
 nor starter reads any RESULT column — only `game_type`. `starter_ip` already does this.
 
-Guard: these two generators must NOT regress to `mart_game_results` for the game universe.
-`run_env` is intentionally EXEMPT — it genuinely consumes `home_final_score`/`away_final_score`
-(`total_runs`), a real completed-games dependency, so it legitimately keeps `mart_game_results`.
+Guard: none of the four floor/blocking signal generators may regress to `mart_game_results`
+for the game universe. `run_env` ALSO consumes realized scores (`total_runs`) but takes them
+from `stg_statsapi_games.home_score + away_score` (EXACT parity with mart_game_results' finals,
+populated the moment a game goes Final) with `home_score IS NOT NULL` to keep completed-only
+semantics — so it is race-free too, without depending on the heavy daily --w5 mart rebuild.
 """
 from __future__ import annotations
 
@@ -28,13 +30,29 @@ STARTER_IP = (REPO / "betting_ml" / "scripts" / "starter_v1" / "generate_starter
 RUN_ENV = (REPO / "betting_ml" / "scripts" / "generate_run_env_signals.py").read_text()
 
 
-def _score_query(src: str) -> str:
-    """The generator's main feature query (the _SCORE_QUERY triple-quoted block)."""
-    i = src.find("_SCORE_QUERY")
-    assert i != -1, "no _SCORE_QUERY in generator"
+def _triple_quoted_after(src: str, var: str) -> str:
+    """The triple-quoted block assigned to `var` in the generator source."""
+    i = src.find(var)
+    assert i != -1, f"no {var} in generator"
     start = src.find('"""', i)
     end = src.find('"""', start + 3)
     return src[start:end]
+
+
+def _score_query(src: str) -> str:
+    """The offense/starter feature query (the _SCORE_QUERY block)."""
+    return _triple_quoted_after(src, "_SCORE_QUERY")
+
+
+def _score_query_run_env(src: str) -> str:
+    """run_env's feature query (the _SIGNAL_QUERY_TEMPLATE block)."""
+    return _triple_quoted_after(src, "_SIGNAL_QUERY_TEMPLATE")
+
+
+def _sql_code_only(q: str) -> str:
+    """Strip `--` SQL comments so a banned-table check can't trip on the prose that
+    DOCUMENTS why the table was avoided (the E9.26 disclaimer-scan trap)."""
+    return "\n".join(line.split("--", 1)[0] for line in q.splitlines())
 
 
 class TestOffenseUsesFreshGameUniverse:
@@ -61,15 +79,37 @@ class TestStarterUsesFreshGameUniverse:
         )
 
 
-class TestPrecedentAndExemption:
-    def test_starter_ip_is_the_precedent(self):
-        # starter_ip already joins stg_statsapi_games — the pattern offense/starter now match.
-        assert "stg_statsapi_games" in STARTER_IP
-
-    def test_run_env_keeps_mart_game_results_because_it_needs_results(self):
-        # run_env legitimately consumes final scores (total_runs) — it is EXEMPT from the swap.
-        assert "mart_game_results" in RUN_ENV
-        assert "final_score" in RUN_ENV, (
-            "run_env's mart_game_results dependency is only justified while it reads a result column; "
-            "if final_score usage is gone, run_env should also move to stg_statsapi_games."
+class TestRunEnvUsesFreshGameUniverse:
+    def test_run_env_query_uses_stg_not_mart_game_results(self):
+        q = _score_query_run_env(RUN_ENV)
+        assert "stg_statsapi_games" in q, (
+            "run_env must source its game universe + total_runs from stg_statsapi_games (intraday-"
+            "fresh) so it can't race the lagging --w5 mart_game_results rebuild (the blocking-floor "
+            "recurrence of the 2026-07-21 HALT)."
         )
+        assert "mart_game_results" not in _sql_code_only(q), (
+            "run_env query regressed to mart_game_results (checked on comment-stripped SQL)."
+        )
+
+    def test_run_env_gets_total_runs_from_stg_scores_completed_only(self):
+        q = _score_query_run_env(RUN_ENV)
+        assert "home_score + g.away_score" in q or "home_score+g.away_score" in q.replace(" ", ""), (
+            "run_env total_runs must come from stg_statsapi_games home_score+away_score (parity with "
+            "mart_game_results finals)."
+        )
+        assert "home_score is not null" in q.lower(), (
+            "run_env must keep completed-only semantics (home_score IS NOT NULL) — else it would emit "
+            "rows for scheduled/postponed games mart_game_results excluded."
+        )
+
+    def test_run_env_filters_on_official_date_not_varchar_game_date(self):
+        # official_date is a DATE; stg_statsapi_games.game_date is the INC-23 VARCHAR — filtering/
+        # selecting the VARCHAR would reintroduce the year(VARCHAR) binder bite.
+        q = _score_query_run_env(RUN_ENV)
+        assert "g.official_date >= " in q and "g.official_date <= " in q
+
+
+class TestPrecedent:
+    def test_starter_ip_is_the_precedent(self):
+        # starter_ip already joins stg_statsapi_games — the pattern the other three now match.
+        assert "stg_statsapi_games" in STARTER_IP
