@@ -563,3 +563,113 @@ models:
         description: Games in the hyperparameter fit backing this row.
       - name: model_version
         data_tests: [not_null]
+
+  - name: ncaaf_recruit_production_pairs
+    description: >
+      NCAAF-P1.2b SUBSTRATE — one row per (player_id, arrival_season): a bridged recruit and
+      what they did in their FIRST FBS season. This is what run_freshman_projection.py learns
+      the recruit-rating → freshman-production map from, and the population it emits a prior for.
+
+      ⭐ THE BRIDGE (verified on the real lake 2026-07-20): recruiting.id ↔ roster.recruit_ids.
+      The data inventory originally documented recruiting.athleteId ↔ roster.recruitIds — WRONG
+      on the real data (7 matches in 12 seasons); recruit_ids→recruiting.id matches 60,883 →
+      18,891 distinct recruit↔player pairs, all with a composite rating.
+
+      ARRIVAL SEASON = the player's FIRST FBS roster season (not the recruiting class year; the
+      two agree for ~90% of pairs with a ~9% one-year redshirt lag — the observed first FBS
+      season is the honest, data-driven choice).
+
+      PRODUCTION is the LABEL (POST-hoc): season totals from fact_ncaaf_player_game over the
+      arrival season. scrimmage_prod / defense_prod / games_played are carried and the Python
+      model chooses + STANDARDIZES per position group. has_production is FALSE for a bridged
+      recruit who made an FBS roster but logged no stat line (redshirt / walk-on depth / an OL
+      freshman) — that stays UNKNOWN, never coalesced to 0.
+
+      LEAKAGE: every recruiting attribute is pre-signing; production is the label, never a
+      feature. The point-in-time discipline (fit only on strictly-prior classes) lives in the
+      Python model — this mart is the raw, class-tagged substrate.
+    columns:
+      - name: player_id
+        data_tests: [not_null]
+      - name: arrival_season
+        description: The player's first FBS roster season — the class the prior is emitted for.
+        data_tests: [not_null]
+      - name: sport
+        data_tests: [not_null]
+      - name: position_group
+        description: >
+          QB / RB / WR / TE / OL / DL / LB / DB / ST / ATH / OTHER — CFBD's granular recruiting
+          labels collapsed to nine modelling groups. OL and ST carry NO box production and are
+          modelled on a rating-only prior downstream.
+        data_tests: [not_null]
+      - name: composite_rating
+        description: The 247 composite (0–1) — the model's core predictor. Non-null by construction (recruits with no rating are dropped in staging).
+        data_tests: [not_null]
+      - name: has_production
+        description: >
+          TRUE ⇒ the recruit logged ≥1 stat line in their arrival season (production observed).
+          FALSE ⇒ on an FBS roster but no stat line — UNKNOWN production, not zero.
+
+  - name: ncaaf_freshman_priors
+    description: >
+      ⭐ NCAAF-P1.2b — the per-recruit freshman-production PRIOR. One row per (player_id,
+      arrival_season): a bridged recruit and their leakage-safe projected first-college-season
+      production, fit from recruiting rating on STRICTLY-PRIOR classes via a §0.5 bake-off
+      (partial-pooling / stratified-OLS / GBM / null-floor) under leave-one-class-out
+      expanding-window CV. The true-freshman feature P1.3 uses where a player has no prior snaps.
+
+      ⚠️ NOT COMPUTED IN dbt — a read-only view over the parquet run_freshman_projection.py
+      writes to ncaaf/derived/freshman_priors. 🚨 BUILD ORDER (INC-25): P1.1 marts +
+      ncaaf_recruit_production_pairs → run_freshman_projection.py → this view. Tagged
+      `ncaaf_p1_2b` (opt-in until the script has run once).
+
+      ⚠️ UNCERTAINTY: projected_production_z_sd is PARAMETER uncertainty (a RELATIVE confidence
+      signal), NOT a calibrated predictive interval — a pricing consumer MUST recalibrate on
+      held-out data (the E13.6 pattern). ⚠️ box_production_available=false (OL / ST) ⇒ a
+      rating-only prior, not a validated production projection. best_alpha = 0 — a candidate
+      feature P1.4 tests, not an edge claim.
+    columns:
+      - name: recruit_prior_key
+        description: arrival_season||'-'||player_id — the grain contract.
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: arrival_season
+        description: 2015+ — 2014 is the un-emitted seed (production floor; no strictly-prior class exists).
+        data_tests: [not_null]
+      - name: projected_production_z
+        description: ⭐ THE FEATURE. Projected first-season production, standardized within (position_group, class). Never NULL.
+        data_tests: [not_null]
+      - name: projected_production_z_sd
+        description: PARAMETER uncertainty (relative confidence only — NOT a calibrated predictive sd). Strictly positive.
+        data_tests: [not_null]
+      - name: box_production_available
+        description: FALSE ⇒ OL / special teams — a rating-only prior (box-invisible), NOT a validated production projection.
+      - name: model_version
+        data_tests: [not_null]
+
+  - name: ncaaf_team_freshman_prior
+    description: >
+      ⭐ NCAAF-P1.2b — the freshman prior rolled up to the P1.3 JOIN CONTRACT. GRAIN
+      (season, team): the per-recruit prior is a PRE-SEASON constant, so P1.3 BROADCASTS it to
+      every as_of_week of that season by joining on (season = arrival_season, team =
+      arrival_team) to its (season, team, as_of_week) matrix. A team with no bridged incoming
+      class is ABSENT — P1.3 LEFT JOINs and reads the absence as zero projected contribution.
+
+      ⚠️ NOT COMPUTED IN dbt — a read-only view over ncaaf/derived/team_freshman_prior, written
+      by run_freshman_projection.py alongside the per-recruit priors. Same INC-25 build-order +
+      `ncaaf_p1_2b` tag as ncaaf_freshman_priors.
+    columns:
+      - name: team_season_key
+        description: season||'-'||team — the grain contract.
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+      - name: team
+        data_tests: [not_null]
+      - name: freshman_class_projected_production
+        description: ⭐ Σ projected_production_z over the incoming class — the team-level pre-season freshman-contribution signal.
+      - name: model_version
+        data_tests: [not_null]
