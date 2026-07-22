@@ -107,7 +107,7 @@
 | `/roster` | 🗓️🧍 | ✅ year-only → **30,072 players** | id, name, position, jersey, height, weight, year, hometown, **recruitIds** |
 | `/player/search` | 🧍 | ✅ | + `teamStints` (transfer history) |
 | `/player/portal` | 🗓️🧍 | ✅ (4,499 rows 2025) | transfer portal: origin, destination, rating, stars, eligibility |
-| `/recruiting/players` | 🗓️🧍 | ✅ year-only (2,507); 2000+ | stars, rating, ranking, **athleteId** (→ roster `recruitIds`) |
+| `/recruiting/players` | 🗓️🧍 | ✅ year-only (2,507); 2000+ | stars, rating, ranking, **`id`** = the college bridge key. 🔧 **CORRECTED (P1.2b, 2026-07-20): the bridge is `recruiting.id ↔ roster.recruitIds`, NOT `athleteId`.** On the real lake `athleteId ↔ recruitIds` matches **7 rows in 12 seasons** (dead); `recruitIds → recruiting.id` matches **60,883 → 8,373 distinct bridged freshmen**. `athleteId` is an ESPN-style id in a different space; ignore it for the bridge. |
 | `/recruiting/teams`, `/talent` | 🗓️👥 | ✅ | class rankings; **team talent composite** (the mismatch-regime feature, roadmap §4) |
 | `/teams/fbs`, `/venues`, `/coaches`, `/calendar` | 🗓️ | ✅ | 136 FBS teams; venue incl. **dome, elevation, grass, timezone**; coach history w/ SP+ |
 

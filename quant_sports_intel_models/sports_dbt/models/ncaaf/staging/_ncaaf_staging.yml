@@ -86,7 +86,8 @@ models:
       Flattened CFBD /roster (NCAAF-P0.4) — one row per player on a team's season roster
       (athlete id = stable key; season from the Delta partition, not the JSON). Covers all
       divisions; the P0.4 mart's returning-production spine restricts to FBS. Feeds the
-      year-over-year roster-continuity computation. Leakage-safe. Materialized as a TABLE.
+      year-over-year roster-continuity computation AND (P1.2b) the recruit↔player bridge via
+      recruit_ids. Leakage-safe. Materialized as a TABLE.
     columns:
       - name: season
         data_tests: [not_null]
@@ -96,6 +97,31 @@ models:
         data_tests: [not_null]
       - name: sport
         data_tests: [not_null]
+      - name: recruit_ids
+        description: >
+          ⭐ P1.2b bridge (NEW) — the recruiting RECORD ids (VARCHAR[]) linked to this roster
+          player. recruit_ids ↔ recruiting_players.recruit_id is the ONLY join that works
+          (athleteId matches 7 rows in 12 seasons; recruit_ids→id matches 60,883). Empty for
+          most rows (walk-ons, transfers, pre-2014 arrivals) — an unlinked player, not a match
+          failure.
+
+  - name: stg_ncaaf_recruiting_players
+    description: >
+      Flattened CFBD /recruiting/players (NCAAF-P1.2b) — one row per recruit per class.
+      recruit_id (the recruiting RECORD id) is the bridge into the college universe via
+      roster.recruit_ids. rating is the 247 COMPOSITE (0–1); committed_to is the COLLEGE (school
+      is the HS). recruit_type distinguishes HighSchool / JUCO / PrepSchool. Pre-signing ⇒
+      leakage-safe. season = Delta partition (== class year). Materialized as a TABLE.
+    columns:
+      - name: season
+        data_tests: [not_null]
+      - name: recruit_id
+        description: The recruiting RECORD id — the bridge key (↔ roster.recruit_ids). Unique per (season) record.
+        data_tests: [not_null]
+      - name: sport
+        data_tests: [not_null]
+      - name: composite_rating
+        description: 247Sports composite (0–1). NULL for a handful of unrated recruits; the P1.2b substrate drops those.
 
   - name: stg_ncaaf_coaches
     description: >

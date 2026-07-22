@@ -542,6 +542,32 @@ against a market — no edge is claimed, and P1.4 is what tests this feature aga
 
 ---
 
+### 6.14 P1.2b freshman-projection marts (the recruit→college MLE)
+
+Three marts land with **NCAAF-P1.2b**. They project a TRUE FRESHMAN's first-college-season
+production from their recruiting rating (a player with no snaps has no rollup features — the
+recruiting rating is the only pre-arrival signal), leakage-safe, position-specific.
+
+| Mart | Grain | What | Tag |
+|---|---|---|---|
+| `ncaaf_recruit_production_pairs` | (player_id, arrival_season) | dbt-native substrate: a bridged recruit + their first-FBS-season box production (the LABEL). ~8,373 pairs, 2014–2025. | (in default build) |
+| `ncaaf_freshman_priors` | (player_id, arrival_season) | ⭐ the per-recruit prior: `projected_production_z` + `_sd`. View over `ncaaf/derived/freshman_priors`. | `ncaaf_p1_2b` |
+| `ncaaf_team_freshman_prior` | (season, team) | ⭐ the **P1.3 join contract** — the class's projected freshman contribution, broadcast to every `as_of_week`. | `ncaaf_p1_2b` |
+
+- **⭐ THE BRIDGE = `roster.recruit_ids ↔ recruiting_players.recruit_id`** (the recruiting RECORD
+  id), NOT `athleteId` (7 matches in 12 seasons — the data inventory was wrong; corrected). 60,883
+  unnested matches → 8,373 distinct bridged freshmen.
+- **ARRIVAL = the player's first FBS roster season** (not the recruiting class year — they agree
+  ~90% of the time; the observed first FBS season absorbs redshirt/grayshirt lag honestly).
+- **The model is a §0.5 bake-off** (partial-pooling via `hierarchical.py` REUSED / stratified-OLS /
+  GBM / position-mean null), leave-one-CLASS-out expanding-window CV, PBO/DSR, oracle-floor.
+  Not in dbt — `models/run_freshman_projection.py`; **INC-25 build order** (P1.1 marts + pairs mart
+  → script → the two views). ⚠️ **`projected_production_z_sd` is PARAMETER uncertainty** (relative
+  confidence — recalibrate to price). ⚠️ **OL/ST have `box_production_available = false`** (a
+  rating-only prior; a lineman logs no stat line). ⚠️ **NULL production stays NULL**, never 0.
+
+---
+
 ## 7. Open gaps carried into P1.2 / P1.3
 
 1. **Special teams is thin.** Kicking/punting live in the long player-stat table but are not pivoted
