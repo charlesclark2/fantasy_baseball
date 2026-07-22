@@ -1,6 +1,6 @@
 # NCAAF-P1.2b — recruit-rating → freshman-production projection (the HS→college MLE)
 
-**Model:** `ncaaf_freshman_projection_v1` · **generated:** 2026-07-22T01:25:32.469255+00:00
+**Model:** `ncaaf_freshman_projection_v1` · **generated:** 2026-07-22T04:43:30.013432+00:00
 **Classes emitted:** 2015–2025 (16,541 recruit priors) · **seed (not emitted):** 2014
 
 > ⚠️ **This is a freshman PRIOR, not an edge claim.** It projects a recruit's first-season production from their recruiting rating, measured against realized production — never a market. `best_alpha = 0` holds; P1.4 decides whether a freshman feature earns its place. The uncertainty is **PARAMETER** uncertainty (a RELATIVE confidence signal), NOT a calibrated predictive interval — a pricing consumer MUST recalibrate on held-out data.

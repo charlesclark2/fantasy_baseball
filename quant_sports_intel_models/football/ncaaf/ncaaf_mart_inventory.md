@@ -1,11 +1,14 @@
 # NCAAF — Analytic Mart Inventory (the conformed dimensional model)
 
-**Status:** v1.1 — produced by **NCAAF-P1.1** (2026-07-20). Every row count below is **observed on a
-real build over the S3 Delta lake**, not estimated, and was **re-measured after the
-`season_order_week` fix** — see the note below.
-**✅ Box-verified 2026-07-20:** `sports_ncaaf_dbt_build_job` ran green on the EC2 box in **2m59s**
-(run op ~3 min), reproducing these counts exactly (`rollup_ncaaf_team_week_asof` = 25,565;
-`ncaaf_team_coaching_change` = 1,555). The runtime gate is CLOSED.
+**Status:** v1.2 — the P1.1 conformed model (2026-07-20) **plus the P1.2 / P1.2b / P1.3 marts** that
+later stories added (§6.13 strength, §6.14 freshman, §6.15 the pregame feature matrix). Every row
+count below is **observed on a real build over the S3 Delta lake**, not estimated, and was
+**re-measured after the `season_order_week` fix** — see the note below.
+**✅ Box-verified 2026-07-20** (P1.1 core): `sports_ncaaf_dbt_build_job` ran green on the EC2 box in
+**2m59s** (run op ~3 min), reproducing these counts exactly (`rollup_ncaaf_team_week_asof` = 25,565;
+`ncaaf_team_coaching_change` = 1,555). **✅ P1.3 laptop-verified 2026-07-21:**
+`feature_ncaaf_pregame_matrix` = **9,086 FBS-vs-FBS games** (= the exact `dim_ncaaf_game` FBS
+universe) built + all 4 HALT leakage gates green. The runtime gate is CLOSED.
 
 > ⚠️ **Provenance note (why v1.1).** v1.0 quoted 24,000 for the two week-grained rollups. That was
 > a PRE-FIX measurement carried forward by mistake: it was taken before `season_order_week` existed,
@@ -215,12 +218,14 @@ column and OOM'd 4 GB on a 25k-row table.
 
 | Surface | What |
 |---|---|
-| **Box job** | `sports_ncaaf_dbt_build_job` (`pipeline/jobs/sports_dbt_job.py`) — builds the **whole** NCAAF DAG, P0.4's `ncaaf_team_roster_continuity` and P0.5's `ncaaf_team_coaching_change` included. |
-| **Tiers** | `dbt run` = **HALT** → the 3 leakage gates = **HALT** → the rest of `dbt test` = **WARN-continue**. Leakage is carved out of the INC-6 WARN default on purpose: a pregame rollup absorbing post-kickoff data is a correctness emergency, and a warning nobody reads is how the postseason week-1 collision reached a shipped model. |
+| **Box job** | `sports_ncaaf_dbt_build_job` (`pipeline/jobs/sports_dbt_job.py`) — builds the **whole** NCAAF DAG via the `ncaaf.marts` folder selector, so a mart a later story adds (P1.2's `ncaaf_team_strength_week`, P1.2b's freshman marts, P1.3's `feature_ncaaf_pregame_matrix`, P0.4's roster / P0.5's coaching) is picked up automatically and cannot silently go un-built. ⚠️ the parquet-backed views (strength / freshman) read a Delta the P1.2/P1.2b **scripts** write, so INC-25 build order holds: run those scripts before the mart build refreshes them (see §6.13/§6.15). |
+| **Tiers** | `dbt run` = **HALT** → the **5 leakage gates** = **HALT** → the rest of `dbt test` = **WARN-continue**. The HALT set is `NCAAF_LEAKAGE_GATES`: the 3 P1.1 rollup gates (§3.1) **+ P1.2's `assert_team_strength_is_point_in_time`** (§6.13) **+ P1.3's `assert_pregame_matrix_is_point_in_time`** (§6.15) — every serving/training-critical pregame surface. Leakage is carved out of the INC-6 WARN default on purpose: a pregame surface absorbing post-kickoff data is a correctness emergency, and a warning nobody reads is how the postseason week-1 collision reached a shipped model. (The strength gate was promoted from the WARN suite to HALT on 2026-07-21 — a leak in the strength feature propagates to the P1.3 matrix and all of P1.4.) |
 | **Serial staging** | Built one model at a time — the P0.5 fusion-segfault landmine *and* the measured OOM above. ~85s. |
-| **CI** | `.github/workflows/sports_dbt_ci.yml` — offline parse + compile, an NCAAF-specific slice, the three leakage gates, and a non-empty-selector assertion (a selector matching nothing still exits 0 in dbt). |
+| **CI** | `.github/workflows/sports_dbt_ci.yml` — offline parse + compile, an NCAAF-specific slice, the **four** leakage gates, and a non-empty-selector assertion (a selector matching nothing still exits 0 in dbt; the gate count is asserted `== 4`). |
 
-**Observed clean-slate build:** staging 15 models / ~85s → marts 14 models / ~14s → 166 tests / ~14s.
+**Observed clean-slate build (P1.1 core, box 2026-07-20):** staging 15 models / ~85s → marts 14 models
+/ ~14s → 166 tests / ~14s. The marts folder now holds **19 models** (P1.1's 14 + P1.2 strength + P1.2b's
+3 + P1.3's feature matrix); the P1.3 laptop build materialized the incremental chain in ~2 min.
 
 ### ⚠️ Known accepted nulls — RATCHETED, not waived (P0.3 `xref_college_nfl_players`)
 
@@ -568,13 +573,78 @@ recruiting rating is the only pre-arrival signal), leakage-safe, position-specif
 
 ---
 
-## 7. Open gaps carried into P1.2 / P1.3
+### 6.15 `feature_ncaaf_pregame_matrix` — the P1.3 pregame feature matrix · grain: game_id · ⭐ P1.3
+
+**The BROAD, leakage-safe, point-in-time matrix P1.4's game-model bake-off trains on.** One row per
+FBS-vs-FBS game (a MATCHUP): the home team's and away team's pregame features side by side, each
+snapshot AS OF this game's own kickoff, plus situational context and — under a `label_` prefix —
+the POST-KICKOFF outcome P1.4 targets. **Real build (laptop, 2026-07-21): 9,086 games (2014–2025) ×
+200 columns** — **174 `home_`/`away_` feature columns** (~87 per side across the 12 families below),
+6 `label_*` targets, + headline diffs. Tag `ncaaf_p1_3`.
+
+**Why game grain, not team-game:** P1.4 models the JOINT scoring distribution ONCE and derives all
+three markets (H2H = P(margin>0), spread, total). A team's features appear twice per season (home
+and away) — correct, because the leakage boundary is each SPECIFIC game's kickoff.
+
+| Family | Source | Join grain | As-of |
+|---|---|---|---|
+| Team strength (P1.2) | `ncaaf_team_strength_week` | (season, team_id, as_of_week) **1:1** | kickoff week |
+| Efficiency raw + opp-adj (P1.1) | `rollup_ncaaf_team_week_asof` / `_opponent_adjusted` | (season, team_id, as_of_week) **1:1** | kickoff week |
+| Pace/style, line/trench, drive quality (P1.1) | `rollup_ncaaf_team_week_asof` | 1:1 | kickoff week |
+| Roster continuity / portal / talent (P0.4) | `ncaaf_team_roster_continuity` | (season, team) **BROADCAST** | pre-season |
+| Freshman prior (P1.2b) | `ncaaf_team_freshman_prior` | (season, team) **BROADCAST** | pre-season |
+| Coaching, HC-only (P0.5) | `ncaaf_team_coaching_change` | (season, team) **BROADCAST** | pre-season |
+| QB continuity (derived) | `fact_ncaaf_player_game` | per matchup side, prior starts | strictly prior games |
+| Situational + environment | `dim_ncaaf_game` + `dim_ncaaf_team` venue | game-level | kickoff |
+
+**Observed per-family coverage (real build, % non-null pooled over both sides, latest season 2025):**
+strength 99.9% · coaching / portal / roster 98.5% · talent 97.1% · freshman 95.5% · rest 94.3% ·
+the rollup-derived families (efficiency raw + opp-adj, pace, line/trench, drive, qb) all 91.4%
+(shared week-1 / no-play-coverage NULL) · travel/altitude 87.0% (neutral-site NULL). **Strength is
+0% in 2014** (P1.2 emits 2015+) → 100% thereafter (2020: 96%, COVID opt-outs). No dead family.
+⚠️ **P1.4 CAVEAT: `portal_net_count` is COALESCED to a real 0 pre-2021, so portal_flux reads ~98%
+coverage even where the feed does not exist — the honest gate is the `{home,away}_portal_data_covered`
+boolean carried in the matrix, NOT the non-null rate.** The driver emits the full per-season table to
+`ablation_results/ncaaf_p1_3_feature_matrix.md`.
+
+- **⚠️ NOT the whole story — it is a FEATURE matrix, no edge claim.** Every `home_*`/`away_*` col is
+  as-of kickoff; `label_*` is the target and NEVER a feature (prefixed so a `select home_*` can't
+  leak it). `best_alpha = 0` holds; P1.4 tests it against a closing line under §0.5 deflation.
+- **🚨 NULL = unknown, kept NULL** (week-1, no coverage, first-time HC, pre-2021 portal, **2014 = no
+  strength emitted**). Never coalesced to 0.
+- **QB has no injury flag** (no CFB injury source, P0.1) → the DERIVABLE half only: starter
+  continuity (`qb_starts_prior`, `qb_distinct_starters_prior`, `qb_starter_changed_recent`) + a
+  trailing efficiency proxy (`qb_trailing_ypa/qbr`). **Coaching is HC-only** (OC/DC deferred, P0.5).
+  **No `is_rivalry`** (no confirmed field — dropped, not guessed). **Line/trench is UNIT-level**
+  (individual-OL is the PFF gap; sack-rate-allowed / DL-havoc are a §7 refinement).
+- **⭐ Travel/altitude ARE built (non-neutral games)** — a verified departure from the P1.1-update
+  banner's "drop travel/altitude": `venue_latitude`/`venue_longitude` are in fact staged on
+  `stg_ncaaf_teams`, so `away_travel_km` (great-circle) + `away_altitude_change_m` are computed for
+  the non-neutral majority, coverage-flagged for P1.4 to ablate. Neutral-site venue geography stays
+  NULL (§7 gap 2 — not attributed).
+- **⚠️ NOT COMPUTED BY A SCRIPT — this IS a pure dbt mart** (unlike strength/freshman). But it reads
+  the parquet-backed `ncaaf_team_strength_week` + `ncaaf_team_freshman_prior` views, so **INC-25
+  build order holds**: P1.1 marts → `run_team_strength.py` → `run_freshman_projection.py` →
+  `dbt run --select +feature_ncaaf_pregame_matrix`. Then `models/run_feature_matrix.py` reads it
+  ONCE → the cached parquet (`ncaaf/derived/feature_pregame_matrix`) the bake-off consumes, and
+  emits a **per-family per-season coverage report** (`ablation_results/ncaaf_p1_3_feature_matrix.md`).
+- **Leakage gate `assert_pregame_matrix_is_point_in_time`** (HALT-tier, in the box job's gate op):
+  DATE-based, per-matchup — count parity (the snapshot is at the kickoff week, not later) + clock
+  sanity (no in-window game post-dates this game's kickoff). Verified to FAIL on a tampered row by
+  `betting_ml/tests/test_ncaaf_feature_matrix.py`.
+
+---
+
+## 7. Open gaps carried into P1.2 / P1.3 / P1.4
 
 1. **Special teams is thin.** Kicking/punting live in the long player-stat table but are not pivoted
-   into `fact_ncaaf_player_game`. Add if a P1.3 ablation wants them.
+   into `fact_ncaaf_player_game`. Add if a P1.4 ablation wants them. (P1.3 does not use ST.)
 2. **No venue for neutral-site games** — deliberately NULL rather than wrongly attributing the home
-   team's stadium to a bowl. If travel/altitude features need them, a neutral-venue table is a
-   precursor.
+   team's stadium to a bowl. ✅ **Partly resolved by P1.3:** `venue_latitude`/`venue_longitude`/
+   `venue_elevation_m` ARE staged on `stg_ncaaf_teams` → `feature_ncaaf_pregame_matrix` builds
+   `away_travel_km` (great-circle) + `away_altitude_change_m` for the **non-neutral majority** (§6.15),
+   coverage ~86–88%. The remaining gap is genuinely NEUTRAL-site venue geography — still NULL (a
+   neutral-venue table is the precursor if a P1.4 ablation wants travel on bowls/neutral openers).
 3. **`box_advanced` (lake table #8) is not staged** — it overlaps `game_advanced`, which is already
    the modelling grain. Stage it only if a specific field is missing.
 4. **Opponent adjustment is 2-pass, unweighted per opponent.** ✅ **Partly addressed by P1.2**,

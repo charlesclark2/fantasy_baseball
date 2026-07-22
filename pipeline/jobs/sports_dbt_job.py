@@ -186,6 +186,13 @@ NCAAF_LEAKAGE_GATES = [
     "assert_asof_week_has_no_future_games",
     "assert_opponent_adjustment_is_point_in_time",
     "assert_season_order_week_is_monotone_in_date",
+    # P1.2: the team-strength posterior is a serving-critical PREGAME feature that feeds the P1.3
+    # matrix — a leak in it propagates to every P1.4 model, so its point-in-time gate HALTs too
+    # (promoted from the WARN test suite to the HALT set, 2026-07-21).
+    "assert_team_strength_is_point_in_time",
+    # P1.3: the pregame feature matrix is THE input every P1.4 model trains on, so a leak here
+    # contaminates all of it — its point-in-time gate HALTs like the P1.1 rollup gates.
+    "assert_pregame_matrix_is_point_in_time",
 ]
 
 

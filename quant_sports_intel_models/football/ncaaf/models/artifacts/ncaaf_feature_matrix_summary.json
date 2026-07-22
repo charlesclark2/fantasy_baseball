@@ -1,0 +1,1222 @@
+{
+  "generated_at": "2026-07-22T04:47:36.871816+00:00",
+  "n_games": 9086,
+  "n_columns": 200,
+  "n_feature_columns": 174,
+  "n_label_columns": 6,
+  "seasons": [
+    2014,
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "families": [
+    "strength (P1.2)",
+    "efficiency_raw (P1.1)",
+    "efficiency_opp_adj (P1.1)",
+    "pace_style",
+    "line_trench",
+    "drive_quality",
+    "roster_continuity (P0.4)",
+    "portal_flux (P0.4)",
+    "talent (P0.4)",
+    "freshman_prior (P1.2b)",
+    "coaching (P0.5)",
+    "qb_continuity",
+    "rest",
+    "travel/altitude"
+  ],
+  "coverage": [
+    {
+      "season": 2014,
+      "family": "coaching (P0.5)",
+      "coverage_pct": 97.9,
+      "n_present": 1488,
+      "n_sides": 1520
+    },
+    {
+      "season": 2014,
+      "family": "drive_quality",
+      "coverage_pct": 91.2,
+      "n_present": 1387,
+      "n_sides": 1520
+    },
+    {
+      "season": 2014,
+      "family": "efficiency_opp_adj (P1.1)",
+      "coverage_pct": 91.1,
+      "n_present": 1385,
+      "n_sides": 1520
+    },
+    {
+      "season": 2014,
+      "family": "efficiency_raw (P1.1)",
+      "coverage_pct": 91.1,
+      "n_present": 1385,
+      "n_sides": 1520
+    },
+    {
+      "season": 2014,
+      "family": "freshman_prior (P1.2b)",
+      "coverage_pct": 0.0,
+      "n_present": 0,
+      "n_sides": 1520
+    },
+    {
+      "season": 2014,
+      "family": "line_trench",
+      "coverage_pct": 91.1,
+      "n_present": 1385,
+      "n_sides": 1520
+    },
+    {
+      "season": 2014,
+      "family": "pace_style",
+      "coverage_pct": 91.1,
+      "n_present": 1385,
+      "n_sides": 1520
+    },
+    {
+      "season": 2014,
+      "family": "portal_flux (P0.4)",
+      "coverage_pct": 97.9,
+      "n_present": 1488,
+      "n_sides": 1520
+    },
+    {
+      "season": 2014,
+      "family": "qb_continuity",
+      "coverage_pct": 91.2,
+      "n_present": 1386,
+      "n_sides": 1520
+    },
+    {
+      "season": 2014,
+      "family": "rest",
+      "coverage_pct": 94.7,
+      "n_present": 1439,
+      "n_sides": 1520
+    },
+    {
+      "season": 2014,
+      "family": "roster_continuity (P0.4)",
+      "coverage_pct": 97.9,
+      "n_present": 1488,
+      "n_sides": 1520
+    },
+    {
+      "season": 2014,
+      "family": "strength (P1.2)",
+      "coverage_pct": 0.0,
+      "n_present": 0,
+      "n_sides": 1520
+    },
+    {
+      "season": 2014,
+      "family": "talent (P0.4)",
+      "coverage_pct": 0.0,
+      "n_present": 0,
+      "n_sides": 1520
+    },
+    {
+      "season": 2014,
+      "family": "travel/altitude",
+      "coverage_pct": 86.2,
+      "n_present": 1311,
+      "n_sides": 1520
+    },
+    {
+      "season": 2015,
+      "family": "coaching (P0.5)",
+      "coverage_pct": 99.3,
+      "n_present": 1519,
+      "n_sides": 1530
+    },
+    {
+      "season": 2015,
+      "family": "drive_quality",
+      "coverage_pct": 91.5,
+      "n_present": 1400,
+      "n_sides": 1530
+    },
+    {
+      "season": 2015,
+      "family": "efficiency_opp_adj (P1.1)",
+      "coverage_pct": 91.5,
+      "n_present": 1400,
+      "n_sides": 1530
+    },
+    {
+      "season": 2015,
+      "family": "efficiency_raw (P1.1)",
+      "coverage_pct": 91.5,
+      "n_present": 1400,
+      "n_sides": 1530
+    },
+    {
+      "season": 2015,
+      "family": "freshman_prior (P1.2b)",
+      "coverage_pct": 99.3,
+      "n_present": 1519,
+      "n_sides": 1530
+    },
+    {
+      "season": 2015,
+      "family": "line_trench",
+      "coverage_pct": 91.5,
+      "n_present": 1400,
+      "n_sides": 1530
+    },
+    {
+      "season": 2015,
+      "family": "pace_style",
+      "coverage_pct": 91.5,
+      "n_present": 1400,
+      "n_sides": 1530
+    },
+    {
+      "season": 2015,
+      "family": "portal_flux (P0.4)",
+      "coverage_pct": 99.3,
+      "n_present": 1519,
+      "n_sides": 1530
+    },
+    {
+      "season": 2015,
+      "family": "qb_continuity",
+      "coverage_pct": 91.2,
+      "n_present": 1395,
+      "n_sides": 1530
+    },
+    {
+      "season": 2015,
+      "family": "rest",
+      "coverage_pct": 94.6,
+      "n_present": 1448,
+      "n_sides": 1530
+    },
+    {
+      "season": 2015,
+      "family": "roster_continuity (P0.4)",
+      "coverage_pct": 99.3,
+      "n_present": 1519,
+      "n_sides": 1530
+    },
+    {
+      "season": 2015,
+      "family": "strength (P1.2)",
+      "coverage_pct": 100.0,
+      "n_present": 1530,
+      "n_sides": 1530
+    },
+    {
+      "season": 2015,
+      "family": "talent (P0.4)",
+      "coverage_pct": 99.3,
+      "n_present": 1519,
+      "n_sides": 1530
+    },
+    {
+      "season": 2015,
+      "family": "travel/altitude",
+      "coverage_pct": 87.1,
+      "n_present": 1333,
+      "n_sides": 1530
+    },
+    {
+      "season": 2016,
+      "family": "coaching (P0.5)",
+      "coverage_pct": 100.0,
+      "n_present": 1520,
+      "n_sides": 1520
+    },
+    {
+      "season": 2016,
+      "family": "drive_quality",
+      "coverage_pct": 91.4,
+      "n_present": 1389,
+      "n_sides": 1520
+    },
+    {
+      "season": 2016,
+      "family": "efficiency_opp_adj (P1.1)",
+      "coverage_pct": 91.4,
+      "n_present": 1389,
+      "n_sides": 1520
+    },
+    {
+      "season": 2016,
+      "family": "efficiency_raw (P1.1)",
+      "coverage_pct": 91.4,
+      "n_present": 1389,
+      "n_sides": 1520
+    },
+    {
+      "season": 2016,
+      "family": "freshman_prior (P1.2b)",
+      "coverage_pct": 99.2,
+      "n_present": 1508,
+      "n_sides": 1520
+    },
+    {
+      "season": 2016,
+      "family": "line_trench",
+      "coverage_pct": 91.4,
+      "n_present": 1389,
+      "n_sides": 1520
+    },
+    {
+      "season": 2016,
+      "family": "pace_style",
+      "coverage_pct": 91.4,
+      "n_present": 1389,
+      "n_sides": 1520
+    },
+    {
+      "season": 2016,
+      "family": "portal_flux (P0.4)",
+      "coverage_pct": 100.0,
+      "n_present": 1520,
+      "n_sides": 1520
+    },
+    {
+      "season": 2016,
+      "family": "qb_continuity",
+      "coverage_pct": 91.3,
+      "n_present": 1388,
+      "n_sides": 1520
+    },
+    {
+      "season": 2016,
+      "family": "rest",
+      "coverage_pct": 94.7,
+      "n_present": 1439,
+      "n_sides": 1520
+    },
+    {
+      "season": 2016,
+      "family": "roster_continuity (P0.4)",
+      "coverage_pct": 100.0,
+      "n_present": 1520,
+      "n_sides": 1520
+    },
+    {
+      "season": 2016,
+      "family": "strength (P1.2)",
+      "coverage_pct": 100.0,
+      "n_present": 1520,
+      "n_sides": 1520
+    },
+    {
+      "season": 2016,
+      "family": "talent (P0.4)",
+      "coverage_pct": 100.0,
+      "n_present": 1520,
+      "n_sides": 1520
+    },
+    {
+      "season": 2016,
+      "family": "travel/altitude",
+      "coverage_pct": 86.2,
+      "n_present": 1310,
+      "n_sides": 1520
+    },
+    {
+      "season": 2017,
+      "family": "coaching (P0.5)",
+      "coverage_pct": 98.5,
+      "n_present": 1529,
+      "n_sides": 1552
+    },
+    {
+      "season": 2017,
+      "family": "drive_quality",
+      "coverage_pct": 91.4,
+      "n_present": 1418,
+      "n_sides": 1552
+    },
+    {
+      "season": 2017,
+      "family": "efficiency_opp_adj (P1.1)",
+      "coverage_pct": 91.4,
+      "n_present": 1418,
+      "n_sides": 1552
+    },
+    {
+      "season": 2017,
+      "family": "efficiency_raw (P1.1)",
+      "coverage_pct": 91.4,
+      "n_present": 1418,
+      "n_sides": 1552
+    },
+    {
+      "season": 2017,
+      "family": "freshman_prior (P1.2b)",
+      "coverage_pct": 99.2,
+      "n_present": 1540,
+      "n_sides": 1552
+    },
+    {
+      "season": 2017,
+      "family": "line_trench",
+      "coverage_pct": 91.4,
+      "n_present": 1418,
+      "n_sides": 1552
+    },
+    {
+      "season": 2017,
+      "family": "pace_style",
+      "coverage_pct": 91.4,
+      "n_present": 1418,
+      "n_sides": 1552
+    },
+    {
+      "season": 2017,
+      "family": "portal_flux (P0.4)",
+      "coverage_pct": 98.5,
+      "n_present": 1529,
+      "n_sides": 1552
+    },
+    {
+      "season": 2017,
+      "family": "qb_continuity",
+      "coverage_pct": 91.3,
+      "n_present": 1417,
+      "n_sides": 1552
+    },
+    {
+      "season": 2017,
+      "family": "rest",
+      "coverage_pct": 94.4,
+      "n_present": 1465,
+      "n_sides": 1552
+    },
+    {
+      "season": 2017,
+      "family": "roster_continuity (P0.4)",
+      "coverage_pct": 98.5,
+      "n_present": 1529,
+      "n_sides": 1552
+    },
+    {
+      "season": 2017,
+      "family": "strength (P1.2)",
+      "coverage_pct": 100.0,
+      "n_present": 1552,
+      "n_sides": 1552
+    },
+    {
+      "season": 2017,
+      "family": "talent (P0.4)",
+      "coverage_pct": 98.5,
+      "n_present": 1529,
+      "n_sides": 1552
+    },
+    {
+      "season": 2017,
+      "family": "travel/altitude",
+      "coverage_pct": 86.9,
+      "n_present": 1348,
+      "n_sides": 1552
+    },
+    {
+      "season": 2018,
+      "family": "coaching (P0.5)",
+      "coverage_pct": 99.4,
+      "n_present": 1534,
+      "n_sides": 1544
+    },
+    {
+      "season": 2018,
+      "family": "drive_quality",
+      "coverage_pct": 91.3,
+      "n_present": 1410,
+      "n_sides": 1544
+    },
+    {
+      "season": 2018,
+      "family": "efficiency_opp_adj (P1.1)",
+      "coverage_pct": 91.3,
+      "n_present": 1410,
+      "n_sides": 1544
+    },
+    {
+      "season": 2018,
+      "family": "efficiency_raw (P1.1)",
+      "coverage_pct": 91.3,
+      "n_present": 1410,
+      "n_sides": 1544
+    },
+    {
+      "season": 2018,
+      "family": "freshman_prior (P1.2b)",
+      "coverage_pct": 99.2,
+      "n_present": 1532,
+      "n_sides": 1544
+    },
+    {
+      "season": 2018,
+      "family": "line_trench",
+      "coverage_pct": 91.3,
+      "n_present": 1410,
+      "n_sides": 1544
+    },
+    {
+      "season": 2018,
+      "family": "pace_style",
+      "coverage_pct": 91.2,
+      "n_present": 1408,
+      "n_sides": 1544
+    },
+    {
+      "season": 2018,
+      "family": "portal_flux (P0.4)",
+      "coverage_pct": 99.4,
+      "n_present": 1534,
+      "n_sides": 1544
+    },
+    {
+      "season": 2018,
+      "family": "qb_continuity",
+      "coverage_pct": 91.3,
+      "n_present": 1410,
+      "n_sides": 1544
+    },
+    {
+      "season": 2018,
+      "family": "rest",
+      "coverage_pct": 94.4,
+      "n_present": 1458,
+      "n_sides": 1544
+    },
+    {
+      "season": 2018,
+      "family": "roster_continuity (P0.4)",
+      "coverage_pct": 99.4,
+      "n_present": 1534,
+      "n_sides": 1544
+    },
+    {
+      "season": 2018,
+      "family": "strength (P1.2)",
+      "coverage_pct": 100.0,
+      "n_present": 1544,
+      "n_sides": 1544
+    },
+    {
+      "season": 2018,
+      "family": "talent (P0.4)",
+      "coverage_pct": 99.4,
+      "n_present": 1534,
+      "n_sides": 1544
+    },
+    {
+      "season": 2018,
+      "family": "travel/altitude",
+      "coverage_pct": 86.2,
+      "n_present": 1331,
+      "n_sides": 1544
+    },
+    {
+      "season": 2019,
+      "family": "coaching (P0.5)",
+      "coverage_pct": 100.0,
+      "n_present": 1548,
+      "n_sides": 1548
+    },
+    {
+      "season": 2019,
+      "family": "drive_quality",
+      "coverage_pct": 91.6,
+      "n_present": 1418,
+      "n_sides": 1548
+    },
+    {
+      "season": 2019,
+      "family": "efficiency_opp_adj (P1.1)",
+      "coverage_pct": 91.6,
+      "n_present": 1418,
+      "n_sides": 1548
+    },
+    {
+      "season": 2019,
+      "family": "efficiency_raw (P1.1)",
+      "coverage_pct": 91.6,
+      "n_present": 1418,
+      "n_sides": 1548
+    },
+    {
+      "season": 2019,
+      "family": "freshman_prior (P1.2b)",
+      "coverage_pct": 99.3,
+      "n_present": 1537,
+      "n_sides": 1548
+    },
+    {
+      "season": 2019,
+      "family": "line_trench",
+      "coverage_pct": 91.6,
+      "n_present": 1418,
+      "n_sides": 1548
+    },
+    {
+      "season": 2019,
+      "family": "pace_style",
+      "coverage_pct": 91.6,
+      "n_present": 1418,
+      "n_sides": 1548
+    },
+    {
+      "season": 2019,
+      "family": "portal_flux (P0.4)",
+      "coverage_pct": 100.0,
+      "n_present": 1548,
+      "n_sides": 1548
+    },
+    {
+      "season": 2019,
+      "family": "qb_continuity",
+      "coverage_pct": 91.5,
+      "n_present": 1417,
+      "n_sides": 1548
+    },
+    {
+      "season": 2019,
+      "family": "rest",
+      "coverage_pct": 94.2,
+      "n_present": 1458,
+      "n_sides": 1548
+    },
+    {
+      "season": 2019,
+      "family": "roster_continuity (P0.4)",
+      "coverage_pct": 100.0,
+      "n_present": 1548,
+      "n_sides": 1548
+    },
+    {
+      "season": 2019,
+      "family": "strength (P1.2)",
+      "coverage_pct": 100.0,
+      "n_present": 1548,
+      "n_sides": 1548
+    },
+    {
+      "season": 2019,
+      "family": "talent (P0.4)",
+      "coverage_pct": 100.0,
+      "n_present": 1548,
+      "n_sides": 1548
+    },
+    {
+      "season": 2019,
+      "family": "travel/altitude",
+      "coverage_pct": 86.6,
+      "n_present": 1340,
+      "n_sides": 1548
+    },
+    {
+      "season": 2020,
+      "family": "coaching (P0.5)",
+      "coverage_pct": 100.0,
+      "n_present": 1068,
+      "n_sides": 1068
+    },
+    {
+      "season": 2020,
+      "family": "drive_quality",
+      "coverage_pct": 88.1,
+      "n_present": 941,
+      "n_sides": 1068
+    },
+    {
+      "season": 2020,
+      "family": "efficiency_opp_adj (P1.1)",
+      "coverage_pct": 88.1,
+      "n_present": 941,
+      "n_sides": 1068
+    },
+    {
+      "season": 2020,
+      "family": "efficiency_raw (P1.1)",
+      "coverage_pct": 88.1,
+      "n_present": 941,
+      "n_sides": 1068
+    },
+    {
+      "season": 2020,
+      "family": "freshman_prior (P1.2b)",
+      "coverage_pct": 100.0,
+      "n_present": 1068,
+      "n_sides": 1068
+    },
+    {
+      "season": 2020,
+      "family": "line_trench",
+      "coverage_pct": 88.1,
+      "n_present": 941,
+      "n_sides": 1068
+    },
+    {
+      "season": 2020,
+      "family": "pace_style",
+      "coverage_pct": 88.1,
+      "n_present": 941,
+      "n_sides": 1068
+    },
+    {
+      "season": 2020,
+      "family": "portal_flux (P0.4)",
+      "coverage_pct": 100.0,
+      "n_present": 1068,
+      "n_sides": 1068
+    },
+    {
+      "season": 2020,
+      "family": "qb_continuity",
+      "coverage_pct": 87.8,
+      "n_present": 938,
+      "n_sides": 1068
+    },
+    {
+      "season": 2020,
+      "family": "rest",
+      "coverage_pct": 89.1,
+      "n_present": 952,
+      "n_sides": 1068
+    },
+    {
+      "season": 2020,
+      "family": "roster_continuity (P0.4)",
+      "coverage_pct": 100.0,
+      "n_present": 1068,
+      "n_sides": 1068
+    },
+    {
+      "season": 2020,
+      "family": "strength (P1.2)",
+      "coverage_pct": 96.4,
+      "n_present": 1030,
+      "n_sides": 1068
+    },
+    {
+      "season": 2020,
+      "family": "talent (P0.4)",
+      "coverage_pct": 100.0,
+      "n_present": 1068,
+      "n_sides": 1068
+    },
+    {
+      "season": 2020,
+      "family": "travel/altitude",
+      "coverage_pct": 88.3,
+      "n_present": 943,
+      "n_sides": 1068
+    },
+    {
+      "season": 2021,
+      "family": "coaching (P0.5)",
+      "coverage_pct": 98.6,
+      "n_present": 1518,
+      "n_sides": 1540
+    },
+    {
+      "season": 2021,
+      "family": "drive_quality",
+      "coverage_pct": 91.3,
+      "n_present": 1406,
+      "n_sides": 1540
+    },
+    {
+      "season": 2021,
+      "family": "efficiency_opp_adj (P1.1)",
+      "coverage_pct": 91.3,
+      "n_present": 1406,
+      "n_sides": 1540
+    },
+    {
+      "season": 2021,
+      "family": "efficiency_raw (P1.1)",
+      "coverage_pct": 91.3,
+      "n_present": 1406,
+      "n_sides": 1540
+    },
+    {
+      "season": 2021,
+      "family": "freshman_prior (P1.2b)",
+      "coverage_pct": 97.8,
+      "n_present": 1506,
+      "n_sides": 1540
+    },
+    {
+      "season": 2021,
+      "family": "line_trench",
+      "coverage_pct": 91.3,
+      "n_present": 1406,
+      "n_sides": 1540
+    },
+    {
+      "season": 2021,
+      "family": "pace_style",
+      "coverage_pct": 91.3,
+      "n_present": 1406,
+      "n_sides": 1540
+    },
+    {
+      "season": 2021,
+      "family": "portal_flux (P0.4)",
+      "coverage_pct": 98.6,
+      "n_present": 1518,
+      "n_sides": 1540
+    },
+    {
+      "season": 2021,
+      "family": "qb_continuity",
+      "coverage_pct": 90.6,
+      "n_present": 1396,
+      "n_sides": 1540
+    },
+    {
+      "season": 2021,
+      "family": "rest",
+      "coverage_pct": 93.8,
+      "n_present": 1445,
+      "n_sides": 1540
+    },
+    {
+      "season": 2021,
+      "family": "roster_continuity (P0.4)",
+      "coverage_pct": 98.6,
+      "n_present": 1518,
+      "n_sides": 1540
+    },
+    {
+      "season": 2021,
+      "family": "strength (P1.2)",
+      "coverage_pct": 100.0,
+      "n_present": 1540,
+      "n_sides": 1540
+    },
+    {
+      "season": 2021,
+      "family": "talent (P0.4)",
+      "coverage_pct": 98.6,
+      "n_present": 1518,
+      "n_sides": 1540
+    },
+    {
+      "season": 2021,
+      "family": "travel/altitude",
+      "coverage_pct": 86.9,
+      "n_present": 1339,
+      "n_sides": 1540
+    },
+    {
+      "season": 2022,
+      "family": "coaching (P0.5)",
+      "coverage_pct": 99.4,
+      "n_present": 1542,
+      "n_sides": 1552
+    },
+    {
+      "season": 2022,
+      "family": "drive_quality",
+      "coverage_pct": 91.0,
+      "n_present": 1412,
+      "n_sides": 1552
+    },
+    {
+      "season": 2022,
+      "family": "efficiency_opp_adj (P1.1)",
+      "coverage_pct": 91.0,
+      "n_present": 1412,
+      "n_sides": 1552
+    },
+    {
+      "season": 2022,
+      "family": "efficiency_raw (P1.1)",
+      "coverage_pct": 91.0,
+      "n_present": 1412,
+      "n_sides": 1552
+    },
+    {
+      "season": 2022,
+      "family": "freshman_prior (P1.2b)",
+      "coverage_pct": 100.0,
+      "n_present": 1552,
+      "n_sides": 1552
+    },
+    {
+      "season": 2022,
+      "family": "line_trench",
+      "coverage_pct": 91.0,
+      "n_present": 1412,
+      "n_sides": 1552
+    },
+    {
+      "season": 2022,
+      "family": "pace_style",
+      "coverage_pct": 91.0,
+      "n_present": 1412,
+      "n_sides": 1552
+    },
+    {
+      "season": 2022,
+      "family": "portal_flux (P0.4)",
+      "coverage_pct": 99.4,
+      "n_present": 1542,
+      "n_sides": 1552
+    },
+    {
+      "season": 2022,
+      "family": "qb_continuity",
+      "coverage_pct": 90.7,
+      "n_present": 1408,
+      "n_sides": 1552
+    },
+    {
+      "season": 2022,
+      "family": "rest",
+      "coverage_pct": 93.9,
+      "n_present": 1458,
+      "n_sides": 1552
+    },
+    {
+      "season": 2022,
+      "family": "roster_continuity (P0.4)",
+      "coverage_pct": 99.4,
+      "n_present": 1542,
+      "n_sides": 1552
+    },
+    {
+      "season": 2022,
+      "family": "strength (P1.2)",
+      "coverage_pct": 100.0,
+      "n_present": 1552,
+      "n_sides": 1552
+    },
+    {
+      "season": 2022,
+      "family": "talent (P0.4)",
+      "coverage_pct": 99.4,
+      "n_present": 1542,
+      "n_sides": 1552
+    },
+    {
+      "season": 2022,
+      "family": "travel/altitude",
+      "coverage_pct": 86.6,
+      "n_present": 1344,
+      "n_sides": 1552
+    },
+    {
+      "season": 2023,
+      "family": "coaching (P0.5)",
+      "coverage_pct": 98.5,
+      "n_present": 1561,
+      "n_sides": 1584
+    },
+    {
+      "season": 2023,
+      "family": "drive_quality",
+      "coverage_pct": 91.3,
+      "n_present": 1446,
+      "n_sides": 1584
+    },
+    {
+      "season": 2023,
+      "family": "efficiency_opp_adj (P1.1)",
+      "coverage_pct": 91.3,
+      "n_present": 1446,
+      "n_sides": 1584
+    },
+    {
+      "season": 2023,
+      "family": "efficiency_raw (P1.1)",
+      "coverage_pct": 91.3,
+      "n_present": 1446,
+      "n_sides": 1584
+    },
+    {
+      "season": 2023,
+      "family": "freshman_prior (P1.2b)",
+      "coverage_pct": 99.2,
+      "n_present": 1571,
+      "n_sides": 1584
+    },
+    {
+      "season": 2023,
+      "family": "line_trench",
+      "coverage_pct": 91.3,
+      "n_present": 1446,
+      "n_sides": 1584
+    },
+    {
+      "season": 2023,
+      "family": "pace_style",
+      "coverage_pct": 91.3,
+      "n_present": 1446,
+      "n_sides": 1584
+    },
+    {
+      "season": 2023,
+      "family": "portal_flux (P0.4)",
+      "coverage_pct": 98.5,
+      "n_present": 1561,
+      "n_sides": 1584
+    },
+    {
+      "season": 2023,
+      "family": "qb_continuity",
+      "coverage_pct": 91.0,
+      "n_present": 1441,
+      "n_sides": 1584
+    },
+    {
+      "season": 2023,
+      "family": "rest",
+      "coverage_pct": 93.8,
+      "n_present": 1485,
+      "n_sides": 1584
+    },
+    {
+      "season": 2023,
+      "family": "roster_continuity (P0.4)",
+      "coverage_pct": 98.5,
+      "n_present": 1561,
+      "n_sides": 1584
+    },
+    {
+      "season": 2023,
+      "family": "strength (P1.2)",
+      "coverage_pct": 100.0,
+      "n_present": 1584,
+      "n_sides": 1584
+    },
+    {
+      "season": 2023,
+      "family": "talent (P0.4)",
+      "coverage_pct": 98.5,
+      "n_present": 1561,
+      "n_sides": 1584
+    },
+    {
+      "season": 2023,
+      "family": "travel/altitude",
+      "coverage_pct": 86.7,
+      "n_present": 1373,
+      "n_sides": 1584
+    },
+    {
+      "season": 2024,
+      "family": "coaching (P0.5)",
+      "coverage_pct": 99.3,
+      "n_present": 1587,
+      "n_sides": 1598
+    },
+    {
+      "season": 2024,
+      "family": "drive_quality",
+      "coverage_pct": 91.4,
+      "n_present": 1461,
+      "n_sides": 1598
+    },
+    {
+      "season": 2024,
+      "family": "efficiency_opp_adj (P1.1)",
+      "coverage_pct": 91.4,
+      "n_present": 1461,
+      "n_sides": 1598
+    },
+    {
+      "season": 2024,
+      "family": "efficiency_raw (P1.1)",
+      "coverage_pct": 91.4,
+      "n_present": 1461,
+      "n_sides": 1598
+    },
+    {
+      "season": 2024,
+      "family": "freshman_prior (P1.2b)",
+      "coverage_pct": 99.3,
+      "n_present": 1587,
+      "n_sides": 1598
+    },
+    {
+      "season": 2024,
+      "family": "line_trench",
+      "coverage_pct": 91.4,
+      "n_present": 1461,
+      "n_sides": 1598
+    },
+    {
+      "season": 2024,
+      "family": "pace_style",
+      "coverage_pct": 91.4,
+      "n_present": 1461,
+      "n_sides": 1598
+    },
+    {
+      "season": 2024,
+      "family": "portal_flux (P0.4)",
+      "coverage_pct": 99.3,
+      "n_present": 1587,
+      "n_sides": 1598
+    },
+    {
+      "season": 2024,
+      "family": "qb_continuity",
+      "coverage_pct": 91.4,
+      "n_present": 1460,
+      "n_sides": 1598
+    },
+    {
+      "season": 2024,
+      "family": "rest",
+      "coverage_pct": 95.4,
+      "n_present": 1525,
+      "n_sides": 1598
+    },
+    {
+      "season": 2024,
+      "family": "roster_continuity (P0.4)",
+      "coverage_pct": 99.3,
+      "n_present": 1587,
+      "n_sides": 1598
+    },
+    {
+      "season": 2024,
+      "family": "strength (P1.2)",
+      "coverage_pct": 99.9,
+      "n_present": 1596,
+      "n_sides": 1598
+    },
+    {
+      "season": 2024,
+      "family": "talent (P0.4)",
+      "coverage_pct": 99.3,
+      "n_present": 1587,
+      "n_sides": 1598
+    },
+    {
+      "season": 2024,
+      "family": "travel/altitude",
+      "coverage_pct": 86.4,
+      "n_present": 1380,
+      "n_sides": 1598
+    },
+    {
+      "season": 2025,
+      "family": "coaching (P0.5)",
+      "coverage_pct": 98.5,
+      "n_present": 1592,
+      "n_sides": 1616
+    },
+    {
+      "season": 2025,
+      "family": "drive_quality",
+      "coverage_pct": 91.4,
+      "n_present": 1477,
+      "n_sides": 1616
+    },
+    {
+      "season": 2025,
+      "family": "efficiency_opp_adj (P1.1)",
+      "coverage_pct": 91.4,
+      "n_present": 1477,
+      "n_sides": 1616
+    },
+    {
+      "season": 2025,
+      "family": "efficiency_raw (P1.1)",
+      "coverage_pct": 91.4,
+      "n_present": 1477,
+      "n_sides": 1616
+    },
+    {
+      "season": 2025,
+      "family": "freshman_prior (P1.2b)",
+      "coverage_pct": 95.5,
+      "n_present": 1544,
+      "n_sides": 1616
+    },
+    {
+      "season": 2025,
+      "family": "line_trench",
+      "coverage_pct": 91.4,
+      "n_present": 1477,
+      "n_sides": 1616
+    },
+    {
+      "season": 2025,
+      "family": "pace_style",
+      "coverage_pct": 91.4,
+      "n_present": 1477,
+      "n_sides": 1616
+    },
+    {
+      "season": 2025,
+      "family": "portal_flux (P0.4)",
+      "coverage_pct": 98.5,
+      "n_present": 1592,
+      "n_sides": 1616
+    },
+    {
+      "season": 2025,
+      "family": "qb_continuity",
+      "coverage_pct": 91.4,
+      "n_present": 1477,
+      "n_sides": 1616
+    },
+    {
+      "season": 2025,
+      "family": "rest",
+      "coverage_pct": 94.3,
+      "n_present": 1524,
+      "n_sides": 1616
+    },
+    {
+      "season": 2025,
+      "family": "roster_continuity (P0.4)",
+      "coverage_pct": 98.5,
+      "n_present": 1592,
+      "n_sides": 1616
+    },
+    {
+      "season": 2025,
+      "family": "strength (P1.2)",
+      "coverage_pct": 99.9,
+      "n_present": 1614,
+      "n_sides": 1616
+    },
+    {
+      "season": 2025,
+      "family": "talent (P0.4)",
+      "coverage_pct": 97.1,
+      "n_present": 1569,
+      "n_sides": 1616
+    },
+    {
+      "season": 2025,
+      "family": "travel/altitude",
+      "coverage_pct": 87.0,
+      "n_present": 1406,
+      "n_sides": 1616
+    }
+  ],
+  "gates_passed": [
+    "grain is 1-row-per-game \u2014 no join fanned out (9,086 games, unique)",
+    "no games dropped \u2014 matrix == dim_ncaaf_game FBS universe (9,086)",
+    "6 label_* target columns present + prefixed (never a feature)",
+    "DATE-based leakage gate PASSES on the real build (18,172 sides, 0 violations)",
+    "leakage gate PROVEN to fail on a tampered/back-dated row (2 violations raised)"
+  ]
+}

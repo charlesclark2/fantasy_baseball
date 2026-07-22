@@ -67,7 +67,9 @@ jobs:
           uv run dbt compile --project-dir . --profiles-dir . --target ci \
             --select assert_asof_week_has_no_future_games \
                      assert_opponent_adjustment_is_point_in_time \
-                     assert_season_order_week_is_monotone_in_date
+                     assert_season_order_week_is_monotone_in_date \
+                     assert_team_strength_is_point_in_time \
+                     assert_pregame_matrix_is_point_in_time
 
       # A selector that matches NOTHING still exits 0 in dbt — so an empty NCAAF selection would
       # sail through the steps above. Assert the model count is non-zero and roughly what P1.1
@@ -79,17 +81,20 @@ jobs:
           # to STDOUT and every count is inflated by 2.
           n_models=$(uv run dbt --quiet list --project-dir . --profiles-dir . --target ci \
                        --select ncaaf.staging ncaaf.marts --resource-type model | wc -l | tr -d ' ')
+          # (5 leakage gates as of P1.3: 3 P1.1 rollup + P1.2 strength + P1.3 matrix)
           n_gates=$(uv run dbt --quiet list --project-dir . --profiles-dir . --target ci \
                        --select assert_asof_week_has_no_future_games \
                                 assert_opponent_adjustment_is_point_in_time \
                                 assert_season_order_week_is_monotone_in_date \
+                                assert_team_strength_is_point_in_time \
+                                assert_pregame_matrix_is_point_in_time \
                        --resource-type test | wc -l | tr -d ' ')
           echo "NCAAF models selected: $n_models ; leakage gates selected: $n_gates"
           if [ "$n_models" -lt 20 ]; then
             echo "::error::NCAAF model slice collapsed to $n_models (<20) — the selector or the folder layout broke."
             exit 1
           fi
-          if [ "$n_gates" -ne 3 ]; then
-            echo "::error::Expected 3 NCAAF leakage gates, found $n_gates — a point-in-time contract test was lost."
+          if [ "$n_gates" -ne 5 ]; then
+            echo "::error::Expected 5 NCAAF leakage gates, found $n_gates — a point-in-time contract test was lost."
             exit 1
           fi

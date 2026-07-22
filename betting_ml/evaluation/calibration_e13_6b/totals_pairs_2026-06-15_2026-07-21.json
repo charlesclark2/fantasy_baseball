@@ -1,0 +1,3026 @@
+[
+  {
+    "game_pk": 822724,
+    "game_date": "2026-06-15",
+    "model_prob": 0.43947193220301767,
+    "market_prob": 0.503152352097,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822887,
+    "game_date": "2026-06-15",
+    "model_prob": 0.43841988985388514,
+    "market_prob": 0.49852976694,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823046,
+    "game_date": "2026-06-15",
+    "model_prob": 0.34316166511938306,
+    "market_prob": 0.507503887779,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823452,
+    "game_date": "2026-06-15",
+    "model_prob": 0.5582594810793159,
+    "market_prob": 0.519304576456,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823938,
+    "game_date": "2026-06-15",
+    "model_prob": 0.5539440106773448,
+    "market_prob": 0.502746593062,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824181,
+    "game_date": "2026-06-15",
+    "model_prob": 0.5637263820325381,
+    "market_prob": 0.497337465418,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824505,
+    "game_date": "2026-06-15",
+    "model_prob": 0.6468551102304105,
+    "market_prob": 0.503726574179,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824666,
+    "game_date": "2026-06-15",
+    "model_prob": 0.56315326479367,
+    "market_prob": 0.487489458776,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824993,
+    "game_date": "2026-06-15",
+    "model_prob": 0.5061960512060961,
+    "market_prob": 0.493046766439,
+    "outcome": 1
+  },
+  {
+    "game_pk": 825071,
+    "game_date": "2026-06-15",
+    "model_prob": 0.2626821865528087,
+    "market_prob": 0.513234940424,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822723,
+    "game_date": "2026-06-16",
+    "model_prob": 0.5780250130663283,
+    "market_prob": 0.520268686699,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822888,
+    "game_date": "2026-06-16",
+    "model_prob": 0.5450775144720339,
+    "market_prob": 0.492846160792,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823045,
+    "game_date": "2026-06-16",
+    "model_prob": 0.5439859065164705,
+    "market_prob": 0.492905702192,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823128,
+    "game_date": "2026-06-16",
+    "model_prob": 0.5789237074006837,
+    "market_prob": 0.503005405144,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823451,
+    "game_date": "2026-06-16",
+    "model_prob": 0.5131014370256236,
+    "market_prob": 0.493407180063,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823535,
+    "game_date": "2026-06-16",
+    "model_prob": 0.5829742198915302,
+    "market_prob": 0.514332331392,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823775,
+    "game_date": "2026-06-16",
+    "model_prob": 0.5482920489694643,
+    "market_prob": 0.499730241466,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823939,
+    "game_date": "2026-06-16",
+    "model_prob": 0.5357520495564299,
+    "market_prob": 0.494721605793,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824182,
+    "game_date": "2026-06-16",
+    "model_prob": 0.4903720613604323,
+    "market_prob": 0.50100908627,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824504,
+    "game_date": "2026-06-16",
+    "model_prob": 0.5147811149871574,
+    "market_prob": 0.507516652537,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824667,
+    "game_date": "2026-06-16",
+    "model_prob": 0.4350217630586996,
+    "market_prob": 0.508664986135,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824750,
+    "game_date": "2026-06-16",
+    "model_prob": 0.6274558442395559,
+    "market_prob": 0.491902977376,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824912,
+    "game_date": "2026-06-16",
+    "model_prob": 0.6601561359683277,
+    "market_prob": 0.50781078421,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824991,
+    "game_date": "2026-06-16",
+    "model_prob": 0.5274248759455556,
+    "market_prob": 0.509595949774,
+    "outcome": 1
+  },
+  {
+    "game_pk": 825070,
+    "game_date": "2026-06-16",
+    "model_prob": 0.5392050440603965,
+    "market_prob": 0.510330447605,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822721,
+    "game_date": "2026-06-17",
+    "model_prob": 0.4039043938779203,
+    "market_prob": 0.501883094265,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823044,
+    "game_date": "2026-06-17",
+    "model_prob": 0.34295022608477144,
+    "market_prob": 0.503991385469,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823127,
+    "game_date": "2026-06-17",
+    "model_prob": 0.5493275631810373,
+    "market_prob": 0.499909194189,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823450,
+    "game_date": "2026-06-17",
+    "model_prob": 0.4300906013176777,
+    "market_prob": 0.485824601506,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823536,
+    "game_date": "2026-06-17",
+    "model_prob": 0.5029286116146052,
+    "market_prob": 0.495084516362,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823774,
+    "game_date": "2026-06-17",
+    "model_prob": 0.6139179934308351,
+    "market_prob": 0.496842525826,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823940,
+    "game_date": "2026-06-17",
+    "model_prob": 0.6093143541348595,
+    "market_prob": 0.494337575736,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824178,
+    "game_date": "2026-06-17",
+    "model_prob": 0.566619112765517,
+    "market_prob": 0.496505985303,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824503,
+    "game_date": "2026-06-17",
+    "model_prob": 0.5593757775507551,
+    "market_prob": 0.503240543153,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824668,
+    "game_date": "2026-06-17",
+    "model_prob": 0.41549727428942373,
+    "market_prob": 0.497858606922,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824746,
+    "game_date": "2026-06-17",
+    "model_prob": 0.41965213749538904,
+    "market_prob": 0.499859141644,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824913,
+    "game_date": "2026-06-17",
+    "model_prob": 0.5010448619056802,
+    "market_prob": 0.49661632839,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824992,
+    "game_date": "2026-06-17",
+    "model_prob": 0.5167455681551674,
+    "market_prob": 0.489435396668,
+    "outcome": 1
+  },
+  {
+    "game_pk": 825072,
+    "game_date": "2026-06-17",
+    "model_prob": 0.5147784224847697,
+    "market_prob": 0.497349672994,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822889,
+    "game_date": "2026-06-18",
+    "model_prob": 0.6287128064183176,
+    "market_prob": 0.510425748537,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823125,
+    "game_date": "2026-06-18",
+    "model_prob": 0.5414504711480685,
+    "market_prob": 0.504480736466,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823448,
+    "game_date": "2026-06-18",
+    "model_prob": 0.42192166429582656,
+    "market_prob": 0.506507700542,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823533,
+    "game_date": "2026-06-18",
+    "model_prob": 0.3617399495642706,
+    "market_prob": 0.498021004426,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823772,
+    "game_date": "2026-06-18",
+    "model_prob": 0.6189389239295219,
+    "market_prob": 0.489752015979,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824098,
+    "game_date": "2026-06-18",
+    "model_prob": 0.6028688902494664,
+    "market_prob": 0.509051875449,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824748,
+    "game_date": "2026-06-18",
+    "model_prob": 0.46745873281281686,
+    "market_prob": 0.492857700643,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824989,
+    "game_date": "2026-06-18",
+    "model_prob": 0.4234309799968674,
+    "market_prob": 0.501735197666,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822886,
+    "game_date": "2026-06-19",
+    "model_prob": 0.6501997923807554,
+    "market_prob": 0.501140262771,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822966,
+    "game_date": "2026-06-19",
+    "model_prob": 0.49179983072956907,
+    "market_prob": 0.492467146983,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823124,
+    "game_date": "2026-06-19",
+    "model_prob": 0.6646052405120325,
+    "market_prob": 0.518541687467,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823534,
+    "game_date": "2026-06-19",
+    "model_prob": 0.4851209006641168,
+    "market_prob": 0.498181382428,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823853,
+    "game_date": "2026-06-19",
+    "model_prob": 0.5781848785446215,
+    "market_prob": 0.50001033068,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823936,
+    "game_date": "2026-06-19",
+    "model_prob": 0.4113313796064715,
+    "market_prob": 0.494482426877,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824097,
+    "game_date": "2026-06-19",
+    "model_prob": 0.5831246661185974,
+    "market_prob": 0.50263005223,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824179,
+    "game_date": "2026-06-19",
+    "model_prob": 0.5472166275553887,
+    "market_prob": 0.495827769567,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824264,
+    "game_date": "2026-06-19",
+    "model_prob": 0.5085058576877596,
+    "market_prob": 0.495818150074,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824345,
+    "game_date": "2026-06-19",
+    "model_prob": 0.44276415236284383,
+    "market_prob": 0.488654872265,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824663,
+    "game_date": "2026-06-19",
+    "model_prob": 0.6559450852374364,
+    "market_prob": 0.495119457969,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824910,
+    "game_date": "2026-06-19",
+    "model_prob": 0.6479745702966689,
+    "market_prob": 0.488632692387,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824990,
+    "game_date": "2026-06-19",
+    "model_prob": 0.7025590294702078,
+    "market_prob": 0.505599093955,
+    "outcome": 1
+  },
+  {
+    "game_pk": 825069,
+    "game_date": "2026-06-19",
+    "model_prob": 0.5711801354881534,
+    "market_prob": 0.510503089794,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822885,
+    "game_date": "2026-06-20",
+    "model_prob": 0.6214455275032427,
+    "market_prob": 0.509080612625,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822967,
+    "game_date": "2026-06-20",
+    "model_prob": 0.5934148651073994,
+    "market_prob": 0.501420517018,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823126,
+    "game_date": "2026-06-20",
+    "model_prob": 0.5886129916508942,
+    "market_prob": 0.487458949151,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823447,
+    "game_date": "2026-06-20",
+    "model_prob": 0.5985782676912553,
+    "market_prob": 0.501839017585,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823532,
+    "game_date": "2026-06-20",
+    "model_prob": 0.4291250289422116,
+    "market_prob": 0.493678125089,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823854,
+    "game_date": "2026-06-20",
+    "model_prob": 0.5769099909008243,
+    "market_prob": 0.499221014004,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823937,
+    "game_date": "2026-06-20",
+    "model_prob": 0.48120925251482094,
+    "market_prob": 0.50577884256,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824180,
+    "game_date": "2026-06-20",
+    "model_prob": 0.5225863644958053,
+    "market_prob": 0.49241491056,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824263,
+    "game_date": "2026-06-20",
+    "model_prob": 0.49470527052829394,
+    "market_prob": 0.506249233169,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824342,
+    "game_date": "2026-06-20",
+    "model_prob": 0.4767661860092761,
+    "market_prob": 0.513185649273,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824665,
+    "game_date": "2026-06-20",
+    "model_prob": 0.4868683226481056,
+    "market_prob": 0.504817992055,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824909,
+    "game_date": "2026-06-20",
+    "model_prob": 0.629644066527987,
+    "market_prob": 0.505509666833,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824988,
+    "game_date": "2026-06-20",
+    "model_prob": 0.47405037619763235,
+    "market_prob": 0.504092922354,
+    "outcome": 0
+  },
+  {
+    "game_pk": 825068,
+    "game_date": "2026-06-20",
+    "model_prob": 0.5428451380518882,
+    "market_prob": 0.505231573756,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822883,
+    "game_date": "2026-06-21",
+    "model_prob": 0.6105592164625037,
+    "market_prob": 0.49658419913,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822968,
+    "game_date": "2026-06-21",
+    "model_prob": 0.5347393668505694,
+    "market_prob": 0.487418180733,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823123,
+    "game_date": "2026-06-21",
+    "model_prob": 0.6540033735819869,
+    "market_prob": 0.520816038745,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823449,
+    "game_date": "2026-06-21",
+    "model_prob": 0.5505518582132112,
+    "market_prob": 0.502124410973,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823531,
+    "game_date": "2026-06-21",
+    "model_prob": 0.5236372870757297,
+    "market_prob": 0.515344354914,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823852,
+    "game_date": "2026-06-21",
+    "model_prob": 0.5283310235939037,
+    "market_prob": 0.492455660232,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823934,
+    "game_date": "2026-06-21",
+    "model_prob": 0.4182781391423022,
+    "market_prob": 0.49808307422,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824095,
+    "game_date": "2026-06-21",
+    "model_prob": 0.5966793846003717,
+    "market_prob": 0.50229529363,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824177,
+    "game_date": "2026-06-21",
+    "model_prob": 0.5352560156034771,
+    "market_prob": 0.500277683206,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824260,
+    "game_date": "2026-06-21",
+    "model_prob": 0.5360239063304338,
+    "market_prob": 0.490084006275,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824343,
+    "game_date": "2026-06-21",
+    "model_prob": 0.42880134991518926,
+    "market_prob": 0.494704993333,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824908,
+    "game_date": "2026-06-21",
+    "model_prob": 0.522041923455808,
+    "market_prob": 0.504061634403,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824987,
+    "game_date": "2026-06-21",
+    "model_prob": 0.5667098915528732,
+    "market_prob": 0.501201446492,
+    "outcome": 1
+  },
+  {
+    "game_pk": 825067,
+    "game_date": "2026-06-21",
+    "model_prob": 0.5435484649233215,
+    "market_prob": 0.48896764508,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822720,
+    "game_date": "2026-06-22",
+    "model_prob": 0.4999899483549919,
+    "market_prob": 0.502232162364,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822800,
+    "game_date": "2026-06-22",
+    "model_prob": 0.6559815206484159,
+    "market_prob": 0.50329174791,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822964,
+    "game_date": "2026-06-22",
+    "model_prob": 0.6164655339715006,
+    "market_prob": 0.479726713485,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823040,
+    "game_date": "2026-06-22",
+    "model_prob": 0.5687001477210628,
+    "market_prob": 0.506924379022,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823288,
+    "game_date": "2026-06-22",
+    "model_prob": 0.6244207185434416,
+    "market_prob": 0.478965459614,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823692,
+    "game_date": "2026-06-22",
+    "model_prob": 0.4374484069900678,
+    "market_prob": 0.503840203709,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823851,
+    "game_date": "2026-06-22",
+    "model_prob": 0.5109347074389315,
+    "market_prob": 0.500620043493,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824016,
+    "game_date": "2026-06-22",
+    "model_prob": 0.5325509372216394,
+    "market_prob": 0.506282335763,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824261,
+    "game_date": "2026-06-22",
+    "model_prob": 0.5261870156882822,
+    "market_prob": 0.505602218371,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824344,
+    "game_date": "2026-06-22",
+    "model_prob": 0.42919707347530534,
+    "market_prob": 0.507573811895,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824502,
+    "game_date": "2026-06-22",
+    "model_prob": 0.5148535121708407,
+    "market_prob": 0.495046261411,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824585,
+    "game_date": "2026-06-22",
+    "model_prob": 0.6397818064041342,
+    "market_prob": 0.482894247437,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822718,
+    "game_date": "2026-06-23",
+    "model_prob": 0.5591511857135009,
+    "market_prob": 0.507651464075,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822799,
+    "game_date": "2026-06-23",
+    "model_prob": 0.537996215716843,
+    "market_prob": 0.508814994639,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822963,
+    "game_date": "2026-06-23",
+    "model_prob": 0.594361736514955,
+    "market_prob": 0.512176072547,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823043,
+    "game_date": "2026-06-23",
+    "model_prob": 0.5472197106100085,
+    "market_prob": 0.492689704366,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823210,
+    "game_date": "2026-06-23",
+    "model_prob": 0.529145658609966,
+    "market_prob": 0.501000020241,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823286,
+    "game_date": "2026-06-23",
+    "model_prob": 0.5420482019247307,
+    "market_prob": 0.505162454176,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823365,
+    "game_date": "2026-06-23",
+    "model_prob": 0.5423051794495514,
+    "market_prob": 0.507917960697,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823614,
+    "game_date": "2026-06-23",
+    "model_prob": 0.5359305633203497,
+    "market_prob": 0.501943066027,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823690,
+    "game_date": "2026-06-23",
+    "model_prob": 0.5951802939721912,
+    "market_prob": 0.505481562217,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823849,
+    "game_date": "2026-06-23",
+    "model_prob": 0.4926632437813152,
+    "market_prob": 0.491464354722,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824017,
+    "game_date": "2026-06-23",
+    "model_prob": 0.52922426156829,
+    "market_prob": 0.503129720471,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824262,
+    "game_date": "2026-06-23",
+    "model_prob": 0.5771921538934457,
+    "market_prob": 0.504825064147,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824340,
+    "game_date": "2026-06-23",
+    "model_prob": 0.4719162997138231,
+    "market_prob": 0.508640637508,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824501,
+    "game_date": "2026-06-23",
+    "model_prob": 0.4852673936851453,
+    "market_prob": 0.492746157559,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824584,
+    "game_date": "2026-06-23",
+    "model_prob": 0.6703692234766808,
+    "market_prob": 0.500470354716,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822719,
+    "game_date": "2026-06-24",
+    "model_prob": 0.5277616795602657,
+    "market_prob": 0.484636012444,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822798,
+    "game_date": "2026-06-24",
+    "model_prob": 0.5319100302068396,
+    "market_prob": 0.507920575927,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822965,
+    "game_date": "2026-06-24",
+    "model_prob": 0.5882262654123843,
+    "market_prob": 0.493454712308,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823041,
+    "game_date": "2026-06-24",
+    "model_prob": 0.5185962574885629,
+    "market_prob": 0.510363119332,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823208,
+    "game_date": "2026-06-24",
+    "model_prob": 0.5671892579365974,
+    "market_prob": 0.496691823514,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823284,
+    "game_date": "2026-06-24",
+    "model_prob": 0.5749865086528276,
+    "market_prob": 0.494548020225,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823367,
+    "game_date": "2026-06-24",
+    "model_prob": 0.6136210756161622,
+    "market_prob": 0.510977366665,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823611,
+    "game_date": "2026-06-24",
+    "model_prob": 0.6127837650755948,
+    "market_prob": 0.500657594774,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823613,
+    "game_date": "2026-06-24",
+    "model_prob": 0.5534884078939649,
+    "market_prob": 0.48662423213,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823691,
+    "game_date": "2026-06-24",
+    "model_prob": 0.6240245872775393,
+    "market_prob": 0.500122415393,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823850,
+    "game_date": "2026-06-24",
+    "model_prob": 0.6063642047497688,
+    "market_prob": 0.482317995989,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824018,
+    "game_date": "2026-06-24",
+    "model_prob": 0.502861123599973,
+    "market_prob": 0.506440798163,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824259,
+    "game_date": "2026-06-24",
+    "model_prob": 0.5886829945250542,
+    "market_prob": 0.490499219715,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824341,
+    "game_date": "2026-06-24",
+    "model_prob": 0.5054544778949683,
+    "market_prob": 0.507919924883,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824500,
+    "game_date": "2026-06-24",
+    "model_prob": 0.46534057396688683,
+    "market_prob": 0.489418261211,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824583,
+    "game_date": "2026-06-24",
+    "model_prob": 0.6080626201227077,
+    "market_prob": 0.495778298694,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822717,
+    "game_date": "2026-06-25",
+    "model_prob": 0.6417410826648364,
+    "market_prob": 0.500552998314,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822797,
+    "game_date": "2026-06-25",
+    "model_prob": 0.6000829286474927,
+    "market_prob": 0.505656060462,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822961,
+    "game_date": "2026-06-25",
+    "model_prob": 0.5713957880115539,
+    "market_prob": 0.500804298403,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823209,
+    "game_date": "2026-06-25",
+    "model_prob": 0.584320259981064,
+    "market_prob": 0.493901186601,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823366,
+    "game_date": "2026-06-25",
+    "model_prob": 0.5439370518025751,
+    "market_prob": 0.49009590843,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823612,
+    "game_date": "2026-06-25",
+    "model_prob": 0.5365851340603479,
+    "market_prob": 0.50579510193,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824258,
+    "game_date": "2026-06-25",
+    "model_prob": 0.45458093221495494,
+    "market_prob": 0.497772048948,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824747,
+    "game_date": "2026-06-25",
+    "model_prob": 0.5669866314649638,
+    "market_prob": 0.498953611229,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822796,
+    "game_date": "2026-06-26",
+    "model_prob": 0.5603936658865742,
+    "market_prob": 0.48863012427,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822962,
+    "game_date": "2026-06-26",
+    "model_prob": 0.5457660880163483,
+    "market_prob": 0.501647315535,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823039,
+    "game_date": "2026-06-26",
+    "model_prob": 0.578198062598146,
+    "market_prob": 0.492644672275,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823206,
+    "game_date": "2026-06-26",
+    "model_prob": 0.5315487840868293,
+    "market_prob": 0.500533106327,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823285,
+    "game_date": "2026-06-26",
+    "model_prob": 0.6155287513672325,
+    "market_prob": 0.507840193747,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823363,
+    "game_date": "2026-06-26",
+    "model_prob": 0.6084161741471853,
+    "market_prob": 0.509502032055,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823610,
+    "game_date": "2026-06-26",
+    "model_prob": 0.546684265843994,
+    "market_prob": 0.487470435374,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823688,
+    "game_date": "2026-06-26",
+    "model_prob": 0.5563374288857319,
+    "market_prob": 0.506026045345,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823773,
+    "game_date": "2026-06-26",
+    "model_prob": 0.6000887108997431,
+    "market_prob": 0.497856546799,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824014,
+    "game_date": "2026-06-26",
+    "model_prob": 0.5482958044546176,
+    "market_prob": 0.500371994046,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824255,
+    "game_date": "2026-06-26",
+    "model_prob": 0.4701809349980975,
+    "market_prob": 0.505722612422,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824423,
+    "game_date": "2026-06-26",
+    "model_prob": 0.6377779869308224,
+    "market_prob": 0.510060164534,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824582,
+    "game_date": "2026-06-26",
+    "model_prob": 0.5258630954019473,
+    "market_prob": 0.511318818517,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824743,
+    "game_date": "2026-06-26",
+    "model_prob": 0.5199041912274369,
+    "market_prob": 0.517010837582,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824824,
+    "game_date": "2026-06-26",
+    "model_prob": 0.47665290380540465,
+    "market_prob": 0.497811987089,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822794,
+    "game_date": "2026-06-27",
+    "model_prob": 0.5847202389999075,
+    "market_prob": 0.50258588482,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822960,
+    "game_date": "2026-06-27",
+    "model_prob": 0.6425408029255142,
+    "market_prob": 0.500922998667,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823038,
+    "game_date": "2026-06-27",
+    "model_prob": 0.540466655733901,
+    "market_prob": 0.511234618895,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823207,
+    "game_date": "2026-06-27",
+    "model_prob": 0.5862009371608962,
+    "market_prob": 0.510112438452,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823283,
+    "game_date": "2026-06-27",
+    "model_prob": 0.5812622768934603,
+    "market_prob": 0.510194906315,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823364,
+    "game_date": "2026-06-27",
+    "model_prob": 0.6079497716210494,
+    "market_prob": 0.499673141388,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823609,
+    "game_date": "2026-06-27",
+    "model_prob": 0.5194377800950216,
+    "market_prob": 0.500898490781,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823689,
+    "game_date": "2026-06-27",
+    "model_prob": 0.5787305613746234,
+    "market_prob": 0.503702780713,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823770,
+    "game_date": "2026-06-27",
+    "model_prob": 0.5589793984730803,
+    "market_prob": 0.500593817131,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824015,
+    "game_date": "2026-06-27",
+    "model_prob": 0.5587048241256376,
+    "market_prob": 0.49855011404,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824257,
+    "game_date": "2026-06-27",
+    "model_prob": 0.5136334785497558,
+    "market_prob": 0.503781070067,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824421,
+    "game_date": "2026-06-27",
+    "model_prob": 0.6136720924126662,
+    "market_prob": 0.480968620824,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824581,
+    "game_date": "2026-06-27",
+    "model_prob": 0.5882221251105472,
+    "market_prob": 0.495315595596,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824745,
+    "game_date": "2026-06-27",
+    "model_prob": 0.5534887695151689,
+    "market_prob": 0.498539164383,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824825,
+    "game_date": "2026-06-27",
+    "model_prob": 0.5025111058356284,
+    "market_prob": 0.503944886315,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822795,
+    "game_date": "2026-06-28",
+    "model_prob": 0.557044823218877,
+    "market_prob": 0.491847809721,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822959,
+    "game_date": "2026-06-28",
+    "model_prob": 0.6325877521524188,
+    "market_prob": 0.503006338606,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823037,
+    "game_date": "2026-06-28",
+    "model_prob": 0.4524470288122513,
+    "market_prob": 0.480165824906,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823204,
+    "game_date": "2026-06-28",
+    "model_prob": 0.6302026039992605,
+    "market_prob": 0.49313780469,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823281,
+    "game_date": "2026-06-28",
+    "model_prob": 0.5677005060310218,
+    "market_prob": 0.505664995627,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823362,
+    "game_date": "2026-06-28",
+    "model_prob": 0.5498622666696666,
+    "market_prob": 0.5219274324,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823608,
+    "game_date": "2026-06-28",
+    "model_prob": 0.585376808236079,
+    "market_prob": 0.499532850635,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823686,
+    "game_date": "2026-06-28",
+    "model_prob": 0.5817589278231025,
+    "market_prob": 0.497182173608,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823769,
+    "game_date": "2026-06-28",
+    "model_prob": 0.5646663473672807,
+    "market_prob": 0.500563822361,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824011,
+    "game_date": "2026-06-28",
+    "model_prob": 0.4708990404065734,
+    "market_prob": 0.508003013709,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824256,
+    "game_date": "2026-06-28",
+    "model_prob": 0.5694768290771727,
+    "market_prob": 0.503059259265,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824422,
+    "game_date": "2026-06-28",
+    "model_prob": 0.5982623669379431,
+    "market_prob": 0.487460142058,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824580,
+    "game_date": "2026-06-28",
+    "model_prob": 0.5263124439764688,
+    "market_prob": 0.507685158856,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824744,
+    "game_date": "2026-06-28",
+    "model_prob": 0.589053107664945,
+    "market_prob": 0.504261564088,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824821,
+    "game_date": "2026-06-28",
+    "model_prob": 0.48243184132067857,
+    "market_prob": 0.495685778928,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822792,
+    "game_date": "2026-06-29",
+    "model_prob": 0.5299641294126791,
+    "market_prob": 0.5089881198674749,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823121,
+    "game_date": "2026-06-29",
+    "model_prob": 0.5464722895896625,
+    "market_prob": 0.514528267430983,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823444,
+    "game_date": "2026-06-29",
+    "model_prob": 0.5373783468316874,
+    "market_prob": 0.5099554258468195,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823529,
+    "game_date": "2026-06-29",
+    "model_prob": 0.5937898875620279,
+    "market_prob": 0.4985781198427943,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823771,
+    "game_date": "2026-06-29",
+    "model_prob": 0.4901986068738839,
+    "market_prob": 0.5006037044589177,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824176,
+    "game_date": "2026-06-29",
+    "model_prob": 0.5152945681191039,
+    "market_prob": 0.5097427252779038,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824339,
+    "game_date": "2026-06-29",
+    "model_prob": 0.4273227181487172,
+    "market_prob": 0.5131946190186017,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824420,
+    "game_date": "2026-06-29",
+    "model_prob": 0.604553292655013,
+    "market_prob": 0.5014076410877807,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824662,
+    "game_date": "2026-06-29",
+    "model_prob": 0.2960982628787511,
+    "market_prob": 0.48758796481181815,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824741,
+    "game_date": "2026-06-29",
+    "model_prob": 0.5459696230062254,
+    "market_prob": 0.4888285190240654,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824822,
+    "game_date": "2026-06-29",
+    "model_prob": 0.46153473350792984,
+    "market_prob": 0.49841857537274026,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824986,
+    "game_date": "2026-06-29",
+    "model_prob": 0.46319806955564863,
+    "market_prob": 0.5056832602701387,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822793,
+    "game_date": "2026-06-30",
+    "model_prob": 0.6048544301433214,
+    "market_prob": 0.5063508932520483,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823122,
+    "game_date": "2026-06-30",
+    "model_prob": 0.5916408818459779,
+    "market_prob": 0.5031950560898502,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823445,
+    "game_date": "2026-06-30",
+    "model_prob": 0.4677739185295011,
+    "market_prob": 0.5063934831816267,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823528,
+    "game_date": "2026-06-30",
+    "model_prob": 0.6477140937607349,
+    "market_prob": 0.4996574568423994,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823768,
+    "game_date": "2026-06-30",
+    "model_prob": 0.4496747525202051,
+    "market_prob": 0.4959465522043853,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824096,
+    "game_date": "2026-06-30",
+    "model_prob": 0.5102978228633918,
+    "market_prob": 0.5089560409725482,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824175,
+    "game_date": "2026-06-30",
+    "model_prob": 0.5476283999339984,
+    "market_prob": 0.489078966894756,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824338,
+    "game_date": "2026-06-30",
+    "model_prob": 0.5140096047527515,
+    "market_prob": 0.4977611203973017,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824418,
+    "game_date": "2026-06-30",
+    "model_prob": 0.6107723974474399,
+    "market_prob": 0.5089700088261269,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824661,
+    "game_date": "2026-06-30",
+    "model_prob": 0.2913177095823003,
+    "market_prob": 0.49263876026539194,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824742,
+    "game_date": "2026-06-30",
+    "model_prob": 0.4336933994518203,
+    "market_prob": 0.49937129946372777,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824819,
+    "game_date": "2026-06-30",
+    "model_prob": 0.35963788620568315,
+    "market_prob": 0.49726579995035525,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824907,
+    "game_date": "2026-06-30",
+    "model_prob": 0.4935501840385947,
+    "market_prob": 0.5019854730909031,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824984,
+    "game_date": "2026-06-30",
+    "model_prob": 0.40773926510075964,
+    "market_prob": 0.4944996735748276,
+    "outcome": 1
+  },
+  {
+    "game_pk": 825066,
+    "game_date": "2026-06-30",
+    "model_prob": 0.5974063233237049,
+    "market_prob": 0.49904964863466666,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822791,
+    "game_date": "2026-07-01",
+    "model_prob": 0.5375330495023747,
+    "market_prob": 0.5132555337095488,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823446,
+    "game_date": "2026-07-01",
+    "model_prob": 0.541912866939022,
+    "market_prob": 0.49718963071453165,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823530,
+    "game_date": "2026-07-01",
+    "model_prob": 0.44308433197412833,
+    "market_prob": 0.5007051092904594,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823767,
+    "game_date": "2026-07-01",
+    "model_prob": 0.4418681985109947,
+    "market_prob": 0.49762944204861564,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824094,
+    "game_date": "2026-07-01",
+    "model_prob": 0.34654521047202014,
+    "market_prob": 0.49946881987730246,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824174,
+    "game_date": "2026-07-01",
+    "model_prob": 0.535493770910751,
+    "market_prob": 0.507817684760628,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824337,
+    "game_date": "2026-07-01",
+    "model_prob": 0.49732183566478133,
+    "market_prob": 0.5009004034722603,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824419,
+    "game_date": "2026-07-01",
+    "model_prob": 0.6080426586300867,
+    "market_prob": 0.49862766653535784,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824660,
+    "game_date": "2026-07-01",
+    "model_prob": 0.2522413884045503,
+    "market_prob": 0.5045736022638466,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824740,
+    "game_date": "2026-07-01",
+    "model_prob": 0.39345914632493295,
+    "market_prob": 0.5003503398078304,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824818,
+    "game_date": "2026-07-01",
+    "model_prob": 0.38822024473308714,
+    "market_prob": 0.5033672000423057,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824905,
+    "game_date": "2026-07-01",
+    "model_prob": 0.48623795494380573,
+    "market_prob": 0.49979712860767783,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824985,
+    "game_date": "2026-07-01",
+    "model_prob": 0.4325358355192157,
+    "market_prob": 0.5006084467180613,
+    "outcome": 0
+  },
+  {
+    "game_pk": 825064,
+    "game_date": "2026-07-01",
+    "model_prob": 0.5545110366152453,
+    "market_prob": 0.4958664569686101,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822884,
+    "game_date": "2026-07-02",
+    "model_prob": 0.6306206304548022,
+    "market_prob": 0.4823630719274122,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823119,
+    "game_date": "2026-07-02",
+    "model_prob": 0.6064223417877542,
+    "market_prob": 0.4928967436721307,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823442,
+    "game_date": "2026-07-02",
+    "model_prob": 0.35897671265854314,
+    "market_prob": 0.5041471694095269,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823765,
+    "game_date": "2026-07-02",
+    "model_prob": 0.6459530006104306,
+    "market_prob": 0.4983512679307966,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823935,
+    "game_date": "2026-07-02",
+    "model_prob": 0.430717519080117,
+    "market_prob": 0.48713070061851127,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824093,
+    "game_date": "2026-07-02",
+    "model_prob": 0.369324441705392,
+    "market_prob": 0.4985453779743921,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824335,
+    "game_date": "2026-07-02",
+    "model_prob": 0.37457043007175816,
+    "market_prob": 0.4929014661855815,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824416,
+    "game_date": "2026-07-02",
+    "model_prob": 0.5146383313841041,
+    "market_prob": 0.495257264129115,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824906,
+    "game_date": "2026-07-02",
+    "model_prob": 0.5012041481349542,
+    "market_prob": 0.5097428450211068,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822714,
+    "game_date": "2026-07-03",
+    "model_prob": 0.4782640488293386,
+    "market_prob": 0.497549775423601,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823120,
+    "game_date": "2026-07-03",
+    "model_prob": 0.59829563469293,
+    "market_prob": 0.48858380564117176,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823527,
+    "game_date": "2026-07-03",
+    "model_prob": 0.43774005203175637,
+    "market_prob": 0.5104404422296808,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823933,
+    "game_date": "2026-07-03",
+    "model_prob": 0.5574918436471409,
+    "market_prob": 0.49887635334835284,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824013,
+    "game_date": "2026-07-03",
+    "model_prob": 0.5620811476150946,
+    "market_prob": 0.4952330098479068,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824173,
+    "game_date": "2026-07-03",
+    "model_prob": 0.5684328574675207,
+    "market_prob": 0.49447288615360063,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824336,
+    "game_date": "2026-07-03",
+    "model_prob": 0.5663763638549049,
+    "market_prob": 0.5015232442154577,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824417,
+    "game_date": "2026-07-03",
+    "model_prob": 0.5156509160127104,
+    "market_prob": 0.4962479504776873,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824498,
+    "game_date": "2026-07-03",
+    "model_prob": 0.5195804934417675,
+    "market_prob": 0.5023023843837624,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824659,
+    "game_date": "2026-07-03",
+    "model_prob": 0.3732139916054855,
+    "market_prob": 0.4903349174861645,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824904,
+    "game_date": "2026-07-03",
+    "model_prob": 0.4395940343594672,
+    "market_prob": 0.47906111413178604,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824982,
+    "game_date": "2026-07-03",
+    "model_prob": 0.48647221295220827,
+    "market_prob": 0.5008478692087517,
+    "outcome": 1
+  },
+  {
+    "game_pk": 825062,
+    "game_date": "2026-07-03",
+    "model_prob": 0.6118482869876828,
+    "market_prob": 0.5186190891767043,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822716,
+    "game_date": "2026-07-04",
+    "model_prob": 0.40078392198091106,
+    "market_prob": 0.48829724981447825,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822882,
+    "game_date": "2026-07-04",
+    "model_prob": 0.5376020438812713,
+    "market_prob": 0.49711755845743866,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823118,
+    "game_date": "2026-07-04",
+    "model_prob": 0.5785643317063605,
+    "market_prob": 0.508192181082346,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823526,
+    "game_date": "2026-07-04",
+    "model_prob": 0.3564523436323901,
+    "market_prob": 0.4956611081353047,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823932,
+    "game_date": "2026-07-04",
+    "model_prob": 0.4618200675425369,
+    "market_prob": 0.507036182295613,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824012,
+    "game_date": "2026-07-04",
+    "model_prob": 0.5446518038847734,
+    "market_prob": 0.4952100529118937,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824092,
+    "game_date": "2026-07-04",
+    "model_prob": 0.5137634188390136,
+    "market_prob": 0.5049660282978142,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824171,
+    "game_date": "2026-07-04",
+    "model_prob": 0.6013659744289498,
+    "market_prob": 0.5015974082594593,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824334,
+    "game_date": "2026-07-04",
+    "model_prob": 0.29127319413902153,
+    "market_prob": 0.4977858072086029,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824415,
+    "game_date": "2026-07-04",
+    "model_prob": 0.6015250861782441,
+    "market_prob": 0.4787406293083688,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824499,
+    "game_date": "2026-07-04",
+    "model_prob": 0.5148153990239484,
+    "market_prob": 0.506569447718594,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824658,
+    "game_date": "2026-07-04",
+    "model_prob": 0.6236847628460989,
+    "market_prob": 0.5013544247591513,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824903,
+    "game_date": "2026-07-04",
+    "model_prob": 0.5483821958491842,
+    "market_prob": 0.5007717896768721,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824983,
+    "game_date": "2026-07-04",
+    "model_prob": 0.4279751308423393,
+    "market_prob": 0.4996243656240529,
+    "outcome": 0
+  },
+  {
+    "game_pk": 825063,
+    "game_date": "2026-07-04",
+    "model_prob": 0.5814728463714723,
+    "market_prob": 0.4864821737888529,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822715,
+    "game_date": "2026-07-05",
+    "model_prob": 0.4679578547217302,
+    "market_prob": 0.49594293308121645,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822879,
+    "game_date": "2026-07-05",
+    "model_prob": 0.6075196138270272,
+    "market_prob": 0.5021937172485579,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823117,
+    "game_date": "2026-07-05",
+    "model_prob": 0.5646638240077456,
+    "market_prob": 0.4819155413143188,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823525,
+    "game_date": "2026-07-05",
+    "model_prob": 0.535416224727179,
+    "market_prob": 0.49227110089916853,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823931,
+    "game_date": "2026-07-05",
+    "model_prob": 0.43416900982673945,
+    "market_prob": 0.5142775266957608,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824010,
+    "game_date": "2026-07-05",
+    "model_prob": 0.573544508689315,
+    "market_prob": 0.49602249456974784,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824091,
+    "game_date": "2026-07-05",
+    "model_prob": 0.46078268228136693,
+    "market_prob": 0.5137498199582223,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824172,
+    "game_date": "2026-07-05",
+    "model_prob": 0.5458265043511467,
+    "market_prob": 0.5039665353464556,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824333,
+    "game_date": "2026-07-05",
+    "model_prob": 0.36248236326292005,
+    "market_prob": 0.5047483848710005,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824413,
+    "game_date": "2026-07-05",
+    "model_prob": 0.5166406580060205,
+    "market_prob": 0.4991498640978047,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824497,
+    "game_date": "2026-07-05",
+    "model_prob": 0.49421710957111076,
+    "market_prob": 0.49761710111258706,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824656,
+    "game_date": "2026-07-05",
+    "model_prob": 0.6160977885727107,
+    "market_prob": 0.5029773081457278,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824902,
+    "game_date": "2026-07-05",
+    "model_prob": 0.5016030732355461,
+    "market_prob": 0.4920825100312977,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824980,
+    "game_date": "2026-07-05",
+    "model_prob": 0.5418158065374796,
+    "market_prob": 0.4997554864038586,
+    "outcome": 1
+  },
+  {
+    "game_pk": 825061,
+    "game_date": "2026-07-05",
+    "model_prob": 0.5934197043581987,
+    "market_prob": 0.4972558397965994,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822712,
+    "game_date": "2026-07-06",
+    "model_prob": 0.4385426638629373,
+    "market_prob": 0.501288818201954,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822958,
+    "game_date": "2026-07-06",
+    "model_prob": 0.5487049131709879,
+    "market_prob": 0.4794287378591175,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823036,
+    "game_date": "2026-07-06",
+    "model_prob": 0.5903497437209613,
+    "market_prob": 0.5068566625839384,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823205,
+    "game_date": "2026-07-06",
+    "model_prob": 0.6047975787706414,
+    "market_prob": 0.5066965487968415,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823282,
+    "game_date": "2026-07-06",
+    "model_prob": 0.603928444249004,
+    "market_prob": 0.5030952156110076,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823930,
+    "game_date": "2026-07-06",
+    "model_prob": 0.36965655651879814,
+    "market_prob": 0.49343559058132136,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824089,
+    "game_date": "2026-07-06",
+    "model_prob": 0.5662401883686897,
+    "market_prob": 0.4976551292592504,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824900,
+    "game_date": "2026-07-06",
+    "model_prob": 0.5095214670966346,
+    "market_prob": 0.511348481002604,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822713,
+    "game_date": "2026-07-07",
+    "model_prob": 0.5694712154658019,
+    "market_prob": 0.5034071673482787,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822881,
+    "game_date": "2026-07-07",
+    "model_prob": 0.6534924905100356,
+    "market_prob": 0.500503746869321,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822956,
+    "game_date": "2026-07-07",
+    "model_prob": 0.5229631583111384,
+    "market_prob": 0.49984496261158745,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823035,
+    "game_date": "2026-07-07",
+    "model_prob": 0.6072498232154856,
+    "market_prob": 0.49660748549757777,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823062,
+    "game_date": "2026-07-07",
+    "model_prob": 0.6285483083964248,
+    "market_prob": 0.5112668046639184,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823203,
+    "game_date": "2026-07-07",
+    "model_prob": 0.6001717403073903,
+    "market_prob": 0.5078643207321759,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823280,
+    "game_date": "2026-07-07",
+    "model_prob": 0.5935450926720045,
+    "market_prob": 0.5141474124606636,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823361,
+    "game_date": "2026-07-07",
+    "model_prob": 0.5540344644346231,
+    "market_prob": 0.507251321363269,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823607,
+    "game_date": "2026-07-07",
+    "model_prob": 0.5605842638233812,
+    "market_prob": 0.501922477592545,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823687,
+    "game_date": "2026-07-07",
+    "model_prob": 0.5424351790105414,
+    "market_prob": 0.509703597836038,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823847,
+    "game_date": "2026-07-07",
+    "model_prob": 0.5700991135910484,
+    "market_prob": 0.49944197807314034,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823929,
+    "game_date": "2026-07-07",
+    "model_prob": 0.3982361644634451,
+    "market_prob": 0.5002710873404644,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824254,
+    "game_date": "2026-07-07",
+    "model_prob": 0.5016204663974155,
+    "market_prob": 0.5032320136926611,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824495,
+    "game_date": "2026-07-07",
+    "model_prob": 0.5613699140716458,
+    "market_prob": 0.49695320364364143,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824579,
+    "game_date": "2026-07-07",
+    "model_prob": 0.5375616379051172,
+    "market_prob": 0.49151034260843063,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824820,
+    "game_date": "2026-07-07",
+    "model_prob": 0.4506875995774385,
+    "market_prob": 0.4845688949671026,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822710,
+    "game_date": "2026-07-08",
+    "model_prob": 0.5660369707910213,
+    "market_prob": 0.5049653442480665,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822880,
+    "game_date": "2026-07-08",
+    "model_prob": 0.6310169974217085,
+    "market_prob": 0.5112326914606613,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822957,
+    "game_date": "2026-07-08",
+    "model_prob": 0.5641894520797851,
+    "market_prob": 0.5016999270106964,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823032,
+    "game_date": "2026-07-08",
+    "model_prob": 0.595511709408878,
+    "market_prob": 0.4993167027037349,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823202,
+    "game_date": "2026-07-08",
+    "model_prob": 0.6171323541857722,
+    "market_prob": 0.5024822712632306,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823279,
+    "game_date": "2026-07-08",
+    "model_prob": 0.6189659144865618,
+    "market_prob": 0.49991034430296916,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823360,
+    "game_date": "2026-07-08",
+    "model_prob": 0.5027958154311521,
+    "market_prob": 0.5019202026666536,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823605,
+    "game_date": "2026-07-08",
+    "model_prob": 0.5275627365034365,
+    "market_prob": 0.5022651529913631,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823684,
+    "game_date": "2026-07-08",
+    "model_prob": 0.5506394745853865,
+    "market_prob": 0.491692924839839,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823848,
+    "game_date": "2026-07-08",
+    "model_prob": 0.5148955067051618,
+    "market_prob": 0.5019842702720295,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823928,
+    "game_date": "2026-07-08",
+    "model_prob": 0.4061058793100538,
+    "market_prob": 0.4996943782012635,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824253,
+    "game_date": "2026-07-08",
+    "model_prob": 0.47762026190747,
+    "market_prob": 0.5149947443190747,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824496,
+    "game_date": "2026-07-08",
+    "model_prob": 0.44224109555257873,
+    "market_prob": 0.494796020549084,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824578,
+    "game_date": "2026-07-08",
+    "model_prob": 0.5738543657379044,
+    "market_prob": 0.49964146661158354,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824815,
+    "game_date": "2026-07-08",
+    "model_prob": 0.47032462904997074,
+    "market_prob": 0.4949882368877726,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822877,
+    "game_date": "2026-07-09",
+    "model_prob": 0.6771960609939726,
+    "market_prob": 0.5014158348206493,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822954,
+    "game_date": "2026-07-09",
+    "model_prob": 0.5778981700473417,
+    "market_prob": 0.5018789670902198,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823034,
+    "game_date": "2026-07-09",
+    "model_prob": 0.5377231040670494,
+    "market_prob": 0.4949093845826614,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823201,
+    "game_date": "2026-07-09",
+    "model_prob": 0.5461594238518349,
+    "market_prob": 0.49466912608057145,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823277,
+    "game_date": "2026-07-09",
+    "model_prob": 0.577179259898317,
+    "market_prob": 0.5010727550360441,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823359,
+    "game_date": "2026-07-09",
+    "model_prob": 0.4617169969986827,
+    "market_prob": 0.49283702415876834,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823606,
+    "game_date": "2026-07-09",
+    "model_prob": 0.5332150233090913,
+    "market_prob": 0.5048535263601599,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823683,
+    "game_date": "2026-07-09",
+    "model_prob": 0.5529849055316196,
+    "market_prob": 0.5100783441742485,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823846,
+    "game_date": "2026-07-09",
+    "model_prob": 0.5454368839102889,
+    "market_prob": 0.496699551346376,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824251,
+    "game_date": "2026-07-09",
+    "model_prob": 0.4722613269136033,
+    "market_prob": 0.5035629847035856,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824494,
+    "game_date": "2026-07-09",
+    "model_prob": 0.49346487674160483,
+    "market_prob": 0.49076160133023156,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824577,
+    "game_date": "2026-07-09",
+    "model_prob": 0.5003512712291753,
+    "market_prob": 0.5047830566343001,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824816,
+    "game_date": "2026-07-09",
+    "model_prob": 0.44437113458466865,
+    "market_prob": 0.5105348625136139,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822709,
+    "game_date": "2026-07-10",
+    "model_prob": 0.46250667111431953,
+    "market_prob": 0.5042958088678533,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822878,
+    "game_date": "2026-07-10",
+    "model_prob": 0.6123343366090152,
+    "market_prob": 0.5014462184161341,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822955,
+    "game_date": "2026-07-10",
+    "model_prob": 0.5166015260231076,
+    "market_prob": 0.5022171402849239,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823033,
+    "game_date": "2026-07-10",
+    "model_prob": 0.6180427369076423,
+    "market_prob": 0.5019739845769401,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823200,
+    "game_date": "2026-07-10",
+    "model_prob": 0.5441722432667307,
+    "market_prob": 0.48540476685961614,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823278,
+    "game_date": "2026-07-10",
+    "model_prob": 0.560152601723463,
+    "market_prob": 0.5095905406587927,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823604,
+    "game_date": "2026-07-10",
+    "model_prob": 0.6543489792610939,
+    "market_prob": 0.5078431981539601,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823685,
+    "game_date": "2026-07-10",
+    "model_prob": 0.4661989109644006,
+    "market_prob": 0.498310160160583,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823845,
+    "game_date": "2026-07-10",
+    "model_prob": 0.5913663068415668,
+    "market_prob": 0.47750853500550244,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823927,
+    "game_date": "2026-07-10",
+    "model_prob": 0.5500246186196361,
+    "market_prob": 0.49938003934801467,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824252,
+    "game_date": "2026-07-10",
+    "model_prob": 0.4677646809732778,
+    "market_prob": 0.5050942492900437,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824493,
+    "game_date": "2026-07-10",
+    "model_prob": 0.4638908145769523,
+    "market_prob": 0.4859695889460206,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824575,
+    "game_date": "2026-07-10",
+    "model_prob": 0.5049115436529277,
+    "market_prob": 0.5078693557260393,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824817,
+    "game_date": "2026-07-10",
+    "model_prob": 0.43683077197225273,
+    "market_prob": 0.5105789308511967,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822711,
+    "game_date": "2026-07-11",
+    "model_prob": 0.5276027920472907,
+    "market_prob": 0.5060947667818831,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822875,
+    "game_date": "2026-07-11",
+    "model_prob": 0.5480813158711103,
+    "market_prob": 0.4970771544995743,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822953,
+    "game_date": "2026-07-11",
+    "model_prob": 0.5652948277283851,
+    "market_prob": 0.4814737290907642,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823030,
+    "game_date": "2026-07-11",
+    "model_prob": 0.5527369951998825,
+    "market_prob": 0.4886113188905579,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823198,
+    "game_date": "2026-07-11",
+    "model_prob": 0.5281968755175748,
+    "market_prob": 0.5113290799327753,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823276,
+    "game_date": "2026-07-11",
+    "model_prob": 0.5560696388187141,
+    "market_prob": 0.5007957010642233,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823356,
+    "game_date": "2026-07-11",
+    "model_prob": 0.5619437313584578,
+    "market_prob": 0.512682346591341,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823357,
+    "game_date": "2026-07-11",
+    "model_prob": 0.5568786517277882,
+    "market_prob": 0.5008715535367984,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823603,
+    "game_date": "2026-07-11",
+    "model_prob": 0.5721188175865232,
+    "market_prob": 0.4969519642826473,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823682,
+    "game_date": "2026-07-11",
+    "model_prob": 0.5125129718920196,
+    "market_prob": 0.5074577273678392,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823844,
+    "game_date": "2026-07-11",
+    "model_prob": 0.5865644093030471,
+    "market_prob": 0.5118645296500358,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823926,
+    "game_date": "2026-07-11",
+    "model_prob": 0.43825776833187136,
+    "market_prob": 0.4990306208517191,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824249,
+    "game_date": "2026-07-11",
+    "model_prob": 0.5761656217349858,
+    "market_prob": 0.47998868586588384,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824492,
+    "game_date": "2026-07-11",
+    "model_prob": 0.41370808347221516,
+    "market_prob": 0.4988700310578665,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824576,
+    "game_date": "2026-07-11",
+    "model_prob": 0.48889528014974143,
+    "market_prob": 0.49908240417056954,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824813,
+    "game_date": "2026-07-11",
+    "model_prob": 0.4848288924316374,
+    "market_prob": 0.5090772508422129,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822708,
+    "game_date": "2026-07-12",
+    "model_prob": 0.4825025998362116,
+    "market_prob": 0.4951682949166,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822876,
+    "game_date": "2026-07-12",
+    "model_prob": 0.5552433890662721,
+    "market_prob": 0.49693271020350677,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822951,
+    "game_date": "2026-07-12",
+    "model_prob": 0.5963490057674918,
+    "market_prob": 0.5127872680448128,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823029,
+    "game_date": "2026-07-12",
+    "model_prob": 0.551732571784709,
+    "market_prob": 0.48575177171287576,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823199,
+    "game_date": "2026-07-12",
+    "model_prob": 0.5219321719633492,
+    "market_prob": 0.5114490251199453,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823274,
+    "game_date": "2026-07-12",
+    "model_prob": 0.5999489096702446,
+    "market_prob": 0.49589640207135555,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823358,
+    "game_date": "2026-07-12",
+    "model_prob": 0.5799657502563852,
+    "market_prob": 0.5155133035930208,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823602,
+    "game_date": "2026-07-12",
+    "model_prob": 0.6043449647382865,
+    "market_prob": 0.4845267796492863,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823681,
+    "game_date": "2026-07-12",
+    "model_prob": 0.5428430387678829,
+    "market_prob": 0.5231374604741375,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823842,
+    "game_date": "2026-07-12",
+    "model_prob": 0.5387982518556804,
+    "market_prob": 0.5017102740037667,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823925,
+    "game_date": "2026-07-12",
+    "model_prob": 0.447605379726053,
+    "market_prob": 0.4890565198951212,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824250,
+    "game_date": "2026-07-12",
+    "model_prob": 0.5767757679231927,
+    "market_prob": 0.4982636249100868,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824491,
+    "game_date": "2026-07-12",
+    "model_prob": 0.48694755081782204,
+    "market_prob": 0.48168550241921865,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824574,
+    "game_date": "2026-07-12",
+    "model_prob": 0.5314192485619357,
+    "market_prob": 0.514880228855848,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824814,
+    "game_date": "2026-07-12",
+    "model_prob": 0.469151922473918,
+    "market_prob": 0.4979031029435365,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823440,
+    "game_date": "2026-07-16",
+    "model_prob": 0.35821264683805065,
+    "market_prob": 0.5016087965473568,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822789,
+    "game_date": "2026-07-17",
+    "model_prob": 0.532412176859986,
+    "market_prob": 0.5024950854284963,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823115,
+    "game_date": "2026-07-17",
+    "model_prob": 0.636653651187187,
+    "market_prob": 0.5069399413583374,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823524,
+    "game_date": "2026-07-17",
+    "model_prob": 0.47425035764955453,
+    "market_prob": 0.504003380700366,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823766,
+    "game_date": "2026-07-17",
+    "model_prob": 0.5454057791450946,
+    "market_prob": 0.5024781959193599,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824009,
+    "game_date": "2026-07-17",
+    "model_prob": 0.5820085360909674,
+    "market_prob": 0.49766642645250414,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824090,
+    "game_date": "2026-07-17",
+    "model_prob": 0.43628564187634455,
+    "market_prob": 0.5012682493710906,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824170,
+    "game_date": "2026-07-17",
+    "model_prob": 0.5540182672782255,
+    "market_prob": 0.5163136806433972,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824332,
+    "game_date": "2026-07-17",
+    "model_prob": 0.4209046837285547,
+    "market_prob": 0.5025277707254385,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824655,
+    "game_date": "2026-07-17",
+    "model_prob": 0.3724225920897871,
+    "market_prob": 0.5053679301734013,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824737,
+    "game_date": "2026-07-17",
+    "model_prob": 0.4839844288468459,
+    "market_prob": 0.5111512393050373,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824766,
+    "game_date": "2026-07-17",
+    "model_prob": 0.535298283303059,
+    "market_prob": 0.49490942402133936,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824901,
+    "game_date": "2026-07-17",
+    "model_prob": 0.5387590875585088,
+    "market_prob": 0.5008418352806276,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824981,
+    "game_date": "2026-07-17",
+    "model_prob": 0.46652988359988284,
+    "market_prob": 0.5036340130294836,
+    "outcome": 1
+  },
+  {
+    "game_pk": 825060,
+    "game_date": "2026-07-17",
+    "model_prob": 0.4855225401235599,
+    "market_prob": 0.5024796118722306,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822790,
+    "game_date": "2026-07-18",
+    "model_prob": 0.5546710871377823,
+    "market_prob": 0.507742723094508,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823116,
+    "game_date": "2026-07-18",
+    "model_prob": 0.6195500679931574,
+    "market_prob": 0.49725728973935757,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823441,
+    "game_date": "2026-07-18",
+    "model_prob": 0.5385192183033932,
+    "market_prob": 0.514170710032293,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823763,
+    "game_date": "2026-07-18",
+    "model_prob": 0.5425655817059953,
+    "market_prob": 0.5013963698100131,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824008,
+    "game_date": "2026-07-18",
+    "model_prob": 0.5810386278727585,
+    "market_prob": 0.5005729662182964,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824088,
+    "game_date": "2026-07-18",
+    "model_prob": 0.3848416213910976,
+    "market_prob": 0.5101328332257891,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824169,
+    "game_date": "2026-07-18",
+    "model_prob": 0.5707869253562834,
+    "market_prob": 0.5220114866642961,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824331,
+    "game_date": "2026-07-18",
+    "model_prob": 0.32245947167409666,
+    "market_prob": 0.4964151693413077,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824412,
+    "game_date": "2026-07-18",
+    "model_prob": 0.6022747753958259,
+    "market_prob": 0.5007071618631144,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824414,
+    "game_date": "2026-07-18",
+    "model_prob": 0.5932493431090362,
+    "market_prob": 0.4953976519895,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824657,
+    "game_date": "2026-07-18",
+    "model_prob": 0.5214416167643944,
+    "market_prob": 0.501264289221796,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824738,
+    "game_date": "2026-07-18",
+    "model_prob": 0.377913521697628,
+    "market_prob": 0.5014129404668585,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824899,
+    "game_date": "2026-07-18",
+    "model_prob": 0.4949074864876511,
+    "market_prob": 0.5018599538215898,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824979,
+    "game_date": "2026-07-18",
+    "model_prob": 0.4195760905276522,
+    "market_prob": 0.5136794383746404,
+    "outcome": 1
+  },
+  {
+    "game_pk": 825059,
+    "game_date": "2026-07-18",
+    "model_prob": 0.5166287625171427,
+    "market_prob": 0.5008580826953676,
+    "outcome": 0
+  },
+  {
+    "game_pk": 822786,
+    "game_date": "2026-07-19",
+    "model_prob": 0.5523122960281472,
+    "market_prob": 0.49415214042001726,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823113,
+    "game_date": "2026-07-19",
+    "model_prob": 0.6165068600749957,
+    "market_prob": 0.504952998572918,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823439,
+    "game_date": "2026-07-19",
+    "model_prob": 0.5318256713935711,
+    "market_prob": 0.5211404030563853,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823521,
+    "game_date": "2026-07-19",
+    "model_prob": 0.6234014290727835,
+    "market_prob": 0.5037287514835637,
+    "outcome": 0
+  },
+  {
+    "game_pk": 823523,
+    "game_date": "2026-07-19",
+    "model_prob": 0.6224664294695159,
+    "market_prob": 0.5073933907391983,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823764,
+    "game_date": "2026-07-19",
+    "model_prob": 0.5184739274691923,
+    "market_prob": 0.497040623170623,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824007,
+    "game_date": "2026-07-19",
+    "model_prob": 0.5297045274825921,
+    "market_prob": 0.4994901387113503,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824086,
+    "game_date": "2026-07-19",
+    "model_prob": 0.4424207399403831,
+    "market_prob": 0.4969651582311671,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824168,
+    "game_date": "2026-07-19",
+    "model_prob": 0.5202561557461609,
+    "market_prob": 0.5026913931453418,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824330,
+    "game_date": "2026-07-19",
+    "model_prob": 0.5206719092338199,
+    "market_prob": 0.49488764286706044,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824411,
+    "game_date": "2026-07-19",
+    "model_prob": 0.6356188853718227,
+    "market_prob": 0.5021091723539818,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824653,
+    "game_date": "2026-07-19",
+    "model_prob": 0.6228293485844938,
+    "market_prob": 0.5018610844673428,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824739,
+    "game_date": "2026-07-19",
+    "model_prob": 0.5616122595941025,
+    "market_prob": 0.5016970483394456,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824897,
+    "game_date": "2026-07-19",
+    "model_prob": 0.5272180826013929,
+    "market_prob": 0.5159963566587263,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824978,
+    "game_date": "2026-07-19",
+    "model_prob": 0.436744470115305,
+    "market_prob": 0.5066776136096846,
+    "outcome": 0
+  },
+  {
+    "game_pk": 825057,
+    "game_date": "2026-07-19",
+    "model_prob": 0.5188439051533797,
+    "market_prob": 0.5040053560471521,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822788,
+    "game_date": "2026-07-20",
+    "model_prob": 0.6123069376956998,
+    "market_prob": 0.48726379019154403,
+    "outcome": 1
+  },
+  {
+    "game_pk": 822874,
+    "game_date": "2026-07-20",
+    "model_prob": 0.620685079061367,
+    "market_prob": 0.5006393107266957,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823436,
+    "game_date": "2026-07-20",
+    "model_prob": 0.4767700826686215,
+    "market_prob": 0.4918636709022214,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823522,
+    "game_date": "2026-07-20",
+    "model_prob": 0.6059473009963757,
+    "market_prob": 0.509887652909142,
+    "outcome": 1
+  },
+  {
+    "game_pk": 823762,
+    "game_date": "2026-07-20",
+    "model_prob": 0.5622699015128835,
+    "market_prob": 0.5029064745117858,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824087,
+    "game_date": "2026-07-20",
+    "model_prob": 0.4016679687367213,
+    "market_prob": 0.4910594557434899,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824167,
+    "game_date": "2026-07-20",
+    "model_prob": 0.5137218749887069,
+    "market_prob": 0.5043789458337878,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824328,
+    "game_date": "2026-07-20",
+    "model_prob": 0.39887150473768784,
+    "market_prob": 0.5098063231292072,
+    "outcome": 0
+  },
+  {
+    "game_pk": 824410,
+    "game_date": "2026-07-20",
+    "model_prob": 0.6411938526070525,
+    "market_prob": 0.5030463677178177,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824736,
+    "game_date": "2026-07-20",
+    "model_prob": 0.5008500800835705,
+    "market_prob": 0.5186933366558159,
+    "outcome": 1
+  },
+  {
+    "game_pk": 824898,
+    "game_date": "2026-07-20",
+    "model_prob": 0.4917242530706271,
+    "market_prob": 0.5011052398180161,
+    "outcome": 0
+  }
+]

@@ -225,8 +225,50 @@ GATE/AC: a week-by-week team-strength posterior (mean + uncertainty), partial-po
 
 ```
 ▶ NCAAF-P1.3 — FEATURE ENGINEERING (the broad pregame feature library — BEFORE model dev)   [Model/Data · 🧭 OPUS · Phase 1 · operator-scoped: "a good number of features ready"]   (2026-07-13)
+✅✅ **DONE + VALIDATED ON THE REAL 2014–2025 BUILD 2026-07-21 (operator ran it LAPTOP-side — the sports_dbt DAG reads the S3 lake RO + feeds no live serving, so no box needed).** 📊 REAL RESULT: `feature_ncaaf_pregame_matrix` = **9,086 FBS-vs-FBS games** (= the exact `dim_ncaaf_game` FBS universe, no drop/fan-out) × 200 cols; the HALT leakage gate PASSES on **18,172 real matchup-sides (0 violations)** + still proven to fail on a tampered row; landed 2014–2025 in S3 (`ncaaf/derived/feature_pregame_matrix`, 534 in COVID-2020, ~760–808 otherwise). **Per-family coverage all healthy (no dead join):** strength **2014=0% (not emitted, honest) → 100%** 2015+ (2020 96% = COVID opt-outs); season-broadcast families 95–99%; the rollup-derived families all 91% (shared week-1/no-coverage NULL); travel/altitude 86–88% (neutral-site NULL, by design). ⚠️ **P1.4 NOTE: portal_flux reads ~98% even pre-2021 because `portal_net_count` is a real 0 there, not NULL — the honest gate is the `{home,away}_portal_data_covered` boolean carried in the matrix.** Report: `ablation_results/ncaaf_p1_3_feature_matrix.md`.
+📦 SHIPPED: the dbt mart **`feature_ncaaf_pregame_matrix`** (`sports_dbt/models/ncaaf/marts/`, tag
+`ncaaf_p1_3`) — **one row per FBS-vs-FBS game, 200 cols**: home_/away_ features across **12 families**
+(team strength P1.2 · efficiency raw + opponent-adjusted P1.1 · pace/style · line/trench UNIT proxies
+· drive quality · roster continuity + portal flux + talent P0.4 · freshman prior P1.2b · coaching
+HC-only P0.5 · QB continuity derived · situational · travel/altitude), 6 POST-KICKOFF `label_*`
+targets (prefixed, never a feature), + headline diffs. Plus the DATE-based per-matchup leakage gate
+**`assert_pregame_matrix_is_point_in_time`** (HALT-tier — wired into `NCAAF_LEAKAGE_GATES` + the CI
+gate slice, 3→4), the driver **`models/run_feature_matrix.py`** (one-pull→cached parquet
+`ncaaf/derived/feature_pregame_matrix`, join-coverage verification, per-family per-season coverage
+report, proves the gate FAILS on a tampered row, `--s3`), and 11 fast-gate tests
+`betting_ml/tests/test_ncaaf_feature_matrix.py`. Mart inventory §6.15.
+🔑 **Banner A (verify joins on the real lake):** week-grained families join **1:1** on
+`(season, team_id, as_of_week = season_order_week)`; season-grained families **BROADCAST** on
+`(season, team-name)`. The mart is game-grained + all LEFT joins, so a fan-out DUPLICATES `game_id`
+(the driver's grain guard raises) and a drop shrinks the row count vs the `dim_ncaaf_game` FBS
+universe (the driver asserts equality). The per-family coverage report surfaces a silently-dead
+family (F2/INC-31 class) at build time. **⚠️ the row-count/coverage asserts + the real gate run are
+the OPERATOR box step below** — offline they're proven on synthetic + a full local mart execution.
+✅ **Banner B (gate proven to fail):** DATE-based (per-matchup kickoff boundary, count-parity +
+clock-sanity — NOT a `week<W` filter), and `test_ncaaf_feature_matrix.py` PROVES it fires on both a
+back-dated row (clock) and a wrong-week snapshot (parity).
+🔧 **PM-correction outcomes:** (2) coaching = HC-only ✅. (3a) QB injury DROPPED (no CFB source) —
+kept the derivable half (starter continuity + trailing YPA/QBR). (3b) `is_rivalry` DROPPED (no
+confirmed field — not guessed). (3c) `box_advanced` not staged → finishing/field-pos not added.
+(4) situational thinned as expected. **⭐ ONE deliberate departure:** travel/altitude are BUILT
+(non-neutral games) — the P1.1-update "drop travel/altitude" banner predates confirming
+`venue_latitude`/`venue_longitude` ARE staged on `stg_ncaaf_teams`; verified from code, so
+`away_travel_km` + `away_altitude_change_m` ship coverage-flagged for P1.4 to ablate (neutral-site
+NULL by design). Documented honestly in the report.
+🔒 Offline gates GREEN: dbt `parse` + `compile --target ci` (64 models, 4 leakage gates); the FULL
+mart executes on synthetic upstreams (200 cols, values correct); the driver runs end-to-end
+(all 5 gates incl. tamper-proof); fast gate `pytest -m "not slow"` **1665 passed**.
+✅ **RUNTIME GATE CLOSED ON THE LAPTOP** (no box — the sports_dbt DAG reads the S3 lake RO and
+serves nothing live; P1.2/P1.2b also ran laptop-side): `dbt run --select +feature_ncaaf_pregame_matrix`
+(25 models, 1m56s) → `dbt test --select assert_pregame_matrix_is_point_in_time` (PASS) →
+`run_feature_matrix.py --s3` (all 5 gates green, S3 landed 2014–2025). ⏭️ UNBLOCKS P1.4 (reads the
+cached parquet / the S3 derived Delta). (Orig prompt + PM banners ↓.)
+─────────────────────────────────────────
+🟢🟢 **PM FINAL CONFIRM-PASS (2026-07-21) — ALL 3 DEPS DONE (P1.1 marts ✅ · P1.2 strength ✅ · P1.2b freshman ✅); CLEARED TO KICK OFF. Two additions from the P1.1/P1.2/P1.2b sessions — both apply BECAUSE P1.3 is the most JOIN-HEAVY, highest-leverage leakage surface in the chain:**
+ **(A) 🔑 VERIFY EVERY JOIN KEY + ROW COVERAGE ON THE REAL LAKE (the P1.2b dead-bridge lesson — a documented key can be wrong + ship a silently-empty result, CI-green).** P1.3 fans ~6 marts into one matrix at **TWO grains**: WEEK-level 1:1 (`rollup_ncaaf_team_week_asof` + `_opponent_adjusted`, P1.2 `strength` per `(season, team, as_of_week)`) vs SEASON-level BROADCAST across `as_of_week` (P1.2b `ncaaf_team_freshman_prior`, P0.4 roster-continuity, P0.5 coaching, all `(season, team)`). ⚠️ **after EACH join, assert row count on the real build — a season-level join must BROADCAST (not fan-out or drop); a week-level join must stay 1:1.** Match-count each key on the lake before trusting the grain; do NOT code to a documented key. **Emit a per-family COVERAGE REPORT** (% non-null per feature family, per season) so a silently-dead family (the F2/INC-31 class — a whole block reading NULL) surfaces at build time, not in P1.4.
+ **(B) ✅ THE LEAKAGE GATE MUST BE PROVEN TO FAIL (the P1.1/P1.2/P1.2b standard).** P1.3's AC below says "as-of-kickoff proven" — make that gate **DATE-based** (every contributing row predates the game's kickoff; NOT a `week<W` filter, which passes green on a bad ordering) **AND verify it actually FAILS on a tampered/future-dated row**, so its green means something. This is THE matrix every downstream model trains on — a silent leak here contaminates all of P1.4.
 🟢 **PM READINESS PASS (2026-07-20) — CLEARED TO RUN, with 4 corrections to the DO list below. Read all three banners before building.**
- **(1) ⛔ UNMET DEPENDENCY — `P1.2b` (freshman priors) is NOT built yet.** The DO list names "**P1.2b freshman priors** for true-freshman contributors" as a roster feature. **DECISION (PM): do NOT block P1.3 on it.** Build the matrix WITHOUT the freshman-prior family, and leave a **documented, named slot** (same `(season, team, as_of_week)` grain) so P1.2b's output joins in later without a re-architecture. Note it as a known-absent family in the feature doc. (P1.2b runs in parallel / after; it's ONE family of ~8 — the bake-off is not starved without it.)
+ **(1) ✅ RESOLVED — `P1.2b` freshman priors are BUILT (2026-07-21).** Join the team aggregate **`ncaaf_team_freshman_prior`** on **`(season, team)`** (arrival_season/arrival_team), broadcast across every `as_of_week`; columns: `n_incoming_freshmen`, `freshman_class_projected_production`, `freshman_class_avg_projected_production`, `freshman_class_top_projected_production`, `freshman_class_avg_rating`, `blue_chip_count`. ⚠️ **it's a WEAK signal by measurement** (GBM beats null robustly PBO=0.000 but DSR=0.821 <0.95 — recruiting explains only ~0.2 of freshman-production variance; opportunity/depth-chart drives freshman snaps as much as talent) → **carry it, but don't expect it to move the needle; let P1.4's ablation decide its weight.** ⚠️ its `_sd`/uncertainty is **PARAMETER uncertainty, not a calibrated interval** (same as P1.2's `strength_margin_sd`) → relative-confidence only, recalibrate before any pricing use.
  **(2) 🚫 COACHING = HEAD COACH ONLY.** The DO list says "P0.5 new-HC/**OC/DC** flags" — **P0.5 DEFERRED coordinators** (no free source exists; editorial/paid only, gated like NIL-$). Available today: HC identity/change/tenure, `is_first_year_at_school`, `hc_midseason_change`, ⭐ the coach's **prior SP+ off/def track record**, `is_first_time_hc`, `is_hc_history_censored`. **Drop OC/DC from the feature list.**
  **(3) ⚠️ VERIFY-OR-DROP before promising these three** (each is unconfirmed in `ncaaf_data_inventory.md` — do NOT invent a proxy): **(a) QB "injury/change flags"** — ⚠️ college football has **no mandated injury report** (unlike the NFL) and no injury source was established in P0.1 → **most likely NOT available; drop the injury half** and keep the derivable half (starter continuity / QB change vs prior game, from the roster + player facts). **(b) "is-rivalry"** — confirm a CFBD field exists or derive it from a maintained pair list; don't assume. **(c) "finishing" / field-position efficiency** — may live in the **unstaged `box_advanced`** (§7 gap) → confirm it's staged before including.
  **(4) ✅ Sanity-check the surviving situational family.** After the P1.1 banner removes venue/travel/altitude/neutral-site, what genuinely remains is: **home/away, rest days (derive from `game_date` deltas), `season_order_week`, is-conference** (+ is-rivalry if (3b) confirms). That's a thinner situational block than the prompt implies — that's correct and honest, not a shortfall.
