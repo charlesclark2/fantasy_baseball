@@ -105,14 +105,23 @@ _IMMUTABLE_KEYS = {"user_id", "bet_id", "placed_at", "game_pk", "pending_game_pk
 
 
 def update_bet(user_id: str, bet_id: str, updates: dict) -> dict:
-    """Update mutable fields of a bet. Returns the updated item. Raises ValueError if not found."""
+    """Update mutable fields of a bet. Returns the updated item. Raises ValueError if not found.
+
+    Settling a bet (setting a terminal `outcome`) ALSO REMOVEs `pending_game_pk` so the bet
+    drops out of the sparse gsi-pending-by-game index — mirroring settle_user_bets.py's atomic
+    `SET outcome ... REMOVE pending_game_pk`. Without this, the SET-only update left auto-voided
+    bets (routers/bets.py) stuck in the pending index forever (they re-scan every settle pass
+    and never clear). REMOVE of an absent attribute is a harmless no-op, so this is safe for an
+    already-settled bet too.
+    """
     table = _bets_table()
     resp = table.get_item(Key={"user_id": user_id, "bet_id": bet_id})
     if "Item" not in resp:
         raise ValueError("not_found")
 
     patch = _to_dynamo({k: v for k, v in updates.items() if v is not None and k not in _IMMUTABLE_KEYS})
-    if not patch:
+    settling = updates.get("outcome") is not None  # a terminal outcome ⇒ drop from pending GSI
+    if not patch and not settling:
         return _from_dynamo(resp["Item"])
 
     keys = list(patch.keys())
@@ -121,13 +130,21 @@ def update_bet(user_id: str, bet_id: str, updates: dict) -> dict:
     values = {f":v{i}": v for i, v in enumerate(vals)}
     set_parts = [f"#k{i} = :v{i}" for i in range(len(keys))]
 
-    result = table.update_item(
-        Key={"user_id": user_id, "bet_id": bet_id},
-        UpdateExpression="SET " + ", ".join(set_parts),
-        ExpressionAttributeNames=names,
-        ExpressionAttributeValues=values,
-        ReturnValues="ALL_NEW",
-    )
+    expr = "SET " + ", ".join(set_parts) if set_parts else ""
+    if settling:
+        names["#pgp"] = "pending_game_pk"
+        expr = (expr + " " if expr else "") + "REMOVE #pgp"
+
+    kwargs = {
+        "Key": {"user_id": user_id, "bet_id": bet_id},
+        "UpdateExpression": expr,
+        "ExpressionAttributeNames": names,
+        "ReturnValues": "ALL_NEW",
+    }
+    if values:  # boto3 rejects an empty ExpressionAttributeValues (REMOVE-only case)
+        kwargs["ExpressionAttributeValues"] = values
+
+    result = table.update_item(**kwargs)
     return _from_dynamo(result["Attributes"])
 
 

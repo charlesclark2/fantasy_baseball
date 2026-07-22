@@ -1712,23 +1712,41 @@ def finalize_prior_slate_game_detail_op(context):
 
 # ── User bet settlement (Performance page redesign, story B1) ─────────────────
 
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
-def settle_user_bets_op(context):
-    """Settle pending DynamoDB user-bets against final scores.
-
-    Bets live in DynamoDB (OLTP); scores live in Snowflake (OLAP). Runs after
-    dbt_daily_build, where last night's finals (stg_statsapi_games) are fresh.
-    Off the critical prediction path — failure here must not block predictions.
-    Soft-fail (mirrors ingest_umpire_scorecards): this is a leaf op
-    (settle_user_bets_op(start=s16) — nothing downstream depends on it), so a
-    settlement error (missing script, transient DynamoDB/Snowflake hiccup) must
-    not flip daily_ingestion_job to FAILURE and fire the Run Failure alert. The
-    warning is logged for monitoring; unsettled bets are retried next daily run.
+def _run_settlement(context) -> None:
+    """Shared settlement body (WARN-tier). Runs settle_user_bets.py — now Snowflake-FREE
+    (scores/K totals read from the S3 lakehouse via DuckDB). A failure is logged, never
+    raised: settlement is off the critical prediction path, and the next pass (daily morning
+    OR an evening settle_user_bets_job) retries. Soft-fail mirrors ingest_umpire_scorecards.
     """
     try:
         _run_script(context, "settle_user_bets.py")
     except Exception as e:
-        context.log.warning(f"User-bet settlement failed (non-fatal, retried next run): {e}")
+        context.log.warning(f"User-bet settlement failed (non-fatal, retried next pass): {e}")
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def settle_user_bets_op(context):
+    """Settle pending DynamoDB user-bets against final scores — the DAILY morning pass.
+
+    Wired into daily_ingestion_job after dbt_daily_build. This is a leaf op
+    (settle_user_bets_op(start=s16) — nothing downstream depends on it), so a settlement
+    error must not flip the job to FAILURE. NOTE (E11.20 phase-2a): the morning pass ALONE
+    left a whole slate's afternoon/evening finals unsettled for 12-24h — the evening
+    settle_user_bets_job (settle_user_bets_scheduled_op) closes that gap.
+    """
+    _run_settlement(context)
+
+
+@op(out=Out(Nothing))
+def settle_user_bets_scheduled_op(context):
+    """Standalone settle op for the EVENING settle_user_bets_job (E11.20 phase-2a).
+
+    No `start` input, so it is the sole node of an evening-cadence job. Same WARN-tier body
+    as the daily settle_user_bets_op. The once-daily morning pass left evening finals
+    unsettled 12-24h; these evening passes settle same-night — and it is FREE now that the
+    settle script is Snowflake-free (S3/DuckDB reads → no warehouse wake per pass).
+    """
+    _run_settlement(context)
 
 
 # ── Backfill phase ───────────────────────────────────────────────────────────

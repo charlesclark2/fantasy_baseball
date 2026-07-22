@@ -1,5 +1,18 @@
 [
   {
+    "week": "2026-07-20",
+    "items": [
+      {
+        "tag": "fixed",
+        "text": "Fixed bets in your Bet Log staying marked 'open' long after their games had finished. Settlement — grading each pending bet win/loss/push against the final score (or, for pitcher-strikeout props, the starter's actual strikeout total) — only ran once a day, in the early-morning update. Because a full slate plays out over the afternoon and evening, a game that finished at night wasn't graded until the next morning, so bets could show 'open' for up to a day. Settlement now also runs on an evening/overnight cadence, so a bet grades within a couple of hours of its game ending — the same night, not the next day. This is a factual result recap, not betting advice."
+      },
+      {
+        "tag": "fixed",
+        "text": "Fixed a bet that was automatically voided (because its game was postponed or cancelled) still lingering internally as if unsettled. The bet showed correctly as 'void' on your page, but a bookkeeping marker wasn't cleared, so it was needlessly re-checked on every settlement pass. Voiding a bet now fully closes it out. No change to how a void looks or counts in your record."
+      }
+    ]
+  },
+  {
     "week": "2026-07-13",
     "items": [
       {
