@@ -246,6 +246,16 @@ def lineup_intraday_s3_feature_rebuild(context: OpExecutionContext) -> None:
     steps: list[tuple[str, list[str]]] = [
         ("backfill_lineup_state_scd2.py", ["--since", _today()]),
         ("export_w8b_precursors_to_s3.py", ["--table", "feature_pregame_lineup_state"]),
+        # INTRADAY SPINE REFRESH (2026-07-22, game 824735 reschedule gap): mart_game_spine is
+        # rebuilt only in the daily --w5-group-a step (~12:38 UTC). A game rescheduled AFTER that
+        # (a rain makeup — postponed 7/21 → 7/22) is absent from the daily spine, so the --w8b
+        # aggregator (which spines on it) misses it → the feature store lacks the game → predict
+        # falls to intraday_assembly with no clean post_lineup row → the lineup_monitor loops on
+        # it every tick until first pitch. Refresh JUST the spine (cheap: reuses the existing
+        # mart_game_results parquet, recomputes only the UNION from the intraday-fresh
+        # stg_statsapi_games) BEFORE --w8b-only so today's reschedule enters the feature slate
+        # same-day. Ordered after the staging/SCD-2 mirror, before the aggregator reads it.
+        ("run_w1_lakehouse.py", ["--game-spine-only"]),
         ("run_w1_lakehouse.py", ["--w8b-only"]),
         ("refresh_w1_external_tables.py", ["--w8b"]),
     ]

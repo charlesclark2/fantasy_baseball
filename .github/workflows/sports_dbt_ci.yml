@@ -98,3 +98,44 @@ jobs:
             echo "::error::Expected 5 NCAAF leakage gates, found $n_gates — a point-in-time contract test was lost."
             exit 1
           fi
+
+      # ── NFL-N1.0 — the team-game / CLV mart layer CI gate ────────────────────────────
+      # N1.0 ADDS the team-game + CLV/odds marts to nfl/ (the game-line/props/fantasy foundation).
+      # Same rationale as the NCAAF slice: attribute a break to NFL and fail if the selector stops
+      # matching. Note this is exactly the path the CD filter must trigger on (sports_dbt/**) — a
+      # model-only change here must deploy, not sail behind a green run on a stale image.
+      - name: dbt compile — NFL slice (staging + marts)
+        run: |
+          uv run dbt compile --project-dir . --profiles-dir . --target ci \
+            --select nfl.staging nfl.marts
+
+      # The three N1.0 leakage/CLV gates are singular tests — compiling them offline catches a
+      # rename or dropped column that would otherwise turn a HALT gate into a silently-skipped test.
+      - name: dbt compile — NFL leakage gates (point-in-time + CLV close contract)
+        run: |
+          uv run dbt compile --project-dir . --profiles-dir . --target ci \
+            --select assert_nfl_asof_week_has_no_future_games \
+                     assert_nfl_opponent_adjustment_is_point_in_time \
+                     assert_nfl_clv_is_pre_kickoff
+
+      - name: Assert the NFL slice is non-empty (a no-op selector must not pass)
+        run: |
+          set -euo pipefail
+          n_models=$(uv run dbt --quiet list --project-dir . --profiles-dir . --target ci \
+                       --select nfl.staging nfl.marts --resource-type model | wc -l | tr -d ' ')
+          n_gates=$(uv run dbt --quiet list --project-dir . --profiles-dir . --target ci \
+                       --select assert_nfl_asof_week_has_no_future_games \
+                                assert_nfl_opponent_adjustment_is_point_in_time \
+                                assert_nfl_clv_is_pre_kickoff \
+                       --resource-type test | wc -l | tr -d ' ')
+          echo "NFL models selected: $n_models ; leakage gates selected: $n_gates"
+          # N0.3 shipped ~23 nfl models; N1.0 adds 12 (5 staging + 7 marts) → floor of 30 guards
+          # against the slice silently collapsing.
+          if [ "$n_models" -lt 30 ]; then
+            echo "::error::NFL model slice collapsed to $n_models (<30) — the selector or the folder layout broke."
+            exit 1
+          fi
+          if [ "$n_gates" -ne 3 ]; then
+            echo "::error::Expected 3 NFL leakage gates, found $n_gates — a point-in-time contract test was lost."
+            exit 1
+          fi

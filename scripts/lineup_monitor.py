@@ -66,6 +66,27 @@ TASK = "lineup_monitor"
 _FULL_LINEUP_SLOTS = 9
 _SLA_FALLBACK_MINUTES = 40.0
 
+# INC-32 recurrence (2026-07-22, game 824735) — BRANCH-2 RE-TRIGGER CAP.
+# Step 2b re-triggers any already-triggered game that still LACKS a post_lineup row (the
+# "job failed mid-run, retry" path). That retry was UNBOUNDED, and the sensor RunRequest
+# carries no run_key, so a game that can NEVER get a clean post_lineup row re-fired the full
+# lineup_monitor_job (dbt rebuild + predict) every ~10-min tick until first pitch. The 824735
+# trigger: the game was rescheduled (postponed 7/21 → 7/22) AFTER the daily --w5 mart_game_spine
+# build, so it was absent from today's spine → the feature store missed it → predict fell to
+# intraday_assembly and never landed a post_lineup row → infinite Step-2b re-trigger.
+# CAP: retry a missing-post_lineup game at most _RETRIGGER_CAP times, then STOP re-triggering it
+# and ALERT loudly — converting a runaway loop into a bounded retry + a visible signal. The
+# counter is kept in DynamoDB (path-independent: works in BOTH the SF and S3 modes, so the cap
+# protects the live SF box) keyed per (run_date, game_pk), so it resets each day.
+_RETRIGGER_CAP = 3
+_RETRY_SK_PREFIX = "lineup_retry#"
+
+
+def over_retrigger_cap(attempts: int) -> bool:
+    """PURE (unit-tested) — True once a game has exhausted its branch-2 (missing-post_lineup)
+    retry budget. `attempts` is the running count INCLUDING the current attempt."""
+    return attempts > _RETRIGGER_CAP
+
 # ── E11.20 PHASE-2a — the SNOWFLAKE-FREE DETECTION TICK (2026-07-20) ────────────────────
 # The E11.20-COST measurement found ~80% of Snowflake spend is warehouse WAKE/IDLE, not
 # query compute, and named this monitor one of the last 24/7 wakers: the sensor evaluates
@@ -201,6 +222,28 @@ def _record_trigger_dynamo(today_iso: str, game_pk: int, home, away) -> None:
         "is_permanent": False,
         "cache_date": today_iso,
     })
+
+
+def _bump_retrigger_count(today_iso: str, game_pk: int) -> int:
+    """Atomically increment and RETURN this game's branch-2 (missing-post_lineup) re-trigger
+    attempt count for today (DynamoDB ADD). Path-independent — used in BOTH the SF and S3
+    branches so the loop cap works on the live SF box. Fail-OPEN (return 1) on any Dynamo
+    error: a counter outage must never break the monitor; worst case we lose the cap for one
+    tick rather than go dark."""
+    try:
+        resp = _state_table().update_item(
+            Key={"pk": "ops", "sk": f"{_RETRY_SK_PREFIX}{today_iso}#{int(game_pk)}"},
+            UpdateExpression="SET run_date = :d ADD retrigger_count :one",
+            ExpressionAttributeValues={":d": today_iso, ":one": 1},
+            ReturnValues="UPDATED_NEW",
+        )
+        return int(resp["Attributes"]["retrigger_count"])
+    except Exception as e:  # noqa: BLE001 — never break the monitor on the counter
+        log.warning(
+            "retrigger-counter bump failed for game_pk=%s (%s); allowing retry (fail-open).",
+            game_pk, e,
+        )
+        return 1
 
 
 def select_ready_games(candidates, first_pitch, now):
@@ -489,14 +532,32 @@ def main() -> None:
             if pk not in already_triggered:
                 new_game_pks.append(pk)
             elif pk not in games_with_post_lineup:
-                # Triggered but post_lineup prediction never written — job must have
-                # failed mid-run. Re-trigger so the prediction is produced.
-                log.info(
-                    "Re-triggering game_pk=%d: in lineup_monitor_state but no "
-                    "post_lineup prediction found.",
-                    pk,
-                )
-                new_game_pks.append(pk)
+                # Triggered but post_lineup prediction never written. Two causes: (1) the
+                # lineup_monitor_job failed mid-run (transient — a retry is correct), or (2) the
+                # game can NEVER get a clean post_lineup row this slate — the 824735 class
+                # (2026-07-22): rescheduled AFTER the daily --w5 spine build → absent from today's
+                # mart_game_spine → feature store misses it → intraday_assembly fallback, no
+                # post_lineup. Unbounded, case (2) re-fires the full job every tick until first
+                # pitch (no run_key on the sensor RunRequest). CAP it: retry up to _RETRIGGER_CAP,
+                # then give up + ALERT so a runaway loop becomes a bounded retry + a visible signal.
+                attempts = _bump_retrigger_count(today, pk)
+                if not over_retrigger_cap(attempts):
+                    log.info(
+                        "Re-triggering game_pk=%d: in lineup_monitor_state but no post_lineup "
+                        "prediction found (attempt %d/%d).",
+                        pk, attempts, _RETRIGGER_CAP,
+                    )
+                    new_game_pks.append(pk)
+                else:
+                    log.warning(
+                        "[ALERT] game_pk=%d: still no post_lineup prediction after %d attempts — "
+                        "GIVING UP re-triggers to stop the runaway lineup_monitor loop. Most likely "
+                        "the game is absent from today's mart_game_spine (a reschedule captured "
+                        "after the daily --w5 build) so the feature store misses it → "
+                        "intraday_assembly fallback, no clean post_lineup. Investigate spine "
+                        "coverage for this game_pk; it is served (degraded) via its morning row.",
+                        pk, _RETRIGGER_CAP,
+                    )
             else:
                 stored_home, stored_away = already_triggered[pk]
                 # Only re-trigger on a GENUINE side-for-side starter change. is_real_pitcher_change

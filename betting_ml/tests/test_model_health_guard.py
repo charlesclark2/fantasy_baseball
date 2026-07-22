@@ -23,69 +23,92 @@ from betting_ml.monitoring import model_health_metrics as mh
 # Task 1: post_lineup matchup coverage check
 # ---------------------------------------------------------------------------
 
-def _make_conn(n_games: int, avg_coverage: float | None) -> MagicMock:
-    """Mock Snowflake connection returning (n_games, avg_coverage) from the coverage query."""
-    row = (n_games, avg_coverage)
+def _make_conn(slate_coverages, baseline, imputed=None) -> MagicMock:
+    """Mock Snowflake connection for the recalibrated (baseline-relative) coverage check.
+
+    1st execute → fetchall() returns the post_lineup slate rows
+        (feature_coverage_score, imputed_features);
+    2nd execute → fetchone() returns the trailing baseline as (baseline,).
+    """
+    imputed = imputed if imputed is not None else [""] * len(slate_coverages)
+    slate = list(zip(slate_coverages, imputed))
     cursor = MagicMock()
-    cursor.fetchone.return_value = row
+    cursor.fetchall.return_value = slate
+    cursor.fetchone.return_value = (baseline,)
     conn = MagicMock()
     conn.cursor.return_value = cursor
     return conn
 
 
-def test_post_lineup_null_matchup_fires_alert():
-    """INC-17 class: a slate where lineup block is null (avg coverage 0.833) triggers alert."""
-    # 0.833 = 5/6: lineup block (avg_eb_woba) null across all games, other blocks fine.
-    conn = _make_conn(n_games=15, avg_coverage=5 / 6)
-    result = mh.check_post_lineup_matchup_coverage(conn, "betting_ml", date(2026, 6, 27))
-
-    assert result["alert_fired"] is True, "Expected alert when avg_coverage < threshold"
+def test_post_lineup_regression_below_baseline_fires():
+    """A slate materially below its trailing baseline fires (a NEW coverage regression)."""
+    conn = _make_conn([5 / 6] * 15, baseline=0.98)     # drop ≈ 0.147 ≥ 0.10
+    result = mh.check_post_lineup_matchup_coverage(conn, "betting_ml", date(2026, 7, 21))
+    assert result["alert_fired"] is True
     assert result["n_games"] == 15
     assert result["avg_coverage"] == pytest.approx(5 / 6, abs=1e-6)
     assert "INC-17 class" in result["fail_reason"]
-    assert "avg_eb_woba" in result["fail_reason"]
 
 
-def test_post_lineup_healthy_coverage_passes():
-    """Healthy slate with full coverage (avg=1.0) does not fire."""
-    conn = _make_conn(n_games=15, avg_coverage=1.0)
-    result = mh.check_post_lineup_matchup_coverage(conn, "betting_ml", date(2026, 6, 27))
-
+def test_post_lineup_steady_state_does_not_fire():
+    """The recalibration fix (2026-07-21 false positive): a slate AT its chronic baseline — a
+    non-lineup block that has been imputed for a while — must NOT cry wolf."""
+    conn = _make_conn([5 / 6] * 15, baseline=5 / 6)     # today == baseline, drop 0
+    result = mh.check_post_lineup_matchup_coverage(conn, "betting_ml", date(2026, 7, 21))
     assert result["alert_fired"] is False
     assert result["fail_reason"] == ""
 
 
-def test_post_lineup_odds_missing_only_does_not_alert():
-    """A few games lacking the odds block (avg=0.944) should not fire the alert.
+def test_post_lineup_hard_floor_catches_broad_collapse():
+    """A broad multi-block collapse below the hard floor fires even when the baseline is similar
+    (no relative drop) — the belt-and-suspenders absolute floor."""
+    conn = _make_conn([0.5] * 15, baseline=0.55)        # 0.50 < 0.70 hard floor
+    result = mh.check_post_lineup_matchup_coverage(conn, "betting_ml", date(2026, 7, 21))
+    assert result["alert_fired"] is True
 
-    With 2/15 games lacking only the odds block:
-      avg = (13*1.0 + 2*(5/6)) / 15 ≈ 0.978   → above 0.85, no alert.
-    With 5/15 games lacking only the odds block:
-      avg = (10*1.0 + 5*(5/6)) / 15 ≈ 0.944   → still above 0.85, no alert.
-    """
-    avg_with_some_odds_missing = (10 * 1.0 + 5 * (5 / 6)) / 15
-    conn = _make_conn(n_games=15, avg_coverage=avg_with_some_odds_missing)
-    result = mh.check_post_lineup_matchup_coverage(conn, "betting_ml", date(2026, 6, 27))
 
-    assert result["alert_fired"] is False, (
-        f"Expected no alert: only odds block missing, avg={avg_with_some_odds_missing:.3f}"
-    )
+def test_post_lineup_attribution_names_the_real_block_not_lineup():
+    """Honest attribution: a sequential/bullpen-block regression is NOT blamed on the lineup
+    block — the exact mis-attribution that made 2026-07-21 look like the soak's lineup work broke."""
+    conn = _make_conn([5 / 6] * 14, baseline=0.98,
+                      imputed=["home_team_sequential_bullpen_xwoba"] * 14)
+    result = mh.check_post_lineup_matchup_coverage(conn, "betting_ml", date(2026, 7, 21))
+    assert result["alert_fired"] is True
+    reason = result["fail_reason"]
+    assert "sequential_bullpen" in reason          # names the ACTUAL imputed feature
+    assert "NON-lineup block" in reason            # explicitly does not misattribute to lineup
+
+
+def test_post_lineup_lineup_block_regression_is_labelled_lineup():
+    """When the imputed features DO include a lineup token, the alert labels the lineup block."""
+    conn = _make_conn([2 / 3] * 14, baseline=0.95,
+                      imputed=["home_avg_eb_woba,away_avg_eb_woba"] * 14)
+    result = mh.check_post_lineup_matchup_coverage(conn, "betting_ml", date(2026, 7, 21))
+    assert result["alert_fired"] is True
+    assert "LINEUP/matchup block" in result["fail_reason"]
+    assert "avg_eb_woba" in result["fail_reason"]
+
+
+def test_post_lineup_healthy_at_baseline_passes():
+    """Healthy slate at full coverage with a full-coverage baseline does not fire."""
+    conn = _make_conn([1.0] * 15, baseline=1.0)
+    result = mh.check_post_lineup_matchup_coverage(conn, "betting_ml", date(2026, 7, 21))
+    assert result["alert_fired"] is False
+    assert result["fail_reason"] == ""
 
 
 def test_post_lineup_too_few_games_skipped():
     """Fewer than POST_LINEUP_MIN_GAMES_FOR_CHECK rows → skip (no false alert on off-days)."""
-    conn = _make_conn(n_games=2, avg_coverage=0.5)
-    result = mh.check_post_lineup_matchup_coverage(conn, "betting_ml", date(2026, 6, 27))
-
+    conn = _make_conn([0.5, 0.5], baseline=0.9)
+    result = mh.check_post_lineup_matchup_coverage(conn, "betting_ml", date(2026, 7, 21))
     assert result["alert_fired"] is False
     assert "insufficient" in result["fail_reason"]
 
 
 def test_post_lineup_empty_slate_skipped():
     """Zero rows → skip, no alert."""
-    conn = _make_conn(n_games=0, avg_coverage=None)
-    result = mh.check_post_lineup_matchup_coverage(conn, "betting_ml", date(2026, 6, 27))
-
+    conn = _make_conn([], baseline=0.9)
+    result = mh.check_post_lineup_matchup_coverage(conn, "betting_ml", date(2026, 7, 21))
     assert result["alert_fired"] is False
 
 

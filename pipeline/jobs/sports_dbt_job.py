@@ -32,60 +32,81 @@ SPORTS_DBT_DIR = os.environ.get(
 DBT_TIMEOUT_SECONDS = int(os.environ.get("SPORTS_DBT_TIMEOUT_SECONDS", "2400"))
 
 
-@op(out=Out(Nothing))
-def sports_nfl_dbt_build_op(context):
-    """Build the NFL staging + refined marts in sports_dbt over the S3/Delta lake."""
-    cmd = [
-        sys.executable,
-        "-m",
-        "dbt.cli.main",
-        "build",  # run models + run their data tests in one pass
-        "--select",
-        "nfl.staging",
-        "nfl.marts+",
-        "--project-dir",
-        SPORTS_DBT_DIR,
-        "--profiles-dir",
-        SPORTS_DBT_DIR,
-    ]
-    env = {
-        **os.environ,
-        "DAGSTER_JOB_NAME": context.job_name,
-        # DuckDB needs an explicit region for the S3 lake bucket (boto3 is region-less).
-        "SPORTS_LAKE_REGION": os.environ.get("SPORTS_LAKE_REGION", "us-east-2"),
-        "AWS_DEFAULT_REGION": os.environ.get("AWS_DEFAULT_REGION", "us-east-2"),
-        # Materialize into a writable local DuckDB file (rebuilt each run).
-        "SPORTS_DUCKDB_PATH": os.environ.get("SPORTS_DUCKDB_PATH", "/tmp/sports_nfl.duckdb"),
-    }
-    context.log.info(f"Building sports_dbt NFL DAG: {' '.join(cmd)}")
-    try:
-        result = subprocess.run(
-            cmd,
-            env=env,
-            capture_output=True,
-            text=True,
-            cwd=SPORTS_DBT_DIR,
-            timeout=DBT_TIMEOUT_SECONDS,  # INC-32: never an un-timed-out subprocess on a worker
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise Exception(
-            f"sports_dbt NFL build TIMED OUT after {DBT_TIMEOUT_SECONDS}s — dbt wedged."
-        ) from exc
+# ══════════════════════════════════════════════════════════════════════════════════════════
+# NFL — three-tier build (N0.3 port + N1.0 team-game/CLV layer)
+# ══════════════════════════════════════════════════════════════════════════════════════════
+# Same INC-6 tiering as the NCAAF job (added with N1.0): run (HALT) → leakage gates (HALT) → the
+# rest of the tests (WARN-continue). N1.0 introduced the first NFL point-in-time contract (the
+# team-game rollups + the CLV closing-line marts), so a single `build` that lumped a leakage gate
+# in with peripheral not_null checks was no longer safe — a pregame leak must fail the job while a
+# peripheral data-quality nit must not.
+NFL_LEAKAGE_GATES = [
+    # the as-of rollup contract (a week-W pregame row must aggregate only week < W)
+    "assert_nfl_asof_week_has_no_future_games",
+    # the opponent-adjustment contract (each opponent rating read AS OF the same week, not final)
+    "assert_nfl_opponent_adjustment_is_point_in_time",
+    # the CLV close contract (every served closing line captured strictly before kickoff)
+    "assert_nfl_clv_is_pre_kickoff",
+]
 
-    if result.stdout:
-        context.log.info(result.stdout)
-    if result.stderr:
-        context.log.warning(result.stderr)
+
+@op(out=Out(Nothing))
+def sports_nfl_dbt_run_op(context):
+    """HALT tier — materialize the FULL NFL DAG (staging serially, then all marts)."""
+    # Staging ONE thread at a time — stg_nfl_pbp scans 1.28M plays over delta_scan from S3 and
+    # self-pins DuckDB to 1 thread during its build; a serial staging pass keeps peak RSS
+    # predictable on the box (the NCAAF fact_ncaaf_play memory rationale).
+    staging = _run_sports_dbt(
+        context, ["run", "--select", "nfl.staging", "--threads", "1"], "nfl.staging (serial)"
+    )
+    if staging.returncode != 0:
+        raise Exception(
+            f"sports_dbt NFL STAGING build FAILED (exit {staging.returncode}). See logs above."
+        )
+    # Every NFL mart — N0.3's player-week port AND N1.0's team-game/rollup/CLV layer. `nfl.marts`
+    # selects the folder so a mart added by a later story is picked up automatically.
+    marts = _run_sports_dbt(context, ["run", "--select", "nfl.marts"], "nfl.marts")
+    if marts.returncode != 0:
+        raise Exception(
+            f"sports_dbt NFL MARTS build FAILED (exit {marts.returncode}). See logs above."
+        )
+    context.log.info("sports_dbt NFL build PASSED — staging + all marts materialized.")
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def sports_nfl_leakage_gate_op(context):
+    """HALT tier — the NFL point-in-time leakage + CLV-close gates (see the NCAAF op's rationale)."""
+    result = _run_sports_dbt(
+        context, ["test", "--select", *NFL_LEAKAGE_GATES, "--threads", "1"], "nfl leakage gates"
+    )
     if result.returncode != 0:
         raise Exception(
-            f"sports_dbt NFL build FAILED (exit {result.returncode}). See logs above."
+            "🚨 NFL LEAKAGE GATE FAILED (exit "
+            f"{result.returncode}) — a pregame rollup is absorbing post-kickoff data, or a CLV "
+            "closing line was captured at/after kickoff. Do NOT train or serve off these marts "
+            "until it is resolved. See logs above."
         )
-    context.log.info("sports_dbt NFL build PASSED — staging + refined marts materialized.")
+    context.log.info("NFL leakage gates PASSED — the point-in-time contract holds.")
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def sports_nfl_dbt_test_op(context):
+    """WARN tier — the rest of the NFL data tests (grain, not_null, accepted_values)."""
+    result = _run_sports_dbt(context, ["test", "--select", "nfl", "--threads", "1"], "nfl tests")
+    if result.returncode != 0:
+        context.log.warning(
+            "⚠️ NFL dbt TESTS FAILED (exit %s) — build kept, investigate above.",
+            result.returncode,
+        )
+    else:
+        context.log.info("sports_dbt NFL tests PASSED (warnings may still be present — see log).")
 
 
 @job(executor_def=in_process_executor)
 def sports_nfl_dbt_build_job():
-    sports_nfl_dbt_build_op()
+    # run (HALT) → leakage gates (HALT) → the rest of the tests (WARN-continue).
+    built = sports_nfl_dbt_run_op()
+    sports_nfl_dbt_test_op(start=sports_nfl_leakage_gate_op(start=built))
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════

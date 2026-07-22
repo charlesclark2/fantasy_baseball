@@ -12,8 +12,10 @@ from datetime import datetime, timedelta, timezone
 
 from scripts.lineup_monitor import (
     _FULL_LINEUP_SLOTS,
+    _RETRIGGER_CAP,
     _SLA_FALLBACK_MINUTES,
     is_real_pitcher_change,
+    over_retrigger_cap,
     select_ready_games,
 )
 
@@ -115,6 +117,21 @@ def test_null_current_probable_is_not_a_change():
     # must not churn a re-score.
     assert is_real_pitcher_change((100, 200), (100, None)) is False
     assert is_real_pitcher_change((100, 200), (None, None)) is False
+
+
+# ── over_retrigger_cap — the 824735 unbounded branch-2 loop guard (2026-07-22) ───────
+def test_retrigger_allowed_within_budget():
+    # A game missing its post_lineup row may be retried up to _RETRIGGER_CAP times.
+    for attempt in range(1, _RETRIGGER_CAP + 1):
+        assert over_retrigger_cap(attempt) is False, f"attempt {attempt} must still retry"
+
+
+def test_retrigger_gives_up_past_cap():
+    # Past the cap the game stops re-triggering (loud ALERT + served degraded) so a game that
+    # can never get a clean post_lineup row (e.g. absent from the daily spine) cannot re-fire
+    # the full lineup_monitor_job every tick until first pitch.
+    assert over_retrigger_cap(_RETRIGGER_CAP + 1) is True
+    assert over_retrigger_cap(_RETRIGGER_CAP + 5) is True
 
 
 def test_null_stored_waits_rather_than_churns():

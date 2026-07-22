@@ -1,0 +1,110 @@
+{
+  "story": "NCAAF-P1.4",
+  "fit_at": "2026-07-22",
+  "model_class": "ridge",
+  "contract": "strength_only",
+  "form": "strength_posterior",
+  "n_oos_games": 6024,
+  "served_params": {
+    "version": "ncaaf_game_distribution_v1",
+    "form": "strength_posterior",
+    "sigma_margin": 16.086901549597975,
+    "sigma_total": 16.746709708076466,
+    "rho": 0.05603365986298882,
+    "dof": 30.0,
+    "r_home": 200.0,
+    "r_away": 200.0,
+    "sigma0_margin": 15.608306376557337,
+    "k_margin": 0.5733998774193014,
+    "sigma0_total": 16.435109098643373,
+    "k_total": 0.4986582179537887,
+    "learner": "ridge",
+    "contract": "strength_only",
+    "n_draws": 10000,
+    "quantile_levels": [
+      0.05,
+      0.1,
+      0.15,
+      0.2,
+      0.25,
+      0.3,
+      0.35,
+      0.4,
+      0.45,
+      0.5,
+      0.55,
+      0.6,
+      0.65,
+      0.7,
+      0.75,
+      0.8,
+      0.85,
+      0.9,
+      0.95
+    ],
+    "dispersion_calibration": "held-out OOS residuals (leakage-safe; E13.6 pattern)",
+    "notes": "NCAAF P1.4 joint (margin,total) distribution. learner=ridge contract=strength_only. Held-out \u03c3/\u03c1/dof/k calibrated on pooled OOS residuals (E13.6). For form=strength_posterior the per-game \u03c3 propagates the P1.2 strength posterior (\u03c3_g\u00b2=\u03c30\u00b2+k\u00b2\u00b7[home_sd\u00b2+away_sd\u00b2]); \u03bc from the mean artifact at score time. Market-blind; best_alpha=0."
+  },
+  "gate": {
+    "margin": {
+      "calib_80": 0.8001,
+      "pit_max_decile_dev": 0.008,
+      "pit_mean_dev": 0.0073,
+      "pit_is_flat": true
+    },
+    "total": {
+      "calib_80": 0.8016,
+      "pit_max_decile_dev": 0.0218,
+      "pit_mean_dev": 0.0263,
+      "pit_is_flat": false
+    },
+    "home_win": {
+      "brier": 0.1814,
+      "pred_rate": 0.5656,
+      "obs_rate": 0.583
+    }
+  },
+  "early_season_validation": {
+    "weeks": 3,
+    "n": 1051,
+    "calib_80": {
+      "margin": 0.7916,
+      "total": 0.8221
+    },
+    "pit_max_decile_dev": {
+      "margin": 0.0172,
+      "total": 0.0408
+    },
+    "pit_is_flat": {
+      "margin": true,
+      "total": false
+    },
+    "floor_ok": true,
+    "wk1_interval": {
+      "margin_wk1": 43.06294888199484,
+      "margin_late": 40.76375625828678,
+      "margin_ratio": 1.056,
+      "n_wk1": 337
+    },
+    "cold_start_null_frac": 1.0,
+    "cold_start_ok": true
+  },
+  "early_season_weeks": 3,
+  "gate_pass": {
+    "calib_floor": true,
+    "pit_flat": false,
+    "early_season_floor": true,
+    "cold_start_no_peek": true
+  },
+  "clv_eval": {
+    "n_with_close": 4182,
+    "ats_hit_rate": 0.4971,
+    "ats_n": 4108,
+    "ats_placebo_hit_rate": 0.4971,
+    "ou_hit_rate": 0.5237,
+    "ou_n": 4128,
+    "breakeven": 0.5238,
+    "note": "historical vs-close hit rates; > 0.5238 clears the -110 vig. best_alpha=0 until this beats breakeven AND the placebo under deflation, confirmed by a forward in-season CLV window (post-kickoff, P0.6b-fed)."
+  },
+  "market_blind": true
+}

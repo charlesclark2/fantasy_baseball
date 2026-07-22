@@ -1,0 +1,207 @@
+version: 2
+
+# NFL-N1.0 — the team-game mart layer + CLV/odds marts (the game-line/props/fantasy foundation).
+# Separate schema file from _nfl_marts.yml (which owns the N0.3 player-week port) so the two stories
+# stay independently editable. The three point-in-time contract gates live as singular tests under
+# tests/nfl/ (assert_nfl_asof_week_has_no_future_games, assert_nfl_opponent_adjustment_is_point_in_time,
+# assert_nfl_clv_is_pre_kickoff) and are wired HALT into the box job.
+
+models:
+  # ── staging (net-new) ──────────────────────────────────────────────────────────────
+  - name: stg_nfl_pbp
+    description: Play-by-play staging; the atom team-game EPA/success/explosiveness decomposes to.
+    columns:
+      - name: play_key
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: game_id
+        data_tests: [not_null]
+      - name: is_scrimmage_play
+        data_tests: [not_null]
+      - name: is_garbage_time
+        data_tests: [not_null]
+
+  - name: stg_nfl_team_week
+    description: Team-week conventional box line (from stats_team_week).
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: game_id
+        data_tests: [not_null]
+      - name: team
+        data_tests: [not_null]
+
+  - name: stg_nfl_team_geo
+    description: 32-team static geography + name crosswalk (travel anchor + odds name→code).
+    columns:
+      - name: code
+        data_tests: [not_null, unique]
+      - name: team_name
+        data_tests: [not_null, unique]
+
+  - name: stg_nfl_historical_odds
+    description: Flattened historical CLOSING game lines (h2h/spreads/totals), with both timestamps.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: event_id
+        data_tests: [not_null]
+      - name: is_leakage_safe
+        data_tests: [not_null]
+      - name: market
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['h2h', 'spreads', 'totals']
+
+  - name: stg_nfl_props_historical
+    description: Flattened historical CLOSING player props (2023–2024 vendor floor).
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: event_id
+        data_tests: [not_null]
+      - name: is_leakage_safe
+        data_tests: [not_null]
+
+  # ── team-game marts ────────────────────────────────────────────────────────────────
+  - name: dim_nfl_game
+    description: The NFL game dimension / conformed spine (one row per game_id, 2020+).
+    columns:
+      - name: game_key
+        data_tests: [not_null, unique]
+      - name: game_id
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+      - name: week
+        description: Monotone-in-kickoff season ordering (reg 1–18, playoffs 19–22; no reset). Safe as-of anchor.
+        data_tests: [not_null]
+      - name: home_team
+        data_tests: [not_null]
+      - name: away_team
+        data_tests: [not_null]
+      - name: is_completed
+        data_tests: [not_null]
+
+  - name: fct_nfl_team_game
+    description: Team-game fact (two rows/game) — box + result + pbp EPA/success/explosiveness/pace.
+    columns:
+      - name: team_game_key
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: game_id
+        data_tests: [not_null]
+      - name: team
+        data_tests: [not_null]
+      - name: opponent
+        data_tests: [not_null]
+      - name: is_completed
+        data_tests: [not_null]
+      - name: has_box_line
+        data_tests: [not_null]
+
+  - name: rollup_nfl_team_week_asof
+    description: >
+      POINT-IN-TIME team rollup — the pregame-safe surface (a week-W row aggregates only week < W).
+    columns:
+      - name: team_week_key
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+      - name: team
+        data_tests: [not_null]
+      - name: as_of_week
+        description: The week the row is pregame FOR (NFL `week`, monotone).
+        data_tests: [not_null]
+      - name: games_played
+        description: Count of strictly-prior completed games. 0 at as_of_week 1 by construction.
+        data_tests: [not_null]
+      - name: has_sufficient_sample
+        data_tests: [not_null]
+      - name: points_for_per_game
+        description: NULL — not 0 — when games_played = 0. That NULL is the honest "unknown".
+        data_tests:
+          - not_null:
+              config:
+                where: "games_played > 0"
+
+  - name: rollup_nfl_team_week_opponent_adjusted
+    description: Two-pass opponent-adjusted efficiency, point-in-time. What the N1.1 strength model consumes.
+    columns:
+      - name: team_week_key
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+      - name: team
+        data_tests: [not_null]
+      - name: as_of_week
+        data_tests: [not_null]
+      - name: adjustment_applied
+        description: False when no opponent rating resolved — the adjusted values are the raw values.
+        data_tests: [not_null]
+      - name: has_reliable_adjustment
+        description: This team AND every opponent had >= 3 games at as_of_week. Early-season rows honestly false.
+        data_tests: [not_null]
+      - name: adj_net_epa
+        description: adj_off_epa − adj_def_epa; conditioned on the raw inputs, not on games_played.
+        data_tests:
+          - not_null:
+              config:
+                where: "raw_off_epa is not null and raw_def_epa is not null"
+
+  - name: rollup_nfl_team_season
+    description: Season-final team rollup. ⛔ NOT pregame-safe for its own season (priors/reporting only).
+    columns:
+      - name: team_season_key
+        data_tests: [not_null, unique]
+      - name: sport
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+      - name: team
+        data_tests: [not_null]
+      - name: games_played
+        data_tests: [not_null]
+
+  # ── CLV / odds marts ───────────────────────────────────────────────────────────────
+  - name: mart_nfl_clv_game_lines
+    description: Leakage-safe CLOSING game line + realized-outcome CLV scoreboard (all 3 verticals).
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: game_id
+        data_tests: [not_null]
+      - name: bookmaker
+        data_tests: [not_null]
+      - name: market
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['h2h', 'spreads', 'totals']
+      - name: side
+        data_tests: [not_null]
+      - name: commence_time
+        data_tests: [not_null]
+      - name: snapshot_ts
+        data_tests: [not_null]
+
+  - name: mart_nfl_clv_props
+    description: Leakage-safe CLOSING player-prop line (props vertical benchmark; 2023–2024).
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: game_id
+        data_tests: [not_null]
+      - name: bookmaker
+        data_tests: [not_null]
+      - name: player_name
+        data_tests: [not_null]

@@ -81,14 +81,31 @@ BRIER_MARGIN = 0.002           # Brier must beat no-skill by at least this to co
 # near-constant" (spread) remains the real INC-24 signal for it, kept via the spread leg below.
 SPREAD_ONLY_TARGETS = frozenset({"home_win", "run_differential"})
 
-# INC-17-P3: post_lineup matchup-block coverage check. When lineup data flows correctly,
-# feature_coverage_score for post_lineup predictions should average ≥ 0.85 (i.e., at most
-# one non-lineup block, like odds, can be missing). A drop below this threshold means the
-# lineup block (avg_eb_woba / matchup woba / archetype features) went null — the INC-17
-# serving-feature gap class. Measured as a slate-average to avoid individual-game false alerts
-# from games that legitimately lack bookmaker odds.
-POST_LINEUP_AVG_COVERAGE_THRESHOLD = 0.85
-POST_LINEUP_MIN_GAMES_FOR_CHECK = 3  # don't alert on single-game or empty slates
+# INC-17-P3 (recalibrated 2026-07-22 after a soak false-positive): post_lineup feature-coverage
+# REGRESSION check. The original fired on a FIXED feature_coverage_score < 0.85 and hard-coded
+# "the lineup block (avg_eb_woba) is null." Two defects made it cry wolf on the 2026-07-21 slate
+# (avg 0.774, emailed as an INC-17 lineup-block alert):
+#   (1) MIS-ATTRIBUTION — the aggregate 6-block score cannot tell WHICH block dropped, and the
+#       block actually imputed that day was the sequential/bullpen block, not the lineup block.
+#       The block feature columns are not persisted in daily_model_predictions, so we now attribute
+#       from the per-row `imputed_features` list instead of assuming.
+#   (2) FLOOR ABOVE THE ACHIEVABLE MAX — the sequential/bullpen block has been chronically imputed
+#       (healthy baseline ≈ 0.833), so a fixed 0.85 floor can NEVER be met → the alert fired every
+#       slate. A genuine lineup-block null (0.833) is ALSO indistinguishable from that steady state
+#       by the aggregate alone, so a fixed floor fundamentally cannot work. The trigger is now
+#       BASELINE-RELATIVE (today vs its own trailing average), matching check_feature_block_coverage's
+#       self-calibrating pattern — it catches a NEW single-block regression without firing on the
+#       steady state.
+# POST_LINEUP_AVG_COVERAGE_THRESHOLD is retained (the serve-time twin check_served_prediction_
+# integrity imports it) but recalibrated to a HARD FLOOR for a BROAD (2+ block) collapse — well
+# below the ~0.833 steady state so neither check false-fires on normal operation.
+POST_LINEUP_AVG_COVERAGE_THRESHOLD = 0.70   # hard floor: a broad multi-block coverage collapse
+POST_LINEUP_MIN_GAMES_FOR_CHECK = 3         # don't alert on single-game or empty slates
+POST_LINEUP_COVERAGE_BASELINE_DAYS = 14     # trailing window for the self-calibrating baseline
+POST_LINEUP_COVERAGE_DROP = 0.10            # alert when today is >= this far below the baseline
+# Tokens in `imputed_features` that mark the lineup/matchup block specifically (the true INC-17
+# signature) — used to LABEL a regression, never as the trigger.
+_LINEUP_BLOCK_TOKENS = ("avg_eb_woba", "matchup", "archetype", "vs_starter", "h2h", "cluster")
 
 _PRED_SCHEMA_DEFAULT = "betting_ml"
 _RESULTS_TABLE = "baseball_data.betting_ml.model_health_metrics"
@@ -411,54 +428,102 @@ def _persist(conn, run_at: datetime, start: date, end: date, ptype: str | None,
 def check_post_lineup_matchup_coverage(
     conn, schema: str, check_date: date
 ) -> dict:
-    """INC-17-P3: verify that lineup-gated features were populated for a post_lineup slate.
+    """INC-17-P3 (recalibrated 2026-07-22): detect a post_lineup feature-coverage REGRESSION and
+    report WHICH features are imputed, rather than assuming the lineup block.
 
-    Uses `feature_coverage_score` (stored per-row in daily_model_predictions) as a proxy
-    for the lineup block. In a healthy post_lineup slate all 6 coverage blocks are populated
-    (avg score ≈ 1.0). When the lineup block (avg_eb_woba / matchup woba / archetype
-    features) goes null the score drops by 1/6 ≈ 0.167, dragging the slate average below
-    POST_LINEUP_AVG_COVERAGE_THRESHOLD. A few games legitimately lack the odds block
-    (no bookmaker line) without causing a slate-level average drop; the alert only fires
-    when the lineup block is broadly missing — the INC-17 failure signature.
+    Fires when the slate-average `feature_coverage_score` drops >= POST_LINEUP_COVERAGE_DROP below
+    its trailing baseline (self-calibrating, so a chronically-imputed NON-lineup block does not cry
+    wolf), OR below the POST_LINEUP_AVG_COVERAGE_THRESHOLD hard floor (a broad multi-block collapse).
+    Attribution comes from the per-row `imputed_features` list — the block feature columns are not
+    persisted in daily_model_predictions, so the aggregate score alone cannot tell WHICH block fell.
 
     Returns:
-        dict with keys n_games, avg_coverage, alert_fired, fail_reason.
+        dict with keys n_games, avg_coverage, baseline_coverage, alert_fired, fail_reason.
     """
-    sql = f"""
-        select count(*) as n_games,
-               avg(feature_coverage_score) as avg_coverage
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        select feature_coverage_score,
+               coalesce(cast(imputed_features as varchar), '') as imputed_features
         from baseball_data.{schema}.daily_model_predictions
         where score_date = %(d)s
           and prediction_type = 'post_lineup'
           and feature_coverage_score is not null
-    """
-    cur = conn.cursor()
-    cur.execute(sql, {"d": check_date.isoformat()})
-    row = cur.fetchone()
-    cur.close()
-
-    n_games = int(row[0]) if row and row[0] else 0
+        """,
+        {"d": check_date.isoformat()},
+    )
+    slate = cur.fetchall()
+    n_games = len(slate)
     if n_games < POST_LINEUP_MIN_GAMES_FOR_CHECK:
+        cur.close()
         return {
             "n_games": n_games,
             "avg_coverage": float("nan"),
+            "baseline_coverage": float("nan"),
             "alert_fired": False,
             "fail_reason": f"insufficient post_lineup rows ({n_games}) for {check_date}",
         }
+    avg_cov = sum(float(r[0]) for r in slate) / n_games
 
-    avg_cov = float(row[1]) if row[1] is not None else float("nan")
-    alert_fired = avg_cov < POST_LINEUP_AVG_COVERAGE_THRESHOLD
-    fail_reason = (
-        f"INC-17 class: post_lineup matchup block likely null. "
-        f"avg feature_coverage_score={avg_cov:.3f} < {POST_LINEUP_AVG_COVERAGE_THRESHOLD} "
-        f"across {n_games} games on {check_date}. "
-        f"Lineup-gated features (avg_eb_woba, matchup woba, archetype) are imputed. "
-        f"Check: feature_pregame_lineup_features / feature_pitcher_batter_h2h_matchups lineage."
-        if alert_fired else ""
+    # Self-calibrating trailing baseline: the post_lineup slate-average over the prior window
+    # (excluding today). A NaN baseline (no history) just falls back to the hard floor below.
+    cur.execute(
+        f"""
+        select avg(feature_coverage_score)
+        from baseball_data.{schema}.daily_model_predictions
+        where prediction_type = 'post_lineup'
+          and feature_coverage_score is not null
+          and score_date >= %(lo)s and score_date < %(d)s
+        """,
+        {
+            "lo": (check_date - timedelta(days=POST_LINEUP_COVERAGE_BASELINE_DAYS)).isoformat(),
+            "d": check_date.isoformat(),
+        },
     )
+    brow = cur.fetchone()
+    cur.close()
+    baseline = float(brow[0]) if brow and brow[0] is not None else float("nan")
+
+    # Attribution: which features are actually imputed across the slate (top tokens), so the alert
+    # names the real null block instead of always blaming the lineup block.
+    counts: dict[str, int] = {}
+    for r in slate:
+        for tok in str(r[1]).replace(" ", "").split(","):
+            if tok:
+                counts[tok] = counts.get(tok, 0) + 1
+    top = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:6]
+    imp_label = ", ".join(f"{t}x{c}" for t, c in top) if top else "none recorded"
+    lineup_block_hit = any(any(k in t for k in _LINEUP_BLOCK_TOKENS) for t in counts)
+
+    has_baseline = baseline == baseline  # False iff NaN
+    drop = (baseline - avg_cov) if has_baseline else 0.0
+    alert_fired = (avg_cov < POST_LINEUP_AVG_COVERAGE_THRESHOLD) or (
+        has_baseline and drop >= POST_LINEUP_COVERAGE_DROP
+    )
+
+    if not alert_fired:
+        fail_reason = ""
+    else:
+        block = (
+            "the LINEUP/matchup block (avg_eb_woba / matchup woba / archetype)"
+            if lineup_block_hit
+            else "a NON-lineup block — see the imputed features above, NOT necessarily the lineup block"
+        )
+        base_txt = "n/a" if not has_baseline else f"{baseline:.3f}"
+        fail_reason = (
+            f"INC-17 class: post_lineup feature-coverage regression on {check_date}. "
+            f"slate avg feature_coverage_score={avg_cov:.3f} vs trailing-"
+            f"{POST_LINEUP_COVERAGE_BASELINE_DAYS}d baseline={base_txt} across {n_games} games "
+            f"(hard floor {POST_LINEUP_AVG_COVERAGE_THRESHOLD}). Most-imputed features: {imp_label}. "
+            f"Likely null block: {block}. If the lineup block: check feature_pregame_lineup_features "
+            f"/ feature_pitcher_batter_h2h_matchups lineage AND mart_game_spine coverage of the slate "
+            f"(a game rescheduled after the daily --w5 spine build is absent from the store → "
+            f"intraday_assembly fallback, which also lowers coverage)."
+        )
     return {
         "n_games": n_games,
         "avg_coverage": avg_cov,
+        "baseline_coverage": baseline,
         "alert_fired": alert_fired,
         "fail_reason": fail_reason,
     }

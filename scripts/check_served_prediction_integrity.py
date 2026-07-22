@@ -132,11 +132,16 @@ def evaluate_tier(
             f"(INC-25 / spine-freeze class: a served S3 parquet froze / the store coverage gate failed)"
         )
 
-    # (3) COVERAGE — INC-17-P2: a lineup-gated block went null on post_lineup.
+    # (3) COVERAGE — INC-17-P2: a BROAD (2+ block) coverage collapse on post_lineup. The floor
+    # (POST_LINEUP_AVG_COVERAGE_THRESHOLD) was recalibrated 2026-07-22 to a hard floor below the
+    # ~0.833 steady state, so this no longer fires on the chronic single-block imputation (the
+    # 2026-07-21 cry-wolf). A single-block regression (which the serve-time aggregate cannot
+    # attribute) is caught next-day by the self-calibrating 30-day check_post_lineup_matchup_coverage.
     if stat.tier == "post_lineup" and stat.avg_coverage is not None and stat.avg_coverage < min_coverage:
         problems.append(
             f"{stat.tier}: avg feature_coverage_score {stat.avg_coverage:.2f} < {min_coverage:.2f} "
-            f"— a lineup/matchup block went null (INC-17-P2 class)"
+            f"— a broad coverage collapse (2+ blocks; check the imputed features, not necessarily "
+            f"the lineup block) (INC-17-P2 class)"
         )
 
     # (4) FLAT — INC-24: near-constant / all-null target output on the served slate.

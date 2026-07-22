@@ -16,3 +16,18 @@
     delta_scan('s3://{{ var('lake_bucket') }}/nfl/{{ tier }}/{{ source }}')
   {%- endif -%}
 {% endmacro %}
+
+{#-
+  nfl_team_norm(col) — normalize an NFL team CODE to its canonical current franchise.
+
+  nflverse uses the CURRENT code for 2020+ (LAR/LAC/LV), but historical rows and some feeds still
+  carry the relocation aliases (LA/STL→LAR, SD→LAC, OAK→LV). Applied identically in
+  stg_nfl_schedules and stg_nfl_pbp so every team join lands on one code space. `col` is a raw SQL
+  column expression.
+-#}
+{% macro nfl_team_norm(col) %}
+  case when {{ col }} in ('LA', 'STL') then 'LAR'
+       when {{ col }} in ('SD') then 'LAC'
+       when {{ col }} = 'OAK' then 'LV'
+       else {{ col }} end
+{% endmacro %}

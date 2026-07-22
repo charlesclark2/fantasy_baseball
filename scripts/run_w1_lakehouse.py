@@ -1160,6 +1160,34 @@ def _build_w5b(conn, dry_run: bool) -> None:
     _alert_stale_w5b(conn)
 
 
+def _build_game_spine_only(conn, dry_run: bool) -> None:
+    """INTRADAY spine refresh — rebuild ONLY mart_game_spine, cheaply (2026-07-22, the 824735
+    reschedule gap).
+
+    WHY --game-spine-only exists: mart_game_spine is rebuilt only in the daily --w5-group-a step
+    (~12:38 UTC). A game rescheduled AFTER that daily build (a rain makeup — postponed 7/21 →
+    7/22, MLB reusing the gamePk) is absent from the daily spine, so the served pregame feature
+    store (which spines on mart_game_spine) misses it → predict_today falls to the intraday_assembly
+    fallback with NO clean post_lineup row → the lineup_monitor re-triggers that game every ~10-min
+    tick until first pitch (the 824735 loop). The daily --w5-group-a is too heavy to run intraday
+    (it re-reads all pitches for mart_game_results).
+
+    This rebuilds ONLY the spine: its `completed` branch reads the EXISTING mart_game_results
+    parquet (registered as a view, NOT rebuilt), and its `scheduled` branch recomputes the UNION
+    from the intraday-fresh stg_statsapi_games — so a same-day reschedule enters the spine (and,
+    via the downstream --w8b-only build the caller runs next, the feature slate) same-day. Mirrors
+    the _build_w5b reuse pattern; no pitch re-read. Non-serving-critical on its own (the intraday
+    op that calls it is MIRROR/ALERT tier); the daily --w5-group-a remains the authoritative build."""
+    print("\nGame-spine-only intraday refresh (reuse existing mart_game_results/dim parquet):")
+    # stg_statsapi_games (intraday-fresh S3 glob) + the seeds; then the spine's two mart deps as
+    # views over their existing parquet (recomputed from the seeds/precursors under --dry-run).
+    _register_s3_glob_views(conn, W5_SEED_VIEWS + W5_PRECURSOR_VIEWS)
+    _register_mart_views(conn, ["dim_team_name_lookup", "mart_game_results"], dry_run)
+    _build_marts(conn, ["mart_game_spine"], dry_run)
+    _register_mart_views(conn, ["mart_game_spine"], dry_run)
+    _alert_stale_game_spine(conn)
+
+
 def _build_archetype(conn, dry_run: bool) -> None:
     """Build the E11.1-W5b archetype mart (mart_batter_archetype_vs_pitcher_cluster). It
     reads the W1 mart_pitch_play_event (registered as a DuckDB view) + the
@@ -2001,6 +2029,7 @@ def run(
     w5: bool = False,
     w5_only: bool = False,
     w5_group_a_only: bool = False,
+    game_spine_only: bool = False,
     w5b_only: bool = False,
     archetype: bool = False,
     archetype_only: bool = False,
@@ -2126,6 +2155,18 @@ def run(
         _build_sub_model_signals_consumer(conn, dry_run)
         conn.close()
         print("\nfeature_pregame_sub_model_signals consumer rebuild complete (--sub-model-signals-only).")
+        return
+
+    # 2026-07-22 (824735 reschedule gap): --game-spine-only rebuilds JUST mart_game_spine from the
+    # intraday-fresh stg_statsapi_games + the existing mart_game_results parquet. Placed HERE (before
+    # the heavy stg_batter_pitches scan) because it re-reads NO pitches — the completed branch reuses
+    # the existing mart_game_results parquet as a view. The intraday lineup rebuild op runs this
+    # before --w8b-only so a same-day reschedule enters the served feature slate. See
+    # _build_game_spine_only for the full rationale.
+    if game_spine_only:
+        _build_game_spine_only(conn, dry_run)
+        conn.close()
+        print("\nmart_game_spine intraday refresh complete (--game-spine-only).")
         return
 
     # Register stg_batter_pitches as a view so mart refs resolve.
@@ -2466,6 +2507,7 @@ if __name__ == "__main__":
         w5="--w5" in sys.argv,
         w5_only="--w5-only" in sys.argv,
         w5_group_a_only="--w5-group-a-only" in sys.argv,
+        game_spine_only="--game-spine-only" in sys.argv,
         w5b_only="--w5b-only" in sys.argv,
         archetype="--archetype" in sys.argv,
         archetype_only="--archetype-only" in sys.argv,

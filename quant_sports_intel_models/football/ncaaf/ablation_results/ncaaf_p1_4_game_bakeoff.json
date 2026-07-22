@@ -1,0 +1,292 @@
+{
+  "story": "NCAAF-P1.4",
+  "decided_at": "2026-07-22",
+  "n_configs": 23,
+  "n_buckets": 32,
+  "selection_metric": "sum over {margin, total} of PIT max-decile-dev (lower better); calib_80 \u2265 0.80 a FLOOR not a target (inclusive-integer coverage is inflated \u2014 an oracle covers > 0.80); h2h Brier secondary",
+  "reference_config": "ridge/strength_only/gaussian",
+  "verdict": "REFERENCE_STANDS",
+  "reference_passes_calibration_floor": true,
+  "reference": {
+    "config_id": "ridge__strength_only__gaussian",
+    "form": "gaussian",
+    "params": {
+      "alpha": 10.0
+    },
+    "pooled_downstream_score": 0.0242,
+    "pooled_metrics": {
+      "margin": {
+        "calib_80": 0.7998,
+        "pit_max_decile_dev": 0.0062,
+        "pit_mean_dev": 0.0074,
+        "pit_is_flat": true
+      },
+      "total": {
+        "calib_80": 0.8031,
+        "pit_max_decile_dev": 0.018,
+        "pit_mean_dev": 0.0261,
+        "pit_is_flat": false
+      },
+      "home_win": {
+        "brier": 0.1815,
+        "pred_rate": 0.5659,
+        "obs_rate": 0.583
+      }
+    },
+    "mean_h2h_brier": 0.1816
+  },
+  "best": {
+    "config_id": "lgbm__full__student_t",
+    "form": "student_t",
+    "params": {
+      "objective": "regression",
+      "num_leaves": 31,
+      "learning_rate": 0.03,
+      "n_estimators": 400,
+      "min_child_samples": 40,
+      "subsample": 0.85,
+      "subsample_freq": 1,
+      "colsample_bytree": 0.85,
+      "random_state": 42,
+      "verbose": -1
+    },
+    "pooled_downstream_score": 0.0215,
+    "pooled_metrics": {
+      "margin": {
+        "calib_80": 0.7966,
+        "pit_max_decile_dev": 0.0055,
+        "pit_mean_dev": 0.005,
+        "pit_is_flat": true
+      },
+      "total": {
+        "calib_80": 0.8008,
+        "pit_max_decile_dev": 0.016,
+        "pit_mean_dev": 0.0195,
+        "pit_is_flat": true
+      },
+      "home_win": {
+        "brier": 0.184,
+        "pred_rate": 0.5693,
+        "obs_rate": 0.583
+      }
+    },
+    "mean_h2h_brier": 0.1841
+  },
+  "winner": null,
+  "gain_vs_reference": 0.0,
+  "full_search_pbo": 0.483,
+  "best_dsr": 0.1094,
+  "gates": {
+    "full_search_deflated": false,
+    "market_blind": true
+  },
+  "leaderboard": [
+    {
+      "config_id": "lgbm__full__student_t",
+      "form": "student_t",
+      "score": 0.0215,
+      "calib_80_margin": 0.7966,
+      "calib_80_total": 0.8008,
+      "h2h_brier": 0.1841,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__clustered__gaussian",
+      "form": "gaussian",
+      "score": 0.0217,
+      "calib_80_margin": 0.8044,
+      "calib_80_total": 0.8028,
+      "h2h_brier": 0.1838,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0229,
+      "calib_80_margin": 0.8008,
+      "calib_80_total": 0.8048,
+      "h2h_brier": 0.184,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.023,
+      "calib_80_margin": 0.802,
+      "calib_80_total": 0.801,
+      "h2h_brier": 0.1831,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__clustered__gaussian",
+      "form": "gaussian",
+      "score": 0.0231,
+      "calib_80_margin": 0.7998,
+      "calib_80_total": 0.8025,
+      "h2h_brier": 0.1824,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__top_k__gaussian",
+      "form": "gaussian",
+      "score": 0.0241,
+      "calib_80_margin": 0.7945,
+      "calib_80_total": 0.8099,
+      "h2h_brier": 0.1848,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0242,
+      "calib_80_margin": 0.8006,
+      "calib_80_total": 0.8044,
+      "h2h_brier": 0.1818,
+      "passes_floor": true
+    },
+    {
+      "config_id": "ridge__strength_only__gaussian",
+      "form": "gaussian",
+      "score": 0.0242,
+      "calib_80_margin": 0.7998,
+      "calib_80_total": 0.8031,
+      "h2h_brier": 0.1816,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__clustered__gaussian",
+      "form": "gaussian",
+      "score": 0.0249,
+      "calib_80_margin": 0.798,
+      "calib_80_total": 0.8048,
+      "h2h_brier": 0.1813,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__top_k__gaussian",
+      "form": "gaussian",
+      "score": 0.0255,
+      "calib_80_margin": 0.7975,
+      "calib_80_total": 0.8078,
+      "h2h_brier": 0.1819,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__strength_only__gaussian",
+      "form": "gaussian",
+      "score": 0.0255,
+      "calib_80_margin": 0.8001,
+      "calib_80_total": 0.8094,
+      "h2h_brier": 0.1851,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__strength_only__gaussian",
+      "form": "gaussian",
+      "score": 0.0259,
+      "calib_80_margin": 0.8,
+      "calib_80_total": 0.8064,
+      "h2h_brier": 0.1863,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__top_k__gaussian",
+      "form": "gaussian",
+      "score": 0.0265,
+      "calib_80_margin": 0.7966,
+      "calib_80_total": 0.8063,
+      "h2h_brier": 0.1827,
+      "passes_floor": true
+    },
+    {
+      "config_id": "ridge__strength_only__strength_posterior",
+      "form": "strength_posterior",
+      "score": 0.0269,
+      "calib_80_margin": 0.7983,
+      "calib_80_total": 0.803,
+      "h2h_brier": 0.1816,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__strength_only__gaussian",
+      "form": "gaussian",
+      "score": 0.0283,
+      "calib_80_margin": 0.804,
+      "calib_80_total": 0.8098,
+      "h2h_brier": 0.1835,
+      "passes_floor": true
+    },
+    {
+      "config_id": "ridge__top_k__gaussian",
+      "form": "gaussian",
+      "score": 0.032,
+      "calib_80_margin": 0.7976,
+      "calib_80_total": 0.8036,
+      "h2h_brier": 0.1821,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__count",
+      "form": "count",
+      "score": 0.0624,
+      "calib_80_margin": 0.8637,
+      "calib_80_total": 0.8624,
+      "h2h_brier": 0.1849,
+      "passes_floor": true
+    },
+    {
+      "config_id": "ridge__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0746,
+      "calib_80_margin": 0.8247,
+      "calib_80_total": 0.8272,
+      "h2h_brier": 0.1853,
+      "passes_floor": true
+    },
+    {
+      "config_id": "ngboost_normal__top_k__native",
+      "form": "native",
+      "score": 0.0802,
+      "calib_80_margin": 0.7249,
+      "calib_80_total": 0.7332,
+      "h2h_brier": 0.1834,
+      "passes_floor": false
+    },
+    {
+      "config_id": "ngboost_normal__strength_only__native",
+      "form": "native",
+      "score": 0.0809,
+      "calib_80_margin": 0.7351,
+      "calib_80_total": 0.7312,
+      "h2h_brier": 0.1841,
+      "passes_floor": false
+    },
+    {
+      "config_id": "ridge__clustered__gaussian",
+      "form": "gaussian",
+      "score": 0.0876,
+      "calib_80_margin": 0.8239,
+      "calib_80_total": 0.8269,
+      "h2h_brier": 0.1857,
+      "passes_floor": true
+    },
+    {
+      "config_id": "ngboost_normal__full__native",
+      "form": "native",
+      "score": 0.0877,
+      "calib_80_margin": 0.7233,
+      "calib_80_total": 0.7165,
+      "h2h_brier": 0.1835,
+      "passes_floor": false
+    },
+    {
+      "config_id": "ngboost_normal__clustered__native",
+      "form": "native",
+      "score": 0.0907,
+      "calib_80_margin": 0.7206,
+      "calib_80_total": 0.715,
+      "h2h_brier": 0.1838,
+      "passes_floor": false
+    }
+  ]
+}
