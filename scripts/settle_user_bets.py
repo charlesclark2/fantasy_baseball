@@ -3,32 +3,34 @@
 Settles pending bets in the DynamoDB user-bets table against final game scores.
 
 Bets are OLTP data and live in DynamoDB (credence-{env}-dynamo-user-bets); game
-scores are OLAP data and live in Snowflake. This job bridges them:
+scores live in the S3 lakehouse (read Snowflake-free via DuckDB). This job bridges them:
 
   1. Scan the sparse GSI `gsi-pending-by-game` — only PENDING bets carry the
      `pending_game_pk` attribute, so the index contains exactly the unsettled bets.
-  2. Look up final scores for those games in Snowflake (stg_statsapi_games, status
-     'F').
+  2. Look up final scores for those games in the S3 lakehouse (stg_statsapi_games,
+     status_code 'F'/'O'), the SAME source the GET /bets auto-void reads.
   3. For each pending bet whose game is final: set `outcome` ('win'/'loss'/'push')
      and `profit_loss`, and REMOVE `pending_game_pk` so the bet drops out of the
      pending index. Unfinished games are left pending.
 
 Game markets (h2h / totals) settle against the final score. Pitcher-strikeout props
 (E9.42, market 'strikeouts over'/'strikeouts under') settle against the starter's actual
-K total from mart_starting_pitcher_game_log — same Snowflake read path as the scores.
+K total from mart_starting_pitcher_game_log — same S3 lakehouse read path as the scores.
 
-Called by settle_user_bets_op in pipeline/ops/daily_ingestion_ops.py, wired into
-daily_ingestion_job after dbt_daily_build (scores are fresh there). Idempotent:
+Called by settle_user_bets_op — wired into BOTH daily_ingestion_job (after dbt_daily_build)
+AND the evening settle_user_bets_job schedule (E11.20 phase-2a): the daily morning pass
+alone left a full slate's evening finals unsettled for 12-24h, so the evening passes settle
+same-night. Snowflake-free reads make the extra passes free (no warehouse wake). Idempotent:
 only bets still in the pending index are touched, so re-running is a no-op.
 
 profit_loss convention: win → stake × (decimal_odds − 1); loss → −stake; push → 0.
 decimal_odds − 1 = american_odds/100 (positive) or 100/abs(american_odds) (negative).
 
 Env vars:
-    SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_WAREHOUSE
-    SNOWFLAKE_PRIVATE_KEY_PATH  (preferred)  or  SNOWFLAKE_PRIVATE_KEY (PEM/base64)
-    AWS_REGION                  (default us-east-1)
-    USER_BETS_TABLE             (default credence-prod-dynamo-user-bets)
+    AWS_REGION       DynamoDB region (default us-east-1)
+    USER_BETS_TABLE  (default credence-prod-dynamo-user-bets)
+    (Snowflake env is NO LONGER required — scores/K totals come from the S3 lakehouse;
+     DuckDB resolves S3 creds via the credential chain = the box instance role.)
 
 Exits 0 on success (including nothing to settle), 1 on error.
 """
@@ -42,11 +44,20 @@ from decimal import Decimal
 from pathlib import Path
 
 import boto3
-import snowflake.connector
 from dotenv import load_dotenv
 
 # Local runs read creds from the repo-root .env (pipeline runs set env directly).
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
+
+# E11.20 phase-2a: settlement is Snowflake-FREE — game scores + starter-K totals are read
+# from the S3 lakehouse via DuckDB (the canonical prediction-path reader), the SAME source
+# the GET /bets auto-void already uses. So the evening settle passes (settle_user_bets_job)
+# never wake the Snowflake warehouse. AWS creds only (DuckDB credential_chain = the box
+# instance role / Lambda role).
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+from scripts.utils.lakehouse_read import duck_connect, query_upper, register_views
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -75,20 +86,24 @@ def _aws_session() -> boto3.Session:
     return boto3.Session()
 
 
-# ── Snowflake ────────────────────────────────────────────────────────────────
+# ── Lakehouse scores (S3 + DuckDB, Snowflake-free) ───────────────────────────
 
-def _connect_snowflake() -> snowflake.connector.SnowflakeConnection:
-    # INC-22 straggler cure (2026-07-05): this script previously rolled its OWN inline-key
-    # PEM parser, which mishandled the box's `\n`-escaped SNOWFLAKE_PRIVATE_KEY
-    # (`ValueError: Unable to load PEM file … InvalidByte(0, 92)` — a literal backslash at
-    # byte 0). Delegate to the shared PATH-if-exists→inline→password resolver, which handles
-    # the raw/base64/escaped inline key correctly. All queries here are fully-qualified
-    # (baseball_data.betting.*), so the default schema is immaterial. See CLAUDE.md INC-22.
-    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if _root not in sys.path:
-        sys.path.insert(0, _root)
-    from betting_ml.utils.data_loader import get_snowflake_connection
-    return get_snowflake_connection(schema="betting")
+# The two settlement sources, read straight from the S3 lakehouse parquet. Both are
+# materialized (lakehouse/stg_statsapi_games/, lakehouse/mart_starting_pitcher_game_log/)
+# and refreshed daily + intraday — the same tables the GET /bets auto-void already reads.
+_SCORE_TABLES = ["stg_statsapi_games", "mart_starting_pitcher_game_log"]
+
+
+def _connect_lakehouse():
+    """A DuckDB connection with the two settlement source views registered over S3.
+
+    Uses the canonical prediction-path reader (scripts/utils/lakehouse_read) so there is
+    ONE connection/registration path, not a bespoke one that can drift. Snowflake-free:
+    DuckDB resolves S3 creds via the credential chain (box instance role / Lambda role).
+    """
+    conn = duck_connect()
+    register_views(conn, _SCORE_TABLES)
+    return conn
 
 
 def _final_scores(conn, game_pks: list[int]) -> dict[int, tuple[int, int]]:
@@ -107,16 +122,15 @@ def _final_scores(conn, game_pks: list[int]) -> dict[int, tuple[int, int]]:
         f"WHERE status_code IN ('F', 'O') AND game_pk IN ({placeholders}) "
         "AND home_score IS NOT NULL AND away_score IS NOT NULL"
     )
-    cur = conn.cursor(snowflake.connector.DictCursor)
-    cur.execute(sql)
-    return {int(r["GAME_PK"]): (int(r["HOME_SCORE"]), int(r["AWAY_SCORE"])) for r in cur.fetchall()}
+    rows = query_upper(conn, sql)
+    return {int(r["GAME_PK"]): (int(r["HOME_SCORE"]), int(r["AWAY_SCORE"])) for r in rows}
 
 
 def _starter_strikeouts(conn, game_pks: list[int]) -> dict[tuple[int, int], int]:
     """(game_pk, pitcher_id) -> actual strikeouts for starters in the given games.
 
     Reads mart_starting_pitcher_game_log (grain = one row per pitcher_id/game_pk,
-    starters only), the same Snowflake read path _final_scores uses. A row exists only
+    starters only), the same S3 lakehouse read path _final_scores uses. A row exists only
     once the game is played, so a pending prop whose starter has no row yet (mart lag,
     or a scratched start) simply stays pending — it is never mis-settled.
     """
@@ -128,11 +142,10 @@ def _starter_strikeouts(conn, game_pks: list[int]) -> dict[tuple[int, int], int]
         "FROM baseball_data.betting.mart_starting_pitcher_game_log "
         f"WHERE game_pk IN ({placeholders}) AND strikeouts IS NOT NULL"
     )
-    cur = conn.cursor(snowflake.connector.DictCursor)
-    cur.execute(sql)
+    rows = query_upper(conn, sql)
     return {
         (int(r["GAME_PK"]), int(r["PITCHER_ID"])): int(r["STRIKEOUTS"])
-        for r in cur.fetchall()
+        for r in rows
     }
 
 
@@ -214,9 +227,9 @@ def main() -> int:
     log.info("%s pending bet(s) across %s game(s)", len(pending), len(game_pks))
 
     try:
-        conn = _connect_snowflake()
+        conn = _connect_lakehouse()
     except Exception:
-        log.exception("Failed to connect to Snowflake")
+        log.exception("Failed to connect to the S3 lakehouse (DuckDB)")
         return 1
     try:
         scores = _final_scores(conn, game_pks)
@@ -224,21 +237,27 @@ def main() -> int:
         has_props = any(b.get("market") in _PROP_MARKETS for b in pending)
         strikeouts = _starter_strikeouts(conn, game_pks) if has_props else {}
     except Exception:
-        log.exception("Failed to load settlement data from Snowflake")
+        log.exception("Failed to load settlement data from the S3 lakehouse")
         return 1
     finally:
         conn.close()
 
     settled = 0
+    # Track bets whose game is FINAL but which we still couldn't settle — the silent-failure
+    # class (E11.20 phase-2a). A final game with unsettleable bets is worth a loud ALERT: it
+    # means a genuine data gap (missing K row, unknown market) rather than the benign
+    # "game not final yet" skip, and settlement is otherwise invisible (WARN-tier op).
+    final_unsettled = 0
     for bet in pending:
         gp = int(bet["pending_game_pk"])
         if gp not in scores:
-            continue  # game not final yet
+            continue  # game not final yet — the benign, expected skip
         market = bet["market"]
         if market in _PROP_MARKETS:
             pid = bet.get("player_id")
             if pid is None:
                 log.warning("Bet %s: prop market=%s missing player_id (skipping)", bet.get("bet_id"), market)
+                final_unsettled += 1
                 continue
             actual_k = strikeouts.get((gp, int(pid)))
             if actual_k is None:
@@ -246,6 +265,7 @@ def main() -> int:
                 # did not start (scratch). Leave pending — never mis-settle.
                 log.warning("Bet %s: no strikeout row for pitcher %s in game %s yet (leaving pending)",
                             bet.get("bet_id"), pid, gp)
+                final_unsettled += 1
                 continue
             outcome = _prop_outcome(market, actual_k, bet.get("prop_line"))
         else:
@@ -253,6 +273,7 @@ def main() -> int:
             outcome = _outcome(market, home, away, bet.get("total_line"))
         if outcome is None:
             log.warning("Bet %s: cannot settle market=%s (skipping)", bet.get("bet_id"), market)
+            final_unsettled += 1
             continue
         pl = _profit_loss(outcome, Decimal(str(bet["stake"])), Decimal(str(bet["american_odds"])))
         try:
@@ -264,6 +285,16 @@ def main() -> int:
             settled += 1
         except Exception:
             log.exception("Failed to settle bet %s", bet.get("bet_id"))
+            final_unsettled += 1
+
+    # ALERT-loud-but-continue (CLAUDE.md pipeline-failure contract): if any bet's game is
+    # FINAL yet unsettled, surface it to stderr so a real settlement gap is visible rather
+    # than silently deferred to the next pass. Not an exit-1 — a partial gap must not fail
+    # the op (predictions/serving are unaffected) and the next evening pass retries.
+    if final_unsettled:
+        print(f"[ALERT] settle_user_bets: {final_unsettled} bet(s) on FINAL games left "
+              f"unsettled (missing K row / unknown market / write error) — see warnings above",
+              file=sys.stderr)
 
     log.info("Settled %s of %s pending bet(s) in %s", settled, len(pending), _USER_BETS_TABLE)
     return 0

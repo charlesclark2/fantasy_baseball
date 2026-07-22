@@ -1,0 +1,77 @@
+{
+  "model_version": "ncaaf_freshman_projection_v1",
+  "generated_at": "2026-07-22T01:25:01.834613+00:00",
+  "n_priors": 16541,
+  "n_team_rows": 1424,
+  "classes": [
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "winner": "gbm@200-2-0.05",
+  "leaderboard": [
+    {
+      "config": "gbm@200-2-0.05",
+      "oos_mae": 0.7010522038986203,
+      "oos_skill_vs_null": 0.015358362959700611
+    },
+    {
+      "config": "gbm@400-3-0.03",
+      "oos_mae": 0.7091105891359804,
+      "oos_skill_vs_null": 0.00729997772234063
+    },
+    {
+      "config": "partial_pool@2.0",
+      "oos_mae": 0.7149971669883505,
+      "oos_skill_vs_null": 0.001413399869970406
+    },
+    {
+      "config": "partial_pool@4.0",
+      "oos_mae": 0.7149981010805709,
+      "oos_skill_vs_null": 0.0014124657777499544
+    },
+    {
+      "config": "stratified_ols",
+      "oos_mae": 0.715988051750357,
+      "oos_skill_vs_null": 0.0004225151079638924
+    },
+    {
+      "config": "position_mean",
+      "oos_mae": 0.7164105668583208,
+      "oos_skill_vs_null": 0.0
+    }
+  ],
+  "pbo": 0.0,
+  "dsr": 0.8213349036420838,
+  "oracle_floor_ok": true,
+  "by_group_projection_corr": {
+    "ATH": 0.023677387188744507,
+    "DB": 0.15173599252441794,
+    "DL": 0.2832210046618199,
+    "LB": 0.14314651566383702,
+    "QB": 0.18310091249067031,
+    "RB": 0.20125046296293578,
+    "TE": 0.2986966658463197,
+    "WR": 0.2675966029287429,
+    "ALL": 0.20394350241324102
+  },
+  "gates_passed": [
+    "seed class 2014 not emitted (no strictly-prior map exists)",
+    "every emitted prior was fit on strictly-prior recruit classes (n_prior \u2265 1)",
+    "per-recruit grain (player_id, arrival_season) is unique",
+    "projection finite + plausible (|z|\u22642.72, sd\u22642.56)",
+    "oracle-floor holds (no candidate beats a target-seeing oracle \u2192 metric not inverted)",
+    "winner beats the position-mean null OOS (MAE 0.7011 < 0.7164)",
+    "PBO computed = 0.000 over 6 configs (<0.2 \u2705)",
+    "DSR computed = 0.821 (n_trials=6)"
+  ],
+  "notes": []
+}

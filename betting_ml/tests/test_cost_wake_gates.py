@@ -106,6 +106,62 @@ class TestBookOddsIntradayS3:
         )
 
 
+class TestTickSfFreeStep3:
+    """E11.20 phase-2a STEP 3 — the 30-min capture tick retires its two Snowflake legs
+    (intraday_lineup_rebuild dbt SF staging + the trailing refresh_w1_external_tables) under a
+    default-OFF TICK_SF_FREE gate that REQUIRES SCHEDULE_LAKEHOUSE_INTRADAY (the --w7b S3 rebuild
+    that replaces the dbt leg). Merging is a runtime no-op; the flip is operator/box work."""
+
+    def _helper(self) -> str:
+        return INTRADAY[INTRADAY.find("def _tick_sf_free"):INTRADAY.find("def _w6_lakehouse_intraday")]
+
+    def test_gate_requires_both_flags(self):
+        assert re.search(
+            r'TICK_SF_FREE"\)\s*==\s*"1"\s+and\s+os\.environ\.get\("SCHEDULE_LAKEHOUSE_INTRADAY"\)\s*==\s*"1"',
+            self._helper()), (
+            "_tick_sf_free must require BOTH TICK_SF_FREE and SCHEDULE_LAKEHOUSE_INTRADAY — dropping "
+            "the SF lineup rebuild WITHOUT the --w7b S3 rebuild leaves lineups stale on both paths "
+            "and the lineup monitor goes blind (post_lineup never fires)."
+        )
+
+    def test_lineup_rebuild_skips_before_dbt_when_gated(self):
+        body = INTRADAY[INTRADAY.find("def intraday_lineup_rebuild"):]
+        body = body[:body.find("\n@op") if "\n@op" in body[10:] else len(body)]
+        gate = body.find("if _tick_sf_free():")
+        ret = body.find("return", gate)
+        dbt = body.find("_run_dbt(")
+        assert gate != -1 and ret != -1 and dbt != -1 and gate < ret < dbt, (
+            "intraday_lineup_rebuild must check _tick_sf_free() and return BEFORE _run_dbt — the "
+            "SF staging rebuild is the leg being retired."
+        )
+
+    def test_lineup_rebuild_misconfig_is_loud_and_falls_back(self):
+        body = INTRADAY[INTRADAY.find("def intraday_lineup_rebuild"):INTRADAY.find("--target", INTRADAY.find("def intraday_lineup_rebuild"))]
+        # TICK_SF_FREE set but SCHEDULE_LAKEHOUSE_INTRADAY off ⇒ warn loud + still run the dbt rebuild.
+        assert 'os.environ.get("TICK_SF_FREE") == "1"' in body and "log.warning" in body, (
+            "when TICK_SF_FREE=1 but SCHEDULE_LAKEHOUSE_INTRADAY is OFF, the op must warn LOUD and "
+            "fall back to running the dbt rebuild (never silently skip and blind the monitor)."
+        )
+
+    def test_ext_refresh_is_gated_not_removed(self):
+        body = INTRADAY[INTRADAY.find("def _schedule_lakehouse_intraday"):INTRADAY.find("def _w6_lakehouse_intraday")]
+        assert "if _tick_sf_free():" in body and 'refresh_w1_external_tables.py")' in body, (
+            "the tick's refresh_w1_external_tables must be gated on _tick_sf_free() (else-run), not "
+            "hardcoded-removed — removing it unconditionally breaks pre-flip boxes that still read SF."
+        )
+
+    def test_tick_sf_free_does_not_gate_the_capture_insert_or_export_bridge(self):
+        # Step 3 owns ONLY the refresh + dbt legs. The SF INSERT (ingest_statsapi schedule) and the
+        # export bridge (export_odds_raw_to_s3 --source monthly_schedule) are the writer-flip's to
+        # retire (order-coupled to W11_RAW_WRITE_MODE / INC-31). They must NOT hang off TICK_SF_FREE.
+        body = INTRADAY[INTRADAY.find("def _schedule_lakehouse_intraday"):INTRADAY.find("def _w6_lakehouse_intraday")]
+        bridge_line = [ln for ln in body.splitlines() if "export_odds_raw_to_s3.py" in ln and "monthly_schedule" in ln]
+        assert bridge_line, "export bridge line not found"
+        # the bridge export is unconditional in this helper (its own SCHEDULE_LAKEHOUSE_INTRADAY gate is
+        # at the top); it must not be wrapped by a _tick_sf_free() branch.
+        assert "if _tick_sf_free" not in bridge_line[0]
+
+
 class TestW7b2IntradayServingS3:
     """E11.20 phase-2a W7b-2 — the intraday predict + serving read S3 instead of the Snowflake
     staging views (the last game-hours SF-view readers), gated default-OFF so merging is a no-op

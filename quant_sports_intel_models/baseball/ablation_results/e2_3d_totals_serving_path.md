@@ -56,7 +56,21 @@ Re-measured **from the cached serving-cache pairs** `betting_ml/evaluation/calib
 | since Jul 1 | 164 | **0.102** | 0.521 | 0.470 | recent, still over-leaning |
 | since Jul 9 | 59 | 0.107 | 0.530 | 0.424 | small-n, noisy |
 
-**Confirmed:** the served totals prob is miscalibrated ~2× worse than moneyline (~0.03), with a **consistent systematic lean toward the OVER** (mean_pred 0.52–0.55 vs base 0.42–0.50) in every window. E9.26's ~0.079 is real; the recent window is if anything *worse*. (Data is 3 days stale — window ends 2026-07-16; a fresher gather is the slow ~15–20 min S3 walk, out of scope for a read-only spike. The direction is unambiguous.)
+**Confirmed:** the served totals prob is miscalibrated ~2× worse than moneyline (~0.03), with a **consistent systematic lean toward the OVER** (mean_pred 0.52–0.55 vs base 0.42–0.50) in every window. E9.26's ~0.079 is real; the recent window is if anything *worse*.
+
+### Fresh gather through 2026-07-21 (operator ran `fit_totals_calibrator_e13_6b.py --start 2026-06-15`)
+432 served totals games (Jun 15 – Jul 21, S3 serving cache). **Served raw ECE 0.0605**, mean_pred 0.530 vs base 0.484 — miscalibration + over-lean **hold today**. This reinforces the recommendation (rules out option D).
+
+**⚠️ New finding — E13.6b's *isotonic* candidate is NOT stable on fresh data.** On the robust **pooled walk-forward OOF** (n_oof=247, the instrument that decided Part A):
+
+| method | OOF Brier | OOF LL | OOF ECE | spread | note |
+|---|---|---|---|---|---|
+| identity | 0.2448 | 0.6828 | 0.0812 | 0.0785 | uncalibrated |
+| platt | 0.2499 | 0.6929 | **0.0328** | 0.024 | lowest ECE but **collapses spread < 0.03 floor** |
+| isotonic | 0.2554 | **0.8907** | 0.0576 | 0.1225 | **proper-score blow-up = overfit** (LL 0.89 vs 0.68) |
+| temperature | 0.2452 | 0.6836 | 0.0473 | 0.0479 | **spread-floor OOF pick** (T≈1.53 on hold-out) |
+
+The 7/17 Part-A "isotonic wins (OOF ECE 0.048→0.015)" selection **does not reproduce** on the recent window — isotonic's OOF LL/Brier degrade (overfit tell), platt collapses to base rate, and the spread-floor pick is now **temperature**. **Implication for Part B: re-select the calibrator METHOD on a fresh pooled-OOF at wire-time — do NOT blindly ship the 7/17 `calibrator_e13_6b_isotonic_candidate.joblib`.** A monotone single-param temperature fit is the more robust current candidate, to be re-confirmed on the box slate immediately before wiring.
 
 ---
 
@@ -64,7 +78,7 @@ Re-measured **from the cached serving-cache pairs** `betting_ml/evaluation/calib
 
 E2.3's artifact is **not** the served path, so E13.6b is not redundant with a hidden calibrated distribution. Concretely:
 
-1. **E13.6b is the small, already-validated, correctly-targeted fix.** Part A is DONE and fit *directly on the served NGBoost output*: isotonic cuts pooled walk-forward OOF ECE **0.048 → 0.015** (at/under moneyline parity) and is the only candidate clearing the 0.03 spread floor (Platt/temperature collapse P(over) to base rate). Wire-in is a one-line analog of the h2h `_apply_calibrator` at `predict_today` `p_over_v` (~L1111) → `totals_model_prob` (~L1257), serving the `calibrator_e13_6b_isotonic_candidate.joblib` from S3.
+1. **E13.6b is the small, correctly-targeted fix** — fit *directly on the served NGBoost output*, and wire-in is a one-line analog of the h2h `_apply_calibrator` at `predict_today` `p_over_v` (~L1111) → `totals_model_prob` (~L1257), serving the calibrator from S3. **⚠️ But re-select the calibrator METHOD on fresh data at wire-time.** Part A picked isotonic (7/17: OOF ECE 0.048→0.015), but the fresh 7/21 pooled-OOF (§4) shows isotonic's proper scores blow up (LL 0.89 = overfit), platt collapses below the 0.03 spread floor, and the spread-floor pick flips to **temperature** (a monotone single-param fit). So Part B ships whichever method the *then-current* pooled-OOF selects under the spread floor — not the frozen 7/17 isotonic joblib.
 
 2. **E2.3 deploy is a large ON-BOX re-wire with a weaker guarantee — not a calibration bolt-on.** `totals_distribution_v1.json` holds only global dispersion constants; serving E2.3 would require (a) serving the E2.1 per-side NegBin **mean** marginals at serve time, (b) convolving per game at serve, and (c) **reworking `write_serving_store`'s hardcoded Normal-CDF per-book recompute** (L1817) to a NegBin/quantile-grid — because `pred_total_runs_scale` would no longer be a Normal σ. And its selection metric (`calib_80`) is the biased-for-counts one, so it isn't even guaranteed to beat isotonic-recalibrated NGBoost on served ECE. That is a *fix-at-source model-swap story*, not this decision's lane.
 

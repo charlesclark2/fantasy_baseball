@@ -1,131 +1,104 @@
 # NCAAF-P1.2b — recruit-rating → freshman-production projection (the HS→college MLE)
 
-**Status:** 🟢 **CODE-COMPLETE + synthetic-validated + CI-green + data-assembly runtime-verified
-on the real lake (2026-07-20).** The numeric validation table (bake-off leaderboard, PBO/DSR,
-projection↔realized correlation, face-validity lists) is produced by the operator's real
-`run_freshman_projection.py` run over the 2014+ build — **this file is regenerated in full by that
-run** and currently carries the design + the verified data-assembly facts. This mirrors P1.2's
-"code-complete, validated on a real build by the operator" delivery.
+**Model:** `ncaaf_freshman_projection_v1` · **generated:** 2026-07-22T01:25:32.469255+00:00
+**Classes emitted:** 2015–2025 (16,541 recruit priors) · **seed (not emitted):** 2014
 
-> ⚠️ **This is a freshman PRIOR, not an edge claim.** It projects a recruit's first-college-season
-> production from their recruiting rating, measured against realized production — never a market.
-> `best_alpha = 0` holds; P1.4 decides whether a freshman feature earns its place. The uncertainty
-> is **PARAMETER** uncertainty (a RELATIVE confidence signal), NOT a calibrated predictive
-> interval — a pricing consumer MUST recalibrate on held-out data.
+> ⚠️ **This is a freshman PRIOR, not an edge claim.** It projects a recruit's first-season production from their recruiting rating, measured against realized production — never a market. `best_alpha = 0` holds; P1.4 decides whether a freshman feature earns its place. The uncertainty is **PARAMETER** uncertainty (a RELATIVE confidence signal), NOT a calibrated predictive interval — a pricing consumer MUST recalibrate on held-out data.
 
----
+## 1. Gates
 
-## 1. What was built (the analog: MLB E7 MiLB→MLB MLE, one rung down)
+- ✅ seed class 2014 not emitted (no strictly-prior map exists)
+- ✅ every emitted prior was fit on strictly-prior recruit classes (n_prior ≥ 1)
+- ✅ per-recruit grain (player_id, arrival_season) is unique
+- ✅ projection finite + plausible (|z|≤2.72, sd≤2.56)
+- ✅ oracle-floor holds (no candidate beats a target-seeing oracle → metric not inverted)
+- ✅ winner beats the position-mean null OOS (MAE 0.7011 < 0.7164)
+- ✅ PBO computed = 0.000 over 6 configs (<0.2 ✅)
+- ✅ DSR computed = 0.821 (n_trials=6)
 
-A true freshman has **no college snaps**, so P1.3's snap-based roster features are blank for them.
-The only pre-arrival signal is the **recruiting rating**, so it becomes the prior. P1.2b learns the
-**recruit-rating → first-college-season production** map, position-specific, leakage-safe, and emits
-a per-recruit prior + a team-level aggregate for P1.3.
+## 2. The §0.5 bake-off leaderboard (leave-one-class-out expanding-window CV)
 
-| Layer | File | What |
-|---|---|---|
-| staging | `sports_dbt/.../stg_ncaaf_recruiting_players.sql` | flatten CFBD `/recruiting/players` (rating, stars, position, class, committed college) |
-| staging | `sports_dbt/.../stg_ncaaf_roster.sql` (extended) | + `recruit_ids` (VARCHAR[]) — the bridge key |
-| mart | `sports_dbt/.../ncaaf_recruit_production_pairs.sql` | the training/emission substrate: recruit → first-FBS-season production |
-| model | `football/ncaaf/models/freshman_projection.py` | the §0.5 bake-off (4 candidate classes) + leakage-safe emission + team aggregate |
-| CLI | `football/ncaaf/models/run_freshman_projection.py` | load → bake-off → gates → parquet/S3 → this report |
-| view | `sports_dbt/.../ncaaf_freshman_priors.sql` | per-recruit prior (grain `player_id, arrival_season`) |
-| view | `sports_dbt/.../ncaaf_team_freshman_prior.sql` | ⭐ the **P1.3 join contract** (grain `season, team`) |
-| tests | `betting_ml/tests/test_ncaaf_freshman_projection.py` | 14 fast-gate behavioural + leakage guards |
+Every candidate is fit on STRICTLY-PRIOR classes and scored on the held-out class; the metric is MAE on the standardized production target (lower = better). `position_mean` is the NULL FLOOR (ignores rating). `oos_skill_vs_null` = how much MAE the config removes vs that null (>0 ⇒ the recruiting rating carries signal).
 
-## 2. 🔧 The bridge — a corrected data-inventory error (verified on the real lake)
+| config           |   oos_mae |   oos_skill_vs_null |
+|:-----------------|----------:|--------------------:|
+| gbm@200-2-0.05   |    0.7011 |              0.0154 |
+| gbm@400-3-0.03   |    0.7091 |              0.0073 |
+| partial_pool@2.0 |    0.7150 |              0.0014 |
+| partial_pool@4.0 |    0.7150 |              0.0014 |
+| stratified_ols   |    0.7160 |              0.0004 |
+| position_mean    |    0.7164 |              0.0000 |
 
-`ncaaf_data_inventory.md` documented the recruit↔college link as **recruiting.athleteId ↔
-roster.recruitIds**. On the real lake that matches **7 rows across 12 seasons** — effectively dead.
-The link that actually works is **roster.recruit_ids ↔ recruiting_players.id** (the recruiting
-RECORD id): **60,883 unnested matches → 8,373 distinct bridged freshmen** at their first FBS season,
-2014–2025 (~760/class). Every bridged recruit carries a composite rating. The data inventory has
-been corrected. This is exactly the "verify a documented key on the real data" runtime-gate class —
-CI (which mocks IO) could not have caught it.
+**Winner:** `gbm@200-2-0.05`, refit on all 11 emittable classes for emission.
 
-## 3. 🔬 The §0.5 bake-off (this is a MODEL, not a lookup)
+## 3. Overfitting deflation (PBO / DSR)
 
-Pre-registered candidate set — every config counts toward PBO/DSR (deflation makes the search safe):
+- **PBO** = 0.000 over 6 configs × 8 CSCV splits.
+  - ⚠️ **Reading a high PBO correctly (E2.1-r):** if the top configs genuinely TIE, a high PBO is the NULL (which tied candidate wins is noise), not evidence of overfitting. A high PBO with a WIDE leaderboard spread IS overfitting. Read the spread above.
+- **DSR** = 0.821 (observed skill-Sharpe 0.880 vs deflated floor 0.392, n_trials=6). ≥0.95 = the winner's OOS skill survives the multiple-testing deflation.
 
-- **(a) ⭐ Partial pooling** via `hierarchical.py` (the P1.2 solver, **reused unchanged**): a
-  random-slopes model — a GLOBAL rating→production line plus per-position-group intercept AND
-  rating-slope deviations, EB-shrunk toward the global line. This IS "position-specific + EB-shrunk
-  for thin cells," and it inherits the **boundary-avoiding Gamma(2,·) tau prior + multi-start** that
-  the P1.2 build proved is MANDATORY (ML genuinely collapses a variance component to 0 on thin
-  cells, silently deleting a level of the hierarchy — a live bug there). A fast-gate test pins that
-  the variance components stay alive.
-- **(b) Position-stratified OLS** on rating — the interpretable foil (no pooling between cells).
-- **(c) Learned GBM** on rating + stars + national_ranking + position one-hot + class size.
-- **(d) Position-mean NULL FLOOR** — predict the group mean, ignore rating. The honest "no signal"
-  baseline every candidate must beat.
+## 4. Does the projection track reality? (rating → realized freshman production)
 
-**Selection:** leave-one-CLASS-out **expanding-window** CV (project class Y using ONLY strictly-prior
-classes) on held-out MAE of the standardized production target; **PBO** over folds×configs; **DSR**
-on the winner's per-fold skill (n_trials = config count); and an **ORACLE-FLOOR** sanity check
-(a target-seeing model must beat every candidate — a candidate beating it is the E2.1-r
-inverted-metric tell). *(A high PBO on a genuinely-tied field is the NULL, not overfitting — read
-the leaderboard spread, per the E2.1-r discipline.)*
+Correlation of the emitted `projected_production_z` with the recruit's REALIZED standardized production, per position group (emitted rows that DID produce — a true out-of-sample read, since each class's prior was fit only on strictly-prior classes). A positive, position-plausible correlation is the behavioural gate that the map learned something; a flat correlation means the recruiting rating does not predict production and the honest verdict is no signal.
 
-## 4. The target (why standardized, why leakage-free)
+| group   |   proj↔realized corr |
+|:--------|---------------------:|
+| ALL     |                0.204 |
+| ATH     |                0.024 |
+| DB      |                0.152 |
+| DL      |                0.283 |
+| LB      |                0.143 |
+| QB      |                0.183 |
+| RB      |                0.201 |
+| TE      |                0.299 |
+| WR      |                0.268 |
 
-Production is position-incomparable (QB passing yards vs a corner's tackles), so the raw metric is
-chosen per group (offense: scrimmage yards + TD bonus; defense: havoc = tackles + 2·(sacks+TFL) +
-3·(PBU+INT)) and then **z-scored within (position_group, arrival_season)**. Standardization makes
-the raw scale irrelevant (only within-group-season ordering matters) and absorbs league drift. It is
-leakage-free: it only builds the TRAINING label on completed classes; emission predicts z from
-rating and never needs the new class's production.
+## 5. Face validity — the top projected freshmen (most recent class)
 
-**OL and deep special teams record no box stat line** — participation-via-stats reads ~0 for every
-lineman — so they carry **no production label** and get a **rating-only prior**, flagged
-`box_production_available = false`, and are excluded from the production VALIDATION. Their prior is a
-talent signal, honestly labelled, never a fabricated 0.
+**2025 class:**
 
-## 5. Output grain + the P1.3 join contract (PM addition #3)
+| recruit_name      | arrival_team   | position_group   |   stars |   composite_rating |   projected_production_z |   projected_production_z_sd |
+|:------------------|:---------------|:-----------------|--------:|-------------------:|-------------------------:|----------------------------:|
+| Elijah Griffin    | Georgia        | DL               |       5 |              0.999 |                    1.728 |                       1.752 |
+| Keelon Russell    | Alabama        | QB               |       5 |              1.000 |                    1.611 |                       1.759 |
+| Bryce Underwood   | Michigan       | QB               |       5 |              1.000 |                    1.611 |                       1.759 |
+| Tavien St. Clair  | Ohio State     | QB               |       5 |              0.997 |                    1.155 |                       1.479 |
+| David Sanders Jr. | Tennessee      | OL               |       5 |              0.997 |                    1.114 |                       1.748 |
+| Dakorien Moore    | Oregon         | WR               |       5 |              0.998 |                    1.114 |                       1.762 |
+| Michael Fasusi    | Oklahoma       | OL               |       5 |              0.998 |                    1.114 |                       1.748 |
+| Justus Terry      | Texas          | DL               |       5 |              0.994 |                    1.068 |                       1.420 |
+| DJ Pickett        | LSU            | DB               |       5 |              0.994 |                    1.049 |                       1.393 |
+| Harlem Berry      | LSU            | RB               |       5 |              0.992 |                    1.018 |                       1.479 |
+| Andrew Babalola   | Michigan       | OL               |       5 |              0.991 |                    1.011 |                       1.433 |
+| Jerome Myles      | Texas A&M      | WR               |       5 |              0.988 |                    1.009 |                       1.412 |
 
-- **`ncaaf_freshman_priors`** — grain **(player_id, arrival_season)**: `projected_production_z`
-  (mean), `projected_production_z_sd` (parameter uncertainty), `box_production_available`,
-  `n_prior_classes`, `n_prior_pairs`, `model_version`.
-- **`ncaaf_team_freshman_prior`** — grain **(season, team)** = the P1.3 slot. Columns:
-  `n_incoming_freshmen`, `freshman_class_projected_production` (Σ), `freshman_class_avg_projected_production`,
-  `freshman_class_top_projected_production`, `freshman_class_avg_rating`, `blue_chip_count`.
-  **P1.3 joins on `(season = arrival_season, team = arrival_team)` and broadcasts to every
-  `as_of_week`** (the freshman prior is a pre-season constant). A team with no bridged class is
-  ABSENT → LEFT JOIN and read absence as zero projected contribution.
+Read the list, do not just count it: the top projected freshmen should be blue-chip recruits at skill positions. If they are not, the map is picking up something else.
 
-## 6. Uncertainty semantics (PM addition #4)
+## 6. The P1.3 team aggregate (the join contract)
 
-`projected_production_z_sd` is **PARAMETER** uncertainty (posterior/quantile sd of the fitted map at
-this recruit's rating), NOT a calibrated predictive interval for realized production. Like P1.2's
-`strength_margin_sd` it ranks confidence correctly but is too tight to price with — **any pricing
-consumer must recalibrate on held-out data** (the E13.6 pattern). P1.3 uses `projected_production_z`
-as a POINT feature and the sd as a RELATIVE confidence signal only.
+Grain **(season, team)** — a PRE-SEASON constant that P1.3 broadcasts to every `as_of_week` by joining on `(season = arrival_season, team = arrival_team)`. Columns: `n_incoming_freshmen`, `freshman_class_projected_production` (Σ over the class), `freshman_class_avg_projected_production`, `freshman_class_top_projected_production`, `freshman_class_avg_rating`, `blue_chip_count`. A team absent from this table has no bridged incoming class — LEFT JOIN and read the absence as zero projected contribution.
 
-## 7. Behavioural gates (PM addition #5) — verified
+1,424 (season, team) rows. Top projected incoming classes (2025):
 
-- **Synthetic bake-off** recovers a planted rating→production signal; the winner beats the null
-  floor; partial pooling demonstrably shrinks a thin position cell; the tau prior keeps the group
-  level alive; PBO/DSR compute. (14 fast-gate tests, 5.9s.)
-- **Leakage is CLASS-based and verified to FAIL on a tamper:** a FUTURE class's production cannot
-  move an earlier class's prior (guard), AND tampering a PRIOR (training) class DOES move the
-  downstream prior (the complement — so "no change on future tamper" means something). The seed
-  class (2014) is never emitted; every prior has ≥1 strictly-prior class.
-- **Oracle-floor** holds (no candidate beats a target-seeing oracle).
-- **Real-lake runtime check:** the novel bridge SQL (`unnest(recruit_ids)`, `try_cast(... as
-  varchar[])`, the dedup `row_number`, arrival = min FBS season) executes over the real Delta lake
-  and yields the 8,373-freshman substrate. The dbt project **parses + compiles** clean (CI gate).
+| team       |   n_incoming_freshmen |   freshman_class_projected_production |   freshman_class_avg_rating |   blue_chip_count |
+|:-----------|----------------------:|--------------------------------------:|----------------------------:|------------------:|
+| Texas      |                    22 |                                  6.53 |                        0.94 |                18 |
+| Georgia    |                    20 |                                  6.10 |                        0.94 |                20 |
+| Alabama    |                    18 |                                  5.38 |                        0.93 |                15 |
+| Ohio State |                    18 |                                  4.23 |                        0.93 |                16 |
+| LSU        |                    21 |                                  3.02 |                        0.92 |                21 |
+| Oregon     |                    17 |                                  2.69 |                        0.93 |                15 |
+| Michigan   |                    13 |                                  2.61 |                        0.93 |                 9 |
+| Auburn     |                    20 |                                  2.50 |                        0.93 |                17 |
+| Florida    |                    19 |                                  2.36 |                        0.92 |                16 |
+| Texas A&M  |                    22 |                                  2.12 |                        0.92 |                19 |
 
-## 8. Limitations (carried into P1.3/P1.4)
+## 7. Limitations
 
-- Uncertainty is parameter-only (recalibrate before pricing).
-- OL/ST have no validated production projection (rating-only prior).
-- The target is within-(group, class) relative production, not absolute yardage.
-- JUCO/PrepSchool excluded by default (`recruit_types`) — a different, older-arrival translation.
-- Empirical-Bayes plug-in variance components (the P1.2 posture).
+- **Uncertainty is PARAMETER uncertainty, not a calibrated predictive interval** — ranks confidence correctly, too tight to price. P1.3/P1.4 must recalibrate (E13.6 pattern).
+- **OL and special teams have NO box production** (`box_production_available = False`): a lineman logs no stat line, so participation-via-stats reads ~0 for all of them. They get a rating-only prior from the global line and are excluded from the production VALIDATION. Their prior is a talent signal, not a validated production projection.
+- **The target is WITHIN-(group, season) standardized** — it captures who produced more AMONG their positional peers that class, not an absolute yardage. That is the honestly learnable signal (rating orders within-class production); absolute cross-position production is not comparable and is not claimed.
+- **The bridge is roster.recruit_ids ↔ recruiting.id** (NOT athleteId — the data-inventory doc was wrong; corrected). ~19k pairs; a recruit with no roster recruitIds link (walk-ons, some transfers) is simply absent — a coverage limit, not a bias claim.
+- **JUCO/PrepSchool recruits are excluded by default** (`recruit_types`) — they arrive older and are a different translation than the clean HS→college signal.
+- **Empirical-Bayes plug-in** (partial-pool winner): the variance components are point estimates, not integrated over — the same posture as P1.2 and MLB's bullpen posteriors.
 
-## 9. ⏭️ Operator validation run (regenerates §3–§5 numbers)
-
-See the story's Operator Handoff — the box command runs the bake-off over the real 2014+ build,
-lands the priors in the lake (`--s3`), and rewrites this report with the leaderboard, PBO/DSR,
-projection↔realized correlation, and face-validity lists. **Acceptance:** a position-specific
-recruit→production prior (mean + uncertainty), validated on a holdout recruit class (the CV winner
-beats the position-mean null), that feeds P1.3 as the true-freshman feature.
