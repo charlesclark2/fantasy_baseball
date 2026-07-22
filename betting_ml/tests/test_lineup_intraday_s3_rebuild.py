@@ -77,15 +77,16 @@ def test_regenerates_s3_chain_in_daily_order():
         "backfill_lineup_state_scd2.py",     # SCD-2 ← fresh staging (else intraday change is invisible)
         "export_w8b_precursors_to_s3.py",    # mirror the SCD-2 lineup state → S3
         "run_w1_lakehouse.py",               # (2026-07-22) --game-spine-only: pick up a same-day reschedule
+        "run_w1_lakehouse.py",               # (2026-07-22) --eb-batter-only: fresh lineup-block EB posteriors
         "run_w1_lakehouse.py",               # rebuild the W8b feature/matchup/aggregator parquet
         "refresh_w1_external_tables.py",     # point lakehouse_ext at the new parquet
     ], "the S3-regeneration chain must run in the daily mirror order, before the feature copy"
 
-    # Two run_w1_lakehouse.py steps now: the cheap --game-spine-only refresh MUST precede --w8b-only
-    # (the aggregator spines on mart_game_spine → the reschedule must be in the spine first).
+    # Three run_w1_lakehouse.py steps now: the cheap precursor refreshes (--game-spine-only,
+    # --eb-batter-only) MUST both precede --w8b-only, which reads the spine + eb as precursors.
     rw_args = [args for script, args in steps if script == "run_w1_lakehouse.py"]
-    assert rw_args == [["--game-spine-only"], ["--w8b-only"]], (
-        "spine refresh must run before the --w8b-only aggregator rebuild"
+    assert rw_args == [["--game-spine-only"], ["--eb-batter-only"], ["--w8b-only"]], (
+        "spine + eb-batter refreshes must run before the --w8b-only aggregator rebuild"
     )
     by = dict(steps)
     assert by["refresh_w1_external_tables.py"] == ["--w8b"]      # and refresh the ext table

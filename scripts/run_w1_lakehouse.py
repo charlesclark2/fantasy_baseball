@@ -1188,6 +1188,64 @@ def _build_game_spine_only(conn, dry_run: bool) -> None:
     _alert_stale_game_spine(conn)
 
 
+# 2026-07-22: the precursor parquet eb_batter_posteriors_raw reads. All slowly-changing / already
+# fresh EXCEPT stg_statsapi_lineups (the CONFIRMED batting order, which lands ~3h pre-game) — that
+# is the one whose intraday freshness matters for today's post_lineup slate.
+W8A_EB_BATTER_PRECURSORS = [
+    "mart_batter_rolling_stats", "stg_fangraphs__zips_hitting", "stg_statsapi_lineups",
+    "player_sequential_posteriors", "ref_eb_lineup_priors",
+]
+
+
+def _alert_stale_eb_batter(conn) -> None:
+    """EB-batter staleness ALERT at the SOURCE. eb_batter_posteriors_raw feeds the served lineup
+    block (avg_eb_woba / matchup / archetype); if it does not reach the current slate the lineup
+    block serves NULL (imputed to a constant) — the 2026-07-22 avg_eb_woba outage. game_date is a
+    DATE here (no INC-23 VARCHAR wrap). WARN to stderr (ALERT tier); never raises."""
+    try:
+        row = conn.execute(
+            "select max(game_date::date) as mx, (max(game_date::date) >= current_date) as covers_today "
+            "from eb_batter_posteriors_raw"
+        ).fetchone()
+    except Exception as e:  # noqa: BLE001 — observability only
+        print(f"  (eb-batter-staleness check skipped: {e})", file=sys.stderr)
+        return
+    mx, covers_today = (row[0] if row else None), (row[1] if row else False)
+    if not covers_today:
+        print(
+            f"WARNING: [eb-batter-staleness] eb_batter_posteriors_raw does not reach today "
+            f"(max game_date {mx}); the served lineup block (avg_eb_woba) will be NULL for the "
+            f"current slate → post_lineup coverage drops (INC-17 class). Ensure stg_statsapi_lineups "
+            f"is fresh (confirmed lineups landed) before this rebuild.",
+            file=sys.stderr,
+        )
+    else:
+        print(f"[eb-batter-staleness] OK: eb_batter_posteriors_raw reaches today (max game_date {mx}).")
+
+
+def _build_eb_batter_only(conn, dry_run: bool) -> None:
+    """INTRADAY EB-batter refresh — rebuild ONLY eb_batter_posteriors_raw (2026-07-22, the
+    avg_eb_woba lineup-block outage).
+
+    WHY --eb-batter-only exists: eb_batter_posteriors_raw is a W8a model built from the CONFIRMED
+    batting order (stg_statsapi_lineups). Its S3 parquet is regenerated only by the daily --w8a
+    build (~12:48 UTC) — but confirmed lineups land ~3h pre-game, AFTER that build, and the intraday
+    lineup rebuild runs only --w8b-only (which reads eb as a frozen precursor). So today's
+    post_lineup slate serves with the lineup block (avg_eb_woba / matchup / archetype) NULL →
+    predict imputes it to a constant → post_lineup coverage drops (the INC-17 signature). Verified:
+    the served eb_batter_posteriors_raw maxed at game_date 7/20 while stg_statsapi_lineups had 7/22.
+
+    This rebuilds ONLY eb_batter_posteriors_raw from the intraday-fresh stg_statsapi_lineups + the
+    existing (slowly-changing) precursor parquet — NO pitch re-read, no heavy --w8a. The intraday op
+    runs it BEFORE --w8b-only so the aggregator reads the fresh eb. eb_starter_posteriors is NOT
+    rebuilt here — it reads probable pitchers (announced days ahead), so it never lags the slate."""
+    print("\nEB-batter-only intraday refresh (reuse existing precursor parquet; fresh stg_statsapi_lineups):")
+    _register_w8a_views(conn, W8A_EB_BATTER_PRECURSORS)
+    _build_marts(conn, ["eb_batter_posteriors_raw"], dry_run)
+    _register_mart_views(conn, ["eb_batter_posteriors_raw"], dry_run)
+    _alert_stale_eb_batter(conn)
+
+
 def _build_archetype(conn, dry_run: bool) -> None:
     """Build the E11.1-W5b archetype mart (mart_batter_archetype_vs_pitcher_cluster). It
     reads the W1 mart_pitch_play_event (registered as a DuckDB view) + the
@@ -2030,6 +2088,7 @@ def run(
     w5_only: bool = False,
     w5_group_a_only: bool = False,
     game_spine_only: bool = False,
+    eb_batter_only: bool = False,
     w5b_only: bool = False,
     archetype: bool = False,
     archetype_only: bool = False,
@@ -2167,6 +2226,17 @@ def run(
         _build_game_spine_only(conn, dry_run)
         conn.close()
         print("\nmart_game_spine intraday refresh complete (--game-spine-only).")
+        return
+
+    # 2026-07-22 (avg_eb_woba lineup-block outage): --eb-batter-only rebuilds JUST
+    # eb_batter_posteriors_raw from the intraday-fresh stg_statsapi_lineups + existing precursor
+    # parquet. Placed HERE (before the heavy stg_batter_pitches scan) because it reads NO pitches.
+    # The intraday lineup rebuild op runs this before --w8b-only so today's confirmed lineups reach
+    # the served lineup block. See _build_eb_batter_only for the full rationale.
+    if eb_batter_only:
+        _build_eb_batter_only(conn, dry_run)
+        conn.close()
+        print("\neb_batter_posteriors_raw intraday refresh complete (--eb-batter-only).")
         return
 
     # Register stg_batter_pitches as a view so mart refs resolve.
@@ -2508,6 +2578,7 @@ if __name__ == "__main__":
         w5_only="--w5-only" in sys.argv,
         w5_group_a_only="--w5-group-a-only" in sys.argv,
         game_spine_only="--game-spine-only" in sys.argv,
+        eb_batter_only="--eb-batter-only" in sys.argv,
         w5b_only="--w5b-only" in sys.argv,
         archetype="--archetype" in sys.argv,
         archetype_only="--archetype-only" in sys.argv,

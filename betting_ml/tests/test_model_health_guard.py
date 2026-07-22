@@ -67,25 +67,30 @@ def test_post_lineup_hard_floor_catches_broad_collapse():
     assert result["alert_fired"] is True
 
 
-def test_post_lineup_attribution_names_the_real_block_not_lineup():
-    """Honest attribution: a sequential/bullpen-block regression is NOT blamed on the lineup
-    block — the exact mis-attribution that made 2026-07-21 look like the soak's lineup work broke."""
+def test_post_lineup_attribution_reports_imputed_but_does_not_exonerate_lineup():
+    """Honest attribution (corrected 2026-07-22): report the actual imputed feature, but because
+    imputed_features does NOT track the lineup block (avg_eb_woba), its absence must NOT be spun as
+    'NON-lineup block' — the alert must explicitly say the lineup block is still possible and point
+    at eb_batter_posteriors_raw freshness (the real 2026-07-22 cause)."""
     conn = _make_conn([5 / 6] * 14, baseline=0.98,
                       imputed=["home_team_sequential_bullpen_xwoba"] * 14)
     result = mh.check_post_lineup_matchup_coverage(conn, "betting_ml", date(2026, 7, 21))
     assert result["alert_fired"] is True
     reason = result["fail_reason"]
-    assert "sequential_bullpen" in reason          # names the ACTUAL imputed feature
-    assert "NON-lineup block" in reason            # explicitly does not misattribute to lineup
+    assert "sequential_bullpen" in reason              # reports the ACTUAL imputed feature
+    assert "NON-lineup block" not in reason            # must NOT falsely exonerate the lineup block
+    assert "not tracked in imputed_features" in reason.lower()   # the honest caveat
+    assert "eb_batter_posteriors_raw" in reason        # points at the real diagnostic
 
 
-def test_post_lineup_lineup_block_regression_is_labelled_lineup():
-    """When the imputed features DO include a lineup token, the alert labels the lineup block."""
+def test_post_lineup_lineup_token_is_directly_implicated():
+    """When the imputed features DO include a lineup token, the alert says the lineup block is
+    directly implicated (and surfaces the token)."""
     conn = _make_conn([2 / 3] * 14, baseline=0.95,
                       imputed=["home_avg_eb_woba,away_avg_eb_woba"] * 14)
     result = mh.check_post_lineup_matchup_coverage(conn, "betting_ml", date(2026, 7, 21))
     assert result["alert_fired"] is True
-    assert "LINEUP/matchup block" in result["fail_reason"]
+    assert "LINEUP block is directly implicated" in result["fail_reason"]
     assert "avg_eb_woba" in result["fail_reason"]
 
 
