@@ -1330,19 +1330,27 @@ def update_player_posteriors_op(context):
     # E11.20 phase 1.5: under W7A_LAKEHOUSE_S3=1 (cut over on the box) the PA substrate
     # reads from the S3 lakehouse — the last DAILY Snowflake read of the W1 pitch-mart
     # family, a precondition for dropping the SF mart_pitch_* views (rollout doc §6 step 6).
+    # 2026-07-22: --catchup (was --date yesterday) advances the chain over EVERY completed date
+    # missing since the frontier, in order — self-healing if yesterday's completed-game source
+    # wasn't ready when this ran (the fragile single-day advance permanently skipped such a day →
+    # the team-seq 7/21 NULL). Order-preserving; see betting_ml/scripts/sequential_bayes/catchup.py.
     _run_script(context, f"{_SEQ_DIR}/update_player_posteriors.py",
-                ["--date", _one_day_ago()] + _w7a_s3_args())
+                ["--catchup"] + _w7a_s3_args())
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def update_team_posteriors_op(context):
-    _run_script(context, f"{_SEQ_DIR}/update_team_posteriors.py", ["--date", _one_day_ago()])
+    # 2026-07-22: --catchup (was --date yesterday) — self-healing ordered advance; see the note on
+    # update_player_posteriors_op + catchup.py. Directly fixes the team-seq 7/21 permanent-skip.
+    _run_script(context, f"{_SEQ_DIR}/update_team_posteriors.py", ["--catchup"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def update_matchup_cell_posteriors_op(context):
+    # 2026-07-22: --catchup (was --date yesterday) — self-healing ordered advance; see the note on
+    # update_player_posteriors_op + catchup.py.
     _run_script(context, f"{_SEQ_DIR}/update_matchup_cell_posteriors.py",
-                ["--date", _one_day_ago()] + _w7a_s3_args())
+                ["--catchup"] + _w7a_s3_args())
 
 
 # INC-2 (2026-06-22): compute_archetype_posteriors.py had NO scheduled caller and
