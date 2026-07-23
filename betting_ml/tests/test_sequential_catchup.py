@@ -14,6 +14,7 @@ from datetime import date
 
 from betting_ml.scripts.sequential_bayes.catchup import (
     frontier_gap_alert,
+    run_catchup,
     run_catchup_loop,
     select_catchup_dates,
 )
@@ -102,3 +103,53 @@ def test_loop_advances_all_ready_dates():
         [D(2026, 7, 21), D(2026, 7, 22)], lambda gd: 10, "x")
     assert processed == [D(2026, 7, 21), D(2026, 7, 22)]
     assert stalled is None
+
+
+# ── frontier_sql override: matchup-cell table has no game_date column ─────────────
+class _FakeConn:
+    def close(self):
+        pass
+
+
+def test_default_frontier_sql_selects_max_game_date():
+    """Team/player path: no override → the default MAX(game_date) query is used verbatim."""
+    seen = {}
+
+    def fake_fetch(conn, sql, params):
+        if "MAX" in sql and "game_date" in sql:
+            seen["frontier_sql"] = sql
+            return [{"d": D(2026, 7, 21)}]
+        return [{"d": D(2026, 7, 21)}, {"d": D(2026, 7, 22)}]  # completed window
+
+    out = run_catchup(
+        label="team", target_table="db.schema.team_seq", today=D(2026, 7, 22),
+        lookback_days=10, get_connection=lambda: _FakeConn(),
+        process_date=lambda gd: 1, fetch_dicts=fake_fetch, log=lambda *a: None)
+    assert "MAX(game_date) AS d FROM db.schema.team_seq" in seen["frontier_sql"]
+    assert out["processed"] == []  # frontier 7/21, only 7/21 completed ≤ yesterday → nothing new
+
+
+def test_frontier_sql_override_is_used_for_matchup():
+    """Matchup path: the join-based override query is passed through unchanged (regression for the
+    2026-07-23 `invalid identifier 'GAME_DATE'` HALT — the matchup table has no game_date column)."""
+    override = (
+        "SELECT MAX(r.game_date) AS d FROM db.schema.matchup_seq p "
+        "JOIN db.schema.mart_game_results r ON p.game_pk = r.game_pk WHERE p.season = %(season)s"
+    )
+    seen = {}
+    processed_dates = []
+
+    def fake_fetch(conn, sql, params):
+        if "MAX(r.game_date)" in sql:
+            seen["frontier_sql"] = sql
+            return [{"d": D(2026, 7, 20)}]
+        return [{"d": D(2026, 7, 21)}]  # completed window: 7/21 ready
+
+    out = run_catchup(
+        label="matchup", target_table="db.schema.matchup_seq", today=D(2026, 7, 22),
+        lookback_days=10, get_connection=lambda: _FakeConn(),
+        process_date=lambda gd: (processed_dates.append(gd), 5)[1],
+        fetch_dicts=fake_fetch, frontier_sql=override, log=lambda *a: None)
+    assert seen["frontier_sql"] == override           # override used verbatim, no game_date on target
+    assert out["processed"] == [D(2026, 7, 21)]        # frontier 7/20 → advance over 7/21
+    assert processed_dates == [D(2026, 7, 21)]

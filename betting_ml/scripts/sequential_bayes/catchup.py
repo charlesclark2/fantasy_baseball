@@ -114,6 +114,7 @@ def run_catchup(
     get_connection,
     process_date,
     fetch_dicts=None,
+    frontier_sql=None,
     log=print,
 ) -> dict:
     """Wire the frontier + completed-dates reads (Snowflake) to the pure selection + the loop.
@@ -121,16 +122,19 @@ def run_catchup(
     - frontier = MAX(game_date) already in `target_table` this season (None if empty).
     - completed = distinct decided regular-season game_dates in mart_game_results within the window.
     - `process_date(gd) -> int` advances the chain one date (the script's update_for_date).
+
+    `frontier_sql` overrides the frontier query for a table WITHOUT a `game_date` column (must
+    return one column aliased `d` = the latest processed game_date, take a `%(season)s` bind). The
+    matchup-cell chain is grained on `game_pk` only, so it joins game_pk → mart_game_results.game_date.
     """
     fetch_dicts = fetch_dicts or _default_fetch_dicts
+    frontier_sql = frontier_sql or (
+        f"SELECT MAX(game_date) AS d FROM {target_table} WHERE season = %(season)s"
+    )
     season = today.year
     conn = get_connection()
     try:
-        fr = fetch_dicts(
-            conn,
-            f"SELECT MAX(game_date) AS d FROM {target_table} WHERE season = %(season)s",
-            {"season": season},
-        )
+        fr = fetch_dicts(conn, frontier_sql, {"season": season})
         frontier = _coerce_date(fr[0]["d"]) if fr and fr[0].get("d") is not None else None
         cr = fetch_dicts(
             conn, _COMPLETED_DATES_SQL,

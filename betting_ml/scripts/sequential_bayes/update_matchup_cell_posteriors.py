@@ -653,6 +653,13 @@ def run_catchup(lookback_days: int, dry_run: bool, use_s3: bool = False) -> None
         today=today,
         lookback_days=lookback_days,
         get_connection=get_snowflake_connection,
+        # This chain is grained on (batter_arch, pitcher_arch, season, game_pk) — no game_date
+        # column — so derive the frontier date by joining game_pk → mart_game_results.game_date.
+        frontier_sql=(
+            f"SELECT MAX(r.game_date) AS d FROM {_TARGET_TABLE} p "
+            "JOIN baseball_data.betting.mart_game_results r ON p.game_pk = r.game_pk "
+            "WHERE p.season = %(season)s"
+        ),
         process_date=lambda gd: update_for_date(
             gd, artifact, eb, ridge_cell_means, posteriors, dry_run, duck=duck)["cells_updated"],
     )
