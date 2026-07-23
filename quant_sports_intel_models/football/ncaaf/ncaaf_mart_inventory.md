@@ -635,6 +635,50 @@ boolean carried in the matrix, NOT the non-null rate.** The driver emits the ful
 
 ---
 
+### 6.16 P1A college→NFL translation marts (the NFL feeder — the MLB Edge-E7 analog)
+
+Two marts land with **NCAAF-P1A**. They translate a drafted player's PRE-DRAFT college body of work
+(final 1–2 FBS seasons of box production + combine + recruiting pedigree) into a projected
+early-career NFL outcome — the feeder that powers the NFL vertical (N1.2 rookie props + N1.3
+fantasy-dynasty), a market that is otherwise priors-only. Position-specific, leakage-safe.
+
+| Mart | Grain | What | Tag |
+|---|---|---|---|
+| `ncaaf_draft_college_production_pairs` | gsis_id | dbt-native substrate: the P0.3 xref (per matched NFL player) + P1.1 college production joined on `college_athlete_id = fact_ncaaf_player_game.player_id` + best-effort recruiting pedigree + combine + the `target_*` NFL outcome (the LABEL). | (in default build) |
+| `ncaaf_nfl_rookie_projections` | gsis_id | ⭐ the per-player rookie projection: `projected_nfl_z` + `_sd`, keyed to `gsis_id`. View over `ncaaf/derived/nfl_rookie_projections`. | `ncaaf_p1a` |
+
+- **⭐ STARTS FROM THE XREF (P0.3 — does NOT rebuild the draft-slot join).** The join key is the
+  **CFBD/ESPN athlete id** — `xref.college_athlete_id` (bigint) `= fact_ncaaf_player_game.player_id`
+  (varchar, cast). ⚠️ **VERIFY THE JOIN COVERAGE ON THE REAL LAKE** (the P1.2b dead-bridge lesson):
+  the run report prints `pct_with_college_production` / `pct_trainable`; a silently-thin join
+  under-trains the map. `has_college_production = false` where a drafted player carries no P1.1
+  production — UNKNOWN, never 0.
+- **The model is a §0.5 bake-off** (partial-pooling via `hierarchical.py` REUSED / stratified-OLS /
+  GBM / position-mean null), **plus a reported-not-selected draft-slot benchmark** (does college
+  production beat the market's draft-slot prior?), leave-one-DRAFT-CLASS-out expanding-window CV,
+  PBO/DSR, oracle-floor. Not in dbt — `models/run_college_nfl_translation.py`; **INC-25 build order**
+  (P1.1 marts + xref + pairs mart → script → the projections view).
+- **TARGET = `target_w_av`** (weighted career AV, front-loaded — the closest early-career proxy;
+  operator can switch to `dr_av`/`car_av`/`games`/`seasons_started` via `--target-metric`),
+  **standardized within (position_group, draft_year)**. **~12 draft classes (2015–26)** is the
+  training ceiling (the 2014 box floor); **2015 is the un-emitted seed**.
+- **🗓️ ANNUAL DRAFT-CLASS REFRESH** (each new NFL draft; the 2026 class was wired 2026-07-22 — the
+  xref stops at whatever `--draft-seasons` last built it). The incoming draft class is NOT auto-
+  ingested — a "20YY" class with all-UDFA rows means the 20YY draft was never ingested. Refresh
+  chain (all LAPTOP, `SPORTS_LAKE_REGION=us-east-2`): (1) `ingest.backfill --seasons 20YY --sources
+  cfbd_draft_picks,nflverse_draft_picks,nflverse_combine,nflverse_players` (1 CFBD call + free
+  nflverse reads → S3), (2) `feeder.xref --draft-seasons 2015-20YY --write` (rebuilds the S3 xref
+  Delta), (3) `dbt-core run --select xref_college_nfl_players ncaaf_draft_college_production_pairs`,
+  (4) re-run `run_college_nfl_translation.py --s3`, (5) `dbt-core run --select tag:ncaaf_p1a`.
+  nflverse must have the class (verify: `read_parquet` the draft_picks release — 2026 landed 257).
+- ⚠️ **`projected_nfl_z_sd` is PARAMETER uncertainty** (relative confidence — N1.2 MUST recalibrate
+  to price). ⚠️ **OL/ST have `box_production_available = false`** (combine/pedigree-only). ⚠️ **UDFAs
+  (`is_udfa = true`) carry no NFL-outcome label** → excluded from TRAINING, still emitted (college-
+  only, lower conf). ⚠️ **A robust-but-weak signal (DSR<0.95) is a VALID feeder** — the noisy NFL
+  draft; reported honestly, not forced. `best_alpha = 0`. Guard: `betting_ml/tests/test_ncaaf_college_nfl_translation.py`.
+
+---
+
 ## 7. Open gaps carried into P1.2 / P1.3 / P1.4
 
 1. **Special teams is thin.** Kicking/punting live in the long player-stat table but are not pivoted
