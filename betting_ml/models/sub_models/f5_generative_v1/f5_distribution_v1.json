@@ -1,0 +1,32 @@
+{
+  "version": "f5_distribution_v1",
+  "form": "betabinom",
+  "dispersion_home": 15.4077,
+  "dispersion_away": 15.6201,
+  "rho": 0.0,
+  "n_cap": 25,
+  "n_draws": 10000,
+  "quantile_levels": [
+    0.05,
+    0.1,
+    0.15,
+    0.2,
+    0.25,
+    0.3,
+    0.35,
+    0.4,
+    0.45,
+    0.5,
+    0.55,
+    0.6,
+    0.65,
+    0.7,
+    0.75,
+    0.8,
+    0.85,
+    0.9,
+    0.95
+  ],
+  "dispersion_calibration": "expanding-window held-out residuals (leakage-safe)",
+  "notes": "E2.4 F5 per-side distribution. learner=lgbm_poisson, contract=full. Served dispersion MLE'd on pooled OOS held-out residuals (leakage-safe; per-season expanding values confirm stability). Market-blind; best_alpha=0."
+}
