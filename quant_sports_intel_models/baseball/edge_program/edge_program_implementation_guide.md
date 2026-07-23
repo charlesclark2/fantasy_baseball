@@ -1101,11 +1101,12 @@ MCP fully-qualified no USE; uv run python; hand >1min scripts to the operator; d
 
 **Why:** the current EB posteriors shrink low-MLB-PA players toward an archetype prior; a rookie's actual AAA Statcast/performance is far more informative. AAA has had Hawk-Eye/Statcast since 2023, and minor-league box/game-log data is available via the MLB Stats API minor-league `sportId`s — so the data exists; the work is ingestion + translation.
 
-### E7.1 — MiLB game-log / box ingestion  ⬜
+### E7.1 — MiLB game-log / box ingestion  ✅ **CODE-COMPLETE + SMOKE-VERIFIED 2026-07-22 (operator backfill pending)**
 **Tasks:**
-- [ ] Ingest schedule + box + player game logs for AAA(`sportId`=11) / AA(12) / A+(13) / A(14) via the Stats API minor `sportId`s into append-only raw tables (mirror the `monthly_schedule`/statsapi pattern).
-- [ ] Stage to per-player game logs with level, league, park, date.
-**AC:** per-player MiLB game logs land with level/league/park/date + leakage-safe `ingestion_ts`.
+- [x] Ingest schedule + box + player game logs for AAA(`sportId`=11) / AA(12) / A+(13) / A(14) via the Stats API minor `sportId`s → **S3 Delta lakehouse (SF-FREE)**, not Snowflake raw tables (the E11.1 decommission supersedes the old `monthly_schedule` pattern). `scripts/ingest_milb_to_s3.py`.
+- [x] Stage to per-player game logs with level, league, **affiliate**, park, date, **age**.
+**AC:** ✅ per-player MiLB game logs land with level/league/affiliate/park/date/age + leakage-safe `ingestion_ts` (ISO-VARCHAR). Smoke slice (3 AAA games) → 83 player-game-log rows, ZERO nulls on every AC field, DuckDB `delta_scan` read-through PASS, idempotent partition-skip round-trip confirmed. **⏭️ Operator runs the historical backfill** (`--seasons 2005-2026`, off-box, resumable) + reports row-counts-by-season.
+> **Implementation reality (verified LIVE, not coded to docs — the recurring E7/P0.1 lesson):** the hydrated `schedule?sportId=<N>&hydrate=team,venue,linescore` call returns level(`sport`)/league/affiliate(`parentOrg`)/park(`venue`) per game in ONE request; `game/<pk>/boxscore` `teams.*.players[].stats.{batting,pitching}` IS the single-game line (the per-player game-log grain); age is derived from `people.birthDate` + `officialDate` (never the API's as-of-today `currentAge` = leakage). **Deepest history the API returns = season 2005** (2004 and earlier return `totalGames=0` for every minor sportId → `EARLIEST_SEASON=2005`). Tables live at `s3://baseball-betting-ml-artifacts/baseball/milb/{schedule,player_game_logs}` (Delta, partitioned by season/sport_id/month). Tests: `betting_ml/tests/test_ingest_milb.py`.
 
 ### E7.2 — AAA Statcast ingestion (2023+)  ⬜
 **Tasks:**

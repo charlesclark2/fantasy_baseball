@@ -509,8 +509,12 @@ def evaluate_config(
         "params": cand.params,
         "top_k": top_k if contract == "top_k" else None,
         "n_cap": n_cap if fm == "betabinom" else None,
+        # The reference/foil is the E2.1-carried arch at DEFAULT params — NOT a tuned trial of
+        # the same triple. Optuna passes explicit params, so `not params` excludes tuned
+        # challengers on the reference axis (else every `--form heldout` lgbm trial would flag
+        # itself the incumbent and pollute decide's reference selection).
         "is_incumbent": (model_class == _INCUMBENT and contract == _INCUMBENT_CONTRACT
-                         and fm == _INCUMBENT_FORM),
+                         and fm == _INCUMBENT_FORM and not params),
         "folds": fold_rows,
         "mean_downstream_score": round(float(np.mean([f["downstream_score"] for f in fold_rows])), 5),
         "pooled_downstream_score": round(downstream_score(pooled_metrics), 5),
