@@ -59,11 +59,13 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
     # This check only catches a missed MONTHLY load (month_end_date is weeks stale).
     # The HARD-ALERT schedule_freshness_alert_sensor is the authoritative monitor for
     # daily feed continuity (stale > 4h OR 0 games on game day after 14:30 UTC).
-    "baseball_data.statsapi.monthly_schedule": {
-        "ts_col": "month_end_date",  # DATE; future value when current month is loaded → always fresh
-        "max_stale_hours": 48,       # catches missed monthly load (shows weeks stale); NOT mid-month failures
-        "game_day_only": True,
-    },
+    # ⛔ monthly_schedule REMOVED 2026-07-23 — schedule capture is now S3-NATIVE (writer retired
+    # 2026-07-20, same class as the mlb_odds_raw removal below), so the Snowflake
+    # statsapi.monthly_schedule table is FROZEN by design and a SF-table staleness check here would
+    # false-warn once month_end_date lapses (7/31). Daily schedule continuity is owned by the
+    # HARD-ALERT schedule_freshness_alert_sensor (reads the fresh S3 feed). Do NOT re-add a SF-table
+    # schedule entry unless capture is reverted to write Snowflake. (_is_game_day now reads the S3
+    # lakehouse_ext.stg_statsapi_games ext table — see its note.)
     # ⛔ actionnetwork.public_betting_raw REMOVED 2026-07-09 (E11.22 decommission — see the
     # consolidated note above). Public-betting is S3-native now; the raw SF table was dropped.
     # ── Odds ingestion (INC-2, 2026-06-22) ──────────────────────────────────
@@ -183,18 +185,20 @@ def _get_connection() -> snowflake.connector.SnowflakeConnection:
 def _is_game_day(check_date: date, con: snowflake.connector.SnowflakeConnection) -> bool:
     """Return True if there are scheduled games on check_date.
 
-    Queries monthly_schedule directly so the answer is independent of whether
-    batter_pitches (and the dbt models built on it) have today's data yet.
+    Reads the S3-backed lakehouse_ext.stg_statsapi_games (fresh) — NOT the native
+    statsapi.monthly_schedule, whose writer was RETIRED 2026-07-20 when schedule capture went
+    S3-native. Querying the frozen native table here would silently return "not a game day" once
+    the last snapshot's forward coverage lapsed (~early August) → every game_day_only freshness
+    check would skip → the monitor goes blind. lakehouse_ext.stg_statsapi_games exposes
+    official_date + game_type directly (already flattened), so no LATERAL FLATTEN is needed.
     """
     cur = con.cursor()
     cur.execute(
         """
         SELECT COUNT(*)
-        FROM baseball_data.statsapi.monthly_schedule,
-             LATERAL FLATTEN(input => json_field:dates) d,
-             LATERAL FLATTEN(input => d.value:games) g
-        WHERE g.value:officialDate::DATE = %s
-          AND g.value:gameType::VARCHAR = 'R'
+        FROM baseball_data.lakehouse_ext.stg_statsapi_games
+        WHERE official_date = %s
+          AND game_type = 'R'
         """,
         (check_date.isoformat(),),
     )
