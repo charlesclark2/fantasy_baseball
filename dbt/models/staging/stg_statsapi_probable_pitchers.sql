@@ -124,74 +124,26 @@ qualify row_number() over (
 
 {% else %}
 
-{{
-    config(
-        materialized = 'table'
-    )
-}}
+{{ config(materialized='view', tags=['w7b_lakehouse']) }}
 
-with source as (
-
-    select json_field, ingestion_ts
-    from {{ source('statsapi', 'monthly_schedule') }}
-
-),
-
-dates_flattened as (
-
-    select d.value as date_obj, ingestion_ts
-    from source,
-    lateral flatten(input => json_field:dates) d
-
-),
-
-games_flattened as (
-
-    select g.value as game, ingestion_ts
-    from dates_flattened,
-    lateral flatten(input => date_obj:games) g
-
-),
-
-home_side as (
-
-    select
-        game:gamePk::integer                                        as game_pk,
-        game:officialDate::date                                     as game_date,
-        'home'                                                      as side,
-        game:teams:home:probablePitcher:id::integer                 as probable_pitcher_id,
-        game:teams:home:probablePitcher:fullName::varchar           as probable_pitcher_name,
-        ingestion_ts
-    from games_flattened
-
-),
-
-away_side as (
-
-    select
-        game:gamePk::integer                                        as game_pk,
-        game:officialDate::date                                     as game_date,
-        'away'                                                      as side,
-        game:teams:away:probablePitcher:id::integer                 as probable_pitcher_id,
-        game:teams:away:probablePitcher:fullName::varchar           as probable_pitcher_name,
-        ingestion_ts
-    from games_flattened
-
-),
-
-all_sides as (
-
-    select * from home_side
-    union all
-    select * from away_side
-
-)
-
-select *
-from all_sides
-qualify row_number() over (
-    partition by game_pk, side
-    order by ingestion_ts desc nulls last
-) = 1
+-- E11.20 phase-2a STRAGGLER CUTOVER (2026-07-23): the native statsapi.monthly_schedule
+-- writer was retired when the schedule capture flipped S3-native, which FROZE this model's
+-- old `source('statsapi','monthly_schedule')` read at 2026-07-20 17:00. Result: games whose
+-- starters MLB announced after 7/20 kept serving both-NULL probables → the pregame starter
+-- feature block couldn't build → those games got NO prediction (824247, 823042 on 7/23).
+-- stg_statsapi_games was already repointed to the S3-backed lakehouse_ext external table; this
+-- finishes the SAME cutover for probable pitchers (the ext table is kept fresh by the W7b
+-- precursor export + refresh_w1_external_tables — verified 7/23 18:00 with live starters).
+-- Explicit column list (not select *) drops the ext table's VARIANT `VALUE` wrapper and
+-- preserves this model's exact output contract; the per-(game_pk, side) latest-snapshot dedup
+-- already happened in the duckdb branch that BUILT the parquet, so no re-dedup is needed here.
+select
+    game_pk,
+    game_date,
+    side,
+    probable_pitcher_id,
+    probable_pitcher_name,
+    ingestion_ts
+from baseball_data.lakehouse_ext.stg_statsapi_probable_pitchers
 
 {% endif %}
