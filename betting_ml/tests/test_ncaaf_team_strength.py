@@ -30,6 +30,55 @@ from quant_sports_intel_models.football.ncaaf.models.hierarchical import (
 from quant_sports_intel_models.football.ncaaf.models import team_strength as ts
 
 
+def _schedule_only_next_season(sim: dict, next_season: int) -> pd.DataFrame:
+    """The scheduled team universe for a season with NO completed games (the P0.7 roll-forward /
+    upcoming-season shape): reuse the league membership, tag it `next_season`."""
+    league = sim["team_games"][["team_id", "team", "conference"]].drop_duplicates()
+    out = league.copy()
+    out.insert(0, "season", next_season)
+    return out.reset_index(drop=True)
+
+
+def test_upcoming_season_emits_a_preseason_prior_from_schedule_only():
+    """A season present ONLY in `schedule_teams` (no completed games) must emit its week-1
+    pre-season prior — the NCAAF-P0.7 cold-start: covariate-only strengths so a 2026 futures
+    board can render before a single game is played."""
+    sim = _simulate(seasons=(2014, 2015, 2016, 2017))
+    next_season = 2018
+    sched = _schedule_only_next_season(sim, next_season)
+
+    run = ts.run_strength(
+        games=sim["games"], team_games=sim["team_games"], roster=sim["roster"],
+        coaching=sim["coaching"], schedule_teams=sched,
+    )
+    wk = run.weekly
+    up = wk[wk["season"] == next_season]
+    # It emitted, exactly one (pre-season) as-of week, one row per team, all finite + bounded.
+    assert not up.empty, "the upcoming (schedule-only) season produced no rows"
+    assert sorted(up["as_of_week"].unique()) == [1], "should emit ONLY the week-1 pre-season prior"
+    assert up["team_id"].nunique() == len(sched), "one pre-season row per scheduled team"
+    assert (up["games_in_window"] == 0).all(), "the pre-season prior must condition on 0 games"
+    assert np.isfinite(up["strength_margin"]).all()
+    # sd is strictly positive and within the 50-pt plausibility ceiling (run_team_strength gate 7).
+    assert (up["strength_margin_sd"] > 0).all() and (up["strength_margin_sd"] < 50.0).all()
+
+
+def test_schedule_teams_is_backward_compatible_for_played_seasons():
+    """Passing `schedule_teams` for ALREADY-PLAYED seasons must not change their output — the
+    completed universe is canonical (dedup keeps the fact rows)."""
+    sim = _simulate(seasons=(2014, 2015, 2016, 2017))
+    league = sim["team_games"][["season", "team_id", "team", "conference"]].drop_duplicates()
+
+    base = ts.run_strength(sim["games"], sim["team_games"], sim["roster"], sim["coaching"])
+    withsched = ts.run_strength(sim["games"], sim["team_games"], sim["roster"], sim["coaching"],
+                                schedule_teams=league)
+    a = base.weekly.sort_values(["season", "team_id", "as_of_week"]).reset_index(drop=True)
+    b = withsched.weekly.sort_values(["season", "team_id", "as_of_week"]).reset_index(drop=True)
+    assert a.shape == b.shape
+    pd.testing.assert_series_equal(a["strength_margin"], b["strength_margin"], check_exact=False,
+                                   atol=1e-9, rtol=0)
+
+
 # ══════════════════════════════════════════════════════════════════════════════════════
 # Synthetic league
 # ══════════════════════════════════════════════════════════════════════════════════════

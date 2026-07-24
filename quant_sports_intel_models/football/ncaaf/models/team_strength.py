@@ -618,15 +618,30 @@ def run_strength(
     config: StrengthConfig | None = None,
     *,
     seasons: list[int] | None = None,
+    schedule_teams: pd.DataFrame | None = None,
 ) -> StrengthRun:
     """Fit every (season, as-of week) posterior and return the week-grained frame.
 
     Seasons are processed in ASCENDING order because each season's `prior_strength`
     covariate is the previous season's FINAL estimate from this same model — a recursion
     that only runs forward in time.
+
+    `schedule_teams` (optional, columns season/team_id/team/conference) is the SCHEDULED team
+    universe — including the UPCOMING season, which has a published schedule but ZERO completed
+    games and is therefore absent from the results-grained `games`/`team_games`. Supplying it
+    lets that season enter the model and emit its **week-1 PRE-SEASON prior** (a pure
+    covariate + conference-pooling + prior-strength posterior with an honestly wide sd — the
+    documented cold-start capability, e.g. the NCAAF-P0.7 2026 season roll-forward). Omitting it
+    is fully backward-compatible: the universe is exactly the completed seasons, unchanged.
     """
     config = config or StrengthConfig()
-    all_seasons = sorted(int(s) for s in games["season"].dropna().unique())
+    completed_seasons = sorted(int(s) for s in games["season"].dropna().unique())
+    # A scheduled-but-unplayed season (no completed games) can only enter via schedule_teams.
+    schedule_seasons = (
+        sorted(int(s) for s in schedule_teams["season"].dropna().unique())
+        if schedule_teams is not None else []
+    )
+    all_seasons = sorted(set(completed_seasons) | set(schedule_seasons))
     if seasons is not None:
         wanted = set(int(s) for s in seasons)
         # The seed and any season needed for a lookback still have to RUN; they are simply
@@ -652,6 +667,18 @@ def run_strength(
     team_seasons = (
         team_games[["season", "team_id", "team", "conference"]].drop_duplicates().reset_index(drop=True)
     )
+    if schedule_teams is not None:
+        # Union the scheduled universe in so a season with no completed games (the upcoming one)
+        # has a team spine. Dedup on (season, team_id) with the completed rows FIRST, so a
+        # played season's canonical fact identity always wins and its output is unchanged.
+        team_seasons = (
+            pd.concat(
+                [team_seasons, schedule_teams[["season", "team_id", "team", "conference"]]],
+                ignore_index=True,
+            )
+            .drop_duplicates(subset=["season", "team_id"], keep="first")
+            .reset_index(drop=True)
+        )
     base_cov = prepare_covariates(roster, coaching, team_seasons)
     base_cov["prior_strength"] = np.nan
 
@@ -717,7 +744,16 @@ def run_strength(
         # The as-of spine — identical to rollup_ncaaf_team_week_asof's: every distinct
         # season_order_week in the season, so a team on bye still gets a row.
         weeks = sorted(int(w) for w in season_games["season_order_week"].dropna().unique())
-        terminal_week = (max(weeks) + 1) if weeks else 1
+        if weeks:
+            terminal_week = max(weeks) + 1
+        else:
+            # A scheduled season with ZERO completed games (the upcoming season): emit ONLY the
+            # week-1 PRE-SEASON prior. The fit window (`season_order_week < as_of_week`) is empty
+            # at week 1 by construction, so no unplayed game ever enters a fit — this is the exact
+            # 0-game posterior every season's week 1 already computes. terminal_week=2 makes week 1
+            # an EMITTED pregame row rather than the non-emitted carryover terminal.
+            weeks = [1]
+            terminal_week = 2
 
         emitted = season in wanted
         for as_of_week in weeks + [terminal_week]:

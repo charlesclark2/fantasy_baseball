@@ -110,6 +110,24 @@ where is_completed
 """
 
 
+# The SCHEDULED FBS team universe (both sides of every FBS game), across ALL seasons — including
+# the UPCOMING season, which has a published schedule but zero completed games, so it is absent
+# from `fact_ncaaf_team_game` (results-grained). This lets P1.2 emit the upcoming season's week-1
+# PRE-SEASON prior (the NCAAF-P0.7 season roll-forward / cold-start). For a played season it is a
+# redundant superset of the fact universe and changes nothing (deduped, fact rows win).
+_SCHEDULE_TEAMS_SQL = """
+select distinct season, home_team_id as team_id, home_team as team, home_conference as conference
+from {schema}.dim_ncaaf_game
+where is_fbs_matchup and home_classification = 'fbs' and season_order_week is not null
+  and home_team_id is not null
+union
+select distinct season, away_team_id as team_id, away_team as team, away_conference as conference
+from {schema}.dim_ncaaf_game
+where is_fbs_matchup and away_classification = 'fbs' and season_order_week is not null
+  and away_team_id is not null
+"""
+
+
 def load_marts(duckdb_path: str, schema: str = MARTS_SCHEMA) -> dict[str, pd.DataFrame]:
     """Read the four P1.1/P0.4/P0.5 marts this model consumes.
 
@@ -127,6 +145,7 @@ def load_marts(duckdb_path: str, schema: str = MARTS_SCHEMA) -> dict[str, pd.Dat
             "team_games": con.sql(_TEAM_GAMES_SQL.format(schema=schema)).df(),
             "roster": con.sql(f"select * from {schema}.ncaaf_team_roster_continuity").df(),
             "coaching": con.sql(f"select * from {schema}.ncaaf_team_coaching_change").df(),
+            "schedule_teams": con.sql(_SCHEDULE_TEAMS_SQL.format(schema=schema)).df(),
         }
     finally:
         con.close()
@@ -619,6 +638,7 @@ def main(argv: list[str] | None = None) -> int:
         coaching=marts["coaching"],
         config=config,
         seasons=seasons,
+        schedule_teams=marts["schedule_teams"],
     )
     weekly = run.weekly
     if weekly.empty:
