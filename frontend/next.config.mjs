@@ -19,6 +19,8 @@ const securityHeaders = [
         "connect-src 'self'",
         "https://api.credencesports.com",
         "https://cognito-idp.us-east-1.amazonaws.com",
+        // Cognito Hosted-UI (Google OAuth token exchange, E9.7)
+        "https://us-east-1gg9zmbwqt.auth.us-east-1.amazoncognito.com",
         "https://us.i.posthog.com",
         "https://us-assets.i.posthog.com",
         "https://app.posthog.com",
