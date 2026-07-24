@@ -101,70 +101,24 @@ qualify row_number() over (
 
 {% else %}
 
-{{ config(materialized='table') }}
+{{ config(materialized='view', tags=['w8a_lakehouse']) }}
 
-with source as (
-
-    select json_field, ingestion_ts
-    from {{ source('statsapi', 'monthly_schedule') }}
-
-),
-
-dates_flattened as (
-
-    select d.value as date_obj, ingestion_ts
-    from source,
-    lateral flatten(input => json_field:dates) d
-
-),
-
-games_flattened as (
-
-    select g.value as game, ingestion_ts
-    from dates_flattened,
-    lateral flatten(input => date_obj:games) g
-
-),
-
-home_side as (
-
-    select
-        game:gamePk::integer                                        as game_pk,
-        game:officialDate::date                                     as game_date,
-        'home'                                                      as side,
-        game:teams:home:probablePitcher:id::integer                 as probable_pitcher_id,
-        game:teams:home:probablePitcher:fullName::varchar           as probable_pitcher_name,
-        coalesce(ingestion_ts, '1970-01-01 00:00:00'::timestamp_ntz) as ingestion_ts
-    from games_flattened
-
-),
-
-away_side as (
-
-    select
-        game:gamePk::integer                                        as game_pk,
-        game:officialDate::date                                     as game_date,
-        'away'                                                      as side,
-        game:teams:away:probablePitcher:id::integer                 as probable_pitcher_id,
-        game:teams:away:probablePitcher:fullName::varchar           as probable_pitcher_name,
-        coalesce(ingestion_ts, '1970-01-01 00:00:00'::timestamp_ntz) as ingestion_ts
-    from games_flattened
-
-),
-
-combined as (
-
-    select * from home_side
-    union all
-    select * from away_side
-
-)
-
-select *
-from combined
-qualify row_number() over (
-    partition by game_pk, side, ingestion_ts
-    order by probable_pitcher_id nulls last
-) = 1
+-- E11.20 phase-2a STRAGGLER CUTOVER (2026-07-23, sibling of the stg_statsapi_probable_pitchers
+-- fix): the native statsapi.monthly_schedule writer was retired when the schedule capture flipped
+-- S3-native, which FROZE the old `source('statsapi','monthly_schedule')` read at 2026-07-20 17:00.
+-- This model feeds the SCD-2 starter-change history (feature_pregame_starter_status), so a frozen
+-- source silently drops every post-7/20 probable-starter announcement / scratch on the Snowflake
+-- path. The header already described this as a thin view over the lakehouse_ext external table;
+-- this makes the code match, mirroring the already-cut-over stg_statsapi_games. The duckdb branch
+-- BUILT this ext preserving EVERY (game_pk, side, ingestion_ts) snapshot (the SCD-2 grain is the
+-- whole point), so no re-dedup here — verified fresh 7/23 with the full snapshot history intact.
+select
+    game_pk,
+    game_date,
+    side,
+    probable_pitcher_id,
+    probable_pitcher_name,
+    ingestion_ts
+from baseball_data.lakehouse_ext.stg_statsapi_starter_snapshots
 
 {% endif %}
