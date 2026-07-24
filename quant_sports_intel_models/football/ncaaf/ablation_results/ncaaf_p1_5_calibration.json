@@ -1,0 +1,203 @@
+{
+  "seasons": [
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "n_sims": 20000,
+  "strength_sd_scale": 1.0,
+  "expected_wins": {
+    "n": 1309,
+    "mae": 1.639,
+    "bias": 0.012,
+    "corr": 0.662
+  },
+  "conference_title": {
+    "n": 1257,
+    "base_rate": 0.0485,
+    "brier": 0.04381,
+    "brier_ref": 0.04617,
+    "brier_skill_score": 0.0513,
+    "mean_pred": 0.078,
+    "reliability": [
+      {
+        "bin": "[0.0,0.1)",
+        "n": 925,
+        "mean_pred": 0.0334,
+        "obs_freq": 0.0205
+      },
+      {
+        "bin": "[0.1,0.2)",
+        "n": 194,
+        "mean_pred": 0.1387,
+        "obs_freq": 0.0722
+      },
+      {
+        "bin": "[0.2,0.3)",
+        "n": 94,
+        "mean_pred": 0.2435,
+        "obs_freq": 0.1277
+      },
+      {
+        "bin": "[0.3,0.4)",
+        "n": 27,
+        "mean_pred": 0.3423,
+        "obs_freq": 0.3333
+      },
+      {
+        "bin": "[0.4,0.5)",
+        "n": 15,
+        "mean_pred": 0.4422,
+        "obs_freq": 0.4
+      },
+      {
+        "bin": "[0.6,0.7)",
+        "n": 1,
+        "mean_pred": 0.6686,
+        "obs_freq": 0.0
+      },
+      {
+        "bin": "[0.8,0.9)",
+        "n": 1,
+        "mean_pred": 0.8002,
+        "obs_freq": 1.0
+      }
+    ]
+  },
+  "national_title": {
+    "n": 1309,
+    "base_rate": 0.0076,
+    "brier": 0.00659,
+    "brier_ref": 0.00758,
+    "brier_skill_score": 0.1301,
+    "mean_pred": 0.0076,
+    "reliability": [
+      {
+        "bin": "[0.0,0.1)",
+        "n": 1253,
+        "mean_pred": 0.0029,
+        "obs_freq": 0.0008
+      },
+      {
+        "bin": "[0.1,0.1)",
+        "n": 32,
+        "mean_pred": 0.0694,
+        "obs_freq": 0.125
+      },
+      {
+        "bin": "[0.1,0.2)",
+        "n": 11,
+        "mean_pred": 0.1164,
+        "obs_freq": 0.2727
+      },
+      {
+        "bin": "[0.2,0.2)",
+        "n": 5,
+        "mean_pred": 0.1759,
+        "obs_freq": 0.0
+      },
+      {
+        "bin": "[0.2,0.2)",
+        "n": 4,
+        "mean_pred": 0.2273,
+        "obs_freq": 0.25
+      },
+      {
+        "bin": "[0.2,0.3)",
+        "n": 4,
+        "mean_pred": 0.2631,
+        "obs_freq": 0.25
+      }
+    ],
+    "note": "\u2248one champion/season \u2192 THIN; read directionally, not as a calibrated market."
+  },
+  "champion_preseason_rank": [
+    {
+      "season": 2016,
+      "as_of_week": 1,
+      "n_teams": 128,
+      "champion": "Clemson",
+      "champion_preseason_rank": 2,
+      "champion_preseason_p_natty": 0.08765
+    },
+    {
+      "season": 2017,
+      "as_of_week": 1,
+      "n_teams": 130,
+      "champion": "Alabama",
+      "champion_preseason_rank": 1,
+      "champion_preseason_p_natty": 0.23395
+    },
+    {
+      "season": 2018,
+      "as_of_week": 1,
+      "n_teams": 130,
+      "champion": "Clemson",
+      "champion_preseason_rank": 4,
+      "champion_preseason_p_natty": 0.09855
+    },
+    {
+      "season": 2019,
+      "as_of_week": 1,
+      "n_teams": 130,
+      "champion": "LSU",
+      "champion_preseason_rank": 4,
+      "champion_preseason_p_natty": 0.0572
+    },
+    {
+      "season": 2020,
+      "as_of_week": 1,
+      "n_teams": 127,
+      "champion": "Alabama",
+      "champion_preseason_rank": 3,
+      "champion_preseason_p_natty": 0.1201
+    },
+    {
+      "season": 2021,
+      "as_of_week": 1,
+      "n_teams": 130,
+      "champion": "Georgia",
+      "champion_preseason_rank": 3,
+      "champion_preseason_p_natty": 0.1246
+    },
+    {
+      "season": 2022,
+      "as_of_week": 1,
+      "n_teams": 131,
+      "champion": "Georgia",
+      "champion_preseason_rank": 1,
+      "champion_preseason_p_natty": 0.27575
+    },
+    {
+      "season": 2023,
+      "as_of_week": 1,
+      "n_teams": 133,
+      "champion": "Michigan",
+      "champion_preseason_rank": 4,
+      "champion_preseason_p_natty": 0.1046
+    },
+    {
+      "season": 2024,
+      "as_of_week": 1,
+      "n_teams": 134,
+      "champion": "Ohio State",
+      "champion_preseason_rank": 4,
+      "champion_preseason_p_natty": 0.08415
+    },
+    {
+      "season": 2025,
+      "as_of_week": 1,
+      "n_teams": 136,
+      "champion": "Indiana",
+      "champion_preseason_rank": 18,
+      "champion_preseason_p_natty": 0.0093
+    }
+  ]
+}

@@ -152,6 +152,34 @@ models:
       - name: projected_fantasy_points_ppr_week
         data_tests: [not_null]
 
+  - name: mart_nfl_fantasy_season_projection
+    description: >
+      ⭐ NF-FASTPATH — the 2026 fantasy season RAW STAT-LINE projection (the draft-tool content base;
+      MVP-1). One row per draft-relevant offensive player (player_id = gsis_id): projected upcoming-
+      season passing/rushing/receiving volume + TDs + a playing-time (proj_games) estimate + an 80%
+      PPR interval. The RAW line is the input contract MVP-2/NF-C1 scores per league; proj_fp_* is a
+      CONVENIENCE (standard nflverse scoring) for ranking/validation only.
+
+      ⚠️ NOT COMPUTED IN dbt — a read-only view over the parquet run_season_projection.py writes to
+      nfl/fantasy/derived/season_projections. 🚨 BUILD ORDER: NFL marts + the P1A rookie parquet →
+      run_season_projection.py → this view. Tagged `nfl_fantasy` (opt-in until the script has run).
+
+      ⚖️ EDGE-INDEPENDENT (best_alpha N/A) — a projection product; the gate is face-validity +
+      coverage + a holdout rank-correlation check. ⚠️ Veteran intervals are EMPIRICAL; rookie
+      intervals are PARAMETER uncertainty (slot-curve + P1A) → recalibrate before pricing. Rookie
+      team_id is NULL (incoming draftees are not in the base-season role dimension). NULL = kept NULL.
+    columns:
+      - name: sport
+        data_tests: [not_null]
+      - name: player_id
+        description: gsis_id — the per-player grain / NFL-vertical join key.
+        data_tests: [not_null]
+      - name: projection_season
+        data_tests: [not_null]
+      - name: proj_fp_ppr
+        description: CONVENIENCE standard-PPR total (ranking/validation only — NF-C1 rescores the raw line).
+        data_tests: [not_null]
+
   - name: dim_nfl_betting
     description: >
       The betting head-start: one row per game with the FREE nflverse consensus lines

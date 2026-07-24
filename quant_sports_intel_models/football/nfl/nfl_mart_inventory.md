@@ -16,7 +16,8 @@ Marts (`models/nfl/marts/`) — all **player-week / player-season grain**:
 | `mart_opportunity_player_week` | player·week | props, fantasy |
 | `mart_efficiency_player_week` | player·week | props, fantasy |
 | `mart_player_season` | player·season | props, fantasy |
-| `mart_projections_preseason` | player·season | fantasy |
+| `mart_projections_preseason` | player·season | fantasy (superseded for the draft tool by ↓) |
+| `mart_nfl_fantasy_season_projection` | player·season | fantasy (NF-FASTPATH — raw stat-line + rookies + uncertainty; MVP-2/NF-C1 input) |
 | `sat_{passing,rushing,receiving}_ngs_weekly`, `sat_snap_counts_weekly` | player·week | props, fantasy |
 | `dim_player`, `dim_player_role` (SCD-2) | player | all |
 | `dim_nfl_betting` | game (nflverse consensus line only) | (thin — a single consensus line, not per-book/CLV) |
