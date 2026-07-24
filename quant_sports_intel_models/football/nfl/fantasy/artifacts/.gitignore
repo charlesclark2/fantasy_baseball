@@ -1,0 +1,6 @@
+# Regenerable NF-FASTPATH outputs — the projection lives in the S3 lake
+# (nfl/fantasy/derived/season_projections); the human-readable deliverable is the
+# ablation_results report. These are rebuilt by run_season_projection.py.
+*.parquet
+*.csv
+*_summary.json
