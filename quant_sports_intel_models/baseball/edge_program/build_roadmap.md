@@ -466,6 +466,53 @@ change gets a FRESH session, not the tail of a long one (SESSIONS B/C/D are sepa
 exactly this reason). This flip session itself spans soaks → use the checkpoint-to-roadmap
 discipline above so a resume never loses which flips are already live.
 ```
+- 🟢 **E11.20 PHASE-2A FLIP SESSION — STEP-0 (AC-C) DONE 2026-07-24; steps 1–4 in progress.**
+  ⭐ **AC-C VERDICT (read 7/24 AM, 7/21–23 finalized): the W1 `mart_pitch_*` SF surface is ELIMINATED.**
+  ⚠️ the doc's `%lakehouse_ext.mart_pitch%` filter OVER-COUNTS — it also matches the still-live
+  `mart_pitcher_*` (W2/W3) family; a precise filter (`%mart_pitch\_%` AND NOT `%mart_pitcher%`) shows
+  the true W1 family: **~212–430 q/day → ~9–19 q/day** post-drop, elapsed **~82–400s → ~4–11s/day**,
+  cloud-services credits **~0.012–0.017 → ~0.001/day** (residual = drop-DDL trailing + parity tooling +
+  the AC-C read self-matching). The 7 ext tables + views confirmed GONE from `lakehouse_ext`/`betting`
+  (`information_schema.tables`). Whole-account anchor (COMPUTE_WH): pre-drop game days 7/17 4.16 / 7/18
+  4.36 → post-drop clean days 7/21 2.94 / 7/22 4.23 / 7/23 2.85 (~0.9–1.5 cr/day lower, but
+  game-count-noisy + NOT cleanly attributable to the W1 drop). ⇒ **as predicted by E11.20-COST, the W1
+  mart migration's DIRECT credit saving is tiny (~0.01 cr/day); the account anchor is still ~2.85–4.23
+  cr/day because the #1 waker (the 30-min tick's SF legs) is STILL LIVE — that's what steps 1–4 kill.**
+  🛑 **STEP-1 DISCREPANCY CAUGHT (2026-07-24, live-box verification per guardrail-b) — the writer is ALREADY
+  s3-native; the brief's "set `both`" command would be a REGRESSION.** Evidence: SF `statsapi.monthly_schedule`
+  is FROZEN at 2026-07-20 17:00 (2,970 rows, no writes since) while the S3 raw is FRESH (`dt=2026-07-24`
+  written today 16:00Z; `stg_statsapi_games` flattened from the S3 lakehouse reaches 2026-08-01). S3-fresh +
+  SF-frozen is ONLY possible if the S3-native writer is live AND the SF INSERT is off ⇒ `W11_RAW_WRITE_MODE`
+  is effectively `s3` since ~7/20 (matches INC-35: "schedule-capture went S3-native 2026-07-20"). Setting
+  `both` would RE-ENABLE the SF INSERT (re-wake the warehouse) = the opposite of the goal. **So step 1's
+  writer-flip is substantively DONE; what remains is (1) the BRIDGE RETIREMENT (INC-35 follow-up #1: retire
+  the redundant/fragile `export_odds_raw --source monthly_schedule` mirror — HALT-tier, reads the frozen SF
+  table; currently benign only because its `--since today` returns 0 rows off the frozen table) and (2)
+  steps 2–4.** ⏸️ HELD pending the operator's live `grep W11_RAW_WRITE_MODE .env` (the one value I can't read
+  from the laptop) to confirm the mode before re-planning. Laptop prechecks otherwise PASS (writer code +
+  gates present; S3 layout healthy May/June collapsed + dt=today + `__nullts__`).
+  ⚠️ **2ND FINDING — bridge retirement = TWO pieces of unequal risk:** (i) INTRADAY bridge
+  (`intraday_ops.py:141`, `export_odds_raw --source monthly_schedule --since today`) = SAFE self-contained
+  removal (the writer at `intraday_schedule_capture:397` already wrote fresh S3; the `--w3pre/--w7b`
+  rebuilds read it; retiring #i drops a per-tick frozen-SF wake — on-mission for step 4). (ii) DAILY bridge
+  (`lakehouse_schedule_export_op`, daily graph `lk1`) = HALT-tier GRAPH edit: under mode=s3 it exports the
+  FROZEN SF table (harmless dt=2026-07-20 partition, dedup-shadowed), and the daily writer
+  `ingest_statsapi_schedule` (s6) runs AFTER the flatten (`lk5=w3pre`) → today's daily-flatten freshness is
+  carried by the INTRADAY writer partitions, not this bridge. Retiring #ii also raises whether s6 should
+  move BEFORE the flattens now → needs a box freshness check, its own careful review. The op's own comment
+  (daily:610–613, "ingest_statsapi is Snowflake-only") is now STALE.
+  ✅ **STEP-1 REMAINDER — box grep CONFIRMED `W11_RAW_WRITE_MODE=s3` (+ `W6_LAKEHOUSE_INTRADAY=1`,
+  `SCHEDULE_LAKEHOUSE_INTRADAY=1`, `LINEUP_MONITOR_S3=1` all SET; `W7B_INTRADAY_S3`+`TICK_SF_FREE` unset;
+  `W1_SF_COMPAT_MIRROR` unset=correct). ⇒ ALL of steps 2–4's prereqs already met.** Authored the INTRADAY
+  bridge retirement (i) 2026-07-24: removed the `export_odds_raw --source monthly_schedule --since today`
+  call from `_schedule_lakehouse_intraday` (intraday_ops.py) — the tick's schedule leg is now writer(S3-native,
+  in intraday_schedule_capture) → `--w3pre` → `--w7b` → (refresh unless TICK_SF_FREE); updated the test
+  `test_cost_wake_gates.py::test_intraday_monthly_schedule_export_bridge_is_retired` (was pinning the bridge
+  PRESENT). Fast gate 1780✅/7skip. DAILY bridge (ii) DEFERRED — banks ~0 wake (once-daily op in an
+  already-SF-waking job; E11.20-COST wake-frequency lesson) + is a HALT-tier graph edit; stays INC-35
+  follow-up #1. **⏭️ NEXT: operator deploy (`up -d --build`, code change) → soak tonight's slate (RUNTIME
+  GATE: tick fires + stg_statsapi_games stays fresh); THEN step 2 `W7B_INTRADAY_S3=1` (flag-only `up -d`) →
+  soak → step 4 `TICK_SF_FREE=1` (flag-only) → verify no tick SF session. ONE serving change per soak.**
 - ✅ **INC-35 — MISSING PREDICTIONS (824247 KC@DET, 823042 ARI@STL, 2026-07-23) = a "RETIRED NATIVE SOURCE" class, fully fixed + guarded.** ROOT: `stg_statsapi_probable_pitchers` (Snowflake branch) still read the native `statsapi.monthly_schedule`, whose writer was RETIRED 2026-07-20 when schedule-capture went S3-native → the table froze at 7/20 → both games showed TBD starters → the starter-dependent feature block couldn't build → no prediction (compounded by a timing artifact: morning predict ran before MLB announced those starters). The served S3 path was already fresh; a re-predict surfaced both games. ⭐ **REUSABLE LESSON (now a CLAUDE.md landmine + fast-gate guard): when a raw capture flips S3-native or a native table is dropped, ANY dbt model whose SNOWFLAKE-executable branch still reads it via `{{ source() }}` silently serves a FROZEN snapshot — no error, CI-blind (mocks IO), PARITY-blind (the served S3 path stays fresh). Repoint EVERY sibling staging model that flattened the retired source in the SAME change; a `dbt ls`/DAG check won't flag it (both branches parse) — grep every `{{ source('<retired>') }}`.** FULL CLASS-AUDIT FIXED + verified: `stg_statsapi_probable_pitchers` → `lakehouse_ext` · `stg_statsapi_starter_snapshots` → `lakehouse_ext` (same `monthly_schedule` freeze; feeds the SCD-2 starter-change history) · `check_data_freshness.py::_is_game_day()` repointed off the frozen native to `lakehouse_ext.stg_statsapi_games` (would have gone BLIND in early August when the July snapshot's coverage lapsed → silently disabling every game-day freshness check) + removed the retired-native staleness entry · `backfill_lineup_state_scd2.py` rewritten to read fresh `lakehouse_ext.stg_statsapi_lineups` with an idempotent compare-to-target SCD-2 upsert (latest-snapshot source can't use the old LAG/LEAD change-detection; verified idempotent 30/30 hashes, run on box: closed 2 / inserted 70 / fresh through 7/23 / clean 1-`is_current`-per-game-side). ALSO fixed same-session: `update_matchup_cell_posteriors_op` HALT (`invalid identifier 'GAME_DATE'` — the shared `catchup.run_catchup` frontier assumed a `game_date` col but the matchup-cell table is `game_pk`-grained) via a `frontier_sql` override joining `game_pk → mart_game_results.game_date`. PREVENTION SHIPPED: `test_retired_source_guard.py` (two-layer fast-gate — dbt `{{ source() }}` reads + Python raw-SQL `FROM/JOIN`; strips comments/prose to dodge the E9.26 banned-scan landmine) with a registry (`statsapi.monthly_schedule`, `oddsapi.mlb_odds_raw`, `savant.batter_pitches`) + CLAUDE.md landmine. CI: fast gate 1750✅/7 skip, dbt-Build green. Deployed (`up -d --build`); box view-swap of the 2 staging models was the low-urgency finish (served path already fresh). **⏭️ Add a `(schema,table)` to the guard registry the moment ANY capture's SF writer is retired / a native table is dropped.**
 - 🚩 **CI/CD PATHS GAP — OPERATOR DECISION (recommended FIX; surfaced 7/24, 2nd occurrence, the "fix merged but NOT live" class):** `betting_ml/**` is NOT in `orchestration_cd.yml` `paths:` → a serving-critical change under `betting_ml/` (e.g. the signal generators like `generate_run_env_signals.py`) does NOT auto-deploy; it reaches the box ONLY via a manual build. This has now bitten TWICE (the run_env HALT fix + a prior). ⭐ **This is the deploy-mechanism behind the whole INC-35/INC-27 "CI-green but not on the box" risk class — a merged serving fix silently isn't live until someone remembers to manually build.** Recommended one-liner: add `betting_ml/**` to the CD trigger `paths:`. ⚠️ sanity-check the blast radius (does it over-trigger deploys on non-serving test edits?), but the status quo — serving code shipping only on manual builds — is the more dangerous default. **Awaiting operator go.**
 - ✅ **SOAK-HARDENING (2026-07-24) — run_env `signal_freshness_check` false-HALT FIXED (INC-34 inversion; recorded for the E11.20 soak).** During the E11.20 cutover soak the 7/24 daily HALTed (`run_env 0/10` on ref slate 7/23, others fine) — LOOKED like a cutover regression but was a latent source-desync the soak's re-execute-from-later-step pattern exposed: run_env (post-INC-34) read completeness from `stg_statsapi_games` while the gate anchors on `mart_game_results` (Statcast finals) → the two pipelines RACED. FIX (shipped to main, box-verified): run_env now reads its universe + `total_runs` from `mart_game_results` (the gate's OWN table) → a false HALT is structurally impossible in EITHER lag direction; offense/starter/starter_ip stay on `stg_statsapi_games` (superset-safe). ⚠️ the INVERSE of INC-34 → CLAUDE.md landmine corrected; refined rule: **match a SCORE-CONSUMING generator's source to the FRESHNESS GATE's reference, not the intraday feed.** Also folded into the E11.20 restart brief (one fewer soak-flapping mode). Files: `generate_run_env_signals.py`, `test_signal_generator_game_universe.py` (inverted guard), `CLAUDE.md`.

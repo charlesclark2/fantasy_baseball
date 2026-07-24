@@ -150,16 +150,26 @@ class TestTickSfFreeStep3:
             "hardcoded-removed — removing it unconditionally breaks pre-flip boxes that still read SF."
         )
 
-    def test_tick_sf_free_does_not_gate_the_capture_insert_or_export_bridge(self):
-        # Step 3 owns ONLY the refresh + dbt legs. The SF INSERT (ingest_statsapi schedule) and the
-        # export bridge (export_odds_raw_to_s3 --source monthly_schedule) are the writer-flip's to
-        # retire (order-coupled to W11_RAW_WRITE_MODE / INC-31). They must NOT hang off TICK_SF_FREE.
+    def test_intraday_monthly_schedule_export_bridge_is_retired(self):
+        # E11.20 phase-2a (2026-07-24, bridge retirement): with W11_RAW_WRITE_MODE=s3 the
+        # monthly_schedule writer is S3-native — intraday_schedule_capture's `ingest_statsapi.py
+        # schedule` call (which runs BEFORE _schedule_lakehouse_intraday) already writes today's raw.
+        # So the redundant export bridge (export_odds_raw_to_s3 --source monthly_schedule) is REMOVED
+        # from this helper: it was a 2nd writer of the same S3 key (INC-31 clobber shape) + a per-tick
+        # Snowflake READ of the now-frozen SF table (a warehouse wake). Its retirement belongs to the
+        # writer flip (order-coupled to W11_RAW_WRITE_MODE / INC-31), NOT to TICK_SF_FREE — step 3 owns
+        # only the refresh + dbt legs, so the removal is unconditional, never behind a _tick_sf_free()
+        # branch. Match the live _run_script CALL only (not docstring/comment prose that names the
+        # retired command) — the banned-scan-prose landmine.
         body = INTRADAY[INTRADAY.find("def _schedule_lakehouse_intraday"):INTRADAY.find("def _w6_lakehouse_intraday")]
-        bridge_line = [ln for ln in body.splitlines() if "export_odds_raw_to_s3.py" in ln and "monthly_schedule" in ln]
-        assert bridge_line, "export bridge line not found"
-        # the bridge export is unconditional in this helper (its own SCHEDULE_LAKEHOUSE_INTRADAY gate is
-        # at the top); it must not be wrapped by a _tick_sf_free() branch.
-        assert "if _tick_sf_free" not in bridge_line[0]
+        live_bridge = [
+            ln for ln in body.splitlines()
+            if "_run_script(" in ln and "export_odds_raw_to_s3.py" in ln and "monthly_schedule" in ln
+        ]
+        assert not live_bridge, (
+            "the intraday monthly_schedule export bridge must be RETIRED — the S3-native writer is the "
+            "sole author; found a live export call: %r" % live_bridge
+        )
 
 
 class TestW7b2IntradayServingS3:
