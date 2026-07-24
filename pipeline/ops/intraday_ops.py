@@ -112,10 +112,18 @@ def _schedule_lakehouse_intraday(context: OpExecutionContext) -> None:
     stops serving a day-stale 'Preview' game-state and TODAY's confirmed lineups are actually seen.
 
     Sequence mirrors the daily run_w1_lakehouse_op for this tier, scoped to today's raw:
-      export_odds_raw_to_s3.py --source monthly_schedule --since <today>   (native → S3 raw)
       run_w1_lakehouse.py --w3pre-only                                     (rebuild games flatten)
       run_w1_lakehouse.py --w7b-only                                       (rebuild lineups_wide etc.)
       refresh_w1_external_tables.py                                        (refresh ext-table metadata)
+
+    E11.20 phase-2a (2026-07-24, bridge retirement): the old first leg
+    `export_odds_raw_to_s3.py --source monthly_schedule --since <today>` is RETIRED. Since the
+    monthly_schedule writer flipped S3-native (W11_RAW_WRITE_MODE=s3), intraday_schedule_capture's
+    own `ingest_statsapi.py schedule` call (which runs BEFORE this helper) already writes today's
+    monthly_schedule raw to S3 — so the export bridge was a redundant SECOND writer of the same key
+    (INC-31 clobber shape) AND a per-tick Snowflake READ of the now-frozen SF table (a warehouse
+    wake). Dropping it makes the writer the sole S3 author and removes one tick SF touch; the
+    --w3pre/--w7b rebuilds below read the S3 raw the writer just wrote.
 
     INC-31 (2026-07-10) — WHY --w7b-only is here: the S3 stg_statsapi_lineups_wide parquet is
     otherwise rebuilt ONLY by the once-daily (morning) run, but a slate's lineups post through the
@@ -137,8 +145,9 @@ def _schedule_lakehouse_intraday(context: OpExecutionContext) -> None:
         )
         return
     try:
-        today = _today()
-        _run_script(context, "export_odds_raw_to_s3.py", ["--source", "monthly_schedule", "--since", today])
+        # E11.20 phase-2a (2026-07-24): the monthly_schedule export bridge is RETIRED here — the
+        # S3-native writer (W11_RAW_WRITE_MODE=s3) in intraday_schedule_capture already wrote today's
+        # raw. See the docstring. The --w3pre rebuild below reads that fresh S3 monthly_schedule raw.
         _run_script(context, "run_w1_lakehouse.py", ["--w3pre-only"])
         _run_script(context, "run_w1_lakehouse.py", ["--w7b-only"])
         # E11.20 phase-2a step 3: the trailing SF ext-table REFRESH is retired under TICK_SF_FREE.
