@@ -1,6 +1,6 @@
 {
   "story": "NCAAF-P1.4",
-  "fit_at": "2026-07-22",
+  "fit_at": "2026-07-23",
   "model_class": "ridge",
   "contract": "strength_only",
   "form": "strength_posterior",
@@ -98,11 +98,11 @@
   },
   "clv_eval": {
     "n_with_close": 4182,
-    "ats_hit_rate": 0.4971,
-    "ats_n": 4108,
-    "ats_placebo_hit_rate": 0.4971,
-    "ou_hit_rate": 0.5237,
-    "ou_n": 4128,
+    "ats_hit_rate": 0.4961,
+    "ats_n": 4110,
+    "ats_placebo_hit_rate": 0.4968,
+    "ou_hit_rate": 0.5229,
+    "ou_n": 4129,
     "breakeven": 0.5238,
     "note": "historical vs-close hit rates; > 0.5238 clears the -110 vig. best_alpha=0 until this beats breakeven AND the placebo under deflation, confirmed by a forward in-season CLV window (post-kickoff, P0.6b-fed)."
   },

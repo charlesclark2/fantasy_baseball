@@ -1,7 +1,7 @@
 {
   "story": "NCAAF-P1.4",
-  "decided_at": "2026-07-22",
-  "n_configs": 23,
+  "decided_at": "2026-07-23",
+  "n_configs": 125,
   "n_buckets": 32,
   "selection_metric": "sum over {margin, total} of PIT max-decile-dev (lower better); calib_80 \u2265 0.80 a FLOOR not a target (inclusive-integer coverage is inflated \u2014 an oracle covers > 0.80); h2h Brier secondary",
   "reference_config": "ridge/strength_only/gaussian",
@@ -36,51 +36,97 @@
     "mean_h2h_brier": 0.1816
   },
   "best": {
-    "config_id": "lgbm__full__student_t",
-    "form": "student_t",
+    "config_id": "xgb__full__gaussian",
+    "form": "gaussian",
     "params": {
-      "objective": "regression",
-      "num_leaves": 31,
-      "learning_rate": 0.03,
-      "n_estimators": 400,
-      "min_child_samples": 40,
-      "subsample": 0.85,
-      "subsample_freq": 1,
-      "colsample_bytree": 0.85,
+      "objective": "reg:squarederror",
+      "max_depth": 9,
+      "learning_rate": 0.027541959470033038,
+      "n_estimators": 500,
+      "subsample": 0.8292597461987918,
+      "colsample_bytree": 0.9523248317120949,
+      "min_child_weight": 1.7537157217764776,
+      "reg_lambda": 6.607473871775914,
       "random_state": 42,
-      "verbose": -1
+      "tree_method": "hist",
+      "verbosity": 0
     },
-    "pooled_downstream_score": 0.0215,
+    "pooled_downstream_score": 0.0192,
     "pooled_metrics": {
       "margin": {
-        "calib_80": 0.7966,
-        "pit_max_decile_dev": 0.0055,
-        "pit_mean_dev": 0.005,
+        "calib_80": 0.8006,
+        "pit_max_decile_dev": 0.0047,
+        "pit_mean_dev": 0.0038,
         "pit_is_flat": true
       },
       "total": {
-        "calib_80": 0.8008,
-        "pit_max_decile_dev": 0.016,
-        "pit_mean_dev": 0.0195,
-        "pit_is_flat": true
+        "calib_80": 0.8035,
+        "pit_max_decile_dev": 0.0145,
+        "pit_mean_dev": 0.0243,
+        "pit_is_flat": false
       },
       "home_win": {
-        "brier": 0.184,
-        "pred_rate": 0.5693,
+        "brier": 0.1846,
+        "pred_rate": 0.5715,
         "obs_rate": 0.583
       }
     },
-    "mean_h2h_brier": 0.1841
+    "mean_h2h_brier": 0.1846
   },
   "winner": null,
   "gain_vs_reference": 0.0,
-  "full_search_pbo": 0.483,
-  "best_dsr": 0.1094,
+  "full_search_pbo": 0.648,
+  "best_dsr": 0.0075,
   "gates": {
     "full_search_deflated": false,
     "market_blind": true
   },
   "leaderboard": [
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0192,
+      "calib_80_margin": 0.8006,
+      "calib_80_total": 0.8035,
+      "h2h_brier": 0.1846,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0201,
+      "calib_80_margin": 0.8033,
+      "calib_80_total": 0.8051,
+      "h2h_brier": 0.1835,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0204,
+      "calib_80_margin": 0.8016,
+      "calib_80_total": 0.8056,
+      "h2h_brier": 0.1835,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0205,
+      "calib_80_margin": 0.7988,
+      "calib_80_total": 0.8049,
+      "h2h_brier": 0.187,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0207,
+      "calib_80_margin": 0.8026,
+      "calib_80_total": 0.8074,
+      "h2h_brier": 0.1845,
+      "passes_floor": true
+    },
     {
       "config_id": "lgbm__full__student_t",
       "form": "student_t",
@@ -102,10 +148,163 @@
     {
       "config_id": "lgbm__full__gaussian",
       "form": "gaussian",
+      "score": 0.0217,
+      "calib_80_margin": 0.798,
+      "calib_80_total": 0.8054,
+      "h2h_brier": 0.183,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__strength_posterior",
+      "form": "strength_posterior",
+      "score": 0.0218,
+      "calib_80_margin": 0.7988,
+      "calib_80_total": 0.8044,
+      "h2h_brier": 0.184,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0219,
+      "calib_80_margin": 0.799,
+      "calib_80_total": 0.8035,
+      "h2h_brier": 0.1818,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0221,
+      "calib_80_margin": 0.799,
+      "calib_80_total": 0.803,
+      "h2h_brier": 0.1851,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0222,
+      "calib_80_margin": 0.8005,
+      "calib_80_total": 0.802,
+      "h2h_brier": 0.1894,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0224,
+      "calib_80_margin": 0.8011,
+      "calib_80_total": 0.8059,
+      "h2h_brier": 0.1835,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0225,
+      "calib_80_margin": 0.8003,
+      "calib_80_total": 0.8051,
+      "h2h_brier": 0.1824,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0226,
+      "calib_80_margin": 0.8018,
+      "calib_80_total": 0.8036,
+      "h2h_brier": 0.1825,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0226,
+      "calib_80_margin": 0.8036,
+      "calib_80_total": 0.802,
+      "h2h_brier": 0.1833,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0226,
+      "calib_80_margin": 0.8028,
+      "calib_80_total": 0.8078,
+      "h2h_brier": 0.1881,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0227,
+      "calib_80_margin": 0.8016,
+      "calib_80_total": 0.8046,
+      "h2h_brier": 0.1811,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0227,
+      "calib_80_margin": 0.8038,
+      "calib_80_total": 0.8064,
+      "h2h_brier": 0.187,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0227,
+      "calib_80_margin": 0.7966,
+      "calib_80_total": 0.8018,
+      "h2h_brier": 0.1812,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0227,
+      "calib_80_margin": 0.7995,
+      "calib_80_total": 0.8041,
+      "h2h_brier": 0.1819,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0228,
+      "calib_80_margin": 0.8026,
+      "calib_80_total": 0.8053,
+      "h2h_brier": 0.1896,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0228,
+      "calib_80_margin": 0.8033,
+      "calib_80_total": 0.8056,
+      "h2h_brier": 0.1807,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
       "score": 0.0229,
       "calib_80_margin": 0.8008,
       "calib_80_total": 0.8048,
       "h2h_brier": 0.184,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0229,
+      "calib_80_margin": 0.804,
+      "calib_80_total": 0.8098,
+      "h2h_brier": 0.1843,
       "passes_floor": true
     },
     {
@@ -127,12 +326,138 @@
       "passes_floor": true
     },
     {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0232,
+      "calib_80_margin": 0.8011,
+      "calib_80_total": 0.8041,
+      "h2h_brier": 0.1834,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0234,
+      "calib_80_margin": 0.7996,
+      "calib_80_total": 0.8053,
+      "h2h_brier": 0.1826,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0235,
+      "calib_80_margin": 0.801,
+      "calib_80_total": 0.8079,
+      "h2h_brier": 0.1835,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0237,
+      "calib_80_margin": 0.8011,
+      "calib_80_total": 0.8053,
+      "h2h_brier": 0.1834,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0237,
+      "calib_80_margin": 0.8008,
+      "calib_80_total": 0.8038,
+      "h2h_brier": 0.183,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0237,
+      "calib_80_margin": 0.8021,
+      "calib_80_total": 0.8049,
+      "h2h_brier": 0.1834,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0237,
+      "calib_80_margin": 0.7985,
+      "calib_80_total": 0.8028,
+      "h2h_brier": 0.1815,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0237,
+      "calib_80_margin": 0.7976,
+      "calib_80_total": 0.803,
+      "h2h_brier": 0.1816,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0239,
+      "calib_80_margin": 0.8023,
+      "calib_80_total": 0.8053,
+      "h2h_brier": 0.1814,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0239,
+      "calib_80_margin": 0.799,
+      "calib_80_total": 0.8023,
+      "h2h_brier": 0.1808,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0239,
+      "calib_80_margin": 0.8036,
+      "calib_80_total": 0.804,
+      "h2h_brier": 0.1836,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.024,
+      "calib_80_margin": 0.8001,
+      "calib_80_total": 0.804,
+      "h2h_brier": 0.1812,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0241,
+      "calib_80_margin": 0.8003,
+      "calib_80_total": 0.8064,
+      "h2h_brier": 0.1835,
+      "passes_floor": true
+    },
+    {
       "config_id": "lgbm__top_k__gaussian",
       "form": "gaussian",
       "score": 0.0241,
       "calib_80_margin": 0.7945,
       "calib_80_total": 0.8099,
       "h2h_brier": 0.1848,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0241,
+      "calib_80_margin": 0.8018,
+      "calib_80_total": 0.8043,
+      "h2h_brier": 0.1869,
       "passes_floor": true
     },
     {
@@ -145,12 +470,120 @@
       "passes_floor": true
     },
     {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0242,
+      "calib_80_margin": 0.8015,
+      "calib_80_total": 0.802,
+      "h2h_brier": 0.1831,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0242,
+      "calib_80_margin": 0.7986,
+      "calib_80_total": 0.8041,
+      "h2h_brier": 0.1828,
+      "passes_floor": true
+    },
+    {
       "config_id": "ridge__strength_only__gaussian",
       "form": "gaussian",
       "score": 0.0242,
       "calib_80_margin": 0.7998,
       "calib_80_total": 0.8031,
       "h2h_brier": 0.1816,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0244,
+      "calib_80_margin": 0.7993,
+      "calib_80_total": 0.8028,
+      "h2h_brier": 0.1824,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0244,
+      "calib_80_margin": 0.8006,
+      "calib_80_total": 0.8049,
+      "h2h_brier": 0.1815,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0244,
+      "calib_80_margin": 0.8026,
+      "calib_80_total": 0.8023,
+      "h2h_brier": 0.1829,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0244,
+      "calib_80_margin": 0.8,
+      "calib_80_total": 0.8011,
+      "h2h_brier": 0.1893,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0246,
+      "calib_80_margin": 0.8008,
+      "calib_80_total": 0.804,
+      "h2h_brier": 0.1834,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0246,
+      "calib_80_margin": 0.8031,
+      "calib_80_total": 0.8078,
+      "h2h_brier": 0.1822,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0246,
+      "calib_80_margin": 0.8005,
+      "calib_80_total": 0.8054,
+      "h2h_brier": 0.1826,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0246,
+      "calib_80_margin": 0.8011,
+      "calib_80_total": 0.8056,
+      "h2h_brier": 0.1871,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0247,
+      "calib_80_margin": 0.7986,
+      "calib_80_total": 0.8051,
+      "h2h_brier": 0.1819,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0247,
+      "calib_80_margin": 0.7995,
+      "calib_80_total": 0.8006,
+      "h2h_brier": 0.185,
       "passes_floor": true
     },
     {
@@ -163,12 +596,111 @@
       "passes_floor": true
     },
     {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0249,
+      "calib_80_margin": 0.798,
+      "calib_80_total": 0.8013,
+      "h2h_brier": 0.1945,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.025,
+      "calib_80_margin": 0.7968,
+      "calib_80_total": 0.802,
+      "h2h_brier": 0.1882,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.025,
+      "calib_80_margin": 0.8023,
+      "calib_80_total": 0.8054,
+      "h2h_brier": 0.1847,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.025,
+      "calib_80_margin": 0.8025,
+      "calib_80_total": 0.8059,
+      "h2h_brier": 0.1844,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0252,
+      "calib_80_margin": 0.8069,
+      "calib_80_total": 0.8076,
+      "h2h_brier": 0.1858,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0252,
+      "calib_80_margin": 0.801,
+      "calib_80_total": 0.8051,
+      "h2h_brier": 0.1819,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0253,
+      "calib_80_margin": 0.7975,
+      "calib_80_total": 0.8063,
+      "h2h_brier": 0.1834,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0253,
+      "calib_80_margin": 0.801,
+      "calib_80_total": 0.8063,
+      "h2h_brier": 0.1822,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0253,
+      "calib_80_margin": 0.798,
+      "calib_80_total": 0.8051,
+      "h2h_brier": 0.1824,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0254,
+      "calib_80_margin": 0.7983,
+      "calib_80_total": 0.8126,
+      "h2h_brier": 0.1873,
+      "passes_floor": true
+    },
+    {
       "config_id": "catboost__top_k__gaussian",
       "form": "gaussian",
       "score": 0.0255,
       "calib_80_margin": 0.7975,
       "calib_80_total": 0.8078,
       "h2h_brier": 0.1819,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0255,
+      "calib_80_margin": 0.801,
+      "calib_80_total": 0.8011,
+      "h2h_brier": 0.1812,
       "passes_floor": true
     },
     {
@@ -181,12 +713,111 @@
       "passes_floor": true
     },
     {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0257,
+      "calib_80_margin": 0.7986,
+      "calib_80_total": 0.803,
+      "h2h_brier": 0.1835,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0258,
+      "calib_80_margin": 0.8011,
+      "calib_80_total": 0.8031,
+      "h2h_brier": 0.1831,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0259,
+      "calib_80_margin": 0.797,
+      "calib_80_total": 0.8056,
+      "h2h_brier": 0.1811,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0259,
+      "calib_80_margin": 0.8,
+      "calib_80_total": 0.8018,
+      "h2h_brier": 0.1815,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0259,
+      "calib_80_margin": 0.8,
+      "calib_80_total": 0.8079,
+      "h2h_brier": 0.1831,
+      "passes_floor": true
+    },
+    {
       "config_id": "lgbm__strength_only__gaussian",
       "form": "gaussian",
       "score": 0.0259,
       "calib_80_margin": 0.8,
       "calib_80_total": 0.8064,
       "h2h_brier": 0.1863,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0259,
+      "calib_80_margin": 0.8,
+      "calib_80_total": 0.8043,
+      "h2h_brier": 0.1846,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0259,
+      "calib_80_margin": 0.8028,
+      "calib_80_total": 0.8046,
+      "h2h_brier": 0.1819,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.026,
+      "calib_80_margin": 0.8003,
+      "calib_80_total": 0.8013,
+      "h2h_brier": 0.1811,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0261,
+      "calib_80_margin": 0.8058,
+      "calib_80_total": 0.8074,
+      "h2h_brier": 0.1858,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0264,
+      "calib_80_margin": 0.8,
+      "calib_80_total": 0.8018,
+      "h2h_brier": 0.1812,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0264,
+      "calib_80_margin": 0.8046,
+      "calib_80_total": 0.8033,
+      "h2h_brier": 0.184,
       "passes_floor": true
     },
     {
@@ -199,12 +830,174 @@
       "passes_floor": true
     },
     {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0267,
+      "calib_80_margin": 0.8006,
+      "calib_80_total": 0.8036,
+      "h2h_brier": 0.1845,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0268,
+      "calib_80_margin": 0.799,
+      "calib_80_total": 0.8028,
+      "h2h_brier": 0.1814,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0269,
+      "calib_80_margin": 0.7976,
+      "calib_80_total": 0.8025,
+      "h2h_brier": 0.1826,
+      "passes_floor": true
+    },
+    {
       "config_id": "ridge__strength_only__strength_posterior",
       "form": "strength_posterior",
       "score": 0.0269,
       "calib_80_margin": 0.7983,
       "calib_80_total": 0.803,
       "h2h_brier": 0.1816,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0269,
+      "calib_80_margin": 0.803,
+      "calib_80_total": 0.8073,
+      "h2h_brier": 0.1864,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.027,
+      "calib_80_margin": 0.7976,
+      "calib_80_total": 0.8043,
+      "h2h_brier": 0.1814,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0271,
+      "calib_80_margin": 0.8015,
+      "calib_80_total": 0.8071,
+      "h2h_brier": 0.1825,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0272,
+      "calib_80_margin": 0.8033,
+      "calib_80_total": 0.8086,
+      "h2h_brier": 0.1847,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0273,
+      "calib_80_margin": 0.8023,
+      "calib_80_total": 0.8071,
+      "h2h_brier": 0.1839,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0273,
+      "calib_80_margin": 0.8038,
+      "calib_80_total": 0.8066,
+      "h2h_brier": 0.1885,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0274,
+      "calib_80_margin": 0.8013,
+      "calib_80_total": 0.8021,
+      "h2h_brier": 0.1821,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0275,
+      "calib_80_margin": 0.8025,
+      "calib_80_total": 0.8038,
+      "h2h_brier": 0.1819,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0277,
+      "calib_80_margin": 0.7986,
+      "calib_80_total": 0.8044,
+      "h2h_brier": 0.185,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0278,
+      "calib_80_margin": 0.7978,
+      "calib_80_total": 0.8035,
+      "h2h_brier": 0.1891,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0279,
+      "calib_80_margin": 0.8018,
+      "calib_80_total": 0.8058,
+      "h2h_brier": 0.1815,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0279,
+      "calib_80_margin": 0.7991,
+      "calib_80_total": 0.803,
+      "h2h_brier": 0.1857,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.028,
+      "calib_80_margin": 0.8003,
+      "calib_80_total": 0.8096,
+      "h2h_brier": 0.1847,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0281,
+      "calib_80_margin": 0.7998,
+      "calib_80_total": 0.8044,
+      "h2h_brier": 0.1822,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0282,
+      "calib_80_margin": 0.8026,
+      "calib_80_total": 0.8088,
+      "h2h_brier": 0.1895,
       "passes_floor": true
     },
     {
@@ -217,12 +1010,138 @@
       "passes_floor": true
     },
     {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0284,
+      "calib_80_margin": 0.8005,
+      "calib_80_total": 0.8046,
+      "h2h_brier": 0.1815,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0286,
+      "calib_80_margin": 0.7998,
+      "calib_80_total": 0.803,
+      "h2h_brier": 0.1819,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0287,
+      "calib_80_margin": 0.8008,
+      "calib_80_total": 0.8015,
+      "h2h_brier": 0.1854,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0288,
+      "calib_80_margin": 0.8059,
+      "calib_80_total": 0.8046,
+      "h2h_brier": 0.1835,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0289,
+      "calib_80_margin": 0.7986,
+      "calib_80_total": 0.8046,
+      "h2h_brier": 0.1839,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.029,
+      "calib_80_margin": 0.8028,
+      "calib_80_total": 0.8058,
+      "h2h_brier": 0.1934,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0291,
+      "calib_80_margin": 0.799,
+      "calib_80_total": 0.804,
+      "h2h_brier": 0.1818,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0292,
+      "calib_80_margin": 0.7988,
+      "calib_80_total": 0.8035,
+      "h2h_brier": 0.1828,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0304,
+      "calib_80_margin": 0.7963,
+      "calib_80_total": 0.8026,
+      "h2h_brier": 0.1836,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0304,
+      "calib_80_margin": 0.8003,
+      "calib_80_total": 0.8054,
+      "h2h_brier": 0.1823,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0305,
+      "calib_80_margin": 0.7955,
+      "calib_80_total": 0.8099,
+      "h2h_brier": 0.191,
+      "passes_floor": true
+    },
+    {
+      "config_id": "xgb__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0319,
+      "calib_80_margin": 0.8043,
+      "calib_80_total": 0.8064,
+      "h2h_brier": 0.1845,
+      "passes_floor": true
+    },
+    {
       "config_id": "ridge__top_k__gaussian",
       "form": "gaussian",
       "score": 0.032,
       "calib_80_margin": 0.7976,
       "calib_80_total": 0.8036,
       "h2h_brier": 0.1821,
+      "passes_floor": true
+    },
+    {
+      "config_id": "lgbm__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0321,
+      "calib_80_margin": 0.8048,
+      "calib_80_total": 0.804,
+      "h2h_brier": 0.1836,
+      "passes_floor": true
+    },
+    {
+      "config_id": "catboost__full__gaussian",
+      "form": "gaussian",
+      "score": 0.0345,
+      "calib_80_margin": 0.8003,
+      "calib_80_total": 0.803,
+      "h2h_brier": 0.1906,
       "passes_floor": true
     },
     {
@@ -244,21 +1163,21 @@
       "passes_floor": true
     },
     {
-      "config_id": "ngboost_normal__top_k__native",
+      "config_id": "ngboost_normal__strength_only__native",
       "form": "native",
-      "score": 0.0802,
-      "calib_80_margin": 0.7249,
-      "calib_80_total": 0.7332,
-      "h2h_brier": 0.1834,
+      "score": 0.0786,
+      "calib_80_margin": 0.7346,
+      "calib_80_total": 0.7327,
+      "h2h_brier": 0.1843,
       "passes_floor": false
     },
     {
-      "config_id": "ngboost_normal__strength_only__native",
+      "config_id": "ngboost_normal__top_k__native",
       "form": "native",
-      "score": 0.0809,
-      "calib_80_margin": 0.7351,
-      "calib_80_total": 0.7312,
-      "h2h_brier": 0.1841,
+      "score": 0.0787,
+      "calib_80_margin": 0.7256,
+      "calib_80_total": 0.7354,
+      "h2h_brier": 0.1833,
       "passes_floor": false
     },
     {
@@ -271,21 +1190,21 @@
       "passes_floor": true
     },
     {
-      "config_id": "ngboost_normal__full__native",
+      "config_id": "ngboost_normal__clustered__native",
       "form": "native",
-      "score": 0.0877,
-      "calib_80_margin": 0.7233,
-      "calib_80_total": 0.7165,
-      "h2h_brier": 0.1835,
+      "score": 0.088,
+      "calib_80_margin": 0.7206,
+      "calib_80_total": 0.7208,
+      "h2h_brier": 0.1836,
       "passes_floor": false
     },
     {
-      "config_id": "ngboost_normal__clustered__native",
+      "config_id": "ngboost_normal__full__native",
       "form": "native",
-      "score": 0.0907,
-      "calib_80_margin": 0.7206,
-      "calib_80_total": 0.715,
-      "h2h_brier": 0.1838,
+      "score": 0.0902,
+      "calib_80_margin": 0.72,
+      "calib_80_total": 0.7153,
+      "h2h_brier": 0.1836,
       "passes_floor": false
     }
   ]

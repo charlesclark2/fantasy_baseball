@@ -1,10 +1,11 @@
 # NCAAF-P1.4 — the game-model bake-off (H2H · spread · total), design + handoff
 
-**Status (2026-07-22):** CODE-COMPLETE + smoke-verified end-to-end (assemble → bakeoff → decide →
-finalize) on the real cached matrix. The heavy §0.5 search (all folds × 5 learners × 4 contracts ×
-4 forms + Optuna, then the vs-close CLV leg) is **operator-run** (>1-min jobs) — see the run plan
-at the bottom. This doc is the design record; the operator's `--stage decide` writes the deflated
-leaderboard to `ncaaf_p1_4_game_bakeoff.md`, and `--stage finalize` writes `ncaaf_p1_4_calibration.md`.
+**Status (2026-07-23): ✅ COMPLETE — full §0.5 search ran; verdict `REFERENCE_STANDS` (trustworthy
+tied-field null); shipped the calibrated strength-prior joint distribution.** The heavy operator run
+(all 8 folds × 5 learners × 4 contracts × 4 forms + Optuna on lgbm/xgb/catboost = **125 deflated
+configs**, then decide + finalize + the vs-close CLV leg) is done — final numbers in
+[§ Final result](#final-result-operator-run-2026-07-23) below and in the auto-generated
+`ncaaf_p1_4_game_bakeoff.md` / `ncaaf_p1_4_calibration.md`.
 
 ## Design — model the JOINT distribution ONCE, derive all 3 markets
 
@@ -155,21 +156,55 @@ OFFLINE deflated vs-close eval (2020–2025 historical ATS/OU hit-rate vs breake
 PBO/DSR) + calibration (PIT/reliability). Forward-CLV is the in-season confirmation (P0.6b-fed).
 `best_alpha = 0` until the gate clears AND a positive vs-close window.
 
-## Smoke verification (2026-07-22 — NOT the final result)
+## Final result (operator run, 2026-07-23)
 
-A capped 2-fold, default-param smoke (all four stages ran clean on the 8,325-game / 180-feature
-cache):
+The full search ran: 8 folds × 5 learners × 4 contracts × 4 forms + Optuna (lgbm 40 / xgb 40 /
+catboost 21 trials) = **125 configs**, all counted toward deflation.
 
-| config | score | calib_80 (m/t) | H2H Brier |
-|---|---|---|---|
-| `ridge__strength_only__gaussian` (reference) | 0.0337 | 0.797 / 0.814 | 0.170 |
-| `lgbm__full__gaussian` | 0.0388 | 0.797 / 0.813 | 0.175 |
+**`--stage decide` → `REFERENCE_STANDS` (a TRUSTWORTHY tied-field null).** The leaderboard is densely
+tied — the top 15 configs span only 0.0192 → 0.0226 (~17%):
 
-`decide` → **REFERENCE_STANDS** (PBO 0.914 over a 2-config tied field = the null reading, correctly
-framed). `finalize` (reference) → margin/total both **PIT-flat**, calib floor PASS, H2H Brier 0.170 —
-a genuinely shippable calibrated joint distribution. **This is a 2-fold smoke, not the verdict** —
-the operator's full search + Optuna decides whether the full matrix earns its complexity. A
-trustworthy null (the strength prior carries) is a valid, expected P1.4 deliverable.
+| rank | config | score | calib_80 (m/t) | H2H Brier |
+|---|---|---|---|---|
+| 1 | `xgb__full__gaussian` (best Optuna) | 0.01920 | 0.801 / 0.803 | 0.1846 |
+| 3 | `lgbm__full__gaussian` (best Optuna) | 0.02040 | 0.802 / 0.806 | 0.1835 |
+| 4 | `catboost__full__gaussian` | 0.02050 | 0.799 / 0.805 | 0.1870 |
+| — | **`ridge__strength_only__gaussian` (reference)** | **0.02420** | floor PASS | — |
+
+- **full-search PBO 0.648** (FAIL < 0.2) and **best DSR 0.007** (barely > 0). Per the E2.1-r reading:
+  a HIGH PBO over a **TIED field** (17% span) is the NULL, *not* overfitting — "which tied learner
+  wins" is noise. The tuned gradient learners edge the reference on raw score but do **not** survive
+  deflation. ⇒ the full 180-feature matrix does NOT robustly beat the strength prior — the
+  strength-prior choice is now **proven, not assumed**.
+
+**`--stage finalize` (ridge / strength_only / strength_posterior) — the shipped distribution** (6,024
+OOS games, 2018–2025):
+
+- served: **σ_margin 16.09 · σ_total 16.75 · ρ 0.056 · dof 30**; posterior-predictive
+  **σ₀_margin 15.61 k_margin 0.573 · σ₀_total 16.44 k_total 0.499** (per-game σ_margin 15.9→16.6).
+- **margin** calib_80 **0.800**, PITdev **0.0080**, PIT-flat ✅ · **total** calib_80 **0.802**,
+  PITdev **0.0218**, PIT-flat ❌. **calib floor PASS ✅**, H2H Brier **0.1814**.
+  - ⚠️ **Honest caveat:** the total marginal is *calibrated* (floor pass) but **mildly non-flat**
+    (PITdev 0.0218, just over the ~0.02 bar) — a small total-shape residual. Acceptable for a
+    market-blind product distribution (`best_alpha=0`); flagged for a future refit if P1.5 needs a
+    sharper total tail. Margin (the H2H/spread driver) is cleanly flat.
+- **Early-season / cold-start (wk ≤ 3, n=1051):** calib_80 margin 0.792 / total 0.822, margin
+  PIT-flat, early floor **PASS ✅**; week-1 margin interval **wider (43.1 vs 40.8, ×1.06)**; **100%**
+  of wk-1 games carry NULL in-season features (no current-season peeking).
+- **vs-close CLV (2020–2025):** ATS 0.496 (n=4110, placebo 0.497), O/U 0.523 (n=4129) — both < the
+  0.5238 breakeven ⇒ a **clean game-line null, `best_alpha=0`** (forward CLV is the in-season P0.6b
+  follow-on; cannot exist pre-season).
+
+**Bottom line:** a genuinely shippable, calibrated, market-blind joint (margin, total) distribution
+whose 3-market probabilities are honest — and a trustworthy null on both "does the full matrix earn
+its complexity?" (no) and "is there a pre-season vs-close edge?" (no). Both are valid, expected P1.4
+deliverables.
+
+### Smoke verification (2026-07-22 — superseded, kept for provenance)
+
+A capped 2-fold default-param smoke earlier validated the plumbing end-to-end
+(`ridge__strength_only__gaussian` 0.0337 vs `lgbm__full__gaussian` 0.0388 → REFERENCE_STANDS,
+PBO 0.914 over a 2-config field). The full run above is the authoritative result.
 
 ## Files
 

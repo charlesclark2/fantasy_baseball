@@ -1,6 +1,6 @@
 # NCAAF-P1.4 — served NCAAF joint game distribution (calibration)
 
-_Fit 2026-07-22 · learner `ridge` · contract `strength_only` · form `strength_posterior` · 6,024 OOS games_
+_Fit 2026-07-23 · learner `ridge` · contract `strength_only` · form `strength_posterior` · 6,024 OOS games_
 
 ## Served contract
 
@@ -29,8 +29,8 @@ Week 1–3 is a priors-heavy regime (in-season efficiency NULL) whose quality th
 
 ## vs-close CLV (2020–2025 historical)
 
-- ATS model-side hit **0.497** (n=4108, placebo 0.497, breakeven 0.5238)
-- O/U model-side hit **0.524** (n=4128)
+- ATS model-side hit **0.496** (n=4110, placebo 0.497, breakeven 0.5238)
+- O/U model-side hit **0.523** (n=4129)
 
 historical vs-close hit rates; > 0.5238 clears the -110 vig. best_alpha=0 until this beats breakeven AND the placebo under deflation, confirmed by a forward in-season CLV window (post-kickoff, P0.6b-fed).
 

@@ -1,0 +1,99 @@
+{
+  "model_version": "ncaaf_college_nfl_translation_v1",
+  "target_metric": "target_w_av",
+  "generated_at": "2026-07-22T23:17:08.467194+00:00",
+  "n_projections": 3804,
+  "classes": [
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025,
+    2026
+  ],
+  "join_coverage": {
+    "n_xref_rows": 4368,
+    "n_drafted": 3026,
+    "n_with_college_production": 3590,
+    "pct_with_college_production": 82.2,
+    "n_with_nfl_outcome": 2624,
+    "n_trainable": 2149,
+    "pct_trainable": 49.2
+  },
+  "winner": "stratified_ols",
+  "leaderboard": [
+    {
+      "config": "draft_slot_ref",
+      "oos_mae": 0.6416850756520616,
+      "oos_skill_vs_null": 0.16899018476466748,
+      "selectable": false
+    },
+    {
+      "config": "stratified_ols",
+      "oos_mae": 0.7901409082541989,
+      "oos_skill_vs_null": 0.020534352162530144,
+      "selectable": true
+    },
+    {
+      "config": "partial_pool@2.0",
+      "oos_mae": 0.7987478448917564,
+      "oos_skill_vs_null": 0.011927415524972595,
+      "selectable": true
+    },
+    {
+      "config": "partial_pool@4.0",
+      "oos_mae": 0.7987600919447697,
+      "oos_skill_vs_null": 0.011915168471959392,
+      "selectable": true
+    },
+    {
+      "config": "position_mean",
+      "oos_mae": 0.8106752604167289,
+      "oos_skill_vs_null": 0.0,
+      "selectable": false
+    },
+    {
+      "config": "gbm@400-3-0.03",
+      "oos_mae": 0.8149736299481601,
+      "oos_skill_vs_null": -0.0042983695314311125,
+      "selectable": true
+    },
+    {
+      "config": "gbm@200-2-0.05",
+      "oos_mae": 0.8180657074244948,
+      "oos_skill_vs_null": -0.007390447007765611,
+      "selectable": true
+    }
+  ],
+  "pbo": 0.0,
+  "dsr": 0.993543175089701,
+  "oracle_floor_ok": true,
+  "by_group_projection_corr": {
+    "DB": 0.10371613718494037,
+    "DL": 0.0012098912411931389,
+    "LB": 0.1110208281692705,
+    "QB": 0.3202108386762213,
+    "RB": 0.36918050327660373,
+    "TE": 0.35383755276711437,
+    "WR": 0.1943036498467365,
+    "ALL": 0.17696700438446017
+  },
+  "gates_passed": [
+    "seed class 2015 not emitted (no strictly-prior map exists)",
+    "every emitted projection was fit on strictly-prior draft classes (n_prior \u2265 1)",
+    "per-player grain (gsis_id) is unique",
+    "projection finite + plausible (|z|\u22642.59, sd\u22641.07)",
+    "oracle-floor holds (no candidate beats a target-seeing oracle \u2192 metric not inverted)",
+    "join coverage surfaced: 82.2% carry college production, 49.2% trainable (n=2149)",
+    "winner beats the position-mean null OOS (MAE 0.7901 < 0.8107)",
+    "vs draft-slot benchmark: college\u2192NFL winner does NOT beat draft-slot-only (MAE 0.7901 vs 0.6417)",
+    "PBO computed = 0.000 over 7 configs (<0.2 \u2705)",
+    "DSR computed = 0.994 (n_trials=7) \u2014 \u22650.95"
+  ],
+  "notes": []
+}
