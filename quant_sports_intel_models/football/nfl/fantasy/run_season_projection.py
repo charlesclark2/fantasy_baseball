@@ -80,7 +80,9 @@ OUTPUT_COLS = [
 #    stats, plus game-to-game PPR sd, current depth-chart rank/team, and position. All from the
 #    already-built NFL marts (SF-free). `week > 0` = regular+post; a played game = played_flag & not
 #    bye (matches mart_player_season's games_played).
-_BASE_SEASON_SQL = """
+# Per-player-PER-SEASON realized line over a multi-year window. The weighting into a single
+# per-game line (recency + games) happens in pandas — see load_base_season. `week > 0` = reg+post.
+_MULTI_SEASON_SQL = """
 with wk as (
     select season, week, player_id, player_name, team_id, position, week_start_et,
            (played_flag and not is_bye) as g,
@@ -89,36 +91,26 @@ with wk as (
            receiving_targets, receptions, receiving_yards, receiving_touchdowns,
            fantasy_points_ppr
     from {schema}.fct_player_week
-    where season = {season} and week > 0
-),
-agg as (
-    select
-        player_id,
-        count_if(g) as games_played,
-        max(position) as position,
-        sum(case when g then pass_attempts else 0 end)::double        as pass_att_tot,
-        sum(case when g then pass_completions else 0 end)::double      as pass_cmp_tot,
-        sum(case when g then passing_yards else 0 end)::double         as pass_yds_tot,
-        sum(case when g then passing_touchdowns else 0 end)::double    as pass_td_tot,
-        sum(case when g then interceptions else 0 end)::double         as pass_int_tot,
-        sum(case when g then rushing_carries else 0 end)::double       as rush_att_tot,
-        sum(case when g then rushing_yards else 0 end)::double         as rush_yds_tot,
-        sum(case when g then rushing_touchdowns else 0 end)::double    as rush_td_tot,
-        sum(case when g then receiving_targets else 0 end)::double     as targets_tot,
-        sum(case when g then receptions else 0 end)::double            as rec_tot,
-        sum(case when g then receiving_yards else 0 end)::double       as rec_yds_tot,
-        sum(case when g then receiving_touchdowns else 0 end)::double  as rec_td_tot,
-        stddev_samp(case when g then fantasy_points_ppr end)          as fp_ppr_sd,
-        avg(case when g then fantasy_points_ppr end)                  as fp_ppr_pg
-    from wk group by 1
-),
-last_team as (  -- most-recent base-season team + display name
-    select player_id, team_id, player_name
-    from wk qualify row_number() over (partition by player_id order by week desc, week_start_et desc) = 1
+    where season between {lo} and {season} and week > 0
 )
-select a.*, lt.team_id, lt.player_name
-from agg a left join last_team lt using (player_id)
-where a.games_played > 0
+select
+    player_id, season,
+    count_if(g) as games_played,
+    max(position) as position,
+    sum(case when g then pass_attempts else 0 end)::double        as pass_att_tot,
+    sum(case when g then pass_completions else 0 end)::double      as pass_cmp_tot,
+    sum(case when g then passing_yards else 0 end)::double         as pass_yds_tot,
+    sum(case when g then passing_touchdowns else 0 end)::double    as pass_td_tot,
+    sum(case when g then interceptions else 0 end)::double         as pass_int_tot,
+    sum(case when g then rushing_carries else 0 end)::double       as rush_att_tot,
+    sum(case when g then rushing_yards else 0 end)::double         as rush_yds_tot,
+    sum(case when g then rushing_touchdowns else 0 end)::double    as rush_td_tot,
+    sum(case when g then receiving_targets else 0 end)::double     as targets_tot,
+    sum(case when g then receptions else 0 end)::double            as rec_tot,
+    sum(case when g then receiving_yards else 0 end)::double       as rec_yds_tot,
+    sum(case when g then receiving_touchdowns else 0 end)::double  as rec_td_tot,
+    stddev_samp(case when g then fantasy_points_ppr end)          as fp_ppr_sd
+from wk group by 1, 2 having count_if(g) > 0
 """
 
 _PERGAME_MAP = {
@@ -128,13 +120,55 @@ _PERGAME_MAP = {
     "targets": "targets_tot", "rec": "rec_tot", "rec_yds": "rec_yds_tot", "rec_td": "rec_td_tot",
 }
 
+# Multi-year regression: a season's weight decays by recency and scales by that season's games, so a
+# 3-yr window regresses a CAREER-YEAR (or a down/injured year) toward the player's own baseline. This
+# is the fix for single-season recency bias — the noisy spike stats (esp. rushing TDs) mean-revert
+# instead of anchoring the projection (the Trevor-Lawrence-as-QB2 failure).
+_RECENCY_DECAY = 0.6   # weight of a season one year older than the base season
+_WINDOW_YEARS = 3      # base season + the two prior
+
 
 def load_base_season(con, season: int, schema: str = MARTS_SCHEMA) -> pd.DataFrame:
-    df = con.sql(_BASE_SEASON_SQL.format(schema=schema, season=season)).df()
-    g = df["games_played"].clip(lower=1)
+    lo = season - (_WINDOW_YEARS - 1)
+    per_season = con.sql(_MULTI_SEASON_SQL.format(schema=schema, season=season, lo=lo)).df()
+    if per_season.empty:
+        return per_season
+
+    # per-season per-game rates
+    gps = per_season["games_played"].clip(lower=1)
     for base, tot in _PERGAME_MAP.items():
-        df[base + "_pg"] = df[tot] / g
-    # attach current depth-chart rank (the role signal for expected games)
+        per_season[base + "_pg"] = per_season[tot] / gps
+    # season weight = decay^(age) × games (an injury-shortened year contributes less)
+    age = season - per_season["season"]
+    per_season["_w"] = (_RECENCY_DECAY ** age) * per_season["games_played"]
+
+    pg_cols = [b + "_pg" for b in _PERGAME_MAP]
+
+    def _blend(g: pd.DataFrame) -> pd.Series:
+        w = g["_w"].to_numpy()
+        wsum = w.sum() or 1.0
+        out = {c: float((g[c].to_numpy() * w).sum() / wsum) for c in pg_cols}
+        return pd.Series(out)
+
+    weighted = per_season.groupby("player_id").apply(_blend, include_groups=False)
+
+    # anchor on the BASE SEASON: a player must have appeared in the season we project off to be
+    # draft-relevant for the upcoming one (excludes retired / out-of-league players the multi-year
+    # window would otherwise sweep in). Role/team/sd/durability all come from that base season.
+    base = per_season[per_season["season"] == season].set_index("player_id")
+    weighted = weighted.join(base[["games_played", "fp_ppr_sd", "position"]], how="inner")
+    df = weighted.reset_index()
+
+    # team + display name from the most-recent base-season week
+    meta = con.sql(f"""
+        select player_id, team_id, player_name
+        from {schema}.fct_player_week
+        where season = {season} and week > 0
+        qualify row_number() over (partition by player_id order by week desc, week_start_et desc) = 1
+    """).df()
+    df = df.merge(meta, on="player_id", how="left")
+
+    # current depth-chart rank (role signal for expected games)
     role = con.sql(f"""
         select player_id, depth_chart_position_rank
         from {schema}.dim_player_role where current_record_indicator = 'Y'
@@ -267,6 +301,31 @@ def holdout_backtest(con, base_season: int, target_season: int, schema: str) -> 
     }
 
 
+def score_vs_realized(con, proj: pd.DataFrame, target_season: int, schema: str) -> dict:
+    """Grade a FULL emitted projection (veterans + rookies) against the realized target season —
+    overall + per-position Spearman (rank), MAE, and realized-top-24 hit rate. Only valid for a
+    COMPLETED season (realized exists). This is the multi-season backtest the MVP is judged on."""
+    real = load_realized_season(con, target_season, schema)
+    m = proj.merge(real, on="player_id", how="inner")
+    m = m[m["g"] >= 6]
+    if len(m) < 30:
+        return {"projection_season": target_season, "n": int(len(m)), "note": "thin overlap"}
+
+    def _sp(d):
+        return float(d[["proj_fp_ppr", "real_fp_ppr"]].corr(method="spearman").iloc[0, 1])
+
+    top = min(24, len(m))
+    hit = len(set(m.nlargest(top, "proj_fp_ppr")["player_id"]) & set(m.nlargest(top, "real_fp_ppr")["player_id"]))
+    out = {"projection_season": target_season, "n": int(len(m)),
+           "spearman_all": round(_sp(m), 3), "mae_ppr": round(float((m["proj_fp_ppr"] - m["real_fp_ppr"]).abs().mean()), 1),
+           f"top{top}_hit": f"{hit}/{top}"}
+    for pos in ("QB", "RB", "WR", "TE"):
+        d = m[m["position"] == pos]
+        if len(d) >= 10 and d["proj_fp_ppr"].std() > 0 and d["real_fp_ppr"].std() > 0:
+            out[f"sp_{pos}"] = round(_sp(d), 3)
+    return out
+
+
 def _md_table(df: pd.DataFrame) -> str:
     try:
         return df.to_markdown(index=False, floatfmt=".1f")
@@ -293,11 +352,14 @@ def write_report(proj: pd.DataFrame, cov: dict, backtests: list[dict], path: Pat
     p("")
     p("## 1. The projection method (honest framing)")
     p("")
-    p("- **Veterans** — realized base-season per-game line, shrunk toward a conservative positional "
-      "prior (position median over qualified players) by sample size `w = g/(g+5)`, then scaled by "
-      "an **EXPECTED-GAMES** estimate = a 50/50 blend of depth-chart role and base-season durability. "
-      "Expected-games is the fix for the naïve `per_game × 17` that ranks small-sample backups at the "
-      "top of `mart_projections_preseason` (Malik Willis was its #1).")
+    p("- **Veterans** — a **3-year recency+games-weighted** per-game line (weight = 0.6^age × games, "
+      "so a career year or a down/injured year regresses toward the player's own baseline — the fix "
+      "for single-season recency bias, esp. the spiky rushing-TD stat that ranked Trevor Lawrence "
+      "QB2 off a fluke 9-rush-TD 2025), shrunk toward a conservative positional prior (position "
+      "median) by sample size `w = g/(g+5)`, then scaled by an **EXPECTED-GAMES** estimate = a 50/50 "
+      "blend of depth-chart role and base-season durability. Expected-games is the fix for the naïve "
+      "`per_game × 17` that ranks small-sample backups at the top of `mart_projections_preseason` "
+      "(Malik Willis was its #1).")
     p("- **Rookies (QB/RB/WR/TE)** — a historical draft-slot → rookie-year production curve (power-law "
       "per position, fit on prior classes) nudged by the **NCAAF-P1A residual** (`projected_nfl_z` vs "
       "the slot-expected z — talent the draft board disagreed with), with deliberately wide intervals. "
@@ -309,11 +371,13 @@ def write_report(proj: pd.DataFrame, cov: dict, backtests: list[dict], path: Pat
     p(json.dumps(cov, indent=2))
     p("```")
     p("")
-    p("## 3. Holdout-season sanity check (does the veteran method have signal?)")
+    p("## 3. Multi-season backtest — this model vs realized outcomes")
     p("")
-    p("Replicate the veteran projection for an earlier base season and score its projected PPR ranking "
-      "against the realized next season, over players who actually played the target season. Spearman "
-      "(rank) is the headline; this is a signal check, not a calibration claim.")
+    p("Each PRIOR season below was projected with the SAME model (base = season−1, 3-yr regression) and "
+      "scored against what actually happened — the FULL projection (veterans + rookies), over players "
+      "who played ≥6 games. `spearman_all` (rank) is the headline; `sp_<POS>` is within-position rank "
+      "correlation (what matters for drafting); `topN_hit` = of the realized top-24, how many the model "
+      "ranked top-24. A signal check across seasons, not a calibration claim.")
     p("")
     if backtests:
         p(_md_table(pd.DataFrame(backtests)))
@@ -365,9 +429,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--base-season", type=int, default=None,
                     help="completed base season (default: max(season) in fct_player_week)")
     ap.add_argument("--projection-season", type=int, default=None,
-                    help="season to project (default: base_season + 1)")
+                    help="the primary (forward) season to project (default: base_season + 1)")
+    ap.add_argument("--backtest-from", type=int, default=None,
+                    help="ALSO emit projections for every prior season from this year through the "
+                         "primary season (each projected off its own season-1 with the multi-year "
+                         "model), and score each completed one vs realized. E.g. --backtest-from 2019")
     ap.add_argument("--out-dir", default=str(_DEFAULT_OUT))
-    ap.add_argument("--s3", action="store_true", help="also land the projection to the S3 sports lake")
+    ap.add_argument("--s3", action="store_true", help="also land the projection(s) to the S3 sports lake")
     ap.add_argument("--lake-root", default=None, help="land to a LOCAL-FS Delta tree instead of S3")
     ap.add_argument("--no-report", action="store_true")
     ap.add_argument("-v", "--verbose", action="store_true")
@@ -382,60 +450,69 @@ def main(argv: list[str] | None = None) -> int:
 
     import duckdb
 
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if args.s3 or args.lake_root:
+        from quant_sports_intel_models.football.nfl.ingest import s3io
+
     con = duckdb.connect(args.duckdb, read_only=True)
     try:
         base_season = args.base_season or int(
             con.sql(f"select max(season) from {args.schema}.fct_player_week").fetchone()[0])
-        projection_season = args.projection_season or (base_season + 1)
-        log.info("base season %d → projecting %d", base_season, projection_season)
+        primary_season = args.projection_season or (base_season + 1)
+        # the set of projection seasons to emit — the forward one, plus any backtest history
+        seasons = [primary_season]
+        if args.backtest_from:
+            seasons = sorted(set(range(args.backtest_from, primary_season + 1)) | {primary_season})
+        log.info("emitting projection seasons: %s", seasons)
 
-        proj = build_projection(con, base_season, projection_season, args.schema)
-        log.info("projected %d players (%d veterans, %d rookies)",
-                 len(proj), int((~proj["is_rookie"]).sum()), int(proj["is_rookie"].sum()))
+        primary_proj = primary_cov = None
+        backtests: list[dict] = []
+        for y in seasons:
+            base_y = y - 1
+            proj = build_projection(con, base_y, y, args.schema)
+            log.info("  %d (base %d): %d players (%d vets, %d rookies)", y, base_y, len(proj),
+                     int((~proj["is_rookie"]).sum()), int(proj["is_rookie"].sum()))
 
-        base = load_base_season(con, base_season, args.schema)
-        cov = coverage_report(proj, base)
-        log.info("coverage: %s", cov)
+            # local artifacts per season
+            proj.to_parquet(out_dir / f"nfl_fantasy_season_projections_{y}.parquet", index=False)
+            ranked = proj.copy()
+            ranked.insert(0, "rank", np.arange(1, len(ranked) + 1))
+            ranked.insert(1, "pos_rank", ranked.groupby("position").cumcount() + 1)
+            ranked.to_csv(out_dir / f"nfl_fantasy_season_projections_{y}_ranked.csv", index=False)
 
-        backtests = []
-        for bs in (base_season - 3, base_season - 2):
-            if bs >= 2003:
-                bt = holdout_backtest(con, bs, bs + 1, args.schema)
-                log.info("holdout %d→%d: %s", bs, bs + 1, bt)
-                backtests.append(bt)
+            # land the Delta partition (season = projection year)
+            if args.s3 or args.lake_root:
+                n = s3io.write_dataframe(
+                    proj.assign(season=int(y)), sport="nfl", source="season_projections",
+                    season=int(y), tier="fantasy/derived", local_root=args.lake_root)
+                log.info("    landed %d rows → nfl/fantasy/derived/season_projections season=%d", n, y)
+
+            # score vs realized for completed seasons (the backtest)
+            if y <= base_season:
+                acc = score_vs_realized(con, proj, y, args.schema)
+                log.info("    backtest %d: %s", y, acc)
+                backtests.append(acc)
+
+            if y == primary_season:
+                primary_proj = proj
+                primary_cov = coverage_report(proj, load_base_season(con, base_y, args.schema))
+                log.info("  primary %d coverage: %s", y, primary_cov)
     finally:
         con.close()
 
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    pq = out_dir / f"nfl_fantasy_season_projections_{projection_season}.parquet"
-    proj.to_parquet(pq, index=False)
-    log.info("wrote %s", pq)
-
-    ranked = proj.copy()
-    ranked.insert(0, "rank", np.arange(1, len(ranked) + 1))
-    ranked.insert(1, "pos_rank", ranked.groupby("position").cumcount() + 1)
-    csv = out_dir / f"nfl_fantasy_season_projections_{projection_season}_ranked.csv"
-    ranked.to_csv(csv, index=False)
-    log.info("wrote %s", csv)
-
-    (out_dir / f"nfl_fantasy_season_projections_{projection_season}_summary.json").write_text(
-        json.dumps({"model_version": MODEL_VERSION, "base_season": base_season,
-                    "projection_season": projection_season, "coverage": cov,
-                    "holdout_backtests": backtests,
+    (out_dir / "nfl_fantasy_projections_summary.json").write_text(
+        json.dumps({"model_version": MODEL_VERSION, "primary_season": primary_season,
+                    "seasons_emitted": seasons, "coverage": primary_cov,
+                    "backtest_vs_realized": backtests,
                     "generated_at": datetime.now(timezone.utc).isoformat()}, indent=2, default=float))
+    dest = f"local lake {args.lake_root}" if args.lake_root else (
+        "the S3 sports lake" if args.s3 else "(local only — no --s3)")
+    log.info("done. landed to %s", dest)
 
-    if args.s3 or args.lake_root:
-        from quant_sports_intel_models.football.nfl.ingest import s3io
-
-        n = s3io.write_dataframe(
-            proj.assign(season=int(projection_season)), sport="nfl", source="season_projections",
-            season=int(projection_season), tier="fantasy/derived", local_root=args.lake_root)
-        dest = f"local lake {args.lake_root}" if args.lake_root else "the S3 sports lake"
-        log.info("landed %d projection rows in %s (nfl/fantasy/derived/season_projections)", n, dest)
-
-    if not args.no_report:
-        write_report(proj, cov, backtests, _REPORT_PATH, base_season, projection_season)
+    if not args.no_report and primary_proj is not None:
+        write_report(primary_proj, primary_cov, backtests, _REPORT_PATH,
+                     primary_season - 1, primary_season)
 
     return 0
 

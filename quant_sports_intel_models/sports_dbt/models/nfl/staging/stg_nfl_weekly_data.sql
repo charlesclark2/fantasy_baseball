@@ -12,7 +12,9 @@
 select
     'nfl'                                             as sport,
     trim(player_id)                                   as player_id,
-    case when player_name is null then trim(player_display_name) else trim(player_name) end as player_name,
+    -- prefer the FULL display name ("Ashton Jeanty") over the abbreviated box name ("A.Jeanty") —
+    -- for stat-only players (rookies with no role segment) this is the name fct_player_week carries
+    coalesce(nullif(trim(player_display_name), ''), trim(player_name)) as player_name,
     position,
     position_group,
     headshot_url,
