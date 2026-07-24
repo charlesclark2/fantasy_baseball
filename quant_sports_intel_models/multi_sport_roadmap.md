@@ -18,7 +18,7 @@
 ## 1. The model: one playbook, many sports
 The MLB work produced two reusable, **sport-agnostic** asset classes:
 - **The Edge methodology** (`baseball/edge_program/`): overfitting-audited CV (E1: purged CV, PBO, deflated Sharpe), per-side distributional modeling (E2), closing-line/CLV (E3), cross-book sharp-anchor (E4), player props (E5), parlay (E10), plus the shared conventions (market-blind, app-session handoff, cost playbook).
-- **The Fantasy projection suite** (`baseball/fantasy/`): distributional player projections + playing-time + aging/Dynasty + prospect (minor→pro) translation.
+- **The Fantasy/Dynasty vertical** (`baseball/fantasy/` — ✅ STOOD UP 2026-07-22: `fantasy_roadmap.md` + `fantasy_story_prompts.md` [F1–F5]): distributional player projections + aging/keeper + the Dynasty prospect board, built on the E7 MiLB→MLB translation (the moat). A distinct PRODUCT LINE (own users/revenue/GTM — the named GTM LEAD), organized STRUCTURALLY BY SPORT under `baseball/`, sibling to `edge_program/` (betting). **🗂️ ORGANIZING PRINCIPLE (operator 2026-07-22): group by SPORT, not by product line** — each sport folder holds ALL its verticals (MLB betting=`edge_program/` + fantasy=`fantasy/`; NFL betting=N1.1/N1.2 + fantasy=N1.3, both under `football/nfl/`; the E7 MiLB data dual-serves betting + fantasy so it stays in `edge_program/`). Closes the prior chasm (NFL fantasy was bundled with its sport; MLB fantasy was homeless).
 
 **New sports instantiate these patterns; they do not reinvent them.** Each new sport's guide *cites the MLB guides as the reference implementation*. The per-sport lift is **(a) data ingestion + a sport-specific base distributional model**; the market/CLV/sharp-anchor/parlay/fantasy layers largely transfer (The Odds API covers NFL/NCAAF/NCAAB odds, props, and scores).
 
@@ -27,7 +27,7 @@ The MLB work produced two reusable, **sport-agnostic** asset classes:
 quant_sports_intel_models/
   baseball/        ← MLB (reference implementation): edge_program/, fantasy/, baseball_data_mart_inventory.md
   football/
-    nfl/           ← nfl_guide.md (+ later nfl/fantasy/), nfl_data_inventory.md
+    nfl/           ← nfl_guide.md, nfl_data_inventory.md, nfl_story_prompts.md (betting: N-series) + ✅ nfl/fantasy/ (NF-series — split out 2026-07-22)
     ncaaf/         ← ncaaf_guide.md, ncaaf_data_inventory.md  (also the NFL feeder — §4)
   basketball/
     ncaab/         ← ncaab_guide.md, ncaab_data_inventory.md
@@ -41,6 +41,13 @@ Today is **2026-06-17**. Approximate season starts: **NCAAF ~late Aug · NFL ~ea
 - **Phase 0 — Data + odds ingestion** (the long pole; gates everything). Build the sport's `*_data_inventory.md`.
 - **Phase 1 — Honest, edge-free surfaces by kickoff** (ship value without a validated edge): the **parlay calculator** (E10.1 analog), **per-book / CLV transparency** (A0.4.32 + E3 surfaces), and **fantasy projections** (F-series analog). None of these require beating the market.
 - **Phase 2 — Validated-edge models, gated, after kickoff**: sharp-anchor (E4), props (E5), closing-line (E3) — each gated by the same **PBO < 0.2 + DSR > 0** discipline as MLB. We do **not** promise edge by kickoff.
+
+> ⏰⏰ **AUG-1 OVERRIDE — THE PAID-FUNNEL SPRINT IS #1, AHEAD OF ALL MLB WORK (operator 2026-07-24):** GTM execution starts Aug 1 → the **E9.7 (self-serve signup) → E9.19 (MFA) → E9.8 (Stripe, live-mode, $10 founding / $20 after)** sprint jumps AHEAD OF ANY MLB work (E2.5/E2.6/E7 all wait behind it). App-track, independent of the model sessions → runs in parallel; each a fresh app session (E9.7 ∥ E9.19 → E9.8). **NCAAF + NFL tracks KEEP PUSHING** (they're not app-track — no conflict). So: paid funnel #1 → NCAAF (P0.7 data readiness, 8/29) + NFL fantasy (MVP-2→MVP-3, NF-D) continue in their own sessions → MLB resumes AFTER the funnel ships. See `gtm_strategy.md` EXECUTION PIVOT.
+> 🎯🎯 **CURRENT STRATEGIC SEQUENCING (operator 2026-07-22 — this is the source-of-truth priority; supersedes the earlier all-three framing below where they conflict):**
+> - **MLB — CONTINUE the E2 epic to close (E2.5 register → E2.6 F5-close eval + the totals-serving/E13.6b resolution), THEN SHIFT MLB focus to FANTASY BASEBALL** (the `baseball/fantasy/` F-series — redraft-first per the mass-market; the Dynasty branch gates on E7 MiLB data, E7.1 in flight).
+> - **NCAAF — STRICTLY A BETTING surface; keep pushing it as a vertical** (P1.4 game-model → P1.5 futures → Phase-2; 8/29 deadline). No NCAAF fantasy product. (It still doubles as the NFL rookie feeder — P1A, done.)
+> - **NFL — ensure a PROJECTIONS BASIS that serves BOTH props (betting) AND fantasy, but PRIORITIZE FANTASY over the betting surfaces** (the fantasy market is about to get HOT — draft season Aug–early-Sept). ⇒ build the shared per-player-week projection as a FOUNDATION that FANTASY (NF1) drives + platform integration (NF-C0) + config (NF-C1) + draft optimizer (NF-C2) for the draft-season GTM; N1.1 game-line + N1.2 props-pricing come AFTER. The projection basis is shared, so betting isn't abandoned — just sequenced behind fantasy.
+> ⇒ **Cross-vertical order of effort:** NCAAF betting (8/29, in flight) + MLB E2-close run in parallel with their own sessions; NFL fantasy MVP is the hot near-term GTM push; MLB fantasy + NFL betting + NCAAB follow.
 
 **Priority** (all three targeted; NCAAF doubles as the NFL feeder):
 1. **NFL** — biggest betting + fantasy market. Caveat: ~17 games/team ⇒ tiny samples ⇒ head-on game prediction is even weaker than MLB; lean into **props, CLV, and fantasy**. **Data head-start: some NFL data already exists in Snowflake** — Phase 0 begins by inventorying it (§NFL stub).

@@ -54,6 +54,11 @@ function redirectUri(): string {
   return `${window.location.origin}/callback`
 }
 
+// Stored in localStorage (NOT sessionStorage): the PKCE verifier + CSRF state
+// must survive the cross-origin OAuth redirect round-trip (login → Cognito →
+// Google → Cognito → /callback). sessionStorage is unreliable across a cross-site
+// top-level navigation in several browsers; localStorage always survives. Both
+// keys are single-use and cleared as soon as the callback consumes them.
 const PKCE_VERIFIER_KEY = "cognito_pkce_verifier"
 const OAUTH_STATE_KEY = "cognito_oauth_state"
 
@@ -78,15 +83,15 @@ async function pkceChallenge(verifier: string): Promise<string> {
 }
 
 // Kick off "Continue with Google": mint a PKCE verifier + CSRF state (stashed in
-// sessionStorage, survives the round-trip in-tab), then redirect the browser to
-// the Cognito Hosted-UI authorize endpoint forced to the Google IdP.
+// localStorage so it survives the cross-origin redirect round-trip), then redirect
+// the browser to the Cognito Hosted-UI authorize endpoint forced to the Google IdP.
 export async function startGoogleSignIn(): Promise<void> {
   const verifier = randomToken(64)
   const state = randomToken(16)
   const challenge = await pkceChallenge(verifier)
 
-  window.sessionStorage.setItem(PKCE_VERIFIER_KEY, verifier)
-  window.sessionStorage.setItem(OAUTH_STATE_KEY, state)
+  window.localStorage.setItem(PKCE_VERIFIER_KEY, verifier)
+  window.localStorage.setItem(OAUTH_STATE_KEY, state)
 
   const params = new URLSearchParams({
     identity_provider: "Google",
@@ -113,10 +118,10 @@ export async function completeGoogleSignIn(
   code: string,
   state: string,
 ): Promise<{ accessToken: string; idToken: string }> {
-  const savedState = window.sessionStorage.getItem(OAUTH_STATE_KEY)
-  const verifier = window.sessionStorage.getItem(PKCE_VERIFIER_KEY)
-  window.sessionStorage.removeItem(OAUTH_STATE_KEY)
-  window.sessionStorage.removeItem(PKCE_VERIFIER_KEY)
+  const savedState = window.localStorage.getItem(OAUTH_STATE_KEY)
+  const verifier = window.localStorage.getItem(PKCE_VERIFIER_KEY)
+  window.localStorage.removeItem(OAUTH_STATE_KEY)
+  window.localStorage.removeItem(PKCE_VERIFIER_KEY)
 
   if (!savedState || savedState !== state) {
     throw new Error("Sign-in could not be verified. Please try again.")
@@ -139,6 +144,9 @@ export async function completeGoogleSignIn(
     body: body.toString(),
   })
   if (!res.ok) {
+    // Cognito returns { error, error_description } on a bad token exchange.
+    const detail = await res.text().catch(() => "")
+    console.error("oauth2/token exchange failed", res.status, detail)
     throw new Error("Google sign-in failed. Please try again.")
   }
   const tokens = (await res.json()) as OAuthTokens

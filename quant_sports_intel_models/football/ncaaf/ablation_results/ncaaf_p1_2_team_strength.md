@@ -1,7 +1,7 @@
 # NCAAF-P1.2 — conference/team-strength mixed-effects model
 
-**Model:** `ncaaf_team_strength_v1` · **generated:** 2026-07-22T04:41:40.561799+00:00
-**Seasons emitted:** 2015–2025 (22,992 team-week rows) · **seed (not emitted):** 2014
+**Model:** `ncaaf_team_strength_v1` · **generated:** 2026-07-24T07:20:25.589650+00:00
+**Seasons emitted:** 2015–2026 (23,130 team-week rows) · **seed (not emitted):** 2014
 
 > ⚠️ **This is a strength PRIOR, not an edge claim.** Every number below is measured against realized margins, never against a market price. No bet, no win rate, no ROI is implied or claimed; `best_alpha = 0` still holds. Whether this feature is worth anything against a closing line is P1.4's question, and P1.4 answers it under the §0.5 bake-off discipline (≥3 model classes, purged/embargoed CV, PBO/DSR).
 
@@ -19,12 +19,12 @@
 
 |   season | model   | seasons_used        |   n_obs |   sigma |   home_field |   tau_team |   tau_conference | converged   |
 |---------:|:--------|:--------------------|--------:|--------:|-------------:|-----------:|-----------------:|:------------|
-|     2020 | margin  | 2016,2017,2018,2019 |    3081 |   8.404 |        2.546 |      7.334 |            1.253 | True        |
 |     2021 | margin  | 2017,2018,2019,2020 |    2837 |   8.186 |        2.095 |      7.495 |            2.423 | True        |
 |     2022 | margin  | 2018,2019,2020,2021 |    2831 |   8.351 |        1.866 |      7.603 |            1.934 | True        |
 |     2023 | margin  | 2019,2020,2021,2022 |    2835 |   8.442 |        1.817 |      7.271 |            1.654 | True        |
 |     2024 | margin  | 2020,2021,2022,2023 |    2853 |   8.679 |        1.991 |      6.668 |            1.252 | True        |
 |     2025 | margin  | 2021,2022,2023,2024 |    3135 |   8.202 |        2.561 |      6.934 |            1.055 | True        |
+|     2026 | margin  | 2022,2023,2024,2025 |    3172 |   7.936 |        2.848 |      7.050 |            1.769 | True        |
 
 `home_field` is the fitted home-field advantage in points; `tau_team` is how far teams spread around their conference mean; `tau_conference` is how far conferences spread around the league. The ratio of the two IS the partial-pooling story — a team with few games is pulled toward its conference by roughly `sigma^2 / (sigma^2 + n * tau_team^2)` of the distance.
 
@@ -40,9 +40,9 @@
 | def__returning_ppa_pct       | other       |           nan     |
 | def__roster_continuity_pct   | other       |           nan     |
 | def__team_talent             | other       |           nan     |
-| hc_change_from_prev          | coaching    |            -0.475 |
-| hc_recent_sp_overall         | coaching    |             3.468 |
-| is_first_year_at_school      | coaching    |            -0.475 |
+| hc_change_from_prev          | coaching    |            -0.490 |
+| hc_recent_sp_overall         | coaching    |             4.120 |
+| is_first_year_at_school      | coaching    |            -0.490 |
 | off__hc_change_from_prev     | other       |           nan     |
 | off__hc_recent_sp_overall    | other       |           nan     |
 | off__is_first_year_at_school | other       |           nan     |
@@ -51,11 +51,11 @@
 | off__returning_ppa_pct       | other       |           nan     |
 | off__roster_continuity_pct   | other       |           nan     |
 | off__team_talent             | other       |           nan     |
-| portal_net_stars             | roster_flux |             0.119 |
-| prior_strength               | carryover   |             4.543 |
-| returning_ppa_pct            | roster_flux |             1.225 |
-| roster_continuity_pct        | roster_flux |            -0.054 |
-| team_talent                  | talent      |             2.958 |
+| portal_net_stars             | roster_flux |             0.002 |
+| prior_strength               | carryover   |             4.342 |
+| returning_ppa_pct            | roster_flux |             1.161 |
+| roster_continuity_pct        | roster_flux |            -0.292 |
+| team_talent                  | talent      |             2.327 |
 
 ## 3. ⭐ Does the roster/NIL-flux covariate actually move teams? (the P1.2 sanity check)
 
@@ -63,11 +63,11 @@
 
 | component   |   sd across teams (pts) |   max |contribution| (pts) |
 |:------------|------------------------:|---------------------------:|
-| carryover   |                   5.937 |                     21.011 |
-| talent      |                   3.452 |                     14.461 |
-| roster_flux |                   2.167 |                     27.363 |
-| coaching    |                   2.053 |                      8.910 |
-| unknown     |                   1.715 |                     28.564 |
+| carryover   |                   5.813 |                     21.011 |
+| talent      |                   3.298 |                     14.461 |
+| roster_flux |                   2.070 |                     27.363 |
+| coaching    |                   1.961 |                      8.910 |
+| unknown     |                   1.829 |                     28.564 |
 
 **Largest roster/portal-driven pre-season adjustments (all seasons):**
 
@@ -90,21 +90,6 @@ Read this list, do not just count it: if the biggest movers are not teams whose 
 
 ## 4. Face validity — end-of-season top 10
 
-**2024**
-
-| team       | conference       |   strength_margin |   strength_margin_sd |   strength_offense |   strength_defense |
-|:-----------|:-----------------|------------------:|---------------------:|-------------------:|-------------------:|
-| Notre Dame | FBS Independents |             26.96 |                 3.17 |              15.69 |              10.93 |
-| Texas      | SEC              |             25.70 |                 3.20 |               9.23 |              16.00 |
-| Ohio State | Big Ten          |             25.35 |                 3.45 |               9.28 |              15.54 |
-| Georgia    | SEC              |             23.61 |                 3.35 |              13.15 |              10.51 |
-| Alabama    | SEC              |             23.49 |                 3.63 |              10.92 |              12.18 |
-| Oregon     | Big Ten          |             23.41 |                 3.29 |              13.58 |               9.73 |
-| Ole Miss   | SEC              |             22.67 |                 3.42 |               9.43 |              12.78 |
-| Penn State | Big Ten          |             20.94 |                 3.20 |              10.01 |              10.83 |
-| Tennessee  | SEC              |             20.83 |                 3.26 |               8.41 |              12.00 |
-| Indiana    | Big Ten          |             19.83 |                 3.44 |              12.01 |               6.98 |
-
 **2025**
 
 | team       | conference       |   strength_margin |   strength_margin_sd |   strength_offense |   strength_defense |
@@ -119,6 +104,21 @@ Read this list, do not just count it: if the biggest movers are not teams whose 
 | Utah       | Big 12           |             19.91 |                 3.26 |              12.82 |               5.84 |
 | Alabama    | SEC              |             19.10 |                 3.22 |               8.37 |              10.54 |
 | Ole Miss   | SEC              |             19.00 |                 3.39 |              12.36 |               6.54 |
+
+**2026**
+
+| team       | conference       |   strength_margin |   strength_margin_sd |   strength_offense |   strength_defense |
+|:-----------|:-----------------|------------------:|---------------------:|-------------------:|-------------------:|
+| Indiana    | Big Ten          |              8.95 |                 7.79 |               2.30 |               6.51 |
+| Ohio State | Big Ten          |              6.85 |                 7.68 |               1.61 |               5.11 |
+| Notre Dame | FBS Independents |              6.42 |                 7.66 |               1.47 |               4.83 |
+| Oregon     | Big Ten          |              5.79 |                 7.63 |               1.26 |               4.41 |
+| Miami      | ACC              |              5.39 |                 7.61 |               1.13 |               4.14 |
+| Texas Tech | Big 12           |              4.83 |                 7.59 |               0.95 |               3.78 |
+| Georgia    | SEC              |              4.06 |                 7.56 |               0.69 |               3.26 |
+| Ole Miss   | SEC              |              3.89 |                 7.55 |               0.63 |               3.15 |
+| Utah       | Big 12           |              3.26 |                 7.53 |               0.43 |               2.73 |
+| Iowa       | Big Ten          |              3.23 |                 7.53 |               0.42 |               2.71 |
 
 **Cross-check:** the margin model and the offense/defense model are INDEPENDENT fits. `strength_offense + strength_defense` correlates with `strength_margin` at **0.999**. (Sum, not difference — defense is signed as points PREVENTED.) A low value here means the two fits disagree about who is good and neither should be trusted.
 
