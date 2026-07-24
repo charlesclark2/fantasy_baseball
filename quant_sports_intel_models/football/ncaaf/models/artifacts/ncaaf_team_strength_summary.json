@@ -1,7 +1,7 @@
 {
   "model_version": "ncaaf_team_strength_v1",
-  "generated_at": "2026-07-22T04:41:20.638743+00:00",
-  "rows": 22992,
+  "generated_at": "2026-07-24T07:20:03.090619+00:00",
+  "rows": 23130,
   "seasons": [
     2015,
     2016,
@@ -13,7 +13,8 @@
     2022,
     2023,
     2024,
-    2025
+    2025,
+    2026
   ],
   "gates_passed": [
     "season_order_week is monotone in game_date (date-based, not week-based)",
@@ -49,8 +50,8 @@
   ],
   "uncertainty_calibration": {
     "n": 8303,
-    "z_sd": 1.4687107509336719,
-    "z_mean": 0.023936999621782085,
+    "z_sd": 1.468710750933672,
+    "z_mean": 0.023936999621782057,
     "coverage_80": 0.6294110562447308,
     "coverage_95": 0.8225942430446826
   },
