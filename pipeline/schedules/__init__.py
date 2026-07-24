@@ -13,6 +13,10 @@ from pipeline.schedules.sports_dbt_schedules import (
     sports_ncaaf_dbt_schedule,
     sports_nfl_dbt_schedule,
 )
+# NCAAF-P0.7: the annual PRE-SEASON roll-forward refresh. ⛔ default_status=STOPPED (operator-gated,
+# needs CFBD_API_KEY on the box) — ENABLE in Dagit before the Aug-29 opener (the launch-critical
+# action; intended state in BOX_OPERATIONS.md §10).
+from pipeline.schedules.sports_rollforward_schedules import sports_ncaaf_roll_forward_schedule
 
 # E11.1-W1d: w1_parity_schedule was a one-shot gate (fired 2026-06-25) for the
 # parallel-validation window. Parity confirmed GREEN — schedule decommissioned.
@@ -27,4 +31,5 @@ all_schedules = [
     settlement_schedule,
     sports_ncaaf_dbt_schedule,
     sports_nfl_dbt_schedule,
+    sports_ncaaf_roll_forward_schedule,
 ] + all_intraday_schedules

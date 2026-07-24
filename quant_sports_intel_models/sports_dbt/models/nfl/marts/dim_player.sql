@@ -4,6 +4,11 @@
 -- / yahoo / rotowire / pff / pfr / sleeper / gsis_it / smart) every fact joins to, plus bio. The
 -- old Snowflake `md5_number_upper64` surrogate is replaced by an MD5 string key (DuckDB has no
 -- md5_number_upper64) — value is opaque, only used as a stable player_surrogate_key. ⭐ sport-tag.
+-- 🐛 GRAIN FIX (2026-07-24): the dedup previously partitioned by (player_id, player_name), so a
+-- player whose NAME spelling drifts across roster weeks (Cedrick Wilson / Ced Wilson / … Jr.;
+-- De'Von vs DeVon) survived as MULTIPLE rows → the `left join dim_player` in fct_player_week
+-- fanned out ×N (83 players doubled/tripled every stat line → the "36-game season" corruption).
+-- The dimension grain is one row PER player_id; partition on player_id ALONE, latest name wins.
 with weekly_rosters as (
     select *
     from {{ ref('stg_nfl_weekly_rosters') }}
@@ -34,7 +39,7 @@ transformed as (
         upper(trim(gsis_it_id))                       as gsis_it_id,
         upper(trim(smart_id))                         as smart_id
     from weekly_rosters
-    qualify row_number() over (partition by player_id, player_name order by season desc, week desc) = 1
+    qualify row_number() over (partition by player_id order by season desc, week desc) = 1
 )
 select *
 from transformed

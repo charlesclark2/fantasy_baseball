@@ -3,9 +3,11 @@ version: 2
 # N0.3 — the ported `refined` IP (jaffle_shop → sports_dbt over the S3/Delta lake). Every model
 # is sport-tagged ('nfl') and point-in-time / leakage-safe (as-of-week: a week's row carries only
 # that-week roster/role/opponent state, never post-game info folded backward). Tests target the
-# genuinely-unique keys — dim_player carries name-variant dupes on player_id (the jaffle qualify
-# partitions on player_id+player_name) and fct_player_week carries expected role-window dupes on
-# (player_id, season, week, team_id), so uniqueness is asserted on the surrogate / game keys only.
+# genuinely-unique keys. 🐛 2026-07-24 GRAIN FIX: dim_player used to partition its qualify on
+# (player_id, player_name) → name-variant rows (Ced/Cedrick Wilson) survived as dupes on player_id,
+# which fanned fct_player_week's `left join dim_player` out ×N (the "36-game season" corruption).
+# dim_player now partitions on player_id ALONE (unique), and fct_player_week is anchored on the box
+# score (rookie-inclusive) with a deduped role join, so it is unique on (player_id, season, week).
 
 models:
   # ---- calendars ----
@@ -35,14 +37,14 @@ models:
   # ---- dimensions ----
   - name: dim_player
     description: >
-      Player ID/bio dimension + cross-ID rosetta (one current row per player_id+player_name).
-      player_id is NOT unique (name-variant rows survive the qualify, per jaffle) — the surrogate
-      key is. Sport-tagged.
+      Player ID/bio dimension + cross-ID rosetta (one current row PER player_id — latest name wins).
+      🐛 player_id is now UNIQUE (was partitioned on player_id+player_name → name-variant dupes that
+      fanned fct_player_week out; fixed 2026-07-24). Sport-tagged.
     columns:
       - name: sport
         data_tests: [not_null]
       - name: player_id
-        data_tests: [not_null]
+        data_tests: [not_null, unique]  # GRAIN GUARD — a dupe here re-fans fct_player_week ×N
       - name: player_surrogate_key
         data_tests: [not_null, unique]
 

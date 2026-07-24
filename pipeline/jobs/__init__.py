@@ -19,6 +19,8 @@ from pipeline.jobs.sports_dbt_job import (
     sports_ncaaf_dbt_build_job,
     sports_nfl_dbt_build_job,
 )
+# NCAAF-P0.7: the annual pre-season season roll-forward (schedule + covariates → mart rebuild).
+from pipeline.jobs.sports_ncaaf_rollforward_job import sports_ncaaf_roll_forward_job
 
 all_jobs = [
     snowflake_check_job,
@@ -39,4 +41,5 @@ all_jobs = [
     w1_parity_job,
     sports_nfl_dbt_build_job,
     sports_ncaaf_dbt_build_job,
+    sports_ncaaf_roll_forward_job,
 ]

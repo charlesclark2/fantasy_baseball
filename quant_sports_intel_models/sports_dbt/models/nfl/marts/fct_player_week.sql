@@ -18,7 +18,9 @@ team_week_calendar as (
     from {{ ref('team_week_calendar') }}
 ),
 weekly_stats as (
+    -- one box-score row per (player, season, week) — safety dedup so no left join fans out
     select * from {{ ref('stg_nfl_weekly_data') }}
+    qualify row_number() over (partition by season, week, player_id order by team_id) = 1
 ),
 snap_counts as (
     -- rename the reused N0.2 snap staging to the mart contract (pfr_player_id → player_id, st_* → special_teams_*)
@@ -35,15 +37,61 @@ snap_counts as (
 dim_player as (
     select * from {{ ref('dim_player') }}
 ),
-spine as (
+-- 🐛 SPINE FIX (2026-07-24): the fact universe was `calendar JOIN dim_player_role` — anchored on
+-- the depth-chart-derived role dimension. When `depth_charts` lags a season (it has NO 2025 rows),
+-- players with no prior depth-chart segment — the ENTIRE 2025 rookie class (Jeanty, Egbuka, …) — get
+-- no role window and are DROPPED, even though they have a full box-score line. And an overlapping
+-- SCD-2 window fanned the fact out. The durable cure: anchor the universe on the BOX SCORE (which is
+-- complete + rookie-inclusive) UNION the role/bye weeks, with role LEFT-joined + deduped so it can
+-- never drop or duplicate a stat line. Depth-chart rank is best-effort (NULL when depth_charts lags).
+role_windowed as (
+    -- the as-of role for a (season, week, player), deduped to ONE segment per player-week so an
+    -- overlapping SCD-2 window can never fan the fact out
     select
-        t.season, t.week, pr.player_id, pr.player_name, t.team_id, t.opponent_id, t.is_bye,
-        pr.position, pr.status, pr.depth_chart_position_rank, t.week_start_et, t.week_end_et
+        t.season, t.week, pr.player_id, t.team_id,
+        pr.player_name, pr.position, pr.status, pr.depth_chart_position_rank
     from team_week_calendar t
     join player_role pr
         on pr.team_id = t.team_id
        and t.week_start_et >= pr.record_effective_ts
        and t.week_start_et <= pr.record_end_ts
+    qualify row_number() over (
+        partition by t.season, t.week, pr.player_id
+        order by pr.depth_chart_position_rank asc nulls last, pr.record_effective_ts desc
+    ) = 1
+),
+stat_rows as (
+    -- the player-week universe from the box score — includes players with no role segment
+    select season, week, player_id, team_id, player_name, position from weekly_stats
+),
+player_week_keys as (
+    select season, week, player_id from role_windowed
+    union
+    select season, week, player_id from stat_rows
+),
+resolved as (
+    -- resolve team + identity per (season, week, player): prefer the box-score team (where the player
+    -- recorded stats), fall back to the role team (bye / DNP weeks that carry a known role)
+    select
+        k.season, k.week, k.player_id,
+        coalesce(st.team_id, rw.team_id)         as team_id,
+        coalesce(rw.player_name, st.player_name) as player_name,
+        coalesce(rw.position, st.position)       as position,
+        rw.status,
+        rw.depth_chart_position_rank
+    from player_week_keys k
+    left join role_windowed rw using (season, week, player_id)
+    left join stat_rows     st using (season, week, player_id)
+),
+spine as (
+    -- attach the calendar (bye / opponent / week window) on the resolved team for role AND stat rows
+    select
+        r.season, r.week, r.player_id, r.player_name, r.team_id,
+        c.opponent_id, coalesce(c.is_bye, false) as is_bye,
+        r.position, r.status, r.depth_chart_position_rank, c.week_start_et, c.week_end_et
+    from resolved r
+    left join team_week_calendar c
+        on c.season = r.season and c.week = r.week and c.team_id = r.team_id
 ),
 team_totals as (
     select
@@ -131,7 +179,9 @@ player_week as (
             + (coalesce(w.receiving_fumbles_lost, 0) * -2.0) + (coalesce(w.rushing_fumbles_lost, 0) * -2.0), 2),
             0.0
         )                                             as the_league_fantasy_points,
-        (coalesce(sc.offense_snaps, 0) + coalesce(sc.special_teams_snaps, 0)) > 0 as played_flag
+        -- played = took a snap OR recorded a box-score line (robust when snap_counts lags a rookie)
+        ((coalesce(sc.offense_snaps, 0) + coalesce(sc.special_teams_snaps, 0)) > 0
+         or w.season is not null) as played_flag
     from spine s
     left join dim_player d
         on s.player_id = d.player_id

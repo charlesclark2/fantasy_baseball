@@ -76,6 +76,25 @@ def default_backfill_seasons(today: "date | None" = None) -> str:
     the `_parse_seasons` A-B shape) shared by odds_backfill.py and verify_odds_historical.py."""
     return f"{NCAAF_HISTORICAL_FLOOR}-{last_completed_season(today)}"
 
+
+def current_season(today: "date | None" = None) -> int:
+    """The UPCOMING-or-in-progress NCAAF season — the P0.7 season-roll-forward TARGET (the
+    season the pre-season futures board + live game-model board are built FOR), the complement
+    of `last_completed_season`.
+
+    A season YYYY runs Aug YYYY → mid-Jan YYYY+1. So from FEBRUARY onward the season that will
+    START this calendar year is the current target; during JANUARY the season that began LAST
+    year is still finishing its bowls/CFP, so IT is still current (the next roll-forward, to the
+    Aug-of-this-year season, happens in the summer). That is exactly `last_completed_season() + 1`
+    at every point on the calendar — a single clock-derived definition, never a pinned year (the
+    P0.6 stale-by-a-season landmine: a pinned target silently rots the day the calendar turns, so
+    the whole roll-forward chain must clock-derive its season and be re-runnable next August
+    unchanged).
+
+    Injectable `today` keeps it unit-testable; stdlib-only so the lean ingest image can import it.
+    """
+    return last_completed_season(today) + 1
+
 # nflverse release-Parquet asset URLs (read DIRECTLY via DuckDB — nfl_data_py is abandoned;
 # it pins pandas==1.5.3 which won't build on py3.12. P0.1 §1 landmine).
 NFLVERSE_RELEASE = "https://github.com/nflverse/nflverse-data/releases/download"
@@ -567,3 +586,40 @@ ODDS_LIVE = [n for n, s in SOURCES.items() if s.tier == "odds" and not s.on_dema
 ODDS_ON_DEMAND = [n for n, s in SOURCES.items() if s.tier == "odds" and s.on_demand]
 # Everything a DEFAULT (unnamed) run pulls — excludes the on_demand paid odds source (P0.6).
 DEFAULT_SOURCES = [n for n, s in SOURCES.items() if not s.on_demand]
+
+# ── The PRE-SEASON ROLL-FORWARD source set (NCAAF-P0.7) ──────────────────────────────────
+# The feeds `roll_forward.py` refreshes on a recurring PRE-SEASON cadence so the upcoming
+# season's futures board + live game-model board can RUN before kickoff — the SCHEDULE + the
+# pre-season COVARIATE priors P1.2 fits its week-1 strength on, and nothing else:
+#   • games   — THE 2026 game list (home/away/neutral + conference flags → dim_ncaaf_game).
+#               DYNAMIC: pre-season schedules churn (games added/moved/cancelled) all summer →
+#               this is the reason the cadence is RECURRING, not a one-time pull.
+#   • teams   — FBS membership + the conference structure the CCG/CFP bookkeeping needs.
+#   • returning_production / transfer_portal / roster / talent — the P0.4 roster-continuity
+#     covariates; coaches — the P0.5 coaching-change covariate; recruiting_players — the P1.2b
+#     freshman-production prior. These publish on a ROLLING basis through spring→fall camp
+#     (verified live 2026-07-24: games/portal/recruiting/teams already published for 2026, but
+#     returning/talent/coaches/roster still returned 0 rows — a second reason the pull must
+#     RECUR until kickoff, filling covariates in as CFBD posts them).
+# DELIBERATELY EXCLUDED: the per-GAME endpoints (plays / play_stats / box_advanced — the
+# ~960-call/season cost that only exists once games are PLAYED) and every odds source (game
+# lines are P0.6b's recurring capture, on its own credit budget). So a roll-forward refresh is
+# ~8 cheap CFBD calls — trivially affordable weekly. All members are non-paid CFBD sources.
+ROLL_FORWARD_SOURCES = [
+    "games",
+    "teams",
+    "returning_production",
+    "transfer_portal",
+    "roster",
+    "talent",
+    "coaches",
+    "recruiting_players",
+]
+# Registry-integrity: every roll-forward source must exist, be a (free) CFBD source, and never
+# be an on_demand/paid pull — a routine pre-season refresh must not burn Odds credits or fan out
+# a per-game endpoint. Enforced here (and in test_ncaaf_roll_forward) so a future edit can't
+# silently slip a paid/expensive source into the recurring cadence.
+assert all(n in SOURCES for n in ROLL_FORWARD_SOURCES), "ROLL_FORWARD_SOURCES has an unknown source"
+assert all(SOURCES[n].tier == "cfbd" and not SOURCES[n].on_demand for n in ROLL_FORWARD_SOURCES), (
+    "ROLL_FORWARD_SOURCES must be free (non-on_demand) CFBD sources only"
+)
