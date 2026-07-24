@@ -1,6 +1,6 @@
 # NF-FASTPATH — 2026 NFL fantasy season projections (raw stat-line, MVP-1)
 
-**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-07-24T06:12:03.544512+00:00
+**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-07-24T06:34:17.761196+00:00
 
 > ⚖️ **A PROJECTION PRODUCT, edge-independent** — no `best_alpha`/PBO/DSR/CLV gate (that is the betting posture). The gate is FACE-VALIDITY + COVERAGE + a holdout rank-correlation sanity check. The emitted `proj_*` columns are a **RAW STAT LINE** (season totals); the `proj_fp_*` points are a CONVENIENCE (standard nflverse scoring) for ranking/validation only — **MVP-2 / NF-C1 rescore the raw line per league**. Uncertainty is surfaced (an 80% PPR interval), not hidden; NULL = unknown kept NULL. Rookie intervals use PARAMETER uncertainty (slot-curve + P1A) and must be recalibrated before pricing.
 
@@ -13,15 +13,15 @@
 
 ```json
 {
-  "n_total": 704,
-  "n_veterans": 630,
+  "n_total": 716,
+  "n_veterans": 642,
   "n_rookies": 74,
   "by_position": {
-    "FB": 12,
+    "FB": 16,
     "QB": 90,
-    "RB": 164,
+    "RB": 163,
     "TE": 162,
-    "WR": 276
+    "WR": 285
   },
   "n_rookies_by_pos": {
     "FB": 1,
@@ -30,9 +30,9 @@
     "TE": 20,
     "WR": 33
   },
-  "n_base_relevant_players_ge4g": 573,
+  "n_base_relevant_players_ge4g": 592,
   "n_relevant_gap": 40,
-  "pct_relevant_covered": 93.0
+  "pct_relevant_covered": 93.2
 }
 ```
 
@@ -42,131 +42,131 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 
 |   projection_season |   n |   spearman_all |   mae_ppr | top24_hit   |   sp_QB |   sp_RB |   sp_WR |   sp_TE |
 |--------------------:|----:|---------------:|----------:|:------------|--------:|--------:|--------:|--------:|
-|                2019 | 402 |            0.7 |      43.6 | 13/24       |     0.7 |     0.7 |     0.7 |     0.7 |
-|                2020 | 421 |            0.8 |      45.3 | 11/24       |     0.6 |     0.6 |     0.7 |     0.7 |
-|                2021 | 457 |            0.8 |      42.0 | 12/24       |     0.7 |     0.7 |     0.8 |     0.7 |
-|                2022 | 442 |            0.8 |      39.9 | 9/24        |     0.7 |     0.7 |     0.8 |     0.7 |
-|                2023 | 441 |            0.7 |      42.6 | 9/24        |     0.6 |     0.7 |     0.7 |     0.8 |
-|                2024 | 443 |            0.8 |      43.1 | 8/24        |     0.7 |     0.7 |     0.8 |     0.7 |
-|                2025 | 450 |            0.8 |      40.2 | 11/24       |     0.5 |     0.7 |     0.8 |     0.7 |
+|                2019 | 402 |            0.7 |      44.9 | 9/24        |     0.6 |     0.7 |     0.7 |     0.7 |
+|                2020 | 421 |            0.7 |      48.8 | 9/24        |     0.5 |     0.6 |     0.7 |     0.6 |
+|                2021 | 457 |            0.7 |      44.8 | 12/24       |     0.7 |     0.7 |     0.7 |     0.7 |
+|                2022 | 442 |            0.8 |      42.5 | 11/24       |     0.7 |     0.7 |     0.7 |     0.7 |
+|                2023 | 441 |            0.7 |      43.0 | 10/24       |     0.6 |     0.7 |     0.7 |     0.8 |
+|                2024 | 438 |            0.8 |      43.1 | 9/24        |     0.7 |     0.8 |     0.7 |     0.7 |
+|                2025 | 458 |            0.8 |      38.9 | 12/24       |     0.6 |     0.8 |     0.8 |     0.8 |
 
 ## 4. Face validity — top 25 overall (projected PPR)
 
 | player_name         | position   | team_id   | source   |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 |
 |:--------------------|:-----------|:----------|:---------|-------------:|--------------:|-------------:|-------------:|
-| JOSH ALLEN          | QB         | BUF       | veteran  |         16.5 |         305.7 |        215.0 |        396.5 |
-| CHRISTIAN MCCAFFREY | RB         | SF        | veteran  |         16.2 |         294.0 |        211.4 |        376.7 |
-| JALEN HURTS         | QB         | PHI       | veteran  |         16.5 |         284.1 |        211.2 |        357.0 |
-| DAK PRESCOTT        | QB         | DAL       | veteran  |         16.5 |         281.2 |        209.9 |        352.5 |
-| TREVOR LAWRENCE     | QB         | JAX       | veteran  |         16.5 |         278.7 |        203.0 |        354.4 |
-| JARED GOFF          | QB         | DET       | veteran  |         16.5 |         278.6 |        210.1 |        347.1 |
-| BAKER MAYFIELD      | QB         | TB        | veteran  |         16.5 |         273.8 |        209.7 |        338.0 |
-| BO NIX              | QB         | DEN       | veteran  |         16.5 |         270.6 |        198.1 |        343.1 |
-| BIJAN ROBINSON      | RB         | ATL       | veteran  |         16.2 |         269.3 |        192.7 |        345.8 |
+| JOSH ALLEN          | QB         | BUF       | veteran  |         16.5 |         314.1 |        222.2 |        406.0 |
+| JALEN HURTS         | QB         | PHI       | veteran  |         16.5 |         296.5 |        221.6 |        371.4 |
+| CHRISTIAN MCCAFFREY | RB         | SF        | veteran  |         16.2 |         293.9 |        211.2 |        376.5 |
+| JARED GOFF          | QB         | DET       | veteran  |         16.5 |         282.4 |        213.3 |        351.6 |
+| DAK PRESCOTT        | QB         | DAL       | veteran  |         16.5 |         281.1 |        209.8 |        352.4 |
+| TREVOR LAWRENCE     | QB         | JAX       | veteran  |         16.5 |         278.5 |        202.9 |        354.2 |
+| JAHMYR GIBBS        | RB         | DET       | veteran  |         16.2 |         274.7 |        184.9 |        364.4 |
+| BAKER MAYFIELD      | QB         | TB        | veteran  |         16.5 |         273.7 |        209.5 |        337.8 |
+| LAMAR JACKSON       | QB         | BAL       | veteran  |         14.5 |         270.6 |        194.2 |        346.9 |
+| BO NIX              | QB         | DEN       | veteran  |         16.5 |         270.4 |        197.9 |        342.9 |
+| BIJAN ROBINSON      | RB         | ATL       | veteran  |         16.2 |         269.1 |        192.6 |        345.6 |
 | Fernando Mendoza    | QB         | nan       | rookie   |         12.4 |         268.3 |          5.6 |        531.1 |
-| LAMAR JACKSON       | QB         | BAL       | veteran  |         14.5 |         266.5 |        190.9 |        342.1 |
-| JUSTIN HERBERT      | QB         | LAC       | veteran  |         16.5 |         266.0 |        195.8 |        336.1 |
-| JONATHAN TAYLOR     | RB         | IND       | veteran  |         16.2 |         262.1 |        178.4 |        345.9 |
-| JA'MARR CHASE       | WR         | CIN       | veteran  |         15.8 |         261.6 |        185.5 |        337.7 |
-| CALEB WILLIAMS      | QB         | CHI       | veteran  |         16.5 |         260.0 |        187.0 |        333.0 |
-| DRAKE MAYE          | QB         | NE        | veteran  |         16.5 |         259.6 |        187.1 |        332.1 |
-| MATTHEW STAFFORD    | QB         | LAR       | veteran  |         16.5 |         253.9 |        181.2 |        326.6 |
-| AMON-RA ST. BROWN   | WR         | DET       | veteran  |         16.2 |         251.5 |        175.1 |        328.0 |
-| PATRICK MAHOMES     | QB         | KC        | veteran  |         15.0 |         250.4 |        182.1 |        318.8 |
-| PUKA NACUA          | WR         | LAR       | veteran  |         16.2 |         250.2 |        166.5 |        334.0 |
-| DEVON ACHANE        | RB         | MIA       | veteran  |         15.8 |         242.9 |        180.3 |        305.4 |
-| JORDAN LOVE         | QB         | GB        | veteran  |         16.0 |         239.1 |        174.1 |        304.2 |
-| JAHMYR GIBBS        | RB         | DET       | veteran  |         14.0 |         232.8 |        122.3 |        343.4 |
-| SAM DARNOLD         | QB         | MIN       | veteran  |         16.5 |         232.5 |        169.9 |        295.2 |
-| Jaxson Dart         | QB         | NYG       | veteran  |         14.0 |         231.2 |        118.4 |        344.0 |
+| JUSTIN HERBERT      | QB         | LAC       | veteran  |         16.5 |         265.8 |        195.7 |        335.9 |
+| PATRICK MAHOMES     | QB         | KC        | veteran  |         15.0 |         262.0 |        191.6 |        332.5 |
+| JONATHAN TAYLOR     | RB         | IND       | veteran  |         16.2 |         262.0 |        178.2 |        345.8 |
+| MATTHEW STAFFORD    | QB         | LAR       | veteran  |         16.5 |         260.7 |        187.1 |        334.4 |
+| JA'MARR CHASE       | WR         | CIN       | veteran  |         15.8 |         260.1 |        184.3 |        336.0 |
+| CALEB WILLIAMS      | QB         | CHI       | veteran  |         16.5 |         259.9 |        186.9 |        332.9 |
+| DRAKE MAYE          | QB         | NE        | veteran  |         16.5 |         259.5 |        187.0 |        332.0 |
+| PUKA NACUA          | WR         | LAR       | veteran  |         16.2 |         257.7 |        173.0 |        342.3 |
+| AMON-RA ST. BROWN   | WR         | DET       | veteran  |         16.2 |         254.3 |        177.4 |        331.2 |
+| JAXSON DART         | QB         | NYG       | veteran  |         15.0 |         247.5 |        172.7 |        322.4 |
+| DE'VON ACHANE       | RB         | MIA       | veteran  |         15.8 |         242.7 |        180.2 |        305.3 |
+| JORDAN LOVE         | QB         | GB        | veteran  |         16.0 |         239.0 |        173.9 |        304.0 |
+| DERRICK HENRY       | RB         | BAL       | veteran  |         16.2 |         230.8 |        160.7 |        300.9 |
 
 ### Top 12 QB
 
 | player_name      | position   | team_id   | source   |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 |
 |:-----------------|:-----------|:----------|:---------|-------------:|--------------:|-------------:|-------------:|
-| JOSH ALLEN       | QB         | BUF       | veteran  |         16.5 |         305.7 |        215.0 |        396.5 |
-| JALEN HURTS      | QB         | PHI       | veteran  |         16.5 |         284.1 |        211.2 |        357.0 |
-| DAK PRESCOTT     | QB         | DAL       | veteran  |         16.5 |         281.2 |        209.9 |        352.5 |
-| TREVOR LAWRENCE  | QB         | JAX       | veteran  |         16.5 |         278.7 |        203.0 |        354.4 |
-| JARED GOFF       | QB         | DET       | veteran  |         16.5 |         278.6 |        210.1 |        347.1 |
-| BAKER MAYFIELD   | QB         | TB        | veteran  |         16.5 |         273.8 |        209.7 |        338.0 |
-| BO NIX           | QB         | DEN       | veteran  |         16.5 |         270.6 |        198.1 |        343.1 |
+| JOSH ALLEN       | QB         | BUF       | veteran  |         16.5 |         314.1 |        222.2 |        406.0 |
+| JALEN HURTS      | QB         | PHI       | veteran  |         16.5 |         296.5 |        221.6 |        371.4 |
+| JARED GOFF       | QB         | DET       | veteran  |         16.5 |         282.4 |        213.3 |        351.6 |
+| DAK PRESCOTT     | QB         | DAL       | veteran  |         16.5 |         281.1 |        209.8 |        352.4 |
+| TREVOR LAWRENCE  | QB         | JAX       | veteran  |         16.5 |         278.5 |        202.9 |        354.2 |
+| BAKER MAYFIELD   | QB         | TB        | veteran  |         16.5 |         273.7 |        209.5 |        337.8 |
+| LAMAR JACKSON    | QB         | BAL       | veteran  |         14.5 |         270.6 |        194.2 |        346.9 |
+| BO NIX           | QB         | DEN       | veteran  |         16.5 |         270.4 |        197.9 |        342.9 |
 | Fernando Mendoza | QB         | nan       | rookie   |         12.4 |         268.3 |          5.6 |        531.1 |
-| LAMAR JACKSON    | QB         | BAL       | veteran  |         14.5 |         266.5 |        190.9 |        342.1 |
-| JUSTIN HERBERT   | QB         | LAC       | veteran  |         16.5 |         266.0 |        195.8 |        336.1 |
-| CALEB WILLIAMS   | QB         | CHI       | veteran  |         16.5 |         260.0 |        187.0 |        333.0 |
-| DRAKE MAYE       | QB         | NE        | veteran  |         16.5 |         259.6 |        187.1 |        332.1 |
+| JUSTIN HERBERT   | QB         | LAC       | veteran  |         16.5 |         265.8 |        195.7 |        335.9 |
+| PATRICK MAHOMES  | QB         | KC        | veteran  |         15.0 |         262.0 |        191.6 |        332.5 |
+| MATTHEW STAFFORD | QB         | LAR       | veteran  |         16.5 |         260.7 |        187.1 |        334.4 |
 
 ### Top 12 RB
 
 | player_name         | position   | team_id   | source   |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 |
 |:--------------------|:-----------|:----------|:---------|-------------:|--------------:|-------------:|-------------:|
-| CHRISTIAN MCCAFFREY | RB         | SF        | veteran  |         16.2 |         294.0 |        211.4 |        376.7 |
-| BIJAN ROBINSON      | RB         | ATL       | veteran  |         16.2 |         269.3 |        192.7 |        345.8 |
-| JONATHAN TAYLOR     | RB         | IND       | veteran  |         16.2 |         262.1 |        178.4 |        345.9 |
-| DEVON ACHANE        | RB         | MIA       | veteran  |         15.8 |         242.9 |        180.3 |        305.4 |
-| JAHMYR GIBBS        | RB         | DET       | veteran  |         14.0 |         232.8 |        122.3 |        343.4 |
-| DERRICK HENRY       | RB         | BAL       | veteran  |         16.2 |         227.3 |        157.7 |        296.9 |
-| SAQUON BARKLEY      | RB         | PHI       | veteran  |         16.2 |         210.6 |        151.5 |        269.6 |
-| Jeremiyah Love      | RB         | nan       | rookie   |         16.0 |         210.1 |          0.0 |        446.8 |
-| JAMES COOK          | RB         | BUF       | veteran  |         16.2 |         209.0 |        140.6 |        277.4 |
-| KYREN WILLIAMS      | RB         | LAR       | veteran  |         16.2 |         208.0 |        148.7 |        267.3 |
-| JOSH JACOBS         | RB         | GB        | veteran  |         15.8 |         203.2 |        138.3 |        268.1 |
-| CHASE BROWN         | RB         | CIN       | veteran  |         16.2 |         201.6 |        145.5 |        257.7 |
+| CHRISTIAN MCCAFFREY | RB         | SF        | veteran  |         16.2 |         293.9 |        211.2 |        376.5 |
+| JAHMYR GIBBS        | RB         | DET       | veteran  |         16.2 |         274.7 |        184.9 |        364.4 |
+| BIJAN ROBINSON      | RB         | ATL       | veteran  |         16.2 |         269.1 |        192.6 |        345.6 |
+| JONATHAN TAYLOR     | RB         | IND       | veteran  |         16.2 |         262.0 |        178.2 |        345.8 |
+| DE'VON ACHANE       | RB         | MIA       | veteran  |         15.8 |         242.7 |        180.2 |        305.3 |
+| DERRICK HENRY       | RB         | BAL       | veteran  |         16.2 |         230.8 |        160.7 |        300.9 |
+| SAQUON BARKLEY      | RB         | PHI       | veteran  |         16.2 |         221.0 |        160.4 |        281.7 |
+| JAMES COOK III      | RB         | BUF       | veteran  |         16.2 |         215.3 |        146.0 |        284.5 |
+| KYREN WILLIAMS      | RB         | LAR       | veteran  |         16.2 |         214.5 |        154.2 |        274.8 |
+| Jeremiyah Love      | RB         | nan       | rookie   |         16.0 |         208.4 |          0.0 |        443.2 |
+| JOSH JACOBS         | RB         | GB        | veteran  |         15.8 |         203.1 |        138.1 |        268.0 |
+| CHASE BROWN         | RB         | CIN       | veteran  |         16.2 |         201.4 |        145.3 |        257.5 |
 
 ### Top 12 WR
 
 | player_name        | position   | team_id   | source   |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 |
 |:-------------------|:-----------|:----------|:---------|-------------:|--------------:|-------------:|-------------:|
-| JA'MARR CHASE      | WR         | CIN       | veteran  |         15.8 |         261.6 |        185.5 |        337.7 |
-| AMON-RA ST. BROWN  | WR         | DET       | veteran  |         16.2 |         251.5 |        175.1 |        328.0 |
-| PUKA NACUA         | WR         | LAR       | veteran  |         16.2 |         250.2 |        166.5 |        334.0 |
-| JAXON SMITH-NJIGBA | WR         | SEA       | veteran  |         16.2 |         217.8 |        148.1 |        287.4 |
-| CEEDEE LAMB        | WR         | DAL       | veteran  |         14.8 |         203.7 |        146.0 |        261.5 |
-| JUSTIN JEFFERSON   | WR         | MIN       | veteran  |         16.2 |         202.9 |        151.7 |        254.2 |
-| Jordyn Tyson       | WR         | nan       | rookie   |         13.9 |         199.4 |          0.0 |        416.9 |
-| CHRIS OLAVE        | WR         | NO        | veteran  |         15.8 |         196.8 |        138.9 |        254.7 |
-| GEORGE PICKENS     | WR         | PIT       | veteran  |         16.2 |         196.6 |        132.5 |        260.7 |
-| NICO COLLINS       | WR         | HOU       | veteran  |         15.8 |         194.5 |        139.0 |        250.0 |
-| DAVANTE ADAMS      | WR         | NYJ       | veteran  |         14.8 |         193.9 |        138.7 |        249.1 |
-| ZAY FLOWERS        | WR         | BAL       | veteran  |         16.2 |         187.7 |        133.2 |        242.3 |
+| JA'MARR CHASE      | WR         | CIN       | veteran  |         15.8 |         260.1 |        184.3 |        336.0 |
+| PUKA NACUA         | WR         | LAR       | veteran  |         16.2 |         257.7 |        173.0 |        342.3 |
+| AMON-RA ST. BROWN  | WR         | DET       | veteran  |         16.2 |         254.3 |        177.4 |        331.2 |
+| JAXON SMITH-NJIGBA | WR         | SEA       | veteran  |         16.2 |         216.5 |        147.0 |        286.0 |
+| CEEDEE LAMB        | WR         | DAL       | veteran  |         14.8 |         202.2 |        144.8 |        259.7 |
+| JUSTIN JEFFERSON   | WR         | MIN       | veteran  |         16.2 |         201.5 |        150.5 |        252.5 |
+| NICO COLLINS       | WR         | HOU       | veteran  |         15.8 |         196.6 |        140.8 |        252.4 |
+| CHRIS OLAVE        | WR         | NO        | veteran  |         15.8 |         195.3 |        137.6 |        253.0 |
+| A.J. BROWN         | WR         | PHI       | veteran  |         15.8 |         195.0 |        129.1 |        260.9 |
+| Jordyn Tyson       | WR         | nan       | rookie   |         13.6 |         191.8 |          0.0 |        401.0 |
+| ZAY FLOWERS        | WR         | BAL       | veteran  |         16.2 |         186.3 |        131.9 |        240.6 |
+| Carnell Tate       | WR         | nan       | rookie   |         13.6 |         172.9 |          0.0 |        361.4 |
 
 ### Top 12 TE
 
 | player_name       | position   | team_id   | source   |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 |
 |:------------------|:-----------|:----------|:---------|-------------:|--------------:|-------------:|-------------:|
-| TREY MCBRIDE      | TE         | ARI       | veteran  |         16.2 |         212.4 |        151.0 |        273.7 |
-| BROCK BOWERS      | TE         | LV        | veteran  |         13.8 |         156.3 |         95.1 |        217.6 |
-| TRAVIS KELCE      | TE         | KC        | veteran  |         16.2 |         153.3 |        107.7 |        199.0 |
-| GEORGE KITTLE     | TE         | SF        | veteran  |         13.8 |         148.1 |         92.5 |        203.7 |
-| Harold Fannin Jr. | TE         | CLE       | veteran  |         15.0 |         144.5 |         78.8 |        210.2 |
-| Tyler Warren      | TE         | IND       | veteran  |         15.5 |         142.6 |         80.9 |        204.3 |
+| TREY MCBRIDE      | TE         | ARI       | veteran  |         16.2 |         210.7 |        149.6 |        271.8 |
+| TRAVIS KELCE      | TE         | KC        | veteran  |         16.2 |         159.6 |        113.0 |        206.1 |
+| BROCK BOWERS      | TE         | LV        | veteran  |         13.8 |         154.5 |         93.6 |        215.5 |
+| HAROLD FANNIN JR. | TE         | CLE       | veteran  |         15.8 |         150.0 |        106.9 |        193.1 |
+| TYLER WARREN      | TE         | IND       | veteran  |         16.2 |         147.8 |        108.4 |        187.2 |
+| GEORGE KITTLE     | TE         | SF        | veteran  |         13.8 |         146.3 |         90.9 |        201.6 |
 | Kenyon Sadiq      | TE         | nan       | rookie   |         15.3 |         139.5 |          0.0 |        288.6 |
-| KYLE PITTS        | TE         | ATL       | veteran  |         16.2 |         138.1 |         79.5 |        196.8 |
-| JAKE FERGUSON     | TE         | DAL       | veteran  |         16.2 |         135.9 |         89.8 |        181.9 |
-| DALLAS GOEDERT    | TE         | PHI       | veteran  |         15.8 |         129.9 |         82.6 |        177.3 |
-| Colston Loveland  | TE         | CHI       | veteran  |         15.0 |         128.1 |         60.8 |        195.5 |
-| JUWAN JOHNSON     | TE         | NO        | veteran  |         16.2 |         125.7 |         89.8 |        161.6 |
+| DALLAS GOEDERT    | TE         | PHI       | veteran  |         15.8 |         138.7 |         90.2 |        187.1 |
+| KYLE PITTS SR.    | TE         | ATL       | veteran  |         16.2 |         136.5 |         78.0 |        194.9 |
+| JAKE FERGUSON     | TE         | DAL       | veteran  |         16.2 |         134.2 |         88.4 |        180.0 |
+| MARK ANDREWS      | TE         | BAL       | veteran  |         16.2 |         125.9 |         82.4 |        169.5 |
+| COLSTON LOVELAND  | TE         | CHI       | veteran  |         16.2 |         125.2 |         73.6 |        176.7 |
 
 ## 5. Face validity — top 15 ROOKIES (P1A-attached)
 
 | player_name      | position   |   draft_overall |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 |
 |:-----------------|:-----------|----------------:|-------------:|--------------:|-------------:|-------------:|
 | Fernando Mendoza | QB         |             1.0 |         12.4 |         268.3 |          5.6 |        531.1 |
-| Jeremiyah Love   | RB         |             3.0 |         16.0 |         210.1 |          0.0 |        446.8 |
-| Jordyn Tyson     | WR         |             8.0 |         13.9 |         199.4 |          0.0 |        416.9 |
-| Carnell Tate     | WR         |             4.0 |         13.9 |         173.9 |          0.0 |        363.5 |
+| Jeremiyah Love   | RB         |             3.0 |         16.0 |         208.4 |          0.0 |        443.2 |
+| Jordyn Tyson     | WR         |             8.0 |         13.6 |         191.8 |          0.0 |        401.0 |
+| Carnell Tate     | WR         |             4.0 |         13.6 |         172.9 |          0.0 |        361.4 |
 | Kenyon Sadiq     | TE         |            16.0 |         15.3 |         139.5 |          0.0 |        288.6 |
-| Makai Lemon      | WR         |            20.0 |         14.1 |         116.2 |          0.0 |        242.9 |
-| Jadarian Price   | RB         |            32.0 |         13.4 |          91.1 |          0.0 |        193.6 |
-| KC Concepcion    | WR         |            24.0 |         14.1 |          84.7 |          0.0 |        177.0 |
-| Omar Cooper Jr.  | WR         |            30.0 |         14.1 |          70.2 |          0.0 |        146.7 |
-| Denzel Boston    | WR         |            39.0 |         14.1 |          67.8 |          0.0 |        141.8 |
+| Makai Lemon      | WR         |            20.0 |         14.1 |         100.4 |          0.0 |        209.8 |
+| Jadarian Price   | RB         |            32.0 |         13.8 |          89.1 |          0.0 |        189.4 |
+| KC Concepcion    | WR         |            24.0 |         14.1 |          74.4 |          0.0 |        155.5 |
+| Omar Cooper Jr.  | WR         |            30.0 |         14.1 |          62.9 |          0.0 |        131.5 |
+| Denzel Boston    | WR         |            39.0 |         14.1 |          62.2 |          0.0 |        130.0 |
 | Ty Simpson       | QB         |            13.0 |         12.4 |          58.9 |          1.2 |        116.5 |
-| Germie Bernard   | WR         |            47.0 |         13.9 |          54.3 |          0.0 |        113.5 |
-| Eli Stowers      | TE         |            54.0 |         13.7 |          51.7 |          0.0 |        106.9 |
-| Antonio Williams | WR         |            71.0 |         13.9 |          44.7 |          0.0 |         93.4 |
-| Jonah Coleman    | RB         |           108.0 |         11.6 |          42.1 |          0.0 |         89.6 |
+| Eli Stowers      | TE         |            54.0 |         13.9 |          51.7 |          0.0 |        106.9 |
+| Germie Bernard   | WR         |            47.0 |         14.1 |          50.6 |          0.0 |        105.7 |
+| Antonio Williams | WR         |            71.0 |         14.1 |          43.0 |          0.0 |         89.8 |
+| Max Klare        | TE         |            61.0 |         13.9 |          41.6 |          0.0 |         86.1 |
 
 ## 6. Limitations
 
