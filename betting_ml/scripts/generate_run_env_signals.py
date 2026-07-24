@@ -77,10 +77,10 @@ def _resolve_tables(env: str) -> tuple[str, str]:
 _SIGNAL_QUERY_TEMPLATE = """
 select
     g.game_pk,
-    g.official_date                              as game_date,
+    g.game_date,
     p.venue_id,
     p.venue_name,
-    g.home_score + g.away_score                  as total_runs,
+    g.home_final_score + g.away_final_score      as total_runs,
 
     p.eb_park_run_factor,
     p.elevation_ft,
@@ -101,18 +101,27 @@ select
     sa.starter_proj_fip                          as away_starter_proj_fip,
     sa.xwoba_against_30d                         as away_starter_xwoba_30d
 
--- Game universe + realized total_runs sourced from stg_statsapi_games (one row per game_pk,
--- refreshed INTRADAY), NOT mart_game_results. WHY (2026-07-21 signal_freshness HALT class):
--- mart_game_results is a COMPLETED-games mart whose S3 parquet is rebuilt only by the heavy
--- daily --w5-group-a step, so it LAGS — a generator run before that rebuild (or a
--- re-execute-from-a-later-step during a soak) drops the newest completed slate → 0 coverage →
--- BLOCKING HALT (a false positive). run_env DOES need the realized scores (total_runs), but
--- stg_statsapi_games carries home_score/away_score for a game the moment it goes Final (verified
--- EXACT parity vs mart_game_results' home_final_score+away_final_score, and official_date ==
--- game_date), and it is refreshed far more frequently than the --w5 mart. `home_score is not null`
--- preserves the completed-only semantics mart_game_results gave (postponed/scheduled excluded).
--- official_date is a DATE (mart_game_results' game_date equivalent) — NOT the INC-23 VARCHAR game_date.
-from baseball_data.betting.stg_statsapi_games g
+-- Game universe + realized total_runs sourced from mart_game_results — the SAME table the
+-- signal_freshness gate anchors on (scripts/check_signal_freshness.py: reference slate =
+-- `max(game_date) from mart_game_results where game_type='R' and home_final_score is not null`;
+-- coverage denominator = games in mart_game_results on that date). The generator MUST read the
+-- gate's exact source, or a false HALT is possible in either lag direction.
+--
+-- HISTORY: INC-34 (2026-07-21) moved this universe to stg_statsapi_games to dodge a re-execute
+-- race where mart_game_results (rebuilt by the heavy --w5-group-a) lagged the generator. But that
+-- de-SYNCED run_env from the gate, which still reads mart_game_results — so on 2026-07-24 the
+-- INVERSE bit: mart_game_results (scores derived from Statcast stg_batter_pitches, rebuilt in-job
+-- by --w1/--w5-group-a) had the 7/23 finals, while stg_statsapi_games.home_score (a SEPARATE
+-- StatsAPI monthly_schedule capture/flatten pipeline) still lagged them at generator time → run_env
+-- emitted 0/10 → BLOCKING HALT. INC-34 verified VALUE parity between the two score sources but not
+-- TIMING parity — they are independent pipelines and can disagree on "is this game Final yet" at the
+-- moment the generators run. Re-unifying onto mart_game_results makes the desync structurally
+-- impossible: the gate can only demand games that are in mart_game_results, which run_env now reads.
+-- The daily job already rebuilds mart_game_results (lakehouse_w8a --w5-group-a) BEFORE the generators;
+-- on a re-execute-from-the-generator soak where the mart is stale, the gate (also on mart_game_results)
+-- regresses WITH it, so still no false HALT. mart_game_results.game_date is a real DATE (cast ::date
+-- in the model) — NOT the INC-23 VARCHAR game_date; `home_final_score is not null` = completed-only.
+from baseball_data.betting.mart_game_results g
 left join baseball_data.betting_features.feature_pregame_park_features p
     on p.game_pk = g.game_pk
 left join baseball_data.betting_features.feature_pregame_weather_features w
@@ -128,12 +137,12 @@ left join baseball_data.betting_features.feature_pregame_starter_features sh
 left join baseball_data.betting_features.feature_pregame_starter_features sa
     on sa.game_pk = g.game_pk and sa.side = 'away'
 
-where g.official_date >= '{start_date}'
-  and g.official_date <= '{end_date}'
+where g.game_date >= '{start_date}'
+  and g.game_date <= '{end_date}'
   and g.game_type = 'R'
-  and g.home_score is not null   -- completed games only (mart_game_results semantics)
+  and g.home_final_score is not null   -- completed games only (matches the gate's reference slate)
 
-order by g.official_date, g.game_pk
+order by g.game_date, g.game_pk
 """
 
 
