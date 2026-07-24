@@ -13,11 +13,22 @@ refreshed intraday, so it never lags for a scheduled/completed slate). The R gam
 identical to `mart_game_results` for every completed slate (verified), and neither offense
 nor starter reads any RESULT column — only `game_type`. `starter_ip` already does this.
 
-Guard: none of the four floor/blocking signal generators may regress to `mart_game_results`
-for the game universe. `run_env` ALSO consumes realized scores (`total_runs`) but takes them
-from `stg_statsapi_games.home_score + away_score` (EXACT parity with mart_game_results' finals,
-populated the moment a game goes Final) with `home_score IS NOT NULL` to keep completed-only
-semantics — so it is race-free too, without depending on the heavy daily --w5 mart rebuild.
+Guard (offense/starter/starter_ip): source the `game_type='R'` filter from `stg_statsapi_games`,
+never the lagging completed-only `mart_game_results`. These three read NO result column — their
+universe is a SUPERSET of the gate's completed slate (offense's is lineup'd games), so they always
+cover the gate's demand. That is still correct and pinned below.
+
+`run_env` IS DIFFERENT and does the OPPOSITE (2026-07-24 reconciliation): it consumes realized
+scores (`total_runs`) and MUST read `mart_game_results` — the EXACT table + completed-only filter
+the signal_freshness gate anchors on (`max(game_date) from mart_game_results where game_type='R'
+and home_final_score is not null`; coverage denominator = games in mart_game_results). INC-34 had
+moved run_env to `stg_statsapi_games.home_score` for freshness, but that DE-SYNCED it from the gate:
+the two "is this game Final + its runs" signals are INDEPENDENT pipelines (Statcast pitch data via
+stg_batter_pitches vs the StatsAPI monthly_schedule capture) that can disagree at generator time —
+on 2026-07-24 mart_game_results had the 7/23 finals while stg_statsapi_games.home_score lagged, so
+run_env emitted 0/10 → BLOCKING HALT. Re-unifying run_env onto the gate's own source makes a false
+HALT structurally impossible in EITHER lag direction. So the run_env guard below is INVERTED vs the
+other three: run_env must read mart_game_results, they must not.
 """
 from __future__ import annotations
 
@@ -79,34 +90,43 @@ class TestStarterUsesFreshGameUniverse:
         )
 
 
-class TestRunEnvUsesFreshGameUniverse:
-    def test_run_env_query_uses_stg_not_mart_game_results(self):
+class TestRunEnvIsAlignedToTheGateSource:
+    """run_env's guard is INVERTED vs offense/starter: it MUST read mart_game_results (the gate's
+    own source), because it consumes realized total_runs and the gate demands exactly the games in
+    mart_game_results (2026-07-24 reconciliation — see module docstring)."""
+
+    def test_run_env_query_reads_mart_game_results(self):
         q = _score_query_run_env(RUN_ENV)
-        assert "stg_statsapi_games" in q, (
-            "run_env must source its game universe + total_runs from stg_statsapi_games (intraday-"
-            "fresh) so it can't race the lagging --w5 mart_game_results rebuild (the blocking-floor "
-            "recurrence of the 2026-07-21 HALT)."
-        )
-        assert "mart_game_results" not in _sql_code_only(q), (
-            "run_env query regressed to mart_game_results (checked on comment-stripped SQL)."
+        assert "baseball_data.betting.mart_game_results" in _sql_code_only(q), (
+            "run_env must source its game universe + total_runs from mart_game_results — the EXACT "
+            "table the signal_freshness gate anchors on — or a false HALT is possible when the "
+            "StatsAPI schedule pipeline and the Statcast-derived mart disagree on which games are "
+            "Final (the 2026-07-24 0/10 run_env HALT)."
         )
 
-    def test_run_env_gets_total_runs_from_stg_scores_completed_only(self):
-        q = _score_query_run_env(RUN_ENV)
-        assert "home_score + g.away_score" in q or "home_score+g.away_score" in q.replace(" ", ""), (
-            "run_env total_runs must come from stg_statsapi_games home_score+away_score (parity with "
-            "mart_game_results finals)."
-        )
-        assert "home_score is not null" in q.lower(), (
-            "run_env must keep completed-only semantics (home_score IS NOT NULL) — else it would emit "
-            "rows for scheduled/postponed games mart_game_results excluded."
+    def test_run_env_does_not_read_stg_statsapi_games(self):
+        # The whole point of the reconciliation: run_env must NOT source its universe from a
+        # SEPARATE pipeline than the gate. stg_statsapi_games.home_score is that separate pipeline.
+        assert "stg_statsapi_games" not in _sql_code_only(_score_query_run_env(RUN_ENV)), (
+            "run_env regressed to stg_statsapi_games — re-de-syncs it from the gate (mart_game_results)."
         )
 
-    def test_run_env_filters_on_official_date_not_varchar_game_date(self):
-        # official_date is a DATE; stg_statsapi_games.game_date is the INC-23 VARCHAR — filtering/
-        # selecting the VARCHAR would reintroduce the year(VARCHAR) binder bite.
-        q = _score_query_run_env(RUN_ENV)
-        assert "g.official_date >= " in q and "g.official_date <= " in q
+    def test_run_env_gets_total_runs_from_mart_finals_completed_only(self):
+        q = _sql_code_only(_score_query_run_env(RUN_ENV))
+        assert "home_final_score + g.away_final_score" in q or \
+               "home_final_score+g.away_final_score" in q.replace(" ", ""), (
+            "run_env total_runs must come from mart_game_results home_final_score+away_final_score."
+        )
+        assert "home_final_score is not null" in q.lower(), (
+            "run_env must keep completed-only semantics via mart_game_results.home_final_score IS NOT "
+            "NULL — the gate's exact completed-slate filter."
+        )
+
+    def test_run_env_filters_on_date_typed_game_date(self):
+        # mart_game_results.game_date is a real DATE (cast ::date in the model) — NOT the INC-23
+        # VARCHAR game_date on stg_statsapi_games — so a DATE range filter is binder-safe.
+        q = _sql_code_only(_score_query_run_env(RUN_ENV))
+        assert "g.game_date >= " in q and "g.game_date <= " in q
 
 
 class TestPrecedent:
