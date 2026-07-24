@@ -3,6 +3,10 @@
     "week": "2026-07-20",
     "items": [
       {
+        "tag": "new",
+        "text": "Added 'Continue with Google' to the sign-in page. You can now sign in with your Google account in one tap instead of typing an email and password — Credence never sees your Google password, and the account you land in works exactly like a regular one. Existing email-and-password sign-in continues to work unchanged."
+      },
+      {
         "tag": "fixed",
         "text": "Fixed bets in your Bet Log staying marked 'open' long after their games had finished. Settlement — grading each pending bet win/loss/push against the final score (or, for pitcher-strikeout props, the starter's actual strikeout total) — only ran once a day, in the early-morning update. Because a full slate plays out over the afternoon and evening, a game that finished at night wasn't graded until the next morning, so bets could show 'open' for up to a day. Settlement now also runs on an evening/overnight cadence, so a bet grades within a couple of hours of its game ending — the same night, not the next day. This is a factual result recap, not betting advice."
       },
