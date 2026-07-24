@@ -10,3 +10,6 @@
 # (per-season variance components, home-field advantage, covariate coefficients, gate
 # results) and reviewing a model change means reading exactly those.
 *.parquet
+# NCAAF-P1.5 per-run season-board demo sidecar (regenerated each run; the durable board home is the
+# lake `ncaaf/derived/season_simulation_board/`; the audit trail is ablation_results/ncaaf_p1_5_*).
+ncaaf_season_board_*.meta.json
