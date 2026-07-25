@@ -84,6 +84,47 @@ NFLVERSE_RELEASE = "https://github.com/nflverse/nflverse-data/releases/download"
 _ROSTER_STR_COLS = ("jersey_number", "draft_number")
 
 
+def last_completed_season(today: "date | None" = None) -> int:
+    """The most recent NFL season whose Super Bowl has been played — the clock-derived upper
+    bound for a historical backfill, and the complement `current_season()` roll-forward TARGET
+    is built from (NF-D1, the NFL analog of NCAAF-P0.7's `current_season()` — never hardcode a
+    season; a pinned target silently rots the day the calendar turns).
+
+    A season YYYY runs Sep YYYY → early/mid-Feb YYYY+1 (the Super Bowl). So from MARCH onward the
+    season that started LAST calendar year is unambiguously complete (free agency/the draft/roster
+    cuts for the NEXT season are the only things left). During Jan/Feb the prior season's playoffs
+    /Super Bowl may still be in progress, so we conservatively fall back one further — mirrors the
+    NCAAF January-bowls conservatism (`ncaaf/ingest/sources.py::last_completed_season`), just with
+    NFL's later (Feb, not mid-Jan) championship date pushing the threshold month to March. Landing
+    into an in-progress season would seed a PARTIAL partition that `--skip-existing` then protects
+    forever — an operator wanting the just-finishing season passes `--seasons` explicitly.
+
+    Self-contained stdlib only: this package ships as a LEAN image (its Dockerfile COPYs just
+    `nfl/ingest/` + its own requirements) — importing `betting_ml.utils.game_day` here would
+    ImportError at runtime. Injectable `today` keeps it unit-testable.
+    """
+    d = today or datetime.now(timezone.utc).date()
+    return d.year - 1 if d.month >= 3 else d.year - 2
+
+
+def current_season(today: "date | None" = None) -> int:
+    """The UPCOMING-or-in-progress NFL season — the NF-D1 season-roll-forward TARGET (the season
+    MVP-1's fantasy board + any live game-model board are built FOR), the complement of
+    `last_completed_season`.
+
+    A season YYYY runs Sep YYYY → early/mid-Feb YYYY+1. So from MARCH onward the season that will
+    START this calendar year (free agency/draft/roster-building already underway) is the current
+    target; during Jan/Feb the season that began LAST year may still be finishing its playoffs/
+    Super Bowl, so IT is still current. That is exactly `last_completed_season() + 1` at every
+    point on the calendar — a single clock-derived definition, never a pinned year, so the exact
+    same roll-forward job is re-runnable next spring unchanged (the NCAAF-P0.6 stale-by-a-season
+    landmine this pattern exists to avoid).
+
+    Injectable `today` keeps it unit-testable; stdlib-only so the lean ingest image can import it.
+    """
+    return last_completed_season(today) + 1
+
+
 @dataclass
 class Ctx:
     """Everything the fetchers need — the Odds key + a lazy DuckDB conn for the nflverse
@@ -643,3 +684,41 @@ NFLVERSE_WEEKLY = [n for n, s in SOURCES.items() if s.tier == "nflverse" and s.c
 NFLVERSE_SEASONAL = [n for n, s in SOURCES.items() if s.tier == "nflverse" and s.cadence == "seasonal"]
 # Everything a DEFAULT (unnamed) run pulls — excludes the on_demand paid odds sources (N0.4).
 DEFAULT_SOURCES = [n for n, s in SOURCES.items() if not s.on_demand]
+
+# ── The SEASON ROLL-FORWARD source set (NF-D1 — the NFL analog of NCAAF-P0.7) ────────────
+# The feeds `roll_forward.py` refreshes on a recurring cadence so the upcoming season's fantasy
+# board (MVP-1) + any live game-model board can sharpen off REAL 2026 data instead of the 2025
+# carryover, and nothing else:
+#   • rosters / weekly_rosters — free-agency + roster moves → who's actually on which team.
+#   • schedules — ⭐ HIGH LEVERAGE: the game spine `stg_nfl_schedules` derives its week-start
+#     ASOF anchors from. Landing it is what unblocks the `depth_charts` week-map below (currently
+#     0-mapped for 2026 — no schedule means no week to bucket a daily depth snapshot into).
+#   • depth_charts — the 2025+ daily ESPN role snapshots (`stg_nfl_depth_charts`); needs
+#     `schedules` landed FIRST (same run is fine — `run_ingest` fetches in registry order, and the
+#     ASOF week-map is a downstream dbt rebuild step, not computed at ingest time).
+#   • injuries — availability signal (NF-D2 priority #5).
+#   • nflverse_draft_picks / nflverse_combine — the 2026 rookie class (draft slot + measurables).
+# DELIBERATELY EXCLUDED: the heavy per-play/advanced stack (`pbp`, `pbp_participation`,
+# `ftn_charting`, `ngs_*`, `pfr_advstats_*`, `stats_player_*`, `stats_team_week`, `snap_counts`,
+# `qbr_*`, `officials`, `nflverse_players`) — those are populated from REALIZED games, so they
+# don't exist yet for an unplayed season and would just be repeated 404-clean-skips every refresh
+# — and every Odds API source (`ODDS_ON_DEMAND` + the live odds feeds), which is a separate
+# credit-budget concern (N0.4), not this cadence's job. So a roll-forward refresh is 7 cheap,
+# UNAUTHENTICATED nflverse release reads (no API key needed, unlike NCAAF's CFBD calls).
+ROLL_FORWARD_SOURCES = [
+    "rosters",
+    "weekly_rosters",
+    "schedules",
+    "depth_charts",
+    "injuries",
+    "nflverse_draft_picks",
+    "nflverse_combine",
+]
+# Registry-integrity: every roll-forward source must exist, be a (free) nflverse source, and
+# never be an on_demand/paid pull — a routine pre-season refresh must not burn Odds credits or
+# fan out a per-play/per-game endpoint. Enforced here (and in test_nfl_roll_forward) so a future
+# edit can't silently slip a heavy/paid source into the recurring cadence.
+assert all(n in SOURCES for n in ROLL_FORWARD_SOURCES), "ROLL_FORWARD_SOURCES has an unknown source"
+assert all(SOURCES[n].tier == "nflverse" and not SOURCES[n].on_demand for n in ROLL_FORWARD_SOURCES), (
+    "ROLL_FORWARD_SOURCES must be free (non-on_demand) nflverse sources only"
+)

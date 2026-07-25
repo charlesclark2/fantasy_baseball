@@ -426,27 +426,19 @@ def _season_kickoffs(ctx: Ctx, year: int, *, weeks=None) -> list[datetime]:
     return sorted(kicks)
 
 
-def _odds_ncaaf_historical(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
-    """HISTORICAL CLOSING game lines (h2h/spreads/totals) for a season — the leakage-safe CLV
-    benchmark (NOT the mis-tagged live `odds_ncaaf` feed). For each distinct kickoff K we call
-    `/historical/.../odds?date=K−buffer` scoped to K's game window; the API returns the last
-    snapshot ≤ that time = the closing line. Every event carries the API's own `commence_time`
-    and we stamp `_snapshot_ts` / `_requested_snapshot`, so a downstream CLV mart enforces the
-    hard leakage guard (keep only snapshot_ts < commence_time) belt-and-suspenders.
+def _odds_historical_for_kickoffs(ctx: Ctx, kicks: list[datetime]) -> list[dict]:
+    """The per-kickoff `/historical` snapshot loop, factored out of `_odds_ncaaf_historical` so a
+    caller that already knows EXACTLY which kickoffs it wants (P0.6b's recurring catch-up —
+    `odds_recurring_capture.py`) can fetch them directly, without re-deriving kickoffs via the
+    ambiguous CFBD `week` field (postseason bowl "week 1" collides with regular-season "week 1"
+    under CFBD's default `season_type="both"` numbering — grouping by week is unsafe; the
+    recurring capture instead diffs against the flat kickoff list this function also consumes).
 
-    ⛔ BELOW-FLOOR SKIP: FEATURED historical coverage starts season `NCAAF_HISTORICAL_FLOOR`
-    (2020). A pre-floor season returns an empty slice (a clean skip, ALERT-loud) — no 422
-    grinding, no wasted credits.
-
-    Paid `/historical`: 10 × 3 markets × #regions credits per kickoff snapshot. NCAAF slates are
-    DENSER than the NFL (many staggered college start times), so the per-season kickoff count —
-    hence credit cost — is materially higher; ALWAYS `--dry-run` first."""
-    if int(year) < NCAAF_HISTORICAL_FLOOR:
-        log.warning("ALERT [odds_ncaaf_historical] season %s < historical floor %s — no "
-                    "historical closing lines exist (empty slice, no credits spent).",
-                    year, NCAAF_HISTORICAL_FLOOR)
-        return []
-    kicks = _season_kickoffs(ctx, year, weeks=weeks)
+    For each kickoff K: `/historical/.../odds?date=K−buffer` scoped to K's game window; the API
+    returns the last snapshot ≤ that time = the closing line. Every event carries the API's own
+    `commence_time` and we stamp `_snapshot_ts` / `_requested_snapshot`, so a downstream CLV mart
+    enforces the hard leakage guard (keep only snapshot_ts < commence_time) belt-and-suspenders.
+    """
     if ctx.odds_max_events is not None:
         kicks = kicks[: ctx.odds_max_events]     # cheap verification pull (cap snapshots)
     buf = timedelta(minutes=ctx.odds_snapshot_buffer_min)
@@ -472,6 +464,28 @@ def _odds_ncaaf_historical(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
             if isinstance(ev, dict):
                 out.append({**ev, "_snapshot_ts": snap_ts or snap, "_requested_snapshot": snap})
     return out
+
+
+def _odds_ncaaf_historical(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
+    """HISTORICAL CLOSING game lines (h2h/spreads/totals) for a season — the leakage-safe CLV
+    benchmark (NOT the mis-tagged live `odds_ncaaf` feed). See `_odds_historical_for_kickoffs`
+    for the per-kickoff snapshot mechanics; this wrapper derives the kickoff list from CFBD
+    (whole season, or `weeks`-scoped — an explicit operator override, e.g. a verification pull).
+
+    ⛔ BELOW-FLOOR SKIP: FEATURED historical coverage starts season `NCAAF_HISTORICAL_FLOOR`
+    (2020). A pre-floor season returns an empty slice (a clean skip, ALERT-loud) — no 422
+    grinding, no wasted credits.
+
+    Paid `/historical`: 10 × 3 markets × #regions credits per kickoff snapshot. NCAAF slates are
+    DENSER than the NFL (many staggered college start times), so the per-season kickoff count —
+    hence credit cost — is materially higher; ALWAYS `--dry-run` first."""
+    if int(year) < NCAAF_HISTORICAL_FLOOR:
+        log.warning("ALERT [odds_ncaaf_historical] season %s < historical floor %s — no "
+                    "historical closing lines exist (empty slice, no credits spent).",
+                    year, NCAAF_HISTORICAL_FLOOR)
+        return []
+    kicks = _season_kickoffs(ctx, year, weeks=weeks)
+    return _odds_historical_for_kickoffs(ctx, kicks)
 
 
 # ── nflverse fetchers (release Parquet via DuckDB — the feeder universe) ─────────────────

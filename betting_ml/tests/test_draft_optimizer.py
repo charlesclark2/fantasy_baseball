@@ -144,6 +144,36 @@ def test_backup_qb_deprioritized_once_starter_set():
     assert recs[0].position != "QB", "a backup QB should not be recommended #1 once the starter is set"
 
 
+def test_full_starters_prefer_skill_depth_over_backup_qb_te():
+    # after a complete starting lineup (QB/2RB/2WR/TE/FLEX) is set, the optimizer should favor RB/WR
+    # bench upside — a 2nd QB (can't start another in a 1-QB league) must not lead the recommendations.
+    cfg = presets.full_ppr()
+    board = _board(cfg)
+    def top(pos, n):
+        return [r["player_id"] for r in board if NORM(r["position"]) == pos][:n]
+    mine = top("QB", 1) + top("RB", 3) + top("WR", 2) + top("TE", 1)   # fills every starter + FLEX(RB)
+    recs = draft.recommend(board, config=cfg, drafted_ids=mine, my_player_ids=mine, normalize=NORM, top_n=5)
+    assert recs[0].position in ("RB", "WR"), f"expected RB/WR depth, got {recs[0].position}"
+    assert "QB" not in {r.position for r in recs[:3]}, "a backup QB should not be a top-3 pick once set"
+
+
+def test_bye_week_stack_is_penalized():
+    # holding 2 WRs on bye 7, an equal-VOR WR also on bye 7 should rank BELOW one on a different bye.
+    cfg = presets.full_ppr()
+
+    def wr(pid, bye, vor=50.0, pts=150.0):
+        return {"player_id": pid, "player_name": pid, "position": "WR", "vor": vor,
+                "league_points": pts, "positional_rank": 1, "overall_rank": 1,
+                "replacement_points": 100.0, "team_id": "X", "is_rookie": False, "bye": bye}
+
+    board = [wr("mine1", 7), wr("mine2", 7), wr("free_bye7", 7), wr("free_bye9", 9)]
+    recs = draft.recommend(board, config=cfg, drafted_ids=["mine1", "mine2"],
+                           my_player_ids=["mine1", "mine2"], normalize=NORM, top_n=2)
+    top = {r.player_id: r for r in recs}
+    assert top["free_bye9"].score > top["free_bye7"].score
+    assert top["free_bye7"].bye_conflict == 2 and top["free_bye9"].bye_conflict == 0
+
+
 def test_null_vor_rows_never_recommended():
     # K/DST placeholders (no projection → vor None) must never surface as a recommendation.
     cfg = presets.full_ppr()

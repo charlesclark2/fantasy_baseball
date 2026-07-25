@@ -56,6 +56,7 @@ from quant_sports_intel_models.football.nfl.fantasy.season_projection import (  
 log = logging.getLogger("nfl.fantasy.fastpath")
 
 MARTS_SCHEMA = "main_nfl_marts"
+STAGING_SCHEMA = "main_nfl_staging"
 _DEFAULT_OUT = _PROJECT_ROOT / "quant_sports_intel_models/football/nfl/fantasy/artifacts"
 _REPORT_PATH = (
     _PROJECT_ROOT
@@ -128,7 +129,9 @@ _RECENCY_DECAY = 0.6   # weight of a season one year older than the base season
 _WINDOW_YEARS = 3      # base season + the two prior
 
 
-def load_base_season(con, season: int, schema: str = MARTS_SCHEMA) -> pd.DataFrame:
+def load_base_season(
+    con, season: int, schema: str = MARTS_SCHEMA, staging_schema: str = STAGING_SCHEMA
+) -> pd.DataFrame:
     lo = season - (_WINDOW_YEARS - 1)
     per_season = con.sql(_MULTI_SEASON_SQL.format(schema=schema, season=season, lo=lo)).df()
     if per_season.empty:
@@ -168,11 +171,32 @@ def load_base_season(con, season: int, schema: str = MARTS_SCHEMA) -> pd.DataFra
     """).df()
     df = df.merge(meta, on="player_id", how="left")
 
-    # current depth-chart rank (role signal for expected games)
+    # current depth-chart rank (role signal for expected games). NF-D1 cold-start fix
+    # (2026-07-25): prefer `stg_nfl_depth_charts_current` — the freshest known ESPN snapshot for
+    # the season being PROJECTED — over `dim_player_role`'s in-season SCD "current" record.
+    # `dim_player_role` is built off `stg_nfl_depth_charts`'s week-ASOF map, which only covers
+    # weeks a season has actually PLAYED; for an upcoming season with a schedule but zero elapsed
+    # weeks (the normal state during the whole Mar-Aug roll-forward window), its "current" record
+    # stays pinned to the prior season's final week even though nflverse/ESPN is already
+    # publishing fresh camp-battle depth. `stg_nfl_depth_charts_current` has no such gap — it is
+    # keyed straight off the raw snapshot with no week requirement. A player absent from the
+    # current-season snapshot (not yet on any team's depth chart) falls back to the SCD record.
     role = con.sql(f"""
-        select player_id, depth_chart_position_rank
-        from {schema}.dim_player_role where current_record_indicator = 'Y'
-        qualify row_number() over (partition by player_id order by record_effective_ts desc) = 1
+        with current_preseason as (
+            select player_id, depth_chart_position_rank
+            from {staging_schema}.stg_nfl_depth_charts_current
+            where season = {season}
+        ),
+        scd_current as (
+            select player_id, depth_chart_position_rank
+            from {schema}.dim_player_role where current_record_indicator = 'Y'
+            qualify row_number() over (partition by player_id order by record_effective_ts desc) = 1
+        )
+        select
+            coalesce(p.player_id, s.player_id)                                as player_id,
+            coalesce(p.depth_chart_position_rank, s.depth_chart_position_rank) as depth_chart_position_rank
+        from scd_current s
+        full outer join current_preseason p using (player_id)
     """).df()
     df = df.merge(role, on="player_id", how="left")
     return df
@@ -457,8 +481,18 @@ def main(argv: list[str] | None = None) -> int:
 
     con = duckdb.connect(args.duckdb, read_only=True)
     try:
+        # NF-D1 cold-start fix (2026-07-25): `fct_player_week` is a roster×schedule CALENDAR
+        # spine, not a played-games table — as soon as an upcoming season's schedule + rosters
+        # land (the roll-forward cadence), that season enters the calendar with `played_flag`
+        # false for every row (0 games actually played yet). A bare `max(season)` therefore
+        # auto-detects the UPCOMING season as the "base," not the last one actually played,
+        # which then projects a season with no real base data to train off. Gate on
+        # `played_flag` so auto-detection only ever picks a season that has REALIZED games —
+        # a no-op for every season before a schedule-only roll-forward existed.
         base_season = args.base_season or int(
-            con.sql(f"select max(season) from {args.schema}.fct_player_week").fetchone()[0])
+            con.sql(
+                f"select max(season) from {args.schema}.fct_player_week where played_flag"
+            ).fetchone()[0])
         primary_season = args.projection_season or (base_season + 1)
         # the set of projection seasons to emit — the forward one, plus any backtest history
         seasons = [primary_season]
