@@ -17,6 +17,10 @@ from pipeline.schedules.sports_dbt_schedules import (
 # needs CFBD_API_KEY on the box) — ENABLE in Dagit before the Aug-29 opener (the launch-critical
 # action; intended state in BOX_OPERATIONS.md §10).
 from pipeline.schedules.sports_rollforward_schedules import sports_ncaaf_roll_forward_schedule
+# NCAAF-P0.6b: the recurring IN-SEASON closing-line catch-up (weekly, Aug-Jan). ⛔ default_status=
+# STOPPED (operator-gated, needs ODDS_API_KEY + CFBD_API_KEY) — ENABLE alongside the roll-forward
+# schedule before the Aug-29 opener (intended state in BOX_OPERATIONS.md §10).
+from pipeline.schedules.sports_odds_capture_schedules import sports_ncaaf_odds_capture_schedule
 # E7.1 — daily MiLB incremental ingest. default_status=RUNNING (self-start; continuous capture of
 # the live 2026 season). Isolated single-op job; WARN-tier; free Stats API; Snowflake-free.
 from pipeline.schedules.milb_ingest_schedule import milb_ingest_schedule
@@ -35,5 +39,6 @@ all_schedules = [
     sports_ncaaf_dbt_schedule,
     sports_nfl_dbt_schedule,
     sports_ncaaf_roll_forward_schedule,
+    sports_ncaaf_odds_capture_schedule,
     milb_ingest_schedule,
 ] + all_intraday_schedules
