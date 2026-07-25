@@ -1,0 +1,352 @@
+"""draft.py — sport-agnostic LIVE draft optimizer over a VOR board (NF-C2 / MVP-3).
+
+Given a scored+ranked league board (the `vor.build_board` / `mart_nfl_fantasy_league_board` output),
+plus the CURRENT draft state (who's been taken, who's on MY roster, my slot, the league's roster
+requirements), recommend the value-maximizing pick(s). Three signals, all transparent:
+
+  1. VOR              — value-over-replacement already encodes CROSS-position scarcity (the board's job).
+  2. POSITIONAL NEED  — does adding this player fill one of MY still-open STARTER slots (dedicated OR
+                        flex/superflex)? A player who plugs a hole is worth more to *me* than his raw VOR.
+  3. VONA / TIER CLIFF— value-over-next-available at his position: how much value I lose at that position
+                        if I pass now and wait. A big drop-off (the "tier cliff") is the grab-now signal.
+
+The recommendation score stays in VOR POINTS (additive, never a multiplier — VOR can be negative):
+
+    score = vor + need_bonus                          (need_bonus = 0 when the slot is already full)
+    need_bonus = NEED_W[level] * positional_dropoff   (level: open-dedicated > open-flex > none)
+
+so the rationale writes itself ("VOR 122 + fills your open RB2, +38 drop-off to the next RB = 160").
+
+Everything is pure (board rows in, recommendations out) and sport-neutral: positions, eligibility and
+roster shape come only from the `LeagueConfig` — the identical algorithm powers the live TS client
+(`frontend/lib/draft-optimizer.ts`); keep the two in lock-step. K/DST (or any position with no ranked
+players) simply never surface as a candidate — handled by construction, never a crash.
+"""
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass, field
+from typing import Callable, Iterable, Sequence
+
+from quant_sports_intel_models.fantasy_engine.league_config import LeagueConfig
+
+# Need weights (in VONA-points): a candidate that fills an OPEN DEDICATED starter slot gets the full
+# positional drop-off as a bonus; one that only fills a FLEX/superflex spot gets a fraction; a position
+# whose starter demand I've already met gets none (VOR alone ranks the pure-depth pick).
+NEED_W_DEDICATED = 1.0
+NEED_W_FLEX = 0.4
+# Beyond starters, how many bench bodies per position count as healthy depth before a pick is "surplus".
+DEPTH_TARGET = 2
+
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+# Roster requirements — the league's STARTER shape, distilled from a LeagueConfig
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class RosterRequirements:
+    """The per-team STARTER demand: dedicated single-position slots + multi-eligibility flex slots.
+    Bench slots carry no starter demand (they don't drive need). Built once per league config."""
+
+    dedicated: dict[str, int]                       # position -> dedicated starter count per team
+    flex: tuple[tuple[frozenset[str], int], ...]    # (eligible-set, count) per flex/superflex slot
+    bench: int = 0
+
+    @classmethod
+    def from_config(cls, config: LeagueConfig) -> "RosterRequirements":
+        dedicated: dict[str, int] = {}
+        flex: list[tuple[frozenset[str], int]] = []
+        bench = 0
+        for s in config.roster:
+            if s.bench:
+                bench += s.count
+                continue
+            if len(s.eligible) == 1:
+                dedicated[s.eligible[0]] = dedicated.get(s.eligible[0], 0) + s.count
+            elif len(s.eligible) > 1:
+                flex.append((frozenset(s.eligible), s.count))
+        return cls(dedicated=dedicated, flex=tuple(flex), bench=bench)
+
+    def positions(self) -> set[str]:
+        out = set(self.dedicated)
+        for elig, _ in self.flex:
+            out |= set(elig)
+        return out
+
+
+@dataclass
+class OpenSlots:
+    """What starter demand REMAINS for my roster after assigning the players I already hold."""
+
+    dedicated: dict[str, int]                        # position -> still-open dedicated spots
+    flex: list[frozenset[str]]                       # one entry per still-open flex/superflex spot
+
+    def need_level(self, position: str) -> int:
+        """2 = fills an open DEDICATED slot; 1 = fills only an open FLEX; 0 = no open starter slot."""
+        if self.dedicated.get(position, 0) > 0:
+            return 2
+        if any(position in elig for elig in self.flex):
+            return 1
+        return 0
+
+
+def _normalize(profile_normalize: Callable[[str | None], str | None] | None, pos: str | None) -> str | None:
+    if profile_normalize is None:
+        return pos
+    return profile_normalize(pos)
+
+
+def open_starter_slots(
+    my_positions: Sequence[str],
+    req: RosterRequirements,
+    *,
+    normalize: Callable[[str | None], str | None] | None = None,
+) -> OpenSlots:
+    """Greedily assign the positions I've already drafted to my starter slots (dedicated first, then
+    the most-restrictive flex), and return what's still open. Most-restrictive-first mirrors `vor.py`'s
+    league-wide flex allocation so 'need' is defined consistently with how replacement was computed."""
+    open_ded = dict(req.dedicated)
+    counts: dict[str, int] = {}
+    for p in my_positions:
+        p = _normalize(normalize, p)
+        if p is None:
+            continue
+        counts[p] = counts.get(p, 0) + 1
+
+    # fill dedicated slots first
+    for pos in list(open_ded.keys()):
+        take = min(open_ded[pos], counts.get(pos, 0))
+        open_ded[pos] -= take
+        counts[pos] = counts.get(pos, 0) - take
+
+    # expand flex slots to individual spots, most-restrictive (smallest eligibility) first
+    flex_spots: list[frozenset[str]] = []
+    for elig, n in req.flex:
+        flex_spots.extend([elig] * n)
+    flex_spots.sort(key=len)
+
+    open_flex: list[frozenset[str]] = []
+    for elig in flex_spots:
+        # fill this flex spot with any leftover eligible player, preferring the scarcest surplus
+        filler = None
+        for pos in sorted(elig, key=lambda p: counts.get(p, 0)):
+            if counts.get(pos, 0) > 0:
+                filler = pos
+                break
+        if filler is not None:
+            counts[filler] -= 1
+        else:
+            open_flex.append(elig)
+    return OpenSlots(dedicated={p: n for p, n in open_ded.items() if n > 0}, flex=open_flex)
+
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+# Tiers — group a position's players by unusually-large VOR/points gaps (the "tier cliff")
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+def assign_tiers(points_desc: Sequence[float], *, k: float = 1.0, min_gap: float = 1e-9) -> list[int]:
+    """Tier numbers (1 = best) for a DESCENDING points list. A new tier starts at an 'unusually large'
+    consecutive drop: gap > mean(gaps) + k*std(gaps). Transparent, sample-robust, no magic thresholds."""
+    n = len(points_desc)
+    if n == 0:
+        return []
+    if n == 1:
+        return [1]
+    gaps = [max(0.0, float(points_desc[i]) - float(points_desc[i + 1])) for i in range(n - 1)]
+    mean = sum(gaps) / len(gaps)
+    var = sum((g - mean) ** 2 for g in gaps) / len(gaps)
+    std = math.sqrt(var)
+    thr = mean + k * std
+    tiers = [1]
+    t = 1
+    for g in gaps:
+        if g > thr and g > min_gap:
+            t += 1
+        tiers.append(t)
+    return tiers
+
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+# The recommendation
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+@dataclass
+class Recommendation:
+    player_id: str
+    player_name: str
+    position: str
+    team_id: str | None
+    vor: float
+    league_points: float
+    positional_rank: int
+    overall_rank: int
+    score: float                     # VOR + need bonus — the recommendation sort key
+    need_level: int                  # 2 dedicated / 1 flex / 0 none
+    need_bonus: float
+    positional_dropoff: float        # VONA: my-value lost at this position if I pass now
+    tier: int
+    is_last_in_tier: bool
+    is_rookie: bool
+    vor_p10: float | None
+    vor_p90: float | None
+    rationale: str
+
+
+def _fnum(v, default=0.0) -> float:
+    try:
+        if v is None:
+            return default
+        f = float(v)
+        return default if math.isnan(f) else f
+    except (TypeError, ValueError):
+        return default
+
+
+def recommend(
+    board: Iterable[dict],
+    *,
+    config: LeagueConfig,
+    drafted_ids: Iterable[str] = (),
+    my_player_ids: Iterable[str] = (),
+    normalize: Callable[[str | None], str | None] | None = None,
+    top_n: int = 8,
+    tier_k: float = 1.0,
+) -> list[Recommendation]:
+    """Rank the still-AVAILABLE board players for MY next pick.
+
+    `board`         — the (config, size)-filtered board rows (dicts with player_id, position, vor,
+                      league_points, positional_rank, overall_rank, team_id, is_rookie, vor_p10/p90).
+    `drafted_ids`   — every player already taken (by anyone), MINE INCLUDED.
+    `my_player_ids` — the subset on my roster (drives positional need).
+    `normalize`     — optional position normalizer (e.g. NFL FB→RB); defaults to identity.
+
+    Returns up to `top_n` recommendations sorted by `score` (VOR + roster-need bonus), each with a
+    plain-language rationale. Positions with no ranked players (K/DST) never appear — by construction.
+    """
+    drafted = set(drafted_ids)
+    mine = set(my_player_ids)
+    req = RosterRequirements.from_config(config)
+
+    # my current positions → still-open starter slots
+    my_positions: list[str] = []
+    by_id: dict[str, dict] = {}
+    available: list[dict] = []
+    for row in board:
+        pid = str(row.get("player_id"))
+        by_id[pid] = row
+        if pid in drafted:
+            if pid in mine:
+                my_positions.append(_normalize(normalize, row.get("position")) or "")
+            continue
+        available.append(row)
+    open_slots = open_starter_slots(my_positions, req, normalize=normalize)
+
+    # per-position available lists (points-descending) → tiers + next-available lookup
+    pos_players: dict[str, list[dict]] = {}
+    for row in available:
+        pos = _normalize(normalize, row.get("position"))
+        if pos is None:
+            continue
+        pos_players.setdefault(pos, []).append(row)
+    pos_tier: dict[str, dict[str, int]] = {}
+    pos_next_vor: dict[str, dict[str, float]] = {}
+    my_counts: dict[str, int] = {}
+    for p in my_positions:
+        my_counts[p] = my_counts.get(p, 0) + 1
+    for pos, rows in pos_players.items():
+        rows.sort(key=lambda r: _fnum(r.get("league_points")), reverse=True)
+        tiers = assign_tiers([_fnum(r.get("league_points")) for r in rows], k=tier_k)
+        pos_tier[pos] = {}
+        pos_next_vor[pos] = {}
+        for i, r in enumerate(rows):
+            pid = str(r.get("player_id"))
+            pos_tier[pos][pid] = tiers[i]
+            nxt = _fnum(rows[i + 1].get("vor")) if i + 1 < len(rows) else _fnum(r.get("replacement_points")) - _fnum(r.get("league_points"))
+            # positional drop-off (VONA) = my value now minus the best value still available AFTER me
+            pos_next_vor[pos][pid] = nxt
+
+    recs: list[Recommendation] = []
+    for row in available:
+        pid = str(row.get("player_id"))
+        pos = _normalize(normalize, row.get("position"))
+        if pos is None:
+            continue
+        vor = _fnum(row.get("vor"))
+        next_vor = pos_next_vor[pos].get(pid, 0.0)
+        dropoff = max(0.0, vor - next_vor)
+        level = open_slots.need_level(pos)
+        need_w = NEED_W_DEDICATED if level == 2 else (NEED_W_FLEX if level == 1 else 0.0)
+        need_bonus = need_w * dropoff
+        # surplus damping: no open starter slot AND already stacked deep at the position
+        held = my_counts.get(pos, 0)
+        starter_demand = req.dedicated.get(pos, 0)
+        surplus_pen = 0.0
+        if level == 0 and held >= starter_demand + DEPTH_TARGET and vor > 0:
+            surplus_pen = 0.5 * vor
+        score = vor + need_bonus - surplus_pen
+
+        tier = pos_tier[pos].get(pid, 1)
+        rows_pos = pos_players[pos]
+        last_in_tier = (
+            rows_pos.index(row) == len(rows_pos) - 1
+            or pos_tier[pos].get(str(rows_pos[rows_pos.index(row) + 1].get("player_id"))) != tier
+        )
+        recs.append(Recommendation(
+            player_id=pid,
+            player_name=str(row.get("player_name") or ""),
+            position=pos,
+            team_id=(row.get("team_id") if row.get("team_id") is not None else None),
+            vor=round(vor, 1),
+            league_points=round(_fnum(row.get("league_points")), 1),
+            positional_rank=int(_fnum(row.get("positional_rank"))),
+            overall_rank=int(_fnum(row.get("overall_rank"))),
+            score=round(score, 1),
+            need_level=level,
+            need_bonus=round(need_bonus, 1),
+            positional_dropoff=round(dropoff, 1),
+            tier=tier,
+            is_last_in_tier=bool(last_in_tier),
+            is_rookie=bool(row.get("is_rookie")),
+            vor_p10=(round(_fnum(row.get("vor_p10")), 1) if row.get("vor_p10") is not None else None),
+            vor_p90=(round(_fnum(row.get("vor_p90")), 1) if row.get("vor_p90") is not None else None),
+            rationale=_rationale(pos, level, need_bonus, dropoff, last_in_tier, tier, surplus_pen),
+        ))
+
+    recs.sort(key=lambda r: r.score, reverse=True)
+    return recs[:top_n]
+
+
+def _rationale(pos, level, need_bonus, dropoff, last_in_tier, tier, surplus_pen) -> str:
+    parts: list[str] = []
+    if level == 2:
+        parts.append(f"fills your open {pos} starter")
+    elif level == 1:
+        parts.append(f"fills an open FLEX ({pos}-eligible)")
+    if last_in_tier and dropoff > 0:
+        parts.append(f"last of Tier {tier} — {dropoff:.0f} VOR cliff to the next {pos}")
+    elif dropoff > 0 and need_bonus > 0:
+        parts.append(f"+{dropoff:.0f} VOR over the next {pos}")
+    if surplus_pen > 0:
+        parts.append(f"depth pick — {pos} starters already set")
+    if not parts:
+        parts.append("best value on the board (VOR)")
+    return "; ".join(parts)
+
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+# Snake-draft helpers — "how long until my next pick?" (informs whether a tier survives the wait)
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+def overall_pick_for(team_slot: int, n_teams: int, draft_round: int) -> int:
+    """1-indexed overall pick number for `team_slot` (1..n_teams) in `draft_round` (1-indexed), snake."""
+    if draft_round % 2 == 1:                              # odd round: 1..n_teams
+        return (draft_round - 1) * n_teams + team_slot
+    return (draft_round - 1) * n_teams + (n_teams - team_slot + 1)  # even round: reversed
+
+
+def my_upcoming_picks(team_slot: int, n_teams: int, rounds: int) -> list[int]:
+    return [overall_pick_for(team_slot, n_teams, r) for r in range(1, rounds + 1)]
+
+
+def picks_until_next(team_slot: int, n_teams: int, current_overall_pick: int, rounds: int = 30) -> int:
+    """How many OTHER picks happen before my next turn (0 = I'm on the clock now)."""
+    for p in my_upcoming_picks(team_slot, n_teams, rounds):
+        if p >= current_overall_pick:
+            return p - current_overall_pick
+    return 0

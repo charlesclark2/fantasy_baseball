@@ -28,6 +28,15 @@ from quant_sports_intel_models.fantasy_engine.league_config import (  # noqa: F4
     ScoringRules,
     SportProfile,
 )
+from quant_sports_intel_models.fantasy_engine.draft import (  # noqa: F401
+    OpenSlots,
+    Recommendation,
+    RosterRequirements,
+    assign_tiers,
+    open_starter_slots,
+    picks_until_next,
+    recommend,
+)
 from quant_sports_intel_models.fantasy_engine.scoring import score_players  # noqa: F401
 from quant_sports_intel_models.fantasy_engine.vor import (  # noqa: F401
     build_board,
@@ -43,4 +52,11 @@ __all__ = [
     "score_players",
     "compute_replacement_levels",
     "build_board",
+    "recommend",
+    "Recommendation",
+    "RosterRequirements",
+    "OpenSlots",
+    "open_starter_slots",
+    "assign_tiers",
+    "picks_until_next",
 ]

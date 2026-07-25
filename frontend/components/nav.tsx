@@ -22,6 +22,7 @@ type ActiveLink =
   | "players"
   | "props"
   | "parlay"
+  | "fantasy-draft"
   | null
 
 const latestWeek = changelog[0]?.week
@@ -268,6 +269,20 @@ export function Nav({
             )}
           </Link>
 
+          {/* Fantasy — admin-only during the MVP-3 draft-tool rollout */}
+          {isAdmin && (
+            <Link
+              href="/fantasy/draft"
+              className={
+                activeLink === "fantasy-draft"
+                  ? "border-b-2 border-[#10b981] pb-2.5 text-sm font-medium text-white transition-colors whitespace-nowrap"
+                  : "border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors whitespace-nowrap"
+              }
+            >
+              Fantasy
+            </Link>
+          )}
+
           {/* Admin dropdown */}
           {isAdmin && (
             <div className="group relative">
@@ -376,6 +391,22 @@ export function Nav({
 
             {isAdmin && (
               <>
+                <div className="my-2 border-t border-[#262626]" />
+                <span className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
+                  Fantasy
+                </span>
+                <Link
+                  href="/fantasy/draft"
+                  onClick={() => setMobileOpen(false)}
+                  className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+                    activeLink === "fantasy-draft"
+                      ? "bg-[#1a1a1a] text-white"
+                      : "text-gray-400 hover:bg-[#141414] hover:text-white"
+                  }`}
+                >
+                  Draft Optimizer
+                </Link>
+
                 <div className="my-2 border-t border-[#262626]" />
                 <span className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
                   Admin
