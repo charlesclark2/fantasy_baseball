@@ -490,10 +490,17 @@ for t in mart_pitch_characteristics mart_pitch_play_event mart_pitch_game_contex
   aws s3 rm --recursive "s3://baseball-betting-ml-artifacts/baseball/lakehouse/$t/"
 done
 ```
-(e) **AFTER credit measurement (LAPTOP, 7 days later):** re-run BOTH Step-0 queries →
-the AC-C BEFORE→AFTER table; the (i) query should be ~zero, and the residual (ii) spend
-is attributable to Cortex + the not-yet-migrated families (name the next-biggest from
-`query_history` to seed phase 2's migration order).
+(e) **AFTER credit measurement (LAPTOP, after 3 CLEAN game days — window shortened
+2026-07-20 from the original 7; 3 game days matched the flips verdict and the credit
+bleed argues against waiting):** drops executed late 2026-07-19 CDT → clean days =
+7/21–7/23 → run the AFTER read the morning of 7/24 (account_usage metering latency is
+~12h+ on this account — never trust a read <12h after the day closes; the 2.04→4.46
+7/18 revision proved it). Re-run BOTH Step-0 queries → the AC-C BEFORE→AFTER table; the
+(i) query should be ~zero, and the residual (ii) spend is attributable to Cortex + the
+not-yet-migrated families (name the next-biggest from `query_history` to seed phase 2's
+migration order). ⚠️ AC-C is a REPORT, not a gate — phase-2 build work starts as soon
+as the runtime gate (first post-drop daily green) passes; only a FLIP/cutover of a
+phase-2 family would wait on its own measurement.
 
 ## 7. Multi-sport template note
 
