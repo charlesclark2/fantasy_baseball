@@ -1,0 +1,328 @@
+"""run_league_board.py — NF-C1-lite CLI: MVP-1 raw projections → per-league scored + ranked boards.
+
+Reads the MVP-1 season projection (the raw stat line — `mart_nfl_fantasy_season_projection` / the S3
+Delta `nfl/fantasy/derived/season_projections`, or a local artifact parquet), RESCORES it per league
+config with the sport-agnostic `fantasy_engine`, computes VOR / positional scarcity (flex + superflex
+allocation), and lands a cross-position ranked board per preset to the lake + readable CSVs + a
+face-validity report. The board is MVP-3's (draft optimizer) input contract.
+
+⚠️ RESCORES THE RAW STAT LINE — never the MVP-1 `proj_fp_*` convenience columns (those are one format).
+
+⭐ RUN ON THE LAPTOP (like the MVP-1 projection). SF-free; laptop compute + S3 I/O, zero shared-box CPU.
+`SPORTS_LAKE_REGION=us-east-2` for the S3 read/write.
+
+Read the projection from the local MVP-1 artifact (default) or straight from the lake Delta:
+    # from the local MVP-1 artifact parquet (offline, no creds):
+    uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_league_board \
+        --projection-season 2026
+
+    # from the S3 lake Delta (the real lake):
+    SPORTS_LAKE_REGION=us-east-2 uv run python -m \
+        quant_sports_intel_models.football.nfl.fantasy.run_league_board \
+        --projection-season 2026 --from-lake --s3
+
+Outputs (per projection season):
+  * <out-dir>/league_boards/nfl_league_board_<preset>_<year>.csv   — a readable ranked board per preset
+  * <out-dir>/league_configs/<preset>.json                          — the config object (shared contract)
+  * s3://credence-sports-lakehouse/nfl/fantasy/derived/league_boards/season=<year>/  (--s3; all presets)
+  * ablation_results/nf_c1_lite_league_board.md                     — the face-validity report
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[4]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from quant_sports_intel_models.fantasy_engine import score_players  # noqa: E402
+from quant_sports_intel_models.fantasy_engine.vor import (  # noqa: E402
+    build_board,
+    compute_replacement_levels,
+    replacement_summary,
+)
+from quant_sports_intel_models.football.nfl.fantasy.league_presets import (  # noqa: E402
+    NFL_PROFILE,
+    PRESETS,
+    get_preset,
+)
+
+log = logging.getLogger("nfl.fantasy.league_board")
+
+_DEFAULT_OUT = _PROJECT_ROOT / "quant_sports_intel_models/football/nfl/fantasy/artifacts"
+_REPORT_PATH = (
+    _PROJECT_ROOT
+    / "quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_c1_lite_league_board.md"
+)
+
+ENGINE_VERSION = "nfl_fantasy_league_board_v1"
+
+# The emitted per-league board schema (MVP-3's input contract). Ordered for readability.
+BOARD_COLS = [
+    "config_name", "sport", "season", "player_id", "player_name", "position", "team_id",
+    "is_rookie", "proj_games",
+    "league_points", "replacement_points", "vor", "positional_rank", "overall_rank",
+    "league_points_p10", "league_points_p90", "vor_p10", "vor_p90",
+    "uncertainty_type", "n_teams", "ppr", "superflex", "engine_version", "generated_at",
+]
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Read the MVP-1 raw projection
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def load_projection_local(artifacts_dir: Path, season: int) -> pd.DataFrame:
+    p = artifacts_dir / f"nfl_fantasy_season_projections_{season}.parquet"
+    if not p.exists():
+        raise FileNotFoundError(
+            f"MVP-1 projection artifact not found: {p}. Run run_season_projection.py first, "
+            f"or use --from-lake to read the S3 Delta, or pass --projections-parquet."
+        )
+    return pd.read_parquet(p)
+
+
+def load_projection_lake(season: int) -> pd.DataFrame:
+    """Read the MVP-1 season projection straight from the S3 lake Delta (the real-lake path)."""
+    import duckdb
+
+    from quant_sports_intel_models.football.nfl.ingest import s3io
+
+    uri = s3io.table_uri("nfl", "season_projections", tier="fantasy/derived")
+    con = duckdb.connect()
+    try:
+        con.execute("install delta; load delta; install httpfs; load httpfs;")
+        opts = s3io.storage_options()
+        region = opts.get("AWS_REGION", "us-east-2")
+        con.execute(f"set s3_region='{region}';")
+        if opts.get("AWS_ACCESS_KEY_ID"):
+            con.execute(f"set s3_access_key_id='{opts['AWS_ACCESS_KEY_ID']}';")
+            con.execute(f"set s3_secret_access_key='{opts['AWS_SECRET_ACCESS_KEY']}';")
+            if opts.get("AWS_SESSION_TOKEN"):
+                con.execute(f"set s3_session_token='{opts['AWS_SESSION_TOKEN']}';")
+        return con.sql(
+            f"select * from delta_scan('{uri}') where projection_season = {season}"
+        ).df()
+    finally:
+        con.close()
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Board assembly per config
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def board_for_config(proj: pd.DataFrame, config, season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Score + VOR the raw projection under one config. Returns (board, replacement_summary)."""
+    scored = score_players(proj, config, NFL_PROFILE)
+    board = build_board(scored, config, NFL_PROFILE)
+    repl, started = compute_replacement_levels(scored, config, NFL_PROFILE)
+    repl_tbl = replacement_summary(config, NFL_PROFILE, repl, started)
+
+    board["config_name"] = config.name
+    board["season"] = int(season)
+    board["n_teams"] = config.n_teams
+    board["ppr"] = config.ppr
+    board["superflex"] = config.superflex
+    board["engine_version"] = ENGINE_VERSION
+    board["generated_at"] = datetime.now(timezone.utc).isoformat()
+    # rename the carried point-interval columns to the emitted names
+    board = board.rename(columns={
+        "league_points_p10": "league_points_p10", "league_points_p90": "league_points_p90",
+    })
+    for c in BOARD_COLS:
+        if c not in board.columns:
+            board[c] = np.nan
+    board = board[BOARD_COLS].sort_values("overall_rank").reset_index(drop=True)
+    return board, repl_tbl
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Report — the edge-independent gate (scoring correctness + face-valid preset deltas)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def _md(df: pd.DataFrame) -> str:
+    try:
+        return df.to_markdown(index=False, floatfmt=".1f")
+    except Exception:  # noqa: BLE001
+        return df.to_string(index=False)
+
+
+def _qb_rank_of_best(board: pd.DataFrame) -> tuple[str, int]:
+    qb = board[board["position"] == "QB"].nsmallest(1, "overall_rank")
+    if qb.empty:
+        return ("—", -1)
+    return (str(qb["player_name"].iloc[0]), int(qb["overall_rank"].iloc[0]))
+
+
+def write_report(boards: dict, repl_tables: dict, season: int, path: Path) -> None:
+    a = []
+    p = a.append
+    p(f"# NF-C1-lite — {season} NFL league-config scoring + VOR boards (MVP-2)")
+    p("")
+    p(f"**Engine:** `{ENGINE_VERSION}` (sport-agnostic `fantasy_engine`) · **projection season:** {season} "
+      f"· **generated:** {datetime.now(timezone.utc).isoformat()}")
+    p("")
+    p("> ⚖️ **A PROJECTION PRODUCT, edge-independent** — no `best_alpha`/PBO/DSR/CLV gate. The gate is "
+      "(1) SCORING CORRECTNESS (hand-calc match — see the fast-gate tests), (2) a TRANSPARENT "
+      "replacement-level definition (the per-position demand tables below), and (3) FACE-VALID preset "
+      "deltas (full-PPR lifts pass-catchers; superflex lifts QBs). We **RESCORE the MVP-1 raw stat "
+      "line** per league — never the `proj_fp_*` convenience columns. Uncertainty is carried through the "
+      "rescore as a coefficient-of-variation (a first-order interval, not a false-precise point); rookie "
+      "intervals remain PARAMETER uncertainty and must be recalibrated before pricing.")
+    p("")
+
+    # ── face-validity: how the best QB's overall rank moves across presets (the superflex proof) ──
+    p("## 1. Face validity — the preset deltas that prove the scarcity math")
+    p("")
+    rows = []
+    for name in ("standard", "half_ppr", "full_ppr", "superflex"):
+        if name not in boards:
+            continue
+        b = boards[name]
+        qb_name, qb_rank = _qb_rank_of_best(b)
+        # count pass-catchers (WR/TE) in the top 10
+        top10 = b.head(10)
+        pass_catchers_top10 = int(top10["position"].isin(("WR", "TE")).sum())
+        rbs_top10 = int((top10["position"] == "RB").sum())
+        rows.append({
+            "preset": name,
+            "best_QB": qb_name,
+            "best_QB_overall_rank": qb_rank,
+            "WR+TE_in_top10": pass_catchers_top10,
+            "RB_in_top10": rbs_top10,
+        })
+    p(_md(pd.DataFrame(rows)))
+    p("")
+    p("- ✅ **Superflex lifts QBs:** the best QB's overall rank should jump sharply from full-PPR to "
+      "superflex (a QB-eligible SUPERFLEX slot roughly doubles QB starter demand → QB replacement drops "
+      "→ QB VOR rises). This is the direct check the flex-allocation math is right.")
+    p("- ✅ **PPR lifts pass-catchers:** WR/TE representation in the top 10 should rise from standard → "
+      "half → full PPR as receptions gain value.")
+    p("")
+
+    # ── the transparent replacement-level definition per preset ──
+    p("## 2. Positional scarcity — the replacement-level definition (auditable)")
+    p("")
+    p("Replacement level per position = the points of the FIRST non-startable player (the best player "
+      "available for free). DEMAND = dedicated starter spots + the position's allocated share of the "
+      "FLEX/SUPERFLEX pool (allocated greedily, most-restrictive slot first). VOR = league points − this "
+      "replacement level.")
+    p("")
+    for name in ("standard", "full_ppr", "superflex"):
+        if name not in repl_tables:
+            continue
+        p(f"### {name}")
+        p("")
+        p(_md(repl_tables[name]))
+        p("")
+
+    # ── the boards themselves ──
+    p("## 3. Ranked boards — top 20 by VOR")
+    p("")
+    show = ["overall_rank", "player_name", "position", "positional_rank", "proj_games",
+            "league_points", "replacement_points", "vor", "vor_p10", "vor_p90"]
+    for name in ("standard", "full_ppr", "superflex"):
+        if name not in boards:
+            continue
+        p(f"### {name}")
+        p("")
+        p(_md(boards[name].head(20)[show]))
+        p("")
+
+    p("## 4. Limitations")
+    p("")
+    p("- **Presets over the MVP-1 raw line** — the board is only as good as the MVP-1 projection it "
+      "rescores; the within-tier ordering gap vs The Fantasy Footballers (RB/WR) carries through. NF-D2 "
+      "closes it upstream.")
+    p("- **K/DST carry no projection line** (MVP-1 is offensive skill players only) → those slots create "
+      "no ranked players; the board covers QB/RB/WR/TE (FB folded into RB).")
+    p("- **Uncertainty is a CV rescale**, not a per-format re-derived variance (no per-format game logs). "
+      "Honest as a first-order interval; recalibrate rookie (parameter) intervals before pricing.")
+    p("- **Manual formats only** — platform import (NF-C0) populates this SAME config object later; the "
+      "config schema is the shared contract.")
+    p("")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(a) + "\n")
+    log.info("report → %s", path)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Main
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description="NF-C1-lite — per-league scored + VOR boards from MVP-1")
+    ap.add_argument("--projection-season", type=int, default=2026)
+    ap.add_argument("--presets", nargs="*", default=["standard", "half_ppr", "full_ppr", "superflex"],
+                    help=f"presets to score (default: the 4 gate presets). Available: {sorted(PRESETS)}")
+    ap.add_argument("--n-teams", type=int, default=12)
+    ap.add_argument("--from-lake", action="store_true",
+                    help="read the MVP-1 projection from the S3 lake Delta instead of a local artifact")
+    ap.add_argument("--projections-parquet", default=None,
+                    help="explicit path to an MVP-1 projection parquet (overrides the default artifact)")
+    ap.add_argument("--out-dir", default=str(_DEFAULT_OUT))
+    ap.add_argument("--s3", action="store_true", help="also land the boards to the S3 sports lake")
+    ap.add_argument("--lake-root", default=None, help="land to a LOCAL-FS Delta tree instead of S3")
+    ap.add_argument("--no-report", action="store_true")
+    ap.add_argument("-v", "--verbose", action="store_true")
+    args = ap.parse_args(argv)
+
+    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
+                        format="%(asctime)s %(levelname)-7s %(message)s")
+    if args.s3 and args.lake_root:
+        ap.error("--s3 and --lake-root are mutually exclusive")
+
+    season = args.projection_season
+    out_dir = Path(args.out_dir)
+    (out_dir / "league_boards").mkdir(parents=True, exist_ok=True)
+    (out_dir / "league_configs").mkdir(parents=True, exist_ok=True)
+
+    if args.projections_parquet:
+        proj = pd.read_parquet(args.projections_parquet)
+        proj = proj[pd.to_numeric(proj.get("projection_season"), errors="coerce") == season] \
+            if "projection_season" in proj.columns else proj
+    elif args.from_lake:
+        proj = load_projection_lake(season)
+    else:
+        proj = load_projection_local(out_dir, season)
+    if proj.empty:
+        ap.error(f"no MVP-1 projection rows for season {season}")
+    log.info("loaded %d MVP-1 projection rows for season %d", len(proj), season)
+
+    configs = [get_preset(name, args.n_teams) for name in args.presets]
+
+    boards: dict[str, pd.DataFrame] = {}
+    repl_tables: dict[str, pd.DataFrame] = {}
+    for cfg in configs:
+        board, repl_tbl = board_for_config(proj, cfg, season)
+        boards[cfg.name] = board
+        repl_tables[cfg.name] = repl_tbl
+        # persist the config object (the shared contract NF-C0 populates)
+        (out_dir / "league_configs" / f"{cfg.name}.json").write_text(json.dumps(cfg.to_dict(), indent=2))
+        # readable per-preset CSV
+        board.to_csv(out_dir / "league_boards" / f"nfl_league_board_{cfg.name}_{season}.csv", index=False)
+        log.info("  %s: %d players ranked (best QB overall rank %d)",
+                 cfg.name, len(board), _qb_rank_of_best(board)[1])
+
+    # land all presets for the season as one Delta partition (replaceWhere by season)
+    if args.s3 or args.lake_root:
+        from quant_sports_intel_models.football.nfl.ingest import s3io
+        combined = pd.concat(boards.values(), ignore_index=True)
+        n = s3io.write_dataframe(
+            combined, sport="nfl", source="league_boards", season=int(season),
+            tier="fantasy/derived", local_root=args.lake_root)
+        log.info("landed %d board rows (%d presets) → nfl/fantasy/derived/league_boards season=%d",
+                 n, len(boards), season)
+
+    if not args.no_report:
+        write_report(boards, repl_tables, season, _REPORT_PATH)
+
+    log.info("done. presets: %s", ", ".join(boards))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
