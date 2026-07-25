@@ -202,10 +202,13 @@ models:
       rookie intervals are PARAMETER uncertainty → recalibrate before pricing. NULL = kept NULL.
     columns:
       - name: config_name
-        description: The league preset / config the row was scored under (standard/half_ppr/full_ppr/superflex).
+        description: The league preset / config the row was scored under (standard/half_ppr/full_ppr/superflex + 3-WR variants).
+        data_tests: [not_null]
+      - name: n_teams
+        description: League size — a normalized dimension of the grain (VOR replacement scales with it).
         data_tests: [not_null]
       - name: player_id
-        description: gsis_id — the per-player grain (with config_name).
+        description: gsis_id — the per-player grain (with config_name + n_teams).
         data_tests: [not_null]
       - name: league_points
         description: League-specific fantasy points from RESCORING the MVP-1 raw stat line.

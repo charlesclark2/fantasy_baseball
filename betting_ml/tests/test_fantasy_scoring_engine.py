@@ -74,7 +74,7 @@ def test_uncertainty_passthrough_scales_by_cv():
 
 
 # ── 2. CONFIG SCHEMA — the shared contract round-trips ────────────────────────────────────────────
-@pytest.mark.parametrize("name", ["standard", "half_ppr", "full_ppr", "superflex", "te_premium"])
+@pytest.mark.parametrize("name", sorted(presets.PRESETS))
 def test_config_roundtrips_through_dict(name):
     cfg = presets.get_preset(name)
     back = lc.LeagueConfig.from_dict(cfg.to_dict())
@@ -89,6 +89,27 @@ def test_validation_rejects_bad_config():
     with pytest.raises(ValueError):
         lc.LeagueConfig(name="x", sport="nfl", n_teams=12,
                         scoring=lc.ScoringRules(per_stat={}), roster=good.roster).validate()
+
+
+def test_three_wr_roster_raises_wr_demand():
+    """The 1QB/2RB/3WR/1TE/1FLEX roster must demand 3 dedicated WR/team (vs 2 in the standard shape),
+    which deepens WR replacement vs the 2-WR preset on the same pool."""
+    two = presets.full_ppr()
+    three = presets.full_ppr_3wr()
+    assert three.dedicated_demand()["WR"] == 3 * three.n_teams
+    assert two.dedicated_demand()["WR"] == 2 * two.n_teams
+    # a deep WR-heavy synthetic pool: more WR started under 3-WR ⇒ WR replacement is deeper (lower)
+    rows = [("QB", f"q{k}", 300 - 3 * k) for k in range(30)]
+    rows += [("RB", f"r{k}", 260 - 3 * k) for k in range(60)]
+    rows += [("WR", f"w{k}", 270 - 2 * k) for k in range(90)]
+    rows += [("TE", f"t{k}", 180 - 4 * k) for k in range(30)]
+    pool = pd.DataFrame(
+        [{"position": p, "player_id": i, "player_name": i, "league_points": float(v)} for p, i, v in rows]
+    )
+    r2, st2 = vor.compute_replacement_levels(pool, two, PROFILE)
+    r3, st3 = vor.compute_replacement_levels(pool, three, PROFILE)
+    assert st3["WR"] > st2["WR"]           # more WRs started
+    assert r3["WR"] < r2["WR"]             # WR replacement is deeper (lower)
 
 
 def test_superflex_preset_has_a_qb_eligible_flex():

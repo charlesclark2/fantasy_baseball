@@ -1,0 +1,95 @@
+{
+  "format_version": "1.0",
+  "name": "full_ppr_3wr",
+  "sport": "nfl",
+  "n_teams": 10,
+  "ppr": "ppr",
+  "superflex": false,
+  "description": "Full-PPR (1.0/reception), 12-team, 1QB/2RB/3WR/1TE/1FLEX (3-WR roster).",
+  "scoring": {
+    "per_stat": {
+      "pass_yds": 0.04,
+      "pass_td": 4.0,
+      "pass_int": -2.0,
+      "rush_yds": 0.1,
+      "rush_td": 6.0,
+      "rec_yds": 0.1,
+      "rec_td": 6.0,
+      "fumbles_lost": -2.0,
+      "two_pt": 2.0,
+      "rec": 1.0
+    },
+    "position_bonuses": {}
+  },
+  "roster": [
+    {
+      "name": "QB",
+      "count": 1,
+      "eligible": [
+        "QB"
+      ],
+      "bench": false
+    },
+    {
+      "name": "RB",
+      "count": 2,
+      "eligible": [
+        "RB"
+      ],
+      "bench": false
+    },
+    {
+      "name": "WR",
+      "count": 3,
+      "eligible": [
+        "WR"
+      ],
+      "bench": false
+    },
+    {
+      "name": "TE",
+      "count": 1,
+      "eligible": [
+        "TE"
+      ],
+      "bench": false
+    },
+    {
+      "name": "FLEX",
+      "count": 1,
+      "eligible": [
+        "RB",
+        "WR",
+        "TE"
+      ],
+      "bench": false
+    },
+    {
+      "name": "K",
+      "count": 1,
+      "eligible": [
+        "K"
+      ],
+      "bench": false
+    },
+    {
+      "name": "DST",
+      "count": 1,
+      "eligible": [
+        "DST"
+      ],
+      "bench": false
+    },
+    {
+      "name": "BN",
+      "count": 6,
+      "eligible": [
+        "QB",
+        "RB",
+        "WR",
+        "TE"
+      ],
+      "bench": true
+    }
+  ]
+}
