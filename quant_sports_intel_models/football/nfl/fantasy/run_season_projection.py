@@ -481,8 +481,18 @@ def main(argv: list[str] | None = None) -> int:
 
     con = duckdb.connect(args.duckdb, read_only=True)
     try:
+        # NF-D1 cold-start fix (2026-07-25): `fct_player_week` is a roster×schedule CALENDAR
+        # spine, not a played-games table — as soon as an upcoming season's schedule + rosters
+        # land (the roll-forward cadence), that season enters the calendar with `played_flag`
+        # false for every row (0 games actually played yet). A bare `max(season)` therefore
+        # auto-detects the UPCOMING season as the "base," not the last one actually played,
+        # which then projects a season with no real base data to train off. Gate on
+        # `played_flag` so auto-detection only ever picks a season that has REALIZED games —
+        # a no-op for every season before a schedule-only roll-forward existed.
         base_season = args.base_season or int(
-            con.sql(f"select max(season) from {args.schema}.fct_player_week").fetchone()[0])
+            con.sql(
+                f"select max(season) from {args.schema}.fct_player_week where played_flag"
+            ).fetchone()[0])
         primary_season = args.projection_season or (base_season + 1)
         # the set of projection seasons to emit — the forward one, plus any backtest history
         seasons = [primary_season]
