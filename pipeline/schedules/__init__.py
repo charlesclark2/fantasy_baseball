@@ -17,6 +17,9 @@ from pipeline.schedules.sports_dbt_schedules import (
 # needs CFBD_API_KEY on the box) — ENABLE in Dagit before the Aug-29 opener (the launch-critical
 # action; intended state in BOX_OPERATIONS.md §10).
 from pipeline.schedules.sports_rollforward_schedules import sports_ncaaf_roll_forward_schedule
+# E7.1 — daily MiLB incremental ingest. default_status=RUNNING (self-start; continuous capture of
+# the live 2026 season). Isolated single-op job; WARN-tier; free Stats API; Snowflake-free.
+from pipeline.schedules.milb_ingest_schedule import milb_ingest_schedule
 
 # E11.1-W1d: w1_parity_schedule was a one-shot gate (fired 2026-06-25) for the
 # parallel-validation window. Parity confirmed GREEN — schedule decommissioned.
@@ -32,4 +35,5 @@ all_schedules = [
     sports_ncaaf_dbt_schedule,
     sports_nfl_dbt_schedule,
     sports_ncaaf_roll_forward_schedule,
+    milb_ingest_schedule,
 ] + all_intraday_schedules
