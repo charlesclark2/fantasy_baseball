@@ -35,10 +35,14 @@ from quant_sports_intel_models.fantasy_engine.league_config import LeagueConfig
 # whose starter demand I've already met gets none (VOR alone ranks the pure-depth pick).
 NEED_W_DEDICATED = 1.0
 NEED_W_FLEX = 0.4
-# Per-backup surplus penalty (fraction of VOR), applied once my starter demand at a non-flex position is
-# met — capped so even a deep stack keeps a little value. This is what stops a 2nd QB/TE being pushed.
-SURPLUS_W = 0.35
-SURPLUS_CAP = 0.85
+# Surplus (bench-depth) penalty as a fraction of VOR, applied when a pick fills NO open starter slot:
+#   base           — any bench pick is discounted vs a need-filler,
+#   + over-capacity — extra when I already hold as many as I could ever START at the position (dedicated
+#                     + flex-eligible slots) → a 2nd QB in a 1-QB league is punished hard, so it stops
+#                     out-ranking RB/WR depth once my starters are set.
+SURPLUS_BASE = 0.5
+SURPLUS_OVER = 0.35
+SURPLUS_CAP = 0.9
 
 
 # ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -278,15 +282,15 @@ def recommend(
         level = open_slots.need_level(pos)
         need_w = NEED_W_DEDICATED if level == 2 else (NEED_W_FLEX if level == 1 else 0.0)
         need_bonus = need_w * dropoff
-        # surplus damping: this pick fills NO open starter slot (level 0) and I already hold my starter
-        # demand at the position → it's a backup. Deprioritize from the FIRST backup (so a 2nd QB / 2nd
-        # TE stops being recommended the moment my starter is set), scaling as the stack deepens.
+        # surplus damping: this pick fills NO open starter slot (level 0) → it's bench depth. Discount it
+        # vs a need-filler, and punish it HARDER once I already hold everything I could ever start at the
+        # position (so a 2nd QB / 2nd TE stops out-ranking RB/WR depth once my starters are set).
         held = my_counts.get(pos, 0)
-        starter_demand = req.dedicated.get(pos, 0)
+        capacity = req.dedicated.get(pos, 0) + sum(n for elig, n in req.flex if pos in elig)
         surplus_pen = 0.0
-        if level == 0 and held >= starter_demand and vor > 0:
-            backups = held - starter_demand + 1
-            surplus_pen = min(SURPLUS_CAP, SURPLUS_W * backups) * vor
+        if level == 0 and vor > 0:
+            frac = SURPLUS_BASE + (SURPLUS_OVER if held >= capacity else 0.0)
+            surplus_pen = min(SURPLUS_CAP, frac) * vor
         score = vor + need_bonus - surplus_pen
 
         tier = pos_tier[pos].get(pid, 1)

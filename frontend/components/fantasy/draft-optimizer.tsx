@@ -114,11 +114,16 @@ function assignRoster(myPlayers: Player[], roster: RosterSlotDef[]): FilledSlot[
       }
     }
   }
-  // leftovers → bench rows
-  const bench = roster.filter((s) => s.bench).reduce((a, s) => a + s.count, 0)
+  // leftovers → bench rows (bench accepts whatever the config's bench slots accept — for the roster
+  // fit-check; defaults to the skill positions).
+  const benchSlots = roster.filter((s) => s.bench)
+  const bench = benchSlots.reduce((a, s) => a + s.count, 0)
+  const benchEligible = benchSlots.length
+    ? Array.from(new Set(benchSlots.flatMap((s) => s.eligible)))
+    : ["QB", "RB", "WR", "TE"]
   const leftover = pool.filter((p) => !used.has(p.id))
   for (let i = 0; i < Math.max(bench, leftover.length); i++) {
-    out.push({ slotName: "BN", eligible: [], player: leftover[i] ?? null, bench: true })
+    out.push({ slotName: "BN", eligible: benchEligible, player: leftover[i] ?? null, bench: true })
   }
   return out
 }
@@ -134,6 +139,8 @@ export function DraftOptimizer() {
   const [picks, setPicks] = useState<Pick[]>([])
   const [search, setSearch] = useState("")
   const [posFilter, setPosFilter] = useState<string>("ALL")
+  const [sortCol, setSortCol] = useState<"ovrRank" | "pts" | "vor">("ovrRank")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
 
   // default the config once the manifest lands
   useEffect(() => {
@@ -210,14 +217,28 @@ export function DraftOptimizer() {
     return openStarterSlots(myPlayers.map((p) => p.pos), rosterRequirements(config.roster))
   }, [myPlayers, config])
 
+  // positions my still-open roster slots (starters + flex + bench + K/DST) can accept — used to stop me
+  // drafting a player who has nowhere to go on MY roster (e.g. a skill player when only K/DST slots remain)
+  const myOpenEligibility = useMemo(() => {
+    const s = new Set<string>()
+    for (const fs of filledRoster) if (!fs.player) fs.eligible.forEach((e) => s.add(e))
+    return s
+  }, [filledRoster])
+  const onlyKdstLeft =
+    myOpenEligibility.size > 0 && Array.from(myOpenEligibility).every((p) => p === "K" || p === "DST")
+  const canPickForMe = (pos: string) => !myTurn || myOpenEligibility.has(pos)
+
   const draftPlayer = useCallback(
-    (id: string) =>
+    (id: string, pos: string) => {
+      if (draftComplete) return
+      if (onClock === mySlot && !myOpenEligibility.has(pos)) return // no open slot on my roster fits
       setPicks((prev) => {
         if (maxPicks > 0 && prev.length >= maxPicks) return prev // rosters full — no overflow
         if (prev.some((p) => p.id === id)) return prev // already drafted (guard double-click)
         return [...prev, { id, slot: slotOnClock(prev.length + 1, size) }]
-      }),
-    [size, maxPicks]
+      })
+    },
+    [size, maxPicks, draftComplete, onClock, mySlot, myOpenEligibility]
   )
   const undo = useCallback(() => setPicks((prev) => prev.slice(0, -1)), [])
   const resetDraft = useCallback(() => {
@@ -227,10 +248,38 @@ export function DraftOptimizer() {
   const available = useMemo(() => {
     const rows = (board ?? []).filter((p) => !draftedIds.has(p.id))
     const q = search.trim().toLowerCase()
-    return rows.filter(
+    const filtered = rows.filter(
       (p) => (posFilter === "ALL" || p.pos === posFilter) && (!q || p.name.toLowerCase().includes(q))
     )
-  }, [board, draftedIds, search, posFilter])
+    const sign = sortDir === "asc" ? 1 : -1
+    // null pts/vor (K/DST) always sort to the bottom regardless of direction
+    const val = (p: Player) => (sortCol === "ovrRank" ? p.ovrRank : (sortCol === "pts" ? p.pts : p.vor))
+    return [...filtered].sort((a, b) => {
+      const av = val(a), bv = val(b)
+      if (av == null && bv == null) return 0
+      if (av == null) return 1
+      if (bv == null) return -1
+      return (av - bv) * sign
+    })
+  }, [board, draftedIds, search, posFilter, sortCol, sortDir])
+
+  const toggleSort = (col: "pts" | "vor") => {
+    if (sortCol === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+    else { setSortCol(col); setSortDir("desc") }
+  }
+
+  // completion summary — starters filled + total projected starter points
+  const starterSummary = useMemo(() => {
+    const starters = filledRoster.filter((s) => !s.bench && s.player)
+    const pts = starters.reduce((a, s) => a + (s.player?.pts ?? 0), 0)
+    const filledStarters = filledRoster.filter((s) => !s.bench)
+    return {
+      startersFilled: starters.length,
+      starterSlots: filledStarters.length,
+      benchFilled: filledRoster.filter((s) => s.bench && s.player).length,
+      projPoints: Math.round(pts),
+    }
+  }, [filledRoster])
 
   // ── SETUP screen ──────────────────────────────────────────────────────────────────────────────
   if (!started) {
@@ -357,8 +406,30 @@ export function DraftOptimizer() {
           </div>
         )
       ) : (
-        <div className="mt-3 rounded-lg border border-[#262626] bg-[#141414] px-4 py-2.5 text-sm text-gray-300">
-          All {maxPicks} roster spots are filled. Use Undo to revise, or Reset to start over.
+        <div className="mt-3 rounded-lg border border-[#10b981]/50 bg-[#10b981]/10 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-base font-semibold text-[#10b981]">🎉 Draft complete!</div>
+              <div className="mt-0.5 text-sm text-gray-300">
+                You filled all {maxPicks} roster spots. Review your team on the right —{" "}
+                <span className="text-white">{starterSummary.startersFilled}/{starterSummary.starterSlots}</span>{" "}
+                starters set,{" "}
+                <span className="text-white">~{starterSummary.projPoints}</span> projected starter points.
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={undo} className="text-gray-300 hover:text-white">
+                <Undo2 className="mr-1 h-3.5 w-3.5" /> Undo last
+              </Button>
+              <Button
+                size="sm"
+                onClick={resetDraft}
+                className="bg-[#10b981] font-semibold text-[#0a0a0a] hover:bg-[#059669]"
+              >
+                Start a new draft
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -382,6 +453,12 @@ export function DraftOptimizer() {
                   <span className="text-[#10b981]">+</span> is the roster-need boost. Not betting advice.
                 </InfoTip>
               </div>
+              {myTurn && onlyKdstLeft && (
+                <div className="mb-3 rounded-md border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-xs text-violet-300">
+                  Only K / DST slots remain — draft a Kicker or Defense from the board below (filter{" "}
+                  <span className="font-semibold">K</span> or <span className="font-semibold">DST</span>).
+                </div>
+              )}
               <div className="flex flex-col gap-2">
                 {recs.map((r, i) => (
                   <div
@@ -411,8 +488,9 @@ export function DraftOptimizer() {
                     </div>
                     <Button
                       size="sm"
-                      onClick={() => draftPlayer(r.player.id)}
-                      disabled={draftComplete}
+                      onClick={() => draftPlayer(r.player.id, r.player.pos)}
+                      disabled={draftComplete || !canPickForMe(r.player.pos)}
+                      title={myTurn && !canPickForMe(r.player.pos) ? "No open slot on your roster fits this position" : undefined}
                       className={
                         myTurn
                           ? "bg-[#10b981] font-semibold text-[#0a0a0a] hover:bg-[#059669]"
@@ -464,8 +542,16 @@ export function DraftOptimizer() {
                     <tr>
                       <th className="py-1.5 pl-1 font-medium">#</th>
                       <th className="py-1.5 font-medium">Player</th>
-                      <th className="py-1.5 text-right font-medium">Pts</th>
-                      <th className="py-1.5 text-right font-medium">VOR</th>
+                      <th className="py-1.5 text-right font-medium">
+                        <button onClick={() => toggleSort("pts")} className="hover:text-gray-300">
+                          Pts{sortCol === "pts" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                        </button>
+                      </th>
+                      <th className="py-1.5 text-right font-medium">
+                        <button onClick={() => toggleSort("vor")} className="hover:text-gray-300">
+                          VOR{sortCol === "vor" ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                        </button>
+                      </th>
                       <th className="py-1.5 pr-1 text-right font-medium"></th>
                     </tr>
                   </thead>
@@ -487,10 +573,16 @@ export function DraftOptimizer() {
                         <td className="py-1.5 text-right text-gray-400">{p.vor != null ? p.vor.toFixed(0) : "—"}</td>
                         <td className="py-1.5 pr-1 text-right">
                           <button
-                            onClick={() => draftPlayer(p.id)}
-                            disabled={draftComplete}
-                            title={myTurn ? "Draft to your team" : `Record for Team #${onClock}`}
-                            className="rounded border border-[#2a2a2a] px-2 py-0.5 text-xs text-gray-400 hover:border-[#10b981] hover:text-[#10b981] disabled:opacity-40"
+                            onClick={() => draftPlayer(p.id, p.pos)}
+                            disabled={draftComplete || !canPickForMe(p.pos)}
+                            title={
+                              myTurn && !canPickForMe(p.pos)
+                                ? "No open slot on your roster fits this position"
+                                : myTurn
+                                ? "Draft to your team"
+                                : `Record for Team #${onClock}`
+                            }
+                            className="rounded border border-[#2a2a2a] px-2 py-0.5 text-xs text-gray-400 hover:border-[#10b981] hover:text-[#10b981] disabled:opacity-30"
                           >
                             {myTurn ? "Draft" : `→ T${onClock}`}
                           </button>

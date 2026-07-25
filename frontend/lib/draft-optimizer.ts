@@ -52,8 +52,9 @@ export interface Manifest {
 
 const NEED_W_DEDICATED = 1.0
 const NEED_W_FLEX = 0.4
-const SURPLUS_W = 0.35
-const SURPLUS_CAP = 0.85
+const SURPLUS_BASE = 0.5
+const SURPLUS_OVER = 0.35
+const SURPLUS_CAP = 0.9
 
 export interface RosterRequirements {
   dedicated: Record<string, number>
@@ -219,11 +220,12 @@ export function recommend(args: RecommendArgs): Recommendation[] {
     const needBonus = needW * dropoff
 
     const held = myCounts[p.pos] ?? 0
-    const starterDemand = req.dedicated[p.pos] ?? 0
+    const capacity =
+      (req.dedicated[p.pos] ?? 0) + req.flex.reduce((a, f) => a + (f.eligible.has(p.pos) ? f.count : 0), 0)
     let surplusPen = 0
-    if (level === 0 && held >= starterDemand && vor > 0) {
-      const backups = held - starterDemand + 1
-      surplusPen = Math.min(SURPLUS_CAP, SURPLUS_W * backups) * vor
+    if (level === 0 && vor > 0) {
+      const frac = SURPLUS_BASE + (held >= capacity ? SURPLUS_OVER : 0)
+      surplusPen = Math.min(SURPLUS_CAP, frac) * vor
     }
     const score = vor + needBonus - surplusPen
 

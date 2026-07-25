@@ -209,11 +209,48 @@ def board_records(df: pd.DataFrame, rookie_teams: dict[str, str] | None = None) 
     return recs
 
 
-def kdst_records(teams: list[str]) -> list[dict]:
+# kicker status priority — pick each team's primary kicker off the most-recent roster (active first).
+_K_STATUS_RANK = {"ACT": 5, "RES": 4, "INA": 3, "PUP": 3, "DEV": 2, "CUT": 1}
+
+
+def kicker_map(season: int = 2025) -> dict[str, str]:
+    """`{normalized_team -> primary kicker name}` from the most-recent roster (K, active-preferred).
+
+    MVP-1 projects offensive skill only, so kickers aren't in the board — but a manager still drafts one,
+    and a real name beats a placeholder. Kickers rarely change team year-to-year, so the latest roster is
+    a good proxy. Best-effort: on any lake-read failure returns {} → the K entry falls back to '<TEAM> K'."""
+    from quant_sports_intel_models.football.nfl.ingest import s3io
+
+    try:
+        uri = s3io.table_uri("nfl", "rosters")
+        con = _lake_connection()
+        try:
+            df = con.sql(
+                f"select team, full_name, status from delta_scan('{uri}') "
+                f"where season = {season} and position = 'K' and full_name is not null"
+            ).df()
+        finally:
+            con.close()
+    except Exception as e:  # noqa: BLE001
+        log.warning("kicker enrichment skipped (rosters read failed: %s)", e)
+        return {}
+    best: dict[str, tuple[int, str]] = {}
+    for _, r in df.iterrows():
+        team = _norm_team(r.get("team"))
+        if not team:
+            continue
+        rank = _K_STATUS_RANK.get(str(r.get("status") or "").strip().upper(), 0)
+        if team not in best or rank > best[team][0]:
+            best[team] = (rank, str(r["full_name"]))
+    return {t: name for t, (_, name) in best.items()}
+
+
+def kdst_records(teams: list[str], kickers: dict[str, str] | None = None) -> list[dict]:
     """Draftable K & DST placeholders — one per real NFL team. MVP-1 projects offensive skill only, so
     these carry NO projection (pts/vor null): they exist purely so a manager can RECORD their K/DST
-    picks and fill those roster slots. They never get recommended (the optimizer skips null-VOR) and
-    sort to the bottom of the board. Team abbreviations come from the projection itself (not fabricated)."""
+    picks and fill those roster slots. They never get recommended (the optimizer skips null-VOR) and sort
+    to the bottom. DST is the team unit ('<TEAM> D/ST'); K uses the real kicker name where resolved."""
+    kickers = kickers or {}
     recs: list[dict] = []
     for t in teams:
         recs.append({
@@ -221,10 +258,11 @@ def kdst_records(teams: list[str]) -> list[dict]:
             "g": None, "pts": None, "repl": None, "vor": None, "posRank": 0, "ovrRank": 9999,
             "vorP10": None, "vorP90": None,
         })
+        k_name = kickers.get(t)  # roster names are already proper-cased — do not re-title-case
         recs.append({
-            "id": f"K-{t}", "name": f"{t} K", "pos": "K", "team": t, "rookie": False,
-            "g": None, "pts": None, "repl": None, "vor": None, "posRank": 0, "ovrRank": 9999,
-            "vorP10": None, "vorP90": None,
+            "id": f"K-{t}", "name": k_name if k_name else f"{t} K", "pos": "K", "team": t,
+            "rookie": False, "g": None, "pts": None, "repl": None, "vor": None, "posRank": 0,
+            "ovrRank": 9999, "vorP10": None, "vorP90": None,
         })
     return recs
 
@@ -267,7 +305,7 @@ def main(argv: list[str] | None = None) -> int:
         _norm_team(str(t)) for t in df["team_id"].dropna().unique()
         if str(t) not in ("", "None", "nan") and _norm_team(str(t))
     })
-    kdst = kdst_records(teams)
+    kdst = kdst_records(teams, kicker_map())
 
     configs_present: list[str] = []
     sizes_present: set[int] = set()
