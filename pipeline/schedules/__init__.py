@@ -16,7 +16,13 @@ from pipeline.schedules.sports_dbt_schedules import (
 # NCAAF-P0.7: the annual PRE-SEASON roll-forward refresh. ⛔ default_status=STOPPED (operator-gated,
 # needs CFBD_API_KEY on the box) — ENABLE in Dagit before the Aug-29 opener (the launch-critical
 # action; intended state in BOX_OPERATIONS.md §10).
-from pipeline.schedules.sports_rollforward_schedules import sports_ncaaf_roll_forward_schedule
+# NF-D1: the annual NFL season roll-forward refresh (rosters/schedule/depth_charts/injuries/
+# rookie class). ⛔ default_status=STOPPED (operator-gated — the mart-rebuild step shares the
+# sports_nfl_dbt_build_job box-readiness prereq; the ingest step itself needs no API key).
+from pipeline.schedules.sports_rollforward_schedules import (
+    sports_ncaaf_roll_forward_schedule,
+    sports_nfl_roll_forward_schedule,
+)
 # NCAAF-P0.6b: the recurring IN-SEASON closing-line catch-up (weekly, Aug-Jan). ⛔ default_status=
 # STOPPED (operator-gated, needs ODDS_API_KEY + CFBD_API_KEY) — ENABLE alongside the roll-forward
 # schedule before the Aug-29 opener (intended state in BOX_OPERATIONS.md §10).
@@ -39,6 +45,7 @@ all_schedules = [
     sports_ncaaf_dbt_schedule,
     sports_nfl_dbt_schedule,
     sports_ncaaf_roll_forward_schedule,
+    sports_nfl_roll_forward_schedule,
     sports_ncaaf_odds_capture_schedule,
     milb_ingest_schedule,
 ] + all_intraday_schedules

@@ -43,6 +43,11 @@ NEED_W_FLEX = 0.4
 SURPLUS_BASE = 0.5
 SURPLUS_OVER = 0.35
 SURPLUS_CAP = 0.9
+# Bye-week stacking penalty (fraction of VOR per player I ALREADY hold at the same position on the same
+# bye week) — a modest tiebreak so I don't end up with, say, 3 WR starters all idle the same week. Only
+# applies when bye weeks are known (populated once the season schedule is ingested).
+BYE_PEN_FRAC = 0.08
+BYE_CLUSTER_CAP = 3
 
 
 # ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -190,6 +195,8 @@ class Recommendation:
     tier: int
     is_last_in_tier: bool
     is_rookie: bool
+    bye: int | None
+    bye_conflict: int
     vor_p10: float | None
     vor_p90: float | None
     rationale: str
@@ -230,8 +237,9 @@ def recommend(
     mine = set(my_player_ids)
     req = RosterRequirements.from_config(config)
 
-    # my current positions → still-open starter slots
+    # my current positions → still-open starter slots; my (position, bye) counts → bye-stack penalty
     my_positions: list[str] = []
+    my_byes: dict[tuple[str, int], int] = {}
     by_id: dict[str, dict] = {}
     available: list[dict] = []
     for row in board:
@@ -239,7 +247,11 @@ def recommend(
         by_id[pid] = row
         if pid in drafted:
             if pid in mine:
-                my_positions.append(_normalize(normalize, row.get("position")) or "")
+                p = _normalize(normalize, row.get("position")) or ""
+                my_positions.append(p)
+                b = row.get("bye")
+                if p and b is not None:
+                    my_byes[(p, int(b))] = my_byes.get((p, int(b)), 0) + 1
             continue
         available.append(row)
     open_slots = open_starter_slots(my_positions, req, normalize=normalize)
@@ -291,7 +303,11 @@ def recommend(
         if level == 0 and vor > 0:
             frac = SURPLUS_BASE + (SURPLUS_OVER if held >= capacity else 0.0)
             surplus_pen = min(SURPLUS_CAP, frac) * vor
-        score = vor + need_bonus - surplus_pen
+        # bye-week stacking: penalize by how many I already start/hold at this position on the same bye
+        bye = row.get("bye")
+        bye_conflict = my_byes.get((pos, int(bye)), 0) if bye is not None else 0
+        bye_pen = BYE_PEN_FRAC * min(bye_conflict, BYE_CLUSTER_CAP) * vor if (bye_conflict and vor > 0) else 0.0
+        score = vor + need_bonus - surplus_pen - bye_pen
 
         tier = pos_tier[pos].get(pid, 1)
         rows_pos = pos_players[pos]
@@ -315,16 +331,19 @@ def recommend(
             tier=tier,
             is_last_in_tier=bool(last_in_tier),
             is_rookie=bool(row.get("is_rookie")),
+            bye=(int(bye) if bye is not None else None),
+            bye_conflict=int(bye_conflict),
             vor_p10=(round(_fnum(row.get("vor_p10")), 1) if row.get("vor_p10") is not None else None),
             vor_p90=(round(_fnum(row.get("vor_p90")), 1) if row.get("vor_p90") is not None else None),
-            rationale=_rationale(pos, level, need_bonus, dropoff, last_in_tier, tier, surplus_pen),
+            rationale=_rationale(pos, level, need_bonus, dropoff, last_in_tier, tier, surplus_pen,
+                                 bye, bye_conflict),
         ))
 
     recs.sort(key=lambda r: r.score, reverse=True)
     return recs[:top_n]
 
 
-def _rationale(pos, level, need_bonus, dropoff, last_in_tier, tier, surplus_pen) -> str:
+def _rationale(pos, level, need_bonus, dropoff, last_in_tier, tier, surplus_pen, bye=None, bye_conflict=0) -> str:
     parts: list[str] = []
     if level == 2:
         parts.append(f"fills your open {pos} starter")
@@ -336,6 +355,8 @@ def _rationale(pos, level, need_bonus, dropoff, last_in_tier, tier, surplus_pen)
         parts.append(f"+{dropoff:.0f} VOR over the next {pos}")
     if surplus_pen > 0:
         parts.append(f"depth pick — {pos} starters already set")
+    if bye_conflict and bye is not None:
+        parts.append(f"⚠ {bye_conflict} other {pos} on bye {bye}")
     if not parts:
         parts.append("best value on the board (VOR)")
     return "; ".join(parts)

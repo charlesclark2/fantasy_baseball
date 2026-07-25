@@ -40,6 +40,7 @@ const FILTER_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DST"] as const
 // A player's team for display: real abbreviation, or an honest label for the unteamed. Rookie team_id
 // is not yet populated in the projection (upstream fix), so a rookie shows "Rk", never a wrong "FA".
 const teamLabel = (p: { team: string | null; rookie: boolean }) => p.team ?? (p.rookie ? "Rk" : "FA")
+const byeLabel = (bye: number | null | undefined) => (bye != null ? `Bye ${bye}` : "")
 
 interface Pick {
   id: string
@@ -474,6 +475,7 @@ export function DraftOptimizer() {
                         <span className="truncate text-sm font-medium text-white">{r.player.name}</span>
                         <span className="text-xs text-gray-600">
                           {teamLabel(r.player)} · {r.player.pos}{r.player.posRank}
+                          {r.player.bye != null && ` · ${byeLabel(r.player.bye)}`}
                         </span>
                         {r.player.rookie && <span className="rounded bg-sky-500/15 px-1 text-[10px] text-sky-300">R</span>}
                       </div>
@@ -565,6 +567,7 @@ export function DraftOptimizer() {
                             <span className="text-white">{p.name}</span>
                             <span className="text-xs text-gray-600">
                               {teamLabel(p)}{p.posRank ? ` · ${p.pos}${p.posRank}` : ""}
+                              {p.bye != null && ` · ${byeLabel(p.bye)}`}
                             </span>
                             {p.rookie && <span className="rounded bg-sky-500/15 px-1 text-[10px] text-sky-300">R</span>}
                           </div>
@@ -666,6 +669,22 @@ function RosterPanel({
     if (openSlots.flex.length) needs.push(`${openSlots.flex.length}× FLEX`)
   }
   const hasKdst = config.roster.some((s) => !s.bench && (s.eligible.includes("K") || s.eligible.includes("DST")))
+
+  // same-position / same-bye clusters among my drafted skill players (2+ = a bye-week stack to flag)
+  const byeGroups = new Map<string, { pos: string; bye: number; n: number }>()
+  for (const s of filled) {
+    const pl = s.player
+    if (!pl || pl.bye == null || !POSITIONS.includes(pl.pos as (typeof POSITIONS)[number])) continue
+    const key = `${pl.pos}|${pl.bye}`
+    const g = byeGroups.get(key) ?? { pos: pl.pos, bye: pl.bye, n: 0 }
+    g.n += 1
+    byeGroups.set(key, g)
+  }
+  const byeConflicts = Array.from(byeGroups.values())
+    .filter((g) => g.n >= 2)
+    .sort((a, b) => b.n - a.n)
+    .map((g) => `${g.n} ${g.pos} on Bye ${g.bye}`)
+
   return (
     <div className="rounded-lg border border-[#262626] bg-[#0f0f0f] p-4">
       <h2 className="mb-3 text-sm font-semibold text-white">Your team</h2>
@@ -689,7 +708,8 @@ function RosterPanel({
               <>
                 <PosBadge pos={s.player.pos} small />
                 <span className="truncate text-sm text-white">{s.player.name}</span>
-                <span className="ml-auto text-xs text-gray-600">{s.player.vor?.toFixed(0)}</span>
+                {s.player.bye != null && <span className="text-[10px] text-gray-600">Bye {s.player.bye}</span>}
+                <span className="ml-auto text-xs text-gray-600">{s.player.vor != null ? s.player.vor.toFixed(0) : "—"}</span>
               </>
             ) : (
               <span className="text-xs text-gray-700">empty</span>
@@ -697,6 +717,11 @@ function RosterPanel({
           </div>
         ))}
       </div>
+      {byeConflicts.length > 0 && (
+        <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] leading-snug text-amber-300">
+          ⚠ Bye-week stack: {byeConflicts.join(", ")}. You&apos;d have multiple starters idle the same week.
+        </div>
+      )}
       {hasKdst && (
         <p className="mt-3 text-[11px] leading-snug text-gray-600">
           K &amp; DST aren&apos;t projected (offensive skill only) — draft them late; they won&apos;t appear on the board.

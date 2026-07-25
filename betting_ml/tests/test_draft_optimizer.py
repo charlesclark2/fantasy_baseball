@@ -157,6 +157,23 @@ def test_full_starters_prefer_skill_depth_over_backup_qb_te():
     assert "QB" not in {r.position for r in recs[:3]}, "a backup QB should not be a top-3 pick once set"
 
 
+def test_bye_week_stack_is_penalized():
+    # holding 2 WRs on bye 7, an equal-VOR WR also on bye 7 should rank BELOW one on a different bye.
+    cfg = presets.full_ppr()
+
+    def wr(pid, bye, vor=50.0, pts=150.0):
+        return {"player_id": pid, "player_name": pid, "position": "WR", "vor": vor,
+                "league_points": pts, "positional_rank": 1, "overall_rank": 1,
+                "replacement_points": 100.0, "team_id": "X", "is_rookie": False, "bye": bye}
+
+    board = [wr("mine1", 7), wr("mine2", 7), wr("free_bye7", 7), wr("free_bye9", 9)]
+    recs = draft.recommend(board, config=cfg, drafted_ids=["mine1", "mine2"],
+                           my_player_ids=["mine1", "mine2"], normalize=NORM, top_n=2)
+    top = {r.player_id: r for r in recs}
+    assert top["free_bye9"].score > top["free_bye7"].score
+    assert top["free_bye7"].bye_conflict == 2 and top["free_bye9"].bye_conflict == 0
+
+
 def test_null_vor_rows_never_recommended():
     # K/DST placeholders (no projection → vor None) must never surface as a recommendation.
     cfg = presets.full_ppr()

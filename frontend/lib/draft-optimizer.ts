@@ -14,6 +14,7 @@ export interface Player {
   name: string
   pos: string
   team: string | null
+  bye: number | null
   rookie: boolean
   g: number | null
   pts: number | null
@@ -55,6 +56,8 @@ const NEED_W_FLEX = 0.4
 const SURPLUS_BASE = 0.5
 const SURPLUS_OVER = 0.35
 const SURPLUS_CAP = 0.9
+const BYE_PEN_FRAC = 0.08
+const BYE_CLUSTER_CAP = 3
 
 export interface RosterRequirements {
   dedicated: Record<string, number>
@@ -158,6 +161,7 @@ export interface Recommendation {
   positionalDropoff: number
   tier: number
   isLastInTier: boolean
+  byeConflict: number
   rationale: string
 }
 
@@ -180,10 +184,14 @@ export function recommend(args: RecommendArgs): Recommendation[] {
   const mine = new Set(myPlayerIds)
 
   const myPositions: string[] = []
+  const myByes = new Map<string, number>() // `${pos}|${bye}` → count I already hold
   const available: Player[] = []
   for (const p of board) {
     if (draftedIds.has(p.id)) {
-      if (mine.has(p.id)) myPositions.push(p.pos)
+      if (mine.has(p.id)) {
+        myPositions.push(p.pos)
+        if (p.bye != null) myByes.set(`${p.pos}|${p.bye}`, (myByes.get(`${p.pos}|${p.bye}`) ?? 0) + 1)
+      }
       continue
     }
     if (p.vor == null) continue // unprojected (K/DST) — never recommended
@@ -227,7 +235,10 @@ export function recommend(args: RecommendArgs): Recommendation[] {
       const frac = SURPLUS_BASE + (held >= capacity ? SURPLUS_OVER : 0)
       surplusPen = Math.min(SURPLUS_CAP, frac) * vor
     }
-    const score = vor + needBonus - surplusPen
+    // bye-week stacking: penalize by how many I already hold at this position on the same bye week
+    const byeConflict = p.bye != null ? myByes.get(`${p.pos}|${p.bye}`) ?? 0 : 0
+    const byePen = byeConflict > 0 && vor > 0 ? BYE_PEN_FRAC * Math.min(byeConflict, BYE_CLUSTER_CAP) * vor : 0
+    const score = vor + needBonus - surplusPen - byePen
 
     const rows = byPos[p.pos]
     const i = idxInPos[p.id]
@@ -241,7 +252,8 @@ export function recommend(args: RecommendArgs): Recommendation[] {
       positionalDropoff: Math.round(dropoff * 10) / 10,
       tier: tierOf[p.id] ?? 1,
       isLastInTier: isLast,
-      rationale: rationale(p.pos, level, needBonus, dropoff, isLast, tierOf[p.id] ?? 1, surplusPen),
+      byeConflict,
+      rationale: rationale(p.pos, level, needBonus, dropoff, isLast, tierOf[p.id] ?? 1, surplusPen, p.bye, byeConflict),
     })
   }
 
@@ -256,7 +268,9 @@ function rationale(
   dropoff: number,
   lastInTier: boolean,
   tier: number,
-  surplusPen: number
+  surplusPen: number,
+  bye: number | null,
+  byeConflict: number
 ): string {
   const parts: string[] = []
   if (level === 2) parts.push(`Fills your open ${pos} starter`)
@@ -264,6 +278,7 @@ function rationale(
   if (lastInTier && dropoff > 0) parts.push(`Last of Tier ${tier} — ${Math.round(dropoff)} VOR cliff to the next ${pos}`)
   else if (dropoff > 0 && needBonus > 0) parts.push(`+${Math.round(dropoff)} VOR over the next ${pos}`)
   if (surplusPen > 0) parts.push(`Depth pick — ${pos} starters already set`)
+  if (byeConflict > 0 && bye != null) parts.push(`⚠ ${byeConflict} other ${pos} on bye ${bye}`)
   if (parts.length === 0) parts.push("Best value on the board (VOR)")
   return parts.join(" · ")
 }

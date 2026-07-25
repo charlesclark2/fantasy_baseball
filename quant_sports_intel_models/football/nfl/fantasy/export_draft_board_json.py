@@ -177,11 +177,16 @@ def rookie_team_map() -> dict[str, str]:
 
 
 # ── build the JSON ────────────────────────────────────────────────────────────────────────────────
-def board_records(df: pd.DataFrame, rookie_teams: dict[str, str] | None = None) -> list[dict]:
+def board_records(
+    df: pd.DataFrame,
+    rookie_teams: dict[str, str] | None = None,
+    byes: dict[str, int] | None = None,
+) -> list[dict]:
     """One board (already filtered to a config+size) → trimmed, display-ready player records, sorted by
     overall_rank. FB folds into RB; names title-cased; interval carried honestly. A rookie with no
-    projection team is backfilled from `rookie_teams` (their drafted/current NFL team)."""
+    projection team is backfilled from `rookie_teams`; `bye` is the team's bye week (null until known)."""
     rookie_teams = rookie_teams or {}
+    byes = byes or {}
     recs = []
     for _, r in df.sort_values("overall_rank").iterrows():
         pos = NFL_PROFILE.normalize_position(str(r["position"]))
@@ -196,6 +201,7 @@ def board_records(df: pd.DataFrame, rookie_teams: dict[str, str] | None = None) 
             "name": _titlecase(r["player_name"]),
             "pos": pos,
             "team": team,
+            "bye": byes.get(team) if team else None,
             "rookie": is_rookie,
             "g": _fnum(r.get("proj_games")),
             "pts": _fnum(r.get("league_points")),
@@ -211,6 +217,47 @@ def board_records(df: pd.DataFrame, rookie_teams: dict[str, str] | None = None) 
 
 # kicker status priority — pick each team's primary kicker off the most-recent roster (active first).
 _K_STATUS_RANK = {"ACT": 5, "RES": 4, "INA": 3, "PUP": 3, "DEV": 2, "CUT": 1}
+
+
+def bye_week_map(season: int) -> dict[str, int]:
+    """`{normalized_team -> bye week}` for `season`, derived from the lake `schedules` (the REG week a
+    team has no game). READ-ONLY: it reads whatever season is already in the lake and returns {} if the
+    season isn't there yet — it never pulls/ingests. So byes are empty until NF-D1 lands the 2026 slate,
+    then populate automatically on the next export. Best-effort (never fatal)."""
+    from quant_sports_intel_models.football.nfl.ingest import s3io
+
+    try:
+        uri = s3io.table_uri("nfl", "schedules")
+        con = _lake_connection()
+        try:
+            df = con.sql(
+                f"select week, home_team, away_team from delta_scan('{uri}') "
+                f"where season = {season} and game_type = 'REG'"
+            ).df()
+        finally:
+            con.close()
+    except Exception as e:  # noqa: BLE001
+        log.warning("bye-week enrichment skipped (schedules read failed: %s)", e)
+        return {}
+    if df.empty:
+        log.info("no %d schedule in the lake yet — byes stay null until NF-D1 lands the season", season)
+        return {}
+    weeks = sorted(int(w) for w in df["week"].dropna().unique())
+    long = pd.concat([
+        df[["week", "home_team"]].rename(columns={"home_team": "team"}),
+        df[["week", "away_team"]].rename(columns={"away_team": "team"}),
+    ])
+    out: dict[str, int] = {}
+    for team, g in long.groupby("team"):
+        t = _norm_team(str(team))
+        if not t:
+            continue
+        played = {int(w) for w in g["week"].dropna()}
+        missing = [w for w in weeks if w not in played]
+        if missing:
+            out[t] = int(missing[0])
+    log.info("bye week map: %d teams", len(out))
+    return out
 
 
 def kicker_map(season: int = 2025) -> dict[str, str]:
@@ -245,22 +292,28 @@ def kicker_map(season: int = 2025) -> dict[str, str]:
     return {t: name for t, (_, name) in best.items()}
 
 
-def kdst_records(teams: list[str], kickers: dict[str, str] | None = None) -> list[dict]:
+def kdst_records(
+    teams: list[str],
+    kickers: dict[str, str] | None = None,
+    byes: dict[str, int] | None = None,
+) -> list[dict]:
     """Draftable K & DST placeholders — one per real NFL team. MVP-1 projects offensive skill only, so
     these carry NO projection (pts/vor null): they exist purely so a manager can RECORD their K/DST
     picks and fill those roster slots. They never get recommended (the optimizer skips null-VOR) and sort
     to the bottom. DST is the team unit ('<TEAM> D/ST'); K uses the real kicker name where resolved."""
     kickers = kickers or {}
+    byes = byes or {}
     recs: list[dict] = []
     for t in teams:
+        bye = byes.get(t)
         recs.append({
-            "id": f"DST-{t}", "name": f"{t} D/ST", "pos": "DST", "team": t, "rookie": False,
+            "id": f"DST-{t}", "name": f"{t} D/ST", "pos": "DST", "team": t, "bye": bye, "rookie": False,
             "g": None, "pts": None, "repl": None, "vor": None, "posRank": 0, "ovrRank": 9999,
             "vorP10": None, "vorP90": None,
         })
         k_name = kickers.get(t)  # roster names are already proper-cased — do not re-title-case
         recs.append({
-            "id": f"K-{t}", "name": k_name if k_name else f"{t} K", "pos": "K", "team": t,
+            "id": f"K-{t}", "name": k_name if k_name else f"{t} K", "pos": "K", "team": t, "bye": bye,
             "rookie": False, "g": None, "pts": None, "repl": None, "vor": None, "posRank": 0,
             "ovrRank": 9999, "vorP10": None, "vorP90": None,
         })
@@ -299,13 +352,15 @@ def main(argv: list[str] | None = None) -> int:
 
     # rookie NFL teams (MVP-1 leaves them NULL) — best-effort from nflverse_players, never fatal
     rookie_teams = rookie_team_map()
+    # bye weeks for the projection season — empty until NF-D1 lands the schedule, then auto-populates
+    byes = bye_week_map(args.season)
 
     # real NFL team abbreviations from the projection (drives the K/DST placeholder set)
     teams = sorted({
         _norm_team(str(t)) for t in df["team_id"].dropna().unique()
         if str(t) not in ("", "None", "nan") and _norm_team(str(t))
     })
-    kdst = kdst_records(teams, kicker_map())
+    kdst = kdst_records(teams, kicker_map(), byes)
 
     configs_present: list[str] = []
     sizes_present: set[int] = set()
@@ -317,7 +372,7 @@ def main(argv: list[str] | None = None) -> int:
         if config_name not in PRESETS:
             log.warning("skipping unknown config %s (not a shipped preset)", config_name)
             continue
-        recs = board_records(grp, rookie_teams) + kdst    # skill board + draftable K/DST placeholders
+        recs = board_records(grp, rookie_teams, byes) + kdst   # skill board + draftable K/DST placeholders
         path = out_dir / f"board_{config_name}_{n_teams}.json"
         path.write_text(json.dumps(recs, separators=(",", ":")))
         combos += 1
