@@ -17,6 +17,7 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 from fastapi import HTTPException
@@ -116,10 +117,16 @@ class _FakeRequest:
 
 
 def _run_webhook(monkeypatch, event, store):
-    """Drive the async webhook with a fabricated (signature-verified) event."""
+    """Drive the async webhook with a fabricated event.
+
+    The event is passed as the RAW request body (as Stripe delivers it); the handler
+    parses it via json.loads(payload) after signature verification, so this exercises
+    the real plain-dict path (construct_event returns a non-dict StripeObject in prod)."""
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
-    monkeypatch.setattr(billing.stripe.Webhook, "construct_event", lambda *a, **k: event)
-    return asyncio.run(billing.stripe_webhook(_FakeRequest()))
+    # Verify step is stubbed to succeed; its return value is intentionally NOT used.
+    monkeypatch.setattr(billing.stripe.Webhook, "construct_event", lambda *a, **k: object())
+    body = json.dumps(event).encode()
+    return asyncio.run(billing.stripe_webhook(_FakeRequest(body=body)))
 
 
 # ── Founding-price gate ──────────────────────────────────────────────────────

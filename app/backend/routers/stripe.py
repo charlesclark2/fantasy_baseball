@@ -26,6 +26,7 @@ authorizer (Stripe presents no Cognito token) — signature verification is its 
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 
@@ -247,11 +248,15 @@ async def stripe_webhook(request: Request) -> dict:
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature", "")
     try:
-        event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+        stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
     except (ValueError, stripe.SignatureVerificationError) as exc:
         logger.warning("Stripe webhook signature verification failed: %s", exc)
         raise HTTPException(status_code=400, detail="Invalid signature") from exc
 
+    # Handle off the raw JSON (plain dicts) — construct_event returns a StripeObject
+    # whose fields are NOT plain-dict, so `.get()` raises AttributeError on it. The
+    # signature is already verified above, so json.loads(payload) is authentic.
+    event = json.loads(payload)
     event_id = event["id"]
     event_type = event["type"]
     obj = event["data"]["object"]
