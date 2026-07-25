@@ -43,6 +43,21 @@ _FRONTEND_OUT = _PROJECT_ROOT / "frontend/public/data/nfl-fantasy"
 # flags their roster slots as "draft late (no projection)"; they never appear on the board.
 PROJECTABLE = ("QB", "RB", "WR", "TE")
 
+# nflverse team abbreviations → the veteran-projection convention (the board's team_id style). Only a
+# couple differ; the rest pass through. Kept broad so any nflverse-alt code maps cleanly.
+_NFLVERSE_TEAM_FIX = {
+    "AZ": "ARI", "LA": "LAR", "BLT": "BAL", "CLV": "CLE", "HST": "HOU",
+    "SL": "LAR", "STL": "LAR", "SD": "LAC", "OAK": "LV", "ARZ": "ARI", "WSH": "WAS",
+}
+
+
+def _norm_team(t: str | None) -> str | None:
+    if not t:
+        return None
+    t = str(t).strip().upper()
+    return _NFLVERSE_TEAM_FIX.get(t, t) or None
+
+
 # Human labels for the shipped presets (the manifest's config picker).
 CONFIG_LABELS = {
     "standard": "Standard (non-PPR)",
@@ -98,43 +113,90 @@ def load_boards_local(season: int) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-def load_boards_lake(season: int) -> pd.DataFrame:
-    """Read all league boards for the season from the S3 Delta (the real-lake path)."""
+def _lake_connection():
+    """A DuckDB connection wired for the S3 lakehouse (delta + httpfs + creds). SF-free / off-box."""
     import duckdb
 
     from quant_sports_intel_models.football.nfl.ingest import s3io
 
-    uri = s3io.table_uri("nfl", "league_boards", tier="fantasy/derived")
     con = duckdb.connect()
+    con.execute("install delta; load delta; install httpfs; load httpfs;")
+    opts = s3io.storage_options()
+    con.execute(f"set s3_region='{opts.get('AWS_REGION', 'us-east-2')}';")
+    if opts.get("AWS_ACCESS_KEY_ID"):
+        con.execute(f"set s3_access_key_id='{opts['AWS_ACCESS_KEY_ID']}';")
+        con.execute(f"set s3_secret_access_key='{opts['AWS_SECRET_ACCESS_KEY']}';")
+        if opts.get("AWS_SESSION_TOKEN"):
+            con.execute(f"set s3_session_token='{opts['AWS_SESSION_TOKEN']}';")
+    return con
+
+
+def load_boards_lake(season: int) -> pd.DataFrame:
+    """Read all league boards for the season from the S3 Delta (the real-lake path)."""
+    from quant_sports_intel_models.football.nfl.ingest import s3io
+
+    uri = s3io.table_uri("nfl", "league_boards", tier="fantasy/derived")
+    con = _lake_connection()
     try:
-        con.execute("install delta; load delta; install httpfs; load httpfs;")
-        opts = s3io.storage_options()
-        con.execute(f"set s3_region='{opts.get('AWS_REGION', 'us-east-2')}';")
-        if opts.get("AWS_ACCESS_KEY_ID"):
-            con.execute(f"set s3_access_key_id='{opts['AWS_ACCESS_KEY_ID']}';")
-            con.execute(f"set s3_secret_access_key='{opts['AWS_SECRET_ACCESS_KEY']}';")
-            if opts.get("AWS_SESSION_TOKEN"):
-                con.execute(f"set s3_session_token='{opts['AWS_SESSION_TOKEN']}';")
         return con.sql(f"select * from delta_scan('{uri}') where season = {season}").df()
     finally:
         con.close()
 
 
+def rookie_team_map() -> dict[str, str]:
+    """`{player_id -> current NFL team}` for the incoming rookie class, from `nflverse_players`.
+
+    MVP-1's rookie leg (NCAAF-P1A) carries no NFL team (`team_id` is NULL), so a drafted rookie would
+    otherwise show no team. We recover it from `nflverse_players.latest_team` (their post-draft team),
+    joined on the P1A `gsis_id` (== the projection's rookie `player_id`), normalized to the board's team
+    convention. Best-effort: on any lake-read failure we return {} and rookies simply stay teamless (the
+    UI shows a rookie tag) rather than crashing the export. This is a stop-gap for the app — the durable
+    fix is to carry the team through the projection itself once the 2026 draft-picks feed lands (NF-D1)."""
+    from quant_sports_intel_models.football.nfl.ingest import s3io
+
+    try:
+        uri = s3io.table_uri("nfl", "nflverse_players")
+        con = _lake_connection()
+        try:
+            df = con.sql(
+                f"select gsis_id, any_value(latest_team) latest_team, any_value(draft_team) draft_team "
+                f"from delta_scan('{uri}') group by gsis_id"
+            ).df()
+        finally:
+            con.close()
+    except Exception as e:  # noqa: BLE001 — best-effort enrichment, never fatal
+        log.warning("rookie team enrichment skipped (nflverse_players read failed: %s)", e)
+        return {}
+    out: dict[str, str] = {}
+    for _, r in df.iterrows():
+        team = _norm_team(r.get("draft_team")) or _norm_team(r.get("latest_team"))
+        if r.get("gsis_id") and team:
+            out[str(r["gsis_id"])] = team
+    log.info("rookie team map: %d players with a resolved team", len(out))
+    return out
+
+
 # ── build the JSON ────────────────────────────────────────────────────────────────────────────────
-def board_records(df: pd.DataFrame) -> list[dict]:
+def board_records(df: pd.DataFrame, rookie_teams: dict[str, str] | None = None) -> list[dict]:
     """One board (already filtered to a config+size) → trimmed, display-ready player records, sorted by
-    overall_rank. FB folds into RB; names title-cased; interval carried honestly."""
+    overall_rank. FB folds into RB; names title-cased; interval carried honestly. A rookie with no
+    projection team is backfilled from `rookie_teams` (their drafted/current NFL team)."""
+    rookie_teams = rookie_teams or {}
     recs = []
     for _, r in df.sort_values("overall_rank").iterrows():
         pos = NFL_PROFILE.normalize_position(str(r["position"]))
         if pos not in PROJECTABLE:
             continue
+        is_rookie = _to_bool(r.get("is_rookie"))
+        team = None if pd.isna(r.get("team_id")) else _norm_team(str(r["team_id"]))
+        if not team and is_rookie:                     # MVP-1 rookies carry no team → backfill it
+            team = rookie_teams.get(str(r["player_id"]))
         recs.append({
             "id": str(r["player_id"]),
             "name": _titlecase(r["player_name"]),
             "pos": pos,
-            "team": (None if pd.isna(r.get("team_id")) else str(r["team_id"])),
-            "rookie": _to_bool(r.get("is_rookie")),
+            "team": team,
+            "rookie": is_rookie,
             "g": _fnum(r.get("proj_games")),
             "pts": _fnum(r.get("league_points")),
             "repl": _fnum(r.get("replacement_points")),
@@ -143,6 +205,26 @@ def board_records(df: pd.DataFrame) -> list[dict]:
             "ovrRank": int(_fnum(r.get("overall_rank"), 0) or 0),
             "vorP10": _fnum(r.get("vor_p10")),
             "vorP90": _fnum(r.get("vor_p90")),
+        })
+    return recs
+
+
+def kdst_records(teams: list[str]) -> list[dict]:
+    """Draftable K & DST placeholders — one per real NFL team. MVP-1 projects offensive skill only, so
+    these carry NO projection (pts/vor null): they exist purely so a manager can RECORD their K/DST
+    picks and fill those roster slots. They never get recommended (the optimizer skips null-VOR) and
+    sort to the bottom of the board. Team abbreviations come from the projection itself (not fabricated)."""
+    recs: list[dict] = []
+    for t in teams:
+        recs.append({
+            "id": f"DST-{t}", "name": f"{t} D/ST", "pos": "DST", "team": t, "rookie": False,
+            "g": None, "pts": None, "repl": None, "vor": None, "posRank": 0, "ovrRank": 9999,
+            "vorP10": None, "vorP90": None,
+        })
+        recs.append({
+            "id": f"K-{t}", "name": f"{t} K", "pos": "K", "team": t, "rookie": False,
+            "g": None, "pts": None, "repl": None, "vor": None, "posRank": 0, "ovrRank": 9999,
+            "vorP10": None, "vorP90": None,
         })
     return recs
 
@@ -177,6 +259,16 @@ def main(argv: list[str] | None = None) -> int:
     out_dir = (args.out or (_FRONTEND_OUT / str(args.season)))
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # rookie NFL teams (MVP-1 leaves them NULL) — best-effort from nflverse_players, never fatal
+    rookie_teams = rookie_team_map()
+
+    # real NFL team abbreviations from the projection (drives the K/DST placeholder set)
+    teams = sorted({
+        _norm_team(str(t)) for t in df["team_id"].dropna().unique()
+        if str(t) not in ("", "None", "nan") and _norm_team(str(t))
+    })
+    kdst = kdst_records(teams)
+
     configs_present: list[str] = []
     sizes_present: set[int] = set()
     combos = 0
@@ -187,7 +279,7 @@ def main(argv: list[str] | None = None) -> int:
         if config_name not in PRESETS:
             log.warning("skipping unknown config %s (not a shipped preset)", config_name)
             continue
-        recs = board_records(grp)
+        recs = board_records(grp, rookie_teams) + kdst    # skill board + draftable K/DST placeholders
         path = out_dir / f"board_{config_name}_{n_teams}.json"
         path.write_text(json.dumps(recs, separators=(",", ":")))
         combos += 1

@@ -31,8 +31,15 @@ const POS_COLORS: Record<string, string> = {
   RB: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
   WR: "text-sky-400 bg-sky-500/10 border-sky-500/30",
   TE: "text-amber-400 bg-amber-500/10 border-amber-500/30",
+  K: "text-violet-400 bg-violet-500/10 border-violet-500/30",
+  DST: "text-teal-400 bg-teal-500/10 border-teal-500/30",
 }
 const POSITIONS = ["QB", "RB", "WR", "TE"] as const
+const FILTER_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DST"] as const
+
+// A player's team for display: real abbreviation, or an honest label for the unteamed. Rookie team_id
+// is not yet populated in the projection (upstream fix), so a rookie shows "Rk", never a wrong "FA".
+const teamLabel = (p: { team: string | null; rookie: boolean }) => p.team ?? (p.rookie ? "Rk" : "FA")
 
 interface Pick {
   id: string
@@ -177,10 +184,18 @@ export function DraftOptimizer() {
     return m
   }, [board])
 
+  // total roster spots per team (starters + bench) → the draft can't run past a full board
+  const slotsPerTeam = useMemo(
+    () => (config ? config.roster.reduce((a, s) => a + s.count, 0) : 0),
+    [config]
+  )
+  const maxPicks = slotsPerTeam * size
+  const draftComplete = maxPicks > 0 && picks.length >= maxPicks
+
   const currentPick = picks.length + 1
   const onClock = slotOnClock(currentPick, size)
   const round = Math.floor((currentPick - 1) / size) + 1
-  const myTurn = onClock === mySlot
+  const myTurn = onClock === mySlot && !draftComplete
   const untilNext = picksUntilNext(mySlot, size, currentPick)
 
   const recs = useMemo(() => {
@@ -196,8 +211,13 @@ export function DraftOptimizer() {
   }, [myPlayers, config])
 
   const draftPlayer = useCallback(
-    (id: string) => setPicks((prev) => [...prev, { id, slot: slotOnClock(prev.length + 1, size) }]),
-    [size]
+    (id: string) =>
+      setPicks((prev) => {
+        if (maxPicks > 0 && prev.length >= maxPicks) return prev // rosters full — no overflow
+        if (prev.some((p) => p.id === id)) return prev // already drafted (guard double-click)
+        return [...prev, { id, slot: slotOnClock(prev.length + 1, size) }]
+      }),
+    [size, maxPicks]
   )
   const undo = useCallback(() => setPicks((prev) => prev.slice(0, -1)), [])
   const resetDraft = useCallback(() => {
@@ -300,10 +320,16 @@ export function DraftOptimizer() {
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">
-            <div className="text-xs text-gray-500">Round {round} · Pick {currentPick}</div>
+            <div className="text-xs text-gray-500">
+              {draftComplete ? `Complete · ${picks.length}/${maxPicks} picks` : `Round ${round} · Pick ${currentPick}`}
+            </div>
             <div className={`text-sm font-semibold ${myTurn ? "text-[#10b981]" : "text-white"}`}>
-              {myTurn ? "You're on the clock" : `Team #${onClock} on the clock`}
-              {!myTurn && untilNext > 0 && (
+              {draftComplete
+                ? "Draft complete"
+                : myTurn
+                ? "Your pick"
+                : `Team #${onClock} on the clock`}
+              {!myTurn && !draftComplete && untilNext > 0 && (
                 <span className="ml-1 font-normal text-gray-500">· {untilNext} until you</span>
               )}
             </div>
@@ -317,6 +343,25 @@ export function DraftOptimizer() {
         </div>
       </div>
 
+      {/* explicit turn banner — who this pick is being recorded for */}
+      {!draftComplete ? (
+        myTurn ? (
+          <div className="mt-3 rounded-lg border border-[#10b981]/50 bg-[#10b981]/10 px-4 py-2.5 text-sm font-semibold text-[#10b981]">
+            ★ Your pick — choose a player below to add to your team.
+          </div>
+        ) : (
+          <div className="mt-3 rounded-lg border border-[#262626] bg-[#141414] px-4 py-2.5 text-sm text-gray-300">
+            Recording <span className="font-semibold text-white">Team #{onClock}</span>&apos;s pick (not
+            your team) — mark whoever they took.
+            {untilNext > 0 && <span className="text-gray-500"> Your next pick is in {untilNext}.</span>}
+          </div>
+        )
+      ) : (
+        <div className="mt-3 rounded-lg border border-[#262626] bg-[#141414] px-4 py-2.5 text-sm text-gray-300">
+          All {maxPicks} roster spots are filled. Use Undo to revise, or Reset to start over.
+        </div>
+      )}
+
       {boardLoading && <p className="mt-6 text-sm text-gray-500">Loading board…</p>}
 
       {board && config && (
@@ -327,9 +372,15 @@ export function DraftOptimizer() {
             <div className="rounded-lg border border-[#262626] bg-[#0f0f0f] p-4">
               <div className="mb-3 flex items-center gap-2">
                 <h2 className="text-sm font-semibold text-white">
-                  {myTurn ? "Recommended picks — your turn" : "Best available for you"}
+                  {myTurn ? "Recommended picks — your turn" : "Best available for your team"}
                 </h2>
-                <Info className="h-3.5 w-3.5 text-gray-600" />
+                <InfoTip>
+                  Picks are ranked by <strong>VOR</strong> (Value Over Replacement — projected fantasy
+                  points above the last startable player at the position), then adjusted for{" "}
+                  <strong>your roster needs</strong> and <strong>positional tier cliffs</strong> (how
+                  much value drops to the next player at that position if you wait). The green{" "}
+                  <span className="text-[#10b981]">+</span> is the roster-need boost. Not betting advice.
+                </InfoTip>
               </div>
               <div className="flex flex-col gap-2">
                 {recs.map((r, i) => (
@@ -345,7 +396,7 @@ export function DraftOptimizer() {
                       <div className="flex items-center gap-2">
                         <span className="truncate text-sm font-medium text-white">{r.player.name}</span>
                         <span className="text-xs text-gray-600">
-                          {r.player.team ?? "FA"} · {r.player.pos}{r.player.posRank}
+                          {teamLabel(r.player)} · {r.player.pos}{r.player.posRank}
                         </span>
                         {r.player.rookie && <span className="rounded bg-sky-500/15 px-1 text-[10px] text-sky-300">R</span>}
                       </div>
@@ -361,9 +412,14 @@ export function DraftOptimizer() {
                     <Button
                       size="sm"
                       onClick={() => draftPlayer(r.player.id)}
-                      className="bg-[#10b981] font-semibold text-[#0a0a0a] hover:bg-[#059669]"
+                      disabled={draftComplete}
+                      className={
+                        myTurn
+                          ? "bg-[#10b981] font-semibold text-[#0a0a0a] hover:bg-[#059669]"
+                          : "border border-[#2a2a2a] bg-transparent font-medium text-gray-300 hover:border-[#10b981] hover:text-[#10b981]"
+                      }
                     >
-                      Draft
+                      {myTurn ? "Draft" : `→ T${onClock}`}
                     </Button>
                   </div>
                 ))}
@@ -384,8 +440,8 @@ export function DraftOptimizer() {
                     className="w-40 rounded-md border border-[#262626] bg-[#0a0a0a] py-1.5 pl-7 pr-2 text-xs text-white placeholder:text-gray-600"
                   />
                 </div>
-                <div className="flex gap-1">
-                  {["ALL", ...POSITIONS].map((p) => (
+                <div className="flex flex-wrap gap-1">
+                  {["ALL", ...FILTER_POSITIONS].map((p) => (
                     <button
                       key={p}
                       onClick={() => setPosFilter(p)}
@@ -398,6 +454,10 @@ export function DraftOptimizer() {
                   ))}
                 </div>
               </div>
+              <p className="mb-2 text-[11px] text-gray-600">
+                <strong className="text-gray-500">VOR</strong> = Value Over Replacement (points above the
+                last startable player at the position). K &amp; DST are unprojected — draft them late.
+              </p>
               <div className="max-h-[520px] overflow-y-auto">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-[#0f0f0f] text-left text-[11px] uppercase tracking-wide text-gray-600">
@@ -418,19 +478,21 @@ export function DraftOptimizer() {
                             <PosBadge pos={p.pos} small />
                             <span className="text-white">{p.name}</span>
                             <span className="text-xs text-gray-600">
-                              {p.team ?? "FA"} · {p.pos}{p.posRank}
+                              {teamLabel(p)}{p.posRank ? ` · ${p.pos}${p.posRank}` : ""}
                             </span>
                             {p.rookie && <span className="rounded bg-sky-500/15 px-1 text-[10px] text-sky-300">R</span>}
                           </div>
                         </td>
-                        <td className="py-1.5 text-right text-gray-300">{p.pts?.toFixed(0)}</td>
-                        <td className="py-1.5 text-right text-gray-400">{p.vor?.toFixed(0)}</td>
+                        <td className="py-1.5 text-right text-gray-300">{p.pts != null ? p.pts.toFixed(0) : "—"}</td>
+                        <td className="py-1.5 text-right text-gray-400">{p.vor != null ? p.vor.toFixed(0) : "—"}</td>
                         <td className="py-1.5 pr-1 text-right">
                           <button
                             onClick={() => draftPlayer(p.id)}
-                            className="rounded border border-[#2a2a2a] px-2 py-0.5 text-xs text-gray-400 hover:border-[#10b981] hover:text-[#10b981]"
+                            disabled={draftComplete}
+                            title={myTurn ? "Draft to your team" : `Record for Team #${onClock}`}
+                            className="rounded border border-[#2a2a2a] px-2 py-0.5 text-xs text-gray-400 hover:border-[#10b981] hover:text-[#10b981] disabled:opacity-40"
                           >
-                            Draft
+                            {myTurn ? "Draft" : `→ T${onClock}`}
                           </button>
                         </td>
                       </tr>
@@ -465,6 +527,21 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">{label}</span>
       {children}
     </label>
+  )
+}
+
+// A hover/tap tooltip — the Info affordance next to the recommendations header. Uses group-hover +
+// focus so it works on desktop hover AND keyboard/tap (a plain title attr was the prior no-op).
+function InfoTip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="group relative inline-flex">
+      <button type="button" className="text-gray-500 hover:text-gray-300" aria-label="How recommendations work">
+        <Info className="h-3.5 w-3.5" />
+      </button>
+      <span className="pointer-events-none absolute left-0 top-6 z-50 hidden w-72 rounded-md border border-[#262626] bg-[#0f0f0f] p-3 text-xs leading-relaxed text-gray-400 shadow-xl group-hover:block group-focus-within:block">
+        {children}
+      </span>
+    </span>
   )
 }
 

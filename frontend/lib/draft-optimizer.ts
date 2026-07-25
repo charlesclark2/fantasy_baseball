@@ -52,7 +52,8 @@ export interface Manifest {
 
 const NEED_W_DEDICATED = 1.0
 const NEED_W_FLEX = 0.4
-const DEPTH_TARGET = 2
+const SURPLUS_W = 0.35
+const SURPLUS_CAP = 0.85
 
 export interface RosterRequirements {
   dedicated: Record<string, number>
@@ -184,6 +185,7 @@ export function recommend(args: RecommendArgs): Recommendation[] {
       if (mine.has(p.id)) myPositions.push(p.pos)
       continue
     }
+    if (p.vor == null) continue // unprojected (K/DST) — never recommended
     available.push(p)
   }
   const open = openStarterSlots(myPositions, req)
@@ -219,7 +221,10 @@ export function recommend(args: RecommendArgs): Recommendation[] {
     const held = myCounts[p.pos] ?? 0
     const starterDemand = req.dedicated[p.pos] ?? 0
     let surplusPen = 0
-    if (level === 0 && held >= starterDemand + DEPTH_TARGET && vor > 0) surplusPen = 0.5 * vor
+    if (level === 0 && held >= starterDemand && vor > 0) {
+      const backups = held - starterDemand + 1
+      surplusPen = Math.min(SURPLUS_CAP, SURPLUS_W * backups) * vor
+    }
     const score = vor + needBonus - surplusPen
 
     const rows = byPos[p.pos]

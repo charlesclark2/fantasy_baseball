@@ -35,8 +35,10 @@ from quant_sports_intel_models.fantasy_engine.league_config import LeagueConfig
 # whose starter demand I've already met gets none (VOR alone ranks the pure-depth pick).
 NEED_W_DEDICATED = 1.0
 NEED_W_FLEX = 0.4
-# Beyond starters, how many bench bodies per position count as healthy depth before a pick is "surplus".
-DEPTH_TARGET = 2
+# Per-backup surplus penalty (fraction of VOR), applied once my starter demand at a non-flex position is
+# met — capped so even a deep stack keeps a little value. This is what stops a 2nd QB/TE being pushed.
+SURPLUS_W = 0.35
+SURPLUS_CAP = 0.85
 
 
 # ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -268,18 +270,23 @@ def recommend(
         pos = _normalize(normalize, row.get("position"))
         if pos is None:
             continue
+        if row.get("vor") is None:                 # unprojected (K/DST) — never a recommendation
+            continue
         vor = _fnum(row.get("vor"))
         next_vor = pos_next_vor[pos].get(pid, 0.0)
         dropoff = max(0.0, vor - next_vor)
         level = open_slots.need_level(pos)
         need_w = NEED_W_DEDICATED if level == 2 else (NEED_W_FLEX if level == 1 else 0.0)
         need_bonus = need_w * dropoff
-        # surplus damping: no open starter slot AND already stacked deep at the position
+        # surplus damping: this pick fills NO open starter slot (level 0) and I already hold my starter
+        # demand at the position → it's a backup. Deprioritize from the FIRST backup (so a 2nd QB / 2nd
+        # TE stops being recommended the moment my starter is set), scaling as the stack deepens.
         held = my_counts.get(pos, 0)
         starter_demand = req.dedicated.get(pos, 0)
         surplus_pen = 0.0
-        if level == 0 and held >= starter_demand + DEPTH_TARGET and vor > 0:
-            surplus_pen = 0.5 * vor
+        if level == 0 and held >= starter_demand and vor > 0:
+            backups = held - starter_demand + 1
+            surplus_pen = min(SURPLUS_CAP, SURPLUS_W * backups) * vor
         score = vor + need_bonus - surplus_pen
 
         tier = pos_tier[pos].get(pid, 1)

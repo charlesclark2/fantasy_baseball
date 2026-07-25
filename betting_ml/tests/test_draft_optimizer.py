@@ -135,6 +135,28 @@ def test_need_bonus_lifts_a_needed_position_over_pure_vor():
     assert top.need_level >= 1 and top.score >= top.vor      # bonus applied, never below raw VOR
 
 
+def test_backup_qb_deprioritized_once_starter_set():
+    # once I hold my one starting QB, a 2nd QB (pure backup in a 1-QB league) must not be the top pick.
+    cfg = presets.full_ppr()
+    board = _board(cfg)
+    top_qb = next(r["player_id"] for r in board if NORM(r["position"]) == "QB")
+    recs = draft.recommend(board, config=cfg, drafted_ids=[top_qb], my_player_ids=[top_qb], normalize=NORM, top_n=5)
+    assert recs[0].position != "QB", "a backup QB should not be recommended #1 once the starter is set"
+
+
+def test_null_vor_rows_never_recommended():
+    # K/DST placeholders (no projection → vor None) must never surface as a recommendation.
+    cfg = presets.full_ppr()
+    board = _board(cfg) + [
+        {"player_id": "DST-SF", "player_name": "SF D/ST", "position": "DST", "vor": None,
+         "league_points": None, "positional_rank": 0, "overall_rank": 9999, "team_id": "SF"},
+        {"player_id": "K-SF", "player_name": "SF K", "position": "K", "vor": None,
+         "league_points": None, "positional_rank": 0, "overall_rank": 9999, "team_id": "SF"},
+    ]
+    recs = draft.recommend(board, config=cfg, normalize=NORM, top_n=50)
+    assert all(r.position not in ("K", "DST") for r in recs)
+
+
 def test_rationale_is_populated():
     cfg = presets.full_ppr()
     recs = draft.recommend(_board(cfg), config=cfg, normalize=NORM, top_n=3)
