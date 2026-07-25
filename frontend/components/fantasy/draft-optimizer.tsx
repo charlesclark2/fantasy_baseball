@@ -77,7 +77,10 @@ function useBoard(configName: string | null, size: number | null) {
     queryFn: async () => {
       const r = await fetch(`/data/nfl-fantasy/${SEASON}/board_${configName}_${size}.json`)
       if (!r.ok) throw new Error("board not found")
-      return r.json()
+      const rows: Player[] = await r.json()
+      // dedupe by id (defensive — a duplicate player_id would collide React keys and corrupt rendering)
+      const seen = new Set<string>()
+      return rows.filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)))
     },
     staleTime: Infinity,
   })
