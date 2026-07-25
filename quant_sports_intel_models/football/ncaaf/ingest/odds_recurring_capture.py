@@ -23,6 +23,14 @@ fetch ONLY the kickoff(s) not yet covered (bounding paid-credit spend to genuine
 run), and write the UNION back as the season partition — so a weekly re-run never loses a prior
 week and never re-pays for a game already captured.
 
+🩹 **CI-FLAKE HARDENING (found + fixed post-merge):** the "read back what already exists" step
+used to swallow ANY read exception into "nothing captured yet" — indistinguishable from a
+genuinely fresh season. On CI this let a transient `delta_scan` hiccup (reading a partition the
+SAME test had just written — a read-after-write visibility blip) silently trigger the exact
+destructive overwrite this module exists to prevent. `_q_or_missing` now only treats the
+DeltaKernel "table does not exist" error as "nothing captured yet"; every other read failure is
+retried a bounded number of times and then RAISED, never guessed as empty.
+
 🚧 WHY KICKOFF-GRAIN, NOT WEEK-GRAIN (found live against real 2025 data while building this):
 CFBD's `week` field is AMBIGUOUS — postseason bowl games are numbered "week 1, 2, 3…" WITHIN the
 postseason, colliding with regular-season "week 1, 2, 3…" once games of both `seasonType`s are
@@ -76,6 +84,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -116,6 +125,59 @@ def _new_kickoffs_to_capture(
     return sorted(new)
 
 
+# The DeltaKernel error DuckDB's delta_scan raises when a table/partition genuinely doesn't
+# exist yet (verified empirically: `IO Error: DeltaKernel InvalidTableLocationError (28): Invalid
+# table location: Path does not exist: "..."`). This is the ONLY error class that may be treated
+# as "nothing captured yet" — see `_q_or_missing`.
+_MISSING_TABLE_MARKERS = ("InvalidTableLocationError", "Path does not exist")
+
+
+def _is_missing_table_error(exc: Exception) -> bool:
+    """True only when `exc` means the Delta table/partition genuinely doesn't exist yet (a
+    season's first-ever run). Anything else — a network hiccup, an extension-load glitch, a
+    read-after-write visibility blip on a partition just written this same run — must NOT be
+    mistaken for "nothing's there yet"; see `_q_or_missing`."""
+    msg = str(exc)
+    return any(marker in msg for marker in _MISSING_TABLE_MARKERS)
+
+
+def _q_or_missing(sql: str, *, retries: int = 2, retry_sleep: float = 0.15):
+    """Run a read-only lake SELECT. Returns the DataFrame, or `None` if the table/partition
+    genuinely doesn't exist yet. Any OTHER failure is retried a bounded number of times (a
+    transient delta_scan hiccup — e.g. right after a partition was just written — usually clears
+    within one retry) and then RAISED — never silently swallowed into "nothing captured yet."
+
+    THE BUG THIS FIXES (a real data-loss fragility, caught by a CI-only flake): the previous
+    `_existing_raw_rows` wrapped its lake read in a bare `except Exception: return None`, and
+    `_merge_and_write` treats `None` as "fresh season, nothing to preserve" → writes ONLY the new
+    records. A transient read failure is therefore indistinguishable from "no partition yet," so
+    a flaky read of a partition this very run had just written (e.g. a read-after-write
+    visibility blip) silently took the destructive overwrite branch and dropped every prior week.
+    A caller that can't CONFIRM what's already in the lake must fail loud, never guess "empty."
+    """
+    from .query_lake import _connect, q
+
+    last_exc: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            return q(sql)
+        except Exception as exc:  # noqa: BLE001 — inspected immediately below, never blindly swallowed
+            if _is_missing_table_error(exc):
+                return None
+            last_exc = exc
+            if attempt < retries:
+                try:
+                    _connect().execute("LOAD delta")  # defensive re-affirm; cheap, idempotent
+                except Exception:  # noqa: BLE001 — best-effort; a persistent problem still surfaces below
+                    pass
+                time.sleep(retry_sleep)
+    raise RuntimeError(
+        f"lake read failed {retries + 1}x and is NOT a missing-table error — refusing to treat "
+        f"this as 'nothing captured yet' (that would risk a destructive merge overwrite): "
+        f"{last_exc}"
+    ) from last_exc
+
+
 def _captured_commence_times(
     season: int,
     *,
@@ -124,19 +186,19 @@ def _captured_commence_times(
     local_root: str | None = None,
 ) -> set[str]:
     """Distinct `commence_time` values already captured for this season — a PURE lake read (zero
-    CFBD/Odds calls). Empty set if the partition doesn't exist yet (a season's first-ever run)."""
-    from .query_lake import delta, local, q
+    CFBD/Odds calls). Empty set only if the partition genuinely doesn't exist yet (a season's
+    first-ever run) — a transient read failure raises instead (see `_q_or_missing`)."""
+    from .query_lake import delta, local
 
-    try:
-        expr = local(source, local_root) if local_root else delta(source)
-        df = q(
-            f"select distinct json_extract_string(raw_json,'$.commence_time') as ct "
-            f"from {expr} where season = {int(season)}"
-        )
-    except Exception as exc:  # noqa: BLE001 — no partition yet / lake unreachable
+    expr = local(source, local_root) if local_root else delta(source)
+    df = _q_or_missing(
+        f"select distinct json_extract_string(raw_json,'$.commence_time') as ct "
+        f"from {expr} where season = {int(season)}"
+    )
+    if df is None:
         log.info(
-            "  [odds_recurring_capture] no existing %s/%s partition readable (%s) — treating "
-            "as a fresh season (full-to-date capture)", source, season, str(exc)[:160],
+            "  [odds_recurring_capture] no existing %s/%s partition yet — treating as a fresh "
+            "season (full-to-date capture)", source, season,
         )
         return set()
     return set(df["ct"].dropna())
@@ -150,18 +212,17 @@ def _existing_raw_rows(
     local_root: str | None = None,
 ):
     """The full raw Delta rows already captured for this season (season/week/source/ingested_at/
-    raw_json) — a pure lake read. `None` if nothing captured yet for this season."""
-    from .query_lake import delta, local, q
+    raw_json) — a pure lake read. `None` only if the partition genuinely doesn't exist yet for
+    this season — a transient read failure raises instead (see `_q_or_missing`); `_merge_and_write`
+    relies on this so it can never mistake "couldn't read" for "nothing to preserve.\""""
+    from .query_lake import delta, local
 
-    try:
-        expr = local(source, local_root) if local_root else delta(source)
-        df = q(
-            f"select season, week, source, ingested_at, raw_json from {expr} "
-            f"where season = {int(season)}"
-        )
-    except Exception:  # noqa: BLE001 — no partition yet / lake unreachable
-        return None
-    return None if df.empty else df
+    expr = local(source, local_root) if local_root else delta(source)
+    df = _q_or_missing(
+        f"select season, week, source, ingested_at, raw_json from {expr} "
+        f"where season = {int(season)}"
+    )
+    return None if df is None or df.empty else df
 
 
 def _event_key(raw_json_str: str) -> tuple:
@@ -187,7 +248,11 @@ def _merge_and_write(
     covers (idempotent re-capture) → WRITE the union back as the season partition.
 
     Never a plain overwrite of just `new_records` — that would delete every prior week (the
-    landmine this module exists to avoid; see the module docstring)."""
+    landmine this module exists to avoid; see the module docstring). Belt-and-suspenders: this
+    relies on `_existing_raw_rows` RAISING when it can't confirm what's already in the lake
+    (rather than returning `None`, which this function treats as "genuinely nothing captured
+    yet") — a transient read failure must never fall through to the destructive overwrite branch
+    below. Do not wrap the call in a try/except here; let it propagate."""
     import pandas as pd
     import pyarrow as pa
 

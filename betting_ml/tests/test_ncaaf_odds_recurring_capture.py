@@ -12,6 +12,12 @@ Guards:
   * `_merge_and_write` is a READ-MERGE-WRITE — the core regression test proves a weekly re-run
     can NEVER silently delete a previously-captured week (the landmine `s3io.write_season_partition`'s
     season-grained overwrite would otherwise cause).
+  * `_q_or_missing`/`_existing_raw_rows`/`_captured_commence_times` distinguish a GENUINELY absent
+    partition from a transient read failure — a CI-only flake (a read-after-write `delta_scan`
+    hiccup on a partition the same test had just written) exposed a real data-loss bug where any
+    read exception was swallowed into "nothing captured yet," which `_merge_and_write` then took
+    as license for a destructive overwrite. A transient failure must now RAISE, never masquerade
+    as an empty/fresh season.
   * `run_recurring_capture` makes ZERO paid Odds calls when nothing needs capture, and defaults
     the season to the clock-derived `current_season()`.
 """
@@ -24,6 +30,7 @@ import pytest
 
 from quant_sports_intel_models.football.ncaaf.ingest import (
     odds_recurring_capture as orc,
+    query_lake,
     s3io,
 )
 from quant_sports_intel_models.football.ncaaf.ingest import sources as src
@@ -151,7 +158,124 @@ def test_run_recurring_capture_forced_weeks_bypasses_the_diff(monkeypatch):
     assert manifest["rows_written"] == 1
 
 
+# ── _is_missing_table_error / _q_or_missing: distinguish absent-partition from transient failure
+def test_is_missing_table_error_distinguishes_missing_from_transient():
+    missing = Exception(
+        'IO Error: DeltaKernel InvalidTableLocationError (28): Invalid table location: '
+        'Path does not exist: "s3://bucket/ncaaf/raw/odds_ncaaf_historical/".'
+    )
+    transient = Exception("IO Error: connection reset by peer")
+    assert orc._is_missing_table_error(missing) is True
+    assert orc._is_missing_table_error(transient) is False
+
+
+def test_q_or_missing_returns_none_only_for_a_genuinely_missing_table(monkeypatch):
+    def fake_q(sql):
+        raise Exception(
+            'IO Error: DeltaKernel InvalidTableLocationError (28): Invalid table location: '
+            'Path does not exist: "x".'
+        )
+
+    monkeypatch.setattr(query_lake, "q", fake_q)
+    assert orc._q_or_missing("select 1") is None
+
+
+def test_q_or_missing_raises_after_bounded_retries_on_a_transient_error(monkeypatch):
+    # The exact CI flake this guards against: a read failure that is NOT "table missing" (e.g. a
+    # read-after-write delta_scan hiccup) must be retried, then RAISED — never treated as absent.
+    calls = {"n": 0}
+
+    def fake_q(sql):
+        calls["n"] += 1
+        raise Exception("IO Error: transient read hiccup")
+
+    monkeypatch.setattr(query_lake, "q", fake_q)
+    monkeypatch.setattr(query_lake, "_connect", lambda: _NoopConn())
+    with pytest.raises(RuntimeError, match="NOT a missing-table error"):
+        orc._q_or_missing("select 1", retries=2, retry_sleep=0)
+    assert calls["n"] == 3  # initial attempt + 2 retries, all genuinely attempted
+
+
+def test_q_or_missing_retries_transient_failure_then_succeeds(monkeypatch):
+    calls = {"n": 0}
+
+    def fake_q(sql):
+        calls["n"] += 1
+        if calls["n"] < 2:
+            raise Exception("IO Error: transient read hiccup")
+        return "the-dataframe"
+
+    monkeypatch.setattr(query_lake, "q", fake_q)
+    monkeypatch.setattr(query_lake, "_connect", lambda: _NoopConn())
+    assert orc._q_or_missing("select 1", retries=2, retry_sleep=0) == "the-dataframe"
+    assert calls["n"] == 2
+
+
+class _NoopConn:
+    def execute(self, *a, **kw):
+        return None
+
+
+# ── _existing_raw_rows / _captured_commence_times: raise on failure, None only when absent ────
+def test_existing_raw_rows_raises_on_a_non_missing_read_failure(monkeypatch):
+    def fake_q_or_missing(sql, **kw):
+        raise RuntimeError("simulated non-missing read failure")
+
+    monkeypatch.setattr(orc, "_q_or_missing", fake_q_or_missing)
+    with pytest.raises(RuntimeError, match="simulated non-missing"):
+        orc._existing_raw_rows(2025, local_root="/tmp/unused-for-this-test")
+
+
+def test_captured_commence_times_raises_on_a_non_missing_read_failure(monkeypatch):
+    def fake_q_or_missing(sql, **kw):
+        raise RuntimeError("simulated non-missing read failure")
+
+    monkeypatch.setattr(orc, "_q_or_missing", fake_q_or_missing)
+    with pytest.raises(RuntimeError, match="simulated non-missing"):
+        orc._captured_commence_times(2025, local_root="/tmp/unused-for-this-test")
+
+
+def test_existing_raw_rows_returns_none_for_a_genuinely_absent_partition(tmp_path):
+    # A real (unmocked) DuckDB delta_scan against a directory that was never written — proves
+    # `_is_missing_table_error` recognizes the REAL exception shape, end-to-end.
+    assert orc._existing_raw_rows(2099, local_root=str(tmp_path)) is None
+
+
+def test_captured_commence_times_returns_empty_for_a_genuinely_absent_partition(tmp_path):
+    assert orc._captured_commence_times(2099, local_root=str(tmp_path)) == set()
+
+
 # ── _merge_and_write: the core landmine-guard — a weekly re-run must NEVER lose a prior week ──
+def test_merge_and_write_raises_rather_than_silently_overwriting_on_a_read_failure(
+    monkeypatch, tmp_path
+):
+    # Seed an existing partition the way a prior run would have left it.
+    week1_row = {"id": "week1-e1", "commence_time": "2025-08-21T16:00:00Z",
+                "_requested_snapshot": "2025-08-21T15:55:00Z", "bookmakers": []}
+    s3io.write_records([week1_row], sport="ncaaf", source=orc.ODDS_HISTORICAL_SOURCE,
+                       season=2025, local_root=str(tmp_path))
+
+    # Simulate the exact CI flake: a transient failure reading back what's already captured.
+    def _boom(season, **kw):
+        raise RuntimeError("simulated transient delta_scan read failure")
+
+    monkeypatch.setattr(orc, "_existing_raw_rows", _boom)
+    week2_row = {"id": "week2-e1", "commence_time": "2025-08-28T16:00:00Z",
+                "_requested_snapshot": "2025-08-28T15:55:00Z", "bookmakers": []}
+    with pytest.raises(RuntimeError, match="simulated transient"):
+        orc._merge_and_write(2025, [week2_row], local_root=str(tmp_path))
+
+    # week1 must be UNCHANGED — the old bug would have silently overwritten it with week2 only.
+    import duckdb
+
+    con = duckdb.connect()
+    con.execute("INSTALL delta; LOAD delta")
+    uri = s3io.local_table_uri(str(tmp_path), "ncaaf", orc.ODDS_HISTORICAL_SOURCE)
+    rows = con.execute(f"SELECT raw_json FROM delta_scan('{uri}')").fetchall()
+    ids = {json.loads(r[0])["id"] for r in rows}
+    assert ids == {"week1-e1"}  # week2 never written; week1 never dropped
+
+
 def test_merge_and_write_never_loses_a_previously_captured_week(tmp_path):
     # Seed an "existing" partition the way a prior run would have left it.
     week1_row = {"id": "week1-e1", "commence_time": "2025-08-21T16:00:00Z",
