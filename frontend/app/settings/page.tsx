@@ -15,6 +15,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLocalStorage } from "@/hooks/use-local-storage"
 import { apiFetch } from "@/lib/api"
 import { NotificationsSettings } from "@/components/notifications-settings"
+import { MfaSettings } from "@/components/mfa-settings"
 
 // ---------------------------------------------------------------------------
 // Curated sportsbooks — same set as Book Comparison
@@ -860,6 +861,11 @@ export default function SettingsPage() {
             </Button>
           </div>
         </section>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Two-factor authentication (E9.19 — Cognito TOTP)                  */}
+        {/* ---------------------------------------------------------------- */}
+        <MfaSettings />
 
         {/* ---------------------------------------------------------------- */}
         {/* Betting defaults card                                             */}

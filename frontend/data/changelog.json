@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "new",
+        "text": "Added two-factor authentication (2FA) for extra account security. In Settings → Two-Factor Authentication you can now turn on an authenticator app: scan the QR code (or enter the setup key) in Google Authenticator, Authy, 1Password, or any similar app, and from then on you'll enter a 6-digit code from that app along with your password each time you sign in. You can turn it back off anytime by re-entering your password. If you sign in with Google, two-factor is already handled by your Google account, so there's nothing extra to set up here."
+      },
+      {
+        "tag": "new",
         "text": "Added 'Continue with Google' to the sign-in page. You can now sign in with your Google account in one tap instead of typing an email and password — Credence never sees your Google password, and the account you land in works exactly like a regular one. Existing email-and-password sign-in continues to work unchanged."
       },
       {

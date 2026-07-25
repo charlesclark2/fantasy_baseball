@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { CognitoUserSession } from "amazon-cognito-identity-js"
 import posthog from "posthog-js"
 import { queryClient } from "@/lib/query-client"
-import { getCurrentCognitoUser } from "@/lib/cognito"
+import { getCurrentCognitoUser, clearSessionAuthMethod } from "@/lib/cognito"
 import { registerTokenRefresher } from "@/lib/api"
 
 type AuthCtx = {
@@ -191,6 +191,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(() => {
     const user = getCurrentCognitoUser()
     user?.signOut()
+    clearSessionAuthMethod()
     posthog.reset()
     queryClient.clear()
     clearAuth()
