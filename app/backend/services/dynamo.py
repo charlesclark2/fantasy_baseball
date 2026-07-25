@@ -559,3 +559,87 @@ def upsert_user_portfolio(user_id: str, prefs: dict) -> dict:
     except Exception:
         logger.warning("dynamo.upsert_user_portfolio failed for user=%s", user_id)
     return {"user_id": user_id, **pf}
+
+
+# ── Stripe subscription billing state (E9.8) ─────────────────────────────────
+# Reuses the users table with namespaced synthetic PKs so no new infra is needed.
+# The rows are invisible to the app's per-user reads (they never key on these PKs)
+# and to the owner-scan in finances.py (which filters on `email`, absent here).
+#
+#   __stripe_event__#<event_id>   idempotency ledger — one row per processed webhook
+#   __stripe_meta__#founding      durable atomic counter of paid conversions
+#   __stripe_customer__#<cust_id> reverse map Stripe customer → Cognito sub
+#
+# The user's OWN row also gets `stripe_customer_id` on conversion so
+# GET /subscription/status can surface a manage-billing link.
+
+_FOUNDING_COUNTER_PK = "__stripe_meta__#founding"
+
+
+def stripe_event_already_processed(event_id: str) -> bool:
+    """Idempotency gate keyed on the Stripe event id.
+
+    Records the event id with a conditional put. Returns True if this event was
+    ALREADY processed (caller should no-op), False if it is newly recorded (caller
+    should process). Stripe retries and sends duplicates, so a replayed
+    subscription.created must not double-promote or double-count.
+    """
+    try:
+        _users_table().put_item(
+            Item={"user_id": f"__stripe_event__#{event_id}", "processed_at": _now_iso()},
+            ConditionExpression="attribute_not_exists(user_id)",
+        )
+        return False
+    except _ddb.meta.client.exceptions.ConditionalCheckFailedException:
+        return True
+
+
+def founding_slots_used() -> int:
+    """How many paid conversions have been recorded (the durable founding counter)."""
+    resp = _users_table().get_item(Key={"user_id": _FOUNDING_COUNTER_PK})
+    raw = resp.get("Item", {}).get("slots_used")
+    return int(raw) if raw is not None else 0
+
+
+def increment_founding_slots() -> int:
+    """Atomically increment the founding-conversion counter; return the new total.
+
+    Called from the webhook on a genuine (idempotency-gated) new conversion. Not
+    decremented on churn — "first 100 to convert" is a permanent grandfather, so a
+    freed slot is never reclaimed. The #100 boundary race is accepted (no lock)."""
+    resp = _users_table().update_item(
+        Key={"user_id": _FOUNDING_COUNTER_PK},
+        UpdateExpression="ADD slots_used :one",
+        ExpressionAttributeValues={":one": Decimal(1)},
+        ReturnValues="UPDATED_NEW",
+    )
+    return int(resp["Attributes"]["slots_used"])
+
+
+def link_stripe_customer(user_id: str, customer_id: str) -> None:
+    """Record the Stripe customer id on the user's row + a reverse-lookup row.
+
+    The reverse row lets webhook events that carry only a customer id
+    (invoice.payment_failed) resolve back to the Cognito sub."""
+    _users_table().update_item(
+        Key={"user_id": user_id},
+        UpdateExpression="SET stripe_customer_id = :c",
+        ExpressionAttributeValues={":c": customer_id},
+    )
+    _users_table().put_item(
+        Item={"user_id": f"__stripe_customer__#{customer_id}", "cognito_sub": user_id}
+    )
+
+
+def user_id_for_stripe_customer(customer_id: str) -> str | None:
+    """Resolve a Stripe customer id back to a Cognito sub via the reverse-lookup row."""
+    resp = _users_table().get_item(Key={"user_id": f"__stripe_customer__#{customer_id}"})
+    sub = resp.get("Item", {}).get("cognito_sub")
+    return str(sub) if sub else None
+
+
+def stripe_customer_for_user(user_id: str) -> str | None:
+    """The Stripe customer id stored on the user's row, if any."""
+    resp = _users_table().get_item(Key={"user_id": user_id})
+    cid = resp.get("Item", {}).get("stripe_customer_id")
+    return str(cid) if cid else None

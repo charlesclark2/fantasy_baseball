@@ -7,6 +7,7 @@ import { DateProvider } from '@/lib/date-context'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { CookieBanner } from '@/components/cookie-banner'
 import { Toaster } from '@/components/ui/toaster'
+import { SubscriptionGate } from '@/components/subscription-gate'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -14,6 +15,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <DateProvider>
         <QueryClientProvider client={queryClient}>
           <TooltipProvider>
+            <SubscriptionGate />
             {children}
             <CookieBanner />
             <Toaster />
