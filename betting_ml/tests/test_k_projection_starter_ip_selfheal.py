@@ -22,28 +22,36 @@ _DAY = "2026-07-03"
 
 
 class _Conn:
-    """Minimal stand-in for the DuckDB connection the presence check now uses."""
+    """Minimal stand-in for the DuckDB connection the presence check now uses.
 
-    def __init__(self, count):
-        self._count = count
-        self.executed = None
+    The self-heal issues TWO counts: `present` (starter_ip_signals rows for today) and
+    `expected` (starters WITH pregame features today = the generator's own input universe).
+    Return the right one per query so the regen-on-incomplete branch is exercised.
+    """
+
+    def __init__(self, present, expected):
+        self._present = present
+        self._expected = expected
+        self._last_sql = ""
 
     def execute(self, sql, params=None):
-        self.executed = (sql, params)
+        self._last_sql = sql
         return self
 
     def fetchone(self):
-        return (self._count,)
+        if "feature_pregame_starter_features" in self._last_sql:
+            return (self._expected,)
+        return (self._present,)
 
     def close(self):
         pass
 
 
-def _patch_conn(monkeypatch, count=0, raises=False):
+def _patch_conn(monkeypatch, present=0, expected=30, raises=False):
     def _factory(*a, **k):
         if raises:
             raise RuntimeError("lakehouse read failed")
-        return _Conn(count)
+        return _Conn(present, expected)
 
     monkeypatch.setattr(wk, "_duck_lakehouse", _factory)
 
@@ -66,9 +74,9 @@ def _patch_run(monkeypatch, returncode=0):
 
 
 def test_generates_when_signal_missing(monkeypatch):
-    """Zero rows for the date → the generator is invoked with the right --date/--env."""
+    """Zero rows but features ready → the generator is invoked with the right --date/--env."""
     monkeypatch.setenv("TARGET_ENV", "prod")
-    _patch_conn(monkeypatch, count=0)
+    _patch_conn(monkeypatch, present=0, expected=30)
     calls = _patch_run(monkeypatch, returncode=0)
 
     wk._ensure_starter_ip_signal(_DAY)
@@ -87,21 +95,52 @@ def test_generates_when_signal_missing(monkeypatch):
     assert "--table" in mirror and mirror[mirror.index("--table") + 1] == wk._STARTER_IP_TABLE
 
 
-def test_skips_generation_when_signal_present(monkeypatch):
-    """Rows already exist → no generation (idempotent, cheap hourly re-runs)."""
+def test_regenerates_when_coverage_incomplete(monkeypatch):
+    """⭐ The 2026-07-24 cost-race fix: a PARTIAL early generation must NOT freeze coverage.
+
+    present=1 (only the afternoon starter scored) but expected=30 (all of today's starters now
+    have pregame features) → the self-heal must regenerate to fill the gap, not skip because a
+    single stale row exists (the old `if present:` bug that left /props showing one pitcher).
+    """
     monkeypatch.setenv("TARGET_ENV", "prod")
-    _patch_conn(monkeypatch, count=25)
+    _patch_conn(monkeypatch, present=1, expected=30)
     calls = _patch_run(monkeypatch, returncode=0)
 
     wk._ensure_starter_ip_signal(_DAY)
 
-    assert calls == [], "present signal must NOT be regenerated"
+    assert len(calls) == 2, "incomplete coverage (present<expected) must regenerate, not skip"
+
+
+def test_skips_generation_when_signal_complete(monkeypatch):
+    """Coverage complete (present >= expected) → no generation (idempotent, cheap re-runs)."""
+    monkeypatch.setenv("TARGET_ENV", "prod")
+    _patch_conn(monkeypatch, present=30, expected=30)
+    calls = _patch_run(monkeypatch, returncode=0)
+
+    wk._ensure_starter_ip_signal(_DAY)
+
+    assert calls == [], "complete signal must NOT be regenerated"
+
+
+def test_skips_when_no_features_yet(monkeypatch):
+    """No starters have pregame features yet (expected==0) → nothing to generate; no SF touch.
+
+    Guards against a wasted Snowflake self-heal (and a per-run loop) when there is genuinely no
+    input universe — e.g. a very early-morning run before any features are built.
+    """
+    monkeypatch.setenv("TARGET_ENV", "prod")
+    _patch_conn(monkeypatch, present=0, expected=0)
+    calls = _patch_run(monkeypatch, returncode=0)
+
+    wk._ensure_starter_ip_signal(_DAY)
+
+    assert calls == [], "no input universe → must not touch Snowflake"
 
 
 def test_env_defaults_to_dev_without_target_env(monkeypatch):
     """Dev isolation: without TARGET_ENV=prod the generation targets the dev schema."""
     monkeypatch.delenv("TARGET_ENV", raising=False)
-    _patch_conn(monkeypatch, count=0)
+    _patch_conn(monkeypatch, present=0, expected=30)
     calls = _patch_run(monkeypatch, returncode=0)
 
     wk._ensure_starter_ip_signal(_DAY)
@@ -110,7 +149,7 @@ def test_env_defaults_to_dev_without_target_env(monkeypatch):
 
 
 def test_presence_check_failure_falls_through_to_generation(monkeypatch):
-    """A flaky lakehouse presence check must not abort — treat as missing and generate."""
+    """A flaky lakehouse presence check must not abort — treat as incomplete and generate."""
     monkeypatch.setenv("TARGET_ENV", "prod")
     _patch_conn(monkeypatch, raises=True)
     calls = _patch_run(monkeypatch, returncode=0)
@@ -123,7 +162,7 @@ def test_presence_check_failure_falls_through_to_generation(monkeypatch):
 def test_generation_failure_is_fail_soft(monkeypatch):
     """A non-zero generator exit is logged, not raised (WARN-tier writer never blocks serving)."""
     monkeypatch.setenv("TARGET_ENV", "prod")
-    _patch_conn(monkeypatch, count=0)
+    _patch_conn(monkeypatch, present=0, expected=30)
     calls = _patch_run(monkeypatch, returncode=1)
 
     wk._ensure_starter_ip_signal(_DAY)  # must not raise

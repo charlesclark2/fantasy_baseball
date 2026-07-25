@@ -7,12 +7,42 @@ on:
     branches: [main]
 
 jobs:
+  # E9.7 — path gate. The three jobs below are REQUIRED status checks (branch protection),
+  # so we must NOT skip them at the `on: paths:` level: a filtered-out workflow never posts
+  # its check, leaving a required check "pending" forever → the PR can't merge (GitHub's
+  # skipped-but-required gotcha). Instead this job detects whether anything OUTSIDE the
+  # frontend/docs changed; the test jobs gate on it with `if:`. A job skipped via `if:` is
+  # treated as PASSING by branch protection, so a frontend-only change still satisfies the
+  # required checks WITHOUT spinning up the Python suites. (Keep it this way — do not convert
+  # these to `on: paths:` while they remain required checks.)
+  changes:
+    name: Detect backend changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          # `backend` is true when any changed file is NOT purely frontend/docs.
+          # `**` includes everything, then the `!` lines subtract the paths that
+          # can never affect the Python test suites (the Next.js app + markdown/docs).
+          filters: |
+            backend:
+              - '**'
+              - '!frontend/**'
+              - '!**/*.md'
+              - '!docs/**'
+
   # E11.13 — fast gate: every test EXCEPT the `slow` Monte-Carlo calibration guards,
   # run in parallel (-n auto). This is the per-push handoff gate; ~15s vs the old ~4.5min
   # serial run. Both this job AND `slow-tests` are required for merge (see branch protection).
   unit-tests:
     name: Unit Tests (fast gate)
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
 
     steps:
       - uses: actions/checkout@v4
@@ -52,6 +82,8 @@ jobs:
   slow-tests:
     name: Unit Tests (slow — Monte-Carlo calibration)
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
 
     steps:
       - uses: actions/checkout@v4
@@ -103,6 +135,8 @@ jobs:
   model-smoke-test:
     name: Model Artifact Smoke Test
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
 
     steps:
       - uses: actions/checkout@v4
