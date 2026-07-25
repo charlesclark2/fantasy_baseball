@@ -69,6 +69,18 @@ _STD_ROSTER = (
     RosterSlot("DST", 1, ("DST",)),
     RosterSlot("BN", 6, ("QB", "RB", "WR", "TE"), bench=True),
 )
+# The modern "3-WR" starting lineup (1QB/2RB/3WR/1TE/1FLEX) — a very common redraft shape that
+# starts an extra WR (raising WR starter demand → deeper WR replacement level → more WRs are startable).
+_STD_ROSTER_3WR = (
+    RosterSlot("QB", 1, ("QB",)),
+    RosterSlot("RB", 2, ("RB",)),
+    RosterSlot("WR", 3, ("WR",)),
+    RosterSlot("TE", 1, ("TE",)),
+    RosterSlot("FLEX", 1, _FLEX_ELIG),
+    RosterSlot("K", 1, ("K",)),
+    RosterSlot("DST", 1, ("DST",)),
+    RosterSlot("BN", 6, ("QB", "RB", "WR", "TE"), bench=True),
+)
 # Superflex adds an OP/SUPERFLEX slot (QB-eligible) — the format that makes QBs scarce.
 _SUPERFLEX_ROSTER = (
     RosterSlot("QB", 1, ("QB",)),
@@ -121,6 +133,30 @@ def superflex(n_teams: int = 12) -> LeagueConfig:
     ).validate()
 
 
+def standard_3wr(n_teams: int = 12) -> LeagueConfig:
+    return LeagueConfig(
+        name="standard_3wr", sport="nfl", n_teams=n_teams, ppr="standard",
+        scoring=_scoring(0.0), roster=_STD_ROSTER_3WR,
+        description="Standard (non-PPR), 12-team, 1QB/2RB/3WR/1TE/1FLEX (3-WR roster).",
+    ).validate()
+
+
+def half_ppr_3wr(n_teams: int = 12) -> LeagueConfig:
+    return LeagueConfig(
+        name="half_ppr_3wr", sport="nfl", n_teams=n_teams, ppr="half",
+        scoring=_scoring(0.5), roster=_STD_ROSTER_3WR,
+        description="Half-PPR (0.5/reception), 12-team, 1QB/2RB/3WR/1TE/1FLEX (3-WR roster).",
+    ).validate()
+
+
+def full_ppr_3wr(n_teams: int = 12) -> LeagueConfig:
+    return LeagueConfig(
+        name="full_ppr_3wr", sport="nfl", n_teams=n_teams, ppr="ppr",
+        scoring=_scoring(1.0), roster=_STD_ROSTER_3WR,
+        description="Full-PPR (1.0/reception), 12-team, 1QB/2RB/3WR/1TE/1FLEX (3-WR roster).",
+    ).validate()
+
+
 def te_premium(n_teams: int = 12, premium: float = 0.5) -> LeagueConfig:
     """Full-PPR with an extra +premium per TE reception (the TE-premium format)."""
     return LeagueConfig(
@@ -130,12 +166,16 @@ def te_premium(n_teams: int = 12, premium: float = 0.5) -> LeagueConfig:
     ).validate()
 
 
-# The 4 shipped presets the story requires (+ TE-premium as a 5th demonstrator of position bonuses).
+# The shipped presets. The 4 gate presets (2-WR roster) + the common 3-WR roster across PPR variants
+# + TE-premium (a demonstrator of position bonuses). All share the sport-agnostic engine.
 PRESETS = {
     "standard": standard,
     "half_ppr": half_ppr,
     "full_ppr": full_ppr,
     "superflex": superflex,
+    "standard_3wr": standard_3wr,
+    "half_ppr_3wr": half_ppr_3wr,
+    "full_ppr_3wr": full_ppr_3wr,
     "te_premium": te_premium,
 }
 

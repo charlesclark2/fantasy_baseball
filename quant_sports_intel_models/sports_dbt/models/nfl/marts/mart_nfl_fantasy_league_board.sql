@@ -1,9 +1,11 @@
 -- mart_nfl_fantasy_league_board — NF-C1-lite (MVP-2): per-league scored + ranked draft boards.
 --
--- GRAIN: one row per (config_name, player_id) — a player's league-specific fantasy points, VOR
--- (value-over-replacement), positional + overall rank, and a carried interval, for EACH shipped
--- preset (standard / half_ppr / full_ppr / superflex). This is MVP-3's (draft optimizer) input
--- contract: it ranks off `vor` / `overall_rank`.
+-- GRAIN: one row per (config_name, n_teams, player_id) — a player's league-specific fantasy points,
+-- VOR (value-over-replacement), positional + overall rank, and a carried interval, for EACH shipped
+-- preset (standard / half_ppr / full_ppr / superflex + the 3-WR roster variants) AT EACH league size.
+-- League size is a NORMALIZED dimension (not part of the format name) because VOR replacement scales
+-- with n_teams — each size is a genuinely different value board. This is MVP-3's (draft optimizer)
+-- input contract: it ranks off `vor` / `overall_rank` for a chosen (config_name, n_teams).
 --
 -- ⚠️ NOT COMPUTED IN dbt. A read-only view over the parquet
 -- `football/nfl/fantasy/run_league_board.py` writes to the lake

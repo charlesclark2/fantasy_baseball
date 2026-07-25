@@ -158,13 +158,43 @@ def _qb_rank_of_best(board: pd.DataFrame) -> tuple[str, int]:
     return (str(qb["player_name"].iloc[0]), int(qb["overall_rank"].iloc[0]))
 
 
-def write_report(boards: dict, repl_tables: dict, season: int, path: Path) -> None:
+def _size_effect_table(boards_all: dict, fmt: str, sizes: list[int]) -> pd.DataFrame:
+    """For ONE format across league sizes: how positional replacement + QB scarcity + the count of
+    positive-VOR (draftable-with-value) players move with league size. The auditable proof that size
+    is a real dimension of value, not a label — fewer teams ⇒ shallower demand ⇒ higher replacement bar."""
+    rows = []
+    for size in sizes:
+        b = boards_all.get((fmt, size))
+        if b is None:
+            continue
+        repl = b.groupby("position")["replacement_points"].max()
+        _, qb_rank = _qb_rank_of_best(b)
+        rows.append({
+            "format": fmt, "n_teams": size,
+            "QB_repl": round(float(repl.get("QB", 0.0)), 1),
+            "RB_repl": round(float(repl.get("RB", 0.0)), 1),
+            "WR_repl": round(float(repl.get("WR", 0.0)), 1),
+            "TE_repl": round(float(repl.get("TE", 0.0)), 1),
+            "best_QB_rank": qb_rank,
+            "players_positive_VOR": int((b["vor"] > 0).sum()),
+        })
+    return pd.DataFrame(rows)
+
+
+def write_report(boards: dict, repl_tables: dict, season: int, path: Path, *,
+                 reference_n_teams: int = 12, size_effect: pd.DataFrame | None = None,
+                 size_fmt: str = "full_ppr") -> None:
     a = []
     p = a.append
     p(f"# NF-C1-lite — {season} NFL league-config scoring + VOR boards (MVP-2)")
     p("")
     p(f"**Engine:** `{ENGINE_VERSION}` (sport-agnostic `fantasy_engine`) · **projection season:** {season} "
       f"· **generated:** {datetime.now(timezone.utc).isoformat()}")
+    p("")
+    p(f"> 🧮 **Sections 1–3 below are shown at the {reference_n_teams}-team reference size** (the modal "
+      f"redraft size); the boards are landed for every scored size — see §4 for the league-size effect. "
+      f"The board grain is (config_name, n_teams, player_id): league size is a normalized dimension, not "
+      f"part of the format name.")
     p("")
     p("> ⚖️ **A PROJECTION PRODUCT, edge-independent** — no `best_alpha`/PBO/DSR/CLV gate. The gate is "
       "(1) SCORING CORRECTNESS (hand-calc match — see the fast-gate tests), (2) a TRANSPARENT "
@@ -233,7 +263,19 @@ def write_report(boards: dict, repl_tables: dict, season: int, path: Path) -> No
         p(_md(boards[name].head(20)[show]))
         p("")
 
-    p("## 4. Limitations")
+    if size_effect is not None and not size_effect.empty and len(size_effect) > 1:
+        p("## 4. League-size effect — size is a real dimension of value, not a label")
+        p("")
+        p(f"For **{size_fmt}** across the scored league sizes: replacement level per position + the best "
+          f"QB's overall rank + the count of players carrying positive VOR. Fewer teams ⇒ shallower "
+          f"starter demand ⇒ a HIGHER replacement bar ⇒ fewer players with positive VOR. This is why the "
+          f"board grain includes `n_teams` — each size is a genuinely different value board off the same "
+          f"MVP-1 projections.")
+        p("")
+        p(_md(size_effect))
+        p("")
+
+    p("## 5. Limitations")
     p("")
     p("- **Presets over the MVP-1 raw line** — the board is only as good as the MVP-1 projection it "
       "rescores; the within-tier ordering gap vs The Fantasy Footballers (RB/WR) carries through. NF-D2 "
@@ -256,9 +298,17 @@ def write_report(boards: dict, repl_tables: dict, season: int, path: Path) -> No
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="NF-C1-lite — per-league scored + VOR boards from MVP-1")
     ap.add_argument("--projection-season", type=int, default=2026)
-    ap.add_argument("--presets", nargs="*", default=["standard", "half_ppr", "full_ppr", "superflex"],
-                    help=f"presets to score (default: the 4 gate presets). Available: {sorted(PRESETS)}")
-    ap.add_argument("--n-teams", type=int, default=12)
+    ap.add_argument(
+        "--presets", nargs="*",
+        default=["standard", "half_ppr", "full_ppr", "superflex",
+                 "standard_3wr", "half_ppr_3wr", "full_ppr_3wr"],
+        help=f"presets to score. Available: {sorted(PRESETS)}. ⚠️ the S3 write is a replaceWhere by "
+             f"season — a run OVERWRITES the whole season partition, so pass the FULL set you want "
+             f"persisted (the default = the 4 gate presets + the 3-WR roster variants).")
+    ap.add_argument("--n-teams", type=int, nargs="+", default=[12, 10],
+                    help="league size(s) to score. Size is a normalized dimension of the board grain "
+                         "(config_name, n_teams, player_id) — VOR replacement scales with it, so each "
+                         "size is a genuinely different value board. Default: 12 and 10.")
     ap.add_argument("--from-lake", action="store_true",
                     help="read the MVP-1 projection from the S3 lake Delta instead of a local artifact")
     ap.add_argument("--projections-parquet", default=None,
@@ -292,35 +342,48 @@ def main(argv: list[str] | None = None) -> int:
         ap.error(f"no MVP-1 projection rows for season {season}")
     log.info("loaded %d MVP-1 projection rows for season %d", len(proj), season)
 
-    configs = [get_preset(name, args.n_teams) for name in args.presets]
+    sizes = sorted(set(args.n_teams), reverse=True)
+    ref_size = 12 if 12 in sizes else sizes[0]  # the size the report's main tables use
 
-    boards: dict[str, pd.DataFrame] = {}
-    repl_tables: dict[str, pd.DataFrame] = {}
-    for cfg in configs:
-        board, repl_tbl = board_for_config(proj, cfg, season)
-        boards[cfg.name] = board
-        repl_tables[cfg.name] = repl_tbl
-        # persist the config object (the shared contract NF-C0 populates)
-        (out_dir / "league_configs" / f"{cfg.name}.json").write_text(json.dumps(cfg.to_dict(), indent=2))
-        # readable per-preset CSV
-        board.to_csv(out_dir / "league_boards" / f"nfl_league_board_{cfg.name}_{season}.csv", index=False)
-        log.info("  %s: %d players ranked (best QB overall rank %d)",
-                 cfg.name, len(board), _qb_rank_of_best(board)[1])
+    boards_all: dict[tuple[str, int], pd.DataFrame] = {}   # (preset, size) -> board (for the write)
+    ref_boards: dict[str, pd.DataFrame] = {}               # preset -> board at ref_size (report)
+    ref_repl: dict[str, pd.DataFrame] = {}
+    for size in sizes:
+        for name in args.presets:
+            cfg = get_preset(name, size)
+            board, repl_tbl = board_for_config(proj, cfg, season)
+            boards_all[(name, size)] = board
+            # persist the config object (the shared contract NF-C0 populates) + a readable CSV, per size
+            (out_dir / "league_configs" / f"{name}_{size}team.json").write_text(
+                json.dumps(cfg.to_dict(), indent=2))
+            board.to_csv(
+                out_dir / "league_boards" / f"nfl_league_board_{name}_{size}team_{season}.csv", index=False)
+            if size == ref_size:
+                ref_boards[name] = board
+                ref_repl[name] = repl_tbl
+            log.info("  %s (%d-team): %d players ranked (best QB overall rank %d)",
+                     name, size, len(board), _qb_rank_of_best(board)[1])
 
-    # land all presets for the season as one Delta partition (replaceWhere by season)
+    # league-size effect: for a representative format, how replacement + QB scarcity move with size
+    size_fmt = next((f for f in ("full_ppr", "half_ppr", "standard") if f in args.presets), args.presets[0])
+    size_effect = _size_effect_table(boards_all, size_fmt, sizes)
+
+    # land EVERY (preset × size) board for the season as one Delta partition (replaceWhere by season —
+    # a single combined write, so re-running never drops a preset/size already landed).
     if args.s3 or args.lake_root:
         from quant_sports_intel_models.football.nfl.ingest import s3io
-        combined = pd.concat(boards.values(), ignore_index=True)
+        combined = pd.concat(boards_all.values(), ignore_index=True)
         n = s3io.write_dataframe(
             combined, sport="nfl", source="league_boards", season=int(season),
             tier="fantasy/derived", local_root=args.lake_root)
-        log.info("landed %d board rows (%d presets) → nfl/fantasy/derived/league_boards season=%d",
-                 n, len(boards), season)
+        log.info("landed %d board rows (%d presets × %d sizes) → nfl/fantasy/derived/league_boards season=%d",
+                 n, len(args.presets), len(sizes), season)
 
     if not args.no_report:
-        write_report(boards, repl_tables, season, _REPORT_PATH)
+        write_report(ref_boards, ref_repl, season, _REPORT_PATH,
+                     reference_n_teams=ref_size, size_effect=size_effect, size_fmt=size_fmt)
 
-    log.info("done. presets: %s", ", ".join(boards))
+    log.info("done. presets: %s | sizes: %s", ", ".join(args.presets), sizes)
     return 0
 
 

@@ -1,6 +1,8 @@
 # NF-C1-lite — 2026 NFL league-config scoring + VOR boards (MVP-2)
 
-**Engine:** `nfl_fantasy_league_board_v1` (sport-agnostic `fantasy_engine`) · **projection season:** 2026 · **generated:** 2026-07-25T01:32:53.953945+00:00
+**Engine:** `nfl_fantasy_league_board_v1` (sport-agnostic `fantasy_engine`) · **projection season:** 2026 · **generated:** 2026-07-25T01:47:01.479621+00:00
+
+> 🧮 **Sections 1–3 below are shown at the 12-team reference size** (the modal redraft size); the boards are landed for every scored size — see §4 for the league-size effect. The board grain is (config_name, n_teams, player_id): league size is a normalized dimension, not part of the format name.
 
 > ⚖️ **A PROJECTION PRODUCT, edge-independent** — no `best_alpha`/PBO/DSR/CLV gate. The gate is (1) SCORING CORRECTNESS (hand-calc match — see the fast-gate tests), (2) a TRANSPARENT replacement-level definition (the per-position demand tables below), and (3) FACE-VALID preset deltas (full-PPR lifts pass-catchers; superflex lifts QBs). We **RESCORE the MVP-1 raw stat line** per league — never the `proj_fp_*` convenience columns. Uncertainty is carried through the rescore as a coefficient-of-variation (a first-order interval, not a false-precise point); rookie intervals remain PARAMETER uncertainty and must be recalibrated before pricing.
 
@@ -130,7 +132,16 @@ Replacement level per position = the points of the FIRST non-startable player (t
 |             19 | TREVOR LAWRENCE     | QB         |                 5 |         16.5 |           278.5 |                205.2 |  73.4 |      -2.3 |     149.0 |
 |             20 | Jeremiyah Love      | RB         |                10 |         16.0 |           208.4 |                135.5 |  72.9 |    -135.5 |     307.7 |
 
-## 4. Limitations
+## 4. League-size effect — size is a real dimension of value, not a label
+
+For **full_ppr** across the scored league sizes: replacement level per position + the best QB's overall rank + the count of players carrying positive VOR. Fewer teams ⇒ shallower starter demand ⇒ a HIGHER replacement bar ⇒ fewer players with positive VOR. This is why the board grain includes `n_teams` — each size is a genuinely different value board off the same MVP-1 projections.
+
+| format   |   n_teams |   QB_repl |   RB_repl |   WR_repl |   TE_repl |   best_QB_rank |   players_positive_VOR |
+|:---------|----------:|----------:|----------:|----------:|----------:|---------------:|-----------------------:|
+| full_ppr |        12 |     259.9 |     135.5 |     135.6 |     124.0 |             26 |                     84 |
+| full_ppr |        10 |     262.0 |     143.9 |     144.8 |     125.9 |             21 |                     70 |
+
+## 5. Limitations
 
 - **Presets over the MVP-1 raw line** — the board is only as good as the MVP-1 projection it rescores; the within-tier ordering gap vs The Fantasy Footballers (RB/WR) carries through. NF-D2 closes it upstream.
 - **K/DST carry no projection line** (MVP-1 is offensive skill players only) → those slots create no ranked players; the board covers QB/RB/WR/TE (FB folded into RB).
