@@ -67,6 +67,10 @@ dependencies = [
     "h5py>=3.11",
     "psycopg2-binary>=2.9",
     "pytest-xdist>=3.5",
+    # E9.8 Stripe subscription billing — pure-Python; the FastAPI backend uses it for
+    # Checkout Session creation + webhook signature verification. Kept in lockstep with
+    # the pip install in infrastructure/lambda/deploy.sh (the Lambda bundle).
+    "stripe>=10.0.0",
 ]
 
 [build-system]

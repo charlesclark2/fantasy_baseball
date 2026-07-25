@@ -30,6 +30,36 @@ export function getCurrentCognitoUser() {
   return getPool().getCurrentUser()
 }
 
+// Force-mint a brand-new token pair from the refresh token, even if the cached
+// access token is still valid. Used after a Stripe conversion (E9.8) so the freshly
+// added `subscriber` Cognito group lands in the id/access token immediately, rather
+// than waiting for the next scheduled refresh. Resolves null if there's no session.
+export function forceRefreshTokens(): Promise<{ accessToken: string; idToken: string } | null> {
+  return new Promise((resolve) => {
+    const user = getCurrentCognitoUser()
+    if (!user) {
+      resolve(null)
+      return
+    }
+    user.getSession((err: Error | null, session: CognitoUserSession | null) => {
+      if (err || !session) {
+        resolve(null)
+        return
+      }
+      user.refreshSession(session.getRefreshToken(), (rErr, newSession: CognitoUserSession | null) => {
+        if (rErr || !newSession?.isValid()) {
+          resolve(null)
+          return
+        }
+        resolve({
+          accessToken: newSession.getAccessToken().getJwtToken(),
+          idToken: newSession.getIdToken().getJwtToken(),
+        })
+      })
+    })
+  })
+}
+
 // ── Hosted-UI / federated (Google) sign-in (E9.7) ────────────────────────────
 // Google OAuth runs through Cognito's Hosted UI (authorization-code + PKCE). The
 // app client is a PUBLIC client (no secret — the SDK can't hold one), so the code

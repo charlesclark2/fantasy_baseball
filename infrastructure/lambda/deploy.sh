@@ -89,6 +89,7 @@ pip install \
   "sentry-sdk[fastapi]>=2.0.0" \
   "psycopg2-binary>=2.9.0" \
   "duckdb>=1.1.0" \
+  "stripe>=10.0.0" \
   -t "$PACKAGE_DIR" \
   --quiet
 

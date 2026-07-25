@@ -16,6 +16,7 @@ import { useLocalStorage } from "@/hooks/use-local-storage"
 import { apiFetch } from "@/lib/api"
 import { NotificationsSettings } from "@/components/notifications-settings"
 import { MfaSettings } from "@/components/mfa-settings"
+import { openBillingPortal } from "@/lib/subscription"
 
 // ---------------------------------------------------------------------------
 // Curated sportsbooks — same set as Book Comparison
@@ -847,18 +848,37 @@ export default function SettingsPage() {
                 Billing
               </p>
               <p className="text-sm text-gray-500">
-                No active subscription — beta access
+                {groups.includes("subscriber")
+                  ? "Manage your subscription, payment method, or cancel."
+                  : groups.includes("beta_tester")
+                  ? "No active subscription — beta access."
+                  : "Subscribe to unlock the full model."}
               </p>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled
-              className="text-gray-600 hover:text-gray-600 disabled:opacity-40"
-              asChild
-            >
-              <Link href="/billing">Manage billing</Link>
-            </Button>
+            {groups.includes("subscriber") ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void openBillingPortal(accessToken)
+                }}
+                className="border-[#262626] text-gray-200 hover:bg-[#141414]"
+              >
+                Manage billing
+              </Button>
+            ) : groups.includes("beta_tester") ? (
+              <Button variant="ghost" size="sm" disabled className="text-gray-600 disabled:opacity-40">
+                Beta access
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                asChild
+                className="bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669]"
+              >
+                <Link href="/subscribe">Subscribe</Link>
+              </Button>
+            )}
           </div>
         </section>
 
