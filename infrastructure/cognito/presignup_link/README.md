@@ -7,6 +7,14 @@ account. See `handler.py` for the mechanism.
 
 All commands below run on the **LAPTOP** (AWS CLI, `us-east-1`). Pool `us-east-1_gG9zMbwQt`.
 
+> ⚠️ **Set the region first** — the Cognito pool is in `us-east-1`, but a shell configured
+> for the lakehouse defaults to `us-east-2` (the artifacts bucket), which makes
+> `describe-user-pool` fail with `ResourceNotFoundException: … does not exist`. Export it
+> for the whole session (flip back / use a fresh shell before any S3/DuckDB `us-east-2` work):
+> ```bash
+> export AWS_DEFAULT_REGION=us-east-1
+> ```
+
 ---
 
 ## One-time setup (operator)
@@ -30,7 +38,7 @@ aws iam attach-role-policy \
 
 # Least-privilege: only ListUsers + AdminLinkProviderForUser on THIS pool
 POOL_ARN=$(aws cognito-idp describe-user-pool --user-pool-id us-east-1_gG9zMbwQt \
-  --query 'UserPool.Arn' --output text)
+  --region us-east-1 --query 'UserPool.Arn' --output text)
 cat > /tmp/presignup-policy.json <<JSON
 { "Version": "2012-10-17", "Statement": [
   { "Effect": "Allow",
@@ -64,7 +72,7 @@ aws lambda create-function \
 ### 3. Let Cognito invoke it
 ```bash
 POOL_ARN=$(aws cognito-idp describe-user-pool --user-pool-id us-east-1_gG9zMbwQt \
-  --query 'UserPool.Arn' --output text)
+  --region us-east-1 --query 'UserPool.Arn' --output text)
 
 aws lambda add-permission \
   --function-name credence-prod-cognito-presignup-link \

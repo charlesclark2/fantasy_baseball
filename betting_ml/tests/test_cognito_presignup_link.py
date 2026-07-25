@@ -36,31 +36,52 @@ def mod(monkeypatch):
     return module
 
 
-def _event(trigger="PreSignUp_ExternalProvider", username="Google_123456",
+def _event(trigger="PreSignUp_ExternalProvider", username="google_100868166396155863973",
            email="user@example.com", verified="true"):
+    attrs = {"email": email}
+    # verified=None models Cognito NOT mapping email_verified into the event (the real
+    # E9.7 case); otherwise set it explicitly.
+    if verified is not None:
+        attrs["email_verified"] = verified
     return {
         "triggerSource": trigger,
         "userPoolId": "us-east-1_gG9zMbwQt",
         "userName": username,
-        "request": {"userAttributes": {"email": email, "email_verified": verified}},
+        "request": {"userAttributes": attrs},
     }
 
 
 def test_links_google_into_existing_native_user(mod):
-    mod.cognito.list_users.return_value = {"Users": [{"Username": "user@example.com"}]}
+    # Native user has a UUID username (as in prod: 14187448-c091-…), email as attribute.
+    mod.cognito.list_users.return_value = {
+        "Users": [{"Username": "14187448-c091-705c-1199-63858b12c986"}]
+    }
     out = mod.handler(_event(), None)
 
     assert out["triggerSource"] == "PreSignUp_ExternalProvider"  # event returned unchanged
     mod.cognito.admin_link_provider_for_user.assert_called_once()
     kwargs = mod.cognito.admin_link_provider_for_user.call_args.kwargs
     assert kwargs["DestinationUser"] == {
-        "ProviderName": "Cognito", "ProviderAttributeValue": "user@example.com",
+        "ProviderName": "Cognito",
+        "ProviderAttributeValue": "14187448-c091-705c-1199-63858b12c986",
     }
     assert kwargs["SourceUser"] == {
+        # Canonical IdP name — Cognito lowercases it in the username ("google_…") but
+        # admin_link_provider_for_user requires the configured "Google".
         "ProviderName": "Google",
         "ProviderAttributeName": "Cognito_Subject",
-        "ProviderAttributeValue": "123456",
+        "ProviderAttributeValue": "100868166396155863973",
     }
+
+
+def test_links_when_email_verified_attribute_is_absent(mod):
+    # The real E9.7 bug: Google mapping omits email_verified → attribute absent. A
+    # trusted provider must still link (this is the regression the fix targets).
+    mod.cognito.list_users.return_value = {
+        "Users": [{"Username": "14187448-c091-705c-1199-63858b12c986"}]
+    }
+    mod.handler(_event(verified=None), None)
+    mod.cognito.admin_link_provider_for_user.assert_called_once()
 
 
 def test_native_signup_passes_through_untouched(mod):
@@ -69,14 +90,31 @@ def test_native_signup_passes_through_untouched(mod):
     mod.cognito.admin_link_provider_for_user.assert_not_called()
 
 
-def test_unverified_email_never_links(mod):
+def test_trusted_provider_links_even_when_email_verified_false(mod):
+    # Cognito reports email_verified="false" for a Google federation when the IdP mapping
+    # doesn't pass it through (the confirmed prod case). That `false` is an artifact, not a
+    # real unverified signal, so a trusted provider must STILL link.
+    mod.cognito.list_users.return_value = {
+        "Users": [{"Username": "14187448-c091-705c-1199-63858b12c986"}]
+    }
     mod.handler(_event(verified="false"), None)
+    mod.cognito.admin_link_provider_for_user.assert_called_once()
+
+
+def test_untrusted_provider_without_verified_email_never_links(mod):
+    # A hypothetical future non-trusted IdP must assert email_verified=true to link.
+    mod.cognito.list_users.return_value = {
+        "Users": [{"Username": "14187448-c091-705c-1199-63858b12c986"}]
+    }
+    mod.handler(_event(username="myoidc_abc", verified="false"), None)
     mod.cognito.admin_link_provider_for_user.assert_not_called()
 
 
 def test_no_matching_native_user_creates_normal_federated_user(mod):
     # Only the incoming federated identity exists (or nothing) → no link, no error.
-    mod.cognito.list_users.return_value = {"Users": [{"Username": "Google_123456"}]}
+    mod.cognito.list_users.return_value = {
+        "Users": [{"Username": "google_100868166396155863973"}]
+    }
     mod.handler(_event(), None)
     mod.cognito.admin_link_provider_for_user.assert_not_called()
 

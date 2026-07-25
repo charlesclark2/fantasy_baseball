@@ -182,6 +182,38 @@ models:
         description: CONVENIENCE standard-PPR total (ranking/validation only — NF-C1 rescores the raw line).
         data_tests: [not_null]
 
+  - name: mart_nfl_fantasy_league_board
+    description: >
+      ⭐ NF-C1-lite (MVP-2) — per-league scored + ranked draft boards. One row per (config_name,
+      player_id): a player's league-specific fantasy points, VOR (value-over-replacement), positional
+      + overall rank, and a carried 80% interval, for each shipped preset (standard / half_ppr /
+      full_ppr / superflex). MVP-3's (draft optimizer) input contract — it ranks off vor/overall_rank.
+
+      ⚠️ NOT COMPUTED IN dbt — a read-only view over the parquet run_league_board.py writes to
+      nfl/fantasy/derived/league_boards. It RESCORES the MVP-1 RAW stat line
+      (mart_nfl_fantasy_season_projection) per league config via the sport-agnostic fantasy_engine
+      (scoring rules + roster/flex/superflex slots + league size) → league points → positional
+      scarcity → VOR. Never the proj_fp_* convenience columns. 🚨 BUILD ORDER: season projection Delta
+      → run_league_board.py → this view. Tagged `nfl_fantasy` (opt-in until the script has run).
+
+      ⚖️ EDGE-INDEPENDENT (best_alpha N/A) — the gate is scoring correctness (hand-calc) + a
+      transparent replacement-level definition + face-valid preset deltas (superflex lifts QBs;
+      full-PPR lifts pass-catchers). Uncertainty is a first-order CV rescale of the MVP-1 interval;
+      rookie intervals are PARAMETER uncertainty → recalibrate before pricing. NULL = kept NULL.
+    columns:
+      - name: config_name
+        description: The league preset / config the row was scored under (standard/half_ppr/full_ppr/superflex).
+        data_tests: [not_null]
+      - name: player_id
+        description: gsis_id — the per-player grain (with config_name).
+        data_tests: [not_null]
+      - name: league_points
+        description: League-specific fantasy points from RESCORING the MVP-1 raw stat line.
+        data_tests: [not_null]
+      - name: vor
+        description: Value-over-replacement = league_points − the position's replacement level.
+        data_tests: [not_null]
+
   - name: dim_nfl_betting
     description: >
       The betting head-start: one row per game with the FREE nflverse consensus lines

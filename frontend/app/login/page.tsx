@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { getCognitoUser, AuthenticationDetails, startGoogleSignIn, isHostedUiConfigured } from "@/lib/cognito"
+import { getCognitoUser, AuthenticationDetails, startGoogleSignIn, isHostedUiConfigured, setSessionAuthMethod } from "@/lib/cognito"
 import { useAuth } from "@/lib/auth-context"
 import { apiFetch } from "@/lib/api"
 import { Nav } from "@/components/nav"
@@ -40,11 +40,14 @@ function LoginInner() {
   const [error, setError] = useState<string | null>(null)
 
   // New-password-required step
-  const [step, setStep] = useState<"login" | "new-password">("login")
+  const [step, setStep] = useState<"login" | "new-password" | "mfa">("login")
   const [newPassword, setNewPassword] = useState("")
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const pendingUser = useRef<CognitoUser | null>(null)
+
+  // TOTP MFA challenge step (SOFTWARE_TOKEN_MFA)
+  const [mfaCode, setMfaCode] = useState("")
 
   const { onLoginSuccess } = useAuth()
 
@@ -74,6 +77,7 @@ function LoginInner() {
       onSuccess(session) {
         const accessToken = session.getAccessToken().getJwtToken()
         const idToken     = session.getIdToken().getJwtToken()
+        setSessionAuthMethod("password")
         onLoginSuccess(accessToken, idToken)
         posthog.capture("user_signed_in", { method: "password" })
         apiFetch("/auth/verify-email", { method: "POST" }, accessToken).catch(() => {})
@@ -88,7 +92,48 @@ function LoginInner() {
         setIsLoading(false)
         setStep("new-password")
       },
+      // TOTP MFA (E9.19) — only the password/InitiateAuth path issues this challenge;
+      // Google Hosted-UI logins are MFA'd by Google and never reach here.
+      totpRequired() {
+        pendingUser.current = cognitoUser
+        setMfaCode("")
+        setIsLoading(false)
+        setStep("mfa")
+      },
     })
+  }
+
+  function handleMfaCode(e: React.FormEvent) {
+    e.preventDefault()
+    if (!pendingUser.current) return
+    setError(null)
+    setIsLoading(true)
+
+    pendingUser.current.sendMFACode(
+      mfaCode.trim(),
+      {
+        onSuccess(session) {
+          const accessToken = session.getAccessToken().getJwtToken()
+          const idToken     = session.getIdToken().getJwtToken()
+          setSessionAuthMethod("password")
+          onLoginSuccess(accessToken, idToken)
+          posthog.capture("user_signed_in", { method: "password", mfa: true })
+          apiFetch("/auth/verify-email", { method: "POST" }, accessToken).catch(() => {})
+          router.push("/dashboard")
+        },
+        onFailure(err) {
+          setError(
+            /CodeMismatch|invalid|not match/i.test(err.message ?? "")
+              ? "That code didn't match. Check your authenticator app and try again."
+              : /expired/i.test(err.message ?? "")
+              ? "That code expired. Enter the current code from your authenticator app."
+              : err.message ?? "Could not verify the code. Please try again.",
+          )
+          setIsLoading(false)
+        },
+      },
+      "SOFTWARE_TOKEN_MFA",
+    )
   }
 
   function handleNewPassword(e: React.FormEvent) {
@@ -101,6 +146,7 @@ function LoginInner() {
       onSuccess(session) {
         const accessToken = session.getAccessToken().getJwtToken()
         const idToken     = session.getIdToken().getJwtToken()
+        setSessionAuthMethod("password")
         onLoginSuccess(accessToken, idToken)
         posthog.capture("user_set_initial_password")
         apiFetch("/auth/verify-email", { method: "POST" }, accessToken).catch(() => {})
@@ -139,6 +185,15 @@ function LoginInner() {
                 </h1>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Sign in to your account to view today&apos;s picks
+                </p>
+              </>
+            ) : step === "mfa" ? (
+              <>
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                  Two-factor verification
+                </h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Enter the 6-digit code from your authenticator app
                 </p>
               </>
             ) : (
@@ -246,6 +301,51 @@ function LoginInner() {
                   "Sign In"
                 )}
               </Button>
+            </form>
+          ) : step === "mfa" ? (
+            <form onSubmit={handleMfaCode} className="space-y-4" noValidate>
+              <div className="space-y-1.5">
+                <Label htmlFor="mfa-code">Authentication code</Label>
+                <Input
+                  id="mfa-code"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  placeholder="123456"
+                  required
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  disabled={isLoading}
+                  className="text-center text-lg tracking-[0.4em] font-mono"
+                  autoFocus
+                />
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669]"
+                disabled={isLoading || mfaCode.length !== 6}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  "Verify & Sign In"
+                )}
+              </Button>
+
+              <button
+                type="button"
+                onClick={() => { setStep("login"); setError(null); setMfaCode(""); setPassword("") }}
+                disabled={isLoading}
+                className="w-full text-center text-sm text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors disabled:opacity-50"
+              >
+                Back to sign in
+              </button>
             </form>
           ) : (
             <form onSubmit={handleNewPassword} className="space-y-4" noValidate>
