@@ -183,9 +183,15 @@ def load_base_season(
     # current-season snapshot (not yet on any team's depth chart) falls back to the SCD record.
     role = con.sql(f"""
         with current_preseason as (
+            -- one row per player: a multi-position player (e.g. Taysom Hill listed at QB AND TE) has
+            -- several current-depth rows; keep his best (lowest) rank so the role join stays 1:1 and
+            -- can't fan a player into duplicate projection rows.
             select player_id, depth_chart_position_rank
             from {staging_schema}.stg_nfl_depth_charts_current
             where season = {season}
+            qualify row_number() over (
+                partition by player_id order by depth_chart_position_rank asc nulls last
+            ) = 1
         ),
         scd_current as (
             select player_id, depth_chart_position_rank
@@ -273,6 +279,14 @@ def build_projection(con, base_season: int, projection_season: int, schema: str)
         if c not in proj.columns:
             proj[c] = np.nan
     proj = proj[OUTPUT_COLS].sort_values("proj_fp_ppr", ascending=False).reset_index(drop=True)
+    # grain guard: exactly ONE row per player. An upstream join fan (e.g. a multi-position current
+    # depth-chart row) must never duplicate a player on the board — keep the highest-fp row and warn
+    # loudly if any were dropped so the fan gets investigated at the source.
+    before = len(proj)
+    proj = proj.drop_duplicates(subset=["player_id"], keep="first").reset_index(drop=True)
+    if len(proj) < before:
+        log.warning("grain guard dropped %d duplicate player_id row(s) — an upstream join fanned a "
+                    "player; investigate (the role/depth-chart merge is the usual culprit)", before - len(proj))
     return proj
 
 

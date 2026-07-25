@@ -188,10 +188,15 @@ def board_records(
     rookie_teams = rookie_teams or {}
     byes = byes or {}
     recs = []
+    seen: set[str] = set()
     for _, r in df.sort_values("overall_rank").iterrows():
         pos = NFL_PROFILE.normalize_position(str(r["position"]))
         if pos not in PROJECTABLE:
             continue
+        pid = str(r["player_id"])
+        if pid in seen:                                # dedupe by player_id (keep best overall_rank);
+            continue                                    # MVP-1 can emit a player twice → 1 row per player
+        seen.add(pid)
         is_rookie = _to_bool(r.get("is_rookie"))
         team = None if pd.isna(r.get("team_id")) else _norm_team(str(r["team_id"]))
         if not team and is_rookie:                     # MVP-1 rookies carry no team → backfill it
