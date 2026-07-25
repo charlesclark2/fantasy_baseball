@@ -158,6 +158,38 @@ def test_run_recurring_capture_forced_weeks_bypasses_the_diff(monkeypatch):
     assert manifest["rows_written"] == 1
 
 
+# ── query_lake._connect(): must tolerate a credential-less sandbox for LOCAL-only reads ──────
+def test_connect_tolerates_a_credential_chain_secret_failure(monkeypatch):
+    # THE ACTUAL CI FAILURE (found after the swallow fix above stopped hiding it): a runner with
+    # NO AWS credential source anywhere (no env, no profile, no IMDS role — the fast-gate sandbox
+    # intentionally mocks all external IO) makes DuckDB's `credential_chain` secret VALIDATE
+    # eagerly at CREATE-SECRET time and raise "Secret Validation Failure" — before any query even
+    # runs, even one that only reads a LOCAL path via `local()`. `_connect()` must not let that
+    # break local-only usage.
+    monkeypatch.setattr(query_lake, "_con", None)
+
+    class _FakeConn:
+        def __init__(self):
+            self.executed = []
+
+        def execute(self, sql, *a, **kw):
+            self.executed.append(sql)
+            if "CREATE OR REPLACE SECRET" in sql:
+                raise Exception(
+                    "Secret Validation Failure: during `create` using the following: "
+                    "Credential Chain: 'config'"
+                )
+            return self
+
+    fake_conn = _FakeConn()
+    import duckdb
+
+    monkeypatch.setattr(duckdb, "connect", lambda: fake_conn)
+    con = query_lake._connect()
+    assert con is fake_conn  # _connect() succeeded despite the secret-creation failure
+    assert any("CREATE OR REPLACE SECRET" in s for s in fake_conn.executed)  # it did try
+
+
 # ── _is_missing_table_error / _q_or_missing: distinguish absent-partition from transient failure
 def test_is_missing_table_error_distinguishes_missing_from_transient():
     missing = Exception(
