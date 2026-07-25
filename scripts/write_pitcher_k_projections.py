@@ -427,27 +427,44 @@ def _ensure_starter_ip_signal(target: str) -> None:
     write, in the SAME run.
     """
     try:
-        conn = _duck_lakehouse([_STARTER_IP_TABLE])
+        conn = _duck_lakehouse([_STARTER_IP_TABLE, "feature_pregame_starter_features"])
         try:
             (present,) = conn.execute(
                 f"SELECT COUNT(*) FROM {_STARTER_IP_TABLE} "
                 f"WHERE game_date = ?::date AND model_version = 'starter_ip_v1'",
                 [target],
             ).fetchone()
+            # E11.20 cost-race fix (2026-07-24): regen when coverage is INCOMPLETE, not just zero.
+            # `expected` = the generator's OWN input universe (today's starters WITH pregame features).
+            # This self-heal is the ONLY generator of today's signal (the daily op excludes today), so
+            # an early PARTIAL run — when only the afternoon starters had features — used to FREEZE
+            # coverage: every later run saw present>0 and skipped, so late-announced evening starters
+            # never got a signal (2026-07-24: only 1/15 games scored → /props showed one pitcher). The
+            # generator is an idempotent full-date MERGE, so re-running to fill the gap is safe. This is
+            # the INC-25/INC-34 regen-on-incomplete rule.
+            (expected,) = conn.execute(
+                "SELECT COUNT(*) FROM feature_pregame_starter_features WHERE game_date = ?::date",
+                [target],
+            ).fetchone()
         finally:
             conn.close()
     except Exception as exc:  # noqa: BLE001
         _warn(f"[{target}] starter_ip presence check failed ({exc}); attempting generation anyway.")
-        present = 0
+        present, expected = 0, 1
 
-    if present:
-        print(f"[k-projection] starter_ip_v1 signal present for {target} ({present} rows) — no regen needed.")
+    if expected == 0:
+        print(f"[k-projection] no starters with pregame features for {target} yet — nothing to generate.")
+        return
+    if present >= expected:
+        print(f"[k-projection] starter_ip_v1 signal COMPLETE for {target} "
+              f"({present}/{expected} starters) — no regen needed.")
         return
 
     # Match the schema the K writer READS (betting_features = prod); TARGET_ENV drives dev isolation.
     env = "prod" if os.getenv("TARGET_ENV") == "prod" else "dev"
-    _warn(f"[{target}] starter_ip_v1 signal MISSING from the S3 mirror — falling back to the Snowflake "
-          f"self-heal (generate + re-mirror, env={env}). A run that logs this is NOT Snowflake-free.")
+    _warn(f"[{target}] starter_ip_v1 coverage INCOMPLETE ({present}/{expected} starters) in the S3 mirror "
+          f"— falling back to the Snowflake self-heal (generate + re-mirror, env={env}). A run that logs "
+          f"this is NOT Snowflake-free.")
     result = subprocess.run(
         [sys.executable, str(_STARTER_IP_GEN), "--date", target, "--env", env, "--s3"],
         capture_output=True, text=True, cwd=str(PROJECT_ROOT),
