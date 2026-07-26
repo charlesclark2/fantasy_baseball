@@ -611,6 +611,68 @@ def test_load_file_benchmark_raises_on_missing_columns(tmp_path):
         bs.load_file_benchmark(None, bad, 2025)
 
 
+def test_sleeper_parses_projection_and_filters_to_skill(tmp_path):
+    import json
+    sl = pytest.importorskip("quant_sports_intel_models.football.nfl.fantasy.sleeper_source")
+    payload = [
+        {"company": "rotowire", "team": "SF", "player_id": "1",
+         "player": {"first_name": "Christian", "last_name": "McCaffrey", "position": "RB"},
+         "stats": {"pts_ppr": 363.3, "pts_half_ppr": 320.0, "pts_std": 280.0, "gp": 17.0}},
+        {"company": "rotowire", "team": "BAL", "player_id": "2",
+         "player": {"first_name": "Justin", "last_name": "Tucker", "position": "K"},  # dropped (non-skill)
+         "stats": {"pts_ppr": 150.0, "gp": 17.0}},
+    ]
+    (tmp_path / "sleeper_2021.json").write_text(json.dumps(payload))
+    df = sl.fetch_sleeper_proj(2021, cache_dir=tmp_path)
+    assert list(df["position"].unique()) == ["RB"]                 # K filtered out
+    cmc = df.iloc[0]
+    assert cmc["player_name"] == "Christian McCaffrey"
+    assert cmc["proj_pts_ppr"] == pytest.approx(363.3) and cmc["proj_games"] == pytest.approx(17.0)
+    assert cmc["provider"] == "rotowire"
+
+
+def test_espn_parses_ppr_draftrank_and_skips_unranked(tmp_path):
+    import json
+    es = pytest.importorskip("quant_sports_intel_models.football.nfl.fantasy.espn_source")
+    payload = {"players": [
+        {"fullName": "Ja'Marr Chase", "defaultPositionId": 3, "id": 100,
+         "draftRanksByRankType": {"PPR": {"rank": 2}}},
+        {"fullName": "Some Kicker", "defaultPositionId": 5, "id": 101,      # K → dropped (non-skill)
+         "draftRanksByRankType": {"PPR": {"rank": 180}}},
+        {"fullName": "Unranked Guy", "defaultPositionId": 2, "id": 102,     # no PPR rank → dropped
+         "draftRanksByRankType": {}},
+    ]}
+    (tmp_path / "espn_2024.json").write_text(json.dumps(payload))
+    df = es.fetch_espn_draftranks(2024, cache_dir=tmp_path)
+    assert len(df) == 1 and df.iloc[0]["player_name"] == "Ja'Marr Chase"
+    assert df.iloc[0]["position"] == "WR" and df.iloc[0]["ppr_draft_rank"] == 2.0
+
+
+def test_espn_empty_when_no_ranks(tmp_path):
+    import json
+    es = pytest.importorskip("quant_sports_intel_models.football.nfl.fantasy.espn_source")
+    (tmp_path / "espn_2019.json").write_text(json.dumps({"players": []}))
+    df = es.fetch_espn_draftranks(2019, cache_dir=tmp_path)
+    assert df.empty and "ppr_draft_rank" in df.columns
+
+
+def test_sleeper_scores_by_points_espn_by_negrank(tmp_path, monkeypatch):
+    # the registry: sleeper score = +points (higher better); espn score = -rank (rank 1 → highest)
+    def _fake_xw(con, df, season, schema="main_nfl_marts"):
+        out = df.copy(); out["player_id"] = ["G" + str(i) for i in range(len(out))]
+        return out
+    monkeypatch.setattr(bs.S, "load_sleeper_for_season",
+                        lambda con, s, schema="main_nfl_marts": _fake_xw(con, pd.DataFrame(
+                            {"position": ["RB", "WR"], "proj_pts_ppr": [300.0, 250.0]}), s))
+    monkeypatch.setattr(bs.E, "load_espn_for_season",
+                        lambda con, s, schema="main_nfl_marts": _fake_xw(con, pd.DataFrame(
+                            {"position": ["RB", "WR"], "ppr_draft_rank": [1.0, 5.0]}), s))
+    sfr = bs._sleeper_system(None, 2024, "main_nfl_marts")
+    assert sfr.sort_values("score", ascending=False).iloc[0]["score"] == 300.0     # points, higher better
+    efr = bs._espn_system(None, 2024, "main_nfl_marts")
+    assert efr.sort_values("score", ascending=False).iloc[0]["score"] == -1.0       # rank 1 → top score
+
+
 def test_aggregate_averages_across_seasons():
     per_season = [
         {"season": 2023, "systems": {"ecr": {

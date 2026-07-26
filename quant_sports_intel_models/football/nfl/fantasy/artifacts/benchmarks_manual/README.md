@@ -1,8 +1,18 @@
-# NF-D3 file benchmarks (operator drop-in) — Fantasy Footballers / PFF / ESPN / 4for4 / …
+# NF-D3 file benchmarks (operator drop-in) — Fantasy Footballers / PFF / 4for4 / …
 
-The competitor systems with a public API (ADP → Fantasy Football Calculator, ECR → FantasyPros) are
-auto-fetched. Systems that are **paid / have no public API** — Fantasy Footballers, PFF, ESPN, 4for4,
-Football Outsiders — are supplied as files here and scored **identically** by the standing scorecard.
+## Which systems are AUTO-fetched vs need a file
+
+| system | how | leakage basis | seasons |
+|--------|-----|---------------|---------|
+| **ADP** (Fantasy Football Calculator) | auto (`run_adp_ingest.py`) | dated week-before-Week-1 | 2018–2024, 2026 |
+| **ECR** (FantasyPros) | auto (`run_ecr_ingest.py`) | dated early-Sept snapshot | 2019–2026 |
+| **Sleeper** (Rotowire projections) | auto (`run_projection_benchmark_ingest.py`) | verified frozen-preseason (gp=17 test) | 2019–2026 |
+| **ESPN** (PPR draft rank) | auto (`run_projection_benchmark_ingest.py`) | preseason draft artifact (as-of date unstamped → lower-verified); unofficial API | **2023+** only |
+| **Yahoo** | ❌ not available | needs 3-legged OAuth + does not expose season projections | — (NF-C0 territory) |
+| **Fantasy Footballers / PFF / 4for4 / Football Outsiders** | **FILE drop-in (below)** | operator's responsibility | whatever you supply |
+
+Auto-fetched systems need no file. Paid / no-public-API systems are supplied as files here and scored
+**identically** by the standing scorecard.
 
 ## How to add a system
 

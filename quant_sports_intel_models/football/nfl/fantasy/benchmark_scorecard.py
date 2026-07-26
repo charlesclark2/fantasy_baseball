@@ -38,7 +38,9 @@ import numpy as np
 import pandas as pd
 
 from quant_sports_intel_models.football.nfl.fantasy import adp_source as A
+from quant_sports_intel_models.football.nfl.fantasy import espn_source as E
 from quant_sports_intel_models.football.nfl.fantasy import fantasypros_source as F
+from quant_sports_intel_models.football.nfl.fantasy import sleeper_source as S
 
 log = logging.getLogger("nfl.fantasy.scorecard")
 
@@ -161,8 +163,32 @@ def _ecr_system(con, season, schema):
     return ecr[["player_id", "position", "score"]].dropna(subset=["score"])
 
 
-# API systems always attempted; file systems discovered at runtime and appended.
-API_SYSTEMS = {"adp": _adp_system, "ecr": _ecr_system}
+def _sleeper_system(con, season, schema):
+    df = S.load_sleeper_for_season(con, season, schema=schema)
+    df = df[df["player_id"].notna()].copy()
+    if df.empty:
+        return df.reindex(columns=["player_id", "position", "score"])
+    df["player_id"] = df["player_id"].astype(str)
+    df["score"] = pd.to_numeric(df["proj_pts_ppr"], errors="coerce")   # a POINT projection (higher=better)
+    return df[["player_id", "position", "score"]].dropna(subset=["score"])
+
+
+def _espn_system(con, season, schema):
+    df = E.load_espn_for_season(con, season, schema=schema)
+    df = df[df["player_id"].notna()].copy()
+    if df.empty:
+        return df.reindex(columns=["player_id", "position", "score"])
+    df["player_id"] = df["player_id"].astype(str)
+    df["score"] = -pd.to_numeric(df["ppr_draft_rank"], errors="coerce")   # a RANK (lower=better)
+    return df[["player_id", "position", "score"]].dropna(subset=["score"])
+
+
+# API systems always attempted; file systems discovered at runtime and appended. Each is scored the
+# same way — see the per-system leakage basis documented in `benchmark_scorecard.py` header / the
+# report: adp (FFC, dated week-before-Week-1), ecr (FantasyPros, dated early-Sept snapshot) and sleeper
+# (Rotowire, verified frozen-preseason by the gp=17 test) are leakage-safe; espn (draft rank) is a
+# preseason artifact but its as-of date is unstamped → lower-verified.
+API_SYSTEMS = {"adp": _adp_system, "ecr": _ecr_system, "sleeper": _sleeper_system, "espn": _espn_system}
 
 
 def load_systems(con, season, schema, manual_dir=None) -> dict[str, pd.DataFrame]:
