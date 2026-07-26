@@ -60,6 +60,23 @@ def test_normal_posterior_is_prior_mean_at_zero_pa():
     assert 0.10 < v < 0.170
 
 
+def test_iso_pseudocount_is_mle_at_zero_pa_and_shrinks_with_pa():
+    assert mp.iso_pseudocount_posterior_mean(0.170, 0.0475, pa=0, obs_iso=0.10) == 0.170
+    v = mp.iso_pseudocount_posterior_mean(0.170, 0.0475, pa=50, obs_iso=0.10)
+    assert 0.10 < v < 0.170                                   # between prior and obs
+
+
+def test_iso_pseudocount_does_not_explode_on_tiny_sample_extreme_obs():
+    # a rookie with 3 PA and obs_iso=1.5 (a couple extra-base hits) — the case where the Normal-Normal
+    # update blew eb_iso past 1.0. The pseudo-count blend (κ_iso ≫ pa) must keep it near the prior.
+    v = mp.iso_pseudocount_posterior_mean(0.155, 0.0475, pa=3, obs_iso=1.5)
+    assert 0.15 < v < 0.30, f"eb_iso={v} — pseudo-count failed to regularize a tiny-sample extreme obs"
+    # the incumbent Normal-Normal genuinely DOES explode here (documents WHY the pseudo-count is needed)
+    assert mp.normal_posterior_mean(0.155, 0.0475, pa=3, obs_iso=1.5) > 1.0
+    # κ_iso is a sensible equivalent-PA strength (comparable to the K%/BB% pseudo-counts)
+    assert 50 < mp.iso_kappa(0.0475) < 250
+
+
 def test_woba_is_not_a_wired_metric():
     assert "woba" not in mp.PRIOR_METRICS
     assert set(mp.PRIOR_METRICS) == {"k_pct", "bb_pct", "iso"}

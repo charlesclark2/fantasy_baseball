@@ -178,22 +178,31 @@ calc as (
         case when mle_k_pct  is not null then (1 - mle_k_pct) * k_pct_prior_kappa  else k_beta    end as eff_k_beta,
         case when mle_bb_pct is not null then mle_bb_pct      * bb_pct_prior_kappa else bb_alpha  end as eff_bb_alpha,
         case when mle_bb_pct is not null then (1 - mle_bb_pct)* bb_pct_prior_kappa else bb_beta   end as eff_bb_beta,
-        coalesce(mle_iso, iso_mu)                                                                     as eff_iso_mu,
-        case when mle_iso is not null then iso_prior_sd else iso_sigma end                            as eff_iso_sigma,
         -- generic prior means (the coalesce base when no MLE / no ZiPS)
         woba_alpha / nullif(woba_alpha + woba_beta, 0) as pm_woba,
         k_alpha    / nullif(k_alpha + k_beta, 0)       as pm_k,
         bb_alpha   / nullif(bb_alpha + bb_beta, 0)     as pm_bb,
         iso_mu                                         as pm_iso,
-        -- EB posteriors (guarded so the iso division never sees pa=0). K%/BB%/ISO use the EFFECTIVE
-        -- (MLE-or-generic) prior so the PA-accrual shrink runs off the MLE prior for a rookie with one.
+        -- EB posteriors (guarded so the iso division never sees pa=0). K%/BB% use the EFFECTIVE
+        -- (MLE-or-generic) Beta prior so the PA-accrual shrink runs off the MLE prior for a rookie.
         case when obs_woba is not null then (woba_alpha + obs_woba*pa)/(woba_alpha + woba_beta + pa) end as eb_woba_raw,
         case when obs_k    is not null then (eff_k_alpha  + obs_k*pa) /(eff_k_alpha + eff_k_beta + pa)   end as eb_k_raw,
         case when obs_bb   is not null then (eff_bb_alpha + obs_bb*pa)/(eff_bb_alpha + eff_bb_beta + pa)  end as eb_bb_raw,
+        -- GENERIC ISO path (no MLE): the incumbent Normal-Normal, UNCHANGED from pre-E7.5.
         case when pa > 0 and obs_iso is not null then
-            (eff_iso_mu*(1.0/(eff_iso_sigma*eff_iso_sigma)) + obs_iso*(pa/greatest(obs_iso*(1-obs_iso), 0.001)))
-            / ((1.0/(eff_iso_sigma*eff_iso_sigma)) + (pa/greatest(obs_iso*(1-obs_iso), 0.001)))
-        end as eb_iso_raw
+            (iso_mu*(1.0/(iso_sigma*iso_sigma)) + obs_iso*(pa/greatest(obs_iso*(1-obs_iso), 0.001)))
+            / ((1.0/(iso_sigma*iso_sigma)) + (pa/greatest(obs_iso*(1-obs_iso), 0.001)))
+        end as eb_iso_raw,
+        -- MLE ISO path: a REGULARIZING pseudo-count blend (mirrors K%/BB%). κ_iso = V_iso / iso_prior_sd²,
+        -- V_iso ≈ the per-PA variance of extra-bases-per-AB (ISO's numerator; values {0,1,2,3}) ≈ 0.25;
+        -- derived INLINE from the served iso_prior_sd so the calibrated parquet needs no extra column.
+        -- κ_iso ≫ pa keeps a tiny-sample extreme obs_iso (>1 over a few PAs) from blowing eb_iso past its
+        -- plausible range — the failure the Normal-Normal variance floor allows once the ZiPS damp is
+        -- bypassed for an MLE rookie.
+        case when pa > 0 and obs_iso is not null and mle_iso is not null and iso_prior_sd > 0 then
+            (mle_iso * (0.25/(iso_prior_sd*iso_prior_sd)) + obs_iso * pa)
+            / ((0.25/(iso_prior_sd*iso_prior_sd)) + pa)
+        end as eb_iso_mle_raw
     from assembled a
 ),
 
@@ -245,8 +254,8 @@ final as (
         round(case
             when iso_mu is null and mle_iso is null then null
             when (pa = 0 or obs_iso is null) then coalesce(mle_iso, proj_iso, pm_iso)
+            when mle_iso is not null then eb_iso_mle_raw            -- regularized pseudo-count (no Normal-Normal blow-up)
             when eb_weight >= 1.0 then eb_iso_raw
-            when mle_iso is not null then eb_iso_raw
             when proj_iso is not null then eb_weight*eb_iso_raw + (1-eb_weight)*proj_iso
             else eb_iso_raw
         end, 4) as eb_iso,
