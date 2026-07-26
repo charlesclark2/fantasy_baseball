@@ -263,6 +263,19 @@ def load_team_week1_env(con, projection_season: int, schema: str = MARTS_SCHEMA)
     """).df()
 
 
+def load_forward_roster_status(con, projection_season: int, staging_schema: str = STAGING_SCHEMA) -> pd.DataFrame:
+    """NF-D2 slice 5 — each player's PROJECTION-season roster status from the EARLIEST available week
+    (leakage-safe: a Week-1 / preseason designation is set before any of the season's games; for a
+    not-yet-started season the earliest snapshot is the current offseason roster). `proj_status` feeds
+    the injury/availability cap (RES/PUP/NFI/SUS). Empty when the season's rosters aren't landed yet."""
+    return con.sql(f"""
+        select player_id, first(status order by week asc) as proj_status
+        from {staging_schema}.stg_nfl_weekly_rosters
+        where season = {projection_season} and player_id is not null
+        group by 1
+    """).df()
+
+
 def load_rookie_training(con, upto_season: int, schema: str = MARTS_SCHEMA) -> pd.DataFrame:
     """Historical drafted rookies (skill positions, draft_year ≤ base season) joined to their
     rookie-year raw stat TOTALS — the training base for the draft-slot production curves."""
@@ -316,7 +329,8 @@ def load_realized_season(con, season: int, schema: str = MARTS_SCHEMA) -> pd.Dat
 def build_projection(con, base_season: int, projection_season: int, schema: str,
                      usage_role_blend: float | None = None,
                      mover_opportunity_blend: float | None = None,
-                     env_tilt_blend: float | None = None) -> pd.DataFrame:
+                     env_tilt_blend: float | None = None,
+                     injury_override_blend: float | None = None) -> pd.DataFrame:
     base = load_base_season(con, base_season, schema)
     # NF-D2 slice 4: attach the projection-season team's Week-1 implied points (leakage-safe forward
     # environment) on the forward team, for the QB environment tilt. A NULL join (unknown forward team
@@ -324,6 +338,11 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     env = load_team_week1_env(con, projection_season, schema)
     if not env.empty and "proj_team" in base.columns:
         base = base.merge(env, on="proj_team", how="left")
+    # NF-D2 slice 5: attach the projection-season forward roster status (leakage-safe) for the injury/
+    # availability cap. A NULL join (no rosters landed yet) makes the cap a no-op.
+    status = load_forward_roster_status(con, projection_season)
+    if not status.empty:
+        base = base.merge(status, on="player_id", how="left")
     priors = positional_pergame_priors(base)
     kw = {} if usage_role_blend is None else {"usage_role_blend": usage_role_blend}
     # NF-D2 slice 3: the role→volume prior (in-fold from the base season) drives the team-changer
@@ -334,6 +353,8 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
         kw["mover_opportunity_blend"] = mover_opportunity_blend
     if env_tilt_blend is not None:
         kw["env_tilt_blend"] = env_tilt_blend
+    if injury_override_blend is not None:
+        kw["injury_override_blend"] = injury_override_blend
     vets = project_veterans(base, priors, projection_season, **kw)
 
     rookies_all = pd.read_parquet(_ROOKIE_PARQUET)
@@ -493,6 +514,14 @@ def write_report(proj: pd.DataFrame, cov: dict, backtests: list[dict], path: Pat
       "(2020–2025) — see `ablation_results/nf_d2_team_context_ablation.md`. QB-scoped (RB/WR/TE carry "
       "team context via their own usage line). A richer forward-Vegas signal (preseason win totals) "
       "would grow this toward its +0.06 leaky ceiling.")
+    p("- **Injury / availability (NF-D2 slice 5)** — a player flagged unavailable in the "
+      "projection-season roster (reserve/IR, PUP, NFI, suspension) has expected games CAPPED toward "
+      "the empirical status level (RES→3.7 g, PUP→2.4 vs ACT→13.2), so a shelved player is not ranked "
+      "as startable. Leakage-safe (a preseason designation). The measured ρ lift is small (the eval "
+      "excludes players with <6 realized games — the very ones this fixes) — it is a CORRECTNESS fix. "
+      "⚠️ The nflverse injury REPORT is in-season only and 2026 is unpublished; the roster PUP/IR flag "
+      "is the forward source and populates through camp, so re-run as designations land (a live "
+      "injury-news feed would surface offseason-surgery cases earlier).")
     p("- **Rookies (QB/RB/WR/TE)** — a historical draft-slot → rookie-year production curve (power-law "
       "per position, fit on prior classes) nudged by the **NCAAF-P1A residual** (`projected_nfl_z` vs "
       "the slot-expected z — talent the draft board disagreed with), with deliberately wide intervals. "

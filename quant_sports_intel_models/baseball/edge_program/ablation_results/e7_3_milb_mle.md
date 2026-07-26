@@ -20,6 +20,23 @@ Does the MiLB `player_id` actually bridge to a realized MLB `batter_id` line? Th
 
 Labelled graduates by level: `{'Double-A': 559, 'Triple-A': 458, 'High-A': 428, 'Single-A': 305}`
 
+## 1b. Headline read — which skills translate
+
+Each metric is its own translation, and the honest finding is that they **DIFFER sharply**. A metric is a **strong** feeder when its winner beats BOTH the level-mean null AND the generic archetype prior out-of-sample AND clears DSR≥0.95; **weak-but-real** when it beats both but DSR<0.95 (a valid feeder, P1.2b precedent); **no-signal** when the winner does not beat the null / archetype (the minor line adds nothing beyond which level the player reached → the emission degrades to the population prior).
+
+| metric | winner            | oos_corr | dsr   | verdict                                        |
+|:-------|:------------------|---------:|------:|:-----------------------------------------------|
+| woba   | partial_pool@4.0  |    0.220 | 0.032 | ❌ no-signal (degrades to the population prior) |
+| k_pct  | partial_pool@2.0  |    0.637 | 1.000 | ✅ STRONG feeder                                |
+| bb_pct | partial_pool@4.0  |    0.491 | 0.989 | ✅ STRONG feeder                                |
+| iso    | partial_pool@2.0  |    0.429 | 0.679 | 🟡 weak-but-real                               |
+
+**The result is itself the deliverable — plate DISCIPLINE translates, the composite does not.** K% (corr 0.64) and BB% (corr 0.49) clear the strict live-grade deflation bar (DSR≥0.95, PBO 0.000) and beat both the null and the generic archetype prior decisively — plate discipline is the most stable, translatable minor-league skill and is the real MLE moat. ISO (power, corr 0.43) is weak-but-real (beats null + archetype, robust PBO 0.043, but doesn't clear DSR≥0.95 — park/pitching-quality dependent). **wOBA carries NO translatable signal beyond level**: the winner ties the level-mean null AND the population archetype prior (0.0285 vs 0.0284) — the run-value composite regresses hard on call-up and the graduated-hitter population is narrow (survivorship), so knowing a player's level + the population mean is as good as their minor wOBA.
+
+⭐ **`partial_pool` (the shared `hierarchical.py` solver) WON every metric** — over the classic `multiplicative` Davenport factor foil (which UNDERperformed the null on wOBA/ISO) and the GBM+AAA-Statcast (competitive but never beat partial-pool; the Statcast add earns nothing over the discipline signal). The Bayesian partial-pooling form is validated; the classic multiplicative-factor MLE is refuted on this data.
+
+> **For E7.5 (wiring the MiLB prior into `eb_batter_posteriors`):** wire the **K% and BB%** MLEs (strong), and **ISO** with wide uncertainty (weak-but-real); do **NOT** wire the **wOBA** MLE — it is no better than the incumbent generic archetype prior. Whichever are wired MUST be recalibrated on held-out data before pricing (PARAMETER uncertainty; E13.6). The bridge is healthy (1,750 graduated players; not a dead join).
+
 ## 2.woba — bake-off: `woba`  (winner: `partial_pool@4.0`)
 
 Leave-one-MLB-debut-cohort-out expanding-window CV; metric = MAE on the raw realized MLB `woba` (lower = better). `level_mean` is the NULL FLOOR; `identity_no_translation` (raw minor line) and `archetype_prior` (generic population prior) are REPORTED benchmarks (`selectable = False`).

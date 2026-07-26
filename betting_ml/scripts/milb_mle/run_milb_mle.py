@@ -184,6 +184,40 @@ def write_report(runs: dict, cov: dict, checks: dict, corrs: dict, path: Path) -
     a(f"Labelled graduates by level: `{cov.get('levels')}`")
     a("")
 
+    # ── Headline read — classify each metric so the per-metric verdict is explicit, not inferred.
+    a("## 1b. Headline read — which skills translate")
+    a("")
+    a("Each metric is its own translation; the honest finding is that they DIFFER. A metric is a "
+      "**strong** feeder when its winner beats BOTH the level-mean null AND the generic archetype prior "
+      "out-of-sample AND clears DSR≥0.95; **weak-but-real** when it beats both but DSR<0.95 (a valid "
+      "feeder, P1.2b precedent); **no-signal** when the winner does not beat the null / archetype (the "
+      "minor line adds nothing beyond level → the emission degrades to the population prior).")
+    a("")
+    rows = []
+    for metric in runs:
+        lb = runs[metric].bakeoff.leaderboard
+        null_mae = float(lb.loc[lb["config"] == "level_mean", "oos_mae"].iloc[0])
+        arch = lb[lb["config"] == "archetype_prior"]
+        arch_mae = float(arch["oos_mae"].iloc[0]) if not arch.empty else float("nan")
+        win_mae = float(lb[lb["selectable"]]["oos_mae"].min())
+        dsr = None if runs[metric].bakeoff.dsr is None else runs[metric].bakeoff.dsr.dsr
+        beats = win_mae < null_mae - 1e-9 and win_mae < arch_mae - 1e-9
+        if not beats:
+            verdict = "❌ no-signal (degrades to the population prior)"
+        elif dsr is not None and dsr >= 0.95:
+            verdict = "✅ STRONG feeder"
+        else:
+            verdict = "🟡 weak-but-real"
+        rows.append({"metric": metric, "winner": runs[metric].bakeoff.winner_name,
+                     "oos_corr": corrs.get(metric), "dsr": dsr, "verdict": verdict})
+    a(pd.DataFrame(rows).to_markdown(index=False, floatfmt=".3f"))
+    a("")
+    a("> **For E7.5 (wiring the MiLB prior into `eb_batter_posteriors`):** wire the STRONG / weak-but-real "
+      "metrics (weak ones with wide uncertainty); do NOT wire a no-signal metric — it is no better than "
+      "the incumbent generic archetype prior. Whichever are wired MUST be recalibrated on held-out data "
+      "before pricing (PARAMETER uncertainty; E13.6).")
+    a("")
+
     for metric in runs:
         run = runs[metric]
         bake = run.bakeoff

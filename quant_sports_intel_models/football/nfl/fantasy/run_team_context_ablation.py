@@ -99,6 +99,10 @@ def _prep_base(con, y, schema):
     if "proj_team" in base.columns:
         base = base.drop(columns=["proj_team"])
     base = base.merge(pr, on="player_id", how="left")
+    # slice 5: projection-season forward roster status (Week-1 = leakage-safe) for the injury cap
+    status = con.sql(f"""select player_id, any_value(status) proj_status
+        from main_nfl_staging.stg_nfl_weekly_rosters where season={y} and week=1 group by 1""").df()
+    base = base.merge(status, on="player_id", how="left")
     # use the clean forward (weeks 1-3) role as the projection-season depth rank when known.
     # coerce to float64/NaN (not nullable pd.NA) so the downstream np.isfinite checks stay happy.
     base["depth_chart_position_rank"] = pd.to_numeric(
@@ -107,11 +111,11 @@ def _prep_base(con, y, schema):
     return base
 
 
-def _project(base, priors, y, *, mover_vol=0.0, env_source=None, env_blend=0.0):
-    """Slice-1 projection + the SHIPPED slice-3 (mover) and slice-4 (env) features — no inline
-    reimplementation, so this harness measures exactly what production ships. `env_source` selects
-    which env column feeds the shipped `team_env` tilt: 'env_wk1' (leakage-safe, the shipped one) or
-    'env_opt' (the season-long LEAKY reference)."""
+def _project(base, priors, y, *, mover_vol=0.0, env_source=None, env_blend=0.0, injury_blend=0.0):
+    """Slice-1 projection + the SHIPPED slice-3 (mover), slice-4 (env), slice-5 (injury) features — no
+    inline reimplementation, so this harness measures exactly what production ships. `env_source`
+    selects which env column feeds the shipped `team_env` tilt: 'env_wk1' (leakage-safe, the shipped
+    one) or 'env_opt' (the season-long LEAKY reference)."""
     b = base
     if env_source:
         b = base.copy()
@@ -119,7 +123,8 @@ def _project(base, priors, y, *, mover_vol=0.0, env_source=None, env_blend=0.0):
     rvp = sp.role_volume_prior(b)
     v = sp.project_veterans(b, priors, y, usage_role_blend=0.4, role_vol_prior=rvp,
                             mover_opportunity_blend=mover_vol,
-                            env_tilt_blend=(env_blend if env_source else 0.0))
+                            env_tilt_blend=(env_blend if env_source else 0.0),
+                            injury_override_blend=injury_blend)
     v["moved"] = ((v["base_team"].astype(str) != v["proj_team"].astype(str))
                   & v["proj_team"].notna() & v["base_team"].notna()).to_numpy()
     return v[v["position"].isin(("QB", "RB", "WR", "TE", "FB"))]
@@ -152,8 +157,9 @@ def run(con, seasons, schema):
     arms = {
         "slice1_baseline": dict(mover_vol=0.0),
         "A_mover_opportunity": dict(mover_vol=0.35),
-        "B_env_wk1_QB_SAFE": dict(mover_vol=0.0, env_source="env_wk1", env_blend=0.10),
-        "B_env_opt_QB_LEAKY": dict(mover_vol=0.0, env_source="env_opt", env_blend=0.10),
+        "B_env_wk1_QB_SAFE": dict(mover_vol=0.0, env_source="env_wk1", env_blend=0.06),
+        "B_env_opt_QB_LEAKY": dict(mover_vol=0.0, env_source="env_opt", env_blend=0.06),
+        "D_injury_availability": dict(mover_vol=0.0, injury_blend=0.7),
     }
     results = {}
     for name, kw in arms.items():
@@ -177,7 +183,11 @@ def run(con, seasons, schema):
                         "implied points — QB +~0.015 (env_wk1); a Week-1 line is set before any of the "
                         "season's games, so it needs NO new ingest (season-long env_opt QB +~0.06 is "
                         "the leaky ceiling ⇒ a richer forward-line/win-total ingest would capture more). "
-                        "Both wired into project_veterans. C (system fit) deferred to NF1.")}
+                        "Both wired into project_veterans. D (injury/availability) SHIPPED — a forward "
+                        "roster-status flag (RES/PUP/NFI/SUS) caps expected games; the +~0.002 ρ badly "
+                        "UNDER-states it (the ≥6-game eval filters out the shelved players it fixes) — "
+                        "it's a correctness fix (don't rank an IR/PUP star as startable). C (system "
+                        "fit) deferred to NF1.")}
 
 
 def write_report(out, path):
@@ -218,6 +228,17 @@ def write_report(out, path):
       "context through their own usage line; a QB has no such volume anchor. Wired into "
       "`project_veterans` (`_ENV_TILT_BLEND`); reads `dim_nfl_game` Week-1 lines (full 2020–2025; 2026 "
       "Week-1 already posted).")
+    p("- **D (injury / availability) — ✅ SHIPPED (slice 5), leakage-safe, no new ingest.** A forward "
+      "roster-status flag of unavailability (RES/IR, PUP, NFI, SUS) set preseason caps expected games "
+      "toward the empirical status level (RES→3.7 g, PUP→2.4 vs ACT→13.2). The measured QB/skill ρ "
+      "lift is only +~0.002 — but that BADLY under-states it: the ρ eval keeps only players with ≥6 "
+      "realized games, which EXCLUDES the shelved players this fixes. It's a **correctness fix** — "
+      "don't rank a season-ending-IR or PUP star as a startable option. QB especially benefits "
+      "(+0.005). Wired into `project_veterans` (`_INJURY_STATUS_GAMES_CAP`); reads the projection-season "
+      "Week-1 roster status. ⚠️ The nflverse injury REPORT is in-season only (no offseason) and 2026 "
+      "is unpublished — the roster PUP/IR flag is the available forward source; it populates through "
+      "camp. A live injury-news feed (Sleeper API `injury_status`) would surface offseason-surgery "
+      "cases EARLIER — recommended follow-on ingest.")
     p("- **C (system fit — archetype × scheme) — deferred.** A forward, mover-centric interaction "
       "(a run-first RB into a pass-heavy offense, etc.) best learned jointly in NF1; larger build.")
     p("")

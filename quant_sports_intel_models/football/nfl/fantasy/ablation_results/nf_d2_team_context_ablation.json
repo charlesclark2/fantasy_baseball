@@ -23,19 +23,26 @@
       "movers_allpos": 0.7169
     },
     "B_env_wk1_QB_SAFE": {
-      "QB": 0.6862,
+      "QB": 0.6866,
       "RB": 0.7392,
       "WR": 0.7673,
       "TE": 0.754,
-      "movers_allpos": 0.6878
+      "movers_allpos": 0.688
     },
     "B_env_opt_QB_LEAKY": {
-      "QB": 0.7248,
+      "QB": 0.7183,
       "RB": 0.7392,
       "WR": 0.7673,
       "TE": 0.754,
-      "movers_allpos": 0.6854
+      "movers_allpos": 0.6857
+    },
+    "D_injury_availability": {
+      "QB": 0.68,
+      "RB": 0.7404,
+      "WR": 0.7712,
+      "TE": 0.7545,
+      "movers_allpos": 0.6873
     }
   },
-  "verdict": "A (team-change / depth-jump opportunity) SHIPPED \u2014 RB/WR/TE all lift, mover subpop +~0.03. B (Vegas environment, QB) SHIPPED via LEAKAGE-SAFE WEEK-1 implied points \u2014 QB +~0.015 (env_wk1); a Week-1 line is set before any of the season's games, so it needs NO new ingest (season-long env_opt QB +~0.06 is the leaky ceiling \u21d2 a richer forward-line/win-total ingest would capture more). Both wired into project_veterans. C (system fit) deferred to NF1."
+  "verdict": "A (team-change / depth-jump opportunity) SHIPPED \u2014 RB/WR/TE all lift, mover subpop +~0.03. B (Vegas environment, QB) SHIPPED via LEAKAGE-SAFE WEEK-1 implied points \u2014 QB +~0.015 (env_wk1); a Week-1 line is set before any of the season's games, so it needs NO new ingest (season-long env_opt QB +~0.06 is the leaky ceiling \u21d2 a richer forward-line/win-total ingest would capture more). Both wired into project_veterans. D (injury/availability) SHIPPED \u2014 a forward roster-status flag (RES/PUP/NFI/SUS) caps expected games; the +~0.002 \u03c1 badly UNDER-states it (the \u22656-game eval filters out the shelved players it fixes) \u2014 it's a correctness fix (don't rank an IR/PUP star as startable). C (system fit) deferred to NF1."
 }

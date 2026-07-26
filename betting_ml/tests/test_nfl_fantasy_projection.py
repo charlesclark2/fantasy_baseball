@@ -240,6 +240,46 @@ def test_veteran_env_tilt_orders_qbs_by_team_environment():
     assert on.loc["HIGH", "proj_fp_ppr"] > on.loc["LOW", "proj_fp_ppr"]
 
 
+# ── NF-D2 slice 5: injury / availability ─────────────────────────────────────────────────────────
+def test_injury_games_caps_flagged_status_and_no_ops_others():
+    df = pd.DataFrame({
+        "proj_status": ["ACT", "RES", "PUP", "SUS", None],
+        "proj_games": [16.0, 16.0, 15.0, 16.0, 14.0],
+    })
+    eg = sp.injury_availability_games(df, blend=1.0)   # hard cap
+    assert eg[0] == pytest.approx(16.0)                # ACT untouched
+    assert eg[1] == pytest.approx(sp._INJURY_STATUS_GAMES_CAP["RES"])   # IR capped
+    assert eg[2] == pytest.approx(sp._INJURY_STATUS_GAMES_CAP["PUP"])   # PUP capped
+    assert eg[3] == pytest.approx(sp._INJURY_STATUS_GAMES_CAP["SUS"])   # SUS capped
+    assert eg[4] == pytest.approx(14.0)                # unknown status untouched
+    # cap only moves games DOWN — a flagged player already below the cap is unchanged
+    df2 = pd.DataFrame({"proj_status": ["RES"], "proj_games": [2.0]})
+    assert sp.injury_availability_games(df2, blend=1.0)[0] == pytest.approx(2.0)
+
+
+def test_injury_games_is_noop_without_column_or_blend():
+    df = pd.DataFrame({"proj_games": [16.0]})          # no proj_status
+    assert sp.injury_availability_games(df, blend=0.7)[0] == pytest.approx(16.0)
+    df2 = pd.DataFrame({"proj_status": ["RES"], "proj_games": [16.0]})
+    assert sp.injury_availability_games(df2, blend=0.0)[0] == pytest.approx(16.0)
+
+
+def test_veteran_injured_player_projects_far_below_healthy_twin():
+    # two identical every-down RBs; one is flagged RES (IR) for the projection season → far fewer games
+    def rb(pid, status):
+        base = {"player_id": pid, "player_name": pid, "team_id": "AAA", "position": "RB",
+                "games_played": 16, "depth_chart_position_rank": 1, "fp_ppr_sd": 6.0, "proj_status": status}
+        for s in sp._VET_PERGAME_STATS:
+            base[s + "_pg"] = 0.0
+        base.update(rush_att_pg=17, rush_yds_pg=80, rush_td_pg=0.6, targets_pg=4, rec_pg=3, rec_yds_pg=25)
+        return base
+    base = pd.DataFrame([rb("HEALTHY", "ACT"), rb("INJURED", "RES")])
+    proj = sp.project_veterans(base, sp.positional_pergame_priors(base), 2026,
+                               injury_override_blend=0.7).set_index("player_name")
+    assert proj.loc["INJURED", "proj_games"] < proj.loc["HEALTHY", "proj_games"]
+    assert proj.loc["INJURED", "proj_fp_ppr"] < 0.5 * proj.loc["HEALTHY", "proj_fp_ppr"]  # materially demoted
+
+
 # ── shrinkage ───────────────────────────────────────────────────────────────────────────────────
 def test_shrink_pulls_small_sample_harder():
     prior = np.array([10.0, 10.0])

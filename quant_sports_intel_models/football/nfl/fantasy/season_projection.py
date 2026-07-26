@@ -126,6 +126,22 @@ _ENV_TILT_BLEND = 0.06                    # QB environment tilt strength (0 = of
 _ENV_TILT_LO, _ENV_TILT_HI = 0.92, 1.10  # clamp the per-QB environment multiplier to ±~10%
 _ENV_TILT_POSITIONS = ("QB",)
 
+# ── NF-D2 slice 5: INJURY / AVAILABILITY (ablated + SHIPPED 2026-07-26). A forward roster-status flag
+#    of unavailability — reserve/IR (`RES`), physically-unable-to-perform (`PUP`), non-football-injury
+#    (`NFI`), or suspension (`SUS`) — set PRESEASON is a strong, leakage-safe signal that the player
+#    will miss games. Empirically (2015–2024, players productive the prior year) a Week-1 status of
+#    RES → 3.7 games, PUP → 2.4, SUS → 6.9 vs ACT → 13.2. The base model over-projects such a player
+#    off LAST year's healthy games; this caps expected games toward the empirical status level. THE
+#    OPERATOR'S CASE (a player recovering from offseason surgery who misses the first few games) lands
+#    exactly on PUP/NFI. ⚠️ The held-out within-position ρ lift is only +0.002 because the ρ eval
+#    filters to players with ≥6 realized games — which EXCLUDES the very players this fixes (a
+#    season-ending IR player plays 0 games) — so the measured number badly UNDER-states the value; it
+#    is a CORRECTNESS fix (don't rank a shelved star as startable), not a ρ optimisation. Leakage-safe:
+#    the flag is a preseason designation (the live board reads the freshest projection-season roster
+#    snapshot; the backtest uses the season's Week-1 status). No-op when `proj_status` is absent.
+_INJURY_STATUS_GAMES_CAP = {"RES": 4.0, "PUP": 4.0, "NFI": 4.0, "SUS": 7.0}  # empirical status→games
+_INJURY_OVERRIDE_BLEND = 0.7   # weight on the status cap vs the base estimate (0 = off; 1 = hard cap)
+
 # Minimum base-season games for a veteran to anchor a conservative positional prior (avoids the
 # cup-of-coffee crowd diluting the prior toward zero).
 _PRIOR_MIN_GAMES = 6
@@ -285,6 +301,22 @@ def mover_opportunity_scale(
     return scale
 
 
+def injury_availability_games(df: pd.DataFrame, blend: float = _INJURY_OVERRIDE_BLEND) -> np.ndarray:
+    """NF-D2 slice 5 — expected games adjusted for a forward roster-status unavailability flag. For a
+    player whose projection-season status is in `_INJURY_STATUS_GAMES_CAP` (RES/PUP/NFI/SUS), blend the
+    base expected-games estimate toward the empirical status-level games (a cap the base line can only
+    move DOWN toward, never up). Everyone else is unchanged. Pure; leakage-safe (a preseason flag).
+    Returns the adjusted `proj_games` array; a no-op (returns proj_games unchanged) when the
+    `proj_status` column is absent or blend == 0."""
+    eg = pd.to_numeric(df["proj_games"], errors="coerce").to_numpy(dtype=float)
+    if blend <= 0.0 or "proj_status" not in df.columns:
+        return eg
+    st = df["proj_status"].astype("string")
+    cap = st.map(_INJURY_STATUS_GAMES_CAP).to_numpy(dtype=float)   # NaN where not a flagged status
+    flagged = np.isfinite(cap)
+    return np.where(flagged, (1.0 - blend) * eg + blend * np.minimum(eg, cap), eg)
+
+
 def environment_tilt_scale(df: pd.DataFrame, blend: float = _ENV_TILT_BLEND) -> np.ndarray:
     """NF-D2 slice 4 — the per-QB multiplicative environment tilt from the projection-season team's
     Week-1 implied points (`df['team_env']`). A z-score WITHIN the projected QB field → `exp(blend·z)`,
@@ -355,6 +387,7 @@ def project_veterans(
     role_vol_prior: dict | None = None,
     mover_opportunity_blend: float = _MOVER_OPP_BLEND,
     env_tilt_blend: float = _ENV_TILT_BLEND,
+    injury_override_blend: float = _INJURY_OVERRIDE_BLEND,
 ) -> pd.DataFrame:
     """Project every base-season player's UPCOMING-season raw stat line.
 
@@ -440,6 +473,25 @@ def project_veterans(
                     "proj_rush_att", "proj_rush_yds", "proj_rush_td"):
             df[col] = df[col].to_numpy() * escale
         df["proj_pass_cmp"] = np.minimum(df["proj_pass_cmp"], df["proj_pass_att"])
+        df = score_line(df, prefix="proj_")
+
+    # ── NF-D2 slice 5: INJURY / AVAILABILITY. Cap expected games for a player flagged unavailable
+    #    (RES/PUP/NFI/SUS) in the projection-season roster, and rescale the whole season line by the
+    #    games ratio. Applied LAST so it caps whatever the prior steps produced. No-op when the
+    #    proj_status column is absent or injury_override_blend == 0.
+    if injury_override_blend > 0 and "proj_status" in df.columns:
+        new_games = injury_availability_games(df, blend=injury_override_blend)
+        old_games = df["proj_games"].to_numpy()
+        iscale = np.where(old_games > 1e-6, new_games / np.clip(old_games, 1e-6, None), 1.0)
+        for col in ("proj_pass_att", "proj_pass_cmp", "proj_pass_yds", "proj_pass_td", "proj_pass_int",
+                    "proj_rush_att", "proj_rush_yds", "proj_rush_td",
+                    "proj_targets", "proj_rec", "proj_rec_yds", "proj_rec_td"):
+            df[col] = df[col].to_numpy() * iscale
+        df["proj_games"] = new_games
+        df["proj_pass_cmp"] = np.minimum(df["proj_pass_cmp"], df["proj_pass_att"])
+        df["proj_rec"] = np.minimum(df["proj_rec"], df["proj_targets"])
+        df["proj_fumbles_lost"] = np.round(
+            (df["proj_rush_att"].to_numpy() + df["proj_rec"].to_numpy()) * 0.006, 2)
         df = score_line(df, prefix="proj_")
 
     # ── 80% interval on the convenience PPR total. Two independent sources of season variance:
