@@ -1,0 +1,104 @@
+{
+  "model_version": "milb_mle_prior_v1",
+  "generated_at": "2026-07-26T07:39:22.791978+00:00",
+  "metrics": [
+    "k_pct",
+    "bb_pct",
+    "iso"
+  ],
+  "n_batters": 6365,
+  "recalibration": {
+    "k_pct": {
+      "metric": "k_pct",
+      "resid_sd": 0.044336,
+      "param_sd_median": 0.006134,
+      "tightness_ratio": 7.228,
+      "n": 597,
+      "coverage_68": 0.6801,
+      "coverage_90": 0.9045,
+      "label_sampling_sd": 0.023677,
+      "true_sd_est": 0.037485,
+      "kappa_floor": 20.0,
+      "kappa_cap": 400.0
+    },
+    "bb_pct": {
+      "metric": "bb_pct",
+      "resid_sd": 0.022223,
+      "param_sd_median": 0.004325,
+      "tightness_ratio": 5.138,
+      "n": 597,
+      "coverage_68": 0.6667,
+      "coverage_90": 0.9062,
+      "label_sampling_sd": 0.014412,
+      "true_sd_est": 0.016916,
+      "kappa_floor": 20.0,
+      "kappa_cap": 400.0
+    },
+    "iso": {
+      "metric": "iso",
+      "resid_sd": 0.047482,
+      "param_sd_median": 0.006802,
+      "tightness_ratio": 6.981,
+      "n": 597,
+      "coverage_68": 0.6633,
+      "coverage_90": 0.8878,
+      "label_sampling_sd": 0.019013,
+      "true_sd_est": 0.043509,
+      "kappa_floor": 20.0,
+      "kappa_cap": 400.0
+    }
+  },
+  "ablation": {
+    "k_pct": {
+      "metric": "k_pct",
+      "n_scored": 534,
+      "n_cohorts": 10,
+      "mle_nll": -1.69915,
+      "generic_nll": -1.36521,
+      "mle_crps": 0.025048,
+      "generic_crps": 0.034793,
+      "mle_mae": 0.035808,
+      "generic_mae": 0.049266,
+      "mle_cov68": 0.7004,
+      "generic_cov68": 0.6835,
+      "mle_cov90": 0.9176,
+      "generic_cov90": 0.9139,
+      "mle_wins": true,
+      "notes": []
+    },
+    "bb_pct": {
+      "metric": "bb_pct",
+      "n_scored": 534,
+      "n_cohorts": 10,
+      "mle_nll": -2.37611,
+      "generic_nll": -2.24463,
+      "mle_crps": 0.012635,
+      "generic_crps": 0.014449,
+      "mle_mae": 0.018066,
+      "generic_mae": 0.020632,
+      "mle_cov68": 0.7004,
+      "generic_cov68": 0.7022,
+      "mle_cov90": 0.9232,
+      "generic_cov90": 0.9307,
+      "mle_wins": true,
+      "notes": []
+    },
+    "iso": {
+      "metric": "iso",
+      "n_scored": 534,
+      "n_cohorts": 10,
+      "mle_nll": -1.59148,
+      "generic_nll": -1.52416,
+      "mle_crps": 0.027868,
+      "generic_crps": 0.029678,
+      "mle_mae": 0.03982,
+      "generic_mae": 0.042328,
+      "mle_cov68": 0.7079,
+      "generic_cov68": 0.7022,
+      "mle_cov90": 0.9307,
+      "generic_cov90": 0.9494,
+      "mle_wins": true,
+      "notes": []
+    }
+  }
+}

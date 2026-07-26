@@ -941,6 +941,7 @@ milb_mle_v1:
   promoted_at: null
   ablation_report: quant_sports_intel_models/baseball/edge_program/ablation_results/e7_3_milb_mle.md
   tests: betting_ml/tests/test_milb_mle.py
+  consumed_by: milb_mle_prior_v1                # E7.5 recalibrates + wires it into eb_batter_posteriors
   notes: |
     E7.3 (2026-07-26). The MiLB→MLB minor-league-equivalency MLE — the baseball analog of the
     NCAAF-P1.2b (recruit→freshman) + P1A (college→NFL) feeder MLEs, reusing the SAME shared
@@ -949,4 +950,53 @@ milb_mle_v1:
     (Davenport/James factor foil) vs GBM (+AAA-Statcast) vs level-mean null; identity + archetype
     are REPORTED benchmarks (the prior E7.3 must beat). Leave-one-MLB-debut-cohort-out expanding CV.
     Emits current PROSPECTS (is_prospect, no MLB label) from the latest map — the E7.5/E8 deliverable.
-    Harness code-complete + fast gate green; awaiting operator build_graduated_pairs + run_milb_mle.
+    Real S3 bake-off DONE (1,750 graduates): plate DISCIPLINE translates (K% corr 0.637/DSR 1.0,
+    BB% 0.491/0.989 STRONG; ISO 0.429 weak-but-real); wOBA NO signal (ties archetype). E7.5 (below)
+    wires K%/BB%/ISO — NOT wOBA — into the served eb_batter_posteriors_raw rookie prior.
+
+# =============================================================================
+# E7.5 — recalibrated MiLB rookie prior, WIRED into eb_batter_posteriors_raw
+# =============================================================================
+# The BETTING payoff of the E7.3 MLE: for a called-up rookie with ~0 MLB PAs the served EB build
+# previously shrank toward a GENERIC archetype/slot prior; E7.5 replaces that with the MLE-translated
+# minor line for the metrics that TRANSLATE (K%/BB%/ISO), recalibrated (E13.6) so the prior sd is honest.
+milb_mle_prior_v1:
+  artifact_type: served_rookie_prior         # feeds eb_batter_posteriors_raw → avg_eb_{k_pct,bb_pct,iso}
+  source_model: milb_mle_v1                   # the E7.3 projections it recalibrates
+  model_module: betting_ml/scripts/milb_mle/mle_prior.py
+  runner: betting_ml/scripts/milb_mle/run_mle_prior_recalibration.py
+  metrics: [k_pct, bb_pct, iso]              # wOBA DELIBERATELY excluded (E7.3: no translatable signal)
+  wired_into: dbt/models/eb_posteriors/eb_batter_posteriors_raw.sql   # DuckDB (SF-free lakehouse) branch
+  output_path: s3://baseball-betting-ml-artifacts/baseball/lakehouse/milb_mle_prior/data.parquet   # W8a precursor view (single overwrite parquet, fail-safe empty view if absent)
+  grain: batter_id                           # one row per batter (MLBAM) at the HIGHEST reached level
+  recalibration:                             # E13.6 — parameter sd → held-out predictive spread
+    method: held_out_residual_sd            # σ_resid = std(realized MLB − MLE), highest-level, mlb_pa≥150 floor
+    prior_strength: beta_pseudocount        # κ = m(1−m)/σ_resid² − 1, clip [20, 400]; ISO = Normal prior sd
+    k_pct:  {resid_sd: 0.0443, param_sd_x: 7.2, cov68: 0.68, cov90: 0.90}
+    bb_pct: {resid_sd: 0.0222, param_sd_x: 5.1, cov68: 0.67, cov90: 0.91}
+    iso:    {resid_sd: 0.0475, param_sd_x: 7.0, cov68: 0.66, cov90: 0.89}
+  ablation:                                  # purged leave-one-debut-cohort-out; MLE prior vs generic prior
+    cv_strategy: leave_one_debut_cohort_out
+    metric: predictive_nll_crps_mae_coverage
+    k_pct:  {mle_nll: -1.699, generic_nll: -1.365, mle_mae: 0.0358, generic_mae: 0.0493, wins: true}
+    bb_pct: {mle_nll: -2.376, generic_nll: -2.245, mle_mae: 0.0181, generic_mae: 0.0206, wins: true}
+    iso:    {mle_nll: -1.592, generic_nll: -1.524, mle_mae: 0.0398, generic_mae: 0.0423, wins: true}
+  uncertainty: recalibrated_predictive       # σ_resid is honest (cov ≈ 0.68/0.90) — was parameter-only
+  best_alpha: 0                              # a rookie prior, never a market bet
+  promotion_status: pending                  # harness code-complete + fast gate + SQL smoke green; awaiting operator W8a run + serving parity
+  promoted_at: null
+  ablation_report: quant_sports_intel_models/baseball/edge_program/ablation_results/e7_5_milb_prior_ablation.md
+  tests: betting_ml/tests/test_milb_mle_prior.py
+  notes: |
+    E7.5 (2026-07-26). Recalibrates milb_mle_v1 into a priceable rookie prior and wires K%/BB%/ISO
+    (NOT wOBA) into the SERVED eb_batter_posteriors_raw (dbt DuckDB branch — the SF-free lakehouse
+    compute; the Python compute_lineup_posteriors.py is dead). A low-MLB-PA rookie WITH a MiLB line
+    gets the MLE-translated MLB-equivalent line as the Beta-Binomial (K%/BB%) / Normal-Normal (ISO)
+    prior; the existing PA-accrual update shrinks the rookie's own MLB line toward it as PA accrues
+    (κ = equivalent PA); a batter WITHOUT an MLE keeps the generic archetype/slot prior; wOBA is
+    untouched. E13.6 recalibration: the E7.3 parameter sd was 5–7× too tight; σ_resid (held-out,
+    highest-level, mlb_pa≥150 floor) gives honest ~0.68/0.90 coverage. Purged ablation: MLE prior
+    beats the generic prior on NLL + MAE for all three metrics. SF-FREE; the calibrated prior is a
+    static W8a precursor view (fail-safe → empty view → generic prior if the parquet is absent, so a
+    missing artifact never HALTs the serving-critical build). Reaches served total_runs / run_diff
+    models via feature_pregame_lineup_features avg_eb_{k_pct,bb_pct,iso}. best_alpha = 0.

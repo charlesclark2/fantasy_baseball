@@ -120,6 +120,24 @@ seq as (
     ) = 1
 ),
 
+-- E7.5 — the MiLB→MLB MLE rookie prior (milb_mle_prior_v1). One row per batter (MLBAM) at the highest
+-- reached MiLB level, carrying the E7.3 MLE-translated MLB-equivalent line + the E13.6-recalibrated prior
+-- strength: a Beta pseudo-count for K%/BB% (α=mean·κ, β=(1−mean)·κ) and a Normal prior sd for ISO. It
+-- REPLACES the generic archetype/slot prior for a low-MLB-PA rookie WHO HAS a minor-league line (the
+-- Beta-Binomial / Normal-Normal update below then shrinks the rookie's own MLB line toward it as PA
+-- accrues). wOBA is DELIBERATELY absent — E7.3 proved it carries no translatable signal beyond level.
+-- Static precursor (rebuilt when the MLE is retrained), read as a W8a precursor view over S3. LEAKAGE:
+-- only pre-debut minor stats enter the MLE (the E7.3 as-of guard).
+mle_prior as (
+    select
+        batter_id::varchar as batter_id,
+        mle_k_pct, k_pct_prior_kappa,
+        mle_bb_pct, bb_pct_prior_kappa,
+        mle_iso, iso_prior_sd
+    from milb_mle_prior
+    qualify row_number() over (partition by batter_id order by k_pct_prior_kappa desc nulls last) = 1
+),
+
 assembled as (
     select
         l.game_pk, l.batting_slot, l.batter_id, l.season, l.game_date, l.role,
@@ -136,6 +154,10 @@ assembled as (
         coalesce(pw.bb_beta,    pr.bb_beta)    as bb_beta,
         coalesce(pw.iso_mu,     pr.iso_mu)     as iso_mu,
         coalesce(pw.iso_sigma,  pr.iso_sigma)  as iso_sigma,
+        -- E7.5 MiLB MLE rookie prior (null when the batter has no minor-league line → generic prior stays)
+        mp.mle_k_pct, mp.k_pct_prior_kappa,
+        mp.mle_bb_pct, mp.bb_pct_prior_kappa,
+        mp.mle_iso, mp.iso_prior_sd,
         sq.posterior_mu as seq_mu, sq.seq_game_date
     from lineups l
     left join rolling_asof ra on ra.game_pk = l.game_pk and ra.batter_id = l.batter_id
@@ -143,24 +165,34 @@ assembled as (
     left join priors_wide pw  on pw.season = l.season and pw.role = l.role and pw.batter_hand = coalesce(ra.hand, 'R')
     left join priors_wide pr  on pr.season = l.season and pr.role = l.role and pr.batter_hand = 'R'
     left join seq sq          on sq.game_pk = l.game_pk and sq.batter_id = l.batter_id
+    left join mle_prior mp    on mp.batter_id = l.batter_id
 ),
 
 calc as (
     select
         a.*,
         least(pa / 150.0, 1.0) as eb_weight,
-        -- prior means
+        -- E7.5 — effective K%/BB% Beta prior (α, β) and ISO Normal prior (μ, σ): the recalibrated MiLB MLE
+        -- when the batter has one, else the generic archetype/slot prior. wOBA prior is UNCHANGED.
+        case when mle_k_pct  is not null then mle_k_pct       * k_pct_prior_kappa  else k_alpha   end as eff_k_alpha,
+        case when mle_k_pct  is not null then (1 - mle_k_pct) * k_pct_prior_kappa  else k_beta    end as eff_k_beta,
+        case when mle_bb_pct is not null then mle_bb_pct      * bb_pct_prior_kappa else bb_alpha  end as eff_bb_alpha,
+        case when mle_bb_pct is not null then (1 - mle_bb_pct)* bb_pct_prior_kappa else bb_beta   end as eff_bb_beta,
+        coalesce(mle_iso, iso_mu)                                                                     as eff_iso_mu,
+        case when mle_iso is not null then iso_prior_sd else iso_sigma end                            as eff_iso_sigma,
+        -- generic prior means (the coalesce base when no MLE / no ZiPS)
         woba_alpha / nullif(woba_alpha + woba_beta, 0) as pm_woba,
         k_alpha    / nullif(k_alpha + k_beta, 0)       as pm_k,
         bb_alpha   / nullif(bb_alpha + bb_beta, 0)     as pm_bb,
         iso_mu                                         as pm_iso,
-        -- EB posteriors (guarded so the iso division never sees pa=0)
+        -- EB posteriors (guarded so the iso division never sees pa=0). K%/BB%/ISO use the EFFECTIVE
+        -- (MLE-or-generic) prior so the PA-accrual shrink runs off the MLE prior for a rookie with one.
         case when obs_woba is not null then (woba_alpha + obs_woba*pa)/(woba_alpha + woba_beta + pa) end as eb_woba_raw,
-        case when obs_k    is not null then (k_alpha    + obs_k*pa)   /(k_alpha + k_beta + pa)       end as eb_k_raw,
-        case when obs_bb   is not null then (bb_alpha   + obs_bb*pa)  /(bb_alpha + bb_beta + pa)     end as eb_bb_raw,
+        case when obs_k    is not null then (eff_k_alpha  + obs_k*pa) /(eff_k_alpha + eff_k_beta + pa)   end as eb_k_raw,
+        case when obs_bb   is not null then (eff_bb_alpha + obs_bb*pa)/(eff_bb_alpha + eff_bb_beta + pa)  end as eb_bb_raw,
         case when pa > 0 and obs_iso is not null then
-            (iso_mu*(1.0/(iso_sigma*iso_sigma)) + obs_iso*(pa/greatest(obs_iso*(1-obs_iso), 0.001)))
-            / ((1.0/(iso_sigma*iso_sigma)) + (pa/greatest(obs_iso*(1-obs_iso), 0.001)))
+            (eff_iso_mu*(1.0/(eff_iso_sigma*eff_iso_sigma)) + obs_iso*(pa/greatest(obs_iso*(1-obs_iso), 0.001)))
+            / ((1.0/(eff_iso_sigma*eff_iso_sigma)) + (pa/greatest(obs_iso*(1-obs_iso), 0.001)))
         end as eb_iso_raw
     from assembled a
 ),
@@ -190,26 +222,31 @@ final as (
             else eb_woba_raw
         end, 4) as eb_woba,
 
+        -- E7.5: MLE precedence at PA≈0 (coalesce mle→zips→generic); when an MLE prior is present the low-PA
+        -- ZiPS blend is bypassed (the MLE prior is already baked into eb_*_raw — no double-counted projection).
         round(case
-            when k_alpha is null then null
-            when (pa = 0 or obs_k is null) then coalesce(proj_k_pct, pm_k)
+            when k_alpha is null and mle_k_pct is null then null
+            when (pa = 0 or obs_k is null) then coalesce(mle_k_pct, proj_k_pct, pm_k)
             when eb_weight >= 1.0 then eb_k_raw
+            when mle_k_pct is not null then eb_k_raw
             when proj_k_pct is not null then eb_weight*eb_k_raw + (1-eb_weight)*proj_k_pct
             else eb_k_raw
         end, 4) as eb_k_pct,
 
         round(case
-            when bb_alpha is null then null
-            when (pa = 0 or obs_bb is null) then coalesce(proj_bb_pct, pm_bb)
+            when bb_alpha is null and mle_bb_pct is null then null
+            when (pa = 0 or obs_bb is null) then coalesce(mle_bb_pct, proj_bb_pct, pm_bb)
             when eb_weight >= 1.0 then eb_bb_raw
+            when mle_bb_pct is not null then eb_bb_raw
             when proj_bb_pct is not null then eb_weight*eb_bb_raw + (1-eb_weight)*proj_bb_pct
             else eb_bb_raw
         end, 4) as eb_bb_pct,
 
         round(case
-            when iso_mu is null then null
-            when (pa = 0 or obs_iso is null) then coalesce(proj_iso, pm_iso)
+            when iso_mu is null and mle_iso is null then null
+            when (pa = 0 or obs_iso is null) then coalesce(mle_iso, proj_iso, pm_iso)
             when eb_weight >= 1.0 then eb_iso_raw
+            when mle_iso is not null then eb_iso_raw
             when proj_iso is not null then eb_weight*eb_iso_raw + (1-eb_weight)*proj_iso
             else eb_iso_raw
         end, 4) as eb_iso,

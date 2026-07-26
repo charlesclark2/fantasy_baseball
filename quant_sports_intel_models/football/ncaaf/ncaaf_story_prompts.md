@@ -381,4 +381,49 @@ GATE/AC: the pre-registered hypothesis set (BEFORE eval); each tested under purg
 ```
 
 ---
-_Created 2026-07-08. Phase 0 is data-first and re-verifies sources against live endpoints. Data-source facts (CFBD tiers, PFF-paid charting) current as of 2026-07-08._
+
+## PHASE 3 — THE NCAAF APPLICATION (P3 epic, scoped 2026-07-26)
+
+The model/data track is DONE; the vertical has **no frontend yet**. This epic ships it. Soft deadline = **Aug-29 kickoff**. See `ncaaf_roadmap.md §3 Phase 3` for the epic overview.
+
+⭐ **CROSS-CUTTING BRAND DIRECTIVE (applies to every P3 surface):** NCAAF is **probability-first + distributional**. Lead with the WIN PROBABILITY ("Team A 58%") and visualize margin/total as a **distributional CURVE**, not a point number. Honest framing everywhere — `best_alpha=0`, no edge/win-rate claim on game lines (the CLV null holds); the model line is shown vs the market line as TRANSPARENCY, not a "beat the book" pitch. Reuse MLB app components where sensible but the framing is uncertainty-forward. **App-target rule: all UI in `frontend/` (Next.js) ONLY — never `app/` legacy Streamlit** (see repo `CLAUDE.md`). Entitlement: NCAAF is betting-only → **FREE** (E9.45). Every user-facing change adds a `frontend/data/changelog.json` line (Monday-of-week). Serving-path stories get a fresh session.
+
+```
+▶ NCAAF-P3.1 — SERVING PLUMBING (⭐ KEYSTONE — gates P3.2/3.3/3.4/3.5/3.6/3.7)   [Serving · fresh session · 🧭 OPUS]
+GOAL: get P1.4 game predictions + P1.5 futures out of the S3 research lakehouse and onto a SERVING store the app reads.
+TASKS: (1) a serving-write op (box Dagster) that reads the P1.4 predictive + P1.5 board from the lakehouse and writes NCAAF blobs to DynamoDB (primary) / S3 (fallback), keyed on `America/Los_Angeles` game-day (`game_day.current_game_date`, never UTC — the INC-22 landmine). Cadence: weekly board refresh + a game-week predictions write. (2) FastAPI NCAAF routers in `app/backend/` (games/predictions, futures) reading the serving store; ⚠️ every SERVED field must be declared on the Pydantic response model (E9.41 silent-drop landmine). (3) payload carries PROBABILITIES + interval params (so the client can draw the curve), the market line, and honest-frame flags — NOT a single pick. (4) tier the op per the failure contract (serving-critical write = HALT; narrative/enrichment = WARN).
+AC: a box run writes the current-week NCAAF predictions + the futures board to the serving store; the new routers return them; game-day keys are LA-time; response models declare every field; SF-free path. Changelog line.
+NOTES: mirror MLB's write_serving_store / router structure; NCAAF outputs are off the MLB serving lane (separate keys). This is the ONLY P3 story that must land before the surfaces.
+
+▶ NCAAF-P3.2 — GAME PREDICTIONS SURFACE (flagship; probability-first)   [App · fresh session · needs P3.1]
+GOAL: the per-matchup card that defines the vertical's look.
+TASKS: render, per game — the WIN PROBABILITY (both sides, e.g. "58% / 42%"); the margin & total **distributional curves** (⭐ the signature viz — a density/interval band from the P3.1 interval params, NOT a point); the honest interval (e.g. 80%); the MODEL line vs the MARKET line side-by-side (transparency framing, explicit "we don't claim an edge here"). A week selector; link out to Team Stats (P3.3). Reuse MLB card scaffolding but lead with probability + curve.
+AC: cards render for the live week from the P3.1 API; curves draw from interval params; model-vs-market shown honestly (no edge claim); mobile-legible; changelog line.
+
+▶ NCAAF-P3.3 — TEAM STATS PAGE   [App · fresh session · needs P3.1]
+Per team: strength rating + posterior band (honest uncertainty), opponent-adjusted efficiency, schedule/results, trench/pace splits — all off P1.1 marts + `ncaaf_team_strength_week`. AC: a team page renders from the API for any FBS team; realignment-correct (SCD-2 dim); changelog line.
+
+▶ NCAAF-P3.4 — PLAYER STATS PAGE   [App · fresh session · needs P3.1]
+Per-team player lines off P1.1's 539k player-games. Honest NULLs kept NULL (no fabricated coverage). AC: player lines render per team from the API; changelog line.
+
+▶ NCAAF-P3.5 — CONFERENCE STANDINGS PAGE   [App · fresh session · needs P3.1]
+Standings from the schedule/results marts + `dim_ncaaf_conference`; realignment-correct. AC: standings render per conference for the live season; changelog line.
+
+▶ NCAAF-P3.6 — FUTURES BOARD SURFACE   [App · fresh session · needs P3.1]
+P1.5 already COMPUTES national-title + conference-title PROBABILITIES — this is the page. Probability-first, distributional; pre-season vs in-season labeling honest (cold-start caveat before fall-camp covariates). AC: the board renders from the P3.1 API; probabilities honestly labeled; changelog line.
+
+▶ NCAAF-P3.7 — BACKTEST / HONEST TRACK-RECORD SURFACE   [App · fresh session · needs P3.1]   ⚠️ FRAMING IS BRAND-CRITICAL
+P1.4 has 2018–2025 OOS predictions. Surface them as a **market-blind PROJECTION/CALIBRATION track record** — "how our model would have projected past games + how well-calibrated it was," clearly LABELED a backtest. ❌ NEVER a win-rate / "we'd have won X%" / edge claim (`best_alpha=0`, NCAAF CLV null). Show calibration (reliability, coverage) + example past-game projections vs realized. This is the transparency asset that earns trust; a dishonest "track record" here would poison the honest-analytics brand. AC: a calibration/backtest page renders; every number is a projection-accuracy/calibration figure, none implies betting edge; explicit backtest disclaimer; changelog line.
+
+▶ NCAAF-P3.8 — TEAM LOGOS + ASSETS INGEST   [Data/App · can run anytime · 🧭 SONNET (low-risk)]
+CFBD `/teams` carries logo URLs (light/dark); ESPN CDN fallback. Small ingest → a team-asset map the app reads (logo, colors). No scraping. ⚠️ flag any licensing constraint on redistribution before shipping to prod. AC: every FBS team resolves a logo + primary color via the asset map; used by P3.2/3.3/3.5.
+
+▶ NCAAF-P3.9 — NCAAF NAV + ENTITLEMENT   [App · fresh session · needs E9.45 nav]
+Slot NCAAF into E9.45's sport-first nav; NCAAF betting surfaces stay FREE (fantasy is the paid hook). AC: NCAAF is reachable in the multi-sport nav; entitlement = free for all NCAAF surfaces; changelog line.
+
+▶ NCAAF-P0.6c — DAY-PRIOR (T-1) LINE-MOVEMENT ODDS CAPTURE   [Data · extends P0.6b · 🧭 SONNET]
+Extend P0.6b to capture an additional ~24h-pre-kickoff Odds-API snapshot alongside the existing close → line MOVEMENT toward kickoff. ⚠️ SCOPE THE CREDIT MATH FIRST (paid tier; ~doubles per-game odds credits — confirm against remaining balance before enabling). Leakage-safe (`_snapshot_ts` < `commence_time`; a T-1 snapshot is inherently pre-kickoff). Reuse the P0.6/P0.6b fetch + KICKOFF-GRAIN diffing (never CFBD `week`, the P0.6b landmine); READ-MERGE-WRITE into the Delta (never lose the close). Useful as a transparency/content feature (show the move) AND a Phase-2 microstructure signal. AC: for a sample of games, both a T-1 and a close snapshot land, distinguishable by `_snapshot_ts`; credit cost measured + within budget; never-lose-prior-snapshot regression test.
+```
+
+---
+_Created 2026-07-08. Phase 0 is data-first and re-verifies sources against live endpoints. Data-source facts (CFBD tiers, PFF-paid charting) current as of 2026-07-08. Phase 3 (P3 app epic) scoped 2026-07-26._
