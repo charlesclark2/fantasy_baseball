@@ -27,6 +27,15 @@ on:
       # is rebuilt. Trigger the rebuild-deploy on those changes too (E11.1-W3pre).
       - "dbt/**"
       - "scripts/**"
+      # betting_ml/ is COPY'd into credence-dagster by the root Dockerfile's `COPY . .` —
+      # so a serving-critical change (signal generators e.g. generate_run_env_signals.py,
+      # betting_ml/monitoring/monitor_health.py, the EB-posterior scripts) runs STALE on the
+      # box until the image is rebuilt. Same baked-image-drift class as dbt/**+scripts/** above;
+      # missing this path is the INC-35/INC-27 "CI-green but NOT on the box" risk (bitten 3+×).
+      # NOTE: this also covers betting_ml/tests/** → a test-only edit triggers a full rebuild-deploy.
+      # That is wasteful but SAFE (deploy is idempotent + serialized by the orchestration-cd
+      # concurrency group) — far preferable to serving code silently not deploying.
+      - "betting_ml/**"
       # NCAAF-P1.1: the SPORTS dbt project (dbt-duckdb, NCAAF + NFL) is likewise COPY'd into
       # credence-dagster by the root Dockerfile's `COPY . .` — so a model-only change to
       # sports_dbt runs STALE on the box until the image is rebuilt, and the box job would
