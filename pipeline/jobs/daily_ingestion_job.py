@@ -26,6 +26,7 @@ from pipeline.ops.daily_ingestion_ops import (
     generate_env_state_signals_op,
     generate_matchup_signals_op,
     generate_offense_signals_op,
+    generate_totals_generative_signals_op,
     generate_pick_narratives_op,
     generate_run_env_signals_op,
     generate_starter_ip_signals_op,
@@ -151,6 +152,9 @@ def daily_ingestion_job():
     # bullpen runs after starter_ip — it reads starter_ip_signals for v2 scaling.
     sig_run_env    = generate_run_env_signals_op(start=s16)
     sig_offense    = generate_offense_signals_op(start=s16)
+    # E2.5 — per-side generative totals signal (totals_generative_v1). Reported into the pivot but NOT
+    # in the signal_freshness HALT floor (nothing consumes it yet → must not gate predict_today).
+    sig_totals_gen = generate_totals_generative_signals_op(start=s16)
     sig_starter    = generate_starter_signals_op(start=s16)
     sig_starter_ip = generate_starter_ip_signals_op(start=s16)
     sig_bullpen    = generate_bullpen_signals_op(start=sig_starter_ip)
@@ -170,11 +174,12 @@ def daily_ingestion_job():
     # the fresh stores → materialize the SF consumer → gate. Previously the store mirror + consumer
     # parquet were built at job START (before the generators) so the consumer served a slate-stale
     # pivot and signal_freshness_check HALTed the job.
-    # 1) export_w9_signals_to_s3_op is now the fan-in of all 8 generators (SF stores → S3 parquet)
+    # 1) export_w9_signals_to_s3_op is now the fan-in of all 9 generators (SF stores → S3 parquet)
     #    + emits the at-the-source empty-slate coverage ALERT.
     sig_stores_s3 = export_w9_signals_to_s3_op(
         run_env_done=sig_run_env,
         offense_done=sig_offense,
+        totals_gen_done=sig_totals_gen,
         starter_done=sig_starter,
         starter_ip_done=sig_starter_ip,
         bullpen_done=sig_bullpen,

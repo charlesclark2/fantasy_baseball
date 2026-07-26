@@ -31,6 +31,7 @@ _JOB = _REPO / "pipeline" / "jobs" / "daily_ingestion_job.py"
 _GENERATORS = {
     "generate_run_env_signals_op",
     "generate_offense_signals_op",
+    "generate_totals_generative_signals_op",   # E2.5 — per-side generative totals signal (9th)
     "generate_starter_signals_op",
     "generate_starter_ip_signals_op",
     "generate_bullpen_signals_op",

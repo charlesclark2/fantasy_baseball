@@ -839,6 +839,70 @@ offense_v2:
     verdict_detail: |
       HOLD — seq challenger did not beat nonseq champion on both NLL (2.4850 vs 2.4847) and calib_80 (0.822 vs 0.822). Champion unchanged.
 
+# =============================================================================
+# E2.5 — Per-side GENERATIVE totals signal (the E2.1/E2.1-r per-side count model,
+#         registered as a served sub-model signal + leakage-safe backfilled)
+# =============================================================================
+# The marginal E2.6 prices the derivative markets from. Same grain/shape as offense_v2
+# (per-(game_pk, side) run distribution) but modelled from the FULL matchup (opposing
+# starter/bullpen/staff + park/weather/umpire) under E1.1 purged CV — the richer marginal
+# offense_v2 omits. Market-blind (CONTRACT-GUARD in train_perside_negbin); best_alpha = 0.
+totals_generative_v1:
+  artifact_path: s3://baseball-betting-ml-artifacts/sub_models/totals_perside_v1.pkl   # E2.1-r validated learner (LightGBM Poisson); operator promotes it to S3 (E2.5)
+  source_model: totals_perside_v1            # betting_ml/scripts/totals_generative/train_perside_negbin.py
+  generator: betting_ml/scripts/totals_generative/generate_totals_generative_signals.py
+  target:
+    source_table: baseball_data.betting.mart_game_results
+    primary_column: runs_scored              # one row per game-side (home or away)
+    auxiliary_columns: []
+    grain: game_pk_side
+  training_window:
+    start: '2018-01-01'                       # --min-year default; 5 clean Statcast-era eval folds 2021-2025
+    end: null                                 # champion trains through the last COMPLETE season (2025); 2026 partial excluded
+  cv_strategy: purged_walk_forward            # E1.1 PurgedWalkForwardSplit (purge + embargo)
+  cv_metric: perside_negbin_nll
+  cv_score: null                              # E2.1 gate record: ablation_results/e2_1_perside_negbin_cv.json (NegBin beats Poisson 5/5)
+  dispersion:
+    # ⚠️ SERVED r = the E2.3 leakage-safe held-out per-side calibration, NOT the artifact's train-fit
+    # negbin_r (7.449 → under-dispersed, calib_80 0.778; the bug E2.1-r/E2.3 diagnosed + fixed).
+    served_r_home: 4.0645
+    served_r_away: 3.3977
+    calibration: totals_distribution_v1.json  # E2.3 expanding-window held-out residuals (leakage-safe)
+    artifact_train_fit_r: 7.449               # NOT served — recorded for provenance
+  parent_features:
+    - feature_pregame_game_features           # the wide per-game mart (unpivoted into per-side)
+  output_signals:
+    - totals_perside_mu                        # LightGBM Poisson mean (the validated E2.1-r learner)
+    - totals_perside_dispersion                # E2.3 calibrated per-side NegBin r (home 4.0645 / away 3.3977)
+    - totals_perside_raw                       # alias for mu (offense_v2 parity: pred_runs_raw)
+    - uncertainty                              # 80% NegBin PI width at (mu, r_side)
+  leakage_tracking:                            # E2.5 AC — the scoring artifact must not have seen the scored season
+    columns: [is_oos, train_through_season]
+    backfill: leakage_safe_walk_forward        # --backfill --leakage-safe: each eval season Y scored by a model trained on seasons < Y
+    eval_predicate: "where is_oos"             # downstream OOS eval (E2.6 CLV/PBO) filters to honest-OOS rows
+  downstream_consumers: []                     # E2.6 (derivative pricing) is the intended consumer; not built yet
+  promotion_status: pending                    # generator + wiring code-complete; awaiting operator backfill run + box deploy
+  promoted_at: null
+  best_alpha: 0
+  ablation_report: quant_sports_intel_models/baseball/edge_program/ablation_results/e2_5_signal_registration.md
+  tests: betting_ml/tests/test_totals_generative_signals.py
+  notes: |
+    E2.5 (2026-07-26). Registers the E2.1/E2.1-r per-side count-distribution model as a served
+    sub-model signal (`totals_generative_signals` store, mirroring offense_v2_signals) and wires the
+    leakage-safe backfill. THE LEARNER = LightGBM Poisson mean (E2.1-r verdict PROMOTE_MINIMAL_FIX:
+    keep the learner, switch dispersion) — NOT NGBoost (dropped as under-dispersed; the older E2.5
+    prompt's "NGBoost winner" is stale). THE DISPERSION = E2.3's held-out-calibrated per-side r
+    (home 4.0645 / away 3.3977), NOT the artifact's train-fit 7.449 (which under-covers; serving it
+    would re-introduce the ~24% variance deficit E2.3 fixed). No double-calibration: the mean is the
+    raw LightGBM prediction; the served distribution is Normal-free (NegBin per-side).
+    LEAKAGE-SAFE BACKFILL (the AC): `--backfill --leakage-safe` scores each eval season Y with a model
+    trained ONLY on seasons < Y (E1.1 purged walk-forward — the SAME folds train_perside_negbin.run_cv
+    evaluates), so no season is scored in-sample; the current partial season is scored by the champion
+    (OOS by construction). Every row carries is_oos + train_through_season so E2.6's OOS eval filters
+    with `where is_oos`. SF-free (DuckDB over S3 with --s3). Served via feature_pregame_sub_model_signals
+    (9th generator in daily_ingestion_job; reported-but-NOT-in the signal_freshness HALT floor — nothing
+    consumes it yet, so it must not gate predict_today). Ships the signal path; the edge question is E2.6.
+
 starter_ip_v1:
   seq_challenger_16b3:
     verdict: HOLD_NONSEQ

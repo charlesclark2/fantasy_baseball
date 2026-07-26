@@ -86,6 +86,8 @@ MIRROR_TABLES = {
     "offense_v2_signals":          "baseball_data.betting_features.offense_v2_signals",
     "starter_suppression_signals": "baseball_data.betting_features.starter_suppression_signals",
     "starter_ip_signals":          "baseball_data.betting_features.starter_ip_signals",
+    # E2.5 — per-side generative totals signal (generate_totals_generative_signals.py MERGE store)
+    "totals_generative_signals":   "baseball_data.betting_features.totals_generative_signals",
 }
 ALL_NAMES = sorted(MIRROR_TABLES)
 

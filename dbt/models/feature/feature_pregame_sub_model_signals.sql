@@ -23,6 +23,11 @@
 --   offense_v2_signals.pred_runs_dispersion → pred_runs_dispersion_v2  (NegBin r; constant per model)
 --   offense_v2_signals.pred_runs_raw   → pred_runs_raw_v2    (alias for pred_runs_mu; no bias correction)
 --   offense_v2_signals.uncertainty     → pred_runs_uncertainty_v2  (80% PI width)
+--   totals_generative_signals.totals_perside_mu         → totals_perside_mu_v1     (E2.5; per-side generative μ; LightGBM Poisson, full matchup)
+--   totals_generative_signals.totals_perside_dispersion → totals_perside_dispersion_v1  (E2.3 held-out per-side NegBin r; home 4.0645/away 3.3977)
+--   totals_generative_signals.totals_perside_raw        → totals_perside_raw_v1    (alias for μ; offense_v2 parity)
+--   totals_generative_signals.uncertainty               → totals_perside_uncertainty_v1  (80% NegBin PI width)
+--   totals_generative_signals.is_oos                    → totals_perside_is_oos_v1  (leakage flag: scoring artifact did NOT see this season — E2.6 filters `where is_oos`)
 --   starter_suppression_signals.starter_suppression_mu     → starter_suppression_mu_v1     (Epic 5; Normal μ)
 --   starter_suppression_signals.starter_suppression_sigma  → starter_suppression_sigma_v1  (Normal σ; constant per model)
 --   starter_suppression_signals.starter_suppression_signal → starter_suppression_signal_v1 (z-score; negative = better suppression)
@@ -231,6 +236,14 @@ select
     o2.uncertainty                                          as pred_runs_uncertainty_v2,
     (o2.pred_runs_mu is not null)                          as pred_runs_mu_v2_available,
 
+    -- Per-side GENERATIVE totals signals v1 (Epic E2.5 — E2.1-r LightGBM Poisson + E2.3 held-out r)
+    tg.totals_perside_mu                                    as totals_perside_mu_v1,
+    tg.totals_perside_dispersion                            as totals_perside_dispersion_v1,
+    tg.totals_perside_raw                                   as totals_perside_raw_v1,
+    tg.uncertainty                                          as totals_perside_uncertainty_v1,
+    tg.is_oos                                               as totals_perside_is_oos_v1,
+    (tg.totals_perside_mu is not null)                     as totals_perside_mu_v1_available,
+
     -- Starter suppression signals v1 (Epic 5 — LightGBM+Normal distributional; champion)
     ss.starter_suppression_mu                                   as starter_suppression_mu_v1,
     ss.starter_suppression_sigma                                as starter_suppression_sigma_v1,
@@ -327,6 +340,10 @@ left join offense_v2_signals o2
     on  o2.game_pk       = p.game_pk
     and o2.side          = p.side
     and o2.model_version = 'offense_v2'
+left join totals_generative_signals tg
+    on  tg.game_pk       = p.game_pk
+    and tg.side          = p.side
+    and tg.model_version = 'totals_generative_v1'
 left join starter_suppression_signals ss
     on  ss.game_pk       = p.game_pk
     and ss.side          = p.side

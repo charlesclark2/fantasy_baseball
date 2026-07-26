@@ -1086,6 +1086,20 @@ def generate_offense_signals_op(context):
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing), tags=_SUB_MODEL_OP_TAGS)
+def generate_totals_generative_signals_op(context):
+    # E2.5 — per-side GENERATIVE totals signal (totals_generative_v1). Scores the recently-completed
+    # window with the champion (LightGBM Poisson mean + E2.3 held-out per-side r); is_oos is True on
+    # the current partial season (the champion never trained on it). The leakage-safe HISTORICAL
+    # backfill (walk-forward as-of scoring) is a ONE-TIME operator run:
+    #   generate_totals_generative_signals.py --backfill --leakage-safe --s3
+    # This daily op only advances the recent completed dates (mirrors generate_offense_signals_op).
+    env = _target_env()
+    for d in _recent_completed_dates():
+        _run_script(context, "/app/betting_ml/scripts/totals_generative/generate_totals_generative_signals.py",
+                    ["--date", d, "--env", env] + _w9_s3_read_args())
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), tags=_SUB_MODEL_OP_TAGS)
 def generate_starter_signals_op(context):
     env = _target_env()
     for d in _recent_completed_dates():
@@ -1185,6 +1199,7 @@ def _w9_mirror_on() -> bool:
     ins={
         "run_env_done":       In(Nothing),
         "offense_done":       In(Nothing),
+        "totals_gen_done":    In(Nothing),
         "starter_done":       In(Nothing),
         "starter_ip_done":    In(Nothing),
         "bullpen_done":       In(Nothing),
@@ -1198,7 +1213,7 @@ def export_w9_signals_to_s3_op(context):
     # E11.7 failure tier: ALERT-loud-but-continue (MIRROR tier) — a Snowflake→S3 export failure must
     # never HALT the serving pipeline; if the mirror is stale the consumer rebuild + freshness gate
     # catch it downstream.
-    # INC-25 (2026-07-01): this op is now the FAN-IN of all 8 signal generators and runs BEFORE
+    # INC-25 (2026-07-01): this op is now the FAN-IN of all 9 signal generators and runs BEFORE
     # rebuild_sub_model_signals_consumer_op + dbt_sub_model_signals_rebuild. After the W8a cutover the
     # Snowflake consumer feature_pregame_sub_model_signals reads the S3 parquet built from these
     # stores, so the store parquets MUST be refreshed (here) before the consumer parquet is rebuilt —
