@@ -333,19 +333,23 @@ def injury_availability_games(df: pd.DataFrame, blend: float = _INJURY_OVERRIDE_
     return np.where(flagged, (1.0 - blend) * eg + blend * np.minimum(eg, cap), eg)
 
 
-def environment_tilt_scale(df: pd.DataFrame, blend: float = _ENV_TILT_BLEND) -> np.ndarray:
-    """NF-D2 slice 4 — the per-QB multiplicative environment tilt from the projection-season team's
-    Week-1 implied points (`df['team_env']`). A z-score WITHIN the projected QB field → `exp(blend·z)`,
-    clamped to [_ENV_TILT_LO, _ENV_TILT_HI]; non-QB rows and rows without a team_env → 1.0 (no-op).
-    Leakage-safe (a Week-1 line is set before any of the season's games are played). No-op when the
-    `team_env` column is absent or blend == 0."""
+def environment_tilt_scale(df: pd.DataFrame, blend: float = _ENV_TILT_BLEND,
+                           positions: tuple = _ENV_TILT_POSITIONS) -> np.ndarray:
+    """NF-D2 slice 4 / NF-D4 — the per-position multiplicative environment tilt from the projection-
+    season team's forward Vegas environment (`df['team_env']` — Week-1 implied points in the slice-4
+    ship, or the NF-D4 preseason WIN TOTAL). A z-score WITHIN each tilted position's field →
+    `exp(blend·z)`, clamped to [_ENV_TILT_LO, _ENV_TILT_HI]; rows outside `positions` and rows without a
+    team_env → 1.0 (no-op). The tilt is UNIT-INVARIANT (it z-scores team_env), so swapping the env
+    source only changes the ordering, not the mechanism. Leakage-safe (a Week-1 line / preseason win
+    total is set before any of the season's games). No-op when `team_env` is absent or blend == 0.
+    `positions` defaults to the shipped QB-only scope; NF-D4 ablates extending it to skill positions."""
     n = len(df)
     if blend <= 0.0 or "team_env" not in df.columns:
         return np.ones(n)
     env = pd.to_numeric(df["team_env"], errors="coerce").to_numpy()
     pos = np.array([(p or "").upper() for p in df["position"]], dtype=object)
     scale = np.ones(n)
-    for p in _ENV_TILT_POSITIONS:
+    for p in positions:
         idx = np.where(pos == p)[0]
         ev = env[idx]
         mk = np.isfinite(ev)
@@ -461,6 +465,7 @@ def project_veterans(
     role_vol_prior: dict | None = None,
     mover_opportunity_blend: float = _MOVER_OPP_BLEND,
     env_tilt_blend: float = _ENV_TILT_BLEND,
+    env_tilt_positions: tuple = _ENV_TILT_POSITIONS,
     injury_override_blend: float = _INJURY_OVERRIDE_BLEND,
 ) -> pd.DataFrame:
     """Project every base-season player's UPCOMING-season raw stat line.
@@ -538,15 +543,23 @@ def project_veterans(
             (df["proj_rush_att"].to_numpy() + df["proj_rec"].to_numpy()) * 0.006, 2)
         df = score_line(df, prefix="proj_")
 
-    # ── NF-D2 slice 4: Vegas team ENVIRONMENT tilt (QB only) from the projection-season team's Week-1
-    #    implied points. Disjoint from the mover step (QB vs RB/WR/TE) so order is irrelevant. No-op
-    #    when the team_env column is absent or env_tilt_blend == 0.
+    # ── NF-D2 slice 4 / NF-D4: Vegas team ENVIRONMENT tilt from the projection-season team's forward
+    #    Vegas environment (`team_env` = Week-1 implied points in the slice-4 ship, or the NF-D4
+    #    preseason WIN TOTAL). Disjoint from the mover step (QB vs RB/WR/TE) so order is irrelevant when
+    #    QB-scoped. NF-D4: the scaled column set now includes the receiving line so `env_tilt_positions`
+    #    can be widened past QB — a QB's receiving line is ~0, so including it is a no-op for the shipped
+    #    QB-only scope. `proj_pass_int` stays UNSCALED by design (a better environment lifts production,
+    #    not interceptions). No-op when the team_env column is absent or env_tilt_blend == 0.
     if env_tilt_blend > 0 and "team_env" in df.columns:
-        escale = environment_tilt_scale(df, blend=env_tilt_blend)
+        escale = environment_tilt_scale(df, blend=env_tilt_blend, positions=env_tilt_positions)
         for col in ("proj_pass_att", "proj_pass_cmp", "proj_pass_yds", "proj_pass_td",
-                    "proj_rush_att", "proj_rush_yds", "proj_rush_td"):
+                    "proj_rush_att", "proj_rush_yds", "proj_rush_td",
+                    "proj_targets", "proj_rec", "proj_rec_yds", "proj_rec_td"):
             df[col] = df[col].to_numpy() * escale
         df["proj_pass_cmp"] = np.minimum(df["proj_pass_cmp"], df["proj_pass_att"])
+        df["proj_rec"] = np.minimum(df["proj_rec"], df["proj_targets"])
+        df["proj_fumbles_lost"] = np.round(
+            (df["proj_rush_att"].to_numpy() + df["proj_rec"].to_numpy()) * 0.006, 2)
         df = score_line(df, prefix="proj_")
 
     # ── NF-D2 slice 5: INJURY / AVAILABILITY. Cap expected games for a player flagged unavailable
