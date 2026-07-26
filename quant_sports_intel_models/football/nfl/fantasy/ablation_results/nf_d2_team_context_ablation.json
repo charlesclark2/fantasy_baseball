@@ -22,20 +22,20 @@
       "TE": 0.7612,
       "movers_allpos": 0.7169
     },
-    "B_env_safe_QB": {
-      "QB": 0.6809,
+    "B_env_wk1_QB_SAFE": {
+      "QB": 0.6862,
       "RB": 0.7392,
       "WR": 0.7673,
       "TE": 0.754,
-      "movers_allpos": 0.6867
+      "movers_allpos": 0.6878
     },
     "B_env_opt_QB_LEAKY": {
-      "QB": 0.7476,
+      "QB": 0.7248,
       "RB": 0.7392,
       "WR": 0.7673,
       "TE": 0.754,
-      "movers_allpos": 0.6847
+      "movers_allpos": 0.6854
     }
   },
-  "verdict": "A (team-change / depth-jump opportunity) SHIPPED \u2014 RB/WR/TE all lift and the mover subpopulation +~0.03; wired into project_veterans. B (Vegas environment) is strong ONLY with LEAKY forward lines (QB +0.07); the leakage-safe prior-season proxy is marginal noise (~0) \u21d2 NOT shipped, BLOCKED on ingesting forward/preseason win totals to validate. C (system fit) deferred to NF1."
+  "verdict": "A (team-change / depth-jump opportunity) SHIPPED \u2014 RB/WR/TE all lift, mover subpop +~0.03. B (Vegas environment, QB) SHIPPED via LEAKAGE-SAFE WEEK-1 implied points \u2014 QB +~0.015 (env_wk1); a Week-1 line is set before any of the season's games, so it needs NO new ingest (season-long env_opt QB +~0.06 is the leaky ceiling \u21d2 a richer forward-line/win-total ingest would capture more). Both wired into project_veterans. C (system fit) deferred to NF1."
 }

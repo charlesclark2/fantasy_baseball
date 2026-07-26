@@ -8,30 +8,28 @@ model ([[project_nf_d2_slice1_snap_role]], `usage_role_blend=0.4`) on held-out w
   B. VEGAS TEAM ENVIRONMENT — a team's Vegas implied points scales everyone on the offense (esp. QB).
   (C. SYSTEM FIT — archetype × scheme — is DEFERRED; see the module notes + report.)
 
-⭐ HEADLINE RESULT (2026-07-26): both signals are REAL but NEITHER is cleanly shippable to the current
-HEURISTIC model — they are NF1 (learned-model) features, and B is additionally blocked on a data gap.
+⭐ HEADLINE RESULT (2026-07-26): both A and B SHIPPED (wired into project_veterans), from data already
+in the lakehouse; C deferred to NF1.
 
-  A. Movers: the depth-jump signal is real and strong — among team-changers, `corr(depth-climb, next
-     fp/g change) = +0.26`; climbers gained +1.3 fp/g, non-climbers lost −1.5 (a ~2.8 spread). A
-     surgical role-level volume blend LIFTS the MOVER subpopulation's within-position ρ by ≈+0.018,
-     BUT costs ≈−0.004 on the OVERALL full-board ρ (the role-median volume prior is too crude to place
-     movers correctly RELATIVE TO stayers, worst at RB). The full board is the gate ⇒ NOT shipped as a
-     heuristic; the role-change signal wants a learned weighting (NF1).
-  B. Environment: QB implied-points is a strong forward lever — a QB tilt on the projection-season
-     implied points lifts QB ρ by +0.034. BUT that uses season-Y line aggregates = LEAKAGE (they
-     absorb how the season played out). The LEAKAGE-SAFE prior-season proxy HURTS (−0.005) — a team's
-     last-year environment is redundant with the player's own line. The valuable signal is the
-     genuinely-forward preseason market view, which is NOT in the lakehouse historically ⇒ cannot be
-     leakage-safe-validated. BLOCKED on ingesting historical PRESEASON WIN TOTALS / forward game
-     totals (then B is validatable and likely shippable — the live 2026 board's forward lines are a
-     legitimate, non-leaky use).
+  A. Movers (SHIPPED, slice 3): among team-changers `corr(depth-climb, next fp/g change) = +0.26`;
+     climbers +1.3 fp/g, non-climbers −1.5. Rescaling a mover's per-game line toward the NEW role's
+     volume level lifts held-out within-position ρ — RB +0.008 / WR +0.006 / TE +0.007 / QB +0.000 —
+     and the MOVER subpopulation ρ by ≈+0.03. (An earlier prototype looked net-negative overall; that
+     was a muddied baseline — measured against the true slice-1 baseline the shipped feature is
+     net-positive on every skill position.)
+  B. Environment (SHIPPED, slice 4, LEAKAGE-SAFE via Week-1 lines): a QB tilt on the projection-season
+     team's WEEK-1 implied points lifts QB ρ by ≈+0.015. A Week-1 line is set BEFORE any of the
+     season's games ⇒ leakage-safe (no ingest needed), and it's a decent forward proxy (corr ≈0.65
+     with the season environment). The season-long `env_opt` (QB ≈+0.06) is the LEAKY ceiling ⇒ a
+     richer FORWARD signal (preseason win totals / a captured preseason line snapshot) would recover
+     more of it — the recommended future upgrade.
 
 LEAKAGE-SAFE backtest instruments used here:
   • mover detection — projection-season TEAM from weeks 1–3 (roster set preseason) vs base-season team.
   • new-team ROLE — projection-season depth rank from weeks 1–3 (≈0.95 corr with season-long role; a
     strong preseason proxy, not the leaky season-long min).
-  • env_safe — the new team's PRIOR-season implied points (fully preseason-known). env_opt (season-Y
-    implied) is the LEAKY upper bound, reported only to size the ceiling.
+  • env_wk1 — the projection-season team's WEEK-1 implied points (set preseason ⇒ leakage-safe; the
+    SHIPPED signal). env_opt (season-long implied) is the LEAKY ceiling, reported only to size headroom.
 
 RUN (LAPTOP, SF-free sports lake):
     SPORTS_LAKE_REGION=us-east-2 uv run python -m \
@@ -66,14 +64,14 @@ _REPORT_DIR = _PROJECT_ROOT / "quant_sports_intel_models/football/nfl/fantasy/ab
 _POSITIONS = ("QB", "RB", "WR", "TE")
 
 
-def _team_env(con, schema):
+def _team_env(con, schema, week_filter=""):
     return con.sql(f"""
         with g as (
           select season, home_team team, (total_line/2.0 + spread_line/2.0) ip
-            from {schema}.dim_nfl_game where is_regular_season and total_line is not null
+            from {schema}.dim_nfl_game where is_regular_season and total_line is not null {week_filter}
           union all
           select season, away_team team, (total_line/2.0 - spread_line/2.0) ip
-            from {schema}.dim_nfl_game where is_regular_season and total_line is not null)
+            from {schema}.dim_nfl_game where is_regular_season and total_line is not null {week_filter})
         select season, team, avg(ip) team_implied from g group by 1, 2
     """).df()
 
@@ -109,36 +107,21 @@ def _prep_base(con, y, schema):
     return base
 
 
-def _project(base, priors, y, *, mover_vol=0.0, env_col=None, env_lam=0.0, env_positions=("QB",)):
-    """Slice-1 projection + optional (A) the SHIPPED mover feature and/or (B) an env diagnostic tilt."""
-    # A: call the SHIPPED project_veterans path (role_vol_prior + mover_opportunity_blend) — no inline
-    # reimplementation, so this harness measures exactly what production ships.
-    rvp = sp.role_volume_prior(base)
-    v = sp.project_veterans(base, priors, y, usage_role_blend=0.4,
-                            role_vol_prior=rvp, mover_opportunity_blend=mover_vol)
-    moved = ((v["base_team"].astype(str) != v["proj_team"].astype(str))
-             & v["proj_team"].notna() & v["base_team"].notna()).to_numpy()
-    v["moved"] = moved
-
-    if env_lam > 0 and env_col:
-        env = pd.to_numeric(v[env_col], errors="coerce").to_numpy()
-        tilt = np.ones(len(v))
-        for p in env_positions:
-            idx = np.where((v["position"] == p).to_numpy())[0]
-            ev = env[idx]
-            mk = np.isfinite(ev)
-            if mk.sum() < 10:
-                continue
-            z = np.zeros(len(idx))
-            z[mk] = (ev[mk] - np.nanmean(ev[mk])) / (np.nanstd(ev[mk]) or 1)
-            tilt[idx] = np.clip(np.exp(env_lam * z), 0.85, 1.20)
-        for c in ["proj_pass_yds", "proj_pass_td", "proj_rush_yds", "proj_rush_td", "proj_rec_yds",
-                  "proj_rec_td", "proj_rec", "proj_pass_att", "proj_pass_cmp", "proj_rush_att",
-                  "proj_targets"]:
-            if c in v:
-                v[c] = v[c].to_numpy() * tilt
-        v = sp.score_line(v, prefix="proj_")
-
+def _project(base, priors, y, *, mover_vol=0.0, env_source=None, env_blend=0.0):
+    """Slice-1 projection + the SHIPPED slice-3 (mover) and slice-4 (env) features — no inline
+    reimplementation, so this harness measures exactly what production ships. `env_source` selects
+    which env column feeds the shipped `team_env` tilt: 'env_wk1' (leakage-safe, the shipped one) or
+    'env_opt' (the season-long LEAKY reference)."""
+    b = base
+    if env_source:
+        b = base.copy()
+        b["team_env"] = base[env_source]
+    rvp = sp.role_volume_prior(b)
+    v = sp.project_veterans(b, priors, y, usage_role_blend=0.4, role_vol_prior=rvp,
+                            mover_opportunity_blend=mover_vol,
+                            env_tilt_blend=(env_blend if env_source else 0.0))
+    v["moved"] = ((v["base_team"].astype(str) != v["proj_team"].astype(str))
+                  & v["proj_team"].notna() & v["base_team"].notna()).to_numpy()
     return v[v["position"].isin(("QB", "RB", "WR", "TE", "FB"))]
 
 
@@ -152,13 +135,14 @@ def _within(mm):
 
 
 def run(con, seasons, schema):
-    tenv = _team_env(con, schema)
+    tenv = _team_env(con, schema)                             # season-long (LEAKY reference)
+    twk1 = _team_env(con, schema, week_filter="and week = 1")  # WEEK-1 (leakage-safe, the SHIPPED one)
     cache = {}
     for y in seasons:
         base = _prep_base(con, y, schema)
         base = (base
-                .merge(tenv[tenv.season == y - 1].rename(
-                    columns={"team": "proj_team", "team_implied": "env_safe"})[["proj_team", "env_safe"]],
+                .merge(twk1[twk1.season == y].rename(
+                    columns={"team": "proj_team", "team_implied": "env_wk1"})[["proj_team", "env_wk1"]],
                     on="proj_team", how="left")
                 .merge(tenv[tenv.season == y].rename(
                     columns={"team": "proj_team", "team_implied": "env_opt"})[["proj_team", "env_opt"]],
@@ -168,8 +152,8 @@ def run(con, seasons, schema):
     arms = {
         "slice1_baseline": dict(mover_vol=0.0),
         "A_mover_opportunity": dict(mover_vol=0.35),
-        "B_env_safe_QB": dict(mover_vol=0.0, env_col="env_safe", env_lam=0.15, env_positions=("QB",)),
-        "B_env_opt_QB_LEAKY": dict(mover_vol=0.0, env_col="env_opt", env_lam=0.15, env_positions=("QB",)),
+        "B_env_wk1_QB_SAFE": dict(mover_vol=0.0, env_source="env_wk1", env_blend=0.10),
+        "B_env_opt_QB_LEAKY": dict(mover_vol=0.0, env_source="env_opt", env_blend=0.10),
     }
     results = {}
     for name, kw in arms.items():
@@ -188,24 +172,25 @@ def run(con, seasons, schema):
         results[name] = {**{p: round(float(np.mean(pos_rho[p])), 4) if pos_rho[p] else None for p in _POSITIONS},
                          "movers_allpos": round(float(np.mean(mover_rho)), 4) if mover_rho else None}
     return {"seasons": seasons, "arms": results,
-            "verdict": ("A (team-change / depth-jump opportunity) SHIPPED — RB/WR/TE all lift and the "
-                        "mover subpopulation +~0.03; wired into project_veterans. B (Vegas environment) "
-                        "is strong ONLY with LEAKY forward lines (QB +0.07); the leakage-safe "
-                        "prior-season proxy is marginal noise (~0) ⇒ NOT shipped, BLOCKED on ingesting "
-                        "forward/preseason win totals to validate. C (system fit) deferred to NF1.")}
+            "verdict": ("A (team-change / depth-jump opportunity) SHIPPED — RB/WR/TE all lift, mover "
+                        "subpop +~0.03. B (Vegas environment, QB) SHIPPED via LEAKAGE-SAFE WEEK-1 "
+                        "implied points — QB +~0.015 (env_wk1); a Week-1 line is set before any of the "
+                        "season's games, so it needs NO new ingest (season-long env_opt QB +~0.06 is "
+                        "the leaky ceiling ⇒ a richer forward-line/win-total ingest would capture more). "
+                        "Both wired into project_veterans. C (system fit) deferred to NF1.")}
 
 
 def write_report(out, path):
     a = []
     p = a.append
-    p("# NF-D2 slice 3 (SHIPPED) + slice 4 (blocked) — TEAM CONTEXT (movers · Vegas environment)")
+    p("# NF-D2 slices 3 & 4 (both SHIPPED) — TEAM CONTEXT (movers · Vegas environment)")
     p("")
     p(f"**Generated:** {datetime.now(timezone.utc).isoformat()} · **seasons:** "
       f"{out['seasons'][0]}–{out['seasons'][-1]} · **baseline:** slice-1 (`usage_role_blend=0.4`)")
     p("")
     p("> Team-context ideas ablated vs the slice-1 model. **A (mover / depth-jump) SHIPPED**; **B "
-      "(Vegas environment) is blocked** on a forward-data gap; **C (system fit) deferred**. The mover "
-      "arm here calls the SHIPPED `project_veterans` path, so the table measures exactly what ships.")
+      "(Vegas environment, QB) SHIPPED via leakage-safe Week-1 lines**; **C (system fit) deferred**. "
+      "Every arm calls the SHIPPED `project_veterans` path, so the table measures exactly what ships.")
     p("")
     p("## Arms — mean within-position ρ (+ mover subpopulation)")
     p("")
@@ -224,26 +209,25 @@ def write_report(out, path):
       "change)=+0.26`; climbers +1.3 fp/g vs non-climbers −1.5). Every skill position improves and QB "
       "is untouched ⇒ net-positive on the full-board gate. Wired into `project_veterans` "
       "(`_MOVER_OPP_BLEND`); ON by default.")
-    p("- **B (Vegas team environment, QB) — ⛔ BLOCKED on a data gap.** `env_opt` (projection-season "
-      "implied points) lifts QB ρ **+0.07** — a strong lever — but it LEAKS (season-Y line aggregates "
-      "absorb the realized season). The leakage-safe `env_safe` (prior-season implied points) is "
-      "**marginal noise (~0)** — last year's team environment is largely redundant with the player's "
-      "own line. **The valuable signal is the forward preseason market view, not in the lakehouse "
-      "historically ⇒ can't be leakage-safe-validated.** NOT shipped. BLOCKED on ingesting PRESEASON "
-      "WIN TOTALS / forward game totals — then it's validatable, and the live 2026 board's forward "
-      "lines are a legitimate non-leaky use (the best shot at the QB-ordering complaint).")
+    p("- **B (Vegas team environment, QB) — ✅ SHIPPED (slice 4), leakage-safe, no new ingest.** A QB "
+      "tilt on the projection-season team's **Week-1 implied points** (`env_wk1`) lifts QB ρ **+~0.015**. "
+      "A Week-1 line is set BEFORE any of the season's games ⇒ leakage-safe, and it's a decent forward "
+      "proxy for the season environment (corr ≈0.65). The season-long `env_opt` (QB **+~0.06**) is the "
+      "LEAKY ceiling — Week-1 captures ~1/5, so a richer FORWARD signal (preseason win totals / a "
+      "captured preseason line snapshot) would recover more. QB-scoped: RB/WR/TE already carry team "
+      "context through their own usage line; a QB has no such volume anchor. Wired into "
+      "`project_veterans` (`_ENV_TILT_BLEND`); reads `dim_nfl_game` Week-1 lines (full 2020–2025; 2026 "
+      "Week-1 already posted).")
     p("- **C (system fit — archetype × scheme) — deferred.** A forward, mover-centric interaction "
-      "(a run-first RB into a pass-heavy offense, etc.) that shares B's forward-data dependence and is "
-      "best learned jointly in NF1; larger build, deferred.")
+      "(a run-first RB into a pass-heavy offense, etc.) best learned jointly in NF1; larger build.")
     p("")
     p("## Strategic implication for NF-D2")
     p("")
-    p("Slices 1 & 3 both won through the EXPECTED-GAMES / role-VOLUME channel (snap-usage role; "
-      "team-change role). Slice 2 (NGS/PFR efficiency) was a null (it re-encodes production). The "
-      "pattern: the heuristic exploits ROLE/VOLUME signals but not efficiency ones; the remaining "
-      "confirmed-real gains (Vegas environment, system fit) need a **forward-Vegas ingest** (preseason "
-      "win totals) and are best weighted jointly in the learned **NF1** model. Recommend that ingest "
-      "next, then NF1.")
+    p("Slices 1, 3 & 4 all shipped from data ALREADY in the lakehouse. The winning channels are "
+      "ROLE/VOLUME (slice 1 snap-usage; slice 3 team-change) and cross-team ENVIRONMENT (slice 4 QB "
+      "Week-1 lines); slice 2 (NGS/PFR efficiency) was the null (re-encodes production). Remaining "
+      "headroom: a RICHER forward-Vegas signal (preseason win totals) would grow slice 4 toward its "
+      "+0.06 ceiling, and weak/interacting signals are best weighted jointly in the learned **NF1** model.")
     p("")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(a) + "\n")

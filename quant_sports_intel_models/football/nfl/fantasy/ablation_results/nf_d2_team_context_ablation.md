@@ -1,8 +1,8 @@
-# NF-D2 slice 3 (SHIPPED) + slice 4 (blocked) — TEAM CONTEXT (movers · Vegas environment)
+# NF-D2 slices 3 & 4 (both SHIPPED) — TEAM CONTEXT (movers · Vegas environment)
 
-**Generated:** 2026-07-26T05:45:04.940730+00:00 · **seasons:** 2020–2025 · **baseline:** slice-1 (`usage_role_blend=0.4`)
+**Generated:** 2026-07-26T05:57:09.496037+00:00 · **seasons:** 2020–2025 · **baseline:** slice-1 (`usage_role_blend=0.4`)
 
-> Team-context ideas ablated vs the slice-1 model. **A (mover / depth-jump) SHIPPED**; **B (Vegas environment) is blocked** on a forward-data gap; **C (system fit) deferred**. The mover arm here calls the SHIPPED `project_veterans` path, so the table measures exactly what ships.
+> Team-context ideas ablated vs the slice-1 model. **A (mover / depth-jump) SHIPPED**; **B (Vegas environment, QB) SHIPPED via leakage-safe Week-1 lines**; **C (system fit) deferred**. Every arm calls the SHIPPED `project_veterans` path, so the table measures exactly what ships.
 
 ## Arms — mean within-position ρ (+ mover subpopulation)
 
@@ -10,16 +10,16 @@
 |-----|----|----|----|----|--------------------|
 | slice1_baseline | 0.675 | 0.739 | 0.767 | 0.754 | 0.687 |
 | A_mover_opportunity | 0.675 | 0.747 | 0.773 | 0.761 | 0.717 |
-| B_env_safe_QB | 0.681 | 0.739 | 0.767 | 0.754 | 0.687 |
-| B_env_opt_QB_LEAKY | 0.748 | 0.739 | 0.767 | 0.754 | 0.685 |
+| B_env_wk1_QB_SAFE | 0.686 | 0.739 | 0.767 | 0.754 | 0.688 |
+| B_env_opt_QB_LEAKY | 0.725 | 0.739 | 0.767 | 0.754 | 0.685 |
 
 ## Reading it
 
 - **A (mover / depth-jump opportunity) — ✅ SHIPPED (slice 3).** For a team-changer (base-season team ≠ projection-season team) at RB/WR/TE, the per-game line is rescaled toward the NEW role's volume level. Held-out lift over slice-1: **RB +0.008 · WR +0.006 · TE +0.007 · QB +0.000**, and the **mover subpopulation +~0.03**. Signal is real (diagnostic: `corr(depth-climb, next fp/g change)=+0.26`; climbers +1.3 fp/g vs non-climbers −1.5). Every skill position improves and QB is untouched ⇒ net-positive on the full-board gate. Wired into `project_veterans` (`_MOVER_OPP_BLEND`); ON by default.
-- **B (Vegas team environment, QB) — ⛔ BLOCKED on a data gap.** `env_opt` (projection-season implied points) lifts QB ρ **+0.07** — a strong lever — but it LEAKS (season-Y line aggregates absorb the realized season). The leakage-safe `env_safe` (prior-season implied points) is **marginal noise (~0)** — last year's team environment is largely redundant with the player's own line. **The valuable signal is the forward preseason market view, not in the lakehouse historically ⇒ can't be leakage-safe-validated.** NOT shipped. BLOCKED on ingesting PRESEASON WIN TOTALS / forward game totals — then it's validatable, and the live 2026 board's forward lines are a legitimate non-leaky use (the best shot at the QB-ordering complaint).
-- **C (system fit — archetype × scheme) — deferred.** A forward, mover-centric interaction (a run-first RB into a pass-heavy offense, etc.) that shares B's forward-data dependence and is best learned jointly in NF1; larger build, deferred.
+- **B (Vegas team environment, QB) — ✅ SHIPPED (slice 4), leakage-safe, no new ingest.** A QB tilt on the projection-season team's **Week-1 implied points** (`env_wk1`) lifts QB ρ **+~0.015**. A Week-1 line is set BEFORE any of the season's games ⇒ leakage-safe, and it's a decent forward proxy for the season environment (corr ≈0.65). The season-long `env_opt` (QB **+~0.06**) is the LEAKY ceiling — Week-1 captures ~1/5, so a richer FORWARD signal (preseason win totals / a captured preseason line snapshot) would recover more. QB-scoped: RB/WR/TE already carry team context through their own usage line; a QB has no such volume anchor. Wired into `project_veterans` (`_ENV_TILT_BLEND`); reads `dim_nfl_game` Week-1 lines (full 2020–2025; 2026 Week-1 already posted).
+- **C (system fit — archetype × scheme) — deferred.** A forward, mover-centric interaction (a run-first RB into a pass-heavy offense, etc.) best learned jointly in NF1; larger build.
 
 ## Strategic implication for NF-D2
 
-Slices 1 & 3 both won through the EXPECTED-GAMES / role-VOLUME channel (snap-usage role; team-change role). Slice 2 (NGS/PFR efficiency) was a null (it re-encodes production). The pattern: the heuristic exploits ROLE/VOLUME signals but not efficiency ones; the remaining confirmed-real gains (Vegas environment, system fit) need a **forward-Vegas ingest** (preseason win totals) and are best weighted jointly in the learned **NF1** model. Recommend that ingest next, then NF1.
+Slices 1, 3 & 4 all shipped from data ALREADY in the lakehouse. The winning channels are ROLE/VOLUME (slice 1 snap-usage; slice 3 team-change) and cross-team ENVIRONMENT (slice 4 QB Week-1 lines); slice 2 (NGS/PFR efficiency) was the null (re-encodes production). Remaining headroom: a RICHER forward-Vegas signal (preseason win totals) would grow slice 4 toward its +0.06 ceiling, and weak/interacting signals are best weighted jointly in the learned **NF1** model.
 

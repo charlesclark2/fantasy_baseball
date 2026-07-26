@@ -244,6 +244,25 @@ def load_base_season(
     return df
 
 
+def load_team_week1_env(con, projection_season: int, schema: str = MARTS_SCHEMA) -> pd.DataFrame:
+    """NF-D2 slice 4 — each team's WEEK-1 implied points for the PROJECTION season = a leakage-safe
+    forward read on its offensive environment (a Week-1 line is set before any of the season's games
+    are played). implied points = total/2 ± spread/2 (home +, away −). Keyed by team → `team_env` for
+    a join on the projected player's projection-season team. Empty when no Week-1 lines are posted yet."""
+    return con.sql(f"""
+        with e as (
+            select home_team as team, (total_line/2.0 + spread_line/2.0) as ip
+            from {schema}.dim_nfl_game
+            where is_regular_season and week = 1 and season = {projection_season} and total_line is not null
+            union all
+            select away_team as team, (total_line/2.0 - spread_line/2.0) as ip
+            from {schema}.dim_nfl_game
+            where is_regular_season and week = 1 and season = {projection_season} and total_line is not null
+        )
+        select team as proj_team, avg(ip) as team_env from e group by 1
+    """).df()
+
+
 def load_rookie_training(con, upto_season: int, schema: str = MARTS_SCHEMA) -> pd.DataFrame:
     """Historical drafted rookies (skill positions, draft_year ≤ base season) joined to their
     rookie-year raw stat TOTALS — the training base for the draft-slot production curves."""
@@ -296,8 +315,15 @@ def load_realized_season(con, season: int, schema: str = MARTS_SCHEMA) -> pd.Dat
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 def build_projection(con, base_season: int, projection_season: int, schema: str,
                      usage_role_blend: float | None = None,
-                     mover_opportunity_blend: float | None = None) -> pd.DataFrame:
+                     mover_opportunity_blend: float | None = None,
+                     env_tilt_blend: float | None = None) -> pd.DataFrame:
     base = load_base_season(con, base_season, schema)
+    # NF-D2 slice 4: attach the projection-season team's Week-1 implied points (leakage-safe forward
+    # environment) on the forward team, for the QB environment tilt. A NULL join (unknown forward team
+    # / no Week-1 line yet) makes the tilt a no-op.
+    env = load_team_week1_env(con, projection_season, schema)
+    if not env.empty and "proj_team" in base.columns:
+        base = base.merge(env, on="proj_team", how="left")
     priors = positional_pergame_priors(base)
     kw = {} if usage_role_blend is None else {"usage_role_blend": usage_role_blend}
     # NF-D2 slice 3: the role→volume prior (in-fold from the base season) drives the team-changer
@@ -306,6 +332,8 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     kw["role_vol_prior"] = role_volume_prior(base)
     if mover_opportunity_blend is not None:
         kw["mover_opportunity_blend"] = mover_opportunity_blend
+    if env_tilt_blend is not None:
+        kw["env_tilt_blend"] = env_tilt_blend
     vets = project_veterans(base, priors, projection_season, **kw)
 
     rookies_all = pd.read_parquet(_ROOKIE_PARQUET)
@@ -459,6 +487,12 @@ def write_report(proj: pd.DataFrame, cov: dict, backtests: list[dict], path: Pat
       "`ablation_results/nf_d2_team_context_ablation.md`. Leakage-safe (the forward team + role are "
       "read from the freshest preseason depth-chart snapshot). Fires only where the depth feed has "
       "captured the move, so re-run as the offseason depth charts refresh through camp.")
+    p("- **Vegas team environment — QB (NF-D2 slice 4)** — a QB's projection is tilted (≤±10%) by the "
+      "projection-season team's WEEK-1 implied points, a LEAKAGE-SAFE forward read on the offense (a "
+      "Week-1 line is set before any of the season's games). Ablated held-out QB ρ lift +0.012 "
+      "(2020–2025) — see `ablation_results/nf_d2_team_context_ablation.md`. QB-scoped (RB/WR/TE carry "
+      "team context via their own usage line). A richer forward-Vegas signal (preseason win totals) "
+      "would grow this toward its +0.06 leaky ceiling.")
     p("- **Rookies (QB/RB/WR/TE)** — a historical draft-slot → rookie-year production curve (power-law "
       "per position, fit on prior classes) nudged by the **NCAAF-P1A residual** (`projected_nfl_z` vs "
       "the slot-expected z — talent the draft board disagreed with), with deliberately wide intervals. "

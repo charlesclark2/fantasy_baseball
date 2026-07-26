@@ -907,3 +907,46 @@ starter_ip_v1:
     for Layer 3 stacking. starter_ip_p20_outs is the key input to 6D Candidate B Stage 1
     (maximum bullpen exposure under pessimistic starter depth).
     Backfilled 27,584 rows (13,928 games, 2020–2026) in starter_ip_signals on 2026-06-01.
+
+# =============================================================================
+# E7.3 — MiLB → MLB translation factors (MLEs)   [PROSPECT PRIOR, not a Layer-3 betting signal]
+# =============================================================================
+# NOTE: this is NOT a per-game Layer-3 sub-model. It is a per-(player, level)
+# MLB-EQUIVALENT rate PRIOR (wOBA/K%/BB%/ISO) with PARAMETER uncertainty, built
+# SF-FREE (DuckDB over S3), consumed by E7.5 (wiring into eb_batter_posteriors)
+# and E8 Dynasty. It has no game_pk grain and emits no mart_sub_model_signals.
+# best_alpha = 0 (a projection + a betting prior, never a market bet).
+milb_mle_v1:
+  artifact_type: prospect_prior            # NOT a per-game betting signal
+  model_module: betting_ml/scripts/milb_mle/milb_mle.py
+  runner: betting_ml/scripts/milb_mle/run_milb_mle.py
+  substrate_builder: betting_ml/scripts/milb_mle/build_graduated_pairs.py
+  output_path: s3://baseball-betting-ml-artifacts/baseball/milb/derived/mle_projections   # Delta, --s3
+  grain: player_id_level                    # one row per (player, level)
+  metrics: [woba, k_pct, bb_pct, iso]       # each a separate translation
+  feature_sources:                          # SF-FREE lakehouse (E7.1/E7.2)
+    - baseball/milb/player_game_logs         # E7.1 box line (feature, as-of pre-debut)
+    - baseball/milb/statcast_aaa             # E7.2 AAA-Statcast add (coverage-conditioned)
+  label_source: baseball/lakehouse/mart_batter_rolling_stats   # realized MLB _std line
+  bakeoff:
+    candidates: [partial_pool, multiplicative, gbm]   # + level_mean null, identity/archetype benchmarks
+    solver: betting_ml/utils/hierarchical.py          # shared partial-pooling solver (reused)
+    cv_strategy: leave_one_mlb_debut_cohort_out_expanding
+    cv_metric: mae_raw_mlb_rate
+    deflation: {pbo_lt: 0.2, dsr_ge: 0.95}            # reported honestly (E2.1-r; robust-but-weak OK)
+    oracle_floor: enforced
+  uncertainty: parameter                    # E7.5 MUST recalibrate before pricing (E13.6)
+  best_alpha: 0
+  promotion_status: pending                 # harness code-complete; awaiting operator real S3 run
+  promoted_at: null
+  ablation_report: quant_sports_intel_models/baseball/edge_program/ablation_results/e7_3_milb_mle.md
+  tests: betting_ml/tests/test_milb_mle.py
+  notes: |
+    E7.3 (2026-07-26). The MiLB→MLB minor-league-equivalency MLE — the baseball analog of the
+    NCAAF-P1.2b (recruit→freshman) + P1A (college→NFL) feeder MLEs, reusing the SAME shared
+    hierarchical.py solver (promoted from the football tree to betting_ml/utils/). §0.5 bake-off
+    per metric: partial-pool (level nested, EB-shrunk, boundary-avoiding tau) vs multiplicative
+    (Davenport/James factor foil) vs GBM (+AAA-Statcast) vs level-mean null; identity + archetype
+    are REPORTED benchmarks (the prior E7.3 must beat). Leave-one-MLB-debut-cohort-out expanding CV.
+    Emits current PROSPECTS (is_prospect, no MLB label) from the latest map — the E7.5/E8 deliverable.
+    Harness code-complete + fast gate green; awaiting operator build_graduated_pairs + run_milb_mle.

@@ -109,6 +109,23 @@ _MOVER_OPP_BLEND = 0.35        # weight on the new-role volume level for a mover
 _MOVER_OPP_CAP = 1.6           # clamp the per-player mover rescale to [1/1.6, 1.6] (guard the tail)
 _MOVER_OPP_POSITIONS = ("RB", "WR", "TE")
 
+# ── NF-D2 slice 4: VEGAS TEAM ENVIRONMENT (ablated + SHIPPED 2026-07-26, LEAKAGE-SAFE via Week-1
+#    lines). A QB's fantasy output scales with the team's offensive environment; the market prices that
+#    forward. The valuable forward signal (season-long implied points) LEAKS in a backtest, but a team's
+#    WEEK-1 game line is set BEFORE any of the season's games are played ⇒ leakage-safe, and it is a
+#    decent proxy for the season environment (corr ≈0.65). Held-out QB ρ lift over the slice-1+3 model:
+#    **+0.012** (2020–2025; the leaky season-long ceiling is +0.06, so Week-1 captures ~1/5). SCOPED
+#    to QB — RB/WR/TE already carry team context through their own usage line; a QB has no such volume
+#    anchor, so the environment is where its cross-team ordering signal lives. The tilt is a mild
+#    z-scored multiplier on the passing/rushing line, clamped. `team_env` = the projection-season team's
+#    Week-1 implied points; a no-op when that column is absent (unknown forward team / no line).
+#    Blend/clamp are deliberately GENTLE (≤±10% per QB): a QB's own line already partly reflects his
+#    offense, so a large tilt would DOUBLE-COUNT; ρ (rank) is magnitude-insensitive, so the gentle
+#    setting keeps ~85% of the lift while staying face-valid on the board (no ±20% swings).
+_ENV_TILT_BLEND = 0.06                    # QB environment tilt strength (0 = off); gentle by design
+_ENV_TILT_LO, _ENV_TILT_HI = 0.92, 1.10  # clamp the per-QB environment multiplier to ±~10%
+_ENV_TILT_POSITIONS = ("QB",)
+
 # Minimum base-season games for a veteran to anchor a conservative positional prior (avoids the
 # cup-of-coffee crowd diluting the prior toward zero).
 _PRIOR_MIN_GAMES = 6
@@ -268,6 +285,30 @@ def mover_opportunity_scale(
     return scale
 
 
+def environment_tilt_scale(df: pd.DataFrame, blend: float = _ENV_TILT_BLEND) -> np.ndarray:
+    """NF-D2 slice 4 — the per-QB multiplicative environment tilt from the projection-season team's
+    Week-1 implied points (`df['team_env']`). A z-score WITHIN the projected QB field → `exp(blend·z)`,
+    clamped to [_ENV_TILT_LO, _ENV_TILT_HI]; non-QB rows and rows without a team_env → 1.0 (no-op).
+    Leakage-safe (a Week-1 line is set before any of the season's games are played). No-op when the
+    `team_env` column is absent or blend == 0."""
+    n = len(df)
+    if blend <= 0.0 or "team_env" not in df.columns:
+        return np.ones(n)
+    env = pd.to_numeric(df["team_env"], errors="coerce").to_numpy()
+    pos = np.array([(p or "").upper() for p in df["position"]], dtype=object)
+    scale = np.ones(n)
+    for p in _ENV_TILT_POSITIONS:
+        idx = np.where(pos == p)[0]
+        ev = env[idx]
+        mk = np.isfinite(ev)
+        if mk.sum() < 10:                       # too thin to standardise reliably ⇒ skip
+            continue
+        z = np.zeros(len(idx))
+        z[mk] = (ev[mk] - np.nanmean(ev[mk])) / (np.nanstd(ev[mk]) or 1.0)
+        scale[idx] = np.clip(np.exp(blend * z), _ENV_TILT_LO, _ENV_TILT_HI)
+    return scale
+
+
 def _games_sd(depth_rank: pd.Series, position: pd.Series) -> pd.Series:
     """Std-dev of the games estimate (drives the interval): a proven rank-1 starter is fairly
     predictable, a rotational/backup role is far more volatile (promotion or benching)."""
@@ -313,6 +354,7 @@ def project_veterans(
     usage_role_blend: float = _USAGE_ROLE_BLEND,
     role_vol_prior: dict | None = None,
     mover_opportunity_blend: float = _MOVER_OPP_BLEND,
+    env_tilt_blend: float = _ENV_TILT_BLEND,
 ) -> pd.DataFrame:
     """Project every base-season player's UPCOMING-season raw stat line.
 
@@ -387,6 +429,17 @@ def project_veterans(
         df["proj_rec"] = np.minimum(df["proj_rec"], df["proj_targets"])
         df["proj_fumbles_lost"] = np.round(
             (df["proj_rush_att"].to_numpy() + df["proj_rec"].to_numpy()) * 0.006, 2)
+        df = score_line(df, prefix="proj_")
+
+    # ── NF-D2 slice 4: Vegas team ENVIRONMENT tilt (QB only) from the projection-season team's Week-1
+    #    implied points. Disjoint from the mover step (QB vs RB/WR/TE) so order is irrelevant. No-op
+    #    when the team_env column is absent or env_tilt_blend == 0.
+    if env_tilt_blend > 0 and "team_env" in df.columns:
+        escale = environment_tilt_scale(df, blend=env_tilt_blend)
+        for col in ("proj_pass_att", "proj_pass_cmp", "proj_pass_yds", "proj_pass_td",
+                    "proj_rush_att", "proj_rush_yds", "proj_rush_td"):
+            df[col] = df[col].to_numpy() * escale
+        df["proj_pass_cmp"] = np.minimum(df["proj_pass_cmp"], df["proj_pass_att"])
         df = score_line(df, prefix="proj_")
 
     # ── 80% interval on the convenience PPR total. Two independent sources of season variance:

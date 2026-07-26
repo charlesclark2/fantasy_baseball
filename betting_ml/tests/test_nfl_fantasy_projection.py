@@ -195,6 +195,51 @@ def test_veteran_mover_into_bigger_role_projects_higher():
     assert on.loc["S0", "proj_fp_ppr"] == pytest.approx(off.loc["S0", "proj_fp_ppr"])  # stayer unchanged
 
 
+# ── NF-D2 slice 4: Vegas team environment (QB) ───────────────────────────────────────────────────
+def test_environment_tilt_boosts_high_env_qb_and_no_ops_others():
+    df = pd.DataFrame({
+        "position": ["QB", "QB", "QB", "RB"],
+        "team_env": [30.0, 22.0, 14.0, 30.0],   # a high / mid / low scoring environment; RB is out of scope
+    })
+    # pad to ≥10 QBs so the z-score path activates
+    extra = pd.DataFrame({"position": ["QB"] * 8, "team_env": [22.0] * 8})
+    d = pd.concat([df, extra], ignore_index=True)
+    scale = sp.environment_tilt_scale(d, blend=0.15)
+    assert scale[0] > 1.0            # high-env QB boosted
+    assert scale[2] < 1.0            # low-env QB cut
+    assert scale[3] == pytest.approx(1.0)   # RB out of scope
+    assert (scale >= sp._ENV_TILT_LO - 1e-9).all() and (scale <= sp._ENV_TILT_HI + 1e-9).all()
+
+
+def test_environment_tilt_is_noop_without_column_or_blend():
+    d = pd.DataFrame({"position": ["QB"] * 12})   # no team_env column
+    assert np.allclose(sp.environment_tilt_scale(d, blend=0.15), 1.0)
+    d2 = pd.DataFrame({"position": ["QB"] * 12, "team_env": [25.0] * 12})
+    assert np.allclose(sp.environment_tilt_scale(d2, blend=0.0), 1.0)   # blend 0 = off
+
+
+def test_veteran_env_tilt_orders_qbs_by_team_environment():
+    # two identical QBs differing only in team environment — the higher-env one projects higher
+    def qb(pid, env):
+        base = {"player_id": pid, "player_name": pid, "team_id": "AAA", "position": "QB",
+                "games_played": 16, "depth_chart_position_rank": 1, "fp_ppr_sd": 6.0, "team_env": env}
+        for s in sp._VET_PERGAME_STATS:
+            base[s + "_pg"] = 0.0
+        base.update(pass_att_pg=34, pass_cmp_pg=22, pass_yds_pg=250, pass_td_pg=1.6, pass_int_pg=0.7,
+                    rush_att_pg=4, rush_yds_pg=20, rush_td_pg=0.2)
+        return base
+    rows = [qb(f"Q{i}", 20.0 + (i % 5)) for i in range(12)]     # a spread of environments
+    rows.append(qb("HIGH", 30.0))
+    rows.append(qb("LOW", 15.0))
+    base = pd.DataFrame(rows)
+    priors = sp.positional_pergame_priors(base)
+    on = sp.project_veterans(base, priors, 2026, env_tilt_blend=0.15).set_index("player_id")
+    off = sp.project_veterans(base, priors, 2026, env_tilt_blend=0.0).set_index("player_id")
+    assert on.loc["HIGH", "proj_fp_ppr"] > off.loc["HIGH", "proj_fp_ppr"]   # boosted
+    assert on.loc["LOW", "proj_fp_ppr"] < off.loc["LOW", "proj_fp_ppr"]     # cut
+    assert on.loc["HIGH", "proj_fp_ppr"] > on.loc["LOW", "proj_fp_ppr"]
+
+
 # ── shrinkage ───────────────────────────────────────────────────────────────────────────────────
 def test_shrink_pulls_small_sample_harder():
     prior = np.array([10.0, 10.0])
