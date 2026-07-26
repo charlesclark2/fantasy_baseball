@@ -1,0 +1,208 @@
+{
+  "per_season": [
+    {
+      "season": 2023,
+      "n_scored_universe": 366,
+      "systems": {
+        "adp": {
+          "n_aligned": 150,
+          "us": {
+            "rho_by_pos": {
+              "QB": 0.177,
+              "RB": 0.376,
+              "WR": 0.755,
+              "TE": 0.343
+            },
+            "rho_pooled": 0.413,
+            "rank_mae": 9.64,
+            "top24_hit": "11/24"
+          },
+          "system": {
+            "rho_by_pos": {
+              "QB": 0.286,
+              "RB": 0.435,
+              "WR": 0.716,
+              "TE": 0.412
+            },
+            "rho_pooled": 0.462,
+            "rank_mae": 9.62,
+            "top24_hit": "9/24"
+          },
+          "delta_rho_by_pos": {
+            "QB": -0.109,
+            "RB": -0.059,
+            "WR": 0.039,
+            "TE": -0.069
+          },
+          "delta_rho_pooled": -0.049,
+          "delta_rank_mae": 0.02,
+          "disagreement": {
+            "n_high_disagreement": 38,
+            "us": 0.45,
+            "system": 0.335
+          },
+          "coverage_pct": 41.0
+        },
+        "ecr": {
+          "n_aligned": 316,
+          "us": {
+            "rho_by_pos": {
+              "QB": 0.514,
+              "RB": 0.672,
+              "WR": 0.753,
+              "TE": 0.749
+            },
+            "rho_pooled": 0.672,
+            "rank_mae": 15.53,
+            "top24_hit": "10/24"
+          },
+          "system": {
+            "rho_by_pos": {
+              "QB": 0.61,
+              "RB": 0.782,
+              "WR": 0.806,
+              "TE": 0.84
+            },
+            "rho_pooled": 0.759,
+            "rank_mae": 13.86,
+            "top24_hit": "9/24"
+          },
+          "delta_rho_by_pos": {
+            "QB": -0.096,
+            "RB": -0.11,
+            "WR": -0.053,
+            "TE": -0.091
+          },
+          "delta_rho_pooled": -0.087,
+          "delta_rank_mae": 1.67,
+          "disagreement": {
+            "n_high_disagreement": 79,
+            "us": 0.661,
+            "system": 0.776
+          },
+          "coverage_pct": 86.3
+        }
+      }
+    },
+    {
+      "season": 2024,
+      "n_scored_universe": 374,
+      "systems": {
+        "adp": {
+          "n_aligned": 150,
+          "us": {
+            "rho_by_pos": {
+              "QB": 0.449,
+              "RB": 0.559,
+              "WR": 0.408,
+              "TE": 0.507
+            },
+            "rho_pooled": 0.481,
+            "rank_mae": 10.51,
+            "top24_hit": "13/24"
+          },
+          "system": {
+            "rho_by_pos": {
+              "QB": 0.477,
+              "RB": 0.629,
+              "WR": 0.482,
+              "TE": 0.628
+            },
+            "rho_pooled": 0.554,
+            "rank_mae": 9.75,
+            "top24_hit": "11/24"
+          },
+          "delta_rho_by_pos": {
+            "QB": -0.028,
+            "RB": -0.07,
+            "WR": -0.074,
+            "TE": -0.121
+          },
+          "delta_rho_pooled": -0.073,
+          "delta_rank_mae": 0.76,
+          "disagreement": {
+            "n_high_disagreement": 38,
+            "us": 0.348,
+            "system": 0.195
+          },
+          "coverage_pct": 40.1
+        },
+        "ecr": {
+          "n_aligned": 355,
+          "us": {
+            "rho_by_pos": {
+              "QB": 0.72,
+              "RB": 0.792,
+              "WR": 0.73,
+              "TE": 0.742
+            },
+            "rho_pooled": 0.746,
+            "rank_mae": 16.67,
+            "top24_hit": "10/24"
+          },
+          "system": {
+            "rho_by_pos": {
+              "QB": 0.766,
+              "RB": 0.802,
+              "WR": 0.768,
+              "TE": 0.766
+            },
+            "rho_pooled": 0.776,
+            "rank_mae": 15.22,
+            "top24_hit": "9/24"
+          },
+          "delta_rho_by_pos": {
+            "QB": -0.046,
+            "RB": -0.01,
+            "WR": -0.038,
+            "TE": -0.024
+          },
+          "delta_rho_pooled": -0.03,
+          "delta_rank_mae": 1.45,
+          "disagreement": {
+            "n_high_disagreement": 89,
+            "us": 0.741,
+            "system": 0.778
+          },
+          "coverage_pct": 94.9
+        }
+      }
+    }
+  ],
+  "aggregate": {
+    "adp": {
+      "n_seasons": 2,
+      "us_rho_pooled": 0.447,
+      "system_rho_pooled": 0.508,
+      "delta_rho_pooled": -0.061,
+      "delta_rank_mae": 0.39,
+      "disagreement_us": 0.399,
+      "disagreement_system": 0.265,
+      "delta_rho_by_pos": {
+        "QB": -0.069,
+        "RB": -0.065,
+        "WR": -0.017,
+        "TE": -0.095
+      }
+    },
+    "ecr": {
+      "n_seasons": 2,
+      "us_rho_pooled": 0.709,
+      "system_rho_pooled": 0.768,
+      "delta_rho_pooled": -0.058,
+      "delta_rank_mae": 1.56,
+      "disagreement_us": 0.701,
+      "disagreement_system": 0.777,
+      "delta_rho_by_pos": {
+        "QB": -0.071,
+        "RB": -0.06,
+        "WR": -0.045,
+        "TE": -0.057
+      }
+    }
+  },
+  "seasons_scored": [
+    2023,
+    2024
+  ]
+}

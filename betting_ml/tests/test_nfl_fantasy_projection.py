@@ -477,3 +477,150 @@ def test_adp_name_normalization_and_aliases():
     assert n("Kenneth Walker III") == "kenneth walker"     # generational suffix stripped
     assert n("Ja'Marr Chase") == "jamarr chase"            # punctuation removed
     assert n("Amon-Ra St. Brown") == "amonra st brown"
+
+
+# ── NF-D3: FantasyPros ECR benchmark + the standing scorecard ─────────────────────────────────────
+fp = pytest.importorskip("quant_sports_intel_models.football.nfl.fantasy.fantasypros_source")
+bs = pytest.importorskip("quant_sports_intel_models.football.nfl.fantasy.benchmark_scorecard")
+
+
+def _fp_payload():
+    return {
+        "total_experts": 200, "last_updated": "9/06",
+        "players": [
+            {"player_name": "Christian McCaffrey", "player_position_id": "RB", "player_team_id": "SF",
+             "rank_ecr": 1, "rank_ave": "2.38", "rank_std": "4.45", "rank_min": "1", "rank_max": "55",
+             "pos_rank": "RB1", "tier": 1},
+            {"player_name": "Ja'Marr Chase", "player_position_id": "WR", "player_team_id": "CIN",
+             "rank_ecr": 2, "rank_ave": "3.1", "rank_std": "3.0", "rank_min": "1", "rank_max": "20",
+             "pos_rank": "WR1", "tier": 1},
+            # a K row that must be dropped from the skill crosswalk
+            {"player_name": "Justin Tucker", "player_position_id": "PK", "player_team_id": "BAL",
+             "rank_ecr": 200, "rank_ave": "200", "rank_std": "1", "rank_min": "190", "rank_max": "210",
+             "pos_rank": "K1", "tier": 15},
+        ],
+    }
+
+
+def test_fp_ecr_parses_from_cache(tmp_path):
+    # priming the cache means fetch does NO network call — pure parse of a frozen preseason snapshot
+    import json
+    (tmp_path / "fp_ecr_PPR_2024.json").write_text(json.dumps(_fp_payload()))
+    df = fp.fetch_fp_ecr(2024, scoring="PPR", cache_dir=tmp_path)
+    assert set(["rank_ecr", "rank_ave", "pos_rank", "position", "player_name"]).issubset(df.columns)
+    assert (df["season"] == 2024).all() and (df["source"] == "fantasypros").all()
+    cmc = df[df["player_name"] == "Christian McCaffrey"].iloc[0]
+    assert cmc["rank_ecr"] == 1 and cmc["position"] == "RB"
+    assert df[df["player_name"] == "Justin Tucker"].iloc[0]["position"] == "K"  # PK→K normalized
+    # dispersion fields coerced to numeric
+    assert float(cmc["rank_ave"]) == pytest.approx(2.38)
+
+
+def test_fp_ecr_empty_when_no_players(tmp_path):
+    import json
+    (tmp_path / "fp_ecr_PPR_2099.json").write_text(json.dumps({"players": []}))
+    df = fp.fetch_fp_ecr(2099, cache_dir=tmp_path)
+    assert df.empty and "rank_ecr" in df.columns
+
+
+# ── scorecard metric primitives (pure DataFrame logic, no con) ────────────────────────────────────
+def _scored(us, sys_score, real, positions):
+    return pd.DataFrame({
+        "player_id": [f"P{i}" for i in range(len(us))],
+        "position": positions,
+        "proj_fp_ppr": us,
+        "sys_score": sys_score,
+        "real_fp_ppr": real,
+    })
+
+
+def test_rank_mae_zero_for_perfect_order():
+    # a system whose within-position order EXACTLY matches realized has rank-MAE 0
+    d = _scored([50, 40, 30, 20, 10], [50, 40, 30, 20, 10], [90, 80, 70, 60, 50], ["RB"] * 5)
+    assert bs._rank_mae(d, "sys_score") == 0.0
+    # a REVERSED order is maximally wrong (non-zero)
+    d2 = _scored([50, 40, 30, 20, 10], [10, 20, 30, 40, 50], [90, 80, 70, 60, 50], ["RB"] * 5)
+    assert bs._rank_mae(d2, "sys_score") > 0
+
+
+def test_within_position_rho_and_delta_favours_better_orderer():
+    # our model orders RB perfectly; the "system" orders it reversed → +Δρ for us
+    n = 12
+    real = list(range(n, 0, -1))
+    us = list(range(n, 0, -1))          # perfect
+    syss = list(range(1, n + 1))        # reversed
+    d = _scored(us, syss, real, ["RB"] * n)
+    res = bs._score_pair(d, "proj_fp_ppr", "sys_score")
+    assert res["us"]["rho_pooled"] == pytest.approx(1.0)
+    assert res["system"]["rho_pooled"] == pytest.approx(-1.0)
+    assert res["delta_rho_pooled"] > 0                      # +Δ favours us
+    assert res["delta_rank_mae"] < 0                        # lower rank-MAE for us
+
+
+def test_disagreement_panel_credits_the_right_side():
+    # build a WR pool where, on the biggest us-vs-system disagreements, US predicts realized better
+    rng = np.random.default_rng(0)
+    n = 40
+    real = rng.normal(0, 1, n)
+    us = real + rng.normal(0, 0.2, n)        # us tracks realized closely
+    syss = rng.normal(0, 1, n)               # system is noise
+    d = _scored(list(us), list(syss), list(real), ["WR"] * n)
+    dz = bs._disagreement(d, "proj_fp_ppr", "sys_score")
+    assert dz and dz["us"] > dz["system"]
+
+
+def test_find_col_matches_case_and_space_insensitively():
+    assert bs._find_col(["Player Name", "Pos", "Overall Rank"], bs._RANK_COLS) == "Overall Rank"
+    assert bs._find_col(["player", "position", "FPTS"], bs._POINTS_COLS) == "FPTS"
+    assert bs._find_col(["a", "b"], bs._RANK_COLS) is None
+
+
+def test_discover_file_benchmarks_parses_system_and_season(tmp_path):
+    (tmp_path / "fantasy_footballers_2025.csv").write_text("player_name,position,rank\nX,RB,1\n")
+    (tmp_path / "pff_2024.csv").write_text("name,pos,points\nY,WR,300\n")
+    (tmp_path / "junk.csv").write_text("a,b\n1,2\n")            # no _season suffix → skipped
+    got = {(f["system"], f["season"]) for f in bs.discover_file_benchmarks(tmp_path)}
+    assert ("fantasy_footballers", 2025) in got and ("pff", 2024) in got
+    assert not any(f["system"] == "junk" for f in bs.discover_file_benchmarks(tmp_path))
+
+
+def test_load_file_benchmark_points_and_rank(tmp_path, monkeypatch):
+    # attach_gsis needs a con; stub it to assign a deterministic player_id per row (skill only)
+    def _fake_xw(con, df, season, schema="main_nfl_marts"):
+        out = df.copy()
+        out["player_id"] = ["G" + str(i) for i in range(len(out))]
+        return out
+    monkeypatch.setattr(bs.A, "attach_gsis", _fake_xw)
+    # POINTS file → score == points (higher better)
+    pts = tmp_path / "fantasy_footballers_2025.csv"
+    pts.write_text("Player,Position,Proj FP PPR\nA,RB,300\nB,WR,250\n")
+    fpts = bs.load_file_benchmark(None, pts, 2025)
+    assert set(fpts.columns) == {"player_id", "position", "score"}
+    assert fpts.sort_values("score", ascending=False).iloc[0]["score"] == 300
+    # RANK file → score == -rank (rank 1 is best → highest score)
+    rk = tmp_path / "espn_2025.csv"
+    rk.write_text("name,pos,overall_rank\nA,RB,1\nB,WR,5\n")
+    frk = bs.load_file_benchmark(None, rk, 2025)
+    assert frk.sort_values("score", ascending=False).iloc[0]["score"] == -1
+
+
+def test_load_file_benchmark_raises_on_missing_columns(tmp_path):
+    bad = tmp_path / "x_2025.csv"
+    bad.write_text("foo,bar\n1,2\n")
+    with pytest.raises(ValueError):
+        bs.load_file_benchmark(None, bad, 2025)
+
+
+def test_aggregate_averages_across_seasons():
+    per_season = [
+        {"season": 2023, "systems": {"ecr": {
+            "delta_rho_pooled": 0.02, "delta_rank_mae": -1.0, "delta_rho_by_pos": {"WR": 0.04},
+            "us": {"rho_pooled": 0.60}, "system": {"rho_pooled": 0.58}, "disagreement": {"us": 0.5, "system": 0.3}}}},
+        {"season": 2024, "systems": {"ecr": {
+            "delta_rho_pooled": 0.04, "delta_rank_mae": -3.0, "delta_rho_by_pos": {"WR": 0.06},
+            "us": {"rho_pooled": 0.62}, "system": {"rho_pooled": 0.58}, "disagreement": {"us": 0.5, "system": 0.3}}}},
+    ]
+    agg = bs._aggregate(per_season)
+    assert agg["ecr"]["n_seasons"] == 2
+    assert agg["ecr"]["delta_rho_pooled"] == pytest.approx(0.03)
+    assert agg["ecr"]["delta_rho_by_pos"]["WR"] == pytest.approx(0.05)
