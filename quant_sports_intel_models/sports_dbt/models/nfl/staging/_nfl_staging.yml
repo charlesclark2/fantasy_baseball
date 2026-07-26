@@ -49,6 +49,19 @@ models:
       - name: report_status
         description: Out / Doubtful / Questionable / (null). Free-text, not enum-constrained upstream.
 
+  - name: stg_nfl_sleeper_injuries
+    description: >
+      Sleeper `v1/players/nfl` forward-availability snapshot (NF-D5) — an earlier, offseason-
+      covering sibling to stg_nfl_injuries. `proj_status` is pre-mapped to the shared RES/PUP/NFI/
+      SUS vocabulary at ingest; `player_id` is Sleeper's native gsis_id backfilled by a deterministic
+      name/position crosswalk when null. Snapshot grain (no week); one row per player per season.
+    columns:
+      - name: player_id
+        description: Resolved NFL player key (native Sleeper gsis_id, or the name/pos crosswalk fallback).
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+
   - name: stg_nfl_players
     description: >
       The NFL player ID universe + cross-ID rosetta (nflverse players). NOT season-grained

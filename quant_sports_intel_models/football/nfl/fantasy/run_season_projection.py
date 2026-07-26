@@ -265,16 +265,47 @@ def load_team_week1_env(con, projection_season: int, schema: str = MARTS_SCHEMA)
 
 
 def load_forward_roster_status(con, projection_season: int, staging_schema: str = STAGING_SCHEMA) -> pd.DataFrame:
-    """NF-D2 slice 5 — each player's PROJECTION-season roster status from the EARLIEST available week
-    (leakage-safe: a Week-1 / preseason designation is set before any of the season's games; for a
-    not-yet-started season the earliest snapshot is the current offseason roster). `proj_status` feeds
-    the injury/availability cap (RES/PUP/NFI/SUS). Empty when the season's rosters aren't landed yet."""
-    return con.sql(f"""
-        select player_id, first(status order by week asc) as proj_status
+    """NF-D2 slice 5 (+ NF-D5) — each player's PROJECTION-season roster status from the EARLIEST
+    available week (leakage-safe: a Week-1 / preseason designation is set before any of the season's
+    games; for a not-yet-started season the earliest snapshot is the current offseason roster).
+    `proj_status` feeds the injury/availability cap (RES/PUP/NFI/SUS). ⭐ NF-D5: COALESCED with
+    Sleeper's `v1/players/nfl` forward-availability snapshot (`stg_nfl_sleeper_injuries`) — Sleeper
+    PREFERRED (fresher + offseason-covering; nflverse's roster `status` lags to camp), nflverse the
+    fallback. A not-yet-built Sleeper staging model (the ingest hasn't landed/rebuilt yet) degrades
+    cleanly to nflverse-only (WARN-tier — this feed is advisory, never serving-critical)."""
+    nflverse = con.sql(f"""
+        select player_id, first(status order by week asc) as proj_status_nflverse
         from {staging_schema}.stg_nfl_weekly_rosters
         where season = {projection_season} and player_id is not null
         group by 1
     """).df()
+    try:
+        sleeper = con.sql(f"""
+            select player_id, first(proj_status order by ingested_at desc) as proj_status_sleeper
+            from {staging_schema}.stg_nfl_sleeper_injuries
+            where season = {projection_season} and player_id is not null and proj_status is not null
+            group by 1
+        """).df()
+    except Exception:  # noqa: BLE001 — WARN-tier: advisory feed, never blocks the projection
+        log.warning("NF-D5: stg_nfl_sleeper_injuries not available (run run_sleeper_injuries_ingest.py "
+                    "+ rebuild nfl.staging) — forward roster status falls back to nflverse-only.")
+        sleeper = pd.DataFrame(columns=["player_id", "proj_status_sleeper"])
+    return _coalesce_forward_status(nflverse, sleeper)
+
+
+def _coalesce_forward_status(nflverse: pd.DataFrame, sleeper: pd.DataFrame) -> pd.DataFrame:
+    """NF-D5 — pure merge: PREFER `sleeper`'s mapped status over `nflverse`'s when both are present
+    for a player, falling back to nflverse when Sleeper has none (and vice versa — a player only
+    Sleeper has flagged, e.g. an offseason case nflverse hasn't caught up to, still surfaces). Either
+    frame may be empty (no rosters landed yet / Sleeper not ingested) — a clean no-op in that case."""
+    if sleeper is None or sleeper.empty:
+        return nflverse.rename(columns={"proj_status_nflverse": "proj_status"})
+    if nflverse is None or nflverse.empty:
+        return sleeper.rename(columns={"proj_status_sleeper": "proj_status"})[["player_id", "proj_status"]]
+    merged = nflverse.merge(sleeper, on="player_id", how="outer")
+    merged["proj_status"] = merged["proj_status_sleeper"].where(
+        merged["proj_status_sleeper"].notna(), merged["proj_status_nflverse"])
+    return merged[["player_id", "proj_status"]]
 
 
 def load_rookie_training(con, upto_season: int, schema: str = MARTS_SCHEMA) -> pd.DataFrame:
