@@ -102,15 +102,26 @@ def get_optional_user_id(request: Request) -> str | None:
 
 
 def _groups_from_request(request: Request) -> list[str]:
-    """Cognito groups for the caller, from the authorizer context (preferred) or the
-    raw Bearer token (fallback). API Gateway HTTP API delivers array claims as a
-    comma-separated string, so split on comma; the token has already been
-    signature-validated by the JWT authorizer before Lambda invokes."""
-    claims = _claims_from_event(request)
-    raw = claims.get("cognito:groups") or ""
-    if raw:
-        return [g.strip() for g in raw.split(",") if g.strip()]
-    return _groups_from_bearer(request.headers.get("Authorization"))
+    """Cognito groups for the caller — the UNION of the authorizer-context claim and the
+    raw Bearer-token payload.
+
+    Both sources are merged because the API Gateway HTTP API (v2) JWT authorizer delivers
+    a multi-valued claim like `cognito:groups` as a bracketed, space-separated STRING
+    (`[fantasy_comp subscriber]`), NOT comma-separated — so parsing the context alone is
+    unreliable (this is exactly why get_admin_user keeps a bearer-decode fallback). The
+    Bearer payload carries the claim as a clean JSON array. Unioning both, and parsing the
+    context for either bracket/space or comma delimiters, is robust to both formats. The
+    token is already signature-validated by the authorizer before Lambda invokes."""
+    groups: set[str] = set(_groups_from_bearer(request.headers.get("Authorization")))
+    raw = _claims_from_event(request).get("cognito:groups")
+    if isinstance(raw, list):
+        groups.update(str(g).strip() for g in raw if str(g).strip())
+    elif isinstance(raw, str) and raw.strip():
+        # Handle both "[a b]" (HTTP API v2) and "a,b" delimiter styles.
+        for part in raw.strip().strip("[]").replace(",", " ").split():
+            if part.strip():
+                groups.add(part.strip())
+    return list(groups)
 
 
 def require_fantasy_access(request: Request, user_id: str = Depends(get_user_id)) -> str:

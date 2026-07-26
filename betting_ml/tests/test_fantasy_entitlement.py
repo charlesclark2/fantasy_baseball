@@ -112,6 +112,43 @@ def test_require_fantasy_access_grants_via_bearer_fallback():
     assert deps.require_fantasy_access(req, "user-1") == "user-1"
 
 
+def _request_raw_ctx(raw_groups: str) -> Request:
+    """A Request whose authorizer context carries cognito:groups as a raw string, to
+    exercise the exact API-Gateway HTTP-API v2 bracketed/space delimiter format."""
+    scope = {
+        "type": "http",
+        "headers": [],
+        "aws.event": {
+            "requestContext": {
+                "authorizer": {"jwt": {"claims": {"sub": "u", "cognito:groups": raw_groups}}}
+            }
+        },
+    }
+    return Request(scope)
+
+
+@pytest.mark.parametrize(
+    "raw,granted",
+    [
+        ("[fantasy_comp subscriber]", True),   # HTTP API v2 bracketed + space-separated
+        ("[fantasy_comp]", True),
+        ("[beta_tester churned]", False),      # bracketed, no fantasy tier
+        ("subscriber,fantasy_comp", True),     # comma style
+        ("[beta_tester]", False),
+    ],
+)
+def test_require_fantasy_access_parses_gateway_group_formats(raw, granted):
+    # The 403-on-a-real-comp bug: a bracketed context claim was comma-split into garbage
+    # and never fell back → a legit fantasy_comp user was rejected. Both formats must work.
+    req = _request_raw_ctx(raw)
+    if granted:
+        assert deps.require_fantasy_access(req, "u") == "u"
+    else:
+        with pytest.raises(HTTPException) as exc:
+            deps.require_fantasy_access(req, "u")
+        assert exc.value.status_code == 403
+
+
 def test_require_fantasy_access_denies_via_bearer_fallback():
     req = _request(ctx_groups=None, auth_token=_bearer(["beta_tester"]))
     with pytest.raises(HTTPException) as exc:
