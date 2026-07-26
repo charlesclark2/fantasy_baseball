@@ -70,6 +70,29 @@ _SHRINK_K = 5.0
 SKILL_POSITIONS = ("QB", "RB", "WR", "TE", "FB")
 ROOKIE_POSITIONS = ("QB", "RB", "WR", "TE")
 
+# ── NF-D2 slice 1: base-season USAGE-SHARE role signal → expected games (the within-tier ordering
+#    lever, ablated 2026-07-25). Base-season snap share (`offense_pct`) is a validated volume/role
+#    signal that separates entrenched starters ("volume-EARNERS") from rotational depth bodies — the
+#    exact RB/WR ordering gap The Fantasy Footballers beat MVP-1 on. It predicts NEXT-season per-game
+#    production far better than it predicts games (ρ≈0.66 vs ≈0.20 within position), but it enters the
+#    model through expected-games because that is where a leakage-safe, non-double-counting role signal
+#    belongs (production continuity is already carried by the recency-weighted per-game line). The
+#    blend lifted held-out within-position ρ 2019–2025: RB +0.010, WR +0.009, TE +0.004, QB +0.000
+#    (a smooth plateau over blend∈[0.3,0.6]) — see run_projection_ablation.py.
+#
+#    POSITION-SCOPED, by design (a hypothesis-driven scope, not open tuning):
+#      • RB / WR — SNAP share is the clean volume signal → blend into expected games.
+#      • TE       — snap share confounds blocking vs receiving TEs, so it does NOT lift TE ordering;
+#                   TARGET share (the receiving-role signal) does → blend that instead.
+#      • QB       — untouched; the starter/backup games question is already governed by depth rank,
+#                   and a usage blend adds only noise (it regressed QB ρ in the ablation).
+_USAGE_ROLE_BLEND = 0.4          # weight on the usage-implied games term (plateau peak; 0=off=MVP-1)
+# usage share → an implied full-season games expectation. An 85%-snap RB is an entrenched every-down
+# starter (~15 g); a 30%-snap committee body (~7 g). Calibrated to the realized share→games map, held
+# deliberately gentle (the term is blended, never a hard override) and clamped to the [1,17] game range.
+_SNAP_GAMES_INTERCEPT, _SNAP_GAMES_SLOPE = 3.0, 14.0    # RB/WR: 3 + 14·snap_share
+_TGT_GAMES_INTERCEPT, _TGT_GAMES_SLOPE = 6.0, 55.0      # TE: 6 + 55·target_share (share ~0.05–0.20)
+
 # Minimum base-season games for a veteran to anchor a conservative positional prior (avoids the
 # cup-of-coffee crowd diluting the prior toward zero).
 _PRIOR_MIN_GAMES = 6
@@ -141,6 +164,42 @@ def expected_games(
     return pd.Series(np.clip(est, 1.0, 17.0), index=gp.index)
 
 
+def blend_usage_into_games(
+    base_eg: pd.Series,
+    position: pd.Series,
+    snap_share: pd.Series | None,
+    target_share: pd.Series | None,
+    blend: float = _USAGE_ROLE_BLEND,
+) -> pd.Series:
+    """NF-D2 slice 1 — refine the role/durability expected-games estimate with a base-season
+    USAGE-SHARE role signal, position-scoped (RB/WR ← snap share; TE ← target share; QB untouched).
+
+    Leakage-safe: snap/target share are realized BASE-season quantities, known at projection time.
+    Non-double-counting: this modifies only expected GAMES (playing-time), never the per-game line
+    (which already carries production). Where a player's usage share is unknown (a base-season
+    snap-count gap) the estimate falls through to the unchanged role/durability `base_eg`. Returns the
+    blended games, clamped to [1, 17]. `blend=0` is a no-op ⇒ the exact MVP-1 baseline (ablation off).
+    """
+    eg = pd.to_numeric(base_eg, errors="coerce").to_numpy(dtype=float)
+    if blend <= 0.0:
+        return pd.Series(np.clip(eg, 1.0, 17.0), index=base_eg.index)
+    pos = np.array([(p or "").upper() for p in position], dtype=object)
+    snap = (pd.to_numeric(snap_share, errors="coerce").to_numpy(dtype=float)
+            if snap_share is not None else np.full(len(eg), np.nan))
+    tgt = (pd.to_numeric(target_share, errors="coerce").to_numpy(dtype=float)
+           if target_share is not None else np.full(len(eg), np.nan))
+
+    # RB/WR ← snap-share-implied games
+    snap_games = np.clip(_SNAP_GAMES_INTERCEPT + _SNAP_GAMES_SLOPE * snap, 1.0, 17.0)
+    use_snap = np.isfinite(snap) & np.isin(pos, ("RB", "WR", "FB"))
+    eg = np.where(use_snap, (1.0 - blend) * eg + blend * snap_games, eg)
+    # TE ← target-share-implied games (receiving role, not blocking snaps)
+    tgt_games = np.clip(_TGT_GAMES_INTERCEPT + _TGT_GAMES_SLOPE * tgt, 1.0, 17.0)
+    use_tgt = np.isfinite(tgt) & (pos == "TE")
+    eg = np.where(use_tgt, (1.0 - blend) * eg + blend * tgt_games, eg)
+    return pd.Series(np.clip(eg, 1.0, 17.0), index=base_eg.index)
+
+
 def _games_sd(depth_rank: pd.Series, position: pd.Series) -> pd.Series:
     """Std-dev of the games estimate (drives the interval): a proven rank-1 starter is fairly
     predictable, a rotational/backup role is far more volatile (promotion or benching)."""
@@ -183,18 +242,28 @@ def project_veterans(
     base_season: pd.DataFrame,
     priors: pd.DataFrame,
     projection_season: int,
+    usage_role_blend: float = _USAGE_ROLE_BLEND,
 ) -> pd.DataFrame:
     """Project every base-season player's UPCOMING-season raw stat line.
 
     base_season: one row per (player_id) with `<stat>_pg` realized per-game counting stats,
-      `games_played`, `depth_chart_position_rank`, `fp_ppr_sd` (game-to-game PPR sd), team, position.
+      `games_played`, `depth_chart_position_rank`, `fp_ppr_sd` (game-to-game PPR sd), team, position,
+      and (NF-D2 slice 1) base-season `snap_share` / `target_share` usage-role signals (optional —
+      absent columns fall through to the MVP-1 role/durability expected-games estimate).
     priors: `positional_pergame_priors(base_season)` output.
+    usage_role_blend: weight on the usage-share role signal in expected games (0 = MVP-1 baseline,
+      the ablation "off" arm). Position-scoped inside `blend_usage_into_games`.
     Returns the RAW_STAT_COLS (season totals) + convenience fp + an 80% PPR interval, per player.
     """
     df = base_season.merge(priors, on="position", how="left")
     g = pd.to_numeric(df["games_played"], errors="coerce").fillna(0.0).to_numpy()
 
     eg = expected_games(df["games_played"], df["depth_chart_position_rank"], df["position"])
+    # NF-D2 slice 1: refine expected games with the base-season usage-share role signal (snap share
+    # for RB/WR, target share for TE). No-op when the columns are absent or usage_role_blend == 0.
+    eg = blend_usage_into_games(
+        eg, df["position"], df.get("snap_share"), df.get("target_share"), blend=usage_role_blend
+    )
     df["proj_games"] = eg.to_numpy()
 
     # shrink each per-game counting stat, then scale by expected games → season total

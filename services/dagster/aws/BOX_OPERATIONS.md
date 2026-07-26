@@ -143,6 +143,9 @@ These are enforced by `check_monitors_healthy_op` (an unset one = a silently-gat
 | `W8A_LAKEHOUSE_S3` | **`1`** | Feature layer + EB posteriors served from S3 (cut over 2026-06-30). |
 | `W8B_LAKEHOUSE_S3` | **`1`** | Serving pregame aggregator served from S3 (cut over 2026-06-30). |
 | `LINEUP_MONITOR_S3` | **`1`** | E11.20 phase-2a: lineup-monitor detection tick reads S3+DynamoDB, not Snowflake (kills the ~10-min COMPUTE_WH wake). Flipped + converged 2026-07-20. Off → detection wakes the warehouse every tick. ⚠️ Rollback (a soak regression) = set `0` AND remove from the enforced set, else this heartbeat false-pages. |
+| `W6_LAKEHOUSE_INTRADAY` | **`1`** | E11.20 phase-2a step 2 prereq: gates the intraday W6 odds-mart rebuild AND `W7B_INTRADAY_S3`'s `--book-odds --s3` read. Off → intraday serving silently falls back to Snowflake (stale odds / clobber). Cut over; enforced 2026-07-26. |
+| `W7B_INTRADAY_S3` | **`1`** | E11.20 phase-2a step 2: intraday serving/predict (`write_serving_store_intraday`, post_lineup re-score) read S3 instead of Snowflake. Flipped ~00:40Z 7/25, verified on the 7/25 slate (coverage 1.000). Off → intraday serving reads SF. |
+| `TICK_SF_FREE` | **`1`** | E11.20 phase-2a step 4 (the cost win): the 30-min `intraday_schedule_job` tick SKIPS `refresh_w1_external_tables` (~60-table refresh) + the dbt lineup rebuild = the #1 warehouse waker (~80% of the wake burn). Flipped 2026-07-26 ~04:48 UTC. Requires `SCHEDULE_LAKEHOUSE_INTRADAY=1` (inert+loud otherwise). ⚠️ In its first soak — rollback = set `0` AND remove from the enforced set (else the heartbeat false-pages). |
 
 ### 10b. Other cutover / gating flags — intended state (NOT auto-enforced; confirm per cutover)
 | Flag | Intended | Note |

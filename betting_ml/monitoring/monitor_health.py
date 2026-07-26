@@ -60,6 +60,16 @@ REQUIRED_INTRADAY_FLAGS = (
     # post_lineup coverage regresses, the rollback is LINEUP_MONITOR_S3=0 AND removing it here (else
     # this heartbeat false-pages on the intended-`0` rollback).
     "LINEUP_MONITOR_S3",             # lineup-monitor detection tick is Snowflake-free (S3+DynamoDB)
+    # E11.20 phase-2a steps 2+4 (2026-07-26): the INTRADAY serving/predict path reads S3 and the
+    # 30-min tick skips its SF ext-refresh + dbt-rebuild legs — the last high-frequency COMPUTE_WH
+    # wakers. Enforced so they can't silently drift back to Snowflake on a re-host (the W7B lesson).
+    # W6_LAKEHOUSE_INTRADAY is the prereq for W7B_INTRADAY_S3's --book-odds --s3 gate; if it drifts
+    # off, intraday serving silently falls back to SF. ⚠️ TICK_SF_FREE flipped 2026-07-26 and is in
+    # its first soak — if a soak regression forces rollback, set TICK_SF_FREE=0 AND remove it here
+    # (else this heartbeat false-pages on the intended-`0` rollback, per the LINEUP_MONITOR_S3 note).
+    "W6_LAKEHOUSE_INTRADAY",         # intraday W6 odds mart rebuild + the W7B_INTRADAY_S3 prereq
+    "W7B_INTRADAY_S3",               # intraday serving/predict read S3 (write_serving_store_intraday)
+    "TICK_SF_FREE",                  # the 30-min tick skips refresh_w1_external_tables + dbt rebuild
 )
 
 

@@ -1,0 +1,203 @@
+{
+  "slice": "snap_role",
+  "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "arms": [
+    {
+      "label": "MVP-1 baseline (no usage role)",
+      "kwargs": {
+        "usage_role_blend": 0.0
+      },
+      "n_seasons": 7,
+      "spearman_all": 0.7524,
+      "sp_QB": 0.642,
+      "sp_RB": 0.7077,
+      "sp_WR": 0.7074,
+      "sp_TE": 0.7203,
+      "per_season": [
+        {
+          "projection_season": 2019,
+          "n": 402,
+          "spearman_all": 0.727,
+          "mae_ppr": 44.9,
+          "top24_hit": "9/24",
+          "sp_QB": 0.599,
+          "sp_RB": 0.723,
+          "sp_WR": 0.664,
+          "sp_TE": 0.675
+        },
+        {
+          "projection_season": 2020,
+          "n": 421,
+          "spearman_all": 0.732,
+          "mae_ppr": 48.7,
+          "top24_hit": "9/24",
+          "sp_QB": 0.546,
+          "sp_RB": 0.613,
+          "sp_WR": 0.708,
+          "sp_TE": 0.634
+        },
+        {
+          "projection_season": 2021,
+          "n": 457,
+          "spearman_all": 0.737,
+          "mae_ppr": 44.8,
+          "top24_hit": "12/24",
+          "sp_QB": 0.715,
+          "sp_RB": 0.665,
+          "sp_WR": 0.695,
+          "sp_TE": 0.719
+        },
+        {
+          "projection_season": 2022,
+          "n": 442,
+          "spearman_all": 0.751,
+          "mae_ppr": 42.5,
+          "top24_hit": "11/24",
+          "sp_QB": 0.67,
+          "sp_RB": 0.692,
+          "sp_WR": 0.69,
+          "sp_TE": 0.728
+        },
+        {
+          "projection_season": 2023,
+          "n": 441,
+          "spearman_all": 0.743,
+          "mae_ppr": 43.0,
+          "top24_hit": "10/24",
+          "sp_QB": 0.623,
+          "sp_RB": 0.739,
+          "sp_WR": 0.68,
+          "sp_TE": 0.77
+        },
+        {
+          "projection_season": 2024,
+          "n": 438,
+          "spearman_all": 0.781,
+          "mae_ppr": 43.1,
+          "top24_hit": "9/24",
+          "sp_QB": 0.727,
+          "sp_RB": 0.758,
+          "sp_WR": 0.747,
+          "sp_TE": 0.734
+        },
+        {
+          "projection_season": 2025,
+          "n": 458,
+          "spearman_all": 0.796,
+          "mae_ppr": 38.9,
+          "top24_hit": "12/24",
+          "sp_QB": 0.614,
+          "sp_RB": 0.764,
+          "sp_WR": 0.768,
+          "sp_TE": 0.782
+        }
+      ]
+    },
+    {
+      "label": "+ snap/target usage role",
+      "kwargs": {
+        "usage_role_blend": 0.4
+      },
+      "n_seasons": 7,
+      "spearman_all": 0.7576,
+      "sp_QB": 0.642,
+      "sp_RB": 0.717,
+      "sp_WR": 0.7163,
+      "sp_TE": 0.727,
+      "per_season": [
+        {
+          "projection_season": 2019,
+          "n": 402,
+          "spearman_all": 0.727,
+          "mae_ppr": 45.3,
+          "top24_hit": "10/24",
+          "sp_QB": 0.599,
+          "sp_RB": 0.718,
+          "sp_WR": 0.667,
+          "sp_TE": 0.685
+        },
+        {
+          "projection_season": 2020,
+          "n": 421,
+          "spearman_all": 0.747,
+          "mae_ppr": 48.5,
+          "top24_hit": "9/24",
+          "sp_QB": 0.546,
+          "sp_RB": 0.639,
+          "sp_WR": 0.724,
+          "sp_TE": 0.649
+        },
+        {
+          "projection_season": 2021,
+          "n": 457,
+          "spearman_all": 0.748,
+          "mae_ppr": 44.4,
+          "top24_hit": "12/24",
+          "sp_QB": 0.715,
+          "sp_RB": 0.682,
+          "sp_WR": 0.71,
+          "sp_TE": 0.757
+        },
+        {
+          "projection_season": 2022,
+          "n": 442,
+          "spearman_all": 0.766,
+          "mae_ppr": 42.0,
+          "top24_hit": "12/24",
+          "sp_QB": 0.67,
+          "sp_RB": 0.726,
+          "sp_WR": 0.717,
+          "sp_TE": 0.715
+        },
+        {
+          "projection_season": 2023,
+          "n": 441,
+          "spearman_all": 0.744,
+          "mae_ppr": 43.3,
+          "top24_hit": "10/24",
+          "sp_QB": 0.623,
+          "sp_RB": 0.726,
+          "sp_WR": 0.693,
+          "sp_TE": 0.78
+        },
+        {
+          "projection_season": 2024,
+          "n": 438,
+          "spearman_all": 0.772,
+          "mae_ppr": 44.3,
+          "top24_hit": "9/24",
+          "sp_QB": 0.727,
+          "sp_RB": 0.757,
+          "sp_WR": 0.734,
+          "sp_TE": 0.722
+        },
+        {
+          "projection_season": 2025,
+          "n": 458,
+          "spearman_all": 0.799,
+          "mae_ppr": 39.6,
+          "top24_hit": "10/24",
+          "sp_QB": 0.614,
+          "sp_RB": 0.771,
+          "sp_WR": 0.769,
+          "sp_TE": 0.781
+        }
+      ],
+      "delta_vs_baseline": {
+        "spearman_all": 0.0052,
+        "sp_QB": 0.0,
+        "sp_RB": 0.0093,
+        "sp_WR": 0.0089,
+        "sp_TE": 0.0067
+      }
+    }
+  ]
+}
