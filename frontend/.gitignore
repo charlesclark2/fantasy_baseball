@@ -1,1 +1,5 @@
 .env.local
+
+# E9.45 — NFL fantasy draft boards are a PAID surface, served via the gated
+# /fantasy/nfl/* API from S3, NOT as public assets. Never re-commit them here.
+/public/data/nfl-fantasy/

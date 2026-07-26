@@ -1,6 +1,6 @@
 # NF-FASTPATH — 2026 NFL fantasy season projections (raw stat-line, MVP-1)
 
-**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-07-26T04:49:42.262746+00:00
+**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-07-26T06:19:41.666289+00:00
 
 > ⚖️ **A PROJECTION PRODUCT, edge-independent** — no `best_alpha`/PBO/DSR/CLV gate (that is the betting posture). The gate is FACE-VALIDITY + COVERAGE + a holdout rank-correlation sanity check. The emitted `proj_*` columns are a **RAW STAT LINE** (season totals); the `proj_fp_*` points are a CONVENIENCE (standard nflverse scoring) for ranking/validation only — **MVP-2 / NF-C1 rescore the raw line per league**. Uncertainty is surfaced (an 80% PPR interval), not hidden; NULL = unknown kept NULL. Rookie intervals use PARAMETER uncertainty (slot-curve + P1A) and must be recalibrated before pricing.
 
@@ -8,6 +8,9 @@
 
 - **Veterans** — a **3-year recency+games-weighted** per-game line (weight = 0.6^age × games, so a career year or a down/injured year regresses toward the player's own baseline — the fix for single-season recency bias, esp. the spiky rushing-TD stat that ranked Trevor Lawrence QB2 off a fluke 9-rush-TD 2025), shrunk toward a conservative positional prior (position median) by sample size `w = g/(g+5)`, then scaled by an **EXPECTED-GAMES** estimate = a 50/50 blend of depth-chart role and base-season durability. Expected-games is the fix for the naïve `per_game × 17` that ranks small-sample backups at the top of `mart_projections_preseason` (Malik Willis was its #1).
 - **Usage-share role signal (NF-D2 slice 1)** — expected games is further refined by the base-season USAGE share (snap share for RB/WR, target share for TE; QB untouched), the volume-earner-vs-depth-body separator. Ablated for held-out within-position ρ lift over the MVP-1 baseline (RB +0.009 / WR +0.009 / TE +0.007 / QB +0.000, 2019–2025) — see `ablation_results/nf_d2_snap_role_ablation.md`. Leakage-safe (a realized base-season quantity) and non-double-counting (it moves only playing-time, not the per-game production line).
+- **Team-change / depth-jump opportunity (NF-D2 slice 3)** — for a player who CHANGES teams (base-season team ≠ projection-season team) at RB/WR/TE, the per-game line is rescaled toward the NEW role's volume level (a stale old-team line understates a role UPGRADE, overstates a player buried on a new depth chart). Ablated held-out lift over slice-1: RB +0.008 / WR +0.006 / TE +0.007 / QB +0.000, with the MOVER subpopulation +~0.03 — see `ablation_results/nf_d2_team_context_ablation.md`. Leakage-safe (the forward team + role are read from the freshest preseason depth-chart snapshot). Fires only where the depth feed has captured the move, so re-run as the offseason depth charts refresh through camp.
+- **Vegas team environment — QB (NF-D2 slice 4)** — a QB's projection is tilted (≤±10%) by the projection-season team's WEEK-1 implied points, a LEAKAGE-SAFE forward read on the offense (a Week-1 line is set before any of the season's games). Ablated held-out QB ρ lift +0.012 (2020–2025) — see `ablation_results/nf_d2_team_context_ablation.md`. QB-scoped (RB/WR/TE carry team context via their own usage line). A richer forward-Vegas signal (preseason win totals) would grow this toward its +0.06 leaky ceiling.
+- **Injury / availability (NF-D2 slice 5)** — a player flagged unavailable in the projection-season roster (reserve/IR, PUP, NFI, suspension) has expected games CAPPED toward the empirical status level (RES→3.7 g, PUP→2.4 vs ACT→13.2), so a shelved player is not ranked as startable. Leakage-safe (a preseason designation). The measured ρ lift is small (the eval excludes players with <6 realized games — the very ones this fixes) — it is a CORRECTNESS fix. ⚠️ The nflverse injury REPORT is in-season only and 2026 is unpublished; the roster PUP/IR flag is the forward source and populates through camp, so re-run as designations land (a live injury-news feed would surface offseason-surgery cases earlier).
 - **Rookies (QB/RB/WR/TE)** — a historical draft-slot → rookie-year production curve (power-law per position, fit on prior classes) nudged by the **NCAAF-P1A residual** (`projected_nfl_z` vs the slot-expected z — talent the draft board disagreed with), with deliberately wide intervals. Defensive/OL rookies carry no fantasy line and are excluded (≈0, per P1A).
 
 ## 2. Coverage report
@@ -41,53 +44,57 @@
 
 Each PRIOR season below was projected with the SAME model (base = season−1, 3-yr regression) and scored against what actually happened — the FULL projection (veterans + rookies), over players who played ≥6 games. `spearman_all` (rank) is the headline; `sp_<POS>` is within-position rank correlation (what matters for drafting); `topN_hit` = of the realized top-24, how many the model ranked top-24. A signal check across seasons, not a calibration claim.
 
+|   projection_season |   n |   spearman_all |   mae_ppr | top24_hit   |   sp_QB |   sp_RB |   sp_WR |   sp_TE |
+|--------------------:|----:|---------------:|----------:|:------------|--------:|--------:|--------:|--------:|
+|                2024 | 438 |            0.8 |      44.1 | 11/24       |     0.7 |     0.8 |     0.8 |     0.7 |
+|                2025 | 458 |            0.8 |      39.6 | 12/24       |     0.6 |     0.8 |     0.8 |     0.8 |
 
 ## 4. Face validity — top 25 overall (projected PPR)
 
 | player_name         | position   | team_id   | source   |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 |
 |:--------------------|:-----------|:----------|:---------|-------------:|--------------:|-------------:|-------------:|
-| JOSH ALLEN          | QB         | BUF       | veteran  |         16.5 |         314.1 |        222.2 |        406.0 |
-| JALEN HURTS         | QB         | PHI       | veteran  |         16.5 |         296.5 |        221.6 |        371.4 |
-| JARED GOFF          | QB         | DET       | veteran  |         16.5 |         282.4 |        213.3 |        351.6 |
-| DAK PRESCOTT        | QB         | DAL       | veteran  |         16.5 |         281.1 |        209.8 |        352.4 |
+| JALEN HURTS         | QB         | PHI       | veteran  |         16.5 |         318.5 |        240.0 |        397.0 |
+| JOSH ALLEN          | QB         | BUF       | veteran  |         16.5 |         316.0 |        223.9 |        408.2 |
+| JARED GOFF          | QB         | DET       | veteran  |         16.5 |         312.4 |        238.2 |        386.6 |
+| DAK PRESCOTT        | QB         | DAL       | veteran  |         16.5 |         295.7 |        222.1 |        369.4 |
+| JUSTIN HERBERT      | QB         | LAC       | veteran  |         16.5 |         294.1 |        219.6 |        368.7 |
+| LAMAR JACKSON       | QB         | BAL       | veteran  |         14.5 |         293.8 |        213.0 |        374.5 |
+| TREVOR LAWRENCE     | QB         | JAX       | veteran  |         16.5 |         286.7 |        209.8 |        363.6 |
+| BAKER MAYFIELD      | QB         | TB        | veteran  |         16.5 |         284.8 |        218.8 |        350.9 |
+| MATTHEW STAFFORD    | QB         | LAR       | veteran  |         16.5 |         280.3 |        203.7 |        356.9 |
 | CHRISTIAN MCCAFFREY | RB         | SF        | veteran  |         15.5 |         279.9 |        198.2 |        361.7 |
-| TREVOR LAWRENCE     | QB         | JAX       | veteran  |         16.5 |         278.5 |        202.9 |        354.2 |
-| BAKER MAYFIELD      | QB         | TB        | veteran  |         16.5 |         273.7 |        209.5 |        337.8 |
-| LAMAR JACKSON       | QB         | BAL       | veteran  |         14.5 |         270.6 |        194.2 |        346.9 |
-| BO NIX              | QB         | DEN       | veteran  |         16.5 |         270.4 |        197.9 |        342.9 |
 | Fernando Mendoza    | QB         | nan       | rookie   |         12.4 |         268.3 |          5.6 |        531.1 |
-| JUSTIN HERBERT      | QB         | LAC       | veteran  |         16.5 |         265.8 |        195.7 |        335.9 |
-| PATRICK MAHOMES     | QB         | KC        | veteran  |         15.0 |         262.0 |        191.6 |        332.5 |
+| CALEB WILLIAMS      | QB         | CHI       | veteran  |         16.5 |         264.3 |        190.6 |        337.9 |
+| PATRICK MAHOMES     | QB         | KC        | veteran  |         15.0 |         262.2 |        191.8 |        332.7 |
 | JA'MARR CHASE       | WR         | CIN       | veteran  |         15.8 |         261.4 |        185.4 |        337.3 |
-| MATTHEW STAFFORD    | QB         | LAR       | veteran  |         16.5 |         260.7 |        187.1 |        334.4 |
-| CALEB WILLIAMS      | QB         | CHI       | veteran  |         16.5 |         259.9 |        186.9 |        332.9 |
-| DRAKE MAYE          | QB         | NE        | veteran  |         16.5 |         259.5 |        187.0 |        332.0 |
+| BO NIX              | QB         | DEN       | veteran  |         16.5 |         253.1 |        183.3 |        323.0 |
 | BIJAN ROBINSON      | RB         | ATL       | veteran  |         15.2 |         251.3 |        176.0 |        326.6 |
 | JONATHAN TAYLOR     | RB         | IND       | veteran  |         15.4 |         247.8 |        165.4 |        330.3 |
 | AMON-RA ST. BROWN   | WR         | DET       | veteran  |         15.8 |         247.6 |        171.3 |        324.0 |
-| JAXSON DART         | QB         | NYG       | veteran  |         15.0 |         247.5 |        172.7 |        322.4 |
+| DRAKE MAYE          | QB         | NE        | veteran  |         16.5 |         247.1 |        176.4 |        317.8 |
+| JAXSON DART         | QB         | NYG       | veteran  |         15.0 |         246.4 |        171.7 |        321.0 |
+| JORDAN LOVE         | QB         | GB        | veteran  |         16.0 |         243.2 |        177.5 |        308.8 |
 | JAHMYR GIBBS        | RB         | DET       | veteran  |         14.4 |         243.0 |        156.5 |        329.6 |
 | PUKA NACUA          | WR         | LAR       | veteran  |         15.1 |         239.1 |        156.3 |        321.8 |
-| JORDAN LOVE         | QB         | GB        | veteran  |         16.0 |         239.0 |        173.9 |        304.0 |
-| AARON RODGERS       | QB         | PIT       | veteran  |         16.5 |         229.7 |        170.9 |        288.6 |
-| DANIEL JONES        | QB         | IND       | veteran  |         14.5 |         222.5 |        160.8 |        284.3 |
+| JOE BURROW          | QB         | CIN       | veteran  |         12.0 |         228.9 |        154.8 |        303.0 |
+| AARON RODGERS       | QB         | PIT       | veteran  |         16.5 |         227.4 |        168.9 |        285.8 |
 
 ### Top 12 QB
 
 | player_name      | position   | team_id   | source   |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 |
 |:-----------------|:-----------|:----------|:---------|-------------:|--------------:|-------------:|-------------:|
-| JOSH ALLEN       | QB         | BUF       | veteran  |         16.5 |         314.1 |        222.2 |        406.0 |
-| JALEN HURTS      | QB         | PHI       | veteran  |         16.5 |         296.5 |        221.6 |        371.4 |
-| JARED GOFF       | QB         | DET       | veteran  |         16.5 |         282.4 |        213.3 |        351.6 |
-| DAK PRESCOTT     | QB         | DAL       | veteran  |         16.5 |         281.1 |        209.8 |        352.4 |
-| TREVOR LAWRENCE  | QB         | JAX       | veteran  |         16.5 |         278.5 |        202.9 |        354.2 |
-| BAKER MAYFIELD   | QB         | TB        | veteran  |         16.5 |         273.7 |        209.5 |        337.8 |
-| LAMAR JACKSON    | QB         | BAL       | veteran  |         14.5 |         270.6 |        194.2 |        346.9 |
-| BO NIX           | QB         | DEN       | veteran  |         16.5 |         270.4 |        197.9 |        342.9 |
+| JALEN HURTS      | QB         | PHI       | veteran  |         16.5 |         318.5 |        240.0 |        397.0 |
+| JOSH ALLEN       | QB         | BUF       | veteran  |         16.5 |         316.0 |        223.9 |        408.2 |
+| JARED GOFF       | QB         | DET       | veteran  |         16.5 |         312.4 |        238.2 |        386.6 |
+| DAK PRESCOTT     | QB         | DAL       | veteran  |         16.5 |         295.7 |        222.1 |        369.4 |
+| JUSTIN HERBERT   | QB         | LAC       | veteran  |         16.5 |         294.1 |        219.6 |        368.7 |
+| LAMAR JACKSON    | QB         | BAL       | veteran  |         14.5 |         293.8 |        213.0 |        374.5 |
+| TREVOR LAWRENCE  | QB         | JAX       | veteran  |         16.5 |         286.7 |        209.8 |        363.6 |
+| BAKER MAYFIELD   | QB         | TB        | veteran  |         16.5 |         284.8 |        218.8 |        350.9 |
+| MATTHEW STAFFORD | QB         | LAR       | veteran  |         16.5 |         280.3 |        203.7 |        356.9 |
 | Fernando Mendoza | QB         | nan       | rookie   |         12.4 |         268.3 |          5.6 |        531.1 |
-| JUSTIN HERBERT   | QB         | LAC       | veteran  |         16.5 |         265.8 |        195.7 |        335.9 |
-| PATRICK MAHOMES  | QB         | KC        | veteran  |         15.0 |         262.0 |        191.6 |        332.5 |
-| MATTHEW STAFFORD | QB         | LAR       | veteran  |         16.5 |         260.7 |        187.1 |        334.4 |
+| CALEB WILLIAMS   | QB         | CHI       | veteran  |         16.5 |         264.3 |        190.6 |        337.9 |
+| PATRICK MAHOMES  | QB         | KC        | veteran  |         15.0 |         262.2 |        191.8 |        332.7 |
 
 ### Top 12 RB
 
@@ -116,7 +123,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | JAXON SMITH-NJIGBA | WR         | SEA       | veteran  |         15.3 |         203.7 |        135.4 |        272.0 |
 | JUSTIN JEFFERSON   | WR         | MIN       | veteran  |         16.2 |         200.3 |        149.3 |        251.3 |
 | CEEDEE LAMB        | WR         | DAL       | veteran  |         14.4 |         197.3 |        140.1 |        254.5 |
-| A.J. BROWN         | WR         | PHI       | veteran  |         15.7 |         194.0 |        128.2 |        259.9 |
+| A.J. BROWN         | WR         | NE        | veteran  |         15.7 |         194.8 |        128.9 |        260.8 |
 | Jordyn Tyson       | WR         | nan       | rookie   |         13.6 |         191.8 |          0.0 |        401.0 |
 | CHRIS OLAVE        | WR         | NO        | veteran  |         15.0 |         186.2 |        129.2 |        243.2 |
 | NICO COLLINS       | WR         | HOU       | veteran  |         14.7 |         183.4 |        128.5 |        238.4 |

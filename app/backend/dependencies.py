@@ -101,6 +101,46 @@ def get_optional_user_id(request: Request) -> str | None:
         return None
 
 
+def _groups_from_request(request: Request) -> list[str]:
+    """Cognito groups for the caller — the UNION of the authorizer-context claim and the
+    raw Bearer-token payload.
+
+    Both sources are merged because the API Gateway HTTP API (v2) JWT authorizer delivers
+    a multi-valued claim like `cognito:groups` as a bracketed, space-separated STRING
+    (`[fantasy_comp subscriber]`), NOT comma-separated — so parsing the context alone is
+    unreliable (this is exactly why get_admin_user keeps a bearer-decode fallback). The
+    Bearer payload carries the claim as a clean JSON array. Unioning both, and parsing the
+    context for either bracket/space or comma delimiters, is robust to both formats. The
+    token is already signature-validated by the authorizer before Lambda invokes."""
+    groups: set[str] = set(_groups_from_bearer(request.headers.get("Authorization")))
+    raw = _claims_from_event(request).get("cognito:groups")
+    if isinstance(raw, list):
+        groups.update(str(g).strip() for g in raw if str(g).strip())
+    elif isinstance(raw, str) and raw.strip():
+        # Handle both "[a b]" (HTTP API v2) and "a,b" delimiter styles.
+        for part in raw.strip().strip("[]").replace(",", " ").split():
+            if part.strip():
+                groups.add(part.strip())
+    return list(groups)
+
+
+def require_fantasy_access(request: Request, user_id: str = Depends(get_user_id)) -> str:
+    """Gate the fantasy surface (E9.45) — defense-in-depth for the client-side nav gate.
+
+    Grants callers in `subscriber`, `admin`, or the `fantasy_comp` allow-list, read
+    from the `cognito:groups` claim. Raises 403 otherwise (a `beta_tester` who lacks
+    fantasy is blocked here even though they keep full betting access — the deliberate
+    E9.8 divergence). A client-only gate on a paid feature is bypassable, so the
+    fantasy DATA endpoints depend on this.
+    """
+    # Import here to avoid a circular import at module load (services import lightly).
+    from app.backend.services import cognito
+
+    if cognito.has_fantasy_access(_groups_from_request(request)):
+        return user_id
+    raise HTTPException(status_code=403, detail="Fantasy access required")
+
+
 def get_admin_user(request: Request, user_id: str = Depends(get_user_id)) -> str:
     """Like get_user_id, but raises 403 if the caller is not an admin.
 

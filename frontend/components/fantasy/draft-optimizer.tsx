@@ -24,6 +24,8 @@ import {
   type Manifest,
   type RosterSlotDef,
 } from "@/lib/draft-optimizer"
+import { useAuth } from "@/lib/auth-context"
+import { getFantasyManifest, getFantasyBoard } from "@/lib/fantasy"
 
 const SEASON = 2026
 const POS_COLORS: Record<string, string> = {
@@ -58,26 +60,24 @@ const storageKey = (s: { configName: string; size: number; mySlot: number }) =>
   `nfl-draft-${SEASON}-${s.configName}-${s.size}-slot${s.mySlot}`
 
 // ── data hooks ────────────────────────────────────────────────────────────────────────────────
+// Boards load through the SERVER-SIDE-GATED backend (/fantasy/nfl/*, require_fantasy_access →
+// 403) rather than the old public JSON, so the paid gate can't be bypassed at the asset URL.
 function useManifest() {
+  const { accessToken } = useAuth()
   return useQuery<Manifest>({
     queryKey: ["nfl-fantasy-manifest", SEASON],
-    queryFn: async () => {
-      const r = await fetch(`/data/nfl-fantasy/${SEASON}/manifest.json`)
-      if (!r.ok) throw new Error("manifest not found")
-      return r.json()
-    },
+    queryFn: () => getFantasyManifest(accessToken, SEASON),
     staleTime: Infinity,
   })
 }
 
 function useBoard(configName: string | null, size: number | null) {
+  const { accessToken } = useAuth()
   return useQuery<Player[]>({
     queryKey: ["nfl-fantasy-board", SEASON, configName, size],
     enabled: !!configName && !!size,
     queryFn: async () => {
-      const r = await fetch(`/data/nfl-fantasy/${SEASON}/board_${configName}_${size}.json`)
-      if (!r.ok) throw new Error("board not found")
-      const rows: Player[] = await r.json()
+      const rows = await getFantasyBoard(accessToken, SEASON, configName as string, size as number)
       // dedupe by id (defensive — a duplicate player_id would collide React keys and corrupt rendering)
       const seen = new Set<string>()
       return rows.filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)))

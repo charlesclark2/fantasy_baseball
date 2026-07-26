@@ -28,7 +28,7 @@ if _SENTRY_DSN:
         traces_sample_rate=0.1,
     )
 
-from app.backend.routers import admin, alerts, auth, bankroll, bets, blog, feedback, finances, parlay, picks, performance, pipeline, players, portfolio, stripe, teams, users
+from app.backend.routers import admin, alerts, auth, bankroll, bets, blog, fantasy, feedback, finances, parlay, picks, performance, pipeline, players, portfolio, stripe, teams, users
 from app.backend.routers.auth import require_subscriber_mfa
 
 logging.basicConfig(level=logging.INFO)
@@ -97,6 +97,10 @@ app.include_router(players.router, dependencies=_paid)
 app.include_router(parlay.router, dependencies=_paid)
 app.include_router(users.router)
 app.include_router(stripe.router)
+# Fantasy data endpoints carry their OWN entitlement gate (require_fantasy_access,
+# subscriber/admin/fantasy_comp → else 403). `_paid` adds the subscriber-MFA guard
+# for consistency with the other paid content (a no-op unless ENFORCE_SUBSCRIBER_MFA=1).
+app.include_router(fantasy.router, dependencies=_paid)
 
 
 @app.api_route("/health", methods=["GET", "HEAD"], tags=["health"])

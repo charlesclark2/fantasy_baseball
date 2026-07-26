@@ -135,6 +135,151 @@ def test_veteran_usage_role_reorders_equal_line_by_snap_share():
     assert off.loc["HIGH_SNAP", "proj_fp_ppr"] == pytest.approx(off.loc["LOW_SNAP", "proj_fp_ppr"])
 
 
+# ── NF-D2 slice 3: team-change / depth-jump opportunity ──────────────────────────────────────────
+def test_role_volume_prior_orders_by_depth_rank():
+    base = _synth_base()
+    # add a depth spread so the prior has rank-1 and rank-3 buckets
+    rvp = sp.role_volume_prior(base)
+    # every entry is a (position, rank)->float; a rank-1 RB should out-produce a rank-3 RB if both exist
+    assert all(isinstance(k, tuple) and isinstance(v, float) for k, v in rvp.items())
+    assert ("RB", 1) in rvp
+
+
+def test_mover_scale_boosts_upgrade_and_no_ops_non_movers():
+    df = pd.DataFrame({
+        "player_id": ["A", "B", "C", "D"],
+        "position": ["RB", "RB", "QB", "WR"],
+        "base_team": ["AAA", "AAA", "AAA", "AAA"],
+        "proj_team": ["BBB", "AAA", "BBB", None],           # A moved, B stayed, C moved(QB), D no proj team
+        "depth_chart_position_rank": [1.0, 1.0, 1.0, 1.0],
+    })
+    rvp = {("RB", 1): 18.0, ("WR", 1): 15.0}                # new-role level well above the current fp
+    fp_pg = np.array([9.0, 9.0, 9.0, 9.0])                  # everyone currently at 9/gm
+    scale = sp.mover_opportunity_scale(df, rvp, fp_pg, blend=0.5, cap=1.6)
+    assert scale[0] > 1.0                                   # A: RB mover upgraded toward 18 → boosted
+    assert scale[1] == pytest.approx(1.0)                   # B: not a mover → no-op
+    assert scale[2] == pytest.approx(1.0)                   # C: QB out of scope → no-op
+    assert scale[3] == pytest.approx(1.0)                   # D: unknown proj team → no-op
+    assert (scale <= 1.6 + 1e-9).all() and (scale >= 1 / 1.6 - 1e-9).all()  # clamped
+
+
+def test_mover_scale_is_noop_without_prior_or_columns():
+    df = pd.DataFrame({"player_id": ["A"], "position": ["RB"]})  # no base_team/proj_team
+    assert sp.mover_opportunity_scale(df, {("RB", 1): 18.0}, np.array([9.0])) [0] == pytest.approx(1.0)
+    df2 = pd.DataFrame({"player_id": ["A"], "position": ["RB"], "base_team": ["X"], "proj_team": ["Y"]})
+    assert sp.mover_opportunity_scale(df2, {}, np.array([9.0]))[0] == pytest.approx(1.0)  # empty prior
+
+
+def test_veteran_mover_into_bigger_role_projects_higher():
+    # a backup-usage RB (low per-game line) who CHANGES teams into a lead role should project higher
+    # with the mover feature ON than OFF — the stale old-team line understates the new opportunity.
+    def rb(pid, base_team, proj_team, rank):
+        base = {"player_id": pid, "player_name": pid, "team_id": proj_team, "position": "RB",
+                "games_played": 14, "depth_chart_position_rank": rank, "fp_ppr_sd": 6.0,
+                "base_team": base_team, "proj_team": proj_team}
+        for s in sp._VET_PERGAME_STATS:
+            base[s + "_pg"] = 0.0
+        base.update(rush_att_pg=8, rush_yds_pg=34, rush_td_pg=0.2, targets_pg=2, rec_pg=1.5, rec_yds_pg=11)
+        return base
+    # a fuller field so the role-volume prior has a believable rank-1 level to pull toward
+    rows = [rb(f"S{i}", "AAA", "AAA", 1) for i in range(6)]      # incumbent rank-1 starters (higher volume)
+    for r in rows:
+        r.update(rush_att_pg=17, rush_yds_pg=78, rush_td_pg=0.5, targets_pg=3, rec_pg=2.4, rec_yds_pg=18)
+    rows.append(rb("MOVER", "OLD", "NEW", 1))                    # our backup-line RB moving into a rank-1 role
+    base = pd.DataFrame(rows)
+    priors = sp.positional_pergame_priors(base)
+    rvp = sp.role_volume_prior(base)
+    on = sp.project_veterans(base, priors, 2026, role_vol_prior=rvp, mover_opportunity_blend=0.35).set_index("player_id")
+    off = sp.project_veterans(base, priors, 2026, role_vol_prior=None).set_index("player_id")
+    assert on.loc["MOVER", "proj_fp_ppr"] > off.loc["MOVER", "proj_fp_ppr"]   # boosted by the new role
+    assert on.loc["S0", "proj_fp_ppr"] == pytest.approx(off.loc["S0", "proj_fp_ppr"])  # stayer unchanged
+
+
+# ── NF-D2 slice 4: Vegas team environment (QB) ───────────────────────────────────────────────────
+def test_environment_tilt_boosts_high_env_qb_and_no_ops_others():
+    df = pd.DataFrame({
+        "position": ["QB", "QB", "QB", "RB"],
+        "team_env": [30.0, 22.0, 14.0, 30.0],   # a high / mid / low scoring environment; RB is out of scope
+    })
+    # pad to ≥10 QBs so the z-score path activates
+    extra = pd.DataFrame({"position": ["QB"] * 8, "team_env": [22.0] * 8})
+    d = pd.concat([df, extra], ignore_index=True)
+    scale = sp.environment_tilt_scale(d, blend=0.15)
+    assert scale[0] > 1.0            # high-env QB boosted
+    assert scale[2] < 1.0            # low-env QB cut
+    assert scale[3] == pytest.approx(1.0)   # RB out of scope
+    assert (scale >= sp._ENV_TILT_LO - 1e-9).all() and (scale <= sp._ENV_TILT_HI + 1e-9).all()
+
+
+def test_environment_tilt_is_noop_without_column_or_blend():
+    d = pd.DataFrame({"position": ["QB"] * 12})   # no team_env column
+    assert np.allclose(sp.environment_tilt_scale(d, blend=0.15), 1.0)
+    d2 = pd.DataFrame({"position": ["QB"] * 12, "team_env": [25.0] * 12})
+    assert np.allclose(sp.environment_tilt_scale(d2, blend=0.0), 1.0)   # blend 0 = off
+
+
+def test_veteran_env_tilt_orders_qbs_by_team_environment():
+    # two identical QBs differing only in team environment — the higher-env one projects higher
+    def qb(pid, env):
+        base = {"player_id": pid, "player_name": pid, "team_id": "AAA", "position": "QB",
+                "games_played": 16, "depth_chart_position_rank": 1, "fp_ppr_sd": 6.0, "team_env": env}
+        for s in sp._VET_PERGAME_STATS:
+            base[s + "_pg"] = 0.0
+        base.update(pass_att_pg=34, pass_cmp_pg=22, pass_yds_pg=250, pass_td_pg=1.6, pass_int_pg=0.7,
+                    rush_att_pg=4, rush_yds_pg=20, rush_td_pg=0.2)
+        return base
+    rows = [qb(f"Q{i}", 20.0 + (i % 5)) for i in range(12)]     # a spread of environments
+    rows.append(qb("HIGH", 30.0))
+    rows.append(qb("LOW", 15.0))
+    base = pd.DataFrame(rows)
+    priors = sp.positional_pergame_priors(base)
+    on = sp.project_veterans(base, priors, 2026, env_tilt_blend=0.15).set_index("player_id")
+    off = sp.project_veterans(base, priors, 2026, env_tilt_blend=0.0).set_index("player_id")
+    assert on.loc["HIGH", "proj_fp_ppr"] > off.loc["HIGH", "proj_fp_ppr"]   # boosted
+    assert on.loc["LOW", "proj_fp_ppr"] < off.loc["LOW", "proj_fp_ppr"]     # cut
+    assert on.loc["HIGH", "proj_fp_ppr"] > on.loc["LOW", "proj_fp_ppr"]
+
+
+# ── NF-D2 slice 5: injury / availability ─────────────────────────────────────────────────────────
+def test_injury_games_caps_flagged_status_and_no_ops_others():
+    df = pd.DataFrame({
+        "proj_status": ["ACT", "RES", "PUP", "SUS", None],
+        "proj_games": [16.0, 16.0, 15.0, 16.0, 14.0],
+    })
+    eg = sp.injury_availability_games(df, blend=1.0)   # hard cap
+    assert eg[0] == pytest.approx(16.0)                # ACT untouched
+    assert eg[1] == pytest.approx(sp._INJURY_STATUS_GAMES_CAP["RES"])   # IR capped
+    assert eg[2] == pytest.approx(sp._INJURY_STATUS_GAMES_CAP["PUP"])   # PUP capped
+    assert eg[3] == pytest.approx(sp._INJURY_STATUS_GAMES_CAP["SUS"])   # SUS capped
+    assert eg[4] == pytest.approx(14.0)                # unknown status untouched
+    # cap only moves games DOWN — a flagged player already below the cap is unchanged
+    df2 = pd.DataFrame({"proj_status": ["RES"], "proj_games": [2.0]})
+    assert sp.injury_availability_games(df2, blend=1.0)[0] == pytest.approx(2.0)
+
+
+def test_injury_games_is_noop_without_column_or_blend():
+    df = pd.DataFrame({"proj_games": [16.0]})          # no proj_status
+    assert sp.injury_availability_games(df, blend=0.7)[0] == pytest.approx(16.0)
+    df2 = pd.DataFrame({"proj_status": ["RES"], "proj_games": [16.0]})
+    assert sp.injury_availability_games(df2, blend=0.0)[0] == pytest.approx(16.0)
+
+
+def test_veteran_injured_player_projects_far_below_healthy_twin():
+    # two identical every-down RBs; one is flagged RES (IR) for the projection season → far fewer games
+    def rb(pid, status):
+        base = {"player_id": pid, "player_name": pid, "team_id": "AAA", "position": "RB",
+                "games_played": 16, "depth_chart_position_rank": 1, "fp_ppr_sd": 6.0, "proj_status": status}
+        for s in sp._VET_PERGAME_STATS:
+            base[s + "_pg"] = 0.0
+        base.update(rush_att_pg=17, rush_yds_pg=80, rush_td_pg=0.6, targets_pg=4, rec_pg=3, rec_yds_pg=25)
+        return base
+    base = pd.DataFrame([rb("HEALTHY", "ACT"), rb("INJURED", "RES")])
+    proj = sp.project_veterans(base, sp.positional_pergame_priors(base), 2026,
+                               injury_override_blend=0.7).set_index("player_name")
+    assert proj.loc["INJURED", "proj_games"] < proj.loc["HEALTHY", "proj_games"]
+    assert proj.loc["INJURED", "proj_fp_ppr"] < 0.5 * proj.loc["HEALTHY", "proj_fp_ppr"]  # materially demoted
+
+
 # ── shrinkage ───────────────────────────────────────────────────────────────────────────────────
 def test_shrink_pulls_small_sample_harder():
     prior = np.array([10.0, 10.0])
@@ -259,3 +404,76 @@ def test_rookie_residual_nudge_orders_equal_slot_by_talent():
     proj = sp.project_rookies(incoming, curve, 2026).set_index("player_name")
     # same slot: the higher-talent (P1A z) rookie projects higher
     assert proj.loc["WR0", "proj_fp_ppr"] > proj.loc["WR4", "proj_fp_ppr"]
+
+
+# ── NF-D2 #6 / NF-D3: ADP market-consensus prior + benchmark ─────────────────────────────────────
+adp = pytest.importorskip("quant_sports_intel_models.football.nfl.fantasy.adp_source")
+
+
+def _adp_frame(fps, adps, positions):
+    return pd.DataFrame({
+        "player_id": [f"P{i}" for i in range(len(fps))],
+        "position": positions,
+        "proj_fp_ppr": fps,
+        "adp": adps,
+    })
+
+
+def test_zscore_is_finite_safe():
+    z = sp._zscore(np.array([1.0, 2.0, 3.0, np.nan]))
+    assert np.isnan(z[3])
+    assert z[0] < z[1] < z[2]
+    # a degenerate (all-equal) group yields zeros, not NaN/inf
+    assert np.allclose(sp._zscore(np.array([5.0, 5.0, 5.0])), 0.0)
+
+
+def test_blend_adp_prior_is_noop_when_off_or_absent():
+    df = _adp_frame([100.0, 90.0, 80.0], [3.0, 1.0, 2.0], ["RB", "RB", "RB"])
+    # blend=0 ⇒ EXACT no-op (the market-blind product / model-only arm)
+    assert np.allclose(sp.blend_adp_prior(df, blend=0.0), df["proj_fp_ppr"].to_numpy())
+    # missing adp column ⇒ no-op
+    assert np.allclose(sp.blend_adp_prior(df.drop(columns=["adp"]), blend=0.7),
+                       df["proj_fp_ppr"].to_numpy())
+
+
+def test_blend_adp_prior_preserves_point_multiset():
+    # the quantile remap reorders WITHIN a position but must keep the exact set of projected points
+    df = _adp_frame([100.0, 90.0, 80.0, 70.0], [4.0, 3.0, 2.0, 1.0], ["WR"] * 4)
+    out = sp.blend_adp_prior(df, blend=0.6)
+    assert sorted(out.tolist()) == sorted(df["proj_fp_ppr"].tolist())
+
+
+def test_blend_adp_prior_reorders_toward_adp():
+    # model ranks A>B>C>D; ADP ranks them exactly REVERSED (D best). A full blend to ADP must flip the
+    # order so the lowest-ADP (best) player gets the top points.
+    df = _adp_frame([100.0, 90.0, 80.0, 70.0], [4.0, 3.0, 2.0, 1.0], ["RB"] * 4)
+    out = sp.blend_adp_prior(df, blend=1.0)
+    # player P3 (adp=1, the consensus #1) should now carry the position's top points (100)
+    assert out[3] == pytest.approx(100.0)
+    assert out[0] == pytest.approx(70.0)  # model's #1 (worst ADP) drops to the bottom
+
+
+def test_blend_adp_prior_position_scoping():
+    # QB/RB scoped: RB reorders toward ADP; WR is left exactly at the model line
+    df = _adp_frame([100.0, 90.0, 60.0, 50.0], [2.0, 1.0, 2.0, 1.0], ["RB", "RB", "WR", "WR"])
+    out = sp.blend_adp_prior(df, blend=1.0, positions=("QB", "RB"))
+    # RB pair flips toward ADP (P1 has better adp ⇒ gets 100)
+    assert out[1] == pytest.approx(100.0) and out[0] == pytest.approx(90.0)
+    # WR pair is untouched (scoped out) ⇒ exactly the model line
+    assert out[2] == pytest.approx(60.0) and out[3] == pytest.approx(50.0)
+
+
+def test_blend_adp_prior_no_adp_player_keeps_model_score():
+    # a player with NaN ADP falls through in place (keeps the model score) while the covered ones blend
+    df = _adp_frame([100.0, 90.0, 80.0], [np.nan, 1.0, 2.0], ["RB"] * 3)
+    out = sp.blend_adp_prior(df, blend=1.0)
+    # still a valid permutation of the point multiset
+    assert sorted(out.tolist()) == [80.0, 90.0, 100.0]
+
+
+def test_adp_name_normalization_and_aliases():
+    n = adp._normalize_name
+    assert n("Marquise Brown") == n("Hollywood Brown")     # nickname alias
+    assert n("Kenneth Walker III") == "kenneth walker"     # generational suffix stripped
+    assert n("Ja'Marr Chase") == "jamarr chase"            # punctuation removed
+    assert n("Amon-Ra St. Brown") == "amonra st brown"

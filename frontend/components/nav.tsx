@@ -4,26 +4,12 @@ import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { LogOut, Settings, Menu, X, ChevronDown } from "lucide-react"
+import { LogOut, Settings, Menu, X, ChevronDown, Lock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
+import { canAccess } from "@/lib/entitlements"
+import { SPORTS, surfaceItems, type SurfaceGroup } from "@/lib/nav-model"
 import changelog from "@/data/changelog.json"
-
-type ActiveLink =
-  | "dashboard"
-  | "ev-tracker"
-  | "performance"
-  | "settings"
-  | "bet-log"
-  | "admin"
-  | "blog"
-  | "changelog"
-  | "teams"
-  | "players"
-  | "props"
-  | "parlay"
-  | "fantasy-draft"
-  | null
 
 const latestWeek = changelog[0]?.week
 const isChangelogRecent = latestWeek
@@ -33,29 +19,10 @@ const isChangelogRecent = latestWeek
   : false
 
 interface NavProps {
-  activeLink?: ActiveLink
+  activeLink?: string | null
   authenticated?: boolean
   userEmail?: string | null
 }
-
-// Personal betting workflow — collapsed into a "Betting" dropdown to keep the sub-nav uncrowded.
-// Props = the daily model-projection surface (transparency, not a bet rec).
-const BETTING_ITEMS = [
-  { label: "Dashboard", href: "/dashboard", key: "dashboard" },
-  { label: "EV Tracker", href: "/ev-tracker", key: "ev-tracker" },
-  { label: "Props", href: "/props", key: "props" },
-  { label: "Parlay Calculator", href: "/parlay", key: "parlay" },
-] as const
-
-const MAIN_NAV_ITEMS = [
-  { label: "Performance", href: "/performance", key: "performance" },
-  { label: "Bet Log", href: "/bet-log", key: "bet-log" },
-] as const
-
-const RESEARCH_ITEMS = [
-  { label: "Teams", href: "/teams", key: "teams" },
-  { label: "Players", href: "/players", key: "players" },
-] as const
 
 const ADMIN_ITEMS = [
   { label: "Admin Dashboard", href: "/admin", key: "admin" },
@@ -68,19 +35,23 @@ export function Nav({
   userEmail,
 }: NavProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
-  const { accessToken, isAdmin, signOut } = useAuth()
+  const { accessToken, groups, isAdmin, signOut } = useAuth()
   const router = useRouter()
   const isSignedIn = !!accessToken
   const showSubNav = authenticated || isSignedIn
 
-  const flatLinkClass = (key: string) =>
-    activeLink === key
-      ? "border-b-2 border-[#10b981] pb-2.5 text-sm text-white font-medium transition-colors whitespace-nowrap"
-      : "border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors whitespace-nowrap"
-
-  const isBettingActive = BETTING_ITEMS.some((i) => i.key === activeLink)
-  const isResearchActive = RESEARCH_ITEMS.some((i) => i.key === activeLink)
   const isAdminActive = ADMIN_ITEMS.some((i) => i.key === activeLink)
+
+  // A fantasy surface the caller isn't entitled to → visible but LOCKED (upsell).
+  const isLocked = (g: SurfaceGroup) =>
+    g.surface === "fantasy" && !canAccess("fantasy", groups)
+
+  const itemClass = (key: string) =>
+    `block px-3 py-2 text-sm transition-colors ${
+      activeLink === key
+        ? "text-white bg-[#1a1a1a]"
+        : "text-gray-400 hover:text-white hover:bg-[#1a1a1a]"
+    }`
 
   return (
     <nav className="sticky top-0 z-50 border-b border-[#262626] bg-[#0a0a0a]/90 backdrop-blur-md">
@@ -187,74 +158,69 @@ export function Nav({
         </div>
       </div>
 
-      {/* Desktop sub-nav */}
+      {/* Desktop sub-nav — SPORT-FIRST (E9.45): a dropdown per sport, surfaces within. */}
       {showSubNav && (
         <div className="mx-auto hidden max-w-6xl items-center gap-6 px-4 pb-0 sm:flex">
-          {/* Betting dropdown */}
-          <div className="group relative">
-            <button
-              className={`flex items-center gap-1 pb-2.5 text-sm transition-colors whitespace-nowrap ${
-                isBettingActive
-                  ? "border-b-2 border-[#10b981] font-medium text-white"
-                  : "border-b-2 border-transparent text-gray-500 hover:text-gray-300"
-              }`}
-            >
-              Betting
-              <ChevronDown className="h-3 w-3" />
-            </button>
-            <div className="absolute left-0 top-full z-50 hidden w-36 rounded-md border border-[#262626] bg-[#0f0f0f] py-1 shadow-xl group-hover:block">
-              {BETTING_ITEMS.map(({ label, href, key }) => (
-                <Link
-                  key={key}
-                  href={href}
-                  className={`block px-3 py-2 text-sm transition-colors ${
-                    activeLink === key
-                      ? "text-white bg-[#1a1a1a]"
-                      : "text-gray-400 hover:text-white hover:bg-[#1a1a1a]"
+          {SPORTS.map((sport) => {
+            const sportActive = sport.surfaces.some((g) =>
+              surfaceItems(g).some((i) => i.key === activeLink),
+            )
+            return (
+              <div key={sport.sport} className="group relative">
+                <button
+                  className={`flex items-center gap-1 pb-2.5 text-sm transition-colors whitespace-nowrap ${
+                    sportActive
+                      ? "border-b-2 border-[#10b981] font-medium text-white"
+                      : "border-b-2 border-transparent text-gray-500 hover:text-gray-300"
                   }`}
                 >
-                  {label}
-                </Link>
-              ))}
-            </div>
-          </div>
+                  {sport.label}
+                  <ChevronDown className="h-3 w-3" />
+                </button>
+                <div className="absolute left-0 top-full z-50 hidden w-56 rounded-md border border-[#262626] bg-[#0f0f0f] py-1 shadow-xl group-hover:block">
+                  {sport.surfaces.map((g) => {
+                    const locked = isLocked(g)
+                    return (
+                      <div key={g.surface} className="py-1">
+                        <div className="flex items-center gap-1.5 px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
+                          {g.label}
+                          {locked && <Lock className="h-3 w-3 text-gray-500" />}
+                        </div>
+                        {locked ? (
+                          <Link
+                            href="/subscribe"
+                            className="flex items-center justify-between px-3 py-2 text-sm text-gray-500 hover:bg-[#1a1a1a] hover:text-gray-300 transition-colors"
+                          >
+                            <span>Unlock Fantasy</span>
+                            <span className="rounded bg-[#10b981]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[#10b981]">
+                              Upgrade
+                            </span>
+                          </Link>
+                        ) : (
+                          g.sections.map((section, si) => (
+                            <div key={si}>
+                              {section.label && (
+                                <div className="px-3 pb-0.5 pt-1.5 text-[10px] font-medium uppercase tracking-wider text-gray-700">
+                                  {section.label}
+                                </div>
+                              )}
+                              {section.items.map((item) => (
+                                <Link key={item.key} href={item.href} className={itemClass(item.key)}>
+                                  {item.label}
+                                </Link>
+                              ))}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
 
-          {MAIN_NAV_ITEMS.map(({ label, href, key }) => (
-            <Link key={key} href={href} className={flatLinkClass(key)}>
-              {label}
-            </Link>
-          ))}
-
-          {/* Research dropdown */}
-          <div className="group relative">
-            <button
-              className={`flex items-center gap-1 pb-2.5 text-sm transition-colors whitespace-nowrap ${
-                isResearchActive
-                  ? "border-b-2 border-[#10b981] font-medium text-white"
-                  : "border-b-2 border-transparent text-gray-500 hover:text-gray-300"
-              }`}
-            >
-              Research
-              <ChevronDown className="h-3 w-3" />
-            </button>
-            <div className="absolute left-0 top-full z-50 hidden w-36 rounded-md border border-[#262626] bg-[#0f0f0f] py-1 shadow-xl group-hover:block">
-              {RESEARCH_ITEMS.map(({ label, href, key }) => (
-                <Link
-                  key={key}
-                  href={href}
-                  className={`block px-3 py-2 text-sm transition-colors ${
-                    activeLink === key
-                      ? "text-white bg-[#1a1a1a]"
-                      : "text-gray-400 hover:text-white hover:bg-[#1a1a1a]"
-                  }`}
-                >
-                  {label}
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          {/* What's New */}
+          {/* What's New — cross-cutting */}
           <Link
             href="/changelog"
             className={
@@ -268,20 +234,6 @@ export function Nav({
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
             )}
           </Link>
-
-          {/* Fantasy — admin-only during the MVP-3 draft-tool rollout */}
-          {isAdmin && (
-            <Link
-              href="/fantasy/draft"
-              className={
-                activeLink === "fantasy-draft"
-                  ? "border-b-2 border-[#10b981] pb-2.5 text-sm font-medium text-white transition-colors whitespace-nowrap"
-                  : "border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors whitespace-nowrap"
-              }
-            >
-              Fantasy
-            </Link>
-          )}
 
           {/* Admin dropdown */}
           {isAdmin && (
@@ -298,15 +250,7 @@ export function Nav({
               </button>
               <div className="absolute left-0 top-full z-50 hidden w-40 rounded-md border border-[#262626] bg-[#0f0f0f] py-1 shadow-xl group-hover:block">
                 {ADMIN_ITEMS.map(({ label, href, key }) => (
-                  <Link
-                    key={key}
-                    href={href}
-                    className={`block px-3 py-2 text-sm transition-colors ${
-                      activeLink === key
-                        ? "text-white bg-[#1a1a1a]"
-                        : "text-gray-400 hover:text-white hover:bg-[#1a1a1a]"
-                    }`}
-                  >
+                  <Link key={key} href={href} className={itemClass(key)}>
                     {label}
                   </Link>
                 ))}
@@ -316,61 +260,53 @@ export function Nav({
         </div>
       )}
 
-      {/* Mobile slide-down menu */}
+      {/* Mobile slide-down menu — SPORT-FIRST */}
       {showSubNav && mobileOpen && (
         <div className="border-t border-[#262626] bg-[#0a0a0a] px-4 py-3 sm:hidden">
           <div className="flex flex-col gap-0.5">
-            <span className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
-              Betting
-            </span>
-            {BETTING_ITEMS.map(({ label, href, key }) => (
-              <Link
-                key={key}
-                href={href}
-                onClick={() => setMobileOpen(false)}
-                className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
-                  activeLink === key
-                    ? "bg-[#1a1a1a] text-white"
-                    : "text-gray-400 hover:bg-[#141414] hover:text-white"
-                }`}
-              >
-                {label}
-              </Link>
-            ))}
-
-            <div className="my-2 border-t border-[#262626]" />
-            {MAIN_NAV_ITEMS.map(({ label, href, key }) => (
-              <Link
-                key={key}
-                href={href}
-                onClick={() => setMobileOpen(false)}
-                className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
-                  activeLink === key
-                    ? "bg-[#1a1a1a] text-white"
-                    : "text-gray-400 hover:bg-[#141414] hover:text-white"
-                }`}
-              >
-                {label}
-              </Link>
-            ))}
-
-            <div className="my-2 border-t border-[#262626]" />
-            <span className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
-              Research
-            </span>
-            {RESEARCH_ITEMS.map(({ label, href, key }) => (
-              <Link
-                key={key}
-                href={href}
-                onClick={() => setMobileOpen(false)}
-                className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
-                  activeLink === key
-                    ? "bg-[#1a1a1a] text-white"
-                    : "text-gray-400 hover:bg-[#141414] hover:text-white"
-                }`}
-              >
-                {label}
-              </Link>
+            {SPORTS.map((sport, sportIdx) => (
+              <div key={sport.sport}>
+                {sportIdx > 0 && <div className="my-2 border-t border-[#262626]" />}
+                <span className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
+                  {sport.label}
+                </span>
+                {sport.surfaces.map((g) => {
+                  const locked = isLocked(g)
+                  if (locked) {
+                    return (
+                      <Link
+                        key={g.surface}
+                        href="/subscribe"
+                        onClick={() => setMobileOpen(false)}
+                        className="flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-medium text-gray-400 hover:bg-[#141414] hover:text-white transition-colors"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Lock className="h-3.5 w-3.5" /> {g.label} — Unlock
+                        </span>
+                        <span className="rounded bg-[#10b981]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[#10b981]">
+                          Upgrade
+                        </span>
+                      </Link>
+                    )
+                  }
+                  return g.sections.flatMap((section) =>
+                    section.items.map((item) => (
+                      <Link
+                        key={item.key}
+                        href={item.href}
+                        onClick={() => setMobileOpen(false)}
+                        className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+                          activeLink === item.key
+                            ? "bg-[#1a1a1a] text-white"
+                            : "text-gray-400 hover:bg-[#141414] hover:text-white"
+                        }`}
+                      >
+                        {item.label}
+                      </Link>
+                    )),
+                  )
+                })}
+              </div>
             ))}
 
             <div className="my-2 border-t border-[#262626]" />
@@ -391,22 +327,6 @@ export function Nav({
 
             {isAdmin && (
               <>
-                <div className="my-2 border-t border-[#262626]" />
-                <span className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
-                  Fantasy
-                </span>
-                <Link
-                  href="/fantasy/draft"
-                  onClick={() => setMobileOpen(false)}
-                  className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
-                    activeLink === "fantasy-draft"
-                      ? "bg-[#1a1a1a] text-white"
-                      : "text-gray-400 hover:bg-[#141414] hover:text-white"
-                  }`}
-                >
-                  Draft Optimizer
-                </Link>
-
                 <div className="my-2 border-t border-[#262626]" />
                 <span className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
                   Admin

@@ -3,6 +3,7 @@
 import React, { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
+import { canAccess } from "@/lib/entitlements"
 import { getMfaStatus, getSessionAuthMethod, subscriberMfaRequired } from "@/lib/cognito"
 
 // Subscriber MFA enforcement (E9.19) — the SINGLE in-app gate that gates E9.8 go-live.
@@ -36,6 +37,25 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }, [loading, accessToken, groups, router])
 
   if (loading || accessToken === null) return null
+  return <>{children}</>
+}
+
+// Fantasy surface gate (E9.45). A signed-in caller without fantasy entitlement
+// (subscriber / admin / fantasy_comp) is bounced to /subscribe — the upsell. A
+// beta_tester is deliberately NOT entitled here (they keep full betting access).
+// This is the client half of a defense-in-depth pair: the fantasy DATA endpoints
+// enforce the same rule server-side (403), so hiding the page is not the only gate.
+export function FantasyGuard({ children }: { children: React.ReactNode }) {
+  const { accessToken, groups, loading } = useAuth()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (loading) return
+    if (accessToken === null) { router.push("/login"); return }
+    if (!canAccess("fantasy", groups)) { router.push("/subscribe"); return }
+  }, [loading, accessToken, groups, router])
+
+  if (loading || accessToken === null || !canAccess("fantasy", groups)) return null
   return <>{children}</>
 }
 
