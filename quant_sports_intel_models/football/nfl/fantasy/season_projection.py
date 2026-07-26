@@ -142,6 +142,22 @@ _ENV_TILT_POSITIONS = ("QB",)
 _INJURY_STATUS_GAMES_CAP = {"RES": 4.0, "PUP": 4.0, "NFI": 4.0, "SUS": 7.0}  # empirical status→games
 _INJURY_OVERRIDE_BLEND = 0.7   # weight on the status cap vs the base estimate (0 = off; 1 = hard cap)
 
+# ── NF-D2 #6 / NF-D3: ADP MARKET-CONSENSUS PRIOR (ablated 2026-07-26). Preseason ADP (Fantasy Football
+#    Calculator real-draft consensus, snapshotted before Week 1 ⇒ leakage-safe) is the single strongest
+#    forward ordering signal — it prices everything public the box-score line cannot see (offseason
+#    moves, holdouts, camp buzz, coaching/scheme, rookie draft capital). Blended in, it lifts held-out
+#    within-position ρ substantially; ADP-ALONE is a very strong NF-D3 benchmark.
+#    ⚠️ SHIPPED OFF BY DESIGN (`_ADP_PRIOR_BLEND = 0.0`). This projection is a NON-MARKET product
+#    (roadmap §0: "market-blind for non-market models"); its EDGE is precisely the DISAGREEMENTS with
+#    consensus, so blanket-blending ADP into every player would just make the board a laggy
+#    market-follower and destroy the disagreement value. ADP is therefore wired as (a) the NF-D3
+#    BENCHMARK and (b) an OPTIONAL prior (turn on via `adp_prior_blend > 0`) whose ρ-lift-vs-independence
+#    tradeoff `run_adp_ablation.py` quantifies. The blend is a within-position QUANTILE REMAP: it
+#    reorders a position's players toward the blended (model, ADP) score while preserving that
+#    position's exact projected-points multiset, so cross-position scale + the downstream raw-line
+#    scoring stay intact. No-op when the `adp` column is absent or blend == 0.
+_ADP_PRIOR_BLEND = 0.0
+
 # Minimum base-season games for a veteran to anchor a conservative positional prior (avoids the
 # cup-of-coffee crowd diluting the prior toward zero).
 _PRIOR_MIN_GAMES = 6
@@ -339,6 +355,64 @@ def environment_tilt_scale(df: pd.DataFrame, blend: float = _ENV_TILT_BLEND) -> 
         z[mk] = (ev[mk] - np.nanmean(ev[mk])) / (np.nanstd(ev[mk]) or 1.0)
         scale[idx] = np.clip(np.exp(blend * z), _ENV_TILT_LO, _ENV_TILT_HI)
     return scale
+
+
+def _zscore(x: np.ndarray) -> np.ndarray:
+    """Finite-safe z-score. Non-finite entries stay NaN; a zero/undefined std yields all-zeros."""
+    x = np.asarray(x, dtype=float)
+    m = np.isfinite(x)
+    z = np.full(len(x), np.nan)
+    if m.sum() >= 2 and np.nanstd(x[m]) > 0:
+        z[m] = (x[m] - np.nanmean(x[m])) / np.nanstd(x[m])
+    elif m.sum() >= 1:
+        z[m] = 0.0
+    return z
+
+
+def blend_adp_prior(
+    df: pd.DataFrame,
+    blend: float = _ADP_PRIOR_BLEND,
+    adp_col: str = "adp",
+    fp_col: str = "proj_fp_ppr",
+    positions: tuple = SKILL_POSITIONS,
+) -> np.ndarray:
+    """NF-D2 #6 / NF-D3 — reorder each position's projections toward the ADP market consensus,
+    PRESERVING the position's exact projected-points multiset (a within-position quantile remap).
+
+    Blended score per player = (1-blend)·z(model fp) + blend·(−z(adp))  (lower ADP = better ⇒ +score).
+    Within each position the players are re-ordered by that blended score and assigned that position's
+    projected-points values in descending order — so the position keeps its exact point scale (cross-
+    position comparability + the downstream raw-line rescore are untouched) while the ORDER moves toward
+    the blend. A player with no ADP keeps the model score (falls through in place). Pure; leakage-safe
+    (preseason ADP). Returns an adjusted `fp_col` array.
+
+    `blend = 0` ⇒ EXACT no-op (returns `fp_col` unchanged) = the market-blind product / the ablation
+    'model-only' arm. `blend = 1` ⇒ pure-ADP order over the position's points = the NF-D3 benchmark.
+    No-op (returns `fp_col` unchanged) when `adp_col` is absent from `df`.
+    """
+    fp = pd.to_numeric(df[fp_col], errors="coerce").to_numpy(dtype=float)
+    if blend <= 0.0 or adp_col not in df.columns:
+        return fp
+    adp = pd.to_numeric(df[adp_col], errors="coerce").to_numpy(dtype=float)
+    pos = np.array([(p or "").upper() for p in df["position"]], dtype=object)
+    out = fp.copy()
+    for p in positions:
+        idx = np.where(pos == p)[0]
+        if len(idx) < 2:
+            continue
+        zf = _zscore(fp[idx])
+        za = -_zscore(adp[idx])                       # lower ADP ⇒ higher score
+        za = np.where(np.isfinite(za), za, zf)        # no ADP ⇒ keep the model score
+        score = (1.0 - blend) * zf + blend * za
+        score = np.where(np.isfinite(score), score, zf)
+        # rank players by blended score (best first) and hand them this position's point values,
+        # sorted descending — a monotone quantile remap that preserves the point multiset exactly.
+        order = np.argsort(-score, kind="stable")
+        sorted_points = np.sort(fp[idx])[::-1]
+        remap = np.empty(len(idx), dtype=float)
+        remap[order] = sorted_points
+        out[idx] = remap
+    return out
 
 
 def _games_sd(depth_rank: pd.Series, position: pd.Series) -> pd.Series:

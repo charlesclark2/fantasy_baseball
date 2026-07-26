@@ -522,6 +522,17 @@ def write_report(proj: pd.DataFrame, cov: dict, backtests: list[dict], path: Pat
       "⚠️ The nflverse injury REPORT is in-season only and 2026 is unpublished; the roster PUP/IR flag "
       "is the forward source and populates through camp, so re-run as designations land (a live "
       "injury-news feed would surface offseason-surgery cases earlier).")
+    p("- **ADP market consensus (NF-D2 #6 / NF-D3) — tested; ships OFF, kept as the BENCHMARK.** "
+      "Preseason ADP (Fantasy Football Calculator real-draft consensus, leakage-safe) is the strongest "
+      "single forward ordering signal, but it is the MARKET's output, not orthogonal information. "
+      "Ablated 2019–2024, a clean POSITION SPLIT emerged: at QB/RB the market OUT-ORDERS the box-score "
+      "model (covered-tier ρ QB 0.48 vs 0.33, RB 0.62 vs 0.52) and the model's fades are noise; at "
+      "WR/TE the model TIES/BEATS ADP and — crucially — where model and ADP most disagree the MODEL "
+      "predicts the realized finish better (overall 0.51 vs 0.28). A blanket blend is net-negative on "
+      "the board and would erase that disagreement edge, so this NON-MARKET projection stays independent "
+      "(`_ADP_PRIOR_BLEND=0.0`). ADP is delivered as the NF-D3 benchmark asset (`run_adp_ingest.py` → "
+      "`nfl/fantasy/benchmarks/`) + an optional evidence-backed QB/RB-scoped prior "
+      "(`blend_adp_prior`). See `ablation_results/nf_d2_adp_ablation.md`.")
     p("- **Rookies (QB/RB/WR/TE)** — a historical draft-slot → rookie-year production curve (power-law "
       "per position, fit on prior classes) nudged by the **NCAAF-P1A residual** (`projected_nfl_z` vs "
       "the slot-expected z — talent the draft board disagreed with), with deliberately wide intervals. "

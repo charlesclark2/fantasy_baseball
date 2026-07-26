@@ -404,3 +404,76 @@ def test_rookie_residual_nudge_orders_equal_slot_by_talent():
     proj = sp.project_rookies(incoming, curve, 2026).set_index("player_name")
     # same slot: the higher-talent (P1A z) rookie projects higher
     assert proj.loc["WR0", "proj_fp_ppr"] > proj.loc["WR4", "proj_fp_ppr"]
+
+
+# ── NF-D2 #6 / NF-D3: ADP market-consensus prior + benchmark ─────────────────────────────────────
+adp = pytest.importorskip("quant_sports_intel_models.football.nfl.fantasy.adp_source")
+
+
+def _adp_frame(fps, adps, positions):
+    return pd.DataFrame({
+        "player_id": [f"P{i}" for i in range(len(fps))],
+        "position": positions,
+        "proj_fp_ppr": fps,
+        "adp": adps,
+    })
+
+
+def test_zscore_is_finite_safe():
+    z = sp._zscore(np.array([1.0, 2.0, 3.0, np.nan]))
+    assert np.isnan(z[3])
+    assert z[0] < z[1] < z[2]
+    # a degenerate (all-equal) group yields zeros, not NaN/inf
+    assert np.allclose(sp._zscore(np.array([5.0, 5.0, 5.0])), 0.0)
+
+
+def test_blend_adp_prior_is_noop_when_off_or_absent():
+    df = _adp_frame([100.0, 90.0, 80.0], [3.0, 1.0, 2.0], ["RB", "RB", "RB"])
+    # blend=0 ⇒ EXACT no-op (the market-blind product / model-only arm)
+    assert np.allclose(sp.blend_adp_prior(df, blend=0.0), df["proj_fp_ppr"].to_numpy())
+    # missing adp column ⇒ no-op
+    assert np.allclose(sp.blend_adp_prior(df.drop(columns=["adp"]), blend=0.7),
+                       df["proj_fp_ppr"].to_numpy())
+
+
+def test_blend_adp_prior_preserves_point_multiset():
+    # the quantile remap reorders WITHIN a position but must keep the exact set of projected points
+    df = _adp_frame([100.0, 90.0, 80.0, 70.0], [4.0, 3.0, 2.0, 1.0], ["WR"] * 4)
+    out = sp.blend_adp_prior(df, blend=0.6)
+    assert sorted(out.tolist()) == sorted(df["proj_fp_ppr"].tolist())
+
+
+def test_blend_adp_prior_reorders_toward_adp():
+    # model ranks A>B>C>D; ADP ranks them exactly REVERSED (D best). A full blend to ADP must flip the
+    # order so the lowest-ADP (best) player gets the top points.
+    df = _adp_frame([100.0, 90.0, 80.0, 70.0], [4.0, 3.0, 2.0, 1.0], ["RB"] * 4)
+    out = sp.blend_adp_prior(df, blend=1.0)
+    # player P3 (adp=1, the consensus #1) should now carry the position's top points (100)
+    assert out[3] == pytest.approx(100.0)
+    assert out[0] == pytest.approx(70.0)  # model's #1 (worst ADP) drops to the bottom
+
+
+def test_blend_adp_prior_position_scoping():
+    # QB/RB scoped: RB reorders toward ADP; WR is left exactly at the model line
+    df = _adp_frame([100.0, 90.0, 60.0, 50.0], [2.0, 1.0, 2.0, 1.0], ["RB", "RB", "WR", "WR"])
+    out = sp.blend_adp_prior(df, blend=1.0, positions=("QB", "RB"))
+    # RB pair flips toward ADP (P1 has better adp ⇒ gets 100)
+    assert out[1] == pytest.approx(100.0) and out[0] == pytest.approx(90.0)
+    # WR pair is untouched (scoped out) ⇒ exactly the model line
+    assert out[2] == pytest.approx(60.0) and out[3] == pytest.approx(50.0)
+
+
+def test_blend_adp_prior_no_adp_player_keeps_model_score():
+    # a player with NaN ADP falls through in place (keeps the model score) while the covered ones blend
+    df = _adp_frame([100.0, 90.0, 80.0], [np.nan, 1.0, 2.0], ["RB"] * 3)
+    out = sp.blend_adp_prior(df, blend=1.0)
+    # still a valid permutation of the point multiset
+    assert sorted(out.tolist()) == [80.0, 90.0, 100.0]
+
+
+def test_adp_name_normalization_and_aliases():
+    n = adp._normalize_name
+    assert n("Marquise Brown") == n("Hollywood Brown")     # nickname alias
+    assert n("Kenneth Walker III") == "kenneth walker"     # generational suffix stripped
+    assert n("Ja'Marr Chase") == "jamarr chase"            # punctuation removed
+    assert n("Amon-Ra St. Brown") == "amonra st brown"
