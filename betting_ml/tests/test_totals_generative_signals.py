@@ -97,6 +97,19 @@ def test_served_dispersion_is_e23_heldout_not_artifact_trainfit(artifact, monkey
     assert r_home < artifact["negbin_r"] and r_away < artifact["negbin_r"]
 
 
+def test_dispersion_falls_back_to_local_json_when_s3_key_wrong(monkeypatch):
+    # A wrong/truncated S3 key must NOT silently degrade to the pooled default — the committed local
+    # JSON (correct per-side r) is the fallback. Simulate "scoring from S3" + an S3 read that fails.
+    monkeypatch.setattr(g, "_artifacts_from_s3", lambda: True)
+    import boto3
+    def _boom(*a, **k):
+        raise RuntimeError("NoSuchKey")
+    monkeypatch.setattr(boto3, "client", _boom)
+    r_home, r_away = g._load_dispersion()
+    assert r_home == pytest.approx(4.0645, abs=1e-3)  # local, NOT pooled 3.7311
+    assert r_away == pytest.approx(3.3977, abs=1e-3)
+
+
 def test_write_signals_dry_run_row_shape(artifact):
     df = _perside_frame([2026])
     out = g.score_with_champion(df, artifact, _R_HOME, _R_AWAY)

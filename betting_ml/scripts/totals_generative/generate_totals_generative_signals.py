@@ -127,22 +127,34 @@ _TEMP_TABLE = "tmp_totals_generative_signals_incoming"
 # Calibrated per-side dispersion (E2.3 held-out r) + artifact loading
 # ---------------------------------------------------------------------------
 
+def _read_dispersion_json() -> dict | None:
+    """Read totals_distribution_v1.json: S3 first (when scoring from S3), then the COMMITTED LOCAL
+    file, then None. The local fallback is deliberate — the local JSON is version-controlled and always
+    correct, so a wrong/missing S3 KEY (e.g. a truncated upload) can never silently degrade the served
+    per-side r to the pooled default. Returns None only if BOTH are unreadable."""
+    if _artifacts_from_s3():
+        try:
+            import boto3  # lazy
+            bucket, key = _DIST_JSON_S3_URI[5:].split("/", 1)
+            body = boto3.client("s3").get_object(Bucket=bucket, Key=key)["Body"].read()
+            return json.loads(body)
+        except Exception as exc:  # noqa: BLE001 — fall through to the committed local copy
+            print(f"  [WARN] S3 dispersion JSON unreadable ({type(exc).__name__}: {exc}); "
+                  f"falling back to the committed local {_DIST_JSON_LOCAL.name}.")
+    try:
+        return json.loads(Path(_DIST_JSON_LOCAL).read_text())
+    except Exception as exc:  # noqa: BLE001 — never let a missing JSON kill scoring
+        print(f"  [WARN] local dispersion JSON unreadable ({exc}); using pooled r=3.7311 default.")
+        return None
+
+
 def _load_dispersion() -> tuple[float, float]:
     """Return (r_home, r_away) — the E2.3 leakage-safe held-out-calibrated per-side dispersion.
 
-    NOT the artifact's train-fit `negbin_r` (under-dispersed; the bug E2.3 fixed). Falls back to the
-    pooled `dispersion_r` then a hard 3.73 default so the generator never dies on a stale JSON."""
-    path = _DIST_JSON_S3_URI if _artifacts_from_s3() else str(_DIST_JSON_LOCAL)
-    try:
-        if str(path).startswith("s3://"):
-            import boto3  # lazy — laptop path uses the local file
-            bucket, key = str(path)[5:].split("/", 1)
-            body = boto3.client("s3").get_object(Bucket=bucket, Key=key)["Body"].read()
-            doc = json.loads(body)
-        else:
-            doc = json.loads(Path(path).read_text())
-    except Exception as exc:  # noqa: BLE001 — never let a missing JSON kill scoring
-        print(f"  [WARN] could not read {path} ({exc}); using pooled r=3.7311 default.")
+    NOT the artifact's train-fit `negbin_r` (under-dispersed; the bug E2.3 fixed). S3 → committed
+    local → pooled-default, so the generator never dies AND a wrong S3 key can't silently pool."""
+    doc = _read_dispersion_json()
+    if doc is None:
         return 3.7311, 3.7311
     pooled = float(doc.get("dispersion_r", 3.7311))
     r_home = float(doc.get("dispersion_r_home", pooled))

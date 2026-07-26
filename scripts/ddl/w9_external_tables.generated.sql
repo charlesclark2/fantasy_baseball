@@ -114,9 +114,32 @@ COMMENT = 'E11.1-W9: starter_ip_signals signal store from S3 lakehouse parquet';
 -- Preserve the feature/reader grant on (re)create (INC-18 band-aid class):
 GRANT SELECT ON EXTERNAL TABLE baseball_data.lakehouse_ext.starter_ip_signals TO ROLE CREDENCE_API_RO;
 
+-- ── totals_generative_signals  (12 columns) ──
+CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.totals_generative_signals (
+    GAME_PK                          VARCHAR        AS (VALUE:game_pk::VARCHAR),
+    SIDE                             VARCHAR        AS (VALUE:side::VARCHAR),
+    GAME_DATE                        DATE           AS (VALUE:game_date::DATE),
+    GAME_YEAR                        NUMBER(38,0)   AS (VALUE:game_year::NUMBER(38,0)),
+    TOTALS_PERSIDE_MU                FLOAT          AS (VALUE:totals_perside_mu::FLOAT),
+    TOTALS_PERSIDE_DISPERSION        FLOAT          AS (VALUE:totals_perside_dispersion::FLOAT),
+    TOTALS_PERSIDE_RAW               FLOAT          AS (VALUE:totals_perside_raw::FLOAT),
+    UNCERTAINTY                      FLOAT          AS (VALUE:uncertainty::FLOAT),
+    IS_OOS                           BOOLEAN        AS (VALUE:is_oos::BOOLEAN),
+    TRAIN_THROUGH_SEASON             NUMBER(38,0)   AS (VALUE:train_through_season::NUMBER(38,0)),
+    MODEL_VERSION                    VARCHAR        AS (VALUE:model_version::VARCHAR),
+    INGESTION_TS                     TIMESTAMP_NTZ  AS (VALUE:ingestion_ts::TIMESTAMP_NTZ)
+)
+WITH LOCATION = @baseball_data.lakehouse_ext.s3_lakehouse/totals_generative_signals/
+FILE_FORMAT = baseball_data.lakehouse_ext.parquet_snappy
+AUTO_REFRESH = FALSE
+COMMENT = 'E11.1-W9: totals_generative_signals signal store from S3 lakehouse parquet';
+-- Preserve the feature/reader grant on (re)create (INC-18 band-aid class):
+GRANT SELECT ON EXTERNAL TABLE baseball_data.lakehouse_ext.totals_generative_signals TO ROLE CREDENCE_API_RO;
+
 -- Verification (run after CREATE):
 -- SELECT count(*) FROM baseball_data.lakehouse_ext.mart_sub_model_signals;
 -- SELECT count(*) FROM baseball_data.lakehouse_ext.offense_v1_signals;
 -- SELECT count(*) FROM baseball_data.lakehouse_ext.offense_v2_signals;
 -- SELECT count(*) FROM baseball_data.lakehouse_ext.starter_suppression_signals;
 -- SELECT count(*) FROM baseball_data.lakehouse_ext.starter_ip_signals;
+-- SELECT count(*) FROM baseball_data.lakehouse_ext.totals_generative_signals;
