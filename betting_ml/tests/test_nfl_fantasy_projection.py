@@ -135,6 +135,66 @@ def test_veteran_usage_role_reorders_equal_line_by_snap_share():
     assert off.loc["HIGH_SNAP", "proj_fp_ppr"] == pytest.approx(off.loc["LOW_SNAP", "proj_fp_ppr"])
 
 
+# ── NF-D2 slice 3: team-change / depth-jump opportunity ──────────────────────────────────────────
+def test_role_volume_prior_orders_by_depth_rank():
+    base = _synth_base()
+    # add a depth spread so the prior has rank-1 and rank-3 buckets
+    rvp = sp.role_volume_prior(base)
+    # every entry is a (position, rank)->float; a rank-1 RB should out-produce a rank-3 RB if both exist
+    assert all(isinstance(k, tuple) and isinstance(v, float) for k, v in rvp.items())
+    assert ("RB", 1) in rvp
+
+
+def test_mover_scale_boosts_upgrade_and_no_ops_non_movers():
+    df = pd.DataFrame({
+        "player_id": ["A", "B", "C", "D"],
+        "position": ["RB", "RB", "QB", "WR"],
+        "base_team": ["AAA", "AAA", "AAA", "AAA"],
+        "proj_team": ["BBB", "AAA", "BBB", None],           # A moved, B stayed, C moved(QB), D no proj team
+        "depth_chart_position_rank": [1.0, 1.0, 1.0, 1.0],
+    })
+    rvp = {("RB", 1): 18.0, ("WR", 1): 15.0}                # new-role level well above the current fp
+    fp_pg = np.array([9.0, 9.0, 9.0, 9.0])                  # everyone currently at 9/gm
+    scale = sp.mover_opportunity_scale(df, rvp, fp_pg, blend=0.5, cap=1.6)
+    assert scale[0] > 1.0                                   # A: RB mover upgraded toward 18 → boosted
+    assert scale[1] == pytest.approx(1.0)                   # B: not a mover → no-op
+    assert scale[2] == pytest.approx(1.0)                   # C: QB out of scope → no-op
+    assert scale[3] == pytest.approx(1.0)                   # D: unknown proj team → no-op
+    assert (scale <= 1.6 + 1e-9).all() and (scale >= 1 / 1.6 - 1e-9).all()  # clamped
+
+
+def test_mover_scale_is_noop_without_prior_or_columns():
+    df = pd.DataFrame({"player_id": ["A"], "position": ["RB"]})  # no base_team/proj_team
+    assert sp.mover_opportunity_scale(df, {("RB", 1): 18.0}, np.array([9.0])) [0] == pytest.approx(1.0)
+    df2 = pd.DataFrame({"player_id": ["A"], "position": ["RB"], "base_team": ["X"], "proj_team": ["Y"]})
+    assert sp.mover_opportunity_scale(df2, {}, np.array([9.0]))[0] == pytest.approx(1.0)  # empty prior
+
+
+def test_veteran_mover_into_bigger_role_projects_higher():
+    # a backup-usage RB (low per-game line) who CHANGES teams into a lead role should project higher
+    # with the mover feature ON than OFF — the stale old-team line understates the new opportunity.
+    def rb(pid, base_team, proj_team, rank):
+        base = {"player_id": pid, "player_name": pid, "team_id": proj_team, "position": "RB",
+                "games_played": 14, "depth_chart_position_rank": rank, "fp_ppr_sd": 6.0,
+                "base_team": base_team, "proj_team": proj_team}
+        for s in sp._VET_PERGAME_STATS:
+            base[s + "_pg"] = 0.0
+        base.update(rush_att_pg=8, rush_yds_pg=34, rush_td_pg=0.2, targets_pg=2, rec_pg=1.5, rec_yds_pg=11)
+        return base
+    # a fuller field so the role-volume prior has a believable rank-1 level to pull toward
+    rows = [rb(f"S{i}", "AAA", "AAA", 1) for i in range(6)]      # incumbent rank-1 starters (higher volume)
+    for r in rows:
+        r.update(rush_att_pg=17, rush_yds_pg=78, rush_td_pg=0.5, targets_pg=3, rec_pg=2.4, rec_yds_pg=18)
+    rows.append(rb("MOVER", "OLD", "NEW", 1))                    # our backup-line RB moving into a rank-1 role
+    base = pd.DataFrame(rows)
+    priors = sp.positional_pergame_priors(base)
+    rvp = sp.role_volume_prior(base)
+    on = sp.project_veterans(base, priors, 2026, role_vol_prior=rvp, mover_opportunity_blend=0.35).set_index("player_id")
+    off = sp.project_veterans(base, priors, 2026, role_vol_prior=None).set_index("player_id")
+    assert on.loc["MOVER", "proj_fp_ppr"] > off.loc["MOVER", "proj_fp_ppr"]   # boosted by the new role
+    assert on.loc["S0", "proj_fp_ppr"] == pytest.approx(off.loc["S0", "proj_fp_ppr"])  # stayer unchanged
+
+
 # ── shrinkage ───────────────────────────────────────────────────────────────────────────────────
 def test_shrink_pulls_small_sample_harder():
     prior = np.array([10.0, 10.0])

@@ -51,6 +51,7 @@ from quant_sports_intel_models.football.nfl.fantasy.season_projection import (  
     positional_pergame_priors,
     project_rookies,
     project_veterans,
+    role_volume_prior,
 )
 
 log = logging.getLogger("nfl.fantasy.fastpath")
@@ -199,28 +200,47 @@ def load_base_season(
     # current-season snapshot (not yet on any team's depth chart) falls back to the SCD record.
     role = con.sql(f"""
         with current_preseason as (
-            -- one row per player: a multi-position player (e.g. Taysom Hill listed at QB AND TE) has
-            -- several current-depth rows; keep his best (lowest) rank so the role join stays 1:1 and
-            -- can't fan a player into duplicate projection rows.
-            select player_id, depth_chart_position_rank
+            -- one row per player = the FRESHEST forward depth snapshot. Read both the base-season and
+            -- the projection-season (base+1) partitions and keep the latest `snap_ts` so a 2026
+            -- post-free-agency/draft snapshot (stored under the season=base+1 partition) WINS over a
+            -- stale pre-free-agency one under season=base — otherwise the forward role/team is pinned
+            -- to March and misses the offseason moves NF-D2 slice 3 exists to catch. A multi-position
+            -- player (Taysom Hill at QB AND TE) is deduped to his best (lowest) rank so the role join
+            -- stays 1:1. `player_team` = the PROJECTION-season (forward) team — slice 3 compares it to
+            -- the base-season team to detect a team change. (For a backtest the base+1 partition does
+            -- not exist ⇒ this is a no-op that reads only season=base, exactly as before.)
+            select player_id, depth_chart_position_rank, player_team
             from {staging_schema}.stg_nfl_depth_charts_current
-            where season = {season}
+            where season in ({season}, {season} + 1)
             qualify row_number() over (
-                partition by player_id order by depth_chart_position_rank asc nulls last
+                partition by player_id
+                order by snap_ts desc nulls last, depth_chart_position_rank asc nulls last
             ) = 1
         ),
         scd_current as (
-            select player_id, depth_chart_position_rank
+            select player_id, depth_chart_position_rank, player_team
             from {schema}.dim_player_role where current_record_indicator = 'Y'
             qualify row_number() over (partition by player_id order by record_effective_ts desc) = 1
         )
         select
             coalesce(p.player_id, s.player_id)                                as player_id,
-            coalesce(p.depth_chart_position_rank, s.depth_chart_position_rank) as depth_chart_position_rank
+            coalesce(p.depth_chart_position_rank, s.depth_chart_position_rank) as depth_chart_position_rank,
+            coalesce(p.player_team, s.player_team)                            as proj_team
         from scd_current s
         full outer join current_preseason p using (player_id)
     """).df()
     df = df.merge(role, on="player_id", how="left")
+
+    # NF-D2 slice 3: team-change detection. `base_team` = the base-season team (the `team_id` from the
+    # most-recent base-season week); `proj_team` = the forward team from the current depth-chart
+    # snapshot (populated for the live board via `stg_nfl_depth_charts_current`; NULL for older
+    # backtest seasons whose forward role falls back to the SCD — the mover step then no-ops). Set the
+    # displayed `team_id` to the forward team when known, so a team-changer's board row shows the team
+    # they're actually projected on.
+    df["base_team"] = df["team_id"]
+    if "proj_team" not in df.columns:
+        df["proj_team"] = pd.NA
+    df["team_id"] = df["proj_team"].where(df["proj_team"].notna(), df["base_team"])
     return df
 
 
@@ -275,10 +295,17 @@ def load_realized_season(con, season: int, schema: str = MARTS_SCHEMA) -> pd.Dat
 # Projection assembly
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 def build_projection(con, base_season: int, projection_season: int, schema: str,
-                     usage_role_blend: float | None = None) -> pd.DataFrame:
+                     usage_role_blend: float | None = None,
+                     mover_opportunity_blend: float | None = None) -> pd.DataFrame:
     base = load_base_season(con, base_season, schema)
     priors = positional_pergame_priors(base)
     kw = {} if usage_role_blend is None else {"usage_role_blend": usage_role_blend}
+    # NF-D2 slice 3: the role→volume prior (in-fold from the base season) drives the team-changer
+    # rescale. Passing it in turns the mover step ON (build the live board with it); the ablation
+    # harness passes mover_opportunity_blend=0 for the "off" baseline arm.
+    kw["role_vol_prior"] = role_volume_prior(base)
+    if mover_opportunity_blend is not None:
+        kw["mover_opportunity_blend"] = mover_opportunity_blend
     vets = project_veterans(base, priors, projection_season, **kw)
 
     rookies_all = pd.read_parquet(_ROOKIE_PARQUET)
@@ -424,6 +451,14 @@ def write_report(proj: pd.DataFrame, cov: dict, backtests: list[dict], path: Pat
       "MVP-1 baseline (RB +0.009 / WR +0.009 / TE +0.007 / QB +0.000, 2019–2025) — see "
       "`ablation_results/nf_d2_snap_role_ablation.md`. Leakage-safe (a realized base-season quantity) "
       "and non-double-counting (it moves only playing-time, not the per-game production line).")
+    p("- **Team-change / depth-jump opportunity (NF-D2 slice 3)** — for a player who CHANGES teams "
+      "(base-season team ≠ projection-season team) at RB/WR/TE, the per-game line is rescaled toward "
+      "the NEW role's volume level (a stale old-team line understates a role UPGRADE, overstates a "
+      "player buried on a new depth chart). Ablated held-out lift over slice-1: RB +0.008 / WR +0.006 "
+      "/ TE +0.007 / QB +0.000, with the MOVER subpopulation +~0.03 — see "
+      "`ablation_results/nf_d2_team_context_ablation.md`. Leakage-safe (the forward team + role are "
+      "read from the freshest preseason depth-chart snapshot). Fires only where the depth feed has "
+      "captured the move, so re-run as the offseason depth charts refresh through camp.")
     p("- **Rookies (QB/RB/WR/TE)** — a historical draft-slot → rookie-year production curve (power-law "
       "per position, fit on prior classes) nudged by the **NCAAF-P1A residual** (`projected_nfl_z` vs "
       "the slot-expected z — talent the draft board disagreed with), with deliberately wide intervals. "

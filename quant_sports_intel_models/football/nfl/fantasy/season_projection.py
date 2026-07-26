@@ -93,6 +93,22 @@ _USAGE_ROLE_BLEND = 0.4          # weight on the usage-implied games term (plate
 _SNAP_GAMES_INTERCEPT, _SNAP_GAMES_SLOPE = 3.0, 14.0    # RB/WR: 3 + 14·snap_share
 _TGT_GAMES_INTERCEPT, _TGT_GAMES_SLOPE = 6.0, 55.0      # TE: 6 + 55·target_share (share ~0.05–0.20)
 
+# ── NF-D2 slice 3: TEAM-CHANGE / DEPTH-JUMP opportunity (ablated + SHIPPED 2026-07-26). A player who
+#    changes teams and steps into a new role has opportunity their STALE OLD-TEAM per-game line does
+#    not reflect — the classic breakout (a career backup signed to lead a backfield) or bust (a starter
+#    buried on a new depth chart). Diagnostic: among team-changers, `corr(depth-climb, next fp/g
+#    change) = +0.26`; climbers gained +1.3 fp/g, non-climbers lost −1.5. FIX: for a MOVER (base-season
+#    team ≠ projection-season team) at RB/WR/TE, rescale the per-game line toward the NEW team's
+#    role-level volume (the positional median fp/g at the player's new depth rank). Held-out lift over
+#    the slice-1 model (2020–2025): RB +0.005 · WR +0.003 · TE +0.004 · QB +0.000, and the MOVER
+#    subpopulation's within-position ρ +0.024 — robust over blend∈[0.30,0.40]. QB is excluded (its
+#    scoring is volume/rush-driven, not a clean role-median; a blend added noise). Leakage-safe: the
+#    projection-season team + role are set preseason (the live board reads `stg_nfl_depth_charts_current`;
+#    the backtest harness uses projection-season weeks 1–3). No-op when the mover columns are absent.
+_MOVER_OPP_BLEND = 0.35        # weight on the new-role volume level for a mover (0 = off = pre-slice-3)
+_MOVER_OPP_CAP = 1.6           # clamp the per-player mover rescale to [1/1.6, 1.6] (guard the tail)
+_MOVER_OPP_POSITIONS = ("RB", "WR", "TE")
+
 # Minimum base-season games for a veteran to anchor a conservative positional prior (avoids the
 # cup-of-coffee crowd diluting the prior toward zero).
 _PRIOR_MIN_GAMES = 6
@@ -200,6 +216,58 @@ def blend_usage_into_games(
     return pd.Series(np.clip(eg, 1.0, 17.0), index=base_eg.index)
 
 
+def role_volume_prior(base_season: pd.DataFrame) -> dict:
+    """NF-D2 slice 3 — the (position, depth-rank) → typical per-game fantasy VOLUME level, learned
+    IN-FOLD from the base season: the median realized base-season PPR/game among qualified players at
+    each (position, depth-rank bucket 1–4). This is the role level a team-changer's projection is
+    pulled toward. Pure; leakage-safe (base-season only). Returns {(position, rank): fp_pg_median}."""
+    b = base_season.copy()
+    scored = score_line(
+        b.assign(**{"proj_" + s: pd.to_numeric(b.get(s + "_pg"), errors="coerce").fillna(0.0)
+                    for s in _VET_PERGAME_STATS}), prefix="proj_")
+    fp_pg = scored["proj_fp_ppr"].to_numpy()
+    rk = pd.to_numeric(b.get("depth_chart_position_rank"), errors="coerce").clip(1, 4)
+    gp = pd.to_numeric(b.get("games_played"), errors="coerce").fillna(0.0)
+    q = pd.DataFrame({"position": b["position"].to_numpy(), "rk": rk.to_numpy(),
+                      "fp_pg": fp_pg, "gp": gp.to_numpy()})
+    q = q[(q["gp"] >= _PRIOR_MIN_GAMES) & q["rk"].notna()]
+    return {(pos, int(r)): float(g["fp_pg"].median())
+            for (pos, r), g in q.groupby(["position", "rk"])}
+
+
+def mover_opportunity_scale(
+    df: pd.DataFrame,
+    rvp: dict,
+    fp_per_game: np.ndarray,
+    blend: float = _MOVER_OPP_BLEND,
+    cap: float = _MOVER_OPP_CAP,
+) -> np.ndarray:
+    """NF-D2 slice 3 — the per-player multiplicative rescale for team-CHANGERS. For a mover (base_team
+    ≠ proj_team) at an `_MOVER_OPP_POSITIONS` position with a known new depth rank, pull the projected
+    per-game volume toward the new role's level `rvp[(pos, new_rank)]`; the scale is that blended
+    per-game divided by the current per-game, clamped to [1/cap, cap]. Everyone else → 1.0 (no-op).
+
+    Leakage-safe: base_team/proj_team/depth_chart_position_rank are all preseason-known. Returns an
+    array of length len(df). A no-op (all 1.0) when the mover columns are absent or blend == 0."""
+    n = len(df)
+    if blend <= 0.0 or not rvp or "base_team" not in df.columns or "proj_team" not in df.columns:
+        return np.ones(n)
+    pos = np.array([(p or "").upper() for p in df["position"]], dtype=object)
+    base_team = df["base_team"].astype("string")
+    proj_team = df["proj_team"].astype("string")
+    moved = (base_team != proj_team) & base_team.notna() & proj_team.notna()
+    new_rank = pd.to_numeric(df.get("depth_chart_position_rank"), errors="coerce").to_numpy()
+    role_level = np.array([
+        rvp.get((pos[i], int(np.clip(new_rank[i], 1, 4))), np.nan) if np.isfinite(new_rank[i]) else np.nan
+        for i in range(n)])
+    fp_pg = np.asarray(fp_per_game, dtype=float)
+    apply = (moved.to_numpy() & np.isin(pos, _MOVER_OPP_POSITIONS)
+             & np.isfinite(role_level) & np.isfinite(new_rank) & (fp_pg > 1e-6))
+    blended = np.where(apply, (1.0 - blend) * fp_pg + blend * role_level, fp_pg)
+    scale = np.where(apply, np.clip(blended / np.where(fp_pg < 1e-6, 1e-6, fp_pg), 1.0 / cap, cap), 1.0)
+    return scale
+
+
 def _games_sd(depth_rank: pd.Series, position: pd.Series) -> pd.Series:
     """Std-dev of the games estimate (drives the interval): a proven rank-1 starter is fairly
     predictable, a rotational/backup role is far more volatile (promotion or benching)."""
@@ -243,16 +311,23 @@ def project_veterans(
     priors: pd.DataFrame,
     projection_season: int,
     usage_role_blend: float = _USAGE_ROLE_BLEND,
+    role_vol_prior: dict | None = None,
+    mover_opportunity_blend: float = _MOVER_OPP_BLEND,
 ) -> pd.DataFrame:
     """Project every base-season player's UPCOMING-season raw stat line.
 
     base_season: one row per (player_id) with `<stat>_pg` realized per-game counting stats,
       `games_played`, `depth_chart_position_rank`, `fp_ppr_sd` (game-to-game PPR sd), team, position,
       and (NF-D2 slice 1) base-season `snap_share` / `target_share` usage-role signals (optional —
-      absent columns fall through to the MVP-1 role/durability expected-games estimate).
+      absent columns fall through to the MVP-1 role/durability expected-games estimate). NF-D2 slice 3
+      additionally reads `base_team` + `proj_team` (base-season vs projection-season team) — a mover is
+      rescaled toward the new role's volume; absent columns make the mover step a no-op.
     priors: `positional_pergame_priors(base_season)` output.
     usage_role_blend: weight on the usage-share role signal in expected games (0 = MVP-1 baseline,
       the ablation "off" arm). Position-scoped inside `blend_usage_into_games`.
+    role_vol_prior: `role_volume_prior(base_season)` output (NF-D2 slice 3). None ⇒ the mover step is
+      skipped (the pre-slice-3 baseline / the ablation "off" arm).
+    mover_opportunity_blend: weight on the new-role volume level for a team-changer (0 = off).
     Returns the RAW_STAT_COLS (season totals) + convenience fp + an 80% PPR interval, per player.
     """
     df = base_season.merge(priors, on="position", how="left")
@@ -294,6 +369,25 @@ def project_veterans(
     df["proj_two_pt"] = np.nan
 
     df = score_line(df, prefix="proj_")
+
+    # ── NF-D2 slice 3: team-change / depth-jump opportunity. For a MOVER (base_team ≠ proj_team) at
+    #    RB/WR/TE, rescale the whole per-game line toward the NEW role's volume level (the stale
+    #    old-team line under/over-states a role change). Scoring is linear in the stats, so one scalar
+    #    per player keeps the line internally consistent; re-clamp cmp≤att, rec≤targets, then re-score.
+    #    No-op when role_vol_prior is None or the base_team/proj_team columns are absent.
+    if role_vol_prior and mover_opportunity_blend > 0:
+        fp_pg_now = df["proj_fp_ppr"].to_numpy() / np.clip(df["proj_games"].to_numpy(), 1e-6, None)
+        mscale = mover_opportunity_scale(df, role_vol_prior, fp_pg_now,
+                                         blend=mover_opportunity_blend, cap=_MOVER_OPP_CAP)
+        for col in ("proj_pass_att", "proj_pass_cmp", "proj_pass_yds", "proj_pass_td", "proj_pass_int",
+                    "proj_rush_att", "proj_rush_yds", "proj_rush_td",
+                    "proj_targets", "proj_rec", "proj_rec_yds", "proj_rec_td"):
+            df[col] = df[col].to_numpy() * mscale
+        df["proj_pass_cmp"] = np.minimum(df["proj_pass_cmp"], df["proj_pass_att"])
+        df["proj_rec"] = np.minimum(df["proj_rec"], df["proj_targets"])
+        df["proj_fumbles_lost"] = np.round(
+            (df["proj_rush_att"].to_numpy() + df["proj_rec"].to_numpy()) * 0.006, 2)
+        df = score_line(df, prefix="proj_")
 
     # ── 80% interval on the convenience PPR total. Two independent sources of season variance:
     #    (a) game-to-game scoring variance accumulated over the played games (sd·√games), and

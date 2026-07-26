@@ -1,0 +1,41 @@
+{
+  "seasons": [
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "arms": {
+    "slice1_baseline": {
+      "QB": 0.6746,
+      "RB": 0.7392,
+      "WR": 0.7673,
+      "TE": 0.754,
+      "movers_allpos": 0.6872
+    },
+    "A_mover_opportunity": {
+      "QB": 0.6746,
+      "RB": 0.7474,
+      "WR": 0.7735,
+      "TE": 0.7612,
+      "movers_allpos": 0.7169
+    },
+    "B_env_safe_QB": {
+      "QB": 0.6809,
+      "RB": 0.7392,
+      "WR": 0.7673,
+      "TE": 0.754,
+      "movers_allpos": 0.6867
+    },
+    "B_env_opt_QB_LEAKY": {
+      "QB": 0.7476,
+      "RB": 0.7392,
+      "WR": 0.7673,
+      "TE": 0.754,
+      "movers_allpos": 0.6847
+    }
+  },
+  "verdict": "A (team-change / depth-jump opportunity) SHIPPED \u2014 RB/WR/TE all lift and the mover subpopulation +~0.03; wired into project_veterans. B (Vegas environment) is strong ONLY with LEAKY forward lines (QB +0.07); the leakage-safe prior-season proxy is marginal noise (~0) \u21d2 NOT shipped, BLOCKED on ingesting forward/preseason win totals to validate. C (system fit) deferred to NF1."
+}
