@@ -1,8 +1,17 @@
-"""E9.13 — generate plain-English pick narratives via Snowflake Cortex.
+"""E9.13 — generate plain-English pick narratives via Bedrock Nova Micro.
 
 Run AFTER predict_today.py for the same date. Reads rows where pick_explanation
-is populated but pick_narrative is NULL, calls Snowflake Cortex COMPLETE
-(mistral-7b), and writes pick_narrative back on the same row.
+is populated but pick_narrative is NULL, calls AWS Bedrock (Amazon Nova Micro
+via the Converse API), and writes pick_narrative back on the same row.
+
+E11.20 — migrated off Snowflake Cortex COMPLETE(mistral-7b) to Bedrock Nova Micro.
+This was the LAST sanctioned Snowflake-Cortex use; retiring it unblocks the
+eventual full SF decommission. Nova Micro is AWS first-party (no Marketplace
+opt-in), served from us-east-1, and validated against the stored Mistral outputs
+(exact numeric fidelity; concise two-paragraph output). Credentials resolve via
+the default chain — on the box that is the EC2 instance role, which MUST carry
+`bedrock:InvokeModel` on amazon.nova-micro-v1:0 (WARN-tier op: a missing grant
+degrades to empty-narrative, never HALTs).
 
 Cost guard: only processes has_odds=TRUE rows, so LLM spend is bounded to
 games that actually appear on the app (~10-15 calls/day, ≈$0.05/day).
@@ -34,13 +43,19 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+import boto3
+
 from betting_ml.utils.data_loader import get_snowflake_connection
 from betting_ml.utils.ml_env import ml_schema
 
 _ML_SCHEMA = ml_schema()
 
-# Snowflake Cortex model — mistral-7b is cheap and sufficient for 2-3 sentence summaries.
-_CORTEX_MODEL = "mistral-7b"
+# Bedrock Nova Micro — cheap AWS first-party model, sufficient for short narratives.
+# Region-pinned to us-east-1 (where Nova is served) — NOT us-east-2 (the DuckDB S3
+# region). The client resolves creds via the default chain (EC2 instance role on box).
+_BEDROCK_MODEL = "amazon.nova-micro-v1:0"
+_BEDROCK_REGION = "us-east-1"
+_bedrock_client = None
 
 # 3-letter MLB abbreviations → full city+nickname.
 # Mistral-7B has no baseball context; "ATH" → "Atlanta Hawks" is a real hallucination
@@ -85,6 +100,7 @@ _MLB_ABBR_TO_FULL: dict[str, str] = {
     "STL": "St. Louis Cardinals",
     # NL West
     "ARI": "Arizona Diamondbacks",
+    "AZ":  "Arizona Diamondbacks",   # StatsAPI/Odds feeds use "AZ" for the D-backs
     "COL": "Colorado Rockies",
     "LAD": "Los Angeles Dodgers",
     "SD":  "San Diego Padres",
@@ -320,7 +336,7 @@ def _validate_pick_consistency(row: dict) -> tuple[bool, str]:
 
 
 def _build_prompt(row: dict, expl: dict) -> str:
-    """Construct the Cortex narrative prompt for one game row.
+    """Construct the LLM narrative prompt for one game row.
 
     E9.20: calibrated_win_prob is always P(home wins). All probabilities are
     labelled by team name in the prompt so the LLM cannot flip home↔away.
@@ -399,6 +415,26 @@ def _build_prompt(row: dict, expl: dict) -> str:
             f"This is a market-transparency indicator — it does not imply a winning bet."
         )
 
+    # E11.20 — Python decides paragraph count deterministically. Nova (like Mistral)
+    # is unreliable at self-judging "does the totals section contain numbers" — in the
+    # A/B it false-negatived and skipped the totals paragraph on EVERY totals-present
+    # game. So we branch the closing here rather than asking the model to decide.
+    has_totals = bool(totals_ev_str)
+    if has_totals:
+        closing = f"""Write your explanation as TWO paragraphs in plain language, using "what drove the model's number" framing (never "why you'll win").
+
+Paragraph 1 — Moneyline: give each team's model win probability by name (e.g. "{home}: X%, {away}: Y%"), describe the model-vs-market divergence (edge) as a measure of disagreement (not a profit guarantee), and explain the top moneyline drivers listed above. If CLV confidence is provided, mention it briefly as the model's estimate of whether the closing line moves toward its pick — context, not a bet signal.
+
+Paragraph 2 — Total runs (Over/Under): give the total line, the model's P(over) versus the market's, the edge as a divergence measure, and the top total-runs drivers above.
+
+Use ONLY the exact team names given above."""
+    else:
+        closing = f"""Write your explanation as ONE paragraph in plain language, using "what drove the model's number" framing (never "why you'll win").
+
+Give each team's model win probability by name (e.g. "{home}: X%, {away}: Y%"), describe the model-vs-market divergence (edge) as a measure of disagreement (not a profit guarantee), and explain the top moneyline drivers listed above. If CLV confidence is provided, mention it briefly as the model's estimate of whether the closing line moves toward its pick — context, not a bet signal. Do not mention totals, the over/under, or run totals — no totals data is available for this game.
+
+Use ONLY the exact team names given above."""
+
     prompt = f"""You are writing a brief, factual explanation for a baseball analytics app.
 These are MLB (Major League Baseball) teams — not NBA, NFL, or any other sport.
 Do NOT recommend placing a bet. Do NOT use phrases like "you should bet" or "this is a good bet."
@@ -430,30 +466,38 @@ Top model drivers for total runs prediction:
 CLV confidence (line-value transparency):
 {clv_str or "  (not available)"}
 
-Write 2-3 sentences explaining what these statistics mean for today's game in plain language.
-Use the exact team names above and reference each team's win probability by name
-(e.g. "{home}: X%, {away}: Y%"). Mention the model-vs-market edge as a measure of divergence —
-it does not guarantee a winning bet. If CLV confidence is provided, mention it briefly as the
-model's estimate of whether the closing line will move toward its pick — frame it as additional
-context, not as a signal to place a bet. Use "what drove the model's number" framing, not "why you'll win."
+{closing}
 """
     return prompt.strip()
 
 
-def _call_cortex(conn, prompt: str) -> str | None:
-    """Call Snowflake Cortex COMPLETE and return the text response."""
+def _get_bedrock_client():
+    """Lazily build the region-pinned Bedrock runtime client (default cred chain)."""
+    global _bedrock_client
+    if _bedrock_client is None:
+        _bedrock_client = boto3.client("bedrock-runtime", region_name=_BEDROCK_REGION)
+    return _bedrock_client
+
+
+def _call_bedrock(prompt: str) -> str | None:
+    """Call Bedrock Nova Micro via the Converse API and return the text response.
+
+    Credentials resolve via the default chain — on the box that is the EC2 instance
+    role, which must carry bedrock:InvokeModel on the Nova Micro model. A missing
+    grant (or any Bedrock error) returns None → WARN-tier op writes no narrative and
+    continues; it never HALTs.
+    """
     try:
-        cur = conn.cursor()
-        cur.execute(
-            f"SELECT SNOWFLAKE.CORTEX.COMPLETE('{_CORTEX_MODEL}', %s)::VARCHAR",
-            [prompt],
+        client = _get_bedrock_client()
+        resp = client.converse(
+            modelId=_BEDROCK_MODEL,
+            messages=[{"role": "user", "content": [{"text": prompt}]}],
+            inferenceConfig={"maxTokens": 700, "temperature": 0.5, "topP": 0.9},
         )
-        row = cur.fetchone()
-        if row and row[0]:
-            return str(row[0]).strip()
-        return None
+        text = resp["output"]["message"]["content"][0]["text"].strip()
+        return text or None
     except Exception as exc:
-        print(f"    [E9.13] Cortex call failed: {exc}")
+        print(f"    [E11.20] Bedrock Nova call failed: {exc}")
         return None
 
 
@@ -538,7 +582,7 @@ def generate_narratives(
 
     mv_label = f"model_version={model_version}" if model_version else "all model_versions"
     print(f"[E9.13] Generating narratives for {len(records)} game(s) on {score_date_str} "
-          f"({mv_label}) via Cortex {_CORTEX_MODEL}{' [DRY RUN]' if dry_run else ''}")
+          f"({mv_label}) via Bedrock {_BEDROCK_MODEL}{' [DRY RUN]' if dry_run else ''}")
 
     conn = get_snowflake_connection()
     try:
@@ -574,7 +618,7 @@ def generate_narratives(
                 generated += 1
                 continue
 
-            narrative = _call_cortex(conn, prompt)
+            narrative = _call_bedrock(prompt)
             if narrative:
                 cur = conn.cursor()
                 cur.execute(
@@ -590,7 +634,7 @@ def generate_narratives(
                 print(f"  ✓ {away} @ {home} (game_pk={game_pk}, {pred_type}): {narrative[:80]}…")
                 generated += 1
             else:
-                print(f"  ✗ {away} @ {home} (game_pk={game_pk}): Cortex returned nothing")
+                print(f"  ✗ {away} @ {home} (game_pk={game_pk}): Bedrock returned nothing")
                 failed += 1
 
         if not dry_run:
@@ -634,7 +678,7 @@ def _parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         default=False,
-        help="Print prompts without calling Cortex or writing to Snowflake.",
+        help="Print prompts without calling Bedrock or writing to Snowflake.",
     )
     parser.add_argument(
         "--model-version",
