@@ -93,3 +93,4 @@ infrastructure/cognito/presignup_link/.build/
 
 # NF-D2 #6: re-fetchable FFC ADP cache (reproducible from the API; not committed)
 quant_sports_intel_models/football/nfl/fantasy/artifacts/adp_cache/
+ablation_results/**/*.parquet

@@ -1241,6 +1241,7 @@ def _build_eb_batter_only(conn, dry_run: bool) -> None:
     rebuilt here — it reads probable pitchers (announced days ahead), so it never lags the slate."""
     print("\nEB-batter-only intraday refresh (reuse existing precursor parquet; fresh stg_statsapi_lineups):")
     _register_w8a_views(conn, W8A_EB_BATTER_PRECURSORS)
+    _register_mle_prior_view(conn)   # E7.5 rookie prior (fail-safe → empty view if absent)
     _build_marts(conn, ["eb_batter_posteriors_raw"], dry_run)
     _register_mart_views(conn, ["eb_batter_posteriors_raw"], dry_run)
     _alert_stale_eb_batter(conn)
@@ -1582,6 +1583,40 @@ W8A_PRECURSOR_VIEWS = [
     "ref_eb_starter_priors", "ref_eb_lineup_priors", "ref_eb_bullpen_priors",
 ]
 
+# E7.5 — the recalibrated MiLB MLE rookie prior read by eb_batter_posteriors_raw. Registered via the
+# FAIL-SAFE helper below (NOT the uniform glob list) so a missing parquet degrades to the generic prior
+# instead of HALTing the serving-critical W8a build. Column contract mirrors mle_prior_calibrated.parquet.
+MLE_PRIOR_VIEW = "milb_mle_prior"
+_MLE_PRIOR_COLUMNS = [
+    ("batter_id", "VARCHAR"), ("mle_k_pct", "DOUBLE"), ("k_pct_prior_kappa", "DOUBLE"),
+    ("mle_bb_pct", "DOUBLE"), ("bb_pct_prior_kappa", "DOUBLE"),
+    ("mle_iso", "DOUBLE"), ("iso_prior_sd", "DOUBLE"),
+]
+
+
+def _register_mle_prior_view(conn) -> None:
+    """Register the E7.5 milb_mle_prior view over its single S3 parquet, degrading to an EMPTY typed view
+    when the parquet is absent (operator has not yet run run_mle_prior_recalibration.py --s3, or an
+    MLE-retrain gap). An empty view makes the eb_batter_posteriors_raw LEFT JOIN yield all-null MLE
+    columns → the generic archetype/slot prior is used everywhere, exactly the pre-E7.5 behaviour. This
+    keeps a missing rookie-prior artifact from HALTing the serving-critical build (the 'documented but not
+    set' landmine class)."""
+    glob = f"{LAKEHOUSE}/{MLE_PRIOR_VIEW}/**/*.parquet"
+    try:
+        conn.execute(
+            f"CREATE OR REPLACE VIEW {MLE_PRIOR_VIEW} AS "
+            f"SELECT * FROM read_parquet('{glob}', union_by_name=true)"
+        )
+        conn.execute(f"SELECT * FROM {MLE_PRIOR_VIEW} LIMIT 0").fetchall()  # probe: file(s) resolve?
+        n = conn.execute(f"SELECT count(*) FROM {MLE_PRIOR_VIEW}").fetchone()[0]
+        print(f"  registered S3 view: {MLE_PRIOR_VIEW} ({n} rookie priors)")
+    except Exception as e:  # noqa: BLE001 — missing parquet must NOT HALT the serving build
+        cols = ", ".join(f"CAST(NULL AS {t}) AS {c}" for c, t in _MLE_PRIOR_COLUMNS)
+        conn.execute(f"CREATE OR REPLACE VIEW {MLE_PRIOR_VIEW} AS SELECT {cols} WHERE 1=0")
+        print(f"  [ALERT] {MLE_PRIOR_VIEW} parquet absent ({type(e).__name__}) → EMPTY view; "
+              f"eb_batter_posteriors_raw falls back to the generic prior (run "
+              f"run_mle_prior_recalibration.py --s3 to enable the MiLB rookie prior)")
+
 # Feature/status models, dependency-ordered (each registered as a view after build so intra-W8a
 # reads resolve — stg_statsapi_starter_snapshots precedes feature_pregame_starter_status).
 W8A_FEATURE_MODELS = [
@@ -1638,6 +1673,7 @@ def _build_w8a(conn, dry_run: bool) -> None:
     (opt-in) so the daily HALT op never trips on it pre-cutover."""
     print("\nW8a precursor views (prior-wave marts/staging + W9 signal stores + W8a mirrors/seeds):")
     _register_w8a_views(conn, W8A_PRECURSOR_VIEWS)
+    _register_mle_prior_view(conn)   # E7.5 rookie prior (fail-safe → empty view if absent)
 
     # stg_statsapi_starter_snapshots RETAINS every (game_pk, side, ingestion_ts) snapshot, so the
     # monthly_schedule month-blob flatten is NOT collapsed early (the OOM source — same as

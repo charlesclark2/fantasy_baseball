@@ -1,0 +1,574 @@
+{
+  "season": 2026,
+  "generated_at": "2026-07-26T07:06:29.878269+00:00",
+  "source": "lake",
+  "positions": [
+    "QB",
+    "RB",
+    "WR",
+    "TE"
+  ],
+  "sizes": [
+    10,
+    12
+  ],
+  "configs": [
+    {
+      "name": "full_ppr",
+      "label": "Full-PPR",
+      "ppr": "ppr",
+      "superflex": false,
+      "description": "Full-PPR (1.0/reception), 12-team, 1QB/2RB/2WR/1TE/1FLEX.",
+      "roster": [
+        {
+          "name": "QB",
+          "count": 1,
+          "eligible": [
+            "QB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "RB",
+          "count": 2,
+          "eligible": [
+            "RB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "WR",
+          "count": 2,
+          "eligible": [
+            "WR"
+          ],
+          "bench": false
+        },
+        {
+          "name": "TE",
+          "count": 1,
+          "eligible": [
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "FLEX",
+          "count": 1,
+          "eligible": [
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "K",
+          "count": 1,
+          "eligible": [
+            "K"
+          ],
+          "bench": false
+        },
+        {
+          "name": "DST",
+          "count": 1,
+          "eligible": [
+            "DST"
+          ],
+          "bench": false
+        },
+        {
+          "name": "BN",
+          "count": 6,
+          "eligible": [
+            "QB",
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": true
+        }
+      ]
+    },
+    {
+      "name": "full_ppr_3wr",
+      "label": "Full-PPR \u00b7 3-WR",
+      "ppr": "ppr",
+      "superflex": false,
+      "description": "Full-PPR (1.0/reception), 12-team, 1QB/2RB/3WR/1TE/1FLEX (3-WR roster).",
+      "roster": [
+        {
+          "name": "QB",
+          "count": 1,
+          "eligible": [
+            "QB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "RB",
+          "count": 2,
+          "eligible": [
+            "RB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "WR",
+          "count": 3,
+          "eligible": [
+            "WR"
+          ],
+          "bench": false
+        },
+        {
+          "name": "TE",
+          "count": 1,
+          "eligible": [
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "FLEX",
+          "count": 1,
+          "eligible": [
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "K",
+          "count": 1,
+          "eligible": [
+            "K"
+          ],
+          "bench": false
+        },
+        {
+          "name": "DST",
+          "count": 1,
+          "eligible": [
+            "DST"
+          ],
+          "bench": false
+        },
+        {
+          "name": "BN",
+          "count": 6,
+          "eligible": [
+            "QB",
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": true
+        }
+      ]
+    },
+    {
+      "name": "half_ppr",
+      "label": "Half-PPR",
+      "ppr": "half",
+      "superflex": false,
+      "description": "Half-PPR (0.5/reception), 12-team, 1QB/2RB/2WR/1TE/1FLEX.",
+      "roster": [
+        {
+          "name": "QB",
+          "count": 1,
+          "eligible": [
+            "QB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "RB",
+          "count": 2,
+          "eligible": [
+            "RB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "WR",
+          "count": 2,
+          "eligible": [
+            "WR"
+          ],
+          "bench": false
+        },
+        {
+          "name": "TE",
+          "count": 1,
+          "eligible": [
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "FLEX",
+          "count": 1,
+          "eligible": [
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "K",
+          "count": 1,
+          "eligible": [
+            "K"
+          ],
+          "bench": false
+        },
+        {
+          "name": "DST",
+          "count": 1,
+          "eligible": [
+            "DST"
+          ],
+          "bench": false
+        },
+        {
+          "name": "BN",
+          "count": 6,
+          "eligible": [
+            "QB",
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": true
+        }
+      ]
+    },
+    {
+      "name": "half_ppr_3wr",
+      "label": "Half-PPR \u00b7 3-WR",
+      "ppr": "half",
+      "superflex": false,
+      "description": "Half-PPR (0.5/reception), 12-team, 1QB/2RB/3WR/1TE/1FLEX (3-WR roster).",
+      "roster": [
+        {
+          "name": "QB",
+          "count": 1,
+          "eligible": [
+            "QB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "RB",
+          "count": 2,
+          "eligible": [
+            "RB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "WR",
+          "count": 3,
+          "eligible": [
+            "WR"
+          ],
+          "bench": false
+        },
+        {
+          "name": "TE",
+          "count": 1,
+          "eligible": [
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "FLEX",
+          "count": 1,
+          "eligible": [
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "K",
+          "count": 1,
+          "eligible": [
+            "K"
+          ],
+          "bench": false
+        },
+        {
+          "name": "DST",
+          "count": 1,
+          "eligible": [
+            "DST"
+          ],
+          "bench": false
+        },
+        {
+          "name": "BN",
+          "count": 6,
+          "eligible": [
+            "QB",
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": true
+        }
+      ]
+    },
+    {
+      "name": "standard",
+      "label": "Standard (non-PPR)",
+      "ppr": "standard",
+      "superflex": false,
+      "description": "Standard (non-PPR), 12-team, 1QB/2RB/2WR/1TE/1FLEX.",
+      "roster": [
+        {
+          "name": "QB",
+          "count": 1,
+          "eligible": [
+            "QB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "RB",
+          "count": 2,
+          "eligible": [
+            "RB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "WR",
+          "count": 2,
+          "eligible": [
+            "WR"
+          ],
+          "bench": false
+        },
+        {
+          "name": "TE",
+          "count": 1,
+          "eligible": [
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "FLEX",
+          "count": 1,
+          "eligible": [
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "K",
+          "count": 1,
+          "eligible": [
+            "K"
+          ],
+          "bench": false
+        },
+        {
+          "name": "DST",
+          "count": 1,
+          "eligible": [
+            "DST"
+          ],
+          "bench": false
+        },
+        {
+          "name": "BN",
+          "count": 6,
+          "eligible": [
+            "QB",
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": true
+        }
+      ]
+    },
+    {
+      "name": "standard_3wr",
+      "label": "Standard \u00b7 3-WR",
+      "ppr": "standard",
+      "superflex": false,
+      "description": "Standard (non-PPR), 12-team, 1QB/2RB/3WR/1TE/1FLEX (3-WR roster).",
+      "roster": [
+        {
+          "name": "QB",
+          "count": 1,
+          "eligible": [
+            "QB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "RB",
+          "count": 2,
+          "eligible": [
+            "RB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "WR",
+          "count": 3,
+          "eligible": [
+            "WR"
+          ],
+          "bench": false
+        },
+        {
+          "name": "TE",
+          "count": 1,
+          "eligible": [
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "FLEX",
+          "count": 1,
+          "eligible": [
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "K",
+          "count": 1,
+          "eligible": [
+            "K"
+          ],
+          "bench": false
+        },
+        {
+          "name": "DST",
+          "count": 1,
+          "eligible": [
+            "DST"
+          ],
+          "bench": false
+        },
+        {
+          "name": "BN",
+          "count": 6,
+          "eligible": [
+            "QB",
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": true
+        }
+      ]
+    },
+    {
+      "name": "superflex",
+      "label": "Superflex (Full-PPR)",
+      "ppr": "ppr",
+      "superflex": true,
+      "description": "Superflex full-PPR, 12-team, adds a QB-eligible SUPERFLEX slot.",
+      "roster": [
+        {
+          "name": "QB",
+          "count": 1,
+          "eligible": [
+            "QB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "RB",
+          "count": 2,
+          "eligible": [
+            "RB"
+          ],
+          "bench": false
+        },
+        {
+          "name": "WR",
+          "count": 2,
+          "eligible": [
+            "WR"
+          ],
+          "bench": false
+        },
+        {
+          "name": "TE",
+          "count": 1,
+          "eligible": [
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "FLEX",
+          "count": 1,
+          "eligible": [
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "SUPERFLEX",
+          "count": 1,
+          "eligible": [
+            "QB",
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": false
+        },
+        {
+          "name": "K",
+          "count": 1,
+          "eligible": [
+            "K"
+          ],
+          "bench": false
+        },
+        {
+          "name": "DST",
+          "count": 1,
+          "eligible": [
+            "DST"
+          ],
+          "bench": false
+        },
+        {
+          "name": "BN",
+          "count": 6,
+          "eligible": [
+            "QB",
+            "RB",
+            "WR",
+            "TE"
+          ],
+          "bench": true
+        }
+      ]
+    }
+  ]
+}
