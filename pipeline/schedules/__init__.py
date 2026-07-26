@@ -19,9 +19,13 @@ from pipeline.schedules.sports_dbt_schedules import (
 # NF-D1: the annual NFL season roll-forward refresh (rosters/schedule/depth_charts/injuries/
 # rookie class). ⛔ default_status=STOPPED (operator-gated — the mart-rebuild step shares the
 # sports_nfl_dbt_build_job box-readiness prereq; the ingest step itself needs no API key).
+# NF-D5: the daily (through camp) Sleeper forward-availability refresh, continuing NF-D2 slice 5.
+# ⛔ default_status=STOPPED (operator-gated — same box-readiness prereq as NF-D1's roll-forward;
+# the Sleeper fetch itself needs no API key). WARN-tier throughout — advisory, non-serving.
 from pipeline.schedules.sports_rollforward_schedules import (
     sports_ncaaf_roll_forward_schedule,
     sports_nfl_roll_forward_schedule,
+    sports_nfl_sleeper_injuries_schedule,
 )
 # NCAAF-P0.6b: the recurring IN-SEASON closing-line catch-up (weekly, Aug-Jan). ⛔ default_status=
 # STOPPED (operator-gated, needs ODDS_API_KEY + CFBD_API_KEY) — ENABLE alongside the roll-forward
@@ -46,6 +50,7 @@ all_schedules = [
     sports_nfl_dbt_schedule,
     sports_ncaaf_roll_forward_schedule,
     sports_nfl_roll_forward_schedule,
+    sports_nfl_sleeper_injuries_schedule,
     sports_ncaaf_odds_capture_schedule,
     milb_ingest_schedule,
 ] + all_intraday_schedules

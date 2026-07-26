@@ -24,6 +24,8 @@ from pipeline.jobs.sports_ncaaf_rollforward_job import sports_ncaaf_roll_forward
 # NF-D1: the annual NFL season roll-forward (rosters/schedule/depth_charts/injuries/rookie class
 # → mart rebuild) — the NFL analog of NCAAF-P0.7.
 from pipeline.jobs.sports_nfl_rollforward_job import sports_nfl_roll_forward_job
+# NF-D5: daily (through camp) Sleeper forward-availability capture — continues NF-D2 slice 5.
+from pipeline.jobs.sports_nfl_sleeper_injuries_job import sports_nfl_sleeper_injuries_job
 # NCAAF-P0.6b: the recurring IN-SEASON closing-line catch-up (bridges the P0.6 one-time backfill).
 from pipeline.jobs.sports_ncaaf_odds_capture_job import sports_ncaaf_odds_capture_job
 from pipeline.jobs.milb_ingest_job import milb_ingest_job  # E7.1 — isolated daily MiLB ingest
@@ -49,6 +51,7 @@ all_jobs = [
     sports_ncaaf_dbt_build_job,
     sports_ncaaf_roll_forward_job,
     sports_nfl_roll_forward_job,
+    sports_nfl_sleeper_injuries_job,
     sports_ncaaf_odds_capture_job,
     milb_ingest_job,
 ]

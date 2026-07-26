@@ -686,3 +686,96 @@ def test_aggregate_averages_across_seasons():
     assert agg["ecr"]["n_seasons"] == 2
     assert agg["ecr"]["delta_rho_pooled"] == pytest.approx(0.03)
     assert agg["ecr"]["delta_rho_by_pos"]["WR"] == pytest.approx(0.05)
+
+
+# ── NF-D5: Sleeper forward-availability feed ─────────────────────────────────────────────────────
+def test_map_injury_status_maps_long_absence_not_weekly_report():
+    si = pytest.importorskip("quant_sports_intel_models.football.nfl.fantasy.sleeper_injuries_source")
+    # long-absence designations → the shared RES/PUP/NFI/SUS vocabulary (case-insensitive)
+    assert si.map_injury_status("PUP") == "PUP"
+    assert si.map_injury_status("ir") == "RES"
+    assert si.map_injury_status("Suspended") == "SUS"
+    assert si.map_injury_status("Non Football Injury") == "NFI"
+    # weekly game-report tags are the channel NF-D2 slice 5 already rejected — must NOT map
+    assert si.map_injury_status("Questionable") is None
+    assert si.map_injury_status("Doubtful") is None
+    assert si.map_injury_status("Out") is None
+    assert si.map_injury_status(None) is None
+
+
+def test_sleeper_injuries_fetch_parses_filters_skill_and_maps_status(tmp_path):
+    import json
+    si = pytest.importorskip("quant_sports_intel_models.football.nfl.fantasy.sleeper_injuries_source")
+    payload = {
+        "1": {"first_name": "Cam", "last_name": "Akers", "position": "RB", "team": "MIN",
+              "gsis_id": "00-0036223", "injury_status": "PUP", "injury_body_part": "Achilles"},
+        "2": {"first_name": "Some", "last_name": "Kicker", "position": "K", "team": "SF",
+              "gsis_id": "00-0099999", "injury_status": "IR"},   # dropped (non-skill)
+        "3": {"first_name": "Healthy", "last_name": "Wideout", "position": "WR", "team": "KC",
+              "gsis_id": None, "injury_status": None},           # kept, no flag, no native gsis
+    }
+    (tmp_path / "sleeper_players_2026-07-26.json").write_text(json.dumps(payload))
+    df = si.fetch_sleeper_players(cache_dir=tmp_path, as_of="2026-07-26")
+    assert sorted(df["position"].unique()) == ["RB", "WR"]        # K filtered out
+    akers = df[df["player_name"] == "Cam Akers"].iloc[0]
+    assert akers["proj_status"] == "PUP" and akers["injury_body_part"] == "Achilles"
+    healthy = df[df["player_name"] == "Healthy Wideout"].iloc[0]
+    assert pd.isna(healthy["proj_status"]) or healthy["proj_status"] is None
+
+
+def test_sleeper_injuries_attach_gsis_prefers_native_falls_back_to_crosswalk(monkeypatch):
+    si = pytest.importorskip("quant_sports_intel_models.football.nfl.fantasy.sleeper_injuries_source")
+    df = pd.DataFrame({
+        "sleeper_player_id": ["1", "2"],
+        "player_name": ["Native Guy", "Fallback Guy"],
+        "position": ["RB", "WR"], "team": ["MIN", "KC"],
+        "gsis_id": ["00-0036223", None],
+        "injury_status": ["PUP", "IR"], "injury_body_part": [None, None],
+        "proj_status": ["PUP", "RES"],
+    })
+    calls = []
+
+    def _fake_crosswalk(con, sub, season, schema="main_nfl_marts"):
+        calls.append(list(sub["player_name"]))
+        out = sub.copy()
+        out["player_id"] = ["00-0099999" for _ in range(len(out))]
+        return out
+
+    monkeypatch.setattr(si.A, "attach_gsis", _fake_crosswalk)
+    out = si.attach_gsis(None, df, 2026)
+    # native gsis_id wins for the row that has one — the crosswalk is never called on it
+    assert out.loc[out["player_name"] == "Native Guy", "player_id"].iloc[0] == "00-0036223"
+    # the null-gsis row falls back to the (name, position) crosswalk
+    assert out.loc[out["player_name"] == "Fallback Guy", "player_id"].iloc[0] == "00-0099999"
+    assert calls == [["Fallback Guy"]]   # crosswalk called ONLY on the missing-gsis subset
+
+
+def test_coalesce_forward_status_prefers_sleeper_falls_back_to_nflverse():
+    rsp = pytest.importorskip("quant_sports_intel_models.football.nfl.fantasy.run_season_projection")
+    nflverse = pd.DataFrame({
+        "player_id": ["A", "B", "C"],
+        "proj_status_nflverse": ["RES", "ACT", "PUP"],
+    })
+    sleeper = pd.DataFrame({
+        "player_id": ["A", "D"],           # A: Sleeper disagrees w/ nflverse (RES) → Sleeper wins
+        "proj_status_sleeper": ["PUP", "SUS"],   # D: Sleeper-only (not in nflverse at all) → surfaces
+    })
+    out = rsp._coalesce_forward_status(nflverse, sleeper).set_index("player_id")
+    assert out.loc["A", "proj_status"] == "PUP"    # Sleeper preferred over nflverse's RES
+    assert out.loc["B", "proj_status"] == "ACT"    # nflverse fallback (Sleeper has no row for B)
+    assert out.loc["C", "proj_status"] == "PUP"    # nflverse fallback
+    assert out.loc["D", "proj_status"] == "SUS"    # Sleeper-only player still surfaces
+
+
+def test_coalesce_forward_status_handles_empty_frames():
+    rsp = pytest.importorskip("quant_sports_intel_models.football.nfl.fantasy.run_season_projection")
+    nflverse = pd.DataFrame({"player_id": ["A"], "proj_status_nflverse": ["RES"]})
+    empty_sleeper = pd.DataFrame(columns=["player_id", "proj_status_sleeper"])
+    out = rsp._coalesce_forward_status(nflverse, empty_sleeper)
+    assert list(out.columns) == ["player_id", "proj_status"]
+    assert out.set_index("player_id").loc["A", "proj_status"] == "RES"
+
+    empty_nflverse = pd.DataFrame(columns=["player_id", "proj_status_nflverse"])
+    sleeper = pd.DataFrame({"player_id": ["Z"], "proj_status_sleeper": ["PUP"]})
+    out2 = rsp._coalesce_forward_status(empty_nflverse, sleeper)
+    assert out2.set_index("player_id").loc["Z", "proj_status"] == "PUP"

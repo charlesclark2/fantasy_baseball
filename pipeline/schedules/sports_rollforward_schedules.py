@@ -33,18 +33,34 @@ through OTAs/camp/roster cuts (Aug), i.e. exactly the months rosters/depth chart
 churn before kickoff. UNLIKE NCAAF, nflverse needs no API key, so the only reason this ships
 STOPPED is the shared `sports_nfl_dbt_build_job`/`sports_nfl_dbt_schedule` box-readiness gate
 (dbt-duckdb + S3 instance-role read) the rebuild step depends on — see `BOX_OPERATIONS.md §10`.
+
+═══════════════════════════════════════════════════════════════════════════════════════════════
+NF-D5 — the Sleeper forward-availability schedule (below): a DAILY (not weekly — the story's
+"cheap daily through camp" cadence) refresh of Sleeper's `v1/players/nfl` snapshot, continuing
+NF-D2 slice 5's roster-status unavailability flag with an earlier, offseason-covering source. Fires
+`sports_nfl_sleeper_injuries_job` (ingest → refresh just the sleeper-injuries staging model) —
+WARN-tier throughout, advisory/non-serving (see the job's own docstring).
+
+⏰ WINDOW: daily, MARCH–AUGUST — the same offseason/camp churn window as NF-D1's roll-forward
+(surgeries/PUP/IR designations land on Sleeper throughout free agency → the draft → camp). Ships
+STOPPED for the same reason as NF-D1: the staging-model refresh step shares the
+`sports_nfl_dbt_build_job` box-readiness prereq — the Sleeper fetch itself needs no key.
 """
 
 from dagster import DefaultScheduleStatus, RunRequest, ScheduleEvaluationContext, schedule
 
 from pipeline.jobs.sports_ncaaf_rollforward_job import sports_ncaaf_roll_forward_job
 from pipeline.jobs.sports_nfl_rollforward_job import sports_nfl_roll_forward_job
+from pipeline.jobs.sports_nfl_sleeper_injuries_job import sports_nfl_sleeper_injuries_job
 
 # Weekly Monday 06:00 PT, months February–August (the pre-season roll-forward window).
 NCAAF_ROLL_FORWARD_CRON = "0 6 * 2-8 1"
 # Weekly Monday 06:15 PT (offset from the NCAAF pull), months March–August (free agency → camp
 # cuts — the NFL roster/depth-chart churn window).
 NFL_ROLL_FORWARD_CRON = "15 6 * 3-8 1"
+# Daily 06:30 PT (offset from the weekly NFL pull), months March–August — the NF-D5 cheap daily
+# forward-availability capture (one unauthenticated HTTP GET + a single-model dbt rebuild).
+NFL_SLEEPER_INJURIES_CRON = "30 6 * 3-8 *"
 
 
 @schedule(
@@ -74,3 +90,16 @@ def sports_nfl_roll_forward_schedule(context: ScheduleEvaluationContext):
         "[nfl roll-forward] firing season roster/schedule/depth_chart/injuries/draft/combine "
         "refresh for the clock-derived current_season()")
     return RunRequest(run_key=None, tags={"sport": "nfl", "cadence": "roll_forward"})
+
+
+@schedule(
+    job=sports_nfl_sleeper_injuries_job,
+    cron_schedule=NFL_SLEEPER_INJURIES_CRON,
+    execution_timezone="America/Los_Angeles",
+    default_status=DefaultScheduleStatus.STOPPED,  # ⛔ operator-gated — see module docstring
+)
+def sports_nfl_sleeper_injuries_schedule(context: ScheduleEvaluationContext):
+    """Daily (through camp) refresh of Sleeper's forward-availability snapshot (NF-D5)."""
+    context.log.info(
+        "[nfl sleeper-injuries] firing daily forward-availability capture")
+    return RunRequest(run_key=None, tags={"sport": "nfl", "cadence": "sleeper_injuries"})
