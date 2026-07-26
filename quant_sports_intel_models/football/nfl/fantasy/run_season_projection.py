@@ -90,7 +90,8 @@ with wk as (
            pass_attempts, pass_completions, passing_yards, passing_touchdowns, interceptions,
            rushing_carries, rushing_yards, rushing_touchdowns,
            receiving_targets, receptions, receiving_yards, receiving_touchdowns,
-           fantasy_points_ppr
+           fantasy_points_ppr,
+           offense_pct, target_share, carry_share
     from {schema}.fct_player_week
     where season between {lo} and {season} and week > 0
 )
@@ -110,7 +111,13 @@ select
     sum(case when g then receptions else 0 end)::double            as rec_tot,
     sum(case when g then receiving_yards else 0 end)::double       as rec_yds_tot,
     sum(case when g then receiving_touchdowns else 0 end)::double  as rec_td_tot,
-    stddev_samp(case when g then fantasy_points_ppr end)          as fp_ppr_sd
+    stddev_samp(case when g then fantasy_points_ppr end)          as fp_ppr_sd,
+    -- NF-D2 slice 1: base-season USAGE-SHARE role signals (per-game rates → season averages over
+    -- played games). snap share only counts games the player was actually on the field (>0);
+    -- target/carry share are box-derived and defined for every played game.
+    avg(offense_pct) filter (where g and offense_pct > 0)         as snap_share,
+    avg(target_share) filter (where g)                            as target_share,
+    avg(carry_share) filter (where g)                             as carry_share
 from wk group by 1, 2 having count_if(g) > 0
 """
 
@@ -146,11 +153,20 @@ def load_base_season(
     per_season["_w"] = (_RECENCY_DECAY ** age) * per_season["games_played"]
 
     pg_cols = [b + "_pg" for b in _PERGAME_MAP]
+    # NF-D2 slice 1: base-season usage-share role signals, window-blended on the SAME recency×games
+    # weights as the per-game line. NaN-aware — a season with no snap-count coverage (an older season,
+    # or a player with a snap-data gap) simply drops out of that player's weighted share.
+    usage_cols = [c for c in ("snap_share", "target_share", "carry_share") if c in per_season.columns]
 
     def _blend(g: pd.DataFrame) -> pd.Series:
         w = g["_w"].to_numpy()
         wsum = w.sum() or 1.0
         out = {c: float((g[c].to_numpy() * w).sum() / wsum) for c in pg_cols}
+        for c in usage_cols:
+            v = pd.to_numeric(g[c], errors="coerce").to_numpy()
+            m = np.isfinite(v)
+            wm = w[m].sum()
+            out[c] = float((v[m] * w[m]).sum() / wm) if wm > 0 else np.nan
         return pd.Series(out)
 
     weighted = per_season.groupby("player_id").apply(_blend, include_groups=False)
@@ -258,10 +274,12 @@ def load_realized_season(con, season: int, schema: str = MARTS_SCHEMA) -> pd.Dat
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # Projection assembly
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-def build_projection(con, base_season: int, projection_season: int, schema: str) -> pd.DataFrame:
+def build_projection(con, base_season: int, projection_season: int, schema: str,
+                     usage_role_blend: float | None = None) -> pd.DataFrame:
     base = load_base_season(con, base_season, schema)
     priors = positional_pergame_priors(base)
-    vets = project_veterans(base, priors, projection_season)
+    kw = {} if usage_role_blend is None else {"usage_role_blend": usage_role_blend}
+    vets = project_veterans(base, priors, projection_season, **kw)
 
     rookies_all = pd.read_parquet(_ROOKIE_PARQUET)
     incoming = rookies_all[pd.to_numeric(rookies_all["draft_year"], errors="coerce") == projection_season]
@@ -313,13 +331,15 @@ def coverage_report(proj: pd.DataFrame, base: pd.DataFrame) -> dict:
     }
 
 
-def holdout_backtest(con, base_season: int, target_season: int, schema: str) -> dict:
+def holdout_backtest(con, base_season: int, target_season: int, schema: str,
+                     usage_role_blend: float | None = None) -> dict:
     """Replicate the VETERAN method for an earlier base season and score its projected PPR ranking
     against the realized next season. The behavioural sanity check that the method has signal (rank
     correlation), not a calibration claim."""
     base = load_base_season(con, base_season, schema)
     priors = positional_pergame_priors(base)
-    vets = project_veterans(base, priors, target_season)
+    kw = {} if usage_role_blend is None else {"usage_role_blend": usage_role_blend}
+    vets = project_veterans(base, priors, target_season, **kw)
     vets = vets[vets["position"].isin(("QB", "RB", "WR", "TE", "FB"))]
     real = load_realized_season(con, target_season, schema)
     m = vets.merge(real, on="player_id", how="inner")
@@ -398,6 +418,12 @@ def write_report(proj: pd.DataFrame, cov: dict, backtests: list[dict], path: Pat
       "blend of depth-chart role and base-season durability. Expected-games is the fix for the naïve "
       "`per_game × 17` that ranks small-sample backups at the top of `mart_projections_preseason` "
       "(Malik Willis was its #1).")
+    p("- **Usage-share role signal (NF-D2 slice 1)** — expected games is further refined by the "
+      "base-season USAGE share (snap share for RB/WR, target share for TE; QB untouched), the "
+      "volume-earner-vs-depth-body separator. Ablated for held-out within-position ρ lift over the "
+      "MVP-1 baseline (RB +0.009 / WR +0.009 / TE +0.007 / QB +0.000, 2019–2025) — see "
+      "`ablation_results/nf_d2_snap_role_ablation.md`. Leakage-safe (a realized base-season quantity) "
+      "and non-double-counting (it moves only playing-time, not the per-game production line).")
     p("- **Rookies (QB/RB/WR/TE)** — a historical draft-slot → rookie-year production curve (power-law "
       "per position, fit on prior classes) nudged by the **NCAAF-P1A residual** (`projected_nfl_z` vs "
       "the slot-expected z — talent the draft board disagreed with), with deliberately wide intervals. "

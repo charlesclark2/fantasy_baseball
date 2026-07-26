@@ -62,6 +62,79 @@ def test_expected_games_unknown_rank_uses_durability_proxy():
     assert eg.iloc[0] < 8.0
 
 
+# ── NF-D2 slice 1: usage-share role → expected games ─────────────────────────────────────────────
+def test_usage_blend_is_noop_when_off_or_absent():
+    base_eg = pd.Series([10.0, 12.0, 8.0])
+    pos = pd.Series(["RB", "WR", "TE"])
+    snap = pd.Series([0.8, 0.9, 0.7])
+    tgt = pd.Series([0.1, 0.2, 0.15])
+    # blend=0 ⇒ exact MVP-1 baseline (the ablation "off" arm)
+    off = sp.blend_usage_into_games(base_eg, pos, snap, tgt, blend=0.0)
+    assert np.allclose(off.to_numpy(), base_eg.to_numpy())
+    # missing usage columns ⇒ fall through to base_eg unchanged
+    none = sp.blend_usage_into_games(base_eg, pos, None, None, blend=0.4)
+    assert np.allclose(none.to_numpy(), base_eg.to_numpy())
+
+
+def test_usage_blend_position_scoping():
+    # RB/WR use SNAP share; TE uses TARGET share; QB is untouched (depth rank governs)
+    base_eg = pd.Series([9.0, 9.0, 9.0, 9.0])
+    pos = pd.Series(["RB", "TE", "QB", "WR"])
+    # high snap share, zero target share
+    snap = pd.Series([0.95, 0.95, 0.95, 0.95])
+    tgt = pd.Series([0.0, 0.0, 0.0, 0.0])
+    eg = sp.blend_usage_into_games(base_eg, pos, snap, tgt, blend=0.5)
+    # RB & WR (snap-driven) get lifted toward a full-time role by high snap share
+    assert eg.iloc[0] > 9.0 and eg.iloc[3] > 9.0
+    # QB is untouched regardless of snap share
+    assert eg.iloc[2] == pytest.approx(9.0)
+    # TE keys off TARGET share (0 here) not snap share ⇒ pulled DOWN, not up like the RB/WR
+    assert eg.iloc[1] < 9.0
+
+
+def test_usage_blend_high_snap_entrenched_starter_beats_low_snap_body():
+    # two RBs with the SAME crude role/durability estimate; the entrenched (high-snap) one should end
+    # up with more expected games than the rotational (low-snap) body — the volume-earner separation
+    base_eg = pd.Series([11.0, 11.0])
+    pos = pd.Series(["RB", "RB"])
+    snap = pd.Series([0.85, 0.30])
+    tgt = pd.Series([0.10, 0.05])
+    eg = sp.blend_usage_into_games(base_eg, pos, snap, tgt, blend=0.4)
+    assert eg.iloc[0] > eg.iloc[1]
+    assert (eg >= 1.0).all() and (eg <= 17.0).all()
+
+
+def test_usage_blend_partial_coverage_falls_through():
+    # a player with a snap-count gap (NaN) keeps the baseline estimate; the covered one is adjusted
+    base_eg = pd.Series([10.0, 10.0])
+    pos = pd.Series(["WR", "WR"])
+    snap = pd.Series([np.nan, 0.9])
+    eg = sp.blend_usage_into_games(base_eg, pos, snap, pd.Series([np.nan, np.nan]), blend=0.4)
+    assert eg.iloc[0] == pytest.approx(10.0)   # NaN snap ⇒ unchanged
+    assert eg.iloc[1] > 10.0                   # covered high-snap WR lifted
+
+
+def test_veteran_usage_role_reorders_equal_line_by_snap_share():
+    # two RBs with an IDENTICAL per-game line + same depth rank/games, differing ONLY in base-season
+    # snap share — the higher-snap-share (entrenched volume-earner) must project higher season points.
+    def rb(pid, snap):
+        base = {"player_id": pid, "player_name": pid, "team_id": "AAA", "position": "RB",
+                "games_played": 14, "depth_chart_position_rank": 1, "fp_ppr_sd": 6.0,
+                "snap_share": snap, "target_share": 0.08}
+        for s in sp._VET_PERGAME_STATS:
+            base[s + "_pg"] = 0.0
+        base.update(rush_att_pg=15, rush_yds_pg=70, rush_td_pg=0.5, targets_pg=3, rec_pg=2.4, rec_yds_pg=18)
+        return base
+    base = pd.DataFrame([rb("HIGH_SNAP", 0.85), rb("LOW_SNAP", 0.35)])
+    priors = sp.positional_pergame_priors(base)
+    on = sp.project_veterans(base, priors, 2026, usage_role_blend=0.4).set_index("player_name")
+    off = sp.project_veterans(base, priors, 2026, usage_role_blend=0.0).set_index("player_name")
+    # with the feature ON, the entrenched RB outranks the committee body
+    assert on.loc["HIGH_SNAP", "proj_fp_ppr"] > on.loc["LOW_SNAP", "proj_fp_ppr"]
+    # with the feature OFF (baseline) the identical lines tie
+    assert off.loc["HIGH_SNAP", "proj_fp_ppr"] == pytest.approx(off.loc["LOW_SNAP", "proj_fp_ppr"])
+
+
 # ── shrinkage ───────────────────────────────────────────────────────────────────────────────────
 def test_shrink_pulls_small_sample_harder():
     prior = np.array([10.0, 10.0])
