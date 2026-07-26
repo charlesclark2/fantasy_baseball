@@ -99,13 +99,40 @@ def beta_posterior_mean(mean: float, kappa: float, pa: float, obs_rate: float | 
 
 
 def normal_posterior_mean(mu0: float, sigma0: float, pa: float, obs_iso: float | None) -> float:
-    """Normal-Normal posterior mean for ISO with an MLE-derived prior mean/sd — the served formula."""
+    """Normal-Normal posterior mean for ISO — the GENERIC (non-MLE) served formula. NOTE: this is the
+    incumbent path and is NOT used for the MLE prior — its measurement-variance floor lets a tiny-sample
+    extreme obs_iso (>1 over a few PAs) overwhelm the prior; the MLE path uses the regularized pseudo-count
+    below instead (mirroring K%/BB%)."""
     if pa <= 0 or obs_iso is None or not np.isfinite(obs_iso):
         return float(mu0)
     sigma_meas_sq = max(obs_iso * (1.0 - obs_iso), 0.001) / pa
     prec_prior = 1.0 / (sigma0 * sigma0)
     prec_obs = 1.0 / sigma_meas_sq
     return (mu0 * prec_prior + obs_iso * prec_obs) / (prec_prior + prec_obs)
+
+
+# ISO is unbounded (extra-bases/AB ∈ {0,1,2,3}), so unlike a [0,1] rate the Normal-Normal update blows up
+# for a tiny-sample extreme obs_iso. The MLE ISO prior therefore uses a PSEUDO-COUNT blend (like K%/BB%):
+# κ_iso = V_ISO_PER_PA / iso_prior_sd², with V_ISO_PER_PA ≈ the per-PA variance of extra-bases-per-AB.
+V_ISO_PER_PA = 0.25
+
+
+def iso_kappa(iso_prior_sd: float, v_iso: float = V_ISO_PER_PA) -> float:
+    """κ_iso (equivalent PAs the MLE ISO prior is worth). Mirrors the served DuckDB SQL exactly."""
+    s = float(iso_prior_sd)
+    if not np.isfinite(s) or s <= 0:
+        return float("nan")
+    return v_iso / (s * s)
+
+
+def iso_pseudocount_posterior_mean(mle_iso: float, iso_prior_sd: float, pa: float,
+                                   obs_iso: float | None, v_iso: float = V_ISO_PER_PA) -> float:
+    """Regularized ISO posterior mean: (mle·κ_iso + obs·PA)/(κ_iso + PA). PA=0 → the MLE mean; a tiny-sample
+    extreme obs_iso can only nudge it (κ_iso ≫ pa), so eb_iso stays in range — the served MLE formula."""
+    k = iso_kappa(iso_prior_sd, v_iso)
+    if pa <= 0 or obs_iso is None or not np.isfinite(obs_iso) or not np.isfinite(k):
+        return float(mle_iso)
+    return (mle_iso * k + obs_iso * pa) / (k + pa)
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════
