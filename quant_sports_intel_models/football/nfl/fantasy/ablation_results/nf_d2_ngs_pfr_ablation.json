@@ -1,0 +1,40 @@
+{
+  "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "baseline_slice1": {
+    "QB": 0.642,
+    "RB": 0.7169,
+    "WR": 0.7162,
+    "TE": 0.7271
+  },
+  "plus_ngs_learned": {
+    "QB": 0.6479,
+    "RB": 0.7119,
+    "WR": 0.716,
+    "TE": 0.7229
+  },
+  "delta": {
+    "QB": 0.0059,
+    "RB": -0.005,
+    "WR": -0.0002,
+    "TE": -0.0042
+  },
+  "verdict": "NULL \u2014 NGS/PFR advanced does not lift within-position \u03c1 over slice-1; DROPPED",
+  "features": [
+    "intended_ay_share",
+    "air_yards_share",
+    "adot",
+    "separation",
+    "yac_oe",
+    "ryoe_pct",
+    "cpoe",
+    "aggressiveness"
+  ]
+}
