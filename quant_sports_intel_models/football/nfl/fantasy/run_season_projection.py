@@ -53,6 +53,7 @@ from quant_sports_intel_models.football.nfl.fantasy.season_projection import (  
     project_veterans,
     role_volume_prior,
 )
+from quant_sports_intel_models.football.nfl.fantasy import win_total_source  # noqa: E402
 
 log = logging.getLogger("nfl.fantasy.fastpath")
 
@@ -332,10 +333,14 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
                      env_tilt_blend: float | None = None,
                      injury_override_blend: float | None = None) -> pd.DataFrame:
     base = load_base_season(con, base_season, schema)
-    # NF-D2 slice 4: attach the projection-season team's Week-1 implied points (leakage-safe forward
-    # environment) on the forward team, for the QB environment tilt. A NULL join (unknown forward team
-    # / no Week-1 line yet) makes the tilt a no-op.
+    # NF-D2 slice 4 / NF-D4: attach the projection-season team's forward Vegas environment on the
+    # forward team, for the QB environment tilt. Base = the Week-1 implied points (leakage-safe); NF-D4
+    # AUGMENTS it with the preseason WIN TOTAL — a team-level 0.5/0.5 z-blend (a season-level team-
+    # quality read that STABILISES the noisy single Week-1 game line; it beat the Week-1-only baseline on
+    # held-out QB ρ). `blend_env_with_win_total` falls back to Week-1-only when the projection season's
+    # win totals aren't backfilled. A NULL join (unknown forward team / no Week-1 line) → tilt no-op.
     env = load_team_week1_env(con, projection_season, schema)
+    env = win_total_source.blend_env_with_win_total(env, projection_season)
     if not env.empty and "proj_team" in base.columns:
         base = base.merge(env, on="proj_team", how="left")
     # NF-D2 slice 5: attach the projection-season forward roster status (leakage-safe) for the injury/

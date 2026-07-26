@@ -13,36 +13,57 @@
       "RB": 0.7392,
       "WR": 0.7673,
       "TE": 0.754,
-      "movers_allpos": 0.6872
+      "movers_allpos": 0.6864
     },
     "A_mover_opportunity": {
       "QB": 0.6746,
-      "RB": 0.7474,
-      "WR": 0.7735,
-      "TE": 0.7612,
-      "movers_allpos": 0.7169
+      "RB": 0.7444,
+      "WR": 0.7716,
+      "TE": 0.7621,
+      "movers_allpos": 0.711
     },
     "B_env_wk1_QB_SAFE": {
-      "QB": 0.6866,
+      "QB": 0.6825,
       "RB": 0.7392,
       "WR": 0.7673,
       "TE": 0.754,
-      "movers_allpos": 0.688
+      "movers_allpos": 0.6869
+    },
+    "B_env_wintotal_QB": {
+      "QB": 0.6768,
+      "RB": 0.7392,
+      "WR": 0.7673,
+      "TE": 0.754,
+      "movers_allpos": 0.6855
+    },
+    "B_env_wt_wk1_QB": {
+      "QB": 0.6844,
+      "RB": 0.7392,
+      "WR": 0.7673,
+      "TE": 0.754,
+      "movers_allpos": 0.6858
     },
     "B_env_opt_QB_LEAKY": {
-      "QB": 0.7183,
+      "QB": 0.7206,
       "RB": 0.7392,
       "WR": 0.7673,
       "TE": 0.754,
-      "movers_allpos": 0.6857
+      "movers_allpos": 0.6844
+    },
+    "B_env_wintotal_ALLSKILL": {
+      "QB": 0.6768,
+      "RB": 0.7373,
+      "WR": 0.7681,
+      "TE": 0.7526,
+      "movers_allpos": 0.6813
     },
     "D_injury_availability": {
       "QB": 0.68,
       "RB": 0.7404,
       "WR": 0.7712,
       "TE": 0.7545,
-      "movers_allpos": 0.6873
+      "movers_allpos": 0.6865
     }
   },
-  "verdict": "A (team-change / depth-jump opportunity) SHIPPED \u2014 RB/WR/TE all lift, mover subpop +~0.03. B (Vegas environment, QB) SHIPPED via LEAKAGE-SAFE WEEK-1 implied points \u2014 QB +~0.015 (env_wk1); a Week-1 line is set before any of the season's games, so it needs NO new ingest (season-long env_opt QB +~0.06 is the leaky ceiling \u21d2 a richer forward-line/win-total ingest would capture more). Both wired into project_veterans. D (injury/availability) SHIPPED \u2014 a forward roster-status flag (RES/PUP/NFI/SUS) caps expected games; the +~0.002 \u03c1 badly UNDER-states it (the \u22656-game eval filters out the shelved players it fixes) \u2014 it's a correctness fix (don't rank an IR/PUP star as startable). C (system fit) deferred to NF1."
+  "verdict": "A (mover) + B (env) + D (injury) SHIPPED earlier (slices 3/4/5). NF-D4 GROWS slice-4: probe found the Odds API exposes NO NFL win-total futures market (only super_bowl_winner outrights) \u21d2 the forward win total comes from a static public backfill (covers.com, 2020\u20132026). Win-total ALONE (env_wt) is WORSE than Week-1 (loses 5/6 seasons \u2014 a win total is season-level TEAM QUALITY, not offense, and the recoverable ceiling env_opt +~0.046 is offense-specific) \u21d2 DROPPED. The z-BLEND of win-total \u00d7 Week-1 (env_wt_wk1) BEATS Week-1 on the 6-season-mean QB \u03c1 (0.684 vs 0.682, +0.002; wins 4/6) by STABILISING the noisy single Week-1 game line \u21d2 SHIPPED as the QB env source (augment, not replace). Extending the tilt to RB/WR/TE (env_wt_ALLSKILL) adds NO lift \u21d2 QB-scoped, unchanged. Most of the +0.046 ceiling stays unrecovered because it is offense-specific \u2014 the true future lever is a going-forward preseason OPENING-LINE / team-total capture (serves 2026+, cannot validate historically)."
 }
