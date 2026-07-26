@@ -101,6 +101,35 @@ def get_optional_user_id(request: Request) -> str | None:
         return None
 
 
+def _groups_from_request(request: Request) -> list[str]:
+    """Cognito groups for the caller, from the authorizer context (preferred) or the
+    raw Bearer token (fallback). API Gateway HTTP API delivers array claims as a
+    comma-separated string, so split on comma; the token has already been
+    signature-validated by the JWT authorizer before Lambda invokes."""
+    claims = _claims_from_event(request)
+    raw = claims.get("cognito:groups") or ""
+    if raw:
+        return [g.strip() for g in raw.split(",") if g.strip()]
+    return _groups_from_bearer(request.headers.get("Authorization"))
+
+
+def require_fantasy_access(request: Request, user_id: str = Depends(get_user_id)) -> str:
+    """Gate the fantasy surface (E9.45) — defense-in-depth for the client-side nav gate.
+
+    Grants callers in `subscriber`, `admin`, or the `fantasy_comp` allow-list, read
+    from the `cognito:groups` claim. Raises 403 otherwise (a `beta_tester` who lacks
+    fantasy is blocked here even though they keep full betting access — the deliberate
+    E9.8 divergence). A client-only gate on a paid feature is bypassable, so the
+    fantasy DATA endpoints depend on this.
+    """
+    # Import here to avoid a circular import at module load (services import lightly).
+    from app.backend.services import cognito
+
+    if cognito.has_fantasy_access(_groups_from_request(request)):
+        return user_id
+    raise HTTPException(status_code=403, detail="Fantasy access required")
+
+
 def get_admin_user(request: Request, user_id: str = Depends(get_user_id)) -> str:
     """Like get_user_id, but raises 403 if the caller is not an admin.
 

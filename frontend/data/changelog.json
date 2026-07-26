@@ -3,6 +3,10 @@
     "week": "2026-07-20",
     "items": [
       {
+        "tag": "improved",
+        "text": "Reorganized the top navigation around sports. Instead of one long list, the menu now leads with the sport — MLB today — and groups everything for that sport underneath (your Dashboard, EV Tracker, Props, Parlay Calculator, Performance, Bet Log, and Team/Player research all live under MLB). Nothing moved out of reach: every page is exactly where it was, just gathered under its sport, and all your existing links and bookmarks keep working. This makes room for more sports as they come online — you'll also notice a new NFL section with a Fantasy area, which we're building toward and will open up soon. Your access to everything you use today is unchanged."
+      },
+      {
         "tag": "new",
         "text": "Added two-factor authentication (2FA) for extra account security. In Settings → Two-Factor Authentication you can now turn on an authenticator app: scan the QR code (or enter the setup key) in Google Authenticator, Authy, 1Password, or any similar app, and from then on you'll enter a 6-digit code from that app along with your password each time you sign in. You can turn it back off anytime by re-entering your password. If you sign in with Google, two-factor is already handled by your Google account, so there's nothing extra to set up here."
       },

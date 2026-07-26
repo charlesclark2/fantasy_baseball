@@ -31,6 +31,23 @@ _USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "us-east-1_gG9zMbwQt")
 GROUP_BETA = "beta_tester"
 GROUP_SUBSCRIBER = "subscriber"
 GROUP_CHURNED = "churned"
+GROUP_ADMIN = "admin"
+
+# Fantasy comp allow-list (E9.45) — a group DISTINCT from `subscriber` that grants
+# fantasy access to operator/comp accounts WITHOUT counting them as paid subscribers.
+# Keeping it separate from `subscriber` is deliberate: it keeps E9.8's founding-100
+# count-based $10→$20 flip accurate and keeps comps out of paid analytics.
+GROUP_FANTASY_COMP = "fantasy_comp"
+
+# Per-SURFACE entitlement (E9.45). Betting is grandfathered — open to every current
+# access tier; fantasy is a paid feature: `subscriber` or `admin` or the comp
+# allow-list ONLY (beta_tester is deliberately NOT granted fantasy).
+FANTASY_ACCESS_GROUPS = frozenset({GROUP_SUBSCRIBER, GROUP_ADMIN, GROUP_FANTASY_COMP})
+
+
+def has_fantasy_access(groups: list[str] | frozenset[str]) -> bool:
+    """True iff the caller's Cognito groups grant the fantasy surface (E9.45)."""
+    return bool(FANTASY_ACCESS_GROUPS.intersection(groups))
 
 
 def _client():

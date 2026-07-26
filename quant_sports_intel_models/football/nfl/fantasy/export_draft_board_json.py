@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -37,7 +38,10 @@ log = logging.getLogger("nfl.fantasy.export_draft_board")
 
 _ARTIFACTS = _PROJECT_ROOT / "quant_sports_intel_models/football/nfl/fantasy/artifacts"
 _BOARDS_DIR = _ARTIFACTS / "league_boards"
-_FRONTEND_OUT = _PROJECT_ROOT / "frontend/public/data/nfl-fantasy"
+# E9.45: the draft board is a PAID surface, so it is no longer shipped as public JSON
+# (a public asset URL is bypassable). It is staged locally then uploaded to S3, where
+# the server-side-gated /fantasy/nfl/* endpoints read it. Default local staging dir:
+_STAGING_OUT = _ARTIFACTS / "draft_board_json"
 
 # The projectable fantasy positions (MVP-1 = offensive skill only). K/DST carry no projection → the UI
 # flags their roster slots as "draft late (no projection)"; they never appear on the board.
@@ -344,7 +348,14 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--season", type=int, default=2026)
     ap.add_argument("--from-lake", action="store_true", help="read boards from the S3 Delta instead of local CSVs")
-    ap.add_argument("--out", type=Path, default=None, help="override the frontend output dir")
+    ap.add_argument("--out", type=Path, default=None, help="override the local staging output dir")
+    ap.add_argument(
+        "--s3-bucket",
+        default=os.getenv("CACHE_BUCKET"),
+        help="S3 bucket to upload the boards to (default $CACHE_BUCKET). Uploaded under "
+        "fantasy/nfl/<season>/ where the gated /fantasy/nfl/* API reads them. If empty, "
+        "boards are only staged locally.",
+    )
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -352,7 +363,7 @@ def main(argv: list[str] | None = None) -> int:
     if "config_name" not in df.columns or "n_teams" not in df.columns:
         raise ValueError("board frame missing config_name / n_teams — cannot key by (config, size)")
 
-    out_dir = (args.out or (_FRONTEND_OUT / str(args.season)))
+    out_dir = (args.out or (_STAGING_OUT / str(args.season)))
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # rookie NFL teams (MVP-1 leaves them NULL) — best-effort from nflverse_players, never fatal
@@ -399,8 +410,42 @@ def main(argv: list[str] | None = None) -> int:
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     log.info("wrote manifest.json — %d configs, sizes %s, %d combos, %d player-rows total",
              len(configs_present), sorted(sizes_present), combos, total_rows)
-    log.info("frontend draft-board JSON landed in %s", out_dir)
+    log.info("draft-board JSON staged in %s", out_dir)
+
+    # Upload to S3 for the server-side-gated /fantasy/nfl/* endpoints (E9.45). Without a
+    # bucket the boards are only staged locally (the API then 404s until they're uploaded).
+    if args.s3_bucket:
+        _upload_to_s3(out_dir, args.s3_bucket, args.season)
+    else:
+        log.warning(
+            "no --s3-bucket / $CACHE_BUCKET — boards staged locally only; the gated API "
+            "will 404 until they are uploaded to s3://<bucket>/fantasy/nfl/%d/", args.season,
+        )
     return 0
+
+
+def _upload_to_s3(out_dir: Path, bucket: str, season: int) -> None:
+    """Upload every staged board + the manifest to s3://<bucket>/fantasy/nfl/<season>/.
+
+    Plain (key-less) client — instance-role / AWS_PROFILE safe (never pass
+    aws_access_key_id=os.environ.get(...); see test_boto3_credential_lint.py). The
+    cache bucket lives in us-east-1 (matches app.backend.services.s3_cache) — pin the
+    region here so a laptop AWS_DEFAULT_REGION=us-east-2 (the ML-artifacts bucket)
+    can't misroute the put."""
+    import boto3
+
+    s3 = boto3.client("s3", region_name="us-east-1")
+    prefix = f"fantasy/nfl/{season}"
+    n = 0
+    for path in sorted(out_dir.glob("*.json")):
+        s3.put_object(
+            Bucket=bucket,
+            Key=f"{prefix}/{path.name}",
+            Body=path.read_bytes(),
+            ContentType="application/json",
+        )
+        n += 1
+    log.info("uploaded %d board files to s3://%s/%s/", n, bucket, prefix)
 
 
 if __name__ == "__main__":
