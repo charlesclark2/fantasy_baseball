@@ -172,6 +172,61 @@ class TestTickSfFreeStep3:
         )
 
 
+class TestW6OddsSfFree:
+    """E11.20 phase-2b — the INTRADAY odds tick (odds_current_dbt_rebuild, ~12-14 fires/game-day)
+    retires its two Snowflake legs (the `dbt run` SF view rebuild + the trailing
+    `refresh_w1_external_tables.py --w6-odds`) under a default-OFF W6_ODDS_SF_FREE gate that
+    REQUIRES W6_LAKEHOUSE_INTRADAY (the --w6-odds-current S3 rebuild that is the read source).
+    Consumers already read S3 (predict --s3 aux, write_book_odds --s3, backend lakehouse_query),
+    so intraday SF-view freshness buys nothing. Merging is a runtime no-op; the flip is box work."""
+
+    def _helper(self) -> str:
+        return INTRADAY[INTRADAY.find("def _w6_odds_sf_free"):INTRADAY.find("def _schedule_lakehouse_intraday")]
+
+    def test_gate_requires_both_flags(self):
+        assert re.search(
+            r'W6_ODDS_SF_FREE"\)\s*==\s*"1"\s+and\s+os\.environ\.get\("W6_LAKEHOUSE_INTRADAY"\)\s*==\s*"1"',
+            self._helper()), (
+            "_w6_odds_sf_free must require BOTH W6_ODDS_SF_FREE and W6_LAKEHOUSE_INTRADAY — dropping "
+            "the SF odds legs WITHOUT the --w6-odds-current S3 rebuild leaves served odds stale on "
+            "every path (the S3 parquet is what predict/serving/backend actually read)."
+        )
+
+    def test_dbt_view_rebuild_is_gated_and_falls_back_loud(self):
+        body = INTRADAY[INTRADAY.find("def odds_current_dbt_rebuild"):INTRADAY.find("def odds_clv_dbt_rebuild")]
+        gate = body.find("if _w6_odds_sf_free():")
+        dbt = body.find("_run_dbt(")
+        assert gate != -1 and dbt != -1 and gate < dbt, (
+            "odds_current_dbt_rebuild must check _w6_odds_sf_free() and skip _run_dbt when gated — "
+            "the SF view rebuild is one of the two legs being retired."
+        )
+        # W6_ODDS_SF_FREE set but W6_LAKEHOUSE_INTRADAY off ⇒ warn loud + still run the dbt rebuild.
+        assert 'os.environ.get("W6_ODDS_SF_FREE") == "1"' in body and "log.warning" in body, (
+            "when W6_ODDS_SF_FREE=1 but W6_LAKEHOUSE_INTRADAY is OFF, odds_current_dbt_rebuild must "
+            "warn LOUD and fall back to running the dbt rebuild (never silently skip and serve stale "
+            "odds — the S3 rebuild that makes the skip safe is off)."
+        )
+
+    def test_ext_refresh_is_gated_not_removed(self):
+        body = INTRADAY[INTRADAY.find("def _w6_lakehouse_intraday"):INTRADAY.find("def check_games_today")]
+        assert "if _w6_odds_sf_free():" in body and '"refresh_w1_external_tables.py", ["--w6-odds"]' in body, (
+            "the intraday --w6-odds ext-refresh must be gated on _w6_odds_sf_free() (else-run), not "
+            "hardcoded-removed — removing it unconditionally breaks pre-flip boxes that still read SF."
+        )
+
+    def test_s3_odds_rebuild_is_never_gated_off(self):
+        # The --w6-odds-current DuckDB/S3 rebuild is the read source under the gate — it must run
+        # unconditionally (never behind _w6_odds_sf_free), else the served odds parquet freezes.
+        body = INTRADAY[INTRADAY.find("def _w6_lakehouse_intraday"):INTRADAY.find("def check_games_today")]
+        odds_block = body[body.find('if scope == "odds":'):body.find("else:  # clv")]
+        rebuild = odds_block.find('"run_w1_lakehouse.py", ["--w6-odds-current"]')
+        gate = odds_block.find("if _w6_odds_sf_free():")
+        assert rebuild != -1 and (gate == -1 or rebuild < gate), (
+            "run_w1_lakehouse.py --w6-odds-current (the S3 read source) must run BEFORE/outside the "
+            "_w6_odds_sf_free gate — gating it off would freeze the served odds parquet."
+        )
+
+
 class TestW7b2IntradayServingS3:
     """E11.20 phase-2a W7b-2 — the intraday predict + serving read S3 instead of the Snowflake
     staging views (the last game-hours SF-view readers), gated default-OFF so merging is a no-op
