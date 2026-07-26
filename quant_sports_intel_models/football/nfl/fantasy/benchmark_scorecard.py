@@ -1,0 +1,466 @@
+"""benchmark_scorecard.py — NF-D3: the STANDING us-vs-consensus scorecard (the GTM proof asset).
+
+Turns the one-off "FF 2025 file" comparison into a REPRODUCIBLE, season-over-season, multi-system
+scorecard: grade OUR shipped projection against every obtainable public/competitor system on the SAME
+player universe, the SAME realized-outcome truth, and the SAME ordering metric — apples-to-apples.
+
+⭐ THE HONESTY BAR IS THE WHOLE POINT (a public "we beat X" claim backfires if it is cherry-picked):
+  • APPLES-TO-APPLES — every system is scored on the SHARED universe of players it AND our model both
+    cover, with ≥6 realized games; and on the strict all-systems intersection for a head-to-head. We
+    never compare our full-pool ρ to their top-N ρ. Format is held fixed (PPR) across systems.
+  • NO HINDSIGHT / NO LEAKAGE — our projection for season Y is built from ≤Y−1 data only
+    (`project_veterans(base=Y−1 → Y)`); ADP/ECR are the FROZEN PRESEASON snapshots. So every season is
+    a genuine holdout. The FF file must likewise be a PRESEASON ranking/projection (the operator
+    supplies preseason files only).
+  • ORDERING METRICS — within-position Spearman ρ (what wins drafts) + rank-MAE (rank-space, so a
+    RANKING system like ADP/ECR/FF grades the same way our POINT projection does). Points-MAE is
+    reported for point systems only (ours), never demanded of a ranking system.
+  • NULL, DON'T FABRICATE — a system with no data for a season is simply absent from that season's row.
+
+SYSTEMS — two kinds, one scorer:
+  • API systems (auto-fetched, reproducible): `adp` (Fantasy Football Calculator) and `ecr`
+    (FantasyPros). Both are RANKINGS → scored as `-rank`.
+  • FILE systems (operator-supplied, e.g. Fantasy Footballers / PFF / ESPN — paid, no public API):
+    drop a CSV named `<system>_<season>.csv` into `artifacts/benchmarks_manual/`. The loader
+    auto-detects a name, position, and EITHER a rank OR a projected-points column, crosswalks to gsis
+    via the shared `adp_source` crosswalk, and scores it identically. See `FILE_BENCHMARK_README`.
+
+Entry point: `build_scorecard(con, seasons, schema)` → the per-(system, season) metrics + aggregates.
+The CLI `run_benchmark_scorecard.py` renders the report and (optionally) lands a scorecard asset.
+"""
+from __future__ import annotations
+
+import logging
+import re
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from quant_sports_intel_models.football.nfl.fantasy import adp_source as A
+from quant_sports_intel_models.football.nfl.fantasy import espn_source as E
+from quant_sports_intel_models.football.nfl.fantasy import fantasypros_source as F
+from quant_sports_intel_models.football.nfl.fantasy import sleeper_source as S
+
+log = logging.getLogger("nfl.fantasy.scorecard")
+
+_POSITIONS = ("QB", "RB", "WR", "TE")
+_MANUAL_DIR = Path(__file__).resolve().parent / "artifacts" / "benchmarks_manual"
+
+# Column-name candidates for the flexible file-benchmark loader (case/space-insensitive match).
+_NAME_COLS = ("player_name", "player", "name", "fullname", "full_name")
+_POS_COLS = ("position", "pos", "player_position", "fantasy_position")
+_RANK_COLS = ("rank", "overall_rank", "overall", "ecr", "consensus_rank", "adp", "ovr_rank")
+_POINTS_COLS = ("proj_fp_ppr", "points", "projection", "fpts", "proj_points", "fantasy_points",
+                "ppr", "ppr_points", "proj")
+
+FILE_BENCHMARK_README = """\
+FILE-BENCHMARK DROP-IN (Fantasy Footballers / PFF / ESPN / 4for4 / any competitor)
+----------------------------------------------------------------------------------
+Put a CSV here:  artifacts/benchmarks_manual/<system>_<season>.csv
+  <system>  a short slug, e.g. fantasy_footballers, pff, espn, 4for4  (underscores ok)
+  <season>  the 4-digit projection season the file is FOR, e.g. 2025
+
+The CSV needs (header names are matched case/space-insensitively; extra columns are ignored):
+  • a NAME column     — one of: player_name | player | name
+  • a POSITION column — one of: position | pos           (QB/RB/WR/TE; K/DST are dropped)
+  • ONE ordering column, EITHER:
+      – a RANK column   — one of: rank | overall_rank | ecr | consensus_rank   (lower = better), OR
+      – a POINTS column — one of: proj_fp_ppr | points | projection | fpts     (higher = better)
+    (if both are present, POINTS is used.)
+
+⚠️ LEAKAGE: the file MUST be that system's PRESEASON ranking/projection for <season> (frozen before
+Week 1). A file scored against a season it was published DURING/AFTER is hindsight and is disqualified
+— the scorecard cannot verify this, so it is on the supplier to provide preseason files only.
+"""
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# File-benchmark loader (operator-supplied competitor files: Fantasy Footballers, PFF, ESPN, …)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def _find_col(cols, candidates):
+    norm = {re.sub(r"[^a-z0-9]", "", c.lower()): c for c in cols}
+    for cand in candidates:
+        key = re.sub(r"[^a-z0-9]", "", cand.lower())
+        if key in norm:
+            return norm[key]
+    return None
+
+
+def discover_file_benchmarks(manual_dir: str | Path | None = None) -> list[dict]:
+    """Enumerate operator-supplied `<system>_<season>.csv` files under `benchmarks_manual/`.
+    Returns [{system, season, path}], sorted. Silent (empty list) when the dir is absent — file
+    benchmarks are optional; the API systems always run."""
+    d = Path(manual_dir or _MANUAL_DIR)
+    if not d.exists():
+        return []
+    out = []
+    for p in sorted(d.glob("*.csv")):
+        m = re.match(r"^(?P<system>.+)_(?P<season>\d{4})$", p.stem)
+        if not m:
+            log.warning("benchmarks_manual: '%s' does not match <system>_<season>.csv — skipping", p.name)
+            continue
+        out.append({"system": m.group("system"), "season": int(m.group("season")), "path": p})
+    return out
+
+
+def load_file_benchmark(con, path: str | Path, season: int, schema: str = "main_nfl_marts") -> pd.DataFrame:
+    """Read an operator-supplied competitor CSV → a scored benchmark frame with `player_id, position,
+    score` (score higher = better). Auto-detects the name/position/rank-or-points columns, crosswalks
+    to gsis via the shared `adp_source` crosswalk. Raises a clear error if a required column is absent
+    (so a malformed drop-in fails loudly, never silently produces a wrong scorecard)."""
+    df = pd.read_csv(path)
+    name_c = _find_col(df.columns, _NAME_COLS)
+    pos_c = _find_col(df.columns, _POS_COLS)
+    if name_c is None or pos_c is None:
+        raise ValueError(f"{Path(path).name}: need a name column {_NAME_COLS} and a position column "
+                         f"{_POS_COLS}; found {list(df.columns)}")
+    pts_c = _find_col(df.columns, _POINTS_COLS)
+    rank_c = _find_col(df.columns, _RANK_COLS)
+    if pts_c is None and rank_c is None:
+        raise ValueError(f"{Path(path).name}: need a points column {_POINTS_COLS} OR a rank column "
+                         f"{_RANK_COLS}; found {list(df.columns)}")
+
+    norm = pd.DataFrame({
+        "player_name": df[name_c].astype(str),
+        "position": df[pos_c].astype(str).str.upper().str.strip(),
+    })
+    if pts_c is not None:
+        norm["score"] = pd.to_numeric(df[pts_c], errors="coerce")
+        kind = f"points[{pts_c}]"
+    else:
+        norm["score"] = -pd.to_numeric(df[rank_c], errors="coerce")
+        kind = f"rank[{rank_c}]"
+    norm = norm.dropna(subset=["score"])
+    xw = A.attach_gsis(con, norm, season, schema=schema)
+    xw = xw[xw["player_id"].notna()][["player_id", "position", "score"]].copy()
+    xw["player_id"] = xw["player_id"].astype(str)
+    log.info("  file benchmark %s (%s): %d rows, %d gsis-matched", Path(path).name, kind,
+             len(norm), len(xw))
+    return xw
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# System registry — every benchmark returns (player_id, position, score) where score higher = better
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def _adp_system(con, season, schema):
+    adp = A.load_adp_for_season(con, season, schema=schema)
+    adp = adp[adp["player_id"].notna()].copy()
+    if adp.empty:
+        return adp.reindex(columns=["player_id", "position", "score"])
+    adp["player_id"] = adp["player_id"].astype(str)
+    adp["score"] = -pd.to_numeric(adp["adp"], errors="coerce")
+    return adp[["player_id", "position", "score"]].dropna(subset=["score"])
+
+
+def _ecr_system(con, season, schema):
+    ecr = F.load_ecr_for_season(con, season, schema=schema)
+    ecr = ecr[ecr["player_id"].notna()].copy()
+    if ecr.empty:
+        return ecr.reindex(columns=["player_id", "position", "score"])
+    ecr["player_id"] = ecr["player_id"].astype(str)
+    ecr["score"] = -pd.to_numeric(ecr["rank_ecr"], errors="coerce")
+    return ecr[["player_id", "position", "score"]].dropna(subset=["score"])
+
+
+def _sleeper_system(con, season, schema):
+    df = S.load_sleeper_for_season(con, season, schema=schema)
+    df = df[df["player_id"].notna()].copy()
+    if df.empty:
+        return df.reindex(columns=["player_id", "position", "score"])
+    df["player_id"] = df["player_id"].astype(str)
+    df["score"] = pd.to_numeric(df["proj_pts_ppr"], errors="coerce")   # a POINT projection (higher=better)
+    return df[["player_id", "position", "score"]].dropna(subset=["score"])
+
+
+def _espn_system(con, season, schema):
+    df = E.load_espn_for_season(con, season, schema=schema)
+    df = df[df["player_id"].notna()].copy()
+    if df.empty:
+        return df.reindex(columns=["player_id", "position", "score"])
+    df["player_id"] = df["player_id"].astype(str)
+    df["score"] = -pd.to_numeric(df["ppr_draft_rank"], errors="coerce")   # a RANK (lower=better)
+    return df[["player_id", "position", "score"]].dropna(subset=["score"])
+
+
+# API systems always attempted; file systems discovered at runtime and appended. Each is scored the
+# same way — see the per-system leakage basis documented in `benchmark_scorecard.py` header / the
+# report: adp (FFC, dated week-before-Week-1), ecr (FantasyPros, dated early-Sept snapshot) and sleeper
+# (Rotowire, verified frozen-preseason by the gp=17 test) are leakage-safe; espn (draft rank) is a
+# preseason artifact but its as-of date is unstamped → lower-verified.
+API_SYSTEMS = {"adp": _adp_system, "ecr": _ecr_system, "sleeper": _sleeper_system, "espn": _espn_system}
+
+
+def load_systems(con, season, schema, manual_dir=None) -> dict[str, pd.DataFrame]:
+    """All benchmark systems that have data for `season`, as {name: frame(player_id, position,
+    score)}. API systems (adp/ecr) + any operator file benchmarks for that season."""
+    out = {}
+    for name, fn in API_SYSTEMS.items():
+        try:
+            f = fn(con, season, schema)
+        except Exception as e:  # noqa: BLE001 — a fetch failure NULLs that system, never the run
+            log.warning("  system '%s' season %d failed: %s", name, season, e)
+            continue
+        if f is not None and not f.empty:
+            out[name] = f
+    for fb in discover_file_benchmarks(manual_dir):
+        if fb["season"] != season:
+            continue
+        try:
+            f = load_file_benchmark(con, fb["path"], season, schema)
+        except Exception as e:  # noqa: BLE001
+            log.warning("  file benchmark '%s' failed: %s", fb["path"].name, e)
+            continue
+        if not f.empty:
+            out[fb["system"]] = f
+    return out
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Apples-to-apples metrics
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def _spearman(a: pd.Series, b: pd.Series) -> float | None:
+    if len(a) < 10 or a.std() == 0 or b.std() == 0:
+        return None
+    return float(pd.Series(a.to_numpy()).corr(pd.Series(b.to_numpy()), method="spearman"))
+
+
+def _within_position_rho(d: pd.DataFrame, score_col: str) -> tuple[dict, float | None]:
+    """Per-position Spearman(score, realized) + the position-pooled mean. `d` has position,
+    `score_col`, real_fp_ppr."""
+    per = {}
+    for p in _POSITIONS:
+        s = d[d["position"] == p]
+        v = _spearman(s[score_col], s["real_fp_ppr"])
+        if v is not None:
+            per[p] = round(v, 3)
+    pooled = round(float(np.mean(list(per.values()))), 3) if per else None
+    return per, pooled
+
+
+def _rank_mae(d: pd.DataFrame, score_col: str) -> float | None:
+    """Mean absolute WITHIN-POSITION rank error vs the realized within-position rank. Rank-space, so a
+    ranking system and a point projection grade identically. Lower = better."""
+    errs = []
+    for p in _POSITIONS:
+        s = d[d["position"] == p]
+        if len(s) < 5:
+            continue
+        r_sys = s[score_col].rank(ascending=False, method="average")
+        r_real = s["real_fp_ppr"].rank(ascending=False, method="average")
+        errs.append((r_sys - r_real).abs())
+    if not errs:
+        return None
+    return round(float(pd.concat(errs).mean()), 2)
+
+
+def _topn_hit(d: pd.DataFrame, score_col: str, n: int = 24) -> str | None:
+    if len(d) < n:
+        return None
+    top_sys = set(d.nlargest(n, score_col)["player_id"])
+    top_real = set(d.nlargest(n, "real_fp_ppr")["player_id"])
+    return f"{len(top_sys & top_real)}/{n}"
+
+
+def _score_pair(m: pd.DataFrame, us_col: str, sys_col: str) -> dict:
+    """Grade OUR model vs a system on the SAME frame `m` (already the aligned universe). Returns both
+    sides' within-pos ρ / rank-MAE / top-24 and the us−system deltas."""
+    us_per, us_pool = _within_position_rho(m, us_col)
+    sy_per, sy_pool = _within_position_rho(m, sys_col)
+    us_mae, sy_mae = _rank_mae(m, us_col), _rank_mae(m, sys_col)
+    delta_pos = {p: round(us_per[p] - sy_per[p], 3) for p in us_per if p in sy_per}
+    return {
+        "n_aligned": int(len(m)),
+        "us": {"rho_by_pos": us_per, "rho_pooled": us_pool, "rank_mae": us_mae,
+               "top24_hit": _topn_hit(m, us_col)},
+        "system": {"rho_by_pos": sy_per, "rho_pooled": sy_pool, "rank_mae": sy_mae,
+                   "top24_hit": _topn_hit(m, sys_col)},
+        "delta_rho_by_pos": delta_pos,
+        "delta_rho_pooled": (round(us_pool - sy_pool, 3)
+                             if us_pool is not None and sy_pool is not None else None),
+        "delta_rank_mae": (round(us_mae - sy_mae, 2)
+                           if us_mae is not None and sy_mae is not None else None),
+    }
+
+
+def _disagreement(m: pd.DataFrame, us_col: str, sys_col: str, q: float = 0.75) -> dict:
+    """Where OUR model most disagrees with the system (top-quartile |z_us − z_sys| within position),
+    who predicts the realized finish better? The edge of a NON-MARKET product lives in the fades."""
+    pool = []
+    for p in _POSITIONS:
+        d = m[m["position"] == p]
+        if len(d) < 12:
+            continue
+        zf, zs = _zscore(d[us_col].to_numpy()), _zscore(d[sys_col].to_numpy())
+        dd = d.assign(_dis=np.abs(zf - zs))
+        pool.append(dd[["position", us_col, sys_col, "real_fp_ppr", "_dis"]])
+    if not pool:
+        return {}
+    allp = pd.concat(pool, ignore_index=True)
+    hi = allp[allp["_dis"] >= allp["_dis"].quantile(q)]
+    if len(hi) < 10:
+        return {}
+    return {
+        "n_high_disagreement": int(len(hi)),
+        "us": round(float(hi[us_col].corr(hi["real_fp_ppr"], method="spearman")), 3),
+        "system": round(float(hi[sys_col].corr(hi["real_fp_ppr"], method="spearman")), 3),
+    }
+
+
+def _zscore(x: np.ndarray) -> np.ndarray:
+    x = np.asarray(x, dtype="float64")
+    sd = np.nanstd(x)
+    if not np.isfinite(sd) or sd == 0:
+        return np.zeros_like(x)
+    return (x - np.nanmean(x)) / sd
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# The scorecard
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def build_scorecard(con, seasons, schema, *, project_fn, load_realized_fn, manual_dir=None) -> dict:
+    """Grade our shipped projection vs every available benchmark system, per season, apples-to-apples.
+
+    `project_fn(con, season, schema) -> DataFrame[player_id, position, proj_fp_ppr]` builds the SHIPPED
+    model for a season (base = season−1); `load_realized_fn(con, season, schema) -> [player_id, g,
+    real_fp_ppr]` is the realized truth. (Injected so this module stays free of the heavy projection
+    imports and is unit-testable.)
+
+    Returns {"per_season": [...], "aggregate": {system: {...}}, "seasons_scored": [...]}.
+    """
+    per_season = []
+    for y in seasons:
+        systems = load_systems(con, y, schema, manual_dir=manual_dir)
+        if not systems:
+            log.info("  %d: no benchmark systems with data — skip", y)
+            continue
+        proj = project_fn(con, y, schema)
+        proj = proj[proj["position"].isin(_POSITIONS)].copy()
+        proj["player_id"] = proj["player_id"].astype(str)
+        real = load_realized_fn(con, y, schema)
+        real["player_id"] = real["player_id"].astype(str)
+        base = proj.merge(real, on="player_id", how="inner", suffixes=("", "_r"))
+        base = base[base["g"] >= 6].copy()  # players who actually played the target season
+        # our position is authoritative; keep just what the scorer needs
+        base = base[["player_id", "position", "proj_fp_ppr", "real_fp_ppr"]]
+        if len(base) < 30:
+            log.info("  %d: thin overlap (%d) — skip", y, len(base))
+            continue
+
+        row = {"season": y, "n_scored_universe": int(len(base)), "systems": {}}
+        for name, sysf in systems.items():
+            s = sysf.rename(columns={"score": "sys_score"})[["player_id", "sys_score"]]
+            m = base.merge(s, on="player_id", how="inner")
+            if len(m) < 20:
+                row["systems"][name] = {"n_aligned": int(len(m)), "note": "thin aligned overlap"}
+                continue
+            scored = _score_pair(m, "proj_fp_ppr", "sys_score")
+            scored["disagreement"] = _disagreement(m, "proj_fp_ppr", "sys_score")
+            scored["coverage_pct"] = round(100.0 * len(m) / len(base), 1)
+            row["systems"][name] = scored
+        per_season.append(row)
+
+    aggregate = _aggregate(per_season)
+    return {"per_season": per_season, "aggregate": aggregate,
+            "seasons_scored": [r["season"] for r in per_season]}
+
+
+def forward_comparison(con, season, schema, *, project_fn, manual_dir=None) -> dict:
+    """FORWARD (no-realized) comparison for an INCOMPLETE season (e.g. the current draft year): how
+    aligned is OUR board with each system, and where do we most DISAGREE? ⚠️ This is an AGREEMENT view,
+    NOT an accuracy claim — there is no realized truth yet, so NO "we beat X" statement can be made
+    here (that waits for `build_scorecard` once the season completes). It exists so an operator-supplied
+    forward file (Fantasy Footballers 2026) is USABLE now — as draft content (our contrarian takes),
+    not as a proof point.
+
+    Returns {"season", "systems": {name: {agreement ρ by pos + overall, top disagreements}}}.
+    """
+    systems = load_systems(con, season, schema, manual_dir=manual_dir)
+    proj = project_fn(con, season, schema)
+    proj = proj[proj["position"].isin(_POSITIONS)].copy()
+    proj["player_id"] = proj["player_id"].astype(str)
+    # a display name if the projection carries one (for readable disagreement rows)
+    name_col = "player_name" if "player_name" in proj.columns else None
+    keep = ["player_id", "position", "proj_fp_ppr"] + ([name_col] if name_col else [])
+    base = proj[keep].copy()
+    out = {"season": season, "systems": {}}
+    for name, sysf in systems.items():
+        s = sysf.rename(columns={"score": "sys_score"})[["player_id", "sys_score"]]
+        m = base.merge(s, on="player_id", how="inner")
+        if len(m) < 20:
+            continue
+        per = {}
+        for p in _POSITIONS:
+            d = m[m["position"] == p]
+            v = _spearman(d["proj_fp_ppr"], d["sys_score"])
+            if v is not None:
+                per[p] = round(v, 3)
+        # biggest within-position disagreements = our most contrarian picks vs this system
+        rows = []
+        for p in _POSITIONS:
+            d = m[m["position"] == p].copy()
+            if len(d) < 8:
+                continue
+            d["z_us"] = _zscore(d["proj_fp_ppr"].to_numpy())
+            d["z_sys"] = _zscore(d["sys_score"].to_numpy())
+            d["gap"] = d["z_us"] - d["z_sys"]   # +gap = WE are higher on them than the system
+            rows.append(d)
+        disagreements = []
+        if rows:
+            allp = pd.concat(rows, ignore_index=True)
+            for _, r in allp.reindex(allp["gap"].abs().sort_values(ascending=False).index).head(15).iterrows():
+                disagreements.append({
+                    "player": (r[name_col] if name_col else r["player_id"]),
+                    "position": r["position"],
+                    "direction": "we_higher" if r["gap"] > 0 else "we_lower",
+                    "gap_z": round(float(r["gap"]), 2),
+                })
+        out["systems"][name] = {
+            "n_aligned": int(len(m)),
+            "agreement_rho_by_pos": per,
+            "agreement_rho_pooled": round(float(np.mean(list(per.values()))), 3) if per else None,
+            "top_disagreements": disagreements,
+        }
+    return out
+
+
+def _aggregate(per_season: list[dict]) -> dict:
+    """Average each system's us-vs-system deltas across the seasons it appears in (a durable claim
+    holds across seasons, not one)."""
+    agg: dict[str, dict] = {}
+    names = {n for r in per_season for n in r["systems"]}
+    for name in sorted(names):
+        rows = [r["systems"][name] for r in per_season
+                if name in r["systems"] and "delta_rho_pooled" in r["systems"][name]]
+        if not rows:
+            continue
+        def _m(key):
+            xs = [x[key] for x in rows if x.get(key) is not None]
+            return round(float(np.mean(xs)), 3) if xs else None
+        dis_us = [x["disagreement"]["us"] for x in rows if x.get("disagreement")]
+        dis_sy = [x["disagreement"]["system"] for x in rows if x.get("disagreement")]
+        agg[name] = {
+            "n_seasons": len(rows),
+            "us_rho_pooled": _m_over(rows, "us", "rho_pooled"),
+            "system_rho_pooled": _m_over(rows, "system", "rho_pooled"),
+            "delta_rho_pooled": _m("delta_rho_pooled"),
+            "delta_rank_mae": _m("delta_rank_mae"),
+            "disagreement_us": round(float(np.mean(dis_us)), 3) if dis_us else None,
+            "disagreement_system": round(float(np.mean(dis_sy)), 3) if dis_sy else None,
+            "delta_rho_by_pos": _agg_by_pos(rows),
+        }
+    return agg
+
+
+def _m_over(rows, side, key):
+    xs = [r[side][key] for r in rows if r.get(side, {}).get(key) is not None]
+    return round(float(np.mean(xs)), 3) if xs else None
+
+
+def _agg_by_pos(rows) -> dict:
+    out = {}
+    for p in _POSITIONS:
+        xs = [r["delta_rho_by_pos"][p] for r in rows if p in r.get("delta_rho_by_pos", {})]
+        if xs:
+            out[p] = round(float(np.mean(xs)), 3)
+    return out

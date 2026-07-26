@@ -93,4 +93,7 @@ infrastructure/cognito/presignup_link/.build/
 
 # NF-D2 #6: re-fetchable FFC ADP cache (reproducible from the API; not committed)
 quant_sports_intel_models/football/nfl/fantasy/artifacts/adp_cache/
+# NF-D3: re-fetchable FantasyPros ECR cache + operator-supplied competitor files (licensed FF/PFF/ESPN
+# rankings — never commit; the *.csv rule under artifacts/ already covers benchmarks_manual data)
+quant_sports_intel_models/football/nfl/fantasy/artifacts/ecr_cache/
 ablation_results/**/*.parquet

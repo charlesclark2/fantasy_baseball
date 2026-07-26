@@ -106,6 +106,38 @@ def _tick_sf_free() -> bool:
             and os.environ.get("SCHEDULE_LAKEHOUSE_INTRADAY") == "1")
 
 
+def _w6_odds_sf_free() -> bool:
+    """E11.20 phase-2b gate (default-OFF): retire the INTRADAY odds tick's two Snowflake
+    legs — the `dbt run` SF VIEW rebuild (`stg_oddsapi_odds` + `mart_odds_outcomes`) in
+    `odds_current_dbt_rebuild`, and the trailing `refresh_w1_external_tables.py --w6-odds`
+    in `_w6_lakehouse_intraday(scope='odds')`. Both keep the Snowflake `lakehouse_ext`/
+    `betting.*` views of mart_odds_outcomes + mart_game_odds_bridge fresh — a per-tick
+    warehouse WAKE (~12-14 fires/game-day, the measured phase-2b lever).
+
+    REQUIRES `W6_LAKEHOUSE_INTRADAY=1`: that is what runs `run_w1_lakehouse.py
+    --w6-odds-current` (the DuckDB/S3 parquet rebuild of mart_odds_outcomes' _current bucket
+    + mart_game_odds_bridge) — the read source the --s3 predict/serving (W7B_*) and the
+    backend `lakehouse_query` actually use. Retiring the SF legs WITHOUT that S3 rebuild
+    would leave served odds STALE on every path, so this returns False (KEEP the SF legs)
+    unless BOTH flags are set. Read fresh from env (not a module constant) so a box flip
+    takes effect on reload.
+
+    Consumer audit (2026-07-26): the ONLY intraday readers of these two marts —
+    /app/scripts/predict_today.py (its `--s3` aux/Bovada odds reads route through DuckDB),
+    write_serving_store.py --book-odds --s3, and app/backend/routers/picks.py
+    (`lakehouse_query`) — read the S3 parquet, NOT the SF views/ext tables. The remaining
+    SF readers (check_odds_coverage_op + the 2 dbt feature models that `ref` these marts)
+    run in the DAILY build, kept fresh by the daily lakehouse_spine_odds_bridge_op /
+    refresh_w1_external_tables_op — so INTRADAY freshness of the SF views buys nothing. The
+    SF-only predict twin (betting_ml/scripts/predict_today.py) is invoked only by the
+    deprecated Streamlit UI, not the pipeline. This flag owns ONLY the intraday odds path;
+    the once/day CLV path (odds_clv_dbt_rebuild) keeps its SF legs (1 fire/day, low wake,
+    feeds the daily-run CLV SF consumers).
+    """
+    return (os.environ.get("W6_ODDS_SF_FREE") == "1"
+            and os.environ.get("W6_LAKEHOUSE_INTRADAY") == "1")
+
+
 def _schedule_lakehouse_intraday(context: OpExecutionContext) -> None:
     """Refresh the S3 lakehouse game-state (stg_statsapi_games) AND the wide lineup table
     (stg_statsapi_lineups_wide) from the just-captured native monthly_schedule snapshot, so prod
@@ -204,7 +236,21 @@ def _w6_lakehouse_intraday(context: OpExecutionContext, scope: str) -> None:
     try:
         if scope == "odds":
             _run_script(context, "run_w1_lakehouse.py", ["--w6-odds-current"])
-            _run_script(context, "refresh_w1_external_tables.py", ["--w6-odds"])
+            # E11.20 phase-2b: the trailing SF ext-table REFRESH is retired under
+            # W6_ODDS_SF_FREE — nothing reads the mart_odds_outcomes / mart_game_odds_bridge
+            # SF ext tables intraday (all intraday consumers read the --w6-odds-current S3
+            # parquet above). The DAILY lakehouse_spine_odds_bridge_op /
+            # refresh_w1_external_tables_op still refresh these ext tables for the daily SF
+            # readers (check_odds_coverage_op + the 2 dbt feature models). Gated (else-run),
+            # not removed, so pre-flip boxes that still read SF stay fresh.
+            if _w6_odds_sf_free():
+                context.log.info(
+                    "[W6_ODDS_SF_FREE] skipping refresh_w1_external_tables --w6-odds — no "
+                    "game-hours consumer reads the SF odds ext tables intraday; the "
+                    "--w6-odds-current S3 parquet is the read source."
+                )
+            else:
+                _run_script(context, "refresh_w1_external_tables.py", ["--w6-odds"])
         else:  # clv
             _run_script(context, "export_w6_raw_to_s3.py", ["--table", "daily_model_predictions"])
             _run_script(context, "run_w1_lakehouse.py", ["--w6"])
@@ -265,13 +311,32 @@ def odds_current_dbt_rebuild(context: OpExecutionContext) -> None:
     ~48 full-chain rebuilds. The heavy post-hoc CLV/line-movement marts are split out to
     `odds_clv_dbt_rebuild` (once/day post-game) since they can't compute anything until
     the closing line locks at first pitch."""
-    _run_dbt(context, [
-        "run",
-        "--select",
-        "stg_oddsapi_odds",
-        "mart_odds_outcomes",
-        "--target", "baseball_betting_and_fantasy",
-    ])
+    # E11.20 phase-2b (W6_ODDS_SF_FREE): post-cutover this dbt run only rebuilds the Snowflake
+    # VIEW definition (a data no-op — the view is stable between deploys, and the DAILY build
+    # rebuilds it when a deploy changes it). No game-hours consumer reads the SF views intraday
+    # (all --s3), so retire this per-tick warehouse wake. Gated, not removed — inert + LOUD if
+    # W6_ODDS_SF_FREE is set WITHOUT W6_LAKEHOUSE_INTRADAY (then the --w6-odds-current S3 rebuild
+    # below is off, so the SF legs are NOT safe to drop → fall back to running the rebuild).
+    if _w6_odds_sf_free():
+        context.log.info(
+            "[W6_ODDS_SF_FREE] skipping the intraday `dbt run stg_oddsapi_odds mart_odds_outcomes` "
+            "SF view rebuild — no game-hours consumer reads the SF views intraday; the "
+            "--w6-odds-current S3 parquet (below) is the read source."
+        )
+    else:
+        if os.environ.get("W6_ODDS_SF_FREE") == "1":
+            context.log.warning(
+                "⚠️ W6_ODDS_SF_FREE=1 but W6_LAKEHOUSE_INTRADAY is OFF — NOT retiring the SF odds "
+                "legs (the --w6-odds-current S3 rebuild is what makes them safe to drop); running "
+                "the dbt view rebuild as before to avoid stale served odds."
+            )
+        _run_dbt(context, [
+            "run",
+            "--select",
+            "stg_oddsapi_odds",
+            "mart_odds_outcomes",
+            "--target", "baseball_betting_and_fantasy",
+        ])
     # E11.1-W6: post-cutover, the dbt run above only rebuilds the Snowflake VIEW — the real
     # served-price freshness comes from the S3 today-partition rebuild + external-table REFRESH.
     _w6_lakehouse_intraday(context, scope="odds")
