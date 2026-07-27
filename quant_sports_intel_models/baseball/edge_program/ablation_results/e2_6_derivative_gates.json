@@ -1,0 +1,123 @@
+{
+  "meta": {
+    "synthetic": false,
+    "n_games": 5394,
+    "n_quotes": 937947,
+    "r_home": 4.0645,
+    "r_away": 3.3977,
+    "n_draws": 5000,
+    "seasons": [
+      2023,
+      2024,
+      2025,
+      2026
+    ],
+    "n_books": 24,
+    "markets_present": [
+      "alternate_totals",
+      "team_totals"
+    ]
+  },
+  "distributional_gate": {
+    "ran": false,
+    "note": "champion total \u03bc/\u03c3 not supplied (--champ-preds) \u2014 distributional gate skipped; derivative gate is E2.6's core."
+  },
+  "placebo_control": {
+    "team_totals": {
+      "n_candidates": 0,
+      "fdr_survive": 0,
+      "pbo": 0.305
+    },
+    "alternate_totals": {
+      "n_candidates": 0,
+      "fdr_survive": 0,
+      "pbo": 0.3255
+    },
+    "totals": {
+      "n_candidates": 0,
+      "fdr_survive": 0,
+      "pbo": NaN
+    }
+  },
+  "markets": {
+    "team_totals": {
+      "market": "team_totals",
+      "present": true,
+      "n_selectable": 239,
+      "pbo": {
+        "pbo": 0.2995,
+        "n_combos": 2000,
+        "n_configs": 68,
+        "n_splits": 16,
+        "clears_live_pbo": false
+      },
+      "dsr": {
+        "dsr": 0.9113245462324442,
+        "observed_sr": 0.17769260511885485,
+        "sr0": 0.0902721510114244,
+        "n_obs": 80,
+        "n_trials": 239,
+        "passes_live": false,
+        "best_config": "team_totals|betmgm|mid|tau0.06",
+        "best_roi": 0.160030081030081
+      },
+      "fdr": {
+        "threshold": NaN,
+        "n_survive": 0,
+        "n_tested": 239,
+        "q": 0.1
+      },
+      "candidates": [],
+      "n_fragile": 0,
+      "verdict": "CLEAN NULL \u2014 no config beats the close after deflation"
+    },
+    "alternate_totals": {
+      "market": "alternate_totals",
+      "present": true,
+      "n_selectable": 468,
+      "pbo": {
+        "pbo": 0.0565,
+        "n_combos": 2000,
+        "n_configs": 160,
+        "n_splits": 16,
+        "clears_live_pbo": true
+      },
+      "dsr": {
+        "dsr": 0.5919728217598382,
+        "observed_sr": 0.10103216089724744,
+        "sr0": 0.08311589838825426,
+        "n_obs": 158,
+        "n_trials": 468,
+        "passes_live": false,
+        "best_config": "alternate_totals|pointsbetus|low|tau0.08",
+        "best_roi": 0.12293820758522037
+      },
+      "fdr": {
+        "threshold": NaN,
+        "n_survive": 0,
+        "n_tested": 468,
+        "q": 0.1
+      },
+      "candidates": [],
+      "n_fragile": 0,
+      "verdict": "CLEAN NULL \u2014 no config beats the close after deflation"
+    },
+    "totals": {
+      "market": "totals",
+      "present": false,
+      "n_selectable": 0,
+      "pbo": {
+        "pbo": NaN
+      },
+      "dsr": {
+        "dsr": NaN
+      },
+      "fdr": {
+        "n_survive": 0,
+        "n_tested": 0
+      },
+      "candidates": [],
+      "verdict": "ABSENT \u2014 no closes for this market in S3"
+    }
+  }
+}

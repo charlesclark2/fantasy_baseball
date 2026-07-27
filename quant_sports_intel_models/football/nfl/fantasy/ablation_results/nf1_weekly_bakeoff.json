@@ -1,0 +1,41 @@
+{
+  "seasons": [
+    2021,
+    2022,
+    2023,
+    2024
+  ],
+  "arms": {
+    "flat_baseline": {
+      "mean_weekly_rho": 0.5001,
+      "n_weeks": 60,
+      "pit_max_decile_dev": 0.2315,
+      "delta_vs_flat": 0.0
+    },
+    "+dvp": {
+      "mean_weekly_rho": 0.4971,
+      "n_weeks": 60,
+      "pit_max_decile_dev": 0.2327,
+      "delta_vs_flat": -0.003
+    },
+    "+env": {
+      "mean_weekly_rho": 0.4932,
+      "n_weeks": 60,
+      "pit_max_decile_dev": 0.2318,
+      "delta_vs_flat": -0.0069
+    },
+    "+home": {
+      "mean_weekly_rho": 0.5008,
+      "n_weeks": 60,
+      "pit_max_decile_dev": 0.2331,
+      "delta_vs_flat": 0.0007
+    },
+    "full_matchup": {
+      "mean_weekly_rho": 0.4868,
+      "n_weeks": 60,
+      "pit_max_decile_dev": 0.2366,
+      "delta_vs_flat": -0.0133
+    }
+  },
+  "generated_at": "2026-07-27T01:28:55.326613+00:00"
+}

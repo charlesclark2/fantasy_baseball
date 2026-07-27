@@ -302,7 +302,7 @@ AUTO_REFRESH = FALSE
 COMMENT = 'E11.1-W8a: feature_pregame_odds_features from S3 lakehouse parquet (upstream feature layer + EB posteriors)';
 GRANT SELECT ON EXTERNAL TABLE baseball_data.lakehouse_ext.feature_pregame_odds_features TO ROLE CREDENCE_API_RO;
 
--- ── feature_pregame_sub_model_signals  (94 columns) ──
+-- ── feature_pregame_sub_model_signals  (100 columns) ──
 CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.feature_pregame_sub_model_signals (
     GAME_PK                          NUMBER(38,0)   AS (VALUE:GAME_PK::NUMBER(38,0)),
     SIDE                             VARCHAR        AS (VALUE:SIDE::VARCHAR),
@@ -327,6 +327,12 @@ CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.feature_pregame_sub
     PRED_RUNS_RAW_V2                 FLOAT          AS (VALUE:pred_runs_raw_v2::FLOAT),
     PRED_RUNS_UNCERTAINTY_V2         FLOAT          AS (VALUE:pred_runs_uncertainty_v2::FLOAT),
     PRED_RUNS_MU_V2_AVAILABLE        BOOLEAN        AS (VALUE:pred_runs_mu_v2_available::BOOLEAN),
+    TOTALS_PERSIDE_MU_V1             FLOAT          AS (VALUE:totals_perside_mu_v1::FLOAT),
+    TOTALS_PERSIDE_DISPERSION_V1     FLOAT          AS (VALUE:totals_perside_dispersion_v1::FLOAT),
+    TOTALS_PERSIDE_RAW_V1            FLOAT          AS (VALUE:totals_perside_raw_v1::FLOAT),
+    TOTALS_PERSIDE_UNCERTAINTY_V1    FLOAT          AS (VALUE:totals_perside_uncertainty_v1::FLOAT),
+    TOTALS_PERSIDE_IS_OOS_V1         BOOLEAN        AS (VALUE:totals_perside_is_oos_v1::BOOLEAN),
+    TOTALS_PERSIDE_MU_V1_AVAILABLE   BOOLEAN        AS (VALUE:totals_perside_mu_v1_available::BOOLEAN),
     STARTER_SUPPRESSION_MU_V1        FLOAT          AS (VALUE:starter_suppression_mu_v1::FLOAT),
     STARTER_SUPPRESSION_SIGMA_V1     FLOAT          AS (VALUE:starter_suppression_sigma_v1::FLOAT),
     STARTER_SUPPRESSION_SIGNAL_V1    FLOAT          AS (VALUE:starter_suppression_signal_v1::FLOAT),

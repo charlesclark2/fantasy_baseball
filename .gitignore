@@ -70,6 +70,13 @@ quant_sports_intel_models/baseball/edge_program/ablation_results/*.parquet
 quant_sports_intel_models/baseball/edge_program/ablation_results/e13_13_derivative_efficiency_smoke.json
 quant_sports_intel_models/baseball/edge_program/ablation_results/e13_13_market_grid_results_smoke.csv
 
+# E2.6 — bulky SYNTHETIC smoke outputs (regenerate via `eval_derivative_model_gate.py --smoke`;
+# committed: the banner-marked _smoke.md proofs + the real operator-run dossier, no suffix)
+quant_sports_intel_models/baseball/edge_program/ablation_results/e2_6_derivative_gates_smoke.json
+quant_sports_intel_models/baseball/edge_program/ablation_results/e2_6_derivative_gates_smoke_mispriced.json
+quant_sports_intel_models/baseball/edge_program/ablation_results/e2_6_model_gate_grid_smoke.csv
+quant_sports_intel_models/baseball/edge_program/ablation_results/e2_6_model_gate_grid_smoke_mispriced.csv
+
 # Next.js frontend
 frontend/.next/
 frontend/out/

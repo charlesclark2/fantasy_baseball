@@ -647,24 +647,56 @@ via MCP fully-qualified no USE; uv run python; hand >1min scripts to the operato
 
 > **✅ CODE-COMPLETE 2026-07-26 — awaiting operator backfill run + box deploy.** Generator `betting_ml/scripts/totals_generative/generate_totals_generative_signals.py` (mirrors `offense_v2/generate_offense_signals.py`). **Two corrections vs the older prompt:** (1) the served learner is **LightGBM Poisson**, NOT NGBoost — E2.1-r's verdict was `PROMOTE_MINIMAL_FIX` (NGBoost dropped as under-dispersed); (2) the served dispersion is the **E2.3 held-out-calibrated per-side `r` (home 4.0645 / away 3.3977)**, NOT the artifact's train-fit `negbin_r = 7.449` (which under-covers — serving it re-introduces the ~24 % variance deficit E2.3 fixed). Full live wiring shipped (store + 9th generator + consumer column block + export/ext-table/rebuild + INC-25 guard → 9). ⚠️ The champion **and** `totals_distribution_v1.json` must be promoted to S3 for the box. Report: `ablation_results/e2_5_signal_registration.md`. Next = E2.6 (derivative pricing; its OOS eval filters `where is_oos`).
 
-### E2.6 — Derivative pricing + validation gates  ⬜  **[needs E2.0 complete]**
+### E2.6 — Derivative pricing + validation gates  ✅ **HARNESS CODE-COMPLETE 2026-07-26 — awaiting operator `--build-cache` + eval run**  **[needs E2.0 complete]**
 **Tasks/AC (must clear before any derivative bet surfaces as actionable):**
-- [ ] **Distributional accuracy:** convolved-total `crps_ensemble` beats the `total_runs` champion `crps_normal` under E1.1 CV, via `evaluate_promotion` (plug in as a `SamplesSpec` adapter — no gate changes).
-- [ ] **Main-line un-pause (unchanged rule):** to bet main-line totals it must beat **both** prior-predictive NLL **2.8893** AND prior-naive Brier **0.248** on rolling-60 live.
-- [ ] **Derivative edge (the real value path):** F5 / team-totals / alt-lines gated by **positive CLV vs *that derivative's own close* (from E2.0)** + **PBO<0.2 + DSR>0** (E1.4). ✅ E2.0's historical closes now exist (238k closes / 5,896 games). ⚠️ **Split the gate by market:** **team-totals + alt-totals** have history + live capture (E2.0b) → backtestable + forward — gate these now. **F5 has NO data source** (E2.0b probe: Odds API offers zero F5) → **F5 is on hold pending E2.0c**; don't include an F5 gate until a source exists (or F5 is killed).
-- [ ] **FINAL STEP (§0.3):** generate the E2.7 app-session prompt and write it into §E2.7 (real PG table/columns/payload).
+- [x] **Distributional accuracy:** convolved-total `crps_ensemble` vs the `total_runs` champion `crps_normal` via `evaluate_promotion` (a `PredictiveOutput.from_samples` adapter — no gate changes). Wired as leg 1 of the harness (`distributional_gate`); runs when the operator supplies champion (μ,σ) preds. **Product-quality check, not the edge gate.**
+- [ ] **Main-line un-pause (unchanged rule):** to bet main-line totals it must beat **both** prior-predictive NLL **2.8893** AND prior-naive Brier **0.248** on rolling-60 live. **⚠️ This belongs to the SEPARATE main-line-`P(over)`-calibration track (E13.6b Part-B / deploying E2.3 at source), NOT E2.6's derivative gate** (reconciled 2026-07-26). E2.6 OWNS derivatives; it does not un-pause the main line.
+- [x] **Derivative edge (the real value path):** team-totals / alt-totals gated by **positive ROI net of vig vs *that derivative's own close* (from E2.0)** + **season-sign-consistent + BH-FDR + PBO<0.2 + DSR≥0.95** (E1.4), scored **GAME-level** (the E13.13 anti-clustering rule). This is **angle 3** (model-vs-market) over the E13.13 angle-1/2 efficiency eval; our market-blind E2.5 `totals_generative_v1` prices each derivative (convolve per-side NegBin, ρ=0). **Beating the close is the strictest cashability test; `best_alpha=0` → a CLEAN NULL is the likely+valid outcome** (E13.8 + E5.4 + E13.13 nulls). **F5 HELD OUT** — its closes exist in S3, but the served model produces only full-game per-side μ (E2.4 `f5_generative_v1` is built but not yet registered as a served signal → a small E2.5-follow-on); the harness is F5-ready. Harness: `betting_ml/utils/derivative_model_gate.py` + `betting_ml/scripts/derivative_eval/eval_derivative_model_gate.py` + `betting_ml/tests/test_derivative_model_gate.py`. Pre-reg: `ablation_results/e2_6_preregistration.md`.
+- [x] **FINAL STEP (§0.3):** E2.7 app-session prompt generated + written into §E2.7 below.
 
 ### E2.7 — Distribution UX  🧩  **[separate app session — prompt emitted by the E2 model session; see §0.3]**
 **Scope:** render the predictive total/run-diff distribution + market-line rule + shaded favorable mass + an alt-line ladder, beside the existing per-pick SHAP `pick_explanation` (Story 30.15). Serve via Railway PG (params + quantiles only, never raw samples at request time). **AC:** distribution + drivers render on the pick detail page; honest-framing copy; changelog entry.
 > **Totals-parity (E9.23):** this is the **honest home for the "totals win-probability CI"** the operator asked for (H2H parity). Include a **calibrated P(over) + an over-probability/total CI** from the E2.3 distribution on the totals pick detail — this is the real version (the current totals model's interval is un-calibrated; don't ship that). The CLV half of E9.23 is separate (E9.2, muted).
 
 ```
-▶ App-session prompt — Story E2.7 (Distribution UX)  [app repo]
-⏳ TO BE GENERATED by the E2 model session as its final task (§0.3), after E2.3/E2.6 produce the served
-   contract. It must specify the ACTUAL Railway-PG table + columns (μ/σ, the P05…P95 quantile grid,
-   p_over_<line>), the per-pick payload shape, and the serving path — then a fresh app session builds the
-   pick-detail distribution + alt-line ladder + SHAP drivers per §0.2 + honest framing + changelog.
-   Do not hand-author this prompt.
+▶ App-session prompt — Story E2.7 (Distribution UX)  [app repo · 🧩 APP · needs E2.3 served + E2.6 verdict]
+✅ GENERATED by the E2 model session (E2.6 final step, 2026-07-26). Build the predictive-totals
+   distribution surface on the totals pick-detail page. Read §0.2 (app-target rule: UI ⇒ frontend/
+   ONLY; API ⇒ app/backend/) + Story 30.15 (the existing per-pick SHAP `pick_explanation`).
+
+WHAT TO RENDER (totals pick detail — frontend/app/picks/[game_pk]/page.tsx):
+  1. The predictive GAME-TOTAL distribution: μ_total + the P05…P95 quantile grid as a density/violin,
+     with the market total line drawn on it and the favorable mass (P(over) or P(under) side) SHADED.
+  2. A calibrated **P(over) + an over-probability / total CI** (the E9.23 totals-parity ask — the
+     REAL calibrated version from E2.3; do NOT ship the old totals model's un-calibrated interval).
+  3. The run-diff distribution (home − away) as the distributional H2H context (>0 ⇔ home).
+  4. A TEAM-TOTAL + ALT-LINE ladder: P(over) at a few lines around each team total and the game total
+     (the alt ladder), sourced from the same convolved distribution.
+  5. Beside the existing SHAP `pick_explanation` drivers (Story 30.15) — one coherent "why + how
+     confident" panel.
+
+THE SERVED CONTRACT (all already produced by the model layer — the app CONSUMES, never recomputes):
+  * Per-side means: `feature_pregame_sub_model_signals.totals_perside_mu_v1` (home/away rows), served.
+  * Dispersion + grid params: betting_ml/models/sub_models/totals_perside_v1/totals_distribution_v1.json
+    → dispersion_r_home 4.0645 / dispersion_r_away 3.3977, rho 0.0, quantile_levels P05…P95, n_draws.
+  * The distribution is the INDEPENDENT convolution of the two per-side NegBin marginals (E2.2/E2.3).
+  SERVING PATH (per CLAUDE.md — Railway is decommissioned; serve = DynamoDB → S3 fallback, NEVER
+  Snowflake at request time): a DAILY batch (extend scripts/write_serving_store.py --game-detail, or a
+  sibling op) computes μ_total, the P05…P95 total quantile grid, p_over at the market line, the
+  run-diff quantiles, and the team-total + alt-line p_over ladder from the served μ + the json params
+  (cap ~10k draws/game, write PARAMS + QUANTILES + p_over ONLY — never raw samples), and stores them in
+  the per-game game-detail blob. app/backend/routers/picks.py exposes them on the pick-detail payload
+  (⚠️ add the new fields to the Pydantic response model — a field absent from the schema is dropped
+  SILENTLY, the E9.41 landmine). Frontend renders per §0.2.
+  PAYLOAD SHAPE (per pick): { total: {mu, quantiles:{p05..p95}, market_line, p_over, ci80:[lo,hi]},
+    run_diff:{quantiles, p_home}, team_totals:{home:{line,p_over,ladder}, away:{...}},
+    alt_totals:[{line,p_over}...] }.
+
+HONEST FRAMING (non-negotiable — best_alpha=0): this is a CALIBRATED DISTRIBUTION for transparency,
+  NOT an edge claim. E2.6's derivative gate result (see ablation_results/e2_6_derivative_gates.md — a
+  CLEAN NULL is the likely outcome) governs whether ANY derivative is surfaced as actionable; until a
+  market clears E2.6's gate, show the distribution as insight/context, never "+EV bet". No win-rate /
+  edge copy. FINAL STEP: add a frontend/data/changelog.json entry (Monday-of-week `week`).
 ```
 
 ```
