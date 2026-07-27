@@ -79,9 +79,15 @@ class DistLadderPoint(BaseModel):
     p_over: float  # model P(outcome > line) — descriptive, not a recommendation
 
 
+class DistPmfPoint(BaseModel):
+    x: int      # integer run total (or run margin)
+    p: float    # P(outcome == x) — the discrete predictive mass at x
+
+
 class TotalDistribution(BaseModel):
     mu: float                                  # expected game total (runs)
     quantiles: dict[str, float] = {}           # {"p05":.., "p10":.., … "p95":..}
+    pmf: list[DistPmfPoint] = []               # P(total == k) over integer support — the render shape
     ci80: list[float] = []                     # [Q10, Q90] — the 80% predictive interval
     market_line: float | None = None           # book total drawn on the density
     p_over: float | None = None                # P(total > market_line) (None if no line)
@@ -90,6 +96,7 @@ class TotalDistribution(BaseModel):
 class RunDiffDistribution(BaseModel):
     mu: float                                  # expected home−away margin (runs)
     quantiles: dict[str, float] = {}
+    pmf: list[DistPmfPoint] = []               # P(home − away == k) over integer support
     p_home: float                              # P(run_diff > 0) — distributional H2H view
 
 

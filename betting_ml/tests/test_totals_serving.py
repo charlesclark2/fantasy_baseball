@@ -33,10 +33,40 @@ def _payload(mu_home=4.6, mu_away=4.3, line=8.5, **kw):
 def test_top_level_shape_matches_served_contract():
     p = _payload()
     assert set(p) == {"version", "total", "run_diff", "team_totals", "alt_totals"}
-    assert set(p["total"]) == {"mu", "quantiles", "ci80", "market_line", "p_over"}
-    assert set(p["run_diff"]) == {"mu", "quantiles", "p_home"}
+    assert set(p["total"]) == {"mu", "quantiles", "pmf", "ci80", "market_line", "p_over"}
+    assert set(p["run_diff"]) == {"mu", "quantiles", "pmf", "p_home"}
     assert set(p["team_totals"]) == {"home", "away"}
     assert set(p["team_totals"]["home"]) == {"line", "p_over", "mu", "ladder"}
+
+
+def test_pmf_is_a_valid_unimodal_integer_mass_function():
+    pmf = _payload()["total"]["pmf"]
+    xs = [pt["x"] for pt in pmf]
+    ps = [pt["p"] for pt in pmf]
+    # integer support, contiguous and ascending (no sawtooth gaps)
+    assert all(isinstance(pt["x"], int) for pt in pmf)
+    assert xs == sorted(xs)
+    assert xs == list(range(xs[0], xs[-1] + 1))
+    # a probability mass: each in [0,1] and the trimmed support holds ~all the mass
+    assert all(0.0 <= q <= 1.0 for q in ps)
+    assert 0.9 <= sum(ps) <= 1.0001
+    # unimodal-ish: a single interior peak (a count distribution is a smooth bell, not a sawtooth)
+    peak = ps.index(max(ps))
+    assert 0 < peak < len(ps) - 1
+    # the peak sits near the projected mean (sum of the per-side means)
+    assert abs(xs[peak] - _payload()["total"]["mu"]) <= 2.0
+
+
+def test_pmf_peak_shifts_with_the_projection():
+    lo_peak = max(_payload(mu_home=2.5, mu_away=2.5)["total"]["pmf"], key=lambda d: d["p"])["x"]
+    hi_peak = max(_payload(mu_home=6.5, mu_away=6.5)["total"]["pmf"], key=lambda d: d["p"])["x"]
+    assert lo_peak < hi_peak
+
+
+def test_run_diff_pmf_spans_negative_and_positive():
+    pmf = _payload(mu_home=4.6, mu_away=4.3)["run_diff"]["pmf"]
+    xs = [pt["x"] for pt in pmf]
+    assert min(xs) < 0 < max(xs)  # margins can be negative (away wins) or positive (home wins)
 
 
 def test_quantile_grid_is_p05_to_p95_and_monotone():

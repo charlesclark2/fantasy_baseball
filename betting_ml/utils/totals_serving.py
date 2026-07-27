@@ -50,6 +50,21 @@ def _quantile_dict(samples_1d: np.ndarray, levels: tuple[float, ...]) -> dict[st
     return {f"p{int(round(lvl * 100)):02d}": round(float(q), 2) for lvl, q in zip(levels, qs)}
 
 
+def _pmf(samples_1d: np.ndarray, *, tail: tuple[float, float] = (0.005, 0.995)) -> list[dict]:
+    """Probability mass function of a DISCRETE (integer-valued) predictive: [{"x": k, "p": P(==k)}…].
+
+    A game total / run margin is an integer count, so the honest distribution is a PMF over integers,
+    not a smoothed continuous density. Reconstructing a density from the quantile grid via Δp/Δx
+    oscillates on the integer lattice (a sawtooth) — the PMF is the exact, smooth bell instead. Support
+    is trimmed to the [0.5%, 99.5%] range so the payload stays compact (~20-25 points) and drops the
+    negligible tails. Counts, not raw samples, so the §6 cost guard holds."""
+    lo = int(np.floor(np.quantile(samples_1d, tail[0])))
+    hi = int(np.ceil(np.quantile(samples_1d, tail[1])))
+    xs = np.arange(lo, hi + 1)
+    counts = np.array([(samples_1d == k).mean() for k in xs], dtype=float)
+    return [{"x": int(k), "p": round(float(p), 4)} for k, p in zip(xs, counts)]
+
+
 def _ladder(samples_1d: np.ndarray, lines: list[float]) -> list[dict[str, float]]:
     """[{"line": L, "p_over": P(sample > L)} …] for a single game's sample array."""
     return [
@@ -109,6 +124,7 @@ def build_totals_distribution_payload(
     total_block: dict = {
         "mu": mu_total,
         "quantiles": _quantile_dict(total, levels),
+        "pmf": _pmf(total),          # P(total == k) over the integer support — the render shape
         "ci80": ci80,
     }
     if market_total_line is not None:
@@ -123,6 +139,7 @@ def build_totals_distribution_payload(
     run_diff_block = {
         "mu": round(mu_h - mu_a, 3),
         "quantiles": _quantile_dict(run_diff, levels),
+        "pmf": _pmf(run_diff),       # P(home − away == k); >0 ⇔ home wins on the scoreboard
         "p_home": round(float((run_diff > 0.0).mean()), 4),
     }
 

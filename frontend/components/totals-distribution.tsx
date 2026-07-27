@@ -31,10 +31,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 // ---------------------------------------------------------------------------
 
 export type DistLadderPoint = { line: number; p_over: number }
+export type DistPmfPoint = { x: number; p: number }
 
 export type TotalDistributionData = {
   mu: number
   quantiles: Record<string, number>
+  pmf: DistPmfPoint[]
   ci80: number[]
   market_line: number | null
   p_over: number | null
@@ -43,6 +45,7 @@ export type TotalDistributionData = {
 export type RunDiffDistributionData = {
   mu: number
   quantiles: Record<string, number>
+  pmf: DistPmfPoint[]
   p_home: number
 }
 
@@ -74,64 +77,49 @@ const fmtPct = (n: number | null | undefined) =>
 const fmtRuns = (n: number | null | undefined) =>
   n == null || Number.isNaN(n) ? "—" : n.toFixed(1)
 
-// ---------------------------------------------------------------------------
-// Density reconstruction from the stored P05…P95 quantile grid.
-// The grid is a CDF sample: level p_i is reached at run value x_i. The density on (x_{i-1}, x_i) is
-// Δp/Δx, placed at the interval midpoint. This yields a smooth-enough curve for a violin/density feel
-// without shipping raw samples (the §6 contract). Δx is floored to avoid a divide-by-zero spike where
-// two quantiles coincide.
-// ---------------------------------------------------------------------------
-function densityFromQuantiles(quantiles: Record<string, number>): { x: number; d: number }[] {
-  const entries = Object.entries(quantiles)
-    .map(([k, v]) => ({ p: parseInt(k.slice(1), 10) / 100, x: v }))
-    .filter((e) => Number.isFinite(e.p) && Number.isFinite(e.x))
-    .sort((a, b) => a.p - b.p)
-  if (entries.length < 2) return []
-  const pts: { x: number; d: number }[] = []
-  for (let i = 1; i < entries.length; i++) {
-    const dx = Math.max(entries[i].x - entries[i - 1].x, 0.25)
-    const dp = entries[i].p - entries[i - 1].p
-    pts.push({ x: (entries[i].x + entries[i - 1].x) / 2, d: dp / dx })
-  }
-  return pts
-}
-
 function DensityTooltip({ active, payload, unit }: any) {
   if (!active || !payload?.length) return null
-  const x = payload[0]?.payload?.x
+  const pt = payload[0]?.payload
+  if (!pt) return null
   return (
     <div className="rounded-md border border-[#2a2a2a] bg-[#0a0a0a] px-2.5 py-1.5 text-[11px] text-gray-300">
-      ≈ {typeof x === "number" ? x.toFixed(1) : x} {unit}
+      {pt.x} {unit} · <span className="text-white">{(pt.p * 100).toFixed(1)}%</span>
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// DensityChart — a game-total or run-diff density with a reference line + shaded favorable mass.
+// DensityChart — the exact probability mass function (P(outcome == k) at each integer k) as a smooth
+// bell, with the market line, the model's projected mean, and the leaned mass shaded. A game total /
+// run margin is an INTEGER count, so we plot the served PMF directly — no continuous-density
+// reconstruction (that oscillates on the integer lattice into a sawtooth).
 // ---------------------------------------------------------------------------
 function DensityChart({
-  quantiles,
+  pmf,
   refLine,
+  meanLine,
+  refLabel,
   shadeSide,
   unit,
   ariaLabel,
 }: {
-  quantiles: Record<string, number>
-  refLine: number | null
+  pmf: DistPmfPoint[]
+  refLine: number | null // market line (over/under boundary), orange dashed
+  meanLine: number | null // the model's projected mean, green solid
+  refLabel: string
   shadeSide: "over" | "under" | null // which side of refLine to shade (the model's lean)
   unit: string
   ariaLabel: string
 }) {
-  const data = densityFromQuantiles(quantiles)
-  if (!data.length) return null
-  const xs = data.map((p) => p.x)
+  if (!pmf?.length) return null
+  const xs = pmf.map((p) => p.x)
   const xMin = Math.min(...xs)
   const xMax = Math.max(...xs)
 
   return (
     <div role="img" aria-label={ariaLabel}>
       <ResponsiveContainer width="100%" height={150}>
-        <AreaChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 4 }}>
+        <AreaChart data={pmf} margin={{ top: 12, right: 8, left: 8, bottom: 4 }}>
           <defs>
             <linearGradient id={`grad-${unit}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={ACCENT} stopOpacity={0.35} />
@@ -159,25 +147,30 @@ function DensityChart({
           )}
           <Area
             type="monotone"
-            dataKey="d"
+            dataKey="p"
             stroke={ACCENT}
             strokeWidth={2}
             fill={`url(#grad-${unit})`}
             isAnimationActive={false}
             dot={false}
           />
+          {/* Model's projected mean — where we think it lands. */}
+          {meanLine != null && (
+            <ReferenceLine
+              x={meanLine}
+              stroke={ACCENT}
+              strokeWidth={1.5}
+              label={{ value: `Proj ${meanLine.toFixed(1)}`, position: "top", fill: ACCENT, fontSize: 10 }}
+            />
+          )}
+          {/* Market line / even. */}
           {refLine != null && (
             <ReferenceLine
               x={refLine}
               stroke={MARKET}
               strokeWidth={1.5}
               strokeDasharray="4 3"
-              label={{
-                value: unit === "runs" ? `Line ${refLine.toFixed(1)}` : "Even",
-                position: "top",
-                fill: MARKET,
-                fontSize: 10,
-              }}
+              label={{ value: refLabel, position: "insideTopRight", fill: MARKET, fontSize: 10 }}
             />
           )}
         </AreaChart>
@@ -290,8 +283,10 @@ export function TotalsDistributionPanel({
           Predicted game total (runs)
         </p>
         <DensityChart
-          quantiles={total.quantiles}
+          pmf={total.pmf}
           refLine={line}
+          meanLine={total.mu}
+          refLabel={line != null ? `Line ${line.toFixed(1)}` : ""}
           shadeSide={shadeSide}
           unit="runs"
           ariaLabel={`Predicted game total distribution${line != null ? `, market line ${line.toFixed(1)}` : ""}`}
@@ -316,8 +311,10 @@ export function TotalsDistributionPanel({
           </span>
         </div>
         <DensityChart
-          quantiles={run_diff.quantiles}
+          pmf={run_diff.pmf}
           refLine={0}
+          meanLine={null}
+          refLabel="Even"
           shadeSide={run_diff.p_home >= 0.5 ? "over" : "under"}
           unit="margin"
           ariaLabel="Predicted run-margin distribution (home minus away)"
