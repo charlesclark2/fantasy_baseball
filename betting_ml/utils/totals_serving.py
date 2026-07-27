@@ -46,7 +46,11 @@ DEFAULT_SERVE_DRAWS = 10_000
 # those games (the blob omits it; the panel already no-ops on null) until the per-side μ is fixed at
 # the source (E2.5 model follow-up). Thresholds are tunable.
 PLAUSIBLE_SIDE_MU_FLOOR = 2.5          # a full-game team total below this is an implausible per-side μ
-PLAUSIBLE_CHAMPION_MAX_DIVERGENCE = 3.0  # or the per-side total disagrees with the champion by > this
+# or the per-side total disagrees with the champion by > this. 4.0 chosen from the 2026 distribution:
+# the two models agree within ~1.09 runs on average, so a 4-run gap is a genuinely contradictory tail;
+# floor+>4 suppresses ~5.3% of games (vs 8.9% at >3), keeping the surface on ~95% while still hiding
+# the cases that would show two conflicting projected totals on the page.
+PLAUSIBLE_CHAMPION_MAX_DIVERGENCE = 4.0
 
 
 def distribution_is_plausible(

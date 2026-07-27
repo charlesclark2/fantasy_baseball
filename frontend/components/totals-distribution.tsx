@@ -123,7 +123,7 @@ function DensityChart({
   return (
     <div role="img" aria-label={ariaLabel}>
       <ResponsiveContainer width="100%" height={150}>
-        <AreaChart data={pmf} margin={{ top: 18, right: 8, left: 8, bottom: 4 }}>
+        <AreaChart data={pmf} margin={{ top: 18, right: 8, left: 4, bottom: 4 }}>
           <defs>
             <linearGradient id={`grad-${unit}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={ACCENT} stopOpacity={0.35} />
@@ -142,8 +142,24 @@ function DensityChart({
             tickLine={false}
             tickFormatter={(v: number) => v.toFixed(0)}
           />
-          {/* Headroom above the peak so the curve top + reference-line labels aren't clipped. */}
-          <YAxis hide domain={[0, (max: number) => max * 1.28]} />
+          {/* Headroom above the peak so the curve top + reference-line labels aren't clipped. The
+              tick VALUES are suppressed (absolute PMF magnitudes aren't meaningful to read off) but a
+              "Probability" axis label names the vertical dimension; exact P% is on hover. */}
+          <YAxis
+            domain={[0, (max: number) => max * 1.28]}
+            width={26}
+            tick={false}
+            tickLine={false}
+            axisLine={false}
+            label={{
+              value: "Probability",
+              angle: -90,
+              position: "insideLeft",
+              fill: MUTED,
+              fontSize: 10,
+              style: { textAnchor: "middle" },
+            }}
+          />
           <RechartsTooltip content={<DensityTooltip unit={unit} />} cursor={{ stroke: MUTED }} />
           {/* Shade the model's leaned mass (transparency, not a rec). */}
           {refLine != null && shadeSide === "over" && (

@@ -177,9 +177,10 @@ def test_plausibility_guard_flags_implausibly_low_side_mu():
 
 
 def test_plausibility_guard_flags_sharp_divergence_from_champion():
-    # Both sides sane, but the convolved total (9.0) disagrees with the champion (13.0) by > 3 runs.
-    assert distribution_is_plausible(4.5, 4.5, champion_total=9.2) is True
-    assert distribution_is_plausible(4.5, 4.5, champion_total=13.0) is False
+    # Both sides sane, but the convolved total (9.0) disagrees with the champion by > 4 runs.
+    assert distribution_is_plausible(4.5, 4.5, champion_total=9.2) is True   # gap 0.2 — fine
+    assert distribution_is_plausible(4.5, 4.5, champion_total=11.0) is True  # gap 2.0 — within tolerance
+    assert distribution_is_plausible(4.5, 4.5, champion_total=14.0) is False  # gap 5.0 — contradictory
     # No champion to compare against ⇒ the divergence rule is skipped.
     assert distribution_is_plausible(4.5, 4.5, champion_total=None) is True
 
