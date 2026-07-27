@@ -63,6 +63,7 @@ from dotenv import load_dotenv
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
+import numpy as np
 from scipy.stats import norm as _scipy_norm
 
 from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
@@ -1458,6 +1459,50 @@ SELECT game_pk, calibrated_win_prob, pred_total_runs, pred_total_runs_scale,
 FROM ranked WHERE _rn = 1
 """
 
+# E2.7 (Distribution UX) — served per-side means for the predictive-total distribution. Grain is
+# (game_pk, side) with side ∈ {home,away}; the dispersion column carries the E2.3 held-out per-side
+# NegBin r (home 4.0645 / away 3.3977 — the same values as totals_distribution_v1.json, the canonical
+# served contract we load for the quantile grid + n_draws). The daily batch convolves these two
+# marginals INDEPENDENTLY (E2.2 ρ≈0) into the total/run-diff/team-total/alt-line distribution the
+# totals pick detail renders. See betting_ml/utils/totals_serving.build_totals_distribution_payload.
+_PERSIDE_MU_BATCH = """
+SELECT game_pk, side, totals_perside_mu_v1, totals_perside_dispersion_v1
+FROM baseball_data.betting_features.feature_pregame_sub_model_signals
+WHERE game_pk IN ({game_pk_list})
+  AND totals_perside_mu_v1 IS NOT NULL
+"""
+
+# E2.7 — the committed E2.3 held-out dispersion + grid params (canonical served contract). Loaded
+# from the repo copy (on the box image; mirrors the E2.5 "fall back to committed local json" harden
+# so a wrong S3 key can never silently pool the dispersions). Cached; None-safe on any load failure.
+_totals_dist_params_cache: list = []  # 1-slot memo (avoid re-reading the json per game)
+
+
+def _load_totals_dist_params():
+    """Return the cached TotalsDistributionParams (E2.3), or None if the json can't be loaded.
+
+    App-cosmetic (E2.7 transparency surface) — a missing/invalid json must NOT fail the game-detail
+    write, so the caller treats None as 'skip the distribution block for this run' (WARN tier).
+    The json is anchored to the betting_ml package (committed repo copy, also baked into the box
+    image) so it resolves regardless of the CWD the script runs from."""
+    if _totals_dist_params_cache:
+        return _totals_dist_params_cache[0]
+    params = None
+    try:
+        import betting_ml
+        from betting_ml.utils.totals_distribution import TotalsDistributionParams
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(betting_ml.__file__)),
+            "models", "sub_models", "totals_perside_v1", "totals_distribution_v1.json",
+        )
+        with open(path) as fh:
+            params = TotalsDistributionParams.from_dict(json.load(fh))
+    except Exception as exc:  # noqa: BLE001 — cosmetic surface; degrade quietly, don't HALT the blob
+        log.warning("E2.7 totals-distribution params not loaded (distribution blocks skipped): %s", exc)
+    _totals_dist_params_cache.append(params)
+    return params
+
+
 # A0.4.32 — standalone --book-odds game-pk resolver (no --picks given).
 # Module-level (not inlined in main()) so the --s3 grep-driven view registration
 # auto-discovers daily_model_predictions for it like every other SQL constant.
@@ -2158,6 +2203,15 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
     umpire_rows     = _sf_query_batch(sf, _UMPIRE_BATCH, game_pks)
     pick_rows       = _sf_query_batch(sf, _GAME_PICKS_BATCH, game_pks)
     expl_rows       = _sf_query_batch(sf, _EXPLANATION_BATCH, game_pks)
+    # E2.7 — served per-side means for the predictive-total distribution (grain game_pk, side).
+    # WARN-tier: the distribution is app-cosmetic, so a missing column/parquet (e.g. pre-E2.5 box
+    # image, or an un-migrated --s3 straggler) must degrade the distribution to absent, NEVER HALT
+    # the serving-critical game-detail write. Isolate the read so it can't take the whole blob down.
+    try:
+        perside_rows = _sf_query_batch(sf, _PERSIDE_MU_BATCH, game_pks)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("E2.7 per-side mean read failed (totals distribution skipped this run): %s", exc)
+        perside_rows = []
 
     # Index by game_pk
     status_by_pk   = {r["GAME_PK"]: r for r in status_rows}
@@ -2168,6 +2222,15 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
     h2h_by_pk      = {r["GAME_PK"]: r for r in h2h_rows}
     umpire_by_pk   = {r["GAME_PK"]: r for r in umpire_rows}
     expl_by_pk     = {r["GAME_PK"]: r for r in expl_rows}
+
+    # E2.7 — {game_pk: {"home": mu, "away": mu}} (dispersion comes from the canonical json params).
+    perside_mu_by_pk: dict = defaultdict(dict)
+    for r in perside_rows:
+        _side = str(r.get("SIDE", "")).lower()
+        _mu = _flt(r.get("TOTALS_PERSIDE_MU_V1"))
+        if _side in ("home", "away") and _mu is not None:
+            perside_mu_by_pk[r["GAME_PK"]][_side] = _mu
+    _dist_params = _load_totals_dist_params()
 
     starters_by_pk  = defaultdict(list)
     for r in starter_rows:
@@ -2485,6 +2548,59 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
                     pass
             pick_narrative = er.get("PICK_NARRATIVE")
 
+        # ── E2.7 predictive-total distribution (transparency, NOT an edge claim; best_alpha=0) ──
+        # Convolve the served per-side NegBin marginals (E2.5 μ + E2.3 held-out r) into the
+        # total / run-diff / team-total / alt-line distribution. Deterministic per game (seeded on
+        # game_pk → stable across daily runs). App-cosmetic → any failure degrades to None, never
+        # HALTs the game-detail blob (WARN tier). Compact: params + P05…P95 grid + p_over ladders
+        # only, never raw samples (§6 cost + the 400 KB DynamoDB item cap).
+        totals_distribution = None
+        _ps = perside_mu_by_pk.get(gp)
+        if _ps and "home" in _ps and "away" in _ps and _dist_params is not None:
+            try:
+                from betting_ml.utils.totals_serving import (
+                    build_totals_distribution_payload,
+                    distribution_is_plausible,
+                )
+                # Champion total (NGBoost pred_total_runs, the model the pick's p_over uses) — the
+                # plausibility anchor: suppress the distribution when the per-side generative μ is
+                # implausibly low or diverges sharply from it, so the page never shows two
+                # contradictory projected totals (the E2.5 low-μ quality issue; ~2.6% of games).
+                _champ_total = next(
+                    (p.get("model_total_runs") for p in picks_out
+                     if p.get("model_total_runs") is not None),
+                    None,
+                )
+                if not distribution_is_plausible(
+                    _ps["home"], _ps["away"],
+                    _flt(_champ_total) if _champ_total is not None else None,
+                ):
+                    log.info(
+                        "E2.7 distribution suppressed for game %s (implausible per-side μ: "
+                        "home=%.2f away=%.2f champion_total=%s)",
+                        gp, _ps["home"], _ps["away"], _champ_total,
+                    )
+                else:
+                    # Market total line: the totals pick's line, else the Bovada totals line, else the
+                    # pregame line-movement line (drawn on the density + used for the anchored p_over).
+                    _mkt_line = next(
+                        (p.get("market_total_line") for p in picks_out
+                         if p.get("market_type") == "totals" and p.get("market_total_line") is not None),
+                        None,
+                    )
+                    if _mkt_line is None and bovada_lines and bovada_lines.get("totals"):
+                        _mkt_line = bovada_lines["totals"].get("line")
+                    if _mkt_line is None and line_movement:
+                        _mkt_line = line_movement.get("pregame_total_line") or line_movement.get("open_total_line")
+                    totals_distribution = build_totals_distribution_payload(
+                        mu_home=_ps["home"], mu_away=_ps["away"], params=_dist_params,
+                        market_total_line=(_flt(_mkt_line) if _mkt_line is not None else None),
+                        rng=np.random.default_rng(int(gp)),
+                    )
+            except Exception as exc:  # noqa: BLE001 — cosmetic; degrade quietly
+                log.warning("E2.7 totals_distribution compute failed for game %s: %s", gp, exc)
+                totals_distribution = None
+
         payload = {
             "picks": picks_out, "total": len(picks_out),
             "home_team_name": home_team_name, "away_team_name": away_team_name,
@@ -2494,6 +2610,7 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
             "line_movement_series": line_movement_series,
             "umpire": umpire, "game_context": game_context,
             "pick_explanation": pick_explanation, "pick_narrative": pick_narrative,
+            "totals_distribution": totals_distribution,
         }
         result[gp] = (payload, is_final)
 

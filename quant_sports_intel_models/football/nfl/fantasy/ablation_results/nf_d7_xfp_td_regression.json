@@ -1,0 +1,232 @@
+{
+  "seasons": [
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "premise": {
+    "rush": {
+      "n": 2575,
+      "rho_actual": 0.655,
+      "rho_expected": 0.6653,
+      "rho_blend_5050": 0.6623
+    },
+    "rec": {
+      "n": 2575,
+      "rho_actual": 0.5899,
+      "rho_expected": 0.6287,
+      "rho_blend_5050": 0.6343
+    }
+  },
+  "ablation": {
+    "baseline": {
+      "full": {
+        "QB": 0.6537,
+        "RB": 0.7147,
+        "WR": 0.7254,
+        "TE": 0.7233
+      },
+      "full_pooled": 0.7043,
+      "top": {
+        "QB": 0.333,
+        "RB": 0.4974,
+        "WR": 0.3864,
+        "TE": 0.3641
+      },
+      "top_pooled": 0.3952
+    },
+    "arms": {
+      "0.25": {
+        "full": {
+          "QB": 0.6528,
+          "RB": 0.7139,
+          "WR": 0.7237,
+          "TE": 0.7249
+        },
+        "full_pooled": 0.7038,
+        "full_delta": {
+          "QB": -0.0009,
+          "RB": -0.0008,
+          "WR": -0.0017,
+          "TE": 0.0016
+        },
+        "top": {
+          "QB": 0.3274,
+          "RB": 0.5053,
+          "WR": 0.3769,
+          "TE": 0.3423
+        },
+        "top_pooled": 0.388,
+        "top_delta": {
+          "QB": -0.0056,
+          "RB": 0.0079,
+          "WR": -0.0095,
+          "TE": -0.0218
+        }
+      },
+      "0.4": {
+        "full": {
+          "QB": 0.6525,
+          "RB": 0.7131,
+          "WR": 0.7235,
+          "TE": 0.7243
+        },
+        "full_pooled": 0.7034,
+        "full_delta": {
+          "QB": -0.0012,
+          "RB": -0.0016,
+          "WR": -0.0019,
+          "TE": 0.001
+        },
+        "top": {
+          "QB": 0.3252,
+          "RB": 0.507,
+          "WR": 0.3735,
+          "TE": 0.3539
+        },
+        "top_pooled": 0.3899,
+        "top_delta": {
+          "QB": -0.0078,
+          "RB": 0.0096,
+          "WR": -0.0129,
+          "TE": -0.0102
+        }
+      },
+      "0.5": {
+        "full": {
+          "QB": 0.6528,
+          "RB": 0.7129,
+          "WR": 0.7229,
+          "TE": 0.7246
+        },
+        "full_pooled": 0.7033,
+        "full_delta": {
+          "QB": -0.0009,
+          "RB": -0.0018,
+          "WR": -0.0025,
+          "TE": 0.0013
+        },
+        "top": {
+          "QB": 0.3275,
+          "RB": 0.5049,
+          "WR": 0.3691,
+          "TE": 0.3509
+        },
+        "top_pooled": 0.3881,
+        "top_delta": {
+          "QB": -0.0055,
+          "RB": 0.0075,
+          "WR": -0.0173,
+          "TE": -0.0132
+        }
+      },
+      "0.6": {
+        "full": {
+          "QB": 0.6523,
+          "RB": 0.7124,
+          "WR": 0.7226,
+          "TE": 0.7261
+        },
+        "full_pooled": 0.7033,
+        "full_delta": {
+          "QB": -0.0014,
+          "RB": -0.0023,
+          "WR": -0.0028,
+          "TE": 0.0028
+        },
+        "top": {
+          "QB": 0.3243,
+          "RB": 0.5059,
+          "WR": 0.3858,
+          "TE": 0.3496
+        },
+        "top_pooled": 0.3914,
+        "top_delta": {
+          "QB": -0.0087,
+          "RB": 0.0085,
+          "WR": -0.0006,
+          "TE": -0.0145
+        }
+      },
+      "0.75": {
+        "full": {
+          "QB": 0.6527,
+          "RB": 0.7114,
+          "WR": 0.7217,
+          "TE": 0.7267
+        },
+        "full_pooled": 0.7031,
+        "full_delta": {
+          "QB": -0.001,
+          "RB": -0.0033,
+          "WR": -0.0037,
+          "TE": 0.0034
+        },
+        "top": {
+          "QB": 0.3242,
+          "RB": 0.4903,
+          "WR": 0.3805,
+          "TE": 0.3355
+        },
+        "top_pooled": 0.3826,
+        "top_delta": {
+          "QB": -0.0088,
+          "RB": -0.0071,
+          "WR": -0.0059,
+          "TE": -0.0286
+        }
+      }
+    },
+    "oracle_ok": true,
+    "top_n": {
+      "QB": 24,
+      "RB": 36,
+      "WR": 48,
+      "TE": 24
+    }
+  },
+  "feature_best_shot": {
+    "baseline": {
+      "QB": 0.6537,
+      "RB": 0.7147,
+      "WR": 0.7254,
+      "TE": 0.7233
+    },
+    "plus_xfp_learned": {
+      "QB": 0.6477,
+      "RB": 0.7054,
+      "WR": 0.7235,
+      "TE": 0.7149
+    },
+    "delta": {
+      "QB": -0.006,
+      "RB": -0.0093,
+      "WR": -0.0019,
+      "TE": -0.0084
+    },
+    "pooled_delta": -0.0064,
+    "features": [
+      "xfp_pg",
+      "td_luck_ratio",
+      "xrush_td_pg",
+      "xrec_td_pg",
+      "xrec_pg",
+      "xrec_yds_pg"
+    ]
+  },
+  "decision": {
+    "ship_blend": 0.0,
+    "top_pooled_lift": -0.0038,
+    "plateau": {
+      "0.25": -0.0072,
+      "0.4": -0.0053,
+      "0.5": -0.0071,
+      "0.6": -0.0038,
+      "0.75": -0.0126
+    },
+    "verdict": "NULL \u2014 no robust top-tier ordering lift over the shipped baseline; DROPPED (the recency-weighted line already mean-reverts TDs). xFP/xTD delivered as leakage-safe FEATURES for NF1.1/NF1.2."
+  }
+}

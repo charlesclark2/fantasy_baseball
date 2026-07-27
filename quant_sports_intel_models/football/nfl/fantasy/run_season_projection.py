@@ -53,7 +53,9 @@ from quant_sports_intel_models.football.nfl.fantasy.season_projection import (  
     project_veterans,
     role_volume_prior,
 )
+from quant_sports_intel_models.football.nfl.fantasy import season_projection as _SP  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import win_total_source  # noqa: E402
+from quant_sports_intel_models.football.nfl.fantasy import xfp_source  # noqa: E402
 
 log = logging.getLogger("nfl.fantasy.fastpath")
 
@@ -362,7 +364,8 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
                      usage_role_blend: float | None = None,
                      mover_opportunity_blend: float | None = None,
                      env_tilt_blend: float | None = None,
-                     injury_override_blend: float | None = None) -> pd.DataFrame:
+                     injury_override_blend: float | None = None,
+                     xfp_td_blend: float | None = None) -> pd.DataFrame:
     base = load_base_season(con, base_season, schema)
     # NF-D2 slice 4 / NF-D4: attach the projection-season team's forward Vegas environment on the
     # forward team, for the QB environment tilt. Base = the Week-1 implied points (leakage-safe); NF-D4
@@ -379,6 +382,14 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     status = load_forward_roster_status(con, projection_season)
     if not status.empty:
         base = base.merge(status, on="player_id", how="left")
+    # NF-D7: TD-regression expected per-game rates (leakage-safe base-season-window opportunity), joined
+    # for the TD-regression step in project_veterans. Only loaded when the blend is ON (default OFF ⇒ no
+    # play-by-play read on the baseline board); a cache miss / empty join makes the regression a no-op.
+    _xfp_blend = _SP._XFP_TD_BLEND if xfp_td_blend is None else xfp_td_blend
+    if _xfp_blend and _xfp_blend > 0:
+        xfp = xfp_source.load_xfp_features(con, base_season, schema)
+        if not xfp.empty:
+            base = base.merge(xfp[["player_id", "xrush_td_pg", "xrec_td_pg"]], on="player_id", how="left")
     priors = positional_pergame_priors(base)
     kw = {} if usage_role_blend is None else {"usage_role_blend": usage_role_blend}
     # NF-D2 slice 3: the role→volume prior (in-fold from the base season) drives the team-changer
@@ -391,6 +402,8 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
         kw["env_tilt_blend"] = env_tilt_blend
     if injury_override_blend is not None:
         kw["injury_override_blend"] = injury_override_blend
+    if xfp_td_blend is not None:
+        kw["xfp_td_blend"] = xfp_td_blend
     vets = project_veterans(base, priors, projection_season, **kw)
 
     rookies_all = pd.read_parquet(_ROOKIE_PARQUET)

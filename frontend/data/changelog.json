@@ -3,6 +3,10 @@
     "week": "2026-07-20",
     "items": [
       {
+        "tag": "new",
+        "text": "Added a 'Predictive distribution' section to the totals pick detail page. Instead of just a single projected total, you can now see the model's full calibrated view of how a game's scoring could land: a distribution of the game total with the market line drawn on it and the leaned side shaded, the projected total with an 80% range (the model puts about 80% of the outcomes between those two run values), the probability the total goes over the line, the home-minus-away run-margin view behind the moneyline lean, and P(over) ladders for each team's total and for alternate game-total lines. This is a transparency tool — a calibrated picture of the model's spread and uncertainty, shown so you can see how confident the model is. It is not a bet recommendation: our models have no demonstrated market edge (best alpha = 0), and none of these lines cleared an edge test, so treat everything here as context, not value picks."
+      },
+      {
         "tag": "improved",
         "text": "Reorganized the top navigation around sports. Instead of one long list, the menu now leads with the sport — MLB today — and groups everything for that sport underneath (your Dashboard, EV Tracker, Props, Parlay Calculator, Performance, Bet Log, and Team/Player research all live under MLB). Nothing moved out of reach: every page is exactly where it was, just gathered under its sport, and all your existing links and bookmarks keep working. This makes room for more sports as they come online — you'll also notice a new NFL section with a Fantasy area, which we're building toward and will open up soon. Your access to everything you use today is unchanged."
       },
