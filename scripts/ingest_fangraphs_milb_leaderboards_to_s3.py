@@ -85,7 +85,9 @@ FIELD_ALIASES: dict[str, list[str]] = {
     "fg_player_id": ["upid", "playerid", "player_id"],
     "mlbam_id":     ["xmlbamid", "mlbamid", "mlbam_id"],
     "player_name":  ["playername", "name", "player", "fullname"],
-    "team":         ["team", "teamname", "org", "organization", "abname", "shortname"],
+    # prefer the clean abbreviation `TeamName` ("CHC (AAA)") over `Team` (an HTML <a> anchor);
+    # `AffAbbName` is the parent MLB org.
+    "team":         ["teamname", "affabbname", "team", "org", "organization"],
     "level":        ["alevel", "level", "mlevel", "current level", "minorlevelid"],
     "age":          ["age", "cur_age"],
     # a few universal-ish rate stats extracted for legibility; the rest lives in raw_json.
@@ -296,14 +298,27 @@ def run(season: int, stats_groups: list[str], as_of_date: str, mode: str, csv_pa
                  n, stats, _table_uri(), season, as_of_date)
 
 
+def parse_seasons(spec: str) -> list[int]:
+    """'2020' → [2020]; '2019,2021' → [2019,2021]; '2018-2026' → [2018..2026]."""
+    spec = spec.strip()
+    if "-" in spec:
+        a, b = spec.split("-", 1)
+        return list(range(int(a), int(b) + 1))
+    return [int(s) for s in spec.split(",") if s.strip()]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Ingest FanGraphs MiLB leaderboards → S3 Delta (E7.7).")
     ap.add_argument("--season", type=int, default=date.today().year,
                     help="Season year (default: current year).")
+    ap.add_argument("--seasons", default=None,
+                    help="Historical backfill: a range '2018-2026' or list '2019,2021' (overrides "
+                         "--season). Each past season stamps as_of=<season>-07-01.")
     ap.add_argument("--stats", default="bat,pit",
                     help="Comma list of stat groups: bat, pit (default: both).")
     ap.add_argument("--as-of", default=None, metavar="YYYY-MM-DD",
-                    help="Snapshot date on the rows (default: today, the US game day).")
+                    help="Snapshot date on the rows (default: today's game day; <season>-07-01 for a "
+                         "past season). Applies to --season only (a --seasons backfill resolves per season).")
     ap.add_argument("--probe", action="store_true",
                     help="THE ONE REAL PULL: print field names + samples + alias resolution, NO write.")
     ap.add_argument("--dry-run", action="store_true", help="Fetch + coverage report, NO S3 write.")
@@ -325,6 +340,10 @@ def main() -> None:
     if bad:
         ap.error(f"Invalid stats group(s) {bad}; valid: {VALID_STATS}")
 
+    if args.seasons and args.as_of:
+        ap.error("--as-of applies to a single --season; a --seasons backfill resolves as_of per season.")
+    seasons = parse_seasons(args.seasons) if args.seasons else [args.season]
+
     extra_params: dict = {}
     for kv in args.extra_param:
         if "=" not in kv:
@@ -332,28 +351,35 @@ def main() -> None:
         k, v = kv.split("=", 1)
         extra_params[k.strip()] = v.strip()
 
-    # as_of: explicit → verbatim; current season → US game day; past season → mid-season approx
-    # (a historical --season pull must NOT silently stamp TODAY — E7.8 as-of research).
-    if args.as_of:
-        as_of_date = args.as_of
-    elif args.season != date.today().year:
-        as_of_date = f"{args.season}-07-01"
-        log.warning("Historical season %d with no --as-of → stamping as_of=%s (mid-season approx); "
-                    "pass --as-of for the true date (E7.8 as-of joins).", args.season, as_of_date)
-    else:
-        try:
-            from betting_ml.utils.game_day import current_game_date_iso
-            as_of_date = current_game_date_iso()
-        except Exception:  # noqa: BLE001
-            as_of_date = date.today().isoformat()
+    try:
+        from betting_ml.utils.game_day import current_game_date_iso
+        game_date = current_game_date_iso()
+    except Exception:  # noqa: BLE001
+        game_date = date.today().isoformat()
 
     mode = "probe" if args.probe else ("dry-run" if args.dry_run else "write")
-    log.info("FanGraphs MiLB leaderboard ingest (E7.7) — season=%d stats=%s as_of=%s mode=%s%s%s",
-             args.season, stats_groups, as_of_date, mode,
-             f" from-csv={args.from_csv}" if args.from_csv else "",
-             f" endpoint={args.endpoint}" if args.endpoint else "")
-    run(args.season, stats_groups, as_of_date, mode, args.from_csv,
-        endpoint=args.endpoint, stat_type=args.stat_type, extra_params=extra_params or None)
+    for season in seasons:
+        # as_of: explicit → verbatim; current season → US game day; past season → mid-season approx.
+        if args.as_of:
+            as_of_date = args.as_of
+        elif season != date.today().year:
+            as_of_date = f"{season}-07-01"
+            log.warning("Historical season %d with no --as-of → stamping as_of=%s (mid-season approx); "
+                        "pass --as-of (single --season) for the true date (E7.8 as-of joins).",
+                        season, as_of_date)
+        else:
+            as_of_date = game_date
+        log.info("FanGraphs MiLB leaderboard ingest (E7.7) — season=%d stats=%s as_of=%s mode=%s%s%s",
+                 season, stats_groups, as_of_date, mode,
+                 f" from-csv={args.from_csv}" if args.from_csv else "",
+                 f" endpoint={args.endpoint}" if args.endpoint else "")
+        try:
+            run(season, stats_groups, as_of_date, mode, args.from_csv,
+                endpoint=args.endpoint, stat_type=args.stat_type, extra_params=extra_params or None)
+        except Exception as exc:  # noqa: BLE001 — one bad season must not abort a multi-season backfill
+            if len(seasons) == 1:
+                raise
+            log.warning("Season %d FAILED (%s) — continuing backfill.", season, exc)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,374 @@
+{
+  "probe": {
+    "n_contracts": 51734,
+    "gsis_coverage": 0.9189,
+    "positions": [
+      "C",
+      "CB",
+      "ED",
+      "FB",
+      "IDL",
+      "K",
+      "LB",
+      "LG",
+      "LS",
+      "LT",
+      "P",
+      "QB",
+      "RB",
+      "RG",
+      "RT",
+      "S",
+      "TE",
+      "WR"
+    ],
+    "unmapped_teams": []
+  },
+  "seasons": {
+    "2022": {
+      "coverage": {
+        "season": 2022,
+        "n_skill_players_ours": 617,
+        "n_matched": 601,
+        "pct_matched": 97.4,
+        "match_rate_by_position": {
+          "QB": 0.988,
+          "RB": 0.948,
+          "TE": 1.0,
+          "WR": 0.972
+        },
+        "n_contract_rows": 2505
+      },
+      "n_teams": 32,
+      "top_ol_cap_teams": [
+        {
+          "team_abbr": "NYJ",
+          "team_ol_cap_total": 46.72,
+          "team_ol_cap_pct": 0.24
+        },
+        {
+          "team_abbr": "ARI",
+          "team_ol_cap_total": 44.68,
+          "team_ol_cap_pct": 0.25
+        },
+        {
+          "team_abbr": "DEN",
+          "team_ol_cap_total": 43.02,
+          "team_ol_cap_pct": 0.24
+        },
+        {
+          "team_abbr": "IND",
+          "team_ol_cap_total": 42.15,
+          "team_ol_cap_pct": 0.22
+        },
+        {
+          "team_abbr": "DET",
+          "team_ol_cap_total": 41.69,
+          "team_ol_cap_pct": 0.23
+        }
+      ],
+      "top_skill_concentration_teams": [
+        {
+          "team_abbr": "TEN",
+          "team_skill_cap_concentration": 0.313,
+          "team_skill_cap_total": 72.787
+        },
+        {
+          "team_abbr": "DET",
+          "team_skill_cap_concentration": 0.31,
+          "team_skill_cap_total": 57.756
+        },
+        {
+          "team_abbr": "KC",
+          "team_skill_cap_concentration": 0.263,
+          "team_skill_cap_total": 73.884
+        },
+        {
+          "team_abbr": "MIN",
+          "team_skill_cap_concentration": 0.247,
+          "team_skill_cap_total": 72.556
+        },
+        {
+          "team_abbr": "GB",
+          "team_skill_cap_concentration": 0.244,
+          "team_skill_cap_total": 61.824
+        }
+      ]
+    },
+    "2023": {
+      "coverage": {
+        "season": 2023,
+        "n_skill_players_ours": 600,
+        "n_matched": 589,
+        "pct_matched": 98.2,
+        "match_rate_by_position": {
+          "QB": 1.0,
+          "RB": 0.967,
+          "TE": 0.985,
+          "WR": 0.983
+        },
+        "n_contract_rows": 2533
+      },
+      "n_teams": 32,
+      "top_ol_cap_teams": [
+        {
+          "team_abbr": "DET",
+          "team_ol_cap_total": 57.74,
+          "team_ol_cap_pct": 0.3
+        },
+        {
+          "team_abbr": "HOU",
+          "team_ol_cap_total": 56.77,
+          "team_ol_cap_pct": 0.32
+        },
+        {
+          "team_abbr": "ATL",
+          "team_ol_cap_total": 51.05,
+          "team_ol_cap_pct": 0.26
+        },
+        {
+          "team_abbr": "IND",
+          "team_ol_cap_total": 50.37,
+          "team_ol_cap_pct": 0.29
+        },
+        {
+          "team_abbr": "BAL",
+          "team_ol_cap_total": 49.47,
+          "team_ol_cap_pct": 0.24
+        }
+      ],
+      "top_skill_concentration_teams": [
+        {
+          "team_abbr": "TEN",
+          "team_skill_cap_concentration": 0.295,
+          "team_skill_cap_total": 74.899
+        },
+        {
+          "team_abbr": "TB",
+          "team_skill_cap_concentration": 0.262,
+          "team_skill_cap_total": 85.236
+        },
+        {
+          "team_abbr": "DET",
+          "team_skill_cap_concentration": 0.259,
+          "team_skill_cap_total": 63.323
+        },
+        {
+          "team_abbr": "KC",
+          "team_skill_cap_concentration": 0.249,
+          "team_skill_cap_total": 83.802
+        },
+        {
+          "team_abbr": "LAR",
+          "team_skill_cap_concentration": 0.234,
+          "team_skill_cap_total": 56.77
+        }
+      ]
+    },
+    "2024": {
+      "coverage": {
+        "season": 2024,
+        "n_skill_players_ours": 602,
+        "n_matched": 597,
+        "pct_matched": 99.2,
+        "match_rate_by_position": {
+          "QB": 1.0,
+          "RB": 1.0,
+          "TE": 0.992,
+          "WR": 0.984
+        },
+        "n_contract_rows": 2583
+      },
+      "n_teams": 32,
+      "top_ol_cap_teams": [
+        {
+          "team_abbr": "IND",
+          "team_ol_cap_total": 68.04,
+          "team_ol_cap_pct": 0.29
+        },
+        {
+          "team_abbr": "KC",
+          "team_ol_cap_total": 63.69,
+          "team_ol_cap_pct": 0.27
+        },
+        {
+          "team_abbr": "LAR",
+          "team_ol_cap_total": 63.64,
+          "team_ol_cap_pct": 0.29
+        },
+        {
+          "team_abbr": "CAR",
+          "team_ol_cap_total": 61.94,
+          "team_ol_cap_pct": 0.33
+        },
+        {
+          "team_abbr": "ATL",
+          "team_ol_cap_total": 53.97,
+          "team_ol_cap_pct": 0.23
+        }
+      ],
+      "top_skill_concentration_teams": [
+        {
+          "team_abbr": "ARI",
+          "team_skill_cap_concentration": 0.368,
+          "team_skill_cap_total": 84.839
+        },
+        {
+          "team_abbr": "DAL",
+          "team_skill_cap_concentration": 0.307,
+          "team_skill_cap_total": 85.027
+        },
+        {
+          "team_abbr": "BUF",
+          "team_skill_cap_concentration": 0.29,
+          "team_skill_cap_total": 59.484
+        },
+        {
+          "team_abbr": "TB",
+          "team_skill_cap_concentration": 0.262,
+          "team_skill_cap_total": 57.126
+        },
+        {
+          "team_abbr": "LAR",
+          "team_skill_cap_concentration": 0.255,
+          "team_skill_cap_total": 112.498
+        }
+      ]
+    },
+    "2025": {
+      "coverage": {
+        "season": 2025,
+        "n_skill_players_ours": 628,
+        "n_matched": 621,
+        "pct_matched": 98.9,
+        "match_rate_by_position": {
+          "QB": 1.0,
+          "RB": 0.993,
+          "TE": 1.0,
+          "WR": 0.976
+        },
+        "n_contract_rows": 2630
+      },
+      "n_teams": 32,
+      "top_ol_cap_teams": [
+        {
+          "team_abbr": "CAR",
+          "team_ol_cap_total": 87.74,
+          "team_ol_cap_pct": 0.38
+        },
+        {
+          "team_abbr": "KC",
+          "team_ol_cap_total": 71.81,
+          "team_ol_cap_pct": 0.27
+        },
+        {
+          "team_abbr": "DEN",
+          "team_ol_cap_total": 67.98,
+          "team_ol_cap_pct": 0.29
+        },
+        {
+          "team_abbr": "MIN",
+          "team_ol_cap_total": 60.5,
+          "team_ol_cap_pct": 0.25
+        },
+        {
+          "team_abbr": "LAC",
+          "team_ol_cap_total": 57.33,
+          "team_ol_cap_pct": 0.24
+        }
+      ],
+      "top_skill_concentration_teams": [
+        {
+          "team_abbr": "LV",
+          "team_skill_cap_concentration": 0.343,
+          "team_skill_cap_total": 70.157
+        },
+        {
+          "team_abbr": "DAL",
+          "team_skill_cap_concentration": 0.315,
+          "team_skill_cap_total": 95.389
+        },
+        {
+          "team_abbr": "CLE",
+          "team_skill_cap_concentration": 0.286,
+          "team_skill_cap_total": 72.603
+        },
+        {
+          "team_abbr": "MIA",
+          "team_skill_cap_concentration": 0.279,
+          "team_skill_cap_total": 92.788
+        },
+        {
+          "team_abbr": "LAC",
+          "team_skill_cap_concentration": 0.26,
+          "team_skill_cap_total": 76.959
+        }
+      ]
+    },
+    "2026": {
+      "coverage": {
+        "season": 2026,
+        "n_skill_players_ours": 0,
+        "n_matched": 0,
+        "pct_matched": null,
+        "match_rate_by_position": {},
+        "n_contract_rows": 2223
+      },
+      "n_teams": 32,
+      "top_ol_cap_teams": [
+        {
+          "team_abbr": "CAR",
+          "team_ol_cap_total": 95.1,
+          "team_ol_cap_pct": 0.32
+        },
+        {
+          "team_abbr": "DEN",
+          "team_ol_cap_total": 75.12,
+          "team_ol_cap_pct": 0.26
+        },
+        {
+          "team_abbr": "KC",
+          "team_ol_cap_total": 74.05,
+          "team_ol_cap_pct": 0.26
+        },
+        {
+          "team_abbr": "LAR",
+          "team_ol_cap_total": 71.64,
+          "team_ol_cap_pct": 0.24
+        },
+        {
+          "team_abbr": "ATL",
+          "team_ol_cap_total": 71.28,
+          "team_ol_cap_pct": 0.29
+        }
+      ],
+      "top_skill_concentration_teams": [
+        {
+          "team_abbr": "LAC",
+          "team_skill_cap_concentration": 0.33,
+          "team_skill_cap_total": 82.604
+        },
+        {
+          "team_abbr": "CLE",
+          "team_skill_cap_concentration": 0.327,
+          "team_skill_cap_total": 74.767
+        },
+        {
+          "team_abbr": "BAL",
+          "team_skill_cap_concentration": 0.255,
+          "team_skill_cap_total": 72.965
+        },
+        {
+          "team_abbr": "TB",
+          "team_skill_cap_concentration": 0.247,
+          "team_skill_cap_total": 107.278
+        },
+        {
+          "team_abbr": "KC",
+          "team_skill_cap_concentration": 0.235,
+          "team_skill_cap_total": 75.982
+        }
+      ]
+    }
+  }
+}
