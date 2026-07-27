@@ -1,6 +1,6 @@
 # MLB Edge-E7.5p — PITCHER MiLB MLE → recalibrated rookie-STARTER prior (wired into `eb_starter_posteriors`)
 
-**Model:** `milb_mle_pitcher_prior_v1` · **generated:** 2026-07-27T07:31:32.332313+00:00
+**Model:** `milb_mle_pitcher_prior_v1` · **generated:** 2026-07-27T07:43:51.016477+00:00
 
 > ⚠️ **This wires a performance-based PRIOR for cold-start starters, not an edge claim.** A debuting / low-BF rookie starter previously shrank toward a GENERIC experience-band prior; E7.5p replaces that with the E7.3p MiLB→MLB MLE line for the pitcher metrics that TRANSLATE — **GB% (strong), K% and BB% (weak-but-real, wide)** — and shrinks the rookie's own MLB line toward it as batters-faced accrue. **HR-rate and xwOBA-against are NOT wired** (E7.3p: a tied-field null and a no-signal translation). The E7.3p parameter sd is too tight to price, so E7.5p RECALIBRATES it on held-out MLB data (E13.6). `best_alpha = 0`.
 
