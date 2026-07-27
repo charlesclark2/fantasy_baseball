@@ -85,6 +85,10 @@ _SIGNAL_GROUPS = [
     ("starter_ip", "starter_ip_mu_v1",          True),
     ("bullpen",    "bullpen_mu_v2",             True),
     ("matchup",    "matchup_advantage_mu_v1",   False),
+    # E2.5 — per-side generative totals signal. Reported for observability but EXCLUDED from the
+    # catastrophic completeness floor: nothing consumes it yet (E2.6 is its intended consumer), so a
+    # gap must not drag the floor or gate predict_today. Promote to in_floor once E2.6 serves from it.
+    ("totals_gen", "totals_perside_mu_v1",      False),
 ]
 _N_FLOOR_GROUPS = sum(1 for *_, in_floor in _SIGNAL_GROUPS if in_floor)
 

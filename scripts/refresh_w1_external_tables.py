@@ -229,6 +229,7 @@ W9_TABLES = [
     "offense_v2_signals",
     "starter_suppression_signals",
     "starter_ip_signals",
+    "totals_generative_signals",   # E2.5 — per-side generative totals signal store
 ]
 
 # E11.1-W8a: the upstream feature layer + EB posteriors external tables (created by

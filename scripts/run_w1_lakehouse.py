@@ -1570,9 +1570,9 @@ W8A_PRECURSOR_VIEWS = [
     "mart_team_schedule_context", "stg_statsapi_lineups",
     # W7b
     "stg_statsapi_probable_pitchers",
-    # W9 signal stores (feature_pregame_sub_model_signals reads all 5)
+    # W9 signal stores (feature_pregame_sub_model_signals reads all 6; E2.5 added totals_generative)
     "mart_sub_model_signals", "offense_v1_signals", "offense_v2_signals",
-    "starter_suppression_signals", "starter_ip_signals",
+    "starter_suppression_signals", "starter_ip_signals", "totals_generative_signals",
     # W8a Python-table mirrors (scripts/export_w8a_precursors_to_s3.py)
     "mart_player_start_probability", "feature_pregame_market_features", "player_sequential_posteriors",
     # team_elo_history (compute_elo output; Python-written source read by feature_pregame_team_features
@@ -1700,7 +1700,7 @@ def _build_w8a(conn, dry_run: bool) -> None:
 # these and nothing else).
 W9_SIGNAL_STORE_VIEWS = [
     "mart_sub_model_signals", "offense_v1_signals", "offense_v2_signals",
-    "starter_suppression_signals", "starter_ip_signals",
+    "starter_suppression_signals", "starter_ip_signals", "totals_generative_signals",
 ]
 
 
