@@ -2558,23 +2558,45 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
         _ps = perside_mu_by_pk.get(gp)
         if _ps and "home" in _ps and "away" in _ps and _dist_params is not None:
             try:
-                from betting_ml.utils.totals_serving import build_totals_distribution_payload
-                # Market total line: the totals pick's line, else the Bovada totals line, else the
-                # pregame line-movement line (drawn on the density + used for the anchored p_over).
-                _mkt_line = next(
-                    (p.get("market_total_line") for p in picks_out
-                     if p.get("market_type") == "totals" and p.get("market_total_line") is not None),
+                from betting_ml.utils.totals_serving import (
+                    build_totals_distribution_payload,
+                    distribution_is_plausible,
+                )
+                # Champion total (NGBoost pred_total_runs, the model the pick's p_over uses) — the
+                # plausibility anchor: suppress the distribution when the per-side generative μ is
+                # implausibly low or diverges sharply from it, so the page never shows two
+                # contradictory projected totals (the E2.5 low-μ quality issue; ~2.6% of games).
+                _champ_total = next(
+                    (p.get("model_total_runs") for p in picks_out
+                     if p.get("model_total_runs") is not None),
                     None,
                 )
-                if _mkt_line is None and bovada_lines and bovada_lines.get("totals"):
-                    _mkt_line = bovada_lines["totals"].get("line")
-                if _mkt_line is None and line_movement:
-                    _mkt_line = line_movement.get("pregame_total_line") or line_movement.get("open_total_line")
-                totals_distribution = build_totals_distribution_payload(
-                    mu_home=_ps["home"], mu_away=_ps["away"], params=_dist_params,
-                    market_total_line=(_flt(_mkt_line) if _mkt_line is not None else None),
-                    rng=np.random.default_rng(int(gp)),
-                )
+                if not distribution_is_plausible(
+                    _ps["home"], _ps["away"],
+                    _flt(_champ_total) if _champ_total is not None else None,
+                ):
+                    log.info(
+                        "E2.7 distribution suppressed for game %s (implausible per-side μ: "
+                        "home=%.2f away=%.2f champion_total=%s)",
+                        gp, _ps["home"], _ps["away"], _champ_total,
+                    )
+                else:
+                    # Market total line: the totals pick's line, else the Bovada totals line, else the
+                    # pregame line-movement line (drawn on the density + used for the anchored p_over).
+                    _mkt_line = next(
+                        (p.get("market_total_line") for p in picks_out
+                         if p.get("market_type") == "totals" and p.get("market_total_line") is not None),
+                        None,
+                    )
+                    if _mkt_line is None and bovada_lines and bovada_lines.get("totals"):
+                        _mkt_line = bovada_lines["totals"].get("line")
+                    if _mkt_line is None and line_movement:
+                        _mkt_line = line_movement.get("pregame_total_line") or line_movement.get("open_total_line")
+                    totals_distribution = build_totals_distribution_payload(
+                        mu_home=_ps["home"], mu_away=_ps["away"], params=_dist_params,
+                        market_total_line=(_flt(_mkt_line) if _mkt_line is not None else None),
+                        rng=np.random.default_rng(int(gp)),
+                    )
             except Exception as exc:  # noqa: BLE001 — cosmetic; degrade quietly
                 log.warning("E2.7 totals_distribution compute failed for game %s: %s", gp, exc)
                 totals_distribution = None

@@ -14,6 +14,7 @@ from betting_ml.utils.totals_distribution import TotalsDistributionParams
 from betting_ml.utils.totals_serving import (
     _nearest_half,
     build_totals_distribution_payload,
+    distribution_is_plausible,
 )
 
 # The served E2.3 held-out per-side dispersions (totals_distribution_v1.json).
@@ -166,6 +167,21 @@ def test_payload_is_compact_and_json_safe():
         return obj is None or isinstance(obj, (str, int, float, bool))
 
     assert _all_native(p)
+
+
+def test_plausibility_guard_flags_implausibly_low_side_mu():
+    # A full-game team total of 1.29 runs (the 824734 case) is implausible → suppress.
+    assert distribution_is_plausible(4.5, 4.3) is True
+    assert distribution_is_plausible(1.29, 4.31) is False   # home side μ below the floor
+    assert distribution_is_plausible(4.31, 1.29) is False   # symmetric
+
+
+def test_plausibility_guard_flags_sharp_divergence_from_champion():
+    # Both sides sane, but the convolved total (9.0) disagrees with the champion (13.0) by > 3 runs.
+    assert distribution_is_plausible(4.5, 4.5, champion_total=9.2) is True
+    assert distribution_is_plausible(4.5, 4.5, champion_total=13.0) is False
+    # No champion to compare against ⇒ the divergence rule is skipped.
+    assert distribution_is_plausible(4.5, 4.5, champion_total=None) is True
 
 
 def test_higher_dispersion_widens_the_interval():

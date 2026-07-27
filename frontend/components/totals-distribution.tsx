@@ -112,14 +112,18 @@ function DensityChart({
   ariaLabel: string
 }) {
   if (!pmf?.length) return null
-  const xs = pmf.map((p) => p.x)
-  const xMin = Math.min(...xs)
-  const xMax = Math.max(...xs)
+  // Dynamic x-domain: hug the meaningful mass (drop the long, near-zero tails the NegBin sum leaves),
+  // but always include the market + projected-mean reference lines so their labels never fall off-axis.
+  const peak = Math.max(...pmf.map((p) => p.p))
+  const meaningful = pmf.filter((p) => p.p >= peak * 0.03).map((p) => p.x)
+  const refs = [refLine, meanLine].filter((v): v is number => v != null)
+  const xMin = Math.min(...(meaningful.length ? meaningful : pmf.map((p) => p.x)), ...refs)
+  const xMax = Math.max(...(meaningful.length ? meaningful : pmf.map((p) => p.x)), ...refs)
 
   return (
     <div role="img" aria-label={ariaLabel}>
       <ResponsiveContainer width="100%" height={150}>
-        <AreaChart data={pmf} margin={{ top: 12, right: 8, left: 8, bottom: 4 }}>
+        <AreaChart data={pmf} margin={{ top: 18, right: 8, left: 8, bottom: 4 }}>
           <defs>
             <linearGradient id={`grad-${unit}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={ACCENT} stopOpacity={0.35} />
@@ -131,12 +135,15 @@ function DensityChart({
             dataKey="x"
             type="number"
             domain={[xMin, xMax]}
+            allowDataOverflow
+            allowDecimals={false}
             tick={{ fill: MUTED, fontSize: 10 }}
             axisLine={false}
             tickLine={false}
             tickFormatter={(v: number) => v.toFixed(0)}
           />
-          <YAxis hide domain={[0, "dataMax"]} />
+          {/* Headroom above the peak so the curve top + reference-line labels aren't clipped. */}
+          <YAxis hide domain={[0, (max: number) => max * 1.28]} />
           <RechartsTooltip content={<DensityTooltip unit={unit} />} cursor={{ stroke: MUTED }} />
           {/* Shade the model's leaned mass (transparency, not a rec). */}
           {refLine != null && shadeSide === "over" && (

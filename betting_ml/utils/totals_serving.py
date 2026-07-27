@@ -39,6 +39,39 @@ _TEAM_TOTAL_OFFSETS: tuple[float, ...] = (-1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5)
 DEFAULT_SERVE_DRAWS = 10_000
 
 
+# Plausibility guard (E2.7 UX). The E2.5 per-side generative μ is occasionally implausibly low
+# (~2.6% of games have a side μ < 2.5 full-game runs — a per-side MODEL quality issue, not a UX bug),
+# which would render a distribution centred well below both the market line and the served champion
+# total → two contradictory "projected total" numbers on the page. We suppress the distribution on
+# those games (the blob omits it; the panel already no-ops on null) until the per-side μ is fixed at
+# the source (E2.5 model follow-up). Thresholds are tunable.
+PLAUSIBLE_SIDE_MU_FLOOR = 2.5          # a full-game team total below this is an implausible per-side μ
+PLAUSIBLE_CHAMPION_MAX_DIVERGENCE = 3.0  # or the per-side total disagrees with the champion by > this
+
+
+def distribution_is_plausible(
+    mu_home: float,
+    mu_away: float,
+    champion_total: float | None = None,
+    *,
+    side_floor: float = PLAUSIBLE_SIDE_MU_FLOOR,
+    max_divergence: float = PLAUSIBLE_CHAMPION_MAX_DIVERGENCE,
+) -> bool:
+    """Whether the served per-side μ are sane enough to surface the E2.7 distribution for this game.
+
+    False when either side's full-game μ is below `side_floor` (an implausible team-total the per-side
+    model sometimes emits), or when the convolved total diverges from the served champion total by more
+    than `max_divergence` (a model disagreement we don't surface as a second contradictory projection).
+    """
+    if min(float(mu_home), float(mu_away)) < side_floor:
+        return False
+    if champion_total is not None and abs(
+        (float(mu_home) + float(mu_away)) - float(champion_total)
+    ) > max_divergence:
+        return False
+    return True
+
+
 def _nearest_half(x: float) -> float:
     """Round to the nearest 0.5 — the natural home for a team-total line centred on its mean."""
     return round(float(x) * 2.0) / 2.0
