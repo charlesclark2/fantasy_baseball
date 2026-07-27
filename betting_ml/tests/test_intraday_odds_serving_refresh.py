@@ -38,15 +38,23 @@ def test_book_odds_op_refreshes_game_detail():
     )
 
 
-def test_raw_odds_mirror_export_runs_ungated():
-    """The raw S3 odds mirror must export BEFORE the W6 gate so a flaky host cron can't stale it."""
+def test_raw_odds_mirror_export_is_retired():
+    """E11.20 phase-2b (2026-07-27) — INVERTED from "must run ungated" to "must be gone".
+
+    The old invariant existed because `lakehouse_raw/mlb_odds_raw` was mirrored FROM Snowflake and
+    a flaky 30-min host cron could stale it. That premise died on 2026-07-05 when odds capture went
+    S3-NATIVE and the Snowflake write was dropped: `oddsapi.mlb_odds_raw` has been FROZEN at
+    ingestion_ts 2026-07-05T23:00:14 since, so `--since <today>` selected ZERO rows and the export
+    wrote nothing. It was a pure COMPUTE_WH wake, ~10-14 per game-day, and one of the wakes that
+    SURVIVED the W6 flip (W6 retired the two mart legs, not this bridge). The host cron was retired
+    at the same time (capture.crontab line 35 commented out); this op call was simply missed.
+    """
     src = _func_src("_w6_lakehouse_intraday")
-    export_pos = src.find("export_odds_raw_to_s3.py")
-    gate_pos = src.find("if not _W6_INTRADAY_ENABLED")
-    assert export_pos != -1, "the raw mirror export must still be present"
-    assert gate_pos != -1, "the W6 gate must still be present"
-    assert export_pos < gate_pos, (
-        "export_odds_raw_to_s3 (raw mirror) must run UNGATED, before the W6_LAKEHOUSE_INTRADAY gate"
+    live = [ln for ln in src.splitlines()
+            if "_run_script(" in ln and "export_odds_raw_to_s3.py" in ln]
+    assert not live, (
+        "the mlb_odds_raw export bridge must stay RETIRED — its Snowflake source is frozen, so it "
+        "writes nothing and only wakes the warehouse. Found: %r" % live
     )
 
 
@@ -62,9 +70,11 @@ def test_mart_rebuild_stays_gated():
     )
 
 
-def test_raw_mirror_export_not_duplicated_in_clv_branch():
-    """The raw export was hoisted out of both scope branches — it must appear exactly once now."""
+def test_clv_branch_keeps_its_own_predictions_mirror():
+    """The CLV branch's daily_model_predictions mirror is a DIFFERENT export (export_w6_raw_to_s3)
+    and must survive the mlb_odds_raw retirement — only the frozen-source odds bridge goes."""
     src = _func_src("_w6_lakehouse_intraday")
-    assert src.count("export_odds_raw_to_s3.py") == 1, (
-        "the raw mirror export should be hoisted to a single ungated call, not repeated per scope"
+    assert "export_w6_raw_to_s3.py" in src, (
+        "the CLV branch still needs its daily_model_predictions mirror; the phase-2b retirement "
+        "targets only the frozen mlb_odds_raw bridge"
     )

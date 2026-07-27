@@ -607,11 +607,39 @@ def ingest_statcast_to_s3_op(context):
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def lakehouse_schedule_export_op(context):
-    # HALT — monthly_schedule raw re-export, BEFORE the lakehouse builds that flatten it
-    # (the W6 Group-C lineup marts + W7b/W8a snapshot models): ingest_statsapi.py is
-    # Snowflake-only, so a stale S3 snapshot drops today's lineups → matchup features
-    # NULL for live serving (the INC-17-P2 class). First stage of the old monolith.
-    _run_script(context, "export_odds_raw_to_s3.py", ["--source", "monthly_schedule"])
+    # ⛔ THE monthly_schedule EXPORT BRIDGE IS RETIRED (E11.20 phase-2b, 2026-07-27).
+    #
+    # This op used to run `export_odds_raw_to_s3.py --source monthly_schedule`. Its premise —
+    # "ingest_statsapi.py is Snowflake-only, so a stale S3 snapshot drops today's lineups" —
+    # STOPPED BEING TRUE on 2026-07-20, when the schedule capture flipped S3-native and the
+    # native `statsapi.monthly_schedule` writer was retired (that table has been FROZEN at
+    # ingestion_ts 2026-07-20T17:00:26 ever since). Phase-2a retired the INTRADAY copy of this
+    # same bridge (guarded by test_cost_wake_gates.py) but MISSED this daily one.
+    #
+    # Left running, it did active DAMAGE, not just a stale read — the INC-31 clobber shape with
+    # teeth. Invoked with no `--since`, the script runs `prune_partitions()`, which DELETES every
+    # lakehouse_raw/monthly_schedule/dt= partition outside its own latest-per-month keep set —
+    # computed from the FROZEN table. So each daily run wiped the partitions the S3-native capture
+    # had written. Observed 2026-07-27: the raw tier held only dt=2026-05-31, dt=2026-06-30 and
+    # dt=__nullts__ (schedule dates 2015-04-05..2026-05-31 — NO July data at all); the sole July
+    # partition, dt=2026-07-27, existed only because the capture wrote it at 22:30Z, AFTER that
+    # day's 12:02Z prune. Consequence: `stg_statsapi_probable_pitchers` flattened a ~7/20-era
+    # schedule, so the daily --w8a build published an eb_starter_posteriors with a decaying tail
+    # (7/23=5, 7/24=1, 7/25+=0 rows) for days — the E11.20 phase-2b W8b blocker.
+    #
+    # The S3-native capture is now the SOLE writer of this key, per the INC-31 rule ("the native
+    # build must be the SOLE writer of that S3 key"). The op is KEPT (not deleted) so the daily
+    # graph's ordering edges are unchanged, and logs loudly rather than skipping invisibly.
+    #
+    # ⚠️ FOLLOW-UP: the prune also carried the INC-20 retention duty (collapsing accumulating month
+    # snapshots so the flatten does not OOM). The native capture writes ~450 KB/day (vs the bridge's
+    # 31.8 MB blobs), so there is ample headroom, but retention now belongs WITH the native writer —
+    # it must not come back as a bridge that reads a retired table.
+    context.log.warning(
+        "[E11.20 phase-2b] monthly_schedule export bridge RETIRED — the S3-native schedule capture "
+        "is the sole writer of lakehouse_raw/monthly_schedule/. Re-adding the export here would "
+        "re-run its destructive prune against a Snowflake table frozen since 2026-07-20."
+    )
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

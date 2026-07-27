@@ -63,11 +63,7 @@ SOURCES = {
         "ingestion_ts::varchar as ingestion_ts, load_id, x_requests_used, "
         "x_requests_remaining, to_json(raw_json) as raw_json",
     ),
-    "mlb_odds_raw": (
-        "baseball_data.oddsapi.mlb_odds_raw",
-        "ingestion_ts::varchar as ingestion_ts, load_id, to_json(request_params) as request_params, "
-        "x_requests_used, x_requests_remaining, to_json(raw_json) as raw_json",
-    ),
+    # ⛔ "mlb_odds_raw" REMOVED 2026-07-27 (E11.20 phase-2b) — see RETIRED_SOURCES.
     "derivative_odds_raw": (
         "baseball_data.oddsapi.derivative_odds_raw",
         "ingestion_ts::varchar as ingestion_ts, load_id, event_id, "
@@ -78,9 +74,29 @@ SOURCES = {
         "markets_requested, regions_requested, x_requests_remaining, x_requests_last, "
         "to_json(raw_json) as raw_json",
     ),
+    # ⛔ "monthly_schedule" REMOVED 2026-07-27 (E11.20 phase-2b). Its Snowflake source
+    # `baseball_data.statsapi.monthly_schedule` is RETIRED — the schedule capture flipped
+    # S3-native on 2026-07-20 and the table has been FROZEN at ingestion_ts
+    # 2026-07-20T17:00:26 since. Re-exporting it could only ever republish frozen data, and
+    # because a full (no `--since`) run also calls prune_partitions(), it DELETED the fresh
+    # dt= partitions the S3-native capture had written — leaving the raw tier with no
+    # current-month schedule at all, which silently starved
+    # stg_statsapi_probable_pitchers → eb_starter_posteriors for days. The S3-native capture
+    # is now the SOLE writer of lakehouse_raw/monthly_schedule/ (the INC-31 rule).
+    # Do NOT re-add it here; see RETIRED_SOURCES below.
+}
+
+# Sources deliberately removed from SOURCES, kept by name so an attempt to run one fails with
+# an explanation instead of argparse's bare "invalid choice".
+RETIRED_SOURCES = {
     "monthly_schedule": (
-        "baseball_data.statsapi.monthly_schedule",
-        "ingestion_ts::varchar as ingestion_ts, to_json(json_field) as json_field",
+        "its Snowflake writer was retired 2026-07-20 (schedule capture is S3-native); the table "
+        "is frozen, and this script's partition prune would DELETE the capture's fresh partitions"
+    ),
+    "mlb_odds_raw": (
+        "its Snowflake writer was retired 2026-07-05 (odds capture is S3-native); the table has "
+        "been frozen at ingestion_ts 2026-07-05T23:00:14 since, so a `--since <today>` export "
+        "selects ZERO rows and writes nothing — it was purely a COMPUTE_WH wake (~10-14/game-day)"
     ),
 }
 
@@ -157,10 +173,18 @@ def export_source(conn, source: str, since: str | None, dry_run: bool) -> int:
 
 def main():
     ap = argparse.ArgumentParser(description="E11.1-W3pre: export odds/staging raw VARIANT → S3")
-    ap.add_argument("--source", choices=sorted(SOURCES), help="One source (default: all 4)")
+    ap.add_argument("--source", choices=sorted(SOURCES) + sorted(RETIRED_SOURCES),
+                    help="One source (default: all live sources)")
     ap.add_argument("--since", help="Only ingestion dates >= this (YYYY-MM-DD)")
     ap.add_argument("--dry-run", action="store_true", help="Per-day row counts, no S3 write")
     args = ap.parse_args()
+
+    # Fail LOUD with the reason rather than argparse's bare "invalid choice" — a caller
+    # reaching for a retired source needs to know the source is frozen and why re-running it
+    # would be destructive, not just that the name is unrecognised.
+    if args.source in RETIRED_SOURCES:
+        ap.error(f"--source {args.source} is RETIRED: {RETIRED_SOURCES[args.source]}. "
+                 f"Refusing to run — the S3-native writer owns this key now.")
 
     sources = [args.source] if args.source else list(SOURCES)
     print(f"E11.1-W3pre raw export → S3  | sources: {sources}"

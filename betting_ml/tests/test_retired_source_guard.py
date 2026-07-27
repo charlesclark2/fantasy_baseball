@@ -121,11 +121,71 @@ def _retired_fqn_reads(py_src: str) -> set[str]:
     hits = set()
     for schema, table in RETIRED_NATIVE_SOURCES:
         fqn = rf"baseball_data\.{re.escape(schema)}\.{re.escape(table)}"
-        # A READ site is FROM/JOIN <fqn>. A writer (CREATE/INSERT INTO) or a config dict entry is not
-        # a stale-read and is intentionally NOT matched — only a direct table read serves frozen data.
+        # A READ site is FROM/JOIN <fqn>. A writer (CREATE/INSERT INTO) is not a stale-read and is
+        # intentionally NOT matched — only a direct table read serves frozen data.
         if re.search(rf"\b(?:FROM|JOIN)\s+{fqn}\b", body, re.IGNORECASE):
             hits.add(f"{schema}.{table}")
     return hits
+
+
+# ⭐ THE CONFIG-DICT BLIND SPOT (found 2026-07-27, after it cost days of silent serving rot).
+#
+# _retired_fqn_reads only sees a FQN sitting literally next to FROM/JOIN, and its original
+# comment explicitly exempted "a config dict entry" as not-a-read. But the standard Python
+# shape puts the table in a config dict and interpolates it:
+#     SOURCES = {"monthly_schedule": ("baseball_data.statsapi.monthly_schedule", ...)}
+#     fqn, cols = SOURCES[source];  cur.execute(f"SELECT {cols} FROM {fqn} ...")
+# That IS a read, and the exemption hid the highest-impact instance in the repo:
+# export_odds_raw_to_s3.py re-exported the frozen statsapi.monthly_schedule DAILY and — with no
+# `--since` — ran prune_partitions(), DELETING the S3-native capture's fresh dt= partitions. The
+# raw tier was left with no current-month schedule, so stg_statsapi_probable_pitchers flattened a
+# ~7/20-era snapshot and the daily --w8a build published a decayed eb_starter_posteriors for days.
+#
+# DISCRIMINATOR: a STANDALONE quoted FQN — the whole string literal is just the table name — means
+# the code is naming the table as an object to be used later (a config entry). A FQN embedded
+# inside a longer SQL string is the SQL itself, already covered above (and CREATE/INSERT DDL, as in
+# ingest_statsapi.py, stays legitimately exempt). This is deliberately structural rather than a
+# "file mentions a retired table AND interpolates something" heuristic — that version flagged four
+# files, three of them writers.
+_STANDALONE_FQN = "|".join(
+    rf"['\"]baseball_data\.{re.escape(s)}\.{re.escape(t)}['\"]" for s, t in RETIRED_NATIVE_SOURCES
+)
+
+
+def _retired_fqn_config_entries(py_src: str) -> list[str]:
+    body = _LINE_COMMENT.sub(" ", py_src)
+    return re.findall(_STANDALONE_FQN, body, re.IGNORECASE)
+
+
+# Instances this guard found on the day it was written that were NOT resolved in the same change,
+# declared EXPLICITLY rather than silently excluded (the "no silent caps" rule — an undeclared
+# carve-out is how the config-dict blind spot survived in the first place). Each entry is a real
+# instance of the class and should be driven to zero; a NEW instance still fails the test.
+#   • export_odds_raw_to_s3.py / oddsapi.mlb_odds_raw — RESOLVED the same day: the source is frozen
+#     at 2026-07-05, so `--since <today>` selected zero rows and wrote nothing (a pure warehouse
+#     wake). Bridge removed from intraday_ops.py, entry moved to RETIRED_SOURCES, and the two tests
+#     that ASSERTED the call exists were inverted to assert it is gone.
+#   • parity_check_w3pre.py / both — a SF-vs-S3 parity diagnostic, off every serving path. Its
+#     comparisons against a frozen source are now meaningless rather than dangerous, so it is the
+#     one remaining entry. Resolve by deleting the frozen sources from its comparison map.
+KNOWN_UNRESOLVED = {
+    ("scripts/parity_check_w3pre.py", "baseball_data.oddsapi.mlb_odds_raw"),
+    ("scripts/parity_check_w3pre.py", "baseball_data.statsapi.monthly_schedule"),
+}
+
+
+def test_known_unresolved_list_stays_honest():
+    """Every declared exception must still exist. When one is fixed, this fails and tells you to
+    delete the entry — so the list can only shrink, never quietly outlive its subject."""
+    stale = [
+        (path, fqn) for path, fqn in KNOWN_UNRESOLVED
+        if not (_REPO_ROOT / path).exists()
+        or fqn not in (_REPO_ROOT / path).read_text(errors="ignore")
+    ]
+    assert not stale, (
+        "KNOWN_UNRESOLVED names a retired-source config entry that is no longer there — "
+        f"delete it so the guard tightens: {stale}"
+    )
 
 
 def test_no_python_script_reads_a_retired_native_source():
@@ -150,4 +210,37 @@ def test_no_python_script_reads_a_retired_native_source():
         "data now that the writer is retired (see backfill_lineup_state_scd2.py → the 7/20 lineup-state "
         "freeze, 2026-07-23). Repoint it to the fresh S3 feed (lakehouse_ext.* / the flattened staging "
         "table):\n  " + "\n  ".join(violations)
+    )
+
+
+def test_no_python_config_dict_points_at_a_retired_native_source():
+    """The config-dict form of a stale read — see the _STANDALONE_FQN note above.
+
+    A standalone quoted FQN is how a Python script names a table it will interpolate into a
+    query, so a literal FROM/JOIN scan cannot see it. This is the exact shape that let
+    export_odds_raw_to_s3.py keep re-exporting (and destructively pruning) a Snowflake table
+    frozen since 2026-07-20.
+    """
+    violations = []
+    for root in _PY_ROOTS:
+        base = _REPO_ROOT / root
+        if not base.exists():
+            continue
+        for py_path in sorted(base.rglob("*.py")):
+            if "/tests/" in py_path.as_posix():
+                continue
+            raw = py_path.read_bytes()
+            if not any(tok in raw for tok in _RETIRED_TOKENS):
+                continue
+            found = _retired_fqn_config_entries(raw.decode("utf-8", errors="ignore"))
+            rel = py_path.relative_to(_REPO_ROOT).as_posix()
+            found = [f for f in found if (rel, f.strip("'\"")) not in KNOWN_UNRESOLVED]
+            if found:
+                violations.append(f"{rel} :: {sorted(set(found))}")
+    assert not violations, (
+        "A Python config entry names a RETIRED native source as a table to query. Even when no "
+        "FROM/JOIN sits next to it, the value gets interpolated into one — so it reads FROZEN "
+        "data, and any partition-prune it drives will DELETE the S3-native writer's fresh output "
+        "(the 2026-07-27 monthly_schedule outage). Point it at the S3 feed or retire the entry:\n  "
+        + "\n  ".join(violations)
     )

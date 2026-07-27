@@ -364,14 +364,24 @@ def _build_prompt(row: dict, expl: dict) -> str:
     if cal_win is not None and mkt_win is not None:
         # Edge matches what the pick chip displays: abs(P_home_model − P_home_market)
         edge_display = abs(cal_win - mkt_win)
-        model_favors = home if cal_win >= 0.5 else away
+        # ⚠️ 2026-07-27 — the side named here must be the side the DIVERGENCE favours, i.e.
+        # where the model sits HIGHER than the market — NOT the outright pick (`cal_win >= 0.5`).
+        # The old label used the outright pick, but it sits INSIDE the divergence sentence, so
+        # the LLM (correctly) read it as "this is the side the edge points to". Those two sides
+        # DISAGREE on ~2 of every 3 served rows (391/597 over 7/20–7/27), so the narrative named
+        # the wrong side on most picks. Live example (824570 CWS/NYY): model P(CWS) 47.4% vs
+        # market 42.2% ⇒ the divergence favours CWS, yet the old label said "model favors NYY"
+        # (true of the outright pick, false of the edge) and the narrative repeated it twice.
+        # The outright pick is already conveyed by the four probabilities above; this clause is
+        # only about the divergence, and is phrased so it is literally what it measures.
+        edge_side = home if cal_win > mkt_win else away
         h2h_ev_str = (
             f"Model P({home} wins): {cal_win:.1%}.  "
             f"Model P({away} wins): {1 - cal_win:.1%}.  "
             f"Market P({home} wins): {mkt_win:.1%}.  "
             f"Market P({away} wins): {1 - mkt_win:.1%}.  "
             f"Model-vs-market divergence (edge): {edge_display:.1%} "
-            f"(model favors {model_favors})."
+            f"(the model is higher than the market on {edge_side})."
         )
 
     # Totals section

@@ -196,3 +196,48 @@ def test_missing_total_line_falls_back_to_one_paragraph():
     for a paragraph the data can't fill."""
     prompt = _build_prompt(_totals_row(tot_line=None), {})
     assert "ONE paragraph" in prompt
+
+
+# ---------------------------------------------------------------------------
+# 2026-07-27 — the divergence clause must name the EDGE side, not the outright pick
+#
+# The two disagree on ~2 of every 3 served rows (391/597 over 7/20–7/27). The clause
+# sits inside the "Model-vs-market divergence (edge)" sentence, so naming the outright
+# pick there made the LLM attribute the edge to the wrong team on most picks.
+# Live case 824570: model P(CWS) 47.4% vs market 42.2% ⇒ divergence favours CWS, while
+# the model's outright pick is NYY.
+# ---------------------------------------------------------------------------
+
+def test_divergence_names_the_edge_side_not_the_outright_pick():
+    """Model picks the AWAY team outright (cal_win 0.474 < 0.5) but sits ABOVE the
+    market on HOME (0.474 > 0.422) — the divergence favours HOME."""
+    prompt = _build_prompt(_prompt_row(cal_win=0.4745, mkt_win=0.4218, home="CWS", away="NYY"), {})
+    assert "higher than the market on Chicago White Sox" in prompt, (
+        "the divergence clause must name the side the model is ABOVE the market on "
+        "(CWS here) — naming the outright pick (NYY) mis-attributes the edge."
+    )
+    assert "higher than the market on New York Yankees" not in prompt
+
+
+def test_divergence_side_when_pick_and_edge_agree():
+    """Model picks HOME outright AND sits above the market on HOME — same side."""
+    prompt = _build_prompt(_prompt_row(cal_win=0.62, mkt_win=0.55, home="CWS", away="NYY"), {})
+    assert "higher than the market on Chicago White Sox" in prompt
+
+
+def test_divergence_side_flips_with_the_market_not_with_one_half():
+    """Same model probability, market moved past it ⇒ the named side must flip. This is
+    the property a `cal_win >= 0.5` label structurally cannot have."""
+    below = _build_prompt(_prompt_row(cal_win=0.62, mkt_win=0.55, home="CWS", away="NYY"), {})
+    above = _build_prompt(_prompt_row(cal_win=0.62, mkt_win=0.70, home="CWS", away="NYY"), {})
+    assert "higher than the market on Chicago White Sox" in below
+    assert "higher than the market on New York Yankees" in above, (
+        "with the market ABOVE the model on home, the model is higher on away — the "
+        "divergence side must follow the market, not the 0.5 threshold."
+    )
+
+
+def test_divergence_magnitude_is_unchanged():
+    """The edge NUMBER still matches the pick chip: abs(P_home_model − P_home_market)."""
+    prompt = _build_prompt(_prompt_row(cal_win=0.4745, mkt_win=0.4218), {})
+    assert "divergence (edge): 5.3%" in prompt

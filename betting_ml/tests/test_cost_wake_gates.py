@@ -266,3 +266,48 @@ class TestW7b2IntradayServingS3:
             "lineup_predict (the tick's post_lineup predict) must append the W7b-2 gated --s3 args — "
             "it is one of the two game-hours SF-view readers the flip moves off Snowflake."
         )
+
+
+class TestDailyMonthlyScheduleBridgeRetired:
+    """E11.20 phase-2b (2026-07-27) — the DAILY twin of the intraday bridge retirement above.
+
+    Phase-2a retired the INTRADAY `export_odds_raw_to_s3 --source monthly_schedule` call when the
+    schedule capture flipped S3-native, but `lakehouse_schedule_export_op` kept running the SAME
+    bridge daily. Because the daily call passes NO `--since`, the script also ran
+    prune_partitions(), which DELETES every lakehouse_raw/monthly_schedule/dt= partition outside a
+    keep-set computed from a Snowflake table FROZEN since 2026-07-20 — wiping the S3-native
+    capture's fresh partitions. Verified on 2026-07-27: the raw tier held only dt=2026-05-31,
+    dt=2026-06-30 and dt=__nullts__ (schedule dates 2015-04-05..2026-05-31, NO July), so
+    stg_statsapi_probable_pitchers flattened a ~7/20-era schedule and the daily --w8a build
+    published an eb_starter_posteriors decaying to zero rows for the live slate.
+    """
+
+    def test_daily_schedule_export_op_does_not_run_the_bridge(self):
+        from pathlib import Path
+        src = (Path(__file__).resolve().parents[2] / "pipeline" / "ops"
+               / "daily_ingestion_ops.py").read_text()
+        body = src[src.find("def lakehouse_schedule_export_op"):]
+        body = body[:body.find("\n@op")]
+        # Match the live _run_script CALL only — the docstring/comment prose naming the retired
+        # command must not trip the scan (the banned-scan-prose landmine).
+        live = [ln for ln in body.splitlines()
+                if "_run_script(" in ln and "export_odds_raw_to_s3.py" in ln]
+        assert not live, (
+            "lakehouse_schedule_export_op must NOT run the monthly_schedule export bridge — its "
+            "Snowflake source is frozen and its partition prune deletes the S3-native capture's "
+            "fresh output. Found: %r" % live
+        )
+
+    def test_export_script_refuses_the_retired_source(self):
+        from pathlib import Path
+        src = (Path(__file__).resolve().parents[2] / "scripts"
+               / "export_odds_raw_to_s3.py").read_text()
+        sources_block = src[src.find("SOURCES = {"):src.find("RETIRED_SOURCES")]
+        assert '"baseball_data.statsapi.monthly_schedule"' not in sources_block, (
+            "monthly_schedule must not be a live SOURCES entry — re-adding it restores the "
+            "destructive daily prune against a frozen table."
+        )
+        assert "RETIRED_SOURCES" in src and '"monthly_schedule"' in src, (
+            "keep monthly_schedule declared in RETIRED_SOURCES so an attempt to run it fails "
+            "with the reason rather than argparse's bare 'invalid choice'."
+        )

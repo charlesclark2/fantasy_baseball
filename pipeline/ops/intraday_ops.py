@@ -212,17 +212,28 @@ def _w6_lakehouse_intraday(context: OpExecutionContext, scope: str) -> None:
     --w6-clv (closing_line_value + prediction_clv + line_movement)."""
     today = _today()
 
-    # ⭐ The RAW S3 odds mirror (lakehouse_raw/mlb_odds_raw) is mirror-tier and read 24/7 by the
-    # odds_freshness sensor + the W3pre flatten. Export it UNGATED on every odds cycle so it can't
-    # go stale when the 30-min host-cron `exec` is flaky (2026-07-03: the mirror stalled at 17:00
-    # UTC while Snowflake raw was fresh to 22:00). Idempotent (overwrite_partition) — redundant with
-    # the host cron but that redundancy is the point (belt + suspenders). ALERT-tier: never crash.
-    try:
-        _run_script(context, "export_odds_raw_to_s3.py", ["--source", "mlb_odds_raw", "--since", today])
-    except Exception as exc:  # ALERT-loud-but-continue
-        context.log.warning(
-            f"⚠️ odds raw S3 mirror export FAILED — the 24/7 odds-freshness read may lag: {exc}"
-        )
+    # ⛔ THE RAW mlb_odds_raw MIRROR EXPORT IS RETIRED (E11.20 phase-2b, 2026-07-27).
+    #
+    # It used to run `export_odds_raw_to_s3.py --source mlb_odds_raw --since <today>` UNGATED on
+    # every odds cycle as a belt-and-suspenders backstop for the 30-min host cron. That rationale
+    # died on 2026-07-05, when odds capture flipped S3-NATIVE and the Snowflake write was dropped:
+    # `baseball_data.oddsapi.mlb_odds_raw` has been FROZEN at ingestion_ts 2026-07-05T23:00:14 ever
+    # since (verified: 0 rows with ingestion_ts::date >= today). The host cron was retired then for
+    # exactly this reason (capture.crontab line 35 is commented out) — this op call was missed.
+    #
+    # What it actually did every tick: `SELECT DISTINCT ingestion_ts::date FROM …mlb_odds_raw WHERE
+    # ingestion_ts::date >= '<today>'` returned ZERO rows, so the export loop never executed and
+    # nothing was written. A pure COMPUTE_WH WAKE accomplishing nothing — ~10-14 per game-day
+    # (observed 2026-07-27 at 15:35, 16:05, 17:05, 18:06, 19:06, 20:06, 21:07, 22:07 …). It is one
+    # of the wakes that SURVIVED the W6 flip, because W6 retired the two mart legs, not this bridge.
+    #
+    # The S3-native capture is the sole writer and is healthy: lakehouse_raw/mlb_odds_raw/
+    # dt=2026-07-27 carried 46 part-files with the newest at 22:30:09Z, a ~30-min cadence.
+    # Removing this call changes NO data — it only stops waking the warehouse.
+    context.log.info(
+        "[E11.20 phase-2b] mlb_odds_raw export bridge RETIRED — odds capture is S3-native and its "
+        "Snowflake table has been frozen since 2026-07-05; the export was a no-op warehouse wake."
+    )
 
     # The S3 MART rebuild + external-table refresh is cutover-sensitive (it rewrites the served
     # mart_odds_outcomes parquet), so it stays gated behind W6_LAKEHOUSE_INTRADAY — a clean no-op
