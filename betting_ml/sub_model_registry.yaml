@@ -1019,6 +1019,49 @@ milb_mle_v1:
     wires K%/BB%/ISO — NOT wOBA — into the served eb_batter_posteriors_raw rookie prior.
 
 # =============================================================================
+# E7.3p — the PITCHER MiLB→MLB translation MLE (the E7.3 sibling; same harness)
+# =============================================================================
+milb_mle_pitcher_v1:
+  artifact_type: prospect_prior            # NOT a per-game betting signal
+  model_module: betting_ml/scripts/milb_mle/milb_mle.py     # shared harness (E7.3), pitcher config
+  runner: betting_ml/scripts/milb_mle/run_milb_mle_pitchers.py
+  substrate_builder: betting_ml/scripts/milb_mle/build_graduated_pairs_pitchers.py
+  output_path: s3://baseball-betting-ml-artifacts/baseball/milb/derived/mle_projections_pitchers   # Delta, --s3
+  grain: player_id_level                    # one row per (pitcher, level)
+  metrics: [k_pct, bb_pct, hr_rate, gb_pct, xwoba_against]  # each a separate translation, per-TBF
+  feature_sources:                          # SF-FREE lakehouse (E7.1/E7.2 pitcher rows)
+    - baseball/milb/player_game_logs         # E7.1 pit_* box line (feature, as-of pre-debut)
+    - baseball/milb/statcast_aaa             # E7.2 AAA pitcher stuff/velo/spin add (coverage-conditioned)
+  label_source: baseball/lakehouse/mart_pitcher_rolling_stats   # realized MLB per-game actuals, TBF-weighted
+  gb_label_source: baseball/lakehouse/stg_batter_pitches        # Statcast GB/BIP (cross-definition vs MiLB GO/(GO+AO) — documented)
+  bakeoff:
+    candidates: [partial_pool, multiplicative, gbm]   # + level_mean null, identity/archetype benchmarks
+    solver: betting_ml/utils/hierarchical.py          # shared partial-pooling solver (reused unchanged)
+    cv_strategy: leave_one_mlb_debut_cohort_out_expanding
+    cv_metric: mae_raw_mlb_rate
+    deflation: {pbo_lt: 0.2, dsr_ge: 0.95}            # reported honestly (E2.1-r; robust-but-weak OK)
+    oracle_floor: enforced
+  uncertainty: parameter                    # the starter-EB wiring story MUST recalibrate before pricing (E13.6)
+  best_alpha: 0
+  promotion_status: pending                 # harness code-complete; awaiting operator real S3 run
+  promoted_at: null
+  ablation_report: quant_sports_intel_models/baseball/edge_program/ablation_results/e7_3p_milb_mle_pitchers.md
+  tests: betting_ml/tests/test_milb_mle_pitcher.py
+  consumed_by: e8_0_board_pitcher_column    # + a FUTURE starter-EB rookie-prior story (the E7.5 pitcher sibling)
+  notes: |
+    E7.3p (2026-07-27). The PITCHER sibling of the E7.3 batter MLE — the SAME shared harness
+    (milb_mle.py projectors/bake-off/emission, hierarchical.py solver) under a pitcher config:
+    minor_pa = TBF, metrics per-TBF (K%/BB%/HR-rate) + GB + xwOBA-against. gb_pct is a
+    CROSS-DEFINITION map (MiLB feature = ground-OUT share GO/(GO+AO), all the box offers; MLB label
+    = Statcast GB/BIP) — the regression learns the rescale, stated in the report. xwoba_against's
+    minor feature exists ONLY for AAA-2022+ rows (E7.2 pitcher summaries) — its bake-off may be
+    data-thin and is allowed an HONEST skip. minor_start_share (GS/G) rides the GBM-only
+    impute-flagged aux channel (role is a K%-translation confounder, not a hierarchy level).
+    Prospects (no MLB debut) are the E8.0 board's pitcher-column deliverable. The betting payoff
+    path (eb_starter_posteriors rookie prior, the E7.5 pattern: recalibrate → κ-blends for bounded
+    rates → fail-safe view → serving-check) is DOCUMENTED in the ablation report §3, not wired here.
+
+# =============================================================================
 # E7.5 — recalibrated MiLB rookie prior, WIRED into eb_batter_posteriors_raw
 # =============================================================================
 # The BETTING payoff of the E7.3 MLE: for a called-up rookie with ~0 MLB PAs the served EB build

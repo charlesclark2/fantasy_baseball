@@ -103,19 +103,38 @@ MODEL_VERSION = "milb_mle_v1"
 # minor→major map), analogous to P1A's --target-metric switch — a K% translation is a different
 # relationship from a wOBA translation. `minor_<m>` is the feature, `mlb_<m>` is the label.
 BATTER_METRICS = ("woba", "k_pct", "bb_pct", "iso")
-VALID_METRICS = BATTER_METRICS
+
+# The pitcher rate metrics (E7.3p — the pitcher sibling). All are per-TBF rates (`minor_pa` on the
+# pitcher side IS batters faced — kept under the same column name so the whole harness is shared):
+#   k_pct / bb_pct   — SO/TBF, BB/TBF (command/whiff — the skills expected to translate);
+#   hr_rate          — HR/TBF (HR-suppression; expected noisier);
+#   gb_pct           — a CROSS-DEFINITION map: the MiLB feature is the ground-OUT share GO/(GO+AO)
+#                      (all the box line offers), the MLB label is Statcast GB/BIP. The regression
+#                      learns the rescale; the definitional asymmetry is stated in the report;
+#   xwoba_against    — the run-value composite, feature from the E7.2 AAA-Statcast summaries ONLY
+#                      (AAA 2022+; other rows carry no feature → excluded from that metric's bake-off).
+PITCHER_METRICS = ("k_pct", "bb_pct", "hr_rate", "gb_pct", "xwoba_against")
+PITCHER_MODEL_VERSION = "milb_mle_pitcher_v1"
+VALID_METRICS = tuple(dict.fromkeys(BATTER_METRICS + PITCHER_METRICS))
 
 # Physically-plausible MLB-rate range per metric — a projected MLB rate outside this is a broken map,
 # not a bold projection (mirrors P1.2's ±50-point ceiling / P1A's ±6 sd). Gate in the runner.
+# k_pct/bb_pct are shared batter/pitcher keys — the ranges cover both populations.
 PLAUSIBLE_RANGE: dict[str, tuple[float, float]] = {
     "woba": (0.150, 0.550),
     "k_pct": (0.0, 0.60),
     "bb_pct": (0.0, 0.35),
     "iso": (0.0, 0.50),
+    "hr_rate": (0.0, 0.10),
+    "gb_pct": (0.10, 0.80),
+    "xwoba_against": (0.180, 0.500),
 }
 # An uncertainty this wide (in the metric's own units) means an unidentified coefficient (P1.2's leak,
 # one rung down) — the projection has no information. Gate it.
-MAX_PLAUSIBLE_SD: dict[str, float] = {"woba": 0.20, "k_pct": 0.30, "bb_pct": 0.20, "iso": 0.25}
+MAX_PLAUSIBLE_SD: dict[str, float] = {
+    "woba": 0.20, "k_pct": 0.30, "bb_pct": 0.20, "iso": 0.25,
+    "hr_rate": 0.08, "gb_pct": 0.30, "xwoba_against": 0.20,
+}
 
 # A (level, league) cell needs at least this many labelled players before it earns its OWN multiplicative
 # factor / stratified fit; below it, fall back to the global factor (the partial-pool shrinks
@@ -128,6 +147,17 @@ STATCAST_COLS: tuple[str, ...] = (
     "sc_xwoba", "sc_barrels_per_pa_percent", "sc_hardhit_percent",
     "sc_avg_exit_velocity_mph", "sc_avg_bat_speed_mph",
 )
+
+# The pitcher-side AAA-Statcast summaries (E7.2 pitcher rows: stuff/velo/spin + contact quality
+# against), same coverage-conditioned treatment. `minor_start_share` (GS/G from the box line) rides
+# the same impute-with-flag GBM channel — role is a real K%-translation confounder (an AAA reliever's
+# K% does not carry like a starter's), but only the GBM gets to use it (pre-registered, not a new
+# hierarchy level).
+PITCHER_STATCAST_COLS: tuple[str, ...] = (
+    "sc_xwoba_against", "sc_swing_miss_percent", "sc_avg_pitch_velocity_mph",
+    "sc_avg_spin_rate_rpm", "sc_avg_release_extension_ft", "sc_hardhit_percent_against",
+)
+PITCHER_AUX_COLS: tuple[str, ...] = PITCHER_STATCAST_COLS + ("minor_start_share",)
 
 # Levels, ordered nearest-to-MLB first (used for cosmetics / the "highest level" convenience only —
 # the model treats level as a categorical factor, not an ordinal).
@@ -184,6 +214,36 @@ def compute_rate_metrics_from_counts(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def compute_pitcher_rate_metrics_from_counts(df: pd.DataFrame) -> pd.DataFrame:
+    """Attach the pitcher-side `minor_*` rates + `minor_pa` from aggregated `pit_*` counting stats.
+
+    K% = SO / TBF;  BB% = BB / TBF;  HR-rate = HR / TBF;  GB% (ground-OUT share) = GO / (GO + AO);
+    start-share = GS / G.  `minor_pa` = TBF (batters faced) so the shared harness's PA floor and
+    log(PA) feature read the right exposure without a pitcher fork.
+    """
+    def c(name: str) -> np.ndarray:
+        return pd.to_numeric(df.get(name), errors="coerce").fillna(0.0).to_numpy(float)
+
+    tbf = c("pit_batters_faced")
+    so, bb, hr = c("pit_strike_outs"), c("pit_walks"), c("pit_home_runs")
+    go, ao = c("pit_ground_outs"), c("pit_air_outs")
+    g, gs = c("pit_games_played"), c("pit_games_started")
+    out = df.copy()
+    out["minor_pa"] = tbf
+    out["minor_k_pct"] = np.divide(so, tbf, out=np.full_like(so, np.nan), where=tbf > 0)
+    out["minor_bb_pct"] = np.divide(bb, tbf, out=np.full_like(bb, np.nan), where=tbf > 0)
+    out["minor_hr_rate"] = np.divide(hr, tbf, out=np.full_like(hr, np.nan), where=tbf > 0)
+    outs = go + ao
+    out["minor_gb_pct"] = np.divide(go, outs, out=np.full_like(go, np.nan), where=outs > 0)
+    out["minor_start_share"] = np.divide(gs, g, out=np.full_like(gs, np.nan), where=g > 0)
+    # xwoba_against's minor feature IS the AAA-Statcast summary (no box-line equivalent exists) —
+    # alias it so the shared `minor_<metric>` naming holds; non-AAA/pre-2022 rows stay NaN (excluded
+    # from that metric's bake-off by the has_minor_line gate, never fabricated).
+    if "sc_xwoba_against" in out.columns:
+        out["minor_xwoba_against"] = pd.to_numeric(out["sc_xwoba_against"], errors="coerce")
+    return out
+
+
 # ══════════════════════════════════════════════════════════════════════════════════════
 # Config + target construction
 # ══════════════════════════════════════════════════════════════════════════════════════
@@ -191,12 +251,20 @@ def compute_rate_metrics_from_counts(df: pd.DataFrame) -> pd.DataFrame:
 
 @dataclass
 class MleConfig:
-    """Tunables. Defaults are the pre-registered configuration."""
+    """Tunables. Defaults are the pre-registered BATTER configuration (E7.3, unchanged); the pitcher
+    runner (E7.3p) passes `player_type="pitcher"`, `aux_cols=PITCHER_AUX_COLS`,
+    `model_version=PITCHER_MODEL_VERSION`."""
 
     metric: str = "woba"
     min_cell_support: int = MIN_CELL_SUPPORT
     min_minor_pa: int = 150          # a level line thinner than this is too noisy to translate from
+                                     # (batter: PA; pitcher: TBF — same column, same floor)
     use_statcast: bool = True        # the GBM reads the AAA-Statcast add where present
+    # The impute-with-flag columns only the GBM reads (batter: the AAA-Statcast summaries; pitcher:
+    # stuff/velo/spin against + the start-share role feature).
+    aux_cols: tuple[str, ...] = STATCAST_COLS
+    player_type: str = "batter"      # stamped on the emitted projections
+    model_version: str = MODEL_VERSION
     # Partial-pool prior scale grid (× the response sd) — the fixed-effect "flat" prior width. Every
     # entry is a distinct config that COUNTS toward PBO/DSR (deflation makes the search safe).
     pool_prior_scales: tuple[float, ...] = (2.0, 4.0)
@@ -445,16 +513,18 @@ class PartialPoolProjector(Projector):
 
 class GBMProjector(Projector):
     """Learned gradient-boosted regression on the full feature vector: standardized minor rate + level
-    one-hot + league one-hot + standardized age + log(PA) + (AAA-Statcast add, impute-flagged, when
-    `use_statcast`). Per-row uncertainty from paired quantile models (the ~16/84 predictive spread)."""
+    one-hot + league one-hot + standardized age + log(PA) + (the impute-flagged `aux_cols` add — the
+    AAA-Statcast summaries, plus start-share on the pitcher side — when `use_statcast`). Per-row
+    uncertainty from paired quantile models (the ~16/84 predictive spread)."""
 
     name = "gbm"
     reads_statcast = True
 
     def __init__(self, n_estimators: int = 300, max_depth: int = 2, learning_rate: float = 0.03,
-                 use_statcast: bool = True):
+                 use_statcast: bool = True, aux_cols: tuple[str, ...] = STATCAST_COLS):
         self.n_estimators, self.max_depth, self.learning_rate = n_estimators, max_depth, learning_rate
         self.use_statcast = use_statcast
+        self.aux_cols = tuple(aux_cols)
 
     def _features(self, df: pd.DataFrame) -> np.ndarray:
         z, _ = self.feat_scaler_.transform(df)
@@ -479,7 +549,7 @@ class GBMProjector(Projector):
         # keep only leagues with real support as one-hots (avoid a column per rare league)
         vc = t["league"].value_counts()
         self.leagues_ = sorted(vc[vc >= 5].index.tolist())
-        self.statcast_scalers_ = [_Scaler().fit(t, c) for c in STATCAST_COLS] if self.use_statcast else []
+        self.statcast_scalers_ = [_Scaler().fit(t, c) for c in self.aux_cols] if self.use_statcast else []
         X = self._features(t)
         y = t["target"].to_numpy(float)
         common = dict(n_estimators=self.n_estimators, max_depth=self.max_depth,
@@ -509,7 +579,8 @@ def candidate_configs(config: MleConfig) -> list[Projector]:
         MultiplicativeFactorProjector(config.min_cell_support),
     ]
     cands += [PartialPoolProjector(prior_scale=s) for s in config.pool_prior_scales]
-    cands += [GBMProjector(n, d, lr, use_statcast=config.use_statcast) for (n, d, lr) in config.gbm_grid]
+    cands += [GBMProjector(n, d, lr, use_statcast=config.use_statcast, aux_cols=config.aux_cols)
+              for (n, d, lr) in config.gbm_grid]
     return cands
 
 
@@ -527,7 +598,8 @@ def clone_projector(c: Projector) -> Projector:
     if isinstance(c, PartialPoolProjector):
         return PartialPoolProjector(prior_scale=c.prior_scale)
     if isinstance(c, GBMProjector):
-        return GBMProjector(c.n_estimators, c.max_depth, c.learning_rate, use_statcast=c.use_statcast)
+        return GBMProjector(c.n_estimators, c.max_depth, c.learning_rate,
+                            use_statcast=c.use_statcast, aux_cols=c.aux_cols)
     if isinstance(c, MultiplicativeFactorProjector):
         return MultiplicativeFactorProjector(c.min_support)
     if isinstance(c, IdentityRefProjector):
@@ -714,9 +786,9 @@ def emit_projections(pairs: pd.DataFrame, winner_factory, config: MleConfig | No
         return pd.DataFrame()
     proj = pd.concat(out_rows, ignore_index=True)
     proj["sport"] = "mlb"
-    proj["player_type"] = "batter"
+    proj["player_type"] = config.player_type
     proj["metric"] = m
-    proj["model_version"] = MODEL_VERSION
+    proj["model_version"] = config.model_version
     keep = [
         "sport", "player_type", "metric", "player_id", "player_name", "level", "league",
         "debut_cohort", "is_prospect", "age", "minor_pa", f"minor_{m}", f"mlb_{m}",

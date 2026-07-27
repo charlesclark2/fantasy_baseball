@@ -7,6 +7,7 @@ revisions land. `--incremental` re-pulls those month partitions idempotently.
   • milb_incremental_ingest_op   → baseball/milb/{schedule,player_game_logs}      (E7.1)
   • statcast_aaa_incremental_ingest_op → baseball/milb/statcast_aaa (AAA, Hawk-Eye)  (E7.2)
   • fangraphs_prospects_ingest_op → baseball/milb/the_board (FanGraphs THE BOARD)   (E7.7)
+  • fangraphs_milb_leaderboards_ingest_op → baseball/milb/fg_leaderboards (all minors) (E7.7)
 
 TIER = WARN-but-continue (E11.7 / CLAUDE.md op-tier map): MiLB data is NOT on any MLB
 serving/predict path — it is the research substrate for E7.3 (MLE) + E8 (Dynasty). A Stats-API
@@ -41,6 +42,12 @@ STATCAST_AAA_INGEST_TIMEOUT_SECONDS = int(
 # ceiling (default 300s) covers a slow Cloudflare solve + origin compute; INC-32 discipline.
 FANGRAPHS_PROSPECTS_TIMEOUT_SECONDS = int(
     os.environ.get("FANGRAPHS_PROSPECTS_TIMEOUT_SECONDS", "300")
+)
+
+# The MiLB leaderboards are two paginated FlareSolverr-routed pulls (bat + pit, ~thousands of
+# minor leaguers each). A generous ceiling covers the multi-page solves; INC-32 discipline.
+FANGRAPHS_MILB_LEADERBOARDS_TIMEOUT_SECONDS = int(
+    os.environ.get("FANGRAPHS_MILB_LEADERBOARDS_TIMEOUT_SECONDS", "900")
 )
 
 
@@ -98,4 +105,28 @@ def fangraphs_prospects_ingest_op(context):
             f"FanGraphs prospect board ingest failed (non-fatal — research-only, off the MLB "
             f"serving path; needs FLARESOLVERR_URL on the box, and the next daily run re-snaps "
             f"idempotently per as_of_date): {e}"
+        )
+
+
+@op(out=Out(Nothing))
+def fangraphs_milb_leaderboards_ingest_op(context):
+    """Daily FanGraphs MiLB leaderboards (bat + pit) → baseball/milb/fg_leaderboards (E7.7).
+
+    WARN-tier: this is the `fg_minor_id` POPULATION feed (every minor leaguer, ranked or not —
+    the coverage THE BOARD's graded-only list can't give) for E7.4/E8.0. Off the MLB
+    serving/predict path; a Cloudflare block, unset FLARESOLVERR_URL, or S3 blip must degrade
+    QUIETLY (log a WARNING, op succeeds); the write is idempotent per (season, stats, as_of_date).
+    Snowflake-FREE."""
+    try:
+        _run_script(
+            context,
+            "ingest_fangraphs_milb_leaderboards_to_s3.py",
+            [],  # defaults: --season <current year>, --stats bat,pit, --as-of <today>
+            timeout=FANGRAPHS_MILB_LEADERBOARDS_TIMEOUT_SECONDS,
+        )
+    except Exception as e:  # noqa: BLE001 — WARN-tier: prospect data is off the MLB serving path
+        context.log.warning(
+            f"FanGraphs MiLB leaderboard ingest failed (non-fatal — research-only, off the MLB "
+            f"serving path; needs FLARESOLVERR_URL on the box, and the next daily run re-snaps "
+            f"idempotently per (season, stats, as_of_date)): {e}"
         )

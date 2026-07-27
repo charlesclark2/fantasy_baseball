@@ -70,6 +70,11 @@ log = logging.getLogger(__name__)
 
 PROJECTIONS_URL = "https://www.fangraphs.com/api/projections/member"
 LEADERBOARD_URL = "https://www.fangraphs.com/api/leaders/major-league/data"
+# MINOR-league statistical leaderboard (E7.7) — same param shape as the major board, different
+# path segment. Enumerates EVERY minor leaguer (ranked or not) → the `fg_minor_id` population
+# feed THE BOARD can't give (it only covers graded prospects). Rows carry `playerid` (the
+# `sa`-prefixed minor id) + `xMLBAMID`. Endpoint verified via fungo::fetch_leaders(league='minor').
+MINOR_LEADERBOARD_URL = "https://www.fangraphs.com/api/leaders/minor-league/data"
 # THE BOARD — prospect rankings + scouting grades (E7.7). ONE JSON call returns the whole
 # board (~1,300 prospects/season): future value (cFV), risk, ETA, org/overall rank, level,
 # and — critically for the E8.0 join — both the FanGraphs id (`playerid` → fg_minor_id) AND
@@ -372,7 +377,6 @@ def fetch_leaderboard(
             keep '0' for parity with the historical raws).
         page_size: rows per page (default 1000). Halved automatically on an upstream 5xx.
     """
-    page_size = int(page_size or _LEADERBOARD_PAGE_SIZE)
     base_params = {
         "pos": "all",
         "stats": stats,
@@ -393,7 +397,28 @@ def fetch_leaderboard(
         "sortdir": "default",
         "sortstat": "WAR",
     }
+    out = _paginate_leaderboard(
+        LEADERBOARD_URL, base_params,
+        page_size=int(page_size or _LEADERBOARD_PAGE_SIZE),
+        max_timeout_ms=_leaderboard_max_timeout_ms(),
+        label=f"stats={stats} type={type_id} season={season}",
+    )
+    return out
 
+
+def _paginate_leaderboard(
+    url: str,
+    base_params: dict,
+    page_size: int,
+    max_timeout_ms: int,
+    label: str = "",
+) -> dict:
+    """Walk ``pagenum`` at a capped ``pageitems`` and concatenate the de-duplicated pages
+    (shared by the major + minor leaderboard fetchers). The single ``pageitems=2000000``
+    request 500s at FanGraphs' origin (INC-26); rows are de-duped by ``playerid`` so a
+    pagination-ignoring API terminates on the first all-seen page, and an upstream 5xx halves
+    the page and retries the SAME page. Returns the standardised ``{data, source_endpoint,
+    request_params, http_status_code, load_id}`` dict."""
     all_rows: list = []
     seen_ids: set = set()
     load_id = str(uuid.uuid4())
@@ -407,9 +432,7 @@ def fetch_leaderboard(
         if first_params is None:
             first_params = params
         try:
-            payload, status = _flaresolverr_get(
-                LEADERBOARD_URL, params, max_timeout_ms=_leaderboard_max_timeout_ms()
-            )
+            payload, status = _flaresolverr_get(url, params, max_timeout_ms=max_timeout_ms)
         except FangraphsClientError as exc:
             # INC-26 retry path: a borderline page can still 500 at the origin → halve
             # the page and retry the SAME pagenum before giving up.
@@ -439,20 +462,73 @@ def fetch_leaderboard(
         pagenum += 1
     else:
         log.warning(
-            "fetch_leaderboard hit the %d-page cap (stats=%s type=%d season=%d) — possible truncation",
-            _LEADERBOARD_MAX_PAGES, stats, type_id, season,
+            "_paginate_leaderboard hit the %d-page cap (%s @ %s) — possible truncation",
+            _LEADERBOARD_MAX_PAGES, label, url,
         )
 
     log.info(
-        "fetch_leaderboard: stats=%s type=%d season=%d %s→%s → %d rows (%d page(s), page_size=%d)",
-        stats, type_id, season,
-        startdate or "(full)", enddate or "(full)",
-        len(all_rows), pages_fetched, page_size,
+        "_paginate_leaderboard: %s → %d rows (%d page(s), page_size=%d) @ %s",
+        label, len(all_rows), pages_fetched, page_size, url,
     )
     return {
         "data": all_rows,
-        "source_endpoint": LEADERBOARD_URL,
+        "source_endpoint": url,
         "request_params": first_params,
         "http_status_code": last_status or 200,
         "load_id": load_id,
     }
+
+
+def fetch_minor_leaderboard(
+    stats: str,
+    season: int,
+    qual: str | int = "0",
+    ind: str | int = "1",
+    stat_type: int = 8,
+    page_size: Optional[int] = None,
+) -> dict:
+    """Fetch the FanGraphs MINOR-league statistical leaderboard for a season (E7.7).
+
+    THE reason this exists: THE BOARD only covers RANKED/graded prospects, but a deep dynasty
+    roster is full of UNRANKED minor leaguers. This leaderboard enumerates EVERY minor leaguer
+    with a stat line — so it is the population feed for `fg_minor_id` (rows carry `playerid`,
+    the `sa`-prefixed minor id, AND `xMLBAMID`), the id coverage E7.4's xref + a deep-league
+    draft board need. Routes through FlareSolverr like every FanGraphs fetch.
+
+    Args:
+        stats: 'bat' for hitting, 'pit' for pitching.
+        season: calendar year. NOTE FanGraphs inverts the range params — `season`=END,
+            `season1`=START — so a single season passes the same year to both.
+        qual: PA/IP minimum ('0' = EVERYONE — the coverage default; 'y' = qualified only).
+        ind: '1' = one row per player-season (the coverage grain); '0' = aggregate the span.
+        stat_type: column-set id (8 = the Dashboard set).
+        page_size: rows per page (default 1000); halved automatically on an upstream 5xx.
+    """
+    base_params = {
+        "age": "",
+        "pos": "all",
+        "stats": stats,
+        "lg": "all",
+        "qual": str(qual),
+        # FanGraphs' inverted naming: season = END year, season1 = START year.
+        "season": season,
+        "season1": season,
+        "startdate": "",
+        "enddate": "",
+        "month": "0",
+        "hand": "",
+        "team": "0",
+        "ind": str(ind),
+        "rost": "0",
+        "players": "",
+        "type": stat_type,
+        "postseason": "",
+        "sortdir": "default",
+        "sortstat": "WAR",
+    }
+    return _paginate_leaderboard(
+        MINOR_LEADERBOARD_URL, base_params,
+        page_size=int(page_size or _LEADERBOARD_PAGE_SIZE),
+        max_timeout_ms=_leaderboard_max_timeout_ms(),
+        label=f"MINOR stats={stats} season={season} qual={qual} ind={ind}",
+    )
