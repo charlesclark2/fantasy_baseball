@@ -1153,8 +1153,19 @@ milb_mle_pitcher_prior_v1:
     bb_pct: {mle_nll: -2.270, generic_nll: -2.190, mle_mae: 0.0191, generic_mae: 0.0208, wins: true}
   uncertainty: recalibrated_predictive       # σ_resid honest (cov ≈ 0.68/0.90) — was parameter-only (5.8–7.8× too tight)
   best_alpha: 0                              # a cold-start prior, never a market bet
-  promotion_status: pending                  # harness code-complete + fast gate + served-SQL smoke green; awaiting operator --s3 + box W8a run + serving parity
-  promoted_at: null
+  promotion_status: champion                 # SERVING-LIVE 2026-07-27: prior landed --s3, box --w8a rebuilt the parquet with eb_gb_pct, lakehouse_ext recreated + the native incremental DROP+rebuilt, W8a parity PASS (29/29 column fingerprints, 48,621 rows both sides), predict_today green on the 2026-07-27 slate (12 games, all 3 feature blocks structurally served, coverage 0.81)
+  promoted_at: '2026-07-27'
+  serving_verification:                      # the AC step-5 real-slate check (CI mocks IO — this is the gate that counts)
+    parity: PASS (29/29 fingerprints; snowflake 48,621 = s3 48,621 rows / 24,335 games)
+    predict_today: green, 12 games, 0 absent/0 all-null-collapsed features on all three targets
+    cold_start_reach: |
+      At current_season_bf=0 the GENERIC path returns mu_k — ONE constant per (season, age_band) — so
+      pre-E7.5p `count(distinct eb_k_pct)` over u25 zero-BF rows would be exactly 1 per season. Live:
+      2026 90 distinct / 128 rows, 2025 124/152, 2021 149/186, 2016 71/130 ⇒ the MLE prior reaches the
+      large majority of cold-start starters (2016 is thinnest, as expected — pre-debut MiLB history
+      thins at the front edge of the E7.1 backfill and those pitchers correctly keep the band prior).
+      ⚠️ Do NOT read `count(distinct eb_gb_pct)` as a coverage stat: eb_gb_pct also moves with
+      prior-season observed GB%, which is independent of current-season BF.
   ablation_report: quant_sports_intel_models/baseball/edge_program/ablation_results/e7_5p_pitcher_prior_ablation.md
   tests: betting_ml/tests/test_milb_mle_pitcher_prior.py
   notes: |

@@ -8,6 +8,7 @@ revisions land. `--incremental` re-pulls those month partitions idempotently.
   • statcast_aaa_incremental_ingest_op → baseball/milb/statcast_aaa (AAA, Hawk-Eye)  (E7.2)
   • fangraphs_prospects_ingest_op → baseball/milb/the_board (FanGraphs THE BOARD)   (E7.7)
   • fangraphs_milb_leaderboards_ingest_op → baseball/milb/fg_leaderboards (all minors) (E7.7)
+  • dim_player_xref_build_op     → baseball/milb/derived/dim_player_xref                 (E7.4)
 
 TIER = WARN-but-continue (E11.7 / CLAUDE.md op-tier map): MiLB data is NOT on any MLB
 serving/predict path — it is the research substrate for E7.3 (MLE) + E8 (Dynasty). A Stats-API
@@ -24,7 +25,7 @@ class).
 """
 import os
 
-from dagster import Nothing, Out, op
+from dagster import In, Nothing, Out, op
 
 from pipeline.ops.daily_ingestion_ops import _run_script
 
@@ -48,6 +49,13 @@ FANGRAPHS_PROSPECTS_TIMEOUT_SECONDS = int(
 # minor leaguers each). A generous ceiling covers the multi-page solves; INC-32 discipline.
 FANGRAPHS_MILB_LEADERBOARDS_TIMEOUT_SECONDS = int(
     os.environ.get("FANGRAPHS_MILB_LEADERBOARDS_TIMEOUT_SECONDS", "900")
+)
+
+# The xref rebuild is pure DuckDB-over-S3 (no vendor calls) but scans the MLB FanGraphs raw feeds
+# (~230k JSON rows) for the graduate leg. Generous ceiling; INC-32 discipline (a subprocess on an
+# orchestrator path always carries a finite timeout).
+PLAYER_XREF_BUILD_TIMEOUT_SECONDS = int(
+    os.environ.get("PLAYER_XREF_BUILD_TIMEOUT_SECONDS", "1800")
 )
 
 
@@ -129,4 +137,41 @@ def fangraphs_milb_leaderboards_ingest_op(context):
             f"FanGraphs MiLB leaderboard ingest failed (non-fatal — research-only, off the MLB "
             f"serving path; needs FLARESOLVERR_URL on the box, and the next daily run re-snaps "
             f"idempotently per (season, stats, as_of_date)): {e}"
+        )
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def dim_player_xref_build_op(context):
+    """Rebuild the E7.4 prospect identity spine → baseball/milb/derived/dim_player_xref.
+
+    ⭐ ORDERING IS LOAD-BEARING (INC-25 class): this op CONSUMES the four ingests above, so it is
+    wired downstream of all of them via a Nothing fan-in. Building the xref at job START would
+    crosswalk yesterday's board against yesterday's leaderboards — the exact "consumer parquet
+    lags the stores by a full cycle" failure, except silent (a stale xref still joins; it just
+    misses the newest prospects).
+
+    WARN-tier: the xref is research substrate for E7.8 + the E8.0 draft board, NOT on any MLB
+    serving/predict path — a failure degrades quietly and the next daily run rebuilds from
+    scratch (the write is a full overwrite, so there is no partial-state hazard). The builder's
+    OWN dead-bridge tripwires still raise inside the script, which is what makes this WARN
+    meaningful: a broken bridge fails the script LOUDLY in the logs and leaves the LAST GOOD xref
+    in place, rather than overwriting it with a near-empty crosswalk. Snowflake-FREE.
+    """
+    try:
+        _run_script(
+            context,
+            os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                "betting_ml", "scripts", "milb_xref", "build_player_xref.py",
+            ),
+            ["--s3"],
+            timeout=PLAYER_XREF_BUILD_TIMEOUT_SECONDS,
+        )
+    except Exception as e:  # noqa: BLE001 — WARN-tier: the xref is off the MLB serving path
+        context.log.warning(
+            f"dim_player_xref rebuild failed (non-fatal — research-only, off the MLB serving "
+            f"path; the PREVIOUS xref is left intact and the next daily run rebuilds it. If this "
+            f"is a DEAD-BRIDGE error the FanGraphs id fields changed shape — re-probe with "
+            f"`ingest_fangraphs_milb_leaderboards_to_s3.py --probe` before trusting any prospect "
+            f"join): {e}"
         )
