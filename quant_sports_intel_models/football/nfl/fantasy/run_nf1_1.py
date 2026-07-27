@@ -359,7 +359,12 @@ def build_season_projection(con, base_season: int, projection_season: int, schem
 
     rookies_all = pd.read_parquet(_ROOKIE_PARQUET)
     incoming = rookies_all[pd.to_numeric(rookies_all["draft_year"], errors="coerce") == projection_season]
-    curve = fit_rookie_slot_curves(load_rookie_training(con, base_season, schema))
+    # NF1.4: the point curve fits the survivor-filtered history (unchanged); `band_hist` is
+    # the FULL drafted population (zero-game rookies included) and calibrates the 80% rookie
+    # interval, which the legacy `fp × cv` width missed badly (0.678 coverage, 0.444 at QB).
+    curve = fit_rookie_slot_curves(
+        load_rookie_training(con, base_season, schema),
+        band_hist=load_rookie_training(con, base_season, schema, include_zero_game=True))
     rks = project_rookies(incoming, curve, projection_season) if not incoming.empty else pd.DataFrame()
     if not rks.empty:
         rks["nf1_scale"] = 1.0

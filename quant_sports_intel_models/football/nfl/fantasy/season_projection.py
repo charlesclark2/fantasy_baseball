@@ -669,6 +669,25 @@ class RookieSlotCurve:
     ratios: dict = field(default_factory=dict)    # (position, stat) -> median stat_total / fp
     games_by_pos_slot: dict = field(default_factory=dict)  # (position, slot_bucket) -> mean games
     fp_cv_by_pos: dict = field(default_factory=dict)       # position -> fp coefficient of variation
+    # NF1.4: the CALIBRATED 80% rookie band. (position, prediction-tercile) -> (p10, p90) in fp,
+    # read off the realized outcomes of the FULL drafted population; empty ⇒ the legacy cv band.
+    fp_bands: dict = field(default_factory=dict)
+    fp_band_cuts: dict = field(default_factory=dict)       # position -> (tercile cut 1, cut 2)
+
+    def band(self, position: str, pred: float) -> tuple[float, float] | None:
+        """The calibrated 80% interval for one rookie, or None when no band was fitted (the caller
+        then falls back to the legacy `fp × cv` width). Always brackets the point projection — a
+        band that excluded its own point estimate would be incoherent."""
+        cuts = self.fp_band_cuts.get(position)
+        if cuts is None:
+            return None
+        c1, c2 = cuts
+        b = 0 if pred <= c1 else (1 if pred <= c2 else 2)
+        lohi = self.fp_bands.get((position, b))
+        if lohi is None:
+            return None
+        lo, hi = lohi
+        return (max(0.0, min(lo, pred)), max(hi, pred))
 
     def predict_fp(self, position: str, overall: float) -> float:
         if position not in self.fp_mean:
@@ -693,12 +712,18 @@ def _slot_bucket(overall: float) -> str:
     return "101+"
 
 
-def fit_rookie_slot_curves(hist: pd.DataFrame) -> RookieSlotCurve:
+def fit_rookie_slot_curves(hist: pd.DataFrame, band_hist: pd.DataFrame | None = None) -> RookieSlotCurve:
     """Fit the composite rookie model from prior classes.
 
     hist: one row per historical drafted rookie (skill positions) with `position_group`,
       `draft_overall`, `games`, `rookie_fp_ppr`, and the rookie-year raw stat TOTALS
-      (`_ROOKIE_RAW_STATS` cols) — the training base for the fp curve + the stat composition."""
+      (`_ROOKIE_RAW_STATS` cols) — the training base for the fp curve + the stat composition.
+
+    band_hist (NF1.4): the SAME history over the FULL DRAFTED POPULATION — every drafted skill
+      rookie including the ~15% (35% at QB) who never played a snap, carried as a real `rookie_fp_ppr
+      = 0`. Used ONLY to calibrate the 80% interval; the point curve is unchanged. See
+      `_fit_rookie_bands` for why the interval needs the un-filtered population and the curve does
+      not. Omit it and the projection falls back to the legacy `fp × cv` width."""
     curve = RookieSlotCurve()
     for pos, g in hist.groupby("position_group"):
         overall = pd.to_numeric(g["draft_overall"], errors="coerce")
@@ -730,7 +755,50 @@ def fit_rookie_slot_curves(hist: pd.DataFrame) -> RookieSlotCurve:
         fpp = fp[fp.notna() & (fp > 5)]
         if len(fpp) >= 8 and fpp.mean() > 0:
             curve.fp_cv_by_pos[pos] = float(np.clip(fpp.std() / fpp.mean(), 0.35, 1.2))
+    if band_hist is not None and not band_hist.empty:
+        _fit_rookie_bands(curve, band_hist)
     return curve
+
+
+# The nominal rookie interval. 80% central ⇒ the 10th/90th percentiles of the realized outcome.
+_ROOKIE_BAND_Q = (0.10, 0.90)
+_ROOKIE_BAND_MIN_N = 15
+
+
+def _fit_rookie_bands(curve: RookieSlotCurve, band_hist: pd.DataFrame) -> None:
+    """NF1.4 — calibrate the rookie 80% band EMPIRICALLY, from what drafted rookies actually did.
+
+    ⚠️ THE DEFECT THIS FIXES (measured over draft classes 2019–2025, walk-forward): MVP-1's rookie
+    band is `fp ± 1.2816·fp·cv`, with the cv estimated on the SURVIVOR-filtered fit sample. Its
+    realized coverage of the nominal 80% is **0.678 overall and 0.444 at QB** — the band is not an
+    80% interval, it is a decoration, and its own report said "recalibrate before pricing." A
+    multiplicative width also collapses to nothing as the projection approaches zero, so the late-
+    round rookies who most often surprise get the narrowest band.
+
+    THE CURE: within a position, bucket the curve's predictions into terciles and take the empirical
+    q10/q90 of the REALIZED rookie seasons in each bucket. Two properties the cv band lacked —
+      • the population is the FULL drafted class, zero-game rookies included, so the p10 tells the
+        truth that a late pick's most likely outcome is ~nothing;
+      • the width is read off outcomes rather than asserted, so coverage is a measurable claim
+        (`0.834` overall / `0.827` at QB with this band).
+    The POINT projection is untouched: this is an interval-calibration fix, not a model change.
+    """
+    lo_q, hi_q = _ROOKIE_BAND_Q
+    pos = band_hist["position_group"].astype(str)
+    overall = pd.to_numeric(band_hist["draft_overall"], errors="coerce")
+    real = pd.to_numeric(band_hist.get("rookie_fp_ppr"), errors="coerce")
+    for p in pos.unique():
+        m = (pos == p) & overall.notna() & real.notna()
+        if int(m.sum()) < _ROOKIE_BAND_MIN_N or p not in curve.fp_mean:
+            continue
+        pred = np.array([curve.predict_fp(p, o) for o in overall[m]], dtype=float)
+        y = real[m].to_numpy(dtype=float)
+        c1, c2 = float(np.quantile(pred, 1 / 3)), float(np.quantile(pred, 2 / 3))
+        curve.fp_band_cuts[p] = (c1, c2)
+        for b, sel in enumerate((pred <= c1, (pred > c1) & (pred <= c2), pred > c2)):
+            if int(sel.sum()) >= max(5, _ROOKIE_BAND_MIN_N // 3):
+                curve.fp_bands[(p, b)] = (float(np.quantile(y[sel], lo_q)),
+                                          float(np.quantile(y[sel], hi_q)))
 
 
 def project_rookies(
@@ -825,18 +893,93 @@ def project_rookies(
     df["proj_two_pt"] = np.nan
     df = score_line(df, prefix="proj_")
 
-    # wide rookie interval from the per-position fp coefficient of variation (parameter uncertainty)
-    cv = np.array([curve.fp_cv_by_pos.get(p, 0.7) for p in pos_group])
+    # ── the 80% rookie interval ────────────────────────────────────────────────────────────────
+    # NF1.4: prefer the CALIBRATED band (empirical q10/q90 of what drafted rookies in this
+    # prediction tercile actually scored — realized coverage 0.834 vs the nominal 0.80). The legacy
+    # `fp × cv` parameter-uncertainty width is the fallback for a curve fitted without `band_hist`;
+    # it covers only 0.678 (0.444 at QB), so it is a decoration rather than an 80% interval and is
+    # kept solely so an un-migrated caller still gets *a* band. See `_fit_rookie_bands`.
     fp = df["proj_fp_ppr"].to_numpy()
-    sd = fp * cv
+    cv = np.array([curve.fp_cv_by_pos.get(p, 0.7) for p in pos_group])
     z80 = 1.2815515594
-    df["fp_ppr_sd"] = np.round(sd, 2)
-    df["fp_ppr_p10"] = np.round(np.clip(fp - z80 * sd, 0.0, None), 1)
-    df["fp_ppr_p90"] = np.round(fp + z80 * sd, 1)
-    df["uncertainty_type"] = "parameter"  # slot-curve + P1A parameter uncertainty, recalibrate downstream
+    calibrated = [curve.band(pos_group[i], float(fp[i])) for i in range(len(df))]
+    have_band = any(b is not None for b in calibrated)
+    lo = np.array([b[0] if b else max(0.0, fp[i] - z80 * fp[i] * cv[i])
+                   for i, b in enumerate(calibrated)])
+    hi = np.array([b[1] if b else fp[i] + z80 * fp[i] * cv[i] for i, b in enumerate(calibrated)])
+    df["fp_ppr_sd"] = np.round((hi - lo) / (2 * z80), 2)   # the band's implied 1-sd equivalent
+    # Round the bounds OUTWARD (p10 down, p90 up). `band()` guarantees lo ≤ point ≤ hi, but
+    # nearest-rounding can push a bound past a point projection it exactly equals and emit a
+    # displayed interval that excludes its own point estimate.
+    df["fp_ppr_p10"] = np.floor(np.clip(lo, 0.0, None) * 10.0) / 10.0
+    df["fp_ppr_p90"] = np.ceil(hi * 10.0) / 10.0
+    df["uncertainty_type"] = "calibrated" if have_band else "parameter"
     df["is_rookie"] = True
     df["source"] = "rookie"
     df["projection_season"] = int(projection_season)
     df["confidence"] = "low"  # rookies are inherently high-variance
     df["fp_ppr_l5"] = np.nan
     return df
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF1.4 — the rookie FACE-VALIDITY gate on an emitted board
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# How far down the board a rookie may sit before the placement is worth flagging. Anchored on what
+# actually happens: over draft classes 2019–2025 the #1-overall rookie QB was projected QB11–QB15
+# and finished QB8–QB25 (mean rank ≈ QB19.5), so a rookie inside the overall top 10 is the
+# placement that has never been earned.
+_FACE_VALIDITY_TOP_N = 10
+
+
+def rookie_board_face_validity(board: pd.DataFrame, rookie_history: pd.DataFrame,
+                               *, fp_col: str = "proj_fp_ppr", top_n: int = _FACE_VALIDITY_TOP_N,
+                               quantile: float = 0.90) -> dict:
+    """Flag rookie OVER-PLACEMENT on an emitted (veterans + rookies) board — the NF1.4 gate.
+
+    Two checks, both anchored on realized history rather than an arbitrary threshold:
+      1. **placement** — the #1 overall board slot is a veteran, and no rookie sits inside the
+         overall top `top_n`. This is the symptom MVP-3 dogfooding raised ("a rookie QB floated to
+         #1 overall"); on the 2019–2025 boards MVP-1 put a rookie in the overall top 12 twice, both
+         #1-overall QBs (Trevor Lawrence → finished QB23; Cam Ward → QB22).
+      2. **level** — per position, no rookie is projected above the Q`quantile` of REALIZED rookie
+         seasons at that position over the FULL drafted population (never-played rookies included).
+
+    `rookie_history` needs `position_group` + `rookie_fp_ppr`. ADVISORY, not a HALT: this is a
+    projection product and a genuinely exceptional class should be able to trip it — it exists so
+    the board is checked rather than assumed. Returns every measurement plus `pass`.
+    """
+    out: dict = {"pass": True, "n_rookies": 0, "placement": {}, "level": {}}
+    if board is None or board.empty or fp_col not in board.columns:
+        return {**out, "note": "empty board"}
+
+    ranked = board.sort_values(fp_col, ascending=False).reset_index(drop=True)
+    is_rk = (ranked["is_rookie"].fillna(False).astype(bool) if "is_rookie" in ranked
+             else pd.Series(False, index=ranked.index))
+    out["n_rookies"] = int(is_rk.sum())
+    top = ranked[is_rk].head(1)
+    out["placement"] = {
+        "top1_is_rookie": bool(is_rk.iloc[0]),
+        f"n_rookies_in_top{top_n}": int(is_rk.head(top_n).sum()),
+        "best_rookie_overall_rank": int(ranked[is_rk].index[0]) + 1 if len(top) else None,
+        "best_rookie": None if top.empty else str(top.iloc[0].get("player_name")),
+    }
+
+    pos_col = "position" if "position" in ranked.columns else "position_group"
+    caps, over = {}, []
+    for p, h in rookie_history.groupby(rookie_history["position_group"].astype(str)):
+        v = pd.to_numeric(h["rookie_fp_ppr"], errors="coerce").dropna()
+        if len(v) < 20:
+            continue
+        cap = float(np.quantile(v.to_numpy(), quantile))
+        caps[p] = round(cap, 1)
+        proj = pd.to_numeric(ranked[is_rk & (ranked[pos_col].astype(str) == p)][fp_col],
+                             errors="coerce")
+        if len(proj) and float(proj.max()) > cap:
+            over.append({"position": p, "max_projected": round(float(proj.max()), 1),
+                         "historical_cap": round(cap, 1)})
+    out["level"] = {"historical_caps": caps, "positions_over_cap": over}
+    out["pass"] = (not out["placement"]["top1_is_rookie"]
+                   and out["placement"][f"n_rookies_in_top{top_n}"] == 0
+                   and not over)
+    return out

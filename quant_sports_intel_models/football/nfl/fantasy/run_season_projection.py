@@ -310,9 +310,18 @@ def _coalesce_forward_status(nflverse: pd.DataFrame, sleeper: pd.DataFrame) -> p
     return merged[["player_id", "proj_status"]]
 
 
-def load_rookie_training(con, upto_season: int, schema: str = MARTS_SCHEMA) -> pd.DataFrame:
+def load_rookie_training(con, upto_season: int, schema: str = MARTS_SCHEMA,
+                         include_zero_game: bool = False) -> pd.DataFrame:
     """Historical drafted rookies (skill positions, draft_year ≤ base season) joined to their
-    rookie-year raw stat TOTALS — the training base for the draft-slot production curves."""
+    rookie-year raw stat TOTALS — the training base for the draft-slot production curves.
+
+    `include_zero_game` (NF1.4) returns the FULL DRAFTED POPULATION: every drafted skill rookie,
+    with the ~15% who never played a snap (35% at QB) carried as a real `rookie_fp_ppr = 0` instead
+    of dropped. That population is what `fit_rookie_slot_curves(..., band_hist=...)` needs to
+    calibrate an honest 80% interval — a band fitted on survivors only claims 80% and covers 68%
+    (44% at QB). The POINT curve keeps the default survivor-filtered history: NF1.4 measured the
+    zero-inclusive fit walk-forward and it did NOT improve held-out accuracy at any position (see
+    `ablation_results/nf1_4_rookie.md`), so only the interval changes."""
     rk = pd.read_parquet(_ROOKIE_PARQUET)
     rk = rk[
         rk["position_group"].isin(ROOKIE_POSITIONS)
@@ -320,10 +329,11 @@ def load_rookie_training(con, upto_season: int, schema: str = MARTS_SCHEMA) -> p
         & (pd.to_numeric(rk["draft_year"], errors="coerce") <= upto_season)
     ][["gsis_id", "position_group", "draft_overall", "draft_year"]].copy()
     con.register("rk_train", rk)
+    join, having = ("left join", "") if include_zero_game else ("join", "where games > 0")
     hist = con.sql(f"""
         with ry as (
             select r.gsis_id, r.position_group, r.draft_overall,
-                count_if(f.played_flag and not f.is_bye) as games,
+                coalesce(count_if(f.played_flag and not f.is_bye), 0) as games,
                 sum(case when f.played_flag then f.pass_attempts else 0 end)::double as pass_att,
                 sum(case when f.played_flag then f.pass_completions else 0 end)::double as pass_cmp,
                 sum(case when f.played_flag then f.passing_yards else 0 end)::double as pass_yds,
@@ -336,13 +346,13 @@ def load_rookie_training(con, upto_season: int, schema: str = MARTS_SCHEMA) -> p
                 sum(case when f.played_flag then f.receptions else 0 end)::double as rec,
                 sum(case when f.played_flag then f.receiving_yards else 0 end)::double as rec_yds,
                 sum(case when f.played_flag then f.receiving_touchdowns else 0 end)::double as rec_td,
-                sum(case when f.played_flag then f.fantasy_points_ppr else 0 end)::double as rookie_fp_ppr
+                coalesce(sum(case when f.played_flag then f.fantasy_points_ppr else 0 end), 0)::double as rookie_fp_ppr
             from rk_train r
-            join {schema}.fct_player_week f
+            {join} {schema}.fct_player_week f
               on f.player_id = r.gsis_id and f.season = r.draft_year and f.week > 0
             group by 1,2,3
         )
-        select * from ry where games > 0
+        select * from ry {having}
     """).df()
     return hist
 
@@ -408,7 +418,12 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
 
     rookies_all = pd.read_parquet(_ROOKIE_PARQUET)
     incoming = rookies_all[pd.to_numeric(rookies_all["draft_year"], errors="coerce") == projection_season]
-    curve = fit_rookie_slot_curves(load_rookie_training(con, base_season, schema))
+    # NF1.4: the point curve fits the survivor-filtered history (unchanged); `band_hist` is
+    # the FULL drafted population (zero-game rookies included) and calibrates the 80% rookie
+    # interval, which the legacy `fp × cv` width missed badly (0.678 coverage, 0.444 at QB).
+    curve = fit_rookie_slot_curves(
+        load_rookie_training(con, base_season, schema),
+        band_hist=load_rookie_training(con, base_season, schema, include_zero_game=True))
     rks = project_rookies(incoming, curve, projection_season) if not incoming.empty else pd.DataFrame()
 
     proj = pd.concat([vets, rks], ignore_index=True, sort=False)
@@ -517,7 +532,7 @@ def _md_table(df: pd.DataFrame) -> str:
 
 
 def write_report(proj: pd.DataFrame, cov: dict, backtests: list[dict], path: Path,
-                 base_season: int, projection_season: int) -> None:
+                 base_season: int, projection_season: int, face: dict | None = None) -> None:
     a = []
     p = a.append
     p(f"# NF-FASTPATH — {projection_season} NFL fantasy season projections (raw stat-line, MVP-1)")
@@ -617,6 +632,16 @@ def write_report(proj: pd.DataFrame, cov: dict, backtests: list[dict], path: Pat
         p("")
     p("## 5. Face validity — top 15 ROOKIES (P1A-attached)")
     p("")
+    if face is not None:
+        p("**NF1.4 rookie over-placement gate** (advisory — a genuinely exceptional class may trip "
+          "it): the #1 overall slot must be a veteran, no rookie inside the overall top 10, and no "
+          "rookie projected above the Q90 of realized rookie seasons at his position over the FULL "
+          "drafted population.")
+        p("")
+        p("```json")
+        p(json.dumps(face, indent=2, default=float))
+        p("```")
+        p("")
     rk = proj[proj["is_rookie"]].head(15)[
         ["player_name", "position", "draft_overall", "proj_games", "proj_fp_ppr", "fp_ppr_p10", "fp_ppr_p90"]
     ]
@@ -699,6 +724,7 @@ def main(argv: list[str] | None = None) -> int:
         log.info("emitting projection seasons: %s", seasons)
 
         primary_proj = primary_cov = None
+        face_validity: dict | None = None
         backtests: list[dict] = []
         for y in seasons:
             base_y = y - 1
@@ -730,6 +756,16 @@ def main(argv: list[str] | None = None) -> int:
                 primary_proj = proj
                 primary_cov = coverage_report(proj, load_base_season(con, base_y, args.schema))
                 log.info("  primary %d coverage: %s", y, primary_cov)
+                # NF1.4 rookie over-placement gate (advisory) — measured against the FULL drafted
+                # rookie population, so "what rookies actually do" includes the ones who never
+                # played. A trip logs loudly; it never blocks the projection (this is a projection
+                # product, and an exceptional class is allowed to be exceptional).
+                face_validity = _SP.rookie_board_face_validity(
+                    proj, load_rookie_training(con, base_y, args.schema, include_zero_game=True))
+                if not face_validity["pass"]:
+                    log.warning("NF1.4 rookie face-validity gate TRIPPED: %s", face_validity)
+                else:
+                    log.info("  NF1.4 rookie face-validity: pass")
     finally:
         con.close()
 
@@ -744,7 +780,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.no_report and primary_proj is not None:
         write_report(primary_proj, primary_cov, backtests, _REPORT_PATH,
-                     primary_season - 1, primary_season)
+                     primary_season - 1, primary_season, face=face_validity)
 
     return 0
 
