@@ -1,6 +1,8 @@
 # E7.4 — Prospect identity & ETA xref (`dim_player_xref`)
 
-**Status:** ✅ CODE-COMPLETE (2026-07-27) — **built end-to-end against the live S3 lake (40,449 rows, every tripwire clear)**; operator run with `--s3` to land the Delta table.
+**Status:** ✅✅ **DONE + LANDED + VERIFIED (2026-07-27).** Operator-run; 40,449 rows landed at
+`s3://baseball-betting-ml-artifacts/baseball/milb/derived/dim_player_xref`. Every tripwire clear and
+every AC join verified against the LANDED table (§8).
 **Deliverable:** `baseball/milb/derived/dim_player_xref` (Delta) — the MLBAM-spined prospect identity dimension.
 **Builder:** `betting_ml/scripts/milb_xref/player_xref.py` (pure, tested) + `build_player_xref.py` (CLI).
 **Unblocks:** E8.0's clean board join · E7.8's prospect→realized-MLB link.
@@ -217,3 +219,36 @@ id pair is career-stable — every extra snapshot re-derives the identical pair 
 both bridge legs, the graduate leg with the leaderboard leg removed, the `sa`-prefixed-`fg_player_id`
 trap, the Michael Massey false-positive, snapshot dedupe, DSL coverage-vs-key, and every tripwire.
 The happy path runs with the production tripwires **armed**.
+
+---
+
+## 8. Post-landing verification (against the LANDED Delta table, not the build frame)
+
+The AC is "joins cleanly to the MLB player xref and to E8" — so it is checked on what actually
+landed, by the same reader a consumer would use.
+
+| check | result |
+|---|---|
+| **void-typed columns in the output** | **NONE** ✅ — the table did not reproduce the landmine it documents |
+| **`delta_scan` readback** (what E8.0 will do) | **40,449 rows** ✅ — normal reader works; no special-casing needed downstream |
+| **AC-1 → the existing MLB player xref** (`stg_statsapi_player_profiles`) | **6,571 / 6,571 = 100.0%** — every MLB player resolves; a call-up links to his MLB identity |
+| **AC-2 → E7.3 batter MLE projections** | **6,365 / 6,365 = 100.0%** |
+| **AC-2b → E7.3p pitcher MLE projections** | **7,474 / 7,474 = 100.0%** |
+| **AC-3 → the E8.0 path end-to-end** | 4,279 board prospects → **4,263 carry an MLBAM id (99.6%)**, 1,812 have an MLE projection |
+| identity uniqueness | 40,449 rows / **40,449 distinct `xref_key`** (zero dupes), 40,433 distinct `mlbam_id`, 40,433 stamped `high` confidence |
+
+The 1,812-of-4,263 MLE coverage is **expected, not a gap**: an MLE projection only exists for a player
+with enough MiLB plate appearances at a level E7.1 ingests, so unranked/complex-league/just-drafted
+prospects have identity but no projection yet. The xref's job is the identity; the projection
+coverage is E7.3's.
+
+**`fg_mlb_id` population — a clarification on §4's provenance table.** `fg_mlb_leaderboard_playerid = 1`
+counts rows *resolved by* the graduate leg (the leaderboard leg already resolves the rest). The number
+of rows *carrying* a reconciled `fg_mlb_id` is **1,766 — every one of them alongside its
+`fg_minor_id`**, which is the actual story requirement: a graduate's minor and major FanGraphs records
+reconcile to one MLBAM person. (23,205 rows carry an `fg_minor_id`.)
+
+Spot-check of the reconciliation, and a direct confirmation the reader fix worked: **Konnor Griffin →
+`mlbam_id=804606`, `fg_minor_id=sa3065496`, `fg_mlb_id=35376`.** Under the tombstoned-glob read he
+surfaced with `fg_minor_id=35376` (the numeric MLB id in the minor-id column) — the Delta-correct read
+puts each id in its own column.
