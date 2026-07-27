@@ -28,6 +28,7 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import type { PickExplanationPayload } from "@/components/pick-explanation"
+import type { TotalsDistributionData } from "@/components/totals-distribution"
 
 // ---------------------------------------------------------------------------
 // A0.4.32 — Book odds comparison types
@@ -124,6 +125,11 @@ const ServedTierBadge = dynamic(
 )
 const ZoneHeatmap = dynamic(
   () => import("@/components/zone-heatmap").then((m) => ({ default: m.ZoneHeatmap })),
+  { ssr: false, loading: () => null },
+)
+// Story E2.7 — calibrated predictive-total distribution panel (recharts → client-only)
+const TotalsDistributionPanel = dynamic(
+  () => import("@/components/totals-distribution").then((m) => ({ default: m.TotalsDistributionPanel })),
   { ssr: false, loading: () => null },
 )
 
@@ -298,6 +304,8 @@ type GameDetailData = {
   // Story 30.15 — model explanation
   pick_explanation: PickExplanationPayload | null
   pick_narrative: string | null
+  // Story E2.7 — calibrated predictive-total distribution (transparency; best_alpha=0)
+  totals_distribution: TotalsDistributionData | null
   // E9.40 — "who called it" scorecard (Final games only)
   scorecard: GameScorecardData | null
 }
@@ -2173,6 +2181,21 @@ export default function PickDetailPage() {
                   </>
                 )
               })()}
+
+              {/* ============================================================
+                  1c. How confident — calibrated predictive distribution (Story E2.7)
+                  The "how confident" half beside the SHAP "why" drivers above. Transparency
+                  only (best_alpha=0) — a calibrated view of the total, never a bet rec.
+              ============================================================ */}
+              {data?.totals_distribution && (
+                <CollapsibleSection title="Predictive distribution" defaultOpen={false}>
+                  <TotalsDistributionPanel
+                    dist={data.totals_distribution}
+                    homeTeam={data.home_team_name}
+                    awayTeam={data.away_team_name}
+                  />
+                </CollapsibleSection>
+              )}
 
               {/* ============================================================
                   2. Bovada Lines

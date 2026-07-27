@@ -65,6 +65,54 @@ class PickExplanationPayload(BaseModel):
     targets: dict[str, PickExplanationTarget] = {}
 
 
+# ---------------------------------------------------------------------------
+# Totals predictive-distribution models (Story E2.7 — Distribution UX)
+# The calibrated E2.3 convolution of the served per-side NegBin marginals, computed once in the
+# daily batch (write_serving_store --game-detail) and stored in the per-game blob. TRANSPARENCY
+# ONLY — best_alpha=0, E2.6's derivative gate is a confirmed clean null → no field here is an EV /
+# value / win-rate claim. ⚠️ E9.41: every stored field MUST be declared here or Pydantic drops it
+# silently on serialize; keep this schema in sync with build_totals_distribution_payload's shape.
+# ---------------------------------------------------------------------------
+
+class DistLadderPoint(BaseModel):
+    line: float
+    p_over: float  # model P(outcome > line) — descriptive, not a recommendation
+
+
+class TotalDistribution(BaseModel):
+    mu: float                                  # expected game total (runs)
+    quantiles: dict[str, float] = {}           # {"p05":.., "p10":.., … "p95":..}
+    ci80: list[float] = []                     # [Q10, Q90] — the 80% predictive interval
+    market_line: float | None = None           # book total drawn on the density
+    p_over: float | None = None                # P(total > market_line) (None if no line)
+
+
+class RunDiffDistribution(BaseModel):
+    mu: float                                  # expected home−away margin (runs)
+    quantiles: dict[str, float] = {}
+    p_home: float                              # P(run_diff > 0) — distributional H2H view
+
+
+class TeamTotalDistribution(BaseModel):
+    line: float                                # book line if known, else nearest-half of the mean
+    p_over: float
+    mu: float
+    ladder: list[DistLadderPoint] = []
+
+
+class TeamTotalsDistribution(BaseModel):
+    home: TeamTotalDistribution
+    away: TeamTotalDistribution
+
+
+class TotalsDistribution(BaseModel):
+    version: str | None = None
+    total: TotalDistribution
+    run_diff: RunDiffDistribution
+    team_totals: TeamTotalsDistribution
+    alt_totals: list[DistLadderPoint] = []     # P(over) ladder stepped around the game total
+
+
 class DataQuality(BaseModel):
     signal_completeness_score: float | None = None
     last_updated_at: LooseDatetime | None = None
@@ -483,6 +531,8 @@ class GameDetailResponse(BaseModel):
     # Story 30.15 — model explanation
     pick_explanation: PickExplanationPayload | None = None
     pick_narrative: str | None = None
+    # Story E2.7 — calibrated predictive-total distribution (transparency; best_alpha=0)
+    totals_distribution: TotalsDistribution | None = None
     # E9.40 — "who called it" scorecard (populated only for Final games)
     scorecard: GameScorecard | None = None
 
