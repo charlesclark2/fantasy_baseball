@@ -1,0 +1,421 @@
+{
+  "xref_version": "e7.4-v1",
+  "board_seasons": [
+    {
+      "season": 2018,
+      "as_of_date": "2018-07-01",
+      "board_ids": 721
+    },
+    {
+      "season": 2019,
+      "as_of_date": "2019-07-01",
+      "board_ids": 948
+    },
+    {
+      "season": 2020,
+      "as_of_date": "2020-07-01",
+      "board_ids": 1135
+    },
+    {
+      "season": 2021,
+      "as_of_date": "2021-07-01",
+      "board_ids": 1206
+    },
+    {
+      "season": 2022,
+      "as_of_date": "2022-07-01",
+      "board_ids": 1242
+    },
+    {
+      "season": 2023,
+      "as_of_date": "2023-07-01",
+      "board_ids": 1177
+    },
+    {
+      "season": 2024,
+      "as_of_date": "2024-07-01",
+      "board_ids": 1152
+    },
+    {
+      "season": 2025,
+      "as_of_date": "2025-07-01",
+      "board_ids": 1283
+    },
+    {
+      "season": 2026,
+      "as_of_date": "2026-07-27",
+      "board_ids": 1286
+    }
+  ],
+  "hop1_board_to_leaderboard": [
+    {
+      "season": 2018,
+      "board_ids": 721,
+      "matched": 718,
+      "rate": 0.9958
+    },
+    {
+      "season": 2019,
+      "board_ids": 948,
+      "matched": 947,
+      "rate": 0.9989
+    },
+    {
+      "season": 2020,
+      "board_ids": 1135,
+      "matched": 1134,
+      "rate": 0.9991
+    },
+    {
+      "season": 2021,
+      "board_ids": 1206,
+      "matched": 1205,
+      "rate": 0.9992
+    },
+    {
+      "season": 2022,
+      "board_ids": 1242,
+      "matched": 1240,
+      "rate": 0.9984
+    },
+    {
+      "season": 2023,
+      "board_ids": 1177,
+      "matched": 1176,
+      "rate": 0.9992
+    },
+    {
+      "season": 2024,
+      "board_ids": 1152,
+      "matched": 1150,
+      "rate": 0.9983
+    },
+    {
+      "season": 2025,
+      "board_ids": 1283,
+      "matched": 1282,
+      "rate": 0.9992
+    },
+    {
+      "season": 2026,
+      "board_ids": 1286,
+      "matched": 1277,
+      "rate": 0.993
+    }
+  ],
+  "hop2_leaderboard_mlbam": {
+    "lb_rows": 71680,
+    "populated": 71680,
+    "population_rate": 1.0,
+    "numeric_rate": 1.0
+  },
+  "hop2b_mlbam_in_spine_by_level": [
+    {
+      "level": "DSL",
+      "lb_ids": 6533,
+      "matched": 1771,
+      "rate": 0.2711
+    },
+    {
+      "level": "AAA",
+      "lb_ids": 5082,
+      "matched": 5082,
+      "rate": 1.0
+    },
+    {
+      "level": "R",
+      "lb_ids": 4893,
+      "matched": 2207,
+      "rate": 0.4511
+    },
+    {
+      "level": "A",
+      "lb_ids": 4603,
+      "matched": 4602,
+      "rate": 0.9998
+    },
+    {
+      "level": "CPX",
+      "lb_ids": 4235,
+      "matched": 2417,
+      "rate": 0.5707
+    },
+    {
+      "level": "A+",
+      "lb_ids": 3553,
+      "matched": 3552,
+      "rate": 0.9997
+    },
+    {
+      "level": "AA",
+      "lb_ids": 3290,
+      "matched": 3290,
+      "rate": 1.0
+    },
+    {
+      "level": "AA,AAA",
+      "lb_ids": 3204,
+      "matched": 3204,
+      "rate": 1.0
+    },
+    {
+      "level": "A,CPX",
+      "lb_ids": 2971,
+      "matched": 2971,
+      "rate": 1.0
+    },
+    {
+      "level": "A,A+",
+      "lb_ids": 2756,
+      "matched": 2756,
+      "rate": 1.0
+    },
+    {
+      "level": "A+,AA",
+      "lb_ids": 2564,
+      "matched": 2564,
+      "rate": 1.0
+    },
+    {
+      "level": "A-",
+      "lb_ids": 872,
+      "matched": 624,
+      "rate": 0.7156
+    },
+    {
+      "level": "A+,AA,AAA",
+      "lb_ids": 681,
+      "matched": 681,
+      "rate": 1.0
+    },
+    {
+      "level": "A-,R",
+      "lb_ids": 583,
+      "matched": 429,
+      "rate": 0.7358
+    },
+    {
+      "level": "A+,CPX",
+      "lb_ids": 542,
+      "matched": 542,
+      "rate": 1.0
+    },
+    {
+      "level": "AAA,CPX",
+      "lb_ids": 536,
+      "matched": 536,
+      "rate": 1.0
+    },
+    {
+      "level": "A,A+,CPX",
+      "lb_ids": 529,
+      "matched": 529,
+      "rate": 1.0
+    },
+    {
+      "level": "A,A+,AA",
+      "lb_ids": 510,
+      "matched": 510,
+      "rate": 1.0
+    },
+    {
+      "level": "A+,AAA",
+      "lb_ids": 495,
+      "matched": 495,
+      "rate": 1.0
+    },
+    {
+      "level": "A,A-",
+      "lb_ids": 385,
+      "matched": 385,
+      "rate": 1.0
+    },
+    {
+      "level": "A,R",
+      "lb_ids": 363,
+      "matched": 363,
+      "rate": 1.0
+    },
+    {
+      "level": "A,AAA",
+      "lb_ids": 350,
+      "matched": 350,
+      "rate": 1.0
+    },
+    {
+      "level": "AA,CPX",
+      "lb_ids": 293,
+      "matched": 293,
+      "rate": 1.0
+    },
+    {
+      "level": "CPX,DSL",
+      "lb_ids": 259,
+      "matched": 114,
+      "rate": 0.4402
+    },
+    {
+      "level": "A,AA",
+      "lb_ids": 214,
+      "matched": 214,
+      "rate": 1.0
+    },
+    {
+      "level": "A+,AA,CPX",
+      "lb_ids": 207,
+      "matched": 207,
+      "rate": 1.0
+    },
+    {
+      "level": "A+,R",
+      "lb_ids": 197,
+      "matched": 197,
+      "rate": 1.0
+    },
+    {
+      "level": "AA,AAA,CPX",
+      "lb_ids": 190,
+      "matched": 190,
+      "rate": 1.0
+    },
+    {
+      "level": "A,A+,AAA",
+      "lb_ids": 164,
+      "matched": 164,
+      "rate": 1.0
+    },
+    {
+      "level": "A,AAA,CPX",
+      "lb_ids": 154,
+      "matched": 154,
+      "rate": 1.0
+    },
+    {
+      "level": "A,AA,AAA",
+      "lb_ids": 129,
+      "matched": 129,
+      "rate": 1.0
+    },
+    {
+      "level": "A,AA,CPX",
+      "lb_ids": 125,
+      "matched": 125,
+      "rate": 1.0
+    },
+    {
+      "level": "AAA,R",
+      "lb_ids": 124,
+      "matched": 124,
+      "rate": 1.0
+    },
+    {
+      "level": "A,A+,AA,CPX",
+      "lb_ids": 115,
+      "matched": 115,
+      "rate": 1.0
+    },
+    {
+      "level": "A,A+,AA,AAA",
+      "lb_ids": 106,
+      "matched": 106,
+      "rate": 1.0
+    }
+  ],
+  "hop3_board_fg_mlb_id_to_mlbam": {
+    "numeric_board_ids": 1766,
+    "matched": 1717,
+    "rate": 0.9723
+  },
+  "chain_current_board": {
+    "board_ids": 1286,
+    "via_leaderboard": 1277,
+    "via_graduate_leg": 0,
+    "resolved": 1277,
+    "rate": 0.993
+  },
+  "unresolved_current_board": [
+    {
+      "fg_minor_id": "sa3075053",
+      "player_name": "Jose Luis Acevedo",
+      "org": "BAL",
+      "level": null,
+      "fv": 42.0,
+      "eta": 2032
+    },
+    {
+      "fg_minor_id": "sa3037259",
+      "player_name": "Michael Massey",
+      "org": "DET",
+      "level": null,
+      "fv": 40.0,
+      "eta": 2026
+    },
+    {
+      "fg_minor_id": "sa3027969",
+      "player_name": "Micah Bucknam",
+      "org": "TOR",
+      "level": null,
+      "fv": 40.0,
+      "eta": 2028
+    },
+    {
+      "fg_minor_id": "sa3034275",
+      "player_name": "Griffin Hugus",
+      "org": "SEA",
+      "level": null,
+      "fv": 40.0,
+      "eta": 2029
+    },
+    {
+      "fg_minor_id": "sa3040183",
+      "player_name": "Peyton Prescott",
+      "org": "NYM",
+      "level": null,
+      "fv": 37.0,
+      "eta": 2028
+    },
+    {
+      "fg_minor_id": "sa3069242",
+      "player_name": "Joshua Flores",
+      "org": "MIL",
+      "level": null,
+      "fv": 37.0,
+      "eta": 2031
+    },
+    {
+      "fg_minor_id": "sa3030964",
+      "player_name": "Sean Episcope",
+      "org": "MIL",
+      "level": null,
+      "fv": 37.0,
+      "eta": 2029
+    },
+    {
+      "fg_minor_id": "sa3069274",
+      "player_name": "Peter Kussow",
+      "org": "NYM",
+      "level": null,
+      "fv": 37.0,
+      "eta": 2031
+    },
+    {
+      "fg_minor_id": "sa3069294",
+      "player_name": "River Hamilton",
+      "org": "DET",
+      "level": null,
+      "fv": 37.0,
+      "eta": 2031
+    }
+  ],
+  "dim_rows": 40449,
+  "dim_resolved_rows": 40433,
+  "dim_unresolved_rows": 16,
+  "dim_prospect_rows": 4279,
+  "match_method_counts": {
+    "milb_game_log_native": 23801,
+    "fg_leaderboard_xmlbamid": 11787,
+    "statsapi_profile_native": 4844,
+    "unresolved": 16,
+    "fg_mlb_leaderboard_playerid": 1
+  }
+}

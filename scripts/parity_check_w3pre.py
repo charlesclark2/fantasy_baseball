@@ -14,6 +14,16 @@ RAW S3 tier) on row count, PK uniqueness, natural-key SET coverage, and a sample
   Run it BEFORE the W3pre stg models are flipped to views (else the SF side is a view over
   the same parquet → tautological). The SF reference is the existing stg table from the last
   dbt build; small raw drift since that build shows as a sub-tolerance row-count delta.
+  ⭐ That warning is now ENFORCED, not just documented: check_model detects a VIEW on the
+  Snowflake side and prints a loud TAUTOLOGICAL banner, so a stale invocation can no longer be
+  read as a passed gate (2026-07-27).
+
+⛔ SCOPE SHRANK AS CAPTURES WENT S3-NATIVE (2026-07-27). This script's premise — "Snowflake is
+  the independent reference" — only holds while a source's Snowflake writer is alive. It is dead
+  for `mlb_odds_raw` (7/05) and `monthly_schedule` (7/20); both are listed in FROZEN_SOURCES and
+  SKIPPED in the pre-flight. Leaving them in was not harmless: with S3 correctly ahead of a frozen
+  Snowflake (263,060 vs 175,513 rows for mlb_odds_raw), the pre-flight FAILED the gate as "a
+  partition was doubled" and advised deleting live part files.
 
   ⚠️ SERVING-COUPLED — stg_oddsapi_odds (→ mart_odds_outcomes) and stg_statsapi_games
   (→ mart_game_odds_bridge) are read at request time by predict_today / write_serving_store.
@@ -95,9 +105,31 @@ W3PRE_RAW = {
 # drift, which shows as parquet slightly BELOW source) mirror on both sides. derivative_odds_raw
 # is genuinely 1-per-(load,event) → it stays on the strict self-uniqueness check.
 W3PRE_SOURCE_FQN = {
-    "monthly_schedule": "baseball_data.statsapi.monthly_schedule",
-    "mlb_odds_raw":     "baseball_data.oddsapi.mlb_odds_raw",
     "mlb_events_raw":   "baseball_data.oddsapi.mlb_events_raw",
+}
+
+# ⛔ Sources whose Snowflake raw table is RETIRED — the capture flipped S3-NATIVE, so S3 is the
+# SOURCE OF TRUTH and Snowflake is a frozen historical husk. Comparing them is not merely
+# uninformative, it is ACTIVELY DANGEROUS, which is why these are skipped rather than left to
+# drift (found 2026-07-27):
+#
+#   • mlb_odds_raw — retired 2026-07-05 (SF frozen at ingestion_ts 2026-07-05T23:00:14). S3 raw has
+#     kept growing since: 263,060 parquet rows vs 175,513 in Snowflake. The pre-flight's
+#     `parquet_n > source_n` branch reads that healthy +87,547 as "a partition was doubled",
+#     FAILS the gate, and prints "aws s3 rm the duplicate part-<uuid>.parquet" — advice that would
+#     DELETE live capture data. Exactly the destructive class that the monthly_schedule export
+#     bridge caused for real.
+#   • monthly_schedule — retired 2026-07-20 (SF frozen at 2026-07-20T17:00:26). 266 parquet rows vs
+#     2,970 in Snowflake, so it lands in the "partial export — OK" branch: a silent green that
+#     asserts nothing.
+#
+# There is no honest Snowflake-side reference for these any more, so the pre-flight says so out
+# loud instead of inventing a verdict. The self-uniqueness fallback is NOT a substitute — both
+# carry legitimate multi-row-per-key duplicates (see the note above), so it would false-FAIL.
+# ⏭️ When a source is retired, move it HERE in the same change.
+FROZEN_SOURCES = {
+    "monthly_schedule": "retired 2026-07-20 — schedule capture is S3-native; Snowflake frozen at 2026-07-20T17:00:26",
+    "mlb_odds_raw":     "retired 2026-07-05 — odds capture is S3-native; Snowflake frozen at 2026-07-05T23:00:14",
 }
 
 
@@ -150,6 +182,14 @@ def preflight_raw_integrity(duck, sf, models: list[str]) -> bool:
             continue
         seen.add(source)
         try:
+            if source in FROZEN_SOURCES:
+                # No Snowflake reference exists any more — S3 IS the source of truth. Emit a loud
+                # skip rather than a verdict: the old comparison hard-FAILED on a healthy feed and
+                # recommended deleting live part files (see FROZEN_SOURCES). Does not affect `ok`.
+                print(f"  ⏭️  {source}: SKIPPED — {FROZEN_SOURCES[source]}. S3 is the source of "
+                      f"truth; there is no valid Snowflake row-count reference, so no verdict is "
+                      f"issued. Do NOT 'aws s3 rm' anything on the strength of this source.")
+                continue
             if source in W3PRE_SOURCE_FQN:
                 parquet_n = duck.execute(
                     f"SELECT count(*) FROM read_parquet('{raw_glob(source)}', union_by_name=true)"
@@ -249,9 +289,42 @@ def sample_hash(duck, sf, model: str, sample_n: int) -> tuple[str, str]:
     return duck_h, sf_h
 
 
+def sf_object_is_view(sf, model: str) -> bool:
+    """Is the Snowflake side of this comparison a VIEW (rather than a materialised table)?
+
+    Post-cutover the W3pre stg objects become views over `lakehouse_ext.*` — i.e. over the SAME
+    S3 parquet the DuckDB side reads. The comparison then trivially agrees and prints a green
+    that asserts NOTHING. The module docstring has always warned to run this pre-cutover, but a
+    prose warning does not stop a stale invocation from being read as a pass, so detect it.
+    """
+    cur = sf.cursor()
+    try:
+        db, schema = _SNOWFLAKE_SCHEMA.split(".")
+        cur.execute(
+            f"SELECT table_type FROM {db}.information_schema.tables "
+            f"WHERE table_schema = '{schema}' AND table_name = '{model.upper()}'"
+        )
+        row = cur.fetchone()
+        return bool(row) and "VIEW" in str(row[0]).upper()
+    except Exception:  # noqa: BLE001 — advisory only; never block the check
+        return False
+    finally:
+        cur.close()
+
+
 def check_model(duck, sf, model: str, sample_n: int) -> bool:
     print(f"\n── {model}  (pk: {', '.join(W3PRE_PK[model])}) ──")
     ok = True
+
+    # TAUTOLOGY DETECTOR (2026-07-27) — a green here is only meaningful while the Snowflake side
+    # is still independently materialised. Warn loudly rather than let a self-comparison read as
+    # a passed gate. Advisory: does not change `ok` (the numbers below are still true, just not
+    # INDEPENDENT evidence).
+    if sf_object_is_view(sf, model):
+        print(f"  ⚠️  TAUTOLOGICAL: {_SNOWFLAKE_SCHEMA}.{model.upper()} is a VIEW — post-cutover it "
+              f"reads the same S3 parquet as the DuckDB side, so agreement below is guaranteed and "
+              f"is NOT independent parity evidence. This model is already cut over; a pre-cutover "
+              f"gate cannot be re-run for it.")
 
     # Row count (tolerance) ────────────────────────────────────────────────────
     try:
