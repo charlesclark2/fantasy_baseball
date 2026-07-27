@@ -31,6 +31,8 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from quant_sports_intel_models.football.nfl.fantasy import xfp_source as _XFP  # NF-D7 TD regression
+
 MODEL_VERSION = "nfl_fantasy_fastpath_v1"
 
 # ── Standard (nflverse-compatible) scoring. The CONVENIENCE ranking/validation metric only — the
@@ -157,6 +159,19 @@ _INJURY_OVERRIDE_BLEND = 0.7   # weight on the status cap vs the base estimate (
 #    position's exact projected-points multiset, so cross-position scale + the downstream raw-line
 #    scoring stay intact. No-op when the `adp` column is absent or blend == 0.
 _ADP_PRIOR_BLEND = 0.0
+
+# ── NF-D7: EXPECTED-TD / TD REGRESSION (`xfp_source.py`). TDs are the biggest AND noisiest fantasy
+#    driver: a season's realized rush/rec TD count is a high-variance draw around the TDs a player's
+#    OPPORTUNITY implies (goal-line carries, end-zone/red-zone targets). NF-D7 assigns every carry and
+#    target a league TD-conversion probability from its field-position bucket and sums to an EXPECTED-TD
+#    rate; regressing the realized per-game TD rate toward that expected rate is a strictly better
+#    forward predictor of next-year TDs (validated: rush forward ρ 0.618 xTD vs 0.578 actual; rec 50/50
+#    blend beats either). This blends the base-season window-weighted `rush_td_pg`/`rec_td_pg` toward the
+#    leakage-safe expected rate (`xrush_td_pg`/`xrec_td_pg`, joined onto the base season) BEFORE the
+#    positional shrink, so a lucky/unlucky TD year does not anchor the projection. Passing TDs are left
+#    alone (volume/scheme-driven, not field-position-noise like rush/rec finishing). No-op when the
+#    xTD columns are absent or `xfp_td_blend == 0`; the SHIPPED value is set by the NF-D7 ablation.
+_XFP_TD_BLEND = 0.0
 
 # Minimum base-season games for a veteran to anchor a conservative positional prior (avoids the
 # cup-of-coffee crowd diluting the prior toward zero).
@@ -467,6 +482,7 @@ def project_veterans(
     env_tilt_blend: float = _ENV_TILT_BLEND,
     env_tilt_positions: tuple = _ENV_TILT_POSITIONS,
     injury_override_blend: float = _INJURY_OVERRIDE_BLEND,
+    xfp_td_blend: float = _XFP_TD_BLEND,
 ) -> pd.DataFrame:
     """Project every base-season player's UPCOMING-season raw stat line.
 
@@ -494,6 +510,20 @@ def project_veterans(
         eg, df["position"], df.get("snap_share"), df.get("target_share"), blend=usage_role_blend
     )
     df["proj_games"] = eg.to_numpy()
+
+    # ── NF-D7: TD REGRESSION. Regress the base-season window-weighted rush/rec TD-per-game toward the
+    #    opportunity-based EXPECTED per-game rate BEFORE the positional shrink, so a lucky/unlucky TD
+    #    year does not anchor the projection (the noisiest fantasy driver, de-noised by opportunity).
+    #    No-op when the xTD columns are absent (join miss / cache not built) or xfp_td_blend == 0.
+    if xfp_td_blend > 0:
+        if "xrush_td_pg" in df.columns:
+            df["rush_td_pg"] = _XFP.regress_td_rate(
+                pd.to_numeric(df.get("rush_td_pg"), errors="coerce").to_numpy(),
+                pd.to_numeric(df.get("xrush_td_pg"), errors="coerce").to_numpy(), xfp_td_blend)
+        if "xrec_td_pg" in df.columns:
+            df["rec_td_pg"] = _XFP.regress_td_rate(
+                pd.to_numeric(df.get("rec_td_pg"), errors="coerce").to_numpy(),
+                pd.to_numeric(df.get("xrec_td_pg"), errors="coerce").to_numpy(), xfp_td_blend)
 
     # shrink each per-game counting stat, then scale by expected games → season total
     season = {}
