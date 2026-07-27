@@ -118,6 +118,12 @@ def test_resolve_as_of_date_historical_safeguard():
     assert ip.resolve_as_of_date(None, 2020, 2026, "2026-07-27") == ("2020-07-01", True)
 
 
+def test_parse_seasons():
+    assert ip.parse_seasons("2020") == [2020]
+    assert ip.parse_seasons("2019,2021") == [2019, 2021]
+    assert ip.parse_seasons("2018-2021") == [2018, 2019, 2020, 2021]
+
+
 def test_numeric_parsers():
     assert ip._to_float("50+") == 50.0
     assert ip._to_float(60) == 60.0

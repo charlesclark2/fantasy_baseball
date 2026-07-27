@@ -79,22 +79,33 @@ def _extract(raw, stats="bat"):
 
 
 def test_extract_minor_row_real_casing():
+    """VERIFIED live leaderboard casing (2026-07-27 box probe, Bethancourt row): minorMasterId +
+    xMLBAMID (the MLBAM bridge the board lacks) + wRC+/K%/BB%; clean TeamName preferred over the
+    HTML-anchored Team."""
     raw = {
-        "playerid": "sa3012345", "xMLBAMID": 700123,
-        "Name": '<a href="/players/x">Prospect Guy</a>',
-        "Team": '<a href="/teams/y">BAL (AA)</a>', "aLevel": "AA",
-        "Age": 21.3, "PA": 300, "K%": 0.22, "BB%": 0.10, "wRC+": 130,
+        "minormasterid": "sa503218", "UPID": "10028", "xMLBAMID": 542194,
+        "PlayerName": "Christian Bethancourt",
+        "Team": '<a href="minorleaders.aspx?team=10">Cubs (AAA)</a>', "TeamName": "CHC (AAA)",
+        "AffAbbName": "CHC", "aLevel": "AAA", "level": "AAA",
+        "Age": 34, "PA": 222.0, "K%": 0.198, "BB%": 0.0495, "wRC+": 90.5,
     }
     r = _extract(raw)
-    assert r["fg_minor_id"] == "sa3012345"
-    assert r["mlbam_id"] == "700123"
-    assert r["player_name"] == "Prospect Guy"          # HTML stripped
-    assert r["team"] == "BAL (AA)"                       # HTML stripped
-    assert r["level"] == "AA"
-    assert r["age"] == 21.3
-    assert r["pa"] == 300.0 and r["k_pct"] == 0.22 and r["wrc_plus"] == 130.0
+    assert r["fg_minor_id"] == "sa503218"      # minorMasterId (stable minor id)
+    assert r["fg_player_id"] == "10028"        # UPID (FG unified id)
+    assert r["mlbam_id"] == "542194"           # ⭐ leaderboards DO carry the MLBAM id
+    assert r["player_name"] == "Christian Bethancourt"
+    assert r["team"] == "CHC (AAA)"            # clean TeamName preferred over the HTML Team anchor
+    assert r["level"] == "AAA"
+    assert r["age"] == 34.0
+    assert r["pa"] == 222.0 and r["k_pct"] == 0.198 and r["wrc_plus"] == 90.5
     assert r["stats"] == "bat" and r["season"] == 2026
-    assert json.loads(r["raw_json"])["playerid"] == "sa3012345"
+    assert json.loads(r["raw_json"])["minormasterid"] == "sa503218"
+
+
+def test_parse_seasons():
+    assert il.parse_seasons("2026") == [2026]
+    assert il.parse_seasons("2019,2021") == [2019, 2021]
+    assert il.parse_seasons("2018-2020") == [2018, 2019, 2020]
 
 
 def test_extract_pitcher_row_and_missing_stats_none():

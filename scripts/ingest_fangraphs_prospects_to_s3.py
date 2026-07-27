@@ -365,17 +365,29 @@ def run(season: int, draft: str | None, as_of_date: str, mode: str, csv_path: st
              n, _table_uri(), season, as_of_date)
 
 
+def parse_seasons(spec: str) -> list[int]:
+    """'2020' → [2020]; '2019,2021' → [2019,2021]; '2018-2026' → [2018..2026]."""
+    spec = spec.strip()
+    if "-" in spec:
+        a, b = spec.split("-", 1)
+        return list(range(int(a), int(b) + 1))
+    return [int(s) for s in spec.split(",") if s.strip()]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Ingest FanGraphs THE BOARD → S3 Delta lakehouse (E7.7).")
     ap.add_argument("--season", type=int, default=date.today().year,
                     help="Board season year (default: current year).")
+    ap.add_argument("--seasons", default=None,
+                    help="Historical backfill: a range '2018-2026' or list '2019,2021' (overrides "
+                         "--season). Each past season stamps as_of=<season>-07-01 (E7.8 as-of).")
     ap.add_argument("--draft", default=None,
                     help="Board slug (default: '<season>prospect', the main prospect board). "
                          "e.g. '2026mlb' for the draft board, '<season>int' for international.")
     ap.add_argument("--as-of", default=None, metavar="YYYY-MM-DD",
                     help="Snapshot date stamped on the rows (default: today's US game day for the "
-                         "current season; <season>-07-01 for a past season). Set explicitly for a "
-                         "historical board's true date (E7.8 as-of research).")
+                         "current season; <season>-07-01 for a past season). Applies to --season "
+                         "only (a --seasons backfill resolves as_of per season).")
     ap.add_argument("--probe", action="store_true",
                     help="THE ONE REAL PULL: print the live board's field names + sample rows and "
                          "the alias resolution, write NOTHING. Run this first.")
@@ -385,25 +397,35 @@ def main() -> None:
                     help="Operator fallback: read a manual Board CSV export instead of the API.")
     args = ap.parse_args()
 
-    # as_of: explicit → verbatim; current season → US game day; past season → mid-season approx.
+    if args.seasons and args.as_of:
+        ap.error("--as-of applies to a single --season; a --seasons backfill resolves as_of per season.")
+    seasons = parse_seasons(args.seasons) if args.seasons else [args.season]
+
     try:
         from betting_ml.utils.game_day import current_game_date_iso
         game_date = current_game_date_iso()
     except Exception:  # noqa: BLE001 — laptop/dev without the pkg → plain today
         game_date = date.today().isoformat()
-    as_of_date, is_historical_guess = resolve_as_of_date(
-        args.as_of, args.season, date.today().year, game_date)
-    if is_historical_guess:
-        log.warning(
-            "Historical season %d with no --as-of → stamping as_of=%s (mid-season approximation). "
-            "FanGraphs serves the RETAINED version of a past board, not a point-in-time snapshot; "
-            "pass --as-of for the board's true date if known (E7.8 leakage-safe as-of joins).",
-            args.season, as_of_date)
 
     mode = "probe" if args.probe else ("dry-run" if args.dry_run else "write")
-    log.info("FanGraphs prospect ingest (E7.7) — season=%d as_of=%s mode=%s%s",
-             args.season, as_of_date, mode, f" from-csv={args.from_csv}" if args.from_csv else "")
-    run(args.season, args.draft, as_of_date, mode, args.from_csv)
+    for season in seasons:
+        # as_of: explicit → verbatim; current season → US game day; past season → mid-season approx.
+        as_of_date, is_historical_guess = resolve_as_of_date(
+            args.as_of, season, date.today().year, game_date)
+        if is_historical_guess:
+            log.warning(
+                "Historical season %d with no --as-of → stamping as_of=%s (mid-season approximation). "
+                "FanGraphs serves the RETAINED version of a past board, not a point-in-time snapshot; "
+                "pass --as-of (single --season) for the board's true date (E7.8 leakage-safe joins).",
+                season, as_of_date)
+        log.info("FanGraphs prospect ingest (E7.7) — season=%d as_of=%s mode=%s%s",
+                 season, as_of_date, mode, f" from-csv={args.from_csv}" if args.from_csv else "")
+        try:
+            run(season, args.draft, as_of_date, mode, args.from_csv)
+        except Exception as exc:  # noqa: BLE001 — one bad season must not abort a multi-season backfill
+            if len(seasons) == 1:
+                raise
+            log.warning("Season %d FAILED (%s) — continuing backfill.", season, exc)
 
 
 if __name__ == "__main__":
