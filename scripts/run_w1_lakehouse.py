@@ -1223,6 +1223,75 @@ def _alert_stale_eb_batter(conn) -> None:
         print(f"[eb-batter-staleness] OK: eb_batter_posteriors_raw reaches today (max game_date {mx}).")
 
 
+def _alert_stale_eb_starter(conn) -> None:
+    """EB-starter staleness ALERT at the SOURCE (E11.20 phase-2b, 2026-07-27).
+
+    WHY THIS EXISTS — a REFUTED premise rotted silently for days. `_build_eb_batter_only`'s
+    docstring asserts *"eb_starter_posteriors is NOT rebuilt here — it reads probable pitchers
+    (announced days ahead), so it never lags the slate."* On 2026-07-27 the published S3 parquet
+    held ZERO rows for 7/25, 7/26 and 7/27 (newest: 7/24 n=1) while Snowflake had 23 for the live
+    slate — and a rebuild from the SAME S3 precursors reproduced Snowflake exactly (23/30/30), so
+    neither the model nor its inputs were at fault: the published parquet had simply been left
+    behind by the daily cycle. Nothing noticed, because nothing looked.
+
+    It matters now because the pregame-W8b cutover makes this parquet SERVING-CRITICAL: with the
+    freshness gate routed to S3 (`W8B_FRESHNESS_S3`), a starter-coverage read of 100%-missing
+    reports STALE and abstains the WHOLE slate. The eb_batter sibling already has this guard
+    (`_alert_stale_eb_batter`); eb_starter never did — the gap this closes.
+
+    Compares against the PROBABLE-PITCHER spine rather than `current_date`, because that spine is
+    the model's own game universe: a legitimately dark day (no games) must not warn, and a slate
+    that IS scheduled but missing from the build must. game_date is a real DATE in both parquets
+    (no INC-23 VARCHAR wrap). WARN to stderr (ALERT tier — never raises, never blocks a build).
+    """
+    try:
+        row = conn.execute(
+            "select (select max(game_date::date) from eb_starter_posteriors) as eb_max, "
+            "       (select max(game_date::date) from stg_statsapi_probable_pitchers "
+            "          where probable_pitcher_id is not null) as spine_max, "
+            "       (select count(*) from stg_statsapi_probable_pitchers "
+            "          where probable_pitcher_id is not null and game_date::date = current_date) as spine_today, "
+            "       (select count(*) from eb_starter_posteriors "
+            "          where game_date::date = current_date) as eb_today"
+        ).fetchone()
+    except Exception as e:  # noqa: BLE001 — observability only
+        print(f"  (eb-starter-staleness check skipped: {e})", file=sys.stderr)
+        return
+    if not row:
+        return
+    eb_max, spine_max, spine_today, eb_today = row
+    spine_today = int(spine_today or 0)
+    eb_today = int(eb_today or 0)
+
+    if spine_today == 0:
+        # No probable starters scheduled for today — a dark day, or probables not yet announced.
+        # Not a defect; say so rather than warning on a legitimately empty slate.
+        print(f"[eb-starter-staleness] no probable starters for today (eb max {eb_max}, spine max {spine_max}).")
+        return
+    if eb_today == 0:
+        print(
+            f"WARNING: [eb-starter-staleness] eb_starter_posteriors has NO rows for today although "
+            f"{spine_today} probable starters are scheduled (eb max game_date {eb_max}, spine max "
+            f"{spine_max}). The served starter block builds from this parquet, and an S3-routed "
+            f"serving freshness gate reads 100% starter-coverage MISSING → slate-wide abstain. "
+            f"Rebuild with `run_w1_lakehouse.py --w8a-only` and check why the daily W8a build "
+            f"lagged the probable-pitcher spine.",
+            file=sys.stderr,
+        )
+    elif eb_today < spine_today:
+        print(
+            f"WARNING: [eb-starter-staleness] eb_starter_posteriors covers only {eb_today}/"
+            f"{spine_today} of today's probable starters (eb max {eb_max}, spine max {spine_max}) — "
+            f"partial coverage degrades the served starter block for the missing games.",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"[eb-starter-staleness] OK: eb_starter_posteriors covers today "
+            f"({eb_today}/{spine_today} probable starters; max game_date {eb_max})."
+        )
+
+
 def _build_eb_batter_only(conn, dry_run: bool) -> None:
     """INTRADAY EB-batter refresh — rebuild ONLY eb_batter_posteriors_raw (2026-07-22, the
     avg_eb_woba lineup-block outage).
@@ -1238,7 +1307,16 @@ def _build_eb_batter_only(conn, dry_run: bool) -> None:
     This rebuilds ONLY eb_batter_posteriors_raw from the intraday-fresh stg_statsapi_lineups + the
     existing (slowly-changing) precursor parquet — NO pitch re-read, no heavy --w8a. The intraday op
     runs it BEFORE --w8b-only so the aggregator reads the fresh eb. eb_starter_posteriors is NOT
-    rebuilt here — it reads probable pitchers (announced days ahead), so it never lags the slate."""
+    rebuilt here — it reads probable pitchers, which are announced days ahead, so an intraday
+    lineup confirmation adds nothing to it.
+
+    ⚠️ 2026-07-27 — the OLD wording ("so it never lags the slate") was REFUTED and is corrected
+    above: "probables are known early" bounds only the INTRADAY need, NOT whether the DAILY build
+    actually published them. On 7/27 the S3 eb_starter parquet held zero rows for 7/25-7/27 while
+    Snowflake had the full slate, and a rebuild from the same S3 precursors matched Snowflake
+    exactly — the model and its inputs were healthy; the published parquet had been left behind.
+    `_alert_stale_eb_starter` (called at the end of _build_w8a) now makes that loud instead of
+    silent. Do NOT restore the old claim without evidence from a real build."""
     print("\nEB-batter-only intraday refresh (reuse existing precursor parquet; fresh stg_statsapi_lineups):")
     _register_w8a_views(conn, W8A_EB_BATTER_PRECURSORS)
     _register_mle_prior_view(conn)   # E7.5/E7.5p rookie priors (fail-safe → empty view if absent)
@@ -1714,6 +1792,8 @@ def _build_w8a(conn, dry_run: bool) -> None:
     for model in W8A_EB_MODELS:
         _build_marts(conn, [model], dry_run)
         _register_mart_views(conn, [model], dry_run)
+    if not dry_run:
+        _alert_stale_eb_starter(conn)
 
 
 # INC-25 (2026-07-01): the 5 W9 signal STORES the consumer feature_pregame_sub_model_signals reads
