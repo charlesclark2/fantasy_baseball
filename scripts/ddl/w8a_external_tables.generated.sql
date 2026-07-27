@@ -469,7 +469,14 @@ AUTO_REFRESH = FALSE
 COMMENT = 'E11.1-W8a: eb_bullpen_team_posteriors from S3 lakehouse parquet (upstream feature layer + EB posteriors)';
 GRANT SELECT ON EXTERNAL TABLE baseball_data.lakehouse_ext.eb_bullpen_team_posteriors TO ROLE CREDENCE_API_RO;
 
--- ── eb_starter_posteriors  (18 columns) ──
+-- ── eb_starter_posteriors  (19 columns) ──
+-- E7.5p (2026-07-27): EB_GB_PCT added by hand here in the same PR as the model change, matching what
+-- `generate_w8a_external_tables.py` emits once the box has written the new parquet (the generator
+-- DESCRIBEs the live S3 file, so it cannot be re-run until then — regenerate to verify after the
+-- first --w8a build). Column ORDER follows the model's TYPE-PIN block. ⚠️ Applying this DDL alone is
+-- not enough: baseball_data.betting.eb_starter_posteriors is an INCREMENTAL whose default
+-- on_schema_change='ignore' will skip the new column, and dbt-fusion `--full-refresh` MERGEs rather
+-- than DROPs — the operator must DROP + rebuild it (see the tail of this file).
 CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.eb_starter_posteriors (
     GAME_PK                          VARCHAR        AS (VALUE:game_pk::VARCHAR),
     SIDE                             VARCHAR        AS (VALUE:side::VARCHAR),
@@ -483,6 +490,7 @@ CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.eb_starter_posterio
     EB_XWOBA_AGAINST                 FLOAT          AS (VALUE:eb_xwoba_against::FLOAT),
     EB_K_PCT                         FLOAT          AS (VALUE:eb_k_pct::FLOAT),
     EB_BB_PCT                        FLOAT          AS (VALUE:eb_bb_pct::FLOAT),
+    EB_GB_PCT                        FLOAT          AS (VALUE:eb_gb_pct::FLOAT),
     EB_XWOBA_UNCERTAINTY             FLOAT          AS (VALUE:eb_xwoba_uncertainty::FLOAT),
     EB_XWOBA_AGAINST_SEQUENTIAL      FLOAT          AS (VALUE:eb_xwoba_against_sequential::FLOAT),
     POSTERIOR_SOURCE                 VARCHAR        AS (VALUE:posterior_source::VARCHAR),

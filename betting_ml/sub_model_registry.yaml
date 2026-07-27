@@ -1117,3 +1117,65 @@ milb_mle_prior_v1:
     static W8a precursor view (fail-safe → empty view → generic prior if the parquet is absent, so a
     missing artifact never HALTs the serving-critical build). Reaches served total_runs / run_diff
     models via feature_pregame_lineup_features avg_eb_{k_pct,bb_pct,iso}. best_alpha = 0.
+
+# =============================================================================
+# E7.5p — recalibrated PITCHER MiLB prior, WIRED into eb_starter_posteriors
+# =============================================================================
+# The BETTING payoff of the E7.3p pitcher MLE and the sibling of E7.5: a debuting rookie STARTER used to
+# get the GENERIC experience-band prior; E7.5p replaces it with the MLE-translated minor-league line for
+# the pitcher metrics that TRANSLATE (gb_pct strong; k_pct/bb_pct weak-but-real), recalibrated (E13.6) so
+# the prior sd is honest, blended by pseudo-count so a bounded rate can never blow up (the E7.5 ISO lesson).
+milb_mle_pitcher_prior_v1:
+  artifact_type: served_rookie_prior         # feeds eb_starter_posteriors → starter_eb_{k_pct,bb_pct} + NEW eb_gb_pct
+  source_model: milb_mle_pitcher_v1          # the E7.3p projections it recalibrates
+  model_module: betting_ml/scripts/milb_mle/mle_prior_pitcher.py   # pitcher config over the shared mle_prior.py math
+  runner: betting_ml/scripts/milb_mle/run_pitcher_mle_prior_recalibration.py
+  metrics: [gb_pct, k_pct, bb_pct]           # hr_rate + xwoba_against DELIBERATELY excluded (E7.3p no-signal)
+  not_wired:
+    hr_rate: tied-field null (beats the null by 1e-4, PBO 0.900, corr 0.094 — the E2.1-r reading)
+    xwoba_against: no-signal (corr 0.147, DSR 0.030; does not beat the generic archetype prior)
+  wired_into: dbt/models/eb_posteriors/eb_starter_posteriors.sql   # DuckDB (SF-free lakehouse) branch
+  output_path: s3://baseball-betting-ml-artifacts/baseball/lakehouse/milb_mle_pitcher_prior/data.parquet  # W8a precursor view (single overwrite parquet, fail-safe empty view if absent)
+  grain: pitcher_id                          # one row per pitcher (MLBAM) at the HIGHEST reached level
+  cold_start_gate: n_prior_seasons == 0      # ⇔ age_band 'u25'; an established starter keeps the band prior
+  recalibration:                             # E13.6 — parameter sd → held-out predictive spread
+    method: held_out_residual_sd            # σ_resid = std(realized MLB − MLE), highest-level, mlb_pa≥150 (TBF) floor + mlb_bip≥50 for gb
+    prior_strength: pseudocount_kappa       # κ = m(1−m)/σ_resid² − 1, clip [20, 400]; NEVER Normal-Normal (E7.5 ISO lesson)
+    evidence_units: {gb_pct: balls_in_play, k_pct: batters_faced, bb_pct: batters_faced}
+    gb_pct: {resid_sd: 0.0593, param_sd_x: 7.8, cov68: 0.67, cov90: 0.90, kappa_median: 68}
+    k_pct:  {resid_sd: 0.0447, param_sd_x: 7.7, cov68: 0.73, cov90: 0.90, kappa_median: 81}
+    bb_pct: {resid_sd: 0.0247, param_sd_x: 5.8, cov68: 0.72, cov90: 0.90, kappa_median: 146}
+  ablation:                                  # purged leave-one-debut-cohort-out; MLE prior vs generic prior
+    cv_strategy: leave_one_debut_cohort_out
+    metric: predictive_nll_crps_mae_coverage
+    gb_pct: {mle_nll: -1.409, generic_nll: -1.148, mle_mae: 0.0477, generic_mae: 0.0619, wins: true}
+    k_pct:  {mle_nll: -1.687, generic_nll: -1.576, mle_mae: 0.0343, generic_mae: 0.0382, wins: true}
+    bb_pct: {mle_nll: -2.270, generic_nll: -2.190, mle_mae: 0.0191, generic_mae: 0.0208, wins: true}
+  uncertainty: recalibrated_predictive       # σ_resid honest (cov ≈ 0.68/0.90) — was parameter-only (5.8–7.8× too tight)
+  best_alpha: 0                              # a cold-start prior, never a market bet
+  promotion_status: pending                  # harness code-complete + fast gate + served-SQL smoke green; awaiting operator --s3 + box W8a run + serving parity
+  promoted_at: null
+  ablation_report: quant_sports_intel_models/baseball/edge_program/ablation_results/e7_5p_pitcher_prior_ablation.md
+  tests: betting_ml/tests/test_milb_mle_pitcher_prior.py
+  notes: |
+    E7.5p (2026-07-27). Recalibrates milb_mle_pitcher_v1 into a priceable cold-start STARTER prior and
+    wires gb_pct + k_pct/bb_pct (NOT hr_rate, NOT xwoba_against) into the SERVED eb_starter_posteriors
+    (dbt DuckDB branch — the SF-free lakehouse compute). Three things differ from the E7.5 batter
+    sibling ON PURPOSE. (1) A COLD-START GATE: the MLE applies only when n_prior_seasons = 0 (under 10
+    career prior starts AND under 150 career prior BF); the E7.3p map is calibrated on a pitcher's first
+    two MLB seasons, so feeding an established starter his old minor line would be out-of-distribution.
+    (2) PER-METRIC EVIDENCE UNITS: κ counts binomial trials, so K%/BB% weight against batters faced and
+    GB% against balls in play. (3) A NEW SERVED COLUMN eb_gb_pct — E7.3p's STRONGEST translation had no
+    home (the starter EB table carried no batted-ball metric); it is populated for EVERY starter (MLE
+    prior when cold-start, prior-season league anchor otherwise) and shrunk toward the pitcher's own
+    prior-season GB% by BIP. ⚠️ EXPECTATION-SET: pitcher K% translates far more weakly than batter K%
+    (0.366 vs 0.637), so the lift is MODEST and concentrated in GB% — the purged ablation bears that out
+    (GB% MAE −23% vs the generic prior, K% −10%, BB% −8%; the batter K% was −27%). E13.6 recalibration:
+    the E7.3p parameter sd was 5.8–7.8× too tight; σ_resid (held-out, highest-level, mlb_pa≥150 TBF floor
+    + mlb_bip≥50 for GB) gives honest ~0.68–0.73 / ~0.90 coverage. 7,474 pitchers carry a prior (6,659 of
+    them prospects). SF-FREE; a static W8a precursor view (fail-safe → empty view → generic prior if the
+    parquet is absent, so a missing artifact never HALTs the serving-critical build). ⚠️ TRAIN/SERVE
+    (the E7.9 class): the served starter-consuming models were TRAINED on the old generic-prior
+    eb_k_pct/eb_bb_pct, so the cold-start rows they now see are drawn from a slightly different
+    distribution — the fix is a retrain, tracked as follow-up, and it is also why eb_gb_pct is NOT yet
+    joined into feature_pregame_starter_features. best_alpha = 0.
