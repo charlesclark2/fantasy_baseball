@@ -934,7 +934,7 @@ _FACE_VALIDITY_TOP_N = 10
 
 def rookie_board_face_validity(board: pd.DataFrame, rookie_history: pd.DataFrame,
                                *, fp_col: str = "proj_fp_ppr", top_n: int = _FACE_VALIDITY_TOP_N,
-                               quantile: float = 0.90) -> dict:
+                               quantile: float = 0.90, min_classes: int = 3) -> dict:
     """Flag rookie OVER-PLACEMENT on an emitted (veterans + rookies) board — the NF1.4 gate.
 
     Two checks, both anchored on realized history rather than an arbitrary threshold:
@@ -942,12 +942,25 @@ def rookie_board_face_validity(board: pd.DataFrame, rookie_history: pd.DataFrame
          overall top `top_n`. This is the symptom MVP-3 dogfooding raised ("a rookie QB floated to
          #1 overall"); on the 2019–2025 boards MVP-1 put a rookie in the overall top 12 twice, both
          #1-overall QBs (Trevor Lawrence → finished QB23; Cam Ward → QB22).
-      2. **level** — per position, no rookie is projected above the Q`quantile` of REALIZED rookie
-         seasons at that position over the FULL drafted population (never-played rookies included).
+      2. **level** — per position, the TOP projected rookie is compared against the Q`quantile` of
+         the per-class BEST realized rookie at that position over prior classes. In words: "does
+         this board project someone above what the best rookie in a strong class actually does?"
 
-    `rookie_history` needs `position_group` + `rookie_fp_ppr`. ADVISORY, not a HALT: this is a
-    projection product and a genuinely exceptional class should be able to trip it — it exists so
-    the board is checked rather than assumed. Returns every measurement plus `pass`.
+    ⚠️ THE REFERENCE CLASS IS THE WHOLE GAME HERE, and getting it wrong makes the gate useless.
+    The first cut of this check compared the top projected rookie against the Q90 of ALL drafted
+    rookies — but the best rookie at a position IS, by construction, near the top of that
+    distribution, so the bar was one almost every board clears: measured over 2019–2025 the
+    **REALIZED** top rookie exceeded it in **25 of 28** cohort-positions, and the gate fired on
+    7/7 cohorts. A check that always fires carries no information. Against the corrected
+    top-of-class reference the incumbent breaches **0/28** while reality breaches **9/28** — the
+    gate is a genuine tripwire, and its silence is itself another reading of NF1.4's central
+    finding that the rookie prior runs COLD.
+
+    `rookie_history` needs `position_group`, `rookie_fp_ppr` and `draft_year` (the per-class max
+    needs the class). A position with fewer than `min_classes` prior classes is skipped rather than
+    judged on a reference too thin to mean anything. ADVISORY, not a HALT: this is a projection
+    product and a genuinely exceptional class should be able to trip it — it exists so the board is
+    checked rather than assumed. Returns every measurement plus `pass`.
     """
     out: dict = {"pass": True, "n_rookies": 0, "placement": {}, "level": {}}
     if board is None or board.empty or fp_col not in board.columns:
@@ -967,18 +980,22 @@ def rookie_board_face_validity(board: pd.DataFrame, rookie_history: pd.DataFrame
 
     pos_col = "position" if "position" in ranked.columns else "position_group"
     caps, over = {}, []
-    for p, h in rookie_history.groupby(rookie_history["position_group"].astype(str)):
-        v = pd.to_numeric(h["rookie_fp_ppr"], errors="coerce").dropna()
-        if len(v) < 20:
-            continue
-        cap = float(np.quantile(v.to_numpy(), quantile))
-        caps[p] = round(cap, 1)
-        proj = pd.to_numeric(ranked[is_rk & (ranked[pos_col].astype(str) == p)][fp_col],
-                             errors="coerce")
-        if len(proj) and float(proj.max()) > cap:
-            over.append({"position": p, "max_projected": round(float(proj.max()), 1),
-                         "historical_cap": round(cap, 1)})
-    out["level"] = {"historical_caps": caps, "positions_over_cap": over}
+    if "draft_year" in rookie_history.columns:
+        for p, h in rookie_history.groupby(rookie_history["position_group"].astype(str)):
+            per_class_best = (h.assign(_fp=pd.to_numeric(h["rookie_fp_ppr"], errors="coerce"))
+                              .groupby("draft_year")["_fp"].max().dropna())
+            if len(per_class_best) < min_classes:
+                continue
+            cap = float(np.quantile(per_class_best.to_numpy(), quantile))
+            caps[p] = round(cap, 1)
+            proj = pd.to_numeric(ranked[is_rk & (ranked[pos_col].astype(str) == p)][fp_col],
+                                 errors="coerce")
+            if len(proj) and float(proj.max()) > cap:
+                over.append({"position": p, "max_projected": round(float(proj.max()), 1),
+                             "top_of_class_cap": round(cap, 1),
+                             "n_reference_classes": int(len(per_class_best))})
+    out["level"] = {"top_of_class_caps": caps, "positions_over_cap": over,
+                    "reference": f"Q{int(quantile * 100)} of the per-class BEST realized rookie"}
     out["pass"] = (not out["placement"]["top1_is_rookie"]
                    and out["placement"][f"n_rookies_in_top{top_n}"] == 0
                    and not over)

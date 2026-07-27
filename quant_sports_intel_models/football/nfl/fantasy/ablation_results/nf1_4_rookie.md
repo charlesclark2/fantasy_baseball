@@ -1,6 +1,6 @@
 # NF1.4 — rookie-prior refinement (the hot-curve fix)
 
-**Model:** `nfl_fantasy_nf1_4_rookie_v1` · **cohorts scored:** [2019, 2020, 2021, 2022, 2023, 2024, 2025] · **configs evaluated:** 134 · **generated:** 2026-07-27T08:57:56.721028+00:00
+**Model:** `nfl_fantasy_nf1_4_rookie_v1` · **cohorts scored:** [2019, 2020, 2021, 2022, 2023, 2024, 2025] · **configs evaluated:** 134 · **generated:** 2026-07-27T09:04:37.963314+00:00
 
 > ⚖️ **Honest frame.** This is a PROJECTION-product story, not a betting edge — `best_alpha` does not apply. The win condition is rookie CALIBRATION (kill the level over-valuation), and the ordering claim is held to the full §0.5 deflation (CSCV-PBO / DSR / BH-FDR). The rookie sample is TINY (QB ≈ 12/class over a handful of cohorts) ⇒ the deflation is NOISY and "cannot distinguish from luck" is the expected ordering verdict, recorded as a null.
 
@@ -288,211 +288,37 @@ NF1.4 replaces it with an EMPIRICAL band: within a position, the q10/q90 of what
 {
   "per_cohort": {
     "2019": {
-      "incumbent": [
-        {
-          "position": "QB",
-          "max_projected": 200.1,
-          "hist_cap": 185.0
-        },
-        {
-          "position": "TE",
-          "max_projected": 112.5,
-          "hist_cap": 106.7
-        }
-      ],
-      "selected": [
-        {
-          "position": "QB",
-          "max_projected": 200.1,
-          "hist_cap": 185.0
-        },
-        {
-          "position": "TE",
-          "max_projected": 112.5,
-          "hist_cap": 106.7
-        }
-      ]
+      "incumbent": [],
+      "selected": []
     },
     "2020": {
-      "incumbent": [
-        {
-          "position": "QB",
-          "max_projected": 236.5,
-          "hist_cap": 214.2
-        }
-      ],
-      "selected": [
-        {
-          "position": "QB",
-          "max_projected": 236.5,
-          "hist_cap": 214.2
-        }
-      ]
+      "incumbent": [],
+      "selected": []
     },
     "2021": {
-      "incumbent": [
-        {
-          "position": "QB",
-          "max_projected": 261.0,
-          "hist_cap": 214.0
-        },
-        {
-          "position": "WR",
-          "max_projected": 190.0,
-          "hist_cap": 166.1
-        },
-        {
-          "position": "TE",
-          "max_projected": 107.6,
-          "hist_cap": 98.0
-        }
-      ],
-      "selected": [
-        {
-          "position": "QB",
-          "max_projected": 261.0,
-          "hist_cap": 214.0
-        },
-        {
-          "position": "WR",
-          "max_projected": 190.0,
-          "hist_cap": 166.1
-        },
-        {
-          "position": "TE",
-          "max_projected": 107.6,
-          "hist_cap": 98.0
-        }
-      ]
+      "incumbent": [],
+      "selected": []
     },
     "2022": {
-      "incumbent": [
-        {
-          "position": "WR",
-          "max_projected": 191.9,
-          "hist_cap": 168.5
-        }
-      ],
-      "selected": [
-        {
-          "position": "WR",
-          "max_projected": 191.9,
-          "hist_cap": 168.5
-        }
-      ]
+      "incumbent": [],
+      "selected": []
     },
     "2023": {
-      "incumbent": [
-        {
-          "position": "QB",
-          "max_projected": 232.4,
-          "hist_cap": 207.6
-        },
-        {
-          "position": "RB",
-          "max_projected": 208.3,
-          "hist_cap": 178.8
-        }
-      ],
-      "selected": [
-        {
-          "position": "QB",
-          "max_projected": 232.4,
-          "hist_cap": 207.6
-        },
-        {
-          "position": "RB",
-          "max_projected": 208.3,
-          "hist_cap": 178.8
-        }
-      ]
+      "incumbent": [],
+      "selected": []
     },
     "2024": {
-      "incumbent": [
-        {
-          "position": "QB",
-          "max_projected": 229.9,
-          "hist_cap": 204.5
-        },
-        {
-          "position": "WR",
-          "max_projected": 200.5,
-          "hist_cap": 177.9
-        },
-        {
-          "position": "TE",
-          "max_projected": 111.4,
-          "hist_cap": 97.6
-        }
-      ],
-      "selected": [
-        {
-          "position": "QB",
-          "max_projected": 229.9,
-          "hist_cap": 204.5
-        },
-        {
-          "position": "WR",
-          "max_projected": 200.5,
-          "hist_cap": 177.9
-        },
-        {
-          "position": "TE",
-          "max_projected": 111.4,
-          "hist_cap": 97.6
-        }
-      ]
+      "incumbent": [],
+      "selected": []
     },
     "2025": {
-      "incumbent": [
-        {
-          "position": "QB",
-          "max_projected": 258.1,
-          "hist_cap": 214.6
-        },
-        {
-          "position": "RB",
-          "max_projected": 216.3,
-          "hist_cap": 186.1
-        },
-        {
-          "position": "WR",
-          "max_projected": 205.5,
-          "hist_cap": 184.4
-        },
-        {
-          "position": "TE",
-          "max_projected": 111.8,
-          "hist_cap": 97.0
-        }
-      ],
-      "selected": [
-        {
-          "position": "QB",
-          "max_projected": 258.1,
-          "hist_cap": 214.6
-        },
-        {
-          "position": "RB",
-          "max_projected": 216.3,
-          "hist_cap": 186.1
-        },
-        {
-          "position": "WR",
-          "max_projected": 205.5,
-          "hist_cap": 184.4
-        },
-        {
-          "position": "TE",
-          "max_projected": 111.8,
-          "hist_cap": 97.0
-        }
-      ]
+      "incumbent": [],
+      "selected": []
     }
   },
   "note": "level check only; the top-10-overall check needs the merged veteran board (season_projection).",
-  "incumbent_cohorts_over_cap": 7,
-  "selected_cohorts_over_cap": 7,
+  "incumbent_cohorts_over_cap": 0,
+  "selected_cohorts_over_cap": 0,
   "n_cohorts": 7
 }
 ```

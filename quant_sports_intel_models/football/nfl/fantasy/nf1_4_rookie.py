@@ -684,19 +684,19 @@ def oracle_is_the_scoring_floor(df: pd.DataFrame, candidate_cols: list[str],
 # Face validity — the hot-curve gate, measured against what rookies ACTUALLY do
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 def face_validity(board: pd.DataFrame, hist: pd.DataFrame, *, fp_col: str = "proj_fp_ppr",
-                  quantile: float = 0.90, top_overall: int = 10) -> dict:
-    """The FACE-VALIDITY gate on an emitted board (rookies + veterans together).
+                  quantile: float = 0.90, top_overall: int = 10, min_classes: int = 3) -> dict:
+    """The FACE-VALIDITY gate on an emitted board — the harness-side twin of
+    `season_projection.rookie_board_face_validity` (read that docstring for why the LEVEL reference
+    class is the whole game: an all-drafted-population Q90 makes the check fire on 7/7 cohorts and
+    is therefore uninformative; the per-class-BEST reference is the real tripwire).
 
-    Two checks, both data-driven rather than arbitrary:
-      1. `no_rookie_in_top{N}` — no rookie occupies an overall top-`top_overall` board slot, and the
-         #1 overall slot is a veteran. This is the story's stated symptom ("a rookie QB floated to
-         #1 overall").
-      2. `level_within_history` — per position, the MAX projected rookie must not exceed the
-         historical Q`quantile` of REALIZED rookie seasons at that position, computed over ALL
-         DRAFTED rookies (never-played included). Projecting an incoming class above the 90th
-         percentile of what rookies actually do is the hot curve by definition.
+      1. `placement` — no rookie in an overall top-`top_overall` slot, and the #1 overall slot is a
+         veteran. The story's stated symptom ("a rookie QB floated to #1 overall").
+      2. `level` — per position, the MAX projected rookie vs the Q`quantile` of the per-class BEST
+         realized rookie over the prior classes in `hist`.
 
-    `hist` needs `position_group` + `rookie_fp_ppr`. Returns every measurement, plus `pass`.
+    `hist` needs `position_group`, `rookie_fp_ppr` and `draft_year`. Returns every measurement plus
+    `pass`.
     """
     rk = board[board.get("is_rookie", False).fillna(False).astype(bool)] if "is_rookie" in board else board
     checks: dict = {"n_rookies": int(len(rk))}
@@ -708,21 +708,25 @@ def face_validity(board: pd.DataFrame, hist: pd.DataFrame, *, fp_col: str = "pro
     checks["top1_is_rookie"] = bool(is_rk.iloc[0]) if len(ranked) else False
     checks["n_rookies_in_top10"] = int(is_rk.head(top_overall).sum())
     top_rk = ranked[is_rk].head(1)
-    checks["best_rookie_overall_rank"] = int(top_rk.index[0]) + 1 if len(top_rk) else None
+    checks["best_rookie_overall_rank"] = int(ranked[is_rk].index[0]) + 1 if len(top_rk) else None
     checks["best_rookie_name"] = str(top_rk.iloc[0].get("player_name")) if len(top_rk) else None
 
     caps, over = {}, []
-    for p in ROOKIE_POSITIONS:
-        h = pd.to_numeric(hist[hist["position_group"].astype(str) == p]["rookie_fp_ppr"], errors="coerce").dropna()
-        if len(h) < 20:
-            continue
-        cap = float(np.quantile(h.to_numpy(), quantile))
-        caps[p] = round(cap, 1)
-        pos_col = "position" if "position" in rk.columns else "position_group"
-        v = pd.to_numeric(rk[rk[pos_col].astype(str) == p][fp_col], errors="coerce")
-        if len(v) and float(v.max()) > cap:
-            over.append({"position": p, "max_projected": round(float(v.max()), 1), "hist_cap": round(cap, 1)})
-    checks["hist_caps"] = caps
+    pos_col = "position" if "position" in rk.columns else "position_group"
+    if "draft_year" in hist.columns:
+        for p in ROOKIE_POSITIONS:
+            h = hist[hist["position_group"].astype(str) == p]
+            per_class_best = (h.assign(_fp=pd.to_numeric(h["rookie_fp_ppr"], errors="coerce"))
+                              .groupby("draft_year")["_fp"].max().dropna())
+            if len(per_class_best) < min_classes:
+                continue
+            cap = float(np.quantile(per_class_best.to_numpy(), quantile))
+            caps[p] = round(cap, 1)
+            v = pd.to_numeric(rk[rk[pos_col].astype(str) == p][fp_col], errors="coerce")
+            if len(v) and float(v.max()) > cap:
+                over.append({"position": p, "max_projected": round(float(v.max()), 1),
+                             "top_of_class_cap": round(cap, 1)})
+    checks["top_of_class_caps"] = caps
     checks["positions_over_cap"] = over
     checks["pass"] = (not checks["top1_is_rookie"]) and checks["n_rookies_in_top10"] == 0 and not over
     return checks

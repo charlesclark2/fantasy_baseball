@@ -1,6 +1,6 @@
 # NF-FASTPATH — 2026 NFL fantasy season projections (raw stat-line, MVP-1)
 
-**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-07-27T08:54:57.868320+00:00
+**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-07-27T09:04:49.612808+00:00
 
 > ⚖️ **A PROJECTION PRODUCT, edge-independent** — no `best_alpha`/PBO/DSR/CLV gate (that is the betting posture). The gate is FACE-VALIDITY + COVERAGE + a holdout rank-correlation sanity check. The emitted `proj_*` columns are a **RAW STAT LINE** (season totals); the `proj_fp_*` points are a CONVENIENCE (standard nflverse scoring) for ranking/validation only — **MVP-2 / NF-C1 rescore the raw line per league**. Uncertainty is surfaced (an 80% PPR interval), not hidden; NULL = unknown kept NULL. Rookie intervals use PARAMETER uncertainty (slot-curve + P1A) and must be recalibrated before pricing.
 
@@ -150,7 +150,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 
 ```json
 {
-  "pass": false,
+  "pass": true,
   "n_rookies": 74,
   "placement": {
     "top1_is_rookie": false,
@@ -159,34 +159,14 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
     "best_rookie": "Fernando Mendoza"
   },
   "level": {
-    "historical_caps": {
-      "QB": 214.2,
-      "RB": 189.8,
-      "TE": 106.7,
-      "WR": 179.2
+    "top_of_class_caps": {
+      "QB": 335.1,
+      "RB": 331.4,
+      "TE": 241.6,
+      "WR": 299.1
     },
-    "positions_over_cap": [
-      {
-        "position": "QB",
-        "max_projected": 268.3,
-        "historical_cap": 214.2
-      },
-      {
-        "position": "RB",
-        "max_projected": 208.4,
-        "historical_cap": 189.8
-      },
-      {
-        "position": "TE",
-        "max_projected": 139.5,
-        "historical_cap": 106.7
-      },
-      {
-        "position": "WR",
-        "max_projected": 191.8,
-        "historical_cap": 179.2
-      }
-    ]
+    "positions_over_cap": [],
+    "reference": "Q90 of the per-class BEST realized rookie"
   }
 }
 ```

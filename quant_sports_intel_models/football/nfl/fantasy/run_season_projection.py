@@ -332,7 +332,7 @@ def load_rookie_training(con, upto_season: int, schema: str = MARTS_SCHEMA,
     join, having = ("left join", "") if include_zero_game else ("join", "where games > 0")
     hist = con.sql(f"""
         with ry as (
-            select r.gsis_id, r.position_group, r.draft_overall,
+            select r.gsis_id, r.position_group, r.draft_overall, r.draft_year,
                 coalesce(count_if(f.played_flag and not f.is_bye), 0) as games,
                 sum(case when f.played_flag then f.pass_attempts else 0 end)::double as pass_att,
                 sum(case when f.played_flag then f.pass_completions else 0 end)::double as pass_cmp,
@@ -350,7 +350,7 @@ def load_rookie_training(con, upto_season: int, schema: str = MARTS_SCHEMA,
             from rk_train r
             {join} {schema}.fct_player_week f
               on f.player_id = r.gsis_id and f.season = r.draft_year and f.week > 0
-            group by 1,2,3
+            group by 1,2,3,4
         )
         select * from ry {having}
     """).df()

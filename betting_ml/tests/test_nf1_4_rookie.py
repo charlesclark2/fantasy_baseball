@@ -19,7 +19,11 @@ import pytest
 from quant_sports_intel_models.football.nfl.fantasy import nf1_4_rookie as M14
 from quant_sports_intel_models.football.nfl.fantasy import season_projection as sp
 
-RNG = np.random.default_rng(7)
+# ⚠️ Each generator is created INSIDE the function that draws from it. A module-level shared RNG
+# makes every fixture depend on which tests happened to draw from it first — which is stable
+# serially but NOT under `pytest -n auto`, where xdist distributes tests across workers in a
+# different order. That is exactly how this file flaked once: the fixture population shifted and an
+# exact-value assertion broke. Seed locally, never share generator state across tests.
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -27,6 +31,7 @@ RNG = np.random.default_rng(7)
 # production, ~15% of drafted rookies (more at QB) never play, and combine coverage is partial.
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 def _rookie_pool(n_per_pos: int = 60, classes=(2016, 2017, 2018, 2019, 2020)) -> pd.DataFrame:
+    RNG = np.random.default_rng(7)
     rows = []
     base = {"QB": 240.0, "RB": 170.0, "WR": 150.0, "TE": 90.0}
     zero_rate = {"QB": 0.35, "RB": 0.12, "WR": 0.11, "TE": 0.13}
@@ -272,7 +277,7 @@ def test_the_verdict_needs_every_gate_and_bars_the_non_shippable_form():
 # 4. Face validity + the empirical interval
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 def test_face_validity_flags_a_rookie_at_the_top_of_the_board(pool):
-    hist = pool[["position_group", "rookie_fp_ppr"]]
+    hist = pool[["position_group", "rookie_fp_ppr", "draft_year"]]
     board = pd.DataFrame([
         {"player_name": "Rookie QB", "position": "QB", "is_rookie": True, "proj_fp_ppr": 500.0},
         *[{"player_name": f"Vet {i}", "position": "QB", "is_rookie": False,
@@ -287,6 +292,7 @@ def test_the_rookie_band_covers_its_nominal_rate_on_a_known_population():
     """The band's statistical claim, on a population where the answer is known. `_fit_rookie_bands`
     takes the empirical q10/q90 of realized outcomes within a prediction tercile, so on a sample
     with a known noise level its coverage must land near the nominal 80%."""
+    RNG = np.random.default_rng(11)
     n = 600
     overall = RNG.uniform(1, 250, n)
     truth = np.clip(220.0 * (1.0 - overall / 260.0), 0, None)
@@ -366,7 +372,7 @@ def test_the_band_history_prices_the_never_played_rookie(pool):
 
 
 def test_rookie_board_face_validity_passes_a_sane_board_and_trips_an_over_placed_rookie(pool):
-    hist = pool[["position_group", "rookie_fp_ppr"]]
+    hist = pool[["position_group", "rookie_fp_ppr", "draft_year"]]
     vets = [{"player_name": f"Vet {i}", "position": "RB", "is_rookie": False,
              "proj_fp_ppr": 320.0 - 5 * i} for i in range(30)]
     sane = pd.DataFrame([*vets, {"player_name": "Rook", "position": "RB", "is_rookie": True,
@@ -380,6 +386,31 @@ def test_rookie_board_face_validity_passes_a_sane_board_and_trips_an_over_placed
     assert res["placement"]["top1_is_rookie"]
     assert res["placement"]["best_rookie"] == "Rook"
     assert res["level"]["positions_over_cap"]
+
+
+def test_the_level_cap_references_the_per_class_BEST_rookie_not_the_whole_population(pool):
+    """⭐ THE REGRESSION GUARD FOR THE MIS-SPECIFIED GATE. The first cut compared the top projected
+    rookie against the Q90 of ALL drafted rookies — a bar the REALIZED top rookie cleared in 25 of
+    28 cohort-positions, so it fired on 7/7 cohorts and meant nothing. The reference must be the
+    per-class BEST rookie, which is a strictly higher bar."""
+    hist = pool[["position_group", "rookie_fp_ppr", "draft_year"]]
+    caps = sp.rookie_board_face_validity(
+        pd.DataFrame([{"player_name": "R", "position": "RB", "is_rookie": True,
+                       "proj_fp_ppr": 1.0}]), hist)["level"]["top_of_class_caps"]
+    for p, cap in caps.items():
+        h = pd.to_numeric(hist[hist["position_group"] == p]["rookie_fp_ppr"], errors="coerce")
+        assert cap > float(np.quantile(h.dropna(), 0.90)), (p, cap)
+
+
+def test_a_position_with_too_few_prior_classes_is_skipped_not_judged(pool):
+    """A reference class of one or two drafts is not a reference class. Skipping is the honest
+    behaviour — judging against it would manufacture alarms in the earliest cohorts."""
+    thin = pool[pool["draft_year"] <= 2017][["position_group", "rookie_fp_ppr", "draft_year"]]
+    res = sp.rookie_board_face_validity(
+        pd.DataFrame([{"player_name": "R", "position": "RB", "is_rookie": True,
+                       "proj_fp_ppr": 9_999.0}]), thin)
+    assert res["level"]["top_of_class_caps"] == {}
+    assert not res["level"]["positions_over_cap"]
 
 
 def test_face_validity_is_empty_board_safe():
