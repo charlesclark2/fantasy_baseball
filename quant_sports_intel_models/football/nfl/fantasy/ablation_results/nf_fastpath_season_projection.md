@@ -1,6 +1,6 @@
 # NF-FASTPATH — 2026 NFL fantasy season projections (raw stat-line, MVP-1)
 
-**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-07-26T23:30:39.675185+00:00
+**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-07-27T09:04:49.612808+00:00
 
 > ⚖️ **A PROJECTION PRODUCT, edge-independent** — no `best_alpha`/PBO/DSR/CLV gate (that is the betting posture). The gate is FACE-VALIDITY + COVERAGE + a holdout rank-correlation sanity check. The emitted `proj_*` columns are a **RAW STAT LINE** (season totals); the `proj_fp_*` points are a CONVENIENCE (standard nflverse scoring) for ranking/validation only — **MVP-2 / NF-C1 rescore the raw line per league**. Uncertainty is surfaced (an 80% PPR interval), not hidden; NULL = unknown kept NULL. Rookie intervals use PARAMETER uncertainty (slot-curve + P1A) and must be recalibrated before pricing.
 
@@ -61,7 +61,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | CHRISTIAN MCCAFFREY | RB         | SF        | veteran  |         15.5 |         279.9 |        198.2 |        361.7 |
 | BAKER MAYFIELD      | QB         | TB        | veteran  |         16.5 |         279.2 |        214.1 |        344.3 |
 | PATRICK MAHOMES     | QB         | KC        | veteran  |         15.0 |         271.2 |        199.0 |        343.3 |
-| Fernando Mendoza    | QB         | nan       | rookie   |         12.4 |         268.3 |          5.6 |        531.1 |
+| Fernando Mendoza    | QB         | nan       | rookie   |         12.4 |         268.3 |         26.5 |        277.0 |
 | CALEB WILLIAMS      | QB         | CHI       | veteran  |         16.5 |         266.4 |        192.5 |        340.4 |
 | BO NIX              | QB         | DEN       | veteran  |         16.5 |         265.4 |        193.7 |        337.2 |
 | DRAKE MAYE          | QB         | NE        | veteran  |         16.5 |         261.5 |        188.7 |        334.3 |
@@ -90,7 +90,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | TREVOR LAWRENCE  | QB         | JAX       | veteran  |         16.5 |         282.5 |        206.2 |        358.8 |
 | BAKER MAYFIELD   | QB         | TB        | veteran  |         16.5 |         279.2 |        214.1 |        344.3 |
 | PATRICK MAHOMES  | QB         | KC        | veteran  |         15.0 |         271.2 |        199.0 |        343.3 |
-| Fernando Mendoza | QB         | nan       | rookie   |         12.4 |         268.3 |          5.6 |        531.1 |
+| Fernando Mendoza | QB         | nan       | rookie   |         12.4 |         268.3 |         26.5 |        277.0 |
 | CALEB WILLIAMS   | QB         | CHI       | veteran  |         16.5 |         266.4 |        192.5 |        340.4 |
 
 ### Top 12 RB
@@ -102,7 +102,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | JONATHAN TAYLOR     | RB         | IND       | veteran  |         15.4 |         247.8 |        165.4 |        330.3 |
 | JAHMYR GIBBS        | RB         | DET       | veteran  |         14.4 |         243.0 |        156.5 |        329.6 |
 | DE'VON ACHANE       | RB         | MIA       | veteran  |         14.4 |         221.5 |        159.8 |        283.1 |
-| Jeremiyah Love      | RB         | nan       | rookie   |         16.0 |         208.4 |          0.0 |        443.2 |
+| Jeremiyah Love      | RB         | nan       | rookie   |         16.0 |         208.4 |         10.4 |        244.6 |
 | SAQUON BARKLEY      | RB         | PHI       | veteran  |         15.3 |         207.8 |        147.9 |        267.6 |
 | DERRICK HENRY       | RB         | BAL       | veteran  |         14.0 |         199.6 |        132.1 |        267.0 |
 | KYREN WILLIAMS      | RB         | LAR       | veteran  |         15.1 |         199.5 |        140.2 |        258.8 |
@@ -121,7 +121,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | JUSTIN JEFFERSON   | WR         | MIN       | veteran  |         16.2 |         200.3 |        149.3 |        251.3 |
 | CEEDEE LAMB        | WR         | DAL       | veteran  |         14.4 |         197.3 |        140.1 |        254.5 |
 | A.J. BROWN         | WR         | NE        | veteran  |         15.7 |         194.8 |        128.9 |        260.8 |
-| Jordyn Tyson       | WR         | nan       | rookie   |         13.6 |         191.8 |          0.0 |        401.0 |
+| Jordyn Tyson       | WR         | nan       | rookie   |         13.6 |         191.8 |         28.9 |        216.3 |
 | CHRIS OLAVE        | WR         | NO        | veteran  |         15.0 |         186.2 |        129.2 |        243.2 |
 | NICO COLLINS       | WR         | HOU       | veteran  |         14.7 |         183.4 |        128.5 |        238.4 |
 | ZAY FLOWERS        | WR         | BAL       | veteran  |         15.6 |         178.4 |        124.7 |        232.2 |
@@ -137,7 +137,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | HAROLD FANNIN JR. | TE         | CLE       | veteran  |         16.2 |         154.8 |        111.4 |        198.2 |
 | TYLER WARREN      | TE         | IND       | veteran  |         16.6 |         150.5 |        111.0 |        190.1 |
 | DALLAS GOEDERT    | TE         | PHI       | veteran  |         16.1 |         141.4 |         92.7 |        190.2 |
-| Kenyon Sadiq      | TE         | nan       | rookie   |         15.3 |         139.5 |          0.0 |        288.6 |
+| Kenyon Sadiq      | TE         | nan       | rookie   |         15.3 |         139.5 |          5.3 |        175.1 |
 | KYLE PITTS SR.    | TE         | ATL       | veteran  |         16.4 |         137.4 |         78.8 |        196.0 |
 | JAKE FERGUSON     | TE         | DAL       | veteran  |         15.8 |         130.5 |         85.1 |        175.9 |
 | MARK ANDREWS      | TE         | BAL       | veteran  |         15.8 |         122.4 |         79.2 |        165.5 |
@@ -146,23 +146,48 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 
 ## 5. Face validity — top 15 ROOKIES (P1A-attached)
 
+**NF1.4 rookie over-placement gate** (advisory — a genuinely exceptional class may trip it): the #1 overall slot must be a veteran, no rookie inside the overall top 10, and no rookie projected above the Q90 of realized rookie seasons at his position over the FULL drafted population.
+
+```json
+{
+  "pass": true,
+  "n_rookies": 74,
+  "placement": {
+    "top1_is_rookie": false,
+    "n_rookies_in_top10": 0,
+    "best_rookie_overall_rank": 12,
+    "best_rookie": "Fernando Mendoza"
+  },
+  "level": {
+    "top_of_class_caps": {
+      "QB": 335.1,
+      "RB": 331.4,
+      "TE": 241.6,
+      "WR": 299.1
+    },
+    "positions_over_cap": [],
+    "reference": "Q90 of the per-class BEST realized rookie"
+  }
+}
+```
+
 | player_name      | position   |   draft_overall |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 |
 |:-----------------|:-----------|----------------:|-------------:|--------------:|-------------:|-------------:|
-| Fernando Mendoza | QB         |             1.0 |         12.4 |         268.3 |          5.6 |        531.1 |
-| Jeremiyah Love   | RB         |             3.0 |         16.0 |         208.4 |          0.0 |        443.2 |
-| Jordyn Tyson     | WR         |             8.0 |         13.6 |         191.8 |          0.0 |        401.0 |
-| Carnell Tate     | WR         |             4.0 |         13.6 |         172.9 |          0.0 |        361.4 |
-| Kenyon Sadiq     | TE         |            16.0 |         15.3 |         139.5 |          0.0 |        288.6 |
-| Makai Lemon      | WR         |            20.0 |         14.1 |         100.4 |          0.0 |        209.8 |
-| Jadarian Price   | RB         |            32.0 |         13.8 |          89.1 |          0.0 |        189.4 |
-| KC Concepcion    | WR         |            24.0 |         14.1 |          74.4 |          0.0 |        155.5 |
-| Omar Cooper Jr.  | WR         |            30.0 |         14.1 |          62.9 |          0.0 |        131.5 |
-| Denzel Boston    | WR         |            39.0 |         14.1 |          62.2 |          0.0 |        130.0 |
-| Ty Simpson       | QB         |            13.0 |         12.4 |          58.9 |          1.2 |        116.5 |
-| Eli Stowers      | TE         |            54.0 |         13.9 |          51.7 |          0.0 |        106.9 |
-| Germie Bernard   | WR         |            47.0 |         14.1 |          50.6 |          0.0 |        105.7 |
-| Antonio Williams | WR         |            71.0 |         14.1 |          43.0 |          0.0 |         89.8 |
-| Max Klare        | TE         |            61.0 |         13.9 |          41.6 |          0.0 |         86.1 |
+| Fernando Mendoza | QB         |             1.0 |         12.4 |         268.3 |         26.5 |        277.0 |
+| Jeremiyah Love   | RB         |             3.0 |         16.0 |         208.4 |         10.4 |        244.6 |
+| Jordyn Tyson     | WR         |             8.0 |         13.6 |         191.8 |         28.9 |        216.3 |
+| Carnell Tate     | WR         |             4.0 |         13.6 |         172.9 |         28.9 |        216.3 |
+| Kenyon Sadiq     | TE         |            16.0 |         15.3 |         139.5 |          5.3 |        175.1 |
+| Makai Lemon      | WR         |            20.0 |         14.1 |         100.4 |         28.9 |        216.3 |
+| Jadarian Price   | RB         |            32.0 |         13.8 |          89.1 |         10.4 |        244.6 |
+| KC Concepcion    | WR         |            24.0 |         14.1 |          74.4 |         28.9 |        216.3 |
+| Omar Cooper Jr.  | WR         |            30.0 |         14.1 |          62.9 |         28.9 |        216.3 |
+| Denzel Boston    | WR         |            39.0 |         14.1 |          62.2 |         28.9 |        216.3 |
+| Ty Simpson       | QB         |            13.0 |         12.4 |          58.9 |         26.5 |        277.0 |
+| Eli Stowers      | TE         |            54.0 |         13.9 |          51.7 |          5.3 |        175.1 |
+| Germie Bernard   | WR         |            47.0 |         14.1 |          50.6 |         28.9 |        216.3 |
+| Antonio Williams | WR         |            71.0 |         14.1 |          43.0 |         28.9 |        216.3 |
+| Max Klare        | TE         |            61.0 |         13.9 |          41.6 |          5.3 |        175.1 |
 
 ## 6. Limitations
 
