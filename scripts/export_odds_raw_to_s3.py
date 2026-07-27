@@ -63,11 +63,7 @@ SOURCES = {
         "ingestion_ts::varchar as ingestion_ts, load_id, x_requests_used, "
         "x_requests_remaining, to_json(raw_json) as raw_json",
     ),
-    "mlb_odds_raw": (
-        "baseball_data.oddsapi.mlb_odds_raw",
-        "ingestion_ts::varchar as ingestion_ts, load_id, to_json(request_params) as request_params, "
-        "x_requests_used, x_requests_remaining, to_json(raw_json) as raw_json",
-    ),
+    # ⛔ "mlb_odds_raw" REMOVED 2026-07-27 (E11.20 phase-2b) — see RETIRED_SOURCES.
     "derivative_odds_raw": (
         "baseball_data.oddsapi.derivative_odds_raw",
         "ingestion_ts::varchar as ingestion_ts, load_id, event_id, "
@@ -96,6 +92,11 @@ RETIRED_SOURCES = {
     "monthly_schedule": (
         "its Snowflake writer was retired 2026-07-20 (schedule capture is S3-native); the table "
         "is frozen, and this script's partition prune would DELETE the capture's fresh partitions"
+    ),
+    "mlb_odds_raw": (
+        "its Snowflake writer was retired 2026-07-05 (odds capture is S3-native); the table has "
+        "been frozen at ingestion_ts 2026-07-05T23:00:14 since, so a `--since <today>` export "
+        "selects ZERO rows and writes nothing — it was purely a COMPUTE_WH wake (~10-14/game-day)"
     ),
 }
 

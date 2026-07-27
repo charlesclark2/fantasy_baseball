@@ -161,16 +161,14 @@ def _retired_fqn_config_entries(py_src: str) -> list[str]:
 # declared EXPLICITLY rather than silently excluded (the "no silent caps" rule — an undeclared
 # carve-out is how the config-dict blind spot survived in the first place). Each entry is a real
 # instance of the class and should be driven to zero; a NEW instance still fails the test.
-#   • export_odds_raw_to_s3.py / oddsapi.mlb_odds_raw — odds capture flipped S3-native 2026-07-05
-#     and CLAUDE.md records the mlb_odds_raw CRON as retired, but pipeline/ops/intraday_ops.py
-#     still calls `--source mlb_odds_raw --since <today>` and test_intraday_odds_serving_refresh.py
-#     actively ASSERTS that call exists. `--since` means no prune, so it cannot destroy partitions
-#     the way monthly_schedule did — but it does re-mirror a frozen table over fresh S3. Removing
-#     it means reconciling that test too; not safe to do blind mid-slate.
+#   • export_odds_raw_to_s3.py / oddsapi.mlb_odds_raw — RESOLVED the same day: the source is frozen
+#     at 2026-07-05, so `--since <today>` selected zero rows and wrote nothing (a pure warehouse
+#     wake). Bridge removed from intraday_ops.py, entry moved to RETIRED_SOURCES, and the two tests
+#     that ASSERTED the call exists were inverted to assert it is gone.
 #   • parity_check_w3pre.py / both — a SF-vs-S3 parity diagnostic, off every serving path. Its
-#     comparisons against a frozen source are now meaningless rather than dangerous.
+#     comparisons against a frozen source are now meaningless rather than dangerous, so it is the
+#     one remaining entry. Resolve by deleting the frozen sources from its comparison map.
 KNOWN_UNRESOLVED = {
-    ("scripts/export_odds_raw_to_s3.py", "baseball_data.oddsapi.mlb_odds_raw"),
     ("scripts/parity_check_w3pre.py", "baseball_data.oddsapi.mlb_odds_raw"),
     ("scripts/parity_check_w3pre.py", "baseball_data.statsapi.monthly_schedule"),
 }
