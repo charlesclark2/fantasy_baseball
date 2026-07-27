@@ -45,8 +45,12 @@ Usage (all SF-FREE — AWS creds via the instance role / env only):
     # Operator fallback if the endpoint is genuinely blocked — a manual Board CSV export:
     uv run python scripts/ingest_fangraphs_prospects_to_s3.py --season 2026 --from-csv board.csv
 
-    # Historical as-of snapshot (NICE-TO-HAVE 2nd pass, not an 8/3 blocker): stamp an explicit date.
-    uv run python scripts/ingest_fangraphs_prospects_to_s3.py --season 2025 --as-of 2025-07-01
+    # Historical board snapshot (E7.8 "do rankings translate to MLB success?" research): pass the
+    # past --season (+ --as-of for the board's true date; else it stamps <season>-07-01 + warns —
+    # never today). PROBE a past season first to confirm the slug returns historical data:
+    uv run python scripts/ingest_fangraphs_prospects_to_s3.py --season 2020 --probe
+    uv run python scripts/ingest_fangraphs_prospects_to_s3.py --season 2020 --as-of 2020-02-15
+    #   (backfill many seasons: bash loop `for y in $(seq 2016 2025); do … --season $y …; done`)
 """
 
 from __future__ import annotations
@@ -89,22 +93,34 @@ PARTITION_COLS = ["season", "as_of_date"]
 
 # CASE-INSENSITIVE alias sets (lowercased) → the typed column. First match wins. The raw
 # record is preserved in `raw_json` regardless, so a miss loses nothing (column-name-reality).
+# Verified against the LIVE board probe (2026-07-27, box FlareSolverr, 1290 rows). Key realities:
+#  • The STABLE prospect id is `minorMasterId` (always `sa`-prefixed, e.g. 'sa3065496') — it MUST
+#    win over `PlayerId`/`UPID`, which for a graduated player is the numeric MLB FG id (e.g.
+#    '35376'), NOT the stable minor id. `fg_player_id` keeps the FG unified id separately (the
+#    numeric id bridges to xMLBAMID via other FG feeds / E7.4 xref).
+#  • THE BOARD does NOT expose an MLBAM id — `mlbam_id` resolves None here BY DESIGN; the MLBAM
+#    bridge comes via the MiLB leaderboard feed + E7.4 xref (that is WHY the population feed exists).
 FIELD_ALIASES: dict[str, list[str]] = {
     # ⭐ the join keys E7.4 / E8.0 need
-    "fg_minor_id":  ["playerid", "minormasterid", "prospectid", "player_id"],
+    "fg_minor_id":  ["minormasterid", "prospectid", "playerid", "player_id"],
+    "fg_player_id": ["upid", "playerid", "player_id"],
     "mlbam_id":     ["xmlbamid", "mlbamid", "mlbam_id", "mlbamplayerid"],
     # identity / context
     "player_name":  ["playername", "name", "player", "fullname"],
-    "org":          ["org", "team", "organization", "orgname"],
-    "position":     ["pos", "position", "minorpos", "primaryposition"],
-    "level":        ["current level", "currentlevel", "mlevel", "level", "toplevel"],
+    "org":          ["team", "org", "corg", "organization", "orgname"],
+    "position":     ["position", "positiondb", "pos", "minorpos", "primaryposition"],
+    "level":        ["mlevel", "llevel", "current level", "currentlevel", "level", "toplevel"],
     "age":          ["age", "cur_age", "currentage"],
     # the FV / rank / ETA signal E7.8 tests
-    "fv":           ["cfv", "fv", "futurevalue", "current_fv"],
-    "risk":         ["risk"],
-    "eta":          ["eta", "etayear", "eta_year"],
-    "overall_rank": ["top100", "ovr_rank", "overall_rank", "overallrank", "rank", "cur_rank"],
-    "org_rank":     ["org_rank", "orgrank", "org_top"],
+    "fv":           ["fv_current", "cfv", "fv", "futurevalue", "current_fv"],
+    "risk":         ["crisk", "risk"],
+    "eta":          ["eta_current", "ceta", "eta", "etayear", "eta_year"],
+    "overall_rank": ["ovr_rank", "covr", "top100", "overall_rank", "overallrank", "rank"],
+    "org_rank":     ["org_rank", "corg_rank", "orgrank", "org_top"],
+    # high-value for the 8/3 draft board (FanGraphs' own fantasy ranks + one-line scouting tag)
+    "fantasy_dynasty_rank": ["fantasy_dynasty"],
+    "fantasy_redraft_rank": ["fantasy_redraft"],
+    "tldr":         ["tldr"],
 }
 
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
@@ -153,6 +169,7 @@ def extract_row(raw: dict, season: int, as_of_date: str, board_slug: str, ingest
     lc = _lc_map(raw)
     return {
         "fg_minor_id":   _clean_str(_pick(lc, FIELD_ALIASES["fg_minor_id"])),
+        "fg_player_id":  _clean_str(_pick(lc, FIELD_ALIASES["fg_player_id"])),
         "mlbam_id":      _clean_str(_pick(lc, FIELD_ALIASES["mlbam_id"])),
         "player_name":   _clean_str(_pick(lc, FIELD_ALIASES["player_name"])),
         "org":           _clean_str(_pick(lc, FIELD_ALIASES["org"])),
@@ -165,6 +182,9 @@ def extract_row(raw: dict, season: int, as_of_date: str, board_slug: str, ingest
         "eta":           _to_int(_pick(lc, FIELD_ALIASES["eta"])),
         "overall_rank":  _to_int(_pick(lc, FIELD_ALIASES["overall_rank"])),
         "org_rank":      _to_int(_pick(lc, FIELD_ALIASES["org_rank"])),
+        "fantasy_dynasty_rank": _to_int(_pick(lc, FIELD_ALIASES["fantasy_dynasty_rank"])),
+        "fantasy_redraft_rank": _to_int(_pick(lc, FIELD_ALIASES["fantasy_redraft_rank"])),
+        "tldr":          _clean_str(_pick(lc, FIELD_ALIASES["tldr"])),
         "board_slug":    board_slug,
         "season":        int(season),
         "as_of_date":    as_of_date,
@@ -235,7 +255,8 @@ def coverage_report(rows: list[dict], season: int, as_of_date: str, board_slug: 
         log.info("  with mlbam_id ............... %d (%.0f%%)  ⭐ E8.0 join key", _cnt("mlbam_id"), 100 * _cnt("mlbam_id") / n)
         log.info("  with player_name ............ %d (%.0f%%)", _cnt("player_name"), 100 * _cnt("player_name") / n)
         log.info("  with FV ..................... %d (%.0f%%)", _cnt("fv"), 100 * _cnt("fv") / n)
-        log.info("  with overall_rank ........... %d", _cnt("overall_rank"))
+        log.info("  with overall_rank / org_rank  %d / %d  (overall rank only for the top tier)",
+                 _cnt("overall_rank"), _cnt("org_rank"))
         log.info("  with ETA .................... %d", _cnt("eta"))
         log.info("  with level .................. %d", _cnt("level"))
         log.info("  distinct orgs / positions ... %d / %d", len(orgs), len(positions))
@@ -289,6 +310,26 @@ def fetch_from_csv(path: str) -> list[dict]:
     return df.to_dict(orient="records")
 
 
+def resolve_as_of_date(as_of: str | None, season: int, current_year: int,
+                       current_game_date: str | None) -> tuple[str, bool]:
+    """Resolve the snapshot date to stamp on the rows (E7.8 leakage-safe as-of dating).
+
+    Returns ``(as_of_date, is_historical_guess)``:
+      • explicit ``--as-of``  → use it verbatim (is_historical_guess=False).
+      • CURRENT season, no --as-of → today's US game day (the daily-op case).
+      • a PAST season with no --as-of → `<season>-07-01` (mid-season approx) + is_historical_guess
+        True so main() WARNS. This is the safeguard: a historical `--season 2020` pull must NOT
+        silently stamp TODAY (2026) — that poisons the very time-series E7.8's translation study
+        needs. (FanGraphs serves the RETAINED version of a past board, not a true point-in-time
+        snapshot; pass an explicit --as-of for the board's real date when known.)
+    """
+    if as_of:
+        return as_of, False
+    if season != current_year:
+        return f"{season}-07-01", True
+    return (current_game_date or date.today().isoformat()), False
+
+
 # ── Main run ─────────────────────────────────────────────────────────────────────
 
 def run(season: int, draft: str | None, as_of_date: str, mode: str, csv_path: str | None) -> None:
@@ -332,8 +373,9 @@ def main() -> None:
                     help="Board slug (default: '<season>prospect', the main prospect board). "
                          "e.g. '2026mlb' for the draft board, '<season>int' for international.")
     ap.add_argument("--as-of", default=None, metavar="YYYY-MM-DD",
-                    help="Snapshot date stamped on the rows (default: today, the US game day). "
-                         "Set explicitly for a historical as-of snapshot.")
+                    help="Snapshot date stamped on the rows (default: today's US game day for the "
+                         "current season; <season>-07-01 for a past season). Set explicitly for a "
+                         "historical board's true date (E7.8 as-of research).")
     ap.add_argument("--probe", action="store_true",
                     help="THE ONE REAL PULL: print the live board's field names + sample rows and "
                          "the alias resolution, write NOTHING. Run this first.")
@@ -343,15 +385,20 @@ def main() -> None:
                     help="Operator fallback: read a manual Board CSV export instead of the API.")
     args = ap.parse_args()
 
-    # as_of defaults to the US baseball-day (game_day helper if importable, else today).
-    if args.as_of:
-        as_of_date = args.as_of
-    else:
-        try:
-            from betting_ml.utils.game_day import current_game_date_iso
-            as_of_date = current_game_date_iso()
-        except Exception:  # noqa: BLE001 — laptop/dev without the pkg → plain today
-            as_of_date = date.today().isoformat()
+    # as_of: explicit → verbatim; current season → US game day; past season → mid-season approx.
+    try:
+        from betting_ml.utils.game_day import current_game_date_iso
+        game_date = current_game_date_iso()
+    except Exception:  # noqa: BLE001 — laptop/dev without the pkg → plain today
+        game_date = date.today().isoformat()
+    as_of_date, is_historical_guess = resolve_as_of_date(
+        args.as_of, args.season, date.today().year, game_date)
+    if is_historical_guess:
+        log.warning(
+            "Historical season %d with no --as-of → stamping as_of=%s (mid-season approximation). "
+            "FanGraphs serves the RETAINED version of a past board, not a point-in-time snapshot; "
+            "pass --as-of for the board's true date if known (E7.8 leakage-safe as-of joins).",
+            args.season, as_of_date)
 
     mode = "probe" if args.probe else ("dry-run" if args.dry_run else "write")
     log.info("FanGraphs prospect ingest (E7.7) — season=%d as_of=%s mode=%s%s",

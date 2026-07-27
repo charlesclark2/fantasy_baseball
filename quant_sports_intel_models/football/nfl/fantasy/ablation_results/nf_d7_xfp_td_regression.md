@@ -1,6 +1,6 @@
 # NF-D7 — Expected Fantasy Points (xFP) + TD regression
 
-**Generated:** 2026-07-27T03:00:21.322556+00:00 · **seasons:** 2020–2025 · **baseline:** the FULL shipped MVP-1 model (all NF-D2/NF-D4/NF-D5 slices ON), `xfp_td_blend=0`. Edge-independent.
+**Generated:** 2026-07-27T03:22:25.992979+00:00 · **seasons:** 2020–2025 · **baseline:** the FULL shipped MVP-1 model (all NF-D2/NF-D4/NF-D5 slices ON), `xfp_td_blend=0`. Edge-independent.
 
 ## Verdict — NULL — no robust top-tier ordering lift over the shipped baseline; DROPPED (the recency-weighted line already mean-reverts TDs). xFP/xTD delivered as leakage-safe FEATURES for NF1.1/NF1.2.
 

@@ -38,8 +38,24 @@ Walk-forward CV by season (fit target<Y, predict Y), base seasons 2017–2024, 7
 
 **The scalar matchup tilts do NOT lift weekly ordering (all Δ ≤ 0, within noise) → per the slice-gate discipline they are DROPPED** (the NGS slice-2 precedent). The served weekly ships the FLAT calibrated season-per-game-per-week baseline; DVP / implied-points are still CARRIED as matchup CONTEXT for the UI, not applied to the point. The weekly INTERVAL is a first-order Gamma approximation (PIT ~0.23; weekly points are zero-inflated + heavy-tailed) — FLAGGED for recalibration before weekly pricing (E13.6 pattern). **Future lever:** a richer STAT-level opponent model (a defense that suppresses passing but not rushing; EPA-based) rather than a single scalar fp tilt — the scalar tilt is the honest null here.
 
-## 4. NF-D3 grade vs consensus (market-blind, as designed)
-On the FIXED board (2-season 2023–2024 spot-check; the operator's full 6-season grade is the ship number): vs **ADP** Δρ **−0.011** (QB **−0.002** ≈ TIED the market on ADP-covered QBs — vs the corrupted board's −0.225) and we **WIN the ADP fades (0.435 vs 0.288)**; vs ECR/ESPN/Sleeper still behind on pooled (−0.058 / −0.079 / −0.087). **As designed:** a market-blind NF1 does not close the full top-tier gap (that gap is the market signal we excluded), but it is now COMPETITIVE at QB vs ADP and wins the fades. **Honest-claim scope UNCHANGED:** never "we beat consensus"; the airtight claim stays narrow (high-conviction fades + WR/QB-vs-ADP competitiveness).
+## 4. NF-D3 grade vs consensus — the honest verdict (full 6-season, 2019–2024)
+
+⚖️ **This is an "INCUMBENT-STANDS-for-the-product" result, not a clean win — reported straight (no overclaim).** Two metrics DISAGREE, and that disagreement is the finding:
+
+| system | MVP-1 Δρ | **NF1(gbm) Δρ** | NF1 QB Δρ | NF1 fade (us vs sys) |
+|--------|---------:|----------------:|----------:|:---------------------|
+| adp | −0.060 | **−0.031** ✅ | −0.178 | **0.540 vs 0.313** ✅ (MVP-1 0.478) |
+| ecr | −0.060 | −0.074 | −0.144 | 0.685 vs 0.746 |
+| espn | −0.059 | −0.079 | −0.039 | 0.599 vs 0.796 |
+| sleeper | −0.136 | −0.157 | −0.212 | 0.388 vs 0.801 |
+
+- **On the metric it was SELECTED on** (full-universe within-position ρ, all ~350 players equal-weighted), **NF1 beats MVP-1** (0.732 vs 0.718).
+- **On the product-relevant grade** (NF-D3, consensus-COVERED = the draftable tier), **NF1 is mixed-to-behind vs MVP-1:** BETTER vs ADP (pooled + RB + **TE +0.092** + the **ADP-fade edge, IMPROVED to 0.540 vs MVP-1's 0.478**), but WORSE than MVP-1 vs the deep-coverage systems (ECR/ESPN/Sleeper) and worse at **top-tier QB** vs every consensus.
+- **WHY (the E2.1-r selection-metric lesson, round two):** GBM's regression-to-mean improves DEPTH ordering (lifts the full-universe metric) but slightly COMPRESSES the studs — exactly the tier the draft board + the grade care about. And **market-blind ⇒ the top-tier QB/RB gap is STRUCTURAL** — that gap IS the market signal we excluded; no market-blind learner closes it.
+
+**SHIP DECISION (honest §0.5): the MVP-1 incumbent STANDS as the served draft board** (NF1 does not decisively beat it on the product metric). NF1 ships as (a) a **calibrated alternative** — its landed board (own S3 prefix) carries the calibrated season interval + the age term + the improved ADP-fade edge — and (b) the **research baseline** for the real top-tier lever. **The airtight claim stays NARROW + is now slightly STRONGER on one axis:** "where we most disagree with ADP our picks out-predict the market (0.54 vs 0.31)" — never "we beat consensus."
+- ⭐ **The genuine lever for the top-tier gap = a MARKET-AWARE variant** (revisit the 2026-07-26 market-blind scope call): ADP/ECR as position-conditional features would close the QB/RB tier the market owns. That is a deliberate product/identity decision for the operator, not a modeling gap.
+- 🔬 **§0.5 follow-up (optional):** re-select the learner on a TOP-TIER-weighted metric (top-N/pos or the NF-D3 grade) rather than full-universe ρ — may favor `ridge`/the null; won't break the market-blind ceiling but would stop optimizing depth at the studs' expense.
 
 ## 5. Files
 - `nf1_model.py` (NEW, pure) — learners + registry, `apply_learned_ordering` (the remap) + `apply_learned_level`, calibration + E2.1-r hygiene (`randomized_pit`, `pit_max_decile_deviation`, `calibrate_dispersion` floor, `oracle_ordering_is_the_ceiling`), weekly matchup (`defense_vs_position_factor`, `environment_factor`, `project_week`, Gamma predictive).

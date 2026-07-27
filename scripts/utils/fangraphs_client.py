@@ -406,6 +406,20 @@ def fetch_leaderboard(
     return out
 
 
+_DEDUP_ID_KEYS = ("playerid", "minormasterid", "playerId".lower(), "upid")
+
+
+def _row_dedup_id(row: dict) -> str | None:
+    """Case-insensitive player id for cross-page de-dup, over a candidate key list. None when a
+    row carries no id key (so the caller keeps it rather than collapsing an id-less page)."""
+    lc = {str(k).lower(): v for k, v in row.items()}
+    for k in _DEDUP_ID_KEYS:
+        v = lc.get(k)
+        if v not in (None, ""):
+            return str(v)
+    return None
+
+
 def _paginate_leaderboard(
     url: str,
     base_params: dict,
@@ -451,9 +465,18 @@ def _paginate_leaderboard(
         if not page_rows:
             break
 
-        new_rows = [r for r in page_rows if str(r.get("playerid", "")) not in seen_ids]
-        for r in new_rows:
-            seen_ids.add(str(r.get("playerid", "")))
+        # De-dup across pages by player id. The id key varies by board (major: `playerid`;
+        # minor/prospect: `minorMasterId`/`PlayerId`) — resolve case-insensitively over a
+        # candidate list; a row with NO id key can't be de-duped, so keep it (never collapse
+        # an id-less page to one row).
+        new_rows = []
+        for r in page_rows:
+            rid = _row_dedup_id(r)
+            if rid is not None and rid in seen_ids:
+                continue
+            if rid is not None:
+                seen_ids.add(rid)
+            new_rows.append(r)
         all_rows.extend(new_rows)
 
         # Last page (short) or the API ignored pagination (nothing new) → stop.
@@ -483,52 +506,63 @@ def fetch_minor_leaderboard(
     stats: str,
     season: int,
     qual: str | int = "0",
-    ind: str | int = "1",
-    stat_type: int = 8,
+    ind: str | int = "0",
+    stat_type: int | str = 0,
+    level: str | int = 0,
+    lg: str = "",
     page_size: Optional[int] = None,
+    url: Optional[str] = None,
+    extra_params: Optional[dict] = None,
 ) -> dict:
     """Fetch the FanGraphs MINOR-league statistical leaderboard for a season (E7.7).
 
     THE reason this exists: THE BOARD only covers RANKED/graded prospects, but a deep dynasty
     roster is full of UNRANKED minor leaguers. This leaderboard enumerates EVERY minor leaguer
-    with a stat line — so it is the population feed for `fg_minor_id` (rows carry `playerid`,
-    the `sa`-prefixed minor id, AND `xMLBAMID`), the id coverage E7.4's xref + a deep-league
-    draft board need. Routes through FlareSolverr like every FanGraphs fetch.
+    with a stat line — so it is the population feed for `fg_minor_id` (rows carry the `sa`-prefixed
+    minor id + xMLBAMID), the id coverage E7.4's xref + a deep-league draft board need. Routes
+    through FlareSolverr like every FanGraphs fetch.
+
+    ⚠️ The minor board takes a DIFFERENT param set than the major one (a major-style request with
+    `season1`/`month`/`type=8` 404s at the origin — probed live 2026-07-27): it uses `seasonEnd`
+    (not `season1`), `type=0`, and `level`/`org`/`splitTeam`. Because the exact contract is
+    fragile, `url` + `extra_params` let a caller override any of it from a probe WITHOUT a code
+    change (the ingest exposes `--endpoint`/`--extra-param`).
 
     Args:
         stats: 'bat' for hitting, 'pit' for pitching.
-        season: calendar year. NOTE FanGraphs inverts the range params — `season`=END,
-            `season1`=START — so a single season passes the same year to both.
+        season: calendar year (start == end for a single season).
         qual: PA/IP minimum ('0' = EVERYONE — the coverage default; 'y' = qualified only).
-        ind: '1' = one row per player-season (the coverage grain); '0' = aggregate the span.
-        stat_type: column-set id (8 = the Dashboard set).
+        ind: '0' = aggregate the season into one row per player; '1' = one row per split.
+        stat_type: minor column-set id (0 = default minor set — NOT the major '8').
+        level: minor level filter (0 = all levels).
+        lg: league filter ('' = all).
         page_size: rows per page (default 1000); halved automatically on an upstream 5xx.
+        url: override the endpoint (defaults to MINOR_LEADERBOARD_URL).
+        extra_params: merged over the built params (probe-driven overrides).
     """
     base_params = {
         "age": "",
         "pos": "all",
         "stats": stats,
-        "lg": "all",
+        "lg": lg,
         "qual": str(qual),
-        # FanGraphs' inverted naming: season = END year, season1 = START year.
         "season": season,
-        "season1": season,
-        "startdate": "",
-        "enddate": "",
-        "month": "0",
-        "hand": "",
-        "team": "0",
+        "seasonEnd": season,   # the minor board uses seasonEnd, NOT season1
+        "level": str(level),
+        "team": "",
+        "org": "",
         "ind": str(ind),
-        "rost": "0",
+        "splitTeam": "false",
         "players": "",
         "type": stat_type,
-        "postseason": "",
         "sortdir": "default",
-        "sortstat": "WAR",
+        "sortstat": "",
     }
+    if extra_params:
+        base_params.update(extra_params)
     return _paginate_leaderboard(
-        MINOR_LEADERBOARD_URL, base_params,
+        url or MINOR_LEADERBOARD_URL, base_params,
         page_size=int(page_size or _LEADERBOARD_PAGE_SIZE),
         max_timeout_ms=_leaderboard_max_timeout_ms(),
-        label=f"MINOR stats={stats} season={season} qual={qual} ind={ind}",
+        label=f"MINOR stats={stats} season={season} qual={qual} ind={ind} type={stat_type}",
     )

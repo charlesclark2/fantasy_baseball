@@ -14,7 +14,9 @@ from utils import fangraphs_client as fc
 
 # ── fetch_minor_leaderboard (client) ─────────────────────────────────────────────
 
-def test_minor_leaderboard_hits_minor_endpoint_and_inverts_season(monkeypatch):
+def test_minor_leaderboard_uses_minor_param_set(monkeypatch):
+    """The minor board takes a DIFFERENT contract than the major one (a major-style request 404s):
+    `seasonEnd` not `season1`, `type=0` not 8, plus `level`/`org`/`splitTeam`."""
     captured = {}
 
     def fake_get(url, params, max_timeout_ms=None):
@@ -25,12 +27,37 @@ def test_minor_leaderboard_hits_minor_endpoint_and_inverts_season(monkeypatch):
     monkeypatch.setattr(fc, "_flaresolverr_get", fake_get)
     out = fc.fetch_minor_leaderboard(stats="bat", season=2026)
 
-    assert captured["url"] == fc.MINOR_LEADERBOARD_URL
-    assert "minor-league" in captured["url"]
-    assert captured["params"]["season"] == 2026 and captured["params"]["season1"] == 2026
-    assert captured["params"]["qual"] == "0"      # everyone (coverage default)
-    assert captured["params"]["ind"] == "1"       # per player-season grain
+    assert captured["url"] == fc.MINOR_LEADERBOARD_URL and "minor-league" in captured["url"]
+    p = captured["params"]
+    assert p["season"] == 2026 and p["seasonEnd"] == 2026 and "season1" not in p
+    assert p["type"] == 0 and "month" not in p            # minor set, not the major type=8/month
+    assert p["level"] == "0" and p["splitTeam"] == "false"
+    assert p["qual"] == "0"                                # everyone (coverage default)
     assert out["data"] == [{"playerid": "sa1", "xMLBAMID": "10"}]
+
+
+def test_minor_leaderboard_endpoint_and_extra_params_override(monkeypatch):
+    """Probe-driven overrides finalize the fragile contract without a code change."""
+    captured = {}
+    monkeypatch.setattr(fc, "_flaresolverr_get",
+                        lambda url, params, max_timeout_ms=None: (captured.update(url=url, params=params) or ({"data": []}, 200)))
+    fc.fetch_minor_leaderboard(stats="bat", season=2026,
+                               url="https://x/api/other", extra_params={"lg": "2,4,5", "type": 3})
+    assert captured["url"] == "https://x/api/other"
+    assert captured["params"]["lg"] == "2,4,5" and captured["params"]["type"] == 3
+
+
+def test_dedup_id_case_insensitive_and_idless_kept(monkeypatch):
+    """Cross-page de-dup resolves the id case-insensitively over candidates (playerid /
+    minorMasterId); a row with NO id key is kept (never collapse an id-less page to one row)."""
+    assert fc._row_dedup_id({"PlayerId": "35376"}) == "35376"
+    assert fc._row_dedup_id({"minorMasterId": "sa1"}) == "sa1"
+    assert fc._row_dedup_id({"WAR": 2.0}) is None
+    # A single page of id-less rows must all survive.
+    monkeypatch.setattr(fc, "_flaresolverr_get",
+                        lambda url, params, max_timeout_ms=None: ({"data": [{"WAR": 1}, {"WAR": 2}]}, 200))
+    out = fc.fetch_minor_leaderboard(stats="bat", season=2026, page_size=500)
+    assert len(out["data"]) == 2
 
 
 def test_minor_leaderboard_paginates(monkeypatch):
@@ -89,7 +116,7 @@ def test_extract_alt_casing_resolves():
 def test_dry_run_iterates_both_stats_without_write(monkeypatch):
     seen = []
     monkeypatch.setattr(il, "fetch_board",
-                        lambda season, stats: seen.append(stats) or [{"playerid": "sa1"}])
+                        lambda season, stats, **kw: seen.append(stats) or [{"playerid": "sa1"}])
     monkeypatch.setattr(il, "write_partition",
                         lambda *a, **k: pytest.fail("dry-run must not write"))
     il.run(season=2026, stats_groups=["bat", "pit"], as_of_date="2026-07-27",
@@ -98,7 +125,7 @@ def test_dry_run_iterates_both_stats_without_write(monkeypatch):
 
 
 def test_write_mode_calls_partition_per_stat(monkeypatch):
-    monkeypatch.setattr(il, "fetch_board", lambda season, stats: [{"playerid": "sa1"}])
+    monkeypatch.setattr(il, "fetch_board", lambda season, stats, **kw: [{"playerid": "sa1"}])
     calls = []
     monkeypatch.setattr(il, "write_partition",
                         lambda df, season, stats, as_of_date: calls.append((stats, len(df))) or len(df))
