@@ -107,6 +107,17 @@ def test_extract_missing_fields_are_none_not_crash():
     assert r["season"] == 2026 and r["as_of_date"] == "2026-07-27"
 
 
+def test_resolve_as_of_date_historical_safeguard():
+    """A historical --season pull with no --as-of must NOT stamp TODAY (would poison E7.8's
+    time-series) — it stamps a mid-season approx and flags is_historical_guess."""
+    # explicit --as-of wins verbatim
+    assert ip.resolve_as_of_date("2020-04-01", 2020, 2026, "2026-07-27") == ("2020-04-01", False)
+    # current season → today's game day
+    assert ip.resolve_as_of_date(None, 2026, 2026, "2026-07-27") == ("2026-07-27", False)
+    # past season, no --as-of → mid-season approx + historical flag (main() warns)
+    assert ip.resolve_as_of_date(None, 2020, 2026, "2026-07-27") == ("2020-07-01", True)
+
+
 def test_numeric_parsers():
     assert ip._to_float("50+") == 50.0
     assert ip._to_float(60) == 60.0

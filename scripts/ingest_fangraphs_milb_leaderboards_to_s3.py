@@ -332,8 +332,14 @@ def main() -> None:
         k, v = kv.split("=", 1)
         extra_params[k.strip()] = v.strip()
 
+    # as_of: explicit → verbatim; current season → US game day; past season → mid-season approx
+    # (a historical --season pull must NOT silently stamp TODAY — E7.8 as-of research).
     if args.as_of:
         as_of_date = args.as_of
+    elif args.season != date.today().year:
+        as_of_date = f"{args.season}-07-01"
+        log.warning("Historical season %d with no --as-of → stamping as_of=%s (mid-season approx); "
+                    "pass --as-of for the true date (E7.8 as-of joins).", args.season, as_of_date)
     else:
         try:
             from betting_ml.utils.game_day import current_game_date_iso

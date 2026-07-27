@@ -45,8 +45,12 @@ Usage (all SF-FREE — AWS creds via the instance role / env only):
     # Operator fallback if the endpoint is genuinely blocked — a manual Board CSV export:
     uv run python scripts/ingest_fangraphs_prospects_to_s3.py --season 2026 --from-csv board.csv
 
-    # Historical as-of snapshot (NICE-TO-HAVE 2nd pass, not an 8/3 blocker): stamp an explicit date.
-    uv run python scripts/ingest_fangraphs_prospects_to_s3.py --season 2025 --as-of 2025-07-01
+    # Historical board snapshot (E7.8 "do rankings translate to MLB success?" research): pass the
+    # past --season (+ --as-of for the board's true date; else it stamps <season>-07-01 + warns —
+    # never today). PROBE a past season first to confirm the slug returns historical data:
+    uv run python scripts/ingest_fangraphs_prospects_to_s3.py --season 2020 --probe
+    uv run python scripts/ingest_fangraphs_prospects_to_s3.py --season 2020 --as-of 2020-02-15
+    #   (backfill many seasons: bash loop `for y in $(seq 2016 2025); do … --season $y …; done`)
 """
 
 from __future__ import annotations
@@ -251,7 +255,8 @@ def coverage_report(rows: list[dict], season: int, as_of_date: str, board_slug: 
         log.info("  with mlbam_id ............... %d (%.0f%%)  ⭐ E8.0 join key", _cnt("mlbam_id"), 100 * _cnt("mlbam_id") / n)
         log.info("  with player_name ............ %d (%.0f%%)", _cnt("player_name"), 100 * _cnt("player_name") / n)
         log.info("  with FV ..................... %d (%.0f%%)", _cnt("fv"), 100 * _cnt("fv") / n)
-        log.info("  with overall_rank ........... %d", _cnt("overall_rank"))
+        log.info("  with overall_rank / org_rank  %d / %d  (overall rank only for the top tier)",
+                 _cnt("overall_rank"), _cnt("org_rank"))
         log.info("  with ETA .................... %d", _cnt("eta"))
         log.info("  with level .................. %d", _cnt("level"))
         log.info("  distinct orgs / positions ... %d / %d", len(orgs), len(positions))
@@ -305,6 +310,26 @@ def fetch_from_csv(path: str) -> list[dict]:
     return df.to_dict(orient="records")
 
 
+def resolve_as_of_date(as_of: str | None, season: int, current_year: int,
+                       current_game_date: str | None) -> tuple[str, bool]:
+    """Resolve the snapshot date to stamp on the rows (E7.8 leakage-safe as-of dating).
+
+    Returns ``(as_of_date, is_historical_guess)``:
+      • explicit ``--as-of``  → use it verbatim (is_historical_guess=False).
+      • CURRENT season, no --as-of → today's US game day (the daily-op case).
+      • a PAST season with no --as-of → `<season>-07-01` (mid-season approx) + is_historical_guess
+        True so main() WARNS. This is the safeguard: a historical `--season 2020` pull must NOT
+        silently stamp TODAY (2026) — that poisons the very time-series E7.8's translation study
+        needs. (FanGraphs serves the RETAINED version of a past board, not a true point-in-time
+        snapshot; pass an explicit --as-of for the board's real date when known.)
+    """
+    if as_of:
+        return as_of, False
+    if season != current_year:
+        return f"{season}-07-01", True
+    return (current_game_date or date.today().isoformat()), False
+
+
 # ── Main run ─────────────────────────────────────────────────────────────────────
 
 def run(season: int, draft: str | None, as_of_date: str, mode: str, csv_path: str | None) -> None:
@@ -348,8 +373,9 @@ def main() -> None:
                     help="Board slug (default: '<season>prospect', the main prospect board). "
                          "e.g. '2026mlb' for the draft board, '<season>int' for international.")
     ap.add_argument("--as-of", default=None, metavar="YYYY-MM-DD",
-                    help="Snapshot date stamped on the rows (default: today, the US game day). "
-                         "Set explicitly for a historical as-of snapshot.")
+                    help="Snapshot date stamped on the rows (default: today's US game day for the "
+                         "current season; <season>-07-01 for a past season). Set explicitly for a "
+                         "historical board's true date (E7.8 as-of research).")
     ap.add_argument("--probe", action="store_true",
                     help="THE ONE REAL PULL: print the live board's field names + sample rows and "
                          "the alias resolution, write NOTHING. Run this first.")
@@ -359,15 +385,20 @@ def main() -> None:
                     help="Operator fallback: read a manual Board CSV export instead of the API.")
     args = ap.parse_args()
 
-    # as_of defaults to the US baseball-day (game_day helper if importable, else today).
-    if args.as_of:
-        as_of_date = args.as_of
-    else:
-        try:
-            from betting_ml.utils.game_day import current_game_date_iso
-            as_of_date = current_game_date_iso()
-        except Exception:  # noqa: BLE001 — laptop/dev without the pkg → plain today
-            as_of_date = date.today().isoformat()
+    # as_of: explicit → verbatim; current season → US game day; past season → mid-season approx.
+    try:
+        from betting_ml.utils.game_day import current_game_date_iso
+        game_date = current_game_date_iso()
+    except Exception:  # noqa: BLE001 — laptop/dev without the pkg → plain today
+        game_date = date.today().isoformat()
+    as_of_date, is_historical_guess = resolve_as_of_date(
+        args.as_of, args.season, date.today().year, game_date)
+    if is_historical_guess:
+        log.warning(
+            "Historical season %d with no --as-of → stamping as_of=%s (mid-season approximation). "
+            "FanGraphs serves the RETAINED version of a past board, not a point-in-time snapshot; "
+            "pass --as-of for the board's true date if known (E7.8 leakage-safe as-of joins).",
+            args.season, as_of_date)
 
     mode = "probe" if args.probe else ("dry-run" if args.dry_run else "write")
     log.info("FanGraphs prospect ingest (E7.7) — season=%d as_of=%s mode=%s%s",
