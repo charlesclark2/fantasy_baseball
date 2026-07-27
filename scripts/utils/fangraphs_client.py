@@ -70,6 +70,12 @@ log = logging.getLogger(__name__)
 
 PROJECTIONS_URL = "https://www.fangraphs.com/api/projections/member"
 LEADERBOARD_URL = "https://www.fangraphs.com/api/leaders/major-league/data"
+# THE BOARD — prospect rankings + scouting grades (E7.7). ONE JSON call returns the whole
+# board (~1,300 prospects/season): future value (cFV), risk, ETA, org/overall rank, level,
+# and — critically for the E8.0 join — both the FanGraphs id (`playerid` → fg_minor_id) AND
+# the MLBAM id (`xMLBAMID`). Endpoint + param shape verified against the FanGraphs mobile-app
+# path (github.com/hedgertronic/fungo::get_prospect_board, 2026-07) — do NOT re-derive.
+PROSPECT_BOARD_URL = "https://www.fangraphs.com/api/prospects/board/data"
 
 # FlareSolverr endpoint that solves the Cloudflare challenge (Epic FG).
 FLARESOLVERR_URL = os.environ.get("FLARESOLVERR_URL", "")
@@ -264,6 +270,75 @@ def fetch_projections(proj_type: str, stats: str, season: int) -> dict:
     return {
         "data": rows,
         "source_endpoint": PROJECTIONS_URL,
+        "request_params": params,
+        "http_status_code": status,
+        "load_id": str(uuid.uuid4()),
+    }
+
+
+def _board_max_timeout_ms() -> int:
+    """FlareSolverr solve+fetch budget for a Board pull. One request returns the full
+    ~1,300-prospect board, so a generous window (default 120s, env-tunable) keeps a slow
+    origin from timing out — same lever as the leaderboard fetch."""
+    try:
+        return int(os.environ.get("FANGRAPHS_BOARD_MAX_TIMEOUT_MS", "120000"))
+    except ValueError:
+        return 120000
+
+
+def fetch_prospects_board(
+    season: int,
+    draft: Optional[str] = None,
+    board_type: Optional[str] = None,
+    pos: Optional[str] = None,
+    players: Optional[str] = None,
+) -> dict:
+    """Fetch THE BOARD (prospect rankings + scouting grades) for one season (E7.7).
+
+    Routes THROUGH FlareSolverr like every other FanGraphs fetch — FanGraphs fronts the whole
+    site with a Cloudflare JS challenge (`cf-mitigated: challenge`, HTTP 403 to any direct
+    client), verified live 2026-07-27. One call returns the whole board.
+
+    Args:
+        season: board season year (e.g. 2026).
+        draft: board slug; defaults to ``"<season>prospect"`` (the main prospect board).
+            Other slugs select the draft / international boards (e.g. ``"2026mlb"``).
+        board_type: optional board `type` filter (FanGraphs default when None).
+        pos: optional position filter.
+        players: optional comma-joined player-id filter.
+
+    Returns the standardised dict shape used across this module: ``data`` is the list of
+    per-prospect row dicts EXACTLY as FanGraphs produced them (raw casing preserved — the
+    caller does tolerant, case-insensitive key extraction so a FanGraphs rename can never
+    silently zero a column, per the column-name-reality discipline).
+    """
+    params = {
+        "draft": draft or f"{season}prospect",
+        "season": season,
+        "type": board_type,
+        "pos": pos,
+        "players": players,
+    }
+    # Drop None-valued params — urlencode would otherwise send the literal string "None".
+    params = {k: v for k, v in params.items() if v is not None}
+
+    payload, status = _flaresolverr_get(
+        PROSPECT_BOARD_URL, params, max_timeout_ms=_board_max_timeout_ms()
+    )
+    # The Board endpoint returns a bare JSON list; tolerate a {"data": [...]} wrapper too.
+    if isinstance(payload, list):
+        rows = payload
+    elif isinstance(payload, dict):
+        rows = payload.get("data", payload.get("prospects", [payload]))
+    else:
+        rows = []
+    log.info(
+        "fetch_prospects_board: season=%d draft=%s → %d prospect row(s)",
+        season, params["draft"], len(rows),
+    )
+    return {
+        "data": rows,
+        "source_endpoint": PROSPECT_BOARD_URL,
         "request_params": params,
         "http_status_code": status,
         "load_id": str(uuid.uuid4()),

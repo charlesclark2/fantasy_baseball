@@ -11,10 +11,18 @@ never the MLB predict path.
 """
 from dagster import in_process_executor, job
 
-from pipeline.ops.milb_ops import milb_incremental_ingest_op, statcast_aaa_incremental_ingest_op
+from pipeline.ops.milb_ops import (
+    fangraphs_prospects_ingest_op,
+    milb_incremental_ingest_op,
+    statcast_aaa_incremental_ingest_op,
+)
 
 
 @job(executor_def=in_process_executor)
 def milb_ingest_job():
+    # Three independent WARN-tier ops in one isolated run (E7.1/E7.2/E7.7). Each catches its own
+    # exceptions internally, so one failing never blocks the others or fails the run — one
+    # operational duty ("keep the MiLB + prospect research data topped up"), no extra scaffolding.
     milb_incremental_ingest_op()
     statcast_aaa_incremental_ingest_op()
+    fangraphs_prospects_ingest_op()

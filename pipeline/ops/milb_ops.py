@@ -6,6 +6,7 @@ revisions land. `--incremental` re-pulls those month partitions idempotently.
 
   • milb_incremental_ingest_op   → baseball/milb/{schedule,player_game_logs}      (E7.1)
   • statcast_aaa_incremental_ingest_op → baseball/milb/statcast_aaa (AAA, Hawk-Eye)  (E7.2)
+  • fangraphs_prospects_ingest_op → baseball/milb/the_board (FanGraphs THE BOARD)   (E7.7)
 
 TIER = WARN-but-continue (E11.7 / CLAUDE.md op-tier map): MiLB data is NOT on any MLB
 serving/predict path — it is the research substrate for E7.3 (MLE) + E8 (Dynasty). A Stats-API
@@ -34,6 +35,12 @@ MILB_INGEST_TIMEOUT_SECONDS = int(os.environ.get("MILB_INGEST_TIMEOUT_SECONDS", 
 # the boxscore-per-game MiLB pull above, but still gets a generous ceiling per INC-32 discipline.
 STATCAST_AAA_INGEST_TIMEOUT_SECONDS = int(
     os.environ.get("STATCAST_AAA_INGEST_TIMEOUT_SECONDS", "900")
+)
+
+# The FanGraphs prospect board is ONE FlareSolverr-routed request (~1,300 rows). A generous
+# ceiling (default 300s) covers a slow Cloudflare solve + origin compute; INC-32 discipline.
+FANGRAPHS_PROSPECTS_TIMEOUT_SECONDS = int(
+    os.environ.get("FANGRAPHS_PROSPECTS_TIMEOUT_SECONDS", "300")
 )
 
 
@@ -68,4 +75,27 @@ def statcast_aaa_incremental_ingest_op(context):
         context.log.warning(
             f"AAA Statcast incremental ingest failed (non-fatal — research-only, off the MLB "
             f"serving path; the next daily run re-pulls the same month idempotently): {e}"
+        )
+
+
+@op(out=Out(Nothing))
+def fangraphs_prospects_ingest_op(context):
+    """Daily FanGraphs THE BOARD snapshot → baseball/milb/the_board (E7.7).
+
+    WARN-tier: prospect data is research substrate for E7.4/E7.8 + the E8.0 draft board, NOT on
+    any MLB serving/predict path. A Cloudflare block, an unset FLARESOLVERR_URL, or an S3 blip
+    must degrade QUIETLY (log a WARNING, op succeeds) — the write is idempotent per
+    (season, as_of_date), so the next daily run re-snaps cleanly. Snowflake-FREE."""
+    try:
+        _run_script(
+            context,
+            "ingest_fangraphs_prospects_to_s3.py",
+            [],  # defaults: --season <current year>, --as-of <today>
+            timeout=FANGRAPHS_PROSPECTS_TIMEOUT_SECONDS,
+        )
+    except Exception as e:  # noqa: BLE001 — WARN-tier: prospect data is off the MLB serving path
+        context.log.warning(
+            f"FanGraphs prospect board ingest failed (non-fatal — research-only, off the MLB "
+            f"serving path; needs FLARESOLVERR_URL on the box, and the next daily run re-snaps "
+            f"idempotently per as_of_date): {e}"
         )
