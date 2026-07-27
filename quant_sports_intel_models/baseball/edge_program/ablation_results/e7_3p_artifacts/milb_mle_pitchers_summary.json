@@ -1,0 +1,367 @@
+{
+  "model_version": "milb_mle_pitcher_v1",
+  "generated_at": "2026-07-27T06:37:40.316649+00:00",
+  "metrics": [
+    "k_pct",
+    "bb_pct",
+    "hr_rate",
+    "gb_pct",
+    "xwoba_against"
+  ],
+  "skipped": {},
+  "join_coverage": {
+    "n_rows_player_level": 23862,
+    "n_players": 11166,
+    "n_with_minor_line": 13953,
+    "n_graduated_labelled": 2034,
+    "n_prospects": 11919,
+    "pct_graduated": 8.5,
+    "n_with_statcast": 1829,
+    "n_with_gb_label": 5795
+  },
+  "per_metric": {
+    "k_pct": {
+      "winner": "partial_pool@4.0",
+      "leaderboard": [
+        {
+          "config": "partial_pool@4.0",
+          "oos_mae": 0.03565729939671503,
+          "oos_skill_vs_null": 0.0019078989529571128,
+          "selectable": true
+        },
+        {
+          "config": "partial_pool@2.0",
+          "oos_mae": 0.03572122519616915,
+          "oos_skill_vs_null": 0.001843973153503004,
+          "selectable": true
+        },
+        {
+          "config": "gbm@300-2-0.03+sc",
+          "oos_mae": 0.03583355636937901,
+          "oos_skill_vs_null": 0.0017316419802931337,
+          "selectable": true
+        },
+        {
+          "config": "gbm@500-3-0.02+sc",
+          "oos_mae": 0.036899817544323324,
+          "oos_skill_vs_null": 0.0006653808053488276,
+          "selectable": true
+        },
+        {
+          "config": "archetype_prior",
+          "oos_mae": 0.03734243005735924,
+          "oos_skill_vs_null": 0.0002227682923129145,
+          "selectable": false
+        },
+        {
+          "config": "level_mean",
+          "oos_mae": 0.03756519834967215,
+          "oos_skill_vs_null": 0.0,
+          "selectable": false
+        },
+        {
+          "config": "multiplicative",
+          "oos_mae": 0.04370973629136526,
+          "oos_skill_vs_null": -0.006144537941693105,
+          "selectable": true
+        },
+        {
+          "config": "identity_no_translation",
+          "oos_mae": 0.05570445147075936,
+          "oos_skill_vs_null": -0.018139253121087214,
+          "selectable": false
+        }
+      ],
+      "pbo": 0.014285714285714285,
+      "dsr": 0.7855191187514134,
+      "oracle_floor_ok": true,
+      "oos_corr": 0.3661090725533748,
+      "gates_passed": [
+        "per-(pitcher, level) grain is unique",
+        "every emission fit on strictly-prior debut cohorts (n_prior \u2265 1) \u2014 seed not emitted",
+        "projection finite + plausible (range [0.106, 0.309], sd\u22640.093)",
+        "oracle-floor holds (no candidate beats a target-seeing oracle \u2192 metric not inverted)",
+        "winner beats the level-mean null OOS (MAE 0.0357 < 0.0376)",
+        "vs raw minor line as-is: MLE winner beats it (MAE 0.0357 vs 0.0557)",
+        "vs generic population prior: MLE winner beats it (MAE 0.0357 vs 0.0373)",
+        "PBO = 0.014 over 8 configs (<0.2 \u2705)",
+        "DSR = 0.786 (n_trials=8) \u2014 robust-but-weak, honest feeder (OK)"
+      ]
+    },
+    "bb_pct": {
+      "winner": "partial_pool@4.0",
+      "leaderboard": [
+        {
+          "config": "partial_pool@4.0",
+          "oos_mae": 0.019721536336168785,
+          "oos_skill_vs_null": 0.0015573423897797397,
+          "selectable": true
+        },
+        {
+          "config": "partial_pool@2.0",
+          "oos_mae": 0.01980197044854792,
+          "oos_skill_vs_null": 0.0014769082774006071,
+          "selectable": true
+        },
+        {
+          "config": "gbm@300-2-0.03+sc",
+          "oos_mae": 0.020065049444423295,
+          "oos_skill_vs_null": 0.0012138292815252305,
+          "selectable": true
+        },
+        {
+          "config": "gbm@500-3-0.02+sc",
+          "oos_mae": 0.020372888201532487,
+          "oos_skill_vs_null": 0.0009059905244160338,
+          "selectable": true
+        },
+        {
+          "config": "archetype_prior",
+          "oos_mae": 0.021242950835094417,
+          "oos_skill_vs_null": 3.592789085411017e-05,
+          "selectable": false
+        },
+        {
+          "config": "level_mean",
+          "oos_mae": 0.021278878725948525,
+          "oos_skill_vs_null": 0.0,
+          "selectable": false
+        },
+        {
+          "config": "identity_no_translation",
+          "oos_mae": 0.02501649845765536,
+          "oos_skill_vs_null": -0.0037376197317068355,
+          "selectable": false
+        },
+        {
+          "config": "multiplicative",
+          "oos_mae": 0.02605193860677334,
+          "oos_skill_vs_null": -0.004773059880824809,
+          "selectable": true
+        }
+      ],
+      "pbo": 0.0,
+      "dsr": 0.9468974505838751,
+      "oracle_floor_ok": true,
+      "oos_corr": 0.3666912403325834,
+      "gates_passed": [
+        "per-(pitcher, level) grain is unique",
+        "every emission fit on strictly-prior debut cohorts (n_prior \u2265 1) \u2014 seed not emitted",
+        "projection finite + plausible (range [0.053, 0.189], sd\u22640.102)",
+        "oracle-floor holds (no candidate beats a target-seeing oracle \u2192 metric not inverted)",
+        "winner beats the level-mean null OOS (MAE 0.0197 < 0.0213)",
+        "vs raw minor line as-is: MLE winner beats it (MAE 0.0197 vs 0.0250)",
+        "vs generic population prior: MLE winner beats it (MAE 0.0197 vs 0.0212)",
+        "PBO = 0.000 over 8 configs (<0.2 \u2705)",
+        "DSR = 0.947 (n_trials=8) \u2014 robust-but-weak, honest feeder (OK)"
+      ]
+    },
+    "hr_rate": {
+      "winner": "partial_pool@4.0",
+      "leaderboard": [
+        {
+          "config": "partial_pool@4.0",
+          "oos_mae": 0.009935929351925464,
+          "oos_skill_vs_null": 2.2963872776962816e-05,
+          "selectable": true
+        },
+        {
+          "config": "archetype_prior",
+          "oos_mae": 0.00995355207446686,
+          "oos_skill_vs_null": 5.341150235566185e-06,
+          "selectable": false
+        },
+        {
+          "config": "partial_pool@2.0",
+          "oos_mae": 0.009956608864983991,
+          "oos_skill_vs_null": 2.2843597184357183e-06,
+          "selectable": true
+        },
+        {
+          "config": "level_mean",
+          "oos_mae": 0.009958893224702427,
+          "oos_skill_vs_null": 0.0,
+          "selectable": false
+        },
+        {
+          "config": "gbm@300-2-0.03+sc",
+          "oos_mae": 0.010092029530112788,
+          "oos_skill_vs_null": -0.0001331363054103628,
+          "selectable": true
+        },
+        {
+          "config": "gbm@500-3-0.02+sc",
+          "oos_mae": 0.01028585308011719,
+          "oos_skill_vs_null": -0.000326959855414762,
+          "selectable": true
+        },
+        {
+          "config": "identity_no_translation",
+          "oos_mae": 0.016522625025827423,
+          "oos_skill_vs_null": -0.006563731801125002,
+          "selectable": false
+        },
+        {
+          "config": "multiplicative",
+          "oos_mae": 0.017706917135427117,
+          "oos_skill_vs_null": -0.0077480239107246916,
+          "selectable": true
+        }
+      ],
+      "pbo": 0.9,
+      "dsr": 0.13020395691456377,
+      "oracle_floor_ok": true,
+      "oos_corr": 0.09361206962464608,
+      "gates_passed": [
+        "per-(pitcher, level) grain is unique",
+        "every emission fit on strictly-prior debut cohorts (n_prior \u2265 1) \u2014 seed not emitted",
+        "projection finite + plausible (range [0.017, 0.062], sd\u22640.062)",
+        "oracle-floor holds (no candidate beats a target-seeing oracle \u2192 metric not inverted)",
+        "winner beats the level-mean null OOS (MAE 0.0099 < 0.0100)",
+        "vs raw minor line as-is: MLE winner beats it (MAE 0.0099 vs 0.0165)",
+        "vs generic population prior: MLE winner beats it (MAE 0.0099 vs 0.0100)",
+        "PBO = 0.900 over 8 configs (see report \u2014 tie vs overfit)",
+        "DSR = 0.130 (n_trials=8) \u2014 robust-but-weak, honest feeder (OK)"
+      ]
+    },
+    "gb_pct": {
+      "winner": "partial_pool@2.0",
+      "leaderboard": [
+        {
+          "config": "partial_pool@2.0",
+          "oos_mae": 0.048049263188061415,
+          "oos_skill_vs_null": 0.010543154308318174,
+          "selectable": true
+        },
+        {
+          "config": "partial_pool@4.0",
+          "oos_mae": 0.04804949092717012,
+          "oos_skill_vs_null": 0.010542926569209472,
+          "selectable": true
+        },
+        {
+          "config": "gbm@300-2-0.03+sc",
+          "oos_mae": 0.04937851359462337,
+          "oos_skill_vs_null": 0.009213903901756222,
+          "selectable": true
+        },
+        {
+          "config": "gbm@500-3-0.02+sc",
+          "oos_mae": 0.050593004309483186,
+          "oos_skill_vs_null": 0.007999413186896414,
+          "selectable": true
+        },
+        {
+          "config": "multiplicative",
+          "oos_mae": 0.0560521278754526,
+          "oos_skill_vs_null": 0.0025402896209269737,
+          "selectable": true
+        },
+        {
+          "config": "archetype_prior",
+          "oos_mae": 0.05755267372130095,
+          "oos_skill_vs_null": 0.0010397437750786485,
+          "selectable": false
+        },
+        {
+          "config": "level_mean",
+          "oos_mae": 0.058592417496379584,
+          "oos_skill_vs_null": 0.0,
+          "selectable": false
+        },
+        {
+          "config": "identity_no_translation",
+          "oos_mae": 0.09538775327754144,
+          "oos_skill_vs_null": -0.03679533578116184,
+          "selectable": false
+        }
+      ],
+      "pbo": 0.0,
+      "dsr": 0.9999615445869595,
+      "oracle_floor_ok": true,
+      "oos_corr": 0.55053599776929,
+      "gates_passed": [
+        "per-(pitcher, level) grain is unique",
+        "every emission fit on strictly-prior debut cohorts (n_prior \u2265 1) \u2014 seed not emitted",
+        "projection finite + plausible (range [0.271, 0.590], sd\u22640.071)",
+        "oracle-floor holds (no candidate beats a target-seeing oracle \u2192 metric not inverted)",
+        "winner beats the level-mean null OOS (MAE 0.0480 < 0.0586)",
+        "vs raw minor line as-is: MLE winner beats it (MAE 0.0480 vs 0.0954)",
+        "vs generic population prior: MLE winner beats it (MAE 0.0480 vs 0.0576)",
+        "PBO = 0.000 over 8 configs (<0.2 \u2705)",
+        "DSR = 1.000 (n_trials=8) \u2014 \u22650.95"
+      ]
+    },
+    "xwoba_against": {
+      "winner": "partial_pool@2.0",
+      "leaderboard": [
+        {
+          "config": "level_mean",
+          "oos_mae": 0.02582072074190685,
+          "oos_skill_vs_null": 0.0,
+          "selectable": false
+        },
+        {
+          "config": "archetype_prior",
+          "oos_mae": 0.02582072074190685,
+          "oos_skill_vs_null": -8.673617379884035e-19,
+          "selectable": false
+        },
+        {
+          "config": "partial_pool@2.0",
+          "oos_mae": 0.026000560327302722,
+          "oos_skill_vs_null": -0.00017983958539587175,
+          "selectable": true
+        },
+        {
+          "config": "partial_pool@4.0",
+          "oos_mae": 0.026114431084347106,
+          "oos_skill_vs_null": -0.0002937103424402558,
+          "selectable": true
+        },
+        {
+          "config": "gbm@300-2-0.03+sc",
+          "oos_mae": 0.02613271939462165,
+          "oos_skill_vs_null": -0.00031199865271479884,
+          "selectable": true
+        },
+        {
+          "config": "gbm@500-3-0.02+sc",
+          "oos_mae": 0.02646971846429014,
+          "oos_skill_vs_null": -0.0006489977223832931,
+          "selectable": true
+        },
+        {
+          "config": "identity_no_translation",
+          "oos_mae": 0.041870942384299815,
+          "oos_skill_vs_null": -0.01605022164239297,
+          "selectable": false
+        },
+        {
+          "config": "multiplicative",
+          "oos_mae": 0.05072387920621048,
+          "oos_skill_vs_null": -0.024903158464303625,
+          "selectable": true
+        }
+      ],
+      "pbo": 1.0,
+      "dsr": 0.029940046918491347,
+      "oracle_floor_ok": true,
+      "oos_corr": 0.14654037483709992,
+      "gates_passed": [
+        "per-(pitcher, level) grain is unique",
+        "every emission fit on strictly-prior debut cohorts (n_prior \u2265 1) \u2014 seed not emitted",
+        "projection finite + plausible (range [0.295, 0.351], sd\u22640.019)",
+        "oracle-floor holds (no candidate beats a target-seeing oracle \u2192 metric not inverted)",
+        "\u26a0\ufe0f winner does NOT beat the null (MAE 0.0260 \u2265 0.0258) \u2014 honest no-signal",
+        "vs raw minor line as-is: MLE winner beats it (MAE 0.0260 vs 0.0419)",
+        "vs generic population prior: MLE winner does NOT beat it (MAE 0.0260 vs 0.0258)",
+        "PBO = 1.000 over 8 configs (see report \u2014 tie vs overfit)",
+        "DSR = 0.030 (n_trials=8) \u2014 robust-but-weak, honest feeder (OK)"
+      ]
+    }
+  },
+  "notes": [
+    "\u26a0\ufe0f [xwoba_against] NO SIGNAL: winner OOS MAE 0.0260 \u2265 level-mean null 0.0258 \u2014 the minor line adds nothing beyond level. Emitting anyway (degrades to the level mean), flagged for the starter-EB wiring story."
+  ]
+}
