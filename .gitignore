@@ -107,3 +107,6 @@ quant_sports_intel_models/football/nfl/fantasy/artifacts/*_cache/
 # season projections are already covered above).
 quant_sports_intel_models/football/nfl/fantasy/artifacts/*_projection_summary_*.json
 ablation_results/**/*.parquet
+
+# E7.x ablation artifacts live in *_artifacts/ SUBDIRS; line 66 only globs one level.
+quant_sports_intel_models/baseball/edge_program/ablation_results/**/*.parquet

@@ -165,13 +165,13 @@ def _retired_fqn_config_entries(py_src: str) -> list[str]:
 #     at 2026-07-05, so `--since <today>` selected zero rows and wrote nothing (a pure warehouse
 #     wake). Bridge removed from intraday_ops.py, entry moved to RETIRED_SOURCES, and the two tests
 #     that ASSERTED the call exists were inverted to assert it is gone.
-#   • parity_check_w3pre.py / both — a SF-vs-S3 parity diagnostic, off every serving path. Its
-#     comparisons against a frozen source are now meaningless rather than dangerous, so it is the
-#     one remaining entry. Resolve by deleting the frozen sources from its comparison map.
-KNOWN_UNRESOLVED = {
-    ("scripts/parity_check_w3pre.py", "baseball_data.oddsapi.mlb_odds_raw"),
-    ("scripts/parity_check_w3pre.py", "baseball_data.statsapi.monthly_schedule"),
-}
+#   • parity_check_w3pre.py / both — RESOLVED the same day. Not merely meaningless: with S3
+#     correctly AHEAD of a frozen Snowflake (263,060 vs 175,513 rows for mlb_odds_raw) the
+#     pre-flight FAILED the gate as "a partition was doubled" and told the operator to
+#     `aws s3 rm` live capture data. Both moved to a FROZEN_SOURCES skip-list.
+#
+# ⭐ EMPTY IS THE GOAL STATE — an entry here is a known hole, not an approved exception.
+KNOWN_UNRESOLVED: set[tuple[str, str]] = set()
 
 
 def test_known_unresolved_list_stays_honest():
@@ -243,4 +243,34 @@ def test_no_python_config_dict_points_at_a_retired_native_source():
         "data, and any partition-prune it drives will DELETE the S3-native writer's fresh output "
         "(the 2026-07-27 monthly_schedule outage). Point it at the S3 feed or retire the entry:\n  "
         + "\n  ".join(violations)
+    )
+
+
+def test_parity_check_skips_frozen_sources_instead_of_comparing_them():
+    """parity_check_w3pre's premise — "Snowflake is the independent reference" — only holds while
+    a source's Snowflake writer is alive. For a retired source, S3 is correctly AHEAD of a frozen
+    Snowflake, which the pre-flight's `parquet_n > source_n` branch reported as "a partition was
+    doubled", FAILED the gate on, and prescribed `aws s3 rm` for — i.e. it told the operator to
+    delete live capture data (2026-07-27: 263,060 S3 rows vs 175,513 frozen SF rows).
+    """
+    src = (_REPO_ROOT / "scripts" / "parity_check_w3pre.py").read_text()
+    fqn_map = src[src.find("W3PRE_SOURCE_FQN = {"):]
+    fqn_map = fqn_map[:fqn_map.find("}")]
+    for schema, table in RETIRED_NATIVE_SOURCES:
+        assert f"{schema}.{table}" not in fqn_map, (
+            f"{schema}.{table} is RETIRED — it must not be a live Snowflake reference in "
+            f"W3PRE_SOURCE_FQN; move it to FROZEN_SOURCES so the pre-flight SKIPS it."
+        )
+    assert "FROZEN_SOURCES" in src and "if source in FROZEN_SOURCES:" in src, (
+        "the pre-flight must skip frozen sources explicitly, before the row-count comparison."
+    )
+
+
+def test_parity_check_flags_a_tautological_view_comparison():
+    """Post-cutover the Snowflake stg object becomes a VIEW over the same S3 parquet the DuckDB
+    side reads, so agreement is guaranteed and proves nothing. The docstring always warned to run
+    pre-cutover; prose does not stop a stale invocation being read as a pass."""
+    src = (_REPO_ROOT / "scripts" / "parity_check_w3pre.py").read_text()
+    assert "def sf_object_is_view" in src and "TAUTOLOGICAL" in src, (
+        "check_model must detect a VIEW on the Snowflake side and say so loudly."
     )

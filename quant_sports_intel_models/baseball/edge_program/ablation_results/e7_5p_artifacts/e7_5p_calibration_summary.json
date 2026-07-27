@@ -1,0 +1,114 @@
+{
+  "model_version": "milb_mle_pitcher_prior_v1",
+  "generated_at": "2026-07-27T07:43:51.015979+00:00",
+  "metrics": [
+    "gb_pct",
+    "k_pct",
+    "bb_pct"
+  ],
+  "not_wired": {
+    "hr_rate": "E7.3p TIED FIELD (winner beats the null by 1e-4, PBO 0.900, corr 0.094) \u2014 the E2.1-r reading makes this effectively NO-SIGNAL; HR suppression is BABIP-adjacent.",
+    "xwoba_against": "E7.3p no-signal (corr 0.147, DSR 0.030; does NOT beat the generic archetype prior) \u2014 the batter-wOBA mirror. eb_xwoba_against keeps its experience-band prior."
+  },
+  "evidence_units": {
+    "gb_pct": "bip",
+    "k_pct": "bf",
+    "bb_pct": "bf"
+  },
+  "n_pitchers": 7474,
+  "n_prospects": 6659,
+  "recalibration": {
+    "gb_pct": {
+      "metric": "gb_pct",
+      "resid_sd": 0.059254,
+      "param_sd_median": 0.007626,
+      "tightness_ratio": 7.77,
+      "n": 815,
+      "coverage_68": 0.6675,
+      "coverage_90": 0.8982,
+      "label_sampling_sd": 0.034103,
+      "true_sd_est": 0.048457,
+      "kappa_floor": 20.0,
+      "kappa_cap": 400.0
+    },
+    "k_pct": {
+      "metric": "k_pct",
+      "resid_sd": 0.044676,
+      "param_sd_median": 0.005769,
+      "tightness_ratio": 7.744,
+      "n": 815,
+      "coverage_68": 0.7313,
+      "coverage_90": 0.8994,
+      "label_sampling_sd": 0.023298,
+      "true_sd_est": 0.03812,
+      "kappa_floor": 20.0,
+      "kappa_cap": 400.0
+    },
+    "bb_pct": {
+      "metric": "bb_pct",
+      "resid_sd": 0.024746,
+      "param_sd_median": 0.004281,
+      "tightness_ratio": 5.78,
+      "n": 815,
+      "coverage_68": 0.7178,
+      "coverage_90": 0.9043,
+      "label_sampling_sd": 0.016718,
+      "true_sd_est": 0.018245,
+      "kappa_floor": 20.0,
+      "kappa_cap": 400.0
+    }
+  },
+  "ablation": {
+    "gb_pct": {
+      "metric": "gb_pct",
+      "n_scored": 716,
+      "n_cohorts": 10,
+      "mle_nll": -1.40909,
+      "generic_nll": -1.14752,
+      "mle_crps": 0.033535,
+      "generic_crps": 0.043477,
+      "mle_mae": 0.047673,
+      "generic_mae": 0.061873,
+      "mle_cov68": 0.6732,
+      "generic_cov68": 0.6578,
+      "mle_cov90": 0.9106,
+      "generic_cov90": 0.898,
+      "mle_wins": true,
+      "notes": []
+    },
+    "k_pct": {
+      "metric": "k_pct",
+      "n_scored": 716,
+      "n_cohorts": 10,
+      "mle_nll": -1.68744,
+      "generic_nll": -1.57598,
+      "mle_crps": 0.02474,
+      "generic_crps": 0.0276,
+      "mle_mae": 0.034272,
+      "generic_mae": 0.038177,
+      "mle_cov68": 0.7277,
+      "generic_cov68": 0.7388,
+      "mle_cov90": 0.898,
+      "generic_cov90": 0.9176,
+      "mle_wins": true,
+      "notes": []
+    },
+    "bb_pct": {
+      "metric": "bb_pct",
+      "n_scored": 716,
+      "n_cohorts": 10,
+      "mle_nll": -2.27025,
+      "generic_nll": -2.19015,
+      "mle_crps": 0.013812,
+      "generic_crps": 0.014956,
+      "mle_mae": 0.019103,
+      "generic_mae": 0.02083,
+      "mle_cov68": 0.7165,
+      "generic_cov68": 0.7109,
+      "mle_cov90": 0.9064,
+      "generic_cov90": 0.9064,
+      "mle_wins": true,
+      "notes": []
+    }
+  }
+}
