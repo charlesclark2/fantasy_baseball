@@ -98,9 +98,12 @@ vapid_private.pem
 *.pem
 infrastructure/cognito/presignup_link/.build/
 
-# NF-D2 #6: re-fetchable FFC ADP cache (reproducible from the API; not committed)
-quant_sports_intel_models/football/nfl/fantasy/artifacts/adp_cache/
-# NF-D3: re-fetchable FantasyPros ECR cache + operator-supplied competitor files (licensed FF/PFF/ESPN
-# rankings — never commit; the *.csv rule under artifacts/ already covers benchmarks_manual data)
-quant_sports_intel_models/football/nfl/fantasy/artifacts/ecr_cache/
+# NFL-fantasy re-fetchable network/response caches — every `*_cache/` dir under the fantasy artifacts
+# is reproducible from its source API (FFC ADP, FantasyPros ECR, ESPN/Sleeper ranks, Sleeper injuries,
+# NF-D6/D7 defense & xFP, the NF1 feature pool) → never committed. (Operator-supplied licensed FF/PFF
+# competitor files are covered by the *.csv rule under artifacts/.)
+quant_sports_intel_models/football/nfl/fantasy/artifacts/*_cache/
+# Regenerated NF1/NF1.1/NF1.3 build-output SUMMARIES (re-emitted by `--mode build`; the parquet/csv
+# season projections are already covered above).
+quant_sports_intel_models/football/nfl/fantasy/artifacts/*_projection_summary_*.json
 ablation_results/**/*.parquet
