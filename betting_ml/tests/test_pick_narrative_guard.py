@@ -137,3 +137,62 @@ def test_prompt_edge_matches_chip_formula():
     # Edge displayed must equal abs(cal_win - mkt_win) = abs(0.208 - 0.520) = 0.312
     prompt = _build_prompt(_prompt_row(cal_win=0.208, mkt_win=0.520), {})
     assert "31.2%" in prompt
+
+
+# ---------------------------------------------------------------------------
+# E11.20 phase-2b — the totals paragraph must not hinge on `totals_edge`
+#
+# `totals_edge` is the alpha-aware ACTIONABLE edge and is NULL by design while
+# best_alpha = 0. The Nova prompt decides paragraph count deterministically from
+# `totals_ev_str`, so gating that string on `totals_edge` silently dropped the
+# totals paragraph from EVERY narrative on the first Nova slate (2026-07-27:
+# 0/85 two-paragraph, though 80/85 carried the line + both probabilities).
+# ---------------------------------------------------------------------------
+
+def _totals_row(tot_edge=None, tot_model=0.556, tot_mkt=0.512, tot_line=8.5):
+    row = _prompt_row()
+    row.update({
+        "totals_edge": tot_edge,
+        "totals_model_prob": tot_model,
+        "over_prob_consensus": tot_mkt,
+        "total_line_consensus": tot_line,
+    })
+    return row
+
+
+def test_totals_paragraph_survives_null_totals_edge():
+    """The regression that shipped: probs + line present, totals_edge NULL."""
+    prompt = _build_prompt(_totals_row(tot_edge=None), {})
+    assert "TWO paragraphs" in prompt, (
+        "a NULL totals_edge must not suppress the totals paragraph — totals_edge is "
+        "unpopulated by design while best_alpha=0, so the paragraph would never render."
+    )
+    assert "Total line: 8.5" in prompt
+    assert "Model P(over): 55.6%" in prompt and "Market P(over): 51.2%" in prompt
+
+
+def test_divergence_is_derived_when_totals_edge_is_null():
+    """Derived divergence must equal |model − market| — the same number
+    write_serving_store's `ABS(totals_model_prob - over_prob_consensus)` serves."""
+    prompt = _build_prompt(_totals_row(tot_edge=None, tot_model=0.556, tot_mkt=0.512), {})
+    assert "Model-vs-market divergence (edge): +4.4%" in prompt
+
+
+def test_populated_totals_edge_is_still_used():
+    prompt = _build_prompt(_totals_row(tot_edge=0.031), {})
+    assert "Model-vs-market divergence (edge): +3.1%" in prompt
+
+
+def test_one_paragraph_when_totals_market_absent():
+    """No totals market ⇒ ONE paragraph and an explicit no-totals instruction —
+    the model must never invent a total line."""
+    prompt = _build_prompt(_totals_row(tot_model=None, tot_mkt=None, tot_line=None), {})
+    assert "ONE paragraph" in prompt
+    assert "no totals data is available" in prompt
+
+
+def test_missing_total_line_falls_back_to_one_paragraph():
+    """Probabilities without a line can't answer 'give the total line' — don't ask
+    for a paragraph the data can't fill."""
+    prompt = _build_prompt(_totals_row(tot_line=None), {})
+    assert "ONE paragraph" in prompt

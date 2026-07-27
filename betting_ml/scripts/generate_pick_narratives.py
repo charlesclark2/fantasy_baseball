@@ -380,13 +380,26 @@ def _build_prompt(row: dict, expl: dict) -> str:
     tot_mkt = row.get("over_prob_consensus")
     tot_line = row.get("total_line_consensus")
     totals_ev_str = ""
-    if tot_edge is not None and tot_model is not None and tot_mkt is not None:
-        ev_sign = "+" if tot_edge >= 0 else ""
+    # E11.20 phase-2b (2026-07-27) — gate on the two PROBABILITIES, not on `totals_edge`.
+    # `totals_edge` is the alpha-aware ACTIONABLE edge, which is ~0/NULL by design while
+    # best_alpha = 0 (predict_today.py's column comment), and it has been NULL for every
+    # served row since 7/24. Under Cortex the prompt let the model decide the paragraph
+    # count so this never showed; the Nova prompt decides it deterministically from
+    # `totals_ev_str`, so an unpopulated `totals_edge` silently dropped the totals
+    # paragraph from EVERY narrative on the first Nova slate (0/85 two-paragraph on 7/27,
+    # although 80/85 carried the line + both probabilities).
+    # The divergence is DERIVED here — the same thing write_serving_store.py already does
+    # (`ABS(totals_model_prob - over_prob_consensus) AS edge`) and the same shape as the
+    # H2H block above (`edge_display = abs(cal_win - mkt_win)`), so the narrative agrees
+    # with the number the pick chip shows. `totals_edge` is used when present.
+    if tot_model is not None and tot_mkt is not None and tot_line is not None:
+        divergence = tot_edge if tot_edge is not None else abs(tot_model - tot_mkt)
+        ev_sign = "+" if divergence >= 0 else ""
         totals_ev_str = (
             f"Total line: {tot_line}. "
             f"Model P(over): {tot_model:.1%}. "
             f"Market P(over): {tot_mkt:.1%}. "
-            f"Edge (EV signal): {ev_sign}{tot_edge:.1%}."
+            f"Model-vs-market divergence (edge): {ev_sign}{divergence:.1%}."
         )
 
     # Feature drivers from SHAP payload

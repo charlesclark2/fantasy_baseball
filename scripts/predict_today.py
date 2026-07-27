@@ -45,7 +45,10 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
+from betting_ml.utils.game_day import (  # INC-22 — canonical US baseball-day
+    current_game_date_iso,
+    BASEBALL_DAY_TZ,
+)
 from betting_ml.utils.data_loader import (
     load_features,
     load_todays_features,
@@ -134,6 +137,7 @@ def _get_aux_duck():
             _META_SERVE_QUERY,
             _POSTERIOR_PROVENANCE_QUERY,
             _RANGE_DATES_QUERY,
+            _FRESHNESS_QUERY_S3,   # E11.20 phase-2 — the Snowflake-free freshness probe
         )
         conn = _duck_connect()
         _register_views(conn, tables)
@@ -898,6 +902,105 @@ select
       where probable_pitcher_id is not null and game_date::date = try_to_date(%(d)s)))  as starter_total
 """
 
+# ── E11.20 phase-2 (pregame-W8b prereq) — the S3 twin of the freshness gate ─────────────
+# The SF query above asks `information_schema.tables.last_altered` when the feature store
+# was last built. That column only advances while the SNOWFLAKE leg of the pregame feature
+# family is still being rebuilt — so the moment the W8b SF leg is gated off, the timestamp
+# FREEZES and `lag_min` grows without bound → the gate reports STALE on a perfectly fresh
+# S3 feature store → a false abstain on every game. (Same failure shape as the INC-25 /
+# spine-freeze class: a cutover silently invalidates a freshness ANCHOR, not the data.)
+#
+# Cure: in --s3 mode the two `last_altered` probes are answered by the S3 parquet's
+# LastModified (the S3 build IS the write that must be observed), and the two data probes
+# route through the existing _aux_query DuckDB path. Snowflake-free end to end.
+#
+# ⚠️ INC-23: `ingestion_ts` is stored as an ISO VARCHAR in the parquet (the binary-timestamp
+# cure), so it is cast at the use-site. `game_date` is a real parquet DATE — left alone.
+# ⚠️ INC-17: `probable_pitcher_id` is INTEGER and `eb_starter_posteriors.pitcher_id` is
+# already VARCHAR in the parquet, so the ::varchar join renders '664983', never '664983.0'.
+_FRESHNESS_QUERY_S3 = """
+select
+  (select epoch(max(ingestion_ts::timestamp))
+     from baseball_data.betting.stg_statsapi_probable_pitchers)                        as ingest_epoch,
+  (select count(*) from (
+      select distinct game_pk::varchar gpk, probable_pitcher_id::varchar pid
+      from baseball_data.betting.stg_statsapi_probable_pitchers
+      where probable_pitcher_id is not null and game_date::date = try_cast(%(d)s as date)) p
+   left join baseball_data.betting.eb_starter_posteriors e
+     on e.game_pk::varchar = p.gpk and e.pitcher_id::varchar = p.pid
+   where e.pitcher_id is null)                                                         as starter_missing,
+  (select count(*) from (
+      select distinct game_pk, probable_pitcher_id
+      from baseball_data.betting.stg_statsapi_probable_pitchers
+      where probable_pitcher_id is not null and game_date::date = try_cast(%(d)s as date))) as starter_total
+"""
+
+# ⚠️ SEPARATE, DEFAULT-OFF gate — NOT keyed off --s3 alone. `predict_today` ALREADY runs
+# with --s3 on the daily/morning path whenever W7B_LAKEHOUSE_S3=1 (live since phase-2a), so
+# branching on _PREDICT_S3_MODE by itself would cut this gate over the moment it merged.
+# It must flip TOGETHER with the pregame-W8b SF-leg gate-off — the two are a matched pair:
+#   SF leg ON  + probe on SF  → today's behaviour (both anchors fresh)
+#   SF leg OFF + probe on SF  → `last_altered` FREEZES → false STALE → slate-wide abstain
+#   SF leg OFF + probe on S3  → the target state
+# Requiring BOTH flags mirrors the W6_ODDS_SF_FREE convention, so a half-set flag is inert
+# rather than a silent cutover.
+_FRESHNESS_S3_ENV = "W8B_FRESHNESS_S3"
+
+
+def _freshness_probe_is_s3() -> bool:
+    """True only when W8B_FRESHNESS_S3=1 AND this run is in --s3 read mode."""
+    return os.environ.get(_FRESHNESS_S3_ENV) == "1" and _PREDICT_S3_MODE
+
+
+# The lakehouse objects whose LastModified stands in for Snowflake's `last_altered`.
+_FRESHNESS_S3_BUCKET = "baseball-betting-ml-artifacts"
+_FRESHNESS_S3_GF_KEY = "baseball/lakehouse/feature_pregame_game_features_raw/data.parquet"
+_FRESHNESS_S3_BULLPEN_KEY = "baseball/lakehouse/eb_bullpen_posteriors/data.parquet"
+
+
+def _s3_last_modified(key: str):
+    """UTC-aware LastModified of a lakehouse parquet, or None if it can't be read.
+
+    Uses the shared instance-role-safe client (`make_s3_client`) — NEVER hand-builds one
+    with `aws_access_key_id=os.environ.get(...)`, which resolves to None on the box and
+    kills boto3's credential chain (the AKID landmine; test_boto3_credential_lint guards it).
+    Returns None on any error so the caller degrades to "unknown", never to a false STALE.
+    """
+    try:
+        from scripts.utils.lakehouse_raw_writer import make_s3_client
+        head = make_s3_client().head_object(Bucket=_FRESHNESS_S3_BUCKET, Key=key)
+        return head["LastModified"]          # boto3 returns a tz-aware UTC datetime
+    except Exception as exc:  # noqa: BLE001 — advisory probe; never a new blocker
+        print(f"  [30.13 FRESHNESS-GATE] s3 head_object({key}) unavailable ({exc}).")
+        return None
+
+
+def _freshness_probe_s3(target_date: str) -> tuple:
+    """S3-mode twin of one `_FRESHNESS_QUERY` row, in the SAME positional order the SF
+    path returns: (ingest_epoch, gf_build_epoch, bullpen_build_date, score_day,
+    starter_missing, starter_total). Order is the contract — the caller unpacks
+    positionally, exactly as `_aux_query`'s docstring requires."""
+    _cols, rows = _aux_query(_FRESHNESS_QUERY_S3, {"d": target_date})
+    ingest_epoch, starter_missing, starter_total = rows[0] if rows else (None, None, None)
+
+    gf_mtime = _s3_last_modified(_FRESHNESS_S3_GF_KEY)
+    bullpen_mtime = _s3_last_modified(_FRESHNESS_S3_BULLPEN_KEY)
+    # The SF twin compares `last_altered`'s date in the Snowflake session tz, which is
+    # America/Los_Angeles = the canonical baseball day (game_day.BASEBALL_DAY_TZ). The S3
+    # mtime is UTC, so convert before taking the date — otherwise a build that lands in the
+    # UTC-evening window would read as a different day than the SF path does and the
+    # branches would disagree. (Never diff an mtime against a raw UTC clock — the 7/25
+    # `s3 ls` false-alarm landmine; here both sides are made explicit and tz-aware.)
+    return (
+        ingest_epoch,
+        gf_mtime.timestamp() if gf_mtime is not None else None,
+        bullpen_mtime.astimezone(BASEBALL_DAY_TZ).strftime("%Y-%m-%d")
+        if bullpen_mtime is not None else None,
+        target_date,
+        starter_missing,
+        starter_total,
+    )
+
 
 def _serving_freshness_stale(target_date: str) -> tuple[bool, str]:
     """Story 30.13 Task 4 — SLATE-LEVEL serve-time freshness gate.
@@ -919,13 +1022,19 @@ def _serving_freshness_stale(target_date: str) -> tuple[bool, str]:
     Story 30.8. FAILS OPEN on any error (returns not-stale) so the gate is a safety net,
     never a new blocker. Returns (stale, reason)."""
     try:
-        conn = get_snowflake_connection()
-        try:
-            cur = conn.cursor()
-            cur.execute(_FRESHNESS_QUERY, {"d": target_date})
-            row = cur.fetchone()
-        finally:
-            conn.close()
+        if _freshness_probe_is_s3():
+            # E11.20 phase-2 — Snowflake-free probe. MUST be turned on whenever the pregame
+            # W8b SF leg is gated off, else the `last_altered` anchor freezes and this
+            # gate false-abstains the whole slate (see _FRESHNESS_QUERY_S3).
+            row = _freshness_probe_s3(target_date)
+        else:
+            conn = get_snowflake_connection()
+            try:
+                cur = conn.cursor()
+                cur.execute(_FRESHNESS_QUERY, {"d": target_date})
+                row = cur.fetchone()
+            finally:
+                conn.close()
         if not row:
             return (False, "")
         ingest_epoch, gf_build_epoch, bullpen_date, score_day, starter_missing, starter_total = row
