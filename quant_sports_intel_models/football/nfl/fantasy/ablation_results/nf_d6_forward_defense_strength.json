@@ -1,0 +1,272 @@
+{
+  "walk_forward": {
+    "arms": {
+      "raw": {
+        "config": "raw",
+        "opp_adjust": false,
+        "churn_shrink_k": 0.0,
+        "pass_rho_oppadj": 0.2895,
+        "pass_rho_raw": 0.2652,
+        "rush_rho_oppadj": 0.2268,
+        "rush_rho_raw": 0.228,
+        "pooled_rho_oppadj": 0.2581
+      },
+      "oppadj": {
+        "config": "oppadj",
+        "opp_adjust": true,
+        "churn_shrink_k": 0.0,
+        "pass_rho_oppadj": 0.2808,
+        "pass_rho_raw": 0.2489,
+        "rush_rho_oppadj": 0.2194,
+        "rush_rho_raw": 0.219,
+        "pooled_rho_oppadj": 0.2501
+      },
+      "oppadj_churn_k0.15": {
+        "config": "oppadj_churn_k0.15",
+        "opp_adjust": true,
+        "churn_shrink_k": 0.15,
+        "pass_rho_oppadj": 0.2809,
+        "pass_rho_raw": 0.2489,
+        "rush_rho_oppadj": 0.2182,
+        "rush_rho_raw": 0.2178,
+        "pooled_rho_oppadj": 0.2495
+      },
+      "oppadj_churn_k0.3": {
+        "config": "oppadj_churn_k0.3",
+        "opp_adjust": true,
+        "churn_shrink_k": 0.3,
+        "pass_rho_oppadj": 0.2801,
+        "pass_rho_raw": 0.2484,
+        "rush_rho_oppadj": 0.2169,
+        "rush_rho_raw": 0.2164,
+        "pooled_rho_oppadj": 0.2485
+      },
+      "oppadj_churn_k0.5": {
+        "config": "oppadj_churn_k0.5",
+        "opp_adjust": true,
+        "churn_shrink_k": 0.5,
+        "pass_rho_oppadj": 0.2785,
+        "pass_rho_raw": 0.2469,
+        "rush_rho_oppadj": 0.2132,
+        "rush_rho_raw": 0.2129,
+        "pooled_rho_oppadj": 0.2459
+      }
+    },
+    "seasons": [
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024
+    ]
+  },
+  "uncertainty": {
+    "n": 560,
+    "rho_churn_vs_abs_error": -0.0408,
+    "abs_error_low_churn": 1.0065,
+    "abs_error_high_churn": 0.936,
+    "churn_earns_targeted_widen": false,
+    "coverage_1sd_by_forward_noise": {
+      "0.0": 0.6321,
+      "0.5": 0.6893,
+      "0.75": 0.7411,
+      "0.9": 0.7696,
+      "1.0": 0.7821,
+      "1.2": 0.8304
+    },
+    "selected_forward_noise": 0.5,
+    "nominal_coverage_1sd": 0.68,
+    "rms_forward_change": 1.2232
+  },
+  "face_validity": {
+    "proj_season": 2024,
+    "units": {
+      "pass": {
+        "most_reshaped": [
+          {
+            "team": "TEN",
+            "returning_share": 0.301,
+            "churn": 0.699,
+            "prior_strength": -1.128,
+            "def_strength": -1.128,
+            "def_strength_sd": 1.086,
+            "top_losses": "Sean Murphy-Bunting, Denico Autry, Elijah Molden",
+            "top_adds": "Quandre Diggs, L'Jarius Sneed, Chidobe Awuzie"
+          },
+          {
+            "team": "WAS",
+            "returning_share": 0.313,
+            "churn": 0.687,
+            "prior_strength": -2.143,
+            "def_strength": -2.143,
+            "def_strength_sd": 1.084,
+            "top_losses": "Kamren Curl, Kendall Fuller, Casey Toohill",
+            "top_adds": "Michael Davis, Marshon Lattimore, Clelin Ferrell"
+          },
+          {
+            "team": "CAR",
+            "returning_share": 0.324,
+            "churn": 0.676,
+            "prior_strength": 0.306,
+            "def_strength": 0.306,
+            "def_strength_sd": 1.131,
+            "top_losses": "Donte Jackson, Vonn Bell, Troy Hill",
+            "top_adds": "Jordan Fuller, Akayleb Evans, Rudy Ford"
+          },
+          {
+            "team": "DEN",
+            "returning_share": 0.376,
+            "churn": 0.624,
+            "prior_strength": -0.931,
+            "def_strength": -0.931,
+            "def_strength_sd": 1.09,
+            "top_losses": "Justin Simmons, Fabian Moreau, Ja'Quan McMillian",
+            "top_adds": "Levi Wallace, John Franklin-Myers, Brandon Jones"
+          },
+          {
+            "team": "JAX",
+            "returning_share": 0.409,
+            "churn": 0.591,
+            "prior_strength": 0.694,
+            "def_strength": 0.694,
+            "def_strength_sd": 1.077,
+            "top_losses": "Rayshawn Jenkins, Darious Williams, Tre Herndon",
+            "top_adds": "Darnell Savage Jr., Ronald Darby, Matthew Jackson"
+          }
+        ],
+        "least_reshaped": [
+          {
+            "team": "IND",
+            "returning_share": 0.867,
+            "churn": 0.133,
+            "prior_strength": -0.256,
+            "def_strength": -0.256,
+            "def_strength_sd": 1.092,
+            "top_losses": "Darrell Baker, Dallis Flowers, Jacob Martin",
+            "top_adds": "Tre Flowers, David Long, Samuel Womack"
+          },
+          {
+            "team": "CLE",
+            "returning_share": 0.858,
+            "churn": 0.142,
+            "prior_strength": 2.427,
+            "def_strength": 2.427,
+            "def_strength_sd": 1.096,
+            "top_losses": "Za'Darius Smith, Rodney McLeod, Duron Harmon",
+            "top_adds": "James Houston"
+          },
+          {
+            "team": "MIN",
+            "returning_share": 0.805,
+            "churn": 0.195,
+            "prior_strength": 0.232,
+            "def_strength": 0.232,
+            "def_strength_sd": 1.084,
+            "top_losses": "Akayleb Evans, Dean Lowry, Andrew Booth",
+            "top_adds": "Stephon Gilmore, Fabian Moreau, Jihad Ward"
+          }
+        ]
+      },
+      "rush": {
+        "most_reshaped": [
+          {
+            "team": "WAS",
+            "returning_share": 0.29,
+            "churn": 0.71,
+            "prior_strength": -0.148,
+            "def_strength": -0.148,
+            "def_strength_sd": 1.696,
+            "top_losses": "Cody Barton, Jamin Davis, Casey Toohill",
+            "top_adds": "Bobby Wagner, Frankie Luvu, Clelin Ferrell"
+          },
+          {
+            "team": "CAR",
+            "returning_share": 0.359,
+            "churn": 0.641,
+            "prior_strength": -2.524,
+            "def_strength": -2.524,
+            "def_strength_sd": 1.692,
+            "top_losses": "Frankie Luvu, Brian Burns, Yetur Gross-Matos",
+            "top_adds": "D.J. Wonnum, Josey Jewell, Jadeveon Clowney"
+          },
+          {
+            "team": "LAC",
+            "returning_share": 0.432,
+            "churn": 0.568,
+            "prior_strength": -0.071,
+            "def_strength": -0.071,
+            "def_strength_sd": 1.708,
+            "top_losses": "Kenneth Murray, Eric Kendricks, Austin Johnson",
+            "top_adds": "Bud Dupree, Denzel Perryman, Teair Tart"
+          },
+          {
+            "team": "MIN",
+            "returning_share": 0.437,
+            "churn": 0.563,
+            "prior_strength": 0.052,
+            "def_strength": 0.052,
+            "def_strength_sd": 1.717,
+            "top_losses": "Danielle Hunter, D.J. Wonnum, Jordan Hicks",
+            "top_adds": "Andrew Van Ginkel, Jihad Ward, Blake Cashman"
+          },
+          {
+            "team": "DEN",
+            "returning_share": 0.438,
+            "churn": 0.562,
+            "prior_strength": -0.421,
+            "def_strength": -0.421,
+            "def_strength_sd": 1.703,
+            "top_losses": "Alex Singleton, Josey Jewell, Jonathan Harris",
+            "top_adds": "Cody Barton, Zach Cunningham, John Franklin-Myers"
+          }
+        ],
+        "least_reshaped": [
+          {
+            "team": "NO",
+            "returning_share": 0.89,
+            "churn": 0.11,
+            "prior_strength": 1.306,
+            "def_strength": 1.306,
+            "def_strength_sd": 1.713,
+            "top_losses": "Zack Baun, Malcolm Roach, Kyle Phillips",
+            "top_adds": "Willie Gay Jr., Chase Young, John Ridgeway"
+          },
+          {
+            "team": "IND",
+            "returning_share": 0.875,
+            "churn": 0.125,
+            "prior_strength": -0.59,
+            "def_strength": -0.59,
+            "def_strength_sd": 1.681,
+            "top_losses": "Shaquille Leonard, Eric Johnson, Jacob Martin",
+            "top_adds": "Raekwon Davis, Trysten Hill"
+          },
+          {
+            "team": "KC",
+            "returning_share": 0.833,
+            "churn": 0.167,
+            "prior_strength": -1.267,
+            "def_strength": -1.267,
+            "def_strength_sd": 1.73,
+            "top_losses": "Willie Gay Jr., Matt Dickerson, Malik Herring",
+            "top_adds": "Joshua Uche, Isaiah Buggs, Marlon Tuipulotu"
+          }
+        ]
+      }
+    }
+  },
+  "decision": {
+    "ship_config": "oppadj",
+    "ship_shrink_k": 0.0,
+    "ship_forward_noise": 0.5,
+    "ship_widen_k": 0.0,
+    "pooled_rho": 0.2501,
+    "raw_rho": 0.2581,
+    "oppadj_rho": 0.2501,
+    "verdict": "SHIP \u2014 opponent-adjusted + EB-shrunk strength (pooled \u03c1 0.250, ties raw); churn POINT-shrink adds no walk-forward lift \u21d2 OFF (NF-D gate). Forward uncertainty = a calibrated season-to-season VOLATILITY floor 0.5 (1-sd coverage \u22480.69 vs the too-narrow measurement-only 0.63); churn does NOT predict forward surprise (\u03c1\u2248-0.041) \u21d2 churn-specific widen OFF. Roster-churn / returning shares ship as diagnostics."
+  }
+}
