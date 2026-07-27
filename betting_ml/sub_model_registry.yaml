@@ -1043,7 +1043,7 @@ milb_mle_pitcher_v1:
     oracle_floor: enforced
   uncertainty: parameter                    # the starter-EB wiring story MUST recalibrate before pricing (E13.6)
   best_alpha: 0
-  promotion_status: pending                 # harness code-complete; awaiting operator real S3 run
+  promotion_status: pending                 # real S3 bake-off DONE 2026-07-27; "pending" = not yet a served prior (the wiring story promotes)
   promoted_at: null
   ablation_report: quant_sports_intel_models/baseball/edge_program/ablation_results/e7_3p_milb_mle_pitchers.md
   tests: betting_ml/tests/test_milb_mle_pitcher.py
@@ -1060,6 +1060,16 @@ milb_mle_pitcher_v1:
     Prospects (no MLB debut) are the E8.0 board's pitcher-column deliverable. The betting payoff
     path (eb_starter_posteriors rookie prior, the E7.5 pattern: recalibrate → κ-blends for bounded
     rates → fail-safe view → serving-check) is DOCUMENTED in the ablation report §3, not wired here.
+    REAL S3 BAKE-OFF DONE 2026-07-27 (2,034 labelled graduates — bridge healthy; 13,892 wide
+    projections landed incl. 11,919 prospects): a DIFFERENTIATED result mirroring E7.3 —
+    gb_pct STRONG (corr 0.551, PBO 0.000, DSR 1.000; the cross-definition proxy carried);
+    k_pct/bb_pct weak-but-real (corr 0.366/0.367, PBO 0.014/0.000, DSR 0.786/0.947 — pitcher K%
+    translates far more weakly than batter K% 0.637, a real asymmetry); hr_rate = a TIED-FIELD
+    null (beats null by 1e-4, PBO 0.900, corr 0.094 — the E2.1-r tied-field read: effectively
+    NO-SIGNAL); xwoba_against NO-SIGNAL (ties archetype, DSR 0.030 — the batter-wOBA mirror).
+    partial_pool won all 5 metrics; multiplicative underperformed the null on all 5 (the Davenport
+    factor MLE refuted on both sides of the ball). ⇒ the wiring story wires gb_pct + k_pct/bb_pct
+    (wide recalibrated uncertainty), NOT hr_rate/xwoba_against.
 
 # =============================================================================
 # E7.5 — recalibrated MiLB rookie prior, WIRED into eb_batter_posteriors_raw
