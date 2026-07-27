@@ -1,5 +1,6 @@
 {
   "_comment": "INC-19 type-contract for eb_starter_posteriors (E11.1-W8a). Derived from the live BETTING.EB_STARTER_POSTERIORS schema (2026-06-29). double_pinned = FLOAT cols the DuckDB branch casts ::double in its TYPE-PIN block so the S3 parquet / lakehouse_ext type is stable across upstream NUMBER<->FLOAT flips. Intended type change => regenerate (scripts/gen_type_contract.py --write) in the same PR + operator DROP+rebuild.",
+  "_e7_5p_2026_07_27": "INTENDED COLUMN ADD: eb_gb_pct (the E7.5p pitcher MiLB-MLE ground-ball posterior; E7.3p's STRONGEST translation had no served home). ::double-pinned like every other FLOAT here. Because dbt incrementals default to on_schema_change='ignore', the Snowflake table will NOT pick the column up on a normal run and a plain --full-refresh MERGEs rather than DROPs -- the operator must DROP baseball_data.betting.eb_starter_posteriors + rebuild (and regenerate the lakehouse_ext external table via scripts/ddl/generate_w8a_external_tables.py) so the new column materializes. Until then the DuckDB/S3 parquet carries it and Snowflake simply lacks it -- no HALT either way.",
   "model": "eb_starter_posteriors",
   "all_columns": [
     "game_pk",
@@ -14,6 +15,7 @@
     "eb_xwoba_against",
     "eb_k_pct",
     "eb_bb_pct",
+    "eb_gb_pct",
     "eb_xwoba_uncertainty",
     "eb_xwoba_against_sequential",
     "posterior_source",
@@ -25,6 +27,7 @@
     "eb_xwoba_against",
     "eb_k_pct",
     "eb_bb_pct",
+    "eb_gb_pct",
     "eb_xwoba_uncertainty",
     "eb_xwoba_against_sequential"
   ]

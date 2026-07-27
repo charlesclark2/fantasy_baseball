@@ -27,6 +27,13 @@ models:
       game_pk-scoped Python compute left open. Grain: (game_pk, pitcher_id).
       NOTE: rename to eb_starter_posteriors at cutover (update this name + drop the
       sources.yml entry + rewire feature_pregame_starter_features to ref() it).
+      E7.5p (2026-07-27): a COLD-START starter (n_prior_seasons = 0) with a MiLB→MLB MLE
+      line is now primed off that line instead of the generic experience-band prior for
+      the metrics E7.3p proved translate — gb_pct (strong), k_pct / bb_pct (weak-but-real)
+      — via a pseudo-count (κ) blend that converges to his own MLB line as BF accrue.
+      hr_rate and xwoba_against are NOT wired (E7.3p tied-field null / no-signal), so
+      eb_xwoba_against is unchanged. Experienced starters are untouched. best_alpha = 0 —
+      a cold-start calibration fix, never an edge claim.
 
     tests:
       - dbt_utils.unique_combination_of_columns:
@@ -104,6 +111,28 @@ models:
                 max_value: 0.30
               config:
                 severity: warn
+      - name: eb_gb_pct
+        description: >
+          E7.5p (2026-07-27) — EB posterior ground-ball rate (GB / balls-in-play, the Statcast
+          definition). NEW column: the starter EB table carried no batted-ball metric, so E7.3p's
+          STRONGEST pitcher translation (gb_pct, OOS corr 0.551 / PBO 0.000 / DSR 1.000) had nowhere
+          to land. Prior = the MiLB→MLB MLE ground-ball line for a COLD-START starter
+          (n_prior_seasons = 0), else the prior-season league GB% anchor over starters; evidence =
+          the pitcher's own prior-season GB% weighted by balls in play (season − 1 — the repo's
+          batted-ball leakage doctrine; the source mart is season-grain). Pseudo-count (κ) blend,
+          never Normal-Normal. NULLABLE by design: if neither an MLE nor a league anchor resolves
+          (the fail-safe empty prior view in the earliest season) the column is NULL rather than
+          fabricated — hence no not_null test. NOT yet consumed downstream: wiring it into
+          feature_pregame_starter_features means retraining the models that read that block (the
+          E7.9 train/serve-consistency class), which is a separate story.
+        # ⚠️ NO TESTS YET, on purpose. The Snowflake table does not carry this column until the
+        # operator recreates the lakehouse_ext external table AND DROPs + rebuilds the native
+        # incremental (a dbt incremental defaults to on_schema_change='ignore', and dbt-fusion
+        # --full-refresh MERGEs rather than DROPs). A test naming a column that does not exist is a
+        # HARD error — not a warn — so it would redden CI and the daily test suite in the window
+        # between this merge and that rebuild. Add
+        #   dbt_utils.accepted_range {min_value: 0.15, max_value: 0.75, severity: warn}
+        # once the rebuild has landed (the DuckDB/S3 parquet carries it from the first --w8a build).
       - name: eb_xwoba_uncertainty
         description: Posterior std (prior sigma in the prior_only branch). Always > 0.
         tests:
