@@ -78,11 +78,15 @@ VALID_STATS = ("bat", "pit")
 # CASE-INSENSITIVE alias sets (lowercased) → typed column. First match wins; `raw_json` keeps
 # the FULL stat line regardless, so a miss loses nothing (column-name-reality).
 FIELD_ALIASES: dict[str, list[str]] = {
-    "fg_minor_id":  ["playerid", "minormasterid", "player_id"],
+    # `minorMasterId` is the STABLE `sa`-prefixed minor id → wins over PlayerId/UPID (which can be
+    # the numeric MLB FG id for a graduate); `xMLBAMID` (present on the leaderboards per fungo) is
+    # the MLBAM bridge THE BOARD lacks. `fg_player_id` keeps the FG unified id separately.
+    "fg_minor_id":  ["minormasterid", "playerid", "player_id"],
+    "fg_player_id": ["upid", "playerid", "player_id"],
     "mlbam_id":     ["xmlbamid", "mlbamid", "mlbam_id"],
     "player_name":  ["playername", "name", "player", "fullname"],
     "team":         ["team", "teamname", "org", "organization", "abname", "shortname"],
-    "level":        ["alevel", "level", "aaa", "current level", "minorlevelid"],
+    "level":        ["alevel", "level", "mlevel", "current level", "minorlevelid"],
     "age":          ["age", "cur_age"],
     # a few universal-ish rate stats extracted for legibility; the rest lives in raw_json.
     "pa":           ["pa", "ab"],
@@ -129,6 +133,7 @@ def extract_row(raw: dict, season: int, stats: str, as_of_date: str, ingested_at
     lc = _lc_map(raw)
     return {
         "fg_minor_id":   _clean_str(_pick(lc, FIELD_ALIASES["fg_minor_id"])),
+        "fg_player_id":  _clean_str(_pick(lc, FIELD_ALIASES["fg_player_id"])),
         "mlbam_id":      _clean_str(_pick(lc, FIELD_ALIASES["mlbam_id"])),
         "player_name":   _clean_str(_pick(lc, FIELD_ALIASES["player_name"])),
         "team":          _clean_str(_pick(lc, FIELD_ALIASES["team"])),
@@ -241,12 +246,16 @@ def probe(rows: list[dict], stats: str) -> None:
 
 # ── Fetch sources ────────────────────────────────────────────────────────────────
 
-def fetch_board(season: int, stats: str) -> list[dict]:
+def fetch_board(season: int, stats: str, *, endpoint: str | None = None,
+                stat_type: int | str = 0, extra_params: dict | None = None) -> list[dict]:
     try:
         from fangraphs_client import fetch_minor_leaderboard
     except ImportError:  # pragma: no cover
         from utils.fangraphs_client import fetch_minor_leaderboard
-    return fetch_minor_leaderboard(stats=stats, season=season)["data"]
+    return fetch_minor_leaderboard(
+        stats=stats, season=season, stat_type=stat_type,
+        url=endpoint, extra_params=extra_params,
+    )["data"]
 
 
 def fetch_from_csv(path: str) -> list[dict]:
@@ -256,7 +265,8 @@ def fetch_from_csv(path: str) -> list[dict]:
 
 # ── Main run ─────────────────────────────────────────────────────────────────────
 
-def run(season: int, stats_groups: list[str], as_of_date: str, mode: str, csv_path: str | None) -> None:
+def run(season: int, stats_groups: list[str], as_of_date: str, mode: str, csv_path: str | None,
+        endpoint: str | None = None, stat_type: int | str = 0, extra_params: dict | None = None) -> None:
     ingested_at = datetime.now(timezone.utc).isoformat()
 
     for stats in stats_groups:
@@ -265,7 +275,8 @@ def run(season: int, stats_groups: list[str], as_of_date: str, mode: str, csv_pa
             raw_rows = fetch_from_csv(csv_path)
         else:
             log.info("Fetching MiLB %s leaderboard — season=%d", stats, season)
-            raw_rows = fetch_board(season, stats)
+            raw_rows = fetch_board(season, stats, endpoint=endpoint,
+                                   stat_type=stat_type, extra_params=extra_params)
 
         if mode == "probe":
             probe(raw_rows, stats)
@@ -298,12 +309,28 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true", help="Fetch + coverage report, NO S3 write.")
     ap.add_argument("--from-csv", default=None, metavar="PATH",
                     help="Operator fallback: read a manual CSV export instead of the API.")
+    # Probe-driven overrides for the fragile minor endpoint (no code change needed to finalize):
+    ap.add_argument("--endpoint", default=None,
+                    help="Override the minor-leaderboard API URL (default: the built-in path). "
+                         "Use to point at the exact URL confirmed from the /leaders/minor-league "
+                         "network tab if the default 404s.")
+    ap.add_argument("--stat-type", default="0",
+                    help="FanGraphs minor column-set id (default 0; the major board's 8 404s).")
+    ap.add_argument("--extra-param", action="append", default=[], metavar="KEY=VALUE",
+                    help="Merge/override a single query param (repeatable), e.g. --extra-param lg=2,4,5.")
     args = ap.parse_args()
 
     stats_groups = [s.strip() for s in args.stats.split(",") if s.strip()]
     bad = [s for s in stats_groups if s not in VALID_STATS]
     if bad:
         ap.error(f"Invalid stats group(s) {bad}; valid: {VALID_STATS}")
+
+    extra_params: dict = {}
+    for kv in args.extra_param:
+        if "=" not in kv:
+            ap.error(f"--extra-param must be KEY=VALUE, got: {kv!r}")
+        k, v = kv.split("=", 1)
+        extra_params[k.strip()] = v.strip()
 
     if args.as_of:
         as_of_date = args.as_of
@@ -315,10 +342,12 @@ def main() -> None:
             as_of_date = date.today().isoformat()
 
     mode = "probe" if args.probe else ("dry-run" if args.dry_run else "write")
-    log.info("FanGraphs MiLB leaderboard ingest (E7.7) — season=%d stats=%s as_of=%s mode=%s%s",
+    log.info("FanGraphs MiLB leaderboard ingest (E7.7) — season=%d stats=%s as_of=%s mode=%s%s%s",
              args.season, stats_groups, as_of_date, mode,
-             f" from-csv={args.from_csv}" if args.from_csv else "")
-    run(args.season, stats_groups, as_of_date, mode, args.from_csv)
+             f" from-csv={args.from_csv}" if args.from_csv else "",
+             f" endpoint={args.endpoint}" if args.endpoint else "")
+    run(args.season, stats_groups, as_of_date, mode, args.from_csv,
+        endpoint=args.endpoint, stat_type=args.stat_type, extra_params=extra_params or None)
 
 
 if __name__ == "__main__":

@@ -51,36 +51,37 @@ def _extract(raw):
                           board_slug="2026prospect", ingested_at="2026-07-27T12:00:00+00:00")
 
 
-def test_extract_real_fangraphs_casing():
-    """The verified real casing: playerid + xMLBAMID + cFV + Name/Org anchors."""
+def test_extract_real_board_row_casing():
+    """The VERIFIED live board casing (2026-07-27 box probe, Konnor Griffin row): the stable id is
+    `minorMasterId` (sa-prefixed) — it must WIN over `PlayerId` (the numeric MLB id for a
+    graduate); `cRisk`/`cETA`/`cFV`; and there is NO MLBAM id on the board (→ None by design)."""
     raw = {
-        "playerid": "sa3012345",
-        "xMLBAMID": 691718,
-        "Name": '<a href="/prospects/x">Jackson Holliday</a>',
-        "Org": '<a href="/teams/orioles">BAL</a>',
-        "Pos": "SS",
-        "Current Level": "AAA",
-        "cFV": 65,
-        "Risk": "Medium",
-        "ETA": 2024,
-        "Top100": 1,
-        "Org_Rank": 1,
-        "Age": 20.4,
+        "minorMasterId": "sa3065496",
+        "PlayerId": "35376", "UPID": "35376",   # numeric FG/MLB id — NOT the stable minor id
+        "playerName": "Konnor Griffin",
+        "Team": "PIT", "Position": "SS", "mlevel": "MLB",
+        "cFV": "70", "FV_Current": 70, "cRisk": "High", "cETA": "2026", "ETA_Current": 2026,
+        "Ovr_Rank": 1, "Org_Rank": 1, "Age": "18.9361111",
+        "Fantasy_Dynasty": 3, "Fantasy_Redraft": 120, "TLDR": "Best prospect in baseball.",
     }
     r = _extract(raw)
-    assert r["fg_minor_id"] == "sa3012345"
-    assert r["mlbam_id"] == "691718"
-    assert r["player_name"] == "Jackson Holliday"   # HTML stripped
-    assert r["org"] == "BAL"                          # HTML stripped
-    assert r["position"] == "SS"
-    assert r["level"] == "AAA"
-    assert r["fv"] == 65.0
-    assert r["eta"] == 2024
-    assert r["overall_rank"] == 1
-    assert r["org_rank"] == 1
-    assert r["age"] == 20.4
-    # raw_json round-trips the full record (nothing lost)
-    assert json.loads(r["raw_json"])["playerid"] == "sa3012345"
+    assert r["fg_minor_id"] == "sa3065496"        # minorMasterId WINS over PlayerId
+    assert r["fg_player_id"] == "35376"           # the FG unified id kept separately
+    assert r["mlbam_id"] is None                   # board exposes none — bridge via leaderboard/xref
+    assert r["player_name"] == "Konnor Griffin"
+    assert r["org"] == "PIT" and r["position"] == "SS" and r["level"] == "MLB"
+    assert r["fv"] == 70.0 and r["risk"] == "High" and r["eta"] == 2026
+    assert r["overall_rank"] == 1 and r["org_rank"] == 1
+    assert round(r["age"], 2) == 18.94
+    assert r["fantasy_dynasty_rank"] == 3 and r["fantasy_redraft_rank"] == 120
+    assert r["tldr"] == "Best prospect in baseball."
+    assert json.loads(r["raw_json"])["minorMasterId"] == "sa3065496"
+
+
+def test_extract_xmlbamid_resolves_when_present():
+    """If a feed DOES carry an MLBAM id (e.g. the leaderboards), the alias picks it up."""
+    r = _extract({"minorMasterId": "sa1", "xMLBAMID": 691718})
+    assert r["fg_minor_id"] == "sa1" and r["mlbam_id"] == "691718"
 
 
 def test_extract_alt_casing_still_resolves():

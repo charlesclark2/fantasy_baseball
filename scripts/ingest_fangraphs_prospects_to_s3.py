@@ -89,22 +89,34 @@ PARTITION_COLS = ["season", "as_of_date"]
 
 # CASE-INSENSITIVE alias sets (lowercased) → the typed column. First match wins. The raw
 # record is preserved in `raw_json` regardless, so a miss loses nothing (column-name-reality).
+# Verified against the LIVE board probe (2026-07-27, box FlareSolverr, 1290 rows). Key realities:
+#  • The STABLE prospect id is `minorMasterId` (always `sa`-prefixed, e.g. 'sa3065496') — it MUST
+#    win over `PlayerId`/`UPID`, which for a graduated player is the numeric MLB FG id (e.g.
+#    '35376'), NOT the stable minor id. `fg_player_id` keeps the FG unified id separately (the
+#    numeric id bridges to xMLBAMID via other FG feeds / E7.4 xref).
+#  • THE BOARD does NOT expose an MLBAM id — `mlbam_id` resolves None here BY DESIGN; the MLBAM
+#    bridge comes via the MiLB leaderboard feed + E7.4 xref (that is WHY the population feed exists).
 FIELD_ALIASES: dict[str, list[str]] = {
     # ⭐ the join keys E7.4 / E8.0 need
-    "fg_minor_id":  ["playerid", "minormasterid", "prospectid", "player_id"],
+    "fg_minor_id":  ["minormasterid", "prospectid", "playerid", "player_id"],
+    "fg_player_id": ["upid", "playerid", "player_id"],
     "mlbam_id":     ["xmlbamid", "mlbamid", "mlbam_id", "mlbamplayerid"],
     # identity / context
     "player_name":  ["playername", "name", "player", "fullname"],
-    "org":          ["org", "team", "organization", "orgname"],
-    "position":     ["pos", "position", "minorpos", "primaryposition"],
-    "level":        ["current level", "currentlevel", "mlevel", "level", "toplevel"],
+    "org":          ["team", "org", "corg", "organization", "orgname"],
+    "position":     ["position", "positiondb", "pos", "minorpos", "primaryposition"],
+    "level":        ["mlevel", "llevel", "current level", "currentlevel", "level", "toplevel"],
     "age":          ["age", "cur_age", "currentage"],
     # the FV / rank / ETA signal E7.8 tests
-    "fv":           ["cfv", "fv", "futurevalue", "current_fv"],
-    "risk":         ["risk"],
-    "eta":          ["eta", "etayear", "eta_year"],
-    "overall_rank": ["top100", "ovr_rank", "overall_rank", "overallrank", "rank", "cur_rank"],
-    "org_rank":     ["org_rank", "orgrank", "org_top"],
+    "fv":           ["fv_current", "cfv", "fv", "futurevalue", "current_fv"],
+    "risk":         ["crisk", "risk"],
+    "eta":          ["eta_current", "ceta", "eta", "etayear", "eta_year"],
+    "overall_rank": ["ovr_rank", "covr", "top100", "overall_rank", "overallrank", "rank"],
+    "org_rank":     ["org_rank", "corg_rank", "orgrank", "org_top"],
+    # high-value for the 8/3 draft board (FanGraphs' own fantasy ranks + one-line scouting tag)
+    "fantasy_dynasty_rank": ["fantasy_dynasty"],
+    "fantasy_redraft_rank": ["fantasy_redraft"],
+    "tldr":         ["tldr"],
 }
 
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
@@ -153,6 +165,7 @@ def extract_row(raw: dict, season: int, as_of_date: str, board_slug: str, ingest
     lc = _lc_map(raw)
     return {
         "fg_minor_id":   _clean_str(_pick(lc, FIELD_ALIASES["fg_minor_id"])),
+        "fg_player_id":  _clean_str(_pick(lc, FIELD_ALIASES["fg_player_id"])),
         "mlbam_id":      _clean_str(_pick(lc, FIELD_ALIASES["mlbam_id"])),
         "player_name":   _clean_str(_pick(lc, FIELD_ALIASES["player_name"])),
         "org":           _clean_str(_pick(lc, FIELD_ALIASES["org"])),
@@ -165,6 +178,9 @@ def extract_row(raw: dict, season: int, as_of_date: str, board_slug: str, ingest
         "eta":           _to_int(_pick(lc, FIELD_ALIASES["eta"])),
         "overall_rank":  _to_int(_pick(lc, FIELD_ALIASES["overall_rank"])),
         "org_rank":      _to_int(_pick(lc, FIELD_ALIASES["org_rank"])),
+        "fantasy_dynasty_rank": _to_int(_pick(lc, FIELD_ALIASES["fantasy_dynasty_rank"])),
+        "fantasy_redraft_rank": _to_int(_pick(lc, FIELD_ALIASES["fantasy_redraft_rank"])),
+        "tldr":          _clean_str(_pick(lc, FIELD_ALIASES["tldr"])),
         "board_slug":    board_slug,
         "season":        int(season),
         "as_of_date":    as_of_date,
