@@ -12,6 +12,7 @@ never the MLB predict path.
 from dagster import in_process_executor, job
 
 from pipeline.ops.milb_ops import (
+    dim_player_xref_build_op,
     fangraphs_milb_leaderboards_ingest_op,
     fangraphs_prospects_ingest_op,
     milb_incremental_ingest_op,
@@ -21,10 +22,17 @@ from pipeline.ops.milb_ops import (
 
 @job(executor_def=in_process_executor)
 def milb_ingest_job():
-    # Four independent WARN-tier ops in one isolated run (E7.1/E7.2/E7.7). Each catches its own
-    # exceptions internally, so one failing never blocks the others or fails the run — one
+    # Four independent WARN-tier ingest ops in one isolated run (E7.1/E7.2/E7.7). Each catches its
+    # own exceptions internally, so one failing never blocks the others or fails the run — one
     # operational duty ("keep the MiLB + prospect research data topped up"), no extra scaffolding.
-    milb_incremental_ingest_op()
-    statcast_aaa_incremental_ingest_op()
-    fangraphs_prospects_ingest_op()
-    fangraphs_milb_leaderboards_ingest_op()
+    logs = milb_incremental_ingest_op()
+    statcast = statcast_aaa_incremental_ingest_op()
+    board = fangraphs_prospects_ingest_op()
+    leaderboards = fangraphs_milb_leaderboards_ingest_op()
+
+    # E7.4 — the identity spine is a CONSUMER of all four, so it is a downstream fan-in, never a
+    # fifth peer. Built at job start it would crosswalk the PREVIOUS cycle's board against the
+    # previous cycle's leaderboards and silently miss every newly-listed prospect (the INC-25
+    # "consumer parquet lags the stores" class). The ingests are WARN-tier and always succeed, so
+    # this edge orders the work without letting an ingest hiccup skip the rebuild.
+    dim_player_xref_build_op(start=[logs, statcast, board, leaderboards])

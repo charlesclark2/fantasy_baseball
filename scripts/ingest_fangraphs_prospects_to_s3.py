@@ -218,6 +218,19 @@ def _table_exists() -> bool:
         return False
 
 
+# Columns that are ALWAYS strings, even when every value in a pull is None. Pinned because an
+# all-None object column makes pyarrow infer the `null` type, which Delta records as `"void"` —
+# and DuckDB's delta reader then hard-errors `Unsupported Delta table type: 'void'` on the WHOLE
+# table, for every consumer (E7.4 hit exactly this: `mlbam_id` is 100% NULL on THE BOARD by
+# design, which made `delta_scan` unable to read the board at all). The same class as the
+# INC-17 nullable-int→DOUBLE mirror poisoning: an all-null column silently picks a type nobody
+# wants. Pin the type at the writer — one place heals every consumer.
+_STRING_PINNED = [
+    "fg_minor_id", "fg_player_id", "mlbam_id", "player_name", "org", "position", "level",
+    "fv_raw", "risk", "board_slug", "as_of_date", "ingested_at_utc", "raw_json", "tldr",
+]
+
+
 def write_partition(df: pd.DataFrame, season: int, as_of_date: str) -> int:
     """Idempotently write ONE (season, as_of_date) partition (overwrite predicate pins both
     cols → re-running the same day is a clean rewrite, historical snapshots accumulate)."""
@@ -225,6 +238,9 @@ def write_partition(df: pd.DataFrame, season: int, as_of_date: str) -> int:
     df = df.copy()
     df["season"] = int(season)
     df["as_of_date"] = str(as_of_date)
+    for col in _STRING_PINNED:
+        if col in df.columns:
+            df[col] = df[col].astype("string")
     table_arrow = pa.Table.from_pandas(df, preserve_index=False)
     uri = _table_uri()
     kwargs = dict(storage_options=_storage_options())
