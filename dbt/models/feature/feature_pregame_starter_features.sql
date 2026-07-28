@@ -587,6 +587,10 @@ eb_posteriors as (
         eb_xwoba_against_sequential,
         eb_k_pct,
         eb_bb_pct,
+        -- E7.9: the E7.5p ground-ball posterior. Landed as a served EB column at E7.5p with NO
+        -- consumer, so its measured −23% cold-start MAE lift (E7.3p's STRONGEST translation) never
+        -- reached a prediction. This join is what makes it reachable by a retrained model.
+        eb_gb_pct,
         eb_xwoba_uncertainty,
         eb_data_source,
         posterior_source
@@ -846,6 +850,11 @@ final as (
         eb.eb_xwoba_against_sequential,
         eb.eb_k_pct,
         eb.eb_bb_pct,
+        -- E7.9 — eb_gb_pct (E7.5p). Populated for EVERY starter: the MiLB-MLE ground-ball line for a
+        -- cold-start rookie, else the prior-season league anchor, both shrunk by balls-in-play toward
+        -- the pitcher's own prior-season GB%. Batted-ball mix is a run-environment driver the starter
+        -- block never carried; it is NOT in any model contract until a retrain selects it (E7.9 step 5).
+        eb.eb_gb_pct,
         eb.eb_xwoba_uncertainty,
         eb.eb_data_source,
         -- Epic 16B.3 — per-pitcher posterior source label; NULL pre-2021.

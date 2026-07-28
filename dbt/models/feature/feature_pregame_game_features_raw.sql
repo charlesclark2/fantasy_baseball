@@ -674,6 +674,10 @@ final as (
         h_st.eb_xwoba_against_sequential        as home_starter_eb_xwoba_against_sequential,
         h_st.eb_k_pct                           as home_starter_eb_k_pct,
         h_st.eb_bb_pct                          as home_starter_eb_bb_pct,
+        -- E7.9: the E7.5p ground-ball posterior reaches the game grain. Batted-ball mix is a
+        -- first-order run-environment driver (GB → fewer HR, more DP) the starter block never
+        -- carried. Eval-only until a retrain's feature-selection admits it (E7.9 step 5).
+        h_st.eb_gb_pct                          as home_starter_eb_gb_pct,
         h_st.eb_xwoba_uncertainty               as home_starter_eb_xwoba_uncertainty,
 
         -- ── Away starting pitcher ─────────────────────────────────────────────
@@ -794,6 +798,7 @@ final as (
         a_st.eb_xwoba_against_sequential        as away_starter_eb_xwoba_against_sequential,
         a_st.eb_k_pct                           as away_starter_eb_k_pct,
         a_st.eb_bb_pct                          as away_starter_eb_bb_pct,
+        a_st.eb_gb_pct                          as away_starter_eb_gb_pct,   -- E7.9 (see home side)
         a_st.eb_xwoba_uncertainty               as away_starter_eb_xwoba_uncertainty,
 
         -- ── Home team context ─────────────────────────────────────────────────
@@ -1747,6 +1752,7 @@ select
     home_starter_eb_xwoba_against_sequential::double as home_starter_eb_xwoba_against_sequential,
     home_starter_eb_k_pct::double as home_starter_eb_k_pct,
     home_starter_eb_bb_pct::double as home_starter_eb_bb_pct,
+    home_starter_eb_gb_pct::double as home_starter_eb_gb_pct,
     home_starter_eb_xwoba_uncertainty::double as home_starter_eb_xwoba_uncertainty,
     away_starter_pitcher_id,
     away_starter_pitcher_name,
@@ -1844,6 +1850,7 @@ select
     away_starter_eb_xwoba_against_sequential::double as away_starter_eb_xwoba_against_sequential,
     away_starter_eb_k_pct::double as away_starter_eb_k_pct,
     away_starter_eb_bb_pct::double as away_starter_eb_bb_pct,
+    away_starter_eb_gb_pct::double as away_starter_eb_gb_pct,
     away_starter_eb_xwoba_uncertainty::double as away_starter_eb_xwoba_uncertainty,
     home_wins::double as home_wins,
     home_losses::double as home_losses,

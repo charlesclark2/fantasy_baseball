@@ -1,0 +1,96 @@
+{
+  "story": "E7.9",
+  "mode": "audit",
+  "best_alpha": 0,
+  "served_contracts": {
+    "total_runs/post_lineup": {
+      "contract": "betting_ml/models/total_runs/feature_columns_v6_total_runs_post_lineup_served.json",
+      "n_features": 13,
+      "mle_affected_in_contract": [],
+      "n_mle_affected": 0,
+      "has_gb_already": [],
+      "train_serve_skew": false
+    },
+    "total_runs/pre_lineup": {
+      "contract": "betting_ml/models/total_runs/feature_columns_v6_total_runs_pre_lineup_served.json",
+      "n_features": 14,
+      "mle_affected_in_contract": [],
+      "n_mle_affected": 0,
+      "has_gb_already": [],
+      "train_serve_skew": false
+    },
+    "run_diff/post_lineup": {
+      "contract": "betting_ml/models/run_differential/feature_columns_v6_run_diff_post_lineup_served.json",
+      "n_features": 13,
+      "mle_affected_in_contract": [],
+      "n_mle_affected": 0,
+      "has_gb_already": [],
+      "train_serve_skew": false
+    },
+    "run_diff/pre_lineup": {
+      "contract": "betting_ml/models/run_differential/feature_columns_v6_run_diff_pre_lineup_served.json",
+      "n_features": 124,
+      "mle_affected_in_contract": [
+        "away_starter_eb_k_pct",
+        "home_starter_eb_k_pct",
+        "away_starter_eb_bb_pct"
+      ],
+      "n_mle_affected": 3,
+      "has_gb_already": [],
+      "train_serve_skew": true
+    },
+    "home_win/post_lineup": {
+      "contract": "betting_ml/models/home_win/feature_columns_v6_home_win_post_lineup_served.json",
+      "n_features": 19,
+      "mle_affected_in_contract": [],
+      "n_mle_affected": 0,
+      "has_gb_already": [],
+      "train_serve_skew": false
+    },
+    "home_win/pre_lineup": {
+      "contract": "betting_ml/models/home_win/feature_columns_v6_home_win_pre_lineup_served.json",
+      "n_features": 36,
+      "mle_affected_in_contract": [],
+      "n_mle_affected": 0,
+      "has_gb_already": [],
+      "train_serve_skew": false
+    }
+  },
+  "contracts_with_train_serve_skew": [
+    "run_diff/pre_lineup"
+  ],
+  "prior_exposure": {
+    "min_season": 2021,
+    "starter_rows": 27534,
+    "cold_start_rows": 5991,
+    "mle_moved_rows": 5579,
+    "share_of_starter_rows_moved": 0.2026,
+    "approx_share_of_games_touched": 0.3642,
+    "magnitude_vs_generic_band_prior_mean": [
+      {
+        "eb_data_source": "full_eb",
+        "n": 4681,
+        "mean_abs_k_shift": 0.029773146763512004,
+        "p90_abs_k_shift": 0.06240000000000001,
+        "mean_abs_bb_shift": 0.014954454176458052
+      },
+      {
+        "eb_data_source": "prior_only",
+        "n": 898,
+        "mean_abs_k_shift": 0.021990423162583497,
+        "p90_abs_k_shift": 0.04809999999999998,
+        "mean_abs_bb_shift": 0.01276202672605793
+      }
+    ],
+    "eb_gb_pct": {
+      "rows": 48629,
+      "non_null": 48629,
+      "min": 0.2608,
+      "max": 0.7161
+    }
+  },
+  "leakage_posture": {
+    "mle_map": "leakage-safe by construction \u2014 emit_projections refits per debut cohort on STRICTLY-PRIOR cohorts; the minor line is strictly pre-debut. No as-of rebuild is needed for the historical backfill.",
+    "residual_full_sample_quantity": "the recalibrated kappa (one scalar per metric, from mle_prior.recalibrate) is fit on all graduates; it carries no player-specific information."
+  }
+}
