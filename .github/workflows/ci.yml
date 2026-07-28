@@ -35,11 +35,65 @@ jobs:
               - '!**/*.md'
               - '!docs/**'
 
-  # E11.13 — fast gate: every test EXCEPT the `slow` Monte-Carlo calibration guards,
-  # run in parallel (-n auto). This is the per-push handoff gate; ~15s vs the old ~4.5min
-  # serial run. Both this job AND `slow-tests` are required for merge (see branch protection).
-  unit-tests:
-    name: Unit Tests (fast gate)
+  # E11.13 — fast gate: every test EXCEPT the `slow` Monte-Carlo calibration guards.
+  #
+  # SHARDED (2026-07-27 CI-hygiene profile). The gate had grown to ~2,360 tests / ~90s serial.
+  # Profiling showed the cost is NOT slow tests (slowest single test = 4.5s, under the `@slow`
+  # >5s rule) but per-worker COLLECTION: every xdist worker imports all ~175 test modules
+  # before running its share, so `-n auto` burned 287s of CPU for 90s of work and was SLOWER
+  # than `-n 4` on an 11-core box. Duplicated collection is a fixed cost per process, so the fix
+  # is to give each process fewer tests to collect. Shards are DOMAIN-based so a red check
+  # localises the blame ("football shard failed") before you open the log.
+  #
+  # The shard map lives in scripts/ci_shards.py — ONE source of truth, with `core` as a COMPUTED
+  # catch-all, so a new test file joins the merge bar automatically and cannot escape coverage.
+  # betting_ml/tests/test_fast_gate_hygiene.py proves the partition and pins this matrix.
+  unit-tests-shard:
+    name: Unit Tests (fast gate) — ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    strategy:
+      fail-fast: false   # one red domain must not hide the others — see all failures in one run
+      matrix:
+        # Keep in sync with SHARD_NAMES in scripts/ci_shards.py (guard test enforces it).
+        shard: [football, baseball-models, prospect-milb, guards, serving-ops, core]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true   # shards install the same env 6× — cache makes setup the cheap part
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --no-dev-packages || uv sync
+
+      - name: Run fast gate — ${{ matrix.shard }} shard
+        run: |
+          TARGETS=$(uv run python scripts/ci_shards.py --shard "${{ matrix.shard }}")
+          # Belt-and-braces: pytest with NO file arguments falls back to `testpaths` and runs the
+          # ENTIRE suite, so an empty list would silently turn one shard into a duplicate full
+          # run instead of failing. ci_shards.py already exits non-zero here; check anyway.
+          if [ -z "$TARGETS" ]; then
+            echo "::error::shard ${{ matrix.shard }} produced no test targets"; exit 1
+          fi
+          echo "shard ${{ matrix.shard }} → $(echo "$TARGETS" | wc -w) test files"
+          # $TARGETS is intentionally UNQUOTED: it is a space-separated file list that bash must
+          # word-split into separate pytest arguments (GitHub runs `run:` under bash).
+          # shellcheck disable=SC2086
+          uv run pytest $TARGETS -m "not slow" -n auto --tb=short
+
+  # Static checks that used to ride along in the single fast-gate job.
+  static-checks:
+    name: Static checks (syntax + ingest MERGE ban)
     runs-on: ubuntu-latest
     needs: changes
     if: needs.changes.outputs.backend == 'true'
@@ -51,6 +105,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
+          enable-cache: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -59,9 +114,6 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --no-dev-packages || uv sync
-
-      - name: Run unit tests (fast gate — excludes slow MC calibration tests)
-        run: uv run pytest -m "not slow" -n auto --tb=short
 
       - name: predict_today.py syntax check
         run: uv run python -m py_compile scripts/predict_today.py
@@ -74,6 +126,36 @@ jobs:
             exit 1
           fi
           echo "OK — no MERGE patterns found in ingest scripts"
+
+  # ⚠️ DO NOT RENAME — `Unit Tests (fast gate)` is a REQUIRED status check in branch protection.
+  # Sharding the work into a matrix would otherwise leave that required check permanently
+  # pending (the "skipped-but-required" gotcha the `changes` job above also works around). This
+  # job keeps the exact required name and simply rolls up the shards' results, so branch
+  # protection needs no change when shards are added or renamed.
+  unit-tests:
+    name: Unit Tests (fast gate)
+    runs-on: ubuntu-latest
+    needs: [changes, unit-tests-shard, static-checks]
+    if: always()
+
+    steps:
+      - name: Roll up fast-gate shard results
+        run: |
+          SHARDS="${{ needs.unit-tests-shard.result }}"
+          STATIC="${{ needs.static-checks.result }}"
+          CHANGES="${{ needs.changes.result }}"
+          echo "changes=$CHANGES  shards=$SHARDS  static-checks=$STATIC"
+          # A matrix job's `result` is `success` only when EVERY leg succeeded. `skipped` is a
+          # pass: it means the `changes` filter found a frontend/docs-only diff. `changes` itself
+          # is checked too — if IT failed, the shards would be `skipped` and this roll-up would
+          # otherwise report a green gate for a suite that never ran.
+          for r in "$CHANGES" "$SHARDS" "$STATIC"; do
+            case "$r" in
+              success|skipped) ;;
+              *) echo "::error::fast gate did not pass (changes=$CHANGES, shards=$SHARDS, static=$STATIC)"; exit 1 ;;
+            esac
+          done
+          echo "fast gate GREEN"
 
   # E11.13 — slow gate: the heavy `slow`-marked Monte-Carlo PIT/coverage calibration guards.
   # Parallelised (-n auto) so the 3 ~75s totals tests overlap across workers (~96s vs ~250s

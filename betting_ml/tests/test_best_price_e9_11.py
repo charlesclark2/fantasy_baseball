@@ -10,35 +10,19 @@ These tests exercise the Python-side logic (no Snowflake required):
 """
 from __future__ import annotations
 
-import importlib
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
+# Isolation-safe shared loader — its stubs are restored after the load, so importing this test
+# module during collection cannot alter sys.modules for the rest of the session.
+from betting_ml.tests._serving_store_loader import load_write_serving_store
 
 # ---------------------------------------------------------------------------
 # Load write_serving_store without executing main() (no Snowflake / argparse)
 # ---------------------------------------------------------------------------
-def _load_serving_module() -> ModuleType:
-    src_path = (Path(__file__).resolve().parents[2] / "scripts" / "write_serving_store.py")
-    spec = importlib.util.spec_from_file_location("write_serving_store", src_path)
-    mod = importlib.util.module_from_spec(spec)
-    # Stub heavy imports so the module loads in the test environment
-    for stub in ["snowflake.connector", "dotenv"]:
-        if stub not in sys.modules:
-            import unittest.mock as _mock
-            sys.modules[stub] = _mock.MagicMock()
-            # Handle dotenv.load_dotenv specifically
-            if stub == "dotenv":
-                sys.modules[stub].load_dotenv = lambda *a, **kw: None
-    spec.loader.exec_module(mod)
-    return mod
-
-
 try:
-    _mod = _load_serving_module()
+    _mod = load_write_serving_store("write_serving_store_best_price")
     _compute_book_odds_payloads = _mod._compute_book_odds_payloads
     _compute_line_shopping_payload = _mod._compute_line_shopping_payload
     _MODULE_LOADED = True

@@ -18,11 +18,7 @@ A silent, whole-page data outage from one loose offset string. Both halves are g
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from datetime import datetime
-from pathlib import Path
-from types import ModuleType
 
 import pytest
 
@@ -32,35 +28,16 @@ from app.backend.models.picks import (
     Pick,
     TodayPicksResponse,
 )
-
-_REPO = Path(__file__).parents[2]
+from betting_ml.tests._serving_store_loader import load_write_serving_store
 
 # The exact loose form the lakehouse emitted (and which pydantic used to reject).
 LOOSE = "2026-07-12 17:35:00+00"
 CANONICAL = "2026-07-12T17:35:00+00:00"
 
 
-def _load_writer() -> ModuleType:
-    """Import scripts/write_serving_store.py by path, ONCE (it is not an installed package).
-
-    Heavy optional imports are stubbed so the load stays cheap in the fast gate — mirrors the
-    existing loader in test_best_price_e9_11.py."""
-    import unittest.mock as _mock
-
-    for stub in ("snowflake.connector", "dotenv"):
-        if stub not in sys.modules:
-            sys.modules[stub] = _mock.MagicMock()
-            if stub == "dotenv":
-                sys.modules[stub].load_dotenv = lambda *a, **kw: None
-    src = _REPO / "scripts" / "write_serving_store.py"
-    spec = importlib.util.spec_from_file_location("write_serving_store_ts", src)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-_TS = _load_writer()._ts  # module-level: pay the import once for the whole file
+# module-level: pay the import once for the whole file. The shared loader stubs the heavy
+# optional deps only for the duration of the exec, so collection leaves sys.modules untouched.
+_TS = load_write_serving_store("write_serving_store_ts")._ts
 
 
 # ── 1. WRITER: _ts() emits canonical ISO ─────────────────────────────────────
