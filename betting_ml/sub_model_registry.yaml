@@ -1190,3 +1190,28 @@ milb_mle_pitcher_prior_v1:
     eb_k_pct/eb_bb_pct, so the cold-start rows they now see are drawn from a slightly different
     distribution — the fix is a retrain, tracked as follow-up, and it is also why eb_gb_pct is NOT yet
     joined into feature_pregame_starter_features. best_alpha = 0.
+  e7_9_followup:                             # ── E7.9 (2026-07-27) resolved this entry's open items ──
+    eb_gb_pct_consumer: |
+      JOINED. feature_pregame_starter_features → home_/away_starter_eb_gb_pct on
+      feature_pregame_game_features_raw (::double type-pinned, contract manifest updated). The column is
+      now REACHABLE by a model; it enters a served contract only if the E7.9 bake-off selects it.
+    schema_test: |
+      ADDED. The dbt_utils.accepted_range [0.15, 0.75] test E7.5p deferred (a test on a not-yet-existing
+      SF column is a HARD error) now that the operator rebuild has landed. Bounds are a plausibility
+      envelope, not a fitted quantile: observed 0.261-0.716 over 48,629 rows, 0 violations.
+    train_serve_skew_MEASURED: |
+      ⭐ SMALLER THAN THIS NOTE IMPLIES. Measured against the served v6 sidecars: only run_diff /
+      pre_lineup carries an MLE-moved column (home_/away_starter_eb_k_pct + away_starter_eb_bb_pct, 3 of
+      124). The v6 post_lineup champions are 13-feature slim sets with NO starter_eb_* or avg_eb_* at
+      all, so E7.5's batter side reaches NO served contract. Exposure where it applies: 20.3% of starter
+      rows moved (≈36% of games); mean |Δ eb_k_pct| 0.022 vs the generic band prior on prior_only rows
+      (exact) and 0.030 on full_eb (an upper bound). Report:
+      ablation_results/e7_9_train_serve_audit.md; pinned by test_e7_9_train_serve_consistency.py.
+    historical_backfill: |
+      NOT NEEDED as code. The DuckDB branch is a full rebuild (extract_duckdb_sql strips
+      is_incremental), so --w8a already rewrote ALL history with the MLE (fit_date is a single value
+      across 48,629 rows), and the prior is leakage-safe by construction (emit_projections refits per
+      debut cohort on strictly-prior cohorts; the minor line is strictly pre-debut). Only the SNOWFLAKE
+      incremental (7-day MERGE window) still holds pre-MLE history → an operator DROP+rebuild.
+    retrain: PENDING — harness shipped (betting_ml/scripts/e7_9_train_serve_consistency.py); the full
+      bake-off is an operator run. Default verdict is INCUMBENT_STANDS.

@@ -122,17 +122,23 @@ models:
           batted-ball leakage doctrine; the source mart is season-grain). Pseudo-count (κ) blend,
           never Normal-Normal. NULLABLE by design: if neither an MLE nor a league anchor resolves
           (the fail-safe empty prior view in the earliest season) the column is NULL rather than
-          fabricated — hence no not_null test. NOT yet consumed downstream: wiring it into
-          feature_pregame_starter_features means retraining the models that read that block (the
-          E7.9 train/serve-consistency class), which is a separate story.
-        # ⚠️ NO TESTS YET, on purpose. The Snowflake table does not carry this column until the
-        # operator recreates the lakehouse_ext external table AND DROPs + rebuilds the native
-        # incremental (a dbt incremental defaults to on_schema_change='ignore', and dbt-fusion
-        # --full-refresh MERGEs rather than DROPs). A test naming a column that does not exist is a
-        # HARD error — not a warn — so it would redden CI and the daily test suite in the window
-        # between this merge and that rebuild. Add
-        #   dbt_utils.accepted_range {min_value: 0.15, max_value: 0.75, severity: warn}
-        # once the rebuild has landed (the DuckDB/S3 parquet carries it from the first --w8a build).
+          fabricated — hence no not_null test.
+          E7.9 (2026-07-27): now CONSUMED — joined through feature_pregame_starter_features into
+          home_/away_starter_eb_gb_pct on feature_pregame_game_features_raw, so the −23% cold-start
+          lift is reachable by a model. It enters a served contract only if the E7.9 retrain
+          bake-off selects it.
+        # E7.9: the range test the E7.5p merge deliberately deferred. Safe to add NOW — the operator
+        # rebuild has landed (the SF column exists) and the S3 parquet carries it for all 48,629
+        # historical rows. Bounds are a plausibility envelope, not a fitted quantile: observed
+        # 0.261-0.716 over 2016-2026 with 0 violations; a starter outside [0.15, 0.75] means the
+        # prior or the BIP evidence count is broken, not that a real pitcher drifted.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.15
+                max_value: 0.75
+              config:
+                severity: warn
       - name: eb_xwoba_uncertainty
         description: Posterior std (prior sigma in the prior_only branch). Always > 0.
         tests:
