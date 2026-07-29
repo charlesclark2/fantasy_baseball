@@ -10,7 +10,6 @@
 // interval is a first-order estimate (not yet calibrated) and K/DST carry no projection.
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useQuery } from "@tanstack/react-query"
 import { RotateCcw, Undo2, Info, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -21,13 +20,11 @@ import {
   slotOnClock,
   type Player,
   type LeagueConfigMeta,
-  type Manifest,
   type RosterSlotDef,
 } from "@/lib/draft-optimizer"
-import { useAuth } from "@/lib/auth-context"
-import { getFantasyManifest, getFantasyBoard } from "@/lib/fantasy"
+import { FANTASY_SEASON, useFantasyBoard, useFantasyManifest } from "@/lib/fantasy-queries"
 
-const SEASON = 2026
+const SEASON = FANTASY_SEASON
 const POS_COLORS: Record<string, string> = {
   QB: "text-rose-400 bg-rose-500/10 border-rose-500/30",
   RB: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
@@ -62,29 +59,9 @@ const storageKey = (s: { configName: string; size: number; mySlot: number }) =>
 // ── data hooks ────────────────────────────────────────────────────────────────────────────────
 // Boards load through the SERVER-SIDE-GATED backend (/fantasy/nfl/*, require_fantasy_access →
 // 403) rather than the old public JSON, so the paid gate can't be bypassed at the asset URL.
-function useManifest() {
-  const { accessToken } = useAuth()
-  return useQuery<Manifest>({
-    queryKey: ["nfl-fantasy-manifest", SEASON],
-    queryFn: () => getFantasyManifest(accessToken, SEASON),
-    staleTime: Infinity,
-  })
-}
-
-function useBoard(configName: string | null, size: number | null) {
-  const { accessToken } = useAuth()
-  return useQuery<Player[]>({
-    queryKey: ["nfl-fantasy-board", SEASON, configName, size],
-    enabled: !!configName && !!size,
-    queryFn: async () => {
-      const rows = await getFantasyBoard(accessToken, SEASON, configName as string, size as number)
-      // dedupe by id (defensive — a duplicate player_id would collide React keys and corrupt rendering)
-      const seen = new Set<string>()
-      return rows.filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)))
-    },
-    staleTime: Infinity,
-  })
-}
+// The hooks themselves are shared with the NF3 browse surfaces (lib/fantasy-queries).
+const useManifest = useFantasyManifest
+const useBoard = useFantasyBoard
 
 // ── roster assignment for the "My Team" panel ───────────────────────────────────────────────────
 interface FilledSlot {

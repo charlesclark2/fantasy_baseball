@@ -1,5 +1,14 @@
 [
   {
+    "week": "2026-07-27",
+    "items": [
+      {
+        "tag": "new",
+        "text": "Opened three NFL fantasy pages under NFL → Fantasy: Projections, Rankings, and the League Board. Projections lists every projectable player's 2026 season line — the passing, rushing and receiving totals we expect, the games we expect them to play, and an 80% range on their fantasy points, so you can see how confident the model is rather than just a single number. Rankings and the League Board take that same projection and re-score it for your league: pick your scoring format (standard, half-PPR, full-PPR, superflex, the 3-WR variants) and your league size, and the board re-ranks accordingly — superflex really does lift quarterbacks, because the roster shape changes how many of them start. The League Board adds value over replacement, which is what makes a quarterback and a running back comparable on one list, and it shows the replacement level it used for each position instead of asking you to take it on faith. Every number is a projection with a range attached, and a wide range is the model telling you it doesn't know — rookies in particular carry very wide ranges because rookie outcomes genuinely are. This is a projection and transparency tool for your own draft decisions; modelling is ongoing, we make no claim that it beats any particular ranking, and nothing here is betting advice. Available to subscribers."
+      }
+    ]
+  },
+  {
     "week": "2026-07-20",
     "items": [
       {

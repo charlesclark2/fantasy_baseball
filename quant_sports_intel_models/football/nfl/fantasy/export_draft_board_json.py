@@ -1,12 +1,23 @@
-"""export_draft_board_json.py — land the NF-C1 league boards as trimmed JSON for the live draft UI.
+"""export_draft_board_json.py — land the NFL fantasy boards + projections as trimmed JSON for the app.
 
 MVP-3's frontend draft optimizer is ALL-CLIENT-SIDE (instant recompute per pick, no server round-trip),
-so it reads the boards as static JSON bundled in `frontend/public/data/nfl-fantasy/<season>/`:
+so it reads the boards as static JSON, staged locally then uploaded to S3 where the server-side-gated
+`/fantasy/nfl/*` endpoints read them:
 
   * `manifest.json`              — season meta + every league config's roster shape (drives roster-need
                                    detection client-side) + the (config, size) combos available.
   * `board_<config>_<size>.json` — the per-(config, n_teams) player board, trimmed to the columns the
                                    optimizer + UI need, names title-cased, FB folded into RB.
+  * `projections.json`           — NF3: the MVP-1 SEASON PROJECTION (raw stat line + the 80% PPR
+                                   interval + uncertainty type / confidence / rookie flag), format-
+                                   independent. Feeds the browse "Projections" surface; the league
+                                   boards above stay the format-SCORED view.
+
+⚠️ NF3 SERVING-PATH NOTE: these blobs ARE the fantasy serving path. The boards live only as dbt-duckdb
+views over S3 Delta with no request-time reader, and a wide lakehouse read from the API Lambda fails
+silently (CLAUDE.md landmine) — so the app is served this pre-computed static JSON instead, exactly
+like the MLB `write_api_cache` pattern. The data updates rarely (not intraday), so a re-export is an
+operator command, not a daily op.
 
 Reads the boards from the local artifacts CSVs by default (what `run_league_board.py` writes), or from
 the S3 Delta with `--from-lake`. SF-free / off-box. This is the frontend analog of "land to S3 + a
@@ -38,6 +49,8 @@ log = logging.getLogger("nfl.fantasy.export_draft_board")
 
 _ARTIFACTS = _PROJECT_ROOT / "quant_sports_intel_models/football/nfl/fantasy/artifacts"
 _BOARDS_DIR = _ARTIFACTS / "league_boards"
+# MVP-1's season projection (the format-INDEPENDENT raw line the boards are scored from).
+_PROJECTION_PARQUET = "nfl_fantasy_season_projections_{season}.parquet"
 # E9.45: the draft board is a PAID surface, so it is no longer shipped as public JSON
 # (a public asset URL is bypassable). It is staged locally then uploaded to S3, where
 # the server-side-gated /fantasy/nfl/* endpoints read it. Default local staging dir:
@@ -75,8 +88,14 @@ CONFIG_LABELS = {
 }
 
 
+# Generational suffixes `.title()` mangles (JAMES COOK III → "Iii"). Only ever applied to the LAST
+# token of a name, so a real name that happens to look like one (Ivory, Vince) is never touched.
+_NAME_SUFFIXES = {"Ii": "II", "Iii": "III", "Iv": "IV", "Vi": "VI"}
+
+
 def _titlecase(name: str) -> str:
-    """ALLCAPS board name → display case, with the common Mc/Mac fix (MCCAFFREY → McCaffrey)."""
+    """ALLCAPS board name → display case, with the common Mc/Mac fix (MCCAFFREY → McCaffrey) and
+    generational suffixes restored (JAMES COOK III → James Cook III, not "Cook Iii")."""
     out = str(name).title()
     for pre in ("Mc", "Mac"):
         i = 0
@@ -85,6 +104,10 @@ def _titlecase(name: str) -> str:
             if j < len(out) and out[j].isalpha():
                 out = out[:j] + out[j].upper() + out[j + 1 :]
             i = j
+    parts = out.split()
+    if parts and parts[-1] in _NAME_SUFFIXES:
+        parts[-1] = _NAME_SUFFIXES[parts[-1]]
+        out = " ".join(parts)
     return out
 
 
@@ -102,6 +125,12 @@ def _fnum(v, nd: int = 1):
         return round(f, nd)
     except (TypeError, ValueError):
         return None
+
+
+def _inum(v):
+    """A nullable integer (draft slot) — NaN/unparseable stays null rather than becoming 0."""
+    f = _fnum(v, 0)
+    return None if f is None else int(f)
 
 
 # ── read the boards ───────────────────────────────────────────────────────────────────────────────
@@ -145,6 +174,92 @@ def load_boards_lake(season: int) -> pd.DataFrame:
         return con.sql(f"select * from delta_scan('{uri}') where season = {season}").df()
     finally:
         con.close()
+
+
+def load_projections_local(season: int) -> pd.DataFrame:
+    """MVP-1's season projection from the local artifacts parquet (what run_season_projection.py writes)."""
+    path = _ARTIFACTS / _PROJECTION_PARQUET.format(season=season)
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"no season projection at {path}. Run run_season_projection.py first, or use --from-lake."
+        )
+    return pd.read_parquet(path)
+
+
+def load_projections_lake(season: int) -> pd.DataFrame:
+    """MVP-1's season projection from the S3 Delta (`mart_nfl_fantasy_season_projection`'s source)."""
+    from quant_sports_intel_models.football.nfl.ingest import s3io
+
+    uri = s3io.table_uri("nfl", "season_projections", tier="fantasy/derived")
+    con = _lake_connection()
+    try:
+        return con.sql(
+            f"select * from delta_scan('{uri}') where projection_season = {season}"
+        ).df()
+    finally:
+        con.close()
+
+
+# The projection's RAW STAT LINE → the compact JSON keys the browse table renders. Season totals.
+_STAT_KEYS = (
+    ("proj_pass_att", "passAtt"), ("proj_pass_cmp", "passCmp"), ("proj_pass_yds", "passYds"),
+    ("proj_pass_td", "passTd"), ("proj_pass_int", "passInt"),
+    ("proj_rush_att", "rushAtt"), ("proj_rush_yds", "rushYds"), ("proj_rush_td", "rushTd"),
+    ("proj_targets", "tgt"), ("proj_rec", "rec"), ("proj_rec_yds", "recYds"), ("proj_rec_td", "recTd"),
+    ("proj_fumbles_lost", "fum"), ("proj_two_pt", "twoPt"),
+)
+
+
+def projection_records(
+    df: pd.DataFrame,
+    rookie_teams: dict[str, str] | None = None,
+    byes: dict[str, int] | None = None,
+) -> list[dict]:
+    """MVP-1's season projection → display-ready records for the NF3 browse "Projections" surface.
+
+    FORMAT-INDEPENDENT by design: the raw season stat line plus the 80% PPR interval, the uncertainty
+    TYPE (veteran `empirical` game-to-game variance vs the rookie `calibrated` band) and the model's own
+    confidence tier — the honest-uncertainty payload. `proj_fp_*` are carried as a one-format convenience
+    for sorting only; the FORMAT-scored number is the league board's `league_points`, never these.
+    Sorted by PPR points desc; FB folds into RB; names title-cased; NULL (unknown) stays null."""
+    rookie_teams = rookie_teams or {}
+    byes = byes or {}
+    recs: list[dict] = []
+    seen: set[str] = set()
+    for _, r in df.sort_values("proj_fp_ppr", ascending=False).iterrows():
+        pos = NFL_PROFILE.normalize_position(str(r["position"]))
+        if pos not in PROJECTABLE:
+            continue
+        pid = str(r["player_id"])
+        if pid in seen:                                # 1 row per player (MVP-1 can emit a dupe)
+            continue
+        seen.add(pid)
+        is_rookie = _to_bool(r.get("is_rookie"))
+        team = None if pd.isna(r.get("team_id")) else _norm_team(str(r["team_id"]))
+        if not team and is_rookie:                     # MVP-1 rookies carry no team → backfill it
+            team = rookie_teams.get(pid)
+        rec = {
+            "id": pid,
+            "name": _titlecase(r["player_name"]),
+            "pos": pos,
+            "team": team,
+            "bye": byes.get(team) if team else None,
+            "rookie": is_rookie,
+            "draftPick": _inum(r.get("draft_overall")),
+            "conf": None if pd.isna(r.get("confidence")) else str(r["confidence"]),
+            "g": _fnum(r.get("proj_games")),
+            "fpStd": _fnum(r.get("proj_fp_std")),
+            "fpHalf": _fnum(r.get("proj_fp_half")),
+            "fpPpr": _fnum(r.get("proj_fp_ppr")),
+            "fpSd": _fnum(r.get("fp_ppr_sd")),
+            "fpP10": _fnum(r.get("fp_ppr_p10")),
+            "fpP90": _fnum(r.get("fp_ppr_p90")),
+            "uncType": None if pd.isna(r.get("uncertainty_type")) else str(r["uncertainty_type"]),
+        }
+        for src, key in _STAT_KEYS:
+            rec[key] = _fnum(r.get(src))
+        recs.append(rec)
+    return recs
 
 
 def rookie_team_map() -> dict[str, str]:
@@ -214,6 +329,11 @@ def board_records(
             "rookie": is_rookie,
             "g": _fnum(r.get("proj_games")),
             "pts": _fnum(r.get("league_points")),
+            # NF3: the 80% interval on league POINTS (the browse surfaces lead with this rather
+            # than a false-precise point). vor_p10/p90 is the same interval shifted by the
+            # replacement level, so both are carried.
+            "ptsP10": _fnum(r.get("league_points_p10")),
+            "ptsP90": _fnum(r.get("league_points_p90")),
             "repl": _fnum(r.get("replacement_points")),
             "vor": _fnum(r.get("vor")),
             "posRank": int(_fnum(r.get("positional_rank"), 0) or 0),
@@ -318,13 +438,13 @@ def kdst_records(
         recs.append({
             "id": f"DST-{t}", "name": f"{t} D/ST", "pos": "DST", "team": t, "bye": bye, "rookie": False,
             "g": None, "pts": None, "repl": None, "vor": None, "posRank": 0, "ovrRank": 9999,
-            "vorP10": None, "vorP90": None,
+            "vorP10": None, "vorP90": None, "ptsP10": None, "ptsP90": None,
         })
         k_name = kickers.get(t)  # roster names are already proper-cased — do not re-title-case
         recs.append({
             "id": f"K-{t}", "name": k_name if k_name else f"{t} K", "pos": "K", "team": t, "bye": bye,
             "rookie": False, "g": None, "pts": None, "repl": None, "vor": None, "posRank": 0,
-            "ovrRank": 9999, "vorP10": None, "vorP90": None,
+            "ovrRank": 9999, "vorP10": None, "vorP90": None, "ptsP10": None, "ptsP90": None,
         })
     return recs
 
@@ -347,7 +467,8 @@ def config_manifest_entry(name: str) -> dict:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--season", type=int, default=2026)
-    ap.add_argument("--from-lake", action="store_true", help="read boards from the S3 Delta instead of local CSVs")
+    ap.add_argument("--from-lake", action="store_true",
+                    help="read the boards + season projection from the S3 Delta instead of local artifacts")
     ap.add_argument("--out", type=Path, default=None, help="override the local staging output dir")
     ap.add_argument(
         "--s3-bucket",
@@ -398,6 +519,38 @@ def main(argv: list[str] | None = None) -> int:
             configs_present.append(config_name)
         log.info("wrote %s (%d players)", path.name, len(recs))
 
+    # NF3 — the format-INDEPENDENT season projection blob (the browse "Projections" surface).
+    # Best-effort: a missing projection artifact must not cost the operator the boards, which are
+    # the draft-critical output. The endpoint 404s until it lands (the UI shows an honest empty state).
+    projections: list[dict] = []
+    proj_meta: dict = {}
+    try:
+        pdf = load_projections_lake(args.season) if args.from_lake else load_projections_local(args.season)
+        projections = projection_records(pdf, rookie_teams, byes)
+        proj_meta = {
+            "model_version": (
+                str(pdf["model_version"].dropna().iloc[0]) if "model_version" in pdf.columns
+                and pdf["model_version"].notna().any() else None
+            ),
+            "base_season": (
+                int(pdf["base_season"].dropna().iloc[0]) if "base_season" in pdf.columns
+                and pdf["base_season"].notna().any() else None
+            ),
+        }
+        payload = {
+            "season": args.season,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "source": "lake" if args.from_lake else "local-artifacts",
+            **proj_meta,
+            "players": projections,
+        }
+        (out_dir / "projections.json").write_text(json.dumps(payload, separators=(",", ":")))
+        log.info("wrote projections.json (%d players, model %s)", len(projections),
+                 proj_meta.get("model_version"))
+    except Exception as e:  # noqa: BLE001 — the boards are the critical output; warn loudly and go on
+        log.warning("projections.json SKIPPED (%s: %s) — the browse Projections surface will 404 "
+                    "until the season projection is exported", type(e).__name__, e)
+
     # manifest — meta + per-config roster shapes + available combos
     manifest = {
         "season": args.season,
@@ -406,6 +559,9 @@ def main(argv: list[str] | None = None) -> int:
         "positions": list(PROJECTABLE),
         "sizes": sorted(sizes_present),
         "configs": [config_manifest_entry(c) for c in sorted(configs_present)],
+        # NF3: the browse surfaces read this to know whether the projections blob is available
+        # (and to show its provenance) without a speculative fetch.
+        "projections": {"players": len(projections), **proj_meta} if projections else None,
     }
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     log.info("wrote manifest.json — %d configs, sizes %s, %d combos, %d player-rows total",
