@@ -1,0 +1,5823 @@
+{
+  "model_version": "nfl_fantasy_nf1_5_v1",
+  "stage1": {
+    "stage": "market_refinements",
+    "pool_base_seasons": [
+      2006,
+      2024
+    ],
+    "score_from": 2019,
+    "target_seasons": [
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ],
+    "n_pool": 6736,
+    "selection_metric": "top-tier within-position \u03c1 (tier = top-N by the MVP-1 incumbent, N={'QB': 24, 'RB': 36, 'WR': 48, 'TE': 24})",
+    "oracle_metric_ok": true,
+    "market_top_tier_coverage": {
+      "QB": 1.0,
+      "RB": 0.944,
+      "WR": 0.979,
+      "TE": 1.0
+    },
+    "n_trials_per_class": 40,
+    "placebo_trials": 10,
+    "candidates": [
+      "pos_learned_adaptive_blend",
+      "pos_learned_blend",
+      "pos_adaptive_blend",
+      "pos_blend_flat"
+    ],
+    "positions": {
+      "QB": {
+        "null": {
+          "learner": "pos_null",
+          "hp": {},
+          "per_season_top": {
+            "2019": 0.2026,
+            "2020": 0.453,
+            "2021": 0.5183,
+            "2022": 0.4304,
+            "2023": 0.5504,
+            "2024": 0.4383,
+            "2025": -0.0165
+          },
+          "per_season_full": {
+            "2019": 0.6053,
+            "2020": 0.5686,
+            "2021": 0.7549,
+            "2022": 0.5967,
+            "2023": 0.6158,
+            "2024": 0.772,
+            "2025": 0.6262
+          },
+          "mean_top": 0.3681,
+          "mean_full": 0.6485
+        },
+        "market_only": {
+          "learner": "pos_market_only",
+          "hp": {},
+          "per_season_top": {
+            "2019": 0.6096,
+            "2020": 0.7217,
+            "2021": 0.7504,
+            "2022": 0.6017,
+            "2023": 0.5452,
+            "2024": 0.5652,
+            "2025": 0.1783
+          },
+          "per_season_full": {
+            "2019": 0.8059,
+            "2020": 0.8176,
+            "2021": 0.8869,
+            "2022": 0.7166,
+            "2023": 0.707,
+            "2024": 0.7964,
+            "2025": 0.5938
+          },
+          "mean_top": 0.5674,
+          "mean_full": 0.7606
+        },
+        "nf1_3_incumbent": {
+          "learner": "nf1_3_incumbent(pos_market_blend)",
+          "hp": {
+            "blend_w": 0.9869973994939585
+          },
+          "mean_top": 0.5624,
+          "per_season_top": {
+            "2019": 0.6096,
+            "2020": 0.7243,
+            "2021": 0.7504,
+            "2022": 0.5522,
+            "2023": 0.5461,
+            "2024": 0.5757,
+            "2025": 0.1783
+          }
+        },
+        "learned_anchor": {
+          "learner": "pos_gbm",
+          "hp": {
+            "n_estimators": 150,
+            "num_leaves": 18,
+            "learning_rate": 0.03698206177627045,
+            "min_child_samples": 7,
+            "reg_lambda": 1.7949736030439343
+          }
+        },
+        "market_top_tier_coverage": 1.0,
+        "best_by_class": {
+          "pos_learned_adaptive_blend": {
+            "learner": "pos_learned_adaptive_blend",
+            "hp": {
+              "blend_w": 0.9221115150810637,
+              "disp_slope": 0.17300114503514258
+            },
+            "per_season_top": {
+              "2019": 0.6191,
+              "2020": 0.7217,
+              "2021": 0.7626,
+              "2022": 0.5826,
+              "2023": 0.5539,
+              "2024": 0.5539,
+              "2025": 0.1783
+            },
+            "per_season_full": {
+              "2019": 0.8092,
+              "2020": 0.7927,
+              "2021": 0.8615,
+              "2022": 0.6838,
+              "2023": 0.678,
+              "2024": 0.7727,
+              "2025": 0.6102
+            },
+            "mean_top": 0.5674,
+            "mean_full": 0.744
+          },
+          "pos_learned_blend": {
+            "learner": "pos_learned_blend",
+            "hp": {
+              "blend_w": 0.9714449203068924
+            },
+            "per_season_top": {
+              "2019": 0.6043,
+              "2020": 0.7217,
+              "2021": 0.7504,
+              "2022": 0.5583,
+              "2023": 0.5461,
+              "2024": 0.5826,
+              "2025": 0.1783
+            },
+            "per_season_full": {
+              "2019": 0.7936,
+              "2020": 0.7966,
+              "2021": 0.85,
+              "2022": 0.6643,
+              "2023": 0.6768,
+              "2024": 0.777,
+              "2025": 0.6021
+            },
+            "mean_top": 0.5631,
+            "mean_full": 0.7372
+          },
+          "pos_adaptive_blend": {
+            "learner": "pos_adaptive_blend",
+            "hp": {
+              "blend_w": 0.8890660930092513,
+              "disp_slope": 0.2317215499000329
+            },
+            "per_season_top": {
+              "2019": 0.6157,
+              "2020": 0.7504,
+              "2021": 0.7096,
+              "2022": 0.6043,
+              "2023": 0.5522,
+              "2024": 0.5539,
+              "2025": 0.1783
+            },
+            "per_season_full": {
+              "2019": 0.8129,
+              "2020": 0.7969,
+              "2021": 0.8328,
+              "2022": 0.6969,
+              "2023": 0.6711,
+              "2024": 0.789,
+              "2025": 0.6194
+            },
+            "mean_top": 0.5663,
+            "mean_full": 0.7456
+          },
+          "pos_blend_flat": {
+            "learner": "pos_blend_flat",
+            "hp": {
+              "blend_w": 0.8316430355340343
+            },
+            "per_season_top": {
+              "2019": 0.6104,
+              "2020": 0.7817,
+              "2021": 0.7974,
+              "2022": 0.5452,
+              "2023": 0.5365,
+              "2024": 0.5513,
+              "2025": 0.1165
+            },
+            "per_season_full": {
+              "2019": 0.8092,
+              "2020": 0.8252,
+              "2021": 0.8512,
+              "2022": 0.6658,
+              "2023": 0.6885,
+              "2024": 0.8037,
+              "2025": 0.6164
+            },
+            "mean_top": 0.5627,
+            "mean_full": 0.7514
+          }
+        },
+        "winner": {
+          "learner": "pos_learned_adaptive_blend",
+          "hp": {
+            "blend_w": 0.9221115150810637,
+            "disp_slope": 0.17300114503514258
+          },
+          "per_season_top": {
+            "2019": 0.6191,
+            "2020": 0.7217,
+            "2021": 0.7626,
+            "2022": 0.5826,
+            "2023": 0.5539,
+            "2024": 0.5539,
+            "2025": 0.1783
+          },
+          "per_season_full": {
+            "2019": 0.8092,
+            "2020": 0.7927,
+            "2021": 0.8615,
+            "2022": 0.6838,
+            "2023": 0.678,
+            "2024": 0.7727,
+            "2025": 0.6102
+          },
+          "mean_top": 0.5674,
+          "mean_full": 0.744
+        },
+        "pbo": 0.6,
+        "config_spread": 0.256,
+        "dsr": 0.5837,
+        "pvalue": 0.0033,
+        "n_configs": 161,
+        "beats_null": true,
+        "beats_market_only": false,
+        "beats_nf1_3_incumbent": true,
+        "delta_vs_nf1_3_incumbent": 0.005,
+        "fdr_pass": true,
+        "verdict": {
+          "repoint": false,
+          "beats_null": true,
+          "pbo_ok": false,
+          "dsr_ok": false,
+          "fdr_ok": true
+        }
+      },
+      "RB": {
+        "null": {
+          "learner": "pos_null",
+          "hp": {},
+          "per_season_top": {
+            "2019": 0.5593,
+            "2020": 0.5151,
+            "2021": 0.4775,
+            "2022": 0.4903,
+            "2023": 0.3171,
+            "2024": 0.6494,
+            "2025": 0.5575
+          },
+          "per_season_full": {
+            "2019": 0.7443,
+            "2020": 0.599,
+            "2021": 0.6864,
+            "2022": 0.7218,
+            "2023": 0.7441,
+            "2024": 0.8206,
+            "2025": 0.8228
+          },
+          "mean_top": 0.5095,
+          "mean_full": 0.7341
+        },
+        "market_only": {
+          "learner": "pos_market_only",
+          "hp": {},
+          "per_season_top": {
+            "2019": 0.6945,
+            "2020": 0.7284,
+            "2021": 0.5781,
+            "2022": 0.7199,
+            "2023": 0.4268,
+            "2024": 0.6698,
+            "2025": 0.7287
+          },
+          "per_season_full": {
+            "2019": 0.8473,
+            "2020": 0.6995,
+            "2021": 0.7555,
+            "2022": 0.8164,
+            "2023": 0.7843,
+            "2024": 0.8021,
+            "2025": 0.798
+          },
+          "mean_top": 0.6495,
+          "mean_full": 0.7862
+        },
+        "nf1_3_incumbent": {
+          "learner": "nf1_3_incumbent(pos_market_blend)",
+          "hp": {
+            "blend_w": 0.9583426412697418
+          },
+          "mean_top": 0.656,
+          "per_season_top": {
+            "2019": 0.7032,
+            "2020": 0.7444,
+            "2021": 0.5995,
+            "2022": 0.7032,
+            "2023": 0.4227,
+            "2024": 0.6852,
+            "2025": 0.7336
+          }
+        },
+        "learned_anchor": {
+          "learner": "pos_ridge",
+          "hp": {
+            "alpha": 0.9504011684640693
+          }
+        },
+        "market_top_tier_coverage": 0.944,
+        "best_by_class": {
+          "pos_learned_adaptive_blend": {
+            "learner": "pos_learned_adaptive_blend",
+            "hp": {
+              "blend_w": 0.861976418103483,
+              "disp_slope": 0.010870396913555513
+            },
+            "per_season_top": {
+              "2019": 0.6896,
+              "2020": 0.7601,
+              "2021": 0.591,
+              "2022": 0.7045,
+              "2023": 0.4165,
+              "2024": 0.7032,
+              "2025": 0.7218
+            },
+            "per_season_full": {
+              "2019": 0.8333,
+              "2020": 0.6641,
+              "2021": 0.7547,
+              "2022": 0.8218,
+              "2023": 0.8086,
+              "2024": 0.8089,
+              "2025": 0.8259
+            },
+            "mean_top": 0.6552,
+            "mean_full": 0.7882
+          },
+          "pos_learned_blend": {
+            "learner": "pos_learned_blend",
+            "hp": {
+              "blend_w": 0.8893629074612233
+            },
+            "per_season_top": {
+              "2019": 0.6916,
+              "2020": 0.7616,
+              "2021": 0.5874,
+              "2022": 0.7084,
+              "2023": 0.4224,
+              "2024": 0.7009,
+              "2025": 0.7189
+            },
+            "per_season_full": {
+              "2019": 0.835,
+              "2020": 0.6633,
+              "2021": 0.7561,
+              "2022": 0.8214,
+              "2023": 0.8059,
+              "2024": 0.8077,
+              "2025": 0.8243
+            },
+            "mean_top": 0.6559,
+            "mean_full": 0.7877
+          },
+          "pos_adaptive_blend": {
+            "learner": "pos_adaptive_blend",
+            "hp": {
+              "blend_w": 0.8498927324601829,
+              "disp_slope": 0.06435395916997594
+            },
+            "per_season_top": {
+              "2019": 0.7251,
+              "2020": 0.7506,
+              "2021": 0.6162,
+              "2022": 0.6808,
+              "2023": 0.4314,
+              "2024": 0.6968,
+              "2025": 0.7251
+            },
+            "per_season_full": {
+              "2019": 0.8392,
+              "2020": 0.6624,
+              "2021": 0.7535,
+              "2022": 0.8161,
+              "2023": 0.8077,
+              "2024": 0.8051,
+              "2025": 0.8287
+            },
+            "mean_top": 0.6609,
+            "mean_full": 0.7875
+          },
+          "pos_blend_flat": {
+            "learner": "pos_blend_flat",
+            "hp": {
+              "blend_w": 0.9476636616777102
+            },
+            "per_season_top": {
+              "2019": 0.7133,
+              "2020": 0.7609,
+              "2021": 0.616,
+              "2022": 0.6994,
+              "2023": 0.4273,
+              "2024": 0.6986,
+              "2025": 0.7341
+            },
+            "per_season_full": {
+              "2019": 0.8356,
+              "2020": 0.6622,
+              "2021": 0.755,
+              "2022": 0.8183,
+              "2023": 0.8015,
+              "2024": 0.8044,
+              "2025": 0.8222
+            },
+            "mean_top": 0.6642,
+            "mean_full": 0.7856
+          }
+        },
+        "winner": {
+          "learner": "pos_blend_flat",
+          "hp": {
+            "blend_w": 0.9476636616777102
+          },
+          "per_season_top": {
+            "2019": 0.7133,
+            "2020": 0.7609,
+            "2021": 0.616,
+            "2022": 0.6994,
+            "2023": 0.4273,
+            "2024": 0.6986,
+            "2025": 0.7341
+          },
+          "per_season_full": {
+            "2019": 0.8356,
+            "2020": 0.6622,
+            "2021": 0.755,
+            "2022": 0.8183,
+            "2023": 0.8015,
+            "2024": 0.8044,
+            "2025": 0.8222
+          },
+          "mean_top": 0.6642,
+          "mean_full": 0.7856
+        },
+        "pbo": 0.4571,
+        "config_spread": 0.1369,
+        "dsr": 0.9562,
+        "pvalue": 0.0004,
+        "n_configs": 161,
+        "beats_null": true,
+        "beats_market_only": true,
+        "beats_nf1_3_incumbent": true,
+        "delta_vs_nf1_3_incumbent": 0.0082,
+        "fdr_pass": true,
+        "verdict": {
+          "repoint": false,
+          "beats_null": true,
+          "pbo_ok": false,
+          "dsr_ok": true,
+          "fdr_ok": true
+        }
+      },
+      "WR": {
+        "null": {
+          "learner": "pos_null",
+          "hp": {},
+          "per_season_top": {
+            "2019": 0.4445,
+            "2020": 0.2326,
+            "2021": 0.3381,
+            "2022": 0.552,
+            "2023": 0.5572,
+            "2024": 0.4959,
+            "2025": 0.2591
+          },
+          "per_season_full": {
+            "2019": 0.7652,
+            "2020": 0.7291,
+            "2021": 0.7073,
+            "2022": 0.704,
+            "2023": 0.7598,
+            "2024": 0.7653,
+            "2025": 0.8212
+          },
+          "mean_top": 0.4113,
+          "mean_full": 0.7503
+        },
+        "market_only": {
+          "learner": "pos_market_only",
+          "hp": {},
+          "per_season_top": {
+            "2019": 0.5972,
+            "2020": 0.6557,
+            "2021": 0.5839,
+            "2022": 0.6825,
+            "2023": 0.7283,
+            "2024": 0.506,
+            "2025": 0.4115
+          },
+          "per_season_full": {
+            "2019": 0.7783,
+            "2020": 0.777,
+            "2021": 0.8005,
+            "2022": 0.7863,
+            "2023": 0.8287,
+            "2024": 0.8,
+            "2025": 0.8397
+          },
+          "mean_top": 0.595,
+          "mean_full": 0.8015
+        },
+        "nf1_3_incumbent": {
+          "learner": "nf1_3_incumbent(pos_gbm)",
+          "hp": {
+            "n_estimators": 300,
+            "num_leaves": 7,
+            "learning_rate": 0.012050541345647812,
+            "min_child_samples": 8,
+            "reg_lambda": 4.368469237108717
+          },
+          "mean_top": 0.5841,
+          "per_season_top": {
+            "2019": 0.5543,
+            "2020": 0.5962,
+            "2021": 0.5673,
+            "2022": 0.7495,
+            "2023": 0.7056,
+            "2024": 0.5134,
+            "2025": 0.4025
+          }
+        },
+        "learned_anchor": {
+          "learner": "pos_ridge",
+          "hp": {
+            "alpha": 1.380137655222368
+          }
+        },
+        "market_top_tier_coverage": 0.979,
+        "best_by_class": {
+          "pos_learned_adaptive_blend": {
+            "learner": "pos_learned_adaptive_blend",
+            "hp": {
+              "blend_w": 0.6094478825507955,
+              "disp_slope": 0.1607685732039351
+            },
+            "per_season_top": {
+              "2019": 0.5785,
+              "2020": 0.567,
+              "2021": 0.5763,
+              "2022": 0.7538,
+              "2023": 0.7403,
+              "2024": 0.4929,
+              "2025": 0.4047
+            },
+            "per_season_full": {
+              "2019": 0.7482,
+              "2020": 0.7391,
+              "2021": 0.7404,
+              "2022": 0.7325,
+              "2023": 0.8174,
+              "2024": 0.7788,
+              "2025": 0.8474
+            },
+            "mean_top": 0.5876,
+            "mean_full": 0.772
+          },
+          "pos_learned_blend": {
+            "learner": "pos_learned_blend",
+            "hp": {
+              "blend_w": 0.849359320511512
+            },
+            "per_season_top": {
+              "2019": 0.5924,
+              "2020": 0.5739,
+              "2021": 0.5962,
+              "2022": 0.7363,
+              "2023": 0.7302,
+              "2024": 0.5138,
+              "2025": 0.4038
+            },
+            "per_season_full": {
+              "2019": 0.7351,
+              "2020": 0.7124,
+              "2021": 0.7262,
+              "2022": 0.7217,
+              "2023": 0.8045,
+              "2024": 0.7726,
+              "2025": 0.8364
+            },
+            "mean_top": 0.5924,
+            "mean_full": 0.7584
+          },
+          "pos_adaptive_blend": {
+            "learner": "pos_adaptive_blend",
+            "hp": {
+              "blend_w": 0.861976418103483,
+              "disp_slope": 0.010870396913555513
+            },
+            "per_season_top": {
+              "2019": 0.6215,
+              "2020": 0.5407,
+              "2021": 0.5605,
+              "2022": 0.7187,
+              "2023": 0.7279,
+              "2024": 0.5212,
+              "2025": 0.392
+            },
+            "per_season_full": {
+              "2019": 0.7313,
+              "2020": 0.697,
+              "2021": 0.719,
+              "2022": 0.7166,
+              "2023": 0.8071,
+              "2024": 0.7656,
+              "2025": 0.8215
+            },
+            "mean_top": 0.5832,
+            "mean_full": 0.7512
+          },
+          "pos_blend_flat": {
+            "learner": "pos_blend_flat",
+            "hp": {
+              "blend_w": 0.9304028356763766
+            },
+            "per_season_top": {
+              "2019": 0.6084,
+              "2020": 0.5635,
+              "2021": 0.5714,
+              "2022": 0.713,
+              "2023": 0.722,
+              "2024": 0.5255,
+              "2025": 0.4023
+            },
+            "per_season_full": {
+              "2019": 0.7227,
+              "2020": 0.6904,
+              "2021": 0.7166,
+              "2022": 0.7107,
+              "2023": 0.8008,
+              "2024": 0.7631,
+              "2025": 0.8155
+            },
+            "mean_top": 0.5866,
+            "mean_full": 0.7457
+          }
+        },
+        "winner": {
+          "learner": "pos_learned_blend",
+          "hp": {
+            "blend_w": 0.849359320511512
+          },
+          "per_season_top": {
+            "2019": 0.5924,
+            "2020": 0.5739,
+            "2021": 0.5962,
+            "2022": 0.7363,
+            "2023": 0.7302,
+            "2024": 0.5138,
+            "2025": 0.4038
+          },
+          "per_season_full": {
+            "2019": 0.7351,
+            "2020": 0.7124,
+            "2021": 0.7262,
+            "2022": 0.7217,
+            "2023": 0.8045,
+            "2024": 0.7726,
+            "2025": 0.8364
+          },
+          "mean_top": 0.5924,
+          "mean_full": 0.7584
+        },
+        "pbo": 0.3714,
+        "config_spread": 0.2739,
+        "dsr": 0.8251,
+        "pvalue": 0.0016,
+        "n_configs": 161,
+        "beats_null": true,
+        "beats_market_only": false,
+        "beats_nf1_3_incumbent": true,
+        "delta_vs_nf1_3_incumbent": 0.0083,
+        "fdr_pass": true,
+        "verdict": {
+          "repoint": false,
+          "beats_null": true,
+          "pbo_ok": false,
+          "dsr_ok": false,
+          "fdr_ok": true
+        }
+      },
+      "TE": {
+        "null": {
+          "learner": "pos_null",
+          "hp": {},
+          "per_season_top": {
+            "2019": 0.6243,
+            "2020": 0.3487,
+            "2021": 0.4948,
+            "2022": 0.3774,
+            "2023": 0.4783,
+            "2024": 0.427,
+            "2025": 0.2643
+          },
+          "per_season_full": {
+            "2019": 0.7279,
+            "2020": 0.6226,
+            "2021": 0.744,
+            "2022": 0.7695,
+            "2023": 0.7755,
+            "2024": 0.7137,
+            "2025": 0.8252
+          },
+          "mean_top": 0.4307,
+          "mean_full": 0.7398
+        },
+        "market_only": {
+          "learner": "pos_market_only",
+          "hp": {},
+          "per_season_top": {
+            "2019": 0.5861,
+            "2020": 0.7096,
+            "2021": 0.4574,
+            "2022": 0.4852,
+            "2023": 0.6574,
+            "2024": 0.4148,
+            "2025": 0.2191
+          },
+          "per_season_full": {
+            "2019": 0.7504,
+            "2020": 0.7747,
+            "2021": 0.8003,
+            "2022": 0.759,
+            "2023": 0.8131,
+            "2024": 0.7541,
+            "2025": 0.8195
+          },
+          "mean_top": 0.5042,
+          "mean_full": 0.7816
+        },
+        "nf1_3_incumbent": {
+          "learner": "nf1_3_incumbent(pos_market_blend)",
+          "hp": {
+            "blend_w": 0.6000478605455821
+          },
+          "mean_top": 0.5162,
+          "per_season_top": {
+            "2019": 0.667,
+            "2020": 0.5852,
+            "2021": 0.5226,
+            "2022": 0.4696,
+            "2023": 0.6852,
+            "2024": 0.42,
+            "2025": 0.2635
+          }
+        },
+        "learned_anchor": {
+          "learner": "pos_similarity",
+          "hp": {
+            "k": 35,
+            "weight_power": 2.638285885412706,
+            "mvp1_emphasis": 3.030090628490117
+          }
+        },
+        "market_top_tier_coverage": 1.0,
+        "best_by_class": {
+          "pos_learned_adaptive_blend": {
+            "learner": "pos_learned_adaptive_blend",
+            "hp": {
+              "blend_w": 0.7218695434988335,
+              "disp_slope": 0.24945178898125647
+            },
+            "per_season_top": {
+              "2019": 0.6661,
+              "2020": 0.6991,
+              "2021": 0.5096,
+              "2022": 0.4965,
+              "2023": 0.6765,
+              "2024": 0.4104,
+              "2025": 0.2548
+            },
+            "per_season_full": {
+              "2019": 0.3984,
+              "2020": 0.5114,
+              "2021": 0.6472,
+              "2022": 0.6786,
+              "2023": 0.7028,
+              "2024": 0.6989,
+              "2025": 0.6084
+            },
+            "mean_top": 0.5304,
+            "mean_full": 0.6065
+          },
+          "pos_learned_blend": {
+            "learner": "pos_learned_blend",
+            "hp": {
+              "blend_w": 0.6472753095623965
+            },
+            "per_season_top": {
+              "2019": 0.6583,
+              "2020": 0.687,
+              "2021": 0.5461,
+              "2022": 0.4765,
+              "2023": 0.6809,
+              "2024": 0.4061,
+              "2025": 0.2583
+            },
+            "per_season_full": {
+              "2019": 0.4103,
+              "2020": 0.4666,
+              "2021": 0.7335,
+              "2022": 0.6835,
+              "2023": 0.7088,
+              "2024": 0.7462,
+              "2025": 0.6341
+            },
+            "mean_top": 0.5305,
+            "mean_full": 0.6261
+          },
+          "pos_adaptive_blend": {
+            "learner": "pos_adaptive_blend",
+            "hp": {
+              "blend_w": 0.9941514189905954,
+              "disp_slope": 0.2690393332470698
+            },
+            "per_season_top": {
+              "2019": 0.6322,
+              "2020": 0.7096,
+              "2021": 0.4843,
+              "2022": 0.4896,
+              "2023": 0.6661,
+              "2024": 0.4217,
+              "2025": 0.2191
+            },
+            "per_season_full": {
+              "2019": 0.4536,
+              "2020": 0.5098,
+              "2021": 0.6494,
+              "2022": 0.6978,
+              "2023": 0.7249,
+              "2024": 0.732,
+              "2025": 0.6521
+            },
+            "mean_top": 0.5175,
+            "mean_full": 0.6314
+          },
+          "pos_blend_flat": {
+            "learner": "pos_blend_flat",
+            "hp": {
+              "blend_w": 0.6032143192246215
+            },
+            "per_season_top": {
+              "2019": 0.6722,
+              "2020": 0.573,
+              "2021": 0.587,
+              "2022": 0.4643,
+              "2023": 0.6887,
+              "2024": 0.4,
+              "2025": 0.2887
+            },
+            "per_season_full": {
+              "2019": 0.4967,
+              "2020": 0.5121,
+              "2021": 0.7363,
+              "2022": 0.7459,
+              "2023": 0.7795,
+              "2024": 0.7551,
+              "2025": 0.7385
+            },
+            "mean_top": 0.5248,
+            "mean_full": 0.6806
+          }
+        },
+        "winner": {
+          "learner": "pos_learned_blend",
+          "hp": {
+            "blend_w": 0.6472753095623965
+          },
+          "per_season_top": {
+            "2019": 0.6583,
+            "2020": 0.687,
+            "2021": 0.5461,
+            "2022": 0.4765,
+            "2023": 0.6809,
+            "2024": 0.4061,
+            "2025": 0.2583
+          },
+          "per_season_full": {
+            "2019": 0.4103,
+            "2020": 0.4666,
+            "2021": 0.7335,
+            "2022": 0.6835,
+            "2023": 0.7088,
+            "2024": 0.7462,
+            "2025": 0.6341
+          },
+          "mean_top": 0.5305,
+          "mean_full": 0.6261
+        },
+        "pbo": 0.8,
+        "config_spread": 0.2243,
+        "dsr": 0.1588,
+        "pvalue": 0.0434,
+        "n_configs": 161,
+        "beats_null": true,
+        "beats_market_only": true,
+        "beats_nf1_3_incumbent": true,
+        "delta_vs_nf1_3_incumbent": 0.0143,
+        "fdr_pass": true,
+        "verdict": {
+          "repoint": false,
+          "beats_null": true,
+          "pbo_ok": false,
+          "dsr_ok": false,
+          "fdr_ok": true
+        }
+      }
+    },
+    "placebo": {
+      "QB": {
+        "winner_mean_top": 0.0681,
+        "null_mean_top": 0.0098,
+        "naive_delta_vs_null": 0.0583,
+        "gates_pass": false
+      },
+      "RB": {
+        "winner_mean_top": 0.0256,
+        "null_mean_top": -0.0124,
+        "naive_delta_vs_null": 0.038,
+        "gates_pass": false
+      },
+      "WR": {
+        "winner_mean_top": 0.1061,
+        "null_mean_top": -0.0823,
+        "naive_delta_vs_null": 0.1884,
+        "gates_pass": false
+      },
+      "TE": {
+        "winner_mean_top": 0.1782,
+        "null_mean_top": 0.1096,
+        "naive_delta_vs_null": 0.0686,
+        "gates_pass": false
+      }
+    },
+    "pbo_max": 0.2,
+    "dsr_min": 0.95,
+    "fdr_q": 0.1,
+    "generated_at": "2026-07-29T03:15:10.378877+00:00"
+  },
+  "updated_at": "2026-07-29T04:24:19.382424+00:00",
+  "stage2": {
+    "stage": "blind_ceiling_proof",
+    "pool_base_seasons": [
+      2006,
+      2024
+    ],
+    "score_from": 2010,
+    "target_seasons": [
+      2010,
+      2011,
+      2012,
+      2013,
+      2014,
+      2015,
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ],
+    "n_pool": 6736,
+    "selection_metric": "top-tier within-position \u03c1 (tier = top-N by the MVP-1 incumbent, N={'QB': 24, 'RB': 36, 'WR': 48, 'TE': 24})",
+    "oracle_metric_ok": true,
+    "n_trials_per_cell": 15,
+    "placebo_trials": 3,
+    "bundle_registry": {
+      "base": [],
+      "base_xfp": [
+        "xfp"
+      ],
+      "base_env": [
+        "xfp",
+        "sos",
+        "system",
+        "qbcorr",
+        "spill"
+      ],
+      "base_contract": [
+        "xfp",
+        "contract",
+        "oline"
+      ],
+      "base_opp": [
+        "xfp",
+        "opp"
+      ],
+      "all_skill": [
+        "xfp",
+        "opp",
+        "sos",
+        "system",
+        "qbcorr",
+        "spill"
+      ],
+      "kitchen_sink": [
+        "xfp",
+        "opp",
+        "sos",
+        "system",
+        "qbcorr",
+        "spill",
+        "contract",
+        "oline"
+      ]
+    },
+    "candidates": [
+      "pos_ridge",
+      "pos_gbm",
+      "pos_similarity",
+      "pos_mlp",
+      "pos_twopart",
+      "pos_rank"
+    ],
+    "positions": {
+      "QB": {
+        "null": {
+          "learner": "pos_null",
+          "hp": {},
+          "per_season_top": {
+            "2010": 0.3826,
+            "2011": 0.4765,
+            "2012": 0.58,
+            "2013": 0.2383,
+            "2014": 0.4148,
+            "2015": 0.2861,
+            "2016": 0.1817,
+            "2017": -0.1252,
+            "2018": 0.3391,
+            "2019": 0.2026,
+            "2020": 0.453,
+            "2021": 0.5183,
+            "2022": 0.4304,
+            "2023": 0.5504,
+            "2024": 0.4383,
+            "2025": -0.0165
+          },
+          "per_season_full": {
+            "2010": 0.6571,
+            "2011": 0.6254,
+            "2012": 0.6659,
+            "2013": 0.5969,
+            "2014": 0.7454,
+            "2015": 0.6334,
+            "2016": 0.6821,
+            "2017": 0.5138,
+            "2018": 0.6076,
+            "2019": 0.6053,
+            "2020": 0.5686,
+            "2021": 0.7549,
+            "2022": 0.5967,
+            "2023": 0.6158,
+            "2024": 0.772,
+            "2025": 0.6262
+          },
+          "mean_top": 0.3344,
+          "mean_full": 0.6417
+        },
+        "nf1_1_winner_ref": {
+          "learner": "nf1_1_winner(pos_gbm)",
+          "hp": {
+            "n_estimators": 150,
+            "num_leaves": 18,
+            "learning_rate": 0.03698206177627045,
+            "min_child_samples": 7,
+            "reg_lambda": 1.7949736030439343
+          },
+          "mean_top": 0.363
+        },
+        "bundles": {
+          "base": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "carry_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd"
+          ],
+          "base_xfp": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "carry_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "xrush_td_pg",
+            "td_luck_ratio"
+          ],
+          "base_env": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "carry_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "xrush_td_pg",
+            "td_luck_ratio",
+            "sos_pass_strength",
+            "sos_rush_strength",
+            "team_pass_rate",
+            "team_pace",
+            "pass_rate_delta",
+            "teammate_fp",
+            "vacated_volume"
+          ],
+          "base_contract": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "carry_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "xrush_td_pg",
+            "td_luck_ratio",
+            "log_investment",
+            "guaranteed_ratio",
+            "cap_hit_pct_team",
+            "team_skill_cap_concentration",
+            "team_ol_cap_pct"
+          ],
+          "kitchen_sink": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "carry_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "xrush_td_pg",
+            "td_luck_ratio",
+            "sos_pass_strength",
+            "sos_rush_strength",
+            "team_pass_rate",
+            "team_pace",
+            "pass_rate_delta",
+            "teammate_fp",
+            "vacated_volume",
+            "log_investment",
+            "guaranteed_ratio",
+            "cap_hit_pct_team",
+            "team_skill_cap_concentration",
+            "team_ol_cap_pct"
+          ]
+        },
+        "best_by_cell": {
+          "pos_ridge\u00d7base": {
+            "mean_top": 0.3978
+          },
+          "pos_ridge\u00d7base_xfp": {
+            "mean_top": 0.3946
+          },
+          "pos_ridge\u00d7base_env": {
+            "mean_top": 0.3734
+          },
+          "pos_ridge\u00d7base_contract": {
+            "mean_top": 0.4042
+          },
+          "pos_ridge\u00d7kitchen_sink": {
+            "mean_top": 0.3737
+          },
+          "pos_gbm\u00d7base": {
+            "mean_top": 0.3885
+          },
+          "pos_gbm\u00d7base_xfp": {
+            "mean_top": 0.3892
+          },
+          "pos_gbm\u00d7base_env": {
+            "mean_top": 0.384
+          },
+          "pos_gbm\u00d7base_contract": {
+            "mean_top": 0.4189
+          },
+          "pos_gbm\u00d7kitchen_sink": {
+            "mean_top": 0.4166
+          },
+          "pos_similarity\u00d7base": {
+            "mean_top": 0.354
+          },
+          "pos_similarity\u00d7base_xfp": {
+            "mean_top": 0.3486
+          },
+          "pos_similarity\u00d7base_env": {
+            "mean_top": 0.3444
+          },
+          "pos_similarity\u00d7base_contract": {
+            "mean_top": 0.3647
+          },
+          "pos_similarity\u00d7kitchen_sink": {
+            "mean_top": 0.3542
+          },
+          "pos_mlp\u00d7base": {
+            "mean_top": 0.3952
+          },
+          "pos_mlp\u00d7base_xfp": {
+            "mean_top": 0.3883
+          },
+          "pos_mlp\u00d7base_env": {
+            "mean_top": 0.3454
+          },
+          "pos_mlp\u00d7base_contract": {
+            "mean_top": 0.3544
+          },
+          "pos_mlp\u00d7kitchen_sink": {
+            "mean_top": 0.3137
+          },
+          "pos_twopart\u00d7base": {
+            "mean_top": 0.4236
+          },
+          "pos_twopart\u00d7base_xfp": {
+            "mean_top": 0.4123
+          },
+          "pos_twopart\u00d7base_env": {
+            "mean_top": 0.4087
+          },
+          "pos_twopart\u00d7base_contract": {
+            "mean_top": 0.4269
+          },
+          "pos_twopart\u00d7kitchen_sink": {
+            "mean_top": 0.3971
+          },
+          "pos_rank\u00d7base": {
+            "mean_top": 0.3842
+          },
+          "pos_rank\u00d7base_xfp": {
+            "mean_top": 0.3819
+          },
+          "pos_rank\u00d7base_env": {
+            "mean_top": 0.3865
+          },
+          "pos_rank\u00d7base_contract": {
+            "mean_top": 0.3822
+          },
+          "pos_rank\u00d7kitchen_sink": {
+            "mean_top": 0.3812
+          }
+        },
+        "winner": {
+          "learner": "pos_twopart",
+          "hp": {
+            "n_estimators": 200,
+            "num_leaves": 5,
+            "learning_rate": 0.014154896377799289,
+            "min_child_samples": 6,
+            "reg_lambda": 4.489780617131494,
+            "games_alpha": 2.352886648384758
+          },
+          "per_season_top": {
+            "2010": 0.5087,
+            "2011": 0.5835,
+            "2012": 0.6574,
+            "2013": 0.5226,
+            "2014": 0.4557,
+            "2015": 0.1687,
+            "2016": 0.36,
+            "2017": 0.067,
+            "2018": 0.3713,
+            "2019": 0.2965,
+            "2020": 0.6643,
+            "2021": 0.7461,
+            "2022": 0.4339,
+            "2023": 0.4357,
+            "2024": 0.4835,
+            "2025": 0.0748
+          },
+          "per_season_full": {
+            "2010": 0.6247,
+            "2011": 0.666,
+            "2012": 0.7219,
+            "2013": 0.721,
+            "2014": 0.7172,
+            "2015": 0.5854,
+            "2016": 0.7459,
+            "2017": 0.5823,
+            "2018": 0.6207,
+            "2019": 0.6633,
+            "2020": 0.6818,
+            "2021": 0.8307,
+            "2022": 0.5844,
+            "2023": 0.6111,
+            "2024": 0.7915,
+            "2025": 0.6534
+          },
+          "mean_top": 0.4269,
+          "mean_full": 0.6751,
+          "bundle": "base_contract"
+        },
+        "pbo": 0.293,
+        "config_spread": 0.1621,
+        "dsr": 0.3563,
+        "pvalue": 0.0026,
+        "n_configs": 451,
+        "beats_null": true,
+        "beats_nf1_1_ref": true,
+        "fdr_pass": true,
+        "verdict": {
+          "repoint": false,
+          "beats_null": true,
+          "pbo_ok": false,
+          "dsr_ok": false,
+          "fdr_ok": true
+        }
+      },
+      "RB": {
+        "null": {
+          "learner": "pos_null",
+          "hp": {},
+          "per_season_top": {
+            "2010": 0.3091,
+            "2011": 0.4523,
+            "2012": 0.5086,
+            "2013": 0.3871,
+            "2014": 0.5645,
+            "2015": 0.094,
+            "2016": 0.3784,
+            "2017": 0.4039,
+            "2018": 0.408,
+            "2019": 0.5593,
+            "2020": 0.5151,
+            "2021": 0.4775,
+            "2022": 0.4903,
+            "2023": 0.3171,
+            "2024": 0.6494,
+            "2025": 0.5575
+          },
+          "per_season_full": {
+            "2010": 0.6242,
+            "2011": 0.6179,
+            "2012": 0.5895,
+            "2013": 0.7485,
+            "2014": 0.5487,
+            "2015": 0.5436,
+            "2016": 0.6158,
+            "2017": 0.6844,
+            "2018": 0.6669,
+            "2019": 0.7443,
+            "2020": 0.599,
+            "2021": 0.6864,
+            "2022": 0.7218,
+            "2023": 0.7441,
+            "2024": 0.8206,
+            "2025": 0.8228
+          },
+          "mean_top": 0.442,
+          "mean_full": 0.6737
+        },
+        "nf1_1_winner_ref": {
+          "learner": "nf1_1_winner(pos_ridge)",
+          "hp": {
+            "alpha": 0.9504011684640693
+          },
+          "mean_top": 0.5376
+        },
+        "bundles": {
+          "base": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "carry_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd"
+          ],
+          "base_xfp": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "carry_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "xfp_pg",
+            "td_luck_ratio",
+            "xrush_td_pg",
+            "xrec_td_pg",
+            "xrec_pg",
+            "xrec_yds_pg"
+          ],
+          "base_env": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "carry_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "xfp_pg",
+            "td_luck_ratio",
+            "xrush_td_pg",
+            "xrec_td_pg",
+            "xrec_pg",
+            "xrec_yds_pg",
+            "sos_pass_strength",
+            "sos_rush_strength",
+            "team_pass_rate",
+            "team_pace",
+            "pass_rate_delta",
+            "teammate_fp",
+            "vacated_volume"
+          ],
+          "base_contract": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "carry_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "xfp_pg",
+            "td_luck_ratio",
+            "xrush_td_pg",
+            "xrec_td_pg",
+            "xrec_pg",
+            "xrec_yds_pg",
+            "log_investment",
+            "guaranteed_ratio",
+            "cap_hit_pct_team",
+            "team_skill_cap_concentration",
+            "team_ol_cap_pct"
+          ],
+          "base_opp": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "carry_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "xfp_pg",
+            "td_luck_ratio",
+            "xrush_td_pg",
+            "xrec_td_pg",
+            "xrec_pg",
+            "xrec_yds_pg",
+            "air_yards_share",
+            "wopr"
+          ],
+          "all_skill": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "carry_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "xfp_pg",
+            "td_luck_ratio",
+            "xrush_td_pg",
+            "xrec_td_pg",
+            "xrec_pg",
+            "xrec_yds_pg",
+            "air_yards_share",
+            "wopr",
+            "sos_pass_strength",
+            "sos_rush_strength",
+            "team_pass_rate",
+            "team_pace",
+            "pass_rate_delta",
+            "teammate_fp",
+            "vacated_volume"
+          ],
+          "kitchen_sink": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "carry_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "xfp_pg",
+            "td_luck_ratio",
+            "xrush_td_pg",
+            "xrec_td_pg",
+            "xrec_pg",
+            "xrec_yds_pg",
+            "air_yards_share",
+            "wopr",
+            "sos_pass_strength",
+            "sos_rush_strength",
+            "team_pass_rate",
+            "team_pace",
+            "pass_rate_delta",
+            "teammate_fp",
+            "vacated_volume",
+            "log_investment",
+            "guaranteed_ratio",
+            "cap_hit_pct_team",
+            "team_skill_cap_concentration",
+            "team_ol_cap_pct"
+          ]
+        },
+        "best_by_cell": {
+          "pos_ridge\u00d7base": {
+            "mean_top": 0.5345
+          },
+          "pos_ridge\u00d7base_xfp": {
+            "mean_top": 0.5397
+          },
+          "pos_ridge\u00d7base_env": {
+            "mean_top": 0.5207
+          },
+          "pos_ridge\u00d7base_contract": {
+            "mean_top": 0.5367
+          },
+          "pos_ridge\u00d7base_opp": {
+            "mean_top": 0.5146
+          },
+          "pos_ridge\u00d7all_skill": {
+            "mean_top": 0.4982
+          },
+          "pos_ridge\u00d7kitchen_sink": {
+            "mean_top": 0.4926
+          },
+          "pos_gbm\u00d7base": {
+            "mean_top": 0.5055
+          },
+          "pos_gbm\u00d7base_xfp": {
+            "mean_top": 0.5022
+          },
+          "pos_gbm\u00d7base_env": {
+            "mean_top": 0.4992
+          },
+          "pos_gbm\u00d7base_contract": {
+            "mean_top": 0.5381
+          },
+          "pos_gbm\u00d7base_opp": {
+            "mean_top": 0.5018
+          },
+          "pos_gbm\u00d7all_skill": {
+            "mean_top": 0.4983
+          },
+          "pos_gbm\u00d7kitchen_sink": {
+            "mean_top": 0.5374
+          },
+          "pos_similarity\u00d7base": {
+            "mean_top": 0.5236
+          },
+          "pos_similarity\u00d7base_xfp": {
+            "mean_top": 0.5109
+          },
+          "pos_similarity\u00d7base_env": {
+            "mean_top": 0.5077
+          },
+          "pos_similarity\u00d7base_contract": {
+            "mean_top": 0.5039
+          },
+          "pos_similarity\u00d7base_opp": {
+            "mean_top": 0.5008
+          },
+          "pos_similarity\u00d7all_skill": {
+            "mean_top": 0.5035
+          },
+          "pos_similarity\u00d7kitchen_sink": {
+            "mean_top": 0.4939
+          },
+          "pos_mlp\u00d7base": {
+            "mean_top": 0.532
+          },
+          "pos_mlp\u00d7base_xfp": {
+            "mean_top": 0.5233
+          },
+          "pos_mlp\u00d7base_env": {
+            "mean_top": 0.5154
+          },
+          "pos_mlp\u00d7base_contract": {
+            "mean_top": 0.5045
+          },
+          "pos_mlp\u00d7base_opp": {
+            "mean_top": 0.487
+          },
+          "pos_mlp\u00d7all_skill": {
+            "mean_top": 0.484
+          },
+          "pos_mlp\u00d7kitchen_sink": {
+            "mean_top": 0.4806
+          },
+          "pos_twopart\u00d7base": {
+            "mean_top": 0.5104
+          },
+          "pos_twopart\u00d7base_xfp": {
+            "mean_top": 0.5133
+          },
+          "pos_twopart\u00d7base_env": {
+            "mean_top": 0.5067
+          },
+          "pos_twopart\u00d7base_contract": {
+            "mean_top": 0.5283
+          },
+          "pos_twopart\u00d7base_opp": {
+            "mean_top": 0.5145
+          },
+          "pos_twopart\u00d7all_skill": {
+            "mean_top": 0.5122
+          },
+          "pos_twopart\u00d7kitchen_sink": {
+            "mean_top": 0.5205
+          },
+          "pos_rank\u00d7base": {
+            "mean_top": 0.5191
+          },
+          "pos_rank\u00d7base_xfp": {
+            "mean_top": 0.5043
+          },
+          "pos_rank\u00d7base_env": {
+            "mean_top": 0.5046
+          },
+          "pos_rank\u00d7base_contract": {
+            "mean_top": 0.5005
+          },
+          "pos_rank\u00d7base_opp": {
+            "mean_top": 0.5014
+          },
+          "pos_rank\u00d7all_skill": {
+            "mean_top": 0.5001
+          },
+          "pos_rank\u00d7kitchen_sink": {
+            "mean_top": 0.5023
+          }
+        },
+        "winner": {
+          "learner": "pos_ridge",
+          "hp": {
+            "alpha": 0.7719825246739508
+          },
+          "per_season_top": {
+            "2010": 0.2978,
+            "2011": 0.6463,
+            "2012": 0.4082,
+            "2013": 0.5912,
+            "2014": 0.7074,
+            "2015": 0.0507,
+            "2016": 0.4479,
+            "2017": 0.6291,
+            "2018": 0.6268,
+            "2019": 0.5279,
+            "2020": 0.7076,
+            "2021": 0.5758,
+            "2022": 0.6221,
+            "2023": 0.3936,
+            "2024": 0.7514,
+            "2025": 0.6515
+          },
+          "per_season_full": {
+            "2010": 0.6475,
+            "2011": 0.6965,
+            "2012": 0.6389,
+            "2013": 0.7968,
+            "2014": 0.579,
+            "2015": 0.4586,
+            "2016": 0.6067,
+            "2017": 0.728,
+            "2018": 0.746,
+            "2019": 0.7519,
+            "2020": 0.6143,
+            "2021": 0.7024,
+            "2022": 0.7548,
+            "2023": 0.7702,
+            "2024": 0.8315,
+            "2025": 0.8338
+          },
+          "mean_top": 0.5397,
+          "mean_full": 0.6973,
+          "bundle": "base_xfp"
+        },
+        "pbo": 0.2852,
+        "config_spread": 0.1619,
+        "dsr": 0.5276,
+        "pvalue": 0.0007,
+        "n_configs": 631,
+        "beats_null": true,
+        "beats_nf1_1_ref": true,
+        "fdr_pass": true,
+        "verdict": {
+          "repoint": false,
+          "beats_null": true,
+          "pbo_ok": false,
+          "dsr_ok": false,
+          "fdr_ok": true
+        }
+      },
+      "WR": {
+        "null": {
+          "learner": "pos_null",
+          "hp": {},
+          "per_season_top": {
+            "2010": 0.2164,
+            "2011": 0.3281,
+            "2012": 0.5071,
+            "2013": 0.3388,
+            "2014": 0.5268,
+            "2015": 0.4211,
+            "2016": 0.4683,
+            "2017": 0.4599,
+            "2018": 0.2631,
+            "2019": 0.4445,
+            "2020": 0.2326,
+            "2021": 0.3381,
+            "2022": 0.552,
+            "2023": 0.5572,
+            "2024": 0.4959,
+            "2025": 0.2591
+          },
+          "per_season_full": {
+            "2010": 0.6333,
+            "2011": 0.6666,
+            "2012": 0.6794,
+            "2013": 0.7271,
+            "2014": 0.713,
+            "2015": 0.7369,
+            "2016": 0.6997,
+            "2017": 0.7458,
+            "2018": 0.6692,
+            "2019": 0.7652,
+            "2020": 0.7291,
+            "2021": 0.7073,
+            "2022": 0.704,
+            "2023": 0.7598,
+            "2024": 0.7653,
+            "2025": 0.8212
+          },
+          "mean_top": 0.4006,
+          "mean_full": 0.7202
+        },
+        "nf1_1_winner_ref": {
+          "learner": "nf1_1_winner(pos_ridge)",
+          "hp": {
+            "alpha": 1.380137655222368
+          },
+          "mean_top": 0.5656
+        },
+        "bundles": {
+          "base": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd"
+          ],
+          "base_env": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "sos_pass_strength",
+            "team_pass_rate",
+            "team_pace",
+            "pass_rate_delta",
+            "team_qb_quality",
+            "teammate_fp",
+            "vacated_volume"
+          ],
+          "base_contract": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "log_investment",
+            "guaranteed_ratio",
+            "cap_hit_pct_team",
+            "team_skill_cap_concentration"
+          ],
+          "base_opp": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "air_yards_share",
+            "wopr"
+          ],
+          "all_skill": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "air_yards_share",
+            "wopr",
+            "sos_pass_strength",
+            "team_pass_rate",
+            "team_pace",
+            "pass_rate_delta",
+            "team_qb_quality",
+            "teammate_fp",
+            "vacated_volume"
+          ],
+          "kitchen_sink": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "air_yards_share",
+            "wopr",
+            "sos_pass_strength",
+            "team_pass_rate",
+            "team_pace",
+            "pass_rate_delta",
+            "team_qb_quality",
+            "teammate_fp",
+            "vacated_volume",
+            "log_investment",
+            "guaranteed_ratio",
+            "cap_hit_pct_team",
+            "team_skill_cap_concentration"
+          ]
+        },
+        "best_by_cell": {
+          "pos_ridge\u00d7base": {
+            "mean_top": 0.5675
+          },
+          "pos_ridge\u00d7base_env": {
+            "mean_top": 0.5627
+          },
+          "pos_ridge\u00d7base_contract": {
+            "mean_top": 0.561
+          },
+          "pos_ridge\u00d7base_opp": {
+            "mean_top": 0.5517
+          },
+          "pos_ridge\u00d7all_skill": {
+            "mean_top": 0.5519
+          },
+          "pos_ridge\u00d7kitchen_sink": {
+            "mean_top": 0.5439
+          },
+          "pos_gbm\u00d7base": {
+            "mean_top": 0.5507
+          },
+          "pos_gbm\u00d7base_env": {
+            "mean_top": 0.5554
+          },
+          "pos_gbm\u00d7base_contract": {
+            "mean_top": 0.5504
+          },
+          "pos_gbm\u00d7base_opp": {
+            "mean_top": 0.5492
+          },
+          "pos_gbm\u00d7all_skill": {
+            "mean_top": 0.5535
+          },
+          "pos_gbm\u00d7kitchen_sink": {
+            "mean_top": 0.551
+          },
+          "pos_similarity\u00d7base": {
+            "mean_top": 0.5421
+          },
+          "pos_similarity\u00d7base_env": {
+            "mean_top": 0.5196
+          },
+          "pos_similarity\u00d7base_contract": {
+            "mean_top": 0.5237
+          },
+          "pos_similarity\u00d7base_opp": {
+            "mean_top": 0.5408
+          },
+          "pos_similarity\u00d7all_skill": {
+            "mean_top": 0.5261
+          },
+          "pos_similarity\u00d7kitchen_sink": {
+            "mean_top": 0.5093
+          },
+          "pos_mlp\u00d7base": {
+            "mean_top": 0.5803
+          },
+          "pos_mlp\u00d7base_env": {
+            "mean_top": 0.5637
+          },
+          "pos_mlp\u00d7base_contract": {
+            "mean_top": 0.5608
+          },
+          "pos_mlp\u00d7base_opp": {
+            "mean_top": 0.5465
+          },
+          "pos_mlp\u00d7all_skill": {
+            "mean_top": 0.5557
+          },
+          "pos_mlp\u00d7kitchen_sink": {
+            "mean_top": 0.5325
+          },
+          "pos_twopart\u00d7base": {
+            "mean_top": 0.5711
+          },
+          "pos_twopart\u00d7base_env": {
+            "mean_top": 0.5781
+          },
+          "pos_twopart\u00d7base_contract": {
+            "mean_top": 0.5703
+          },
+          "pos_twopart\u00d7base_opp": {
+            "mean_top": 0.5695
+          },
+          "pos_twopart\u00d7all_skill": {
+            "mean_top": 0.5724
+          },
+          "pos_twopart\u00d7kitchen_sink": {
+            "mean_top": 0.5675
+          },
+          "pos_rank\u00d7base": {
+            "mean_top": 0.5339
+          },
+          "pos_rank\u00d7base_env": {
+            "mean_top": 0.538
+          },
+          "pos_rank\u00d7base_contract": {
+            "mean_top": 0.5303
+          },
+          "pos_rank\u00d7base_opp": {
+            "mean_top": 0.5308
+          },
+          "pos_rank\u00d7all_skill": {
+            "mean_top": 0.5313
+          },
+          "pos_rank\u00d7kitchen_sink": {
+            "mean_top": 0.5235
+          }
+        },
+        "winner": {
+          "learner": "pos_mlp",
+          "hp": {
+            "hidden": "64-32",
+            "alpha": 0.0018689661374796831,
+            "learning_rate_init": 0.00374947895203225
+          },
+          "per_season_top": {
+            "2010": 0.5601,
+            "2011": 0.5589,
+            "2012": 0.738,
+            "2013": 0.4585,
+            "2014": 0.5332,
+            "2015": 0.6394,
+            "2016": 0.5364,
+            "2017": 0.6175,
+            "2018": 0.6663,
+            "2019": 0.4736,
+            "2020": 0.5715,
+            "2021": 0.5688,
+            "2022": 0.7977,
+            "2023": 0.7098,
+            "2024": 0.5199,
+            "2025": 0.3353
+          },
+          "per_season_full": {
+            "2010": 0.7005,
+            "2011": 0.6648,
+            "2012": 0.7653,
+            "2013": 0.7144,
+            "2014": 0.7528,
+            "2015": 0.7501,
+            "2016": 0.7104,
+            "2017": 0.7356,
+            "2018": 0.738,
+            "2019": 0.7391,
+            "2020": 0.7748,
+            "2021": 0.7374,
+            "2022": 0.7189,
+            "2023": 0.7784,
+            "2024": 0.7434,
+            "2025": 0.824
+          },
+          "mean_top": 0.5803,
+          "mean_full": 0.7405,
+          "bundle": "base"
+        },
+        "pbo": 0.2188,
+        "config_spread": 0.1615,
+        "dsr": 0.964,
+        "pvalue": 0.0,
+        "n_configs": 541,
+        "beats_null": true,
+        "beats_nf1_1_ref": true,
+        "fdr_pass": true,
+        "verdict": {
+          "repoint": false,
+          "beats_null": true,
+          "pbo_ok": false,
+          "dsr_ok": true,
+          "fdr_ok": true
+        }
+      },
+      "TE": {
+        "null": {
+          "learner": "pos_null",
+          "hp": {},
+          "per_season_top": {
+            "2010": 0.3704,
+            "2011": 0.7287,
+            "2012": 0.4391,
+            "2013": 0.4861,
+            "2014": 0.3713,
+            "2015": 0.7026,
+            "2016": 0.4991,
+            "2017": 0.0896,
+            "2018": 0.227,
+            "2019": 0.6243,
+            "2020": 0.3487,
+            "2021": 0.4948,
+            "2022": 0.3774,
+            "2023": 0.4783,
+            "2024": 0.427,
+            "2025": 0.2643
+          },
+          "per_season_full": {
+            "2010": 0.7535,
+            "2011": 0.749,
+            "2012": 0.6354,
+            "2013": 0.7318,
+            "2014": 0.6237,
+            "2015": 0.594,
+            "2016": 0.6929,
+            "2017": 0.6793,
+            "2018": 0.7254,
+            "2019": 0.7279,
+            "2020": 0.6226,
+            "2021": 0.744,
+            "2022": 0.7695,
+            "2023": 0.7755,
+            "2024": 0.7137,
+            "2025": 0.8252
+          },
+          "mean_top": 0.433,
+          "mean_full": 0.7102
+        },
+        "nf1_1_winner_ref": {
+          "learner": "nf1_1_winner(pos_similarity)",
+          "hp": {
+            "k": 35,
+            "weight_power": 2.638285885412706,
+            "mvp1_emphasis": 3.030090628490117
+          },
+          "mean_top": 0.4514
+        },
+        "bundles": {
+          "base": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd"
+          ],
+          "base_xfp": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "xrec_pg",
+            "xrec_yds_pg",
+            "xrec_td_pg",
+            "xfp_pg",
+            "td_luck_ratio"
+          ],
+          "base_env": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "xrec_pg",
+            "xrec_yds_pg",
+            "xrec_td_pg",
+            "xfp_pg",
+            "td_luck_ratio",
+            "sos_pass_strength",
+            "team_pass_rate",
+            "team_pace",
+            "pass_rate_delta",
+            "team_qb_quality",
+            "teammate_fp",
+            "vacated_volume"
+          ],
+          "base_contract": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "xrec_pg",
+            "xrec_yds_pg",
+            "xrec_td_pg",
+            "xfp_pg",
+            "td_luck_ratio",
+            "log_investment",
+            "guaranteed_ratio",
+            "cap_hit_pct_team",
+            "team_skill_cap_concentration"
+          ],
+          "base_opp": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "xrec_pg",
+            "xrec_yds_pg",
+            "xrec_td_pg",
+            "xfp_pg",
+            "td_luck_ratio",
+            "air_yards_share",
+            "wopr"
+          ],
+          "all_skill": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "xrec_pg",
+            "xrec_yds_pg",
+            "xrec_td_pg",
+            "xfp_pg",
+            "td_luck_ratio",
+            "air_yards_share",
+            "wopr",
+            "sos_pass_strength",
+            "team_pass_rate",
+            "team_pace",
+            "pass_rate_delta",
+            "team_qb_quality",
+            "teammate_fp",
+            "vacated_volume"
+          ],
+          "kitchen_sink": [
+            "mvp1_fp",
+            "pergame_fp",
+            "base_games",
+            "expected_games",
+            "snap_share",
+            "target_share",
+            "depth_rank",
+            "mover_scale",
+            "team_env",
+            "injury_cap_ratio",
+            "age",
+            "fp_sd",
+            "xrec_pg",
+            "xrec_yds_pg",
+            "xrec_td_pg",
+            "xfp_pg",
+            "td_luck_ratio",
+            "air_yards_share",
+            "wopr",
+            "sos_pass_strength",
+            "team_pass_rate",
+            "team_pace",
+            "pass_rate_delta",
+            "team_qb_quality",
+            "teammate_fp",
+            "vacated_volume",
+            "log_investment",
+            "guaranteed_ratio",
+            "cap_hit_pct_team",
+            "team_skill_cap_concentration"
+          ]
+        },
+        "best_by_cell": {
+          "pos_ridge\u00d7base": {
+            "mean_top": 0.4514
+          },
+          "pos_ridge\u00d7base_xfp": {
+            "mean_top": 0.4506
+          },
+          "pos_ridge\u00d7base_env": {
+            "mean_top": 0.4578
+          },
+          "pos_ridge\u00d7base_contract": {
+            "mean_top": 0.4545
+          },
+          "pos_ridge\u00d7base_opp": {
+            "mean_top": 0.424
+          },
+          "pos_ridge\u00d7all_skill": {
+            "mean_top": 0.4298
+          },
+          "pos_ridge\u00d7kitchen_sink": {
+            "mean_top": 0.4238
+          },
+          "pos_gbm\u00d7base": {
+            "mean_top": 0.4378
+          },
+          "pos_gbm\u00d7base_xfp": {
+            "mean_top": 0.4233
+          },
+          "pos_gbm\u00d7base_env": {
+            "mean_top": 0.4224
+          },
+          "pos_gbm\u00d7base_contract": {
+            "mean_top": 0.436
+          },
+          "pos_gbm\u00d7base_opp": {
+            "mean_top": 0.4336
+          },
+          "pos_gbm\u00d7all_skill": {
+            "mean_top": 0.4348
+          },
+          "pos_gbm\u00d7kitchen_sink": {
+            "mean_top": 0.4369
+          },
+          "pos_similarity\u00d7base": {
+            "mean_top": 0.4788
+          },
+          "pos_similarity\u00d7base_xfp": {
+            "mean_top": 0.4524
+          },
+          "pos_similarity\u00d7base_env": {
+            "mean_top": 0.4355
+          },
+          "pos_similarity\u00d7base_contract": {
+            "mean_top": 0.4464
+          },
+          "pos_similarity\u00d7base_opp": {
+            "mean_top": 0.4547
+          },
+          "pos_similarity\u00d7all_skill": {
+            "mean_top": 0.4552
+          },
+          "pos_similarity\u00d7kitchen_sink": {
+            "mean_top": 0.4832
+          },
+          "pos_mlp\u00d7base": {
+            "mean_top": 0.4676
+          },
+          "pos_mlp\u00d7base_xfp": {
+            "mean_top": 0.4634
+          },
+          "pos_mlp\u00d7base_env": {
+            "mean_top": 0.4668
+          },
+          "pos_mlp\u00d7base_contract": {
+            "mean_top": 0.4584
+          },
+          "pos_mlp\u00d7base_opp": {
+            "mean_top": 0.4878
+          },
+          "pos_mlp\u00d7all_skill": {
+            "mean_top": 0.4748
+          },
+          "pos_mlp\u00d7kitchen_sink": {
+            "mean_top": 0.4618
+          },
+          "pos_twopart\u00d7base": {
+            "mean_top": 0.4572
+          },
+          "pos_twopart\u00d7base_xfp": {
+            "mean_top": 0.4533
+          },
+          "pos_twopart\u00d7base_env": {
+            "mean_top": 0.456
+          },
+          "pos_twopart\u00d7base_contract": {
+            "mean_top": 0.4534
+          },
+          "pos_twopart\u00d7base_opp": {
+            "mean_top": 0.4056
+          },
+          "pos_twopart\u00d7all_skill": {
+            "mean_top": 0.4055
+          },
+          "pos_twopart\u00d7kitchen_sink": {
+            "mean_top": 0.405
+          },
+          "pos_rank\u00d7base": {
+            "mean_top": 0.4495
+          },
+          "pos_rank\u00d7base_xfp": {
+            "mean_top": 0.441
+          },
+          "pos_rank\u00d7base_env": {
+            "mean_top": 0.4302
+          },
+          "pos_rank\u00d7base_contract": {
+            "mean_top": 0.4697
+          },
+          "pos_rank\u00d7base_opp": {
+            "mean_top": 0.451
+          },
+          "pos_rank\u00d7all_skill": {
+            "mean_top": 0.4496
+          },
+          "pos_rank\u00d7kitchen_sink": {
+            "mean_top": 0.4801
+          }
+        },
+        "winner": {
+          "learner": "pos_mlp",
+          "hp": {
+            "hidden": "64-32",
+            "alpha": 1.2820303969267852,
+            "learning_rate_init": 0.00474223448553753
+          },
+          "per_season_top": {
+            "2010": 0.593,
+            "2011": 0.5591,
+            "2012": 0.5513,
+            "2013": 0.5452,
+            "2014": 0.4496,
+            "2015": 0.6887,
+            "2016": 0.4183,
+            "2017": 0.12,
+            "2018": 0.4209,
+            "2019": 0.6965,
+            "2020": 0.6139,
+            "2021": 0.6791,
+            "2022": 0.4443,
+            "2023": 0.4252,
+            "2024": 0.3357,
+            "2025": 0.2643
+          },
+          "per_season_full": {
+            "2010": 0.7234,
+            "2011": 0.7358,
+            "2012": 0.5825,
+            "2013": 0.7216,
+            "2014": 0.6693,
+            "2015": 0.5624,
+            "2016": 0.6977,
+            "2017": 0.5845,
+            "2018": 0.7494,
+            "2019": 0.6672,
+            "2020": 0.6573,
+            "2021": 0.7303,
+            "2022": 0.7692,
+            "2023": 0.7144,
+            "2024": 0.7061,
+            "2025": 0.7765
+          },
+          "mean_top": 0.4878,
+          "mean_full": 0.6905,
+          "bundle": "base_opp"
+        },
+        "pbo": 0.5312,
+        "config_spread": 0.1575,
+        "dsr": 0.4399,
+        "pvalue": 0.0462,
+        "n_configs": 631,
+        "beats_null": true,
+        "beats_nf1_1_ref": true,
+        "fdr_pass": true,
+        "verdict": {
+          "repoint": false,
+          "beats_null": true,
+          "pbo_ok": false,
+          "dsr_ok": false,
+          "fdr_ok": true
+        }
+      }
+    },
+    "placebo": {
+      "QB": {
+        "winner_mean_top": 0.0078,
+        "null_mean_top": -0.0085,
+        "naive_delta_vs_null": 0.0163,
+        "gates_pass": false
+      },
+      "RB": {
+        "winner_mean_top": 0.0457,
+        "null_mean_top": -0.0537,
+        "naive_delta_vs_null": 0.0994,
+        "gates_pass": false
+      },
+      "WR": {
+        "winner_mean_top": 0.0698,
+        "null_mean_top": -0.0047,
+        "naive_delta_vs_null": 0.0745,
+        "gates_pass": false
+      },
+      "TE": {
+        "winner_mean_top": 0.0665,
+        "null_mean_top": 0.0538,
+        "naive_delta_vs_null": 0.0127,
+        "gates_pass": false
+      }
+    },
+    "pbo_max": 0.2,
+    "dsr_min": 0.95,
+    "fdr_q": 0.1,
+    "generated_at": "2026-07-29T04:22:11.754130+00:00"
+  },
+  "serving_recommendation": {
+    "serve": "refined-dual-board",
+    "why": "the refined market-aware board beats the NF1.3 incumbent on the product metric with a verified calibrated interval; the market-blind MVP-1 board stays the fade-claim baseline (dual-board)",
+    "refined_beats_incumbent": {
+      "QB": true,
+      "RB": true,
+      "WR": true,
+      "TE": true
+    },
+    "refined_gates": {
+      "QB": false,
+      "RB": false,
+      "WR": false,
+      "TE": false
+    },
+    "product_delta_vs_nf1_3": 0.011,
+    "calib_80": 0.804
+  },
+  "archived_stages": [
+    {
+      "stage": "market_refinements",
+      "target_seasons": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "n_pool": 2995,
+      "selection_metric": "top-tier within-position \u03c1 (tier = top-N by the MVP-1 incumbent, N={'QB': 24, 'RB': 36, 'WR': 48, 'TE': 24})",
+      "oracle_metric_ok": true,
+      "market_top_tier_coverage": {
+        "QB": 1.0,
+        "RB": 1.0,
+        "WR": 0.979,
+        "TE": 1.0
+      },
+      "n_trials_per_class": 40,
+      "placebo_trials": 10,
+      "candidates": [
+        "pos_learned_adaptive_blend",
+        "pos_learned_blend",
+        "pos_adaptive_blend",
+        "pos_blend_flat"
+      ],
+      "positions": {
+        "QB": {
+          "null": {
+            "learner": "pos_null",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.2026,
+              "2020": 0.453,
+              "2021": 0.5183,
+              "2022": 0.4304,
+              "2023": 0.5504,
+              "2024": 0.4383,
+              "2025": -0.0165
+            },
+            "per_season_full": {
+              "2019": 0.6053,
+              "2020": 0.5686,
+              "2021": 0.7549,
+              "2022": 0.5967,
+              "2023": 0.6158,
+              "2024": 0.772,
+              "2025": 0.6262
+            },
+            "mean_top": 0.3681,
+            "mean_full": 0.6485
+          },
+          "market_only": {
+            "learner": "pos_market_only",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.6096,
+              "2020": 0.7217,
+              "2021": 0.7504,
+              "2022": 0.6017,
+              "2023": 0.5452,
+              "2024": 0.5652,
+              "2025": 0.1783
+            },
+            "per_season_full": {
+              "2019": 0.8059,
+              "2020": 0.8176,
+              "2021": 0.8869,
+              "2022": 0.7166,
+              "2023": 0.707,
+              "2024": 0.7964,
+              "2025": 0.5938
+            },
+            "mean_top": 0.5674,
+            "mean_full": 0.7606
+          },
+          "nf1_3_incumbent": {
+            "learner": "nf1_3_incumbent(pos_market_blend)",
+            "hp": {
+              "blend_w": 0.9869973994939585
+            },
+            "mean_top": 0.5619,
+            "per_season_top": {
+              "2019": 0.6061,
+              "2020": 0.7243,
+              "2021": 0.7504,
+              "2022": 0.5522,
+              "2023": 0.5461,
+              "2024": 0.5757,
+              "2025": 0.1783
+            }
+          },
+          "learned_anchor": {
+            "learner": "pos_gbm",
+            "hp": {
+              "n_estimators": 150,
+              "num_leaves": 18,
+              "learning_rate": 0.03698206177627045,
+              "min_child_samples": 7,
+              "reg_lambda": 1.7949736030439343
+            }
+          },
+          "market_top_tier_coverage": 1.0,
+          "best_by_class": {
+            "pos_learned_adaptive_blend": {
+              "learner": "pos_learned_adaptive_blend",
+              "hp": {
+                "blend_w": 0.944857150064149,
+                "disp_slope": 0.0735418303092305
+              },
+              "per_season_top": {
+                "2019": 0.613,
+                "2020": 0.7217,
+                "2021": 0.7661,
+                "2022": 0.6009,
+                "2023": 0.5461,
+                "2024": 0.5739,
+                "2025": 0.1783
+              },
+              "per_season_full": {
+                "2019": 0.8168,
+                "2020": 0.809,
+                "2021": 0.8707,
+                "2022": 0.7035,
+                "2023": 0.6853,
+                "2024": 0.7848,
+                "2025": 0.61
+              },
+              "mean_top": 0.5714,
+              "mean_full": 0.7543
+            },
+            "pos_learned_blend": {
+              "learner": "pos_learned_blend",
+              "hp": {
+                "blend_w": 0.9847567513887239
+              },
+              "per_season_top": {
+                "2019": 0.6096,
+                "2020": 0.7217,
+                "2021": 0.7504,
+                "2022": 0.5904,
+                "2023": 0.5461,
+                "2024": 0.5757,
+                "2025": 0.1783
+              },
+              "per_season_full": {
+                "2019": 0.8148,
+                "2020": 0.8095,
+                "2021": 0.8697,
+                "2022": 0.7011,
+                "2023": 0.6847,
+                "2024": 0.7777,
+                "2025": 0.5989
+              },
+              "mean_top": 0.5675,
+              "mean_full": 0.7509
+            },
+            "pos_adaptive_blend": {
+              "learner": "pos_adaptive_blend",
+              "hp": {
+                "blend_w": 0.9456831868184076,
+                "disp_slope": 0.09006702047307802
+              },
+              "per_season_top": {
+                "2019": 0.6235,
+                "2020": 0.7365,
+                "2021": 0.7513,
+                "2022": 0.6087,
+                "2023": 0.5452,
+                "2024": 0.567,
+                "2025": 0.1739
+              },
+              "per_season_full": {
+                "2019": 0.8213,
+                "2020": 0.8154,
+                "2021": 0.8711,
+                "2022": 0.7177,
+                "2023": 0.6809,
+                "2024": 0.7877,
+                "2025": 0.61
+              },
+              "mean_top": 0.5723,
+              "mean_full": 0.7577
+            },
+            "pos_blend_flat": {
+              "learner": "pos_blend_flat",
+              "hp": {
+                "blend_w": 0.9602384719059377
+              },
+              "per_season_top": {
+                "2019": 0.5922,
+                "2020": 0.7435,
+                "2021": 0.773,
+                "2022": 0.58,
+                "2023": 0.5409,
+                "2024": 0.5817,
+                "2025": 0.1678
+              },
+              "per_season_full": {
+                "2019": 0.8076,
+                "2020": 0.8176,
+                "2021": 0.8681,
+                "2022": 0.7089,
+                "2023": 0.6845,
+                "2024": 0.7982,
+                "2025": 0.6085
+              },
+              "mean_top": 0.5684,
+              "mean_full": 0.7562
+            }
+          },
+          "winner": {
+            "learner": "pos_adaptive_blend",
+            "hp": {
+              "blend_w": 0.9456831868184076,
+              "disp_slope": 0.09006702047307802
+            },
+            "per_season_top": {
+              "2019": 0.6235,
+              "2020": 0.7365,
+              "2021": 0.7513,
+              "2022": 0.6087,
+              "2023": 0.5452,
+              "2024": 0.567,
+              "2025": 0.1739
+            },
+            "per_season_full": {
+              "2019": 0.8213,
+              "2020": 0.8154,
+              "2021": 0.8711,
+              "2022": 0.7177,
+              "2023": 0.6809,
+              "2024": 0.7877,
+              "2025": 0.61
+            },
+            "mean_top": 0.5723,
+            "mean_full": 0.7577
+          },
+          "pbo": 0.4571,
+          "config_spread": 0.1963,
+          "dsr": 0.7854,
+          "pvalue": 0.0032,
+          "n_configs": 161,
+          "beats_null": true,
+          "beats_market_only": true,
+          "beats_nf1_3_incumbent": true,
+          "delta_vs_nf1_3_incumbent": 0.0104,
+          "fdr_pass": true,
+          "verdict": {
+            "repoint": false,
+            "beats_null": true,
+            "pbo_ok": false,
+            "dsr_ok": false,
+            "fdr_ok": true
+          }
+        },
+        "RB": {
+          "null": {
+            "learner": "pos_null",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.5593,
+              "2020": 0.5151,
+              "2021": 0.4775,
+              "2022": 0.4903,
+              "2023": 0.3171,
+              "2024": 0.6494,
+              "2025": 0.5575
+            },
+            "per_season_full": {
+              "2019": 0.7443,
+              "2020": 0.599,
+              "2021": 0.6864,
+              "2022": 0.7218,
+              "2023": 0.7441,
+              "2024": 0.8206,
+              "2025": 0.8228
+            },
+            "mean_top": 0.5095,
+            "mean_full": 0.7341
+          },
+          "market_only": {
+            "learner": "pos_market_only",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.6945,
+              "2020": 0.7284,
+              "2021": 0.5781,
+              "2022": 0.7199,
+              "2023": 0.4268,
+              "2024": 0.6698,
+              "2025": 0.7287
+            },
+            "per_season_full": {
+              "2019": 0.8473,
+              "2020": 0.6995,
+              "2021": 0.7555,
+              "2022": 0.8164,
+              "2023": 0.7843,
+              "2024": 0.8021,
+              "2025": 0.798
+            },
+            "mean_top": 0.6495,
+            "mean_full": 0.7862
+          },
+          "nf1_3_incumbent": {
+            "learner": "nf1_3_incumbent(pos_market_blend)",
+            "hp": {
+              "blend_w": 0.9583426412697418
+            },
+            "mean_top": 0.6646,
+            "per_season_top": {
+              "2019": 0.7133,
+              "2020": 0.7596,
+              "2021": 0.6216,
+              "2022": 0.6991,
+              "2023": 0.4286,
+              "2024": 0.6968,
+              "2025": 0.7331
+            }
+          },
+          "learned_anchor": {
+            "learner": "pos_ridge",
+            "hp": {
+              "alpha": 0.9504011684640693
+            }
+          },
+          "market_top_tier_coverage": 1.0,
+          "best_by_class": {
+            "pos_learned_adaptive_blend": {
+              "learner": "pos_learned_adaptive_blend",
+              "hp": {
+                "blend_w": 0.6684640779331076,
+                "disp_slope": 0.17545401632784727
+              },
+              "per_season_top": {
+                "2019": 0.6777,
+                "2020": 0.7755,
+                "2021": 0.6085,
+                "2022": 0.7053,
+                "2023": 0.4546,
+                "2024": 0.7145,
+                "2025": 0.7081
+              },
+              "per_season_full": {
+                "2019": 0.8407,
+                "2020": 0.6776,
+                "2021": 0.7496,
+                "2022": 0.8165,
+                "2023": 0.811,
+                "2024": 0.8091,
+                "2025": 0.8253
+              },
+              "mean_top": 0.6635,
+              "mean_full": 0.79
+            },
+            "pos_learned_blend": {
+              "learner": "pos_learned_blend",
+              "hp": {
+                "blend_w": 0.7968620450131523
+              },
+              "per_season_top": {
+                "2019": 0.7169,
+                "2020": 0.7969,
+                "2021": 0.6044,
+                "2022": 0.6999,
+                "2023": 0.4438,
+                "2024": 0.712,
+                "2025": 0.6986
+              },
+              "per_season_full": {
+                "2019": 0.8456,
+                "2020": 0.6881,
+                "2021": 0.7538,
+                "2022": 0.8303,
+                "2023": 0.8105,
+                "2024": 0.8145,
+                "2025": 0.8241
+              },
+              "mean_top": 0.6675,
+              "mean_full": 0.7953
+            },
+            "pos_adaptive_blend": {
+              "learner": "pos_adaptive_blend",
+              "hp": {
+                "blend_w": 0.780646979736833,
+                "disp_slope": 0.13424375579934628
+              },
+              "per_season_top": {
+                "2019": 0.7079,
+                "2020": 0.7426,
+                "2021": 0.6162,
+                "2022": 0.694,
+                "2023": 0.4293,
+                "2024": 0.697,
+                "2025": 0.7184
+              },
+              "per_season_full": {
+                "2019": 0.843,
+                "2020": 0.6858,
+                "2021": 0.7587,
+                "2022": 0.8199,
+                "2023": 0.8102,
+                "2024": 0.809,
+                "2025": 0.8271
+              },
+              "mean_top": 0.6579,
+              "mean_full": 0.7934
+            },
+            "pos_blend_flat": {
+              "learner": "pos_blend_flat",
+              "hp": {
+                "blend_w": 0.9402800794155186
+              },
+              "per_season_top": {
+                "2019": 0.7264,
+                "2020": 0.7516,
+                "2021": 0.6193,
+                "2022": 0.6952,
+                "2023": 0.4268,
+                "2024": 0.696,
+                "2025": 0.7349
+              },
+              "per_season_full": {
+                "2019": 0.8423,
+                "2020": 0.6823,
+                "2021": 0.7571,
+                "2022": 0.8229,
+                "2023": 0.8066,
+                "2024": 0.8075,
+                "2025": 0.8233
+              },
+              "mean_top": 0.6643,
+              "mean_full": 0.7917
+            }
+          },
+          "winner": {
+            "learner": "pos_learned_blend",
+            "hp": {
+              "blend_w": 0.7968620450131523
+            },
+            "per_season_top": {
+              "2019": 0.7169,
+              "2020": 0.7969,
+              "2021": 0.6044,
+              "2022": 0.6999,
+              "2023": 0.4438,
+              "2024": 0.712,
+              "2025": 0.6986
+            },
+            "per_season_full": {
+              "2019": 0.8456,
+              "2020": 0.6881,
+              "2021": 0.7538,
+              "2022": 0.8303,
+              "2023": 0.8105,
+              "2024": 0.8145,
+              "2025": 0.8241
+            },
+            "mean_top": 0.6675,
+            "mean_full": 0.7953
+          },
+          "pbo": 0.3143,
+          "config_spread": 0.1436,
+          "dsr": 0.9931,
+          "pvalue": 0.0005,
+          "n_configs": 161,
+          "beats_null": true,
+          "beats_market_only": true,
+          "beats_nf1_3_incumbent": true,
+          "delta_vs_nf1_3_incumbent": 0.0029,
+          "fdr_pass": true,
+          "verdict": {
+            "repoint": false,
+            "beats_null": true,
+            "pbo_ok": false,
+            "dsr_ok": true,
+            "fdr_ok": true
+          }
+        },
+        "WR": {
+          "null": {
+            "learner": "pos_null",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.4445,
+              "2020": 0.2326,
+              "2021": 0.3381,
+              "2022": 0.552,
+              "2023": 0.5572,
+              "2024": 0.4959,
+              "2025": 0.2591
+            },
+            "per_season_full": {
+              "2019": 0.7652,
+              "2020": 0.7291,
+              "2021": 0.7073,
+              "2022": 0.704,
+              "2023": 0.7598,
+              "2024": 0.7653,
+              "2025": 0.8212
+            },
+            "mean_top": 0.4113,
+            "mean_full": 0.7503
+          },
+          "market_only": {
+            "learner": "pos_market_only",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.5972,
+              "2020": 0.6557,
+              "2021": 0.5839,
+              "2022": 0.6825,
+              "2023": 0.7283,
+              "2024": 0.506,
+              "2025": 0.4115
+            },
+            "per_season_full": {
+              "2019": 0.7783,
+              "2020": 0.777,
+              "2021": 0.8005,
+              "2022": 0.7863,
+              "2023": 0.8287,
+              "2024": 0.8,
+              "2025": 0.8397
+            },
+            "mean_top": 0.595,
+            "mean_full": 0.8015
+          },
+          "nf1_3_incumbent": {
+            "learner": "nf1_3_incumbent(pos_gbm)",
+            "hp": {
+              "n_estimators": 300,
+              "num_leaves": 7,
+              "learning_rate": 0.012050541345647812,
+              "min_child_samples": 8,
+              "reg_lambda": 4.368469237108717
+            },
+            "mean_top": 0.6066,
+            "per_season_top": {
+              "2019": 0.5639,
+              "2020": 0.6497,
+              "2021": 0.6287,
+              "2022": 0.738,
+              "2023": 0.7238,
+              "2024": 0.5289,
+              "2025": 0.4135
+            }
+          },
+          "learned_anchor": {
+            "learner": "pos_ridge",
+            "hp": {
+              "alpha": 1.380137655222368
+            }
+          },
+          "market_top_tier_coverage": 0.979,
+          "best_by_class": {
+            "pos_learned_adaptive_blend": {
+              "learner": "pos_learned_adaptive_blend",
+              "hp": {
+                "blend_w": 0.8709838292110362,
+                "disp_slope": 0.01056978755175474
+              },
+              "per_season_top": {
+                "2019": 0.5906,
+                "2020": 0.5649,
+                "2021": 0.5839,
+                "2022": 0.7387,
+                "2023": 0.7298,
+                "2024": 0.5065,
+                "2025": 0.4101
+              },
+              "per_season_full": {
+                "2019": 0.7631,
+                "2020": 0.7512,
+                "2021": 0.7481,
+                "2022": 0.7563,
+                "2023": 0.8217,
+                "2024": 0.7825,
+                "2025": 0.8466
+              },
+              "mean_top": 0.5892,
+              "mean_full": 0.7814
+            },
+            "pos_learned_blend": {
+              "learner": "pos_learned_blend",
+              "hp": {
+                "blend_w": 0.8875077943209098
+              },
+              "per_season_top": {
+                "2019": 0.5905,
+                "2020": 0.5616,
+                "2021": 0.5839,
+                "2022": 0.7359,
+                "2023": 0.73,
+                "2024": 0.5127,
+                "2025": 0.4106
+              },
+              "per_season_full": {
+                "2019": 0.7628,
+                "2020": 0.7496,
+                "2021": 0.748,
+                "2022": 0.7553,
+                "2023": 0.8207,
+                "2024": 0.7818,
+                "2025": 0.846
+              },
+              "mean_top": 0.5893,
+              "mean_full": 0.7806
+            },
+            "pos_adaptive_blend": {
+              "learner": "pos_adaptive_blend",
+              "hp": {
+                "blend_w": 0.9019567584317124,
+                "disp_slope": 0.01576492890308613
+              },
+              "per_season_top": {
+                "2019": 0.6137,
+                "2020": 0.5415,
+                "2021": 0.5637,
+                "2022": 0.7183,
+                "2023": 0.7236,
+                "2024": 0.5244,
+                "2025": 0.3924
+              },
+              "per_season_full": {
+                "2019": 0.7526,
+                "2020": 0.7394,
+                "2021": 0.7401,
+                "2022": 0.7491,
+                "2023": 0.8231,
+                "2024": 0.7781,
+                "2025": 0.8399
+              },
+              "mean_top": 0.5825,
+              "mean_full": 0.7746
+            },
+            "pos_blend_flat": {
+              "learner": "pos_blend_flat",
+              "hp": {
+                "blend_w": 0.9304028356763766
+              },
+              "per_season_top": {
+                "2019": 0.6087,
+                "2020": 0.5543,
+                "2021": 0.568,
+                "2022": 0.7178,
+                "2023": 0.7226,
+                "2024": 0.5332,
+                "2025": 0.4023
+              },
+              "per_season_full": {
+                "2019": 0.7501,
+                "2020": 0.7396,
+                "2021": 0.7399,
+                "2022": 0.7471,
+                "2023": 0.8208,
+                "2024": 0.7771,
+                "2025": 0.8383
+              },
+              "mean_top": 0.5867,
+              "mean_full": 0.7733
+            }
+          },
+          "winner": {
+            "learner": "pos_learned_blend",
+            "hp": {
+              "blend_w": 0.8875077943209098
+            },
+            "per_season_top": {
+              "2019": 0.5905,
+              "2020": 0.5616,
+              "2021": 0.5839,
+              "2022": 0.7359,
+              "2023": 0.73,
+              "2024": 0.5127,
+              "2025": 0.4106
+            },
+            "per_season_full": {
+              "2019": 0.7628,
+              "2020": 0.7496,
+              "2021": 0.748,
+              "2022": 0.7553,
+              "2023": 0.8207,
+              "2024": 0.7818,
+              "2025": 0.846
+            },
+            "mean_top": 0.5893,
+            "mean_full": 0.7806
+          },
+          "pbo": 0.1714,
+          "config_spread": 0.2039,
+          "dsr": 0.9153,
+          "pvalue": 0.0013,
+          "n_configs": 161,
+          "beats_null": true,
+          "beats_market_only": false,
+          "beats_nf1_3_incumbent": false,
+          "delta_vs_nf1_3_incumbent": -0.0173,
+          "fdr_pass": true,
+          "verdict": {
+            "repoint": false,
+            "beats_null": false,
+            "pbo_ok": true,
+            "dsr_ok": false,
+            "fdr_ok": true
+          }
+        },
+        "TE": {
+          "null": {
+            "learner": "pos_null",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.6243,
+              "2020": 0.3487,
+              "2021": 0.4948,
+              "2022": 0.3774,
+              "2023": 0.4783,
+              "2024": 0.427,
+              "2025": 0.2643
+            },
+            "per_season_full": {
+              "2019": 0.7279,
+              "2020": 0.6226,
+              "2021": 0.744,
+              "2022": 0.7695,
+              "2023": 0.7755,
+              "2024": 0.7137,
+              "2025": 0.8252
+            },
+            "mean_top": 0.4307,
+            "mean_full": 0.7398
+          },
+          "market_only": {
+            "learner": "pos_market_only",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.5861,
+              "2020": 0.7096,
+              "2021": 0.4574,
+              "2022": 0.4852,
+              "2023": 0.6574,
+              "2024": 0.4148,
+              "2025": 0.2191
+            },
+            "per_season_full": {
+              "2019": 0.7504,
+              "2020": 0.7747,
+              "2021": 0.8003,
+              "2022": 0.759,
+              "2023": 0.8131,
+              "2024": 0.7541,
+              "2025": 0.8195
+            },
+            "mean_top": 0.5042,
+            "mean_full": 0.7816
+          },
+          "nf1_3_incumbent": {
+            "learner": "nf1_3_incumbent(pos_market_blend)",
+            "hp": {
+              "blend_w": 0.6000478605455821
+            },
+            "mean_top": 0.5243,
+            "per_season_top": {
+              "2019": 0.6678,
+              "2020": 0.573,
+              "2021": 0.5774,
+              "2022": 0.4696,
+              "2023": 0.6965,
+              "2024": 0.4148,
+              "2025": 0.2713
+            }
+          },
+          "learned_anchor": {
+            "learner": "pos_similarity",
+            "hp": {
+              "k": 35,
+              "weight_power": 2.638285885412706,
+              "mvp1_emphasis": 3.030090628490117
+            }
+          },
+          "market_top_tier_coverage": 1.0,
+          "best_by_class": {
+            "pos_learned_adaptive_blend": {
+              "learner": "pos_learned_adaptive_blend",
+              "hp": {
+                "blend_w": 0.597876329086947,
+                "disp_slope": 0.10177630472966312
+              },
+              "per_season_top": {
+                "2019": 0.6226,
+                "2020": 0.6974,
+                "2021": 0.5461,
+                "2022": 0.507,
+                "2023": 0.6643,
+                "2024": 0.4235,
+                "2025": 0.2896
+              },
+              "per_season_full": {
+                "2019": 0.5721,
+                "2020": 0.6117,
+                "2021": 0.7658,
+                "2022": 0.7361,
+                "2023": 0.8068,
+                "2024": 0.7612,
+                "2025": 0.7402
+              },
+              "mean_top": 0.5358,
+              "mean_full": 0.7134
+            },
+            "pos_learned_blend": {
+              "learner": "pos_learned_blend",
+              "hp": {
+                "blend_w": 0.5963408156616207
+              },
+              "per_season_top": {
+                "2019": 0.6661,
+                "2020": 0.6991,
+                "2021": 0.573,
+                "2022": 0.4835,
+                "2023": 0.6722,
+                "2024": 0.42,
+                "2025": 0.3026
+              },
+              "per_season_full": {
+                "2019": 0.5723,
+                "2020": 0.6245,
+                "2021": 0.7741,
+                "2022": 0.7438,
+                "2023": 0.8085,
+                "2024": 0.764,
+                "2025": 0.7593
+              },
+              "mean_top": 0.5452,
+              "mean_full": 0.7209
+            },
+            "pos_adaptive_blend": {
+              "learner": "pos_adaptive_blend",
+              "hp": {
+                "blend_w": 0.8660597597243906,
+                "disp_slope": 0.44104566711146204
+              },
+              "per_season_top": {
+                "2019": 0.6122,
+                "2020": 0.7096,
+                "2021": 0.5035,
+                "2022": 0.4896,
+                "2023": 0.6739,
+                "2024": 0.4191,
+                "2025": 0.2174
+              },
+              "per_season_full": {
+                "2019": 0.59,
+                "2020": 0.5902,
+                "2021": 0.7249,
+                "2022": 0.7475,
+                "2023": 0.8011,
+                "2024": 0.7216,
+                "2025": 0.7249
+              },
+              "mean_top": 0.5179,
+              "mean_full": 0.7
+            },
+            "pos_blend_flat": {
+              "learner": "pos_blend_flat",
+              "hp": {
+                "blend_w": 0.6323956533440839
+              },
+              "per_season_top": {
+                "2019": 0.6678,
+                "2020": 0.573,
+                "2021": 0.5765,
+                "2022": 0.4696,
+                "2023": 0.6965,
+                "2024": 0.4148,
+                "2025": 0.2713
+              },
+              "per_season_full": {
+                "2019": 0.6161,
+                "2020": 0.634,
+                "2021": 0.7723,
+                "2022": 0.7891,
+                "2023": 0.8215,
+                "2024": 0.7631,
+                "2025": 0.7774
+              },
+              "mean_top": 0.5242,
+              "mean_full": 0.7391
+            }
+          },
+          "winner": {
+            "learner": "pos_learned_blend",
+            "hp": {
+              "blend_w": 0.5963408156616207
+            },
+            "per_season_top": {
+              "2019": 0.6661,
+              "2020": 0.6991,
+              "2021": 0.573,
+              "2022": 0.4835,
+              "2023": 0.6722,
+              "2024": 0.42,
+              "2025": 0.3026
+            },
+            "per_season_full": {
+              "2019": 0.5723,
+              "2020": 0.6245,
+              "2021": 0.7741,
+              "2022": 0.7438,
+              "2023": 0.8085,
+              "2024": 0.764,
+              "2025": 0.7593
+            },
+            "mean_top": 0.5452,
+            "mean_full": 0.7209
+          },
+          "pbo": 0.5143,
+          "config_spread": 0.115,
+          "dsr": 0.9257,
+          "pvalue": 0.0237,
+          "n_configs": 161,
+          "beats_null": true,
+          "beats_market_only": true,
+          "beats_nf1_3_incumbent": true,
+          "delta_vs_nf1_3_incumbent": 0.0209,
+          "fdr_pass": true,
+          "verdict": {
+            "repoint": false,
+            "beats_null": true,
+            "pbo_ok": false,
+            "dsr_ok": false,
+            "fdr_ok": true
+          }
+        }
+      },
+      "placebo": {
+        "QB": {
+          "winner_mean_top": 0.0387,
+          "null_mean_top": 0.0426,
+          "naive_delta_vs_null": -0.0039,
+          "gates_pass": false
+        },
+        "RB": {
+          "winner_mean_top": 0.0459,
+          "null_mean_top": -0.0841,
+          "naive_delta_vs_null": 0.13,
+          "gates_pass": false
+        },
+        "WR": {
+          "winner_mean_top": 0.1028,
+          "null_mean_top": 0.0668,
+          "naive_delta_vs_null": 0.036,
+          "gates_pass": false
+        },
+        "TE": {
+          "winner_mean_top": 0.0085,
+          "null_mean_top": -0.0092,
+          "naive_delta_vs_null": 0.0177,
+          "gates_pass": false
+        }
+      },
+      "pbo_max": 0.2,
+      "dsr_min": 0.95,
+      "fdr_q": 0.1,
+      "generated_at": "2026-07-28T01:22:36.926873+00:00"
+    },
+    {
+      "stage": "market_refinements",
+      "pool_base_seasons": [
+        2006,
+        2024
+      ],
+      "score_from": 2019,
+      "target_seasons": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "n_pool": 6736,
+      "selection_metric": "top-tier within-position \u03c1 (tier = top-N by the MVP-1 incumbent, N={'QB': 24, 'RB': 36, 'WR': 48, 'TE': 24})",
+      "oracle_metric_ok": true,
+      "market_top_tier_coverage": {
+        "QB": 1.0,
+        "RB": 0.944,
+        "WR": 0.979,
+        "TE": 1.0
+      },
+      "n_trials_per_class": 40,
+      "placebo_trials": 10,
+      "candidates": [
+        "pos_learned_adaptive_blend",
+        "pos_learned_blend",
+        "pos_adaptive_blend",
+        "pos_blend_flat"
+      ],
+      "positions": {
+        "QB": {
+          "null": {
+            "learner": "pos_null",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.2026,
+              "2020": 0.453,
+              "2021": 0.5183,
+              "2022": 0.4304,
+              "2023": 0.5504,
+              "2024": 0.4383,
+              "2025": -0.0165
+            },
+            "per_season_full": {
+              "2019": 0.6053,
+              "2020": 0.5686,
+              "2021": 0.7549,
+              "2022": 0.5967,
+              "2023": 0.6158,
+              "2024": 0.772,
+              "2025": 0.6262
+            },
+            "mean_top": 0.3681,
+            "mean_full": 0.6485
+          },
+          "market_only": {
+            "learner": "pos_market_only",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.6096,
+              "2020": 0.7217,
+              "2021": 0.7504,
+              "2022": 0.6017,
+              "2023": 0.5452,
+              "2024": 0.5652,
+              "2025": 0.1783
+            },
+            "per_season_full": {
+              "2019": 0.8059,
+              "2020": 0.8176,
+              "2021": 0.8869,
+              "2022": 0.7166,
+              "2023": 0.707,
+              "2024": 0.7964,
+              "2025": 0.5938
+            },
+            "mean_top": 0.5674,
+            "mean_full": 0.7606
+          },
+          "nf1_3_incumbent": {
+            "learner": "nf1_3_incumbent(pos_market_blend)",
+            "hp": {
+              "blend_w": 0.9869973994939585
+            },
+            "mean_top": 0.5624,
+            "per_season_top": {
+              "2019": 0.6096,
+              "2020": 0.7243,
+              "2021": 0.7504,
+              "2022": 0.5522,
+              "2023": 0.5461,
+              "2024": 0.5757,
+              "2025": 0.1783
+            }
+          },
+          "learned_anchor": {
+            "learner": "pos_gbm",
+            "hp": {
+              "n_estimators": 150,
+              "num_leaves": 18,
+              "learning_rate": 0.03698206177627045,
+              "min_child_samples": 7,
+              "reg_lambda": 1.7949736030439343
+            }
+          },
+          "market_top_tier_coverage": 1.0,
+          "best_by_class": {
+            "pos_learned_adaptive_blend": {
+              "learner": "pos_learned_adaptive_blend",
+              "hp": {
+                "blend_w": 0.9221115150810637,
+                "disp_slope": 0.17300114503514258
+              },
+              "per_season_top": {
+                "2019": 0.6191,
+                "2020": 0.7217,
+                "2021": 0.7626,
+                "2022": 0.5826,
+                "2023": 0.5539,
+                "2024": 0.5539,
+                "2025": 0.1783
+              },
+              "per_season_full": {
+                "2019": 0.8092,
+                "2020": 0.7927,
+                "2021": 0.8615,
+                "2022": 0.6838,
+                "2023": 0.678,
+                "2024": 0.7727,
+                "2025": 0.6102
+              },
+              "mean_top": 0.5674,
+              "mean_full": 0.744
+            },
+            "pos_learned_blend": {
+              "learner": "pos_learned_blend",
+              "hp": {
+                "blend_w": 0.9714449203068924
+              },
+              "per_season_top": {
+                "2019": 0.6043,
+                "2020": 0.7217,
+                "2021": 0.7504,
+                "2022": 0.5583,
+                "2023": 0.5461,
+                "2024": 0.5826,
+                "2025": 0.1783
+              },
+              "per_season_full": {
+                "2019": 0.7936,
+                "2020": 0.7966,
+                "2021": 0.85,
+                "2022": 0.6643,
+                "2023": 0.6768,
+                "2024": 0.777,
+                "2025": 0.6021
+              },
+              "mean_top": 0.5631,
+              "mean_full": 0.7372
+            },
+            "pos_adaptive_blend": {
+              "learner": "pos_adaptive_blend",
+              "hp": {
+                "blend_w": 0.8890660930092513,
+                "disp_slope": 0.2317215499000329
+              },
+              "per_season_top": {
+                "2019": 0.6157,
+                "2020": 0.7504,
+                "2021": 0.7096,
+                "2022": 0.6043,
+                "2023": 0.5522,
+                "2024": 0.5539,
+                "2025": 0.1783
+              },
+              "per_season_full": {
+                "2019": 0.8129,
+                "2020": 0.7969,
+                "2021": 0.8328,
+                "2022": 0.6969,
+                "2023": 0.6711,
+                "2024": 0.789,
+                "2025": 0.6194
+              },
+              "mean_top": 0.5663,
+              "mean_full": 0.7456
+            },
+            "pos_blend_flat": {
+              "learner": "pos_blend_flat",
+              "hp": {
+                "blend_w": 0.8316430355340343
+              },
+              "per_season_top": {
+                "2019": 0.6104,
+                "2020": 0.7817,
+                "2021": 0.7974,
+                "2022": 0.5452,
+                "2023": 0.5365,
+                "2024": 0.5513,
+                "2025": 0.1165
+              },
+              "per_season_full": {
+                "2019": 0.8092,
+                "2020": 0.8252,
+                "2021": 0.8512,
+                "2022": 0.6658,
+                "2023": 0.6885,
+                "2024": 0.8037,
+                "2025": 0.6164
+              },
+              "mean_top": 0.5627,
+              "mean_full": 0.7514
+            }
+          },
+          "winner": {
+            "learner": "pos_learned_adaptive_blend",
+            "hp": {
+              "blend_w": 0.9221115150810637,
+              "disp_slope": 0.17300114503514258
+            },
+            "per_season_top": {
+              "2019": 0.6191,
+              "2020": 0.7217,
+              "2021": 0.7626,
+              "2022": 0.5826,
+              "2023": 0.5539,
+              "2024": 0.5539,
+              "2025": 0.1783
+            },
+            "per_season_full": {
+              "2019": 0.8092,
+              "2020": 0.7927,
+              "2021": 0.8615,
+              "2022": 0.6838,
+              "2023": 0.678,
+              "2024": 0.7727,
+              "2025": 0.6102
+            },
+            "mean_top": 0.5674,
+            "mean_full": 0.744
+          },
+          "pbo": 0.6,
+          "config_spread": 0.256,
+          "dsr": 0.5837,
+          "pvalue": 0.0033,
+          "n_configs": 161,
+          "beats_null": true,
+          "beats_market_only": false,
+          "beats_nf1_3_incumbent": true,
+          "delta_vs_nf1_3_incumbent": 0.005,
+          "fdr_pass": true,
+          "verdict": {
+            "repoint": false,
+            "beats_null": true,
+            "pbo_ok": false,
+            "dsr_ok": false,
+            "fdr_ok": true
+          }
+        },
+        "RB": {
+          "null": {
+            "learner": "pos_null",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.5593,
+              "2020": 0.5151,
+              "2021": 0.4775,
+              "2022": 0.4903,
+              "2023": 0.3171,
+              "2024": 0.6494,
+              "2025": 0.5575
+            },
+            "per_season_full": {
+              "2019": 0.7443,
+              "2020": 0.599,
+              "2021": 0.6864,
+              "2022": 0.7218,
+              "2023": 0.7441,
+              "2024": 0.8206,
+              "2025": 0.8228
+            },
+            "mean_top": 0.5095,
+            "mean_full": 0.7341
+          },
+          "market_only": {
+            "learner": "pos_market_only",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.6945,
+              "2020": 0.7284,
+              "2021": 0.5781,
+              "2022": 0.7199,
+              "2023": 0.4268,
+              "2024": 0.6698,
+              "2025": 0.7287
+            },
+            "per_season_full": {
+              "2019": 0.8473,
+              "2020": 0.6995,
+              "2021": 0.7555,
+              "2022": 0.8164,
+              "2023": 0.7843,
+              "2024": 0.8021,
+              "2025": 0.798
+            },
+            "mean_top": 0.6495,
+            "mean_full": 0.7862
+          },
+          "nf1_3_incumbent": {
+            "learner": "nf1_3_incumbent(pos_market_blend)",
+            "hp": {
+              "blend_w": 0.9583426412697418
+            },
+            "mean_top": 0.656,
+            "per_season_top": {
+              "2019": 0.7032,
+              "2020": 0.7444,
+              "2021": 0.5995,
+              "2022": 0.7032,
+              "2023": 0.4227,
+              "2024": 0.6852,
+              "2025": 0.7336
+            }
+          },
+          "learned_anchor": {
+            "learner": "pos_ridge",
+            "hp": {
+              "alpha": 0.9504011684640693
+            }
+          },
+          "market_top_tier_coverage": 0.944,
+          "best_by_class": {
+            "pos_learned_adaptive_blend": {
+              "learner": "pos_learned_adaptive_blend",
+              "hp": {
+                "blend_w": 0.861976418103483,
+                "disp_slope": 0.010870396913555513
+              },
+              "per_season_top": {
+                "2019": 0.6896,
+                "2020": 0.7601,
+                "2021": 0.591,
+                "2022": 0.7045,
+                "2023": 0.4165,
+                "2024": 0.7032,
+                "2025": 0.7218
+              },
+              "per_season_full": {
+                "2019": 0.8333,
+                "2020": 0.6641,
+                "2021": 0.7547,
+                "2022": 0.8218,
+                "2023": 0.8086,
+                "2024": 0.8089,
+                "2025": 0.8259
+              },
+              "mean_top": 0.6552,
+              "mean_full": 0.7882
+            },
+            "pos_learned_blend": {
+              "learner": "pos_learned_blend",
+              "hp": {
+                "blend_w": 0.8893629074612233
+              },
+              "per_season_top": {
+                "2019": 0.6916,
+                "2020": 0.7616,
+                "2021": 0.5874,
+                "2022": 0.7084,
+                "2023": 0.4224,
+                "2024": 0.7009,
+                "2025": 0.7189
+              },
+              "per_season_full": {
+                "2019": 0.835,
+                "2020": 0.6633,
+                "2021": 0.7561,
+                "2022": 0.8214,
+                "2023": 0.8059,
+                "2024": 0.8077,
+                "2025": 0.8243
+              },
+              "mean_top": 0.6559,
+              "mean_full": 0.7877
+            },
+            "pos_adaptive_blend": {
+              "learner": "pos_adaptive_blend",
+              "hp": {
+                "blend_w": 0.8498927324601829,
+                "disp_slope": 0.06435395916997594
+              },
+              "per_season_top": {
+                "2019": 0.7251,
+                "2020": 0.7506,
+                "2021": 0.6162,
+                "2022": 0.6808,
+                "2023": 0.4314,
+                "2024": 0.6968,
+                "2025": 0.7251
+              },
+              "per_season_full": {
+                "2019": 0.8392,
+                "2020": 0.6624,
+                "2021": 0.7535,
+                "2022": 0.8161,
+                "2023": 0.8077,
+                "2024": 0.8051,
+                "2025": 0.8287
+              },
+              "mean_top": 0.6609,
+              "mean_full": 0.7875
+            },
+            "pos_blend_flat": {
+              "learner": "pos_blend_flat",
+              "hp": {
+                "blend_w": 0.9476636616777102
+              },
+              "per_season_top": {
+                "2019": 0.7133,
+                "2020": 0.7609,
+                "2021": 0.616,
+                "2022": 0.6994,
+                "2023": 0.4273,
+                "2024": 0.6986,
+                "2025": 0.7341
+              },
+              "per_season_full": {
+                "2019": 0.8356,
+                "2020": 0.6622,
+                "2021": 0.755,
+                "2022": 0.8183,
+                "2023": 0.8015,
+                "2024": 0.8044,
+                "2025": 0.8222
+              },
+              "mean_top": 0.6642,
+              "mean_full": 0.7856
+            }
+          },
+          "winner": {
+            "learner": "pos_blend_flat",
+            "hp": {
+              "blend_w": 0.9476636616777102
+            },
+            "per_season_top": {
+              "2019": 0.7133,
+              "2020": 0.7609,
+              "2021": 0.616,
+              "2022": 0.6994,
+              "2023": 0.4273,
+              "2024": 0.6986,
+              "2025": 0.7341
+            },
+            "per_season_full": {
+              "2019": 0.8356,
+              "2020": 0.6622,
+              "2021": 0.755,
+              "2022": 0.8183,
+              "2023": 0.8015,
+              "2024": 0.8044,
+              "2025": 0.8222
+            },
+            "mean_top": 0.6642,
+            "mean_full": 0.7856
+          },
+          "pbo": 0.4571,
+          "config_spread": 0.1369,
+          "dsr": 0.9562,
+          "pvalue": 0.0004,
+          "n_configs": 161,
+          "beats_null": true,
+          "beats_market_only": true,
+          "beats_nf1_3_incumbent": true,
+          "delta_vs_nf1_3_incumbent": 0.0082,
+          "fdr_pass": true,
+          "verdict": {
+            "repoint": false,
+            "beats_null": true,
+            "pbo_ok": false,
+            "dsr_ok": true,
+            "fdr_ok": true
+          }
+        },
+        "WR": {
+          "null": {
+            "learner": "pos_null",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.4445,
+              "2020": 0.2326,
+              "2021": 0.3381,
+              "2022": 0.552,
+              "2023": 0.5572,
+              "2024": 0.4959,
+              "2025": 0.2591
+            },
+            "per_season_full": {
+              "2019": 0.7652,
+              "2020": 0.7291,
+              "2021": 0.7073,
+              "2022": 0.704,
+              "2023": 0.7598,
+              "2024": 0.7653,
+              "2025": 0.8212
+            },
+            "mean_top": 0.4113,
+            "mean_full": 0.7503
+          },
+          "market_only": {
+            "learner": "pos_market_only",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.5972,
+              "2020": 0.6557,
+              "2021": 0.5839,
+              "2022": 0.6825,
+              "2023": 0.7283,
+              "2024": 0.506,
+              "2025": 0.4115
+            },
+            "per_season_full": {
+              "2019": 0.7783,
+              "2020": 0.777,
+              "2021": 0.8005,
+              "2022": 0.7863,
+              "2023": 0.8287,
+              "2024": 0.8,
+              "2025": 0.8397
+            },
+            "mean_top": 0.595,
+            "mean_full": 0.8015
+          },
+          "nf1_3_incumbent": {
+            "learner": "nf1_3_incumbent(pos_gbm)",
+            "hp": {
+              "n_estimators": 300,
+              "num_leaves": 7,
+              "learning_rate": 0.012050541345647812,
+              "min_child_samples": 8,
+              "reg_lambda": 4.368469237108717
+            },
+            "mean_top": 0.5841,
+            "per_season_top": {
+              "2019": 0.5543,
+              "2020": 0.5962,
+              "2021": 0.5673,
+              "2022": 0.7495,
+              "2023": 0.7056,
+              "2024": 0.5134,
+              "2025": 0.4025
+            }
+          },
+          "learned_anchor": {
+            "learner": "pos_ridge",
+            "hp": {
+              "alpha": 1.380137655222368
+            }
+          },
+          "market_top_tier_coverage": 0.979,
+          "best_by_class": {
+            "pos_learned_adaptive_blend": {
+              "learner": "pos_learned_adaptive_blend",
+              "hp": {
+                "blend_w": 0.6094478825507955,
+                "disp_slope": 0.1607685732039351
+              },
+              "per_season_top": {
+                "2019": 0.5785,
+                "2020": 0.567,
+                "2021": 0.5763,
+                "2022": 0.7538,
+                "2023": 0.7403,
+                "2024": 0.4929,
+                "2025": 0.4047
+              },
+              "per_season_full": {
+                "2019": 0.7482,
+                "2020": 0.7391,
+                "2021": 0.7404,
+                "2022": 0.7325,
+                "2023": 0.8174,
+                "2024": 0.7788,
+                "2025": 0.8474
+              },
+              "mean_top": 0.5876,
+              "mean_full": 0.772
+            },
+            "pos_learned_blend": {
+              "learner": "pos_learned_blend",
+              "hp": {
+                "blend_w": 0.849359320511512
+              },
+              "per_season_top": {
+                "2019": 0.5924,
+                "2020": 0.5739,
+                "2021": 0.5962,
+                "2022": 0.7363,
+                "2023": 0.7302,
+                "2024": 0.5138,
+                "2025": 0.4038
+              },
+              "per_season_full": {
+                "2019": 0.7351,
+                "2020": 0.7124,
+                "2021": 0.7262,
+                "2022": 0.7217,
+                "2023": 0.8045,
+                "2024": 0.7726,
+                "2025": 0.8364
+              },
+              "mean_top": 0.5924,
+              "mean_full": 0.7584
+            },
+            "pos_adaptive_blend": {
+              "learner": "pos_adaptive_blend",
+              "hp": {
+                "blend_w": 0.861976418103483,
+                "disp_slope": 0.010870396913555513
+              },
+              "per_season_top": {
+                "2019": 0.6215,
+                "2020": 0.5407,
+                "2021": 0.5605,
+                "2022": 0.7187,
+                "2023": 0.7279,
+                "2024": 0.5212,
+                "2025": 0.392
+              },
+              "per_season_full": {
+                "2019": 0.7313,
+                "2020": 0.697,
+                "2021": 0.719,
+                "2022": 0.7166,
+                "2023": 0.8071,
+                "2024": 0.7656,
+                "2025": 0.8215
+              },
+              "mean_top": 0.5832,
+              "mean_full": 0.7512
+            },
+            "pos_blend_flat": {
+              "learner": "pos_blend_flat",
+              "hp": {
+                "blend_w": 0.9304028356763766
+              },
+              "per_season_top": {
+                "2019": 0.6084,
+                "2020": 0.5635,
+                "2021": 0.5714,
+                "2022": 0.713,
+                "2023": 0.722,
+                "2024": 0.5255,
+                "2025": 0.4023
+              },
+              "per_season_full": {
+                "2019": 0.7227,
+                "2020": 0.6904,
+                "2021": 0.7166,
+                "2022": 0.7107,
+                "2023": 0.8008,
+                "2024": 0.7631,
+                "2025": 0.8155
+              },
+              "mean_top": 0.5866,
+              "mean_full": 0.7457
+            }
+          },
+          "winner": {
+            "learner": "pos_learned_blend",
+            "hp": {
+              "blend_w": 0.849359320511512
+            },
+            "per_season_top": {
+              "2019": 0.5924,
+              "2020": 0.5739,
+              "2021": 0.5962,
+              "2022": 0.7363,
+              "2023": 0.7302,
+              "2024": 0.5138,
+              "2025": 0.4038
+            },
+            "per_season_full": {
+              "2019": 0.7351,
+              "2020": 0.7124,
+              "2021": 0.7262,
+              "2022": 0.7217,
+              "2023": 0.8045,
+              "2024": 0.7726,
+              "2025": 0.8364
+            },
+            "mean_top": 0.5924,
+            "mean_full": 0.7584
+          },
+          "pbo": 0.3714,
+          "config_spread": 0.2739,
+          "dsr": 0.8251,
+          "pvalue": 0.0016,
+          "n_configs": 161,
+          "beats_null": true,
+          "beats_market_only": false,
+          "beats_nf1_3_incumbent": true,
+          "delta_vs_nf1_3_incumbent": 0.0083,
+          "fdr_pass": true,
+          "verdict": {
+            "repoint": false,
+            "beats_null": true,
+            "pbo_ok": false,
+            "dsr_ok": false,
+            "fdr_ok": true
+          }
+        },
+        "TE": {
+          "null": {
+            "learner": "pos_null",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.6243,
+              "2020": 0.3487,
+              "2021": 0.4948,
+              "2022": 0.3774,
+              "2023": 0.4783,
+              "2024": 0.427,
+              "2025": 0.2643
+            },
+            "per_season_full": {
+              "2019": 0.7279,
+              "2020": 0.6226,
+              "2021": 0.744,
+              "2022": 0.7695,
+              "2023": 0.7755,
+              "2024": 0.7137,
+              "2025": 0.8252
+            },
+            "mean_top": 0.4307,
+            "mean_full": 0.7398
+          },
+          "market_only": {
+            "learner": "pos_market_only",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.5861,
+              "2020": 0.7096,
+              "2021": 0.4574,
+              "2022": 0.4852,
+              "2023": 0.6574,
+              "2024": 0.4148,
+              "2025": 0.2191
+            },
+            "per_season_full": {
+              "2019": 0.7504,
+              "2020": 0.7747,
+              "2021": 0.8003,
+              "2022": 0.759,
+              "2023": 0.8131,
+              "2024": 0.7541,
+              "2025": 0.8195
+            },
+            "mean_top": 0.5042,
+            "mean_full": 0.7816
+          },
+          "nf1_3_incumbent": {
+            "learner": "nf1_3_incumbent(pos_market_blend)",
+            "hp": {
+              "blend_w": 0.6000478605455821
+            },
+            "mean_top": 0.5162,
+            "per_season_top": {
+              "2019": 0.667,
+              "2020": 0.5852,
+              "2021": 0.5226,
+              "2022": 0.4696,
+              "2023": 0.6852,
+              "2024": 0.42,
+              "2025": 0.2635
+            }
+          },
+          "learned_anchor": {
+            "learner": "pos_similarity",
+            "hp": {
+              "k": 35,
+              "weight_power": 2.638285885412706,
+              "mvp1_emphasis": 3.030090628490117
+            }
+          },
+          "market_top_tier_coverage": 1.0,
+          "best_by_class": {
+            "pos_learned_adaptive_blend": {
+              "learner": "pos_learned_adaptive_blend",
+              "hp": {
+                "blend_w": 0.7218695434988335,
+                "disp_slope": 0.24945178898125647
+              },
+              "per_season_top": {
+                "2019": 0.6661,
+                "2020": 0.6991,
+                "2021": 0.5096,
+                "2022": 0.4965,
+                "2023": 0.6765,
+                "2024": 0.4104,
+                "2025": 0.2548
+              },
+              "per_season_full": {
+                "2019": 0.3984,
+                "2020": 0.5114,
+                "2021": 0.6472,
+                "2022": 0.6786,
+                "2023": 0.7028,
+                "2024": 0.6989,
+                "2025": 0.6084
+              },
+              "mean_top": 0.5304,
+              "mean_full": 0.6065
+            },
+            "pos_learned_blend": {
+              "learner": "pos_learned_blend",
+              "hp": {
+                "blend_w": 0.6472753095623965
+              },
+              "per_season_top": {
+                "2019": 0.6583,
+                "2020": 0.687,
+                "2021": 0.5461,
+                "2022": 0.4765,
+                "2023": 0.6809,
+                "2024": 0.4061,
+                "2025": 0.2583
+              },
+              "per_season_full": {
+                "2019": 0.4103,
+                "2020": 0.4666,
+                "2021": 0.7335,
+                "2022": 0.6835,
+                "2023": 0.7088,
+                "2024": 0.7462,
+                "2025": 0.6341
+              },
+              "mean_top": 0.5305,
+              "mean_full": 0.6261
+            },
+            "pos_adaptive_blend": {
+              "learner": "pos_adaptive_blend",
+              "hp": {
+                "blend_w": 0.9941514189905954,
+                "disp_slope": 0.2690393332470698
+              },
+              "per_season_top": {
+                "2019": 0.6322,
+                "2020": 0.7096,
+                "2021": 0.4843,
+                "2022": 0.4896,
+                "2023": 0.6661,
+                "2024": 0.4217,
+                "2025": 0.2191
+              },
+              "per_season_full": {
+                "2019": 0.4536,
+                "2020": 0.5098,
+                "2021": 0.6494,
+                "2022": 0.6978,
+                "2023": 0.7249,
+                "2024": 0.732,
+                "2025": 0.6521
+              },
+              "mean_top": 0.5175,
+              "mean_full": 0.6314
+            },
+            "pos_blend_flat": {
+              "learner": "pos_blend_flat",
+              "hp": {
+                "blend_w": 0.6032143192246215
+              },
+              "per_season_top": {
+                "2019": 0.6722,
+                "2020": 0.573,
+                "2021": 0.587,
+                "2022": 0.4643,
+                "2023": 0.6887,
+                "2024": 0.4,
+                "2025": 0.2887
+              },
+              "per_season_full": {
+                "2019": 0.4967,
+                "2020": 0.5121,
+                "2021": 0.7363,
+                "2022": 0.7459,
+                "2023": 0.7795,
+                "2024": 0.7551,
+                "2025": 0.7385
+              },
+              "mean_top": 0.5248,
+              "mean_full": 0.6806
+            }
+          },
+          "winner": {
+            "learner": "pos_learned_blend",
+            "hp": {
+              "blend_w": 0.6472753095623965
+            },
+            "per_season_top": {
+              "2019": 0.6583,
+              "2020": 0.687,
+              "2021": 0.5461,
+              "2022": 0.4765,
+              "2023": 0.6809,
+              "2024": 0.4061,
+              "2025": 0.2583
+            },
+            "per_season_full": {
+              "2019": 0.4103,
+              "2020": 0.4666,
+              "2021": 0.7335,
+              "2022": 0.6835,
+              "2023": 0.7088,
+              "2024": 0.7462,
+              "2025": 0.6341
+            },
+            "mean_top": 0.5305,
+            "mean_full": 0.6261
+          },
+          "pbo": 0.8,
+          "config_spread": 0.2243,
+          "dsr": 0.1588,
+          "pvalue": 0.0434,
+          "n_configs": 161,
+          "beats_null": true,
+          "beats_market_only": true,
+          "beats_nf1_3_incumbent": true,
+          "delta_vs_nf1_3_incumbent": 0.0143,
+          "fdr_pass": true,
+          "verdict": {
+            "repoint": false,
+            "beats_null": true,
+            "pbo_ok": false,
+            "dsr_ok": false,
+            "fdr_ok": true
+          }
+        }
+      },
+      "placebo": {
+        "QB": {
+          "winner_mean_top": 0.0681,
+          "null_mean_top": 0.0098,
+          "naive_delta_vs_null": 0.0583,
+          "gates_pass": false
+        },
+        "RB": {
+          "winner_mean_top": 0.0256,
+          "null_mean_top": -0.0124,
+          "naive_delta_vs_null": 0.038,
+          "gates_pass": false
+        },
+        "WR": {
+          "winner_mean_top": 0.1061,
+          "null_mean_top": -0.0823,
+          "naive_delta_vs_null": 0.1884,
+          "gates_pass": false
+        },
+        "TE": {
+          "winner_mean_top": 0.1782,
+          "null_mean_top": 0.1096,
+          "naive_delta_vs_null": 0.0686,
+          "gates_pass": false
+        }
+      },
+      "pbo_max": 0.2,
+      "dsr_min": 0.95,
+      "fdr_q": 0.1,
+      "generated_at": "2026-07-28T04:11:13.753225+00:00"
+    },
+    {
+      "stage": "blind_ceiling_proof",
+      "target_seasons": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "n_pool": 2995,
+      "selection_metric": "top-tier within-position \u03c1 (tier = top-N by the MVP-1 incumbent, N={'QB': 24, 'RB': 36, 'WR': 48, 'TE': 24})",
+      "oracle_metric_ok": true,
+      "n_trials_per_cell": 15,
+      "placebo_trials": 3,
+      "bundle_registry": {
+        "base": [],
+        "base_xfp": [
+          "xfp"
+        ],
+        "base_env": [
+          "xfp",
+          "sos",
+          "system",
+          "qbcorr",
+          "spill"
+        ],
+        "base_contract": [
+          "xfp",
+          "contract",
+          "oline"
+        ],
+        "base_opp": [
+          "xfp",
+          "opp"
+        ],
+        "all_skill": [
+          "xfp",
+          "opp",
+          "sos",
+          "system",
+          "qbcorr",
+          "spill"
+        ],
+        "kitchen_sink": [
+          "xfp",
+          "opp",
+          "sos",
+          "system",
+          "qbcorr",
+          "spill",
+          "contract",
+          "oline"
+        ]
+      },
+      "candidates": [
+        "pos_ridge",
+        "pos_gbm",
+        "pos_similarity",
+        "pos_mlp"
+      ],
+      "positions": {
+        "QB": {
+          "null": {
+            "learner": "pos_null",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.2026,
+              "2020": 0.453,
+              "2021": 0.5183,
+              "2022": 0.4304,
+              "2023": 0.5504,
+              "2024": 0.4383,
+              "2025": -0.0165
+            },
+            "per_season_full": {
+              "2019": 0.6053,
+              "2020": 0.5686,
+              "2021": 0.7549,
+              "2022": 0.5967,
+              "2023": 0.6158,
+              "2024": 0.772,
+              "2025": 0.6262
+            },
+            "mean_top": 0.3681,
+            "mean_full": 0.6485
+          },
+          "nf1_1_winner_ref": {
+            "learner": "nf1_1_winner(pos_gbm)",
+            "hp": {
+              "n_estimators": 150,
+              "num_leaves": 18,
+              "learning_rate": 0.03698206177627045,
+              "min_child_samples": 7,
+              "reg_lambda": 1.7949736030439343
+            },
+            "mean_top": 0.4199
+          },
+          "bundles": {
+            "base": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "carry_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd"
+            ],
+            "base_xfp": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "carry_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "xrush_td_pg",
+              "td_luck_ratio"
+            ],
+            "base_env": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "carry_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "xrush_td_pg",
+              "td_luck_ratio",
+              "sos_pass_strength",
+              "sos_rush_strength",
+              "team_pass_rate",
+              "team_pace",
+              "pass_rate_delta",
+              "teammate_fp",
+              "vacated_volume"
+            ],
+            "base_contract": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "carry_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "xrush_td_pg",
+              "td_luck_ratio",
+              "log_investment",
+              "guaranteed_ratio",
+              "cap_hit_pct_team",
+              "team_skill_cap_concentration",
+              "team_ol_cap_pct"
+            ],
+            "kitchen_sink": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "carry_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "xrush_td_pg",
+              "td_luck_ratio",
+              "sos_pass_strength",
+              "sos_rush_strength",
+              "team_pass_rate",
+              "team_pace",
+              "pass_rate_delta",
+              "teammate_fp",
+              "vacated_volume",
+              "log_investment",
+              "guaranteed_ratio",
+              "cap_hit_pct_team",
+              "team_skill_cap_concentration",
+              "team_ol_cap_pct"
+            ]
+          },
+          "best_by_cell": {
+            "pos_ridge\u00d7base": {
+              "mean_top": 0.3996
+            },
+            "pos_ridge\u00d7base_xfp": {
+              "mean_top": 0.4041
+            },
+            "pos_ridge\u00d7base_env": {
+              "mean_top": 0.3904
+            },
+            "pos_ridge\u00d7base_contract": {
+              "mean_top": 0.3985
+            },
+            "pos_ridge\u00d7kitchen_sink": {
+              "mean_top": 0.4068
+            },
+            "pos_gbm\u00d7base": {
+              "mean_top": 0.4413
+            },
+            "pos_gbm\u00d7base_xfp": {
+              "mean_top": 0.4199
+            },
+            "pos_gbm\u00d7base_env": {
+              "mean_top": 0.4128
+            },
+            "pos_gbm\u00d7base_contract": {
+              "mean_top": 0.4021
+            },
+            "pos_gbm\u00d7kitchen_sink": {
+              "mean_top": 0.4116
+            },
+            "pos_similarity\u00d7base": {
+              "mean_top": 0.3774
+            },
+            "pos_similarity\u00d7base_xfp": {
+              "mean_top": 0.3435
+            },
+            "pos_similarity\u00d7base_env": {
+              "mean_top": 0.3878
+            },
+            "pos_similarity\u00d7base_contract": {
+              "mean_top": 0.3783
+            },
+            "pos_similarity\u00d7kitchen_sink": {
+              "mean_top": 0.3837
+            },
+            "pos_mlp\u00d7base": {
+              "mean_top": 0.3734
+            },
+            "pos_mlp\u00d7base_xfp": {
+              "mean_top": 0.3953
+            },
+            "pos_mlp\u00d7base_env": {
+              "mean_top": 0.3943
+            },
+            "pos_mlp\u00d7base_contract": {
+              "mean_top": 0.342
+            },
+            "pos_mlp\u00d7kitchen_sink": {
+              "mean_top": 0.3547
+            }
+          },
+          "winner": {
+            "learner": "pos_gbm",
+            "hp": {
+              "n_estimators": 250,
+              "num_leaves": 9,
+              "learning_rate": 0.019926323445819228,
+              "min_child_samples": 14,
+              "reg_lambda": 18.724095849796623
+            },
+            "per_season_top": {
+              "2019": 0.5398,
+              "2020": 0.5817,
+              "2021": 0.5678,
+              "2022": 0.4791,
+              "2023": 0.3478,
+              "2024": 0.4104,
+              "2025": 0.1626
+            },
+            "per_season_full": {
+              "2019": 0.7315,
+              "2020": 0.6459,
+              "2021": 0.773,
+              "2022": 0.5776,
+              "2023": 0.616,
+              "2024": 0.7475,
+              "2025": 0.6544
+            },
+            "mean_top": 0.4413,
+            "mean_full": 0.678,
+            "bundle": "base"
+          },
+          "pbo": 0.7429,
+          "config_spread": 0.2227,
+          "dsr": 0.107,
+          "pvalue": 0.1476,
+          "n_configs": 301,
+          "beats_null": true,
+          "beats_nf1_1_ref": true,
+          "fdr_pass": false,
+          "verdict": {
+            "repoint": false,
+            "beats_null": true,
+            "pbo_ok": false,
+            "dsr_ok": false,
+            "fdr_ok": false
+          }
+        },
+        "RB": {
+          "null": {
+            "learner": "pos_null",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.5593,
+              "2020": 0.5151,
+              "2021": 0.4775,
+              "2022": 0.4903,
+              "2023": 0.3171,
+              "2024": 0.6494,
+              "2025": 0.5575
+            },
+            "per_season_full": {
+              "2019": 0.7443,
+              "2020": 0.599,
+              "2021": 0.6864,
+              "2022": 0.7218,
+              "2023": 0.7441,
+              "2024": 0.8206,
+              "2025": 0.8228
+            },
+            "mean_top": 0.5095,
+            "mean_full": 0.7341
+          },
+          "nf1_1_winner_ref": {
+            "learner": "nf1_1_winner(pos_ridge)",
+            "hp": {
+              "alpha": 0.9504011684640693
+            },
+            "mean_top": 0.6083
+          },
+          "bundles": {
+            "base": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "carry_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd"
+            ],
+            "base_xfp": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "carry_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "xfp_pg",
+              "td_luck_ratio",
+              "xrush_td_pg",
+              "xrec_td_pg",
+              "xrec_pg",
+              "xrec_yds_pg"
+            ],
+            "base_env": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "carry_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "xfp_pg",
+              "td_luck_ratio",
+              "xrush_td_pg",
+              "xrec_td_pg",
+              "xrec_pg",
+              "xrec_yds_pg",
+              "sos_pass_strength",
+              "sos_rush_strength",
+              "team_pass_rate",
+              "team_pace",
+              "pass_rate_delta",
+              "teammate_fp",
+              "vacated_volume"
+            ],
+            "base_contract": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "carry_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "xfp_pg",
+              "td_luck_ratio",
+              "xrush_td_pg",
+              "xrec_td_pg",
+              "xrec_pg",
+              "xrec_yds_pg",
+              "log_investment",
+              "guaranteed_ratio",
+              "cap_hit_pct_team",
+              "team_skill_cap_concentration",
+              "team_ol_cap_pct"
+            ],
+            "base_opp": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "carry_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "xfp_pg",
+              "td_luck_ratio",
+              "xrush_td_pg",
+              "xrec_td_pg",
+              "xrec_pg",
+              "xrec_yds_pg",
+              "air_yards_share",
+              "wopr"
+            ],
+            "all_skill": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "carry_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "xfp_pg",
+              "td_luck_ratio",
+              "xrush_td_pg",
+              "xrec_td_pg",
+              "xrec_pg",
+              "xrec_yds_pg",
+              "air_yards_share",
+              "wopr",
+              "sos_pass_strength",
+              "sos_rush_strength",
+              "team_pass_rate",
+              "team_pace",
+              "pass_rate_delta",
+              "teammate_fp",
+              "vacated_volume"
+            ],
+            "kitchen_sink": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "carry_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "xfp_pg",
+              "td_luck_ratio",
+              "xrush_td_pg",
+              "xrec_td_pg",
+              "xrec_pg",
+              "xrec_yds_pg",
+              "air_yards_share",
+              "wopr",
+              "sos_pass_strength",
+              "sos_rush_strength",
+              "team_pass_rate",
+              "team_pace",
+              "pass_rate_delta",
+              "teammate_fp",
+              "vacated_volume",
+              "log_investment",
+              "guaranteed_ratio",
+              "cap_hit_pct_team",
+              "team_skill_cap_concentration",
+              "team_ol_cap_pct"
+            ]
+          },
+          "best_by_cell": {
+            "pos_ridge\u00d7base": {
+              "mean_top": 0.5998
+            },
+            "pos_ridge\u00d7base_xfp": {
+              "mean_top": 0.6072
+            },
+            "pos_ridge\u00d7base_env": {
+              "mean_top": 0.5814
+            },
+            "pos_ridge\u00d7base_contract": {
+              "mean_top": 0.6081
+            },
+            "pos_ridge\u00d7base_opp": {
+              "mean_top": 0.6021
+            },
+            "pos_ridge\u00d7all_skill": {
+              "mean_top": 0.5797
+            },
+            "pos_ridge\u00d7kitchen_sink": {
+              "mean_top": 0.5729
+            },
+            "pos_gbm\u00d7base": {
+              "mean_top": 0.5716
+            },
+            "pos_gbm\u00d7base_xfp": {
+              "mean_top": 0.5685
+            },
+            "pos_gbm\u00d7base_env": {
+              "mean_top": 0.5718
+            },
+            "pos_gbm\u00d7base_contract": {
+              "mean_top": 0.5859
+            },
+            "pos_gbm\u00d7base_opp": {
+              "mean_top": 0.5628
+            },
+            "pos_gbm\u00d7all_skill": {
+              "mean_top": 0.5596
+            },
+            "pos_gbm\u00d7kitchen_sink": {
+              "mean_top": 0.5741
+            },
+            "pos_similarity\u00d7base": {
+              "mean_top": 0.6018
+            },
+            "pos_similarity\u00d7base_xfp": {
+              "mean_top": 0.5709
+            },
+            "pos_similarity\u00d7base_env": {
+              "mean_top": 0.5578
+            },
+            "pos_similarity\u00d7base_contract": {
+              "mean_top": 0.5711
+            },
+            "pos_similarity\u00d7base_opp": {
+              "mean_top": 0.5471
+            },
+            "pos_similarity\u00d7all_skill": {
+              "mean_top": 0.5341
+            },
+            "pos_similarity\u00d7kitchen_sink": {
+              "mean_top": 0.5516
+            },
+            "pos_mlp\u00d7base": {
+              "mean_top": 0.5839
+            },
+            "pos_mlp\u00d7base_xfp": {
+              "mean_top": 0.5653
+            },
+            "pos_mlp\u00d7base_env": {
+              "mean_top": 0.5704
+            },
+            "pos_mlp\u00d7base_contract": {
+              "mean_top": 0.5543
+            },
+            "pos_mlp\u00d7base_opp": {
+              "mean_top": 0.563
+            },
+            "pos_mlp\u00d7all_skill": {
+              "mean_top": 0.5558
+            },
+            "pos_mlp\u00d7kitchen_sink": {
+              "mean_top": 0.5317
+            }
+          },
+          "winner": {
+            "learner": "pos_ridge",
+            "hp": {
+              "alpha": 0.576620866139328
+            },
+            "per_season_top": {
+              "2019": 0.5696,
+              "2020": 0.7748,
+              "2021": 0.4924,
+              "2022": 0.6463,
+              "2023": 0.3889,
+              "2024": 0.7367,
+              "2025": 0.6479
+            },
+            "per_season_full": {
+              "2019": 0.7091,
+              "2020": 0.648,
+              "2021": 0.6703,
+              "2022": 0.7619,
+              "2023": 0.7603,
+              "2024": 0.8037,
+              "2025": 0.8284
+            },
+            "mean_top": 0.6081,
+            "mean_full": 0.7402,
+            "bundle": "base_contract"
+          },
+          "pbo": 0.0857,
+          "config_spread": 0.1687,
+          "dsr": 0.2585,
+          "pvalue": 0.0118,
+          "n_configs": 421,
+          "beats_null": true,
+          "beats_nf1_1_ref": false,
+          "fdr_pass": true,
+          "verdict": {
+            "repoint": false,
+            "beats_null": true,
+            "pbo_ok": true,
+            "dsr_ok": false,
+            "fdr_ok": true
+          }
+        },
+        "WR": {
+          "null": {
+            "learner": "pos_null",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.4445,
+              "2020": 0.2326,
+              "2021": 0.3381,
+              "2022": 0.552,
+              "2023": 0.5572,
+              "2024": 0.4959,
+              "2025": 0.2591
+            },
+            "per_season_full": {
+              "2019": 0.7652,
+              "2020": 0.7291,
+              "2021": 0.7073,
+              "2022": 0.704,
+              "2023": 0.7598,
+              "2024": 0.7653,
+              "2025": 0.8212
+            },
+            "mean_top": 0.4113,
+            "mean_full": 0.7503
+          },
+          "nf1_1_winner_ref": {
+            "learner": "nf1_1_winner(pos_ridge)",
+            "hp": {
+              "alpha": 1.380137655222368
+            },
+            "mean_top": 0.5511
+          },
+          "bundles": {
+            "base": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd"
+            ],
+            "base_env": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "sos_pass_strength",
+              "team_pass_rate",
+              "team_pace",
+              "pass_rate_delta",
+              "team_qb_quality",
+              "teammate_fp",
+              "vacated_volume"
+            ],
+            "base_contract": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "log_investment",
+              "guaranteed_ratio",
+              "cap_hit_pct_team",
+              "team_skill_cap_concentration"
+            ],
+            "base_opp": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "air_yards_share",
+              "wopr"
+            ],
+            "all_skill": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "air_yards_share",
+              "wopr",
+              "sos_pass_strength",
+              "team_pass_rate",
+              "team_pace",
+              "pass_rate_delta",
+              "team_qb_quality",
+              "teammate_fp",
+              "vacated_volume"
+            ],
+            "kitchen_sink": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "air_yards_share",
+              "wopr",
+              "sos_pass_strength",
+              "team_pass_rate",
+              "team_pace",
+              "pass_rate_delta",
+              "team_qb_quality",
+              "teammate_fp",
+              "vacated_volume",
+              "log_investment",
+              "guaranteed_ratio",
+              "cap_hit_pct_team",
+              "team_skill_cap_concentration"
+            ]
+          },
+          "best_by_cell": {
+            "pos_ridge\u00d7base": {
+              "mean_top": 0.5548
+            },
+            "pos_ridge\u00d7base_env": {
+              "mean_top": 0.552
+            },
+            "pos_ridge\u00d7base_contract": {
+              "mean_top": 0.5445
+            },
+            "pos_ridge\u00d7base_opp": {
+              "mean_top": 0.5487
+            },
+            "pos_ridge\u00d7all_skill": {
+              "mean_top": 0.5483
+            },
+            "pos_ridge\u00d7kitchen_sink": {
+              "mean_top": 0.5322
+            },
+            "pos_gbm\u00d7base": {
+              "mean_top": 0.5319
+            },
+            "pos_gbm\u00d7base_env": {
+              "mean_top": 0.5287
+            },
+            "pos_gbm\u00d7base_contract": {
+              "mean_top": 0.5433
+            },
+            "pos_gbm\u00d7base_opp": {
+              "mean_top": 0.5155
+            },
+            "pos_gbm\u00d7all_skill": {
+              "mean_top": 0.5196
+            },
+            "pos_gbm\u00d7kitchen_sink": {
+              "mean_top": 0.5258
+            },
+            "pos_similarity\u00d7base": {
+              "mean_top": 0.5604
+            },
+            "pos_similarity\u00d7base_env": {
+              "mean_top": 0.5342
+            },
+            "pos_similarity\u00d7base_contract": {
+              "mean_top": 0.5228
+            },
+            "pos_similarity\u00d7base_opp": {
+              "mean_top": 0.5432
+            },
+            "pos_similarity\u00d7all_skill": {
+              "mean_top": 0.5358
+            },
+            "pos_similarity\u00d7kitchen_sink": {
+              "mean_top": 0.521
+            },
+            "pos_mlp\u00d7base": {
+              "mean_top": 0.5566
+            },
+            "pos_mlp\u00d7base_env": {
+              "mean_top": 0.5441
+            },
+            "pos_mlp\u00d7base_contract": {
+              "mean_top": 0.5318
+            },
+            "pos_mlp\u00d7base_opp": {
+              "mean_top": 0.5425
+            },
+            "pos_mlp\u00d7all_skill": {
+              "mean_top": 0.5231
+            },
+            "pos_mlp\u00d7kitchen_sink": {
+              "mean_top": 0.5168
+            }
+          },
+          "winner": {
+            "learner": "pos_similarity",
+            "hp": {
+              "k": 34,
+              "weight_power": 0.43171176232598363,
+              "mvp1_emphasis": 0.6843091216153435
+            },
+            "per_season_top": {
+              "2019": 0.4611,
+              "2020": 0.5021,
+              "2021": 0.5525,
+              "2022": 0.7626,
+              "2023": 0.686,
+              "2024": 0.557,
+              "2025": 0.4014
+            },
+            "per_season_full": {
+              "2019": 0.755,
+              "2020": 0.7514,
+              "2021": 0.7308,
+              "2022": 0.752,
+              "2023": 0.7699,
+              "2024": 0.7467,
+              "2025": 0.7903
+            },
+            "mean_top": 0.5604,
+            "mean_full": 0.7566,
+            "bundle": "base"
+          },
+          "pbo": 0.5429,
+          "config_spread": 0.1216,
+          "dsr": 0.8666,
+          "pvalue": 0.0023,
+          "n_configs": 361,
+          "beats_null": true,
+          "beats_nf1_1_ref": true,
+          "fdr_pass": true,
+          "verdict": {
+            "repoint": false,
+            "beats_null": true,
+            "pbo_ok": false,
+            "dsr_ok": false,
+            "fdr_ok": true
+          }
+        },
+        "TE": {
+          "null": {
+            "learner": "pos_null",
+            "hp": {},
+            "per_season_top": {
+              "2019": 0.6243,
+              "2020": 0.3487,
+              "2021": 0.4948,
+              "2022": 0.3774,
+              "2023": 0.4783,
+              "2024": 0.427,
+              "2025": 0.2643
+            },
+            "per_season_full": {
+              "2019": 0.7279,
+              "2020": 0.6226,
+              "2021": 0.744,
+              "2022": 0.7695,
+              "2023": 0.7755,
+              "2024": 0.7137,
+              "2025": 0.8252
+            },
+            "mean_top": 0.4307,
+            "mean_full": 0.7398
+          },
+          "nf1_1_winner_ref": {
+            "learner": "nf1_1_winner(pos_similarity)",
+            "hp": {
+              "k": 35,
+              "weight_power": 2.638285885412706,
+              "mvp1_emphasis": 3.030090628490117
+            },
+            "mean_top": 0.4994
+          },
+          "bundles": {
+            "base": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd"
+            ],
+            "base_xfp": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "xrec_pg",
+              "xrec_yds_pg",
+              "xrec_td_pg",
+              "xfp_pg",
+              "td_luck_ratio"
+            ],
+            "base_env": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "xrec_pg",
+              "xrec_yds_pg",
+              "xrec_td_pg",
+              "xfp_pg",
+              "td_luck_ratio",
+              "sos_pass_strength",
+              "team_pass_rate",
+              "team_pace",
+              "pass_rate_delta",
+              "team_qb_quality",
+              "teammate_fp",
+              "vacated_volume"
+            ],
+            "base_contract": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "xrec_pg",
+              "xrec_yds_pg",
+              "xrec_td_pg",
+              "xfp_pg",
+              "td_luck_ratio",
+              "log_investment",
+              "guaranteed_ratio",
+              "cap_hit_pct_team",
+              "team_skill_cap_concentration"
+            ],
+            "base_opp": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "xrec_pg",
+              "xrec_yds_pg",
+              "xrec_td_pg",
+              "xfp_pg",
+              "td_luck_ratio",
+              "air_yards_share",
+              "wopr"
+            ],
+            "all_skill": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "xrec_pg",
+              "xrec_yds_pg",
+              "xrec_td_pg",
+              "xfp_pg",
+              "td_luck_ratio",
+              "air_yards_share",
+              "wopr",
+              "sos_pass_strength",
+              "team_pass_rate",
+              "team_pace",
+              "pass_rate_delta",
+              "team_qb_quality",
+              "teammate_fp",
+              "vacated_volume"
+            ],
+            "kitchen_sink": [
+              "mvp1_fp",
+              "pergame_fp",
+              "base_games",
+              "expected_games",
+              "snap_share",
+              "target_share",
+              "depth_rank",
+              "mover_scale",
+              "team_env",
+              "injury_cap_ratio",
+              "age",
+              "fp_sd",
+              "xrec_pg",
+              "xrec_yds_pg",
+              "xrec_td_pg",
+              "xfp_pg",
+              "td_luck_ratio",
+              "air_yards_share",
+              "wopr",
+              "sos_pass_strength",
+              "team_pass_rate",
+              "team_pace",
+              "pass_rate_delta",
+              "team_qb_quality",
+              "teammate_fp",
+              "vacated_volume",
+              "log_investment",
+              "guaranteed_ratio",
+              "cap_hit_pct_team",
+              "team_skill_cap_concentration"
+            ]
+          },
+          "best_by_cell": {
+            "pos_ridge\u00d7base": {
+              "mean_top": 0.4481
+            },
+            "pos_ridge\u00d7base_xfp": {
+              "mean_top": 0.4657
+            },
+            "pos_ridge\u00d7base_env": {
+              "mean_top": 0.4589
+            },
+            "pos_ridge\u00d7base_contract": {
+              "mean_top": 0.4575
+            },
+            "pos_ridge\u00d7base_opp": {
+              "mean_top": 0.4673
+            },
+            "pos_ridge\u00d7all_skill": {
+              "mean_top": 0.461
+            },
+            "pos_ridge\u00d7kitchen_sink": {
+              "mean_top": 0.4542
+            },
+            "pos_gbm\u00d7base": {
+              "mean_top": 0.4354
+            },
+            "pos_gbm\u00d7base_xfp": {
+              "mean_top": 0.4152
+            },
+            "pos_gbm\u00d7base_env": {
+              "mean_top": 0.4202
+            },
+            "pos_gbm\u00d7base_contract": {
+              "mean_top": 0.418
+            },
+            "pos_gbm\u00d7base_opp": {
+              "mean_top": 0.4225
+            },
+            "pos_gbm\u00d7all_skill": {
+              "mean_top": 0.438
+            },
+            "pos_gbm\u00d7kitchen_sink": {
+              "mean_top": 0.4412
+            },
+            "pos_similarity\u00d7base": {
+              "mean_top": 0.5092
+            },
+            "pos_similarity\u00d7base_xfp": {
+              "mean_top": 0.4848
+            },
+            "pos_similarity\u00d7base_env": {
+              "mean_top": 0.5548
+            },
+            "pos_similarity\u00d7base_contract": {
+              "mean_top": 0.4686
+            },
+            "pos_similarity\u00d7base_opp": {
+              "mean_top": 0.5083
+            },
+            "pos_similarity\u00d7all_skill": {
+              "mean_top": 0.5757
+            },
+            "pos_similarity\u00d7kitchen_sink": {
+              "mean_top": 0.4945
+            },
+            "pos_mlp\u00d7base": {
+              "mean_top": 0.4682
+            },
+            "pos_mlp\u00d7base_xfp": {
+              "mean_top": 0.4539
+            },
+            "pos_mlp\u00d7base_env": {
+              "mean_top": 0.4642
+            },
+            "pos_mlp\u00d7base_contract": {
+              "mean_top": 0.4404
+            },
+            "pos_mlp\u00d7base_opp": {
+              "mean_top": 0.4602
+            },
+            "pos_mlp\u00d7all_skill": {
+              "mean_top": 0.4529
+            },
+            "pos_mlp\u00d7kitchen_sink": {
+              "mean_top": 0.4527
+            }
+          },
+          "winner": {
+            "learner": "pos_similarity",
+            "hp": {
+              "k": 6,
+              "weight_power": 2.261021481588942,
+              "mvp1_emphasis": 3.9849733316121356
+            },
+            "per_season_top": {
+              "2019": 0.6026,
+              "2020": 0.667,
+              "2021": 0.7478,
+              "2022": 0.3522,
+              "2023": 0.6609,
+              "2024": 0.4557,
+              "2025": 0.5435
+            },
+            "per_season_full": {
+              "2019": 0.6746,
+              "2020": 0.5806,
+              "2021": 0.7289,
+              "2022": 0.7467,
+              "2023": 0.7358,
+              "2024": 0.7041,
+              "2025": 0.8153
+            },
+            "mean_top": 0.5757,
+            "mean_full": 0.7123,
+            "bundle": "all_skill"
+          },
+          "pbo": 0.0286,
+          "config_spread": 0.361,
+          "dsr": 0.2849,
+          "pvalue": 0.0205,
+          "n_configs": 421,
+          "beats_null": true,
+          "beats_nf1_1_ref": true,
+          "fdr_pass": true,
+          "verdict": {
+            "repoint": false,
+            "beats_null": true,
+            "pbo_ok": true,
+            "dsr_ok": false,
+            "fdr_ok": true
+          }
+        }
+      },
+      "placebo": {
+        "QB": {
+          "winner_mean_top": 0.05,
+          "null_mean_top": 0.0426,
+          "naive_delta_vs_null": 0.0074,
+          "gates_pass": false
+        },
+        "RB": {
+          "winner_mean_top": 0.1053,
+          "null_mean_top": -0.0841,
+          "naive_delta_vs_null": 0.1894,
+          "gates_pass": false
+        },
+        "WR": {
+          "winner_mean_top": 0.1205,
+          "null_mean_top": 0.0668,
+          "naive_delta_vs_null": 0.0537,
+          "gates_pass": false
+        },
+        "TE": {
+          "winner_mean_top": 0.1048,
+          "null_mean_top": -0.0092,
+          "naive_delta_vs_null": 0.114,
+          "gates_pass": false
+        }
+      },
+      "pbo_max": 0.2,
+      "dsr_min": 0.95,
+      "fdr_q": 0.1,
+      "generated_at": "2026-07-28T01:39:23.846772+00:00"
+    }
+  ]
+}
