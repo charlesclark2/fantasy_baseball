@@ -30,6 +30,13 @@ RETIRED_NATIVE_SOURCES = {
     ("statsapi", "monthly_schedule"),  # retired 2026-07-20 — schedule capture flipped S3-native
     ("oddsapi", "mlb_odds_raw"),       # retired 2026-07-05 — odds capture flipped S3-native
     ("savant", "batter_pitches"),      # dropped 2026-07-03 (W11-E) — pitch marts read S3 parquet
+    # E11.24 (2026-07-29) — found via the provisioning-wait audit: both were still named as LIVE
+    # sources by export_odds_raw_to_s3.py, which the daily build ran on every run. MEASURED:
+    # derivative_odds_raw frozen at 2026-07-07T00:00:07 (22 days, 0 rows in the 7-day window);
+    # mlb_events_raw frozen at 2026-06-04T23:25:12 (55 days, 0 rows). Zero rows exported ⇒ pure
+    # COMPUTE_WH wake, no clobber. Neither has a dbt source() reader or raw-SQL consumer.
+    ("oddsapi", "derivative_odds_raw"),  # derivative capture is S3-native (W11_RAW_WRITE_MODE=s3)
+    ("oddsapi", "mlb_events_raw"),       # odds capture flipped S3-native 2026-07-05
 }
 
 _MODELS_DIR = Path(__file__).resolve().parents[2] / "dbt" / "models"

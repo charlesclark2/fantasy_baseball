@@ -672,20 +672,30 @@ def lakehouse_w3_marts_op(context):
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def lakehouse_w3pre_flatten_op(context):
-    # Gated (W11_W3PRE_DAILY, INC-23): re-export the derivative-odds raw bridge (7-day
-    # --since lookback — bounded per-day partitions, idempotent; INC-20-safe) and rebuild
-    # the W3pre odds/staging flatten so stg_derivative_odds is fresh before the W6 build
-    # registers it. HALT when ON (same as the old monolith, where --w3pre rode the HALT
-    # call; _build_w3pre defensively SKIPs any source with no raw parquet). ALERT-loud
-    # skip when OFF.
+    # Gated (W11_W3PRE_DAILY, INC-23): rebuild the W3pre odds/staging flatten so
+    # stg_derivative_odds is fresh before the W6 build registers it. HALT when ON (same as the
+    # old monolith, where --w3pre rode the HALT call; _build_w3pre defensively SKIPs any source
+    # with no raw parquet). ALERT-loud skip when OFF.
+    # E11.24 (2026-07-29): the Snowflake raw bridge this op used to run first is RETIRED — see the
+    # block below. The flatten reads lakehouse_raw/derivative_odds_raw/ directly, which the
+    # S3-native capture is the sole writer of, so nothing was lost with it.
     if not _w3pre_daily_on():
         context.log.warning(
-            "[lakehouse-w3pre] W11_W3PRE_DAILY unset — skipping the derivative-odds "
-            "bridge + W3pre flatten rebuild (stg_derivative_odds stays at its last build)."
+            "[lakehouse-w3pre] W11_W3PRE_DAILY unset — skipping the W3pre flatten rebuild "
+            "(stg_derivative_odds stays at its last build)."
         )
         return
-    _run_script(context, "export_odds_raw_to_s3.py",
-                ["--source", "derivative_odds_raw", "--since", _seven_days_ago()])
+    # ⛔ E11.24 (2026-07-29) — THE DERIVATIVE-ODDS BRIDGE IS RETIRED (the 4th instance of the
+    # retired-writer-bridge class, after monthly_schedule and mlb_odds_raw). It ran
+    # `export_odds_raw_to_s3.py --source derivative_odds_raw --since <7d ago>` on every daily
+    # build, but derivative capture is S3-NATIVE (W11_RAW_WRITE_MODE=s3), so
+    # `oddsapi.derivative_odds_raw` has been FROZEN at ingestion_ts 2026-07-07T00:00:07 —
+    # measured 2026-07-29: 22 days stale, **0 rows in the 7-day window**. The export therefore
+    # selected zero rows and wrote nothing; its only effect was to RESUME COMPUTE_WH (5
+    # provisioning waits in 8 days). The S3-native capture is the sole writer of
+    # lakehouse_raw/derivative_odds_raw/ (the INC-31 rule), which is what --w3pre-only reads.
+    # Verified before removal: no dbt `source()` reader and no raw-SQL consumer anywhere in the
+    # repo (the INC-27 grep-the-whole-repo rule).
     _run_script(context, "run_w1_lakehouse.py", ["--w3pre-only"], timeout=1800)
 
 

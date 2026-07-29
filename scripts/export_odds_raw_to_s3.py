@@ -57,23 +57,19 @@ def latest_dt_per_month(dates: list) -> list:
 # source → (fully-qualified raw table, SELECT column SQL). VARIANT cols are TO_JSON'd to a
 # string; timestamps cast ::varchar (ISO) so the raw parquet is uniform VARCHAR for the
 # flatten's ::timestamp casts. The selected columns are exactly what the stg model reads.
-SOURCES = {
-    "mlb_events_raw": (
-        "baseball_data.oddsapi.mlb_events_raw",
-        "ingestion_ts::varchar as ingestion_ts, load_id, x_requests_used, "
-        "x_requests_remaining, to_json(raw_json) as raw_json",
-    ),
+# ⛔⛔ EVERY SOURCE IS NOW RETIRED — this bridge has NO live source (E11.24, 2026-07-29).
+# Both remaining tables are frozen historical husks whose S3-native capture is the sole writer,
+# so a `--since` export selects ZERO rows and writes nothing: it was purely a COMPUTE_WH wake.
+# MEASURED 2026-07-29: oddsapi.derivative_odds_raw frozen at 2026-07-07T00:00:07 (22 days,
+# 0 rows in the 7-day window); oddsapi.mlb_events_raw frozen at 2026-06-04T23:25:12 (55 days,
+# 0 rows in window). Neither has a dbt `source()` reader or any raw-SQL consumer (repo-wide grep,
+# the INC-27 rule). ⇒ the daily bridge call was removed from lakehouse_w3pre_flatten_op.
+# 🚨 Do NOT re-add an entry here without first confirming its Snowflake WRITER is still live
+# (`W11_RAW_WRITE_MODE` / `LAKEHOUSE_RAW_WRITE_MODE` for that capture). This is the FOURTH
+# instance of the retired-writer-bridge class after monthly_schedule (which also DELETED fresh
+# partitions via prune_partitions) and mlb_odds_raw.
+SOURCES: dict[str, tuple[str, str]] = {
     # ⛔ "mlb_odds_raw" REMOVED 2026-07-27 (E11.20 phase-2b) — see RETIRED_SOURCES.
-    "derivative_odds_raw": (
-        "baseball_data.oddsapi.derivative_odds_raw",
-        "ingestion_ts::varchar as ingestion_ts, load_id, event_id, "
-        "requested_snapshot_ts::varchar as requested_snapshot_ts, "
-        "actual_snapshot_ts::varchar as actual_snapshot_ts, "
-        "previous_snapshot_ts::varchar as previous_snapshot_ts, "
-        "next_snapshot_ts::varchar as next_snapshot_ts, "
-        "markets_requested, regions_requested, x_requests_remaining, x_requests_last, "
-        "to_json(raw_json) as raw_json",
-    ),
     # ⛔ "monthly_schedule" REMOVED 2026-07-27 (E11.20 phase-2b). Its Snowflake source
     # `baseball_data.statsapi.monthly_schedule` is RETIRED — the schedule capture flipped
     # S3-native on 2026-07-20 and the table has been FROZEN at ingestion_ts
@@ -92,6 +88,17 @@ RETIRED_SOURCES = {
     "monthly_schedule": (
         "its Snowflake writer was retired 2026-07-20 (schedule capture is S3-native); the table "
         "is frozen, and this script's partition prune would DELETE the capture's fresh partitions"
+    ),
+    "derivative_odds_raw": (
+        "its Snowflake writer was retired when derivative capture flipped W11_RAW_WRITE_MODE=s3; "
+        "the table is frozen at ingestion_ts 2026-07-07T00:00:07 (measured 2026-07-29: 22 days, "
+        "0 rows in the 7-day export window), so `--since` selected zero rows and wrote nothing — "
+        "it was purely a COMPUTE_WH wake on every daily run"
+    ),
+    "mlb_events_raw": (
+        "its Snowflake writer was retired when odds capture flipped S3-native 2026-07-05; the "
+        "table is frozen at ingestion_ts 2026-06-04T23:25:12 (measured 2026-07-29: 55 days, "
+        "0 rows in the 7-day export window) — same pure-wake shape as mlb_odds_raw"
     ),
     "mlb_odds_raw": (
         "its Snowflake writer was retired 2026-07-05 (odds capture is S3-native); the table has "
