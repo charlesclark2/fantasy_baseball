@@ -251,6 +251,56 @@ same conclusion the provisioning-wait census reached from the other direction (t
 waits, not the 41% the first census estimated). Two independent instruments, one answer. Correct order
 is therefore **6 → 4 → 4b → 7**, and nothing in 4/4b should be attempted before 6 lands.
 
+### 🔧 CORRECTION to the heading above — "everything" was too strong. One family IS independent.
+
+The coupling argument is sound for the **writers** (posteriors + generators). I over-generalized it to the
+whole residual. A by-user attribution shows a family that has nothing to do with the dbt chain:
+
+| User | Provisioning waits (8d) | Distinct query shapes |
+|---|---|---|
+| `DBT_RW` | 713 | 114 ← target 6 + the pipeline |
+| **`CREDENCE_API`** | **56 (7.1%)** | **4** |
+| `CCL1196` (operator Snowsight) | 24 | 8 |
+
+**56 wakes from 4 queries, and the live API is the caller — which is also a CLAUDE.md violation
+("Snowflake … never on a request path").** 42 of the 56 are one shape: the
+`ACCOUNT_USAGE.METERING_DAILY_HISTORY` roll-up behind `/admin/snowflake-credits` and `/admin/finances`.
+
+⭐ **The mechanism, nailed:** it fires **2× per hour around the clock** (7/27: hours 01–09 unbroken).
+That is not a human opening a page — both endpoints carried `staleTime: 3_600_000` in
+`frontend/app/admin/page.tsx`, so **an admin tab left OPEN refetched both hourly, forever.** The page
+that displays the bill was 5.3% of the wakes that produce it. Fixed on both sides:
+- **server:** both queries routed to `MONITOR_WH` (already shipped) ⇒ they can never wake the warehouse
+  they measure;
+- **client:** `staleTime` → **12h**, because the payloads are MONTH-grained *and* `account_usage`
+  metering latency is ~12h+ (E11.20-COST lesson-1) ⇒ an hourly refetch was mathematically guaranteed to
+  return identical numbers.
+
+⚠️ **Both fixes are committed but NOT deployed** — the metering shape's `last_seen` is **7/29, today**, on
+`COMPUTE_WH`. This family only stops on the next **Lambda + Vercel** deploy. It is the third time target 3
+flipped verdict (refuted → un-refuted → mechanism identified); the story's framing was right each time.
+
+The remaining ~24 waits are the operator's own Snowsight browsing (`POLICY_REFERENCES` 9,
+`COST_INSIGHTS`/`ACCOUNT_ROOT_BUDGET`/metering 8). **Behavioural, not code** — worth knowing that opening
+Snowsight cost pages wakes `COMPUTE_WH`, so audit from `MONITOR_WH` (`use warehouse MONITOR_WH` first).
+
+### ✅ The retired-writer-bridge family is now fully closed — verified in the wake data
+
+Each removal is visible as a hard stop, which is the cleanest possible confirmation the bridges are dead:
+
+| Frozen-table `DISTINCT ingestion_ts` scan | Waits (14d) | Last seen | Status |
+|---|---|---|---|
+| `statsapi.monthly_schedule` | 15 | 2026-07-25 | already dead |
+| `oddsapi.mlb_odds_raw` | 14 | 2026-07-27 | already dead (removed 7/27) |
+| `oddsapi.derivative_odds_raw` | 11 | **2026-07-29** | the one retired today — stops at next deploy |
+
+`export_w11_raw_to_s3.py` still lists 4 sources but has **no live caller** (no non-comment reference in
+`pipeline/` or the crontab), so it contributes nothing.
+
+📉 **Total waits are already trending down hard** — 215 (7/19) → 130 → 95 → 132 → 113 → 100 → 111 → 88 →
+78 → 69 (7/28), i.e. roughly **−68% since 7/19** off the E11.20 phase-2a/2b flips. ⚠️ Do not read 7/29 as
+a data point; the day is partial and `account_usage` lags.
+
 ## Stages 3–4 — SOAK-BLOCKED until the E11.20 W8b soak exits (2026-07-31)
 
 The E11.20 guardrail is **one serving-flip per soak**, and the 7/30 no-false-abstain attribution must
