@@ -46,9 +46,30 @@ source "${APP_DIR}/services/dagster/aws/notify.sh" 2>/dev/null || notify() { :; 
 # restarting during `up -d --build`; it skips checks + resets its fail counter
 # while this file exists. Trap removes it on any exit (normal, die, rollback).
 DEPLOY_LOCK="/tmp/credence_deploy_in_progress"
-touch "$DEPLOY_LOCK"
+LOCK_STALE_SECONDS="${LOCK_STALE_SECONDS:-1800}"
+# INC-36 (2026-07-29): this was a bare `touch` — a SIGNAL to healthcheck.sh, NOT a mutex.
+# Nothing stopped a SECOND deploy.sh (a manual on-box run, or any path outside the
+# orchestration-cd concurrency group) from running `docker compose up` concurrently, which is
+# the textbook source of `Error response from daemon: removal of container … is already in
+# progress` → failed `up -d` → auto-rollback. Now genuinely exclusive.
+# ⚠️ The EXIT trap is armed ONLY AFTER we own the lock — otherwise a REFUSED deploy would
+# delete the HOLDER's lock on its way out, un-protecting the deploy that is actually running.
+# (healthcheck.sh only tests `-f`, so writing the pid into the file stays compatible.)
+if [ -f "$DEPLOY_LOCK" ]; then
+  lock_pid="$(head -n1 "$DEPLOY_LOCK" 2>/dev/null || true)"
+  lock_mtime="$(stat -c %Y "$DEPLOY_LOCK" 2>/dev/null || echo 0)"
+  lock_age=$(( $(date +%s) - lock_mtime ))
+  if [ -n "${lock_pid//[!0-9]/}" ] && kill -0 "$lock_pid" 2>/dev/null; then
+    die "another deploy is IN PROGRESS (pid ${lock_pid}, age ${lock_age}s) — refusing to race it (INC-36). Re-run once it finishes."
+  fi
+  if [ "$lock_age" -lt "$LOCK_STALE_SECONDS" ]; then
+    die "deploy lock present (age ${lock_age}s < ${LOCK_STALE_SECONDS}s) but its owner is not alive — a deploy may have just been SIGKILLed mid-flight. Investigate the box, then: rm -f ${DEPLOY_LOCK}"
+  fi
+  log "WARNING: reclaiming STALE deploy lock (age ${lock_age}s, owner pid ${lock_pid:-unknown} not alive)"
+fi
+echo "$$" > "$DEPLOY_LOCK"
 trap 'rm -f "$DEPLOY_LOCK"' EXIT
-log "deploy lock acquired (${DEPLOY_LOCK})"
+log "deploy lock acquired (${DEPLOY_LOCK}, pid $$)"
 
 # --- 1. pull (FIRST — so env-parity validates the env.required being deployed) --
 OLD_HEAD="$(git rev-parse HEAD)"
@@ -94,33 +115,115 @@ for img in "${ROLLBACK_IMAGES[@]}"; do
   fi
 done
 
+# Core services that MUST be running for the box to be considered serving. dagster-daemon is
+# the one that matters most and is the easiest to lose: with no daemon, NO schedule and NO
+# sensor ticks — the E11.23 "silently never runs" class, and the daemon cannot self-report it.
+CORE_SERVICES=(dagster-codeloc dagster-webserver dagster-daemon dbt-runner)
+
+missing_core() {
+  local svc missing=""
+  for svc in "${CORE_SERVICES[@]}"; do
+    $COMPOSE ps --status running --services 2>/dev/null | grep -qx "$svc" || missing="${missing}${svc} "
+  done
+  printf '%s' "$missing"
+}
+
 rollback() {
   log "ROLLING BACK to previous images"
   for img in "${ROLLBACK_IMAGES[@]}"; do
     docker image inspect "${img}:rollback" >/dev/null 2>&1 && docker tag "${img}:rollback" "${img}:latest"
   done
   $COMPOSE up -d --no-build
+  # INC-36 (2026-07-29): the rollback used to STOP HERE — it never checked the box actually
+  # came back. The whole POINT of auto-rollback is to leave the box serving, and on 7/29 it
+  # exited "successfully rolled back" while dagster-daemon was GONE (absent from
+  # `compose ps`), so no sensor or schedule ticked until a human redeployed ~10 min later.
+  # A rollback that leaves a service down is a worse outcome than the failed deploy.
+  local missing; missing="$(missing_core)"
+  if [ -n "$missing" ]; then
+    log "  ALERT: after rollback these core services are NOT running: ${missing}— forcing recreate"
+    $COMPOSE up -d --no-build --force-recreate
+    missing="$(missing_core)"
+  fi
+  if [ -n "$missing" ]; then
+    log "  CRITICAL: core services STILL down after forced recreate: ${missing}"
+    notify CRITICAL "CD rollback INCOMPLETE — box is MISSING services" \
+      "Auto-rollback ran but these core services are NOT running: ${missing}. With dagster-daemon down NO schedule or sensor ticks (nothing will page on its own). Reason for rollback: $1. FIX THE BOX NOW." 2>/dev/null || true
+    die "rollback left core services down (${missing}) — original failure: $1"
+  fi
+  log "  rollback verified — all core services running"
   notify CRITICAL "CD auto-rollback on box" \
-    "A deploy to the orchestration box FAILED verification and was auto-rolled-back to the previous images. Reason: $1. Box is serving on the PREVIOUS image — investigate the failed deploy (Actions log + Dagit) before the next merge." 2>/dev/null || true
+    "A deploy to the orchestration box FAILED verification and was auto-rolled-back to the previous images. Reason: $1. Box is serving on the PREVIOUS image (all core services verified running) — investigate the failed deploy (Actions log + Dagit) before the next merge." 2>/dev/null || true
   die "$1"
 }
 
 # --- 4. graceful drain — let in-flight runs finish --------------------------
 log "draining in-flight Dagster runs (timeout ${DRAIN_TIMEOUT}s)"
+# INC-36: this used to end in `|| echo 0`, so a FAILED probe (Dagit unreachable, webserver
+# mid-restart, malformed JSON) was INDISTINGUISHABLE from "zero runs in flight" and the drain
+# exited IMMEDIATELY, deploying straight into a live run. Same swallowed-error class as the
+# INC-32 landmines. It now returns the sentinel `unknown`, which the loop treats as "cannot
+# verify" (ALERT-loud, bounded) rather than as "drained".
 in_flight() {
-  curl -fsS "$LOCAL_GQL" -H 'Content-Type: application/json' \
-    --data '{"query":"{ runsOrError(filter:{statuses:[STARTED]}, limit:1){ __typename ... on Runs { results { runId } } } }"}' 2>/dev/null \
-    | python3 -c "import sys,json; d=json.load(sys.stdin); print(len((d.get('data',{}).get('runsOrError',{}) or {}).get('results',[])))" 2>/dev/null || echo 0
+  local raw n
+  raw="$(curl -fsS "$LOCAL_GQL" -H 'Content-Type: application/json' \
+    --data '{"query":"{ runsOrError(filter:{statuses:[STARTED]}, limit:1){ __typename ... on Runs { results { runId } } } }"}' 2>/dev/null)" \
+    || { echo unknown; return 0; }
+  n="$(printf '%s' "$raw" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len((d.get('data',{}).get('runsOrError',{}) or {}).get('results',[])))" 2>/dev/null)" \
+    || { echo unknown; return 0; }
+  case "$n" in ''|*[!0-9]*) echo unknown ;; *) echo "$n" ;; esac
 }
-waited=0
-while [ "$(in_flight)" != "0" ] && [ "$waited" -lt "$DRAIN_TIMEOUT" ]; do
-  log "  in-flight run(s) active — waiting…"; sleep 20; waited=$((waited+20))
+DRAIN_UNKNOWN_MAX="${DRAIN_UNKNOWN_MAX:-3}"
+waited=0; unknown_streak=0
+while :; do
+  n_flight="$(in_flight)"
+  if [ "$n_flight" = "0" ]; then
+    log "  no in-flight runs — safe to recreate"; break
+  elif [ "$n_flight" = "unknown" ]; then
+    unknown_streak=$((unknown_streak+1))
+    log "  WARNING: cannot determine in-flight runs (${unknown_streak}/${DRAIN_UNKNOWN_MAX}) — Dagit unreachable?"
+    if [ "$unknown_streak" -ge "$DRAIN_UNKNOWN_MAX" ]; then
+      log "  ALERT: proceeding WITHOUT a verified drain — probe failed ${unknown_streak}× (a recreate may kill a live run)"
+      break
+    fi
+  else
+    unknown_streak=0
+    log "  ${n_flight} in-flight run(s) active — waiting…"
+  fi
+  if [ "$waited" -ge "$DRAIN_TIMEOUT" ]; then
+    # ⚠️ INC-36 root cause: a HUNG job (2026-07-29: intraday_schedule_job ran >1h) parks the
+    # drain here for the full DRAIN_TIMEOUT, which is what pushed the deploy past the CD poll
+    # budget and let a second deploy race it. The box-side lock above is the real guard.
+    log "  WARN: drain timed out after ${waited}s — proceeding (runs may retry). A job hung >${DRAIN_TIMEOUT}s is itself a bug — check Dagit."
+    break
+  fi
+  sleep 20; waited=$((waited+20))
 done
-[ "$(in_flight)" != "0" ] && log "  WARN: drain timed out — proceeding (runs may retry)"
 
 # --- 5. rebuild + redeploy (core + capture profile) -------------------------
 log "rebuild + redeploy core services"
-$COMPOSE up -d --build || rollback "core build/up failed"
+# INC-36 (2026-07-29): a SINGLE transient container-removal race used to cost a full
+# auto-rollback. Retry ONCE, and ONLY for that exact signature — any other failure (a real
+# build error) still rolls back immediately, because retrying a genuine breakage just wastes
+# a slate. Root cause was two concurrent deploys (now blocked by the box lock above); this is
+# defence in depth for the docker-daemon-level race itself.
+compose_up_core() {
+  local attempt=1 rc logf
+  logf="$(mktemp)"
+  while :; do
+    $COMPOSE up -d --build 2>&1 | tee "$logf"
+    rc="${PIPESTATUS[0]}"
+    [ "$rc" -eq 0 ] && { rm -f "$logf"; return 0; }
+    if [ "$attempt" -lt 2 ] && grep -qiE 'removal of container .* (is )?already in progress' "$logf"; then
+      log "  transient container-removal race on attempt ${attempt} — force-clearing core containers and retrying once"
+      $COMPOSE rm -fs "${CORE_SERVICES[@]}" >/dev/null 2>&1 || true
+      sleep 10
+      attempt=$((attempt+1)); continue
+    fi
+    rm -f "$logf"; return "$rc"
+  done
+}
+compose_up_core || rollback "core build/up failed"
 log "rebuild capture-profile images"
 $COMPOSE --profile capture build || rollback "capture build failed"
 
