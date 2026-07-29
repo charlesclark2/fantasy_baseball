@@ -77,6 +77,13 @@ quant_sports_intel_models/baseball/edge_program/ablation_results/e2_6_derivative
 quant_sports_intel_models/baseball/edge_program/ablation_results/e2_6_model_gate_grid_smoke.csv
 quant_sports_intel_models/baseball/edge_program/ablation_results/e2_6_model_gate_grid_smoke_mispriced.csv
 
+# E8.0 — the generated prospect draft board, ENTIRELY. Regenerate in ~40s via
+# `build_prospect_board.py --prospect-savant`; committed: the code + the e8_0_prospect_board.md
+# report (which carries every match rate the join report holds). The exports are a point-in-time
+# snapshot of VENDOR content (FanGraphs FV grades, Prospect Savant expected stats) and do not
+# belong in the repo; the savant cache alone is ~20 MB of raw API JSON.
+quant_sports_intel_models/baseball/edge_program/ablation_results/e8_0_artifacts/
+
 # Next.js frontend
 frontend/.next/
 frontend/out/
