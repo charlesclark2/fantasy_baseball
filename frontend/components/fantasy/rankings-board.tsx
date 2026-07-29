@@ -7,27 +7,42 @@
 //
 // The format matters: switching to superflex or full-PPR genuinely reorders the board because the
 // underlying raw stat line is re-scored, not re-weighted cosmetically.
+//
+// ADP is shown as a REFERENCE — what the room is doing — with a delta so the disagreements are
+// findable. It is deliberately not framed as an edge: we do not claim to beat it (see NF-D3), and
+// the honest read is "here is where we differ, and here is how sure we are", not "here is value".
 
-import { useMemo, useState } from "react"
-import { Search } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { Download, Search } from "lucide-react"
 import { useFantasyBoard, useFantasyManifest, useFormatSelection } from "@/lib/fantasy-queries"
-import type { Player } from "@/lib/draft-optimizer"
+import { assignTiers, type Player } from "@/lib/draft-optimizer"
 import {
+  ADP_DELTA_LABEL,
+  ALL_ROWS,
+  AdpDelta,
   EmptyBlock,
   FormatSelector,
+  GLOSSARY,
+  InfoTip,
   IntervalBar,
   LoadingBlock,
+  Pagination,
   PosBadge,
   PositionTabs,
+  RangeCell,
   ProvenanceLine,
   RookieBadge,
   SKILL_POSITIONS,
   SurfaceHeader,
   UncertaintyNote,
+  downloadCsv,
   num,
   int,
   teamLabel,
 } from "@/components/fantasy/shared"
+
+/** Our rank for a row, given which tab is active. */
+const rankOf = (p: Player, pos: string) => (pos === "Overall" ? p.ovrRank : p.posRank)
 
 export function RankingsBoard() {
   const { data: manifest, isLoading: manifestLoading, error: manifestError } = useFantasyManifest()
@@ -35,32 +50,92 @@ export function RankingsBoard() {
   const { data: board, isLoading: boardLoading } = useFantasyBoard(configName, size)
   const [pos, setPos] = useState("Overall")
   const [q, setQ] = useState("")
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState<number>(50)
 
   const config = manifest?.configs.find((c) => c.name === configName)
 
+  // The board in its ranked order, BEFORE any search. Tiers and ranks are properties of the board,
+  // so they are derived here and merely filtered below — searching never renumbers or re-tiers.
+  // K/DST carry no projection (offensive skill only) — they exist on the board purely so the draft
+  // tracker can record those picks, and must never appear in a ranked list.
+  const ranked = useMemo(() => {
+    const skill = (board ?? []).filter(
+      (p) => p.pts != null && (SKILL_POSITIONS as readonly string[]).includes(p.pos),
+    )
+    const scoped = skill.filter((p) => (pos === "Overall" ? true : p.pos === pos))
+    return pos === "Overall"
+      ? scoped.slice().sort((a, b) => a.ovrRank - b.ovrRank)
+      : scoped.slice().sort((a, b) => a.posRank - b.posRank)
+  }, [board, pos])
+
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    // K/DST carry no projection (offensive skill only) — they exist on the board purely so the
-    // draft tracker can record those picks, and must never appear in a ranked list.
-    const ranked = (board ?? []).filter((p) => p.pts != null && (SKILL_POSITIONS as readonly string[]).includes(p.pos))
-    const filtered = ranked
-      .filter((p) => (pos === "Overall" ? true : p.pos === pos))
-      .filter((p) => (needle ? p.name.toLowerCase().includes(needle) : true))
-    return pos === "Overall"
-      ? filtered.slice().sort((a, b) => a.ovrRank - b.ovrRank)
-      : filtered.slice().sort((a, b) => a.posRank - b.posRank)
-  }, [board, pos, q])
+    return needle ? ranked.filter((p) => p.name.toLowerCase().includes(needle)) : ranked
+  }, [ranked, q])
 
-  // Shared interval domain over the visible rows, so the bars are comparable down the column.
+  // Tiers: grouped by an unusually large drop to the next player, using the SAME gap-based helper
+  // the draft optimizer scores with (lib/draft-optimizer.assignTiers) so a tier means one thing
+  // across the product. Computed on the full ranked set BEFORE search/paging — a tier is a property
+  // of the board, so it must not shift when you search or turn a page.
+  //
+  // ⚠️ ONLY above-replacement players are tiered, and that is load-bearing rather than tidy-minded.
+  // `assignTiers` splits on a gap wider than mean + k·std of consecutive gaps; run over all ~716
+  // players the long flat tail collapses that threshold, and the top of the board fragments into
+  // one tier per player (36 tiers, ranks 1-7 each alone = useless). Restricted to the startable
+  // pool (~84 here) the same k=1.0 yields ~10 genuine tiers. It is also the right definition:
+  // below replacement there is no value to group. Sub-replacement players get no tier.
+  //
+  // Overall tiers on VOR (the cross-position value axis the tab is ordered by); a position tab
+  // tiers on league points, which is that tab's own ordering.
+  const tierOf = useMemo(() => {
+    const m = new Map<string, number>()
+    const draftable = ranked.filter((p) => (p.vor ?? 0) > 0)
+    if (draftable.length === 0) return m
+    const vals = draftable.map((p) => (pos === "Overall" ? (p.vor ?? 0) : (p.pts ?? 0)))
+    const tiers = assignTiers(vals)
+    draftable.forEach((p, i) => m.set(p.id, tiers[i] ?? 1))
+    return m
+  }, [ranked, pos])
+
+  // Any filter/format change invalidates the current page offset.
+  useEffect(() => setPage(0), [pos, q, configName, size])
+
+  const paged = useMemo(
+    () => (pageSize === ALL_ROWS ? rows : rows.slice(page * pageSize, page * pageSize + pageSize)),
+    [rows, page, pageSize],
+  )
+
+  // Shared interval domain over the PAGED rows, so the bars are comparable down the visible column.
   const domain = useMemo(() => {
     let min = Infinity
     let max = -Infinity
-    for (const p of rows) {
+    for (const p of paged) {
       if (p.ptsP10 != null) min = Math.min(min, p.ptsP10)
       if (p.ptsP90 != null) max = Math.max(max, p.ptsP90)
     }
     return Number.isFinite(min) && Number.isFinite(max) ? { min, max } : null
-  }, [rows])
+  }, [paged])
+
+  const hasAdp = useMemo(() => rows.some((p) => p.adp != null), [rows])
+
+  const exportCsv = () => {
+    downloadCsv(
+      `credence-rankings-${configName}-${size}team-${pos.toLowerCase()}.csv`,
+      ["rank", "tier", "player", "pos", "team", "bye", "games", "proj_pts", "pts_p10", "pts_p90",
+       "vor", "pos_rank", "adp", "vs_adp", "rookie", "range_basis"],
+      rows.map((p) => {
+        const rank = rankOf(p, pos)
+        return [
+          rank, tierOf.get(p.id) ?? "", p.name, p.pos, teamLabel(p), p.bye ?? null, p.g, p.pts,
+          p.ptsP10 ?? null, p.ptsP90 ?? null, p.vor, p.posRank, p.adp ?? null,
+          p.adp != null ? Math.round(p.adp - rank) : null, p.rookie ? "yes" : "no",
+          // carried so a downloaded board still says which ranges are class-level, not per-player
+          p.rookie ? "class-level" : "player",
+        ]
+      }),
+    )
+  }
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -109,6 +184,14 @@ export function RankingsBoard() {
                 className="w-48 rounded border border-[#262626] bg-[#0f0f0f] py-1.5 pl-7 pr-2 text-xs text-gray-200 placeholder:text-gray-600 focus:border-[#10b981] focus:outline-none"
               />
             </div>
+            <button
+              onClick={exportCsv}
+              disabled={rows.length === 0}
+              className="ml-auto flex items-center gap-1.5 rounded border border-[#262626] bg-[#0f0f0f] px-2.5 py-1.5 text-xs text-gray-400 transition-colors hover:text-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Export CSV
+            </button>
           </div>
 
           {boardLoading && <LoadingBlock label="Scoring the board…" />}
@@ -121,71 +204,146 @@ export function RankingsBoard() {
           )}
 
           {!boardLoading && rows.length > 0 && (
-            <div className="overflow-x-auto rounded-lg border border-[#262626]">
-              <table className="w-full min-w-[720px] text-left text-xs">
-                <thead className="bg-[#0f0f0f] text-gray-500">
-                  <tr>
-                    <th className="px-3 py-2 font-medium">{pos === "Overall" ? "Rank" : `${pos} #`}</th>
-                    <th className="px-3 py-2 font-medium">Player</th>
-                    <th className="px-3 py-2 font-medium">Pos</th>
-                    <th className="px-3 py-2 font-medium">Team</th>
-                    <th className="px-3 py-2 text-right font-medium">Bye</th>
-                    <th className="px-3 py-2 text-right font-medium">G</th>
-                    <th className="px-3 py-2 text-right font-medium">Proj pts</th>
-                    <th className="px-3 py-2 font-medium">80% range</th>
-                    <th className="px-3 py-2 text-right font-medium">VOR</th>
-                    {pos === "Overall" && <th className="px-3 py-2 text-right font-medium">Pos rank</th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#1a1a1a]">
-                  {rows.map((p: Player) => (
-                    <tr key={p.id} className="hover:bg-[#0f0f0f]">
-                      <td className="px-3 py-2 font-medium text-gray-500">
-                        {pos === "Overall" ? p.ovrRank : p.posRank}
-                      </td>
-                      <td className="px-3 py-2">
-                        <span className="flex items-center gap-1.5">
-                          <span className="font-medium text-gray-200">{p.name}</span>
-                          {p.rookie && <RookieBadge />}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">
-                        <PosBadge pos={p.pos} />
-                      </td>
-                      <td className="px-3 py-2 text-gray-400">{teamLabel(p)}</td>
-                      <td className="px-3 py-2 text-right text-gray-500">{p.bye ?? "—"}</td>
-                      <td className="px-3 py-2 text-right text-gray-400">{num(p.g)}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-gray-100">{num(p.pts)}</td>
-                      <td className="w-40 px-3 py-2">
-                        {p.ptsP10 != null && p.ptsP90 != null && domain ? (
-                          <>
-                            <div className="text-[11px] text-gray-400">
-                              {int(p.ptsP10)}–{int(p.ptsP90)}
-                            </div>
-                            <IntervalBar
-                              p10={p.ptsP10}
-                              point={p.pts}
-                              p90={p.ptsP90}
-                              min={domain.min}
-                              max={domain.max}
-                            />
-                          </>
-                        ) : (
-                          <span className="text-[11px] text-gray-600">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right text-gray-300">{num(p.vor)}</td>
-                      {pos === "Overall" && (
-                        <td className="px-3 py-2 text-right text-gray-500">
-                          {p.pos}
-                          {p.posRank}
-                        </td>
+            <>
+              <div className="mb-3">
+                <Pagination
+                  page={page}
+                  pageSize={pageSize}
+                  total={rows.length}
+                  onPage={setPage}
+                  onPageSize={setPageSize}
+                />
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border border-[#262626]">
+                <table className="w-full min-w-[860px] text-left text-xs">
+                  <thead className="bg-[#0f0f0f] text-gray-500">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">{pos === "Overall" ? "Rank" : `${pos} #`}</th>
+                      <th className="px-3 py-2 text-center font-medium">
+                        <InfoTip label="Tier">{GLOSSARY.tier}</InfoTip>
+                      </th>
+                      <th className="px-3 py-2 font-medium">Player</th>
+                      <th className="px-3 py-2 font-medium">Pos</th>
+                      <th className="px-3 py-2 font-medium">Team</th>
+                      <th className="px-3 py-2 text-right font-medium">Bye</th>
+                      <th className="px-3 py-2 text-right font-medium">G</th>
+                      <th className="px-3 py-2 text-right font-medium">Proj pts</th>
+                      <th className="px-3 py-2 font-medium">80% range</th>
+                      <th className="px-3 py-2 text-right font-medium">
+                        <InfoTip label="VOR">{GLOSSARY.vor}</InfoTip>
+                      </th>
+                      {hasAdp && (
+                        <>
+                          <th className="px-3 py-2 text-right font-medium">
+                            <InfoTip label="ADP">
+                              {GLOSSARY.adp}
+                              {config?.adpFormat ? ` Sample: ${config.adpFormat}, ${size}-team.` : ""}
+                            </InfoTip>
+                          </th>
+                          <th className="px-3 py-2 text-right font-medium">
+                            <InfoTip label={ADP_DELTA_LABEL}>{GLOSSARY.adpDelta}</InfoTip>
+                          </th>
+                        </>
                       )}
+                      {pos === "Overall" && <th className="px-3 py-2 text-right font-medium">Pos rank</th>}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-[#1a1a1a]">
+                    {paged.map((p: Player, i: number) => {
+                      const rank = rankOf(p, pos)
+                      const tier = tierOf.get(p.id) ?? null
+                      // a tier boundary is only meaningful between CONSECUTIVE board rows, so it is
+                      // suppressed while searching (which removes the rows in between)
+                      const startsTier =
+                        tier != null &&
+                        !q.trim() &&
+                        (i === 0 || (tierOf.get(paged[i - 1].id) ?? null) !== tier)
+                      return (
+                        <tr
+                          key={p.id}
+                          className={`hover:bg-[#0f0f0f] ${
+                            startsTier && i > 0 ? "border-t-2 border-t-[#10b981]/30" : ""
+                          }`}
+                        >
+                          <td className="px-3 py-2 font-medium text-gray-500">{rank}</td>
+                          <td className="px-3 py-2 text-center">
+                            {tier == null ? (
+                              <span className="text-[10px] text-gray-700">—</span>
+                            ) : startsTier ? (
+                              <span className="rounded border border-[#10b981]/40 bg-[#10b981]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#10b981]">
+                                T{tier}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-gray-700">{tier}</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className="flex items-center gap-1.5">
+                              <span className="font-medium text-gray-200">{p.name}</span>
+                              {p.rookie && <RookieBadge />}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <PosBadge pos={p.pos} />
+                          </td>
+                          <td className="px-3 py-2 text-gray-400">{teamLabel(p)}</td>
+                          <td className="px-3 py-2 text-right text-gray-500">{p.bye ?? "—"}</td>
+                          <td className="px-3 py-2 text-right text-gray-400">{num(p.g)}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-gray-100">{num(p.pts)}</td>
+                          <td className="w-40 px-3 py-2">
+                            {p.ptsP10 != null && p.ptsP90 != null && domain ? (
+                              <>
+                                {/* every rookie's band is class-level (shared across his draft
+                                    tier), so it is demoted rather than shown as his own range */}
+                                <RangeCell p10={p.ptsP10} p90={p.ptsP90} classLevel={p.rookie} />
+                                <IntervalBar
+                                  p10={p.ptsP10}
+                                  point={p.pts}
+                                  p90={p.ptsP90}
+                                  min={domain.min}
+                                  max={domain.max}
+                                  classLevel={p.rookie}
+                                />
+                              </>
+                            ) : (
+                              <span className="text-[11px] text-gray-600">—</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-right text-gray-300">{num(p.vor)}</td>
+                          {hasAdp && (
+                            <>
+                              <td className="px-3 py-2 text-right text-gray-400">
+                                {p.adp != null ? num(p.adp) : "—"}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                <AdpDelta delta={p.adp != null ? p.adp - rank : null} />
+                              </td>
+                            </>
+                          )}
+                          {pos === "Overall" && (
+                            <td className="px-3 py-2 text-right text-gray-500">
+                              {p.pos}
+                              {p.posRank}
+                            </td>
+                          )}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-3">
+                <Pagination
+                  page={page}
+                  pageSize={pageSize}
+                  total={rows.length}
+                  onPage={setPage}
+                  onPageSize={setPageSize}
+                />
+              </div>
+            </>
           )}
 
           <div className="mt-6">
@@ -196,6 +354,15 @@ export function RankingsBoard() {
                 re-derives replacement level for that roster shape and league size — so superflex lifts
                 quarterbacks and full-PPR lifts pass-catchers for a real reason, not a cosmetic tweak.
               </p>
+              {hasAdp && (
+                <p className="mt-2">
+                  <span className="font-semibold text-gray-300">About the ADP column.</span> ADP is
+                  where the public is drafting these players, shown so you can see where our board and
+                  the room disagree. We are not claiming our order is the better one — a gap is a
+                  prompt to look, and the 80% range next to it tells you how much the model actually
+                  knows. Undrafted players show no ADP.
+                </p>
+              )}
             </UncertaintyNote>
           </div>
         </>

@@ -122,7 +122,7 @@ def _projection_frame() -> pd.DataFrame:
 
 # Every key the Projections table reads. Dropping one blanks a column with no error.
 _PROJECTION_KEYS = {
-    "id", "name", "pos", "team", "bye", "rookie", "draftPick", "conf", "g",
+    "id", "name", "pos", "team", "bye", "rookie", "draftPick", "conf", "g", "adp",
     "fpStd", "fpHalf", "fpPpr", "fpSd", "fpP10", "fpP90", "uncType",
     "passAtt", "passCmp", "passYds", "passTd", "passInt",
     "rushAtt", "rushYds", "rushTd", "tgt", "rec", "recYds", "recTd", "fum", "twoPt",
@@ -149,6 +149,98 @@ def test_projection_rookie_gets_a_backfilled_team_and_int_draft_slot():
     assert rookie["rookie"] is True
     assert rookie["team"] == "LV"          # MVP-1 leaves a rookie's team NULL
     assert rookie["draftPick"] == 1        # an int, not 1.0
+
+
+# ── interval data quality ─────────────────────────────────────────────────────
+
+
+def _rec(name, p10, p90, point):
+    return {"name": name, "fpP10": p10, "fpP90": p90, "fpPpr": point}
+
+
+def test_interval_audit_is_quiet_on_healthy_per_player_bands():
+    healthy = [_rec("A", 100.0, 200.0, 150.0), _rec("B", 80.0, 190.0, 130.0)]
+    assert ex.audit_interval_quality(healthy) == []
+
+
+def test_interval_audit_flags_a_band_shared_across_players():
+    # The rookie failure mode: one band pasted onto many players is a CLASS-level range. It is
+    # invisible to any per-row check — only comparing rows to each other reveals it.
+    shared = [_rec("A", 26.5, 277.0, 268.3), _rec("B", 26.5, 277.0, 30.0), _rec("C", 26.5, 277.0, 40.0)]
+    findings = ex.audit_interval_quality(shared)
+    assert any("shared" in f for f in findings), findings
+    assert any("3" in f for f in findings), findings
+
+
+def test_interval_audit_flags_a_point_outside_its_own_band():
+    findings = ex.audit_interval_quality([_rec("A", 100.0, 200.0, 260.0)])
+    assert any("OUTSIDE" in f for f in findings), findings
+
+
+def test_interval_audit_flags_a_point_pinned_to_the_bands_extreme_tail():
+    # A shared band cannot centre on every player it covers, so this is the tell-tale symptom.
+    findings = ex.audit_interval_quality([_rec("A", 26.5, 277.0, 270.0)])
+    assert any("extreme 5% tail" in f for f in findings), findings
+
+
+def test_interval_audit_never_raises_on_missing_bands():
+    # ALERT-tier: the audit warns, it must never break an export.
+    assert ex.audit_interval_quality([{"name": "A", "fpP10": None, "fpP90": None, "fpPpr": 10.0}]) == []
+    assert ex.audit_interval_quality([]) == []
+
+
+# ── market ADP (the reference column) ─────────────────────────────────────────
+
+
+def test_every_shipped_preset_maps_to_an_adp_format():
+    # A preset with no mapping would silently fall back to PPR — which on a superflex board makes
+    # every QB look like a huge "value" that is purely a mismatched-reference artefact.
+    from quant_sports_intel_models.football.nfl.fantasy.league_presets import PRESETS
+
+    for name in PRESETS:
+        assert ex.PRESET_ADP_FORMAT.get(name), f"preset {name} has no ADP format mapping"
+    assert ex.PRESET_ADP_FORMAT["superflex"] == "2qb", "superflex must use the 2QB ADP sample"
+
+
+def test_attach_adp_matches_on_normalized_name_and_position():
+    recs = ex.board_records(_board_frame())
+    # the ADP side spells him differently (suffix + case) — the shared normalizer must still match
+    matched = ex._attach_adp(recs, {("james cook", "RB"): 41.3})
+    assert matched == 1
+    assert recs[0]["adp"] == 41.3
+
+
+def test_adp_nickname_aliases_resolve_to_the_nflverse_name():
+    # A first-name nickname mismatch (FFC "Kenny Gainwell" vs nflverse "KENNETH GAINWELL") drops a
+    # real draftable player's ADP SILENTLY — nothing errors, the column just reads "—". The alias
+    # map is the cure; this pins the ones we have found so a normalizer change can't undo them.
+    from quant_sports_intel_models.football.nfl.fantasy import adp_source as A
+
+    assert A._normalize_name("Kenny Gainwell") == A._normalize_name("KENNETH GAINWELL")
+    assert A._normalize_name("Hollywood Brown") == A._normalize_name("MARQUISE BROWN")
+
+
+def test_attach_adp_leaves_an_undrafted_player_null():
+    # Undrafted in that sample is a real signal (nobody is taking him), not a data gap — it must
+    # stay null rather than defaulting to a number that would sort as though he were drafted early.
+    recs = ex.board_records(_board_frame())
+    assert ex._attach_adp(recs, {}) == 0
+    assert all(r["adp"] is None for r in recs)
+
+
+def test_adp_is_declared_even_when_the_fetch_never_runs():
+    # `adp` is part of the record shape, not something _attach_adp introduces — otherwise a failed
+    # FFC fetch would ship records missing a key the UI reads.
+    assert "adp" in ex.board_records(_board_frame())[0]
+    assert "adp" in ex.projection_records(_projection_frame())[0]
+
+
+def test_adp_lookup_is_best_effort(monkeypatch):
+    # FFC is an external free API; a failure must degrade the ADP column, never fail the export.
+    from quant_sports_intel_models.football.nfl.fantasy import adp_source as A
+
+    monkeypatch.setattr(A, "fetch_ffc_adp", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert ex.adp_lookup(2026, "ppr", 12) == {}
 
 
 def test_projection_veteran_draft_slot_stays_null():

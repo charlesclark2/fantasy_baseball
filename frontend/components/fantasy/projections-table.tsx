@@ -8,16 +8,21 @@
 // (standard nflverse std/half/PPR) used to order the table, and it says so. Your league's actual
 // scoring lives on Rankings / League Board, which re-score this same raw line per format.
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Search } from "lucide-react"
 import { useFantasyProjections, FANTASY_SEASON } from "@/lib/fantasy-queries"
 import type { ProjectedPlayer } from "@/lib/fantasy"
 import {
+  ALL_ROWS,
   ConfidenceBadge,
   EmptyBlock,
+  GLOSSARY,
+  InfoTip,
   IntervalBar,
   LoadingBlock,
+  Pagination,
   PosBadge,
+  RangeCell,
   PositionTabs,
   ProvenanceLine,
   RookieBadge,
@@ -82,31 +87,49 @@ export function ProjectionsTable() {
   const [scoring, setScoring] = useState<Scoring>("fpPpr")
   const [q, setQ] = useState("")
   const [rookiesOnly, setRookiesOnly] = useState(false)
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState<number>(50)
 
   const players = data?.players ?? []
 
-  const rows = useMemo(() => {
-    const needle = q.trim().toLowerCase()
+  // Rank is assigned on the position-filtered, scoring-sorted board and then CARRIED, so searching
+  // (or filtering to rookies) narrows the rows WITHOUT renumbering them. A search that renumbers
+  // hides the one thing you searched for — where the player actually sits on the board.
+  const ranked = useMemo(() => {
     return players
       .filter((p) => (pos === "All" ? true : p.pos === pos))
-      .filter((p) => (rookiesOnly ? p.rookie : true))
-      .filter((p) => (needle ? p.name.toLowerCase().includes(needle) : true))
       .slice()
       .sort((a, b) => (b[scoring] ?? -Infinity) - (a[scoring] ?? -Infinity))
-  }, [players, pos, q, rookiesOnly, scoring])
+      .map((p, i) => ({ player: p, rank: i + 1 }))
+  }, [players, pos, scoring])
+
+  const rows = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    return ranked
+      .filter(({ player }) => (rookiesOnly ? player.rookie : true))
+      .filter(({ player }) => (needle ? player.name.toLowerCase().includes(needle) : true))
+  }, [ranked, q, rookiesOnly])
+
+  const paged = useMemo(
+    () => (pageSize === ALL_ROWS ? rows : rows.slice(page * pageSize, page * pageSize + pageSize)),
+    [rows, page, pageSize],
+  )
+
+  useEffect(() => setPage(0), [pos, q, rookiesOnly, scoring])
 
   // A shared interval domain across the visible rows, so bar widths are comparable down the column.
   const domain = useMemo(() => {
     let min = Infinity
     let max = -Infinity
-    for (const p of rows) {
-      if (p.fpP10 != null) min = Math.min(min, p.fpP10)
-      if (p.fpP90 != null) max = Math.max(max, p.fpP90)
+    for (const { player } of paged) {
+      if (player.fpP10 != null) min = Math.min(min, player.fpP10)
+      if (player.fpP90 != null) max = Math.max(max, player.fpP90)
     }
     return Number.isFinite(min) && Number.isFinite(max) ? { min, max } : { min: 0, max: 1 }
-  }, [rows])
+  }, [paged])
 
   const statCols = STAT_COLS[pos] ?? []
+  const hasAdp = useMemo(() => players.some((p) => p.adp != null), [players])
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -172,10 +195,20 @@ export function ProjectionsTable() {
           </div>
 
           <p className="mb-3 text-[11px] text-gray-600">
-            {`Showing ${rows.length.toLocaleString()} players. The points column is a reference ${SCORING_LABEL[
+            {`The points column is a reference ${SCORING_LABEL[
               scoring
             ].toLowerCase()} scoring used to order this table — for your league's own scoring and roster shape, use Rankings or the League Board.`}
           </p>
+
+          <div className="mb-3">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={rows.length}
+              onPage={setPage}
+              onPageSize={setPageSize}
+            />
+          </div>
 
           <div className="overflow-x-auto rounded-lg border border-[#262626]">
             <table className="w-full min-w-[900px] text-left text-xs">
@@ -196,14 +229,30 @@ export function ProjectionsTable() {
                   {/* The interval is carried on the PPR total only, so it is labelled that way
                       rather than silently implying it tracks the selected reference scoring. */}
                   <th className="px-3 py-2 font-medium">80% range (PPR)</th>
-                  <th className="px-3 py-2 font-medium">Confidence</th>
-                  <th className="px-3 py-2 font-medium">Range basis</th>
+                  {hasAdp && (
+                    <th className="px-3 py-2 text-right font-medium">
+                      <InfoTip label="ADP">
+                        {GLOSSARY.adp}
+                        {` Sample: ${data?.adp_format ?? "ppr"}, ${data?.adp_teams ?? 12}-team — this page is scoring-independent, so the reference is pinned rather than varying.`}
+                      </InfoTip>
+                    </th>
+                  )}
+                  <th className="px-3 py-2 font-medium">
+                    <InfoTip label="Confidence">{GLOSSARY.confidence}</InfoTip>
+                  </th>
+                  <th className="px-3 py-2 font-medium">
+                    <InfoTip label="Range basis">
+                      Whether the 80% range is specific to this player or shared across a class of
+                      players. {UNCERTAINTY_HELP.empirical} {UNCERTAINTY_HELP.calibrated}
+                    </InfoTip>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#1a1a1a]">
-                {rows.map((p, i) => (
+                {paged.map(({ player: p, rank }) => (
                   <tr key={p.id} className="hover:bg-[#0f0f0f]">
-                    <td className="px-3 py-2 text-gray-600">{i + 1}</td>
+                    {/* the rank carried from the unsearched board — searching must not renumber */}
+                    <td className="px-3 py-2 text-gray-600">{rank}</td>
                     <td className="px-3 py-2">
                       <span className="flex items-center gap-1.5">
                         <span className="font-medium text-gray-200">{p.name}</span>
@@ -228,17 +277,21 @@ export function ProjectionsTable() {
                       {num(p[scoring])}
                     </td>
                     <td className="w-40 px-3 py-2">
-                      <div className="text-[11px] text-gray-400">
-                        {int(p.fpP10)}–{int(p.fpP90)}
-                      </div>
+                      <RangeCell p10={p.fpP10} p90={p.fpP90} classLevel={p.uncType === "calibrated"} />
                       <IntervalBar
                         p10={p.fpP10}
                         point={p.fpPpr}
                         p90={p.fpP90}
                         min={domain.min}
                         max={domain.max}
+                        classLevel={p.uncType === "calibrated"}
                       />
                     </td>
+                    {hasAdp && (
+                      <td className="px-3 py-2 text-right text-gray-400">
+                        {p.adp != null ? num(p.adp) : "—"}
+                      </td>
+                    )}
                     <td className="px-3 py-2">
                       <ConfidenceBadge conf={p.conf} />
                     </td>
@@ -254,13 +307,21 @@ export function ProjectionsTable() {
             </table>
           </div>
 
+          <div className="mt-3">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={rows.length}
+              onPage={setPage}
+              onPageSize={setPageSize}
+            />
+          </div>
+
           <div className="mt-6">
             <UncertaintyNote>
               <p className="mt-2">
                 <span className="font-semibold text-gray-300">Two kinds of range.</span>{" "}
-                {UNCERTAINTY_HELP.empirical} {UNCERTAINTY_HELP.calibrated} A rookie&apos;s band is wide
-                because rookie outcomes genuinely are — treat the point projection there as the middle
-                of a very broad set of possibilities, not a forecast.
+                {UNCERTAINTY_HELP.empirical} {UNCERTAINTY_HELP.calibrated}
               </p>
               <p className="mt-2">
                 Kickers and defences are not projected, and the 80% range shown is on the reference

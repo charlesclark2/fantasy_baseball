@@ -1,6 +1,6 @@
 {
   "season": 2026,
-  "generated_at": "2026-07-26T07:06:29.878269+00:00",
+  "generated_at": "2026-07-29T15:31:44.221798+00:00",
   "source": "lake",
   "positions": [
     "QB",
@@ -18,6 +18,7 @@
       "label": "Full-PPR",
       "ppr": "ppr",
       "superflex": false,
+      "adpFormat": "ppr",
       "description": "Full-PPR (1.0/reception), 12-team, 1QB/2RB/2WR/1TE/1FLEX.",
       "roster": [
         {
@@ -96,6 +97,7 @@
       "label": "Full-PPR \u00b7 3-WR",
       "ppr": "ppr",
       "superflex": false,
+      "adpFormat": "ppr",
       "description": "Full-PPR (1.0/reception), 12-team, 1QB/2RB/3WR/1TE/1FLEX (3-WR roster).",
       "roster": [
         {
@@ -174,6 +176,7 @@
       "label": "Half-PPR",
       "ppr": "half",
       "superflex": false,
+      "adpFormat": "half-ppr",
       "description": "Half-PPR (0.5/reception), 12-team, 1QB/2RB/2WR/1TE/1FLEX.",
       "roster": [
         {
@@ -252,6 +255,7 @@
       "label": "Half-PPR \u00b7 3-WR",
       "ppr": "half",
       "superflex": false,
+      "adpFormat": "half-ppr",
       "description": "Half-PPR (0.5/reception), 12-team, 1QB/2RB/3WR/1TE/1FLEX (3-WR roster).",
       "roster": [
         {
@@ -330,6 +334,7 @@
       "label": "Standard (non-PPR)",
       "ppr": "standard",
       "superflex": false,
+      "adpFormat": "standard",
       "description": "Standard (non-PPR), 12-team, 1QB/2RB/2WR/1TE/1FLEX.",
       "roster": [
         {
@@ -408,6 +413,7 @@
       "label": "Standard \u00b7 3-WR",
       "ppr": "standard",
       "superflex": false,
+      "adpFormat": "standard",
       "description": "Standard (non-PPR), 12-team, 1QB/2RB/3WR/1TE/1FLEX (3-WR roster).",
       "roster": [
         {
@@ -486,6 +492,7 @@
       "label": "Superflex (Full-PPR)",
       "ppr": "ppr",
       "superflex": true,
+      "adpFormat": "2qb",
       "description": "Superflex full-PPR, 12-team, adds a QB-eligible SUPERFLEX slot.",
       "roster": [
         {
@@ -570,5 +577,12 @@
         }
       ]
     }
-  ]
+  ],
+  "projections": {
+    "players": 716,
+    "adp_format": "ppr",
+    "adp_teams": 12,
+    "model_version": "nfl_fantasy_fastpath_v1",
+    "base_season": 2025
+  }
 }

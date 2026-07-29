@@ -4,6 +4,23 @@
     "items": [
       {
         "tag": "new",
+        "tag": "improved",
+        "text": "A round of refinements to the NFL fantasy boards. Rankings now groups players into tiers — a tier breaks where there is an unusually large drop to the next player, which is the practical draft question: inside a tier you can take whoever you like, but letting a tier run out before your next pick costs you real value. The League Board now names the actual player sitting at each position's replacement level, so 'replacement' stops being an abstract number and becomes 'better than that guy'. Season Projections gains pagination and keeps a player's board position visible when you search for him, instead of renumbering the list. The ADP difference column is now labelled 'vs ADP' rather than a mathematical symbol, and the Confidence column explains itself — it measures how much played history sits behind a projection, which is not the same as how good the player is. Column explanations now open on tap as well as hover, so they work on a phone. Available to subscribers."
+      },
+      {
+        "tag": "improved",
+        "text": "Made rookie projection ranges honest about what they are. A rookie has never played an NFL game, so his 80% range is not calculated from his own history — it is a range shared by every rookie drafted around the same slot. Previously that looked identical to a veteran's own range, which made a very wide rookie band read as a precise statement about that player. Rookie ranges are now labelled 'Class-level' and shown muted, with an explanation, so you can tell at a glance which ranges are specific to a player and which are a statement about rookies in general. The underlying projection is unchanged; we are working on genuinely per-player rookie ranges."
+      },
+      {
+        "tag": "new",
+        "text": "Added average draft position (ADP) to the NFL fantasy Rankings and League Board, alongside a difference column showing where our board and the public disagree. ADP is drawn from thousands of real public drafts and is matched to your scoring format and league size — that matching matters: a top quarterback goes around pick 28 in full-PPR but inside the first two picks in superflex, so a single 'ADP' number would be badly misleading on a superflex board. A positive difference means the room typically drafts a player later than we rank him; a negative one means they take him earlier. This is a reference point so you can see where we differ, not a claim that our order is the better one — read it next to the 80% range, which tells you how sure the model actually is. Players nobody is drafting simply show no ADP. Available to subscribers."
+      },
+      {
+        "tag": "improved",
+        "text": "Made the NFL fantasy boards easier to read and work with. Column headers for the terms of art — value over replacement, replacement level, next at position, ADP and the ADP difference — now explain themselves on hover, so you no longer have to infer what a column means. Rankings is paginated (50 players a page by default, switchable to 25, 100, or all of them), and you can export the current rankings to CSV — the export includes every player matching your filters, not just the page you are looking at. Available to subscribers."
+      },
+      {
+        "tag": "new",
         "text": "Opened three NFL fantasy pages under NFL → Fantasy: Projections, Rankings, and the League Board. Projections lists every projectable player's 2026 season line — the passing, rushing and receiving totals we expect, the games we expect them to play, and an 80% range on their fantasy points, so you can see how confident the model is rather than just a single number. Rankings and the League Board take that same projection and re-score it for your league: pick your scoring format (standard, half-PPR, full-PPR, superflex, the 3-WR variants) and your league size, and the board re-ranks accordingly — superflex really does lift quarterbacks, because the roster shape changes how many of them start. The League Board adds value over replacement, which is what makes a quarterback and a running back comparable on one list, and it shows the replacement level it used for each position instead of asking you to take it on faith. Every number is a projection with a range attached, and a wide range is the model telling you it doesn't know — rookies in particular carry very wide ranges because rookie outcomes genuinely are. This is a projection and transparency tool for your own draft decisions; modelling is ongoing, we make no claim that it beats any particular ranking, and nothing here is betting advice. Available to subscribers."
       }
     ]

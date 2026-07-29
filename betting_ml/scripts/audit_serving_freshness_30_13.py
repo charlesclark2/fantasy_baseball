@@ -98,17 +98,39 @@ def _scalar(cur, sql: str):
     return r[0] if r else None
 
 
-def _ts_pair(cur, expr: str, frm: str, where: str = "") -> tuple:
+def _ts_pair(cur, expr: str, frm: str, where: str = "", *, is_ltz: bool = False) -> tuple:
     """Return (display_string, epoch_seconds) for a timestamp expression.
 
-    Zone handling: `ingestion_ts` is TIMESTAMP_NTZ stored in SESSION-LOCAL wall clock
-    (verified: max(ingestion_ts) tracks current_timestamp in the -07 session), while
-    `last_altered` is TIMESTAMP_LTZ (absolute). Casting BOTH to `::timestamp_ntz`
-    renders each in the session-local wall clock; `epoch_second` then treats both on
-    the same as-if-UTC basis, so the constant offset cancels and the DIFFERENCE is the
-    true lag (positive ⇒ ingested after build = stale)."""
+    ⚠️ ZONE HANDLING — THE PREMISE THIS FUNCTION WAS BUILT ON IS NO LONGER TRUE.
+    The original docstring asserted that `ingestion_ts` is TIMESTAMP_NTZ "stored in
+    SESSION-LOCAL wall clock (verified: max(ingestion_ts) tracks current_timestamp in the
+    -07 session)", so casting BOTH it and the TIMESTAMP_LTZ `last_altered` to
+    `::timestamp_ntz` rendered each in session-local wall clock and the constant offset
+    CANCELLED in the difference. That reasoning was correct WHEN WRITTEN.
+
+    It is FALSE as of the 2026-07-23 retired-source repoint, which moved
+    `stg_statsapi_probable_pitchers` onto `lakehouse_ext` and with it `ingestion_ts` from
+    session-local PT to **UTC** (verified 2026-07-29: max(ingestion_ts)=15:00:31 while the
+    -07 session's current_timestamp was 08:12 — it now tracks UTC, ~7h ahead, i.e. exactly
+    NOT what the old docstring claimed). The offset therefore no longer cancels: the lag
+    came out **+420 min** too large. The identical cast in `predict_today._FRESHNESS_QUERY`
+    is what false-abstained every slate 2026-07-24 → 07-29.
+
+    CURE: never let the two sides disagree about what clock they are on. A TIMESTAMP_LTZ
+    (`last_altered`) already carries an absolute instant — take its epoch DIRECTLY; a
+    `::timestamp_ntz` cast on it is a timezone CONVERSION, not a type tidy-up. An NTZ
+    column storing UTC is already on the UTC basis. Both then sit on a true UTC epoch and
+    the DIFFERENCE is the real lag (positive ⇒ ingested after build = stale).
+
+    Pass `is_ltz=True` for a TIMESTAMP_LTZ source (e.g. information_schema.last_altered).
+    The DISPLAY string is still rendered in session-local wall clock for readability — it
+    is cosmetic and never feeds the arithmetic. ⚠️ That display is precisely what made the
+    bug invisible: `to_varchar(last_altered::timestamp_ntz,…)` prints a wholly plausible
+    timestamp while the epoch beneath it is 7h wrong."""
+    epoch_expr = f"date_part(epoch_second, ({expr}))" if is_ltz \
+        else f"date_part(epoch_second, ({expr})::timestamp_ntz)"
     cur.execute(f"select to_varchar(({expr})::timestamp_ntz,'YYYY-MM-DD HH24:MI'), "
-                f"date_part(epoch_second, ({expr})::timestamp_ntz) from {frm} {where}")
+                f"{epoch_expr} from {frm} {where}")
     r = cur.fetchone()
     if not r or r[0] is None:
         return (None, None)
@@ -118,8 +140,10 @@ def _ts_pair(cur, expr: str, frm: str, where: str = "") -> tuple:
 def _build_times(cur) -> dict:
     out = {}
     for schema, table in {(b["build_table"]) for b in _BLOCKS}:
+        # is_ltz: information_schema.last_altered is TIMESTAMP_LTZ — take its epoch directly.
         out[(schema, table)] = _ts_pair(cur, "last_altered", f"{_DB}.information_schema.tables",
-                                        f"where table_schema='{schema}' and table_name='{table}'")
+                                        f"where table_schema='{schema}' and table_name='{table}'",
+                                        is_ltz=True)
     return out
 
 

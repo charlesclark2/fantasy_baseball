@@ -113,15 +113,20 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
         "non_blocking": True,
     },
     # ── E11.8 additions (2026-06-22) ────────────────────────────────────────
-    # Derivative odds (team_totals / alt_totals) — Railway E2.0b cron, every 30 min.
-    # EVAL/CLV-only (not model-training inputs), so peripheral (non_blocking).
-    # 4h = ≥ 7 missed cron fires; only the first stall within a day is meaningful.
-    "baseball_data.oddsapi.derivative_odds_raw": {
-        "ts_col": "ingestion_ts",
-        "max_stale_hours": 4,
-        "game_day_only": False,
-        "non_blocking": True,
-    },
+    # ⛔ derivative_odds_raw REMOVED 2026-07-29 — THIRD instance of the retired-SF-writer class
+    # (after mlb_odds_raw 2026-07-05 and monthly_schedule 2026-07-23, both noted above).
+    # Derivative capture went S3-NATIVE ~2026-07-07 (`derivative_odds_backfill.py`: "retires the
+    # daily export bridge once mode='s3'"), so the Snowflake oddsapi.derivative_odds_raw table is
+    # FROZEN BY DESIGN — verified 2026-07-29: SF max(ingestion_ts) = 2026-07-07 00:00:07 (543h
+    # "stale" against a 4h threshold) while S3 lakehouse_raw/derivative_odds_raw/ has partitions
+    # through dt=2026-07-29. ⇒ this entry had emitted a FALSE stale-WARN on every run for 22 days.
+    # Derivative odds are EVAL/CLV-only (never a model-training input) and the live feed is healthy;
+    # freshness for it belongs on the S3 mirror, not this SF table. Do NOT re-add a SF-table entry
+    # unless derivative capture is reverted to write Snowflake.
+    # ⭐ PATTERN (three for three): when a capture flips S3-native, its SF staleness entry must be
+    # removed IN THE SAME CHANGE — otherwise the monitor cries wolf forever and real breaches in the
+    # same summary stop being read. Sibling of the retired-source guard registry
+    # (betting_ml/tests/test_retired_source_guard.py).
     # Park factors — annual source (game_year-1), updated once at season start via
     # betting_ml/scripts/eb_priors/fit_park_priors.py (hand-run). Feeds
     # feature_pregame_park_features → feature_pregame_game_features_raw → serving.
@@ -223,6 +228,21 @@ def _max_ingestion_timestamp(
     (e.g. one check per ``data_source`` in a multi-source table), so a single source
     going stale isn't masked by another source keeping the table-level MAX fresh.
     The clause is a trusted constant from FRESHNESS_THRESHOLDS, never user input.
+
+    ✅ ZONE ASSUMPTION — AUDITED AND CONFIRMED CORRECT 2026-07-29 (do not "fix" it).
+    The caller labels a naive result UTC (``ts.replace(tzinfo=timezone.utc)``) and diffs it
+    against ``now_utc``. That is right only if every ``ts_col`` is UTC-stored, which the
+    E11.20 phase-2b freshness-gate defect made worth re-checking (there, a session-local PT
+    value was compared against a UTC one and inflated the lag by exactly 7h).
+    VERIFIED at the WRITERS, not by inference: all three ``*_sequential_posteriors``
+    ``update_ts`` columns are written by
+    ``datetime.now(timezone.utc).replace(tzinfo=None)`` (update_{player,team,matchup_cell}
+    _posteriors.py) ⇒ naive UTC ⇒ this function is correct as written.
+    ⚠️ A wall-clock reading ALONE cannot settle this: max(update_ts)=08:15 with a PT session
+    at 08:50 and UTC at 15:50 is equally consistent with "PT, 35 min ago" and "UTC, 7h35m
+    ago" — the second is the truth here (the daily writes these ~08:15 UTC). Always confirm
+    at the writer before converting a timezone.
+    DATE columns (``fit_date``/``as_of_date``) are calendar dates and are unaffected.
     """
     cur = con.cursor()
     inner = f"MAX({ts_col}::TIMESTAMP_NTZ)"
