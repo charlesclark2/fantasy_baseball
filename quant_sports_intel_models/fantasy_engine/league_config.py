@@ -110,6 +110,11 @@ class SportProfile:
     * `base_points_column`/`base_sd_column` — the projection's convenience point total + its sd, used
                             ONLY to carry an uncertainty CV through the rescore (see `scoring`). Kept
                             optional: a projection without them simply yields no interval.
+    * `base_p10_column`/`base_p90_column` — the projection's OWN 80% bounds. Optional, and supplying
+                            them changes the rescore materially: with them, each SIDE of the band is
+                            carried through independently, so an ASYMMETRIC interval survives. Without
+                            them the rescore can only rebuild a symmetric ±z·sd band, which silently
+                            re-centres a skewed interval (NF1.7 — the rookie band is very skewed).
     * `position_aliases`  — fold odd raw positions into a ranked one (NFL: FB→RB, so a fullback is
                             RB/flex-eligible rather than an un-scarce island).
     """
@@ -120,6 +125,8 @@ class SportProfile:
     position_column: str = "position"
     base_points_column: str | None = None
     base_sd_column: str | None = None
+    base_p10_column: str | None = None
+    base_p90_column: str | None = None
     position_aliases: dict[str, str] = field(default_factory=dict)
 
     def normalize_position(self, pos: str | None) -> str | None:

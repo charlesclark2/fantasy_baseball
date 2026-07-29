@@ -559,18 +559,32 @@ def load_rookie_training(con, upto_season: int, schema: str = MARTS_SCHEMA,
     calibrate an honest 80% interval — a band fitted on survivors only claims 80% and covers 68%
     (44% at QB). The POINT curve keeps the default survivor-filtered history: NF1.4 measured the
     zero-inclusive fit walk-forward and it did NOT improve held-out accuracy at any position (see
-    `ablation_results/nf1_4_rookie.md`), so only the interval changes."""
+    `ablation_results/nf1_4_rookie.md`), so only the interval changes.
+
+    🚨 NF1.7 — `projected_nfl_z` / `projected_nfl_z_sd` are carried DELIBERATELY, and dropping them
+    would degrade the per-player band SILENTLY, in two separate ways:
+      * without `projected_nfl_z`, `rookie_point_projection` rebuilds each historical rookie's point
+        WITHOUT the P1A residual nudge — so the band would be fitted against a conditioning variable
+        that differs from the one it is pasted onto: the class-level defect in a new disguise;
+      * without `projected_nfl_z_sd`, the `z_sd` column of the shipped quantile regression's design
+        matrix is a CONSTANT ZERO at fit time, so its coefficient fits to ~0 and the feature is
+        quietly discarded — while at serve time the live P1A rows DO carry a real sd.
+    Neither failure raises. Guard: `betting_ml/tests/test_nf1_7_rookie_intervals.py`."""
     rk = pd.read_parquet(_ROOKIE_PARQUET)
+    keep = ["gsis_id", "position_group", "draft_overall", "draft_year",
+            "projected_nfl_z", "projected_nfl_z_sd"]
     rk = rk[
         rk["position_group"].isin(ROOKIE_POSITIONS)
         & pd.to_numeric(rk["draft_overall"], errors="coerce").notna()
         & (pd.to_numeric(rk["draft_year"], errors="coerce") <= upto_season)
-    ][["gsis_id", "position_group", "draft_overall", "draft_year"]].copy()
+    ][[c for c in keep if c in rk.columns]].copy()
     con.register("rk_train", rk)
     join, having = ("left join", "") if include_zero_game else ("join", "where games > 0")
     hist = con.sql(f"""
         with ry as (
             select r.gsis_id, r.position_group, r.draft_overall, r.draft_year,
+                any_value(r.projected_nfl_z) as projected_nfl_z,
+                any_value(r.projected_nfl_z_sd) as projected_nfl_z_sd,
                 coalesce(count_if(f.played_flag and not f.is_bye), 0) as games,
                 sum(case when f.played_flag then f.pass_attempts else 0 end)::double as pass_att,
                 sum(case when f.played_flag then f.pass_completions else 0 end)::double as pass_cmp,

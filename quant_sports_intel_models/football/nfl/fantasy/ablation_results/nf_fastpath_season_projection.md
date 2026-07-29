@@ -1,6 +1,6 @@
 # NF-FASTPATH — 2026 NFL fantasy season projections (raw stat-line, MVP-1)
 
-**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-07-29T18:02:21.141346+00:00
+**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-07-29T21:58:21.588116+00:00
 
 > ⚖️ **A PROJECTION PRODUCT, edge-independent** — no `best_alpha`/PBO/DSR/CLV gate (that is the betting posture). The gate is FACE-VALIDITY + COVERAGE + a holdout rank-correlation sanity check. The emitted `proj_*` columns are a **RAW STAT LINE** (season totals); the `proj_fp_*` points are a CONVENIENCE (standard nflverse scoring) for ranking/validation only — **MVP-2 / NF-C1 rescore the raw line per league**. Uncertainty is surfaced (an 80% PPR interval), not hidden; NULL = unknown kept NULL. Rookie intervals use PARAMETER uncertainty (slot-curve + P1A) and must be recalibrated before pricing.
 
@@ -18,9 +18,9 @@
 
 ```json
 {
-  "n_total": 777,
+  "n_total": 784,
   "n_veterans": 703,
-  "n_rookies": 74,
+  "n_rookies": 81,
   "n_returning_from_absence": 61,
   "top_returning_from_absence": [
     {
@@ -126,17 +126,17 @@
   ],
   "by_position": {
     "FB": 17,
-    "QB": 104,
-    "RB": 176,
-    "TE": 167,
-    "WR": 313
+    "QB": 105,
+    "RB": 177,
+    "TE": 169,
+    "WR": 316
   },
   "n_rookies_by_pos": {
     "FB": 1,
-    "QB": 9,
-    "RB": 11,
-    "TE": 20,
-    "WR": 33
+    "QB": 10,
+    "RB": 12,
+    "TE": 22,
+    "WR": 36
   },
   "n_base_relevant_players_ge4g": 636,
   "n_relevant_gap": 43,
@@ -164,7 +164,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | CHRISTIAN MCCAFFREY | RB         | SF        | veteran  |         15.5 |         279.9 |        198.2 |        361.7 |
 | BAKER MAYFIELD      | QB         | TB        | veteran  |         16.5 |         279.2 |        214.1 |        344.3 |
 | PATRICK MAHOMES     | QB         | KC        | veteran  |         15.0 |         271.2 |        199.0 |        343.3 |
-| Fernando Mendoza    | QB         | nan       | rookie   |         12.4 |         268.3 |         26.5 |        277.0 |
+| Fernando Mendoza    | QB         | nan       | rookie   |         12.4 |         268.3 |         18.5 |        400.1 |
 | CALEB WILLIAMS      | QB         | CHI       | veteran  |         16.5 |         266.4 |        192.5 |        340.4 |
 | BO NIX              | QB         | DEN       | veteran  |         16.5 |         265.4 |        193.7 |        337.2 |
 | DRAKE MAYE          | QB         | NE        | veteran  |         16.5 |         261.5 |        188.7 |        334.3 |
@@ -193,7 +193,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | TREVOR LAWRENCE  | QB         | JAX       | veteran  |         16.5 |         282.5 |        206.2 |        358.8 |
 | BAKER MAYFIELD   | QB         | TB        | veteran  |         16.5 |         279.2 |        214.1 |        344.3 |
 | PATRICK MAHOMES  | QB         | KC        | veteran  |         15.0 |         271.2 |        199.0 |        343.3 |
-| Fernando Mendoza | QB         | nan       | rookie   |         12.4 |         268.3 |         26.5 |        277.0 |
+| Fernando Mendoza | QB         | nan       | rookie   |         12.4 |         268.3 |         18.5 |        400.1 |
 | CALEB WILLIAMS   | QB         | CHI       | veteran  |         16.5 |         266.4 |        192.5 |        340.4 |
 
 ### Top 12 RB
@@ -205,7 +205,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | JONATHAN TAYLOR     | RB         | IND       | veteran  |         15.4 |         247.8 |        165.4 |        330.3 |
 | JAHMYR GIBBS        | RB         | DET       | veteran  |         14.4 |         243.0 |        156.5 |        329.6 |
 | DE'VON ACHANE       | RB         | MIA       | veteran  |         14.4 |         221.5 |        159.8 |        283.1 |
-| Jeremiyah Love      | RB         | nan       | rookie   |         16.0 |         208.4 |         10.4 |        244.6 |
+| Jeremiyah Love      | RB         | nan       | rookie   |         16.0 |         208.4 |         14.6 |        346.3 |
 | SAQUON BARKLEY      | RB         | PHI       | veteran  |         15.3 |         207.8 |        147.9 |        267.6 |
 | DERRICK HENRY       | RB         | BAL       | veteran  |         14.0 |         199.6 |        132.1 |        267.0 |
 | KYREN WILLIAMS      | RB         | LAR       | veteran  |         15.1 |         199.5 |        140.2 |        258.8 |
@@ -224,7 +224,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | JUSTIN JEFFERSON   | WR         | MIN       | veteran  |         16.2 |         200.3 |        149.3 |        251.3 |
 | CEEDEE LAMB        | WR         | DAL       | veteran  |         14.4 |         197.3 |        140.1 |        254.5 |
 | A.J. BROWN         | WR         | NE        | veteran  |         15.7 |         194.8 |        128.9 |        260.8 |
-| Jordyn Tyson       | WR         | nan       | rookie   |         13.6 |         191.8 |         28.9 |        216.3 |
+| Jordyn Tyson       | WR         | nan       | rookie   |         13.6 |         191.4 |         11.1 |        304.9 |
 | CHRIS OLAVE        | WR         | NO        | veteran  |         15.0 |         186.2 |        129.2 |        243.2 |
 | NICO COLLINS       | WR         | HOU       | veteran  |         14.7 |         183.4 |        128.5 |        238.4 |
 | ZAY FLOWERS        | WR         | BAL       | veteran  |         15.6 |         178.4 |        124.7 |        232.2 |
@@ -240,7 +240,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | HAROLD FANNIN JR. | TE         | CLE       | veteran  |         16.2 |         154.8 |        111.4 |        198.2 |
 | TYLER WARREN      | TE         | IND       | veteran  |         16.6 |         150.5 |        111.0 |        190.1 |
 | DALLAS GOEDERT    | TE         | PHI       | veteran  |         16.1 |         141.4 |         92.7 |        190.2 |
-| Kenyon Sadiq      | TE         | nan       | rookie   |         15.3 |         139.5 |          5.3 |        175.1 |
+| Kenyon Sadiq      | TE         | nan       | rookie   |         15.3 |         141.0 |          8.6 |        263.9 |
 | KYLE PITTS SR.    | TE         | ATL       | veteran  |         16.4 |         137.4 |         78.8 |        196.0 |
 | JAKE FERGUSON     | TE         | DAL       | veteran  |         15.8 |         130.5 |         85.1 |        175.9 |
 | MARK ANDREWS      | TE         | BAL       | veteran  |         15.8 |         122.4 |         79.2 |        165.5 |
@@ -254,7 +254,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 ```json
 {
   "pass": true,
-  "n_rookies": 74,
+  "n_rookies": 81,
   "placement": {
     "top1_is_rookie": false,
     "n_rookies_in_top10": 0,
@@ -274,23 +274,23 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 }
 ```
 
-| player_name      | position   |   draft_overall |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 |
-|:-----------------|:-----------|----------------:|-------------:|--------------:|-------------:|-------------:|
-| Fernando Mendoza | QB         |             1.0 |         12.4 |         268.3 |         26.5 |        277.0 |
-| Jeremiyah Love   | RB         |             3.0 |         16.0 |         208.4 |         10.4 |        244.6 |
-| Jordyn Tyson     | WR         |             8.0 |         13.6 |         191.8 |         28.9 |        216.3 |
-| Carnell Tate     | WR         |             4.0 |         13.6 |         172.9 |         28.9 |        216.3 |
-| Kenyon Sadiq     | TE         |            16.0 |         15.3 |         139.5 |          5.3 |        175.1 |
-| Makai Lemon      | WR         |            20.0 |         14.1 |         100.4 |         28.9 |        216.3 |
-| Jadarian Price   | RB         |            32.0 |         13.8 |          89.1 |         10.4 |        244.6 |
-| KC Concepcion    | WR         |            24.0 |         14.1 |          74.4 |         28.9 |        216.3 |
-| Omar Cooper Jr.  | WR         |            30.0 |         14.1 |          62.9 |         28.9 |        216.3 |
-| Denzel Boston    | WR         |            39.0 |         14.1 |          62.2 |         28.9 |        216.3 |
-| Ty Simpson       | QB         |            13.0 |         12.4 |          58.9 |         26.5 |        277.0 |
-| Eli Stowers      | TE         |            54.0 |         13.9 |          51.7 |          5.3 |        175.1 |
-| Germie Bernard   | WR         |            47.0 |         14.1 |          50.6 |         28.9 |        216.3 |
-| Antonio Williams | WR         |            71.0 |         14.1 |          43.0 |         28.9 |        216.3 |
-| Max Klare        | TE         |            61.0 |         13.9 |          41.6 |          5.3 |        175.1 |
+| player_name        | position   |   draft_overall |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 |
+|:-------------------|:-----------|----------------:|-------------:|--------------:|-------------:|-------------:|
+| Fernando Mendoza   | QB         |             1.0 |         12.4 |         268.3 |         18.5 |        400.1 |
+| Jeremiyah Love     | RB         |             3.0 |         16.0 |         208.4 |         14.6 |        346.3 |
+| Jordyn Tyson       | WR         |             8.0 |         13.6 |         191.4 |         11.1 |        304.9 |
+| Carnell Tate       | WR         |             4.0 |         13.6 |         171.3 |         13.6 |        326.0 |
+| Kenyon Sadiq       | TE         |            16.0 |         15.3 |         141.0 |          8.6 |        263.9 |
+| Makai Lemon        | WR         |            20.0 |         14.1 |         100.6 |          7.9 |        239.5 |
+| Jadarian Price     | RB         |            32.0 |         13.8 |          88.3 |          6.2 |        215.4 |
+| KC Concepcion      | WR         |            24.0 |         14.1 |          74.3 |          7.2 |        218.3 |
+| De'Zhaun Stribling | WR         |            33.0 |         14.1 |          63.4 |          6.1 |        198.7 |
+| Omar Cooper Jr.    | WR         |            30.0 |         14.1 |          62.9 |          6.4 |        201.9 |
+| Denzel Boston      | WR         |            39.0 |         14.1 |          62.4 |          5.5 |        191.6 |
+| Ty Simpson         | QB         |            13.0 |         12.4 |          58.1 |          9.4 |        230.0 |
+| Eli Stowers        | TE         |            54.0 |         13.9 |          52.3 |          4.3 |        170.9 |
+| Germie Bernard     | WR         |            47.0 |         14.1 |          50.7 |          4.8 |        174.7 |
+| Antonio Williams   | WR         |            71.0 |         14.1 |          43.3 |          3.4 |        151.6 |
 
 ## 6. NF-D11 — projection UNIVERSE (injured-all-year rescue) + the ADP coverage audit
 
@@ -315,109 +315,6 @@ The base-season anchor used to DELETE any player who missed the entire base seas
 | K.J. OSBORN    | WR         | TEN       |          2024.0 |          4.5 |          16.9 |          0.0 |         44.2 | low          |
 | ERICK ALL JR.  | TE         | CIN       |          2024.0 |          4.7 |          16.2 |          0.0 |         40.5 | low          |
 | CARSON STEELE  | RB         | PHI       |          2024.0 |          6.4 |          15.7 |          0.0 |         33.8 | low          |
-
-### Standing ADP coverage audit (the check that found this)
-
-Every ADP name is normalized and diffed against the projection's own (name, position) set, with the projection ALSO indexed by SURNAME so the two failure classes stay separable: an `alias_candidate` (surname present at that position ⇒ a name-map miss) vs a `true_absence` (genuinely not in our universe ⇒ a MODEL/universe gap). One diff caught both a join bug and this model gap.
-
-```json
-{
-  "n_samples": 8,
-  "pct_matched_min": 99.4,
-  "pct_matched_mean": 99.8,
-  "n_true_absences": 1,
-  "n_alias_candidates": 0,
-  "n_actionable_true_absences": 1,
-  "true_absences": [
-    {
-      "adp_name": "Carson Beck",
-      "position": "QB",
-      "adp": 143.4,
-      "samples": [
-        "2qb/12",
-        "2qb/10"
-      ],
-      "best_adp": 143.4
-    }
-  ],
-  "alias_candidates": [],
-  "by_sample": {
-    "ppr/12": {
-      "n_adp_rows": 226,
-      "n_adp_covered_positions": 185,
-      "n_matched": 185,
-      "pct_matched": 100.0,
-      "n_alias_candidates": 0,
-      "n_true_absences": 0,
-      "n_actionable_true_absences": 0
-    },
-    "ppr/10": {
-      "n_adp_rows": 233,
-      "n_adp_covered_positions": 191,
-      "n_matched": 191,
-      "pct_matched": 100.0,
-      "n_alias_candidates": 0,
-      "n_true_absences": 0,
-      "n_actionable_true_absences": 0
-    },
-    "half-ppr/12": {
-      "n_adp_rows": 201,
-      "n_adp_covered_positions": 168,
-      "n_matched": 168,
-      "pct_matched": 100.0,
-      "n_alias_candidates": 0,
-      "n_true_absences": 0,
-      "n_actionable_true_absences": 0
-    },
-    "half-ppr/10": {
-      "n_adp_rows": 201,
-      "n_adp_covered_positions": 168,
-      "n_matched": 168,
-      "pct_matched": 100.0,
-      "n_alias_candidates": 0,
-      "n_true_absences": 0,
-      "n_actionable_true_absences": 0
-    },
-    "standard/12": {
-      "n_adp_rows": 183,
-      "n_adp_covered_positions": 159,
-      "n_matched": 159,
-      "pct_matched": 100.0,
-      "n_alias_candidates": 0,
-      "n_true_absences": 0,
-      "n_actionable_true_absences": 0
-    },
-    "standard/10": {
-      "n_adp_rows": 183,
-      "n_adp_covered_positions": 159,
-      "n_matched": 159,
-      "pct_matched": 100.0,
-      "n_alias_candidates": 0,
-      "n_true_absences": 0,
-      "n_actionable_true_absences": 0
-    },
-    "2qb/12": {
-      "n_adp_rows": 204,
-      "n_adp_covered_positions": 177,
-      "n_matched": 176,
-      "pct_matched": 99.4,
-      "n_alias_candidates": 0,
-      "n_true_absences": 1,
-      "n_actionable_true_absences": 1
-    },
-    "2qb/10": {
-      "n_adp_rows": 204,
-      "n_adp_covered_positions": 177,
-      "n_matched": 176,
-      "pct_matched": 99.4,
-      "n_alias_candidates": 0,
-      "n_true_absences": 1,
-      "n_actionable_true_absences": 1
-    }
-  },
-  "season": 2026
-}
-```
 
 ## 7. Limitations
 

@@ -85,13 +85,19 @@ export function RookieBadge() {
  *  imply a per-player interval we do not have. Model-side fix is routed to NF1.4. */
 export const UNCERTAINTY_LABEL: Record<string, string> = {
   empirical: "Player",
+  // NF1.7: the rookie band is now PER-PLAYER, so it is labelled — and rendered — as a real interval.
+  // `calibrated` (the class-level tercile bucket) remains a live fallback for a rookie the per-player
+  // fit has too little draft history to speak to, and keeps its honest "Class-level" demotion.
+  calibrated_per_player: "Player",
   calibrated: "Class-level",
 }
 export const UNCERTAINTY_HELP: Record<string, string> = {
   empirical:
     "Player-specific — the range comes from this player's own game-to-game scoring variance across the seasons he has actually played.",
+  calibrated_per_player:
+    "Player-specific — a rookie has no NFL history, so this range is fitted from what drafted rookies with HIS projection, draft slot and position actually went on to score (busts included, counted as zero). It is roughly twice as wide as a veteran's, which is honest: there is genuinely less to go on.",
   calibrated:
-    "Class-level, NOT player-specific — a rookie has no NFL history, so this is the range for rookies at his draft tier, shared by every rookie in that tier. It is deliberately wide, and his point projection can sit anywhere inside it. Treat it as 'rookies are unpredictable', not as a forecast interval for him.",
+    "Class-level, NOT player-specific — the range for rookies at his draft tier, shared by every rookie in that tier. It is deliberately wide, and his point projection can sit anywhere inside it. Treat it as 'rookies are unpredictable', not as a forecast interval for him.",
 }
 
 /** A column header (or any label) with an explainer on hover/focus. These boards use several terms

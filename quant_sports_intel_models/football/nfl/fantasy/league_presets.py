@@ -41,6 +41,11 @@ NFL_PROFILE = SportProfile(
     position_column="position",
     base_points_column="proj_fp_ppr",   # the MVP-1 convenience total the interval was built on
     base_sd_column="fp_ppr_sd",
+    # NF1.7: carry the projection's OWN bounds so an ASYMMETRIC band survives the rescore. The rookie
+    # band is heavily right-skewed (a late pick's p10 is ~0 and his p90 is a real season), and
+    # rebuilding it from a single sd would silently re-centre it — the CV path stays as the fallback.
+    base_p10_column="fp_ppr_p10",
+    base_p90_column="fp_ppr_p90",
     position_aliases={"FB": "RB"},       # fullbacks are RB / flex-eligible, not an un-scarce island
 )
 

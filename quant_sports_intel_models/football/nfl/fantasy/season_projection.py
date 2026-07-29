@@ -953,11 +953,20 @@ class RookieSlotCurve:
     # read off the realized outcomes of the FULL drafted population; empty ⇒ the legacy cv band.
     fp_bands: dict = field(default_factory=dict)
     fp_band_cuts: dict = field(default_factory=dict)       # position -> (tercile cut 1, cut 2)
+    # NF1.7: the PER-PLAYER 80% band that SUPERSEDES the tercile buckets above (which are retained
+    # as the fallback + as the bake-off's degenerate-ceiling anchor). None ⇒ no per-player fit.
+    band_model: "RookieBandModel | None" = None
 
     def band(self, position: str, pred: float) -> tuple[float, float] | None:
-        """The calibrated 80% interval for one rookie, or None when no band was fitted (the caller
-        then falls back to the legacy `fp × cv` width). Always brackets the point projection — a
-        band that excluded its own point estimate would be incoherent."""
+        """The CLASS-LEVEL (tercile-bucket) 80% interval for one rookie, or None when no band was
+        fitted (the caller then falls back to the legacy `fp × cv` width). Always brackets the point
+        projection — a band that excluded its own point estimate would be incoherent.
+
+        ⚠️ NF1.7 SUPERSEDED this as the served band: it quantises to ~3 intervals per position, so
+        every rookie in a bucket carries a byte-identical range while their point projections span an
+        order of magnitude. It is kept because it is the pre-NF1.7 incumbent (the bake-off's
+        degenerate-ceiling anchor) and the fallback when the per-player fit has too little history.
+        Prefer `band_model.band_many(...)`."""
         cuts = self.fp_band_cuts.get(position)
         if cuts is None:
             return None
@@ -992,7 +1001,11 @@ def _slot_bucket(overall: float) -> str:
     return "101+"
 
 
-def fit_rookie_slot_curves(hist: pd.DataFrame, band_hist: pd.DataFrame | None = None) -> RookieSlotCurve:
+def fit_rookie_slot_curves(hist: pd.DataFrame, band_hist: pd.DataFrame | None = None,
+                           *, band_form: str | None = None, band_k: int | None = None,
+                           band_resid_sd_gain: float | None = None,
+                           band_qreg_alpha: float | None = None,
+                           per_player_band: bool = True) -> RookieSlotCurve:
     """Fit the composite rookie model from prior classes.
 
     hist: one row per historical drafted rookie (skill positions) with `position_group`,
@@ -1003,7 +1016,13 @@ def fit_rookie_slot_curves(hist: pd.DataFrame, band_hist: pd.DataFrame | None = 
       rookie including the ~15% (35% at QB) who never played a snap, carried as a real `rookie_fp_ppr
       = 0`. Used ONLY to calibrate the 80% interval; the point curve is unchanged. See
       `_fit_rookie_bands` for why the interval needs the un-filtered population and the curve does
-      not. Omit it and the projection falls back to the legacy `fp × cv` width."""
+      not. Omit it and the projection falls back to the legacy `fp × cv` width.
+
+    NF1.7: when `band_hist` is supplied, a PER-PLAYER band model (`fit_rookie_band_model`) is fitted
+      on top of it and becomes the served band; the NF1.4 tercile buckets stay as the fallback. The
+      `band_*` overrides exist for the bake-off harness — production leaves them at the module
+      defaults (the selected form). `per_player_band=False` reproduces the NF1.4 incumbent exactly,
+      which is what the bake-off's degenerate-ceiling anchor needs."""
     curve = RookieSlotCurve()
     for pos, g in hist.groupby("position_group"):
         overall = pd.to_numeric(g["draft_overall"], errors="coerce")
@@ -1037,6 +1056,18 @@ def fit_rookie_slot_curves(hist: pd.DataFrame, band_hist: pd.DataFrame | None = 
             curve.fp_cv_by_pos[pos] = float(np.clip(fpp.std() / fpp.mean(), 0.35, 1.2))
     if band_hist is not None and not band_hist.empty:
         _fit_rookie_bands(curve, band_hist)
+        if per_player_band:
+            # NF1.7 — the served band. Conditioned on the SAME served point projection the board
+            # displays (`rookie_point_projection`), so the interval is centred on the number the user
+            # sees rather than on a bucket it was averaged into.
+            curve.band_model = fit_rookie_band_model(
+                band_hist, rookie_point_projection(band_hist, curve),
+                form=_ROOKIE_BAND_FORM if band_form is None else band_form,
+                k=_ROOKIE_BAND_K if band_k is None else band_k,
+                resid_sd_gain=(_ROOKIE_BAND_RESID_SD_GAIN if band_resid_sd_gain is None
+                               else band_resid_sd_gain),
+                qreg_alpha=(_ROOKIE_BAND_QREG_ALPHA if band_qreg_alpha is None
+                            else band_qreg_alpha))
     return curve
 
 
@@ -1081,6 +1112,393 @@ def _fit_rookie_bands(curve: RookieSlotCurve, band_hist: pd.DataFrame) -> None:
                                           float(np.quantile(y[sel], hi_q)))
 
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF1.7 — the PER-PLAYER rookie 80% band (bake-off: run_rookie_interval_ablation.py)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# ⚠️ THE DEFECT (NF3 surfacing, 2026-07-29): NF1.4's band above is CLASS-LEVEL. Every rookie in a
+#    (position, prediction-tercile) bucket carries a byte-identical interval, so on the 2026 board 81
+#    rookies shared **12** distinct bands (3 per position) against 647 distinct bands for 703
+#    veterans. Every top-bucket rookie QB carried 26.5–277.0 while their point projections spanned
+#    25.1→268.3 — a 268-point projection sat in the top 3% of "its own" interval and a 25-point rookie
+#    at the bottom of the SAME one. The band carried ~zero per-player information.
+#
+# ⚠️ AND WHY IT HAPPENED — the §0.5 selection-metric landmine in the wild. NF1.4 tuned this band on
+#    COVERAGE (0.678 → 0.834) and a POSITION-CONSTANT band can hit nominal coverage while carrying NO
+#    information at all: coverage is a property of the population, not of the player. So NF1.7 selects
+#    on a PROPER interval score (the Winkler/pinball interval score — sharpness penalised for
+#    miscoverage) with coverage kept strictly as a FLOOR, exactly the E2.1-r rule ("a coverage figure
+#    is a FLOOR, never a target to minimise distance to") applied to intervals.
+#
+# ⭐ AND THE HONEST DIRECTION IS *WIDER*, NOT MERELY DIFFERENTIATED. A rookie has no NFL sample, so
+#    his honest band is generally wider than a comparable veteran's. Sharpness must therefore never be
+#    bought by under-covering — which is precisely what the coverage FLOOR and the bake-off's
+#    ZERO-WIDTH degenerate anchor (a band of width 0 is maximally "sharp" and must LOSE) exist to
+#    prevent. The point projection is UNCHANGED: NF1.4 proved the rookie point is ~unbiased.
+_ROOKIE_BAND_FORMS = ("ratio_q", "ratio_q_floor", "knn_pos", "knn_norm", "qreg", "qreg_sqrt")
+_ROOKIE_BAND_MIN_TRAIN = 40      # below this a position/pool fit is refused → tercile fallback
+# ⬇ THE SHIPPED SELECTION (44 configs, held-out draft classes 2019–2025, PBO 0.029 / spread 27% =
+#    LOW-PBO + WIDE-spread ⇒ a genuinely separated winner). See
+#    `ablation_results/nf1_7_rookie_intervals.md`. Held-out interval score 181.16 vs the class-level
+#    incumbent's 202.14 (−10.4%) at coverage 0.808 (floor 0.80); distinct-band fraction 0.184 → 0.989
+#    and the point projections in the extreme 5% tail of their own band 30/553 → **0**.
+#    ⭐ THE WINNING BAND IS *WIDER* THAN THE ONE IT REPLACES (127.7 vs 124.4 PPR mean, ≈2× a veteran's)
+#    — the win came from putting the width where it belongs per player, not from shrinking it. Which is
+#    the point: sharpness was the SELECTION metric, honesty the CONSTRAINT.
+_ROOKIE_BAND_FORM = "qreg"
+_ROOKIE_BAND_K = 80                  # neighbourhood arms only; unused by the shipped `qreg`
+_ROOKIE_BAND_QREG_ALPHA = 0.01       # a whisper of L1 — it beat the unregularised fit on every metric
+# The P1A parameter-uncertainty WIDENER is left OFF — and this is the shipped value of a genuine TIE,
+# not a clear win. `sdgain` 0.1/0.2 land within 0.2% of the winner on the primary metric while covering
+# 0.841/0.850 against its 0.808, so there is a real temptation to re-pick on that headroom. We do not:
+# coverage was pre-registered as an eligibility FLOOR, and "prefer more headroom" is monotone in
+# WIDENING — the `max_width` degenerate wins it outright — so re-picking a tie on it is the E2.1-r
+# inversion facing the other way. `projected_nfl_z_sd` still enters the shipped band as a REGRESSION
+# FEATURE; what is switched off is only the extra multiplicative widening on top. See §4b of the report.
+_ROOKIE_BAND_RESID_SD_GAIN = 0.0
+
+
+def p1a_residual_nudge(position_group, overall, z, residual_lambda: float = 0.12) -> np.ndarray:
+    """The NCAAF-P1A residual nudge — a mild multiplicative production tilt from the talent the draft
+    board did not price. WITHIN (position, class): regress `projected_nfl_z` on log(draft slot); the
+    residual (standardised by its own spread) becomes `exp(λ·resid/sd)`, clipped to [0.75, 1.35].
+
+    Factored out of `project_rookies` (NF1.7) so the BAND fit can condition on the very same served
+    point projection the board displays — a band conditioned on a *different* point than the one it is
+    pasted onto is the class-level defect in another guise. A within-class quantity, so it is identical
+    whether the class is train or test and cannot leak across a walk-forward fold.
+
+    Returns all-ones for a group too thin (<6 usable rows) to estimate a slot slope."""
+    pos = np.asarray(position_group, dtype=object)
+    overall = pd.to_numeric(pd.Series(overall), errors="coerce").to_numpy(dtype=float)
+    z = pd.to_numeric(pd.Series(z), errors="coerce").to_numpy(dtype=float) if z is not None \
+        else np.full(len(pos), np.nan)
+    nudge = np.ones(len(pos))
+    logo = np.log(np.clip(overall, 1, None))
+    for p in pd.unique(pos):
+        idx = np.where(pos == p)[0]
+        if len(idx) < 6:
+            continue
+        zi, li = z[idx], logo[idx]
+        m = np.isfinite(zi) & np.isfinite(li)
+        if m.sum() < 6:
+            continue
+        if np.ptp(li[m]) == 0:
+            # every player in the group shares a slot ⇒ no slope; the slot-expected z is the mean z
+            resid = zi - np.nanmean(zi[m])
+        else:
+            slope, intercept = np.polyfit(li[m], zi[m], 1)
+            resid = zi - (intercept + slope * li)
+        rs = np.nanstd(resid[np.isfinite(resid)])
+        if rs and np.isfinite(rs):
+            nudge[idx] = np.clip(np.exp(residual_lambda * np.nan_to_num(resid / rs)), 0.75, 1.35)
+    return nudge
+
+
+def _knn_interval(train_x: np.ndarray, train_y: np.ndarray, q: np.ndarray, k: int,
+                  lo_q: float, hi_q: float) -> tuple[np.ndarray, np.ndarray]:
+    """The q`lo_q`/q`hi_q` of the realized outcomes of the `k` training rookies NEAREST `q` in
+    PREDICTION space — a local (per-player) reading of the incumbent's tercile bucket. `k` is the
+    resolution knob: k = n/3 reproduces the incumbent, small k is a per-player band with a noisy
+    quantile. It is selected in the bake-off, not chosen."""
+    kk = int(np.clip(k, 5, len(train_x)))
+    lo = np.empty(len(q), dtype=float)
+    hi = np.empty(len(q), dtype=float)
+    for i, x in enumerate(q):
+        idx = np.argpartition(np.abs(train_x - x), kk - 1)[:kk]
+        yy = train_y[idx]
+        lo[i] = float(np.quantile(yy, lo_q))
+        hi[i] = float(np.quantile(yy, hi_q))
+    return lo, hi
+
+
+@dataclass
+class RookieBandModel:
+    """NF1.7 — the fitted PER-PLAYER rookie 80% band. One of the pre-registered forms below, all fit
+    IN-FOLD on prior draft classes' REALIZED rookie seasons (the FULL drafted population, zero-game
+    rookies carried as a real 0 — NF1.4's population fix, which this inherits).
+
+    `form` — the candidate class (`run_rookie_interval_ablation.py` is the §0.5 gate):
+      • `ratio_q`       — per-position empirical quantiles of the RATIO realized/predicted, applied
+                          multiplicatively to the player's own point. Per-player and continuous, but
+                          its width COLLAPSES to zero as the point approaches zero — the exact flaw
+                          NF1.4 documented in the pre-NF1.4 `fp × cv` band.
+      • `ratio_q_floor` — `ratio_q` plus an ADDITIVE upside floor (the q90 of realized outcomes in the
+                          position's bottom prediction decile), so a near-zero projection still
+                          carries the honest "a late pick sometimes hits" upside.
+      • `knn_pos`       — the q10/q90 of the realized outcomes of the `k` nearest training rookies in
+                          the POSITION's own prediction space. Non-parametric; k is the resolution.
+      • `knn_norm`      — the same, but in POSITION-NORMALISED prediction space POOLED across
+                          positions, then rescaled by the position level. The resolution fix: a single
+                          position carries only ~40–90 training rookies, so a per-position k-NN is
+                          barely finer than terciles; pooling buys ~4× the neighbours at the cost of
+                          assuming the SHAPE of the conditional distribution is position-invariant
+                          once scaled (which is why `knn_pos` is pre-registered beside it).
+      • `qreg`          — THE DIRECT-LEARNED FOIL: linear quantile regression (pinball loss, τ =
+                          0.10/0.90) of the realized rookie season on the story's named uncertainty
+                          drivers — log point projection, log draft slot, the P1A residual sd, and
+                          position. Learns the conditional quantiles directly instead of reading them
+                          off a neighbourhood.
+      • `qreg_sqrt`     — `qreg` on √y, inverted. Quantiles are invariant under a monotone transform,
+                          so this is still a valid quantile estimate; it changes only WHERE linearity
+                          in the features is assumed to hold (the rookie outcome is heavy-right-tailed,
+                          so the √ scale is the more plausible linear scale).
+    `resid_sd_gain` optionally widens any form by the player's OWN P1A parameter uncertainty
+    (`projected_nfl_z_sd`, z-scored in-fold) — the per-player uncertainty driver that no
+    outcome-neighbourhood can see. 0 = off.
+    """
+
+    form: str = _ROOKIE_BAND_FORM
+    k: int = _ROOKIE_BAND_K
+    resid_sd_gain: float = _ROOKIE_BAND_RESID_SD_GAIN
+    qreg_alpha: float = _ROOKIE_BAND_QREG_ALPHA
+    n_fit: int = 0
+    lo_q: float = 0.10
+    hi_q: float = 0.90
+    scale: dict = field(default_factory=dict)        # position -> normalising prediction level
+    pos_pred: dict = field(default_factory=dict)     # position -> training predictions
+    pos_real: dict = field(default_factory=dict)     # position -> realized rookie fp (aligned)
+    pool_pred: np.ndarray | None = None              # pooled, position-normalised predictions
+    pool_real: np.ndarray | None = None              # pooled, position-normalised realized
+    ratio_lo: dict = field(default_factory=dict)     # position -> q10 of realized/predicted
+    ratio_hi: dict = field(default_factory=dict)     # position -> q90 of realized/predicted
+    floor_hi: dict = field(default_factory=dict)     # position -> additive upside floor
+    qreg_lo: dict = field(default_factory=dict)      # feature -> coef (+ 'intercept')
+    qreg_hi: dict = field(default_factory=dict)
+    qreg_positions: tuple = ()
+    resid_sd_ref: tuple = (0.0, 1.0)                 # in-fold (mean, sd) of projected_nfl_z_sd
+
+    # ── prediction ──────────────────────────────────────────────────────────────────────────
+    def band_many(self, position, pred, overall=None, resid_sd=None
+                  ) -> tuple[np.ndarray, np.ndarray]:
+        """Per-player (lo, hi) arrays. NaN for a row the fit cannot speak to (an unseen position, or
+        a form whose required parameters were never fitted) — the caller then falls back to the
+        class-level tercile band, so a thin fit degrades rather than emitting a fabricated interval.
+
+        Two invariants enforced on every form: the band is NON-NEGATIVE (a fantasy season cannot be
+        negative) and it BRACKETS the point projection (a displayed interval that excludes its own
+        point estimate is incoherent — the very symptom NF3 surfaced)."""
+        pos = np.array([str(p or "").upper() for p in np.asarray(position, dtype=object)],
+                       dtype=object)
+        pred = np.asarray(pd.to_numeric(pd.Series(pred), errors="coerce").to_numpy(), dtype=float)
+        n = len(pred)
+        lo = np.full(n, np.nan)
+        hi = np.full(n, np.nan)
+        ov = (pd.to_numeric(pd.Series(overall), errors="coerce").to_numpy(dtype=float)
+              if overall is not None else np.full(n, np.nan))
+        rsd = (pd.to_numeric(pd.Series(resid_sd), errors="coerce").to_numpy(dtype=float)
+               if resid_sd is not None else np.full(n, np.nan))
+
+        if self.form in ("ratio_q", "ratio_q_floor"):
+            for p in np.unique(pos):
+                if p not in self.ratio_lo:
+                    continue
+                idx = np.where(pos == p)[0]
+                lo[idx] = self.ratio_lo[p] * pred[idx]
+                hi[idx] = self.ratio_hi[p] * pred[idx]
+                if self.form == "ratio_q_floor":
+                    hi[idx] = hi[idx] + float(self.floor_hi.get(p, 0.0))
+        elif self.form == "knn_pos":
+            for p in np.unique(pos):
+                tx, ty = self.pos_pred.get(p), self.pos_real.get(p)
+                if tx is None or len(tx) < _ROOKIE_BAND_MIN_TRAIN:
+                    continue
+                idx = np.where(pos == p)[0]
+                lo[idx], hi[idx] = _knn_interval(tx, ty, pred[idx], self.k, self.lo_q, self.hi_q)
+        elif self.form == "knn_norm":
+            if self.pool_pred is not None and len(self.pool_pred) >= _ROOKIE_BAND_MIN_TRAIN:
+                for p in np.unique(pos):
+                    s = float(self.scale.get(p, 0.0))
+                    if s <= 0:
+                        continue
+                    idx = np.where(pos == p)[0]
+                    l, h = _knn_interval(self.pool_pred, self.pool_real, pred[idx] / s,
+                                         self.k, self.lo_q, self.hi_q)
+                    lo[idx], hi[idx] = l * s, h * s
+        elif self.form in ("qreg", "qreg_sqrt"):
+            if self.qreg_lo and self.qreg_hi:
+                x = self._design(pos, pred, ov, rsd)
+                lo = self._apply_qreg(self.qreg_lo, x)
+                hi = self._apply_qreg(self.qreg_hi, x)
+                if self.form == "qreg_sqrt":
+                    lo = np.clip(lo, 0.0, None) ** 2
+                    hi = np.clip(hi, 0.0, None) ** 2
+
+        # ⭐ the per-player uncertainty driver an outcome-neighbourhood cannot see: widen by the
+        #    player's OWN P1A parameter uncertainty.
+        #    STRICTLY WIDEN-ONLY (`max(z, 0)`), by design: a player whose translation is unusually
+        #    UNCERTAIN gets a wider band, but an unusually CONFIDENT translation buys NOTHING. A
+        #    two-sided tilt would let this knob SHARPEN half the field off a parameter-uncertainty z,
+        #    i.e. buy sharpness on the selection metric by narrowing bands — the exact trade the
+        #    coverage floor exists to forbid. (Measured: the two-sided version cost coverage
+        #    0.808 → 0.773.) Guard: `test_the_widener_is_widen_only`.
+        if self.resid_sd_gain > 0:
+            m0, s0 = self.resid_sd_ref
+            zsd = np.where(np.isfinite(rsd), (rsd - m0) / (s0 or 1.0), 0.0)
+            grow = np.exp(self.resid_sd_gain * np.clip(zsd, 0.0, 2.0))
+            mid = 0.5 * (lo + hi)
+            half = 0.5 * (hi - lo) * grow
+            lo, hi = mid - half, mid + half
+
+        lo = np.clip(np.minimum(lo, pred), 0.0, None)
+        hi = np.maximum(hi, pred)
+        return lo, hi
+
+    # ── the quantile-regression design (shared by fit + predict, so they cannot drift) ──────
+    def _design(self, pos: np.ndarray, pred: np.ndarray, overall: np.ndarray,
+                resid_sd: np.ndarray) -> pd.DataFrame:
+        m0, s0 = self.resid_sd_ref
+        x = pd.DataFrame({
+            "log_pred": np.log1p(np.clip(pred, 0.0, None)),
+            "log_overall": np.log(np.clip(np.nan_to_num(overall, nan=200.0), 1.0, None)),
+            "z_sd": np.where(np.isfinite(resid_sd), (resid_sd - m0) / (s0 or 1.0), 0.0),
+        })
+        for p in self.qreg_positions[1:]:          # first position is the reference level
+            x[f"pos_{p}"] = (pos == p).astype(float)
+        return x
+
+    @staticmethod
+    def _apply_qreg(coefs: dict, x: pd.DataFrame) -> np.ndarray:
+        beta = np.array([float(coefs.get(c, 0.0)) for c in x.columns], dtype=float)
+        return x.to_numpy(dtype=float) @ beta + float(coefs.get("intercept", 0.0))
+
+
+def rookie_point_projection(hist: pd.DataFrame, curve: RookieSlotCurve,
+                            residual_lambda: float = 0.12,
+                            class_col: str = "draft_year") -> np.ndarray:
+    """The SERVED rookie point projection for an arbitrary frame of drafted rookies, by RUNNING THE
+    SERVED PATH — `project_rookies` itself, one draft class at a time — and reading `proj_fp_ppr` back.
+
+    NF1.7 needs this so the BAND is fitted on the SAME conditioning variable it is later pasted onto.
+    A band conditioned on a different point than the board displays is the class-level defect wearing
+    a new hat: it would be centred on a quantity nobody sees.
+
+    ⚠️ IT DELEGATES RATHER THAN RE-DERIVING, and that is not fastidiousness — the first cut recomputed
+    `slot curve × nudge, clipped to the ceiling` and was WRONG BY UP TO 3.3 PPR, because the served
+    point is that target MINUS the fumbles-lost term (`project_rookies` rescales the stat line to hit
+    the target, then recomputes fumbles from the rescaled touches and re-scores). The harness's
+    point-invariance assertion caught it. Any future change to the rookie line therefore flows here
+    for free. Per class, because the P1A residual nudge is a WITHIN-class quantity — grouping by
+    `class_col` is what keeps it from leaking across a walk-forward fold.
+
+    Rows `project_rookies` declines to project (a non-skill position, a missing draft slot) come back
+    as NaN, and `fit_rookie_band_model` drops them."""
+    pos = hist["position_group"].astype(str).str.upper()
+    frame = hist.copy()
+    frame["position_group"] = pos.to_numpy()
+    if "nfl_position" not in frame.columns:
+        frame["nfl_position"] = pos.to_numpy()
+    if "player_name" not in frame.columns:
+        frame["player_name"] = ""
+    if "projected_nfl_z" not in frame.columns:
+        frame["projected_nfl_z"] = np.nan
+    # A SYNTHETIC row key, always — `project_rookies` drops and re-indexes rows, so the results have to
+    # be mapped back by id, and neither a caller's real `gsis_id` (which a unit-test fixture may not
+    # carry at all) nor its uniqueness can be assumed. We only need to re-join our own rows.
+    ids = np.arange(len(frame)).astype(str)
+    frame["gsis_id"] = ids
+    cls = (frame[class_col].to_numpy() if class_col in frame.columns
+           else np.zeros(len(frame), dtype=int))
+    out = np.full(len(frame), np.nan)
+    for c in pd.unique(cls):
+        idx = np.where(cls == c)[0]
+        got = project_rookies(frame.iloc[idx], curve, int(c) if pd.notna(c) else 0,
+                              residual_lambda=residual_lambda)
+        if got.empty:
+            continue
+        m = dict(zip(got["player_id"].astype(str),
+                     pd.to_numeric(got["proj_fp_ppr"], errors="coerce")))
+        out[idx] = [m.get(i, np.nan) for i in ids[idx]]
+    return out
+
+
+def fit_rookie_band_model(
+    band_hist: pd.DataFrame,
+    preds,
+    *,
+    form: str = _ROOKIE_BAND_FORM,
+    k: int = _ROOKIE_BAND_K,
+    resid_sd_gain: float = _ROOKIE_BAND_RESID_SD_GAIN,
+    qreg_alpha: float = _ROOKIE_BAND_QREG_ALPHA,
+    band_q: tuple[float, float] = _ROOKIE_BAND_Q,
+) -> RookieBandModel | None:
+    """NF1.7 §0.5 — fit ONE pre-registered per-player band form on the historical drafted population.
+
+    `band_hist` is the FULL drafted rookie population (one row per historical drafted skill rookie,
+    zero-game rookies carried as a real `rookie_fp_ppr = 0`) and `preds` is the SERVED point
+    projection for each of those rows — i.e. the band is conditioned on exactly the quantity it will
+    be pasted onto. Optional columns `draft_overall` and `projected_nfl_z_sd` feed the parametric arm
+    and the P1A-uncertainty widening.
+
+    Pure. Returns None when the history is too thin to fit anything (the caller then keeps the
+    class-level tercile band) — a thin fit must degrade to the incumbent, never to a fabricated
+    per-player interval."""
+    if band_hist is None or band_hist.empty or form not in _ROOKIE_BAND_FORMS:
+        return None
+    lo_q, hi_q = band_q
+    pos = band_hist["position_group"].astype(str).str.upper().to_numpy()
+    y = pd.to_numeric(band_hist.get("rookie_fp_ppr"), errors="coerce").to_numpy(dtype=float)
+    pred = pd.to_numeric(pd.Series(preds), errors="coerce").to_numpy(dtype=float)
+    if len(pred) != len(y):
+        raise ValueError("preds must be aligned to band_hist (one point projection per row)")
+    ok = np.isfinite(y) & np.isfinite(pred)
+    if ok.sum() < _ROOKIE_BAND_MIN_TRAIN:
+        return None
+    pos, y, pred = pos[ok], y[ok], pred[ok]
+    ov = pd.to_numeric(band_hist.get("draft_overall"), errors="coerce").to_numpy(dtype=float)[ok]
+    rsd_col = band_hist.get("projected_nfl_z_sd")
+    rsd = (pd.to_numeric(rsd_col, errors="coerce").to_numpy(dtype=float)[ok]
+           if rsd_col is not None else np.full(len(y), np.nan))
+
+    m = RookieBandModel(form=form, k=int(k), resid_sd_gain=float(resid_sd_gain),
+                        qreg_alpha=float(qreg_alpha), n_fit=int(len(y)), lo_q=lo_q, hi_q=hi_q)
+    if np.isfinite(rsd).sum() >= _ROOKIE_BAND_MIN_TRAIN:
+        m.resid_sd_ref = (float(np.nanmean(rsd)), float(np.nanstd(rsd)) or 1.0)
+
+    for p in np.unique(pos):
+        sel = pos == p
+        if sel.sum() < _ROOKIE_BAND_MIN_TRAIN:
+            continue
+        m.pos_pred[p] = pred[sel]
+        m.pos_real[p] = y[sel]
+        # the position's normalising level = the MEAN realized rookie season at the position. The
+        # mean (not the max) keeps the normalisation robust to one freak class-best rookie.
+        lvl = float(np.mean(y[sel]))
+        m.scale[p] = lvl if lvl > 1e-6 else float(np.mean(pred[sel]) or 1.0)
+        pr = pred[sel]
+        ratio = np.where(pr > 1e-6, y[sel] / np.where(pr > 1e-6, pr, 1.0), np.nan)
+        ratio = ratio[np.isfinite(ratio)]
+        if len(ratio) >= _ROOKIE_BAND_MIN_TRAIN:
+            m.ratio_lo[p] = float(np.quantile(ratio, lo_q))
+            m.ratio_hi[p] = float(np.quantile(ratio, hi_q))
+            # the additive upside floor: what the BOTTOM prediction decile of this position actually
+            # achieves at its q90. A multiplicative band cannot express it (it collapses at pred→0),
+            # and it is exactly the late-pick surprise the pre-NF1.4 band priced at ~nothing.
+            cut = float(np.quantile(pr, 0.10))
+            bottom = y[sel][pr <= cut]
+            m.floor_hi[p] = float(np.quantile(bottom, hi_q)) if len(bottom) >= 5 else 0.0
+
+    if m.scale:
+        keep = np.array([p in m.scale for p in pos])
+        s = np.array([m.scale.get(p, 1.0) for p in pos])[keep]
+        m.pool_pred = pred[keep] / s
+        m.pool_real = y[keep] / s
+
+    if form in ("qreg", "qreg_sqrt"):
+        m.qreg_positions = tuple(sorted(np.unique(pos).tolist()))
+        x = m._design(pos, pred, ov, rsd)
+        target = np.sqrt(np.clip(y, 0.0, None)) if form == "qreg_sqrt" else y
+        try:
+            from sklearn.linear_model import QuantileRegressor
+        except ImportError:                                    # pragma: no cover - sklearn is a dep
+            return None
+        for q, dest in ((lo_q, m.qreg_lo), (hi_q, m.qreg_hi)):
+            r = QuantileRegressor(quantile=q, alpha=float(qreg_alpha), solver="highs")
+            r.fit(x.to_numpy(dtype=float), target)
+            dest.update(dict(zip(x.columns, r.coef_.tolist())))
+            dest["intercept"] = float(r.intercept_)
+    return m
+
+
 def project_rookies(
     rookies: pd.DataFrame,
     curve: RookieSlotCurve,
@@ -1102,29 +1520,11 @@ def project_rookies(
     overall = pd.to_numeric(r["draft_overall"], errors="coerce").to_numpy()
 
     # ── P1A residual: within (position, class), how far the player's translated talent z sits above
-    #    the slot-EXPECTED z. Regress projected_nfl_z ~ log(overall) inside the class per position;
-    #    the residual is the disagreement the draft board did not price. Scaled + clipped to a mild
-    #    multiplicative production nudge (never a wild swing off a parameter-uncertainty z).
-    nudge = np.ones(len(r))
-    z = pd.to_numeric(r["projected_nfl_z"], errors="coerce").to_numpy()
-    logo = np.log(np.clip(overall, 1, None))
-    for pos in r["position_group"].unique():
-        idx = np.where((r["position_group"] == pos).to_numpy())[0]
-        if len(idx) < 6:
-            continue
-        zi, li = z[idx], logo[idx]
-        m = np.isfinite(zi) & np.isfinite(li)
-        if m.sum() < 6:
-            continue
-        if np.ptp(li[m]) == 0:
-            # every player in the group shares a slot ⇒ no slope; the slot-expected z is the mean z
-            resid = zi - np.nanmean(zi[m])
-        else:
-            slope, intercept = np.polyfit(li[m], zi[m], 1)
-            resid = zi - (intercept + slope * logo[idx])
-        rs = np.nanstd(resid[np.isfinite(resid)])
-        if rs and np.isfinite(rs):
-            nudge[idx] = np.clip(np.exp(residual_lambda * np.nan_to_num(resid / rs)), 0.75, 1.35)
+    #    the slot-EXPECTED z — the disagreement the draft board did not price, as a mild clipped
+    #    multiplicative nudge. NF1.7 factored the computation into `p1a_residual_nudge` so the band
+    #    fit conditions on the identical served point projection (same code, no drift).
+    nudge = p1a_residual_nudge(r["position_group"].to_numpy(), overall,
+                               r.get("projected_nfl_z"), residual_lambda)
 
     out = {
         "player_id": r["gsis_id"].to_numpy(),
@@ -1174,26 +1574,36 @@ def project_rookies(
     df = score_line(df, prefix="proj_")
 
     # ── the 80% rookie interval ────────────────────────────────────────────────────────────────
-    # NF1.4: prefer the CALIBRATED band (empirical q10/q90 of what drafted rookies in this
-    # prediction tercile actually scored — realized coverage 0.834 vs the nominal 0.80). The legacy
-    # `fp × cv` parameter-uncertainty width is the fallback for a curve fitted without `band_hist`;
-    # it covers only 0.678 (0.444 at QB), so it is a decoration rather than an 80% interval and is
-    # kept solely so an un-migrated caller still gets *a* band. See `_fit_rookie_bands`.
+    # THREE TIERS, best first (each is the honest fallback for the one above):
+    #  1. NF1.7 `band_model` — a PER-PLAYER band, width driven by the player's own point projection
+    #     (+ draft slot / P1A sd, per the selected form). Selected on a PROPER interval score with
+    #     coverage as a FLOOR (`run_rookie_interval_ablation.py`).
+    #  2. NF1.4 `curve.band()` — the CLASS-LEVEL tercile bucket. Nominally calibrated (0.834 coverage)
+    #     but carries ~zero per-player information: 81 rookies shared 12 bands on the 2026 board.
+    #  3. the legacy `fp × cv` parameter width — covers only 0.678 (0.444 at QB); a decoration, kept
+    #     solely so an un-migrated caller (no `band_hist`) still gets *a* band, honestly labelled.
     fp = df["proj_fp_ppr"].to_numpy()
     cv = np.array([curve.fp_cv_by_pos.get(p, 0.7) for p in pos_group])
     z80 = 1.2815515594
     calibrated = [curve.band(pos_group[i], float(fp[i])) for i in range(len(df))]
-    have_band = any(b is not None for b in calibrated)
     lo = np.array([b[0] if b else max(0.0, fp[i] - z80 * fp[i] * cv[i])
                    for i, b in enumerate(calibrated)])
     hi = np.array([b[1] if b else fp[i] + z80 * fp[i] * cv[i] for i, b in enumerate(calibrated)])
+    tier = np.where([b is not None for b in calibrated], "calibrated", "parameter").astype(object)
+    if curve.band_model is not None:
+        p_lo, p_hi = curve.band_model.band_many(
+            pos_group, fp, overall=overall, resid_sd=r.get("projected_nfl_z_sd"))
+        use = np.isfinite(p_lo) & np.isfinite(p_hi) & (p_hi >= p_lo)
+        lo = np.where(use, p_lo, lo)
+        hi = np.where(use, p_hi, hi)
+        tier = np.where(use, "calibrated_per_player", tier)
     df["fp_ppr_sd"] = np.round((hi - lo) / (2 * z80), 2)   # the band's implied 1-sd equivalent
-    # Round the bounds OUTWARD (p10 down, p90 up). `band()` guarantees lo ≤ point ≤ hi, but
+    # Round the bounds OUTWARD (p10 down, p90 up). Every tier guarantees lo ≤ point ≤ hi, but
     # nearest-rounding can push a bound past a point projection it exactly equals and emit a
     # displayed interval that excludes its own point estimate.
     df["fp_ppr_p10"] = np.floor(np.clip(lo, 0.0, None) * 10.0) / 10.0
     df["fp_ppr_p90"] = np.ceil(hi * 10.0) / 10.0
-    df["uncertainty_type"] = "calibrated" if have_band else "parameter"
+    df["uncertainty_type"] = tier
     df["is_rookie"] = True
     df["source"] = "rookie"
     df["projection_season"] = int(projection_season)

@@ -342,7 +342,14 @@ def test_calibrated_band_is_labelled_brackets_the_point_and_is_non_negative(pool
     hist, band = _curve_inputs(pool)
     incoming = pool[pool["draft_year"] == 2020].head(30)
     new = sp.project_rookies(incoming, sp.fit_rookie_slot_curves(hist, band_hist=band), 2021)
-    assert (new["uncertainty_type"] == "calibrated").all()
+    # NF1.7 SUPERSEDED the class-level tercile band with a per-player one, so a curve fitted WITH
+    # band history now labels `calibrated_per_player`. The NF1.4 arm is still reachable (and still
+    # labelled `calibrated`) via `per_player_band=False`, which is what the bake-off's
+    # degenerate-ceiling anchor uses — asserted below so both tiers stay live.
+    assert (new["uncertainty_type"] == "calibrated_per_player").all()
+    nf14 = sp.project_rookies(
+        incoming, sp.fit_rookie_slot_curves(hist, band_hist=band, per_player_band=False), 2021)
+    assert (nf14["uncertainty_type"] == "calibrated").all()
     assert (new["fp_ppr_p10"] >= 0).all()
     assert (new["fp_ppr_p10"] <= new["proj_fp_ppr"] + 1e-6).all()
     assert (new["fp_ppr_p90"] >= new["proj_fp_ppr"] - 1e-6).all()
