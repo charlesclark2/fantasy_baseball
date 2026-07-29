@@ -114,6 +114,13 @@ quant_sports_intel_models/football/nfl/fantasy/artifacts/*_cache/
 # Regenerated NF1/NF1.1/NF1.3 build-output SUMMARIES (re-emitted by `--mode build`; the parquet/csv
 # season projections are already covered above).
 quant_sports_intel_models/football/nfl/fantasy/artifacts/*_projection_summary_*.json
+# NF3 draft-board STAGING output. `export_draft_board_json.py` writes this dir (`_STAGING_OUT`) purely
+# as the local staging area before `--publish` uploads to the prod api-cache bucket — the SERVED copy
+# is the S3 object, which `app/backend/routers/fantasy.py` reads; nothing reads these files at runtime
+# and no test uses them as a fixture. Every board is re-emitted wholesale on each export, so the
+# tracked copies were ~3 MB of churn (16 files rewritten per run) with no reviewable diff.
+# ⚠️ If a board is ever needed for review, publish it or diff the S3 object — do NOT re-track these.
+quant_sports_intel_models/football/nfl/fantasy/artifacts/draft_board_json/
 ablation_results/**/*.parquet
 
 # E7.x ablation artifacts live in *_artifacts/ SUBDIRS; line 66 only globs one level.
