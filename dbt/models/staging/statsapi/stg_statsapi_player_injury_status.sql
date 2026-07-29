@@ -113,7 +113,20 @@ status_classified as (
         transaction_id,
         player_id,
         player_name,
-        coalesce(effective_date, transaction_date) as event_date,
+        -- E9.48-b: the Stats API ships TYPO'D effective_dates — transaction 878446 is
+        -- dated transaction_date=2025-11-26 / effective_date=**2925**-11-26. A far-future
+        -- event_date is not cosmetic here: events are ORDERED by it, so a typo sorts LAST,
+        -- becomes the player's `is_current` interval, and pins their status for ~900 years
+        -- — the exact E9.48 failure mode through a different door. A legitimate effective
+        -- date is retroactive by days-to-weeks (never >400d from the posting date), so fall
+        -- back to transaction_date when the gap is absurd. Found while backfilling the
+        -- off-season hole, which is what first brings these rows into the table.
+        case
+            when effective_date is null then transaction_date
+            when abs(datediff('day', transaction_date::date, effective_date::date)) > 400
+                then transaction_date
+            else effective_date
+        end                                         as event_date,
         type_code,
         case
             -- IL / restricted list placements → player unavailable.
@@ -244,7 +257,15 @@ status_classified as (
         transaction_id,
         player_id,
         player_name,
-        coalesce(effective_date, transaction_date) as event_date,
+        -- E9.48-b: guard against TYPO'D effective_dates (see the DuckDB branch — the
+        -- 2925-11-26 row). Snowflake reads these columns as native DATEs, so no ::date
+        -- cast is needed on this side.
+        case
+            when effective_date is null then transaction_date
+            when abs(datediff('day', transaction_date, effective_date)) > 400
+                then transaction_date
+            else effective_date
+        end                                         as event_date,
         type_code,
         case
             -- IL / restricted list placements → player unavailable.
