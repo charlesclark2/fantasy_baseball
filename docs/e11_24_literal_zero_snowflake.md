@@ -284,6 +284,51 @@ The remaining ~24 waits are the operator's own Snowsight browsing (`POLICY_REFER
 `COST_INSIGHTS`/`ACCOUNT_ROOT_BUDGET`/metering 8). **Behavioural, not code** — worth knowing that opening
 Snowsight cost pages wakes `COMPUTE_WH`, so audit from `MONITOR_WH` (`use warehouse MONITOR_WH` first).
 
+### ✅ VERIFIED LIVE 2026-07-29 15:17 — the metering repoint works
+
+`information_schema.query_history()` (near-real-time; **not** `account_usage`, which lags 45–90 min and
+made the first check ambiguous) after loading the admin page post-deploy:
+
+| Time | Warehouse | Shape |
+|---|---|---|
+| 15:17:33 | **MONITOR_WH** | `SUM(CREDITS_USED_COMPUTE)…` ✅ (prov 219ms — woke MONITOR_WH, exactly the intent) |
+| 15:17:34 | **MONITOR_WH** | `SUM(CREDITS_USED_COMPUTE)…` ✅ |
+| 15:17:29/31/34 | COMPUTE_WH | the 3 non-metering shapes (see below) — by design, not a miss |
+
+⚠️ **Instrument note:** the first post-deploy check looked like a failure because a `dateadd(hour,-6)`
+window still contained a PRE-deploy row — identified by its identical millisecond (`.827`). **For "did the
+thing I just did work", use `information_schema.query_history()`; reserve `account_usage` for trends.**
+
+### 🚩 The 3 remaining `CREDENCE_API` shapes — a TARGET-7 BLOCKER and a LATENCY defect, not a cost lever
+
+Measured over 8 days. **Executions, not provisioning waits** — waits undercount a request-time read badly,
+since only the call that happens to wake the warehouse is counted:
+
+| Endpoint | Executions | Waits | avg ms | **max ms** |
+|---|---|---|---|---|
+| admin cost panel (fixed above) | 86 | 43 | 2,652 | **24,344** |
+| **`/pipeline/status`** — the PUBLIC dashboard status dot | 75 | 3 | 423 | **19,015** |
+| admin model freshness (`model_registry`) | 46 | 5 | 658 | **19,894** |
+| admin live served version (`daily_model_predictions`) | 46 | 7 | 364 | 999 |
+
+⇒ the residual cost is only ~14 waits, **but a request-time Snowflake read that occasionally takes 19–24
+SECONDS is a serving-latency defect.** When the warehouse is asleep the dashboard dot blocks for ~19s. This
+is exactly what CLAUDE.md's "Snowflake … never on a request path" rule exists to prevent.
+
+**Why this is NOT a safe drive-by fix** (do it as a scoped story, with a parity check):
+- 🧨 **E9.26b landmine:** the obvious repoint — read `daily_model_predictions` from the lakehouse — is the
+  read that **reliably FAILS inside the API Lambda** while working everywhere else, and `lakehouse_query`
+  **catches-and-returns `[]`**, so it would fail *silently*. The narrowest-mart rule applies: a
+  single-column `DISTINCT model_version` may be fine where the 94-col join was not, but that must be
+  proven **in the Lambda**, not locally.
+- `/pipeline/status` is **user-facing** (the dot's green/amber/red semantics), and the serving store is
+  **not** a drop-in mirror: `write_api_cache.py` / `write_serving_store.py` derive their own
+  `pipeline_status` from prediction AGE, they do not copy the 9-column `betting_ml.pipeline_status` row.
+  A repoint changes the derivation ⇒ needs a semantics parity assertion before it ships.
+
+⇒ **Ordering: this belongs with target 7 (every `COMPUTE_WH` caller must be gone before the warehouse can
+be dropped), not with the cost stages.** Do not attempt it during the W8b soak.
+
 ### ✅ The retired-writer-bridge family is now fully closed — verified in the wake data
 
 Each removal is visible as a hard stop, which is the cleanest possible confirmation the bridges are dead:
