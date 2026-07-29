@@ -1030,6 +1030,13 @@ GATE/AC (when un-parked): alternate/F5/team-totals pricing on a confirmed F5 sou
 GATE/AC (when un-parked): a park-type hierarchical prior built + ablated for held-out lift over the incumbent park features (deflated); kept only if it moves the served outcome. Operator handoff + `git add`.
 ```
 ```
+▶ Story prompt — E11.25 AUDIT: are ARCHETYPE POSTERIORS already in dbt (post-lakehouse)? — verify-then-act (migrated from legacy A2.14)   [Infra/audit · 🧭 SONNET · migrated from A2.14]
+🎯 WHY: legacy A2.14 wanted to migrate the archetype posteriors to dbt — but the E11.x lakehouse/dbt migration may ALREADY have done it. **VERIFY FIRST** (don't assume work is needed): are the batter/pitcher ARCHETYPE posteriors computed in dbt (S3/DuckDB) today, or still a Python-only straggler?
+🔬 DO: (1) LOCATE where archetype posteriors are computed today (`grep -rIn` — a dbt model vs a raw-SQL/Python state-writer); (2) confirm whether they're on the lakehouse (S3 parquet / dbt) or a raw-SQL/Python straggler (the INC-27 class); (3) IF already in dbt/lakehouse → CLOSE (record it, nothing to do); IF still Python-only AND used → migrate to dbt / the `lakehouse_ext` pattern with the runtime-gate + parity discipline.
+🔒 verify-then-act; `best_alpha=0` (infra).
+GATE/AC: the archetype-posteriors compute location determined; either recorded ALREADY-MIGRATED (close) or migrated to dbt/lakehouse with parity. Operator handoff + `git add`.
+```
+```
 ## Epic E9 — Beta User Request Backlog
 ```
 ▶ Story prompt — E9.49 🚨 INCIDENT (validate-first): are PITCHER-K PROP bets actually SETTLING (closing) + reporting correctly? + AUDIT every existing K-prop bet across ALL users   [App · 🧭 serving/settlement + backend + frontend + DB · ⚠️ user-facing CORRECTNESS/TRUST · P1 · ⭐ TOP of the MLB path]   (NEW 2026-07-29, operator)
