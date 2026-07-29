@@ -10,6 +10,32 @@
 - PBO 0.000 (gate < 0.2) · DSR 0.842 (gate ≥ 0.95)
 - Oracle-floor sanity (E2.1-r): oracle crps = 0.000234; no candidate beat it ✅
 
+## ⚠️ Margin attribution — the margin is NOT purely a feature effect
+
+The gate compares leader-arm vs incumbent-arm, where an arm is (contract variant × learner class). That is the right PROMOTION question, but it CONFLATES the feature effect with a learner-class swap. Split against `incumbent::glm_elasticnet` (the incumbent contract under the LEADER's learner):
+
+| component | Δ crps | share of margin |
+|---|---:|---:|
+| **learner swap** (incumbent learner → `glm_elasticnet`) | +0.0153 | 74% |
+| **contract** (added features) | +0.0053 | 26% |
+| **total reported margin** | +0.0206 | 100% |
+
+🚩 **74% of this margin is the LEARNER SWAP, not the features.** Do not read `+0.0206` as what the added columns bought — that figure is `+0.0053`.
+
+### Feature effect holding the LEARNER FIXED (+ = variant better than the incumbent contract)
+
+| learner | incumbent crps | plus_gb | plus_eb | plus_both |
+|---|---:|---:|---:|---:|
+| glm_elasticnet | 2.4768 | +0.0000 | +0.0053 | +0.0053 |
+| ngboost_normal | 2.4921 | +0.0033 | +0.0107 | +0.0115 |
+| ngboost_lognormal | 2.5049 | -0.0002 | +0.0078 | +0.0106 |
+| catboost | 2.5173 | +0.0050 | +0.0259 | +0.0264 |
+| stack_mean | 2.5361 | +0.0045 | +0.0161 | +0.0093 |
+| xgboost | 2.5685 | +0.0035 | +0.0373 | +0.0186 |
+| lightgbm | 2.6526 | +0.0073 | -0.0095 | -0.0169 |
+
+This table — not the headline margin — is where a FEATURE effect can be read.
+
 ## Pre-registered gates
 
 | gate | result |
@@ -18,6 +44,8 @@
 | `pbo_lt_0_2` | ✅ pass |
 | `dsr_gt_0_at_95` | ❌ fail |
 | `calibration_not_degraded` | ✅ pass |
+
+⚠️ Scored under the ORIGINAL `calibration_not_degraded` tolerance of `1e-09`, i.e. BEFORE pre-registration amendment #1 (2026-07-29). That tolerance is tight enough to trip on ROUNDING; where this gate failed, check whether the PIT-KS difference is material before reading it as a real calibration regression. **This recorded verdict is left exactly as scored** — the amendment is forward-dated and does not retro-apply.
 
 **Reading the null honestly.** No arm clears every gate, so the served champion is unchanged and there is NO prediction backfill to run (E7.9 step 7 is conditional on a promotion). Per the E2.1-r note: if the top arms are TIED within the noise floor, a high PBO is the NULL — 'which tied arm wins is noise' — not evidence of overfitting. Check the spread in the table below before reading PBO as a failure.
 

@@ -167,6 +167,113 @@ def test_pbo_and_dsr_thresholds_match_the_repo_discipline():
     assert e79.BEST_ALPHA == 0, "E7.9 is a calibration/consistency story — never an edge claim"
 
 
+# ── Q1 (PM 2026-07-29): a margin must never be reported without its attribution ────────────────
+
+def test_margin_decomposition_splits_learner_from_contract_and_sums_to_the_margin():
+    rows = [
+        {"arm": "incumbent::ngboost_normal", "learner": "ngboost_normal", "crps_mean": 2.4921},
+        {"arm": "incumbent::glm_elasticnet", "learner": "glm_elasticnet", "crps_mean": 2.4768},
+        {"arm": "plus_both::glm_elasticnet", "learner": "glm_elasticnet", "crps_mean": 2.4714},
+    ]
+    d = e79.margin_decomposition(rows, "incumbent::ngboost_normal", "plus_both::glm_elasticnet", "crps")
+    assert d["available"]
+    # the real total_runs/post_lineup numbers: 74% of the margin was the learner swap
+    assert d["total"] == pytest.approx(0.0207, abs=1e-4)
+    assert d["learner_swap"] == pytest.approx(0.0153, abs=1e-4)
+    assert d["contract"] == pytest.approx(0.0054, abs=1e-4)
+    assert d["learner_swap"] + d["contract"] == pytest.approx(d["total"], abs=1e-9)
+    assert d["learner_share"] > 0.7
+
+
+def test_margin_decomposition_degrades_instead_of_raising_when_the_reference_arm_is_absent():
+    """A report must degrade, never crash — the decomposition is presentation, not a gate."""
+    rows = [
+        {"arm": "incumbent::ngboost_normal", "learner": "ngboost_normal", "crps_mean": 2.49},
+        {"arm": "plus_gb::catboost", "learner": "catboost", "crps_mean": 2.48},
+    ]
+    d = e79.margin_decomposition(rows, "incumbent::ngboost_normal", "plus_gb::catboost", "crps")
+    assert d["available"] is False and "total" in d
+
+
+def test_variant_effect_is_reported_holding_the_learner_fixed():
+    """Holding the learner fixed is the ONLY way to read a feature effect out of this grid."""
+    rows = [
+        {"arm": "incumbent::glm_elasticnet", "learner": "glm_elasticnet", "crps_mean": 2.4768},
+        {"arm": "plus_gb::glm_elasticnet",   "learner": "glm_elasticnet", "crps_mean": 2.4768},
+        {"arm": "plus_eb::glm_elasticnet",   "learner": "glm_elasticnet", "crps_mean": 2.4715},
+    ]
+    ve = e79.variant_effect_by_learner(rows, "crps")
+    assert len(ve) == 1 and ve[0]["learner"] == "glm_elasticnet"
+    assert ve[0]["plus_gb"] == pytest.approx(0.0, abs=1e-4)      # + = better than incumbent
+    assert ve[0]["plus_eb"] == pytest.approx(0.0053, abs=1e-4)
+
+
+def test_every_recorded_report_carries_the_margin_attribution():
+    """The recorded E7.9 reports were patched (Q1) without re-fitting. If one loses the section, a
+    reader is back to crediting a learner swap to a features study."""
+    import json
+    jdir = PROJECT_ROOT / "betting_ml/evaluation/feature_selection/bakeoff"
+    adir = PROJECT_ROOT / "quant_sports_intel_models/baseball/edge_program/ablation_results"
+    stems = [p.stem for p in jdir.glob("e7_9_retrain_*.json") if "smoke" not in p.stem]
+    assert stems, "no recorded E7.9 bake-off results found"
+    for stem in stems:
+        md = (adir / f"{stem}.md").read_text()
+        assert "Margin attribution" in md, f"{stem}: attribution section missing"
+        assert "holding the LEARNER FIXED" in md, f"{stem}: learner-fixed table missing"
+        d = json.loads((jdir / f"{stem}.json").read_text())
+        assert d["verdict"] == "INCUMBENT_STANDS", (
+            f"{stem}: verdict changed to {d['verdict']!r}. The Q1 patch is PRESENTATION ONLY — "
+            f"rewrite_reports() must never recompute a gate."
+        )
+
+
+# ── Q2 (PM 2026-07-29): the forward-dated calibration amendment ───────────────────────────────
+
+def test_calibration_amendment_is_dated_and_documented():
+    """A pre-registration amendment is only legitimate if it is dated and on the record. An
+    undocumented tolerance change is indistinguishable from laundering."""
+    src = Path(e79.__file__).read_text()
+    assert e79.CALIBRATION_AMENDMENT_DATE == "2026-07-29"
+    assert "PRE-REGISTRATION AMENDMENT #1" in src
+    assert "EFFECTIVE FOR RUNS ON OR AFTER" in src
+    assert "laundering" in src, "the amendment must state why it is NOT laundering"
+
+
+def test_calibration_tolerance_is_the_max_of_an_absolute_and_a_relative_floor():
+    assert e79.CALIBRATION_TOLERANCE_ABS == 1e-3
+    assert e79.CALIBRATION_TOLERANCE_REL == 0.10
+    # The relative floor binds above PIT-KS 0.01; the absolute floor only protects very small ones
+    # (so a near-perfectly-calibrated incumbent can't make the tolerance vanish toward zero).
+    assert e79.calibration_tolerance(0.025) == pytest.approx(0.0025)   # run_diff/post scale
+    assert e79.calibration_tolerance(0.065) == pytest.approx(0.0065)   # total_runs/post scale
+    assert e79.calibration_tolerance(0.002) == pytest.approx(1e-3)     # absolute floor binds
+    assert e79.calibration_tolerance(float("nan")) == pytest.approx(1e-3)
+
+
+def test_the_amendment_would_have_spared_the_rounding_failure_but_not_a_real_regression():
+    """The defect it fixes: PIT-KS 0.0294 vs 0.0293 tripped a 1e-9 tolerance. A genuine degradation
+    must still fail — an amendment that passes everything is not a gate."""
+    inc = 0.0293
+    tol = e79.calibration_tolerance(inc)
+    assert 0.0294 <= inc + tol, "the rounding-level difference should no longer fail"
+    assert not (0.0400 <= inc + tol), "a real 36% calibration regression must still fail"
+
+
+def test_recorded_e7_9_verdicts_were_scored_under_the_pre_amendment_tolerance():
+    """The amendment is FORWARD-dated. The 2026-07-28 runs must stay as scored — if one of them
+    silently acquires the new tolerance, the amendment has retro-applied."""
+    import json
+    jdir = PROJECT_ROOT / "betting_ml/evaluation/feature_selection/bakeoff"
+    for p in jdir.glob("e7_9_retrain_*.json"):
+        if "smoke" in p.stem:
+            continue
+        d = json.loads(p.read_text())
+        assert "calibration_tolerance" not in d, (
+            f"{p.stem}: a recorded 2026-07-28 verdict acquired a post-amendment tolerance — the "
+            f"amendment must not retro-apply."
+        )
+
+
 # ── E7.9 step 7 (conditional): the promotion landmine the backfill would walk into ────────────
 
 def test_clv_scorecard_champion_pin_matches_the_registry():

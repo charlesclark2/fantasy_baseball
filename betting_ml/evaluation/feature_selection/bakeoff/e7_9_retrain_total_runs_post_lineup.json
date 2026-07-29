@@ -306,5 +306,64 @@
       "pit_ks": 0.15169717252924317,
       "n": 5468
     }
+  ],
+  "margin_decomposition": {
+    "available": true,
+    "total": 0.020646,
+    "learner_swap": 0.015317,
+    "contract": 0.005329,
+    "learner_share": 0.7419,
+    "same_learner_reference_arm": "incumbent::glm_elasticnet"
+  },
+  "variant_effect_by_learner": [
+    {
+      "learner": "glm_elasticnet",
+      "incumbent": 2.4768,
+      "plus_gb": 0.0,
+      "plus_eb": 0.0053,
+      "plus_both": 0.0053
+    },
+    {
+      "learner": "ngboost_normal",
+      "incumbent": 2.4921,
+      "plus_gb": 0.0033,
+      "plus_eb": 0.0107,
+      "plus_both": 0.0115
+    },
+    {
+      "learner": "ngboost_lognormal",
+      "incumbent": 2.5049,
+      "plus_gb": -0.0002,
+      "plus_eb": 0.0078,
+      "plus_both": 0.0106
+    },
+    {
+      "learner": "catboost",
+      "incumbent": 2.5173,
+      "plus_gb": 0.005,
+      "plus_eb": 0.0259,
+      "plus_both": 0.0264
+    },
+    {
+      "learner": "stack_mean",
+      "incumbent": 2.5361,
+      "plus_gb": 0.0045,
+      "plus_eb": 0.0161,
+      "plus_both": 0.0093
+    },
+    {
+      "learner": "xgboost",
+      "incumbent": 2.5685,
+      "plus_gb": 0.0035,
+      "plus_eb": 0.0373,
+      "plus_both": 0.0186
+    },
+    {
+      "learner": "lightgbm",
+      "incumbent": 2.6526,
+      "plus_gb": 0.0073,
+      "plus_eb": -0.0095,
+      "plus_both": -0.0169
+    }
   ]
 }

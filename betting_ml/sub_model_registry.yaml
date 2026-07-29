@@ -1231,9 +1231,26 @@ milb_mle_pitcher_prior_v1:
       the lift needed a path to a prediction before the null could be attributed to the FEATURE rather
       than to missing plumbing. eb_gb_pct stays served + tested but enters NO model contract.
     followups_preregistered: |
-      (1) A LEARNER re-bake-off — glm_elasticnet beat the incumbent ngboost_normal on all three
-      targets with equal-or-better PIT-KS; E1.9 picked NGBoost and the matrix has changed since.
-      ⚠️ E2.1-r: NGBoost was selected for PRICING CALIBRATION, so a discrimination win does not
-      automatically justify the swap. (2) plus_eb on total_runs, PROPERLY POWERED — DSR 0.842 on the
-      strongest case is what an under-powered real effect looks like. Binding constraint: 3 purged
-      folds, and the offline matrix is not point-in-time (ceilings, not live figures).
+      ── PM-ADJUDICATED 2026-07-29 (second read). All 8 questions ruled; no verdict changed and
+      nothing was re-fit. Two in-session fixes (Q1 report attribution, Q2 forward-dated gate
+      amendment); everything else is RECORD-AND-DEFER. Rulings below are binding, not suggestions.
+      (Q3) total_runs/post_lineup 3-of-4 gates, DSR 0.842 vs 0.95 → PARK for a natural AUTO-RETEST as
+      folds accrue (the NF1.5 pattern). NOT a powered story today: "under-powered, not dead" does not
+      clear the bar for a dedicated fitting story. Becomes the revisit candidate IF totals-calibration
+      (E2.7 / the served distribution) is prioritized — and it then re-tests TOGETHER WITH Q4.
+      (Q4) glm_elasticnet > ngboost_normal on CRPS across all 3 targets → NOTE ONLY, DO NOT ACT. A
+      CRPS win from a FEATURES study is not grounds to swap a champion's learner class, and per
+      E2.1-r NGBoost was selected for PRICING CALIBRATION — a CRPS win does not even target its job.
+      Any future re-selection MUST select on the calibration/pricing metric, fully deflated, NOT on
+      CRPS. Folds into Q3 if a totals/run-diff re-selection ever happens.
+      (Q5) eb_gb_pct → CLEAN NULL, closed. Lesson recorded in sport_data_platform.md.
+      (Q6) eb_gb_pct STAYS in the feature block — negligible cost, now proven reachable, and removing
+      it re-opens the "landed with no consumer" gap E7.9 closed.
+      (Q7) the old-prior counterfactual matrix is NOT to be built — the analytical bound (20.3% of
+      starter rows, |Δ eb_k_pct| 0.022-0.030) stands as the record; a production-adjacent rebuild with
+      clobber risk to produce a diagnostic is poor risk/reward.
+      (Q8) home_win was never tested for eb_gb_pct → DELIBERATELY OUT OF SCOPE, deferred, harness NOT
+      extended to classification. Honors the charter (totals + run-diff); home_win carries no
+      MLE-moved columns so there is NO skew to fix, and eb_gb_pct nulled on both targets where it is
+      relevant. ⭐ Ties to Q6: the column is kept on the premise that a future retrain tests it FREE —
+      and home_win's next natural retrain IS that test. A known deferred gap, NOT a coverage failure.

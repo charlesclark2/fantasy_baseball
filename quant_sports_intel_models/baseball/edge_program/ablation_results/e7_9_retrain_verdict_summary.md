@@ -45,6 +45,32 @@ run_diff. Same mechanism: batter K%/BB%/ISO and starter K%/BB% are rate stats th
 SCORED, whereas run differential is largely absorbed by `elo_diff` / `pythagorean_win_exp_diff`,
 which the incumbent contract already carries.
 
+## PM adjudication (second read, 2026-07-29) — binding
+
+All 8 second-read questions were ruled. **No verdict changed and nothing was re-fit.** Two in-session
+fixes were applied; everything else is record-and-defer:
+
+- **Q1 (applied)** — the margin-attribution section above was added to every recorded report, derived
+  from the stored arm table. The **gate is unchanged** ("is any (contract × learner) configuration
+  better?" is the right promotion question); only the reporting was defective. A re-run with a
+  learner-fixed gate was explicitly **declined** — the feature effects are all sub-floor, so a
+  cleaner gate returns the same nulls at hours of cost.
+- **Q2 (applied, FORWARD-DATED)** — pre-registration amendment #1 (2026-07-29) replaces the
+  misspecified `1e-9` calibration tolerance with `max(1e-3, 10% of the incumbent's PIT-KS)`,
+  **effective for the NEXT run**. E7.9's three 2026-07-28 verdicts stand exactly as scored; a guard
+  test fails if the amendment ever retro-applies, and any future run that passes *only* because of
+  it must say so in its own report.
+- **Q3 — PARK** total_runs/post_lineup for a natural auto-retest as folds accrue; no powered story
+  today. Re-tests together with Q4 if totals-calibration is prioritized.
+- **Q4 — NOTE ONLY, do not act.** Any future learner re-selection must select on the
+  calibration/pricing metric, fully deflated, **not** on CRPS (E2.1-r: NGBoost was chosen to price).
+- **Q5 — closed** as a clean null; lesson recorded in `sport_data_platform.md`.
+- **Q6 — keep** `eb_gb_pct` in the feature block.
+- **Q7 — do not build** the old-prior counterfactual; the analytical bound stands as the record.
+- **Q8 — `home_win` deliberately out of scope**, deferred; the harness is not extended to
+  classification. Ties to Q6: home_win's next natural retrain *is* that test. A known deferred gap,
+  not a coverage failure.
+
 ## Pre-registered follow-ups (NOT acted on here — post-hoc action is the overfit move)
 
 1. **A learner re-bake-off.** `glm_elasticnet` beats the incumbent `ngboost_normal` on ALL THREE

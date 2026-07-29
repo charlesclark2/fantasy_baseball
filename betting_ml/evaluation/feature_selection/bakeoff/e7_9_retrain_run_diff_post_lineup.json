@@ -274,5 +274,57 @@
       "pit_ks": 0.12562498631467114,
       "n": 5468
     }
+  ],
+  "margin_decomposition": {
+    "available": true,
+    "total": 0.012726,
+    "learner_swap": 0.006801,
+    "contract": 0.005924,
+    "learner_share": 0.5345,
+    "same_learner_reference_arm": "incumbent::glm_elasticnet"
+  },
+  "variant_effect_by_learner": [
+    {
+      "learner": "glm_elasticnet",
+      "incumbent": 2.478,
+      "plus_gb": -0.0005,
+      "plus_eb": 0.0059,
+      "plus_both": 0.0055
+    },
+    {
+      "learner": "ngboost_normal",
+      "incumbent": 2.4848,
+      "plus_gb": -0.001,
+      "plus_eb": 0.0051,
+      "plus_both": 0.003
+    },
+    {
+      "learner": "catboost",
+      "incumbent": 2.4894,
+      "plus_gb": -0.0114,
+      "plus_eb": -0.0054,
+      "plus_both": -0.0064
+    },
+    {
+      "learner": "stack_mean",
+      "incumbent": 2.5087,
+      "plus_gb": -0.0044,
+      "plus_eb": -0.0044,
+      "plus_both": -0.0048
+    },
+    {
+      "learner": "xgboost",
+      "incumbent": 2.5278,
+      "plus_gb": -0.0011,
+      "plus_eb": -0.0052,
+      "plus_both": -0.0031
+    },
+    {
+      "learner": "lightgbm",
+      "incumbent": 2.6032,
+      "plus_gb": -0.0189,
+      "plus_eb": -0.0357,
+      "plus_both": -0.0418
+    }
   ]
 }
