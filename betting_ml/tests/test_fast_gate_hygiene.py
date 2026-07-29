@@ -208,6 +208,61 @@ def test_module_does_not_mutate_global_state_at_import(test_file: Path):
     )
 
 
+# ── 3b. the slow/research TIER wiring — no test may fall out of BOTH jobs ────────────────────
+
+class TestSlowResearchTierWiring:
+    """TD2 tiering: `slow` splits fast-vs-slow; `research` splits the slow job into the REQUIRED
+    merge bar (`slow and not research`) and the nightly non-blocking job (`research`).
+
+    The failure mode this guards is silent coverage loss: if ci.yml's slow job stopped saying
+    `and not research`, the tier would collapse; if the nightly workflow stopped selecting
+    `-m research`, those tests would run NOWHERE while both gates still went green.
+    """
+
+    def test_required_slow_job_excludes_research(self):
+        wf = yaml.safe_load(_CI_WORKFLOW.read_text())
+        steps = wf["jobs"]["slow-tests"]["steps"]
+        run = " ".join(s.get("run", "") for s in steps)
+        assert "slow and not research" in run, (
+            "ci.yml's slow job must select `-m 'slow and not research'` — without the exclusion "
+            "the research harness tests are back on the required merge bar."
+        )
+
+    def test_nightly_workflow_runs_the_research_tier(self):
+        nightly = _REPO_ROOT / ".github" / "workflows" / "research_tests.yml"
+        assert nightly.exists(), (
+            "research_tests.yml is missing — tests marked `research` are excluded from the "
+            "required slow job, so without this workflow they would run NOWHERE."
+        )
+        wf = yaml.safe_load(nightly.read_text())
+        run = " ".join(s.get("run", "") for s in wf["jobs"]["research-tests"]["steps"])
+        assert "-m research" in run
+        # `on:` parses as the boolean True in YAML 1.1 — check both spellings.
+        triggers = wf.get("on", wf.get(True, {}))
+        assert "schedule" in triggers, "the research tier must actually be scheduled"
+
+    def test_research_is_a_subset_of_slow(self):
+        """`research` only tiers the SLOW job. A fast test carrying `research` would still run in
+        the fast gate, so the marker would be misleading — keep the two aligned."""
+        src = {p: (_REPO_ROOT / p).read_text(errors="ignore") for p in _ALL_TEST_FILES}
+        offenders = []
+        for path, text in src.items():
+            tree = ast.parse(text, filename=str(path))
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                marks = {_dotted(d.func) if isinstance(d, ast.Call) else _dotted(d)
+                         for d in node.decorator_list}
+                if any(m.endswith("mark.research") for m in marks) and not any(
+                    m.endswith("mark.slow") for m in marks
+                ):
+                    offenders.append(f"{path.as_posix()}::{node.name}")
+        assert not offenders, (
+            "test marked `research` but not `slow` — `research` only removes a test from the "
+            f"REQUIRED SLOW job, so this one still runs in the fast gate: {offenders}"
+        )
+
+
 # ── 4. the pipeline-import env contract belongs to conftest, not to a test module ────────────
 
 def test_conftest_supplies_the_dummy_snowflake_env():

@@ -236,6 +236,7 @@ def test_draw_predictive_shapes_are_games_by_draws():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.slow
+@pytest.mark.research
 def test_oracle_is_the_scoring_floor():
     """No model may score BETTER than a perfectly-specified one.
 

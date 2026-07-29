@@ -211,8 +211,14 @@ jobs:
       - name: Generate dbt manifest (offline parse — no warehouse connection)
         run: dbtf parse --project-dir dbt --profiles-dir dbt
 
-      - name: Run slow tests (Monte-Carlo calibration guards)
-        run: uv run pytest -m slow -n auto --tb=short
+      # TD2 (2026-07-27) — `and not research`: the research/bake-off harness guards
+      # (derivative_model_gate, line_microstructure, bakeoff_perside, f5_distribution) are NOT
+      # imported by ANY serving, pipeline, or API code — they only execute when a human runs a
+      # bake-off — so they no longer block a merge. They still run, nightly, in
+      # research_tests.yml. What stays here is the math that runs LIVE: totals_distribution
+      # (drawn per game on every daily serving write via totals_serving) + prop_pricing.
+      - name: Run slow tests (LIVE-path Monte-Carlo calibration guards)
+        run: uv run pytest -m "slow and not research" -n auto --tb=short
 
   model-smoke-test:
     name: Model Artifact Smoke Test
