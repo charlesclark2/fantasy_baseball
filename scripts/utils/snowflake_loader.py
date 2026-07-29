@@ -87,7 +87,14 @@ def _load_private_key_inline(key_val: str, passphrase: str | None) -> bytes:
 def get_snowflake_connection(
     database: str = "baseball_data",
     schema: str = "fangraphs",
+    warehouse: str | None = None,
 ) -> snowflake.connector.SnowflakeConnection:
+    """Open a Snowflake connection.
+
+    E11.24: pass `warehouse` to route a COST/METERING/AUDIT read onto the monitoring warehouse
+    (see `betting_ml.utils.data_loader.get_monitoring_connection`) — an `account_usage` query on
+    the default warehouse RESUMES the very warehouse it measures.
+    """
     required = ["SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_WAREHOUSE"]
     missing = [k for k in required if not os.environ.get(k)]
     if missing:
@@ -96,7 +103,7 @@ def get_snowflake_connection(
     kwargs: dict = {
         "account":   os.environ["SNOWFLAKE_ACCOUNT"],
         "user":      os.environ["SNOWFLAKE_USER"],
-        "warehouse": os.environ["SNOWFLAKE_WAREHOUSE"],
+        "warehouse": warehouse or os.environ["SNOWFLAKE_WAREHOUSE"],
         "database":  database,
         "schema":    schema,
     }

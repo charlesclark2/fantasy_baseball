@@ -12,6 +12,26 @@ Output table: baseball_data.betting.team_elo_history
 Only elo_before_game is used as a pre-game feature — elo_after_game
 captures post-game state for rolling updates only.
 
+⭐ E11.24 (literal-zero Snowflake) — the SF-FREE branch, gated `E11_24_ELO_SF_FREE=1`.
+    WHY THIS SCRIPT: the 2026-07-29 wake census attributed **14% of all remaining COMPUTE_WH
+    resumes (6/44 on 7/28)** to this script's `CREATE TABLE IF NOT EXISTS … team_elo_history`
+    — a pure NO-OP DDL against an already-existing table, the exact shape of the retired
+    `mlb_odds_raw` bridge. The hourly CALLER is `statcast_catchup_job`, re-fired by
+    `statcast_freshness_sensor` once an hour from 04:00 ET until yesterday's Statcast lands
+    (hourly `run_key`) — so on a normal morning the whole chain, this script included, runs
+    ~6× and 5 of those runs can change nothing.
+    Under the flag this script opens NO Snowflake connection at all: it reads
+    `mart_game_results` from the S3 lakehouse via DuckDB and writes `team_elo_history`
+    straight to the lakehouse parquet key.
+
+    🚨 INC-31 WRITER-UNIQUENESS: the S3 key `baseball/lakehouse/team_elo_history/data.parquet`
+    was written by TWO `SELECT *` Snowflake mirrors (`export_w8a_precursors_to_s3.py` and
+    `export_features_to_s3.py`). Both SKIP the table under this flag — a retired mirror still
+    writing a cut-over key is precisely the INC-31 clobber (and, because those mirrors preserve
+    Snowflake's UPPERCASE identifiers, a lowercase native write would ALSO have flipped the
+    column case under the readers). Hence `_LAKEHOUSE_COLUMNS` below pins the UPPERCASE
+    contract the existing parquet already carries.
+
 Usage:
   uv run python betting_ml/scripts/compute_elo.py [--start-year 2015] [--end-year 2025]
   uv run python betting_ml/scripts/compute_elo.py --dry-run
@@ -25,10 +45,6 @@ import os
 from datetime import date
 from typing import Any
 
-import snowflake.connector
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
-
 INITIAL_ELO: float = 1500.0
 K: float = 4.0
 HOME_ADV: float = 24.0
@@ -37,6 +53,32 @@ REGRESSION_WEIGHT: float = 1.0 / 3.0  # fraction pulled back toward mean each se
 _KEY_PATH = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH") or os.path.expanduser(
     "~/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem"
 )
+
+# ── E11.24 literal-zero-Snowflake lever ────────────────────────────────────────────────
+_SF_FREE_ENV = "E11_24_ELO_SF_FREE"
+
+# The lakehouse home of team_elo_history. Kept in one place so the reader glob
+# (betting_ml.utils.lakehouse_monitor.lh) and this writer can never drift apart.
+_LAKEHOUSE_KEY = "team_elo_history"
+
+# ⚠️ UPPERCASE ON PURPOSE — the existing parquet was written by a Snowflake `SELECT *` mirror
+# that preserves Snowflake's UPPERCASE identifiers, and the Snowflake external table addresses
+# columns as CASE-SENSITIVE `VALUE:<KEY>`. Emitting lowercase here would make every column read
+# NULL through the ext table while DuckDB (case-insensitive) stayed green — the silent
+# `VALUE:<key>` landmine. (name, DuckDB type) in the parquet's own column order.
+_LAKEHOUSE_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("GAME_PK", "BIGINT"),
+    ("GAME_DATE", "DATE"),
+    ("TEAM_ABBREV", "VARCHAR"),
+    ("ELO_BEFORE_GAME", "DOUBLE"),
+    ("ELO_AFTER_GAME", "DOUBLE"),
+)
+
+
+def sf_free() -> bool:
+    """True when this run must never touch Snowflake (E11.24 cutover lever)."""
+    return os.environ.get(_SF_FREE_ENV, "0").strip() == "1"
+
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS baseball_data.betting.team_elo_history (
@@ -86,7 +128,12 @@ VALUES (src.game_pk, src.game_date, src.team_abbrev, src.elo_before_game, src.el
 """
 
 
-def _connect() -> snowflake.connector.SnowflakeConnection:
+def _connect():
+    # Lazy import so the SF-FREE branch never even loads the Snowflake connector.
+    import snowflake.connector
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives import serialization
+
     with open(_KEY_PATH, "rb") as f:
         p_key = serialization.load_pem_private_key(
             f.read(), password=None, backend=default_backend()
@@ -162,8 +209,86 @@ def compute_elo(
     return records
 
 
+def load_games_from_lakehouse(start_year: int, end_year: int) -> list[dict[str, Any]]:
+    """E11.24 SF-FREE read: `mart_game_results` from the S3 lakehouse via DuckDB.
+
+    Returns rows keyed EXACTLY like the Snowflake DictCursor did (UPPERCASE), so
+    `compute_elo()` — the pure Elo kernel — is byte-identical across both branches and the
+    two paths cannot silently diverge.
+
+    Routed through `register_lakehouse_views` rather than a hardcoded `read_parquet` glob:
+    a hardcoded glob is what broke the daily job on 2026-07-20 when phase-1.5 deleted the
+    legacy parquet layout out from under it (grep the PATH, not the table name).
+    """
+    from betting_ml.utils.delta_lakehouse import register_lakehouse_views
+    from betting_ml.utils.lakehouse_monitor import duck
+
+    conn = duck()
+    try:
+        register_lakehouse_views(conn, ["mart_game_results"])
+        cur = conn.execute(
+            """
+            SELECT game_pk   AS "GAME_PK",
+                   game_date AS "GAME_DATE",
+                   game_year AS "GAME_YEAR",
+                   home_team AS "HOME_TEAM",
+                   away_team AS "AWAY_TEAM",
+                   home_team_won AS "HOME_TEAM_WON"
+            FROM mart_game_results
+            WHERE game_type = 'R'
+              AND game_year >= ?
+              AND game_year <= ?
+              AND home_team_won IS NOT NULL
+            ORDER BY game_date ASC, game_pk ASC
+            """,
+            [start_year, end_year],
+        )
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def write_to_lakehouse(records: list[tuple[int, date, str, float, float]]) -> int:
+    """E11.24 SF-FREE write: overwrite the single `team_elo_history` lakehouse parquet.
+
+    A FULL overwrite is the value-identical replacement for the Snowflake MERGE: this script
+    always recomputes every season from `--start-year` forward, so the MERGE never had a
+    partial-update semantic to preserve. One object at the existing `data.parquet` key keeps
+    the `**/*.parquet` reader glob single-file (no glob-dup) and keeps the write atomic from a
+    reader's point of view.
+
+    DuckDB `COPY` is used deliberately: it authenticates through the S3 `credential_chain`,
+    so the EC2 instance role resolves and there is no `aws_access_key_id=os.environ.get(...)`
+    AKID footgun.
+    """
+    from betting_ml.utils.lakehouse_monitor import LAKEHOUSE, duck
+
+    target = f"{LAKEHOUSE}/{_LAKEHOUSE_KEY}/data.parquet"
+    ddl_cols = ", ".join(f'"{name}" {typ}' for name, typ in _LAKEHOUSE_COLUMNS)
+    placeholders = ", ".join("?" for _ in _LAKEHOUSE_COLUMNS)
+
+    conn = duck()
+    try:
+        conn.execute(f"CREATE OR REPLACE TEMP TABLE elo_out ({ddl_cols})")
+        conn.executemany(f"INSERT INTO elo_out VALUES ({placeholders})", records)
+        (staged,) = conn.execute("SELECT COUNT(*) FROM elo_out").fetchone()
+        if int(staged) != len(records):
+            raise RuntimeError(
+                f"staged {staged:,} rows but computed {len(records):,} — refusing to publish a "
+                f"partial team_elo_history (a short write silently degrades every elo feature)."
+            )
+        conn.execute(
+            f"COPY (SELECT * FROM elo_out) TO '{target}' (FORMAT PARQUET, OVERWRITE_OR_IGNORE 1)"
+        )
+    finally:
+        conn.close()
+    print(f"  wrote {len(records):,} rows → {target}")
+    return len(records)
+
+
 def _write_to_snowflake(
-    conn: snowflake.connector.SnowflakeConnection,
+    conn,
     records: list[tuple[int, date, str, float, float]],
     batch_size: int = 500,
 ) -> int:
@@ -202,17 +327,27 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    print(f"Connecting to Snowflake...")
-    conn = _connect()
+    lakehouse = sf_free()
+    conn = None
+    if lakehouse:
+        print(f"[{_SF_FREE_ENV}=1] Snowflake-FREE run — S3 lakehouse via DuckDB.")
+    else:
+        print("Connecting to Snowflake...")
+        conn = _connect()
 
     try:
         print(f"Loading games {args.start_year}–{args.end_year} from mart_game_results...")
-        cur = conn.cursor(snowflake.connector.DictCursor)
-        cur.execute(
-            _GAMES_QUERY.format(start_year=args.start_year, end_year=args.end_year)
-        )
-        games = cur.fetchall()
-        cur.close()
+        if lakehouse:
+            games = load_games_from_lakehouse(args.start_year, args.end_year)
+        else:
+            import snowflake.connector
+
+            cur = conn.cursor(snowflake.connector.DictCursor)
+            cur.execute(
+                _GAMES_QUERY.format(start_year=args.start_year, end_year=args.end_year)
+            )
+            games = cur.fetchall()
+            cur.close()
         print(f"  {len(games):,} games loaded")
 
         if not games:
@@ -253,12 +388,17 @@ def main() -> None:
                 print(f"  {team:<4}  {elo:.1f}")
             return
 
-        print(f"Writing {len(records):,} rows to baseball_data.betting.team_elo_history...")
-        written = _write_to_snowflake(conn, records)
+        if lakehouse:
+            print(f"Writing {len(records):,} rows to the S3 lakehouse team_elo_history...")
+            written = write_to_lakehouse(records)
+        else:
+            print(f"Writing {len(records):,} rows to baseball_data.betting.team_elo_history...")
+            written = _write_to_snowflake(conn, records)
         print(f"Done. {written:,} rows written.")
 
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
 
 if __name__ == "__main__":

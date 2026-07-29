@@ -227,14 +227,15 @@ def _load_private_key() -> bytes:
     )
 
 
-def _connect(schema: str | None = None) -> snowflake.connector.SnowflakeConnection:
+def _connect(schema: str | None = None,
+             warehouse: str | None = None) -> snowflake.connector.SnowflakeConnection:
     pkb = _load_private_key()
     kwargs: dict = dict(
         account=os.environ.get("SNOWFLAKE_ACCOUNT", "IHUPICS-DP59975"),
         user=os.environ.get("SNOWFLAKE_USER", "dbt_rw"),
         private_key=pkb,
         role=os.environ.get("SNOWFLAKE_ROLE", "ACCOUNTADMIN"),
-        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
+        warehouse=warehouse or os.environ.get("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
         database="baseball_data",
     )
     if schema:
@@ -249,6 +250,37 @@ def get_snowflake_connection(schema: str | None = None) -> snowflake.connector.S
     Pass schema to set a default schema for unqualified references (e.g. temp tables).
     """
     return _connect(schema=schema)
+
+
+# ── E11.24: the MONITORING warehouse (the self-inflicted-wake cure) ─────────────────────
+# THE BUG THIS FIXES: an `account_usage` cost/metering query needs *a* running warehouse, and
+# the default is COMPUTE_WH — so every cost audit RESUMES the very warehouse it is measuring.
+# That was measured as a top-3 remaining waker (26 resumes pre-flip, 6 post-flip, 16 executions
+# on 7/27) and it also CONTAMINATES the measurement: the 2026-07-29 wake census had to discard
+# its own UTC day because the audit queries landed on it.
+#
+# ⇒ Every read of `snowflake.account_usage` / `information_schema` metering data must connect on
+# a SEPARATE X-Small warehouse. Then the audit is free to run whenever, and a "near-zero resumes"
+# reading on COMPUTE_WH means what it says instead of being floored by the observer.
+#
+# Operator DDL (once, ACCOUNTADMIN — see the E11.24 handoff):
+#   CREATE WAREHOUSE IF NOT EXISTS MONITOR_WH WITH WAREHOUSE_SIZE='XSMALL'
+#     AUTO_SUSPEND=60 AUTO_RESUME=TRUE INITIALLY_SUSPENDED=TRUE;
+MONITOR_WAREHOUSE_ENV = "SNOWFLAKE_MONITOR_WAREHOUSE"
+DEFAULT_MONITOR_WAREHOUSE = "MONITOR_WH"
+
+
+def get_monitoring_connection(schema: str | None = None):
+    """A Snowflake connection for COST/METERING/AUDIT reads ONLY — never the compute warehouse.
+
+    Use this for anything touching `snowflake.account_usage` (warehouse_metering_history,
+    warehouse_events_history, query_history). Using `get_snowflake_connection` for those makes
+    the measurement wake the thing being measured.
+    """
+    return _connect(
+        schema=schema,
+        warehouse=os.environ.get(MONITOR_WAREHOUSE_ENV, DEFAULT_MONITOR_WAREHOUSE),
+    )
 
 
 # ---------------------------------------------------------------------------

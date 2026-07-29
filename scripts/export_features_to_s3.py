@@ -91,9 +91,36 @@ FEATURE_TABLES: dict[str, str] = {}
 # performance.py /summary (~L97-118) — so the bankroll read 404s → CLV fallback IDENTICALLY in
 # Snowflake and --s3 mode. Mirroring a non-existent object would only fail the export, so it's
 # excluded; the readers keep their existing CLV fallback (no behavior change).
+#
+# ⛔ E11.24 (literal-zero Snowflake) — team_elo_history is RETIRED FROM THIS MIRROR the moment
+# `E11_24_ELO_SF_FREE=1`, because betting_ml/scripts/compute_elo.py then writes that exact
+# `baseball/lakehouse/team_elo_history/data.parquet` key NATIVELY. Leaving this mirror live
+# would recreate the INC-31 two-writers-one-key clobber — and worse than the umpire case, since
+# under the flag the Snowflake table is FROZEN, so this mirror would overwrite fresh native
+# Elo with a stale Snowflake snapshot every daily run. team_elo_history is this script's ONLY
+# remaining table, so under the flag the whole export is a loud no-op (its full retirement).
 SERVING_MARTS = {
     "team_elo_history":   "baseball_data.betting.team_elo_history",
 }
+
+# name → (env lever, why). A table listed here is skipped when its lever is set, and an
+# explicit `--table <name>` request FAILS LOUDLY rather than silently clobbering the key.
+CUTOVER_RETIRED: dict[str, tuple[str, str]] = {
+    "team_elo_history": (
+        "E11_24_ELO_SF_FREE",
+        "compute_elo.py writes this lakehouse key natively under E11.24; mirroring the (now "
+        "frozen) Snowflake table over it is the INC-31 two-writers-one-key clobber.",
+    ),
+}
+
+
+def retired_by_cutover(name: str) -> str | None:
+    """The reason `name` must not be mirrored right now, or None if it is still live."""
+    lever_reason = CUTOVER_RETIRED.get(name)
+    if lever_reason and os.environ.get(lever_reason[0], "0").strip() == "1":
+        return f"{lever_reason[0]}=1 — {lever_reason[1]}"
+    return None
+
 
 MIRROR_TABLES = {**FEATURE_TABLES, **SERVING_MARTS}
 ALL_NAMES = sorted(MIRROR_TABLES)
@@ -174,6 +201,21 @@ def main():
     args = ap.parse_args()
 
     selected = [args.table] if args.table else ALL_NAMES
+
+    # E11.24 — drop cut-over tables BEFORE connecting (an explicit --table request is a hard
+    # error so a stale runbook can't clobber a natively-written key).
+    if args.table and (reason := retired_by_cutover(args.table)):
+        print(f"REFUSING to mirror {args.table}: {reason}")
+        sys.exit(2)
+    for name in list(selected):
+        if reason := retired_by_cutover(name):
+            print(f"WARNING: skipping {name} — {reason}")
+            selected.remove(name)
+    if not selected:
+        # ALERT-loud-but-continue: a silent no-op export is the tier violation.
+        print("WARNING: every table in this mirror is retired by a cutover lever — nothing to do.")
+        return
+
     print(f"E11.1-W7b feature mirror: {selected}" + ("  | DRY-RUN" if args.dry_run else ""))
 
     failures: list[tuple[str, str]] = []

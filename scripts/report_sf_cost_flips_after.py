@@ -77,8 +77,10 @@ def main() -> int:
                     help="account $/credit for the banked-$ line (default 2.0)")
     args = ap.parse_args()
 
-    from betting_ml.utils.data_loader import get_snowflake_connection
-    conn = get_snowflake_connection()
+    # E11.24 — a cost report must NOT resume the warehouse it measures (that was a measured
+    # top-3 waker AND it contaminated the 7/29 wake census's own UTC day). Runs on MONITOR_WH.
+    from betting_ml.utils.data_loader import get_monitoring_connection
+    conn = get_monitoring_connection()
     cur = conn.cursor()
     cur.execute("alter session set timezone='UTC'")
 
