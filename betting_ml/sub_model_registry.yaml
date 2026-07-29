@@ -1213,5 +1213,27 @@ milb_mle_pitcher_prior_v1:
       across 48,629 rows), and the prior is leakage-safe by construction (emit_projections refits per
       debut cohort on strictly-prior cohorts; the minor line is strictly pre-debut). Only the SNOWFLAKE
       incremental (7-day MERGE window) still holds pre-MLE history → an operator DROP+rebuild.
-    retrain: PENDING — harness shipped (betting_ml/scripts/e7_9_train_serve_consistency.py); the full
-      bake-off is an operator run. Default verdict is INCUMBENT_STANDS.
+    retrain: |
+      ✅ RUN 2026-07-28 (operator, laptop, S3-native matrix 11,858 × 792). ALL THREE target/tier
+      bake-offs returned INCUMBENT_STANDS ⇒ no champion changes, no prediction backfill (step 7 never
+      fires). run_diff/pre_lineup margin +0.0053 (DSR 0.218); run_diff/post_lineup +0.0127 (DSR
+      0.724); total_runs/post_lineup +0.0206 — cleared 3 of 4 gates, missed DSR at 0.842 vs 0.95 (the
+      nearest miss). PBO 0.000 and the E2.1-r oracle-floor sanity passed on all three.
+      ⚠️ THE MARGIN CONFLATES CONTRACT AND LEARNER: 54-77% of every leader's margin is the
+      ngboost_normal → glm_elasticnet swap, not the features (total_runs/post: +0.0153 of +0.0206).
+      Verdict + decomposition: ablation_results/e7_9_retrain_verdict_summary.md.
+    eb_gb_pct_verdict: |
+      CLEAN NULL, target-dependent sign (holding learner fixed): weakly POSITIVE for total_runs (6 of
+      7 learners, max +0.0073), NEGATIVE for run_diff (all 6 learners). Mechanistically sensible — GB%
+      suppresses home runs, which moves a TOTAL more than a DIFFERENTIAL — but every magnitude is
+      ≤ 1/4 of the 0.02 noise floor. ⇒ E7.3p's −23% cold-start MAE lift on GB% is REAL at the pitcher
+      metric level and does NOT propagate to game-level skill. The join was still correct to build:
+      the lift needed a path to a prediction before the null could be attributed to the FEATURE rather
+      than to missing plumbing. eb_gb_pct stays served + tested but enters NO model contract.
+    followups_preregistered: |
+      (1) A LEARNER re-bake-off — glm_elasticnet beat the incumbent ngboost_normal on all three
+      targets with equal-or-better PIT-KS; E1.9 picked NGBoost and the matrix has changed since.
+      ⚠️ E2.1-r: NGBoost was selected for PRICING CALIBRATION, so a discrimination win does not
+      automatically justify the swap. (2) plus_eb on total_runs, PROPERLY POWERED — DSR 0.842 on the
+      strongest case is what an under-powered real effect looks like. Binding constraint: 3 purged
+      folds, and the offline matrix is not point-in-time (ceilings, not live figures).
