@@ -11,7 +11,10 @@ no network, no S3, no warehouse. It reproduces the AC's validation without the l
   • the UDFA fuzzy residual resolves a real undrafted player, EXCLUDES a drafted one, and
     does NOT false-match a player with no roster row;
   • a transfer's college_athlete_id is stable across schools;
-  • the emitted mart is 1-row-per-gsis_id (duplicate NFL key impossible).
+  • the emitted mart is 1-row-per-gsis_id (duplicate NFL key impossible);
+  • NF-D12: a just-drafted slot with a NULL nflverse gsis_id is backfilled via the ESPN-id
+    bridge (nflverse_players.espn_id == the CFBD college_athlete_id), a genuinely-unresolvable
+    null stays null, and the backfill can never multiply/duplicate the slot xref.
 """
 from __future__ import annotations
 
@@ -228,6 +231,109 @@ def test_mart_unique_gsis_id(lake):
     assert non_null.is_unique
     assert (mart["sport"] == "ncaaf").all()
     assert (mart["xref_version"] == xref.XREF_VERSION).all()
+
+
+# ── NF-D12: a just-drafted class with a transiently-null nflverse gsis_id ────────────────
+@pytest.fixture(scope="module")
+def lake_gsis_backfill(tmp_path_factory):
+    """A dedicated fixture for the ESPN-id gsis backfill: one drafted slot whose nflverse
+    gsis_id is NULL (the just-drafted-class symptom — NF-D12's Carson Beck) but resolves via
+    `nflverse_players.espn_id`, and one that stays genuinely unresolved (no nflverse_players
+    row at all — must not false-match)."""
+    root = str(tmp_path_factory.mktemp("ncaaf_lake_backfill"))
+
+    _land(root, "cfbd_draft_picks", 2026, [
+        {"year": 2026, "overall": 65, "round": 3, "collegeAthleteId": 4430841,
+         "name": "Carson Beck", "position": "QB", "collegeTeam": "Miami", "collegeConference": "ACC"},
+        {"year": 2026, "overall": 201, "round": 6, "collegeAthleteId": 5001,
+         "name": "Nobody Player", "position": "WR", "collegeTeam": "Nowhere State",
+         "collegeConference": "Sun Belt"},
+    ])
+    _land(root, "nflverse_draft_picks", 2026, [
+        # gsis_id NULL — nflverse hasn't synced it yet for the just-drafted class.
+        {"season": 2026, "pick": 65, "round": 3, "gsis_id": None, "pfr_player_id": "BeckCa01",
+         "cfb_player_id": "carson-beck-1", "pfr_player_name": "Carson Beck", "position": "QB",
+         "college": "Miami (FL)", "hof": "false"},
+        # also null gsis_id, but no nflverse_players row exists for this one either → must stay
+        # null (a genuine never-took-an-NFL-snap case, not a bridge-fixable one).
+        {"season": 2026, "pick": 201, "round": 6, "gsis_id": None, "pfr_player_id": "PlayNo01",
+         "cfb_player_id": "nobody-player-1", "pfr_player_name": "Nobody Player", "position": "WR",
+         "college": "Nowhere State", "hof": "false"},
+    ])
+    _land(root, "nflverse_players", 0, [
+        # the bridge: the SAME ESPN athlete id CFBD stamped as collegeAthleteId, real gsis_id.
+        {"espn_id": "4430841", "gsis_id": "BEC122142", "display_name": "Carson Beck",
+         "position": "QB", "college_name": "Miami; Georgia"},
+    ])
+    _land(root, "nflverse_combine", 2026, [{"cfb_id": "carson-beck-1", "forty": 4.83}])
+
+    res = xref.build_xref(xref.local_lake(root), draft_seasons=[2026])
+    return {"root": root, "res": res, "mart": res.mart, "report": res.report}
+
+
+def test_gsis_backfilled_via_espn_bridge(lake_gsis_backfill):
+    import pandas as pd
+
+    mart, rep = lake_gsis_backfill["mart"], lake_gsis_backfill["report"]
+    beck = mart[mart["player_name"] == "Carson Beck"]
+    assert len(beck) == 1
+    row = beck.iloc[0]
+    assert row["gsis_id"] == "BEC122142"                # backfilled, not dropped
+    assert row["match_method"] == "deterministic_slot"
+    assert row["draft_overall"] == 65
+    assert rep["gsis_backfilled_espn"] == 1
+    assert "gsis_backfilled_espn" not in mart.columns    # internal audit flag, not shipped in the mart
+    assert pd.isna(mart[mart["player_name"] == "Nobody Player"].iloc[0]["gsis_id"])
+
+
+def test_unresolvable_gsis_stays_null_no_false_match(lake_gsis_backfill):
+    import pandas as pd
+
+    mart = lake_gsis_backfill["mart"]
+    nobody = mart[mart["player_name"] == "Nobody Player"]
+    assert len(nobody) == 1
+    assert pd.isna(nobody.iloc[0]["gsis_id"])            # no nflverse_players row → stays null
+    assert lake_gsis_backfill["report"]["gsis_backfilled_espn"] == 1   # only Beck backfilled
+
+
+def test_espn_bridge_cannot_duplicate_slot_rows(lake_gsis_backfill):
+    # anti-cartesian: even with the LEFT join to the bridge, 2 cfbd picks + 2 nfl picks -> 2 rows
+    # (per_class's "matched" counts a non-null gsis_id, so Nobody Player's still-null row reads
+    # as unmatched there even though its SLOT resolved — the join itself never multiplied).
+    rep = lake_gsis_backfill["report"]
+    assert rep["slot_total"] == 2
+    assert rep["slot_matched"] == 1
+    assert len(lake_gsis_backfill["mart"]) == 2
+    assert lake_gsis_backfill["mart"]["gsis_id"].dropna().is_unique
+
+
+def test_espn_bridge_failure_does_not_sink_the_spine(tmp_path, monkeypatch):
+    """A backfill ENHANCEMENT, not the primary spine (year, overall) join — if the
+    nflverse_players read fails for any reason, build_xref must still succeed with null gsis_id
+    rows standing (the pre-NF-D12 behaviour), never raise."""
+    root = str(tmp_path)
+    _land(root, "cfbd_draft_picks", 2026, [
+        {"year": 2026, "overall": 65, "round": 3, "collegeAthleteId": 4430841,
+         "name": "Carson Beck", "position": "QB", "collegeTeam": "Miami", "collegeConference": "ACC"},
+    ])
+    _land(root, "nflverse_draft_picks", 2026, [
+        {"season": 2026, "pick": 65, "round": 3, "gsis_id": None, "pfr_player_id": "BeckCa01",
+         "cfb_player_id": "carson-beck-1", "pfr_player_name": "Carson Beck", "position": "QB",
+         "college": "Miami (FL)", "hof": "false"},
+    ])
+    _land(root, "nflverse_combine", 2026, [{"cfb_id": "carson-beck-1", "forty": 4.83}])
+    # deliberately do NOT land nflverse_players at all — the raw source read will fail.
+
+    def _boom(con, lk):
+        raise RuntimeError("simulated nflverse_players read failure")
+
+    monkeypatch.setattr(xref, "_stage_espn_gsis_bridge", _boom)
+    res = xref.build_xref(xref.local_lake(root), draft_seasons=[2026])
+    assert len(res.mart) == 1
+    import pandas as pd
+
+    assert pd.isna(res.mart.iloc[0]["gsis_id"])
+    assert res.report["gsis_backfilled_espn"] == 0
 
 
 # ── the anti-cartesian guard actually raises (defensive, not just asserted) ──────────────

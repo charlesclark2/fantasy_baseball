@@ -22,6 +22,12 @@ operator command, not a daily op.
 Reads the boards from the local artifacts CSVs by default (what `run_league_board.py` writes), or from
 the S3 Delta with `--from-lake`. SF-free / off-box. This is the frontend analog of "land to S3 + a
 readable output" — the board data the draft tool consumes.
+
+🔒 NF-D12 PUBLISH GUARD: resolving an S3 bucket (--s3-bucket / $CACHE_BUCKET) no longer uploads by
+itself — pass `--publish` to actually reach the LIVE prod api-cache. The default is always a DRY-RUN
+that stages the JSON locally and prints exactly what would upload. This exists because $CACHE_BUCKET
+is set in the operator's normal env, so the pre-guard default silently pushed to prod on every
+re-export session (NF-D11 did this unintentionally).
 """
 from __future__ import annotations
 
@@ -592,7 +598,7 @@ def config_manifest_entry(name: str) -> dict:
     }
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_arg_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--season", type=int, default=2026)
     ap.add_argument("--from-lake", action="store_true",
@@ -602,10 +608,23 @@ def main(argv: list[str] | None = None) -> int:
         "--s3-bucket",
         default=os.getenv("CACHE_BUCKET"),
         help="S3 bucket to upload the boards to (default $CACHE_BUCKET). Uploaded under "
-        "fantasy/nfl/<season>/ where the gated /fantasy/nfl/* API reads them. If empty, "
-        "boards are only staged locally.",
+        "fantasy/nfl/<season>/ where the gated /fantasy/nfl/* API reads them. Resolving a "
+        "bucket alone does NOT upload — pass --publish too (see below).",
     )
-    args = ap.parse_args(argv)
+    ap.add_argument(
+        "--publish",
+        action="store_true",
+        help="NF-D12 PUBLISH GUARD: actually upload to the LIVE prod api-cache bucket. Without "
+        "this flag the exporter always DRY-RUNS (default) — it stages the JSON locally and "
+        "prints exactly what WOULD upload, even if --s3-bucket / $CACHE_BUCKET resolves to the "
+        "prod bucket. This is a deliberate act: a re-export session must not push to users "
+        "unintentionally (NF-D11 did).",
+    )
+    return ap
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_arg_parser().parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
     df = load_boards_lake(args.season) if args.from_lake else load_boards_local(args.season)
@@ -712,16 +731,39 @@ def main(argv: list[str] | None = None) -> int:
              len(configs_present), sorted(sizes_present), combos, total_rows)
     log.info("draft-board JSON staged in %s", out_dir)
 
-    # Upload to S3 for the server-side-gated /fantasy/nfl/* endpoints (E9.45). Without a
-    # bucket the boards are only staged locally (the API then 404s until they're uploaded).
-    if args.s3_bucket:
-        _upload_to_s3(out_dir, args.s3_bucket, args.season)
-    else:
+    # Upload to S3 for the server-side-gated /fantasy/nfl/* endpoints (E9.45) — gated behind
+    # --publish (NF-D12). Without a bucket the boards are only staged locally (the API then
+    # 404s until they're uploaded); with a bucket but no --publish, this is a DRY-RUN report.
+    _maybe_publish(out_dir, args.s3_bucket, args.season, args.publish)
+    return 0
+
+
+def _maybe_publish(out_dir: Path, bucket: str | None, season: int, publish: bool) -> None:
+    """Gate the S3 upload behind an explicit `--publish` (NF-D12 PUBLISH GUARD).
+
+    ⭐ WHY: this exporter used to upload whenever a bucket resolved (--s3-bucket / $CACHE_BUCKET
+    — which is ALWAYS set in the operator's env), so any re-export session pushed straight to
+    the LIVE prod api-cache with no deliberate act (NF-D11 did this unintentionally while
+    re-exporting to verify a coverage fix). Default = DRY-RUN: a resolved bucket only prints
+    what WOULD upload; reaching the live bucket requires the caller to pass --publish, which
+    prints a loud banner first. No bucket at all keeps the pre-existing local-staging-only warn."""
+    if not bucket:
         log.warning(
             "no --s3-bucket / $CACHE_BUCKET — boards staged locally only; the gated API "
-            "will 404 until they are uploaded to s3://<bucket>/fantasy/nfl/%d/", args.season,
+            "will 404 until they are uploaded to s3://<bucket>/fantasy/nfl/%d/", season,
         )
-    return 0
+        return
+    files = sorted(out_dir.glob("*.json"))
+    prefix = f"fantasy/nfl/{season}"
+    if not publish:
+        log.info(
+            "[DRY-RUN] would upload %d file(s) to s3://%s/%s/ — pass --publish to actually "
+            "reach the LIVE prod api-cache: %s",
+            len(files), bucket, prefix, ", ".join(p.name for p in files),
+        )
+        return
+    log.warning("🚨 PUBLISHING TO LIVE PROD api-cache — s3://%s/%s/ (%d files)", bucket, prefix, len(files))
+    _upload_to_s3(out_dir, bucket, season)
 
 
 def _upload_to_s3(out_dir: Path, bucket: str, season: int) -> None:
