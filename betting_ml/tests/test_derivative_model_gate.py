@@ -145,6 +145,7 @@ def _price(df, n_draws=1500):
 
 
 @pytest.mark.slow
+@pytest.mark.research
 def test_efficient_market_is_clean_null():
     """The load-bearing correctness check: a genuinely efficient book (priced at the model's own
     truth) yields NO candidate and NO FDR survivor — the gate does not manufacture an edge."""
@@ -156,6 +157,7 @@ def test_efficient_market_is_clean_null():
 
 
 @pytest.mark.slow
+@pytest.mark.research
 def test_mispriced_corner_lights_up_detection_legs():
     """A concentrated real mispricing (the HIGH alt line shaded) must move the DETECTION legs off
     their efficient-market floor: FDR survivors appear and the best high-line config has +ROI/+edge.
@@ -171,6 +173,7 @@ def test_mispriced_corner_lights_up_detection_legs():
 
 
 @pytest.mark.slow
+@pytest.mark.research
 def test_deflation_stays_conservative_on_a_tie():
     """When EVERY config shares the same uniform edge (a saturated tie), PBO must NOT certify it —
     the high-PBO-over-a-tie discipline (§0.5). A uniform shade across all lines/books → no candidate
@@ -181,6 +184,7 @@ def test_deflation_stays_conservative_on_a_tie():
 
 
 @pytest.mark.slow
+@pytest.mark.research
 def test_placebo_negative_control_stays_clean_on_mispriced_data():
     """The E13.16 durable lesson: even where a REAL mispricing exists, breaking the model↔outcome
     link (pricing each game with ANOTHER game's μ) must NOT produce a candidate — else the gate

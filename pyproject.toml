@@ -91,5 +91,6 @@ pythonpath = [".", "scripts"]
 addopts = "--durations=10 --strict-markers"
 markers = [
     "slow: heavy Monte-Carlo / long-running tests (>5s). EXCLUDED from the fast gate; run via `-m slow`. The fast gate is `-m 'not slow' -n auto` and is the per-push handoff gate.",
+    "research: guards a research / bake-off harness that NO serving, pipeline, or API code imports — it only executes when a human runs a bake-off. Combined with `slow`, this moves a test OFF the required merge bar and into the nightly research job (`-m research`). The required slow gate is `-m 'slow and not research'`. Do NOT add this to anything a daily op or request path can reach: verify with `grep -rn '<module>' scripts/ app/ pipeline/` first (see docs/ci_fast_gate_profile.md).",
     "integration: tests that exercise real external IO (Snowflake/S3/network). Currently NONE — all external IO in the suite is mocked; reserved so future genuinely-networked tests get quarantined from the fast gate.",
 ]

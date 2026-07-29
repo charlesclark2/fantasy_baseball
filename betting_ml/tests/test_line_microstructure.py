@@ -173,12 +173,14 @@ def smoke_eval():
 
 
 @pytest.mark.slow
+@pytest.mark.research
 def test_placebo_control_never_survives(smoke_eval):
     assert not smoke_eval["candidates"]["control_breaks"], \
         "placebo (trajectory-independent side) must NOT produce a surviving candidate"
 
 
 @pytest.mark.slow
+@pytest.mark.research
 def test_planted_reversion_fires(smoke_eval):
     real = smoke_eval["candidates"]["candidates"]
     assert real, "the planted totals reversion should surface at least one candidate"
@@ -186,6 +188,7 @@ def test_planted_reversion_fires(smoke_eval):
 
 
 @pytest.mark.slow
+@pytest.mark.research
 def test_totals_grid_is_not_overfit_but_h2h_is_efficient(smoke_eval):
     # planted totals signal ⇒ PBO low (persists OOS); martingale h2h ⇒ PBO high (no persistence)
     pbo_tot = smoke_eval["markets"]["totals"]["deflation"]["pbo"]["pbo"]
@@ -197,6 +200,7 @@ def test_totals_grid_is_not_overfit_but_h2h_is_efficient(smoke_eval):
 
 
 @pytest.mark.slow
+@pytest.mark.research
 def test_configs_scored_game_level(smoke_eval):
     # n (unique games) must never exceed the games in that market (quotes collapsed to games)
     for mk, mv in smoke_eval["markets"].items():

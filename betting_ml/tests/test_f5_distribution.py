@@ -157,6 +157,7 @@ def _oracle_games(form: str, disp: float, n: int, rng) -> pd.DataFrame:
 
 
 @pytest.mark.slow
+@pytest.mark.research
 @pytest.mark.parametrize("form,disp", [("poisson", 1.0), ("negbin", 3.0), ("betabinom", 8.0)])
 def test_oracle_is_the_scoring_floor(form, disp):
     """No model may score BETTER than a perfectly-specified one, for ANY F5 form.

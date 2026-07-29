@@ -166,9 +166,95 @@ Target was <~60s; the gate is under it on both axes, and sharding keeps it there
 grows (~+90 tests/day). Nothing was deleted or reclassified — the after-run carries **more** tests
 than the before-run.
 
-### Follow-up worth a card (not done here)
+---
 
-The **slow gate has drifted too**: 133.6s against the ~95s in CLAUDE.md, dominated by
-`test_totals_distribution::test_pit_uniform_when_correctly_specified` (83.5s alone) and the four
-`test_derivative_model_gate` legs (~79s). It is a separate required check and off the per-push
-critical path, so it was left alone; the same shard mechanism would apply if it becomes a drag.
+# TD2 — the slow gate (2026-07-27)
+
+## 6. Two premises corrected before any fix
+
+TD1's handoff said the slow gate was "~134s dominated by a single 83s test." A serial profile
+(`-m slow -p no:xdist --durations=0`, **283s total**) corrected both halves:
+
+- **It is not one test.** The top three are *siblings in the same class* —
+  `TestCalibration::test_too_tight_dispersion_fails_flatness` (63.0s),
+  `::test_pit_uniform_when_correctly_specified` (55.4s), `::test_calib_80_at_or_above_floor` (55.3s)
+  = **174s, 61% of the gate.** The 83s figure was a `-n auto` reading distorted by contention.
+- **The cost is one systemic thing, not per-test bloat.** Every heavy test bottoms out in
+  `scipy.stats.nbinom.ppf`, measured at **~0.48M inversions/s** and exactly linear in
+  `n_games × n_draws`. The tests run the *production* sampler at ~400× production scale (6000
+  games × 2000 draws × 2 sides = 24M inversions ≈ 55s). Same pattern in `perside_bakeoff` (23.6s),
+  `derivative_model_gate` (47.8s), `line_microstructure` (16s), `prop_pricing` (13s).
+
+## 7. "Do we even run Monte-Carlo live?" — half yes, and the half matters
+
+The operator asked whether any of this guards live code. Checked by importer, not by memory:
+
+- **YES for `totals_distribution`.** `write_serving_store.py:2595` → `totals_serving
+  .build_totals_distribution_payload()` → `draw_independent_samples(n_draws ≤ 10_000)` **per game,
+  ungated, on the HALT-tier daily serving write** — E2.7's predictive-total distribution on the
+  totals pick-detail page. The 174s `TestCalibration` block guards live production math and
+  **stays on the merge bar.**
+- **NO for the research harnesses.** `derivative_model_gate`, `line_microstructure`,
+  `bakeoff_perside`, `f5_distribution` have **zero importers** under `scripts/`, `app/`, or
+  `pipeline/` — only their own bake-off scripts. ~94s (33%) of the required gate guarded code that
+  nothing runs daily.
+
+`prop_pricing` (13s) is fit-time-only by the same test, but it produces a **served** K-projection
+bundle, so it was deliberately **kept on the merge bar** — 13s is not worth the risk asymmetry.
+
+## 8. Fix: tier, then trim (both were needed)
+
+**Tier.** A `research` marker (registered in `pyproject.toml`) moves the four harness families off
+the required job (`-m "slow and not research"`) into a nightly non-blocking workflow
+(`research_tests.yml`, `-m research`). `uv run pytest -m slow` still runs everything locally — the
+tier only changes what blocks a merge. Same HALT/WARN shape the pipeline ops use.
+
+⚠️ **Tiering alone bought almost nothing: 106s → 108s.** Wall-clock was pinned by a single 63s
+test, so removing 94s of *parallel* work moved nothing. It saves CI minutes and clarifies the bar;
+it is not the speed fix. Worth remembering — on an `-n auto` job, only the critical path matters.
+
+**Trim.** `TestCalibration` `n_draws` 2000 → 500, `n_games` **unchanged at 6000**. The asymmetry is
+the whole point: decile-frequency SE is `sqrt(0.1·0.9/n_games)` = 0.0039 at n=6000, so the 0.025
+tolerance sits ~6.5 SE out — **games are the power knob**, draws only refine a per-game CDF that is
+already far finer than an integer-valued total needs. **No tolerance was weakened.**
+
+15-seed sweep at fixed n=6000 (sample columns are i.i.d., so slicing k columns of one draw is
+distributionally identical to drawing k):
+
+| n_draws | correct-spec pass | worst decile dev (tol 0.025) | too-tight DETECTED | its min dev | calib_80 range |
+|---:|---:|---:|---:|---:|---|
+| 500 | 15/15 | 0.0113 | 15/15 | 0.0432 | 0.8168–0.8370 |
+| 400 | 15/15 | 0.0125 | 15/15 | 0.0437 | 0.8145–0.8377 |
+| 300 | 15/15 | 0.0148 | 15/15 | 0.0440 | 0.8153–0.8363 |
+| 200 | 15/15 | 0.0137 | 15/15 | 0.0442 | 0.8147–0.8388 |
+
+200 would still pass; **500 is the deliberately conservative pick** on live serving math.
+
+**Re-proven to fail** (the "a gate must be shown to fail" discipline) at the trimmed budget —
+two-sided, on both assertions:
+
+| predictive vs truth r=3.7 | is_flat | max decile dev | calib_80 | verdict |
+|---|---|---:|---:|---|
+| correct (r=3.7) | True | 0.0042 | 0.839 | passes |
+| **too tight (r=8.5)** | **False** | 0.0485 | **0.762** | rejected |
+| **too fat (r=1.5)** | **False** | 0.0653 | **0.931** | rejected |
+
+## 9. TD2 result
+
+| | Before | After |
+|---|---|---|
+| Required slow job (`-n auto`) | 106s / 38 tests | **33s / 26 tests** |
+| Slow suite serial | 283s | ~60s required tier |
+| `TestCalibration` (3 tests) | 174s | **44.5s** |
+| Research harnesses | blocking every merge | nightly, non-blocking (52s) |
+| Tolerances weakened | — | **none** |
+| Tests deleted | — | **none** (38 = 26 + 12) |
+
+Combined with TD1, the full merge bar (fast + slow, run in parallel) is now bounded by the ~38s
+fast gate rather than the ~106s slow gate.
+
+### Still open
+
+`derivative_model_gate` (48s) and `perside_bakeoff` (24s) were **tiered, not trimmed** — they carry
+the same `nbinom.ppf` cost and the same trim would likely work, but they now run nightly where the
+runtime does not block anyone. Trim them only if the nightly job itself becomes a problem.

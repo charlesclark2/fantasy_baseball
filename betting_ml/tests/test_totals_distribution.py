@@ -168,12 +168,33 @@ class TestGrid:
 
 @pytest.mark.slow  # E11.13: 6k-game × 2k-draw Monte-Carlo PIT/coverage guards (~75s each).
 class TestCalibration:
+    # ── MC budget (TD2, 2026-07-27) ──────────────────────────────────────────────────────────
+    # These three tests were 174s of the ~283s slow gate (61%). Cost is EXACTLY linear in
+    # n_games × n_draws: `draw_independent_samples` → `sample_gaussian_copula_negbin` →
+    # `scipy.stats.nbinom.ppf`, which inverts at ~0.48M draws/s, so 6000 × 2000 × 2 sides = 24M
+    # inversions ≈ 55s per test.
+    #
+    # _N_GAMES IS THE POWER KNOB AND IS DELIBERATELY UNCHANGED. The flatness gate reads DECILE
+    # frequencies, whose standard error is sqrt(0.1·0.9/n_games) = 0.0039 at n=6000 — so the 0.025
+    # tolerance sits ~6.5 SE out. Cutting games would eat that margin and make the gate flaky;
+    # cutting DRAWS only refines each game's predictive CDF estimate, which is already far finer
+    # than the integer-valued total needs.
+    #
+    # _N_DRAWS 2000 → 500 (4× faster) is backed by a 15-seed sweep, NOT by taste. At 500 draws:
+    #   • correctly-specified  worst max_decile_dev 0.0113 vs 0.025 tol  (45% of budget, 15/15 pass)
+    #   • too-tight control    DETECTED 15/15, min max_decile_dev 0.0432 (73% ABOVE the threshold)
+    #   • calib_80             ∈ [0.8168, 0.8370], inside the asserted [0.80, 0.90]
+    # The sweep also showed 200 draws still passes — 500 is the deliberately conservative pick.
+    # NO tolerance was weakened; only the draw budget moved. See docs/ci_fast_gate_profile.md.
+    _N_GAMES = 6000
+    _N_DRAWS = 500
+
     def test_pit_uniform_when_correctly_specified(self):
         """Realised totals drawn from the SAME predictive the PIT is computed against → uniform."""
         rng = np.random.default_rng(12)
-        n = 6000
+        n = self._N_GAMES
         mu_h, mu_a, r = np.full(n, 4.6), np.full(n, 4.4), 3.7
-        samp_yh, samp_ya = draw_independent_samples(mu_h, mu_a, r, rng, n_draws=2000)
+        samp_yh, samp_ya = draw_independent_samples(mu_h, mu_a, r, rng, n_draws=self._N_DRAWS)
         tot_samp = samp_yh + samp_ya
         # one realised draw per game from the same marginals
         obs = (_nb(4.6, r, n, rng) + _nb(4.4, r, n, rng))
@@ -185,9 +206,10 @@ class TestCalibration:
         """Truth is fat (r=3.7) but the predictive is the E2.1-style too-tight r=8.5 → PIT
         U-shaped / non-flat. This is exactly the miscalibration E2.3 fixes."""
         rng = np.random.default_rng(13)
-        n = 6000
+        n = self._N_GAMES
         mu_h, mu_a = np.full(n, 4.6), np.full(n, 4.4)
-        samp_yh, samp_ya = draw_independent_samples(mu_h, mu_a, 8.5, rng, n_draws=2000)  # too tight
+        samp_yh, samp_ya = draw_independent_samples(
+            mu_h, mu_a, 8.5, rng, n_draws=self._N_DRAWS)  # too tight
         obs = (_nb(4.6, 3.7, n, rng) + _nb(4.4, 3.7, n, rng))                            # truth fat
         assert not pit_flatness(randomized_pit(obs, samp_yh + samp_ya, rng))["is_flat"]
 
@@ -196,9 +218,9 @@ class TestCalibration:
         quantiles snap outward → conservative over-coverage), so it clears the E2.3 gate floor
         (calib_80 ≥ 0.80). The randomised PIT is the sharp two-sided calibration check."""
         rng = np.random.default_rng(14)
-        n = 6000
+        n = self._N_GAMES
         mu_h, mu_a, r = np.full(n, 4.6), np.full(n, 4.4), 3.7
-        samp_yh, samp_ya = draw_independent_samples(mu_h, mu_a, r, rng, n_draws=2000)
+        samp_yh, samp_ya = draw_independent_samples(mu_h, mu_a, r, rng, n_draws=self._N_DRAWS)
         obs = (_nb(4.6, r, n, rng) + _nb(4.4, r, n, rng))
         c80 = interval_coverage(obs, samp_yh + samp_ya)
         assert 0.80 <= c80 <= 0.90          # ≥ floor (gate passes); ≤ 0.90 = not absurdly wide

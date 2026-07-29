@@ -1,0 +1,75 @@
+name: Research Harness Tests
+
+# TD2 (2026-07-27) — the NIGHTLY tier of the test suite.
+#
+# WHY THIS EXISTS. Profiling the slow gate found that ~94s of its ~283s serial runtime guarded
+# modules that NO serving, pipeline, or API code imports — `derivative_model_gate`,
+# `line_microstructure`, `bakeoff_perside`, `f5_distribution`. They only execute when a human runs
+# a bake-off, yet they were blocking every merge. This job keeps running them (they encode real
+# discipline — the oracle-floor guard here is what caught the E2.1-r metric inversion, and the
+# placebo/PBO controls are the E13.16 lesson) while taking them off the required merge bar.
+#
+# ⚠️ TIER RULE — same shape as the pipeline's HALT/WARN contract. A test may carry
+# `@pytest.mark.research` ONLY if its module under test has no importer under `scripts/`, `app/`,
+# or `pipeline/`. Verify before marking:
+#     grep -rn '<module>' scripts/ app/ pipeline/
+# If a research module ever gains a serving importer, DROP the marker in the same change — it is
+# live math from that moment and belongs back on the merge bar.
+# Enforced by betting_ml/tests/test_fast_gate_hygiene.py (partition + CI wiring).
+#
+# NOT a required status check: a regression here surfaces on the next nightly run, not on the PR.
+# That is the accepted trade — the code it guards cannot reach production without a human
+# deliberately running a bake-off.
+
+on:
+  schedule:
+    - cron: "0 9 * * *"      # 09:00 UTC nightly (after the daily pipeline window)
+  workflow_dispatch: {}       # and on demand, e.g. right after touching a bake-off harness
+
+jobs:
+  research-tests:
+    name: Research harness tests (nightly, non-blocking)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --no-dev-packages || uv sync
+
+      # Mirrors the slow job: some research tests import `pipeline`, whose dbt_assets decorator
+      # reads dbt/target/manifest.json at IMPORT. `dbtf parse` builds it offline (profiles.yml
+      # defaults every env_var → no warehouse connection).
+      - name: Cache dbt-fusion binary
+        id: cache-dbtf
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/dbt
+          key: dbtf-${{ runner.os }}-latest
+      - name: Install dbt-fusion
+        if: steps.cache-dbtf.outputs.cache-hit != 'true'
+        env:
+          SHELL: /bin/bash
+        run: |
+          mkdir -p ~/.local/bin
+          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to ~/.local/bin
+      - name: Add dbtf to PATH
+        run: |
+          ln -sf ~/.local/bin/dbt ~/.local/bin/dbtf
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Generate dbt manifest (offline parse — no warehouse connection)
+        run: dbtf parse --project-dir dbt --profiles-dir dbt
+
+      - name: Run research harness tests
+        run: uv run pytest -m research -n auto --tb=short
