@@ -70,6 +70,9 @@ export const SPORTS: SportNav[] = [
           {
             label: null,
             items: [
+              { label: "Projections", href: "/fantasy/projections", key: "fantasy-projections" },
+              { label: "Rankings", href: "/fantasy/rankings", key: "fantasy-rankings" },
+              { label: "League Board", href: "/fantasy/league-board", key: "fantasy-league-board" },
               { label: "Draft Optimizer", href: "/fantasy/draft", key: "fantasy-draft" },
             ],
           },

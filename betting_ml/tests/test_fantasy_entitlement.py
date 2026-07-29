@@ -165,6 +165,9 @@ def board_dir(tmp_path, monkeypatch):
     season.mkdir()
     (season / "manifest.json").write_text(json.dumps({"season": 2026, "configs": []}))
     (season / "board_full_ppr_12.json").write_text(json.dumps([{"id": "1", "pos": "RB"}]))
+    (season / "projections.json").write_text(
+        json.dumps({"season": 2026, "model_version": "v1", "players": [{"id": "1", "pos": "RB"}]})
+    )
     monkeypatch.setattr(fantasy, "_LOCAL_BOARD_DIR", str(tmp_path))
     return tmp_path
 
@@ -189,6 +192,21 @@ def test_board_endpoint_rejects_path_traversal(board_dir):
     with pytest.raises(HTTPException) as exc:
         fantasy.nfl_board(config="../../etc/passwd", size=12, season=2026)
     assert exc.value.status_code == 422
+
+
+def test_projections_endpoint_serves_local(board_dir):
+    # NF3 — the browse Projections surface reads this blob.
+    out = fantasy.nfl_projections(season=2026)
+    assert out["season"] == 2026
+    assert out["players"] == [{"id": "1", "pos": "RB"}]
+
+
+def test_projections_endpoint_404_on_missing(board_dir):
+    # The blob is exported separately from the boards, so a season with boards but no projections
+    # must 404 (the UI shows an honest empty state) rather than 500.
+    with pytest.raises(HTTPException) as exc:
+        fantasy.nfl_projections(season=2025)
+    assert exc.value.status_code == 404
 
 
 def test_router_declares_the_fantasy_gate():

@@ -82,6 +82,17 @@ def nfl_manifest(season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100))
     return data
 
 
+@router.get("/nfl/projections")
+def nfl_projections(season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100)):
+    """NF3 — the format-INDEPENDENT NFL season projection (raw stat line + the 80% PPR
+    interval + uncertainty type / confidence). The browse Projections surface reads this;
+    the format-SCORED numbers come from /nfl/board."""
+    data = _load_json(f"{season}/projections.json")
+    if data is None:
+        raise HTTPException(status_code=404, detail="Fantasy projections not found")
+    return data
+
+
 @router.get("/nfl/board")
 def nfl_board(
     config: str = Query(..., description="league preset name, e.g. full_ppr_3wr"),

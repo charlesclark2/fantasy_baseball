@@ -24,6 +24,10 @@ export interface Player {
   ovrRank: number
   vorP10: number | null
   vorP90: number | null
+  // NF3: the 80% interval on league POINTS. OPTIONAL because boards exported before NF3 do not
+  // carry it — the browse surfaces render "—" rather than a wrong number until a re-export lands.
+  ptsP10?: number | null
+  ptsP90?: number | null
 }
 
 export interface RosterSlotDef {
