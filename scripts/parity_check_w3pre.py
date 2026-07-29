@@ -104,9 +104,12 @@ W3PRE_RAW = {
 # partition inflates parquet ABOVE source; legitimate source dupes (and small post-export raw
 # drift, which shows as parquet slightly BELOW source) mirror on both sides. derivative_odds_raw
 # is genuinely 1-per-(load,event) → it stays on the strict self-uniqueness check.
-W3PRE_SOURCE_FQN = {
-    "mlb_events_raw":   "baseball_data.oddsapi.mlb_events_raw",
-}
+# E11.24 (2026-07-29): mlb_events_raw moved to FROZEN_SOURCES — its Snowflake table has been
+# frozen since 2026-06-04T23:25:12 (55 days), so S3 is the source of truth and comparing the two
+# is the same actively-dangerous shape as mlb_odds_raw (a healthy S3-ahead reads as "a partition
+# was doubled" and the pre-flight advises `aws s3 rm` on live capture data). Nothing is left to
+# compare here.
+W3PRE_SOURCE_FQN: dict[str, str] = {}
 
 # ⛔ Sources whose Snowflake raw table is RETIRED — the capture flipped S3-NATIVE, so S3 is the
 # SOURCE OF TRUTH and Snowflake is a frozen historical husk. Comparing them is not merely
@@ -130,6 +133,8 @@ W3PRE_SOURCE_FQN = {
 FROZEN_SOURCES = {
     "monthly_schedule": "retired 2026-07-20 — schedule capture is S3-native; Snowflake frozen at 2026-07-20T17:00:26",
     "mlb_odds_raw":     "retired 2026-07-05 — odds capture is S3-native; Snowflake frozen at 2026-07-05T23:00:14",
+    "mlb_events_raw":   "retired 2026-07-05 — odds capture is S3-native; Snowflake frozen at 2026-06-04T23:25:12 (E11.24)",
+    "derivative_odds_raw": "retired — derivative capture is S3-native (W11_RAW_WRITE_MODE=s3); Snowflake frozen at 2026-07-07T00:00:07 (E11.24)",
 }
 
 

@@ -372,6 +372,67 @@ class TestCostQueriesDoNotWakeTheWarehouseTheyMeasure:
         assert "get_snowflake_connection()" not in src
 
 
+# ── 5b. the retired derivative-odds bridge (found by the provisioning-wait audit) ──────────
+class TestTheDerivativeOddsBridgeStaysRetired:
+    """E11.24 — the 4th instance of the retired-writer-bridge class.
+
+    `export_odds_raw_to_s3.py --source derivative_odds_raw --since <7d>` ran on EVERY daily build,
+    but derivative capture is S3-native (W11_RAW_WRITE_MODE=s3), so `oddsapi.derivative_odds_raw`
+    has been frozen at 2026-07-07T00:00:07 — measured 22 days stale with **0 rows in the 7-day
+    window**. It exported nothing; its only effect was resuming COMPUTE_WH. `mlb_events_raw` is the
+    same shape, frozen 55 days. Sibling instances (monthly_schedule, mlb_odds_raw) had their
+    asserting tests INVERTED on removal; these are the inverted assertions for this one.
+    """
+
+    def test_the_bridge_has_no_live_sources_left(self):
+        src = _src("scripts/export_odds_raw_to_s3.py")
+        block = src[src.find("SOURCES"):src.find("RETIRED_SOURCES")]
+        for table in ("derivative_odds_raw", "mlb_events_raw", "mlb_odds_raw",
+                      "monthly_schedule"):
+            assert f'"{table}": (\n        "baseball_data' not in block, (
+                f"{table} is a LIVE source again — confirm its Snowflake WRITER is still live "
+                f"before re-adding, or this re-exports a frozen table (a pure warehouse wake, and "
+                f"for monthly_schedule a partition-deleting one)."
+            )
+
+    def test_both_frozen_sources_are_declared_retired_with_a_reason(self):
+        src = _src("scripts/export_odds_raw_to_s3.py")
+        retired = src[src.find("RETIRED_SOURCES"):]
+        for table in ("derivative_odds_raw", "mlb_events_raw"):
+            assert f'"{table}"' in retired, f"{table} must be declared in RETIRED_SOURCES"
+        assert "frozen at ingestion_ts 2026-07-07" in retired
+        assert "frozen at ingestion_ts 2026-06-04" in retired
+
+    def test_the_daily_op_no_longer_runs_the_bridge(self):
+        """The op must keep the --w3pre-only flatten (that is the real work, and it reads S3) and
+        drop only the Snowflake export that fed it nothing."""
+        src = _src("pipeline/ops/daily_ingestion_ops.py")
+        body = src[src.find("def lakehouse_w3pre_flatten_op"):]
+        body = body[:body.find("@op", 10)]
+        # Assert no executed CALL — a comment naming the retired script is desirable
+        # documentation, so match the _run_script invocation shape, not a bare mention.
+        assert '_run_script(context, "export_odds_raw_to_s3.py"' not in body, (
+            "the daily build runs the retired derivative-odds bridge again — it exports 0 rows "
+            "from a frozen table and only resumes COMPUTE_WH"
+        )
+        assert '"--w3pre-only"' in body, "the W3pre flatten itself must still run"
+
+    def test_the_registry_carries_both_tables(self):
+        from betting_ml.tests.test_retired_source_guard import RETIRED_NATIVE_SOURCES
+
+        assert ("oddsapi", "derivative_odds_raw") in RETIRED_NATIVE_SOURCES
+        assert ("oddsapi", "mlb_events_raw") in RETIRED_NATIVE_SOURCES
+
+    def test_parity_skips_both_frozen_sources(self):
+        """A frozen Snowflake side makes parity ACTIVELY DANGEROUS: a healthy S3-ahead reads as
+        'a partition was doubled' and the pre-flight advises `aws s3 rm` on live capture data."""
+        src = _src("scripts/parity_check_w3pre.py")
+        frozen = src[src.find("FROZEN_SOURCES"):]
+        frozen = frozen[:frozen.find("\n\n\n")]
+        for table in ("mlb_events_raw", "derivative_odds_raw"):
+            assert f'"{table}"' in frozen, f"{table} must be on the FROZEN_SOURCES skip-list"
+
+
 # ── 6. the levers are declared where an operator will look ────────────────────────────────
 def test_the_e11_24_levers_are_declared_in_env_example():
     """The W6_ODDS_SF_FREE bite: an absent key makes `sed -i 's/^# *KEY=.*/KEY=1/'` a silent

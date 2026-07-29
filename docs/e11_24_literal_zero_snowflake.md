@@ -169,22 +169,137 @@ where start_time >= dateadd(day, -7, current_timestamp())
 group by 1,2,3 order by n desc;
 ```
 
-## Stage 2 — the remaining off-serving-path stragglers (next session)
+### 4. The dead derivative-odds export bridge — RETIRED (2026-07-29)
 
-**4. The three sequential-posterior state writers** (`update_{player,team,matchup_cell}_posteriors.py`).
-Not a drop-in like Elo. `update_player_posteriors` and `update_matchup_cell_posteriors` already have
-`--s3` for their *source* reads; what remains is the **stateful** sequential-posterior store
-(read-modify-write) plus DDL, and `update_team_posteriors` has no `--s3` branch at all (it reads
-`stg_batter_pitches`, `eb_bullpen_posteriors`, `mart_game_results` from Snowflake). Migrating a
-read-modify-write store needs a store decision (parquet overwrite, as Elo did, vs DynamoDB) and its
-own parity gate, because these posteriors feed served features.
-📉 **Note the sequencing dividend:** these run inside `statcast_catchup_job`, so stage 1's gate (1b)
-already removes ~5 of their ~6 daily executions. Their *marginal* wake share after 1b is small — do
-them for literal-zero, not for a big credit delta.
+Not on the original target list; found by sweeping the monitoring/DQ family. `export_odds_raw_to_s3.py`
+was still listing two tables as **live** sources while the daily `lakehouse_w3pre_flatten_op` invoked
+the derivative one on every run. Both writers were long retired:
 
-**4b. `check_data_freshness.py`** — host cron at `30 12,17 * * *`, 24/7, connects to Snowflake and
-reads `baseball_data.lakehouse_ext.stg_statsapi_games`, i.e. an external table **over S3**. That is a
-pure DuckDB repoint (2 guaranteed resumes/day removed) and the cheapest remaining item.
+| Table | SF `max(ingestion_ts)` | Days stale | Rows in the 7-day export window |
+|---|---|---|---|
+| `oddsapi.derivative_odds_raw` | 2026-07-07 00:00:07 | 22 | **0** |
+| `oddsapi.mlb_events_raw` | 2026-06-04 23:25:12 | 55 | **0** |
+
+Derivative capture reads `W11_RAW_WRITE_MODE`, which the box has at `s3`, so its Snowflake writer
+stopped and the `--since <7d>` export had been selecting zero rows and writing nothing. Its only
+remaining effect was resuming `COMPUTE_WH` (~5 provisioning waits / 8 days). **This is the 4th instance
+of the retired-writer-bridge class** (after `mlb_odds_raw` 7/05, `monthly_schedule` 7/23, and
+`derivative_odds_raw`'s own stale entry in `check_data_freshness.py`).
+
+Safety checks before removal — the class has caused one P0, so none were assumed:
+- **No clobber.** Zero rows selected ⇒ no frozen-over-fresh overwrite.
+- **No prune.** `prune_partitions()` is `monthly_schedule`-only and only when `--since` is absent ⇒ *not*
+  the partition-deleting variant that starved probable pitchers in July.
+- **No stranded consumer.** No dbt `source()` reader; a repo-wide `grep -rIn` (the INC-27 rule — the dbt
+  DAG cannot see raw-SQL string consumers) found only comments, the parity script, and the writer's own
+  DDL. `stg_derivative_odds`' Snowflake branch already reads `lakehouse_ext`.
+- The writer's `CREATE TABLE IF NOT EXISTS` is correctly gated inside `if do_sf:` ⇒ unlike
+  `team_elo_history` it was *not* additionally a no-op-DDL waker.
+
+Shipped: `SOURCES` is now **empty** (both tables moved to `RETIRED_SOURCES` with the evidence); the
+bridge call removed from `lakehouse_w3pre_flatten_op` (the `--w3pre-only` flatten stays — that is the
+real work and it reads S3); both registered in `RETIRED_NATIVE_SOURCES` so a 5th instance cannot merge;
+`mlb_events_raw` added to `parity_check_w3pre.py`'s `FROZEN_SOURCES` — that one matters, because with S3
+correctly *ahead* of a frozen Snowflake the pre-flight reads the gap as a doubled partition and advises
+`aws s3 rm` on live capture data. Host cron line 35 was already commented out (verified, not assumed),
+so nothing was left calling a now-erroring `--source`.
+
+## Stage 2 — ⛔ THERE IS NO INDEPENDENT STAGE 2. Everything left is gated on target 6 (2026-07-29)
+
+A full sweep of every **automatically-invoked** Snowflake toucher (the ~200 files that import a SF
+connector are mostly hand-run research scripts and cost nothing — the population that matters is the
+`_run_script` set in `pipeline/ops/`, the host `capture.crontab` lines, the sensors, and the API)
+overturns this section's original premise. **The remaining writers cannot leave Snowflake
+independently, because their OUTPUT tables are read by Snowflake-executing dbt models.**
+
+**The coupling, concretely:**
+
+| Residual writer | Read leg | Write leg | What pins the write to Snowflake |
+|---|---|---|---|
+| `update_{player,team,matchup_cell}_posteriors.py` (3) | partly `--s3` already | SF stateful read-modify-write | `feature_pregame_game_features_raw.sql` reads `{{ source('betting','team_sequential_posteriors') }}`; the `eb_posteriors/*.sql` family (5 models) reads `player_sequential_posteriors` |
+| The 8 signal generators | ✅ **already DuckDB/S3** | SF SCD-2 via `scd2_writer.scd2_upsert` | `feature_pregame_sub_model_signals.sql` selects `from mart_sub_model_signals` on Snowflake |
+
+So the wake is unavoidable while the reader is a SF-native dbt model: you cannot move the write
+without moving the read, and the read *is* target 6.
+
+**🔧 CORRECTION to 4b (my own earlier claim, wrong).** I described `check_data_freshness.py` as "a pure
+DuckDB repoint, the cheapest remaining item." It is not. Only `_is_game_day` reads `lakehouse_ext`;
+**7 of its 8 monitored tables are `baseball_data.betting.*` Snowflake-resident tables** — and they are
+precisely the outputs of the writers in the table above (`player_/team_/matchup_cell_sequential_posteriors`,
+`eb_bullpen_team_posteriors`, `mart_player_archetype_posteriors`, `eb_park_factors_raw`,
+`player_profiles_raw`). A monitor cannot be repointed off a store its subjects still live in. 4b is a
+**dividend of target 6, not a precursor to it.**
+
+**✅ The store decision is already made — and the code comments saying otherwise are STALE.** All 8
+generators carry a variant of *"re-implementing SCD-2 accumulate in DuckDB is the W7a-wipe class the W9
+design forbids."* True but obsolete: `deltalake==1.6.1` is pinned and **`scripts/utils/delta_lake.py`
+already ships `merge_upsert()`** — a partition-pinned `when_matched_update_all / when_not_matched_insert_all`
+MERGE (delta-rs writes Delta; DuckDB still cannot, per the E11.20a spike). History-preserving accumulate
+outside Snowflake is therefore a solved problem as of the E11.20 rollout. **The blocker was never the
+store — it is the dbt readers.**
+
+⭐ **The leverage when target 6 unblocks:** `betting_ml/scripts/scd2_writer.py::scd2_upsert` is a *single
+shared function* behind all 8 generators. One Delta port there migrates 8 daily writers at once — do not
+migrate them one-by-one.
+
+📉 **And the marginal prize is small anyway:** these writers run inside `statcast_catchup_job`, so stage
+1's gate (1b) already removes ~5 of their ~6 daily executions. Post-1b they are a literal-zero
+housekeeping item, not a credit lever.
+
+**Conclusion: target 6 is not one target among several — it is the gate on 4, 4b and 7.** That is the
+same conclusion the provisioning-wait census reached from the other direction (target 6 = 67.7% of
+waits, not the 41% the first census estimated). Two independent instruments, one answer. Correct order
+is therefore **6 → 4 → 4b → 7**, and nothing in 4/4b should be attempted before 6 lands.
+
+### 🔧 CORRECTION to the heading above — "everything" was too strong. One family IS independent.
+
+The coupling argument is sound for the **writers** (posteriors + generators). I over-generalized it to the
+whole residual. A by-user attribution shows a family that has nothing to do with the dbt chain:
+
+| User | Provisioning waits (8d) | Distinct query shapes |
+|---|---|---|
+| `DBT_RW` | 713 | 114 ← target 6 + the pipeline |
+| **`CREDENCE_API`** | **56 (7.1%)** | **4** |
+| `CCL1196` (operator Snowsight) | 24 | 8 |
+
+**56 wakes from 4 queries, and the live API is the caller — which is also a CLAUDE.md violation
+("Snowflake … never on a request path").** 42 of the 56 are one shape: the
+`ACCOUNT_USAGE.METERING_DAILY_HISTORY` roll-up behind `/admin/snowflake-credits` and `/admin/finances`.
+
+⭐ **The mechanism, nailed:** it fires **2× per hour around the clock** (7/27: hours 01–09 unbroken).
+That is not a human opening a page — both endpoints carried `staleTime: 3_600_000` in
+`frontend/app/admin/page.tsx`, so **an admin tab left OPEN refetched both hourly, forever.** The page
+that displays the bill was 5.3% of the wakes that produce it. Fixed on both sides:
+- **server:** both queries routed to `MONITOR_WH` (already shipped) ⇒ they can never wake the warehouse
+  they measure;
+- **client:** `staleTime` → **12h**, because the payloads are MONTH-grained *and* `account_usage`
+  metering latency is ~12h+ (E11.20-COST lesson-1) ⇒ an hourly refetch was mathematically guaranteed to
+  return identical numbers.
+
+⚠️ **Both fixes are committed but NOT deployed** — the metering shape's `last_seen` is **7/29, today**, on
+`COMPUTE_WH`. This family only stops on the next **Lambda + Vercel** deploy. It is the third time target 3
+flipped verdict (refuted → un-refuted → mechanism identified); the story's framing was right each time.
+
+The remaining ~24 waits are the operator's own Snowsight browsing (`POLICY_REFERENCES` 9,
+`COST_INSIGHTS`/`ACCOUNT_ROOT_BUDGET`/metering 8). **Behavioural, not code** — worth knowing that opening
+Snowsight cost pages wakes `COMPUTE_WH`, so audit from `MONITOR_WH` (`use warehouse MONITOR_WH` first).
+
+### ✅ The retired-writer-bridge family is now fully closed — verified in the wake data
+
+Each removal is visible as a hard stop, which is the cleanest possible confirmation the bridges are dead:
+
+| Frozen-table `DISTINCT ingestion_ts` scan | Waits (14d) | Last seen | Status |
+|---|---|---|---|
+| `statsapi.monthly_schedule` | 15 | 2026-07-25 | already dead |
+| `oddsapi.mlb_odds_raw` | 14 | 2026-07-27 | already dead (removed 7/27) |
+| `oddsapi.derivative_odds_raw` | 11 | **2026-07-29** | the one retired today — stops at next deploy |
+
+`export_w11_raw_to_s3.py` still lists 4 sources but has **no live caller** (no non-comment reference in
+`pipeline/` or the crontab), so it contributes nothing.
+
+📉 **Total waits are already trending down hard** — 215 (7/19) → 130 → 95 → 132 → 113 → 100 → 111 → 88 →
+78 → 69 (7/28), i.e. roughly **−68% since 7/19** off the E11.20 phase-2a/2b flips. ⚠️ Do not read 7/29 as
+a data point; the day is partial and `account_usage` lags.
 
 ## Stages 3–4 — SOAK-BLOCKED until the E11.20 W8b soak exits (2026-07-31)
 

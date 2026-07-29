@@ -178,17 +178,30 @@ export default function AdminPage() {
     enabled: !!accessToken && isAdmin,
   })
 
+  // E11.24 — staleTime is 12h, NOT 1h, and that is a COST fix, not a perf tweak.
+  // Both of these endpoints query ACCOUNT_USAGE.METERING_DAILY_HISTORY, and with a 1h staleTime an
+  // admin tab left OPEN refetched both on every focus/interval — measured as 2 provisioning waits
+  // per hour, around the clock (7/27: hours 01–09 unbroken), i.e. 42 of 793 COMPUTE_WH wakes in 8
+  // days = 5.3%, purely from the page that DISPLAYS the bill. Two reasons 12h is not merely safer:
+  //   1. this data is MONTH-grained (SnowflakeCredits / MonthlyFinances) — an hourly refetch cannot
+  //      surface anything a 12-hourly one misses; and
+  //   2. `account_usage` metering latency on this account is ~12h+ (E11.20-COST lesson-1), so an
+  //      hourly refetch is GUARANTEED to return byte-identical numbers.
+  // The companion server-side fix routes both queries to MONITOR_WH so they can never wake the
+  // warehouse they are measuring — keep BOTH: the routing stops the wake, this stops the useless poll.
+  const SF_COST_STALE_MS = 43_200_000 // 12h — see note above; do not lower without re-measuring wakes
+
   const { data: sfCredits, isLoading: creditsLoading } = useQuery<SnowflakeCredits[]>({
     queryKey: ["snowflake-credits", accessToken],
     queryFn: () => apiFetch("/admin/snowflake-credits", {}, accessToken),
-    staleTime: 3_600_000,
+    staleTime: SF_COST_STALE_MS,
     enabled: !!accessToken && isAdmin,
   })
 
   const { data: finances, isLoading: financesLoading } = useQuery<FinancesData>({
     queryKey: ["admin-finances", accessToken],
     queryFn: () => apiFetch("/admin/finances", {}, accessToken),
-    staleTime: 3_600_000,
+    staleTime: SF_COST_STALE_MS,
     enabled: !!accessToken && isAdmin,
   })
 
