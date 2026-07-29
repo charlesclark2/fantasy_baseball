@@ -1,6 +1,6 @@
 # NF-FASTPATH — 2026 NFL fantasy season projections (raw stat-line, MVP-1)
 
-**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-07-27T09:04:49.612808+00:00
+**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-07-29T18:02:21.141346+00:00
 
 > ⚖️ **A PROJECTION PRODUCT, edge-independent** — no `best_alpha`/PBO/DSR/CLV gate (that is the betting posture). The gate is FACE-VALIDITY + COVERAGE + a holdout rank-correlation sanity check. The emitted `proj_*` columns are a **RAW STAT LINE** (season totals); the `proj_fp_*` points are a CONVENIENCE (standard nflverse scoring) for ranking/validation only — **MVP-2 / NF-C1 rescore the raw line per league**. Uncertainty is surfaced (an 80% PPR interval), not hidden; NULL = unknown kept NULL. Rookie intervals use PARAMETER uncertainty (slot-curve + P1A) and must be recalibrated before pricing.
 
@@ -18,15 +18,118 @@
 
 ```json
 {
-  "n_total": 716,
-  "n_veterans": 642,
+  "n_total": 777,
+  "n_veterans": 703,
   "n_rookies": 74,
+  "n_returning_from_absence": 61,
+  "top_returning_from_absence": [
+    {
+      "player": "DESHAUN WATSON",
+      "pos": "QB",
+      "anchor_season": 2024.0,
+      "proj_fp_ppr": 73.1,
+      "p10_p90": [
+        0.0,
+        154.7
+      ]
+    },
+    {
+      "player": "TANK DELL",
+      "pos": "WR",
+      "anchor_season": 2024.0,
+      "proj_fp_ppr": 53.2,
+      "p10_p90": [
+        0.0,
+        121.0
+      ]
+    },
+    {
+      "player": "BRANDON AIYUK",
+      "pos": "WR",
+      "anchor_season": 2024.0,
+      "proj_fp_ppr": 44.0,
+      "p10_p90": [
+        0.0,
+        108.9
+      ]
+    },
+    {
+      "player": "WILL LEVIS",
+      "pos": "QB",
+      "anchor_season": 2024.0,
+      "proj_fp_ppr": 42.0,
+      "p10_p90": [
+        0.0,
+        120.1
+      ]
+    },
+    {
+      "player": "DESMOND RIDDER",
+      "pos": "QB",
+      "anchor_season": 2024.0,
+      "proj_fp_ppr": 29.5,
+      "p10_p90": [
+        0.0,
+        112.9
+      ]
+    },
+    {
+      "player": "EASTON STICK",
+      "pos": "QB",
+      "anchor_season": 2023.0,
+      "proj_fp_ppr": 26.7,
+      "p10_p90": [
+        0.0,
+        124.0
+      ]
+    },
+    {
+      "player": "A.T. PERRY",
+      "pos": "WR",
+      "anchor_season": 2023.0,
+      "proj_fp_ppr": 24.3,
+      "p10_p90": [
+        0.0,
+        65.1
+      ]
+    },
+    {
+      "player": "TOMMY DEVITO",
+      "pos": "QB",
+      "anchor_season": 2024.0,
+      "proj_fp_ppr": 22.5,
+      "p10_p90": [
+        0.0,
+        104.5
+      ]
+    },
+    {
+      "player": "TREY PALMER",
+      "pos": "WR",
+      "anchor_season": 2024.0,
+      "proj_fp_ppr": 18.8,
+      "p10_p90": [
+        0.0,
+        45.3
+      ]
+    },
+    {
+      "player": "QUEZ WATKINS",
+      "pos": "WR",
+      "anchor_season": 2023.0,
+      "proj_fp_ppr": 18.5,
+      "p10_p90": [
+        0.0,
+        54.6
+      ]
+    }
+  ],
   "by_position": {
-    "FB": 16,
-    "QB": 90,
-    "RB": 163,
-    "TE": 162,
-    "WR": 285
+    "FB": 17,
+    "QB": 104,
+    "RB": 176,
+    "TE": 167,
+    "WR": 313
   },
   "n_rookies_by_pos": {
     "FB": 1,
@@ -35,8 +138,8 @@
     "TE": 20,
     "WR": 33
   },
-  "n_base_relevant_players_ge4g": 592,
-  "n_relevant_gap": 40,
+  "n_base_relevant_players_ge4g": 636,
+  "n_relevant_gap": 43,
   "pct_relevant_covered": 93.2
 }
 ```
@@ -189,11 +292,141 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | Antonio Williams | WR         |            71.0 |         14.1 |          43.0 |         28.9 |        216.3 |
 | Max Klare        | TE         |            61.0 |         13.9 |          41.6 |          5.3 |        175.1 |
 
-## 6. Limitations
+## 6. NF-D11 — projection UNIVERSE (injured-all-year rescue) + the ADP coverage audit
+
+The base-season anchor used to DELETE any player who missed the entire base season — a whole-season injury was indistinguishable from retirement — so productive, actively-drafted players (2026: Brandon Aiyuk, Tank Dell, Jonathon Brooks, MarShawn Lloyd) had no board row at all. They are now anchored on their MOST-RECENT PLAYED season, gated on projection-season roster/depth-chart evidence (retired / out-of-league players stay excluded), and discounted by the RETURN-FROM-ABSENCE availability prior: expected games capped toward the empirical return level (historically a returner plays ~4.1 games vs ~10.4 for a base-season-present player; ~43% play ZERO) with the games band widened to the empirical returner SD. **Honest by construction — a returning player carries a WIDE band and `confidence = low`, never a rosy point.** See `ablation_results/nf_d11_absence_prior.md` for the §0.5 bake-off.
+
+**Rescued this run: 61** (rows anchored on a prior played season).
+
+| player_name    | position   | team_id   |   anchor_season |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 | confidence   |
+|:---------------|:-----------|:----------|----------------:|-------------:|--------------:|-------------:|-------------:|:-------------|
+| DESHAUN WATSON | QB         | CLE       |          2024.0 |          6.1 |          73.1 |          0.0 |        154.7 | low          |
+| TANK DELL      | WR         | HOU       |          2024.0 |          5.5 |          53.2 |          0.0 |        121.0 | low          |
+| BRANDON AIYUK  | WR         | SF        |          2024.0 |          4.7 |          44.0 |          0.0 |        108.9 | low          |
+| WILL LEVIS     | QB         | TEN       |          2024.0 |          3.7 |          42.0 |          0.0 |        120.1 | low          |
+| DESMOND RIDDER | QB         | GB        |          2024.0 |          2.4 |          29.5 |          0.0 |        112.9 | low          |
+| EASTON STICK   | QB         | IND       |          2023.0 |          1.9 |          26.7 |          0.0 |        124.0 | low          |
+| A.T. PERRY     | WR         | PIT       |          2023.0 |          4.4 |          24.3 |          0.0 |         65.1 | low          |
+| TOMMY DEVITO   | QB         | NE        |          2024.0 |          1.9 |          22.5 |          0.0 |        104.5 | low          |
+| TREY PALMER    | WR         | NO        |          2024.0 |          5.1 |          18.8 |          0.0 |         45.3 | low          |
+| QUEZ WATKINS   | WR         | PHI       |          2023.0 |          4.2 |          18.5 |          0.0 |         54.6 | low          |
+| TREVOR SIEMIAN | QB         | ATL       |          2023.0 |          1.9 |          17.8 |          0.0 |         83.1 | low          |
+| JAKE HAENER    | QB         | KC        |          2024.0 |          2.7 |          17.8 |          0.0 |         63.1 | low          |
+| K.J. OSBORN    | WR         | TEN       |          2024.0 |          4.5 |          16.9 |          0.0 |         44.2 | low          |
+| ERICK ALL JR.  | TE         | CIN       |          2024.0 |          4.7 |          16.2 |          0.0 |         40.5 | low          |
+| CARSON STEELE  | RB         | PHI       |          2024.0 |          6.4 |          15.7 |          0.0 |         33.8 | low          |
+
+### Standing ADP coverage audit (the check that found this)
+
+Every ADP name is normalized and diffed against the projection's own (name, position) set, with the projection ALSO indexed by SURNAME so the two failure classes stay separable: an `alias_candidate` (surname present at that position ⇒ a name-map miss) vs a `true_absence` (genuinely not in our universe ⇒ a MODEL/universe gap). One diff caught both a join bug and this model gap.
+
+```json
+{
+  "n_samples": 8,
+  "pct_matched_min": 99.4,
+  "pct_matched_mean": 99.8,
+  "n_true_absences": 1,
+  "n_alias_candidates": 0,
+  "n_actionable_true_absences": 1,
+  "true_absences": [
+    {
+      "adp_name": "Carson Beck",
+      "position": "QB",
+      "adp": 143.4,
+      "samples": [
+        "2qb/12",
+        "2qb/10"
+      ],
+      "best_adp": 143.4
+    }
+  ],
+  "alias_candidates": [],
+  "by_sample": {
+    "ppr/12": {
+      "n_adp_rows": 226,
+      "n_adp_covered_positions": 185,
+      "n_matched": 185,
+      "pct_matched": 100.0,
+      "n_alias_candidates": 0,
+      "n_true_absences": 0,
+      "n_actionable_true_absences": 0
+    },
+    "ppr/10": {
+      "n_adp_rows": 233,
+      "n_adp_covered_positions": 191,
+      "n_matched": 191,
+      "pct_matched": 100.0,
+      "n_alias_candidates": 0,
+      "n_true_absences": 0,
+      "n_actionable_true_absences": 0
+    },
+    "half-ppr/12": {
+      "n_adp_rows": 201,
+      "n_adp_covered_positions": 168,
+      "n_matched": 168,
+      "pct_matched": 100.0,
+      "n_alias_candidates": 0,
+      "n_true_absences": 0,
+      "n_actionable_true_absences": 0
+    },
+    "half-ppr/10": {
+      "n_adp_rows": 201,
+      "n_adp_covered_positions": 168,
+      "n_matched": 168,
+      "pct_matched": 100.0,
+      "n_alias_candidates": 0,
+      "n_true_absences": 0,
+      "n_actionable_true_absences": 0
+    },
+    "standard/12": {
+      "n_adp_rows": 183,
+      "n_adp_covered_positions": 159,
+      "n_matched": 159,
+      "pct_matched": 100.0,
+      "n_alias_candidates": 0,
+      "n_true_absences": 0,
+      "n_actionable_true_absences": 0
+    },
+    "standard/10": {
+      "n_adp_rows": 183,
+      "n_adp_covered_positions": 159,
+      "n_matched": 159,
+      "pct_matched": 100.0,
+      "n_alias_candidates": 0,
+      "n_true_absences": 0,
+      "n_actionable_true_absences": 0
+    },
+    "2qb/12": {
+      "n_adp_rows": 204,
+      "n_adp_covered_positions": 177,
+      "n_matched": 176,
+      "pct_matched": 99.4,
+      "n_alias_candidates": 0,
+      "n_true_absences": 1,
+      "n_actionable_true_absences": 1
+    },
+    "2qb/10": {
+      "n_adp_rows": 204,
+      "n_adp_covered_positions": 177,
+      "n_matched": 176,
+      "pct_matched": 99.4,
+      "n_alias_candidates": 0,
+      "n_true_absences": 1,
+      "n_actionable_true_absences": 1
+    }
+  },
+  "season": 2026
+}
+```
+
+## 7. Limitations
 
 - **First-pass MVP** — the full NF1 model (posterior-predictive, weekly, §0.5 bake-off) refines this. The gate here is face-validity + coverage, not a selected model.
 - **Expected-games is a role heuristic, not a depth-chart oracle** — offseason moves (trades, signings, camp battles, holdouts) are not yet ingested; a base-season backup who wins a 2026 job is under-projected until depth charts refresh. Surfaced via the wide games interval.
 - **Rookie uncertainty is PARAMETER uncertainty** (slot curve + P1A `sd`), not a calibrated predictive interval — NF-C1/pricing must recalibrate (the E13.6 pattern).
 - **Rookie team = NULL** (2026 draftees are not in the base-season role dimension) — kept NULL, not guessed.
+- **A rescued (NF-D11) player's per-game LINE is stale by a full season** — the availability prior discounts his GAMES, but the production line itself is his last healthy year's, blended over the recency window. Age/scheme/role change since then is not modelled; the wide band and `confidence = low` are the honest surface for that.
+- **The rescue gate is only as good as the roster feed** — a player the projection-season depth-chart/roster snapshot has not caught up to stays excluded until it refreshes (the same re-run-through-camp cadence the mover/injury slices need).
+- **A rescued player is FADED vs his ADP, by design** — the fitted availability haircut is harsher than draft-room optimism (2026: Tank Dell WR95 vs ~157 ADP, Brandon Aiyuk WR112 vs ~148). 431 historical returners say a full-season absence costs far more availability than a draft board prices. It is an open fade, not a hidden claim: the ADP column renders beside our rank, the p90 still covers a healthy season, and `confidence = low` marks the row.
 - **Two-point conversions kept NULL** (rare/idiosyncratic); fumbles-lost is a modest per-touch estimate. Both are small scoring nuisance terms.
 

@@ -14,9 +14,12 @@ The gate is FACE-VALIDITY + COVERAGE + a holdout-season rank-correlation sanity 
 surfaced (an 80% interval on the convenience PPR total), not hidden; NULL = unknown kept NULL.
 
 TWO PLAYER POPULATIONS, one schema:
-  • VETERANS — every player with a completed base-season (2025) NFL line. Projected from their
-    realized per-game line, shrunk toward a conservative positional prior by sample size, and scaled
-    by an EXPECTED-GAMES estimate built from depth-chart role + base-season durability. The
+  • VETERANS — every player with a completed base-season (2025) NFL line, PLUS (NF-D11) the
+    "injured-all-year" players whose base season is empty but whose 3-year window still holds real
+    production and who are still on a projection-season roster — anchored on their MOST-RECENT
+    PLAYED season and discounted by the RETURN-FROM-ABSENCE availability prior below. Projected from
+    their realized per-game line, shrunk toward a conservative positional prior by sample size, and
+    scaled by an EXPECTED-GAMES estimate built from depth-chart role + base-season durability. The
     expected-games step is the fix for the naïve `per_game × 17` failure that ranks small-sample
     backups (Malik Willis, Jake Browning) at the very top of `mart_projections_preseason`.
   • ROOKIES (skill positions QB/RB/WR/TE) — no NFL line yet, so anchored on a HISTORICAL
@@ -143,6 +146,41 @@ _ENV_TILT_POSITIONS = ("QB",)
 #    snapshot; the backtest uses the season's Week-1 status). No-op when `proj_status` is absent.
 _INJURY_STATUS_GAMES_CAP = {"RES": 4.0, "PUP": 4.0, "NFI": 4.0, "SUS": 7.0}  # empirical status→games
 _INJURY_OVERRIDE_BLEND = 0.7   # weight on the status cap vs the base estimate (0 = off; 1 = hard cap)
+
+# ── NF-D11: RETURN-FROM-ABSENCE AVAILABILITY PRIOR (the second half of the projection-UNIVERSE fix;
+#    bake-off + ablation 2026-07-29 → `ablation_results/nf_d11_absence_prior.md`).
+#    THE UNIVERSE HALF (in `run_season_projection.resolve_base_anchor`): a player who missed the
+#    ENTIRE base season used to be DELETED from the board by the base-season inner-join anchor even
+#    when the 3-year window held a WR1 season (Brandon Aiyuk, Tank Dell, Jonathon Brooks, MarShawn
+#    Lloyd for 2026). He is now RESCUED — anchored on his MOST-RECENT PLAYED season for
+#    role/durability/sd — but only when a PROJECTION-SEASON roster/depth-chart row proves he is still
+#    in the league (that gate is what keeps the anchor's real purpose: retired/out-of-league players
+#    stay out).
+#    THE PRIOR HALF (here): a rescued player's durability is STALE — carrying his last healthy
+#    season's games forward would rank a year-out star as a full-time starter. Empirically
+#    (2016–2025, 431 historical returners: a player with 0 games in Y−1, production in Y−3..Y−2, and
+#    a Week-1 roster row in Y) a returner plays a mean of **4.1 games** vs **10.4** for a
+#    base-season-present player, and ~43% play ZERO. So expected games is capped toward the empirical
+#    return level and the games-uncertainty band is widened to the empirical returner SD — an
+#    availability DISCOUNT with an HONEST band, never a rosy point.
+#    The level is fit IN-FOLD per candidate family (`fit_absence_return_prior`); the shipped
+#    family/blend are the ablation winners. `_ABSENCE_FALLBACK_*` are the pooled empirical constants
+#    used when no history is available (a degraded but still-conservative prior, not a no-op).
+#    ⭐ SHIPPED = the `ratio` family at full weight — a MULTIPLICATIVE haircut on the player's OWN
+#    expected games (the in-fold returner ÷ base-anchored mean-games ratio, ≈0.4), which beat every
+#    absolute-level family AND the direct-learned foil on held-out returner CRPS over 2017–2025
+#    (13.52 vs 18.36 rescue-with-no-prior; PBO 0.0 over 126 season splits; oracle respected,
+#    degenerate-zero beaten). It wins because it PRESERVES the ordering among returners — a WR1
+#    coming back still outranks a fringe returner — while cutting the level hard, where a flat level
+#    flattens them into each other. See `ablation_results/nf_d11_absence_prior.md`.
+_ABSENCE_TIER_EDGES = (50.0, 120.0)   # pre-registered prior-production tier edges (best window PPR)
+_ABSENCE_FALLBACK_LEVEL = 4.1         # pooled 2016–2025 returner mean games
+_ABSENCE_FALLBACK_SD = 5.4            # pooled 2016–2025 returner games SD
+_ABSENCE_HEALTHY_MEAN_GAMES = 10.4    # pooled base-season-present mean games (the `ratio` denominator)
+_ABSENCE_MIN_FIT_N = 20               # below this the fit falls back to the pooled constants
+_ABSENCE_MIN_CELL_N = 15              # below this a cell falls back to the pooled returner mean
+_ABSENCE_PRIOR_FAMILY = "ratio"       # ⬅ NF-D11 bake-off winner (21 configs, CRPS, PBO 0.0)
+_ABSENCE_PRIOR_BLEND = 1.0            # ⬅ apply the in-fold-FITTED haircut in full (0 = off)
 
 # ── NF-D2 #6 / NF-D3: ADP MARKET-CONSENSUS PRIOR (ablated 2026-07-26). Preseason ADP (Fantasy Football
 #    Calculator real-draft consensus, snapshotted before Week 1 ⇒ leakage-safe) is the single strongest
@@ -284,8 +322,9 @@ def role_volume_prior(base_season: pd.DataFrame) -> dict:
     """NF-D2 slice 3 — the (position, depth-rank) → typical per-game fantasy VOLUME level, learned
     IN-FOLD from the base season: the median realized base-season PPR/game among qualified players at
     each (position, depth-rank bucket 1–4). This is the role level a team-changer's projection is
-    pulled toward. Pure; leakage-safe (base-season only). Returns {(position, rank): fp_pg_median}."""
-    b = base_season.copy()
+    pulled toward. Pure; leakage-safe (base-season only). Returns {(position, rank): fp_pg_median}.
+    NF-D11: computed over BASE-ANCHORED rows only, so the rescued-player universe cannot move it."""
+    b = base_anchored_rows(base_season).copy()
     scored = score_line(
         b.assign(**{"proj_" + s: pd.to_numeric(b.get(s + "_pg"), errors="coerce").fillna(0.0)
                     for s in _VET_PERGAME_STATS}), prefix="proj_")
@@ -348,6 +387,188 @@ def injury_availability_games(df: pd.DataFrame, blend: float = _INJURY_OVERRIDE_
     return np.where(flagged, (1.0 - blend) * eg + blend * np.minimum(eg, cap), eg)
 
 
+def absence_tier(prior_best_fp) -> np.ndarray:
+    """NF-D11 — the PRE-REGISTERED prior-production tier of a returning player, off the best single
+    season (convenience PPR total) in his 3-year window: `low` (<50), `mid` (50–120), `high` (>120).
+    The edges are fixed a-priori (roughly: never-productive / rotational / fantasy-startable), NOT
+    tuned — the tier LEVELS are what the in-fold fit learns. Unknown/NaN → `low` (conservative)."""
+    fp = pd.to_numeric(pd.Series(prior_best_fp), errors="coerce").to_numpy(dtype=float)
+    out = np.full(len(fp), "low", dtype=object)
+    out[np.isfinite(fp) & (fp >= _ABSENCE_TIER_EDGES[0])] = "mid"
+    out[np.isfinite(fp) & (fp >= _ABSENCE_TIER_EDGES[1])] = "high"
+    return out
+
+
+@dataclass
+class AbsenceReturnPrior:
+    """NF-D11 — the fitted RETURN-FROM-ABSENCE availability prior: for a player who missed an ENTIRE
+    season and is back on a projection-season roster, the empirical expected-GAMES level his
+    stale-durability estimate is capped toward, plus the empirical games SD that widens his band.
+
+    `family` is the candidate class (the §0.5 bake-off arms — see `fit_absence_return_prior`):
+      • `flat`   — one pooled level for every returner.
+      • `tier`   — a level per PRE-REGISTERED prior-production tier (low/mid/high).
+      • `missed` — a level per number of consecutive seasons missed (1 vs ≥2).
+      • `ratio`  — a multiplicative haircut on the player's OWN stale durability estimate
+                   (returner mean games ÷ base-anchored mean games), not an absolute level.
+      • `learned`— the DIRECT-LEARNED FOIL: a least-squares fit of realized return-year games on
+                   (prior-season games, log1p prior best PPR, seasons missed, QB flag).
+    Every parameter is fit IN-FOLD (target seasons ≤ the base season) — never on the season being
+    projected. `sd` is the realized games SD in the same cell (an honest, empirical band width)."""
+
+    family: str
+    levels: dict = field(default_factory=dict)      # cell key → expected games
+    sds: dict = field(default_factory=dict)         # cell key → realized games SD
+    coefs: dict = field(default_factory=dict)       # `learned` family only
+    n_fit: int = 0
+    fallback_level: float = _ABSENCE_FALLBACK_LEVEL
+    fallback_sd: float = _ABSENCE_FALLBACK_SD
+
+    # ── cell keys ───────────────────────────────────────────────────────────────────────────
+    def _cells(self, df: pd.DataFrame) -> np.ndarray:
+        if self.family == "tier":
+            return absence_tier(df.get("prior_best_fp"))
+        if self.family == "missed":
+            sm = pd.to_numeric(df.get("seasons_missed"), errors="coerce").fillna(1).to_numpy()
+            return np.where(sm >= 2, "2plus", "1")
+        return np.full(len(df), "all", dtype=object)
+
+    def level(self, df: pd.DataFrame) -> np.ndarray:
+        """The per-row expected-games LEVEL (NaN where the prior has nothing to say)."""
+        n = len(df)
+        if self.family == "ratio":
+            eg = pd.to_numeric(df.get("proj_games"), errors="coerce").to_numpy(dtype=float)
+            return eg * float(self.levels.get("ratio", 1.0))
+        if self.family == "learned":
+            return self._learned_level(df)
+        cells = self._cells(df)
+        return np.array([float(self.levels.get(c, self.fallback_level)) for c in cells])
+
+    def sd(self, df: pd.DataFrame) -> np.ndarray:
+        """The per-row realized games SD for the returner's cell (drives the honest wide band)."""
+        if self.family in ("ratio", "learned"):
+            return np.full(len(df), float(self.sds.get("all", self.fallback_sd)))
+        cells = self._cells(df)
+        return np.array([float(self.sds.get(c, self.fallback_sd)) for c in cells])
+
+    def _learned_level(self, df: pd.DataFrame) -> np.ndarray:
+        x = _absence_design_matrix(df)
+        if not self.coefs or x is None:
+            return np.full(len(df), float(self.fallback_level))
+        beta = np.array([self.coefs.get(k, 0.0) for k in _ABSENCE_LEARNED_FEATURES], dtype=float)
+        return np.clip(x @ beta + float(self.coefs.get("intercept", 0.0)), 0.0, 17.0)
+
+
+_ABSENCE_LEARNED_FEATURES = ("prior_games", "log_prior_fp", "seasons_missed", "is_qb")
+
+
+def _absence_design_matrix(df: pd.DataFrame) -> np.ndarray | None:
+    """The `learned` foil's feature matrix — all four columns are preseason-known (a realized prior
+    season + the roster gap), so the fit stays leakage-safe."""
+    if len(df) == 0:
+        return None
+    def _num(col: str, default: float) -> np.ndarray:
+        s = df[col] if col in df.columns else pd.Series([default] * len(df), index=df.index)
+        return pd.to_numeric(s, errors="coerce").fillna(default).to_numpy(dtype=float)
+    pg = _num("prior_games", 0.0) if "prior_games" in df.columns else _num("games_played", 0.0)
+    fp = np.clip(_num("prior_best_fp", 0.0), 0.0, None)
+    sm = _num("seasons_missed", 1.0)
+    pos = df["position"] if "position" in df.columns else pd.Series([""] * len(df), index=df.index)
+    qb = np.array([1.0 if str(p).upper() == "QB" else 0.0 for p in pos])
+    return np.column_stack([pg, np.log1p(fp), sm, qb])
+
+
+def fit_absence_return_prior(history: pd.DataFrame, family: str = "tier") -> AbsenceReturnPrior:
+    """NF-D11 §0.5 — fit ONE candidate family of the return-from-absence prior on the historical
+    returner population. Pure.
+
+    `history`: one row per (target season, historical returner) with `realized_games` (what he
+    actually played in the return year) plus the preseason-known predictors `prior_best_fp`,
+    `prior_games`, `seasons_missed`, `position`, and (for `ratio`) `healthy_mean_games`. The caller
+    passes ONLY target seasons ≤ the base season, so every fit is in-fold.
+
+    An empty/short history returns the module fallback level (the pooled empirical constant), so the
+    prior degrades to a conservative constant rather than to a no-op."""
+    fam = family if family in ("flat", "tier", "missed", "ratio", "learned") else "flat"
+    p = AbsenceReturnPrior(family=fam, n_fit=int(len(history)))
+    if history is None or len(history) < _ABSENCE_MIN_FIT_N:
+        return p
+    h = history.copy()
+    g = pd.to_numeric(h["realized_games"], errors="coerce")
+    h = h[g.notna()].assign(realized_games=g[g.notna()].to_numpy())
+    if len(h) < _ABSENCE_MIN_FIT_N:
+        return p
+    p.sds["all"] = float(h["realized_games"].std(ddof=1) or _ABSENCE_FALLBACK_SD)
+
+    if fam == "ratio":
+        healthy = pd.to_numeric(h.get("healthy_mean_games"), errors="coerce").mean()
+        denom = float(healthy) if np.isfinite(healthy) and healthy > 0 else _ABSENCE_HEALTHY_MEAN_GAMES
+        p.levels["ratio"] = float(np.clip(h["realized_games"].mean() / denom, 0.05, 1.0))
+        return p
+    if fam == "learned":
+        x = _absence_design_matrix(h)
+        y = h["realized_games"].to_numpy(dtype=float)
+        xd = np.column_stack([x, np.ones(len(x))])
+        beta, *_ = np.linalg.lstsq(xd, y, rcond=None)
+        p.coefs = {**dict(zip(_ABSENCE_LEARNED_FEATURES, beta[:-1].tolist())), "intercept": float(beta[-1])}
+        return p
+
+    if fam == "tier":
+        h = h.assign(_cell=absence_tier(h.get("prior_best_fp")))
+    elif fam == "missed":
+        sm = pd.to_numeric(h.get("seasons_missed"), errors="coerce").fillna(1).to_numpy()
+        h = h.assign(_cell=np.where(sm >= 2, "2plus", "1"))
+    else:
+        h = h.assign(_cell="all")
+    pooled = float(h["realized_games"].mean())
+    for cell, grp in h.groupby("_cell"):
+        # a thin cell falls back to the POOLED returner mean, never to a 1-player estimate
+        p.levels[cell] = float(grp["realized_games"].mean()) if len(grp) >= _ABSENCE_MIN_CELL_N else pooled
+        p.sds[cell] = float(grp["realized_games"].std(ddof=1)) if len(grp) >= _ABSENCE_MIN_CELL_N \
+            else p.sds["all"]
+    p.fallback_level = pooled
+    return p
+
+
+def absence_return_games(df: pd.DataFrame, prior: AbsenceReturnPrior | None,
+                         blend: float = _ABSENCE_PRIOR_BLEND) -> np.ndarray:
+    """NF-D11 — expected games for a player RETURNING from a full missed season. For a row with
+    `seasons_missed >= 1` (a base-season-absent player rescued by the most-recent-played anchor),
+    blend the stale-durability expected-games estimate toward the empirical return level — a CAP the
+    estimate can only move DOWN toward, never up (`min(eg, level)`), exactly like the NF-D2 slice-5
+    status cap it composes with. Everyone else is unchanged.
+
+    Pure; leakage-safe (the prior is fit on target seasons ≤ the base season, and `seasons_missed`
+    is a realized roster/production gap). Returns the adjusted `proj_games`; a no-op when the
+    `seasons_missed` column is absent, `prior` is None, or `blend == 0`."""
+    eg = pd.to_numeric(df["proj_games"], errors="coerce").to_numpy(dtype=float)
+    if blend <= 0.0 or prior is None or "seasons_missed" not in df.columns:
+        return eg
+    sm = pd.to_numeric(df["seasons_missed"], errors="coerce").fillna(0.0).to_numpy()
+    returning = sm >= 1
+    if not returning.any():
+        return eg
+    lvl = np.asarray(prior.level(df), dtype=float)
+    ok = returning & np.isfinite(lvl)
+    return np.where(ok, (1.0 - blend) * eg + blend * np.minimum(eg, lvl), eg)
+
+
+def absence_games_sd(base_sd: np.ndarray, df: pd.DataFrame,
+                     prior: AbsenceReturnPrior | None) -> np.ndarray:
+    """NF-D11 — widen the games-uncertainty term for a returner to the EMPIRICAL games SD of the
+    historical returner population (≈5 games — ~40% of returners play ZERO). Take the MAX of the
+    role-based SD and the empirical one so the band can only get WIDER, never narrower: a
+    return-from-injury projection must carry honest uncertainty, never a rosy point."""
+    sd = np.asarray(base_sd, dtype=float)
+    if prior is None or "seasons_missed" not in df.columns:
+        return sd
+    sm = pd.to_numeric(df["seasons_missed"], errors="coerce").fillna(0.0).to_numpy()
+    ret = sm >= 1
+    if not ret.any():
+        return sd
+    return np.where(ret, np.maximum(sd, np.asarray(prior.sd(df), dtype=float)), sd)
+
+
 def environment_tilt_scale(df: pd.DataFrame, blend: float = _ENV_TILT_BLEND,
                            positions: tuple = _ENV_TILT_POSITIONS) -> np.ndarray:
     """NF-D2 slice 4 / NF-D4 — the per-position multiplicative environment tilt from the projection-
@@ -363,6 +584,14 @@ def environment_tilt_scale(df: pd.DataFrame, blend: float = _ENV_TILT_BLEND,
         return np.ones(n)
     env = pd.to_numeric(df["team_env"], errors="coerce").to_numpy()
     pos = np.array([(p or "").upper() for p in df["position"]], dtype=object)
+    # NF-D11: standardise on the BASE-ANCHORED field only. The z-score's mean/sd are population
+    # statistics, so admitting the rescued returners would otherwise shift every incumbent QB's tilt
+    # by a hair (measured: 36/716 adjacent rank swaps) — a universe change must not silently move a
+    # player it has nothing to do with. The tilt is still APPLIED to every row, returners included.
+    if "seasons_missed" in df.columns:
+        stat_ok = pd.to_numeric(df["seasons_missed"], errors="coerce").fillna(0.0).to_numpy() < 1
+    else:
+        stat_ok = np.ones(n, dtype=bool)
     scale = np.ones(n)
     for p in positions:
         idx = np.where(pos == p)[0]
@@ -370,8 +599,11 @@ def environment_tilt_scale(df: pd.DataFrame, blend: float = _ENV_TILT_BLEND,
         mk = np.isfinite(ev)
         if mk.sum() < 10:                       # too thin to standardise reliably ⇒ skip
             continue
+        ref = mk & stat_ok[idx]
+        if ref.sum() < 10:                      # thin base-anchored field ⇒ standardise on all
+            ref = mk
         z = np.zeros(len(idx))
-        z[mk] = (ev[mk] - np.nanmean(ev[mk])) / (np.nanstd(ev[mk]) or 1.0)
+        z[mk] = (ev[mk] - np.nanmean(ev[ref])) / (np.nanstd(ev[ref]) or 1.0)
         scale[idx] = np.clip(np.exp(blend * z), _ENV_TILT_LO, _ENV_TILT_HI)
     return scale
 
@@ -445,11 +677,24 @@ def _games_sd(depth_rank: pd.Series, position: pd.Series) -> pd.Series:
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # Conservative positional priors + shrinkage (per-game)
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+def base_anchored_rows(base_season: pd.DataFrame) -> pd.DataFrame:
+    """NF-D11 — the subset of the projection universe anchored on the ACTUAL base season (i.e.
+    excluding the most-recent-played fallback rows the NF-D11 rescue admits). Every IN-FOLD prior
+    that describes "what a base season looks like" (the positional per-game prior, the role→volume
+    prior) is computed over this subset, so admitting rescued players CANNOT perturb any incumbent
+    player's projection — the rescue is strictly ADDITIVE. A frame without the `base_anchor` column
+    (an older caller / a unit-test fixture) is returned unchanged."""
+    if "base_anchor" not in base_season.columns:
+        return base_season
+    return base_season[base_season["base_anchor"].astype("string") == "base_season"]
+
+
 def positional_pergame_priors(base_season: pd.DataFrame) -> pd.DataFrame:
     """Per-position conservative per-game anchor for each counting stat = the MEDIAN over qualified
     (games ≥ `_PRIOR_MIN_GAMES`) base-season players. The median (not the mean) is robust to the
     stud tail, so shrinking a small-sample player toward it pulls to a plausible mid-roster level,
     never to a star's line. Returns one row per position with a `<stat>_prior` column each."""
+    base_season = base_anchored_rows(base_season)
     q = base_season[base_season["games_played"] >= _PRIOR_MIN_GAMES].copy()
     rows = []
     for pos, g in q.groupby("position"):
@@ -483,6 +728,8 @@ def project_veterans(
     env_tilt_positions: tuple = _ENV_TILT_POSITIONS,
     injury_override_blend: float = _INJURY_OVERRIDE_BLEND,
     xfp_td_blend: float = _XFP_TD_BLEND,
+    absence_prior: "AbsenceReturnPrior | None" = None,
+    absence_prior_blend: float = _ABSENCE_PRIOR_BLEND,
 ) -> pd.DataFrame:
     """Project every base-season player's UPCOMING-season raw stat line.
 
@@ -498,6 +745,9 @@ def project_veterans(
     role_vol_prior: `role_volume_prior(base_season)` output (NF-D2 slice 3). None ⇒ the mover step is
       skipped (the pre-slice-3 baseline / the ablation "off" arm).
     mover_opportunity_blend: weight on the new-role volume level for a team-changer (0 = off).
+    absence_prior / absence_prior_blend: NF-D11 — the fitted return-from-absence availability prior
+      applied to rows the base-anchor fallback rescued (`seasons_missed >= 1`). None / 0 = the
+      rescue-with-no-prior arm (a player carries his stale durability forward).
     Returns the RAW_STAT_COLS (season totals) + convenience fp + an 80% PPR interval, per player.
     """
     df = base_season.merge(priors, on="position", how="left")
@@ -611,6 +861,27 @@ def project_veterans(
             (df["proj_rush_att"].to_numpy() + df["proj_rec"].to_numpy()) * 0.006, 2)
         df = score_line(df, prefix="proj_")
 
+    # ── NF-D11: RETURN-FROM-ABSENCE availability prior. A player rescued by the most-recent-played
+    #    anchor (`seasons_missed >= 1`) carries STALE durability, so cap expected games toward the
+    #    empirical return level and rescale the season line by the games ratio. Applied AFTER the
+    #    slice-5 status cap so the two COMPOSE (both are min-caps ⇒ monotone; a returner who is ALSO
+    #    flagged RES/PUP takes the harsher of the two, never a rebound). No-op when the prior is
+    #    absent, blend == 0, or no row is a returner.
+    if absence_prior_blend > 0 and absence_prior is not None and "seasons_missed" in df.columns:
+        new_games = absence_return_games(df, absence_prior, blend=absence_prior_blend)
+        old_games = df["proj_games"].to_numpy()
+        ascale = np.where(old_games > 1e-6, new_games / np.clip(old_games, 1e-6, None), 1.0)
+        for col in ("proj_pass_att", "proj_pass_cmp", "proj_pass_yds", "proj_pass_td", "proj_pass_int",
+                    "proj_rush_att", "proj_rush_yds", "proj_rush_td",
+                    "proj_targets", "proj_rec", "proj_rec_yds", "proj_rec_td"):
+            df[col] = df[col].to_numpy() * ascale
+        df["proj_games"] = new_games
+        df["proj_pass_cmp"] = np.minimum(df["proj_pass_cmp"], df["proj_pass_att"])
+        df["proj_rec"] = np.minimum(df["proj_rec"], df["proj_targets"])
+        df["proj_fumbles_lost"] = np.round(
+            (df["proj_rush_att"].to_numpy() + df["proj_rec"].to_numpy()) * 0.006, 2)
+        df = score_line(df, prefix="proj_")
+
     # ── 80% interval on the convenience PPR total. Two independent sources of season variance:
     #    (a) game-to-game scoring variance accumulated over the played games (sd·√games), and
     #    (b) games-played uncertainty (per-game mean × games sd). Normal approx, floored at 0.
@@ -619,6 +890,9 @@ def project_veterans(
     eg_arr = np.clip(df["proj_games"].to_numpy(), 1e-6, None)
     fp_per_game = fp_ppr / eg_arr
     gsd = _games_sd(df["depth_chart_position_rank"], df["position"]).to_numpy()
+    # NF-D11: a returner's games uncertainty is the EMPIRICAL returner SD (~5 games — 43% of them
+    # play zero), never the tidy role-based one. Widen-only, so the band is honest by construction.
+    gsd = absence_games_sd(gsd, df, absence_prior if absence_prior_blend > 0 else None)
     season_sd = np.sqrt((fp_pg_sd * np.sqrt(eg_arr)) ** 2 + (fp_per_game * gsd) ** 2)
     z80 = 1.2815515594
     df["fp_ppr_sd"] = np.round(season_sd, 2)
@@ -630,6 +904,12 @@ def project_veterans(
     df["source"] = "veteran"
     df["projection_season"] = int(projection_season)
     df["confidence"] = np.where(g >= 10, "high", np.where(g >= 5, "medium", "low"))
+    # NF-D11: a rescued returner is projected off a STALE season — never claim high confidence for
+    # him, whatever his last healthy year's game count was.
+    if "seasons_missed" in df.columns:
+        ret = pd.to_numeric(df["seasons_missed"], errors="coerce").fillna(0.0).to_numpy() >= 1
+        df["confidence"] = np.where(ret, "low", df["confidence"])
+        df["source"] = np.where(ret, "veteran_returning", df["source"])
     return df
 
 
