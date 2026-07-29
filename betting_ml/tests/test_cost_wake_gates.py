@@ -311,3 +311,62 @@ class TestDailyMonthlyScheduleBridgeRetired:
             "keep monthly_schedule declared in RETIRED_SOURCES so an attempt to run it fails "
             "with the reason rather than argparse's bare 'invalid choice'."
         )
+
+
+# The rollout levers a handoff can tell an operator to FLIP on the box. Each must appear in
+# .env.example as a real `KEY=<value>` line, never as a comment and never omitted.
+ROLLOUT_LEVERS = (
+    "W6_ODDS_SF_FREE",     # E11.20 phase-2b — retires the intraday odds tick's two SF legs
+    "W8B_FRESHNESS_S3",    # E11.20 phase-2b — routes the 30.13 freshness gate off Snowflake
+)
+
+
+class TestRolloutLeversAreDeclared:
+    """E11.20 phase-2b — an ABSENT rollout flag makes "flip it to 1" a silent no-op.
+
+    THE BITE (2026-07-27): `W6_ODDS_SF_FREE` was never listed in .env.example, so it was absent
+    from the box .env too. The handed-off flip was an in-place
+    `sed -i 's/^# *W6_ODDS_SF_FREE=.*/W6_ODDS_SF_FREE=1/'`, which only rewrites a COMMENTED line
+    — it matched nothing, changed nothing, and the deploy still SUCCEEDED (the key isn't in
+    env.required, so no gate caught it). The retired legs kept firing for a day while the roadmap
+    recorded them as retired. Same class as the W7B "documented-but-never-set" bite, one layer
+    down: here the documentation was missing too.
+
+    A blanket `os.environ.get("FLAG")` scan is the WRONG guard here — it is noisy (13 legacy
+    W11*/`*_PARALLEL` knobs that are deliberately undeclared) and, worse, BLIND to the case that
+    matters: `predict_today` reads its lever indirectly via `os.environ.get(_FRESHNESS_S3_ENV)`,
+    which no literal-string scan can see. Hence an explicit registry.
+
+    ⇒ When you add a new gated rollout lever, add it to ROLLOUT_LEVERS and declare it `KEY=0`
+    in .env.example in the SAME change.
+    """
+
+    def test_every_rollout_lever_is_declared_in_env_example(self):
+        env_example = (REPO / "services" / "dagster" / "aws" / ".env.example").read_text()
+        declared = set(re.findall(r"^([A-Z0-9_]+)=", env_example, re.M))
+        missing = [k for k in ROLLOUT_LEVERS if k not in declared]
+        assert not missing, (
+            f"rollout lever(s) {missing} are not declared as a real `KEY=<value>` line in "
+            ".env.example. An absent (or comment-only) key makes an operator's flip a SILENT "
+            "no-op — the 2026-07-27 W6_ODDS_SF_FREE bite. Declare each as `KEY=0`."
+        )
+
+    def test_the_w8b_freshness_lever_name_matches_the_code(self):
+        """The registry is only worth anything if the name matches what predict_today reads —
+        `_FRESHNESS_S3_ENV` is the indirection a literal scan cannot follow."""
+        src = (REPO / "scripts" / "predict_today.py").read_text()
+        assert '_FRESHNESS_S3_ENV = "W8B_FRESHNESS_S3"' in src, (
+            "predict_today's freshness-gate env var was renamed but ROLLOUT_LEVERS / .env.example "
+            "still declare W8B_FRESHNESS_S3 — the operator would flip a key nothing reads."
+        )
+
+    def test_the_freshness_probe_requires_both_the_flag_and_s3_mode(self):
+        """Two-flag convention: keying off `--s3` alone would be an immediate prod cutover on
+        merge, since predict_today already runs --s3 whenever W7B_LAKEHOUSE_S3=1."""
+        src = (REPO / "scripts" / "predict_today.py").read_text()
+        body = src[src.find("def _freshness_probe_is_s3"):]
+        body = body[:body.find("\n\n\n")]
+        assert "_FRESHNESS_S3_ENV" in body and "_PREDICT_S3_MODE" in body and " and " in body, (
+            "_freshness_probe_is_s3 must require BOTH W8B_FRESHNESS_S3=1 AND --s3 mode; "
+            "dropping either conjunct silently cuts the gate over on merge."
+        )

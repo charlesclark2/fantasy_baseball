@@ -225,17 +225,33 @@ def _load_calibrator():
     return None
 
 
-_calibrator = _load_calibrator()
+_CALIBRATOR_CACHE: list = []  # 0 or 1 element — memoizes _load_calibrator()'s result (None included)
+
+
+def _calibrator():
+    """Memoized accessor for the H2H calibrator.
+
+    LAZY ON PURPOSE (CI hygiene, 2026-07-27): this used to be a module-level
+    `_calibrator = _load_calibrator()`, which fired a REAL S3 GET on *import*. Importing this
+    module is not the same as running it — pytest collection imports it in every xdist worker,
+    so the fast gate paid a network round-trip per worker and violated the suite's
+    "all external IO is mocked" invariant. Scoring behaviour is unchanged: the artifact is
+    still fetched from S3 exactly once per process, just on first use rather than at import.
+    """
+    if not _CALIBRATOR_CACHE:
+        _CALIBRATOR_CACHE.append(_load_calibrator())
+    return _CALIBRATOR_CACHE[0]
 
 
 def _apply_calibrator(consensus_win_prob: float) -> float:
     """Return calibrated win probability; falls back to consensus if no calibrator."""
-    if _calibrator is not None:
+    cal = _calibrator()
+    if cal is not None:
         raw = np.array([consensus_win_prob])
         try:
-            calibrated_win_prob = float(_calibrator.predict_proba(raw.reshape(-1, 1))[0, 1])
+            calibrated_win_prob = float(cal.predict_proba(raw.reshape(-1, 1))[0, 1])
         except AttributeError:
-            calibrated_win_prob = float(_calibrator.predict(raw)[0])
+            calibrated_win_prob = float(cal.predict(raw)[0])
         return calibrated_win_prob
     return consensus_win_prob
 
@@ -2098,6 +2114,10 @@ def _resolve_target_dates(args) -> list[str]:
 
 def main(target_date: str, args) -> None:
     print(f"Scoring games for {target_date}")
+
+    # Resolve the calibrator up front so its source (S3 / local / none) still shows near the top
+    # of the run log, exactly as it did when the load ran at import. Memoized — see _calibrator().
+    _calibrator()
 
     df_today = load_todays_features(target_date)
 

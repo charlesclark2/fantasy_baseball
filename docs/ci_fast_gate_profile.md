@@ -1,0 +1,174 @@
+# Fast-gate profile + shard design (2026-07-27)
+
+Story: *tech-debt / CI hygiene — the fast gate is the merge bar every session runs, so shaving it
+compounds across all tracks.* The card's own instruction was **measure first, don't assume "split
+it" is the fix.** This is the measurement.
+
+Machine: laptop, 11 cores, `uv run pytest`, pytest 9.0.3 + pytest-xdist 3.8.0 (the only plugin).
+
+---
+
+## 1. Baseline — what the gate actually cost
+
+| Configuration | Wall | CPU | Notes |
+|---|---|---|---|
+| `-m "not slow"` **serial** | **91.0s** | 93s | 2,358 tests |
+| `-m "not slow" -n auto` (11 workers) | **45.1s** | **287s** | the documented merge bar |
+| `-m "not slow" -n 6` | 37.1s | — | |
+| `-m "not slow" -n 4` | **35.5s** | — | *faster than `-n auto`* |
+| `--collect-only` (1 process) | 7.5s | — | collection alone |
+| slow gate (`-m slow -n auto`) | 133.6s | — | 38 tests |
+
+**CLAUDE.md's "~15s with `-n auto`" was stale.** It was written at E11.13 when the suite was a
+fraction of its current size; at ~2,360 tests (+~90/day) the real number was 45s.
+
+### The decisive ratio
+
+`-n auto` burns **287s of CPU to do 91s of work**, and adding workers past ~4 makes it *slower*.
+That is the signature of a fixed per-process cost, not of slow tests.
+
+- 194s of CPU overhead ÷ 11 workers ≈ **17.6s per worker** of pure startup.
+- Collection is 7.5s/process; timing every test module's import directly gives **11.0s** of
+  module-import time across 175 modules.
+
+Every xdist worker imports **all 175 test modules** before running its ~1/11th share. Collection
+is duplicated N times while the work is divided by N — so past a handful of workers you are
+paying more to collect than you save by parallelising.
+
+### Ruling out the alternatives the card listed
+
+- **(a) slow tests leaking past the `@slow` >5s rule** — **NO.** Slowest single fast-gate test is
+  **4.53s** (`test_ncaaf_team_strength`), under the threshold. Marker hygiene was already clean;
+  `--strict-markers` is on in `pyproject.toml`. Nothing was reclassified, so **no coverage moved**.
+- **(b) collection / import overhead** — **YES, this is it** (above).
+- **(c) genuine breadth** — **YES**, for the execution half: 75.4s spread across ~440 measurable
+  tests, top file only 10.2s. There is no single hog to delete.
+- **(d) `-n auto` not engaging** — it engages; it **anti-scales** past ~4 workers on an 11-core box.
+
+### Where the execution time actually sits (serial, per file)
+
+```
+10.20  test_ncaaf_team_strength.py        3.39  test_boto3_credential_lint.py
+ 7.79  test_copula.py                     3.37  test_totals_distribution.py
+ 6.68  test_ncaaf_college_nfl_translation 2.22  test_the_board_reader_guard.py
+ 5.96  test_perside_bakeoff.py            1.96  test_milb_player_xref.py
+ 5.57  test_milb_mle.py                   1.85  test_phase15_straggler_repoint.py
+ 5.46  test_ncaaf_game_distribution.py    1.81  test_retired_source_guard.py
+ 4.65  test_ncaaf_freshman_projection.py  …long tail: 6,653 tests under 5ms each
+```
+
+---
+
+## 2. A real defect the profile surfaced
+
+`scripts/predict_today.py` ran **`_calibrator = _load_calibrator()` at module scope** — a live
+**S3 GET on import**. Eleven test modules import `predict_today`, so *every xdist worker fired a
+network round-trip during collection*, in a suite whose stated invariant is that all external IO
+is mocked. It also meant anything merely importing the module paid for a download.
+
+Fixed: lazy + memoized `_calibrator()` accessor. Scoring behaviour is unchanged (still fetched
+once per process), and `main()` resolves it up front so the `[calibrator] loaded from S3: …` line
+still appears near the top of the run log exactly as before. Pinned by
+`test_fast_gate_hygiene.py::test_predict_today_does_not_fetch_the_calibrator_at_import`.
+
+---
+
+## 3. The `-n auto` isolation work
+
+The card flagged `test_retired_source_guard::test_known_unresolved_list_stays_honest` as a known
+flake. **It is now inert:** commit `18c1c4a` (E11.20 phase-2b) emptied `KNOWN_UNRESOLVED` to
+`set()`, so the test iterates nothing and cannot fail on content. It did not reproduce in **7
+consecutive full `-n auto` runs**. Reporting that honestly rather than claiming a fix.
+
+The underlying *class* was real and was found elsewhere. Two test modules mutated global
+interpreter state **at import time** — which pytest does during collection, before any test runs,
+so it leaks into every other test in that worker:
+
+1. `test_best_price_e9_11.py` and `test_serving_timestamp_coercion.py` each installed
+   `MagicMock`s into `sys.modules["snowflake.connector"]` / `sys.modules["dotenv"]` and **never
+   removed them**. Worse, both were guarded by `if stub not in sys.modules`, making the behaviour
+   depend on whether some *other* module imported `dotenv` first — i.e. on collection order. That
+   is exactly the "passes in isolation, fails in the full run" shape.
+   → replaced by the shared restore-on-exit loader `betting_ml/tests/_serving_store_loader.py`.
+2. `test_e11_1_w12_sensor_fire.py` called `os.environ.setdefault(...)` at module scope.
+   → moved into an autouse `monkeypatch` fixture (reverted per test).
+
+Both were found *by* the new guard, not by hand:
+`test_fast_gate_hygiene.py::test_module_does_not_mutate_global_state_at_import` AST-scans every
+test file for module-level `sys.modules[...]` / `os.environ[...]` mutation and for `os.chdir` /
+`os.environ.setdefault|update|pop`. This is what makes the suite safe to shard — a test whose
+result depends on what else shares its worker would otherwise depend on which shard it lands in.
+
+---
+
+## 4. The shard design
+
+Breadth is genuine, so the gate is sharded by **domain** (`scripts/ci_shards.py` = single source
+of truth). Domain rather than round-robin so a red check localises the blame before you open the
+log.
+
+| Shard | Files | Est. work |
+|---|---:|---:|
+| football (NFL/NCAAF/fantasy/draft) | 27 | 32.3s |
+| baseball-models (copula, per-side, totals, pricing) | 34 | 27.1s |
+| guards (repo-scanning lints + contracts) | 22 | 11.6s |
+| prospect-milb (MiLB/E7 translation MLEs) | 7 | 11.6s |
+| serving-ops (Dagster ops, sensors, lakehouse, writers) | 74 | 5.4s |
+| **core** (computed catch-all) | 13 | 1.6s |
+
+Longest shard **32.3s vs 89.5s serial**. `prospect-milb` exists purely for balance — with MiLB
+folded in, `baseball-models` was 38.7s and set the wall-clock.
+
+### Coverage cannot escape — the property that makes this safe
+
+Splitting a suite across jobs introduces a failure mode the single job never had: a file that
+belongs to no shard just stops running, and the merge bar goes green anyway. Two defences:
+
+1. **`core` is computed, not listed** — defined as "every collected test file not claimed by a
+   named shard". A new test file joins the merge bar automatically, with zero maintenance.
+2. **`test_fast_gate_hygiene.py` proves it** — exact partition (no unclaimed, no doubled), union
+   equals the whole suite, no empty shard, no rotted/shadowed prefix rule, and the CI matrix
+   lists every shard name.
+
+Verified empirically: the union of the six shards' collected **node IDs** is byte-identical to the
+unsharded run — 2,569 IDs, **zero missing, zero duplicated**.
+
+### Branch protection
+
+`Unit Tests (fast gate)` is a **required status check**. Renaming it to a matrix would leave that
+check permanently pending (the same skipped-but-required gotcha the `changes` job works around).
+So the matrix runs as `unit-tests-shard` and a roll-up job **keeps the exact required name** and
+fails if any shard did (treating `skipped` as pass, for frontend/docs-only diffs).
+**No branch-protection change is needed.** A guard test pins the name.
+
+---
+
+## 5. Result
+
+| | Before | After |
+|---|---|---|
+| Fast gate, `-n auto` | 45.1s / 2,358 tests | **38.7s / 2,575 tests** |
+| Longest CI unit of work | 91s serial (one job) | **32.3s** (longest shard) |
+| Network IO during collection | 1 live S3 GET per worker | none |
+| Import-time global-state leaks | 3 | 0, enforced by a guard |
+
+**Worker tuning, re-measured after the fixes.** The anti-scaling largely closed once the
+import-time S3 fetch was gone — `-n auto` 38.7s vs `-n 4` 38.3s is a tie on wall-clock. But
+`-n 4` gets there on **123s of CPU against 261s**, so it is the better local default on a machine
+doing anything else. CI keeps `-n auto` (runners are 2–4 cores, where auto is already small).
+`ci.yml` is the only workflow that runs pytest, so `-n auto` is already used everywhere.
+
+That closure is itself the lesson: ~1s per worker of module-level network IO was a material share
+of an 11-worker gate. **If the gate creeps back up, suspect a new expensive module-level import
+before suspecting a slow test.**
+
+Target was <~60s; the gate is under it on both axes, and sharding keeps it there as the suite
+grows (~+90 tests/day). Nothing was deleted or reclassified — the after-run carries **more** tests
+than the before-run.
+
+### Follow-up worth a card (not done here)
+
+The **slow gate has drifted too**: 133.6s against the ~95s in CLAUDE.md, dominated by
+`test_totals_distribution::test_pit_uniform_when_correctly_specified` (83.5s alone) and the four
+`test_derivative_model_gate` legs (~79s). It is a separate required check and off the per-push
+critical path, so it was left alone; the same shard mechanism would apply if it becomes a drag.
