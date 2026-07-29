@@ -26,9 +26,16 @@ so it belongs to the odds/CLV MART wave, not this staging precursor.
 ⚠️ >1 min on the full history → operator runs it. Reads Snowflake via the MCP-equivalent
 connector (snowflake_loader). Writes S3 via the boto3 credential chain.
 
-Usage:
-  uv run python scripts/export_odds_raw_to_s3.py                       # all 4 sources, full history
-  uv run python scripts/export_odds_raw_to_s3.py --source mlb_odds_raw # one source
+⛔ FULLY RETIRED 2026-07-29 (E11.24) — `SOURCES` is now EMPTY. All four sources' Snowflake
+writers have been retired in favour of S3-native capture, so every invocation is a loud no-op.
+The script is kept (rather than deleted) as the documented tombstone: `RETIRED_SOURCES` records
+WHY each source left and makes an attempt to run one fail loudly instead of silently exporting
+a frozen table over live S3 data. Running it costs nothing but a COMPUTE_WH wake, which is why
+the daily op and the host cron no longer call it.
+
+Usage (all forms are no-ops today; kept for the historical record):
+  uv run python scripts/export_odds_raw_to_s3.py                       # loud no-op — SOURCES is empty
+  uv run python scripts/export_odds_raw_to_s3.py --source <name>       # errors: every source is RETIRED
   uv run python scripts/export_odds_raw_to_s3.py --since 2026-06-01    # only ingestion dates >= since
   uv run python scripts/export_odds_raw_to_s3.py --dry-run             # per-day row counts, no S3 write
 """
