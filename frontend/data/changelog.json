@@ -4,6 +4,15 @@
     "items": [
       {
         "tag": "new",
+        "tag": "new",
+        "text": "Added average draft position (ADP) to the NFL fantasy Rankings and League Board, alongside a difference column showing where our board and the public disagree. ADP is drawn from thousands of real public drafts and is matched to your scoring format and league size — that matching matters: a top quarterback goes around pick 28 in full-PPR but inside the first two picks in superflex, so a single 'ADP' number would be badly misleading on a superflex board. A positive difference means the room typically drafts a player later than we rank him; a negative one means they take him earlier. This is a reference point so you can see where we differ, not a claim that our order is the better one — read it next to the 80% range, which tells you how sure the model actually is. Players nobody is drafting simply show no ADP. Available to subscribers."
+      },
+      {
+        "tag": "improved",
+        "text": "Made the NFL fantasy boards easier to read and work with. Column headers for the terms of art — value over replacement, replacement level, next at position, ADP and the ADP difference — now explain themselves on hover, so you no longer have to infer what a column means. Rankings is paginated (50 players a page by default, switchable to 25, 100, or all of them), and you can export the current rankings to CSV — the export includes every player matching your filters, not just the page you are looking at. Available to subscribers."
+      },
+      {
+        "tag": "new",
         "text": "Opened three NFL fantasy pages under NFL → Fantasy: Projections, Rankings, and the League Board. Projections lists every projectable player's 2026 season line — the passing, rushing and receiving totals we expect, the games we expect them to play, and an 80% range on their fantasy points, so you can see how confident the model is rather than just a single number. Rankings and the League Board take that same projection and re-score it for your league: pick your scoring format (standard, half-PPR, full-PPR, superflex, the 3-WR variants) and your league size, and the board re-ranks accordingly — superflex really does lift quarterbacks, because the roster shape changes how many of them start. The League Board adds value over replacement, which is what makes a quarterback and a running back comparable on one list, and it shows the replacement level it used for each position instead of asking you to take it on faith. Every number is a projection with a range attached, and a wide range is the model telling you it doesn't know — rookies in particular carry very wide ranges because rookie outcomes genuinely are. This is a projection and transparency tool for your own draft decisions; modelling is ongoing, we make no claim that it beats any particular ranking, and nothing here is betting advice. Available to subscribers."
       }
     ]

@@ -46,6 +46,9 @@ export interface ProjectedPlayer {
   recTd: number | null
   fum: number | null
   twoPt: number | null
+  /** Market average draft position (PPR, 12-team — see `adp_format`/`adp_teams` on the payload).
+   *  A reference column; null means undrafted in that sample. */
+  adp?: number | null
 }
 
 export interface ProjectionPayload {
@@ -54,6 +57,10 @@ export interface ProjectionPayload {
   source: string
   model_version: string | null
   base_season: number | null
+  /** Which FFC ADP sample the `adp` column came from — this surface is format-independent, so its
+   *  ADP reference is pinned rather than varying, and is labelled with these. */
+  adp_format?: string | null
+  adp_teams?: number | null
   players: ProjectedPlayer[]
 }
 

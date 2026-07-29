@@ -26,6 +26,7 @@ readable output" — the board data the draft tool consumes.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import logging
 import os
@@ -74,6 +75,27 @@ def _norm_team(t: str | None) -> str | None:
     t = str(t).strip().upper()
     return _NFLVERSE_TEAM_FIX.get(t, t) or None
 
+
+# ── market ADP (a REFERENCE column, not a claim) ──────────────────────────────────────────────────
+# Each preset maps to the Fantasy Football Calculator ADP format that actually MATCHES it, and the
+# board's own `n_teams`. Format-matching is not cosmetic: superflex ADP ("2qb") drafts ~34 QBs vs
+# ~27 in PPR, so pairing a superflex board with PPR ADP would make every QB look like a huge
+# "value" that is purely an artefact of the mismatched reference. A preset with no direct FFC
+# equivalent falls back to the closest scoring rule (the roster-shape variants share a format).
+PRESET_ADP_FORMAT = {
+    "standard": "standard",
+    "standard_3wr": "standard",
+    "half_ppr": "half-ppr",
+    "half_ppr_3wr": "half-ppr",
+    "full_ppr": "ppr",
+    "full_ppr_3wr": "ppr",
+    "superflex": "2qb",
+    "te_premium": "ppr",
+}
+# The projections surface is format-INDEPENDENT, so its ADP reference is pinned to the most common
+# home-league shape and labelled as such rather than silently varying.
+PROJECTION_ADP_FORMAT = "ppr"
+PROJECTION_ADP_TEAMS = 12
 
 # Human labels for the shipped presets (the manifest's config picker).
 CONFIG_LABELS = {
@@ -255,11 +277,59 @@ def projection_records(
             "fpP10": _fnum(r.get("fp_ppr_p10")),
             "fpP90": _fnum(r.get("fp_ppr_p90")),
             "uncType": None if pd.isna(r.get("uncertainty_type")) else str(r["uncertainty_type"]),
+            "adp": None,   # filled by _attach_adp; declared so the shape is fetch-independent
         }
         for src, key in _STAT_KEYS:
             rec[key] = _fnum(r.get(src))
         recs.append(rec)
     return recs
+
+
+def adp_lookup(season: int, fmt: str, teams: int) -> dict[tuple[str, str], float]:
+    """`{(normalized_name, position) -> adp}` from Fantasy Football Calculator for one (format, size).
+
+    Keyed on the NAME, not our gsis id, on purpose: the board's rookies carry synthetic ids (their
+    projection comes from the NCAAF rookie leg, not an NFL game log), so a gsis crosswalk would drop
+    exactly the players a drafter most wants an ADP for. Both sides go through `adp_source`'s vetted
+    normalizer, which already folds accents, generational suffixes and the FFC nickname aliases.
+
+    Best-effort by design: FFC is an external free API. A failure logs a warning and yields {} → the
+    ADP column renders "—" rather than failing the export, which is the draft-critical output."""
+    from quant_sports_intel_models.football.nfl.fantasy import adp_source as A
+
+    try:
+        df = A.fetch_ffc_adp(season, fmt=fmt, teams=teams)
+    except Exception as e:  # noqa: BLE001 — a reference column must never break the boards
+        log.warning("ADP unavailable for %s %s/%dteam (%s: %s)", season, fmt, teams, type(e).__name__, e)
+        return {}
+    out: dict[tuple[str, str], float] = {}
+    for _, r in df.iterrows():
+        pos = NFL_PROFILE.normalize_position(str(r.get("position") or ""))
+        adp = _fnum(r.get("adp"))
+        if pos in PROJECTABLE and adp is not None:
+            out.setdefault((A._normalize_name(r.get("player_name")), pos), adp)
+    log.info("ADP %s %s/%dteam: %d players", season, fmt, teams, len(out))
+    return out
+
+
+@functools.lru_cache(maxsize=None)
+def adp_cache_for(season: int, fmt: str, teams: int) -> dict[tuple[str, str], float]:
+    """Memoized `adp_lookup` — the 14 (config, size) boards share only a handful of distinct ADP
+    samples, so this keeps the export to one FFC fetch per (format, size) instead of one per board."""
+    return adp_lookup(season, fmt, teams)
+
+
+def _attach_adp(recs: list[dict], adp: dict[tuple[str, str], float]) -> int:
+    """Add `adp` to each record in place (null when the player is undrafted in that ADP sample —
+    a real signal, not a gap). Returns how many matched."""
+    from quant_sports_intel_models.football.nfl.fantasy import adp_source as A
+
+    n = 0
+    for rec in recs:
+        val = adp.get((A._normalize_name(rec["name"]), rec["pos"])) if rec.get("pos") else None
+        rec["adp"] = val
+        n += val is not None
+    return n
 
 
 def rookie_team_map() -> dict[str, str]:
@@ -340,6 +410,9 @@ def board_records(
             "ovrRank": int(_fnum(r.get("overall_rank"), 0) or 0),
             "vorP10": _fnum(r.get("vor_p10")),
             "vorP90": _fnum(r.get("vor_p90")),
+            # declared here (not only added by _attach_adp) so every record has the same shape
+            # whether or not the external ADP fetch succeeded
+            "adp": None,
         })
     return recs
 
@@ -438,13 +511,13 @@ def kdst_records(
         recs.append({
             "id": f"DST-{t}", "name": f"{t} D/ST", "pos": "DST", "team": t, "bye": bye, "rookie": False,
             "g": None, "pts": None, "repl": None, "vor": None, "posRank": 0, "ovrRank": 9999,
-            "vorP10": None, "vorP90": None, "ptsP10": None, "ptsP90": None,
+            "vorP10": None, "vorP90": None, "ptsP10": None, "ptsP90": None, "adp": None,
         })
         k_name = kickers.get(t)  # roster names are already proper-cased — do not re-title-case
         recs.append({
             "id": f"K-{t}", "name": k_name if k_name else f"{t} K", "pos": "K", "team": t, "bye": bye,
             "rookie": False, "g": None, "pts": None, "repl": None, "vor": None, "posRank": 0,
-            "ovrRank": 9999, "vorP10": None, "vorP90": None, "ptsP10": None, "ptsP90": None,
+            "ovrRank": 9999, "vorP10": None, "vorP90": None, "ptsP10": None, "ptsP90": None, "adp": None,
         })
     return recs
 
@@ -456,6 +529,9 @@ def config_manifest_entry(name: str) -> dict:
         "label": CONFIG_LABELS.get(name, name),
         "ppr": cfg.ppr,
         "superflex": cfg.superflex,
+        # which FFC ADP sample this board's ADP column was drawn from — the UI labels it so an
+        # ADP is never shown as though it came from the user's exact format when it didn't
+        "adpFormat": PRESET_ADP_FORMAT.get(name),
         "description": cfg.description,
         "roster": [
             {"name": s.name, "count": s.count, "eligible": list(s.eligible), "bench": s.bench}
@@ -509,7 +585,13 @@ def main(argv: list[str] | None = None) -> int:
         if config_name not in PRESETS:
             log.warning("skipping unknown config %s (not a shipped preset)", config_name)
             continue
-        recs = board_records(grp, rookie_teams, byes) + kdst   # skill board + draftable K/DST placeholders
+        skill = board_records(grp, rookie_teams, byes)
+        # market ADP, matched to THIS board's scoring format + league size (see PRESET_ADP_FORMAT)
+        adp_fmt = PRESET_ADP_FORMAT.get(config_name, "ppr")
+        matched = _attach_adp(skill, adp_cache_for(args.season, adp_fmt, n_teams))
+        log.info("  %s_%d: ADP (%s/%dteam) matched %d/%d players",
+                 config_name, n_teams, adp_fmt, n_teams, matched, len(skill))
+        recs = skill + kdst   # skill board + draftable K/DST placeholders
         path = out_dir / f"board_{config_name}_{n_teams}.json"
         path.write_text(json.dumps(recs, separators=(",", ":")))
         combos += 1
@@ -527,7 +609,15 @@ def main(argv: list[str] | None = None) -> int:
     try:
         pdf = load_projections_lake(args.season) if args.from_lake else load_projections_local(args.season)
         projections = projection_records(pdf, rookie_teams, byes)
+        # The projections surface is format-independent, so its ADP reference is pinned + labelled.
+        proj_adp_matched = _attach_adp(
+            projections, adp_cache_for(args.season, PROJECTION_ADP_FORMAT, PROJECTION_ADP_TEAMS)
+        )
+        log.info("  projections: ADP (%s/%dteam) matched %d/%d players",
+                 PROJECTION_ADP_FORMAT, PROJECTION_ADP_TEAMS, proj_adp_matched, len(projections))
         proj_meta = {
+            "adp_format": PROJECTION_ADP_FORMAT,
+            "adp_teams": PROJECTION_ADP_TEAMS,
             "model_version": (
                 str(pdf["model_version"].dropna().iloc[0]) if "model_version" in pdf.columns
                 and pdf["model_version"].notna().any() else None

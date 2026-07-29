@@ -13,8 +13,11 @@ import { useMemo, useState } from "react"
 import { useFantasyBoard, useFantasyManifest, useFormatSelection } from "@/lib/fantasy-queries"
 import type { Player } from "@/lib/draft-optimizer"
 import {
+  AdpDelta,
   EmptyBlock,
   FormatSelector,
+  GLOSSARY,
+  InfoTip,
   LoadingBlock,
   PosBadge,
   PositionTabs,
@@ -76,6 +79,7 @@ export function LeagueBoard() {
   }, [ranked, pos])
 
   const maxVor = useMemo(() => Math.max(1, ...rows.map((r) => r.vor ?? 0)), [rows])
+  const hasAdp = useMemo(() => rows.some((r) => r.adp != null), [rows])
 
   // Drop-off to the next player at the same position — the "if I wait, this is what I lose" number
   // the draft optimizer prices as VONA. Computed over the FULL board, not the filtered view.
@@ -181,10 +185,29 @@ export function LeagueBoard() {
                       <th className="px-3 py-2 font-medium">Team</th>
                       <th className="px-3 py-2 text-right font-medium">Bye</th>
                       <th className="px-3 py-2 text-right font-medium">Proj pts</th>
-                      <th className="px-3 py-2 text-right font-medium">Replacement</th>
-                      <th className="px-3 py-2 text-right font-medium">VOR</th>
+                      <th className="px-3 py-2 text-right font-medium">
+                        <InfoTip label="Replacement">{GLOSSARY.replacement}</InfoTip>
+                      </th>
+                      <th className="px-3 py-2 text-right font-medium">
+                        <InfoTip label="VOR">{GLOSSARY.vor}</InfoTip>
+                      </th>
                       <th className="px-3 py-2 font-medium">Value above replacement</th>
-                      <th className="px-3 py-2 text-right font-medium">Next at pos</th>
+                      <th className="px-3 py-2 text-right font-medium">
+                        <InfoTip label="Next at pos">{GLOSSARY.nextAtPos}</InfoTip>
+                      </th>
+                      {hasAdp && (
+                        <>
+                          <th className="px-3 py-2 text-right font-medium">
+                            <InfoTip label="ADP">
+                              {GLOSSARY.adp}
+                              {config?.adpFormat ? ` Sample: ${config.adpFormat}, ${size}-team.` : ""}
+                            </InfoTip>
+                          </th>
+                          <th className="px-3 py-2 text-right font-medium">
+                            <InfoTip label="Δ">{GLOSSARY.adpDelta}</InfoTip>
+                          </th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#1a1a1a]">
@@ -230,6 +253,17 @@ export function LeagueBoard() {
                         <td className="px-3 py-2 text-right text-gray-500">
                           {dropoff.has(p.id) ? num(dropoff.get(p.id)) : "—"}
                         </td>
+                        {hasAdp && (
+                          <>
+                            <td className="px-3 py-2 text-right text-gray-400">
+                              {p.adp != null ? num(p.adp) : "—"}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              {/* the value board's own order is the rank we compare ADP against */}
+                              <AdpDelta delta={p.adp != null ? p.adp - (i + 1) : null} />
+                            </td>
+                          </>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -253,6 +287,14 @@ export function LeagueBoard() {
                     80% band under each bar is carried straight through from the projection, shifted by
                     the replacement level.
                   </p>
+                  {hasAdp && (
+                    <p className="mt-2">
+                      <span className="font-semibold text-gray-300">About the ADP column.</span> ADP
+                      is where the public is drafting these players, matched to this format and league
+                      size, shown so you can see where this value board and the room disagree. It is a
+                      reference point, not a scoreboard — we make no claim to beat it.
+                    </p>
+                  )}
                 </UncertaintyNote>
               </div>
             </>

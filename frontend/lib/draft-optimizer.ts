@@ -28,6 +28,10 @@ export interface Player {
   // carry it — the browse surfaces render "—" rather than a wrong number until a re-export lands.
   ptsP10?: number | null
   ptsP90?: number | null
+  // Market average draft position, matched to this board's scoring format + league size. A
+  // REFERENCE column only — never an input to the optimizer's score. Null = undrafted in that
+  // sample (a real signal), and absent entirely on boards exported before NF3.
+  adp?: number | null
 }
 
 export interface RosterSlotDef {
@@ -44,6 +48,9 @@ export interface LeagueConfigMeta {
   superflex: boolean
   description: string
   roster: RosterSlotDef[]
+  /** Which FFC ADP sample this board's `adp` came from ("ppr" | "half-ppr" | "standard" | "2qb").
+   *  Surfaced so the UI can name the reference instead of implying it is the user's exact format. */
+  adpFormat?: string | null
 }
 
 export interface Manifest {

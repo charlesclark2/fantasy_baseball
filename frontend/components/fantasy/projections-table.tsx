@@ -15,6 +15,8 @@ import type { ProjectedPlayer } from "@/lib/fantasy"
 import {
   ConfidenceBadge,
   EmptyBlock,
+  GLOSSARY,
+  InfoTip,
   IntervalBar,
   LoadingBlock,
   PosBadge,
@@ -107,6 +109,7 @@ export function ProjectionsTable() {
   }, [rows])
 
   const statCols = STAT_COLS[pos] ?? []
+  const hasAdp = useMemo(() => players.some((p) => p.adp != null), [players])
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -196,6 +199,14 @@ export function ProjectionsTable() {
                   {/* The interval is carried on the PPR total only, so it is labelled that way
                       rather than silently implying it tracks the selected reference scoring. */}
                   <th className="px-3 py-2 font-medium">80% range (PPR)</th>
+                  {hasAdp && (
+                    <th className="px-3 py-2 text-right font-medium">
+                      <InfoTip label="ADP">
+                        {GLOSSARY.adp}
+                        {` Sample: ${data?.adp_format ?? "ppr"}, ${data?.adp_teams ?? 12}-team — this page is scoring-independent, so the reference is pinned rather than varying.`}
+                      </InfoTip>
+                    </th>
+                  )}
                   <th className="px-3 py-2 font-medium">Confidence</th>
                   <th className="px-3 py-2 font-medium">Range basis</th>
                 </tr>
@@ -239,6 +250,11 @@ export function ProjectionsTable() {
                         max={domain.max}
                       />
                     </td>
+                    {hasAdp && (
+                      <td className="px-3 py-2 text-right text-gray-400">
+                        {p.adp != null ? num(p.adp) : "—"}
+                      </td>
+                    )}
                     <td className="px-3 py-2">
                       <ConfidenceBadge conf={p.conf} />
                     </td>

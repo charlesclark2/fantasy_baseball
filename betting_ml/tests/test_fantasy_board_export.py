@@ -122,7 +122,7 @@ def _projection_frame() -> pd.DataFrame:
 
 # Every key the Projections table reads. Dropping one blanks a column with no error.
 _PROJECTION_KEYS = {
-    "id", "name", "pos", "team", "bye", "rookie", "draftPick", "conf", "g",
+    "id", "name", "pos", "team", "bye", "rookie", "draftPick", "conf", "g", "adp",
     "fpStd", "fpHalf", "fpPpr", "fpSd", "fpP10", "fpP90", "uncType",
     "passAtt", "passCmp", "passYds", "passTd", "passInt",
     "rushAtt", "rushYds", "rushTd", "tgt", "rec", "recYds", "recTd", "fum", "twoPt",
@@ -149,6 +149,50 @@ def test_projection_rookie_gets_a_backfilled_team_and_int_draft_slot():
     assert rookie["rookie"] is True
     assert rookie["team"] == "LV"          # MVP-1 leaves a rookie's team NULL
     assert rookie["draftPick"] == 1        # an int, not 1.0
+
+
+# ── market ADP (the reference column) ─────────────────────────────────────────
+
+
+def test_every_shipped_preset_maps_to_an_adp_format():
+    # A preset with no mapping would silently fall back to PPR — which on a superflex board makes
+    # every QB look like a huge "value" that is purely a mismatched-reference artefact.
+    from quant_sports_intel_models.football.nfl.fantasy.league_presets import PRESETS
+
+    for name in PRESETS:
+        assert ex.PRESET_ADP_FORMAT.get(name), f"preset {name} has no ADP format mapping"
+    assert ex.PRESET_ADP_FORMAT["superflex"] == "2qb", "superflex must use the 2QB ADP sample"
+
+
+def test_attach_adp_matches_on_normalized_name_and_position():
+    recs = ex.board_records(_board_frame())
+    # the ADP side spells him differently (suffix + case) — the shared normalizer must still match
+    matched = ex._attach_adp(recs, {("james cook", "RB"): 41.3})
+    assert matched == 1
+    assert recs[0]["adp"] == 41.3
+
+
+def test_attach_adp_leaves_an_undrafted_player_null():
+    # Undrafted in that sample is a real signal (nobody is taking him), not a data gap — it must
+    # stay null rather than defaulting to a number that would sort as though he were drafted early.
+    recs = ex.board_records(_board_frame())
+    assert ex._attach_adp(recs, {}) == 0
+    assert all(r["adp"] is None for r in recs)
+
+
+def test_adp_is_declared_even_when_the_fetch_never_runs():
+    # `adp` is part of the record shape, not something _attach_adp introduces — otherwise a failed
+    # FFC fetch would ship records missing a key the UI reads.
+    assert "adp" in ex.board_records(_board_frame())[0]
+    assert "adp" in ex.projection_records(_projection_frame())[0]
+
+
+def test_adp_lookup_is_best_effort(monkeypatch):
+    # FFC is an external free API; a failure must degrade the ADP column, never fail the export.
+    from quant_sports_intel_models.football.nfl.fantasy import adp_source as A
+
+    monkeypatch.setattr(A, "fetch_ffc_adp", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert ex.adp_lookup(2026, "ppr", 12) == {}
 
 
 def test_projection_veteran_draft_slot_stays_null():
