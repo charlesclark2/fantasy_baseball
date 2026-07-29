@@ -6,7 +6,7 @@
 -- refresh_w1_external_tables.py (W8B_TABLES).
 -- =============================================================================
 
--- ── feature_pregame_starter_features  (106 columns) ──
+-- ── feature_pregame_starter_features  (107 columns) ──
 CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.feature_pregame_starter_features (
     GAME_PK                                  NUMBER(38,0)   AS (VALUE:game_pk::NUMBER(38,0)),
     GAME_DATE                                DATE           AS (VALUE:game_date::DATE),
@@ -94,7 +94,7 @@ CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.feature_pregame_sta
     STARTER_CHANGEUP_STUFF_PLUS              FLOAT          AS (VALUE:starter_changeup_stuff_plus::FLOAT),
     STARTER_AVG_FASTBALL_VELO                FLOAT          AS (VALUE:starter_avg_fastball_velo::FLOAT),
     STARTER_PROJ_FIP                         FLOAT          AS (VALUE:starter_proj_fip::FLOAT),
-    STARTER_PROJ_XFIP                        NUMBER(38,0)   AS (VALUE:starter_proj_xfip::NUMBER(38,0)),
+    STARTER_PROJ_XFIP                        FLOAT          AS (VALUE:starter_proj_xfip::FLOAT),
     STARTER_TRAILING_FIP_30G                 FLOAT          AS (VALUE:starter_trailing_fip_30g::FLOAT),
     STARTER_TRAILING_RA9_30G                 FLOAT          AS (VALUE:starter_trailing_ra9_30g::FLOAT),
     STARTER_FIP_RA9_GAP                      FLOAT          AS (VALUE:starter_fip_ra9_gap::FLOAT),
@@ -107,6 +107,7 @@ CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.feature_pregame_sta
     EB_XWOBA_AGAINST_SEQUENTIAL              FLOAT          AS (VALUE:eb_xwoba_against_sequential::FLOAT),
     EB_K_PCT                                 FLOAT          AS (VALUE:eb_k_pct::FLOAT),
     EB_BB_PCT                                FLOAT          AS (VALUE:eb_bb_pct::FLOAT),
+    EB_GB_PCT                                FLOAT          AS (VALUE:eb_gb_pct::FLOAT),
     EB_XWOBA_UNCERTAINTY                     FLOAT          AS (VALUE:eb_xwoba_uncertainty::FLOAT),
     EB_DATA_SOURCE                           VARCHAR        AS (VALUE:eb_data_source::VARCHAR),
     POSTERIOR_SOURCE                         VARCHAR        AS (VALUE:posterior_source::VARCHAR),
@@ -289,7 +290,7 @@ AUTO_REFRESH = FALSE
 COMMENT = 'E11.1-W8b: feature_pitcher_cluster_matchups from S3 lakehouse parquet (serving aggregator + complex upstream)';
 GRANT SELECT ON EXTERNAL TABLE baseball_data.lakehouse_ext.feature_pitcher_cluster_matchups TO ROLE CREDENCE_API_RO;
 
--- ── feature_pregame_game_features_raw  (753 columns) ──
+-- ── feature_pregame_game_features_raw  (755 columns) ──
 CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.feature_pregame_game_features_raw (
     GAME_PK                                  NUMBER(38,0)   AS (VALUE:game_pk::NUMBER(38,0)),
     GAME_DATE                                DATE           AS (VALUE:game_date::DATE),
@@ -562,6 +563,7 @@ CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.feature_pregame_gam
     HOME_STARTER_EB_XWOBA_AGAINST_SEQUENTIAL FLOAT          AS (VALUE:home_starter_eb_xwoba_against_sequential::FLOAT),
     HOME_STARTER_EB_K_PCT                    FLOAT          AS (VALUE:home_starter_eb_k_pct::FLOAT),
     HOME_STARTER_EB_BB_PCT                   FLOAT          AS (VALUE:home_starter_eb_bb_pct::FLOAT),
+    HOME_STARTER_EB_GB_PCT                   FLOAT          AS (VALUE:home_starter_eb_gb_pct::FLOAT),
     HOME_STARTER_EB_XWOBA_UNCERTAINTY        FLOAT          AS (VALUE:home_starter_eb_xwoba_uncertainty::FLOAT),
     AWAY_STARTER_PITCHER_ID                  NUMBER(38,0)   AS (VALUE:away_starter_pitcher_id::NUMBER(38,0)),
     AWAY_STARTER_PITCHER_NAME                VARCHAR        AS (VALUE:away_starter_pitcher_name::VARCHAR),
@@ -659,6 +661,7 @@ CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.feature_pregame_gam
     AWAY_STARTER_EB_XWOBA_AGAINST_SEQUENTIAL FLOAT          AS (VALUE:away_starter_eb_xwoba_against_sequential::FLOAT),
     AWAY_STARTER_EB_K_PCT                    FLOAT          AS (VALUE:away_starter_eb_k_pct::FLOAT),
     AWAY_STARTER_EB_BB_PCT                   FLOAT          AS (VALUE:away_starter_eb_bb_pct::FLOAT),
+    AWAY_STARTER_EB_GB_PCT                   FLOAT          AS (VALUE:away_starter_eb_gb_pct::FLOAT),
     AWAY_STARTER_EB_XWOBA_UNCERTAINTY        FLOAT          AS (VALUE:away_starter_eb_xwoba_uncertainty::FLOAT),
     HOME_WINS                                FLOAT          AS (VALUE:home_wins::FLOAT),
     HOME_LOSSES                              FLOAT          AS (VALUE:home_losses::FLOAT),
@@ -943,10 +946,10 @@ CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.feature_pregame_gam
     OVER_PROB_CONSENSUS                      FLOAT          AS (VALUE:over_prob_consensus::FLOAT),
     TEMP_F                                   FLOAT          AS (VALUE:temp_f::FLOAT),
     WIND_SPEED_MPH                           FLOAT          AS (VALUE:wind_speed_mph::FLOAT),
-    WIND_DIRECTION_DEG                       NUMBER(38,0)   AS (VALUE:WIND_DIRECTION_DEG::NUMBER(38,0)),
+    WIND_DIRECTION_DEG                       NUMBER(38,0)   AS (VALUE:wind_direction_deg::NUMBER(38,0)),
     WIND_COMPONENT_MPH                       FLOAT          AS (VALUE:wind_component_mph::FLOAT),
-    HUMIDITY_PCT                             NUMBER(38,0)   AS (VALUE:HUMIDITY_PCT::NUMBER(38,0)),
-    IS_DOME                                  BOOLEAN        AS (VALUE:IS_DOME::BOOLEAN),
+    HUMIDITY_PCT                             NUMBER(38,0)   AS (VALUE:humidity_pct::NUMBER(38,0)),
+    IS_DOME                                  BOOLEAN        AS (VALUE:is_dome::BOOLEAN),
     UMPIRE_NAME                              VARCHAR        AS (VALUE:umpire_name::VARCHAR),
     UMP_GAMES_SAMPLE                         NUMBER(38,0)   AS (VALUE:ump_games_sample::NUMBER(38,0)),
     UMP_K_PCT_ZSCORE                         FLOAT          AS (VALUE:ump_k_pct_zscore::FLOAT),
@@ -1131,7 +1134,7 @@ AUTO_REFRESH = FALSE
 COMMENT = 'E11.1-W8b: feature_league_contact_baseline from S3 lakehouse parquet (serving aggregator + complex upstream)';
 GRANT SELECT ON EXTERNAL TABLE baseball_data.lakehouse_ext.feature_league_contact_baseline TO ROLE CREDENCE_API_RO;
 
--- ── feature_pregame_game_features  (787 columns) ──
+-- ── feature_pregame_game_features  (789 columns) ──
 CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.feature_pregame_game_features (
     GAME_PK                                  NUMBER(38,0)   AS (VALUE:game_pk::NUMBER(38,0)),
     GAME_DATE                                DATE           AS (VALUE:game_date::DATE),
@@ -1404,6 +1407,7 @@ CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.feature_pregame_gam
     HOME_STARTER_EB_XWOBA_AGAINST_SEQUENTIAL FLOAT          AS (VALUE:home_starter_eb_xwoba_against_sequential::FLOAT),
     HOME_STARTER_EB_K_PCT                    FLOAT          AS (VALUE:home_starter_eb_k_pct::FLOAT),
     HOME_STARTER_EB_BB_PCT                   FLOAT          AS (VALUE:home_starter_eb_bb_pct::FLOAT),
+    HOME_STARTER_EB_GB_PCT                   FLOAT          AS (VALUE:home_starter_eb_gb_pct::FLOAT),
     HOME_STARTER_EB_XWOBA_UNCERTAINTY        FLOAT          AS (VALUE:home_starter_eb_xwoba_uncertainty::FLOAT),
     AWAY_STARTER_PITCHER_ID                  NUMBER(38,0)   AS (VALUE:away_starter_pitcher_id::NUMBER(38,0)),
     AWAY_STARTER_PITCHER_NAME                VARCHAR        AS (VALUE:away_starter_pitcher_name::VARCHAR),
@@ -1501,6 +1505,7 @@ CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.feature_pregame_gam
     AWAY_STARTER_EB_XWOBA_AGAINST_SEQUENTIAL FLOAT          AS (VALUE:away_starter_eb_xwoba_against_sequential::FLOAT),
     AWAY_STARTER_EB_K_PCT                    FLOAT          AS (VALUE:away_starter_eb_k_pct::FLOAT),
     AWAY_STARTER_EB_BB_PCT                   FLOAT          AS (VALUE:away_starter_eb_bb_pct::FLOAT),
+    AWAY_STARTER_EB_GB_PCT                   FLOAT          AS (VALUE:away_starter_eb_gb_pct::FLOAT),
     AWAY_STARTER_EB_XWOBA_UNCERTAINTY        FLOAT          AS (VALUE:away_starter_eb_xwoba_uncertainty::FLOAT),
     HOME_WINS                                FLOAT          AS (VALUE:home_wins::FLOAT),
     HOME_LOSSES                              FLOAT          AS (VALUE:home_losses::FLOAT),
@@ -1785,10 +1790,10 @@ CREATE OR REPLACE EXTERNAL TABLE baseball_data.lakehouse_ext.feature_pregame_gam
     OVER_PROB_CONSENSUS                      FLOAT          AS (VALUE:over_prob_consensus::FLOAT),
     TEMP_F                                   FLOAT          AS (VALUE:temp_f::FLOAT),
     WIND_SPEED_MPH                           FLOAT          AS (VALUE:wind_speed_mph::FLOAT),
-    WIND_DIRECTION_DEG                       NUMBER(38,0)   AS (VALUE:WIND_DIRECTION_DEG::NUMBER(38,0)),
+    WIND_DIRECTION_DEG                       NUMBER(38,0)   AS (VALUE:wind_direction_deg::NUMBER(38,0)),
     WIND_COMPONENT_MPH                       FLOAT          AS (VALUE:wind_component_mph::FLOAT),
-    HUMIDITY_PCT                             NUMBER(38,0)   AS (VALUE:HUMIDITY_PCT::NUMBER(38,0)),
-    IS_DOME                                  BOOLEAN        AS (VALUE:IS_DOME::BOOLEAN),
+    HUMIDITY_PCT                             NUMBER(38,0)   AS (VALUE:humidity_pct::NUMBER(38,0)),
+    IS_DOME                                  BOOLEAN        AS (VALUE:is_dome::BOOLEAN),
     UMPIRE_NAME                              VARCHAR        AS (VALUE:umpire_name::VARCHAR),
     UMP_GAMES_SAMPLE                         NUMBER(38,0)   AS (VALUE:ump_games_sample::NUMBER(38,0)),
     UMP_K_PCT_ZSCORE                         FLOAT          AS (VALUE:ump_k_pct_zscore::FLOAT),

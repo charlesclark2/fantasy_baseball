@@ -1,0 +1,273 @@
+{
+  "per_season": [
+    {
+      "season": 2023,
+      "n_scored_universe": 429,
+      "systems": {
+        "adp": {
+          "n_aligned": 166,
+          "us": {
+            "rho_by_pos": {
+              "QB": 0.326,
+              "RB": 0.58,
+              "WR": 0.703,
+              "TE": 0.144
+            },
+            "rho_pooled": 0.438,
+            "rank_mae": 10.04,
+            "top24_hit": "11/24"
+          },
+          "system": {
+            "rho_by_pos": {
+              "QB": 0.286,
+              "RB": 0.486,
+              "WR": 0.728,
+              "TE": 0.205
+            },
+            "rho_pooled": 0.426,
+            "rank_mae": 10.6,
+            "top24_hit": "8/24"
+          },
+          "delta_rho_by_pos": {
+            "QB": 0.04,
+            "RB": 0.094,
+            "WR": -0.025,
+            "TE": -0.061
+          },
+          "delta_rho_pooled": 0.012,
+          "delta_rank_mae": -0.56,
+          "disagreement": {
+            "n_high_disagreement": 42,
+            "us": 0.6,
+            "system": 0.596
+          },
+          "coverage_pct": 38.7
+        },
+        "ecr": {
+          "n_aligned": 375,
+          "us": {
+            "rho_by_pos": {
+              "QB": 0.642,
+              "RB": 0.771,
+              "WR": 0.659,
+              "TE": 0.804
+            },
+            "rho_pooled": 0.719,
+            "rank_mae": 19.08,
+            "top24_hit": "10/24"
+          },
+          "system": {
+            "rho_by_pos": {
+              "QB": 0.65,
+              "RB": 0.789,
+              "WR": 0.774,
+              "TE": 0.835
+            },
+            "rho_pooled": 0.762,
+            "rank_mae": 17.38,
+            "top24_hit": "8/24"
+          },
+          "delta_rho_by_pos": {
+            "QB": -0.008,
+            "RB": -0.018,
+            "WR": -0.115,
+            "TE": -0.031
+          },
+          "delta_rho_pooled": -0.043,
+          "delta_rank_mae": 1.7,
+          "disagreement": {
+            "n_high_disagreement": 94,
+            "us": 0.698,
+            "system": 0.758
+          },
+          "coverage_pct": 87.4
+        },
+        "sleeper": {
+          "n_aligned": 411,
+          "us": {
+            "rho_by_pos": {
+              "QB": 0.514,
+              "RB": 0.784,
+              "WR": 0.679,
+              "TE": 0.725
+            },
+            "rho_pooled": 0.675,
+            "rank_mae": 20.35,
+            "top24_hit": "10/24"
+          },
+          "system": {
+            "rho_by_pos": {
+              "QB": 0.748,
+              "RB": 0.856,
+              "WR": 0.82,
+              "TE": 0.768
+            },
+            "rho_pooled": 0.798,
+            "rank_mae": 16.57,
+            "top24_hit": "11/24"
+          },
+          "delta_rho_by_pos": {
+            "QB": -0.234,
+            "RB": -0.072,
+            "WR": -0.141,
+            "TE": -0.043
+          },
+          "delta_rho_pooled": -0.123,
+          "delta_rank_mae": 3.78,
+          "disagreement": {
+            "n_high_disagreement": 103,
+            "us": 0.406,
+            "system": 0.826
+          },
+          "coverage_pct": 95.8
+        },
+        "espn": {
+          "n_aligned": 429,
+          "us": {
+            "rho_by_pos": {
+              "QB": 0.514,
+              "RB": 0.784,
+              "WR": 0.701,
+              "TE": 0.715
+            },
+            "rho_pooled": 0.678,
+            "rank_mae": 20.94,
+            "top24_hit": "10/24"
+          },
+          "system": {
+            "rho_by_pos": {
+              "QB": 0.778,
+              "RB": 0.832,
+              "WR": 0.859,
+              "TE": 0.854
+            },
+            "rho_pooled": 0.831,
+            "rank_mae": 14.99,
+            "top24_hit": "9/24"
+          },
+          "delta_rho_by_pos": {
+            "QB": -0.264,
+            "RB": -0.048,
+            "WR": -0.158,
+            "TE": -0.139
+          },
+          "delta_rho_pooled": -0.153,
+          "delta_rank_mae": 5.95,
+          "disagreement": {
+            "n_high_disagreement": 108,
+            "us": 0.471,
+            "system": 0.811
+          },
+          "coverage_pct": 100.0
+        }
+      }
+    }
+  ],
+  "aggregate": {
+    "adp": {
+      "n_seasons": 1,
+      "us_rho_pooled": 0.438,
+      "system_rho_pooled": 0.426,
+      "delta_rho_pooled": 0.012,
+      "delta_rank_mae": -0.56,
+      "disagreement_us": 0.6,
+      "disagreement_system": 0.596,
+      "delta_rho_by_pos": {
+        "QB": 0.04,
+        "RB": 0.094,
+        "WR": -0.025,
+        "TE": -0.061
+      }
+    },
+    "ecr": {
+      "n_seasons": 1,
+      "us_rho_pooled": 0.719,
+      "system_rho_pooled": 0.762,
+      "delta_rho_pooled": -0.043,
+      "delta_rank_mae": 1.7,
+      "disagreement_us": 0.698,
+      "disagreement_system": 0.758,
+      "delta_rho_by_pos": {
+        "QB": -0.008,
+        "RB": -0.018,
+        "WR": -0.115,
+        "TE": -0.031
+      }
+    },
+    "espn": {
+      "n_seasons": 1,
+      "us_rho_pooled": 0.678,
+      "system_rho_pooled": 0.831,
+      "delta_rho_pooled": -0.153,
+      "delta_rank_mae": 5.95,
+      "disagreement_us": 0.471,
+      "disagreement_system": 0.811,
+      "delta_rho_by_pos": {
+        "QB": -0.264,
+        "RB": -0.048,
+        "WR": -0.158,
+        "TE": -0.139
+      }
+    },
+    "sleeper": {
+      "n_seasons": 1,
+      "us_rho_pooled": 0.675,
+      "system_rho_pooled": 0.798,
+      "delta_rho_pooled": -0.123,
+      "delta_rank_mae": 3.78,
+      "disagreement_us": 0.406,
+      "disagreement_system": 0.826,
+      "delta_rho_by_pos": {
+        "QB": -0.234,
+        "RB": -0.072,
+        "WR": -0.141,
+        "TE": -0.043
+      }
+    }
+  },
+  "seasons_scored": [
+    2023
+  ],
+  "board": "beats-incumbent",
+  "selections": {
+    "QB": {
+      "learner": "pos_market_blend",
+      "hp": {
+        "blend_w": 0.9869973994939585
+      },
+      "source": "nf1_3_incumbent"
+    },
+    "RB": {
+      "learner": "pos_learned_adaptive_blend",
+      "hp": {
+        "blend_w": 0.2946650026871097,
+        "disp_slope": 0.7958801334079412
+      },
+      "source": "nf1_5_refined"
+    },
+    "WR": {
+      "learner": "pos_gbm",
+      "hp": {
+        "n_estimators": 300,
+        "num_leaves": 7,
+        "learning_rate": 0.012050541345647812,
+        "min_child_samples": 8,
+        "reg_lambda": 4.368469237108717
+      },
+      "source": "nf1_3_incumbent"
+    },
+    "TE": {
+      "learner": "pos_market_blend",
+      "hp": {
+        "blend_w": 0.6000478605455821
+      },
+      "source": "nf1_3_incumbent"
+    }
+  },
+  "interval_calibration": {
+    "kappa": 1.825,
+    "calib_80": 0.803,
+    "pit_max_decile_dev": 0.2254,
+    "n": 2222
+  }
+}
