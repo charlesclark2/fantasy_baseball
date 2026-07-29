@@ -65,6 +65,7 @@ __all__ = [
     "board_column_order",
     "normalize_level",
     "parse_grade",
+    "residual_vs_fit",
     "select_mle_row_per_player",
     "split_sheets",
 ]
@@ -301,8 +302,8 @@ SPEED_FLAG_GRADE = 60.0
 DISAGREEMENT_THRESHOLD = 15.0
 
 
-def _disagreement_residual(model_score: pd.Series, fv_pctile: pd.Series) -> pd.Series:
-    """Our score MINUS what our score usually is at that FV — not the raw gap between them.
+def residual_vs_fit(y: pd.Series, x: pd.Series) -> pd.Series:
+    """`y` MINUS what `y` usually is at that `x` — not the raw gap `y − x`.
 
     🚨 THE RAW GAP IS A BROKEN METRIC, and it looks fine until you read the output. Two rankings
     that correlate at anything below 1.0 regress toward each other at the extremes, so
@@ -311,17 +312,33 @@ def _disagreement_residual(model_score: pd.Series, fv_pctile: pd.Series) -> pd.S
     on the first real 1,286-player run: 10 of the top 12 were flagged, including players our own
     line scored in the 95th percentile.)
 
-    Removing the fitted linear relationship first makes the residual mean-zero at every FV, so a
-    flag means *"unusual for a player with this grade"* — which is the thing that is actually worth
-    a second look on draft day. Same class as the repo's selection-metric hygiene rule: sanity-check
-    the metric against what it mechanically must produce before trusting what it says.
+    Removing the fitted linear relationship first makes the residual mean-zero at every `x`, so a
+    flag means *"unusual for a player at this level of x"* — which is the thing that is actually
+    worth a second look on draft day. Same class as the repo's selection-metric hygiene rule:
+    sanity-check the metric against what it mechanically must produce before trusting what it says.
+
+    ⭐ This is the shared instrument for EVERY "where do two rankings disagree" column in the
+    prospect stack — E8.0's ours-vs-FV and E7.11's per-source-vs-consensus and ours-vs-consensus.
+    One implementation so the regression-to-the-mean lesson can only be learned once.
+
+    ⚠️ KNOWN, BOUNDED LIMITATION: the fit is LINEAR while two bounded rank-percentiles are related
+    S-shaped, so a little bias survives in the extreme deciles. Measured on synthetic rankings
+    (E7.11, 2026-07-29): the raw gap carries ≈20.6 percentile points of tail bias, this residual
+    ≈3.6 — an 82% reduction, and comfortably under the 15-point threshold at which either board
+    calls something a disagreement. So the residual cannot by itself manufacture a flag; it is not
+    claimed to be exactly unbiased. Pinned by `test_prospect_consensus.py::TestResidualNotRawGap`.
     """
-    ok = model_score.notna() & fv_pctile.notna()
-    if int(ok.sum()) < 3 or fv_pctile[ok].nunique() < 2:
-        return (model_score - fv_pctile).round(1)      # too few points to fit — the raw gap is all
-    slope, intercept = np.polyfit(fv_pctile[ok].astype(float), model_score[ok].astype(float), 1)
-    expected = intercept + slope * fv_pctile
-    return (model_score - expected).round(1)
+    ok = y.notna() & x.notna()
+    if int(ok.sum()) < 3 or x[ok].nunique() < 2:
+        return (y - x).round(1)                        # too few points to fit — the raw gap is all
+    slope, intercept = np.polyfit(x[ok].astype(float), y[ok].astype(float), 1)
+    expected = intercept + slope * x
+    return (y - expected).round(1)
+
+
+def _disagreement_residual(model_score: pd.Series, fv_pctile: pd.Series) -> pd.Series:
+    """Our score vs the scouts' grade, as a residual. See `residual_vs_fit`."""
+    return residual_vs_fit(model_score, fv_pctile)
 
 
 def _pctile(series: pd.Series, higher_is_better: bool = True) -> pd.Series:

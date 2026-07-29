@@ -83,6 +83,7 @@ quant_sports_intel_models/baseball/edge_program/ablation_results/e2_6_model_gate
 # snapshot of VENDOR content (FanGraphs FV grades, Prospect Savant expected stats) and do not
 # belong in the repo; the savant cache alone is ~20 MB of raw API JSON.
 quant_sports_intel_models/baseball/edge_program/ablation_results/e8_0_artifacts/
+quant_sports_intel_models/baseball/edge_program/ablation_results/e7_11_artifacts/
 
 # Next.js frontend
 frontend/.next/
