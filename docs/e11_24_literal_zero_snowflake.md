@@ -101,8 +101,12 @@ dedup read (`_already_fetched`) resolves from the S3 `weather_raw` mirror.
   Snowflake's `TIMESTAMP_NTZ` returned — rather than leaking a string to four call sites.
 - **Lean-image rule:** the reader comes from `utils.lakehouse_read` (guard-tested betting_ml-free),
   never `betting_ml.utils.lakehouse_monitor`. `duckdb` added to the image.
-- ⚠️ **HALF A FLIP SAVES NOTHING.** The INSERT leg still opens a Snowflake session until the write
-  leg is S3-only. 🚨 **The var is `W11_RAW_WRITE_MODE`, NOT `LAKEHOUSE_RAW_WRITE_MODE`** —
+- ✅ **RESOLVED ON THE LIVE BOX 2026-07-29 — the write leg was ALREADY `W11_RAW_WRITE_MODE=s3`.**
+  So every one of the 73 measured weather wakes came from the slate/venue READ alone:
+  `ingest_weather.py` called `get_snowflake_conn()` UNCONDITIONALLY, regardless of write mode.
+  `E11_24_WEATHER_SF_FREE=1` is the whole fix; no compose/write-leg change is required.
+- ⚠️ The half-flip hazard still stands for anyone on a box where the write leg is `snowflake`
+  or `both`: the INSERT would keep opening a session until the write leg is S3-only. 🚨 **The var is `W11_RAW_WRITE_MODE`, NOT `LAKEHOUSE_RAW_WRITE_MODE`** —
   `ingest_weather.py` calls `w11_write_mode()` (`W11_WRITE_MODE_ENV = "W11_RAW_WRITE_MODE"`; the W11
   Tier-A wave has its own switch, independent of the odds one). Setting the odds var here is a
   SILENT NO-OP — the W6_ODDS_SF_FREE class of bite, caught 2026-07-29 before it shipped. `needs_snowflake =

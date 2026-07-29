@@ -202,6 +202,18 @@ class TestWeatherCaptureGoesSnowflakeFree:
         assert "duckdb" in dockerfile
         assert "dbt/seeds/ref_venues.csv" in dockerfile
 
+    def test_the_duckdb_extensions_are_prebaked_into_the_image(self):
+        """This image runs `docker compose run --rm` — a fresh container per hourly fire — and
+        `duck_connect()` issues `INSTALL httpfs`. Without a build-time install every fire would
+        re-download from the DuckDB extension CDN, putting a brand-new external network
+        dependency on the weather-capture path where a CDN blip = a failed capture."""
+        dockerfile = _src("services/weather_capture/Dockerfile")
+        assert "INSTALL {ext}" in dockerfile or "INSTALL httpfs" in dockerfile, (
+            "pre-install the DuckDB extensions at build time"
+        )
+        for ext in ("httpfs", "icu", "delta"):
+            assert f'"{ext}"' in dockerfile, f"{ext} is not pre-baked"
+
     def test_no_snowflake_session_is_opened_when_no_leg_needs_one(self):
         """Reads-only-to-S3 while the INSERT leg still points at Snowflake saves NOTHING — the
         connection itself is the wake. This pins the `do_sf or not sf_free` conjunction."""
