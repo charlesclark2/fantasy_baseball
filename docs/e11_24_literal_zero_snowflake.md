@@ -301,6 +301,44 @@ Each removal is visible as a hard stop, which is the cleanest possible confirmat
 78 → 69 (7/28), i.e. roughly **−68% since 7/19** off the E11.20 phase-2a/2b flips. ⚠️ Do not read 7/29 as
 a data point; the day is partial and `account_usage` lags.
 
+### ✅ PRE-VERIFIED FOR 8/1 — the umpire idempotency-gate premise is CONFIRMED, and more strongly than claimed
+
+I had asserted the umpire chain is "an idempotent no-op on nearly every tick" from code reading. Measured
+2026-07-29 (on `MONITOR_WH`, so the audit did not contaminate):
+
+| Evidence | Value |
+|---|---|
+| Umpire-chain query executions | **~100–165 / day** (the 117 figure was only the subset that had to *wake* the warehouse) |
+| Rows ever produced by the live assignment feed (`data_source='statsapi'`) | **30**, across **6 dates**, since 2026-05-18 |
+| `min(loaded_at)` vs `max(loaded_at)` per game_date | **IDENTICAL on all 6 dates** ⇒ the assignment is written in **exactly ONE load stamp** and never re-written |
+
+⇒ **essentially every umpire-chain fire after the slate's single write is a pure no-op.** A per-slate
+idempotency gate is justified, and it is structurally the same gate as the shipped 1b. **Gate key:** "is
+there an assignment row for this slate whose `loaded_at` is newer than the last rebuild?" — because the
+feed writes once, that fires exactly once per slate instead of ~100×.
+
+⚠️ **Design caution for whoever builds it:** the gate must key on *assignment newer than last rebuild*,
+not on "already rebuilt today" — and it must not entrench the lateness documented below.
+
+### 🚩 SEPARATE FINDING (not E11.24 — flagging, not chasing): the HP-umpire assignment lands AFTER first pitch for ~half the slate
+
+Found while verifying the above; it is a **serving-quality** issue, not a cost one, and it deserves its
+own story rather than a drive-by fix.
+
+- The assignment feed **only started working on 2026-07-27** (before that: 1 row on 4 scattered dates;
+  7/27 and 7/28 have 11 and 15 rows = exactly their game counts).
+- It lands at **23:16 UTC (7/27)** and **23:09 UTC (7/28)** — and **6 of 11 (55%) and 6 of 15 (40%) games
+  had ALREADY STARTED** by then.
+
+That is precisely the window story 30.5 exists to beat ("ingest the HP umpire on the afternoon lineup path
+so it is available BEFORE the re-score, the actionable bet"). ⚠️ **Do not read the 1.000 historical
+coverage as health:** 30 assignment rows cannot cover ~150 games — past-date coverage comes from the
+`umpscorecards` **post-game tendency** feed backfilling (26,657 rows), not from the pregame assignment. The
+two feeds share a table and only `data_source` distinguishes them, so a naive coverage check on this block
+looks perfect while the pregame path is missing ~half the slate.
+📉 Note this makes the cost case *stronger*, not weaker: the chain re-runs ~100×/day to serve a feed that
+writes once, late.
+
 ## Stages 3–4 — SOAK-BLOCKED until the E11.20 W8b soak exits (2026-07-31)
 
 The E11.20 guardrail is **one serving-flip per soak**, and the 7/30 no-false-abstain attribution must
