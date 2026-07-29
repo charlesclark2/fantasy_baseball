@@ -34,6 +34,25 @@ RUN pip install --no-cache-dir \
     pyarrow \
     duckdb
 
+# E11.24 — PRE-BAKE the DuckDB extensions. This image runs as `docker compose run --rm`, i.e. a
+# FRESH ephemeral container on every hourly cron fire, and `duck_connect()` issues
+# `INSTALL httpfs` (+ icu, + delta under LAKEHOUSE_DELTA_W1=cutover). Without this layer every
+# fire would re-download them from the DuckDB extension CDN — a brand-new external network
+# dependency on the weather-capture path, where a CDN blip becomes a failed capture. Installing
+# at build time persists them in ~/.duckdb/extensions/ inside the image.
+# Each install is independently non-fatal: a platform without a prebuilt `delta` binary must not
+# fail the BUILD, it just falls back to the runtime install (delta is only reached under cutover).
+RUN python - <<'PY'
+import duckdb
+conn = duckdb.connect()
+for ext in ("httpfs", "icu", "delta"):
+    try:
+        conn.execute(f"INSTALL {ext}")
+        print(f"[duckdb] pre-installed {ext}")
+    except Exception as exc:
+        print(f"[duckdb] WARNING: could not pre-install {ext}: {exc}")
+PY
+
 WORKDIR /app
 
 # ingest_weather.py imports scripts/utils/lakehouse_raw_writer (the shared S3 raw writer), so the
