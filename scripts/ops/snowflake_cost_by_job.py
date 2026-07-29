@@ -101,7 +101,13 @@ def main():
 
     # Connect using the shared helper — DAGSTER_JOB_NAME will tag this session too.
     os.environ.setdefault("DAGSTER_JOB_NAME", "snowflake_cost_by_job_report")
-    conn = get_snowflake_connection(database="SNOWFLAKE", schema="ACCOUNT_USAGE")
+    # E11.24 — run the cost report on the MONITORING warehouse so it can never resume (and so
+    # inflate) the compute warehouse it is reporting on. Falls back to COMPUTE_WH only if the
+    # operator has not created MONITOR_WH yet.
+    conn = get_snowflake_connection(
+        database="SNOWFLAKE", schema="ACCOUNT_USAGE",
+        warehouse=os.environ.get("SNOWFLAKE_MONITOR_WAREHOUSE", "MONITOR_WH"),
+    )
 
     try:
         cur = conn.cursor()

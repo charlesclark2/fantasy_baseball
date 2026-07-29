@@ -85,6 +85,26 @@ MIRROR_TABLES = {
 }
 ALL_NAMES = sorted(MIRROR_TABLES)
 
+# ⛔ E11.24 (literal-zero Snowflake) — a table here is SKIPPED once its lever is set, because a
+# native writer now owns that S3 key. Mirroring a frozen Snowflake table over a natively-written
+# key is the INC-31 two-writers-one-key clobber (there it flipped column case; here it would
+# publish a STALE snapshot over fresh data). Keep this in sync with the same map in
+# scripts/export_features_to_s3.py — both write `baseball/lakehouse/team_elo_history/data.parquet`.
+CUTOVER_RETIRED: dict[str, tuple[str, str]] = {
+    "team_elo_history": (
+        "E11_24_ELO_SF_FREE",
+        "compute_elo.py writes this lakehouse key natively under E11.24.",
+    ),
+}
+
+
+def retired_by_cutover(name: str) -> str | None:
+    """The reason `name` must not be mirrored right now, or None if it is still live."""
+    lever_reason = CUTOVER_RETIRED.get(name)
+    if lever_reason and os.environ.get(lever_reason[0], "0").strip() == "1":
+        return f"{lever_reason[0]}=1 — {lever_reason[1]}"
+    return None
+
 
 def get_snowflake_conn():
     # INC-22 straggler cure (2026-07-05): the box authenticates via the INLINE key
@@ -143,6 +163,19 @@ def main():
     args = ap.parse_args()
 
     selected = [args.table] if args.table else ALL_NAMES
+
+    # E11.24 — drop cut-over tables BEFORE connecting; an explicit --table request is a hard error.
+    if args.table and (reason := retired_by_cutover(args.table)):
+        print(f"REFUSING to mirror {args.table}: {reason}")
+        sys.exit(2)
+    for name in list(selected):
+        if reason := retired_by_cutover(name):
+            print(f"WARNING: skipping {name} — {reason}")
+            selected.remove(name)
+    if not selected:
+        print("WARNING: every table in this mirror is retired by a cutover lever — nothing to do.")
+        return
+
     print(f"E11.1-W8a precursor mirror: {selected}" + ("  | DRY-RUN" if args.dry_run else ""))
 
     failures: list[tuple[str, str]] = []

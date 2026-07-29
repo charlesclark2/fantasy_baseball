@@ -29,7 +29,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.backend.dependencies import get_admin_user
-from app.backend.services.snowflake import execute_query
+from app.backend.services.snowflake import MONITORING_WAREHOUSE, execute_query
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -144,7 +144,7 @@ def _snowflake_costs_by_month() -> dict[str, float]:
             FROM daily
             GROUP BY 1
             ORDER BY 1 DESC
-        """)
+        """, warehouse=MONITORING_WAREHOUSE)  # E11.24 — never resume the measured warehouse
     except Exception:
         logger.warning("Snowflake cost query failed — role may need IMPORTED PRIVILEGES on SNOWFLAKE db")
         return {}

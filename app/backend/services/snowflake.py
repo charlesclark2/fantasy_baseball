@@ -51,13 +51,30 @@ def _load_private_key_bytes() -> bytes:
     )
 
 
+# E11.24 — the warehouse for ACCOUNT_USAGE cost/metering reads (the admin + finances cost
+# panels). Measured 2026-07-29: today those queries wake NOTHING (0 of 636 resumes over 8 days
+# had one as the first-query-after-resume) — they are PASSENGERS that only ever run while the
+# warehouse is already awake for pipeline work. ⚠️ That is precisely why they must move BEFORE
+# the literal-zero cutovers land: once targets 1/2/6 quiet the warehouse down and it actually
+# sleeps, "open the admin cost page" becomes the first query after a resume — i.e. the page
+# that displays the Snowflake bill starts BILLING for the privilege. Routing them to a separate
+# X-Small warehouse makes that structurally impossible.
+# Needs: GRANT USAGE ON WAREHOUSE MONITOR_WH TO ROLE CREDENCE_API_RO. Both call sites already
+# swallow their exceptions and degrade to an empty panel, so a missing grant is cosmetic.
+MONITORING_WAREHOUSE = os.environ.get("SNOWFLAKE_MONITOR_WAREHOUSE", "MONITOR_WH")
+
+
 def get_snowflake_connection(
     schema: str | None = None,
+    warehouse: str | None = None,
 ) -> snowflake.connector.SnowflakeConnection:
     """Open a Snowflake connection. Caller is responsible for closing it.
 
     The role must be read-only for all backend queries except POST /bets
     (INSERT on baseball_data.betting_ml.user_bets only).
+
+    Pass `warehouse` for ACCOUNT_USAGE cost/metering reads (see MONITORING_WAREHOUSE) so a
+    cost query can never resume the warehouse it is reporting on.
     """
     pkb = _load_private_key_bytes()
     kwargs: dict[str, Any] = dict(
@@ -65,7 +82,7 @@ def get_snowflake_connection(
         user=os.environ.get("SNOWFLAKE_USER", "dbt_rw"),
         private_key=pkb,
         role=os.environ.get("SNOWFLAKE_ROLE", "CREDENCE_API_RO"),
-        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
+        warehouse=warehouse or os.environ.get("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
         database="baseball_data",
     )
     if schema:
@@ -73,9 +90,10 @@ def get_snowflake_connection(
     return snowflake.connector.connect(**kwargs)
 
 
-def execute_query(query: str, params: dict | None = None) -> list[dict]:
+def execute_query(query: str, params: dict | None = None,
+                  warehouse: str | None = None) -> list[dict]:
     """Run a query, return all rows as dicts, and close the connection."""
-    conn = get_snowflake_connection()
+    conn = get_snowflake_connection(warehouse=warehouse)
     try:
         cur = conn.cursor(snowflake.connector.DictCursor)
         cur.execute(query, params or {})

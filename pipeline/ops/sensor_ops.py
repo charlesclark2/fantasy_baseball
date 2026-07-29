@@ -2,8 +2,14 @@ import os
 import subprocess
 import sys
 
-from dagster import In, Nothing, OpExecutionContext, Out, RetryPolicy, op
+from dagster import In, Nothing, OpExecutionContext, Out, Output, RetryPolicy, op
 
+from betting_ml.monitoring.statcast_catchup_gate import (  # E11.24 — the no-op catch-up gate
+    CATCHUP_GATE_ENV,
+    catchup_gate_on,
+    catchup_landed_pitches,
+    yesterday_et,
+)
 from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
 from pipeline.ops._dbt_exec import _failure_detail, _run_dbt
 
@@ -87,8 +93,8 @@ def _run_script(context: OpExecutionContext, script: str, args: list[str] | None
 # daily run. savant_ingestion is incremental (auto-resumes from last_loaded+1 to
 # yesterday), so this needs no date args and is idempotent across retries.
 
-@op(out=Out(Nothing), retry_policy=_CATCHUP_RETRY)
-def catchup_ingest_statcast(context: OpExecutionContext) -> None:
+@op(out=Out(Nothing, is_required=False), retry_policy=_CATCHUP_RETRY)
+def catchup_ingest_statcast(context: OpExecutionContext):
     """Land yesterday's not-yet-loaded Statcast pitch data — the sensor's whole purpose.
 
     E11.1-W11-E / E9.41b — the LIVE pitch substrate is the S3 `stg_batter_pitches` parquet written
@@ -100,11 +106,37 @@ def catchup_ingest_statcast(context: OpExecutionContext) -> None:
     yesterday's pitches — spun uselessly every 30 min until the next 08:00 daily
     ingest_statcast_to_s3_op, silently breaking the whole catch-up self-heal after W11-E. Mirrors
     the daily ingest_statcast_to_s3_op exactly (idempotent → safe across the sensor's retries).
+
+    E11.24 (literal-zero Snowflake) — CONDITIONAL OUTPUT. The sensor re-fires this job hourly
+    from 04:00 ET until Savant publishes, so on a normal morning ~5 of ~6 fires land NOTHING and
+    still ran the whole downstream chain (two ext-table REFRESH storms, the bullpen dbt build,
+    the three posterior writers, compute_elo, the umpire rebuild, predict + serve). That is the
+    mechanism behind the census's hourly `team_elo_history` no-op wake. Under
+    `E11_24_STATCAST_CATCHUP_GATE=1` this op yields NO output when yesterday's pitches still are
+    not present, which makes Dagster SKIP the rest of the chain (the run still SUCCEEDS — a skip
+    is not a failure) and the sensor simply retries on the next hourly run_key.
+    Fail-OPEN: any lakehouse read problem resolves to "run the chain", never to a silent skip.
     """
     if os.environ.get("W11_BATTER_PITCHES_SF_RETIRED") == "1":
         _run_script(context, "ingest_statcast_to_s3.py")
+    else:
+        _run_script(context, "savant_ingestion.py", ["batter_pitches"])
+
+    if not catchup_gate_on():
+        yield Output(None)
         return
-    _run_script(context, "savant_ingestion.py", ["batter_pitches"])
+
+    target = yesterday_et()
+    if catchup_landed_pitches(target):
+        context.log.info(f"[E11.24] {target} pitches present — running the catch-up chain.")
+        yield Output(None)
+        return
+    # ALERT-loud-but-continue: the op SUCCEEDS, the chain is skipped, the sensor retries.
+    context.log.warning(
+        f"[E11.24] catch-up landed no pitches for {target} — SKIPPING the downstream chain "
+        f"(nothing downstream can change). The hourly sensor will retry; set "
+        f"{CATCHUP_GATE_ENV}=0 to restore the always-run behaviour."
+    )
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing), retry_policy=_CATCHUP_RETRY)

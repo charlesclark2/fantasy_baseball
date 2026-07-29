@@ -318,6 +318,11 @@ class TestDailyMonthlyScheduleBridgeRetired:
 ROLLOUT_LEVERS = (
     "W6_ODDS_SF_FREE",     # E11.20 phase-2b — retires the intraday odds tick's two SF legs
     "W8B_FRESHNESS_S3",    # E11.20 phase-2b — routes the 30.13 freshness gate off Snowflake
+    # E11.24 literal-zero-Snowflake (August bill) — the three ranked wakers off the 7/29 census
+    "E11_24_ELO_SF_FREE",           # compute_elo → S3 (the hourly team_elo_history no-op DDL, 14%)
+    "E11_24_WEATHER_SF_FREE",       # ingest_weather slate/venue reads → S3 (the 24/7 hourly, 14%)
+    "E11_24_STATCAST_CATCHUP_GATE",  # skip the catch-up chain on a fire that landed nothing
+    "W11_RAW_WRITE_MODE",           # the weather WRITE leg — was load-bearing but UNDECLARED
 )
 
 

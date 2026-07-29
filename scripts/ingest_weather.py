@@ -67,6 +67,31 @@ from utils.lakehouse_raw_writer import (  # noqa: E402
 _LAKEHOUSE_SOURCE = "weather_raw"
 _SERIES_SOURCE = "weather_intraday_series"
 
+# ── E11.24 literal-zero-Snowflake lever ────────────────────────────────────────────────
+# WHY THIS SCRIPT: the 2026-07-29 wake census attributed **14% of all remaining COMPUTE_WH
+# resumes (6/44 on 7/28)** to this script's slate/venue SELECT — including 00:00/01:00/02:00Z,
+# hours with no game anywhere near. The hourly `weather-capture` host cron fires it FIVE times
+# per hour (T-24/6/3/1h + observed + the intraday series), and EVERY one of those opened a
+# Snowflake session purely to ask "which outdoor parks are on the slate?" — a question the S3
+# lakehouse already answers.
+#
+# Under `E11_24_WEATHER_SF_FREE=1` the READ leg is DuckDB-over-S3. To make the capture
+# Snowflake-free END-TO-END the WRITE leg must also be flipped (`LAKEHOUSE_RAW_WRITE_MODE=s3`
+# on the weather-capture service) — reads alone still leave the INSERT waking the warehouse.
+# Safe to flip: `stg_weather_raw_snapshots`' DuckDB branch already reads the S3 weather_raw
+# mirror, and its Snowflake branch is a view over lakehouse_ext (i.e. over that same S3), so
+# freezing the native `statsapi.weather_raw` strands no consumer.
+#
+# 🚦 LEAN-IMAGE RULE: this script runs inside services/weather_capture/, which has NO betting_ml
+# and no pandas. The DuckDB reader therefore comes from `utils.lakehouse_read` (scripts/utils/ is
+# COPYd wholesale and is guard-tested betting_ml-free), never betting_ml.utils.lakehouse_monitor.
+_SF_FREE_ENV = "E11_24_WEATHER_SF_FREE"
+
+
+def weather_sf_free() -> bool:
+    """True when the slate/venue + dedup reads resolve from S3 instead of Snowflake."""
+    return os.environ.get(_SF_FREE_ENV, "0").strip() == "1"
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(message)s",
@@ -223,6 +248,128 @@ _ALREADY_FETCHED_SQL = f"""
       AND weather_observation_type = %(observation_type)s
       AND (%(hours_to_first_pitch)s IS NULL OR hours_to_first_pitch = %(hours_to_first_pitch)s)
 """
+
+# ── E11.24 SF-FREE slate reads (DuckDB over the S3 lakehouse) ──────────────────
+# ⚠️ INC-23: `stg_statsapi_games.game_date` is stored as an ISO **VARCHAR** in the lakehouse
+# (the binary-timestamp cure). The Snowflake query returned a naive UTC TIMESTAMP_NTZ, and the
+# callers below branch on `isinstance(game_dt, str)` — so we cast at the USE SITE
+# (`::timestamptz AT TIME ZONE 'UTC'`) to hand back the SAME naive-UTC datetime Snowflake did,
+# rather than leaking a string and relying on every caller's str branch behaving identically.
+# `official_date` is a real DATE, so it needs no cast.
+_LAKEHOUSE_SLATE_SQL = """
+    SELECT
+        g.game_pk,
+        g.venue_id,
+        (g.game_date::timestamptz AT TIME ZONE 'UTC') AS game_datetime_utc,
+        v.latitude,
+        v.longitude,
+        rv.roof_type
+    FROM stg_statsapi_games g
+    JOIN (
+        SELECT venue_id, latitude, longitude
+        FROM stg_statsapi_venues
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY venue_id ORDER BY ingest_date DESC) = 1
+    ) v ON g.venue_id = v.venue_id
+    JOIN ref_venues rv ON g.venue_id = rv.venue_id
+    WHERE g.official_date = ?
+      {completed_filter}
+      AND rv.roof_type IN ('open', 'convertible')
+    ORDER BY g.game_date
+"""
+
+# `ref_venues` is a dbt SEED (dbt/seeds/ref_venues.csv), not a lakehouse table — it has no
+# parquet to read. The seed CSV is the source of truth for the Snowflake table too, so the
+# lean weather image reads it directly (COPYd next to this script by the Dockerfile).
+_REF_VENUES_SEED_CANDIDATES = (
+    os.path.join(os.path.dirname(__file__), "ref_venues.csv"),                  # lean image
+    os.path.join(os.path.dirname(__file__), "..", "dbt", "seeds", "ref_venues.csv"),  # repo
+)
+
+
+def _ref_venues_csv() -> str:
+    for path in _REF_VENUES_SEED_CANDIDATES:
+        if os.path.exists(path):
+            return os.path.abspath(path)
+    raise FileNotFoundError(
+        "ref_venues.csv not found — the E11.24 SF-free weather read needs the dbt seed. "
+        f"Looked in: {[os.path.abspath(p) for p in _REF_VENUES_SEED_CANDIDATES]}"
+    )
+
+
+def _lakehouse_conn():
+    """DuckDB over S3 with the three tables this script reads registered as bare-name views.
+
+    `duck_connect` resolves S3 auth through the credential_chain (the EC2 instance role) — no
+    `aws_access_key_id=os.environ.get(...)`, which would pass None on the box and kill the chain.
+    """
+    from utils.lakehouse_read import duck_connect, register_views  # lean-safe (no betting_ml)
+
+    conn = duck_connect()
+    register_views(conn, ["stg_statsapi_games", "stg_statsapi_venues"])
+    conn.execute(
+        f"CREATE OR REPLACE VIEW ref_venues AS "
+        f"SELECT * FROM read_csv_auto('{_ref_venues_csv()}')"
+    )
+    return conn
+
+
+def _slate_games_lakehouse(game_date: str, completed_only: bool) -> list[dict]:
+    """The `_SCHEDULE_SQL` / `_COMPLETED_GAMES_SQL` result, read from S3 instead of Snowflake."""
+    sql = _LAKEHOUSE_SLATE_SQL.format(
+        completed_filter="AND g.abstract_game_state = 'Final'" if completed_only else ""
+    )
+    conn = _lakehouse_conn()
+    try:
+        cur = conn.execute(sql, [game_date])
+        cols = [d[0].lower() for d in cur.description]
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def _already_fetched_lakehouse(game_date: str, observation_type: str,
+                               hours_to_first_pitch: int | None) -> set:
+    """The `_ALREADY_FETCHED_SQL` dedup set, read from the S3 weather_raw mirror.
+
+    Preserving this read matters: without it `observed_at_first_pitch` would re-fetch every
+    completed park on all ~17 hourly fires. The mirror stores `game_datetime_utc` as a VARCHAR,
+    so it is cast at the use site (INC-23) exactly as the Snowflake `DATE(...)` did.
+    """
+    from utils.lakehouse_read import LAKEHOUSE_RAW, duck_connect
+
+    conn = duck_connect()
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT DISTINCT game_pk
+            FROM read_parquet('{LAKEHOUSE_RAW}/{_LAKEHOUSE_SOURCE}/**/*.parquet',
+                              union_by_name=true)
+            WHERE game_datetime_utc::timestamp::date = ?::date
+              AND weather_observation_type = ?
+              AND (?::bigint IS NULL OR hours_to_first_pitch = ?::bigint)
+            """,
+            [game_date, observation_type, hours_to_first_pitch, hours_to_first_pitch],
+        ).fetchall()
+        return {row[0] for row in rows}
+    except Exception as exc:  # noqa: BLE001
+        # ALERT-loud-but-continue: a dedup miss costs extra API calls, never correctness
+        # (the retention writer collapses a re-fetch) — it must not kill the capture.
+        log.warning("[E11.24] S3 dedup read failed (%s) — proceeding without it.", exc)
+        return set()
+    finally:
+        conn.close()
+
+
+def _slate_games(conn, game_date: str, completed_only: bool = False) -> list[dict]:
+    """Slate of outdoor-park games for `game_date` — from S3 under the E11.24 lever, else SF."""
+    if weather_sf_free():
+        return _slate_games_lakehouse(game_date, completed_only)
+    with conn.cursor() as cur:
+        cur.execute(_COMPLETED_GAMES_SQL if completed_only else _SCHEDULE_SQL,
+                    {"game_date": game_date})
+        rows = cur.fetchall()
+        col_names = [d[0].lower() for d in cur.description]
+        return [dict(zip(col_names, row)) for row in rows]
 
 # ── Open-Meteo fetching ────────────────────────────────────────────────────────
 
@@ -440,7 +587,13 @@ def _already_fetched(conn, do_sf: bool, game_date: str, observation_type: str,
                      hours_to_first_pitch: int | None) -> set:
     """game_pks already having a row for this (date, obs-type, checkpoint). SF-only optimisation —
     skips redundant weather-API calls. In s3-only mode there is no SF to read, so return empty and
-    let the retention writer collapse any re-fetch (correctness holds; only extra API calls)."""
+    let the retention writer collapse any re-fetch (correctness holds; only extra API calls).
+
+    E11.24: under the SF-free lever the dedup is read from the S3 weather_raw mirror instead of
+    being dropped — otherwise `observed_at_first_pitch` re-fetches every completed park on all
+    ~17 hourly fires, trading a Snowflake wake for a 17× weather-API bill."""
+    if weather_sf_free():
+        return _already_fetched_lakehouse(game_date, observation_type, hours_to_first_pitch)
     if not do_sf:
         return set()
     with conn.cursor() as cur:
@@ -454,11 +607,7 @@ def _already_fetched(conn, do_sf: bool, game_date: str, observation_type: str,
 
 def _run_forecast_pregame(conn, game_date: str, source: str, do_sf: bool, do_s3: bool) -> None:
     """Original daily pre-game forecast ingestion path."""
-    with conn.cursor() as cur:
-        cur.execute(_SCHEDULE_SQL, {"game_date": game_date})
-        rows = cur.fetchall()
-        col_names = [d[0].lower() for d in cur.description]
-        games = [dict(zip(col_names, row)) for row in rows]
+    games = _slate_games(conn, game_date)
 
     if not games:
         log.info("No outdoor-park games found for %s — nothing to fetch.", game_date)
@@ -513,11 +662,7 @@ def _run_forecast_pregame(conn, game_date: str, source: str, do_sf: bool, do_s3:
 
 def _run_observed_at_first_pitch(conn, game_date: str, source: str, do_sf: bool, do_s3: bool) -> None:
     """Fetch observed weather from archive endpoint for completed games on game_date."""
-    with conn.cursor() as cur:
-        cur.execute(_COMPLETED_GAMES_SQL, {"game_date": game_date})
-        rows = cur.fetchall()
-        col_names = [d[0].lower() for d in cur.description]
-        games = [dict(zip(col_names, row)) for row in rows]
+    games = _slate_games(conn, game_date, completed_only=True)
 
     if not games:
         log.info("No completed outdoor-park games found for %s — nothing to fetch.", game_date)
@@ -568,11 +713,7 @@ def _run_observed_at_first_pitch(conn, game_date: str, source: str, do_sf: bool,
 def _run_forecast_intraday(conn, game_date: str, source: str, hours_to_first_pitch: int,
                            do_sf: bool, do_s3: bool) -> None:
     """Fetch intraday forecast snapshot for today's games at a specific checkpoint."""
-    with conn.cursor() as cur:
-        cur.execute(_SCHEDULE_SQL, {"game_date": game_date})
-        rows = cur.fetchall()
-        col_names = [d[0].lower() for d in cur.description]
-        games = [dict(zip(col_names, row)) for row in rows]
+    games = _slate_games(conn, game_date)
 
     if not games:
         log.info("No outdoor-park games found for %s — nothing to fetch.", game_date)
@@ -642,11 +783,7 @@ def _run_intraday_series(conn, game_date: str, source: str) -> None:
     snapshot per (game, hour) within the game-day — the hours are the SIGNAL, so we do NOT collapse
     across hours (only a true intra-hour re-run collapses). S3-only: this is a brand-new source with
     no Snowflake table to decommission (aligns with 'all ingestion strictly to S3')."""
-    with conn.cursor() as cur:
-        cur.execute(_SCHEDULE_SQL, {"game_date": game_date})
-        rows = cur.fetchall()
-        col_names = [d[0].lower() for d in cur.description]
-        games = [dict(zip(col_names, row)) for row in rows]
+    games = _slate_games(conn, game_date)
 
     if not games:
         log.info("intraday_series: no outdoor-park games for %s — nothing to capture.", game_date)
@@ -779,7 +916,15 @@ def main() -> None:
                  args.observation_type, args.source, game_date)
         return
 
-    conn = get_snowflake_conn()
+    # E11.24 — connect to Snowflake ONLY if a leg still needs it. Under the SF-free lever with
+    # LAKEHOUSE_RAW_WRITE_MODE=s3 this run never opens a Snowflake session, so the hourly capture
+    # stops resuming COMPUTE_WH entirely. `do_sf` (the INSERT leg) still forces a connection, so
+    # a half-flip (reads S3, writes 'both') degrades to "same as today", never to a lost write.
+    needs_snowflake = do_sf or not weather_sf_free()
+    if not needs_snowflake:
+        log.info("[%s=1, write_mode=%s] Snowflake-FREE run — no warehouse session opened.",
+                 _SF_FREE_ENV, w11_write_mode())
+    conn = get_snowflake_conn() if needs_snowflake else None
     try:
         if args.observation_type == "forecast_pregame":
             _run_forecast_pregame(conn, game_date, args.source, do_sf, do_s3)
@@ -792,7 +937,8 @@ def main() -> None:
             # S3-only new source (the E13.16 precursor); do_sf/do_s3 don't gate it.
             _run_intraday_series(conn, game_date, args.source)
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
 
 if __name__ == "__main__":

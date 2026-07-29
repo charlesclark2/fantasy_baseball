@@ -26,7 +26,7 @@ from app.backend.services import serving_cache
 from app.backend.services.s3_cache import invalidate_game as s3_invalidate_game
 from app.backend.services.s3_cache import invalidate_permanent_picks as s3_invalidate_permanent_picks
 from app.backend.services.s3_cache import invalidate_today
-from app.backend.services.snowflake import execute_query
+from app.backend.services.snowflake import MONITORING_WAREHOUSE, execute_query
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -356,7 +356,8 @@ def snowflake_credits(_: str = Depends(get_admin_user)) -> list[SnowflakeCredits
             FROM daily
             GROUP BY 1
             ORDER BY 1 DESC
-            """
+            """,
+            warehouse=MONITORING_WAREHOUSE,  # E11.24 — never resume the warehouse being measured
         )
     except Exception:
         logger.warning("snowflake_credits query failed — role may lack IMPORTED PRIVILEGES")
