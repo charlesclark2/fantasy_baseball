@@ -1,7 +1,7 @@
 {
   "season": 2026,
-  "generated_at": "2026-07-29T15:31:44.221798+00:00",
-  "source": "lake",
+  "generated_at": "2026-07-29T17:05:39.926008+00:00",
+  "source": "local-artifacts",
   "positions": [
     "QB",
     "RB",
@@ -579,7 +579,7 @@
     }
   ],
   "projections": {
-    "players": 716,
+    "players": 777,
     "adp_format": "ppr",
     "adp_teams": 12,
     "model_version": "nfl_fantasy_fastpath_v1",

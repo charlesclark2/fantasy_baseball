@@ -3,7 +3,10 @@
     "week": "2026-07-27",
     "items": [
       {
-        "tag": "new",
+        "tag": "fixed",
+        "text": "The NFL fantasy boards were missing players who sat out all of last season. A player with no games in the base season was dropped from the projection universe entirely — the rule exists to keep retired players off the board, but it could not tell a retirement from a season-ending injury, so genuinely draftable names (Brandon Aiyuk, Tank Dell, Jonathon Brooks, MarShawn Lloyd) simply had no row. They are back: a player who missed a full season is now projected off his most recent season actually played, provided he is still on a 2026 roster or depth chart, and retired players are still excluded. Returning players are deliberately discounted rather than projected as if nothing happened — across 431 comparable cases since 2016 a player coming back from a full missed season averaged about 4 games, not the 10 a healthy player does, and 43% never played at all. So each of these rows carries a hard availability haircut, a much wider range, and a Low confidence badge, and it will usually sit below where the draft market ranks him. That gap is intentional, and the ADP column beside it shows you exactly how far apart we are."
+      },
+      {
         "tag": "improved",
         "text": "A round of refinements to the NFL fantasy boards. Rankings now groups players into tiers — a tier breaks where there is an unusually large drop to the next player, which is the practical draft question: inside a tier you can take whoever you like, but letting a tier run out before your next pick costs you real value. The League Board now names the actual player sitting at each position's replacement level, so 'replacement' stops being an abstract number and becomes 'better than that guy'. Season Projections gains pagination and keeps a player's board position visible when you search for him, instead of renumbering the list. The ADP difference column is now labelled 'vs ADP' rather than a mathematical symbol, and the Confidence column explains itself — it measures how much played history sits behind a projection, which is not the same as how good the player is. Column explanations now open on tap as well as hover, so they work on a phone. Available to subscribers."
       },

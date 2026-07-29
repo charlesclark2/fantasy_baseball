@@ -80,7 +80,7 @@ _RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     # (`test_ingest_milb` is deliberately NOT here — `serving-ops`'s `test_ingest_` prefix is
     #  declared first and claims it, which is correct: it guards an ingest op, not an MLE.)
     ("prospect-milb", (
-        "test_milb_", "test_e7_", "test_prospect_board",
+        "test_milb_", "test_e7_", "test_prospect_", "test_mlb_pipeline_",
     )),
     # ── baseball predictive models: the Monte-Carlo / bake-off / pricing families that
     #    dominate the gate's execution time (copula, per-side, totals, …) ──────────────────

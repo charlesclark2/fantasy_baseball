@@ -1,6 +1,6 @@
 # NF-C1-lite — 2026 NFL league-config scoring + VOR boards (MVP-2)
 
-**Engine:** `nfl_fantasy_league_board_v1` (sport-agnostic `fantasy_engine`) · **projection season:** 2026 · **generated:** 2026-07-25T07:26:57.609134+00:00
+**Engine:** `nfl_fantasy_league_board_v1` (sport-agnostic `fantasy_engine`) · **projection season:** 2026 · **generated:** 2026-07-29T18:02:34.562569+00:00
 
 > 🧮 **Sections 1–3 below are shown at the 12-team reference size** (the modal redraft size); the boards are landed for every scored size — see §4 for the league-size effect. The board grain is (config_name, n_teams, player_id): league size is a normalized dimension, not part of the format name.
 
@@ -10,10 +10,10 @@
 
 | preset    | best_QB    |   best_QB_overall_rank |   WR+TE_in_top10 |   RB_in_top10 |
 |:----------|:-----------|-----------------------:|-----------------:|--------------:|
-| standard  | JOSH ALLEN |                     17 |                0 |            10 |
-| half_ppr  | JOSH ALLEN |                     20 |                3 |             7 |
-| full_ppr  | JOSH ALLEN |                     26 |                4 |             6 |
-| superflex | JOSH ALLEN |                      8 |                3 |             6 |
+| standard  | JOSH ALLEN |                     15 |                1 |             9 |
+| half_ppr  | JOSH ALLEN |                     15 |                3 |             7 |
+| full_ppr  | JOSH ALLEN |                     19 |                4 |             6 |
+| superflex | JOSH ALLEN |                      2 |                3 |             4 |
 
 - ✅ **Superflex lifts QBs:** the best QB's overall rank should jump sharply from full-PPR to superflex (a QB-eligible SUPERFLEX slot roughly doubles QB starter demand → QB replacement drops → QB VOR rises). This is the direct check the flex-allocation math is right.
 - ✅ **PPR lifts pass-catchers:** WR/TE representation in the top 10 should rise from standard → half → full PPR as receptions gain value.
@@ -28,10 +28,10 @@ Replacement level per position = the points of the FIRST non-startable player (t
 |:-----------|---------------------:|-----------------:|----------------:|---------------------:|
 | DST        |                   12 |                0 |              12 |                  0.0 |
 | K          |                   12 |                0 |              12 |                  0.0 |
-| QB         |                   12 |                0 |              12 |                259.0 |
-| RB         |                   24 |               11 |              35 |                 96.0 |
-| TE         |                   12 |                0 |              12 |                 74.0 |
-| WR         |                   24 |                1 |              25 |                 97.0 |
+| QB         |                   12 |                0 |              12 |                265.2 |
+| RB         |                   24 |               10 |              34 |                 89.5 |
+| TE         |                   12 |                0 |              12 |                 71.9 |
+| WR         |                   24 |                2 |              26 |                 90.8 |
 
 ### full_ppr
 
@@ -39,10 +39,10 @@ Replacement level per position = the points of the FIRST non-startable player (t
 |:-----------|---------------------:|-----------------:|----------------:|---------------------:|
 | DST        |                   12 |                0 |              12 |                  0.0 |
 | K          |                   12 |                0 |              12 |                  0.0 |
-| QB         |                   12 |                0 |              12 |                259.9 |
-| RB         |                   24 |                5 |              29 |                135.5 |
-| TE         |                   12 |                0 |              12 |                124.0 |
-| WR         |                   24 |                7 |              31 |                135.6 |
+| QB         |                   12 |                0 |              12 |                265.4 |
+| RB         |                   24 |                1 |              25 |                129.9 |
+| TE         |                   12 |                0 |              12 |                117.0 |
+| WR         |                   24 |               11 |              35 |                131.0 |
 
 ### superflex
 
@@ -50,10 +50,10 @@ Replacement level per position = the points of the FIRST non-startable player (t
 |:-----------|---------------------:|-----------------:|----------------:|---------------------:|
 | DST        |                   12 |                0 |              12 |                  0.0 |
 | K          |                   12 |                0 |              12 |                  0.0 |
-| QB         |                   12 |               12 |              24 |                205.2 |
-| RB         |                   24 |                5 |              29 |                135.5 |
-| TE         |                   12 |                0 |              12 |                124.0 |
-| WR         |                   24 |                7 |              31 |                135.6 |
+| QB         |                   12 |               12 |              24 |                191.8 |
+| RB         |                   24 |                1 |              25 |                129.9 |
+| TE         |                   12 |                0 |              12 |                117.0 |
+| WR         |                   24 |               11 |              35 |                131.0 |
 
 ## 3. Ranked boards — top 20 by VOR
 
@@ -61,76 +61,76 @@ Replacement level per position = the points of the FIRST non-startable player (t
 
 |   overall_rank | player_name         | position   |   positional_rank |   proj_games |   league_points |   replacement_points |   vor |   vor_p10 |   vor_p90 |
 |---------------:|:--------------------|:-----------|------------------:|-------------:|----------------:|---------------------:|------:|----------:|----------:|
-|              1 | JONATHAN TAYLOR     | RB         |                 1 |         16.2 |           230.6 |                 96.0 | 134.6 |      60.8 |     208.3 |
-|              2 | CHRISTIAN MCCAFFREY | RB         |                 2 |         16.2 |           226.3 |                 96.0 | 130.4 |      66.7 |     194.0 |
-|              3 | JAHMYR GIBBS        | RB         |                 3 |         16.2 |           222.4 |                 96.0 | 126.5 |      53.8 |     199.1 |
-|              4 | BIJAN ROBINSON      | RB         |                 4 |         16.2 |           213.8 |                 96.0 | 117.8 |      57.0 |     178.6 |
-|              5 | DERRICK HENRY       | RB         |                 5 |         16.2 |           213.4 |                 96.0 | 117.5 |      52.6 |     182.2 |
-|              6 | DE'VON ACHANE       | RB         |                 6 |         15.8 |           190.2 |                 96.0 |  94.2 |      45.2 |     143.2 |
-|              7 | SAQUON BARKLEY      | RB         |                 7 |         16.2 |           189.3 |                 96.0 |  93.3 |      41.3 |     145.2 |
-|              8 | JAMES COOK III      | RB         |                 8 |         16.2 |           187.2 |                 96.0 |  91.2 |      31.0 |     151.4 |
-|              9 | KYREN WILLIAMS      | RB         |                 9 |         16.2 |           185.4 |                 96.0 |  89.4 |      37.3 |     141.4 |
-|             10 | JOSH JACOBS         | RB         |                10 |         15.8 |           172.1 |                 96.0 |  76.1 |      21.1 |     131.1 |
-|             11 | PUKA NACUA          | WR         |                 1 |         16.2 |           166.2 |                 97.0 |  69.1 |      14.6 |     123.7 |
-|             12 | Jeremiyah Love      | RB         |                11 |         16.0 |           164.6 |                 96.0 |  68.6 |     -96.0 |     253.9 |
-|             13 | JA'MARR CHASE       | WR         |                 2 |         15.8 |           164.9 |                 97.0 |  67.8 |      19.8 |     115.9 |
-|             14 | AMON-RA ST. BROWN   | WR         |                 3 |         16.2 |           161.9 |                 97.0 |  64.9 |      16.0 |     113.9 |
-|             15 | ASHTON JEANTY       | RB         |                12 |         16.2 |           155.1 |                 96.0 |  59.1 |      11.9 |     106.3 |
-|             16 | CHASE BROWN         | RB         |                13 |         16.2 |           154.3 |                 96.0 |  58.4 |      15.4 |     101.3 |
-|             17 | JOSH ALLEN          | QB         |                 1 |         16.5 |           314.1 |                259.0 |  55.0 |     -36.8 |     147.0 |
-|             18 | BREECE HALL         | RB         |                14 |         15.8 |           150.9 |                 96.0 |  55.0 |      10.8 |      99.1 |
-|             19 | TRAVIS ETIENNE JR.  | RB         |                15 |         16.2 |           148.5 |                 96.0 |  52.6 |       8.4 |      96.6 |
-|             20 | DAVID MONTGOMERY    | RB         |                16 |         16.2 |           146.3 |                 96.0 |  50.4 |       8.1 |      92.5 |
+|              1 | JONATHAN TAYLOR     | RB         |                 1 |         15.4 |           218.1 |                 89.5 | 128.6 |      56.1 |     201.1 |
+|              2 | CHRISTIAN MCCAFFREY | RB         |                 2 |         15.5 |           215.6 |                 89.5 | 126.1 |      63.2 |     189.0 |
+|              3 | BIJAN ROBINSON      | RB         |                 3 |         15.2 |           199.7 |                 89.5 | 110.2 |      50.4 |     170.0 |
+|              4 | JAHMYR GIBBS        | RB         |                 4 |         14.4 |           196.8 |                 89.5 | 107.4 |      37.2 |     177.4 |
+|              5 | DERRICK HENRY       | RB         |                 5 |         14.0 |           184.5 |                 89.5 |  95.1 |      32.7 |     157.4 |
+|              6 | SAQUON BARKLEY      | RB         |                 6 |         15.3 |           177.9 |                 89.5 |  88.5 |      37.2 |     139.7 |
+|              7 | DE'VON ACHANE       | RB         |                 7 |         14.4 |           173.5 |                 89.5 |  84.1 |      35.7 |     132.3 |
+|              8 | KYREN WILLIAMS      | RB         |                 8 |         15.1 |           172.4 |                 89.5 |  83.0 |      31.7 |     134.1 |
+|              9 | Jeremiyah Love      | RB         |                 9 |         16.0 |           164.6 |                 89.5 |  75.1 |     -17.3 |     167.5 |
+|             10 | JA'MARR CHASE       | WR         |                 1 |         15.8 |           165.6 |                 90.8 |  74.8 |      26.7 |     123.0 |
+|             11 | JAMES COOK III      | RB         |                10 |         14.0 |           161.2 |                 89.5 |  71.7 |      14.0 |     129.4 |
+|             12 | AMON-RA ST. BROWN   | WR         |                 2 |         15.8 |           157.7 |                 90.8 |  66.9 |      18.3 |     115.5 |
+|             13 | JOSH JACOBS         | RB         |                11 |         14.2 |           155.0 |                 89.5 |  65.6 |      12.1 |     119.0 |
+|             14 | PUKA NACUA          | WR         |                 3 |         15.1 |           154.2 |                 90.8 |  63.3 |      10.0 |     116.7 |
+|             15 | JOSH ALLEN          | QB         |                 1 |         16.5 |           325.7 |                265.2 |  60.5 |     -33.0 |     154.0 |
+|             16 | ASHTON JEANTY       | RB         |                12 |         15.3 |           146.1 |                 89.5 |  56.7 |      10.2 |     103.1 |
+|             17 | JALEN HURTS         | QB         |                 2 |         16.5 |           318.2 |                265.2 |  53.0 |     -25.5 |     131.4 |
+|             18 | TREY MCBRIDE        | TE         |                 1 |         16.6 |           123.9 |                 71.9 |  52.0 |      16.6 |      87.5 |
+|             19 | BREECE HALL         | RB         |                13 |         14.3 |           137.4 |                 89.5 |  47.9 |       4.7 |      91.1 |
+|             20 | JARED GOFF          | QB         |                 3 |         16.5 |           311.1 |                265.2 |  46.0 |     -28.1 |     119.9 |
 
 ### full_ppr
 
 |   overall_rank | player_name         | position   |   positional_rank |   proj_games |   league_points |   replacement_points |   vor |   vor_p10 |   vor_p90 |
 |---------------:|:--------------------|:-----------|------------------:|-------------:|----------------:|---------------------:|------:|----------:|----------:|
-|              1 | CHRISTIAN MCCAFFREY | RB         |                 1 |         16.2 |           293.9 |                135.5 | 158.4 |      75.8 |     241.0 |
-|              2 | JAHMYR GIBBS        | RB         |                 2 |         16.2 |           274.7 |                135.5 | 139.1 |      49.4 |     228.9 |
-|              3 | BIJAN ROBINSON      | RB         |                 3 |         16.2 |           269.1 |                135.5 | 133.6 |      57.1 |     210.1 |
-|              4 | JONATHAN TAYLOR     | RB         |                 4 |         16.2 |           262.0 |                135.5 | 126.5 |      42.7 |     210.3 |
-|              5 | JA'MARR CHASE       | WR         |                 1 |         15.8 |           260.1 |                135.6 | 124.6 |      48.7 |     200.4 |
-|              6 | PUKA NACUA          | WR         |                 2 |         16.2 |           257.7 |                135.6 | 122.1 |      37.4 |     206.7 |
-|              7 | AMON-RA ST. BROWN   | WR         |                 3 |         16.2 |           254.3 |                135.6 | 118.7 |      41.9 |     195.6 |
-|              8 | DE'VON ACHANE       | RB         |                 5 |         15.8 |           242.7 |                135.5 | 107.2 |      44.7 |     169.7 |
-|              9 | DERRICK HENRY       | RB         |                 6 |         16.2 |           230.8 |                135.5 |  95.3 |      25.2 |     165.4 |
-|             10 | TREY MCBRIDE        | TE         |                 1 |         16.2 |           210.7 |                124.0 |  86.7 |      25.6 |     147.8 |
-|             11 | SAQUON BARKLEY      | RB         |                 7 |         16.2 |           221.0 |                135.5 |  85.5 |      24.9 |     146.2 |
-|             12 | JAXON SMITH-NJIGBA  | WR         |                 4 |         16.2 |           216.5 |                135.6 |  80.9 |      11.4 |     150.4 |
-|             13 | JAMES COOK III      | RB         |                 8 |         16.2 |           215.3 |                135.5 |  79.7 |      10.5 |     149.0 |
-|             14 | KYREN WILLIAMS      | RB         |                 9 |         16.2 |           214.5 |                135.5 |  79.0 |      18.7 |     139.3 |
-|             15 | Jeremiyah Love      | RB         |                10 |         16.0 |           208.4 |                135.5 |  72.9 |    -135.5 |     307.7 |
-|             16 | JOSH JACOBS         | RB         |                11 |         15.8 |           203.1 |                135.5 |  67.5 |       2.6 |     132.5 |
-|             17 | CEEDEE LAMB         | WR         |                 5 |         14.8 |           202.2 |                135.6 |  66.6 |       9.2 |     124.1 |
-|             18 | CHASE BROWN         | RB         |                12 |         16.2 |           201.4 |                135.5 |  65.9 |       9.8 |     122.0 |
-|             19 | JUSTIN JEFFERSON    | WR         |                 6 |         16.2 |           201.5 |                135.6 |  65.9 |      14.9 |     116.9 |
-|             20 | ASHTON JEANTY       | RB         |                13 |         16.2 |           199.6 |                135.5 |  64.1 |       3.3 |     124.8 |
+|              1 | CHRISTIAN MCCAFFREY | RB         |                 1 |         15.5 |           279.9 |                129.9 | 150.0 |      68.3 |     231.8 |
+|              2 | JA'MARR CHASE       | WR         |                 1 |         15.8 |           261.4 |                131.0 | 130.3 |      54.4 |     206.3 |
+|              3 | BIJAN ROBINSON      | RB         |                 2 |         15.2 |           251.3 |                129.9 | 121.4 |      46.1 |     196.7 |
+|              4 | JONATHAN TAYLOR     | RB         |                 3 |         15.4 |           247.8 |                129.9 | 117.9 |      35.5 |     200.4 |
+|              5 | AMON-RA ST. BROWN   | WR         |                 2 |         15.8 |           247.6 |                131.0 | 116.6 |      40.3 |     193.0 |
+|              6 | JAHMYR GIBBS        | RB         |                 4 |         14.4 |           243.0 |                129.9 | 113.1 |      26.6 |     199.7 |
+|              7 | PUKA NACUA          | WR         |                 3 |         15.1 |           239.1 |                131.0 | 108.0 |      25.3 |     190.8 |
+|              8 | TREY MCBRIDE        | TE         |                 1 |         16.6 |           214.6 |                117.0 |  97.6 |      36.2 |     159.0 |
+|              9 | DE'VON ACHANE       | RB         |                 5 |         14.4 |           221.5 |                129.9 |  91.5 |      29.9 |     153.2 |
+|             10 | Jeremiyah Love      | RB         |                 6 |         16.0 |           208.4 |                129.9 |  78.5 |     -38.5 |     195.6 |
+|             11 | SAQUON BARKLEY      | RB         |                 7 |         15.3 |           207.8 |                129.9 |  77.8 |      18.0 |     137.7 |
+|             12 | JAXON SMITH-NJIGBA  | WR         |                 4 |         15.3 |           203.7 |                131.0 |  72.7 |       4.4 |     141.0 |
+|             13 | DERRICK HENRY       | RB         |                 8 |         14.0 |           199.6 |                129.9 |  69.6 |       2.2 |     137.1 |
+|             14 | KYREN WILLIAMS      | RB         |                 9 |         15.1 |           199.5 |                129.9 |  69.6 |      10.3 |     128.9 |
+|             15 | JUSTIN JEFFERSON    | WR         |                 5 |         16.2 |           200.3 |                131.0 |  69.3 |      18.3 |     120.3 |
+|             16 | CEEDEE LAMB         | WR         |                 6 |         14.4 |           197.3 |                131.0 |  66.3 |       9.1 |     123.5 |
+|             17 | A.J. BROWN          | WR         |                 7 |         15.7 |           194.8 |                131.0 |  63.8 |      -2.1 |     129.8 |
+|             18 | Jordyn Tyson        | WR         |                 8 |         13.6 |           191.8 |                131.0 |  60.7 |     -32.9 |     154.4 |
+|             19 | JOSH ALLEN          | QB         |                 1 |         16.5 |           325.7 |                265.4 |  60.3 |     -33.2 |     153.8 |
+|             20 | ASHTON JEANTY       | RB         |                10 |         15.3 |           188.1 |                129.9 |  58.1 |      -1.6 |     117.9 |
 
 ### superflex
 
 |   overall_rank | player_name         | position   |   positional_rank |   proj_games |   league_points |   replacement_points |   vor |   vor_p10 |   vor_p90 |
 |---------------:|:--------------------|:-----------|------------------:|-------------:|----------------:|---------------------:|------:|----------:|----------:|
-|              1 | CHRISTIAN MCCAFFREY | RB         |                 1 |         16.2 |           293.9 |                135.5 | 158.4 |      75.8 |     241.0 |
-|              2 | JAHMYR GIBBS        | RB         |                 2 |         16.2 |           274.7 |                135.5 | 139.1 |      49.4 |     228.9 |
-|              3 | BIJAN ROBINSON      | RB         |                 3 |         16.2 |           269.1 |                135.5 | 133.6 |      57.1 |     210.1 |
-|              4 | JONATHAN TAYLOR     | RB         |                 4 |         16.2 |           262.0 |                135.5 | 126.5 |      42.7 |     210.3 |
-|              5 | JA'MARR CHASE       | WR         |                 1 |         15.8 |           260.1 |                135.6 | 124.6 |      48.7 |     200.4 |
-|              6 | PUKA NACUA          | WR         |                 2 |         16.2 |           257.7 |                135.6 | 122.1 |      37.4 |     206.7 |
-|              7 | AMON-RA ST. BROWN   | WR         |                 3 |         16.2 |           254.3 |                135.6 | 118.7 |      41.9 |     195.6 |
-|              8 | JOSH ALLEN          | QB         |                 1 |         16.5 |           314.1 |                205.2 | 108.9 |      17.0 |     200.8 |
-|              9 | DE'VON ACHANE       | RB         |                 5 |         15.8 |           242.7 |                135.5 | 107.2 |      44.7 |     169.7 |
-|             10 | DERRICK HENRY       | RB         |                 6 |         16.2 |           230.8 |                135.5 |  95.3 |      25.2 |     165.4 |
-|             11 | JALEN HURTS         | QB         |                 2 |         16.5 |           296.5 |                205.2 |  91.3 |      16.4 |     166.2 |
-|             12 | TREY MCBRIDE        | TE         |                 1 |         16.2 |           210.7 |                124.0 |  86.7 |      25.6 |     147.8 |
-|             13 | SAQUON BARKLEY      | RB         |                 7 |         16.2 |           221.0 |                135.5 |  85.5 |      24.9 |     146.2 |
-|             14 | JAXON SMITH-NJIGBA  | WR         |                 4 |         16.2 |           216.5 |                135.6 |  80.9 |      11.4 |     150.4 |
-|             15 | JAMES COOK III      | RB         |                 8 |         16.2 |           215.3 |                135.5 |  79.7 |      10.5 |     149.0 |
-|             16 | KYREN WILLIAMS      | RB         |                 9 |         16.2 |           214.5 |                135.5 |  79.0 |      18.7 |     139.3 |
-|             17 | JARED GOFF          | QB         |                 3 |         16.5 |           282.4 |                205.2 |  77.3 |       8.1 |     146.4 |
-|             18 | DAK PRESCOTT        | QB         |                 4 |         16.5 |           281.1 |                205.2 |  75.9 |       4.6 |     147.2 |
-|             19 | TREVOR LAWRENCE     | QB         |                 5 |         16.5 |           278.5 |                205.2 |  73.4 |      -2.3 |     149.0 |
-|             20 | Jeremiyah Love      | RB         |                10 |         16.0 |           208.4 |                135.5 |  72.9 |    -135.5 |     307.7 |
+|              1 | CHRISTIAN MCCAFFREY | RB         |                 1 |         15.5 |           279.9 |                129.9 | 150.0 |      68.3 |     231.8 |
+|              2 | JOSH ALLEN          | QB         |                 1 |         16.5 |           325.7 |                191.8 | 133.9 |      40.4 |     227.4 |
+|              3 | JA'MARR CHASE       | WR         |                 1 |         15.8 |           261.4 |                131.0 | 130.3 |      54.4 |     206.3 |
+|              4 | JALEN HURTS         | QB         |                 2 |         16.5 |           318.2 |                191.8 | 126.4 |      47.9 |     204.8 |
+|              5 | BIJAN ROBINSON      | RB         |                 2 |         15.2 |           251.3 |                129.9 | 121.4 |      46.1 |     196.7 |
+|              6 | JARED GOFF          | QB         |                 3 |         16.5 |           311.4 |                191.8 | 119.6 |      45.5 |     193.6 |
+|              7 | JONATHAN TAYLOR     | RB         |                 3 |         15.4 |           247.8 |                129.9 | 117.9 |      35.5 |     200.4 |
+|              8 | AMON-RA ST. BROWN   | WR         |                 2 |         15.8 |           247.6 |                131.0 | 116.6 |      40.3 |     193.0 |
+|              9 | JAHMYR GIBBS        | RB         |                 4 |         14.4 |           243.0 |                129.9 | 113.1 |      26.6 |     199.7 |
+|             10 | PUKA NACUA          | WR         |                 3 |         15.1 |           239.1 |                131.0 | 108.0 |      25.3 |     190.8 |
+|             11 | LAMAR JACKSON       | QB         |                 4 |         14.5 |           296.9 |                191.8 | 105.1 |      23.7 |     186.4 |
+|             12 | DAK PRESCOTT        | QB         |                 5 |         16.5 |           293.4 |                191.8 | 101.7 |      28.3 |     174.9 |
+|             13 | JUSTIN HERBERT      | QB         |                 6 |         16.5 |           290.6 |                191.8 |  98.8 |      24.8 |     172.8 |
+|             14 | TREY MCBRIDE        | TE         |                 1 |         16.6 |           214.6 |                117.0 |  97.6 |      36.2 |     159.0 |
+|             15 | MATTHEW STAFFORD    | QB         |                 7 |         16.5 |           284.8 |                191.8 |  93.0 |      15.8 |     170.2 |
+|             16 | DE'VON ACHANE       | RB         |                 5 |         14.4 |           221.5 |                129.9 |  91.5 |      29.9 |     153.2 |
+|             17 | TREVOR LAWRENCE     | QB         |                 8 |         16.5 |           282.5 |                191.8 |  90.7 |      14.4 |     167.0 |
+|             18 | BAKER MAYFIELD      | QB         |                 9 |         16.5 |           279.2 |                191.8 |  87.4 |      22.3 |     152.5 |
+|             19 | PATRICK MAHOMES     | QB         |                10 |         15.0 |           271.2 |                191.8 |  79.4 |       7.2 |     151.5 |
+|             20 | Jeremiyah Love      | RB         |                 6 |         16.0 |           208.4 |                129.9 |  78.5 |     -38.5 |     195.6 |
 
 ## 4. League-size effect — size is a real dimension of value, not a label
 
@@ -138,8 +138,8 @@ For **full_ppr** across the scored league sizes: replacement level per position 
 
 | format   |   n_teams |   QB_repl |   RB_repl |   WR_repl |   TE_repl |   best_QB_rank |   players_positive_VOR |
 |:---------|----------:|----------:|----------:|----------:|----------:|---------------:|-----------------------:|
-| full_ppr |        12 |     259.9 |     135.5 |     135.6 |     124.0 |             26 |                     84 |
-| full_ppr |        10 |     262.0 |     143.9 |     144.8 |     125.9 |             21 |                     70 |
+| full_ppr |        12 |     265.4 |     129.9 |     131.0 |     117.0 |             19 |                     84 |
+| full_ppr |        10 |     268.3 |     132.0 |     137.9 |     118.6 |             17 |                     70 |
 
 ## 5. Limitations
 

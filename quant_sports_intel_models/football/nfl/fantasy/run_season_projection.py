@@ -75,6 +75,9 @@ _ROOKIE_PARQUET = (
 OUTPUT_COLS = [
     "sport", "projection_season", "base_season", "player_id", "player_name", "position",
     "team_id", "source", "is_rookie", "draft_overall", "confidence",
+    # NF-D11 provenance: which season anchors this row's role/durability, and how many seasons the
+    # player missed (0 = a normal base-season player; ≥1 = rescued + availability-discounted).
+    "anchor_season", "seasons_missed",
     *RAW_STAT_COLS,
     "proj_fp_std", "proj_fp_half", "proj_fp_ppr",
     "fp_ppr_sd", "fp_ppr_p10", "fp_ppr_p90", "uncertainty_type",
@@ -116,6 +119,9 @@ select
     sum(case when g then receiving_yards else 0 end)::double       as rec_yds_tot,
     sum(case when g then receiving_touchdowns else 0 end)::double  as rec_td_tot,
     stddev_samp(case when g then fantasy_points_ppr end)          as fp_ppr_sd,
+    -- NF-D11: the season's realized convenience PPR TOTAL. Not a projection input — it is the
+    -- prior-production signal the return-from-absence availability prior tiers a rescued player on.
+    sum(case when g then fantasy_points_ppr else 0 end)::double    as fp_ppr_tot,
     -- NF-D2 slice 1: base-season USAGE-SHARE role signals (per-game rates → season averages over
     -- played games). snap share only counts games the player was actually on the field (>0);
     -- target/carry share are box-derived and defined for every played game.
@@ -140,8 +146,123 @@ _RECENCY_DECAY = 0.6   # weight of a season one year older than the base season
 _WINDOW_YEARS = 3      # base season + the two prior
 
 
+# ── NF-D11: the statuses that mean "no longer a football player" on the projection-season roster
+#    snapshot. Everything else (ACT / RES / PUP / NFI / SUS / practice-squad codes) is a player who is
+#    still in the league — exactly the population the base-anchor was wrongly deleting.
+_OUT_OF_LEAGUE_STATUSES = ("RET", "CUT")
+
+
+def resolve_base_anchor(
+    per_season: pd.DataFrame, season: int, forward_ids: set | None = None
+) -> pd.DataFrame:
+    """NF-D11 — decide, per player, WHICH season anchors his role / durability / game-to-game sd.
+
+    The projection needs a single "this is what the player was last doing" season. The MVP-1 rule was
+    an inner join on the BASE season, whose stated purpose (keep retired / out-of-league players that
+    the 3-year window would otherwise sweep in OUT of the board) is sound — but a whole-season INJURY
+    is indistinguishable from retirement under that rule, so it silently DELETED productive,
+    actively-drafted players (2026: Brandon Aiyuk, Tank Dell, Jonathon Brooks, MarShawn Lloyd).
+
+    The rule now has two branches:
+      • `base_season`         — the player played in the base season ⇒ anchor there (UNCHANGED; every
+                                incumbent player's anchor row is bit-identical to MVP-1's).
+      • `most_recent_played`  — the player has NO base-season row but the window holds real
+                                production AND `forward_ids` proves he is on a PROJECTION-SEASON
+                                roster / depth chart ⇒ anchor on his most-recent PLAYED season and
+                                stamp `seasons_missed` so the return-from-absence availability prior
+                                discounts him.
+      • dropped               — no base-season row and no forward roster evidence ⇒ still excluded
+                                (retired / out of the league — the anchor's original purpose).
+
+    `forward_ids = None` or an EMPTY set means "no forward roster evidence is available" (e.g. a
+    backtest season with no roster snapshot) and DISABLES the rescue entirely — degrading to exactly
+    the MVP-1 universe rather than guessing. Pure (no IO).
+
+    Returns one row per retained player: `player_id, games_played, fp_ppr_sd, position,
+    anchor_season, seasons_missed, prior_best_fp, base_anchor`.
+    """
+    cols = ["player_id", "games_played", "fp_ppr_sd", "position", "anchor_season",
+            "seasons_missed", "prior_best_fp", "base_anchor"]
+    if per_season is None or per_season.empty:
+        return pd.DataFrame(columns=cols)
+
+    ps = per_season.copy()
+    ps["fp_ppr_tot"] = pd.to_numeric(ps.get("fp_ppr_tot"), errors="coerce")
+    # the best single season in the window — the prior-production signal the availability prior tiers on
+    best_fp = ps.groupby("player_id")["fp_ppr_tot"].max().rename("prior_best_fp")
+
+    keep = ["player_id", "games_played", "fp_ppr_sd", "position", "season"]
+    base = ps[ps["season"] == season][keep].copy()
+    base["base_anchor"] = "base_season"
+
+    absent = ps[~ps["player_id"].isin(set(base["player_id"]))]
+    if forward_ids:
+        absent = absent[absent["player_id"].isin(set(forward_ids))]
+    else:
+        absent = absent.iloc[0:0]
+    if not absent.empty:
+        # the MOST-RECENT PLAYED season is the fallback anchor (role/durability/sd all come from it)
+        idx = absent.groupby("player_id")["season"].idxmax()
+        fallback = absent.loc[idx, keep].copy()
+        fallback["base_anchor"] = "most_recent_played"
+        out = pd.concat([base, fallback], ignore_index=True)
+    else:
+        out = base
+    out = out.rename(columns={"season": "anchor_season"})
+    out["seasons_missed"] = (int(season) - pd.to_numeric(out["anchor_season"], errors="coerce")).astype(float)
+    out = out.merge(best_fp.reset_index(), on="player_id", how="left")
+    return out[cols]
+
+
+def load_forward_roster_ids(
+    con, projection_season: int, schema: str = MARTS_SCHEMA, staging_schema: str = STAGING_SCHEMA
+) -> set:
+    """NF-D11 — the set of players with PROJECTION-SEASON roster evidence: still in the league, so a
+    base-season absence is an INJURY (rescue him), not a retirement (leave him out).
+
+    Two independent, leakage-safe sources, UNIONed because neither is complete on its own:
+      • `stg_nfl_depth_charts_current` (season = projection season) — the freshest ESPN forward depth
+        snapshot. This is the one that carries e.g. Brandon Aiyuk (SF, rank 8, 2026-07-24 snapshot),
+        whom the nflverse offseason roster pull does not yet list.
+      • `stg_nfl_weekly_rosters` at the EARLIEST available week of the projection season, minus the
+        `RET`/`CUT` statuses. This is the branch that exists for HISTORICAL seasons, so it is what
+        the NF-D11 ablation measures on.
+
+    Returns an EMPTY set on any read failure — which disables the rescue (a strictly conservative
+    degrade back to the MVP-1 universe), never a silent half-populated gate. WARN-tier: this feed is
+    a universe gate, not a serving-critical path."""
+    ids: set = set()
+    try:
+        dc = con.sql(f"""
+            select distinct player_id from {staging_schema}.stg_nfl_depth_charts_current
+            where season = {int(projection_season)} and player_id is not null
+        """).df()
+        ids |= set(dc["player_id"].dropna())
+    except Exception as exc:  # noqa: BLE001 — WARN-tier; the roster branch below may still populate
+        log.warning("NF-D11: forward depth-chart snapshot unavailable for %s (%s) — "
+                    "the rescue falls back to the weekly-roster branch only", projection_season, exc)
+    try:
+        ros = con.sql(f"""
+            select player_id, first(status order by week asc) as status
+            from {staging_schema}.stg_nfl_weekly_rosters
+            where season = {int(projection_season)} and player_id is not null
+            group by 1
+        """).df()
+        ros = ros[~ros["status"].astype("string").str.upper().isin(_OUT_OF_LEAGUE_STATUSES)]
+        ids |= set(ros["player_id"].dropna())
+    except Exception as exc:  # noqa: BLE001 — WARN-tier
+        log.warning("NF-D11: projection-season weekly rosters unavailable for %s (%s)",
+                    projection_season, exc)
+    if not ids:
+        log.warning("NF-D11: NO forward roster evidence for %s — the base-season-absent rescue is "
+                    "DISABLED for this run (the projection universe degrades to the MVP-1 rule)",
+                    projection_season)
+    return ids
+
+
 def load_base_season(
-    con, season: int, schema: str = MARTS_SCHEMA, staging_schema: str = STAGING_SCHEMA
+    con, season: int, schema: str = MARTS_SCHEMA, staging_schema: str = STAGING_SCHEMA,
+    projection_season: int | None = None, rescue_absent: bool = True,
 ) -> pd.DataFrame:
     lo = season - (_WINDOW_YEARS - 1)
     per_season = con.sql(_MULTI_SEASON_SQL.format(schema=schema, season=season, lo=lo)).df()
@@ -175,19 +296,30 @@ def load_base_season(
 
     weighted = per_season.groupby("player_id").apply(_blend, include_groups=False)
 
-    # anchor on the BASE SEASON: a player must have appeared in the season we project off to be
-    # draft-relevant for the upcoming one (excludes retired / out-of-league players the multi-year
-    # window would otherwise sweep in). Role/team/sd/durability all come from that base season.
-    base = per_season[per_season["season"] == season].set_index("player_id")
-    weighted = weighted.join(base[["games_played", "fp_ppr_sd", "position"]], how="inner")
+    # NF-D11: anchor each player on the base season where he has one, else (when projection-season
+    # roster evidence proves he is still in the league) on his MOST-RECENT PLAYED season. See
+    # `resolve_base_anchor` — role/team/sd/durability all come from the anchor season, and
+    # `seasons_missed` marks a rescued player for the return-from-absence availability prior.
+    proj_season = int(projection_season) if projection_season is not None else int(season) + 1
+    forward_ids = load_forward_roster_ids(con, proj_season, schema, staging_schema) if rescue_absent else set()
+    anchor = resolve_base_anchor(per_season, season, forward_ids).set_index("player_id")
+    weighted = weighted.join(anchor, how="inner")
     df = weighted.reset_index()
+    n_rescued = int((df["base_anchor"] == "most_recent_played").sum())
+    if n_rescued:
+        log.info("NF-D11: %d base-season-absent player(s) RESCUED via the most-recent-played anchor "
+                 "(forward roster evidence for %d)", n_rescued, proj_season)
 
-    # team + display name from the most-recent base-season week
+    # team + display name from the most-recent week IN THE WINDOW. NF-D11: window-wide (was
+    # base-season-only) so a rescued player — who has no base-season PLAYED row but is still on the
+    # roster×schedule calendar — gets a name and a team instead of a blank board row. For a
+    # base-anchored player this resolves to the same base-season row as before (max season wins).
     meta = con.sql(f"""
         select player_id, team_id, player_name
         from {schema}.fct_player_week
-        where season = {season} and week > 0
-        qualify row_number() over (partition by player_id order by week desc, week_start_et desc) = 1
+        where season between {lo} and {season} and week > 0 and player_id is not null
+        qualify row_number() over (
+            partition by player_id order by season desc, week desc, week_start_et desc) = 1
     """).df()
     df = df.merge(meta, on="player_id", how="left")
 
@@ -310,6 +442,112 @@ def _coalesce_forward_status(nflverse: pd.DataFrame, sleeper: pd.DataFrame) -> p
     return merged[["player_id", "proj_status"]]
 
 
+# The historical returner population is the SAME query for every arm / every projected season, so it
+# is read ONCE per (connection, schema) and filtered to the in-fold target seasons in pandas.
+_ABSENCE_HISTORY_CACHE: dict = {}
+
+
+def load_absence_return_history(con, schema: str = MARTS_SCHEMA,
+                                staging_schema: str = STAGING_SCHEMA) -> pd.DataFrame:
+    """NF-D11 — the historical RETURN-FROM-ABSENCE population the availability prior is fit on.
+
+    One row per (target season Y, player) where the player (a) played ZERO games in Y−1, (b) has real
+    production somewhere in Y−3..Y−2, and (c) carries a Y roster row that is not RET/CUT — i.e. the
+    exact population `resolve_base_anchor` now rescues, reconstructed for every season we have data
+    for. Each row carries the preseason-known predictors (`prior_games`, `prior_best_fp`,
+    `seasons_missed`, `position`) and the OUTCOME (`realized_games`, `realized_fp_ppr`), plus the
+    season's base-anchored mean games (`healthy_mean_games`) as the `ratio` family's denominator.
+
+    ⚠️ The caller MUST filter to `target_season <= base_season` before fitting — that is what keeps
+    the prior in-fold. Cached per (connection, schema): the query is season-agnostic."""
+    # keyed on the live connection; the cache VALUE holds a reference to `con` so the object cannot
+    # be collected and its id() re-used by a later connection (a stale-cache hazard, not a leak —
+    # a run opens one connection).
+    key = (id(con), schema, staging_schema)
+    if key in _ABSENCE_HISTORY_CACHE:
+        return _ABSENCE_HISTORY_CACHE[key][1].copy()
+    sql = f"""
+    with pg as (
+        select season, player_id, max(position) as position,
+               count_if(played_flag and not is_bye) as games,
+               sum(case when played_flag then fantasy_points_ppr else 0 end)::double as fp_ppr
+        from {schema}.fct_player_week where week > 0 and player_id is not null
+        group by 1, 2
+    ),
+    played as (select * from pg where games > 0),
+    ros as (
+        select season, player_id, first(status order by week asc) as status
+        from {staging_schema}.stg_nfl_weekly_rosters where player_id is not null group by 1, 2
+    ),
+    cand as (
+        select r.season as target_season, r.player_id
+        from ros r
+        where upper(coalesce(r.status, 'ACT')) not in ('RET', 'CUT')
+    ),
+    win as (
+        select c.target_season, c.player_id,
+               max(case when p.season = c.target_season - 1 then p.games end)   as base_games,
+               max(case when p.season between c.target_season - 3
+                             and c.target_season - 2 then p.season end)          as anchor_season,
+               max(case when p.season between c.target_season - 3
+                             and c.target_season - 2 then p.fp_ppr end)          as prior_best_fp
+        from cand c
+        join played p on p.player_id = c.player_id
+                     and p.season between c.target_season - 3 and c.target_season - 1
+        group by 1, 2
+    ),
+    returners as (
+        select w.target_season, w.player_id, w.anchor_season, w.prior_best_fp,
+               w.target_season - w.anchor_season as seasons_missed
+        from win w
+        where w.base_games is null and w.anchor_season is not null
+    ),
+    healthy as (
+        -- the season's BASE-ANCHORED comparison level: mean realized games among players who DID
+        -- play the base season (the `ratio` family's denominator + the honest contrast in the report)
+        select p.season + 1 as target_season, avg(coalesce(n.games, 0)) as healthy_mean_games
+        from played p
+        left join pg n on n.player_id = p.player_id and n.season = p.season + 1
+        where p.position in ('QB', 'RB', 'WR', 'TE', 'FB')
+        group by 1
+    )
+    select r.target_season, r.player_id, r.anchor_season, r.seasons_missed,
+           coalesce(r.prior_best_fp, 0.0) as prior_best_fp,
+           a.position, a.games as prior_games,
+           coalesce(n.games, 0) as realized_games,
+           coalesce(n.fp_ppr, 0.0) as realized_fp_ppr,
+           h.healthy_mean_games
+    from returners r
+    join played a on a.player_id = r.player_id and a.season = r.anchor_season
+    left join pg n on n.player_id = r.player_id and n.season = r.target_season
+    left join healthy h on h.target_season = r.target_season
+    where a.position in ('QB', 'RB', 'WR', 'TE', 'FB')
+    """
+    try:
+        hist = con.sql(sql).df()
+    except Exception as exc:  # noqa: BLE001 — WARN-tier: no history ⇒ the prior falls back to the
+        log.warning("NF-D11: return-from-absence history unavailable (%s) — the availability prior "
+                    "falls back to its pooled empirical constants", exc)
+        hist = pd.DataFrame(columns=["target_season", "player_id", "anchor_season", "seasons_missed",
+                                     "prior_best_fp", "position", "prior_games", "realized_games",
+                                     "realized_fp_ppr", "healthy_mean_games"])
+    _ABSENCE_HISTORY_CACHE[key] = (con, hist)
+    return hist.copy()
+
+
+def fit_absence_prior_for(con, base_season: int, family: str = _SP._ABSENCE_PRIOR_FAMILY,
+                          schema: str = MARTS_SCHEMA, staging_schema: str = STAGING_SCHEMA):
+    """NF-D11 — the IN-FOLD availability prior for a board projected off `base_season`: fit on
+    returner cohorts whose RETURN YEAR is already complete (`target_season <= base_season`), so no
+    fit ever sees the season being projected."""
+    hist = load_absence_return_history(con, schema, staging_schema)
+    in_fold = hist[pd.to_numeric(hist["target_season"], errors="coerce") <= int(base_season)]
+    prior = _SP.fit_absence_return_prior(in_fold, family=family)
+    log.debug("NF-D11 absence prior (%s) fit on %d in-fold returners ≤ %s: levels=%s",
+              family, prior.n_fit, base_season, prior.levels)
+    return prior
+
+
 def load_rookie_training(con, upto_season: int, schema: str = MARTS_SCHEMA,
                          include_zero_game: bool = False) -> pd.DataFrame:
     """Historical drafted rookies (skill positions, draft_year ≤ base season) joined to their
@@ -357,13 +595,20 @@ def load_rookie_training(con, upto_season: int, schema: str = MARTS_SCHEMA,
     return hist
 
 
-def load_realized_season(con, season: int, schema: str = MARTS_SCHEMA) -> pd.DataFrame:
-    """Realized convenience PPR total for a season (for the holdout backtest)."""
+def load_realized_season(con, season: int, schema: str = MARTS_SCHEMA,
+                         include_zero_game: bool = False) -> pd.DataFrame:
+    """Realized convenience PPR total for a season (for the holdout backtest).
+
+    `include_zero_game` (NF-D11) keeps players who ended up playing ZERO games. The default
+    survivor-filtered view is right for the ρ backtest, but it is exactly WRONG for grading an
+    AVAILABILITY prior: ~43% of returners play no games, so filtering them out would score the prior
+    only on the cases where it was least needed."""
+    having = "" if include_zero_game else "having g > 0"
     return con.sql(f"""
         select player_id, count_if(played_flag and not is_bye) as g,
                sum(case when played_flag then fantasy_points_ppr else 0 end) as real_fp_ppr
         from {schema}.fct_player_week where season = {season} and week > 0
-        group by 1 having g > 0
+        group by 1 {having}
     """).df()
 
 
@@ -375,8 +620,12 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
                      mover_opportunity_blend: float | None = None,
                      env_tilt_blend: float | None = None,
                      injury_override_blend: float | None = None,
-                     xfp_td_blend: float | None = None) -> pd.DataFrame:
-    base = load_base_season(con, base_season, schema)
+                     xfp_td_blend: float | None = None,
+                     rescue_absent: bool = True,
+                     absence_prior_family: str | None = None,
+                     absence_prior_blend: float | None = None) -> pd.DataFrame:
+    base = load_base_season(con, base_season, schema, projection_season=projection_season,
+                            rescue_absent=rescue_absent)
     # NF-D2 slice 4 / NF-D4: attach the projection-season team's forward Vegas environment on the
     # forward team, for the QB environment tilt. Base = the Week-1 implied points (leakage-safe); NF-D4
     # AUGMENTS it with the preseason WIN TOTAL — a team-level 0.5/0.5 z-blend (a season-level team-
@@ -414,6 +663,15 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
         kw["injury_override_blend"] = injury_override_blend
     if xfp_td_blend is not None:
         kw["xfp_td_blend"] = xfp_td_blend
+    # NF-D11: the return-from-absence availability prior, fit IN-FOLD (return years ≤ base_season)
+    # and applied to the rows the base-anchor fallback rescued. Skipped entirely when nothing was
+    # rescued (the historical-backtest seasons with no roster snapshot) so it can never touch an
+    # incumbent player.
+    a_blend = _SP._ABSENCE_PRIOR_BLEND if absence_prior_blend is None else absence_prior_blend
+    kw["absence_prior_blend"] = a_blend
+    if a_blend > 0 and "seasons_missed" in base.columns and (base["seasons_missed"] >= 1).any():
+        kw["absence_prior"] = fit_absence_prior_for(
+            con, base_season, family=absence_prior_family or _SP._ABSENCE_PRIOR_FAMILY, schema=schema)
     vets = project_veterans(base, priors, projection_season, **kw)
 
     rookies_all = pd.read_parquet(_ROOKIE_PARQUET)
@@ -459,10 +717,22 @@ def coverage_report(proj: pd.DataFrame, base: pd.DataFrame) -> dict:
     projected_ids = set(proj["player_id"])
     relevant = base[base["games_played"] >= 4]
     gap = relevant[~relevant["player_id"].isin(projected_ids)]
+    # NF-D11: how many rows the most-recent-played fallback rescued, and who the most productive of
+    # them are — the standing visibility on a universe rule that used to delete players silently.
+    sm = pd.to_numeric(proj.get("seasons_missed"), errors="coerce") if "seasons_missed" in proj else None
+    resc = proj[sm >= 1] if sm is not None else proj.iloc[0:0]
+    top_resc = resc.nlargest(min(10, len(resc)), "proj_fp_ppr") if len(resc) else resc
     return {
         "n_total": int(len(proj)),
         "n_veterans": int(len(vets)),
         "n_rookies": int(len(rks)),
+        "n_returning_from_absence": int(len(resc)),
+        "top_returning_from_absence": [
+            {"player": r["player_name"], "pos": r["position"], "anchor_season": r.get("anchor_season"),
+             "proj_fp_ppr": round(float(r["proj_fp_ppr"]), 1),
+             "p10_p90": [float(r["fp_ppr_p10"]), float(r["fp_ppr_p90"])]}
+            for _, r in top_resc.iterrows()
+        ],
         "by_position": {k: int(v) for k, v in sorted(by_pos.items())},
         "n_rookies_by_pos": {k: int(v) for k, v in rks.groupby("position").size().items()},
         "n_base_relevant_players_ge4g": int(len(relevant)),
@@ -531,8 +801,57 @@ def _md_table(df: pd.DataFrame) -> str:
         return df.to_string(index=False)
 
 
+# The ADP samples the shipped boards actually reference (`export_draft_board_json.PRESET_ADP_FORMAT`
+# × the two league sizes). The audit runs over ALL of them, not one board: ADP is format-specific
+# (Josh Allen is 28.1 in PPR and 1.5 in superflex), so a universe gap can be invisible in one sample
+# and a first-round hole in another.
+_ADP_AUDIT_SAMPLES = (("ppr", 12), ("ppr", 10), ("half-ppr", 12), ("half-ppr", 10),
+                      ("standard", 12), ("standard", 10), ("2qb", 12), ("2qb", 10))
+
+
+def adp_coverage_check(con, proj: pd.DataFrame, projection_season: int,
+                       samples: tuple = _ADP_AUDIT_SAMPLES, schema: str = MARTS_SCHEMA) -> dict:
+    """NF-D11 — the STANDING coverage diagnostic, run at the end of every board build: diff the
+    market's ADP census against the projection's own universe, across every shipped ADP sample, and
+    log/return the two failure classes SEPARATELY (a name-alias miss vs a genuine universe absence,
+    which route to completely different fixes). See `projection_coverage`.
+
+    WARN-tier and best-effort by construction: FFC is a network fetch, so a failure on one sample
+    logs and is skipped — a coverage AUDIT must never be able to fail a board build."""
+    from quant_sports_intel_models.football.nfl.fantasy import adp_source as A
+    from quant_sports_intel_models.football.nfl.fantasy import projection_coverage as PC
+    by_sample: dict[str, dict] = {}
+    for fmt, teams in samples:
+        key = f"{fmt}/{teams}"
+        try:
+            adp = A.fetch_ffc_adp(projection_season, fmt=fmt, teams=teams)
+        except Exception as exc:  # noqa: BLE001 — WARN-tier: the audit is advisory, never a gate
+            log.warning("NF-D11 ADP coverage: sample %s skipped — FFC fetch failed (%s)", key, exc)
+            continue
+        if adp is None or adp.empty:
+            log.warning("NF-D11 ADP coverage: sample %s has no ADP data for %s", key, projection_season)
+            continue
+        by_sample[key] = PC.audit_adp_coverage(adp, proj)
+    if not by_sample:
+        log.warning("NF-D11 ADP coverage audit produced NO samples — the universe went unaudited "
+                    "this run (check FFC reachability)")
+        return {"skipped": True, "season": int(projection_season)}
+    audit = PC.merge_sample_audits(by_sample)
+    audit["season"] = int(projection_season)
+    PC.log_adp_coverage(audit, label=f"{projection_season} · {len(by_sample)} ADP samples")
+    if audit.get("n_actionable_true_absences"):
+        log.warning("NF-D11: %d ADP player(s) inside the draftable range are ABSENT from the %s "
+                    "projection universe — investigate the player spine before the board ships",
+                    audit["n_actionable_true_absences"], projection_season)
+    else:
+        log.info("NF-D11 ADP coverage: no draftable-range universe gaps across %d samples "
+                 "(min sample match %.1f%%)", audit["n_samples"], audit.get("pct_matched_min") or 0.0)
+    return audit
+
+
 def write_report(proj: pd.DataFrame, cov: dict, backtests: list[dict], path: Path,
-                 base_season: int, projection_season: int, face: dict | None = None) -> None:
+                 base_season: int, projection_season: int, face: dict | None = None,
+                 adp_audit: dict | None = None) -> None:
     a = []
     p = a.append
     p(f"# NF-FASTPATH — {projection_season} NFL fantasy season projections (raw stat-line, MVP-1)")
@@ -647,7 +966,44 @@ def write_report(proj: pd.DataFrame, cov: dict, backtests: list[dict], path: Pat
     ]
     p(_md_table(rk))
     p("")
-    p("## 6. Limitations")
+    p("## 6. NF-D11 — projection UNIVERSE (injured-all-year rescue) + the ADP coverage audit")
+    p("")
+    p("The base-season anchor used to DELETE any player who missed the entire base season — a "
+      "whole-season injury was indistinguishable from retirement — so productive, actively-drafted "
+      "players (2026: Brandon Aiyuk, Tank Dell, Jonathon Brooks, MarShawn Lloyd) had no board row at "
+      "all. They are now anchored on their MOST-RECENT PLAYED season, gated on projection-season "
+      "roster/depth-chart evidence (retired / out-of-league players stay excluded), and discounted by "
+      "the RETURN-FROM-ABSENCE availability prior: expected games capped toward the empirical return "
+      "level (historically a returner plays ~4.1 games vs ~10.4 for a base-season-present player; "
+      "~43% play ZERO) with the games band widened to the empirical returner SD. **Honest by "
+      "construction — a returning player carries a WIDE band and `confidence = low`, never a rosy "
+      "point.** See `ablation_results/nf_d11_absence_prior.md` for the §0.5 bake-off.")
+    p("")
+    resc = proj[pd.to_numeric(proj.get("seasons_missed"), errors="coerce") >= 1] \
+        if "seasons_missed" in proj.columns else proj.iloc[0:0]
+    p(f"**Rescued this run: {len(resc)}** (rows anchored on a prior played season).")
+    p("")
+    if len(resc):
+        p(_md_table(resc.head(15)[["player_name", "position", "team_id", "anchor_season",
+                                   "proj_games", "proj_fp_ppr", "fp_ppr_p10", "fp_ppr_p90",
+                                   "confidence"]]))
+        p("")
+    if adp_audit:
+        p("### Standing ADP coverage audit (the check that found this)")
+        p("")
+        p("Every ADP name is normalized and diffed against the projection's own (name, position) set, "
+          "with the projection ALSO indexed by SURNAME so the two failure classes stay separable: an "
+          "`alias_candidate` (surname present at that position ⇒ a name-map miss) vs a `true_absence` "
+          "(genuinely not in our universe ⇒ a MODEL/universe gap). One diff caught both a join bug "
+          "and this model gap.")
+        p("")
+        p("```json")
+        p(json.dumps({k: v for k, v in adp_audit.items() if k != "alias_candidates"} if
+                     len(adp_audit.get("alias_candidates", [])) > 25 else adp_audit,
+                     indent=2, default=float))
+        p("```")
+        p("")
+    p("## 7. Limitations")
     p("")
     p("- **First-pass MVP** — the full NF1 model (posterior-predictive, weekly, §0.5 bake-off) refines "
       "this. The gate here is face-validity + coverage, not a selected model.")
@@ -658,6 +1014,18 @@ def write_report(proj: pd.DataFrame, cov: dict, backtests: list[dict], path: Pat
       "predictive interval — NF-C1/pricing must recalibrate (the E13.6 pattern).")
     p("- **Rookie team = NULL** (2026 draftees are not in the base-season role dimension) — kept NULL, "
       "not guessed.")
+    p("- **A rescued (NF-D11) player's per-game LINE is stale by a full season** — the availability "
+      "prior discounts his GAMES, but the production line itself is his last healthy year's, blended "
+      "over the recency window. Age/scheme/role change since then is not modelled; the wide band and "
+      "`confidence = low` are the honest surface for that.")
+    p("- **The rescue gate is only as good as the roster feed** — a player the projection-season "
+      "depth-chart/roster snapshot has not caught up to stays excluded until it refreshes (the same "
+      "re-run-through-camp cadence the mover/injury slices need).")
+    p("- **A rescued player is FADED vs his ADP, by design** — the fitted availability haircut is "
+      "harsher than draft-room optimism (2026: Tank Dell WR95 vs ~157 ADP, Brandon Aiyuk WR112 vs "
+      "~148). 431 historical returners say a full-season absence costs far more availability than a "
+      "draft board prices. It is an open fade, not a hidden claim: the ADP column renders beside our "
+      "rank, the p90 still covers a healthy season, and `confidence = low` marks the row.")
     p("- **Two-point conversions kept NULL** (rare/idiosyncratic); fumbles-lost is a modest per-touch "
       "estimate. Both are small scoring nuisance terms.")
     p("")
@@ -685,6 +1053,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--s3", action="store_true", help="also land the projection(s) to the S3 sports lake")
     ap.add_argument("--lake-root", default=None, help="land to a LOCAL-FS Delta tree instead of S3")
     ap.add_argument("--no-report", action="store_true")
+    ap.add_argument("--no-adp-audit", action="store_true",
+                    help="skip the NF-D11 standing ADP coverage diagnostic (it needs a network fetch "
+                         "of the FFC ADP sample; the audit is advisory and never gates the build)")
+    ap.add_argument("--no-rescue-absent", action="store_true",
+                    help="NF-D11 escape hatch: rebuild with the MVP-1 universe rule (delete every "
+                         "player who missed the whole base season). Diagnostic only.")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
 
@@ -725,10 +1099,12 @@ def main(argv: list[str] | None = None) -> int:
 
         primary_proj = primary_cov = None
         face_validity: dict | None = None
+        adp_audit: dict | None = None
         backtests: list[dict] = []
         for y in seasons:
             base_y = y - 1
-            proj = build_projection(con, base_y, y, args.schema)
+            proj = build_projection(con, base_y, y, args.schema,
+                                    rescue_absent=not args.no_rescue_absent)
             log.info("  %d (base %d): %d players (%d vets, %d rookies)", y, base_y, len(proj),
                      int((~proj["is_rookie"]).sum()), int(proj["is_rookie"].sum()))
 
@@ -754,8 +1130,13 @@ def main(argv: list[str] | None = None) -> int:
 
             if y == primary_season:
                 primary_proj = proj
-                primary_cov = coverage_report(proj, load_base_season(con, base_y, args.schema))
+                primary_cov = coverage_report(
+                    proj, load_base_season(con, base_y, args.schema, projection_season=y))
                 log.info("  primary %d coverage: %s", y, primary_cov)
+                # NF-D11 standing coverage diagnostic — the market's ADP census vs our universe.
+                # WARN-tier: a network fetch failure logs and yields an empty audit, never a failure.
+                if not args.no_adp_audit:
+                    adp_audit = adp_coverage_check(con, proj, y, schema=args.schema)
                 # NF1.4 rookie over-placement gate (advisory) — measured against the FULL drafted
                 # rookie population, so "what rookies actually do" includes the ones who never
                 # played. A trip logs loudly; it never blocks the projection (this is a projection
@@ -773,6 +1154,7 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps({"model_version": MODEL_VERSION, "primary_season": primary_season,
                     "seasons_emitted": seasons, "coverage": primary_cov,
                     "backtest_vs_realized": backtests,
+                    "adp_coverage_audit": adp_audit,
                     "generated_at": datetime.now(timezone.utc).isoformat()}, indent=2, default=float))
     dest = f"local lake {args.lake_root}" if args.lake_root else (
         "the S3 sports lake" if args.s3 else "(local only — no --s3)")
@@ -780,7 +1162,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.no_report and primary_proj is not None:
         write_report(primary_proj, primary_cov, backtests, _REPORT_PATH,
-                     primary_season - 1, primary_season, face=face_validity)
+                     primary_season - 1, primary_season, face=face_validity, adp_audit=adp_audit)
 
     return 0
 
