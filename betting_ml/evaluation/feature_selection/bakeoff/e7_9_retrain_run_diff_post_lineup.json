@@ -1,0 +1,330 @@
+{
+  "story": "E7.9",
+  "mode": "bakeoff",
+  "best_alpha": 0,
+  "target": "run_diff",
+  "tier": "post_lineup",
+  "metric": "crps",
+  "smoke": false,
+  "seed": 42,
+  "n_arms": 24,
+  "n_folds": 3,
+  "n_rows": 11858,
+  "variants": {
+    "incumbent": {
+      "n_features": 13,
+      "added_vs_incumbent": []
+    },
+    "plus_gb": {
+      "n_features": 15,
+      "added_vs_incumbent": [
+        "away_starter_eb_gb_pct",
+        "home_starter_eb_gb_pct"
+      ]
+    },
+    "plus_eb": {
+      "n_features": 23,
+      "added_vs_incumbent": [
+        "away_avg_eb_bb_pct",
+        "away_avg_eb_iso",
+        "away_avg_eb_k_pct",
+        "away_starter_eb_bb_pct",
+        "away_starter_eb_k_pct",
+        "home_avg_eb_bb_pct",
+        "home_avg_eb_iso",
+        "home_avg_eb_k_pct",
+        "home_starter_eb_bb_pct",
+        "home_starter_eb_k_pct"
+      ]
+    },
+    "plus_both": {
+      "n_features": 25,
+      "added_vs_incumbent": [
+        "away_avg_eb_bb_pct",
+        "away_avg_eb_iso",
+        "away_avg_eb_k_pct",
+        "away_starter_eb_bb_pct",
+        "away_starter_eb_gb_pct",
+        "away_starter_eb_k_pct",
+        "home_avg_eb_bb_pct",
+        "home_avg_eb_iso",
+        "home_avg_eb_k_pct",
+        "home_starter_eb_bb_pct",
+        "home_starter_eb_gb_pct",
+        "home_starter_eb_k_pct"
+      ]
+    }
+  },
+  "dropped_variants": [],
+  "incumbent_arm": "incumbent::ngboost_normal",
+  "incumbent_metric": 2.484756066951736,
+  "leader_arm": "plus_eb::glm_elasticnet",
+  "leader_metric": 2.4720305515234795,
+  "margin_vs_incumbent": 0.012726,
+  "noise_floor": 0.02,
+  "pbo": 0.0,
+  "dsr": 0.7238863895963757,
+  "oracle_metric": 0.00023369497725510917,
+  "oracle_floor_ok": true,
+  "gates": {
+    "beats_incumbent_by_more_than_noise_floor": false,
+    "pbo_lt_0_2": true,
+    "dsr_gt_0_at_95": false,
+    "calibration_not_degraded": true
+  },
+  "verdict": "INCUMBENT_STANDS",
+  "table": [
+    {
+      "arm": "oracle_floor",
+      "variant": "oracle_floor",
+      "learner": "-",
+      "crps_mean": 0.00023369497725510917,
+      "pit_ks": 0.5,
+      "n": 5468
+    },
+    {
+      "arm": "plus_eb::glm_elasticnet",
+      "variant": "plus_eb",
+      "learner": "glm_elasticnet",
+      "crps_mean": 2.4720305515234795,
+      "pit_ks": 0.025031829228432945,
+      "n": 5468
+    },
+    {
+      "arm": "plus_both::glm_elasticnet",
+      "variant": "plus_both",
+      "learner": "glm_elasticnet",
+      "crps_mean": 2.472433988323187,
+      "pit_ks": 0.025765109347719195,
+      "n": 5468
+    },
+    {
+      "arm": "incumbent::glm_elasticnet",
+      "variant": "incumbent",
+      "learner": "glm_elasticnet",
+      "crps_mean": 2.477954659677523,
+      "pit_ks": 0.02853833883543046,
+      "n": 5468
+    },
+    {
+      "arm": "plus_gb::glm_elasticnet",
+      "variant": "plus_gb",
+      "learner": "glm_elasticnet",
+      "crps_mean": 2.4784772078323143,
+      "pit_ks": 0.028466323541173382,
+      "n": 5468
+    },
+    {
+      "arm": "plus_eb::ngboost_normal",
+      "variant": "plus_eb",
+      "learner": "ngboost_normal",
+      "crps_mean": 2.479690118754789,
+      "pit_ks": 0.02924694795091835,
+      "n": 5468
+    },
+    {
+      "arm": "plus_both::ngboost_normal",
+      "variant": "plus_both",
+      "learner": "ngboost_normal",
+      "crps_mean": 2.4817917654275274,
+      "pit_ks": 0.030668272822220843,
+      "n": 5468
+    },
+    {
+      "arm": "incumbent::ngboost_normal",
+      "variant": "incumbent",
+      "learner": "ngboost_normal",
+      "crps_mean": 2.484756066951736,
+      "pit_ks": 0.03232072302201261,
+      "n": 5468
+    },
+    {
+      "arm": "plus_gb::ngboost_normal",
+      "variant": "plus_gb",
+      "learner": "ngboost_normal",
+      "crps_mean": 2.48578053122146,
+      "pit_ks": 0.03317110919344283,
+      "n": 5468
+    },
+    {
+      "arm": "incumbent::catboost",
+      "variant": "incumbent",
+      "learner": "catboost",
+      "crps_mean": 2.48937986608248,
+      "pit_ks": 0.030239159275652128,
+      "n": 5468
+    },
+    {
+      "arm": "plus_eb::catboost",
+      "variant": "plus_eb",
+      "learner": "catboost",
+      "crps_mean": 2.4947848555701584,
+      "pit_ks": 0.030902076256585958,
+      "n": 5468
+    },
+    {
+      "arm": "plus_both::catboost",
+      "variant": "plus_both",
+      "learner": "catboost",
+      "crps_mean": 2.4957631454548275,
+      "pit_ks": 0.03384178709106068,
+      "n": 5468
+    },
+    {
+      "arm": "plus_gb::catboost",
+      "variant": "plus_gb",
+      "learner": "catboost",
+      "crps_mean": 2.5008287098198103,
+      "pit_ks": 0.03485010637729665,
+      "n": 5468
+    },
+    {
+      "arm": "incumbent::stack_mean",
+      "variant": "incumbent",
+      "learner": "stack_mean",
+      "crps_mean": 2.5086826278112406,
+      "pit_ks": 0.044918957299385005,
+      "n": 5468
+    },
+    {
+      "arm": "plus_eb::stack_mean",
+      "variant": "plus_eb",
+      "learner": "stack_mean",
+      "crps_mean": 2.5131028356596095,
+      "pit_ks": 0.05269910747407577,
+      "n": 5468
+    },
+    {
+      "arm": "plus_gb::stack_mean",
+      "variant": "plus_gb",
+      "learner": "stack_mean",
+      "crps_mean": 2.5131132773661586,
+      "pit_ks": 0.048429415985285086,
+      "n": 5468
+    },
+    {
+      "arm": "plus_both::stack_mean",
+      "variant": "plus_both",
+      "learner": "stack_mean",
+      "crps_mean": 2.5135001534471595,
+      "pit_ks": 0.05559781091193511,
+      "n": 5468
+    },
+    {
+      "arm": "incumbent::xgboost",
+      "variant": "incumbent",
+      "learner": "xgboost",
+      "crps_mean": 2.527812221669106,
+      "pit_ks": 0.0463476538662832,
+      "n": 5468
+    },
+    {
+      "arm": "plus_gb::xgboost",
+      "variant": "plus_gb",
+      "learner": "xgboost",
+      "crps_mean": 2.528922472225456,
+      "pit_ks": 0.04674652692447357,
+      "n": 5468
+    },
+    {
+      "arm": "plus_both::xgboost",
+      "variant": "plus_both",
+      "learner": "xgboost",
+      "crps_mean": 2.5308743606424877,
+      "pit_ks": 0.058647744826335974,
+      "n": 5468
+    },
+    {
+      "arm": "plus_eb::xgboost",
+      "variant": "plus_eb",
+      "learner": "xgboost",
+      "crps_mean": 2.5330015145373115,
+      "pit_ks": 0.054464381276736674,
+      "n": 5468
+    },
+    {
+      "arm": "incumbent::lightgbm",
+      "variant": "incumbent",
+      "learner": "lightgbm",
+      "crps_mean": 2.603174237701191,
+      "pit_ks": 0.09125926760619966,
+      "n": 5468
+    },
+    {
+      "arm": "plus_gb::lightgbm",
+      "variant": "plus_gb",
+      "learner": "lightgbm",
+      "crps_mean": 2.6220505115854165,
+      "pit_ks": 0.10308463978908294,
+      "n": 5468
+    },
+    {
+      "arm": "plus_eb::lightgbm",
+      "variant": "plus_eb",
+      "learner": "lightgbm",
+      "crps_mean": 2.638897421356776,
+      "pit_ks": 0.11508254372542427,
+      "n": 5468
+    },
+    {
+      "arm": "plus_both::lightgbm",
+      "variant": "plus_both",
+      "learner": "lightgbm",
+      "crps_mean": 2.6449450230621148,
+      "pit_ks": 0.12562498631467114,
+      "n": 5468
+    }
+  ],
+  "margin_decomposition": {
+    "available": true,
+    "total": 0.012726,
+    "learner_swap": 0.006801,
+    "contract": 0.005924,
+    "learner_share": 0.5345,
+    "same_learner_reference_arm": "incumbent::glm_elasticnet"
+  },
+  "variant_effect_by_learner": [
+    {
+      "learner": "glm_elasticnet",
+      "incumbent": 2.478,
+      "plus_gb": -0.0005,
+      "plus_eb": 0.0059,
+      "plus_both": 0.0055
+    },
+    {
+      "learner": "ngboost_normal",
+      "incumbent": 2.4848,
+      "plus_gb": -0.001,
+      "plus_eb": 0.0051,
+      "plus_both": 0.003
+    },
+    {
+      "learner": "catboost",
+      "incumbent": 2.4894,
+      "plus_gb": -0.0114,
+      "plus_eb": -0.0054,
+      "plus_both": -0.0064
+    },
+    {
+      "learner": "stack_mean",
+      "incumbent": 2.5087,
+      "plus_gb": -0.0044,
+      "plus_eb": -0.0044,
+      "plus_both": -0.0048
+    },
+    {
+      "learner": "xgboost",
+      "incumbent": 2.5278,
+      "plus_gb": -0.0011,
+      "plus_eb": -0.0052,
+      "plus_both": -0.0031
+    },
+    {
+      "learner": "lightgbm",
+      "incumbent": 2.6032,
+      "plus_gb": -0.0189,
+      "plus_eb": -0.0357,
+      "plus_both": -0.0418
+    }
+  ]
+}

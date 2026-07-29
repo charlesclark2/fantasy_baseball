@@ -129,6 +129,105 @@ INCUMBENT_CLASS = {"total_runs": "ngboost_normal", "run_diff": "ngboost_normal"}
 PBO_MAX = 0.2
 DSR_MIN_CONF = 0.95
 
+# ── PRE-REGISTRATION AMENDMENT #1 — calibration tolerance (dated 2026-07-29, PM-adjudicated) ──────
+# EFFECTIVE FOR RUNS ON OR AFTER 2026-07-29. It does NOT alter any recorded E7.9 verdict; the three
+# 2026-07-28 runs stand exactly as scored under the original 1e-9 tolerance.
+#
+# WHY: the original `calibration_not_degraded` gate required best.pit_ks <= inc.pit_ks + 1e-9. On
+# run_diff/pre_lineup it FIRED at PIT-KS 0.0294 vs 0.0293 — a 1e-4 difference, i.e. it tripped on
+# ROUNDING, not on real degradation. A 1e-9 tolerance on a statistic whose own sampling noise is
+# orders of magnitude larger is a MISSPECIFIED gate: it is nearly guaranteed to fail whenever the
+# leader is not literally the incumbent, which makes it uninformative rather than protective.
+#
+# WHY THIS IS LEGITIMATE AND NOT PRE-REGISTRATION LAUNDERING: the amendment is written BEFORE the
+# next run and cannot change the result that exposed the defect (that verdict was INCUMBENT_STANDS
+# on the MARGIN gate, which failed decisively and independently). Loosening a gate to rescue a
+# result you have already seen is laundering; fixing a demonstrably misspecified gate forward, on
+# the record, with a date, is calibration. If a future run passes ONLY because of this amendment,
+# that fact must be stated explicitly in its report.
+#
+# THE RULE: degradation is material only if it exceeds BOTH an absolute floor and a relative floor —
+# whichever is larger — so the gate scales sensibly across targets with very different PIT-KS levels
+# (run_diff/post sits near 0.025, total_runs/post near 0.060).
+CALIBRATION_TOLERANCE_ABS = 1e-3      # absolute floor
+CALIBRATION_TOLERANCE_REL = 0.10      # or 10% of the incumbent's PIT-KS, whichever is larger
+CALIBRATION_AMENDMENT_DATE = "2026-07-29"
+CALIBRATION_AMENDMENT_LEGACY_TOL = 1e-9   # what the 2026-07-28 E7.9 runs were scored under
+
+
+def calibration_tolerance(incumbent_pit_ks: float) -> float:
+    """The amendment-#1 tolerance: max(absolute floor, 10% of the incumbent's PIT-KS).
+
+    Kept a pure function so the guard test can pin the rule itself rather than a single constant.
+    """
+    if not np.isfinite(incumbent_pit_ks):
+        return CALIBRATION_TOLERANCE_ABS
+    return max(CALIBRATION_TOLERANCE_ABS, CALIBRATION_TOLERANCE_REL * abs(float(incumbent_pit_ks)))
+
+
+# ── Q1 (PM-adjudicated 2026-07-29): margin ATTRIBUTION ────────────────────────────────────────────
+# The gate compares leader-arm vs incumbent-arm, where an arm is (contract variant × learner class).
+# That is the right PROMOTION question — "is any configuration better?" — and the gate is unchanged.
+# But it CONFLATES the feature effect with a learner-class swap, and E7.9's three runs showed 54-77%
+# of every leader's margin was the ngboost_normal -> glm_elasticnet swap, NOT the features. A report
+# that credits such a margin to a features story is making a claim the study did not test. So every
+# report now decomposes the margin before attributing it.
+
+
+def margin_decomposition(table_rows: list[dict], incumbent_arm: str, leader_arm: str,
+                         metric: str) -> dict:
+    """Split (incumbent - leader) into the LEARNER-swap part and the CONTRACT part.
+
+    learner_swap = incumbent_arm - (incumbent contract × LEADER's learner)
+    contract     = (incumbent contract × leader's learner) - leader_arm
+    The two sum to the reported margin by construction. Returns NaNs (never raises) when the
+    same-learner reference arm is absent — a report must degrade, not crash.
+    """
+    key = f"{metric}_mean"
+    scores = {r["arm"]: r[key] for r in table_rows}
+    leader_learner = leader_arm.partition("::")[2]
+    same_learner_ref = f"incumbent::{leader_learner}"
+    inc, lead = scores.get(incumbent_arm), scores.get(leader_arm)
+    ref = scores.get(same_learner_ref)
+    if inc is None or lead is None:
+        return {"available": False}
+    total = inc - lead
+    if ref is None:
+        return {"available": False, "total": round(total, 6)}
+    learner = inc - ref
+    contract = ref - lead
+    return {
+        "available": True,
+        "total": round(total, 6),
+        "learner_swap": round(learner, 6),
+        "contract": round(contract, 6),
+        "learner_share": (round(learner / total, 4) if total not in (0, None) else None),
+        "same_learner_reference_arm": same_learner_ref,
+    }
+
+
+def variant_effect_by_learner(table_rows: list[dict], metric: str) -> list[dict]:
+    """Per-learner effect of each contract variant vs the incumbent contract (+ = better).
+
+    Holding the learner FIXED is the only way to read a FEATURE effect out of this grid; the
+    headline margin cannot do it. Ordered by the learner's incumbent-contract score (best first).
+    """
+    key = f"{metric}_mean"
+    scores = {r["arm"]: r[key] for r in table_rows}
+    learners = sorted({r["learner"] for r in table_rows
+                       if r.get("learner") and r["learner"] != "-"})
+    out = []
+    for lrn in learners:
+        base = scores.get(f"incumbent::{lrn}")
+        if base is None:
+            continue
+        row = {"learner": lrn, "incumbent": round(base, 4)}
+        for v in ("plus_gb", "plus_eb", "plus_both"):
+            x = scores.get(f"{v}::{lrn}")
+            row[v] = round(base - x, 4) if x is not None else None
+        out.append(row)
+    return sorted(out, key=lambda r: r["incumbent"])
+
 
 def _read_contract(path: str) -> list[str]:
     raw = json.loads((PROJECT_ROOT / path).read_text())
@@ -485,8 +584,15 @@ def run_retrain_bakeoff(target: str, tier: str, *, seed: int, smoke: bool,
            if len(imp) >= 3 and np.std(imp) > 0 else None)
     dsr_p = float(getattr(dsr, "dsr", float("nan"))) if dsr is not None else float("nan")
 
+    # AMENDMENT #1 (2026-07-29): tolerance = max(1e-3, 10% of the incumbent's PIT-KS) instead of the
+    # original 1e-9, which tripped on rounding. See the amendment block at the top of this module.
+    calib_tol = calibration_tolerance(float(inc["pit_ks"]))
     calib_ok = bool(np.isnan(best["pit_ks"]) or np.isnan(inc["pit_ks"])
-                    or best["pit_ks"] <= inc["pit_ks"] + 1e-9)
+                    or best["pit_ks"] <= inc["pit_ks"] + calib_tol)
+    # Would this run have FAILED under the pre-amendment tolerance? If so the report must say so
+    # explicitly, so a pass that depends on the amendment is never silent.
+    calib_ok_legacy = bool(np.isnan(best["pit_ks"]) or np.isnan(inc["pit_ks"])
+                           or best["pit_ks"] <= inc["pit_ks"] + CALIBRATION_AMENDMENT_LEGACY_TOL)
     gates = {
         "beats_incumbent_by_more_than_noise_floor": bool(best["arm"] != incumbent_arm and margin > nf),
         "pbo_lt_0_2": bool(np.isfinite(pbo_val) and pbo_val < PBO_MAX),
@@ -513,6 +619,15 @@ def run_retrain_bakeoff(target: str, tier: str, *, seed: int, smoke: bool,
         "pbo": pbo_val, "dsr": dsr_p,
         "oracle_metric": oracle_score, "oracle_floor_ok": True,
         "gates": gates, "verdict": verdict,
+        # Q1: never report a margin without its attribution.
+        "margin_decomposition": margin_decomposition(
+            table.to_dict(orient="records"), incumbent_arm, str(best["arm"]), metric),
+        "variant_effect_by_learner": variant_effect_by_learner(
+            table.to_dict(orient="records"), metric),
+        # Q2 provenance: which tolerance scored this run, and whether the verdict depends on it.
+        "calibration_tolerance": calib_tol,
+        "calibration_amendment": CALIBRATION_AMENDMENT_DATE,
+        "calibration_would_fail_pre_amendment": bool(calib_ok and not calib_ok_legacy),
         "table": table.to_dict(orient="records"),
     }
     _write_bakeoff_report(result, table)
@@ -551,12 +666,71 @@ def _write_bakeoff_report(result: dict, table: pd.DataFrame) -> None:
     a(f"- Oracle-floor sanity (E2.1-r): oracle {m} = {result['oracle_metric']:.6f}; no candidate "
       "beat it ✅")
     a("")
+    a("## ⚠️ Margin attribution — the margin is NOT purely a feature effect")
+    a("")
+    md = result.get("margin_decomposition") or {}
+    if md.get("available"):
+        a(f"The gate compares leader-arm vs incumbent-arm, where an arm is (contract variant × "
+          f"learner class). That is the right PROMOTION question, but it CONFLATES the feature "
+          f"effect with a learner-class swap. Split against `{md['same_learner_reference_arm']}` "
+          f"(the incumbent contract under the LEADER's learner):")
+        a("")
+        a("| component | Δ {m} | share of margin |".format(m=m))
+        a("|---|---:|---:|")
+        share = md.get("learner_share")
+        a(f"| **learner swap** (incumbent learner → `{result['leader_arm'].partition('::')[2]}`) | "
+          f"{md['learner_swap']:+.4f} | {share:.0%} |" if share is not None
+          else f"| **learner swap** | {md['learner_swap']:+.4f} | — |")
+        a(f"| **contract** (added features) | {md['contract']:+.4f} | "
+          + (f"{1 - share:.0%} |" if share is not None else "— |"))
+        a(f"| **total reported margin** | {md['total']:+.4f} | 100% |")
+        a("")
+        if share is not None and share >= 0.5:
+            a(f"🚩 **{share:.0%} of this margin is the LEARNER SWAP, not the features.** Do not read "
+              f"`{md['total']:+.4f}` as what the added columns bought — that figure is "
+              f"`{md['contract']:+.4f}`.")
+    else:
+        a("_Not available — the leader's learner has no incumbent-contract counterpart in this grid._")
+    a("")
+    a("### Feature effect holding the LEARNER FIXED (+ = variant better than the incumbent contract)")
+    a("")
+    ve = result.get("variant_effect_by_learner") or []
+    if ve:
+        a(f"| learner | incumbent {m} | plus_gb | plus_eb | plus_both |")
+        a("|---|---:|---:|---:|---:|")
+        for r in ve:
+            def _f(x):
+                return f"{x:+.4f}" if isinstance(x, (int, float)) else "n/a"
+            a(f"| {r['learner']} | {r['incumbent']:.4f} | {_f(r.get('plus_gb'))} | "
+              f"{_f(r.get('plus_eb'))} | {_f(r.get('plus_both'))} |")
+        a("")
+        a("This table — not the headline margin — is where a FEATURE effect can be read.")
+    a("")
     a("## Pre-registered gates")
     a("")
+    tol = result.get("calibration_tolerance")
+    amend = result.get("calibration_amendment")
     a("| gate | result |")
     a("|---|---|")
     for k, v in result["gates"].items():
         a(f"| `{k}` | {'✅ pass' if v else '❌ fail'} |")
+    a("")
+    if tol is None:
+        a(f"⚠️ Scored under the ORIGINAL `calibration_not_degraded` tolerance of "
+          f"`{CALIBRATION_AMENDMENT_LEGACY_TOL:g}`, i.e. BEFORE pre-registration amendment #1 "
+          f"({CALIBRATION_AMENDMENT_DATE}). That tolerance is tight enough to trip on ROUNDING; where "
+          f"this gate failed, check whether the PIT-KS difference is material before reading it as a "
+          f"real calibration regression. **This recorded verdict is left exactly as scored** — the "
+          f"amendment is forward-dated and does not retro-apply.")
+    else:
+        a(f"Calibration tolerance in effect: `{tol:.5f}` (pre-registration amendment #1, "
+          f"{amend} — max of a {CALIBRATION_TOLERANCE_ABS:g} absolute floor and "
+          f"{CALIBRATION_TOLERANCE_REL:.0%} of the incumbent's PIT-KS).")
+        if result.get("calibration_would_fail_pre_amendment"):
+            a("")
+            a("🚩 **This run's `calibration_not_degraded` PASS depends on amendment #1** — it would "
+              "have FAILED under the original 1e-9 tolerance. Stated explicitly, per the amendment's "
+              "own disclosure requirement.")
     a("")
     if result["verdict"] == "INCUMBENT_STANDS":
         a("**Reading the null honestly.** No arm clears every gate, so the served champion is "
@@ -593,6 +767,34 @@ def _write_bakeoff_report(result: dict, table: pd.DataFrame) -> None:
     (_ABL / f"{stem}.md").write_text("\n".join(lines) + "\n")
 
 
+def rewrite_reports() -> list[str]:
+    """Re-emit every recorded bake-off report from its stored JSON — no re-fitting.
+
+    Q1 (PM-adjudicated 2026-07-29): the recorded reports credit a mostly-learner-swap margin to a
+    features study. The stored `table` already holds every arm's score, so the decomposition is
+    derivable WITHOUT refitting anything.
+
+    ⚠️ VERDICTS ARE NOT RECOMPUTED. Gates, PBO, DSR and the verdict are re-emitted verbatim from the
+    stored result; only the attribution sections are added. In particular the forward-dated
+    calibration amendment does NOT retro-apply — a run stored without a `calibration_tolerance` key
+    was scored under the original 1e-9 tolerance and the report says so.
+    """
+    written = []
+    for path in sorted(_JSON_DIR.glob("e7_9_retrain_*.json")):
+        result = json.loads(path.read_text())
+        rows = result.get("table") or []
+        if not rows:
+            continue
+        metric = result["metric"]
+        result.setdefault("margin_decomposition", margin_decomposition(
+            rows, result["incumbent_arm"], result["leader_arm"], metric))
+        result.setdefault("variant_effect_by_learner", variant_effect_by_learner(rows, metric))
+        path.write_text(json.dumps(result, indent=2, default=float))
+        _write_bakeoff_report(result, pd.DataFrame(rows))
+        written.append(f"{result['target']}/{result['tier']}")
+    return written
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=f"{STORY} train/serve consistency: audit + retrain bake-off")
     ap.add_argument("--audit", action="store_true", help="Exposure audit only (fast, no fitting).")
@@ -610,10 +812,19 @@ def main() -> None:
                          "Snowflake (repo doctrine; also the only source carrying eb_gb_pct before "
                          "the Snowflake external table is recreated). Pair with --refresh-cache.")
     ap.add_argument("--smoke", action="store_true", help="Cap rows/estimators for a harness check.")
+    ap.add_argument("--rewrite-reports", action="store_true",
+                    help="Re-emit every recorded report from its stored JSON (adds the Q1 margin "
+                         "attribution). Recomputes NOTHING — verdicts/gates are re-emitted verbatim.")
     args = ap.parse_args()
 
+    if args.rewrite_reports:
+        done = rewrite_reports()
+        print(f"[{STORY}] rewrote {len(done)} report(s): {', '.join(done) or 'none found'}")
+        if not (args.audit or args.bakeoff):
+            return
+
     if not (args.audit or args.bakeoff):
-        ap.error("pass --audit and/or --bakeoff")
+        ap.error("pass --audit and/or --bakeoff (or --rewrite-reports)")
     if args.audit:
         res = run_audit(args.min_season)
         skew = res["contracts_with_train_serve_skew"]

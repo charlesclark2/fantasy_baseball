@@ -133,13 +133,23 @@ belongs to no shard just stops running, and the merge bar goes green anyway. Two
 Verified empirically: the union of the six shards' collected **node IDs** is byte-identical to the
 unsharded run — 2,569 IDs, **zero missing, zero duplicated**.
 
-### Branch protection
+### Branch protection — and a finding
 
-`Unit Tests (fast gate)` is a **required status check**. Renaming it to a matrix would leave that
-check permanently pending (the same skipped-but-required gotcha the `changes` job works around).
-So the matrix runs as `unit-tests-shard` and a roll-up job **keeps the exact required name** and
-fails if any shard did (treating `skipped` as pass, for frontend/docs-only diffs).
-**No branch-protection change is needed.** A guard test pins the name.
+The matrix runs as `unit-tests-shard`, and a roll-up job **keeps the exact name
+`Unit Tests (fast gate)`** and fails if any shard did (treating `skipped` as pass, for
+frontend/docs-only diffs). Renaming a required check to a matrix would leave it permanently
+pending — the same skipped-but-required gotcha the `changes` job works around.
+
+⚠️ **But verified 2026-07-28: there is no branch protection to satisfy.**
+`gh api repos/:owner/:repo/branches/main/protection` → 404 *"Branch not protected"*, and
+`…/rulesets` → `[]`. So "both gates are required for merge" — asserted in CLAUDE.md and the
+E11.13 handoff since 2026-06-25 — is **convention, not enforcement**; nothing mechanically blocks
+a red merge. This is the repo's own *documented-but-never-set* landmine class (cf. `W7B_LAKEHOUSE_S3`
+documented as cut over while unset on the box), and E11.13's roadmap entry carries an unactioned
+"⏭️ Operator: add the slow-tests check to BRANCH PROTECTION".
+
+The naming discipline above is kept regardless: it costs nothing and makes enabling protection a
+one-click change with zero CI rework. **Enabling it is an operator decision, not done here.**
 
 ---
 

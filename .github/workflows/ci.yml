@@ -127,11 +127,14 @@ jobs:
           fi
           echo "OK — no MERGE patterns found in ingest scripts"
 
-  # ⚠️ DO NOT RENAME — `Unit Tests (fast gate)` is a REQUIRED status check in branch protection.
-  # Sharding the work into a matrix would otherwise leave that required check permanently
-  # pending (the "skipped-but-required" gotcha the `changes` job above also works around). This
-  # job keeps the exact required name and simply rolls up the shards' results, so branch
-  # protection needs no change when shards are added or renamed.
+  # ⚠️ DO NOT RENAME — `Unit Tests (fast gate)` is the name a required status check references.
+  # (Verified 2026-07-28: `main` currently has NO branch protection and NO rulesets, so nothing
+  # mechanically blocks a red merge today — the gate is convention. The name is kept stable
+  # anyway so turning protection ON is a one-click change with zero CI rework.)
+  # Sharding the work into a matrix would otherwise leave such a check permanently pending (the
+  # "skipped-but-required" gotcha the `changes` job above also works around). This job keeps the
+  # exact name and simply rolls up the shards' results, so protection needs no change when
+  # shards are added or renamed.
   unit-tests:
     name: Unit Tests (fast gate)
     runs-on: ubuntu-latest
