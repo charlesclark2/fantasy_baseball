@@ -18,6 +18,12 @@ models:
           4,211 rows (2026-07-20, NCAAF-P1.1). P0.3's original "it does not here" was wrong about
           its own data — these are legitimate nulls, not match failures, so a hard not_null is the
           wrong assertion.
+          🩹 NF-D12 (2026-07-29): a JUST-drafted class (e.g. 2026, Carson Beck + 26 peers) can
+          transiently land here with `gsis_id` NULL because nflverse `draft_picks` hasn't finished
+          syncing it — `xref.py::_stage_espn_gsis_bridge` backfills it from `nflverse_players.espn_id`
+          (the same ESPN athlete id CFBD stamps as `college_athlete_id`) BEFORE this mart is built,
+          so the ratchet below should stay at the original 8 genuine never-played nulls, not grow with
+          every fresh draft class.
         data_tests:
           # ⭐ RATCHET, not a blanket waiver. The 8 known nulls WARN (they are real and expected);
           # a 9th ERRORS. The count can only go DOWN silently — any GROWTH means something new is

@@ -229,14 +229,51 @@ def _stage_combine(con, lake) -> None:
     """)
 
 
+def _stage_espn_gsis_bridge(con, lake) -> None:
+    """nflverse players → `espn_id -> gsis_id`, deduped 1-row-per-espn_id (a NULL/duplicate
+    espn_id must never multiply the slot join downstream).
+
+    ⭐ NF-D12: nflverse `draft_picks` can land a JUST-drafted class with `gsis_id` still NULL —
+    the league hasn't finished assigning it, or nflverse's own sync lags — while `nflverse_players`
+    (the player-profile release, refreshed on a different cadence) already carries the real one,
+    keyed by the SAME ESPN athlete id CFBD stamps as `collegeAthleteId` (verified 27/27 of the
+    2026 class's null-gsis_id drafted picks, incl. Carson Beck; a person's ESPN id is stable
+    across ESPN's college and pro coverage). `_build_slot_xref` uses this to backfill a null
+    `gsis_id` before the pairs mart's `where gsis_id is not null` would otherwise silently drop
+    the player from the P1A rookie-projection universe."""
+    # empty fallback first — if the real build below fails, the LEFT join in `_build_slot_xref`
+    # is a no-op and null gsis_id rows simply stand (the pre-NF-D12 behaviour), never an error.
+    con.execute(
+        "create or replace temp view _espn_gsis_bridge as "
+        "select cast(null as varchar) as espn_id, cast(null as varchar) as gsis_id where false"
+    )
+    con.execute(f"""
+        create or replace temp view _espn_gsis_bridge as
+        with base as (
+            select
+                {_j('raw_json','espn_id')} as espn_id,
+                {_j('raw_json','gsis_id')} as gsis_id
+            from {lake('nflverse_players')}
+            where {_j('raw_json','espn_id')} is not null
+              and length({_j('raw_json','espn_id')}) > 0
+              and {_j('raw_json','gsis_id')} is not null
+        )
+        select * from base
+        qualify row_number() over (partition by espn_id order by gsis_id) = 1
+    """)
+
+
 def _build_slot_xref(con) -> int:
     """The deterministic slot join → `_slot_xref` temp table (materialised so its row count
     is a stable assertion target). INNER join on the unique (year, overall) key, both sides
-    already 1-row-per-slot ⇒ result is 1-row-per-matched-slot (no multiplication)."""
+    already 1-row-per-slot ⇒ result is 1-row-per-matched-slot (no multiplication). A null
+    `gsis_id` from `_nfl_picks` is backfilled via `_espn_gsis_bridge` (NF-D12) — a LEFT join on
+    a deduped, unique key, so it cannot multiply rows either."""
     con.execute("""
         create or replace temp table _slot_xref as
         select
-            n.gsis_id,
+            coalesce(n.gsis_id, eb.gsis_id)        as gsis_id,
+            (n.gsis_id is null and eb.gsis_id is not null) as gsis_backfilled_espn,
             n.pfr_player_id,
             n.cfb_player_id,
             c.college_athlete_id,
@@ -258,6 +295,9 @@ def _build_slot_xref(con) -> int:
         join _cfbd_picks c
           on n.draft_year = c.draft_year
          and n.overall_pick = c.overall_pick
+        left join _espn_gsis_bridge eb
+          on n.gsis_id is null
+         and eb.espn_id = cast(c.college_athlete_id as varchar)
     """)
     return con.execute("select count(*) from _slot_xref").fetchone()[0]
 
@@ -411,10 +451,21 @@ def build_xref(
     _stage_cfbd_picks(con, lake, seasons)
     _stage_nfl_picks(con, lake, seasons)
     _stage_combine(con, lake)
+    try:
+        _stage_espn_gsis_bridge(con, lake)
+    except Exception as exc:  # noqa: BLE001 — a backfill enhancement; its failure never sinks the spine
+        log.warning("ALERT ESPN gsis-backfill bridge skipped (%s: %s) — null gsis_id rows stand",
+                    type(exc).__name__, str(exc)[:160])
+        con.execute(
+            "create or replace temp view _espn_gsis_bridge as "
+            "select cast(null as varchar) as espn_id, cast(null as varchar) as gsis_id where false"
+        )
 
     n_cfbd = con.execute("select count(*) from _cfbd_picks").fetchone()[0]
     n_nfl = con.execute("select count(*) from _nfl_picks").fetchone()[0]
     n_slot = _build_slot_xref(con)
+    n_gsis_backfilled_espn = con.execute(
+        "select count(*) from _slot_xref where gsis_backfilled_espn").fetchone()[0]
 
     # anti-cartesian: an inner join on a UNIQUE key both sides can never exceed either side.
     if n_slot > min(n_cfbd, n_nfl):
@@ -452,7 +503,7 @@ def build_xref(
     mart = con.execute(f"""
         select
             'ncaaf' as sport,
-            x.*,
+            x.* exclude (gsis_backfilled_espn),
             '{XREF_VERSION}' as xref_version,
             '{stamp}'        as built_at
         from (
@@ -495,13 +546,16 @@ def build_xref(
             "select avg(case when surname_agree then 1 else 0 end) from _slot_xref").fetchone()[0], 2)
             if n_slot else 0.0,
         "udfa_matched": int(n_udfa),
+        # NF-D12: how many drafted players would have had a null gsis_id (and been dropped by the
+        # pairs mart's not-null filter) had the ESPN-id bridge not backfilled it.
+        "gsis_backfilled_espn": int(n_gsis_backfilled_espn),
         "total_rows": int(len(mart)),
         "per_class": per_class.to_dict("records"),
     })
     log.info("xref built: %d slot + %d UDFA = %d rows; slot baseline %.2f%% (%d/%d), "
-             "combine %d, surname-agree %.1f%%",
+             "combine %d, surname-agree %.1f%%, gsis backfilled via ESPN bridge %d",
              n_slot, n_udfa, len(mart), report["slot_match_pct"], slot_matched, slot_total,
-             report["combine_attached"], report["surname_agree_pct"])
+             report["combine_attached"], report["surname_agree_pct"], n_gsis_backfilled_espn)
     return XrefResult(mart=mart, report=report)
 
 

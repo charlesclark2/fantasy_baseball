@@ -66,8 +66,10 @@ with xref as (
     from {{ ref('xref_college_nfl_players') }}
     where college_athlete_id is not null
       -- gsis_id IS the NFL-vertical join key + the mart grain, so a null-gsis_id row is useless for
-      -- the feeder and would collide on the grain. P0.3 leaves ~25 draft-pick partners with a null
-      -- gsis_id (nflverse coverage vintage, concentrated 2015–17); drop them here.
+      -- the feeder and would collide on the grain. As of NF-D12 (2026-07-29) the xref backfills a
+      -- just-drafted class's transiently-null gsis_id via an ESPN-id bridge, so the ~8 rows dropped
+      -- here are genuine drafted players who never took an NFL snap (nflverse issues no gsis_id to
+      -- them) — see xref_college_nfl_players.gsis_id's ratchet test, not a coverage gap to fix here.
       and gsis_id is not null
     -- NOTE: drafted (deterministic_slot, draft_year present) AND UDFA (fuzzy_udfa, draft_year NULL)
     -- rows both flow through. A UDFA has no draft year → its class is derived below as
