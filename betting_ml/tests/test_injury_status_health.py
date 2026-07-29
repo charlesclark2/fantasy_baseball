@@ -59,6 +59,20 @@ class TestFeedFreshness:
         assert classify_feed_freshness(date(2026, 7, 25), asof, max_lag_days=4).ok
         assert not classify_feed_freshness(date(2026, 7, 24), asof, max_lag_days=4).ok
 
+    def test_a_future_dated_max_cannot_read_as_healthy(self):
+        """E9.48-b: the MLB feed ships typo'd effective_dates (2925-11-26). An unbounded
+        max() picks the typo, the lag goes hugely NEGATIVE, and the staleness test can
+        never trip — the check would read OK on a totally frozen feed. A guard that
+        cannot go red is worse than no guard."""
+        c = classify_feed_freshness(date(2925, 11, 26), asof=date(2026, 7, 29))
+        assert not c.ok, "a year-2925 event date must never be scored healthy"
+        assert c.status == UNKNOWN
+
+    def test_a_slightly_forward_dated_move_is_still_ok(self):
+        """The inverse: a scheduled move posted a few days ahead is legitimate and must
+        not be flagged, or the guard becomes noise nobody reads."""
+        assert classify_feed_freshness(date(2026, 7, 31), asof=date(2026, 7, 29)).ok
+
     def test_an_empty_read_is_unknown_never_ok(self):
         """A read that returns nothing is the silent-empty class (E9.26b) — it must
         never be scored as healthy."""
@@ -162,6 +176,18 @@ class TestClearingRulesArePresentInBothBranches:
             placement = body.index("description ilike '% on the % injured list%'")
             bare_clear = body.index("description ilike '%activated%'")
             assert placement < bare_clear
+
+    def test_a_typod_effective_date_falls_back_to_the_transaction_date(self, model_sql):
+        """E9.48-b: MLB ships typo'd effective_dates (transaction 878446 is dated
+        effective_date=2925-11-26 vs transaction_date=2025-11-26). Events are ORDERED by
+        event_date, so a far-future typo sorts LAST, becomes the player's is_current
+        interval and pins their status — E9.48 again through a different door. Surfaced by
+        the off-season backfill, which is what brings these rows into the table."""
+        for body in self._branches(model_sql):
+            assert "datediff('day'" in body
+            assert "> 400" in body
+            # the bare coalesce is what the bound replaces — it must be gone
+            assert "coalesce(effective_date, transaction_date) as event_date" not in body
 
     def test_the_window_order_is_deterministic(self, model_sql):
         """`order by event_date` alone tie-broke arbitrarily between runs, so same-day

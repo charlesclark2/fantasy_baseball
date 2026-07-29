@@ -47,6 +47,10 @@ from datetime import date
 # plus a quiet stretch without false-firing.
 MAX_FEED_LAG_DAYS = 4
 
+# A transaction may legitimately be posted with an effective date a few days ahead
+# (a scheduled move). Anything beyond this is a data error, not a forward-dated move.
+FUTURE_DATE_SLACK_DAYS = 7
+
 # The plausibility check is a CORRECTNESS assertion, not a rate: post-E9.48 the count
 # is 0 by construction (an appearance truncates the injured interval). Any non-zero
 # value means the reconciliation stopped being applied.
@@ -89,6 +93,19 @@ def classify_feed_freshness(
             "no roster transactions found at all — the feed read returned nothing",
         )
     lag = (asof - latest_event_date).days
+    # E9.48-b: a FUTURE-dated max means corrupt input, and it silently DISABLES this
+    # check — the MLB feed ships typo'd effective_dates (2925-11-26 for a 2025-11-26
+    # transaction), and one of those makes `lag` hugely negative so the staleness test
+    # below can never trip. A guard that cannot go red is worse than no guard, so an
+    # implausible future date is a failure in its own right, not a pass.
+    if lag < -FUTURE_DATE_SLACK_DAYS:
+        return Check(
+            "feed_freshness",
+            UNKNOWN,
+            f"newest roster transaction is {latest_event_date} — {-lag}d in the FUTURE. "
+            f"That is corrupt input (a typo'd effective_date), and while it stands the "
+            f"staleness check is disabled: a frozen feed would still read OK.",
+        )
     if lag > max_lag_days:
         return Check(
             "feed_freshness",

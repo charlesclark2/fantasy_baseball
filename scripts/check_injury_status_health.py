@@ -54,6 +54,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from betting_ml.monitoring.injury_status_health import (  # noqa: E402
+    FUTURE_DATE_SLACK_DAYS,
     MAX_FEED_LAG_DAYS,
     Check,
     classify_feed_freshness,
@@ -95,9 +96,31 @@ def _as_date(value) -> date | None:
 
 
 def run_checks(conn, asof: date, max_lag_days: int = MAX_FEED_LAG_DAYS) -> list[Check]:
-    latest = conn.execute(
-        "SELECT max(coalesce(effective_date, transaction_date)) FROM stg_statsapi_transactions"
-    ).fetchone()[0]
+    # E9.48-b: read the newest PLAUSIBLE event date. The MLB feed ships typo'd
+    # effective_dates (transaction 878446: effective_date=2925-11-26 for a 2025-11-26
+    # transaction; Julio Rodríguez's 2022 IL placement dated 2024). An unbounded max()
+    # picks the typo, making the lag hugely NEGATIVE so the staleness test can never
+    # trip — the check would read OK on a completely frozen feed. Bound it, and report
+    # the implausible rows rather than letting them silently disable the guard.
+    horizon = asof.isoformat()
+    latest, n_implausible = conn.execute(
+        f"""
+        SELECT
+            max(coalesce(effective_date, transaction_date))
+                FILTER (WHERE coalesce(effective_date, transaction_date)::date
+                              <= date '{horizon}' + INTERVAL {FUTURE_DATE_SLACK_DAYS} DAY),
+            count(*)
+                FILTER (WHERE coalesce(effective_date, transaction_date)::date
+                              >  date '{horizon}' + INTERVAL {FUTURE_DATE_SLACK_DAYS} DAY)
+        FROM stg_statsapi_transactions
+        """
+    ).fetchone()
+    if n_implausible:
+        log.warning(
+            "%d transaction row(s) carry a future-dated effective_date (upstream MLB typos). "
+            "They are excluded from the freshness read and re-dated to transaction_date by "
+            "stg_statsapi_player_injury_status.", n_implausible,
+        )
 
     # Current IL population + how many of them have an MLB appearance after il_since.
     # is_current is the SCD-2 "no later event" flag — the exact thing that goes stale.
