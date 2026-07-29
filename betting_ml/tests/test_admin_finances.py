@@ -157,17 +157,36 @@ class TestSnowflakeBillingRule:
         assert "GREATEST(0, cloud_c - 0.10 * compute_c)" in s  # only bill cloud-svc excess
         assert "GROUP BY USAGE_DATE" in s  # adjustment applied per-day, not period total
 
+    @staticmethod
+    def _assert_runs_on_the_monitoring_warehouse(warehouse):
+        """E11.24 — a cost panel must never run on the warehouse it is reporting on.
+
+        Measured 2026-07-29: today these queries wake NOTHING (0 of 636 resumes over 8 days had
+        one first-after-resume) because the warehouse is always already awake for pipeline work.
+        That is exactly why this guard exists: once the literal-zero cutovers land and the
+        warehouse genuinely sleeps, opening the admin cost page BECOMES the resume — the page
+        that displays the Snowflake bill would start billing for the privilege.
+        """
+        from app.backend.services.snowflake import MONITORING_WAREHOUSE
+
+        assert warehouse == MONITORING_WAREHOUSE, (
+            f"the cost query ran on {warehouse!r} instead of the monitoring warehouse "
+            f"{MONITORING_WAREHOUSE!r} — see docs/e11_24_literal_zero_snowflake.md"
+        )
+
     def test_admin_snowflake_credits_query_applies_daily_rule(self):
         captured = {}
 
-        def fake_execute(sql):
+        def fake_execute(sql, warehouse=None):
             captured["sql"] = sql
+            captured["warehouse"] = warehouse
             return [{"MONTH": "2026-06-01", "COMPUTE_CREDITS": 177.18,
                      "CLOUD_SERVICE_CREDITS": 24.52, "BILLED_CREDITS": 184.28}]
 
         with patch.object(admin, "execute_query", side_effect=fake_execute):
             rows = admin.snowflake_credits(_="admin")
         self._assert_daily_rule_sql(captured["sql"])
+        self._assert_runs_on_the_monitoring_warehouse(captured["warehouse"])
         assert rows[0].billed_credits == 184.28
         # Billed is below the naive raw sum (compute + cloud = 201.70) — the fix.
         assert rows[0].billed_credits < rows[0].compute_credits + rows[0].cloud_service_credits
@@ -176,13 +195,15 @@ class TestSnowflakeBillingRule:
         captured = {}
         fin._sf_cost_cache = None  # bypass per-instance cache
 
-        def fake_execute(sql):
+        def fake_execute(sql, warehouse=None):
             captured["sql"] = sql
+            captured["warehouse"] = warehouse
             return [{"MONTH": "2026-06-01", "BILLED_CREDITS": 184.28}]
 
         with patch.object(fin, "execute_query", side_effect=fake_execute):
             costs = fin._snowflake_costs_by_month()
         self._assert_daily_rule_sql(captured["sql"])
+        self._assert_runs_on_the_monitoring_warehouse(captured["warehouse"])
         # Priced at $2/credit.
         assert costs["2026-06"] == round(184.28 * 2.0, 2)
         fin._sf_cost_cache = None
