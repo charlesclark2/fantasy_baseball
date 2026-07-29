@@ -782,13 +782,28 @@ def main(argv: list[str] | None = None) -> int:
 def _maybe_publish(out_dir: Path, bucket: str | None, season: int, publish: bool) -> None:
     """Gate the S3 upload behind an explicit `--publish` (NF-D12 PUBLISH GUARD).
 
-    ⭐ WHY: this exporter used to upload whenever a bucket resolved (--s3-bucket / $CACHE_BUCKET
-    — which is ALWAYS set in the operator's env), so any re-export session pushed straight to
-    the LIVE prod api-cache with no deliberate act (NF-D11 did this unintentionally while
-    re-exporting to verify a coverage fix). Default = DRY-RUN: a resolved bucket only prints
-    what WOULD upload; reaching the live bucket requires the caller to pass --publish, which
-    prints a loud banner first. No bucket at all keeps the pre-existing local-staging-only warn."""
+    ⭐ WHY: this exporter used to upload whenever a bucket resolved (--s3-bucket / $CACHE_BUCKET),
+    so any re-export session pushed straight to the LIVE prod api-cache with no deliberate act
+    (NF-D11 did this unintentionally while re-exporting to verify a coverage fix). Default =
+    DRY-RUN: a resolved bucket only prints what WOULD upload; reaching the live bucket requires
+    the caller to pass --publish, which prints a loud banner first.
+
+    🚨 `--publish` WITH NO BUCKET IS A HARD ERROR (NF1.7, 2026-07-29 — this cost a real publish).
+    NF-D12 wrote that `$CACHE_BUCKET` "is ALWAYS set in the operator's env"; it was NOT set in the
+    shell the operator actually published NF1.7 from, so `--publish` degraded to the no-bucket
+    local-staging WARNING — one line at the end of ~40 lines of INFO, with no upload banner — and
+    the run looked successful while nothing reached users. That is the repo's documented-but-never-set
+    landmine (cf. `W7B_LAKEHOUSE_S3`) in a publish path. An operator who explicitly asks for an
+    outward-facing action must never get a silent no-op: **without `--publish` a missing bucket stays
+    an ALERT-tier warn (staging locally is the intended default), but WITH `--publish` it raises.**"""
     if not bucket:
+        if publish:
+            raise SystemExit(
+                "--publish was passed but NO BUCKET resolved (--s3-bucket / $CACHE_BUCKET is unset "
+                "or empty), so nothing would be uploaded and the run would have looked successful. "
+                "Re-run with the bucket named explicitly:\n"
+                f"  --season {season} --s3-bucket credence-prod-s3-api-cache --publish"
+            )
         log.warning(
             "no --s3-bucket / $CACHE_BUCKET — boards staged locally only; the gated API "
             "will 404 until they are uploaded to s3://<bucket>/fantasy/nfl/%d/", season,

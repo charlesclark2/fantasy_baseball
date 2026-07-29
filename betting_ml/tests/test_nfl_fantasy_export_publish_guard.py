@@ -49,8 +49,28 @@ def test_publish_flag_reaches_the_live_upload(staged_out_dir, monkeypatch):
 
 
 def test_no_bucket_never_uploads_regardless_of_publish(staged_out_dir, monkeypatch):
+    """🚨 `--publish` WITH NO BUCKET NOW RAISES (NF1.7, 2026-07-29 — this cost a real publish).
+
+    NF-D12 assumed `$CACHE_BUCKET` "is ALWAYS set in the operator's env". It was NOT set in the shell
+    the operator published NF1.7 from, so `--publish` degraded to the no-bucket local-staging WARNING —
+    one line after ~40 lines of INFO, with no upload banner — and the run looked successful while
+    nothing reached users. An operator who explicitly asks for an outward-facing action must never get
+    a silent no-op. Still uploads nothing, which is the original assertion; it now also FAILS LOUD."""
     calls = _spy_upload(monkeypatch)
-    export_mod._maybe_publish(staged_out_dir, None, 2026, publish=True)
+    with pytest.raises(SystemExit) as exc:
+        export_mod._maybe_publish(staged_out_dir, None, 2026, publish=True)
+    assert calls == []
+    msg = str(exc.value)
+    assert "--publish" in msg and "NO BUCKET" in msg
+    assert "credence-prod-s3-api-cache" in msg, "the error must name the bucket to re-run with"
+
+
+def test_an_empty_bucket_string_is_treated_as_missing(staged_out_dir, monkeypatch):
+    """`CACHE_BUCKET=` (empty-but-present) shadows a default and is the documented box footgun — it
+    must count as MISSING, not as a bucket named ''."""
+    calls = _spy_upload(monkeypatch)
+    with pytest.raises(SystemExit):
+        export_mod._maybe_publish(staged_out_dir, "", 2026, publish=True)
     assert calls == []
 
 
