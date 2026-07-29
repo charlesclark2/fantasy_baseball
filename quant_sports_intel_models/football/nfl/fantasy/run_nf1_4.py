@@ -667,7 +667,13 @@ def served_band_coverage(folds: list[Fold]) -> dict:
     zero-game rookies included) is supplied. The POINT projection is byte-identical between them;
     only `fp_ppr_p10`/`fp_ppr_p90` move. This is an interval-CALIBRATION measurement on held-out
     classes, not a model search — no deflation gate applies to it, the same way a NULL-handling fix
-    does not need one."""
+    does not need one.
+
+    ⚠️ NF1.7 SUPERSEDED the band this measures, so the `calibrated_band` arm is PINNED to
+    `per_player_band=False`. Without that pin it would silently start measuring NF1.7's per-player
+    band while the report around it still described NF1.4's class-level tercile one — a report that
+    quietly stops measuring what it claims. NF1.7's own numbers live in
+    `ablation_results/nf1_7_rookie_intervals.md`."""
     res = {"legacy_cv_band": {"hit": 0, "n": 0, "by_pos": {}},
            "calibrated_band": {"hit": 0, "n": 0, "by_pos": {}},
            "nominal": 0.80, "point_projection_max_abs_change": 0.0}
@@ -678,7 +684,8 @@ def served_band_coverage(folds: list[Fold]) -> dict:
         arms = {
             "legacy_cv_band": SP.project_rookies(f.test, SP.fit_rookie_slot_curves(hist), f.year),
             "calibrated_band": SP.project_rookies(
-                f.test, SP.fit_rookie_slot_curves(hist, band_hist=band_hist), f.year),
+                f.test, SP.fit_rookie_slot_curves(hist, band_hist=band_hist,
+                                                  per_player_band=False), f.year),
         }
         res["point_projection_max_abs_change"] = max(
             res["point_projection_max_abs_change"],

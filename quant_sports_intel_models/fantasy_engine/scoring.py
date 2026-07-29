@@ -7,13 +7,20 @@ same function scores a hitter's line. A NULL in a raw stat contributes 0 to ITS 
 passing line never zeroes a WR — NULL kept NULL, per the honest frame).
 
 Uncertainty passthrough (honest, not false-precise): the upstream projection carries an interval on a
-CONVENIENCE point total (NFL: `fp_ppr_sd` on `proj_fp_ppr`). We do not have per-format game logs to
-re-derive game-to-game variance, so we carry the projection's *coefficient of variation* through the
-rescore — `league_sd = (base_sd / base_points) × league_points` — and rebuild an 80% interval from it.
-This is a first-order rescale (documented as such): it preserves relative dispersion under the linear
-scoring transform, which is exact when the format only rescales the same line and a good approximation
-when the reception weight shifts composition. Rookie intervals stay PARAMETER uncertainty (flagged via
-`uncertainty_type`), to be recalibrated before any pricing use.
+CONVENIENCE point total (NFL: `fp_ppr_p10`/`fp_ppr_p90`/`fp_ppr_sd` on `proj_fp_ppr`). We do not have
+per-format game logs to re-derive game-to-game variance, so the projection's own dispersion is carried
+through the rescore in the SAME PROPORTION the point moved. Where the profile publishes the upstream
+bounds, EACH SIDE is carried independently (`league_p10 = base_p10 × league_points / base_points`);
+otherwise we fall back to the *coefficient of variation* and a symmetric `±z·sd` band. Either way this
+is a first-order rescale (documented as such): it preserves relative dispersion under the linear
+scoring transform, exactly when the format only rescales the same line and approximately when the
+reception weight shifts composition.
+
+⚠️ WHY THE PER-SIDE PATH EXISTS (NF1.7): the single-`sd` reconstruction is SYMMETRIC by construction.
+That is right for a veteran (a normal approximation off realized game-to-game variance) and wrong for a
+rookie, whose per-player band is heavily right-skewed — a mid-round pick's p10 is near zero while his
+p90 is a real season. Re-symmetrising it here would slide the interval off its own point and hand the
+app back exactly the incoherence NF1.7 removed upstream, in a league format instead of the base one.
 """
 from __future__ import annotations
 
@@ -73,10 +80,37 @@ def score_players(
     if with_interval and profile.base_points_column and profile.base_sd_column:
         base_pts = _stat_series(out, profile.base_points_column)
         base_sd = _stat_series(out, profile.base_sd_column)
+        pts = out[out_col].to_numpy()
         # coefficient of variation of the upstream projection, carried through the rescore
         cv = np.where(base_pts > 1e-9, base_sd / np.where(base_pts > 1e-9, base_pts, 1.0), 0.0)
-        league_sd = np.abs(cv * out[out_col].to_numpy())
+        league_sd = np.abs(cv * pts)
+        lo = np.clip(pts - _Z80 * league_sd, 0.0, None)
+        hi = pts + _Z80 * league_sd
+
+        # ── NF1.7: carry EACH SIDE of the upstream band through independently where the projection
+        #    publishes its own bounds. Rebuilding the interval from a single sd forces it SYMMETRIC,
+        #    which is fine for a veteran (a normal approximation off game-to-game variance) and wrong
+        #    for a rookie: the per-player rookie band is heavily right-skewed — a mid-round pick's p10
+        #    is near zero while his p90 is a real season — so a ±z·sd reconstruction would slide the
+        #    whole interval and hand the app back the very incoherence NF1.7 removed upstream. Scaling
+        #    each bound by the same ratio the point moved is the exact analogue of the CV passthrough
+        #    (and reduces to it when the band IS symmetric); it is likewise a first-order rescale,
+        #    exact when the format only rescales the same line.
+        if profile.base_p10_column and profile.base_p90_column:
+            b_lo = _stat_series(out, profile.base_p10_column).to_numpy()
+            b_hi = _stat_series(out, profile.base_p90_column).to_numpy()
+            bp = base_pts.to_numpy()
+            usable = (bp > 1e-9) & (b_hi >= b_lo) & ((b_hi > 0) | (b_lo > 0))
+            k = np.where(usable, pts / np.where(bp > 1e-9, bp, 1.0), 1.0)
+            lo = np.where(usable, np.clip(b_lo * k, 0.0, None), lo)
+            hi = np.where(usable, b_hi * k, hi)
+            # the band's implied 1-sd equivalent, so `_sd` keeps describing the band actually emitted
+            league_sd = np.where(usable, (hi - lo) / (2 * _Z80), league_sd)
+        # coherence: a displayed interval must contain its own point estimate (NF1.7)
+        lo = np.clip(np.minimum(lo, pts), 0.0, None)
+        hi = np.maximum(hi, pts)
+
         out[out_col + "_sd"] = np.round(league_sd, 2)
-        out[out_col + "_p10"] = np.round(np.clip(out[out_col].to_numpy() - _Z80 * league_sd, 0.0, None), 1)
-        out[out_col + "_p90"] = np.round(out[out_col].to_numpy() + _Z80 * league_sd, 1)
+        out[out_col + "_p10"] = np.floor(lo * 10.0) / 10.0
+        out[out_col + "_p90"] = np.ceil(hi * 10.0) / 10.0
     return out

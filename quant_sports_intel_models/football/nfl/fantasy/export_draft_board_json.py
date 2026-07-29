@@ -338,6 +338,22 @@ def _attach_adp(recs: list[dict], adp: dict[tuple[str, str], float]) -> int:
     return n
 
 
+# ⭐ NF1.7 — the CLASS-LEVEL-BAND tolerance, and it is MEASURED, not asserted. Two players may share
+#    a rounded band for two very different reasons:
+#      * COINCIDENCE — near-identical projections whose bounds collide at the served 0.1 resolution
+#        (typically two deep-bench veterans whose p10 both floor at 0). Harmless.
+#      * QUANTISATION — a CLASS-level band pasted onto players the band was never centred on. This is
+#        the NF1.7 defect, and its signature is that the sharers' POINT PROJECTIONS span a large
+#        fraction of the band's own width: one interval cannot be centred on all of them.
+#    The two populations are cleanly separated on the real board (measured 2026-07-29, pre-NF1.7): the
+#    four class-level rookie groups sit at a point-spread/width ratio of **0.68–0.84**, while every one
+#    of the 44 veteran rounding coincidences tops out at **0.196**. A threshold of 0.25 therefore sits
+#    inside a 3.4× empirical gap — it is where the data separates, not a number someone liked. It is
+#    also ~5× the extreme-tail tolerance below, so a coincidence can never trip it.
+_SHARED_BAND_POINT_SPREAD_TOL = 0.25
+_EXTREME_TAIL_TOL = 0.05
+
+
 def audit_interval_quality(recs: list[dict], p10: str = "fpP10", p90: str = "fpP90",
                            point: str = "fpPpr") -> list[str]:
     """Data-quality check on the served 80% bands. Returns a list of human-readable findings.
@@ -345,30 +361,52 @@ def audit_interval_quality(recs: list[dict], p10: str = "fpP10", p90: str = "fpP
     ALERT-tier: this WARNS, it never blocks the export — a coarse band is still data, and the app
     labels it honestly. The point is that a degenerate band should never reach users SILENTLY.
 
-    Two failure modes it catches, both real as of 2026-07-29 (NF3 review):
-      * SHARED bands — a band identical across many players is not a per-player interval at all.
-        The rookie leg quantises to ~3 buckets per position, so every rookie QB in a bucket carries
-        26.5–277.0 while their point projections span 25 to 268.
+    Two failure modes it catches, both real on the 2026 board as of 2026-07-29 (the NF3 review that
+    routed NF1.7):
+      * CLASS-LEVEL bands — one interval pasted onto players it was never centred on. Pre-NF1.7 the
+        rookie leg quantised to ~3 buckets per position: 81 rookies carried 12 distinct intervals
+        (703 veterans carried 647), and every top-bucket rookie QB carried an identical 26.5–277.0
+        while their point projections spanned 25.1→268.3.
       * INCOHERENT bands — the point projection sitting outside, or in the extreme tail of, its own
         interval. A direct consequence of the above: one shared band cannot centre on every player
         it is pasted onto.
+
+    ⚠️ THE FIRST CUT OF THIS CHECK FIRED ON *ANY* BAND SHARED BY TWO PLAYERS, which made it
+    permanently red for a reason that is not a defect — two deep-bench veterans whose p10 both floor
+    at 0 collide at the served 0.1 resolution. A guard that can never go green is a guard nobody
+    reads, so the shared-band finding now tests the INVARIANT THAT ACTUALLY MATTERS: a band shared by
+    players whose points span more than `_SHARED_BAND_POINT_SPREAD_TOL` of its own width cannot be
+    centred on all of them. See that constant for the measurement behind the threshold.
     """
     findings: list[str] = []
     usable = [r for r in recs if r.get(p10) is not None and r.get(p90) is not None]
     if not usable:
         return findings
 
-    # a band shared by many players is a class-level band masquerading as a player-level one
-    shared: dict[tuple, int] = {}
+    # ── a band shared by players it cannot be centred on is a CLASS-level range ──
+    groups: dict[tuple, list[dict]] = {}
     for r in usable:
-        shared[(r[p10], r[p90])] = shared.get((r[p10], r[p90]), 0) + 1
-    worst = max(shared.items(), key=lambda kv: kv[1])
-    if worst[1] > 1:
-        n_shared = sum(c for c in shared.values() if c > 1)
+        groups.setdefault((r[p10], r[p90]), []).append(r)
+    offenders = []
+    for (lo, hi), members in groups.items():
+        pts = [m[point] for m in members if m.get(point) is not None]
+        width = hi - lo
+        if len(pts) < 2 or width <= 0:
+            continue
+        ratio = (max(pts) - min(pts)) / width
+        if ratio > _SHARED_BAND_POINT_SPREAD_TOL:
+            offenders.append((ratio, lo, hi, members, max(pts) - min(pts)))
+    if offenders:
+        offenders.sort(reverse=True, key=lambda o: o[0])
+        ratio, lo, hi, members, spread = offenders[0]
+        n_aff = sum(len(o[3]) for o in offenders)
         findings.append(
-            f"{n_shared}/{len(usable)} players carry a band shared with at least one other player "
-            f"(worst: {worst[0][0]}–{worst[0][1]} shared by {worst[1]}) — a shared band is a "
-            f"CLASS-level range, not a player-level one"
+            f"{n_aff}/{len(usable)} players carry a CLASS-LEVEL band — one interval shared by players "
+            f"whose point projections span more than {_SHARED_BAND_POINT_SPREAD_TOL:.0%} of its own "
+            f"width, so it cannot be centred on all of them (worst: {lo}–{hi} shared by "
+            f"{len(members)} players spanning {spread:.1f} pts = {ratio:.0%} of the band; e.g. "
+            f"{members[0]['name']} {members[0][point]} vs {members[-1]['name']} {members[-1][point]}). "
+            f"Overall {len(groups)}/{len(usable)} distinct bands"
         )
 
     # the point projection must sit inside its own interval, and not pinned to an extreme
@@ -381,10 +419,13 @@ def audit_interval_quality(recs: list[dict], p10: str = "fpP10", p90: str = "fpP
         )
     tail = [r for r in usable
             if r.get(point) is not None and r[p90] > r[p10]
-            and not (0.05 <= (r[point] - r[p10]) / (r[p90] - r[p10]) <= 0.95)]
+            and not (_EXTREME_TAIL_TOL
+                     <= (r[point] - r[p10]) / (r[p90] - r[p10])
+                     <= 1.0 - _EXTREME_TAIL_TOL)]
     if tail:
         findings.append(
-            f"{len(tail)} players have a point projection in the extreme 5% tail of their own band "
+            f"{len(tail)} players have a point projection in the extreme "
+            f"{_EXTREME_TAIL_TOL:.0%} tail of their own band "
             f"(e.g. {tail[0]['name']}: {tail[0][point]} in {tail[0][p10]}–{tail[0][p90]})"
         )
     return findings

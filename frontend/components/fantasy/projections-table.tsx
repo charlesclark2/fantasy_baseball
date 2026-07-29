@@ -242,8 +242,8 @@ export function ProjectionsTable() {
                   </th>
                   <th className="px-3 py-2 font-medium">
                     <InfoTip label="Range basis">
-                      Whether the 80% range is specific to this player or shared across a class of
-                      players. {UNCERTAINTY_HELP.empirical} {UNCERTAINTY_HELP.calibrated}
+                      Where this player&apos;s 80% range comes from.{" "}
+                      {UNCERTAINTY_HELP.empirical} {UNCERTAINTY_HELP.calibrated_per_player}
                     </InfoTip>
                   </th>
                 </tr>
@@ -321,7 +321,7 @@ export function ProjectionsTable() {
             <UncertaintyNote>
               <p className="mt-2">
                 <span className="font-semibold text-gray-300">Two kinds of range.</span>{" "}
-                {UNCERTAINTY_HELP.empirical} {UNCERTAINTY_HELP.calibrated}
+                {UNCERTAINTY_HELP.empirical} {UNCERTAINTY_HELP.calibrated_per_player}
               </p>
               <p className="mt-2">
                 Kickers and defences are not projected, and the 80% range shown is on the reference
