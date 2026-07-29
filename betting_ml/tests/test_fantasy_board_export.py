@@ -151,6 +151,44 @@ def test_projection_rookie_gets_a_backfilled_team_and_int_draft_slot():
     assert rookie["draftPick"] == 1        # an int, not 1.0
 
 
+# ── interval data quality ─────────────────────────────────────────────────────
+
+
+def _rec(name, p10, p90, point):
+    return {"name": name, "fpP10": p10, "fpP90": p90, "fpPpr": point}
+
+
+def test_interval_audit_is_quiet_on_healthy_per_player_bands():
+    healthy = [_rec("A", 100.0, 200.0, 150.0), _rec("B", 80.0, 190.0, 130.0)]
+    assert ex.audit_interval_quality(healthy) == []
+
+
+def test_interval_audit_flags_a_band_shared_across_players():
+    # The rookie failure mode: one band pasted onto many players is a CLASS-level range. It is
+    # invisible to any per-row check — only comparing rows to each other reveals it.
+    shared = [_rec("A", 26.5, 277.0, 268.3), _rec("B", 26.5, 277.0, 30.0), _rec("C", 26.5, 277.0, 40.0)]
+    findings = ex.audit_interval_quality(shared)
+    assert any("shared" in f for f in findings), findings
+    assert any("3" in f for f in findings), findings
+
+
+def test_interval_audit_flags_a_point_outside_its_own_band():
+    findings = ex.audit_interval_quality([_rec("A", 100.0, 200.0, 260.0)])
+    assert any("OUTSIDE" in f for f in findings), findings
+
+
+def test_interval_audit_flags_a_point_pinned_to_the_bands_extreme_tail():
+    # A shared band cannot centre on every player it covers, so this is the tell-tale symptom.
+    findings = ex.audit_interval_quality([_rec("A", 26.5, 277.0, 270.0)])
+    assert any("extreme 5% tail" in f for f in findings), findings
+
+
+def test_interval_audit_never_raises_on_missing_bands():
+    # ALERT-tier: the audit warns, it must never break an export.
+    assert ex.audit_interval_quality([{"name": "A", "fpP10": None, "fpP90": None, "fpPpr": 10.0}]) == []
+    assert ex.audit_interval_quality([]) == []
+
+
 # ── market ADP (the reference column) ─────────────────────────────────────────
 
 
@@ -170,6 +208,16 @@ def test_attach_adp_matches_on_normalized_name_and_position():
     matched = ex._attach_adp(recs, {("james cook", "RB"): 41.3})
     assert matched == 1
     assert recs[0]["adp"] == 41.3
+
+
+def test_adp_nickname_aliases_resolve_to_the_nflverse_name():
+    # A first-name nickname mismatch (FFC "Kenny Gainwell" vs nflverse "KENNETH GAINWELL") drops a
+    # real draftable player's ADP SILENTLY — nothing errors, the column just reads "—". The alias
+    # map is the cure; this pins the ones we have found so a normalizer change can't undo them.
+    from quant_sports_intel_models.football.nfl.fantasy import adp_source as A
+
+    assert A._normalize_name("Kenny Gainwell") == A._normalize_name("KENNETH GAINWELL")
+    assert A._normalize_name("Hollywood Brown") == A._normalize_name("MARQUISE BROWN")
 
 
 def test_attach_adp_leaves_an_undrafted_player_null():

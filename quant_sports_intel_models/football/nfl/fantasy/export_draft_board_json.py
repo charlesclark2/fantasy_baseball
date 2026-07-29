@@ -332,6 +332,58 @@ def _attach_adp(recs: list[dict], adp: dict[tuple[str, str], float]) -> int:
     return n
 
 
+def audit_interval_quality(recs: list[dict], p10: str = "fpP10", p90: str = "fpP90",
+                           point: str = "fpPpr") -> list[str]:
+    """Data-quality check on the served 80% bands. Returns a list of human-readable findings.
+
+    ALERT-tier: this WARNS, it never blocks the export — a coarse band is still data, and the app
+    labels it honestly. The point is that a degenerate band should never reach users SILENTLY.
+
+    Two failure modes it catches, both real as of 2026-07-29 (NF3 review):
+      * SHARED bands — a band identical across many players is not a per-player interval at all.
+        The rookie leg quantises to ~3 buckets per position, so every rookie QB in a bucket carries
+        26.5–277.0 while their point projections span 25 to 268.
+      * INCOHERENT bands — the point projection sitting outside, or in the extreme tail of, its own
+        interval. A direct consequence of the above: one shared band cannot centre on every player
+        it is pasted onto.
+    """
+    findings: list[str] = []
+    usable = [r for r in recs if r.get(p10) is not None and r.get(p90) is not None]
+    if not usable:
+        return findings
+
+    # a band shared by many players is a class-level band masquerading as a player-level one
+    shared: dict[tuple, int] = {}
+    for r in usable:
+        shared[(r[p10], r[p90])] = shared.get((r[p10], r[p90]), 0) + 1
+    worst = max(shared.items(), key=lambda kv: kv[1])
+    if worst[1] > 1:
+        n_shared = sum(c for c in shared.values() if c > 1)
+        findings.append(
+            f"{n_shared}/{len(usable)} players carry a band shared with at least one other player "
+            f"(worst: {worst[0][0]}–{worst[0][1]} shared by {worst[1]}) — a shared band is a "
+            f"CLASS-level range, not a player-level one"
+        )
+
+    # the point projection must sit inside its own interval, and not pinned to an extreme
+    outside = [r for r in usable if r.get(point) is not None
+               and not (r[p10] <= r[point] <= r[p90])]
+    if outside:
+        findings.append(
+            f"{len(outside)} players have a point projection OUTSIDE their own 80% band "
+            f"(e.g. {outside[0]['name']}: {outside[0][point]} vs {outside[0][p10]}–{outside[0][p90]})"
+        )
+    tail = [r for r in usable
+            if r.get(point) is not None and r[p90] > r[p10]
+            and not (0.05 <= (r[point] - r[p10]) / (r[p90] - r[p10]) <= 0.95)]
+    if tail:
+        findings.append(
+            f"{len(tail)} players have a point projection in the extreme 5% tail of their own band "
+            f"(e.g. {tail[0]['name']}: {tail[0][point]} in {tail[0][p10]}–{tail[0][p90]})"
+        )
+    return findings
+
+
 def rookie_team_map() -> dict[str, str]:
     """`{player_id -> current NFL team}` for the incoming rookie class, from `nflverse_players`.
 
@@ -615,6 +667,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         log.info("  projections: ADP (%s/%dteam) matched %d/%d players",
                  PROJECTION_ADP_FORMAT, PROJECTION_ADP_TEAMS, proj_adp_matched, len(projections))
+        for finding in audit_interval_quality(projections):
+            log.warning("[ALERT] interval quality: %s", finding)
         proj_meta = {
             "adp_format": PROJECTION_ADP_FORMAT,
             "adp_teams": PROJECTION_ADP_TEAMS,

@@ -60,6 +60,10 @@ _NAME_ALIASES = {
     "cam akers": "cameron akers",
     "joshua palmer": "josh palmer",
     "mike thomas": "michael thomas",
+    # NF3 (2026-07-29): found by auditing every unmatched ADP name against the projection's own
+    # surnames — FFC's "Kenny" vs nflverse's "KENNETH" silently cost a genuinely draftable RB
+    # (18 games / 221 PPR in 2025) his ADP on all 8 samples.
+    "kenny gainwell": "kenneth gainwell",
 }
 
 

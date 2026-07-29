@@ -15,8 +15,9 @@
 import { useEffect, useMemo, useState } from "react"
 import { Download, Search } from "lucide-react"
 import { useFantasyBoard, useFantasyManifest, useFormatSelection } from "@/lib/fantasy-queries"
-import type { Player } from "@/lib/draft-optimizer"
+import { assignTiers, type Player } from "@/lib/draft-optimizer"
 import {
+  ADP_DELTA_LABEL,
   ALL_ROWS,
   AdpDelta,
   EmptyBlock,
@@ -28,6 +29,7 @@ import {
   Pagination,
   PosBadge,
   PositionTabs,
+  RangeCell,
   ProvenanceLine,
   RookieBadge,
   SKILL_POSITIONS,
@@ -53,18 +55,48 @@ export function RankingsBoard() {
 
   const config = manifest?.configs.find((c) => c.name === configName)
 
+  // The board in its ranked order, BEFORE any search. Tiers and ranks are properties of the board,
+  // so they are derived here and merely filtered below — searching never renumbers or re-tiers.
+  // K/DST carry no projection (offensive skill only) — they exist on the board purely so the draft
+  // tracker can record those picks, and must never appear in a ranked list.
+  const ranked = useMemo(() => {
+    const skill = (board ?? []).filter(
+      (p) => p.pts != null && (SKILL_POSITIONS as readonly string[]).includes(p.pos),
+    )
+    const scoped = skill.filter((p) => (pos === "Overall" ? true : p.pos === pos))
+    return pos === "Overall"
+      ? scoped.slice().sort((a, b) => a.ovrRank - b.ovrRank)
+      : scoped.slice().sort((a, b) => a.posRank - b.posRank)
+  }, [board, pos])
+
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    // K/DST carry no projection (offensive skill only) — they exist on the board purely so the
-    // draft tracker can record those picks, and must never appear in a ranked list.
-    const ranked = (board ?? []).filter((p) => p.pts != null && (SKILL_POSITIONS as readonly string[]).includes(p.pos))
-    const filtered = ranked
-      .filter((p) => (pos === "Overall" ? true : p.pos === pos))
-      .filter((p) => (needle ? p.name.toLowerCase().includes(needle) : true))
-    return pos === "Overall"
-      ? filtered.slice().sort((a, b) => a.ovrRank - b.ovrRank)
-      : filtered.slice().sort((a, b) => a.posRank - b.posRank)
-  }, [board, pos, q])
+    return needle ? ranked.filter((p) => p.name.toLowerCase().includes(needle)) : ranked
+  }, [ranked, q])
+
+  // Tiers: grouped by an unusually large drop to the next player, using the SAME gap-based helper
+  // the draft optimizer scores with (lib/draft-optimizer.assignTiers) so a tier means one thing
+  // across the product. Computed on the full ranked set BEFORE search/paging — a tier is a property
+  // of the board, so it must not shift when you search or turn a page.
+  //
+  // ⚠️ ONLY above-replacement players are tiered, and that is load-bearing rather than tidy-minded.
+  // `assignTiers` splits on a gap wider than mean + k·std of consecutive gaps; run over all ~716
+  // players the long flat tail collapses that threshold, and the top of the board fragments into
+  // one tier per player (36 tiers, ranks 1-7 each alone = useless). Restricted to the startable
+  // pool (~84 here) the same k=1.0 yields ~10 genuine tiers. It is also the right definition:
+  // below replacement there is no value to group. Sub-replacement players get no tier.
+  //
+  // Overall tiers on VOR (the cross-position value axis the tab is ordered by); a position tab
+  // tiers on league points, which is that tab's own ordering.
+  const tierOf = useMemo(() => {
+    const m = new Map<string, number>()
+    const draftable = ranked.filter((p) => (p.vor ?? 0) > 0)
+    if (draftable.length === 0) return m
+    const vals = draftable.map((p) => (pos === "Overall" ? (p.vor ?? 0) : (p.pts ?? 0)))
+    const tiers = assignTiers(vals)
+    draftable.forEach((p, i) => m.set(p.id, tiers[i] ?? 1))
+    return m
+  }, [ranked, pos])
 
   // Any filter/format change invalidates the current page offset.
   useEffect(() => setPage(0), [pos, q, configName, size])
@@ -90,14 +122,16 @@ export function RankingsBoard() {
   const exportCsv = () => {
     downloadCsv(
       `credence-rankings-${configName}-${size}team-${pos.toLowerCase()}.csv`,
-      ["rank", "player", "pos", "team", "bye", "games", "proj_pts", "pts_p10", "pts_p90", "vor",
-       "pos_rank", "adp", "adp_delta", "rookie"],
+      ["rank", "tier", "player", "pos", "team", "bye", "games", "proj_pts", "pts_p10", "pts_p90",
+       "vor", "pos_rank", "adp", "vs_adp", "rookie", "range_basis"],
       rows.map((p) => {
         const rank = rankOf(p, pos)
         return [
-          rank, p.name, p.pos, teamLabel(p), p.bye ?? null, p.g, p.pts, p.ptsP10 ?? null,
-          p.ptsP90 ?? null, p.vor, p.posRank, p.adp ?? null,
+          rank, tierOf.get(p.id) ?? "", p.name, p.pos, teamLabel(p), p.bye ?? null, p.g, p.pts,
+          p.ptsP10 ?? null, p.ptsP90 ?? null, p.vor, p.posRank, p.adp ?? null,
           p.adp != null ? Math.round(p.adp - rank) : null, p.rookie ? "yes" : "no",
+          // carried so a downloaded board still says which ranges are class-level, not per-player
+          p.rookie ? "class-level" : "player",
         ]
       }),
     )
@@ -186,6 +220,9 @@ export function RankingsBoard() {
                   <thead className="bg-[#0f0f0f] text-gray-500">
                     <tr>
                       <th className="px-3 py-2 font-medium">{pos === "Overall" ? "Rank" : `${pos} #`}</th>
+                      <th className="px-3 py-2 text-center font-medium">
+                        <InfoTip label="Tier">{GLOSSARY.tier}</InfoTip>
+                      </th>
                       <th className="px-3 py-2 font-medium">Player</th>
                       <th className="px-3 py-2 font-medium">Pos</th>
                       <th className="px-3 py-2 font-medium">Team</th>
@@ -205,7 +242,7 @@ export function RankingsBoard() {
                             </InfoTip>
                           </th>
                           <th className="px-3 py-2 text-right font-medium">
-                            <InfoTip label="Δ">{GLOSSARY.adpDelta}</InfoTip>
+                            <InfoTip label={ADP_DELTA_LABEL}>{GLOSSARY.adpDelta}</InfoTip>
                           </th>
                         </>
                       )}
@@ -213,11 +250,34 @@ export function RankingsBoard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#1a1a1a]">
-                    {paged.map((p: Player) => {
+                    {paged.map((p: Player, i: number) => {
                       const rank = rankOf(p, pos)
+                      const tier = tierOf.get(p.id) ?? null
+                      // a tier boundary is only meaningful between CONSECUTIVE board rows, so it is
+                      // suppressed while searching (which removes the rows in between)
+                      const startsTier =
+                        tier != null &&
+                        !q.trim() &&
+                        (i === 0 || (tierOf.get(paged[i - 1].id) ?? null) !== tier)
                       return (
-                        <tr key={p.id} className="hover:bg-[#0f0f0f]">
+                        <tr
+                          key={p.id}
+                          className={`hover:bg-[#0f0f0f] ${
+                            startsTier && i > 0 ? "border-t-2 border-t-[#10b981]/30" : ""
+                          }`}
+                        >
                           <td className="px-3 py-2 font-medium text-gray-500">{rank}</td>
+                          <td className="px-3 py-2 text-center">
+                            {tier == null ? (
+                              <span className="text-[10px] text-gray-700">—</span>
+                            ) : startsTier ? (
+                              <span className="rounded border border-[#10b981]/40 bg-[#10b981]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#10b981]">
+                                T{tier}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-gray-700">{tier}</span>
+                            )}
+                          </td>
                           <td className="px-3 py-2">
                             <span className="flex items-center gap-1.5">
                               <span className="font-medium text-gray-200">{p.name}</span>
@@ -234,15 +294,16 @@ export function RankingsBoard() {
                           <td className="w-40 px-3 py-2">
                             {p.ptsP10 != null && p.ptsP90 != null && domain ? (
                               <>
-                                <div className="text-[11px] text-gray-400">
-                                  {int(p.ptsP10)}–{int(p.ptsP90)}
-                                </div>
+                                {/* every rookie's band is class-level (shared across his draft
+                                    tier), so it is demoted rather than shown as his own range */}
+                                <RangeCell p10={p.ptsP10} p90={p.ptsP90} classLevel={p.rookie} />
                                 <IntervalBar
                                   p10={p.ptsP10}
                                   point={p.pts}
                                   p90={p.ptsP90}
                                   min={domain.min}
                                   max={domain.max}
+                                  classLevel={p.rookie}
                                 />
                               </>
                             ) : (

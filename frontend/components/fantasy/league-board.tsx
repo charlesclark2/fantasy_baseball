@@ -13,6 +13,7 @@ import { useMemo, useState } from "react"
 import { useFantasyBoard, useFantasyManifest, useFormatSelection } from "@/lib/fantasy-queries"
 import type { Player } from "@/lib/draft-optimizer"
 import {
+  ADP_DELTA_LABEL,
   AdpDelta,
   EmptyBlock,
   FormatSelector,
@@ -36,6 +37,8 @@ interface PosSummary {
   replacement: number
   startable: number
   pool: number
+  /** The player actually sitting at replacement level — the yardstick made concrete. */
+  replacementPlayer: Player | null
 }
 
 export function LeagueBoard() {
@@ -63,11 +66,17 @@ export function LeagueBoard() {
       const atPos = ranked.filter((r) => r.pos === p)
       if (atPos.length === 0) continue
       const replacement = atPos[0].repl ?? 0
+      const startable = atPos.filter((r) => (r.pts ?? 0) > replacement).length
+      // The replacement level IS the points of the first non-starter, so that player is the one
+      // immediately after the startable block in points order. Naming him turns an abstract
+      // baseline into something a drafter can picture ("better than THAT guy").
+      const byPoints = atPos.slice().sort((a, b) => (b.pts ?? 0) - (a.pts ?? 0))
       out.push({
         pos: p,
         replacement,
-        startable: atPos.filter((r) => (r.pts ?? 0) > replacement).length,
+        startable,
         pool: atPos.length,
+        replacementPlayer: byPoints[startable] ?? null,
       })
     }
     return out
@@ -166,6 +175,20 @@ export function LeagueBoard() {
                       <div className="text-[11px] text-gray-500">
                         replacement pts · {s.startable} startable
                       </div>
+                      {s.replacementPlayer && (
+                        <div className="mt-2 border-t border-[#1f1f1f] pt-2 text-[11px] leading-tight">
+                          <InfoTip label={<span className="text-gray-600">at that level</span>}>
+                            {GLOSSARY.replacementPlayer}
+                          </InfoTip>
+                          <div className="mt-0.5 truncate text-gray-300" title={s.replacementPlayer.name}>
+                            {s.replacementPlayer.name}
+                          </div>
+                          <div className="text-gray-600">
+                            {teamLabel(s.replacementPlayer)} · {s.pos}
+                            {s.replacementPlayer.posRank}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -204,7 +227,7 @@ export function LeagueBoard() {
                             </InfoTip>
                           </th>
                           <th className="px-3 py-2 text-right font-medium">
-                            <InfoTip label="Δ">{GLOSSARY.adpDelta}</InfoTip>
+                            <InfoTip label={ADP_DELTA_LABEL}>{GLOSSARY.adpDelta}</InfoTip>
                           </th>
                         </>
                       )}
