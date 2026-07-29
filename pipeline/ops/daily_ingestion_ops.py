@@ -1662,6 +1662,46 @@ def dbt_lineup_feature_rebuild(context):
     ])
 
 
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def check_injury_status_health_op(context):
+    """E9.48 injury / IL status guard — runs immediately after the injury chain rebuilds.
+
+    THE OUTAGE IT PREVENTS (2026-07-29, P1 user-facing TRUST failure): player pages
+    served a WRONG IL status for 62 of the 187 players flagged as currently on the
+    Injured List — Jesús Luzardo read "On IL since 2024-06-19" while starting for PHI.
+    An interval is CURRENT iff no later classified event exists, so ONE missed clearing
+    event pins a player as injured forever, silently, across seasons. Nothing errored;
+    nothing was empty; there was no way to notice except by asserting on the data.
+
+    Two checks (pure logic in betting_ml/monitoring/injury_status_health.py):
+      • FEED FRESHNESS  — the roster-transaction feed stopped advancing (every status
+        frozen at that date). Also surfaces the structural Nov–Feb ingest hole.
+      • IL PLAUSIBILITY — anyone flagged CURRENTLY on the IL who has played an MLB game
+        since. This is the bug signature itself and reads no description text, so a
+        Stats API rewording cannot blind it.
+
+    Tier: ALERT-loud-but-continue. The IL badge is a profile adornment, not the serving
+    path, so a stale feed must never HALT the daily job — but it must never pass
+    silently either. INJURY_STATUS_STRICT=1 promotes to HALT."""
+    strict = os.environ.get("INJURY_STATUS_STRICT") == "1"
+    try:
+        # Bounded S3 read — a finite timeout so a stalled httpfs read can never park the
+        # daily job on an advisory check (INC-32 class).
+        stdout = _run_script(context, "check_injury_status_health.py", timeout=600)
+    except Exception as e:
+        if strict:
+            raise
+        context.log.warning(
+            "[ALERT] check_injury_status_health flagged a stale or implausible IL status "
+            f"(non-blocking; set INJURY_STATUS_STRICT=1 to HALT): {e}"
+        )
+        return
+    for line in stdout.splitlines():
+        if line.startswith("[METRIC] injury_status_"):
+            (context.log.warning if line.endswith("=0") or "OK" not in line
+             else context.log.info)(line.strip())
+
+
 # ── Player profile update (weekly) ───────────────────────────────────────────
 
 @op(out=Out(Nothing))

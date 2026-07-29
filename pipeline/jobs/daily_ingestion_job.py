@@ -9,6 +9,7 @@ from pipeline.ops.daily_ingestion_ops import (
     check_monitors_healthy_op,
     check_odds_coverage_op,
     check_feature_block_coverage_op,
+    check_injury_status_health_op,
     check_served_prediction_integrity_op,
     check_prediction_coverage,
     compute_elo,
@@ -201,7 +202,11 @@ def daily_ingestion_job():
     # rebuild feature_pregame_lineup_features before the prediction step.
     s16d = update_lineup_state_scd2(start=s16c)
     s16e = dbt_lineup_feature_rebuild(start=s16d)
-    s17 = ingest_umpires_late(start=s16e)
+    # E9.48 — assert the freshly-rebuilt IL status is neither frozen nor self-
+    # contradictory (someone flagged CURRENTLY on the IL who has since played). Sits
+    # directly on the rebuild it validates. ALERT-tier: never blocks the slate.
+    s16f = check_injury_status_health_op(start=s16e)
+    s17 = ingest_umpires_late(start=s16f)
     # Story 30.5 — pull UmpScorecards tendency rows (the daily feed that was missing)
     # after the assignment retry and before dbt_umpire_feature_rebuild, so the
     # trailing-3yr ump z-scores recompute on current data. Soft-fail (non-critical).

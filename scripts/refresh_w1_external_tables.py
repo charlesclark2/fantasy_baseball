@@ -217,6 +217,20 @@ W7B_TABLES = [
 # stg_statsapi_transactions, which is already in the W11TX required set.
 W7B_SERVING_TABLES = ["stg_statsapi_lineups_wide", "stg_statsapi_probable_pitchers"]
 
+# E9.48 (2026-07-29): the INJURY-STATUS chain's ext tables were defined in W7B_TABLES but
+# W7B_TABLES is referenced NOWHERE in the refresh flow — only W7B_SERVING_TABLES made it into
+# the daily set. So `run_w1_lakehouse.py --w7b` rewrote the injury parquet every day while the
+# Snowflake external tables over it were never REFRESHed (AUTO_REFRESH=FALSE), leaving the SF
+# read path (mart_player_profile_identity → write_serving_store's _PLAYER_IDENTITY_SQL when
+# W7B_LAKEHOUSE_S3 is off) serving a stale file listing. That is the same "built but never
+# refreshed" shape as INC-25 — a fix can land in S3 and still never reach the user. Best-effort
+# tier, matching the rest of the W7b rollout (a missing ext table is an expected skip, not a HALT).
+W7B_INJURY_TABLES = [
+    "stg_statsapi_player_injury_status",
+    "feature_pregame_injury_status",
+    "mart_player_profile_identity",
+]
+
 # E11.1-W9: the 5 sub-model SIGNAL STORES mirrored to S3 by scripts/export_w9_signals_to_s3.py
 # (external tables created by scripts/ddl/generate_w9_external_tables.py). BEST-EFFORT (WARN if
 # missing) like W4/W5/W6/W7/W7b during the opt-in rollout — they don't exist until the export
@@ -508,11 +522,11 @@ def main():
     _refresh(
         STG_BATTER_PITCHES_TABLE + W2_TABLES + W3_TABLES + W3PRE_TABLES
         + W4_TABLES + W5_TABLES + ARCHETYPE_TABLES + W6_TABLES + W7_TABLES + W7B_SERVING_TABLES
-        + W11TX_TABLES,
+        + W7B_INJURY_TABLES + W11TX_TABLES,
         required=required,
     )
     print("stg_batter_pitches + W2+W3 + W11tx external table refresh complete "
-          "(W3pre + W4 + W5 + W5b + W6 + W7 + W7b-serving best-effort; "
+          "(W3pre + W4 + W5 + W5b + W6 + W7 + W7b-serving + W7b-injury best-effort; "
           "W1 mart_pitch_* RETIRED — phase 1.5).")
 
 

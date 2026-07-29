@@ -1532,13 +1532,19 @@ def _build_clv_labels(conn, dry_run: bool) -> None:
 # view over the lakehouse_ext external table (generate_w7b_external_tables.py).
 #
 # Precursor VIEWS registered (read from S3 parquet, NOT built here):
-#   • W2 marts: mart_batter_rolling_stats, mart_starting_pitcher_game_log
+#   • W2 marts: mart_batter_rolling_stats, mart_pitcher_rolling_stats, mart_starting_pitcher_game_log
 #   • W4 staging: stg_statsapi_player_profiles
 #   • W6 staging: stg_statsapi_lineups
 # Read DIRECTLY via read_parquet(lakehouse_loc/raw_loc) in the duckdb branch (no registration):
 #   • player_transactions (lakehouse/), monthly_schedule (lakehouse_raw/).
 W7B_PRECURSOR_VIEWS = [
     "mart_batter_rolling_stats",
+    # E9.48: the PITCHER appearance source for the injury-status ground-truth
+    # reconciliation in stg_statsapi_player_injury_status. mart_starting_pitcher_game_log
+    # covers only STARTERS; the rolling mart is one row per pitcher × game, so relievers
+    # are covered too. Column-pruned parquet read (player_id + game_date), so registering
+    # it costs the intraday --w7b cadence essentially nothing.
+    "mart_pitcher_rolling_stats",
     "mart_starting_pitcher_game_log",
     "stg_statsapi_player_profiles",
     "stg_statsapi_lineups",
