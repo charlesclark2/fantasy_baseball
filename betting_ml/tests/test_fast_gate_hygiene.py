@@ -208,7 +208,34 @@ def test_module_does_not_mutate_global_state_at_import(test_file: Path):
     )
 
 
-# ── 4. importing a module must not do NETWORK IO ─────────────────────────────────────────────
+# ── 4. the pipeline-import env contract belongs to conftest, not to a test module ────────────
+
+def test_conftest_supplies_the_dummy_snowflake_env():
+    """`pipeline/resources` reads os.environ["SNOWFLAKE_ACCOUNT"] etc. at IMPORT (bracket access),
+    so any test that imports `pipeline` needs them present. The root conftest sets them in
+    pytest_configure — once per process, before collection, so the guarantee does not depend on
+    filename order.
+
+    REGRESSION PIN (2026-07-27): these defaults previously lived at module scope in
+    test_e11_1_w12_sensor_fire.py, which sorts before test_monitor_health_wiring.py, so that
+    module's env LEAK was silently what made the other module's `import pipeline` succeed.
+    Properly scoping the leak away broke the slow gate (the only job that builds the dbt manifest
+    and therefore actually reaches the import). Asserting it here means deleting the conftest
+    block fails the FAST gate in seconds, instead of the slow job discovering it minutes later.
+    """
+    import os
+
+    missing = [
+        v for v in ("SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_WAREHOUSE", "SNOWFLAKE_ROLE")
+        if not os.environ.get(v)
+    ]
+    assert not missing, (
+        f"{missing} unset during the test session — importing `pipeline` will KeyError. Restore "
+        "the os.environ.setdefault block in the root conftest.py's pytest_configure."
+    )
+
+
+# ── 5. importing a module must not do NETWORK IO ─────────────────────────────────────────────
 
 def test_predict_today_does_not_fetch_the_calibrator_at_import():
     """Regression guard for the 2026-07-27 finding: `scripts/predict_today.py` ran

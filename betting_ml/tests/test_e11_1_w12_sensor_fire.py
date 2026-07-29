@@ -25,22 +25,11 @@ import pytest
 
 pytestmark = pytest.mark.slow
 
-# pipeline.resources builds a SnowflakeResource at import (bracket env access) — give it dummy
-# values so importing the sensor defs never needs real Snowflake env (no connection is made).
-# AUTOUSE FIXTURE, not a module-level loop: pytest imports every test module during collection,
-# so setting env at import leaks these vars into every other test in the worker (and under xdist
-# that leak is non-deterministic). monkeypatch reverts after each test. The sensor modules are
-# imported lazily by `_mod()` at TEST time, so the fixture is always in place first.
-_DUMMY_SF_ENV = ("SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_WAREHOUSE", "SNOWFLAKE_ROLE")
-
-
-@pytest.fixture(autouse=True)
-def _dummy_snowflake_env(monkeypatch):
-    for _k in _DUMMY_SF_ENV:
-        if _k not in os.environ:  # setdefault semantics — never clobber a real local value
-            monkeypatch.setenv(_k, "dummy_for_tests")
-
-
+# pipeline.resources builds a SnowflakeResource at import (bracket env access), so importing the
+# sensor defs needs SNOWFLAKE_* present. Those dummy defaults are set ONCE in the root
+# conftest.py's pytest_configure — deliberately NOT here: this module used to set them at module
+# scope, and because it sorts before test_monitor_health_wiring.py, that leak silently became the
+# thing making *that* module's `import pipeline` work. See conftest.py for the full note.
 dagster = pytest.importorskip("dagster")
 from dagster import build_sensor_context  # noqa: E402
 
