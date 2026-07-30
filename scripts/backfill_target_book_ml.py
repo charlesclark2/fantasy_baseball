@@ -159,14 +159,23 @@ where score_date between %(s)s and %(e)s
   and layer4_h2h_bovada_ml_away is null
 """
 
+# ⚠️ NULL-SAFE JOIN ON prediction_type — load-bearing. 251 rows in 2026-05-08..2026-06-09 carry
+# `prediction_type IS NULL`, and a plain `=` makes `NULL = NULL` UNKNOWN → those rows are reported
+# as repairable by the diagnose (which GROUPs BY the column, and grouping DOES collapse NULLs
+# together) and then SILENTLY SKIPPED by the write. That mismatch between "counted" and "written"
+# is the exact silent-skip class this whole story is about, so the join must match NULL to NULL.
+# Written as the explicit ANSI OR-form rather than `is not distinct from`: this is the statement
+# that already failed once on a Snowflake grammar assumption, and the OR-form is valid everywhere
+# (and is exercised against DuckDB in test_target_book_coverage_guard.py).
 _UPDATE_SQL = """
 update {schema}.daily_model_predictions dmp
 set layer4_h2h_bovada_ml_home = c.ml_home,
     layer4_h2h_bovada_ml_away = c.ml_away
 from (""" + _CLASSIFIED_BODY + """) c
-where dmp.game_pk         = c.game_pk
-  and dmp.prediction_type = c.prediction_type
-  and dmp.inserted_at     = c.inserted_at
+where dmp.game_pk     = c.game_pk
+  and dmp.inserted_at = c.inserted_at
+  and (dmp.prediction_type = c.prediction_type
+       or (dmp.prediction_type is null and c.prediction_type is null))
   and (c.ml_home is not null or c.ml_away is not null)
   and ({write_predicate})
 """
@@ -202,11 +211,19 @@ def main() -> int:
 
         cur.execute(_DIAGNOSE_SQL.format(schema=schema, book=TARGET_BOOK), params)
         blank = mismatch = impossible = 0
+        null_tier_rows = 0
+        tiers_seen: set[str] = set()
         for d, tier, n_rows, n_blank, n_mm, n_imp in cur.fetchall():
             blank += int(n_blank)
             mismatch += int(n_mm)
             impossible += int(n_imp)
-            log.info(f"  {d} {tier:<12} matched={int(n_rows):4d}  blank={int(n_blank):4d}  "
+            # `prediction_type` is NULL on 251 rows (2026-05-08..2026-06-09). str() because a bare
+            # `{tier:<12}` on None raises TypeError and kills the whole run mid-report.
+            label = "<null-tier>" if tier is None else str(tier)
+            if tier is None:
+                null_tier_rows += int(n_rows)
+            tiers_seen.add(label)
+            log.info(f"  {d} {label:<12} matched={int(n_rows):4d}  blank={int(n_blank):4d}  "
                      f"stored-differs={int(n_mm):4d}  impossible-pair={int(n_imp):4d}")
 
         cur.execute(_UNREPAIRABLE_SQL.format(schema=schema), params)
@@ -218,9 +235,22 @@ def main() -> int:
         if no_snapshot:
             log.warning(f"  {no_snapshot} blank row(s) have NO pre-game aligned {TARGET_BOOK} "
                         f"snapshot at or before their insert time — left NULL on purpose.")
+        if null_tier_rows:
+            log.warning(f"  {null_tier_rows} row(s) carry prediction_type IS NULL — included via a "
+                        f"null-safe join (a plain '=' would count them here and skip them on write).")
+        if "backfill" in tiers_seen:
+            # Honest caveat: a `backfill` row's inserted_at postdates first pitch, so "as of
+            # inserted_at" degenerates to the LAST PRE-GAME quote. That is the only defensible
+            # value for a re-scored historical row (there was no scoring-time price), but it is
+            # NOT the same semantics as a live morning/post_lineup row — do not read the two as
+            # interchangeable when computing retrospective ROI.
+            log.warning("  'backfill' tier rows are re-scores whose inserted_at postdates first "
+                        f"pitch → their as-of price degenerates to the LAST PRE-GAME {TARGET_BOOK} "
+                        "quote (not a price taken at scoring time).")
         print(f"[METRIC] target_book_repair_blank_rows={blank}")
         print(f"[METRIC] target_book_repair_mismatched_rows={mismatch}")
         print(f"[METRIC] target_book_repair_impossible_pairs={impossible}")
+        print(f"[METRIC] target_book_repair_null_tier_rows={null_tier_rows}")
 
         target = blank + (mismatch if args.repair_existing else 0)
         if target == 0:
