@@ -1005,6 +1005,10 @@ def fit_rookie_slot_curves(hist: pd.DataFrame, band_hist: pd.DataFrame | None = 
                            *, band_form: str | None = None, band_k: int | None = None,
                            band_resid_sd_gain: float | None = None,
                            band_qreg_alpha: float | None = None,
+                           band_qreg_per_pos: bool | None = None,
+                           band_cqr_mode: str | None = None,
+                           band_cqr_scale: str | None = None,
+                           band_cqr_k: int | None = None,
                            per_player_band: bool = True) -> RookieSlotCurve:
     """Fit the composite rookie model from prior classes.
 
@@ -1067,7 +1071,12 @@ def fit_rookie_slot_curves(hist: pd.DataFrame, band_hist: pd.DataFrame | None = 
                 resid_sd_gain=(_ROOKIE_BAND_RESID_SD_GAIN if band_resid_sd_gain is None
                                else band_resid_sd_gain),
                 qreg_alpha=(_ROOKIE_BAND_QREG_ALPHA if band_qreg_alpha is None
-                            else band_qreg_alpha))
+                            else band_qreg_alpha),
+                qreg_per_pos=(_ROOKIE_BAND_QREG_PER_POS if band_qreg_per_pos is None
+                              else band_qreg_per_pos),
+                cqr_mode=_ROOKIE_BAND_CQR_MODE if band_cqr_mode is None else band_cqr_mode,
+                cqr_scale=_ROOKIE_BAND_CQR_SCALE if band_cqr_scale is None else band_cqr_scale,
+                cqr_k=_ROOKIE_BAND_CQR_K if band_cqr_k is None else band_cqr_k)
     return curve
 
 
@@ -1136,6 +1145,39 @@ def _fit_rookie_bands(curve: RookieSlotCurve, band_hist: pd.DataFrame) -> None:
 #    prevent. The point projection is UNCHANGED: NF1.4 proved the rookie point is ~unbiased.
 _ROOKIE_BAND_FORMS = ("ratio_q", "ratio_q_floor", "knn_pos", "knn_norm", "qreg", "qreg_sqrt")
 _ROOKIE_BAND_MIN_TRAIN = 40      # below this a position/pool fit is refused → tercile fallback
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF1.8 — the PER-POSITION coverage floor (bake-off: run_rookie_perposition_ablation.py)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# ⚠️ WHAT NF1.7 LEFT ON THE TABLE. Its coverage floor was pre-registered POOLED, and pooled coverage
+#    duly rose 0.791 → 0.808 — but it REDISTRIBUTED rather than improved uniformly: QB 0.739 (below
+#    nominal in BOTH arms), RB 0.836 → 0.777, TE 0.878, WR 0.822. Pooled coverage is a population
+#    property one position can pay for on another's behalf, which is the same class of blind spot as
+#    NF1.4's "coverage cannot select an interval" — one level up. So NF1.8 re-selects under a
+#    PER-POSITION floor, still SELECTING on the interval score (coverage stays a FLOOR, never a target).
+#
+# ⭐ TWO MECHANISMS ARE ADDED TO THE BALLOT, because re-filtering NF1.7's leaderboard under a new
+#    constraint would make the QB fix INCIDENTAL rather than designed:
+#      • `qreg_per_pos` — fit the quantile regression SEPARATELY per position. NF1.7's position dummy
+#        shifts only the INTERCEPT, so every position was forced to share one slope on log(point) and
+#        one on the P1A sd. QB is precisely the position whose slope should differ (~35% of drafted
+#        rookie QBs never take a snap).
+#      • `cqr_mode` — CONFORMALIZED quantile regression (Romano/Patterson/Candès 2019) with a
+#        MONDRIAN (group-conditional) calibration per position. This is the textbook instrument for a
+#        per-GROUP coverage floor: the fitted band is inflated by the (1−α) empirical quantile of the
+#        calibration conformity scores WITHIN the position, which is what carries the finite-sample
+#        group-conditional guarantee. `cqr_mode="pool"` is its pre-registered FOIL — the identical
+#        machinery calibrated POOLED — so the report can separate "conformal helped" from
+#        "per-position conditioning helped".
+_ROOKIE_BAND_CQR_MODES = ("", "pos", "pool")
+_ROOKIE_BAND_CQR_SCALES = ("add", "width")
+_ROOKIE_BAND_CQR_K = 4           # cross-conformal folds (uses every training row for both jobs)
+# Below this many calibration rows a GROUP cannot carry its own conformal quantile and falls back to
+# the pooled one — recorded in `RookieBandModel.cqr_pooled_groups`, never silent. At α=0.20 the
+# finite-sample guarantee needs only n ≥ 4, but a 4-row quantile is noise; 20 is the honest floor.
+_ROOKIE_BAND_CQR_MIN_CALIB = 20
+_CQR_POOL_KEY = "__POOL__"       # the pooled conformal quantile, and every thin group's fallback
+_CQR_MIN_WIDTH = 1.0             # floor on the width a `"width"`-scaled inflation multiplies
 # ⬇ THE SHIPPED SELECTION (44 configs, held-out draft classes 2019–2025, PBO 0.029 / spread 27% =
 #    LOW-PBO + WIDE-spread ⇒ a genuinely separated winner). See
 #    `ablation_results/nf1_7_rookie_intervals.md`. Held-out interval score 181.16 vs the class-level
@@ -1144,8 +1186,11 @@ _ROOKIE_BAND_MIN_TRAIN = 40      # below this a position/pool fit is refused →
 #    ⭐ THE WINNING BAND IS *WIDER* THAN THE ONE IT REPLACES (127.7 vs 124.4 PPR mean, ≈2× a veteran's)
 #    — the win came from putting the width where it belongs per player, not from shrinking it. Which is
 #    the point: sharpness was the SELECTION metric, honesty the CONSTRAINT.
-_ROOKIE_BAND_FORM = "qreg"
-_ROOKIE_BAND_K = 80                  # neighbourhood arms only; unused by the shipped `qreg`
+#    ⚠️ SUPERSEDED BY NF1.8 (2026-07-29) — the constants below are NF1.8's, not NF1.7's. NF1.7's
+#    `qreg` won under a POOLED floor but covers QB at only 0.741 and RB at 0.777, so it is INELIGIBLE
+#    under NF1.8's per-position floor. See `ablation_results/nf1_8_rookie_perposition_floor.md`.
+_ROOKIE_BAND_FORM = "qreg_sqrt"      # NF1.8: `qreg` on √y — the heavy-right-tailed target's linear scale
+_ROOKIE_BAND_K = 80                  # neighbourhood arms only; unused by the shipped parametric arm
 _ROOKIE_BAND_QREG_ALPHA = 0.01       # a whisper of L1 — it beat the unregularised fit on every metric
 # The P1A parameter-uncertainty WIDENER is left OFF — and this is the shipped value of a genuine TIE,
 # not a clear win. `sdgain` 0.1/0.2 land within 0.2% of the winner on the primary metric while covering
@@ -1155,6 +1200,24 @@ _ROOKIE_BAND_QREG_ALPHA = 0.01       # a whisper of L1 — it beat the unregular
 # inversion facing the other way. `projected_nfl_z_sd` still enters the shipped band as a REGRESSION
 # FEATURE; what is switched off is only the extra multiplicative widening on top. See §4b of the report.
 _ROOKIE_BAND_RESID_SD_GAIN = 0.0
+# ⬇ NF1.8 — THE PER-POSITION-FLOOR RE-SELECTION. Shipped: `qreg_sqrt+cqr[pos,add] · sdgain 0` (80
+#    configs × 7 held-out draft classes, 553 rookie-seasons). See
+#    `ablation_results/nf1_8_rookie_perposition_floor.md`.
+#      · every position clears the NOMINAL 0.80 floor (Tier 1; the documented Tier-2 QB relaxation was
+#        NOT needed): QB 0.741 → 0.815, RB 0.777 → 0.804, TE 0.870 → 0.900, WR 0.826 → 0.835;
+#      · the floor costs +1.3% of interval score (180.99 → 183.41) and is still 9.1% better than the
+#        NF1.4 class-level incumbent (201.76) at a distinct-band fraction of 0.89 vs 0.18;
+#      · the rookie POINT projection is byte-identical (asserted in the harness, max drift 0.0).
+#    ⭐ THE MONDRIAN (PER-POSITION) CALIBRATION IS WHAT EARNS IT, and the pre-registered POOLED foil is
+#    the proof: pooled calibration is a numerical NO-OP on this base (183.451 → 183.451, QB 0.778 →
+#    0.778) because the base band's aggregate out-of-fold coverage is already ≈ nominal. Only reading
+#    the conformity scores WITHIN a position makes the QB shortfall visible.
+#    ⚠️ `qreg_per_pos` (a separate quantile REGRESSION per position) was the other pre-registered
+#    per-position mechanism and it LOST — it made QB worse (0.716), because separate slopes overfit at
+#    QB's in-fold n. Per-position CALIBRATION works where per-position FITTING does not.
+_ROOKIE_BAND_QREG_PER_POS = False
+_ROOKIE_BAND_CQR_MODE = "pos"
+_ROOKIE_BAND_CQR_SCALE = "add"
 
 
 def p1a_residual_nudge(position_group, overall, z, residual_lambda: float = 0.12) -> np.ndarray:
@@ -1245,12 +1308,30 @@ class RookieBandModel:
     `resid_sd_gain` optionally widens any form by the player's OWN P1A parameter uncertainty
     (`projected_nfl_z_sd`, z-scored in-fold) — the per-player uncertainty driver that no
     outcome-neighbourhood can see. 0 = off.
+
+    NF1.8 adds two knobs on the parametric arms, both aimed at a PER-POSITION coverage floor:
+      • `qreg_per_pos` — fit the quantile pair SEPARATELY per position (a position dummy shifts only
+                         the intercept, so NF1.7 forced every position to share one slope).
+      • `cqr_mode`     — conformalize the fitted band. `"pos"` = MONDRIAN / group-conditional (the
+                         conformity quantile is taken WITHIN the position — the instrument that
+                         actually carries a per-group coverage guarantee); `"pool"` = the pooled foil.
+                         `cqr_scale` is `"add"` (a points-scale inflation) or `"width"` (an inflation
+                         PROPORTIONAL to the band's own width — the scale-aware variant, appropriate
+                         for a heavy-right-tailed target whose spread grows with the level).
+      ⚠️ The conformal adjustment is a per-GROUP SCALAR by construction, so it cannot buy sharpness by
+        narrowing selected players; it may be NEGATIVE when the base band over-covers on calibration
+        (that is CQR working as designed, not a back door — it moves every member of the group
+        together), which is why the `resid_sd_gain` widen-only clamp is a SEPARATE guard.
     """
 
     form: str = _ROOKIE_BAND_FORM
     k: int = _ROOKIE_BAND_K
     resid_sd_gain: float = _ROOKIE_BAND_RESID_SD_GAIN
     qreg_alpha: float = _ROOKIE_BAND_QREG_ALPHA
+    qreg_per_pos: bool = False
+    cqr_mode: str = ""
+    cqr_scale: str = "add"
+    cqr_k: int = _ROOKIE_BAND_CQR_K
     n_fit: int = 0
     lo_q: float = 0.10
     hi_q: float = 0.90
@@ -1266,6 +1347,12 @@ class RookieBandModel:
     qreg_hi: dict = field(default_factory=dict)
     qreg_positions: tuple = ()
     resid_sd_ref: tuple = (0.0, 1.0)                 # in-fold (mean, sd) of projected_nfl_z_sd
+    # NF1.8 — the per-position quantile pair and the (group-conditional) conformal adjustment
+    qreg_lo_pos: dict = field(default_factory=dict)   # position -> {feature: coef}
+    qreg_hi_pos: dict = field(default_factory=dict)
+    conformal: dict = field(default_factory=dict)     # position -> adjustment (+ _CQR_POOL_KEY)
+    cqr_pooled_groups: tuple = ()                     # groups too thin for their OWN quantile
+    cqr_n_calib: dict = field(default_factory=dict)   # position -> calibration rows behind it
 
     # ── prediction ──────────────────────────────────────────────────────────────────────────
     def band_many(self, position, pred, overall=None, resid_sd=None
@@ -1315,13 +1402,40 @@ class RookieBandModel:
                                          self.k, self.lo_q, self.hi_q)
                     lo[idx], hi[idx] = l * s, h * s
         elif self.form in ("qreg", "qreg_sqrt"):
-            if self.qreg_lo and self.qreg_hi:
+            if self.qreg_per_pos:
+                # NF1.8 — a SEPARATE quantile pair per position (no dummies in the design). A position
+                # with no fit stays NaN and falls back, exactly as a thin pooled fit does.
+                for p in np.unique(pos):
+                    clo, chi = self.qreg_lo_pos.get(p), self.qreg_hi_pos.get(p)
+                    if not clo or not chi:
+                        continue
+                    idx = np.where(pos == p)[0]
+                    x = self._design(pos[idx], pred[idx], ov[idx], rsd[idx], with_positions=False)
+                    lo[idx] = self._apply_qreg(clo, x)
+                    hi[idx] = self._apply_qreg(chi, x)
+            elif self.qreg_lo and self.qreg_hi:
                 x = self._design(pos, pred, ov, rsd)
                 lo = self._apply_qreg(self.qreg_lo, x)
                 hi = self._apply_qreg(self.qreg_hi, x)
-                if self.form == "qreg_sqrt":
-                    lo = np.clip(lo, 0.0, None) ** 2
-                    hi = np.clip(hi, 0.0, None) ** 2
+            if self.form == "qreg_sqrt":
+                lo = np.clip(lo, 0.0, None) ** 2
+                hi = np.clip(hi, 0.0, None) ** 2
+
+        # ⭐ NF1.8 — the CONFORMAL adjustment, BEFORE the P1A widener so the conformity scores the
+        #    calibration folds measured describe the same band shape this inflates. A per-GROUP scalar
+        #    (`cqr_mode="pos"` reads the position's own quantile, `"pool"` one shared quantile), so it
+        #    moves every member of a group together and cannot narrow a chosen player. `"width"` makes
+        #    the inflation proportional to the band's own width, i.e. a per-group MULTIPLIER on the
+        #    width rather than a points-scale constant.
+        if self.cqr_mode and self.conformal:
+            qp = float(self.conformal.get(_CQR_POOL_KEY, 0.0))
+            adj = (np.array([float(self.conformal.get(p, qp)) for p in pos], dtype=float)
+                   if self.cqr_mode == "pos" else np.full(n, qp))
+            if self.cqr_scale == "width":
+                w = np.maximum(hi - lo, _CQR_MIN_WIDTH)
+                lo, hi = lo - adj * w, hi + adj * w
+            else:
+                lo, hi = lo - adj, hi + adj
 
         # ⭐ the per-player uncertainty driver an outcome-neighbourhood cannot see: widen by the
         #    player's OWN P1A parameter uncertainty.
@@ -1345,15 +1459,18 @@ class RookieBandModel:
 
     # ── the quantile-regression design (shared by fit + predict, so they cannot drift) ──────
     def _design(self, pos: np.ndarray, pred: np.ndarray, overall: np.ndarray,
-                resid_sd: np.ndarray) -> pd.DataFrame:
+                resid_sd: np.ndarray, with_positions: bool = True) -> pd.DataFrame:
+        """`with_positions=False` drops the position dummies — the NF1.8 per-position fit, where the
+        position is the GROUPING rather than a feature (a dummy shifts only the intercept)."""
         m0, s0 = self.resid_sd_ref
         x = pd.DataFrame({
             "log_pred": np.log1p(np.clip(pred, 0.0, None)),
             "log_overall": np.log(np.clip(np.nan_to_num(overall, nan=200.0), 1.0, None)),
             "z_sd": np.where(np.isfinite(resid_sd), (resid_sd - m0) / (s0 or 1.0), 0.0),
         })
-        for p in self.qreg_positions[1:]:          # first position is the reference level
-            x[f"pos_{p}"] = (pos == p).astype(float)
+        if with_positions:
+            for p in self.qreg_positions[1:]:      # first position is the reference level
+                x[f"pos_{p}"] = (pos == p).astype(float)
         return x
 
     @staticmethod
@@ -1411,6 +1528,110 @@ def rookie_point_projection(hist: pd.DataFrame, curve: RookieSlotCurve,
     return out
 
 
+def _fit_qreg_into(m: RookieBandModel, pos: np.ndarray, y: np.ndarray, pred: np.ndarray,
+                   ov: np.ndarray, rsd: np.ndarray) -> None:
+    """Fit `m`'s quantile pair in place — POOLED with position dummies, or (NF1.8) a SEPARATE pair per
+    position when `m.qreg_per_pos`. Factored out of `fit_rookie_band_model` because the NF1.8
+    cross-conformal calibration has to re-fit the very same arm on each fold's complement, and a
+    re-implementation there could silently calibrate a band shape that is not the one served."""
+    try:
+        from sklearn.linear_model import QuantileRegressor
+    except ImportError:                                    # pragma: no cover - sklearn is a dep
+        return
+    target = np.sqrt(np.clip(y, 0.0, None)) if m.form == "qreg_sqrt" else y
+
+    def _fit(x: pd.DataFrame, t: np.ndarray, q: float) -> dict:
+        r = QuantileRegressor(quantile=q, alpha=float(m.qreg_alpha), solver="highs")
+        r.fit(x.to_numpy(dtype=float), t)
+        return {**dict(zip(x.columns, r.coef_.tolist())), "intercept": float(r.intercept_)}
+
+    if m.qreg_per_pos:
+        for p in np.unique(pos):
+            sel = pos == p
+            if sel.sum() < _ROOKIE_BAND_MIN_TRAIN:
+                continue                                   # → NaN → the class-level fallback
+            x = m._design(pos[sel], pred[sel], ov[sel], rsd[sel], with_positions=False)
+            m.qreg_lo_pos[p] = _fit(x, target[sel], m.lo_q)
+            m.qreg_hi_pos[p] = _fit(x, target[sel], m.hi_q)
+        return
+    x = m._design(pos, pred, ov, rsd)
+    m.qreg_lo.update(_fit(x, target, m.lo_q))
+    m.qreg_hi.update(_fit(x, target, m.hi_q))
+
+
+def _fit_conformal_into(m: RookieBandModel, pos: np.ndarray, y: np.ndarray, pred: np.ndarray,
+                        ov: np.ndarray, rsd: np.ndarray) -> None:
+    """NF1.8 — CROSS-CONFORMAL calibration of `m`'s fitted band (Vovk cross-conformal / CQR).
+
+    THE POINT: a per-POSITION coverage floor needs an instrument that delivers coverage PER GROUP, and
+    conformalized quantile regression with a MONDRIAN (per-group) calibration is that instrument. For
+    each of `cqr_k` deterministic folds the arm is re-fit on the complement and scored on the held
+    fold, giving every training row an out-of-fold conformity score
+
+        E_i = max(lo(x_i) − y_i,  y_i − hi(x_i))        ('add')
+        E_i = that, divided by the row's own band width  ('width')
+
+    The adjustment for a group is the ⌈(1−α)(n+1)⌉/n empirical quantile of that group's E — the finite-
+    sample split-conformal level, which is what makes the coverage claim a guarantee at the group's own
+    sample size rather than an asymptotic hope.
+
+    ⚠️ CROSS-conformal, not a single split, and that is not a refinement: a per-position calibration
+    split of ~80 QB training rows would leave ~30 rows to fit on and ~20 to calibrate with, so BOTH
+    halves would be too thin. Cross-conformal spends every row on both jobs.
+
+    ⚠️ A GROUP TOO THIN FOR ITS OWN QUANTILE FALLS BACK TO THE POOLED ONE AND IS RECORDED
+    (`cqr_pooled_groups`) — a silently-pooled group would be a per-position claim the fit never made.
+    That is the NF1.7 lesson-(1) shape: an anchor/estimate that quietly fails to fit makes its own
+    check vacuous."""
+    if m.form not in ("qreg", "qreg_sqrt"):
+        return
+    n = len(y)
+    alpha = 1.0 - (m.hi_q - m.lo_q)
+    # a DETERMINISTIC fold assignment (no RNG — a seeded split would make the fitted band depend on the
+    # draw): order within position by the conditioning variable, then deal the rows round-robin, so
+    # every fold gets a balanced spread of every position and prediction level.
+    order = np.lexsort((pred, pos))
+    fold = np.empty(n, dtype=int)
+    fold[order] = np.arange(n) % max(2, int(m.cqr_k))
+    scores: list[tuple[str, float]] = []
+    for f in range(max(2, int(m.cqr_k))):
+        trn, cal = fold != f, fold == f
+        if trn.sum() < _ROOKIE_BAND_MIN_TRAIN or cal.sum() < 3:
+            continue
+        sub = RookieBandModel(form=m.form, qreg_alpha=m.qreg_alpha, qreg_per_pos=m.qreg_per_pos,
+                              lo_q=m.lo_q, hi_q=m.hi_q, resid_sd_ref=m.resid_sd_ref,
+                              qreg_positions=m.qreg_positions, n_fit=int(trn.sum()))
+        _fit_qreg_into(sub, pos[trn], y[trn], pred[trn], ov[trn], rsd[trn])
+        lo, hi = sub.band_many(pos[cal], pred[cal], overall=ov[cal], resid_sd=rsd[cal])
+        good = np.isfinite(lo) & np.isfinite(hi)
+        if not good.any():
+            continue
+        e = np.maximum(lo[good] - y[cal][good], y[cal][good] - hi[good])
+        if m.cqr_scale == "width":
+            e = e / np.maximum(hi[good] - lo[good], _CQR_MIN_WIDTH)
+        scores.extend(zip(pos[cal][good].tolist(), e.tolist()))
+    if not scores:
+        return
+
+    def _q(vals: list[float]) -> float:
+        nn = len(vals)
+        lvl = min(1.0, np.ceil((1.0 - alpha) * (nn + 1.0)) / nn)
+        return float(np.quantile(np.asarray(vals, dtype=float), lvl))
+
+    by_group: dict[str, list[float]] = {}
+    for p, e in scores:
+        by_group.setdefault(p, []).append(e)
+    m.conformal[_CQR_POOL_KEY] = _q([e for _, e in scores])
+    thin: list[str] = []
+    for p, vals in by_group.items():
+        m.cqr_n_calib[p] = len(vals)
+        if len(vals) >= _ROOKIE_BAND_CQR_MIN_CALIB:
+            m.conformal[p] = _q(vals)
+        else:
+            thin.append(p)
+    m.cqr_pooled_groups = tuple(sorted(thin))
+
+
 def fit_rookie_band_model(
     band_hist: pd.DataFrame,
     preds,
@@ -1419,6 +1640,10 @@ def fit_rookie_band_model(
     k: int = _ROOKIE_BAND_K,
     resid_sd_gain: float = _ROOKIE_BAND_RESID_SD_GAIN,
     qreg_alpha: float = _ROOKIE_BAND_QREG_ALPHA,
+    qreg_per_pos: bool = False,
+    cqr_mode: str = "",
+    cqr_scale: str = "add",
+    cqr_k: int = _ROOKIE_BAND_CQR_K,
     band_q: tuple[float, float] = _ROOKIE_BAND_Q,
 ) -> RookieBandModel | None:
     """NF1.7 §0.5 — fit ONE pre-registered per-player band form on the historical drafted population.
@@ -1434,6 +1659,8 @@ def fit_rookie_band_model(
     per-player interval."""
     if band_hist is None or band_hist.empty or form not in _ROOKIE_BAND_FORMS:
         return None
+    if cqr_mode not in _ROOKIE_BAND_CQR_MODES or cqr_scale not in _ROOKIE_BAND_CQR_SCALES:
+        raise ValueError(f"unknown conformal setting: cqr_mode={cqr_mode!r} cqr_scale={cqr_scale!r}")
     lo_q, hi_q = band_q
     pos = band_hist["position_group"].astype(str).str.upper().to_numpy()
     y = pd.to_numeric(band_hist.get("rookie_fp_ppr"), errors="coerce").to_numpy(dtype=float)
@@ -1450,7 +1677,9 @@ def fit_rookie_band_model(
            if rsd_col is not None else np.full(len(y), np.nan))
 
     m = RookieBandModel(form=form, k=int(k), resid_sd_gain=float(resid_sd_gain),
-                        qreg_alpha=float(qreg_alpha), n_fit=int(len(y)), lo_q=lo_q, hi_q=hi_q)
+                        qreg_alpha=float(qreg_alpha), qreg_per_pos=bool(qreg_per_pos),
+                        cqr_mode=str(cqr_mode), cqr_scale=str(cqr_scale), cqr_k=int(cqr_k),
+                        n_fit=int(len(y)), lo_q=lo_q, hi_q=hi_q)
     if np.isfinite(rsd).sum() >= _ROOKIE_BAND_MIN_TRAIN:
         m.resid_sd_ref = (float(np.nanmean(rsd)), float(np.nanstd(rsd)) or 1.0)
 
@@ -1485,17 +1714,11 @@ def fit_rookie_band_model(
 
     if form in ("qreg", "qreg_sqrt"):
         m.qreg_positions = tuple(sorted(np.unique(pos).tolist()))
-        x = m._design(pos, pred, ov, rsd)
-        target = np.sqrt(np.clip(y, 0.0, None)) if form == "qreg_sqrt" else y
-        try:
-            from sklearn.linear_model import QuantileRegressor
-        except ImportError:                                    # pragma: no cover - sklearn is a dep
-            return None
-        for q, dest in ((lo_q, m.qreg_lo), (hi_q, m.qreg_hi)):
-            r = QuantileRegressor(quantile=q, alpha=float(qreg_alpha), solver="highs")
-            r.fit(x.to_numpy(dtype=float), target)
-            dest.update(dict(zip(x.columns, r.coef_.tolist())))
-            dest["intercept"] = float(r.intercept_)
+        _fit_qreg_into(m, pos, y, pred, ov, rsd)
+        if not (m.qreg_lo or m.qreg_lo_pos):
+            return None                                        # sklearn absent, or every group thin
+        if cqr_mode:
+            _fit_conformal_into(m, pos, y, pred, ov, rsd)
     return m
 
 
