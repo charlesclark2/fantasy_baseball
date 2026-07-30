@@ -110,7 +110,46 @@ _BLOCKS: dict[str, str] = {
     # the coverage guard missed it because this block was not represented here. Now guarded so a
     # future silent collapse of the bullpen-EB chain is caught.
     "bullpen_eb": "home_bp_eb_xwoba",
+    # E9.53 — the team sequential posteriors (Epic 16.3). UNCONDITIONAL-CORE DISCRIMINATIVE
+    # (predict_today._DISCRIMINATIVE_RE matches `team_sequential`), so a whole-block zero sets
+    # is_degraded on every served pick. THREE separate blocks because the producer writes the
+    # three metric chains INDEPENDENTLY and they demonstrably failed independently:
+    # `*_team_sequential_bullpen_xwoba` was 0 games on 2026-07-22/23/24/27/28 while `_woba` and
+    # `_win_prob` were fine on those same dates. A single representative column would have
+    # missed the bullpen-metric hole entirely.
+    "team_sequential_off": "home_team_sequential_woba",
+    "team_sequential_bullpen": "home_team_sequential_bullpen_xwoba",
+    "team_sequential_win": "home_team_sequential_win_prob",
 }
+
+# E9.53 — a `_seasonnorm` column can NEVER be a block's representative column.
+# feature_pregame_game_features derives each `<col>_seasonnorm` from its raw twin through a bare
+# `coalesce(..., 0)`, so a NULL raw becomes a FABRICATED 0.0 and the _seasonnorm column reads
+# 100% NOT-NULL straight through a TOTAL outage of its own block. That is precisely how the
+# 07-22..07-28 team_sequential outage looked like "the _seasonnorm variants are computed from a
+# different path" — they are not; the coalesce is the whole difference.
+# ⏭️ That masking is a KNOWN DEFECT whose fix is DEFERRED TO E1.12 (it changes a served model
+# input, so it ships with the retrain). Until then this guard is the DETECTOR for the class, and
+# it must assert on RAW columns only. Even after E1.12 a not-null-rate check keyed off a
+# _seasonnorm column stays a category error (it measures the coalesce, not the block), so refuse
+# it OUTRIGHT rather than trusting the upstream to stay honest.
+_FORBIDDEN_COLUMN_SUFFIX = "_seasonnorm"
+
+
+def _assert_representative_columns_are_raw(blocks: dict[str, str]) -> None:
+    """RAISE if any block is represented by a derived `_seasonnorm` column (see above).
+
+    Deliberately a hard failure, not a warning: a guard configured with a structurally
+    non-null column is a guard that silently passes forever, which is worse than no guard.
+    """
+    bad = {b: c for b, c in blocks.items() if c.lower().endswith(_FORBIDDEN_COLUMN_SUFFIX)}
+    if bad:
+        raise ValueError(
+            f"check_feature_block_coverage: {len(bad)} block(s) are configured with a "
+            f"`{_FORBIDDEN_COLUMN_SUFFIX}` representative column: {bad}. A _seasonnorm column is "
+            f"derived from its raw twin and cannot be used as a coverage probe — use the RAW "
+            f"column (e.g. 'home_bp_eb_xwoba', not 'home_bp_eb_xwoba_seasonnorm')."
+        )
 
 
 def _mart_schema(env: str) -> str:
@@ -146,6 +185,54 @@ def _classify(base_cov: float | None, recent_cov: float | None,
     return "SKIPPED"
 
 
+# ── E9.53: the PER-DATE check (the blind spot that let 07-22..07-28 through) ───────────
+#
+# BLIND SPOT: every classification above is a WINDOW AGGREGATE. The recent window is 8 days
+# ([anchor-8 .. anchor-1]), so ONE fully-dead date dilutes to recent_cov ≈ 7/8 = 0.875 of
+# baseline — comfortably above _REL_DROP (0.70). TWO dead dates ≈ 0.750, still above. It takes
+# THREE of eight dates fully dead before the aggregate check fires. So an INTERMITTENT
+# whole-slate block outage — exactly the E9.53 signature (team_sequential_bullpen_xwoba dead on
+# 07-22/23/24/27/28, i.e. never 3 consecutive within one 8-day window as observed on 07-29's
+# anchor) is structurally INVISIBLE to the aggregate guard. That is the answer to "did the guard
+# fire?": it did NOT, and it COULD not — a blind spot, not a missed alert.
+#
+# CURE: assert PER PLAYED DATE. A date whose coverage collapses to ~0 for a block that is
+# well-covered on the baseline (or historically) is a whole-slate block outage, full stop — the
+# aggregate is irrelevant. Thresholded ABSOLUTELY and low (not relatively) so this fires only on
+# a genuine zeroing and never on a thin/partial day: a single date is a small sample (~15 games),
+# so a relative test at that n would be noisy.
+_DATE_OUTAGE_MAX = 0.20      # a played date below this notnull-rate is "the block is dead here"
+_DATE_MIN_GAMES = 4         # ignore tiny dates (all-star break, a 2-game slate) — too small to judge
+
+
+def find_date_outages(
+    per_date: list[tuple[object, int, int]],
+    baseline_cov: float | None,
+    hist_cov: float | None = None,
+) -> list[tuple[str, float]]:
+    """PURE. Played dates on which a normally-populated block is DEAD.
+
+    `per_date` is [(game_date, n_games, n_notnull), ...] over the recent window. Returns
+    [(date_str, cov), ...] for every date whose coverage is <= _DATE_OUTAGE_MAX while the block's
+    own baseline (or, INC-31-style, its history) shows it is normally well-covered. Empty when the
+    block has no healthy reference level — a coverage-gapped block cannot have an "outage".
+    """
+    reference = max(
+        baseline_cov if baseline_cov is not None else 0.0,
+        hist_cov if hist_cov is not None else 0.0,
+    )
+    if reference < _WELL_COVERED:
+        return []
+    out: list[tuple[str, float]] = []
+    for game_date, n_games, n_notnull in per_date:
+        if n_games < _DATE_MIN_GAMES:
+            continue
+        cov = n_notnull / n_games
+        if cov <= _DATE_OUTAGE_MAX:
+            out.append((str(game_date)[:10], round(cov, 3)))
+    return sorted(out)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Served-feature-block coverage guard (block-zeroing detector)")
     parser.add_argument("--env", choices=["prod", "dev"], default="prod")
@@ -167,6 +254,9 @@ def main() -> int:
              f"history {hist_lo}..{hist_hi}, baseline {base_lo}..{base_hi}, "
              f"recent {rec_lo}..{rec_hi}; strict={args.strict}")
 
+    # E9.53 — refuse a structurally-non-null probe column before touching the warehouse.
+    _assert_representative_columns_are_raw(_BLOCKS)
+
     conn = get_snowflake_connection()
     try:
         cur = conn.cursor()
@@ -181,25 +271,36 @@ def main() -> int:
             log.warning("[ALERT] no configured block columns present — nothing to check.")
             return 0
 
-        sel = [
-            f"count_if(game_date between '{hist_lo}' and '{hist_hi}') as hist_n",
-            f"count_if(game_date between '{base_lo}' and '{base_hi}') as base_n",
-            f"count_if(game_date between '{rec_lo}' and '{rec_hi}') as recent_n",
-        ]
+        # E9.53 — ONE per-date query now feeds BOTH views: the three window aggregates (summed in
+        # Python, byte-identical to the old count_if aggregate) AND the per-date outage check the
+        # aggregates are blind to. ~120 rows, so this is not measurably more expensive.
+        sel = ["game_date", "count(*) as n_games"]
         for b, c in blocks.items():
-            sel.append(f"count_if(game_date between '{hist_lo}' and '{hist_hi}' and {c} is not null) as hist_{b}")
-            sel.append(f"count_if(game_date between '{base_lo}' and '{base_hi}' and {c} is not null) as base_{b}")
-            sel.append(f"count_if(game_date between '{rec_lo}' and '{rec_hi}' and {c} is not null) as recent_{b}")
+            sel.append(f"count_if({c} is not null) as cov_{b}")
         cur.execute(f"""
             select {', '.join(sel)}
             from {schema}.{table}
             where game_date between '{hist_lo}' and '{rec_hi}'
+            group by game_date
+            order by game_date
         """)
-        row = dict(zip([d[0].lower() for d in cur.description], cur.fetchone()))
+        cols = [d[0].lower() for d in cur.description]
+        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
     finally:
         conn.close()
 
-    hist_n, base_n, recent_n = int(row["hist_n"]), int(row["base_n"]), int(row["recent_n"])
+    def _d(v) -> date:
+        return v if isinstance(v, date) else date.fromisoformat(str(v)[:10])
+
+    def _window(lo: date, hi: date) -> list[dict]:
+        return [r for r in rows if lo <= _d(r["game_date"]) <= hi]
+
+    hist_rows, base_rows, recent_rows = (
+        _window(hist_lo, hist_hi), _window(base_lo, base_hi), _window(rec_lo, rec_hi)
+    )
+    hist_n = sum(int(r["n_games"]) for r in hist_rows)
+    base_n = sum(int(r["n_games"]) for r in base_rows)
+    recent_n = sum(int(r["n_games"]) for r in recent_rows)
     if base_n == 0 or recent_n == 0:
         print("[METRIC] feature_block_min_cov_ratio=1.0000")
         log.warning(f"[ALERT] insufficient played games in the windows "
@@ -208,13 +309,28 @@ def main() -> int:
         return 0
 
     degraded: list[str] = []
+    date_outages: dict[str, list[tuple[str, float]]] = {}
     worst_ratio = 1.0
     for b in blocks:
-        base_cov = int(row[f"base_{b}"]) / base_n
-        recent_cov = int(row[f"recent_{b}"]) / recent_n
+        base_cov = sum(int(r[f"cov_{b}"]) for r in base_rows) / base_n
+        recent_cov = sum(int(r[f"cov_{b}"]) for r in recent_rows) / recent_n
         # hist_cov only defined when the historical window has played games (early-season guard).
-        hist_cov = (int(row[f"hist_{b}"]) / hist_n) if hist_n else None
+        hist_cov = (sum(int(r[f"cov_{b}"]) for r in hist_rows) / hist_n) if hist_n else None
         status = _classify(base_cov, recent_cov, hist_cov)
+
+        # E9.53 PER-DATE check — a whole-slate zeroing on any individual played date, which the
+        # 8-day aggregate above dilutes to ~0.875 (needs 3 of 8 dead before it can fire).
+        outages = find_date_outages(
+            [(r["game_date"], int(r["n_games"]), int(r[f"cov_{b}"])) for r in recent_rows],
+            base_cov, hist_cov,
+        )
+        if outages:
+            date_outages[b] = outages
+            if status != "DEGRADED":
+                status = "DEGRADED"
+                # The aggregate ratio understates an intermittent outage; report the worst DATE.
+                worst_ratio = min(worst_ratio, min(cov for _d_, cov in outages))
+
         # For a block SKIPPED by the trailing baseline but collapsed vs history, the meaningful
         # ratio is recent/hist (recent/base would be ~1.0 when both trailing windows are dead).
         collapsed_vs_hist = status == "DEGRADED" and base_cov < _WELL_COVERED
@@ -223,9 +339,15 @@ def main() -> int:
         hist_str = f", history {hist_cov:.1%}" if hist_cov is not None else ""
         msg = f"  block '{b}': baseline {base_cov:.1%} → recent {recent_cov:.1%}{hist_str}  [{status}]"
         if status == "DEGRADED":
-            worst_ratio = min(worst_ratio, ratio)
+            if b not in date_outages:
+                worst_ratio = min(worst_ratio, ratio)
             degraded.append(b)
-            if collapsed_vs_hist:
+            if outages:
+                dates_str = ", ".join(f"{d} ({cov:.0%})" for d, cov in outages)
+                log.error(msg + f" — WHOLE-SLATE OUTAGE on {len(outages)} played date(s): "
+                                f"{dates_str}. The block is dead for EVERY game on those dates "
+                                f"(the 8-day aggregate alone cannot see this — E9.53).")
+            elif collapsed_vs_hist:
                 log.error(msg + f" — dead across the whole trailing window but was "
                                 f"{hist_cov:.0%} historically; block SILENTLY COLLAPSED vs history (INC-31)")
             else:
@@ -237,6 +359,7 @@ def main() -> int:
             log.info(msg)
 
     print(f"[METRIC] feature_block_min_cov_ratio={worst_ratio:.4f}")
+    print(f"[METRIC] feature_block_date_outage_count={sum(len(v) for v in date_outages.values())}")
 
     if degraded:
         banner = (f"FEATURE BLOCK(S) SILENTLY COLLAPSED in served {table}: {', '.join(degraded)}. "
@@ -245,13 +368,19 @@ def main() -> int:
                   f"precursor build not wired into the daily job (e.g. the W11b umpire cutover: enable "
                   f"W11B_UMPIRE_NIGHTLY, run --w11b-only + refresh --w11b, then --w8b + regen/refresh "
                   f"the w8b ext DDL, and per-ROW verify).")
+        if date_outages:
+            banner += (" WHOLE-SLATE date outages: "
+                       + "; ".join(f"{b}: {[d for d, _c in v]}" for b, v in sorted(date_outages.items()))
+                       + ". A per-DATE zeroing usually means the block's PRODUCER skipped that date "
+                         "(e.g. E9.53: the sequential catch-up frontier advancing past a date whose "
+                         "source wasn't ready), not an ext-table/case problem.")
         if args.strict:
             log.error("[HALT] " + banner)
             return 1
         log.warning("[ALERT] " + banner + "  (non-blocking: set FEATURE_COVERAGE_STRICT=1 to HALT.)")
         return 0
 
-    log.info("All well-covered feature blocks hold near baseline.")
+    log.info("All well-covered feature blocks hold near baseline, on every played date.")
     return 0
 
 

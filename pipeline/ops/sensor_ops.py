@@ -278,6 +278,17 @@ def lineup_intraday_s3_feature_rebuild(context: OpExecutionContext) -> None:
     steps: list[tuple[str, list[str]]] = [
         ("backfill_lineup_state_scd2.py", ["--since", _today()]),
         ("export_w8b_precursors_to_s3.py", ["--table", "feature_pregame_lineup_state"]),
+        # 🩸 E9.53 (2026-07-30) — ALSO re-mirror team_sequential_posteriors. The daily
+        # lakehouse_w8b_aggregator_op mirrors it at graph position lk10, which is BEFORE
+        # update_team_posteriors_op writes YESTERDAY's rows (that op needs the SF
+        # eb_bullpen_posteriors copy, which needs the ext refresh, which runs after lk10 —
+        # a genuine dependency cycle, so the daily order cannot simply be swapped). So the
+        # morning S3 mirror is always one slate behind on the sequential block, and
+        # --w8b-only below would otherwise re-derive from that stale mirror. By intraday
+        # time the Snowflake table HAS yesterday's rows, so this mirror is free freshness
+        # for the post_lineup tier. Cheap: a single full-table SELECT * of a small SCD-2
+        # table, and the export is already being invoked here anyway.
+        ("export_w8b_precursors_to_s3.py", ["--table", "team_sequential_posteriors"]),
         # INTRADAY SPINE REFRESH (2026-07-22, game 824735 reschedule gap): mart_game_spine is
         # rebuilt only in the daily --w5-group-a step (~12:38 UTC). A game rescheduled AFTER that
         # (a rain makeup — postponed 7/21 → 7/22) is absent from the daily spine, so the --w8b
