@@ -730,6 +730,7 @@ def project_veterans(
     xfp_td_blend: float = _XFP_TD_BLEND,
     absence_prior: "AbsenceReturnPrior | None" = None,
     absence_prior_blend: float = _ABSENCE_PRIOR_BLEND,
+    band_model: "VeteranBandModel | None" = None,
 ) -> pd.DataFrame:
     """Project every base-season player's UPCOMING-season raw stat line.
 
@@ -748,6 +749,9 @@ def project_veterans(
     absence_prior / absence_prior_blend: NF-D11 — the fitted return-from-absence availability prior
       applied to rows the base-anchor fallback rescued (`seasons_missed >= 1`). None / 0 = the
       rescue-with-no-prior arm (a player carries his stale durability forward).
+    band_model: NF1.9 — the fitted PER-PLAYER veteran 80% band (`fit_veteran_band_model`). None ⇒ the
+      pre-NF1.9 NORMAL APPROXIMATION, whose measured coverage of its own nominal 80% is only ~0.55.
+      A row the model cannot speak to falls back to that normal band, labelled honestly.
     Returns the RAW_STAT_COLS (season totals) + convenience fp + an 80% PPR interval, per player.
     """
     df = base_season.merge(priors, on="position", how="left")
@@ -894,11 +898,47 @@ def project_veterans(
     # play zero), never the tidy role-based one. Widen-only, so the band is honest by construction.
     gsd = absence_games_sd(gsd, df, absence_prior if absence_prior_blend > 0 else None)
     season_sd = np.sqrt((fp_pg_sd * np.sqrt(eg_arr)) ** 2 + (fp_per_game * gsd) ** 2)
-    z80 = 1.2815515594
+    z80 = _Z80_SEASON
     df["fp_ppr_sd"] = np.round(season_sd, 2)
-    df["fp_ppr_p10"] = np.round(np.clip(fp_ppr - z80 * season_sd, 0.0, None), 1)
-    df["fp_ppr_p90"] = np.round(fp_ppr + z80 * season_sd, 1)
-    df["uncertainty_type"] = "empirical"  # from realized game-to-game variance
+    # ⚠️ THE UNROUNDED SEASON SD, retained OUTSIDE the emitted schema (`OUTPUT_COLS` carries only the
+    #    2-dp display column). NF1.9 needs it: the band model is fed the unrounded `season_sd` at serve
+    #    time, so a historical panel that stored the ROUNDED one would fit the band on a systematically
+    #    different feature than it is served with — and it would make the served-band reproduction proof
+    #    disagree by exactly one rounding step, which is how this was caught.
+    df["fp_ppr_sd_raw"] = season_sd
+
+    # ── the 80% veteran interval. TWO TIERS, best first (NF1.9):
+    #  1. `band_model` — a PER-PLAYER CONDITIONAL-QUANTILE band, selected on a PROPER interval score
+    #     with a PER-POSITION coverage FLOOR (`run_veteran_interval_ablation.py`).
+    #  2. the NORMAL APPROXIMATION below — `point ± 1.2816·season_sd`. Kept as the honest fallback for
+    #     a row the fit cannot speak to, and labelled `empirical` so the tier is never overstated.
+    #     ⚠️ Its MEASURED coverage of its own nominal 80% is ~0.55 (held-out target seasons 2013–2025),
+    #     missing on BOTH tails: a symmetric normal cannot fit a right-skewed season total, and a
+    #     game-to-game sd measured on the games a player DID play cannot price the availability/role
+    #     risk that is the dominant veteran uncertainty. It is a fallback, not a band.
+    lo = np.clip(fp_ppr - z80 * season_sd, 0.0, None)
+    hi = fp_ppr + z80 * season_sd
+    tier = np.full(len(df), "empirical", dtype=object)
+    if band_model is not None:
+        frame = veteran_band_inputs(
+            df["position"], fp_ppr, season_sd, proj_games=df["proj_games"],
+            base_games=df.get("games_played"), snap_share=df.get("snap_share"),
+            seasons_missed=df.get("seasons_missed"))
+        b_lo, b_hi = band_model.band_many(frame)
+        use = np.isfinite(b_lo) & np.isfinite(b_hi) & (b_hi >= b_lo)
+        lo = np.where(use, b_lo, lo)
+        hi = np.where(use, b_hi, hi)
+        tier = np.where(use, "calibrated_per_player", tier).astype(object)
+    # Round the bounds OUTWARD (p10 down, p90 up). Both tiers guarantee lo ≤ point ≤ hi, but
+    # nearest-rounding can push a bound past a point projection it exactly equals and emit a displayed
+    # interval that excludes its own point estimate (the same fix `project_rookies` carries).
+    # ⚠️ …and the min/max clamps are load-bearing: `floor(x*10)/10` is NOT always ≤ x, because `x*10`
+    # can round UP to an integer in float64 (`3.6999999999999997*10 == 37.0`), so the "outward" rounding
+    # would land ~1e-15 INSIDE the bound and re-emit exactly the incoherence it exists to prevent.
+    lo = np.clip(lo, 0.0, None)
+    df["fp_ppr_p10"] = np.minimum(np.floor(lo * 10.0) / 10.0, lo)
+    df["fp_ppr_p90"] = np.maximum(np.ceil(hi * 10.0) / 10.0, hi)
+    df["uncertainty_type"] = tier
     df["is_rookie"] = False
     df["draft_overall"] = np.nan
     df["source"] = "veteran"
@@ -1528,6 +1568,45 @@ def rookie_point_projection(hist: pd.DataFrame, curve: RookieSlotCurve,
     return out
 
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Shared band kernels — used by BOTH the rookie (NF1.7/1.8) and veteran (NF1.9) band models
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Factored out (NF1.9) rather than copied, because these two are where a re-implementation would go
+# wrong SILENTLY: a pinball fit with the wrong regularisation convention, or a conformal quantile at
+# the ASYMPTOTIC level instead of the finite-sample one, both produce a plausible band that quietly
+# fails to carry the guarantee it claims. One definition, two consumers, one test.
+def _pinball_fit(x: pd.DataFrame, target: np.ndarray, q: float, alpha: float) -> dict:
+    """Linear quantile regression at τ=`q` (pinball loss, L1 penalty `alpha`) → {feature: coef} +
+    'intercept'. Raises ImportError when sklearn is absent; every caller degrades from that."""
+    from sklearn.linear_model import QuantileRegressor
+    r = QuantileRegressor(quantile=float(q), alpha=float(alpha), solver="highs")
+    r.fit(x.to_numpy(dtype=float), target)
+    return {**dict(zip(x.columns, r.coef_.tolist())), "intercept": float(r.intercept_)}
+
+
+def _conformity_quantile(vals, alpha: float) -> float:
+    """The ⌈(1−α)(n+1)⌉/n empirical quantile of a set of conformity scores — the FINITE-SAMPLE
+    split-conformal level. ⚠️ Not `np.quantile(v, 1−α)`: the (n+1)/n inflation is exactly what turns
+    the coverage statement into a guarantee at the group's own sample size rather than an asymptotic
+    hope, and at the group sizes a per-position floor lives at, the difference is material."""
+    v = np.asarray(vals, dtype=float)
+    nn = len(v)
+    if nn == 0:
+        return 0.0
+    lvl = min(1.0, float(np.ceil((1.0 - alpha) * (nn + 1.0)) / nn))
+    return float(np.quantile(v, lvl))
+
+
+def _interval_score(lo, hi, y, alpha: float = 0.20) -> np.ndarray:
+    """The Winkler / Gneiting-Raftery interval score for a central (1−α) interval (LOWER is better).
+
+    The SERVED-side copy of the bake-off's primary metric, needed because one veteran arm
+    (`normal_scaled`) fits its own dispersion multiplier by minimising it in-fold. Pinned to the
+    harness definition by `test_interval_score_definitions_agree`."""
+    lo, hi, y = (np.asarray(a, dtype=float) for a in (lo, hi, y))
+    return (hi - lo) + (2.0 / alpha) * (np.clip(lo - y, 0, None) + np.clip(y - hi, 0, None))
+
+
 def _fit_qreg_into(m: RookieBandModel, pos: np.ndarray, y: np.ndarray, pred: np.ndarray,
                    ov: np.ndarray, rsd: np.ndarray) -> None:
     """Fit `m`'s quantile pair in place — POOLED with position dummies, or (NF1.8) a SEPARATE pair per
@@ -1535,15 +1614,13 @@ def _fit_qreg_into(m: RookieBandModel, pos: np.ndarray, y: np.ndarray, pred: np.
     cross-conformal calibration has to re-fit the very same arm on each fold's complement, and a
     re-implementation there could silently calibrate a band shape that is not the one served."""
     try:
-        from sklearn.linear_model import QuantileRegressor
+        import sklearn.linear_model  # noqa: F401  (the kernel imports it; fail soft here)
     except ImportError:                                    # pragma: no cover - sklearn is a dep
         return
     target = np.sqrt(np.clip(y, 0.0, None)) if m.form == "qreg_sqrt" else y
 
     def _fit(x: pd.DataFrame, t: np.ndarray, q: float) -> dict:
-        r = QuantileRegressor(quantile=q, alpha=float(m.qreg_alpha), solver="highs")
-        r.fit(x.to_numpy(dtype=float), t)
-        return {**dict(zip(x.columns, r.coef_.tolist())), "intercept": float(r.intercept_)}
+        return _pinball_fit(x, t, q, m.qreg_alpha)
 
     if m.qreg_per_pos:
         for p in np.unique(pos):
@@ -1614,9 +1691,7 @@ def _fit_conformal_into(m: RookieBandModel, pos: np.ndarray, y: np.ndarray, pred
         return
 
     def _q(vals: list[float]) -> float:
-        nn = len(vals)
-        lvl = min(1.0, np.ceil((1.0 - alpha) * (nn + 1.0)) / nn)
-        return float(np.quantile(np.asarray(vals, dtype=float), lvl))
+        return _conformity_quantile(vals, alpha)
 
     by_group: dict[str, list[float]] = {}
     for p, e in scores:
@@ -1722,6 +1797,539 @@ def fit_rookie_band_model(
     return m
 
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF1.9 — the PER-PLAYER VETERAN 80% band (bake-off: run_veteran_interval_ablation.py)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# ⚠️ THE DEFECT (measured 2026-07-29, held-out target seasons 2013–2025). The whole NF1.4→1.7→1.8 arc
+#    validated intervals for the ~81 ROOKIES on the board. The ~700 VETERANS — 90% of it — carried
+#    `point ± 1.2816·season_sd`, a NORMAL APPROXIMATION off game-to-game scoring variance plus a
+#    games-played term (`uncertainty_type="empirical"`), and NO coverage number for it existed in any
+#    ablation report. Measured, its realized coverage of the nominal 80% is **~0.55**, and it misses on
+#    BOTH tails at once (~25% of veteran-seasons land BELOW p10, ~19% ABOVE p90). It is not an 80%
+#    interval; like the pre-NF1.4 rookie band, it is a decoration.
+#
+# ⭐ WHY A NORMAL APPROXIMATION HAD TO FAIL HERE, and why the fix is not "widen it":
+#      • the season total is RIGHT-SKEWED (a career year is unbounded; a floor sits at 0), so a
+#        symmetric band cannot fit both tails at once;
+#      • the dominant veteran risk is NOT game-to-game scoring noise, it is AVAILABILITY AND ROLE — a
+#        player who loses his job or tears an ACL scores a fraction of his projection, and no
+#        game-to-game sd measured on the games he DID play can see that. `season_sd` is a
+#        within-season-conditional-on-playing quantity being asked to price an out-of-season event.
+#    Hence the pre-registered candidates are CONDITIONAL-QUANTILE estimators of the realized season on
+#    the served point, not variance rescalings of it — with the variance rescalings kept as the honest
+#    nulls (`normal_scaled`, `normal_cov`) so "we needed a new shape, not a bigger sigma" is a measured
+#    claim rather than an assertion.
+#
+# ⚖️ WHAT IS SELECTED — the WIDTH AND SHAPE of the veteran 80% interval, and NOTHING ELSE. The POINT
+#    projection is held identical across every arm and asserted (`< 1e-9`, not byte-equality — a
+#    polyfit/DuckDB ordering ULP is not a model change).
+_VET_BAND_FORMS = ("normal", "normal_scaled", "normal_cov", "ratio_q", "ratio_q_floor",
+                   "knn_pos", "knn_norm", "qreg", "qreg_sqrt")
+_VET_BAND_Q = (0.10, 0.90)
+# A veteran fold carries THOUSANDS of rows (vs a rookie class's ~80), so these floors are about
+# refusing a degenerate fit, not about scarcity. A form whose fit is refused emits NaN and the caller
+# falls back to the served normal band — recorded as a fallback, never silently.
+_VET_BAND_MIN_TRAIN = 200
+_VET_BAND_MIN_POS_TRAIN = 100
+_VET_BAND_CQR_K = 4              # cross-conformal folds (every training row used for both jobs)
+_VET_BAND_CQR_MIN_CALIB = 50     # below this a GROUP falls back to the pooled quantile, and is recorded
+_VET_BAND_CQR_MODES = ("", "pos", "pool")
+_VET_BAND_CQR_SCALES = ("add", "width")
+# The dispersion-multiplier grid for the two variance-rescaling nulls. Spans "sharpen a little" to
+# "3× the served sigma" so the nulls are given every chance — the finding must not be an artifact of a
+# grid that could not reach the answer.
+_VET_SD_SCALE_GRID = tuple(np.round(np.arange(0.6, 3.01, 0.05), 2).tolist())
+# ⬇ THE SHIPPED SELECTION — `knn_norm k300 · sdgain 0`, from 75 configs × 13 held-out target seasons
+#   (8,401 veteran-seasons). See `ablation_results/nf1_9_veteran_perposition_floor.md`.
+#     · held-out interval score **205.96 → 160.89 (−21.9%)** against the served normal approximation;
+#     · pooled coverage **0.545 → 0.890** (floor 0.80), and every CONSTRAINED position clears the
+#       nominal floor with room: QB 0.682 → 0.858, RB 0.549 → 0.887, TE 0.536 → 0.888, WR 0.511 → 0.907
+#       (Tier 1; the documented Tier-2 relaxation was NOT needed). FB stays unconstrained (n < 400).
+#     · the two-sided tail split goes 0.272/0.183 → 0.025/0.085 (below p10 / above p90);
+#     · deflation: PBO(eligible) 0.0 over 1,716 balanced season splits, Bailey degradation 0.21%,
+#       contender spread 1.43% against a 28.0% whole-field spread ⇒ a genuinely separated winner;
+#     · the veteran POINT projection is unchanged (asserted `< 1e-9`, not byte-equality).
+#   ⚠️ `knn_pos` (no position-invariance assumption) is only 0.7% behind and inside the tie band, so the
+#   position-invariant-shape assumption `knn_norm` makes is NOT load-bearing — it buys resolution, and
+#   the two arms agree. ⚠️ The PARAMETRIC foil (`qreg*`) lost by ~2–10%: a single linear conditional q10
+#   cannot express a target that is genuinely 0 for the bottom eight projection deciles and clearly
+#   POSITIVE in the top one. A neighbourhood quantile handles that point mass natively.
+#   `_VET_BAND_PER_PLAYER = False` reverts the board to the pre-NF1.9 normal approximation.
+_VET_BAND_PER_PLAYER = True
+_VET_BAND_FORM = "knn_norm"
+_VET_BAND_K = 300
+_VET_BAND_QREG_ALPHA = 0.01      # parametric arms only; unused by the shipped neighbourhood arm
+_VET_BAND_QREG_PER_POS = False
+# ⚠️ The conformal layer is OFF, and not by preference — on this population it is a MATHEMATICAL no-op.
+# ~29% of conformity scores are EXACTLY 0 (a zero-outcome row whose lower bound floored at 0 scores
+# exactly 0), so the (1−α) conformity quantile is pinned at 0 and a Mondrian adjustment has nothing it
+# can move. All four CQR arms scored byte-identically to their base. It is also inapplicable to a
+# neighbourhood form. Recorded because "we tried the NF1.8 winner's mechanism and it could not act here"
+# is a finding, not an omission.
+_VET_BAND_CQR_MODE = ""
+_VET_BAND_CQR_SCALE = "add"
+_VET_BAND_SD_GAIN = 0.0
+
+# The band's design features. Every one is a BASE-SEASON (or projection-season roster) quantity, so
+# nothing here can leak the outcome being predicted.
+_VET_BAND_FEATURES = ("log_pred", "log_sd", "games", "base_games", "snap", "returner")
+
+
+def veteran_band_inputs(position, point, season_sd, proj_games=None, base_games=None,
+                        snap_share=None, seasons_missed=None) -> pd.DataFrame:
+    """THE VETERAN BAND'S INPUT CONTRACT, assembled in ONE place.
+
+    ⚠️ This exists so the FIT (over a historical walk-forward panel) and the SERVED EMIT (inside
+    `project_veterans`) cannot drift apart. NF1.7 learned the same lesson from the other side: its
+    first cut re-derived the rookie point instead of delegating to the served path and was wrong by up
+    to 3.3 PPR. A band conditioned on a quantity the board never shows is the class-level defect in a
+    new disguise, and a band FIT on features assembled differently from the ones it is later scored
+    with is the same bug one level down.
+
+    Missing optional columns fall through to honest neutral values (a player with no snap-share row
+    contributes 0 to that feature, a player with no `seasons_missed` is not a returner) rather than
+    refusing the row — the served board must always emit SOME band."""
+    n = len(pd.Series(point))
+
+    def _num(v, fill):
+        if v is None:
+            return np.full(n, float(fill))
+        return pd.to_numeric(pd.Series(v).reset_index(drop=True),
+                             errors="coerce").fillna(float(fill)).to_numpy(dtype=float)
+
+    return pd.DataFrame({
+        "position": np.array([str(p or "").upper()
+                              for p in pd.Series(position).reset_index(drop=True)], dtype=object),
+        "point": _num(point, 0.0),
+        "season_sd": _num(season_sd, 0.0),
+        "proj_games": _num(proj_games, 0.0),
+        "base_games": _num(base_games, 0.0),
+        "snap_share": _num(snap_share, 0.0),
+        "seasons_missed": _num(seasons_missed, 0.0),
+    })
+
+
+@dataclass
+class VeteranBandModel:
+    """NF1.9 — the fitted PER-PLAYER veteran 80% band. One of the pre-registered forms below, all fit
+    IN-FOLD on the realized outcomes of PRIOR target seasons (the FULL projected veteran population,
+    players who ended up playing ZERO games carried as a real 0 — the population fix NF1.4 made for
+    rookies, applied here for the first time).
+
+    `form` — the candidate class (`run_veteran_interval_ablation.py` is the §0.5 gate):
+      • `normal`        — the INCUMBENT: `point ± 1.2816·season_sd`, the served pre-NF1.9 band.
+      • `normal_scaled` — the incumbent with a per-position dispersion MULTIPLIER fitted in-fold by
+                          minimising the INTERVAL SCORE. The honest "just widen sigma" null, fitted on
+                          the same proper score the selection uses so it is a fair null and not a
+                          straw man.
+      • `normal_cov`    — the same multiplier fitted instead to MATCH nominal coverage in-fold. The
+                          NAIVE fix, and pre-registered specifically so the report can show what
+                          fitting a band to a coverage TARGET costs on a proper score (E2.1-r, live).
+      • `ratio_q`       — per-position empirical quantiles of the RATIO realized/predicted, applied
+                          multiplicatively to the player's own point. Per-player and skew-aware, but
+                          its width COLLAPSES as the point approaches zero.
+      • `ratio_q_floor` — `ratio_q` + an ADDITIVE upside floor (the q90 of realized outcomes in the
+                          position's bottom prediction decile), so a deep-bench projection still
+                          carries the honest "a backup sometimes starts 12 games" upside.
+      • `knn_pos`       — q10/q90 of the realized outcomes of the `k` nearest training veteran-seasons
+                          in the POSITION's own prediction space. Non-parametric; `k` is the resolution.
+      • `knn_norm`      — the same in POSITION-NORMALISED prediction space, pooled across positions.
+      • `qreg`          — THE DIRECT-LEARNED FOIL: linear quantile regression (pinball, τ=0.10/0.90)
+                          of the realized season on the named uncertainty drivers — log point, log
+                          season sd, expected games, base-season games, snap share, returner flag,
+                          position.
+      • `qreg_sqrt`     — `qreg` on √y, inverted. Quantiles are invariant under a monotone transform,
+                          so this remains a valid quantile estimate; it moves only WHERE linearity is
+                          assumed (a right-skewed season total is more plausibly linear on √).
+
+    `cqr_mode` conformalizes a fitted parametric band: `"pos"` = MONDRIAN / group-conditional (the
+    conformity quantile read WITHIN the position — the instrument that actually carries a per-GROUP
+    coverage guarantee, and what won NF1.8), `"pool"` = the pre-registered POOLED foil that separates
+    "conformal helped" from "PER-POSITION conditioning helped". `cqr_scale` is `"add"` (points-scale)
+    or `"width"` (proportional to the band's own width).
+
+    `sd_gain` widens by the player's OWN small-sample PARAMETER uncertainty (`1/√base_games`,
+    z-scored in-fold) — the per-player driver no outcome-neighbourhood can see, since a rate measured
+    on 4 played games is far less certain than one measured on 17. ⚠️ STRICTLY WIDEN-ONLY
+    (`max(z, 0)`), the NF1.7 anchor-guard-4 lesson: a two-sided version would let this knob SHARPEN
+    half the field off a non-outcome signal, i.e. buy interval score by narrowing bands, which is the
+    exact trade the coverage floor exists to forbid."""
+
+    form: str = _VET_BAND_FORM
+    k: int = _VET_BAND_K
+    sd_gain: float = _VET_BAND_SD_GAIN
+    qreg_alpha: float = _VET_BAND_QREG_ALPHA
+    qreg_per_pos: bool = False
+    cqr_mode: str = ""
+    cqr_scale: str = "add"
+    cqr_k: int = _VET_BAND_CQR_K
+    n_fit: int = 0
+    lo_q: float = 0.10
+    hi_q: float = 0.90
+    positions: tuple = ()
+    scale: dict = field(default_factory=dict)          # position -> normalising prediction level
+    pos_pred: dict = field(default_factory=dict)
+    pos_real: dict = field(default_factory=dict)
+    pool_pred: np.ndarray | None = None
+    pool_real: np.ndarray | None = None
+    ratio_lo: dict = field(default_factory=dict)
+    ratio_hi: dict = field(default_factory=dict)
+    floor_hi: dict = field(default_factory=dict)
+    sd_scale: dict = field(default_factory=dict)       # position -> dispersion multiplier
+    qreg_lo: dict = field(default_factory=dict)
+    qreg_hi: dict = field(default_factory=dict)
+    qreg_lo_pos: dict = field(default_factory=dict)
+    qreg_hi_pos: dict = field(default_factory=dict)
+    # ⭐ BOTH conformal scalings are stored from ONE cross-conformal pass (the `"width"` score is the
+    #   `"add"` score divided by the row's own band width, so a second pass would re-fit the identical
+    #   models to learn nothing new). `cqr_mode`/`cqr_scale` then select at band time, which is what
+    #   makes the four CQR arms cost one fit rather than four.
+    conformal: dict = field(default_factory=dict)      # scale -> {group|_CQR_POOL_KEY: adjustment}
+    cqr_pooled_groups: tuple = ()
+    cqr_n_calib: dict = field(default_factory=dict)
+    param_unc_ref: tuple = (0.0, 1.0)                  # in-fold (mean, sd) of 1/√base_games
+
+    # ── prediction ──────────────────────────────────────────────────────────────────────────
+    def band_many(self, frame: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+        """Per-player (lo, hi) over a `veteran_band_inputs` frame. NaN for a row the fit cannot speak
+        to (an unseen position, a form whose parameters were never fitted) — the caller then falls
+        back to the served normal band, so a thin fit DEGRADES rather than fabricating an interval.
+
+        Two invariants on every form: the band is NON-NEGATIVE (a fantasy season cannot be negative)
+        and it BRACKETS the point projection (a displayed interval that excludes its own point
+        estimate is incoherent)."""
+        pos = np.asarray(frame["position"].to_numpy(), dtype=object)
+        pred = frame["point"].to_numpy(dtype=float)
+        sd = frame["season_sd"].to_numpy(dtype=float)
+        n = len(pred)
+        lo = np.full(n, np.nan)
+        hi = np.full(n, np.nan)
+        z = _Z80_SEASON
+
+        if self.form == "normal":
+            lo, hi = pred - z * sd, pred + z * sd
+        elif self.form in ("normal_scaled", "normal_cov"):
+            mult = np.array([float(self.sd_scale.get(p, np.nan)) for p in pos], dtype=float)
+            lo, hi = pred - z * mult * sd, pred + z * mult * sd
+        elif self.form in ("ratio_q", "ratio_q_floor"):
+            for p in np.unique(pos):
+                if p not in self.ratio_lo:
+                    continue
+                idx = np.where(pos == p)[0]
+                lo[idx] = self.ratio_lo[p] * pred[idx]
+                hi[idx] = self.ratio_hi[p] * pred[idx]
+                if self.form == "ratio_q_floor":
+                    hi[idx] = hi[idx] + float(self.floor_hi.get(p, 0.0))
+        elif self.form == "knn_pos":
+            for p in np.unique(pos):
+                tx, ty = self.pos_pred.get(p), self.pos_real.get(p)
+                if tx is None or len(tx) < _VET_BAND_MIN_POS_TRAIN:
+                    continue
+                idx = np.where(pos == p)[0]
+                lo[idx], hi[idx] = _knn_interval(tx, ty, pred[idx], self.k, self.lo_q, self.hi_q)
+        elif self.form == "knn_norm":
+            if self.pool_pred is not None and len(self.pool_pred) >= _VET_BAND_MIN_TRAIN:
+                for p in np.unique(pos):
+                    s = float(self.scale.get(p, 0.0))
+                    if s <= 0:
+                        continue
+                    idx = np.where(pos == p)[0]
+                    l, h = _knn_interval(self.pool_pred, self.pool_real, pred[idx] / s,
+                                         self.k, self.lo_q, self.hi_q)
+                    lo[idx], hi[idx] = l * s, h * s
+        elif self.form in ("qreg", "qreg_sqrt"):
+            if self.qreg_per_pos:
+                for p in np.unique(pos):
+                    clo, chi = self.qreg_lo_pos.get(p), self.qreg_hi_pos.get(p)
+                    if not clo or not chi:
+                        continue
+                    idx = np.where(pos == p)[0]
+                    x = self._design(frame.iloc[idx], with_positions=False)
+                    lo[idx] = _apply_linear(clo, x)
+                    hi[idx] = _apply_linear(chi, x)
+            elif self.qreg_lo and self.qreg_hi:
+                x = self._design(frame)
+                lo = _apply_linear(self.qreg_lo, x)
+                hi = _apply_linear(self.qreg_hi, x)
+            if self.form == "qreg_sqrt":
+                lo = np.clip(lo, 0.0, None) ** 2
+                hi = np.clip(hi, 0.0, None) ** 2
+
+        # ⭐ the CONFORMAL adjustment, BEFORE the widener so the conformity scores the calibration
+        #   folds measured describe the same band shape this inflates. A per-GROUP SCALAR, so it moves
+        #   every member of a group together and can never narrow a chosen player.
+        table = self.conformal.get(self.cqr_scale) if self.cqr_mode else None
+        if table:
+            qp = float(table.get(_CQR_POOL_KEY, 0.0))
+            adj = (np.array([float(table.get(p, qp)) for p in pos], dtype=float)
+                   if self.cqr_mode == "pos" else np.full(n, qp))
+            if self.cqr_scale == "width":
+                w = np.maximum(hi - lo, _CQR_MIN_WIDTH)
+                lo, hi = lo - adj * w, hi + adj * w
+            else:
+                lo, hi = lo - adj, hi + adj
+
+        # ⭐ WIDEN-ONLY by the player's own small-sample parameter uncertainty (see the class docstring).
+        if self.sd_gain > 0:
+            m0, s0 = self.param_unc_ref
+            pu = _vet_param_uncertainty(frame)
+            zsd = np.where(np.isfinite(pu), (pu - m0) / (s0 or 1.0), 0.0)
+            grow = np.exp(self.sd_gain * np.clip(zsd, 0.0, 2.0))
+            mid = 0.5 * (lo + hi)
+            half = 0.5 * (hi - lo) * grow
+            lo, hi = mid - half, mid + half
+
+        lo = np.clip(np.minimum(lo, pred), 0.0, None)
+        hi = np.maximum(hi, pred)
+        return lo, hi
+
+    # ── the design matrix (shared by fit + predict, so they cannot drift) ────────────────────
+    def _design(self, frame: pd.DataFrame, with_positions: bool = True) -> pd.DataFrame:
+        """`with_positions=False` drops the dummies — the per-position fit, where the position is the
+        GROUPING rather than a feature (a dummy shifts only the intercept)."""
+        x = pd.DataFrame({
+            "log_pred": np.log1p(np.clip(frame["point"].to_numpy(dtype=float), 0.0, None)),
+            "log_sd": np.log1p(np.clip(frame["season_sd"].to_numpy(dtype=float), 0.0, None)),
+            "games": frame["proj_games"].to_numpy(dtype=float) / 17.0,
+            "base_games": frame["base_games"].to_numpy(dtype=float) / 17.0,
+            "snap": np.clip(frame["snap_share"].to_numpy(dtype=float), 0.0, 1.0),
+            "returner": (frame["seasons_missed"].to_numpy(dtype=float) >= 1).astype(float),
+        })
+        if with_positions:
+            pos = np.asarray(frame["position"].to_numpy(), dtype=object)
+            for p in self.positions[1:]:           # first position is the reference level
+                x[f"pos_{p}"] = (pos == p).astype(float)
+        return x
+
+
+_Z80_SEASON = 1.2815515594
+
+
+def _apply_linear(coefs: dict, x: pd.DataFrame) -> np.ndarray:
+    beta = np.array([float(coefs.get(c, 0.0)) for c in x.columns], dtype=float)
+    return x.to_numpy(dtype=float) @ beta + float(coefs.get("intercept", 0.0))
+
+
+def _vet_param_uncertainty(frame: pd.DataFrame) -> np.ndarray:
+    """`1/√base_games` — the per-player PARAMETER uncertainty of the base-season per-game rate the
+    whole projection is built on. A rate from 4 played games is far less certain than one from 17, and
+    no neighbourhood of OUTCOMES can see that; it is the veteran analogue of the rookie band's P1A
+    parameter sd."""
+    g = np.clip(frame["base_games"].to_numpy(dtype=float), 1.0, None)
+    return 1.0 / np.sqrt(g)
+
+
+def _fit_vet_qreg_into(m: VeteranBandModel, frame: pd.DataFrame, y: np.ndarray) -> None:
+    """Fit `m`'s quantile pair in place — POOLED with position dummies, or a SEPARATE pair per
+    position when `m.qreg_per_pos`. Factored out because the cross-conformal calibration has to re-fit
+    the very same arm on each fold's complement, and a re-implementation there could silently
+    calibrate a band shape that is not the one served."""
+    try:
+        import sklearn.linear_model  # noqa: F401
+    except ImportError:                                    # pragma: no cover - sklearn is a dep
+        return
+    target = np.sqrt(np.clip(y, 0.0, None)) if m.form == "qreg_sqrt" else y
+    pos = np.asarray(frame["position"].to_numpy(), dtype=object)
+    if m.qreg_per_pos:
+        for p in np.unique(pos):
+            sel = pos == p
+            if sel.sum() < _VET_BAND_MIN_POS_TRAIN:
+                continue                                   # → NaN → the normal-band fallback
+            x = m._design(frame.loc[sel], with_positions=False)
+            m.qreg_lo_pos[p] = _pinball_fit(x, target[sel], m.lo_q, m.qreg_alpha)
+            m.qreg_hi_pos[p] = _pinball_fit(x, target[sel], m.hi_q, m.qreg_alpha)
+        return
+    x = m._design(frame)
+    m.qreg_lo.update(_pinball_fit(x, target, m.lo_q, m.qreg_alpha))
+    m.qreg_hi.update(_pinball_fit(x, target, m.hi_q, m.qreg_alpha))
+
+
+def _fit_vet_conformal_into(m: VeteranBandModel, frame: pd.DataFrame, y: np.ndarray) -> None:
+    """CROSS-CONFORMAL calibration of `m`'s fitted band (Vovk cross-conformal / CQR), computing BOTH
+    scalings and BOTH aggregations in one pass.
+
+    For each of `cqr_k` deterministic folds the arm is re-fit on the complement and scored on the held
+    fold, giving every training row an out-of-fold conformity score
+
+        E_i = max(lo(x_i) − y_i,  y_i − hi(x_i))                     ('add')
+        E_i / max(width_i, 1)                                        ('width')
+
+    A group's adjustment is the ⌈(1−α)(n+1)⌉/n quantile of that group's E — the finite-sample
+    split-conformal level, which is what makes the per-group coverage claim a guarantee at the GROUP's
+    own sample size rather than an asymptotic hope.
+
+    ⚠️ CROSS-conformal, not a single split: a per-position calibration split would have to divide each
+    position's rows between fitting and calibrating, leaving both halves thinner than either job wants.
+    Cross-conformal spends every row on both.
+
+    ⚠️ A GROUP TOO THIN FOR ITS OWN QUANTILE FALLS BACK TO THE POOLED ONE AND IS RECORDED
+    (`cqr_pooled_groups`) — a silently-pooled group would be a per-position claim the fit never made,
+    which is the NF1.7 lesson-(1) shape (an estimate that quietly fails to fit makes its own check
+    vacuous)."""
+    if m.form not in ("qreg", "qreg_sqrt"):
+        return
+    n = len(y)
+    alpha = 1.0 - (m.hi_q - m.lo_q)
+    pos = np.asarray(frame["position"].to_numpy(), dtype=object)
+    pred = frame["point"].to_numpy(dtype=float)
+    # a DETERMINISTIC fold assignment (no RNG — a seeded split would make the fitted band depend on the
+    # draw): order within position by the conditioning variable, then deal round-robin, so every fold
+    # gets a balanced spread of every position and prediction level.
+    order = np.lexsort((pred, pos))
+    fold = np.empty(n, dtype=int)
+    fold[order] = np.arange(n) % max(2, int(m.cqr_k))
+    scores: dict[str, list[tuple[str, float]]] = {"add": [], "width": []}
+    for f in range(max(2, int(m.cqr_k))):
+        trn, cal = fold != f, fold == f
+        if trn.sum() < _VET_BAND_MIN_TRAIN or cal.sum() < 3:
+            continue
+        sub = VeteranBandModel(form=m.form, k=m.k, qreg_alpha=m.qreg_alpha,
+                              qreg_per_pos=m.qreg_per_pos, lo_q=m.lo_q, hi_q=m.hi_q,
+                              positions=m.positions, param_unc_ref=m.param_unc_ref,
+                              n_fit=int(trn.sum()))
+        _fit_vet_qreg_into(sub, frame.loc[trn], y[trn])
+        lo, hi = sub.band_many(frame.loc[cal])
+        good = np.isfinite(lo) & np.isfinite(hi)
+        if not good.any():
+            continue
+        yc = y[cal][good]
+        e = np.maximum(lo[good] - yc, yc - hi[good])
+        w = np.maximum(hi[good] - lo[good], _CQR_MIN_WIDTH)
+        gp = pos[cal][good].tolist()
+        scores["add"].extend(zip(gp, e.tolist()))
+        scores["width"].extend(zip(gp, (e / w).tolist()))
+    if not scores["add"]:
+        return
+    thin: set = set()
+    for sc, rows in scores.items():
+        by_group: dict[str, list[float]] = {}
+        for p, e in rows:
+            by_group.setdefault(p, []).append(e)
+        table = {_CQR_POOL_KEY: _conformity_quantile([e for _, e in rows], alpha)}
+        for p, vals in by_group.items():
+            m.cqr_n_calib[p] = len(vals)
+            if len(vals) >= _VET_BAND_CQR_MIN_CALIB:
+                table[p] = _conformity_quantile(vals, alpha)
+            else:
+                thin.add(p)
+        m.conformal[sc] = table
+    m.cqr_pooled_groups = tuple(sorted(thin))
+
+
+def _fit_sd_multiplier(y: np.ndarray, pred: np.ndarray, sd: np.ndarray, mode: str,
+                       lo_q: float, hi_q: float) -> float:
+    """The per-position dispersion multiplier for the two variance-rescaling NULLS.
+
+    `mode="score"` (`normal_scaled`) minimises the in-fold INTERVAL SCORE — a PROPER score, so this
+    null is fitted on the same criterion the selection uses and cannot be dismissed as a straw man.
+    `mode="coverage"` (`normal_cov`) instead picks the multiplier whose in-fold coverage is closest to
+    nominal. That is pre-registered precisely BECAUSE it is the naive fix: E2.1-r says a coverage
+    figure is a FLOOR and never a target, and the two arms side by side put a number on what fitting a
+    band to a coverage target costs."""
+    alpha = 1.0 - (hi_q - lo_q)
+    best, best_v = 1.0, np.inf
+    for mult in _VET_SD_SCALE_GRID:
+        lo = np.clip(pred - _Z80_SEASON * mult * sd, 0.0, None)
+        hi = pred + _Z80_SEASON * mult * sd
+        if mode == "coverage":
+            v = abs(float(np.mean((y >= lo) & (y <= hi))) - (hi_q - lo_q))
+        else:
+            v = float(np.mean(_interval_score(lo, hi, y, alpha)))
+        if v < best_v:
+            best, best_v = float(mult), v
+    return best
+
+
+def fit_veteran_band_model(
+    panel: pd.DataFrame,
+    *,
+    form: str = _VET_BAND_FORM,
+    k: int = _VET_BAND_K,
+    sd_gain: float = _VET_BAND_SD_GAIN,
+    qreg_alpha: float = _VET_BAND_QREG_ALPHA,
+    qreg_per_pos: bool = False,
+    cqr_mode: str = "",
+    cqr_scale: str = "add",
+    cqr_k: int = _VET_BAND_CQR_K,
+    band_q: tuple[float, float] = _VET_BAND_Q,
+    real_col: str = "real_fp_ppr",
+) -> VeteranBandModel | None:
+    """NF1.9 §0.5 — fit ONE pre-registered per-player veteran band form on a historical walk-forward
+    panel.
+
+    `panel` is one row per (prior target season × projected veteran): the `veteran_band_inputs`
+    contract columns PLUS `real_col`, the realized season total — with players who ended up playing
+    ZERO games carried as a real 0. That population choice is the whole ballgame: filtering to players
+    who actually played (the ≥6-game filter every OTHER veteran backtest in this program uses, and
+    correctly, for a RANK read) would grade the interval only on the cases where availability risk did
+    not materialise, which is exactly the risk the band exists to price.
+
+    Pure. Returns None when the panel is too thin to fit anything, so the caller keeps the served
+    normal band."""
+    if panel is None or panel.empty or form not in _VET_BAND_FORMS:
+        return None
+    if cqr_mode not in _VET_BAND_CQR_MODES or cqr_scale not in _VET_BAND_CQR_SCALES:
+        raise ValueError(f"unknown conformal setting: cqr_mode={cqr_mode!r} cqr_scale={cqr_scale!r}")
+    lo_q, hi_q = band_q
+    frame = veteran_band_inputs(
+        panel["position"], panel["point"] if "point" in panel else panel["proj_fp_ppr"],
+        panel["season_sd"] if "season_sd" in panel else panel["fp_ppr_sd"],
+        proj_games=panel.get("proj_games"), base_games=panel.get("base_games"),
+        snap_share=panel.get("snap_share"), seasons_missed=panel.get("seasons_missed"))
+    y = pd.to_numeric(pd.Series(panel[real_col]).reset_index(drop=True),
+                      errors="coerce").to_numpy(dtype=float)
+    ok = np.isfinite(y) & np.isfinite(frame["point"].to_numpy(dtype=float))
+    if int(ok.sum()) < _VET_BAND_MIN_TRAIN:
+        return None
+    frame, y = frame.loc[ok].reset_index(drop=True), y[ok]
+    pos = np.asarray(frame["position"].to_numpy(), dtype=object)
+    pred = frame["point"].to_numpy(dtype=float)
+    sd = frame["season_sd"].to_numpy(dtype=float)
+
+    m = VeteranBandModel(form=form, k=int(k), sd_gain=float(sd_gain), qreg_alpha=float(qreg_alpha),
+                         qreg_per_pos=bool(qreg_per_pos), cqr_mode=str(cqr_mode),
+                         cqr_scale=str(cqr_scale), cqr_k=int(cqr_k), n_fit=int(len(y)),
+                         lo_q=lo_q, hi_q=hi_q,
+                         positions=tuple(sorted(np.unique(pos).tolist())))
+    pu = _vet_param_uncertainty(frame)
+    m.param_unc_ref = (float(np.nanmean(pu)), float(np.nanstd(pu)) or 1.0)
+
+    for p in np.unique(pos):
+        sel = pos == p
+        if sel.sum() < _VET_BAND_MIN_POS_TRAIN:
+            continue
+        m.pos_pred[p] = pred[sel]
+        m.pos_real[p] = y[sel]
+        lvl = float(np.mean(y[sel]))
+        m.scale[p] = lvl if lvl > 1e-6 else float(np.mean(pred[sel]) or 1.0)
+        pr = pred[sel]
+        ratio = np.where(pr > 1e-6, y[sel] / np.where(pr > 1e-6, pr, 1.0), np.nan)
+        ratio = ratio[np.isfinite(ratio)]
+        if len(ratio) >= _VET_BAND_MIN_POS_TRAIN:
+            m.ratio_lo[p] = float(np.quantile(ratio, lo_q))
+            m.ratio_hi[p] = float(np.quantile(ratio, hi_q))
+            cut = float(np.quantile(pr, 0.10))
+            bottom = y[sel][pr <= cut]
+            m.floor_hi[p] = float(np.quantile(bottom, hi_q)) if len(bottom) >= 10 else 0.0
+        if form in ("normal_scaled", "normal_cov"):
+            m.sd_scale[p] = _fit_sd_multiplier(
+                y[sel], pr, sd[sel], "coverage" if form == "normal_cov" else "score", lo_q, hi_q)
+
+    if m.scale:
+        keep = np.array([p in m.scale for p in pos])
+        s = np.array([m.scale.get(p, 1.0) for p in pos])[keep]
+        m.pool_pred = pred[keep] / s
+        m.pool_real = y[keep] / s
+
+    if form in ("qreg", "qreg_sqrt"):
+        _fit_vet_qreg_into(m, frame, y)
+        if not (m.qreg_lo or m.qreg_lo_pos):
+            return None                                    # sklearn absent, or every group thin
+        if cqr_mode:
+            _fit_vet_conformal_into(m, frame, y)
+    return m
+
+
 def project_rookies(
     rookies: pd.DataFrame,
     curve: RookieSlotCurve,
@@ -1824,8 +2432,11 @@ def project_rookies(
     # Round the bounds OUTWARD (p10 down, p90 up). Every tier guarantees lo ≤ point ≤ hi, but
     # nearest-rounding can push a bound past a point projection it exactly equals and emit a
     # displayed interval that excludes its own point estimate.
-    df["fp_ppr_p10"] = np.floor(np.clip(lo, 0.0, None) * 10.0) / 10.0
-    df["fp_ppr_p90"] = np.ceil(hi * 10.0) / 10.0
+    # ⚠️ The min/max clamps are load-bearing — see the same note in `project_veterans`: `floor(x*10)/10`
+    # is not always ≤ x in float64, so "outward" without the clamp is only nearly-always outward.
+    lo = np.clip(lo, 0.0, None)
+    df["fp_ppr_p10"] = np.minimum(np.floor(lo * 10.0) / 10.0, lo)
+    df["fp_ppr_p90"] = np.maximum(np.ceil(hi * 10.0) / 10.0, hi)
     df["uncertainty_type"] = tier
     df["is_rookie"] = True
     df["source"] = "rookie"

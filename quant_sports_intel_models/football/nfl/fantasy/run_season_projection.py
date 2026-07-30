@@ -629,15 +629,157 @@ def load_realized_season(con, season: int, schema: str = MARTS_SCHEMA,
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # Projection assembly
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-def build_projection(con, base_season: int, projection_season: int, schema: str,
-                     usage_role_blend: float | None = None,
-                     mover_opportunity_blend: float | None = None,
-                     env_tilt_blend: float | None = None,
-                     injury_override_blend: float | None = None,
-                     xfp_td_blend: float | None = None,
-                     rescue_absent: bool = True,
-                     absence_prior_family: str | None = None,
-                     absence_prior_blend: float | None = None) -> pd.DataFrame:
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF1.9 — the veteran BAND PANEL (the walk-forward substrate the veteran 80% interval is fitted on)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+_VET_PANEL_CACHE = _DEFAULT_OUT / "nf1_9_veteran_band_panel"
+# The panel's schema = the band's INPUT CONTRACT (`season_projection.veteran_band_inputs`) + the
+# realized outcome + provenance. Pinned as a constant so the harness, the served fit and the guard test
+# all agree on what a panel row is.
+VET_PANEL_COLS = [
+    "target_season", "base_season", "player_id", "player_name", "position",
+    "point", "season_sd", "proj_games", "base_games", "snap_share", "seasons_missed",
+    # ⭐ the LITERAL emitted pre-NF1.9 band, carried so the bake-off's INCUMBENT arm is the band the
+    #   board actually showed rather than a re-derivation of it (and so the harness can PROVE the two
+    #   agree — the NF1.7 `_served_point_is_reproduced` pattern applied to the interval).
+    "served_p10", "served_p90",
+    "confidence", "real_games", "real_fp_ppr",
+]
+# The first target season the NFL marts can support a walk-forward veteran projection for (the base
+# season needs a 3-year production window behind it).
+VET_PANEL_FIRST_TARGET = 2007
+
+
+def build_veteran_panel_season(con, target_season: int, schema: str = MARTS_SCHEMA,
+                               use_cache: bool = True) -> pd.DataFrame:
+    """ONE target season of the NF1.9 veteran band panel: the SERVED veteran board for `target_season`
+    (built off base season `target_season − 1`, band model OFF so the panel can never depend on the
+    band it is used to fit) joined to the season the players actually had.
+
+    🚨 THE POPULATION IS THE WHOLE BALLGAME, and it is the one thing every other veteran backtest in
+    this program gets deliberately DIFFERENT. `holdout_backtest`, `score_vs_realized` and the NF1.2/1.5
+    feature pools all `merge(..., how="inner")` the realized season and then keep `g >= 6` — correct for
+    a RANK read, and fatal for an INTERVAL read: it drops precisely the veterans whose season was ended
+    by injury, benching or release, i.e. the left-tail events the band exists to price. Grading the
+    interval on that panel would flatter it exactly where it is broken. So the join is a LEFT join, and
+    a projected veteran with no realized row scored a real **0**.
+
+    (NF1.4 made the identical population fix for rookies — "the population is the FULL drafted class,
+    zero-game rookies included, so the p10 tells the truth". NF1.9 is that fix on 9× the population.)"""
+    cache = _VET_PANEL_CACHE / f"panel_target{int(target_season)}.parquet"
+    if use_cache and cache.exists():
+        return pd.read_parquet(cache)
+    base_season = int(target_season) - 1
+    vets = build_veteran_projection(con, base_season, int(target_season), schema, band_model=None)
+    vets = vets[vets["position"].isin(("QB", "RB", "WR", "TE", "FB"))].copy()
+    vets = vets.drop_duplicates(subset=["player_id"], keep="first")
+    out = pd.DataFrame({
+        "target_season": int(target_season),
+        "base_season": base_season,
+        "player_id": vets["player_id"].to_numpy(),
+        "player_name": vets.get("player_name", pd.Series(index=vets.index, dtype=object)).to_numpy(),
+        "position": vets["position"].astype(str).str.upper().to_numpy(),
+        "point": pd.to_numeric(vets["proj_fp_ppr"], errors="coerce").to_numpy(dtype=float),
+        # ⚠️ the UNROUNDED served season sd (`fp_ppr_sd_raw`), NOT the 2-dp display column. The band is
+        # fed the unrounded value at serve time; fitting on the rounded one would be a train/serve skew
+        # in the band's single most important feature (and it broke the reproduction proof by exactly
+        # one rounding step, which is how it was found).
+        "season_sd": pd.to_numeric(vets["fp_ppr_sd_raw"], errors="coerce").to_numpy(dtype=float),
+        "proj_games": pd.to_numeric(vets["proj_games"], errors="coerce").to_numpy(dtype=float),
+        "base_games": pd.to_numeric(vets.get("games_played"), errors="coerce").to_numpy(dtype=float),
+        "snap_share": pd.to_numeric(vets.get("snap_share"), errors="coerce").to_numpy(dtype=float),
+        "seasons_missed": pd.to_numeric(vets.get("seasons_missed"),
+                                        errors="coerce").fillna(0.0).to_numpy(dtype=float),
+        "served_p10": pd.to_numeric(vets["fp_ppr_p10"], errors="coerce").to_numpy(dtype=float),
+        "served_p90": pd.to_numeric(vets["fp_ppr_p90"], errors="coerce").to_numpy(dtype=float),
+        "confidence": vets.get("confidence", pd.Series(index=vets.index, dtype=object)).to_numpy(),
+    })
+    real = load_realized_season(con, int(target_season), schema, include_zero_game=True)
+    out = out.merge(real.rename(columns={"g": "real_games"}), on="player_id", how="left")
+    out["real_games"] = pd.to_numeric(out["real_games"], errors="coerce").fillna(0.0)
+    out["real_fp_ppr"] = pd.to_numeric(out["real_fp_ppr"], errors="coerce").fillna(0.0)
+    out = out[VET_PANEL_COLS]
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    out.to_parquet(cache, index=False)
+    log.info("veteran band panel target=%d: %d veterans (%.1f%% played 0 games) → %s",
+             target_season, len(out), 100.0 * float((out["real_games"] <= 0).mean()), cache.name)
+    return out
+
+
+def build_veteran_band_panel(con, before_season: int, schema: str = MARTS_SCHEMA,
+                             first_target: int = VET_PANEL_FIRST_TARGET,
+                             use_cache: bool = True) -> pd.DataFrame:
+    """Every panel target season STRICTLY BEFORE `before_season` — the in-fold band-fitting history for
+    a board projecting `before_season`. Per-season parquet cache (the §0.5 "assemble once → parquet"
+    rule), so a board build costs a handful of parquet reads rather than a replay."""
+    frames = []
+    for y in range(int(first_target), int(before_season)):
+        try:
+            part = build_veteran_panel_season(con, y, schema, use_cache=use_cache)
+        except Exception as exc:  # noqa: BLE001 — a missing early season must not kill the board
+            log.warning("[ALERT] veteran band panel target=%d unavailable (%s) — it is EXCLUDED from "
+                        "the band fit; the fit continues on the remaining seasons", y, exc)
+            continue
+        if not part.empty:
+            frames.append(part)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=VET_PANEL_COLS)
+
+
+def fit_veteran_band_from_panel(panel: pd.DataFrame, projection_season: int):
+    """Fit the SHIPPED veteran band form on `panel`, with a LOUD alert (never a silent skip) when the
+    panel cannot support a fit — the board then serves the pre-NF1.9 normal approximation, and the
+    `uncertainty_type` column says so per row.
+
+    ⚠️ LEAKAGE GUARD, enforced rather than assumed: any panel row whose `target_season` is not strictly
+    before `projection_season` is a future outcome and is DROPPED with an alert. The caller already
+    builds the window correctly; this is the assertion that a future caller cannot get it wrong
+    silently."""
+    if panel is None or panel.empty:
+        log.warning("[ALERT] no veteran band panel available — the veteran interval falls back to the "
+                    "NORMAL APPROXIMATION (measured coverage ~0.55 of its nominal 0.80). Build it with "
+                    "`--rebuild-veteran-panel`.")
+        return None
+    fut = pd.to_numeric(panel["target_season"], errors="coerce") >= int(projection_season)
+    if bool(fut.any()):
+        log.warning("[ALERT] veteran band panel contained %d row(s) from target season >= %d — DROPPED "
+                    "(a band fitted on them would leak the outcome it prices)",
+                    int(fut.sum()), projection_season)
+        panel = panel.loc[~fut]
+    model = _SP.fit_veteran_band_model(
+        panel, form=_SP._VET_BAND_FORM, k=_SP._VET_BAND_K, sd_gain=_SP._VET_BAND_SD_GAIN,
+        qreg_alpha=_SP._VET_BAND_QREG_ALPHA, qreg_per_pos=_SP._VET_BAND_QREG_PER_POS,
+        cqr_mode=_SP._VET_BAND_CQR_MODE, cqr_scale=_SP._VET_BAND_CQR_SCALE)
+    if model is None:
+        log.warning("[ALERT] the veteran band fit was REFUSED on %d panel rows — falling back to the "
+                    "normal approximation", len(panel))
+    else:
+        log.info("veteran band: form=%s fitted on %d veteran-seasons (target %d–%d)%s",
+                 model.form, model.n_fit, int(panel["target_season"].min()),
+                 int(panel["target_season"].max()),
+                 f"; groups pooled for conformal: {model.cqr_pooled_groups}"
+                 if model.cqr_pooled_groups else "")
+    return model
+
+
+def build_veteran_projection(con, base_season: int, projection_season: int, schema: str,
+                             usage_role_blend: float | None = None,
+                             mover_opportunity_blend: float | None = None,
+                             env_tilt_blend: float | None = None,
+                             injury_override_blend: float | None = None,
+                             xfp_td_blend: float | None = None,
+                             rescue_absent: bool = True,
+                             absence_prior_family: str | None = None,
+                             absence_prior_blend: float | None = None,
+                             band_model=None) -> pd.DataFrame:
+    """The VETERAN half of the board, as a WIDE frame (every base-season input column retained).
+
+    ⭐ Factored out of `build_projection` by NF1.9 because the veteran interval's band has to be FITTED
+    on a historical walk-forward panel of this very output — so the board and the panel must come from
+    ONE assembly path or the band would be fitted on features assembled differently from the ones it
+    is served with. (Same class of bug as NF1.7's re-derived rookie point, which was wrong by 3.3 PPR.)
+
+    Returns the wide frame; `build_projection` trims it to `OUTPUT_COLS`, `build_veteran_panel_season`
+    keeps the extra band drivers."""
     base = load_base_season(con, base_season, schema, projection_season=projection_season,
                             rescue_absent=rescue_absent)
     # NF-D2 slice 4 / NF-D4: attach the projection-season team's forward Vegas environment on the
@@ -686,7 +828,35 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     if a_blend > 0 and "seasons_missed" in base.columns and (base["seasons_missed"] >= 1).any():
         kw["absence_prior"] = fit_absence_prior_for(
             con, base_season, family=absence_prior_family or _SP._ABSENCE_PRIOR_FAMILY, schema=schema)
-    vets = project_veterans(base, priors, projection_season, **kw)
+    return project_veterans(base, priors, projection_season, band_model=band_model, **kw)
+
+
+def build_projection(con, base_season: int, projection_season: int, schema: str,
+                     usage_role_blend: float | None = None,
+                     mover_opportunity_blend: float | None = None,
+                     env_tilt_blend: float | None = None,
+                     injury_override_blend: float | None = None,
+                     xfp_td_blend: float | None = None,
+                     rescue_absent: bool = True,
+                     absence_prior_family: str | None = None,
+                     absence_prior_blend: float | None = None,
+                     veteran_band: bool | None = None,
+                     band_panel: pd.DataFrame | None = None) -> pd.DataFrame:
+    # ── NF1.9: the PER-PLAYER veteran band, fitted IN-FOLD on the realized outcomes of every target
+    #    season STRICTLY BEFORE this one. `veteran_band=False` (or an unavailable panel) reverts the
+    #    veteran interval to the pre-NF1.9 normal approximation — loudly, never silently.
+    want_band = _SP._VET_BAND_PER_PLAYER if veteran_band is None else bool(veteran_band)
+    band_model = None
+    if want_band:
+        panel = (band_panel if band_panel is not None
+                 else build_veteran_band_panel(con, projection_season, schema))
+        band_model = fit_veteran_band_from_panel(panel, projection_season)
+    vets = build_veteran_projection(
+        con, base_season, projection_season, schema, usage_role_blend=usage_role_blend,
+        mover_opportunity_blend=mover_opportunity_blend, env_tilt_blend=env_tilt_blend,
+        injury_override_blend=injury_override_blend, xfp_td_blend=xfp_td_blend,
+        rescue_absent=rescue_absent, absence_prior_family=absence_prior_family,
+        absence_prior_blend=absence_prior_blend, band_model=band_model)
 
     rookies_all = pd.read_parquet(_ROOKIE_PARQUET)
     incoming = rookies_all[pd.to_numeric(rookies_all["draft_year"], errors="coerce") == projection_season]

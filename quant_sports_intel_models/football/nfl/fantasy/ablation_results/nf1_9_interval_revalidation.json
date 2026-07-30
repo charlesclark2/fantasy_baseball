@@ -1,0 +1,132 @@
+{
+  "pass": true,
+  "blocks": [
+    {
+      "population": "rookies",
+      "config": "SHIPPED rookie band",
+      "form": "qreg_sqrt",
+      "cohorts": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "n": 553,
+      "floors": {
+        "QB": 0.8,
+        "RB": 0.8,
+        "TE": 0.8,
+        "WR": 0.8
+      },
+      "coverage": {
+        "QB": 0.8148,
+        "RB": 0.8041,
+        "TE": 0.9,
+        "WR": 0.8348
+      },
+      "n_by_position": {
+        "QB": 81,
+        "RB": 148,
+        "TE": 100,
+        "WR": 224
+      },
+      "slack_rows": {
+        "QB": 1,
+        "RB": 0,
+        "TE": 10,
+        "WR": 7
+      },
+      "unconstrained": [],
+      "misses": [],
+      "pass": true,
+      "pooled_coverage": 0.8354,
+      "interval_score": 183.407,
+      "newest_cohort": {
+        "cohort": 2025,
+        "n": 85,
+        "pooled_coverage": 0.8235,
+        "coverage": {
+          "QB": 0.7857,
+          "RB": 0.76,
+          "TE": 0.875,
+          "WR": 0.8667
+        },
+        "note": "LEADING INDICATOR ONLY \u2014 one draft class is far too thin per position to gate on"
+      }
+    },
+    {
+      "population": "veterans",
+      "config": "SHIPPED veteran band",
+      "form": "knn_norm",
+      "cohorts": [
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "n": 8398,
+      "below_p10": 0.025,
+      "above_p90": 0.0853,
+      "floors": {
+        "QB": 0.8,
+        "RB": 0.8,
+        "TE": 0.8,
+        "WR": 0.8
+      },
+      "coverage": {
+        "FB": 0.8595,
+        "QB": 0.8575,
+        "RB": 0.8865,
+        "TE": 0.8884,
+        "WR": 0.9068
+      },
+      "n_by_position": {
+        "FB": 299,
+        "QB": 1116,
+        "RB": 2018,
+        "TE": 1801,
+        "WR": 3164
+      },
+      "slack_rows": {
+        "QB": 64,
+        "RB": 174,
+        "TE": 159,
+        "WR": 337
+      },
+      "unconstrained": [
+        "FB"
+      ],
+      "misses": [],
+      "pass": true,
+      "pooled_coverage": 0.8897,
+      "interval_score": 160.888,
+      "newest_cohort": {
+        "cohort": 2025,
+        "n": 701,
+        "pooled_coverage": 0.903,
+        "coverage": {
+          "FB": 0.7692,
+          "QB": 0.913,
+          "RB": 0.8834,
+          "TE": 0.9272,
+          "WR": 0.9043
+        },
+        "above_p90": 0.0742,
+        "note": "LEADING INDICATOR ONLY \u2014 one target season is far too thin per position to gate on"
+      }
+    }
+  ],
+  "generated_at": "2026-07-30T04:47:08.657163+00:00"
+}

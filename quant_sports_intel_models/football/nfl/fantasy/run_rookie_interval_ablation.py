@@ -261,10 +261,17 @@ _Z80 = 1.2815515594
 
 def _finish(lo, hi, point) -> tuple[np.ndarray, np.ndarray]:
     """The coherence + display contract every arm shares, so no arm can win on presentation: the band
-    is non-negative, BRACKETS its own point projection, and is rounded OUTWARD to the served 0.1."""
+    is non-negative, BRACKETS its own point projection, and is rounded OUTWARD to the served 0.1.
+
+    ⚠️ `np.floor(x*10)/10` IS NOT ALWAYS ≤ x (NF1.9). When `x*10` rounds UP to an integer in float64 the
+    "outward" rounding lands ABOVE x — e.g. `3.6999999999999997*10 == 37.0` exactly, so the floor gives
+    3.7 > x. It is a ~1e-15 excursion, but it is enough to emit a band that marginally EXCLUDES its own
+    point estimate, which is the incoherence the export guard fires on. Found by NF1.9's `oracle_point`
+    anchor reading 0.946 coverage where a zero-width band AT the realized value must read 1.0. The
+    min/max clamps make the direction exact instead of nearly-always-right."""
     lo = np.clip(np.minimum(np.asarray(lo, dtype=float), point), 0.0, None)
     hi = np.maximum(np.asarray(hi, dtype=float), point)
-    return np.floor(lo * 10.0) / 10.0, np.ceil(hi * 10.0) / 10.0
+    return np.minimum(np.floor(lo * 10.0) / 10.0, lo), np.maximum(np.ceil(hi * 10.0) / 10.0, hi)
 
 
 def candidate_band(fold: Fold, cfg: dict) -> tuple[np.ndarray, np.ndarray] | None:
