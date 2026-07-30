@@ -361,7 +361,8 @@ def run_anchors(folds: list[Fold], oracle_k: int, permute_cfgs: dict[str, dict])
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # The PER-POSITION floor
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-def position_power(rec: dict, positions: list[str]) -> list[dict]:
+def position_power(rec: dict, positions: list[str], *, nominal: float = _NOMINAL,
+                   label: str = "coverage (NF1.7 winner)") -> list[dict]:
     """⚠️ POWER, REPORTED RATHER THAN ASSUMED. A per-position floor at nominal is a hypothesis test with
     the sample size of ONE POSITION behind it. Two standard errors are given because they answer
     different questions:
@@ -371,8 +372,12 @@ def position_power(rec: dict, positions: list[str]) -> list[dict]:
         honest one, because rookie-seasons inside a draft class share a season and are not independent
         draws. When it exceeds the binomial SE, class-to-class variation is the dominant uncertainty.
     `min_not_significantly_below` is the smallest observed coverage that is NOT significantly below
-    nominal one-sided at 95% — i.e. the value below which a floor miss is real rather than noise."""
+    nominal one-sided at 95% — i.e. the value below which a floor miss is real rather than noise.
+
+    (`nominal`/`label` are parameters only so NF1.9 can reuse this on the VETERAN population without a
+    second copy of the reasoning; the defaults are NF1.8's and its behaviour is unchanged.)"""
     from scipy.stats import binom
+    _NOMINAL = nominal                       # noqa: N806 — shadow for the body's arithmetic
     rows = []
     for p in positions:
         n = int(rec.get(f"n_{p}") or 0)
@@ -386,7 +391,7 @@ def position_power(rec: dict, positions: list[str]) -> list[dict]:
         # buy a lower false-reject rate, it buys the ability to detect a SMALLER true shortfall.
         rows.append({
             "position": p, "n": n,
-            "coverage (NF1.7 winner)": cov,
+            label: cov,
             "binomial SE": round(se, 4),
             "class-clustered SE": rec.get(f"covsd_{p}"),
             "min_not_significantly_below": round(_NOMINAL - _TIER2_Z * se, 4),
@@ -398,7 +403,10 @@ def position_power(rec: dict, positions: list[str]) -> list[dict]:
     return rows
 
 
-def position_floors(rec: dict, positions: list[str], tier: int) -> dict[str, float]:
+def position_floors(rec: dict, positions: list[str], tier: int, *,
+                    min_n: int = _POS_FLOOR_MIN_N,
+                    tier2_positions: tuple = _TIER2_POSITIONS,
+                    nominal: float = _NOMINAL) -> dict[str, float]:
     """The pre-registered per-position floors.
 
     TIER 1 (primary): every position with ≥`_POS_FLOOR_MIN_N` held-out rookie-seasons must cover at
@@ -409,16 +417,20 @@ def position_floors(rec: dict, positions: list[str], tier: int) -> dict[str, flo
       (`_TIER2_POSITIONS` — QB: ~10 drafted a class, ~35% never take a snap) relax to
       `nominal − 1.645·SE(n)`, i.e. "not significantly below nominal one-sided at 95%". Derived from
       SAMPLE SIZE ALONE, which is what stops it being a floor reverse-engineered from the answer.
-      Every other position keeps the hard nominal floor."""
+      Every other position keeps the hard nominal floor.
+
+    (`min_n`/`tier2_positions`/`nominal` are parameters only so NF1.9 can reuse this on the VETERAN
+    population, whose per-position sample sizes are ~20× larger and whose structurally-thin position is
+    FB rather than QB. The defaults are NF1.8's and its behaviour is unchanged.)"""
     floors: dict[str, float] = {}
     for p in positions:
         n = int(rec.get(f"n_{p}") or 0)
-        if n < _POS_FLOOR_MIN_N:
+        if n < min_n:
             continue
-        if tier == 2 and p in _TIER2_POSITIONS:
-            floors[p] = round(_NOMINAL - _TIER2_Z * float(np.sqrt(_NOMINAL * 0.2 / n)), 4)
+        if tier == 2 and p in tier2_positions:
+            floors[p] = round(nominal - _TIER2_Z * float(np.sqrt(nominal * (1 - nominal) / n)), 4)
         else:
-            floors[p] = _NOMINAL
+            floors[p] = nominal
     return floors
 
 
@@ -480,7 +492,7 @@ _REQUIRED_ANCHORS = ("oracle_knn", "oracle_qreg", "zero_width", "max_width", "co
                      "permuted_own", "permuted_knn_norm")
 
 
-def require_anchors(scored: dict) -> None:
+def require_anchors(scored: dict, required: tuple = _REQUIRED_ANCHORS) -> None:
     """⭐ ANCHOR GUARD 1 (NF1.7 lesson 1) — A MISSING ANCHOR IS A HARD FAILURE, NEVER A PASS.
 
     An anchor that fails to fit makes its own check VACUOUSLY TRUE: `best >= anchor` on an absent
@@ -488,8 +500,11 @@ def require_anchors(scored: dict) -> None:
     that — the production fitter refuses a per-position fit under 40 rows and a held-out class is only
     ~80 rows across four positions, so both oracle attempts returned None and `oracle_respected` was
     reported green having compared nothing. Factored out of `main` so this is unit-testable rather than
-    only reachable through a 20-second bake-off."""
-    missing = [k for k in _REQUIRED_ANCHORS if k not in scored]
+    only reachable through a 20-second bake-off.
+
+    (`required` is a parameter only so NF1.9 can reuse the guard with the veteran anchor set; the
+    default is NF1.8's.)"""
+    missing = [k for k in required if k not in scored]
     if missing:
         raise SystemExit(
             f"the anchor(s) {missing} did not fit — their checks would pass on NOTHING. Fix the "

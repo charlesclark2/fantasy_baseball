@@ -361,12 +361,24 @@ def test_a_calibration_group_too_thin_for_its_own_quantile_falls_back_to_POOLED_
 def test_the_conformal_level_is_the_FINITE_SAMPLE_split_conformal_quantile(fitted):
     """The (1−α) level must be ⌈(1−α)(n+1)⌉/n, not a plain empirical quantile: that correction is the
     whole reason split conformal carries a finite-sample coverage guarantee at the group's own n. Read
-    off the source, because the level is computed inside the fit and never returned."""
+    off the source, because the level is computed inside the fit and never returned.
+
+    ⚠️ NF1.9 factored the level into the SHARED `_conformity_quantile` kernel (the rookie and veteran
+    band models must not carry two copies of it — a plain `np.quantile(v, 1−α)` in either would silently
+    drop the guarantee). So this now checks BOTH halves: the kernel computes the finite-sample level, and
+    the rookie fit DELEGATES to it rather than rolling its own."""
     src = Path(sp.__file__).read_text()
-    fn = src[src.index("def _fit_conformal_into"):src.index("def fit_rookie_band_model")]
-    assert "np.ceil((1.0 - alpha) * (nn + 1.0)) / nn" in fn, (
+    kern = src[src.index("def _conformity_quantile"):src.index("def _interval_score")]
+    assert "np.ceil((1.0 - alpha) * (nn + 1.0)) / nn" in kern, (
         "the conformal level is not the finite-sample split-conformal quantile")
+    fn = src[src.index("def _fit_conformal_into"):src.index("def fit_rookie_band_model")]
+    assert "_conformity_quantile(vals, alpha)" in fn, (
+        "the rookie conformal fit must DELEGATE to the shared finite-sample kernel, not re-implement it")
+    assert "np.quantile" not in fn, "a raw np.quantile here would bypass the finite-sample correction"
     assert "alpha = 1.0 - (m.hi_q - m.lo_q)" in src, "α must be derived from the band's own quantiles"
+    # and the numeric behaviour is unchanged by the refactor: the level must exceed the plain quantile
+    vals = list(range(100))
+    assert sp._conformity_quantile(vals, 0.20) >= float(np.quantile(vals, 0.80))
 
 
 def test_unknown_conformal_settings_raise_rather_than_silently_doing_nothing():

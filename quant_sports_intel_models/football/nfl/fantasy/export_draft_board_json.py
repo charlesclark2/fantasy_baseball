@@ -351,6 +351,22 @@ def _attach_adp(recs: list[dict], adp: dict[tuple[str, str], float]) -> int:
 #    inside a 3.4× empirical gap — it is where the data separates, not a number someone liked. It is
 #    also ~5× the extreme-tail tolerance below, so a coincidence can never trip it.
 _SHARED_BAND_POINT_SPREAD_TOL = 0.25
+# ⚠️ NF1.9 — THE RATIO ALONE HAS NO TRACTION WHEN THE SCALE IS TINY, and that is a second false-positive
+#    mode, not a defect. A scale-FREE ratio is most easily tripped by the NARROWEST bands: on the first
+#    NF1.9 board, 4 of the 5 offender groups were deep-bench players whose ENTIRE SEASON projections
+#    spanned 1.3–4.7 PPR inside a 3.2–13.8-wide band (e.g. 0.0–3.2 shared by 6 players spanning 1.27 PPR
+#    = 40% of the band). 1.3 PPR over a 17-game season is 0.08 PPR/game — no drafter can act on it, and
+#    flagging it is the "guard that can never go green" failure the ratio fix was itself introduced to
+#    cure, arriving from the other end.
+#    So a shared band must ALSO span a MATERIAL number of points to count. The floor is a DECISION-
+#    RESOLUTION quantity, fixed from the unit rather than from the result: **1 PPR per game over a
+#    17-game season = 17 PPR**, below which two players are indistinguishable to a drafter.
+#    The measured separation is wide, which is what makes the floor safe rather than convenient: the
+#    NF1.9 offenders top out at **20.3 PPR** of spread while the NF1.7 class-level defect this guard
+#    exists to catch spanned **243 PPR** (26.5–277.0 shared across rookie QBs projected 25.1→268.3) —
+#    a 12× gap, and the defect would clear a 17-PPR floor by 14×. It is NOT a silencer: the NF1.9 board
+#    still trips it on 2 players.
+_SHARED_BAND_MIN_POINT_SPREAD = 17.0
 _EXTREME_TAIL_TOL = 0.05
 
 
@@ -393,9 +409,12 @@ def audit_interval_quality(recs: list[dict], p10: str = "fpP10", p90: str = "fpP
         width = hi - lo
         if len(pts) < 2 or width <= 0:
             continue
-        ratio = (max(pts) - min(pts)) / width
-        if ratio > _SHARED_BAND_POINT_SPREAD_TOL:
-            offenders.append((ratio, lo, hi, members, max(pts) - min(pts)))
+        spread = max(pts) - min(pts)
+        ratio = spread / width
+        # BOTH conditions: the sharers must be un-centrable (the ratio) AND materially different (the
+        # absolute spread). Either alone has a false-positive mode — see the two constants.
+        if ratio > _SHARED_BAND_POINT_SPREAD_TOL and spread >= _SHARED_BAND_MIN_POINT_SPREAD:
+            offenders.append((ratio, lo, hi, members, spread))
     if offenders:
         offenders.sort(reverse=True, key=lambda o: o[0])
         ratio, lo, hi, members, spread = offenders[0]
@@ -403,7 +422,8 @@ def audit_interval_quality(recs: list[dict], p10: str = "fpP10", p90: str = "fpP
         findings.append(
             f"{n_aff}/{len(usable)} players carry a CLASS-LEVEL band — one interval shared by players "
             f"whose point projections span more than {_SHARED_BAND_POINT_SPREAD_TOL:.0%} of its own "
-            f"width, so it cannot be centred on all of them (worst: {lo}–{hi} shared by "
+            f"width AND at least {_SHARED_BAND_MIN_POINT_SPREAD:.0f} PPR, so it cannot be centred on "
+            f"all of them (worst: {lo}–{hi} shared by "
             f"{len(members)} players spanning {spread:.1f} pts = {ratio:.0%} of the band; e.g. "
             f"{members[0]['name']} {members[0][point]} vs {members[-1]['name']} {members[-1][point]}). "
             f"Overall {len(groups)}/{len(usable)} distinct bands"
