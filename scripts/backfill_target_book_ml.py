@@ -192,6 +192,92 @@ where dmp.game_pk     = c.game_pk
   and ({write_predicate})
 """
 
+# ── --null-implausible: retire the both-positive rows the repair cannot fix ──────────────
+# After --repair-existing has run, any REMAINING both-positive stored pair is one for which no
+# aligned pre-game snapshot exists at or before the row's own inserted_at — so there is no honest
+# value to write. Those rows hold an arithmetically impossible price (both sides paying better
+# than even), which the kill-criterion ROI monitors consume as if it were real. A known-wrong
+# number is worse than a missing one: NULL makes the monitors SKIP the row (they already count
+# and report skips), whereas an impossible price silently inflates measured ROI.
+_BOTH_POSITIVE_TOTAL_SQL = """
+select count(*)
+from {schema}.daily_model_predictions
+where score_date between %(s)s and %(e)s
+  and layer4_h2h_bovada_ml_home > 0
+  and layer4_h2h_bovada_ml_away > 0
+"""
+
+# ⚠️ SAFETY INTERLOCK. A both-positive row that DOES have an as-of quote must be REPAIRED, not
+# nulled — nulling it would throw away a recoverable real price. So --null-implausible refuses to
+# run while any repairable both-positive row remains, and tells the operator to run
+# --repair-existing first. Without this, running the flags in the wrong order destroys data.
+_BOTH_POSITIVE_REPAIRABLE_SQL = """
+select count(*)
+from (""" + _CLASSIFIED_BODY + """) c
+where c.is_impossible
+  and (c.ml_home is not null or c.ml_away is not null)
+"""
+
+_NULL_IMPLAUSIBLE_SQL = """
+update {schema}.daily_model_predictions
+set layer4_h2h_bovada_ml_home = null,
+    layer4_h2h_bovada_ml_away = null
+where score_date between %(s)s and %(e)s
+  and layer4_h2h_bovada_ml_home > 0
+  and layer4_h2h_bovada_ml_away > 0
+"""
+
+
+
+def _null_implausible(args, start: date, end: date) -> int:
+    """NULL the residual BOTH-POSITIVE rows — the ones no as-of quote can replace.
+
+    Refuses while any repairable both-positive row remains, so running the passes out of order
+    can never discard a recoverable price."""
+    schema = _pred_schema(args.env)
+    params = {"s": start, "e": end}
+    log.info(f"[{args.env.upper()}] {TARGET_BOOK} ML — NULL implausible (both-positive) "
+             f"{start}..{end} ({'APPLY' if args.apply else 'DRY RUN'})")
+
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(_BOTH_POSITIVE_TOTAL_SQL.format(schema=schema), params)
+        total = int(cur.fetchone()[0])
+        cur.execute(_BOTH_POSITIVE_REPAIRABLE_SQL.format(schema=schema, book=TARGET_BOOK), params)
+        repairable = int(cur.fetchone()[0])
+        residual = total - repairable
+
+        log.info(f"  both-positive stored rows: {total}  "
+                 f"(repairable with a real as-of quote: {repairable}; residual: {residual})")
+        print(f"[METRIC] target_book_both_positive_total={total}")
+        print(f"[METRIC] target_book_both_positive_repairable={repairable}")
+        print(f"[METRIC] target_book_both_positive_residual={residual}")
+
+        if repairable > 0:
+            log.error(
+                f"REFUSING to null: {repairable} both-positive row(s) have a real as-of quote and "
+                f"must be REPAIRED, not discarded. Run with --repair-existing --apply first, then "
+                f"re-run this pass."
+            )
+            return 2
+        if total == 0:
+            log.info("No both-positive rows in the window — nothing to do.")
+            return 0
+        if not args.apply:
+            log.info(f"DRY RUN — {total} row(s) would be set to NULL on both columns. "
+                     f"Re-run with --apply.")
+            return 0
+
+        cur.execute(_NULL_IMPLAUSIBLE_SQL.format(schema=schema), params)
+        nulled = cur.rowcount
+        conn.commit()
+        log.info(f"Nulled {nulled} row(s). The ROI monitors will now SKIP them (and say so) "
+                 f"instead of grading a bet at a price that could not exist.")
+        print(f"[METRIC] target_book_both_positive_nulled={nulled}")
+    finally:
+        conn.close()
+    return 0
 
 
 def main() -> int:
@@ -203,6 +289,10 @@ def main() -> int:
     p.add_argument("--repair-existing", action="store_true",
                    help="Also rewrite rows whose STORED pair differs from the as-of quote "
                         "(defect 2 — the mixed-snapshot / in-play values). Default: blanks only.")
+    p.add_argument("--null-implausible", action="store_true",
+                   help="Separate mode: NULL the remaining BOTH-POSITIVE rows (arithmetically "
+                        "impossible prices that no as-of quote can replace). Refuses to run while "
+                        "any repairable both-positive row is left — run --repair-existing first.")
     p.add_argument("--apply", action="store_true",
                    help="Actually write. Without it this is a DRY RUN (reports only).")
     args = p.parse_args()
@@ -211,6 +301,14 @@ def main() -> int:
     if end < start:
         log.error("--end is before --start.")
         return 2
+    if args.null_implausible and args.repair_existing:
+        # Kept separate on purpose: one writes real prices, the other retires unusable ones, and
+        # the interlock below depends on the repair having ALREADY completed.
+        log.error("--null-implausible and --repair-existing are separate passes — run "
+                  "--repair-existing (with --apply) first, then --null-implausible.")
+        return 2
+    if args.null_implausible:
+        return _null_implausible(args, start, end)
     schema = _pred_schema(args.env)
     params = {"s": start, "e": end}
     mode = "blanks + mismatches" if args.repair_existing else "blanks only"

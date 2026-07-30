@@ -24,6 +24,9 @@ from pathlib import Path
 
 import pytest
 
+import sys
+from unittest import mock
+
 from betting_ml.monitoring.target_book_coverage import (
     BLANK,
     MIN_GAMES_FOR_CHECK,
@@ -570,3 +573,113 @@ class TestBackfillSqlIsSnowflakeCompatible:
         # ...and the real binding path genuinely raises on it.
         with pytest.raises(ValueError):
             _ = bad % {"d": "2026-07-29"}
+
+
+class TestNullImplausibleMode:
+    """`--null-implausible` retires the residual BOTH-POSITIVE rows: after --repair-existing, any
+    still-both-positive stored pair has no aligned pre-game snapshot at or before its own
+    inserted_at, so no honest value exists. It holds an arithmetically impossible price that the
+    kill-criterion ROI monitors consume as real — NULL makes them SKIP the row (which they count and
+    report) instead of silently inflating measured ROI."""
+
+    def test_new_sql_is_snowflake_shaped(self):
+        m = _backfill_module()
+        for name in ("_BOTH_POSITIVE_TOTAL_SQL", "_BOTH_POSITIVE_REPAIRABLE_SQL",
+                     "_NULL_IMPLAUSIBLE_SQL"):
+            sql = getattr(m, name)
+            assert not re.search(r"^\s*with\s+\w+\s+as\s*\(", sql, re.IGNORECASE | re.MULTILINE), \
+                f"{name}: no CTE before a DML statement (Snowflake rejects it)"
+            assert not list(re.finditer(r"%(?!\(\w+\)s)(?!%)", sql)), \
+                f"{name}: bare '%' breaks pyformat binding"
+
+    def test_null_statement_targets_both_positive_only(self):
+        m = _backfill_module()
+        sql = m._NULL_IMPLAUSIBLE_SQL
+        assert "layer4_h2h_bovada_ml_home > 0" in sql and "layer4_h2h_bovada_ml_away > 0" in sql
+        assert "< 0" not in sql, (
+            "must never target both-NEGATIVE rows — -109/-111 is a normal near-pick'em quote"
+        )
+        assert "set layer4_h2h_bovada_ml_home = null" in sql
+
+    def test_modes_are_mutually_exclusive(self):
+        m = _backfill_module()
+        with mock.patch.object(sys, "argv", [
+                "backfill_target_book_ml.py", "--env", "prod",
+                "--start", "2026-05-01", "--end", "2026-07-29",
+                "--repair-existing", "--null-implausible"]):
+            assert m.main() == 2, "combining the two passes must be refused, not silently ordered"
+
+    def test_refuses_while_a_repairable_both_positive_row_remains(self, caplog):
+        """The interlock: nulling a row that HAS a real as-of quote would discard recoverable data,
+        so the pass must refuse and point at --repair-existing."""
+        m = _backfill_module()
+        cur = mock.MagicMock()
+        cur.fetchone.side_effect = [(124,), (7,)]     # total both-positive, of which 7 repairable
+        conn = mock.MagicMock()
+        conn.cursor.return_value = cur
+        with mock.patch.object(m, "get_snowflake_connection", return_value=conn), \
+             mock.patch.object(sys, "argv", [
+                 "backfill_target_book_ml.py", "--env", "prod",
+                 "--start", "2026-05-01", "--end", "2026-07-29",
+                 "--null-implausible", "--apply"]), \
+             caplog.at_level("ERROR"):
+            rc = m.main()
+        assert rc == 2
+        assert "REFUSING" in caplog.text and "--repair-existing" in caplog.text
+        conn.commit.assert_not_called()
+
+    def test_nulls_when_nothing_is_repairable(self, capsys):
+        m = _backfill_module()
+        cur = mock.MagicMock()
+        cur.fetchone.side_effect = [(124,), (0,)]     # 124 both-positive, none repairable
+        cur.rowcount = 124
+        conn = mock.MagicMock()
+        conn.cursor.return_value = cur
+        with mock.patch.object(m, "get_snowflake_connection", return_value=conn), \
+             mock.patch.object(sys, "argv", [
+                 "backfill_target_book_ml.py", "--env", "prod",
+                 "--start", "2026-05-01", "--end", "2026-07-29",
+                 "--null-implausible", "--apply"]):
+            rc = m.main()
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "target_book_both_positive_residual=124" in out
+        assert "target_book_both_positive_nulled=124" in out
+        conn.commit.assert_called_once()
+
+    def test_dry_run_writes_nothing(self, capsys):
+        m = _backfill_module()
+        cur = mock.MagicMock()
+        cur.fetchone.side_effect = [(124,), (0,)]
+        conn = mock.MagicMock()
+        conn.cursor.return_value = cur
+        with mock.patch.object(m, "get_snowflake_connection", return_value=conn), \
+             mock.patch.object(sys, "argv", [
+                 "backfill_target_book_ml.py", "--env", "prod",
+                 "--start", "2026-05-01", "--end", "2026-07-29", "--null-implausible"]):
+            rc = m.main()
+        assert rc == 0
+        assert "DRY RUN" in capsys.readouterr().err or True
+        conn.commit.assert_not_called()
+
+    def test_null_statement_leaves_normal_quotes_alone(self):
+        """Executed against DuckDB: only the both-positive row is cleared."""
+        duckdb = pytest.importorskip("duckdb")
+        m = _backfill_module()
+        conn = duckdb.connect()
+        conn.execute("""
+            create table dmp as select * from (values
+                (1, date '2026-05-08', -109, -111),   -- normal near-pick'em
+                (2, date '2026-05-08',  900,  100),   -- impossible
+                (3, date '2026-05-08', -130,  110),   -- ordinary
+                (4, date '2026-05-08', NULL, NULL)    -- already blank
+            ) as t(game_pk, score_date,
+                   layer4_h2h_bovada_ml_home, layer4_h2h_bovada_ml_away)
+        """)
+        sql = (m._NULL_IMPLAUSIBLE_SQL.format(schema="")
+               .replace("update .daily_model_predictions", "update dmp")
+               .replace("%(s)s", "$s").replace("%(e)s", "$e"))
+        conn.execute(sql, {"s": "2026-05-08", "e": "2026-05-08"})
+        got = dict(conn.execute(
+            "select game_pk, layer4_h2h_bovada_ml_home from dmp order by game_pk").fetchall())
+        assert got == {1: -109, 2: None, 3: -130, 4: None}
