@@ -9,7 +9,18 @@ _PROP_MARKETS = {"strikeouts over", "strikeouts under"}
 _MARKETS = _GAME_MARKETS | _PROP_MARKETS
 
 
-class BetCreate(BaseModel):
+class _BetFields(BaseModel):
+    """The shared field set — DELIBERATELY carries NO validators.
+
+    🚨 A WRITE-TIME RULE MUST NEVER RUN ON THE READ PATH. `Bet` used to subclass `BetCreate`,
+    so every validator added for CREATE also ran on every stored row during `GET /bets`
+    serialization. When E9.49 made `total_line` required for over/under, the ONE legacy bet
+    logged without a line (2026-07-02) started raising on read — and since GET /bets builds
+    `Bet(**b)` for the whole list, a single un-representable row 500'd the ENTIRE bet log for
+    that user. A tightened input rule is retroactive over historical data unless the read
+    model is kept separate; that separation is what this base class exists for.
+    """
+
     game_pk: int
     score_date: str  # YYYY-MM-DD
     matchup: str | None = None
@@ -30,6 +41,10 @@ class BetCreate(BaseModel):
     player_name: str | None = None
     prop_line: float | None = None
     projection: float | None = None
+
+
+class BetCreate(_BetFields):
+    """Inbound payload for POST /bets. Every validator here applies to NEW bets only."""
 
     @field_validator("market")
     @classmethod
@@ -94,7 +109,15 @@ class BetUpdate(BaseModel):
         return v
 
 
-class Bet(BetCreate):
+class Bet(_BetFields):
+    """Outbound representation of a STORED bet.
+
+    Subclasses `_BetFields`, NOT `BetCreate` — see the note there. A bet already in DynamoDB
+    was valid under the rules in force when it was written, and the read path's job is to
+    show it, not to re-litigate it. Adding a create-time rule must never be able to hide a
+    user's existing bets.
+    """
+
     bet_id: str
     user_id: str
     placed_at: str

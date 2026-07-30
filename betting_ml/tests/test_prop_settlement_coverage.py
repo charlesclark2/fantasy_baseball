@@ -335,6 +335,53 @@ class TestGradingInputsRequiredAtWriteTime:
                          american_odds=-110, stake=5).total_line is None
 
 
+# ── 8. A WRITE-time rule must never reject a STORED bet ──────────────────────
+
+class TestReadModelIsNotBoundByCreateRules:
+    """Shipped as a 500 on GET /bets, 2026-07-29. `Bet` subclassed `BetCreate`, so the
+    new create-time rule above ran on every stored row during serialization — the one
+    legacy over/under logged without a line (2026-07-02) raised, and because the router
+    built the whole list at once, ONE un-representable row 500'd the user's ENTIRE bet log.
+    A tightened input rule is retroactive over history unless the read model is separate.
+    """
+
+    def test_bet_does_not_inherit_the_create_validators(self):
+        from app.backend.models.bets import Bet, BetCreate
+        assert not issubclass(Bet, BetCreate), (
+            "Bet must NOT subclass BetCreate — every validator added for CREATE would then "
+            "run against stored rows on GET /bets and 500 the page for historical data"
+        )
+
+    def test_a_legacy_totals_bet_without_a_line_still_serializes(self):
+        # The exact prod row (bet fc396f74…, LAA @ SEA, 2026-07-02).
+        from app.backend.models.bets import Bet
+        bet = Bet(bet_id="fc396f74", user_id="u1", placed_at="2026-07-02T23:43:47Z",
+                  game_pk=823119, score_date="2026-07-02", market="over",
+                  american_odds=-125, stake=5.0)   # no total_line — unsettleable but REAL
+        assert bet.total_line is None and bet.market == "over"
+
+    def test_the_write_rule_is_still_enforced(self):
+        # The read fix must not have quietly disabled the create-time guard.
+        from app.backend.models.bets import BetCreate
+        with pytest.raises(ValueError, match="total_line"):
+            BetCreate(game_pk=823119, score_date="2026-07-02", market="over",
+                      american_odds=-125, stake=5.0)
+
+    def test_one_bad_row_cannot_blank_the_whole_bet_log(self, monkeypatch):
+        # Defence in depth: even an genuinely un-representable row must cost only itself.
+        from app.backend.routers import bets as bets_router
+
+        good = {"bet_id": "ok", "user_id": "u", "placed_at": "2026-07-02T00:00:00Z",
+                "game_pk": 1, "score_date": "2026-07-02", "market": "h2h home",
+                "american_odds": -110, "stake": 5.0, "outcome": "win"}
+        broken = {"bet_id": "broken", "user_id": "u"}   # missing every required field
+
+        monkeypatch.setattr(bets_router, "list_bets", lambda uid: [good, broken])
+        resp = bets_router.get_bets(user_id="u")
+        assert [b.bet_id for b in resp.bets] == ["ok"]
+        assert resp.total == 1
+
+
 # ── 7. Source invariants (cheap, catch a regression in review) ───────────────
 
 class TestFallbackSourceInvariants:
