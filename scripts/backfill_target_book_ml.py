@@ -11,9 +11,12 @@ WHY (two distinct defects in the same read, both fixed at the source in scripts/
       `MAX(price)` per side over the ENTIRE snapshot history (its trailing QUALIFY was a no-op
       over a group already collapsed to one row per event_id), so each side carried the most
       favourable price ever posted, mixed across snapshots and including IN-PLAY quotes. Game
-      823601 on 2026-07-25 was graded home +900 / away +100 — both positive, i.e. no single real
-      quote could have produced it. This inflates kill-criterion ROI, which is worse than NULL
-      because it looks like data. Only the live-capture era is affected (2026-05 onward, when
+      823601 on 2026-07-25 was graded home +900 / away +100 — BOTH POSITIVE, i.e. no single real
+      quote could have produced it (both sides paying better than even loses the book money on
+      balanced action). This inflates kill-criterion ROI, which is worse than NULL because it
+      looks like data. ⚠️ Note a both-NEGATIVE pair (-109/-111) is the NORMAL near-pick'em quote,
+      NOT a defect — the both-positive count is the honest smell test, and treating both-negative
+      as broken over-counted this by ~40%. Only the live-capture era is affected (2026-05 onward, when
       intraday snapshots became dense); earlier rows came from a single-snapshot historical
       source where the per-side max coincides with the real pair.
 
@@ -86,10 +89,16 @@ select
     (not (stored_home is null and stored_away is null)
      and (stored_home is distinct from ml_home
           or stored_away is distinct from ml_away))                  as is_mismatch,
+    -- ⚠️ BOTH-POSITIVE ONLY — do not "restore symmetry" here. A both-NEGATIVE pair is the NORMAL
+    -- near-pick'em quote (-109/-111, -116/-104): it is exactly what a ~4% vig coin-flip game looks
+    -- like, and 215 of the 964 CORRECT aligned quotes in 2026-05..07 are both-negative. Only
+    -- both-POSITIVE is arithmetically impossible (both sides paying better than even ⇒ the book
+    -- loses on balanced action; 0 of those 964 correct quotes are both-positive). The original
+    -- symmetric form over-counted the defect (825 vs the real 583) and — worse — flagged freshly
+    -- REPAIRED rows as broken, reporting stored-differs=0 alongside impossible-pair>0.
     -- coalesce: a blank row's comparison is NULL, and a NULL flows through count_if into a
     -- NULL count, which then blows up int() in the reporting loop.
-    coalesce((stored_home > 0 and stored_away > 0)
-             or (stored_home < 0 and stored_away < 0), false)        as is_impossible
+    coalesce(stored_home > 0 and stored_away > 0, false)            as is_impossible
 from (
     select
         sv.game_pk, sv.prediction_type, sv.score_date, sv.inserted_at,
@@ -224,14 +233,14 @@ def main() -> int:
                 null_tier_rows += int(n_rows)
             tiers_seen.add(label)
             log.info(f"  {d} {label:<12} matched={int(n_rows):4d}  blank={int(n_blank):4d}  "
-                     f"stored-differs={int(n_mm):4d}  impossible-pair={int(n_imp):4d}")
+                     f"stored-differs={int(n_mm):4d}  both-positive={int(n_imp):4d}")
 
         cur.execute(_UNREPAIRABLE_SQL.format(schema=schema), params)
         still_blank = int(cur.fetchone()[0])
         no_snapshot = max(0, still_blank - blank)
 
         log.info(f"Blank rows repairable: {blank}  |  stored values that differ from the as-of "
-                 f"quote: {mismatch} (of which {impossible} are mathematically impossible pairs)")
+                 f"quote: {mismatch} (of which {impossible} are BOTH-POSITIVE = arithmetically impossible)")
         if no_snapshot:
             log.warning(f"  {no_snapshot} blank row(s) have NO pre-game aligned {TARGET_BOOK} "
                         f"snapshot at or before their insert time — left NULL on purpose.")
