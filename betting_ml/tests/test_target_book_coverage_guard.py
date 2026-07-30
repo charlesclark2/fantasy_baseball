@@ -487,3 +487,57 @@ class TestBackfillSqlIsSnowflakeCompatible:
         broken = _run(naive)
         assert broken[1] == -130
         assert broken[2] is None, "expected the plain '=' join to silently skip the NULL-tier row"
+
+    def test_impossible_flag_is_both_positive_only(self):
+        """A both-NEGATIVE American pair is the NORMAL near-pick'em quote (-109/-111): 215 of the
+        964 CORRECT aligned Bovada quotes in 2026-05..07 are both-negative, and 0 are both-positive.
+        Only both-POSITIVE is arithmetically impossible (both sides paying better than even loses
+        the book money on balanced action). The symmetric form over-counted the defect and flagged
+        freshly-REPAIRED rows as broken — `stored-differs=0` next to `impossible>0`. Asserting the
+        asymmetry because "restoring symmetry" is the obvious-looking wrong refactor."""
+        duckdb = pytest.importorskip("duckdb")
+        m = _backfill_module()
+        conn = duckdb.connect()
+        conn.execute("""
+            create table dmp as select * from (values
+                -- stored pair EQUALS the as-of quote in every case below.
+                (1, 'morning', date '2026-05-08', timestamp '2026-05-08 12:00:00', -109, -111),
+                (2, 'morning', date '2026-05-08', timestamp '2026-05-08 12:00:00',  900,  100),
+                (3, 'morning', date '2026-05-08', timestamp '2026-05-08 12:00:00', -130,  110)
+            ) as t(game_pk, prediction_type, score_date, inserted_at,
+                   layer4_h2h_bovada_ml_home, layer4_h2h_bovada_ml_away)
+        """)
+        conn.execute("""
+            create table bridge as select * from (values
+                (1, 'ev1', '2026-05-08 00:00:00'),
+                (2, 'ev2', '2026-05-08 00:00:00'),
+                (3, 'ev3', '2026-05-08 00:00:00')
+            ) as t(game_pk, event_id, game_date)
+        """)
+        conn.execute("""
+            create table outc as select * from (values
+                ('ev1', timestamp '2026-05-08 10:00:00', true,  -109, 'HOME', timestamp '2026-05-08 18:00:00'),
+                ('ev1', timestamp '2026-05-08 10:00:00', false, -111, 'AWAY', timestamp '2026-05-08 18:00:00'),
+                ('ev2', timestamp '2026-05-08 10:00:00', true,   900, 'HOME', timestamp '2026-05-08 18:00:00'),
+                ('ev2', timestamp '2026-05-08 10:00:00', false,  100, 'AWAY', timestamp '2026-05-08 18:00:00'),
+                ('ev3', timestamp '2026-05-08 10:00:00', true,  -130, 'HOME', timestamp '2026-05-08 18:00:00'),
+                ('ev3', timestamp '2026-05-08 10:00:00', false,  110, 'AWAY', timestamp '2026-05-08 18:00:00')
+            ) as t(event_id, ingestion_ts, is_home_outcome, outcome_price_american,
+                   outcome_name, commence_time)
+        """)
+        sql = (m._CLASSIFIED_BODY.format(schema="", book="bovada")
+               .replace(".daily_model_predictions", "dmp")
+               .replace("baseball_data.betting.mart_game_odds_bridge", "bridge")
+               .replace("baseball_data.betting.mart_odds_outcomes", "outc")
+               .replace("o.bookmaker_key = 'bovada'", "true")
+               .replace("o.market_key = 'h2h'", "true")
+               .replace("%(s)s", "$s").replace("%(e)s", "$e"))
+        out = {r[0]: r for r in conn.execute(
+            f"select game_pk, is_mismatch, is_impossible from ({sql}) c",
+            {"s": "2026-05-08", "e": "2026-05-08"}).fetchall()}
+
+        # None of the three is a mismatch — the stored pair matches the as-of quote exactly.
+        assert not any(out[g][1] for g in (1, 2, 3))
+        assert not out[1][2], "-109/-111 is a normal near-pick'em quote, NOT impossible"
+        assert out[2][2], "+900/+100 (both positive) IS arithmetically impossible"
+        assert not out[3][2], "-130/+110 (opposite signs) is the ordinary case"
