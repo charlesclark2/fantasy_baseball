@@ -41,8 +41,14 @@ def test_betcreate_accepts_strikeouts_under():
 
 
 def test_betcreate_still_accepts_game_markets():
-    for m in ("h2h home", "h2h away", "over", "under"):
+    # E9.49: over/under now REQUIRES total_line — a totals bet without a line can never be
+    # graded (settlement compares the final total against the line), so it showed "Pending"
+    # forever. h2h needs no line. See test_prop_settlement_coverage.py for the rejection side.
+    for m in ("h2h home", "h2h away"):
         assert BetCreate(game_pk=1, score_date="2026-07-08", market=m,
+                         american_odds=-110, stake=1.0).market == m
+    for m in ("over", "under"):
+        assert BetCreate(game_pk=1, score_date="2026-07-08", market=m, total_line=8.5,
                          american_odds=-110, stake=1.0).market == m
 
 

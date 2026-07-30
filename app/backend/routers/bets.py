@@ -70,7 +70,20 @@ def get_bets(user_id: str = Depends(get_user_id)) -> BetsResponse:
         except Exception:
             logger.warning("Could not check game statuses for auto-void", exc_info=True)
 
-    return BetsResponse(bets=[Bet(**b) for b in bets], total=len(bets))
+    # Defence in depth (E9.49): one un-representable row must never blank the whole bet log.
+    # `Bet` no longer inherits BetCreate's validators, so this should be unreachable — but a
+    # list comprehension that raises turns a single bad row into a 500 for EVERY bet the user
+    # has, which is the worst possible failure for a page whose whole job is showing them
+    # their money. Skip the row, log it loudly (an unshown bet is itself a correctness bug
+    # worth alerting on), and serve the rest.
+    out: list[Bet] = []
+    for b in bets:
+        try:
+            out.append(Bet(**b))
+        except Exception:
+            logger.error("Bet %s could not be serialized — OMITTED from the response",
+                         b.get("bet_id"), exc_info=True)
+    return BetsResponse(bets=out, total=len(out))
 
 
 @router.delete("/bets/{bet_id}", status_code=204)
