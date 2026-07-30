@@ -17,6 +17,12 @@ The tests below split into the three things that can silently break:
      interval score is pinned from BOTH ends here: an ORACLE that knows the answer must be unbeatable,
      and BOTH degenerate strategies — zero width (maximally "sharp") and all-encompassing width
      (coverage ≈ 1) — must lose. A metric either degenerate can win cannot select an interval.
+
+⚠️ **SUPERSEDED BY NF1.8 (2026-07-29) FOR THE SHIPPED SELECTION ONLY.** Everything above still holds
+and is still enforced here; what changed is WHICH arm is served. NF1.7's coverage floor was POOLED, and
+its winner covers rookie QB at 0.741 and RB at 0.777 — so NF1.8 re-selected under a PER-POSITION floor
+and `season_projection`'s `_ROOKIE_BAND_*` constants are now NF1.8's. The shipped-vs-report drift guard
+therefore lives in `test_nf1_8_perposition_floor.py`; this file keeps the mechanism guards.
 """
 from __future__ import annotations
 
@@ -227,7 +233,8 @@ def test_a_thin_band_history_degrades_to_the_class_level_band_not_to_a_fabricati
 
 
 def test_the_shipped_form_is_one_of_the_pre_registered_ones():
-    """A shipped form outside the pre-registered set would be a config the bake-off never scored."""
+    """A shipped form outside the pre-registered set would be a config no bake-off ever scored.
+    (⚠️ The SHIPPED value is NF1.8's as of 2026-07-29 — see `test_nf1_8_perposition_floor.py`.)"""
     assert sp._ROOKIE_BAND_FORM in sp._ROOKIE_BAND_FORMS
 
 
@@ -485,9 +492,17 @@ def test_the_rookie_band_history_carries_the_P1A_columns():
         assert len(re.findall(col, fn)) >= 2, f"{col} dropped from the rookie band history"
 
 
-def test_the_shipped_selection_matches_the_ablation_report():
-    """The shipped constants must be the ones the bake-off report actually selected — a drifted
-    default is an unselected model in production with a report that says otherwise."""
+def test_the_NF17_report_still_records_the_selection_it_made():
+    """⚠️ NF1.8 SUPERSEDED THE SHIPPED CONSTANTS, so this test no longer compares them against NF1.7's
+    report — the live drift guard is `test_nf1_8_perposition_floor.py::
+    test_the_shipped_constants_match_the_NF1_8_ablation_report`, pointed at the CURRENT selection of
+    record. What is still worth pinning here is that NF1.7's report remains a faithful record of the
+    selection NF1.7 made (a superseded report must not be quietly rewritten to match a later winner),
+    and that its own winner is one of the pre-registered forms.
+
+    NF1.8's arm is INELIGIBLE-free where NF1.7's is not: NF1.7's `qreg` covers rookie QB at 0.741 and
+    RB at 0.777, both below nominal, which is precisely why NF1.8 re-selected under a per-position
+    floor. See `ablation_results/nf1_8_rookie_perposition_floor.md`."""
     rpt = (_REPO / "quant_sports_intel_models/football/nfl/fantasy/ablation_results"
            / "nf1_7_rookie_intervals.md")
     if not rpt.exists():
@@ -496,5 +511,5 @@ def test_the_shipped_selection_matches_the_ablation_report():
     m = re.search(r"\*\*SHIPPED: `([^`]+)`\*\*", text)
     assert m, "the report does not name a shipped config"
     label = m.group(1)
-    assert sp._ROOKIE_BAND_FORM in label, (label, sp._ROOKIE_BAND_FORM)
-    assert f"sdgain {sp._ROOKIE_BAND_RESID_SD_GAIN:g}" in label, label
+    assert label.split()[0] in sp._ROOKIE_BAND_FORMS, label
+    assert "sdgain 0" in label, label

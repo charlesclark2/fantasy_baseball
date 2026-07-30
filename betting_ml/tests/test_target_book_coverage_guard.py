@@ -415,3 +415,75 @@ class TestBackfillSqlIsSnowflakeCompatible:
         assert out[1][3] and not out[1][4]                # blank → repairable, not a mismatch
         assert not out[2][3] and out[2][4] and out[2][5]   # stored +900/+100 → mismatch + impossible
         assert not out[3][3] and not out[3][4]            # already correct → left alone
+
+    def test_update_join_is_null_safe_on_prediction_type(self):
+        """251 rows (2026-05-08..06-09) carry `prediction_type IS NULL`. The diagnose GROUPs BY that
+        column and grouping DOES collapse NULLs, so those rows are COUNTED as repairable — but a
+        plain `=` join makes `NULL = NULL` UNKNOWN, so the write SKIPS them. Counted-but-not-written
+        is the same silent-skip class as the defect this story fixed, so the join must match NULL
+        to NULL. Asserted on the SQL text AND executed against DuckDB below."""
+        m = _backfill_module()
+        assert re.search(
+            r"dmp\.prediction_type\s*=\s*c\.prediction_type\s*\n\s*or\s*\(dmp\.prediction_type "
+            r"is null and c\.prediction_type is null\)",
+            m._UPDATE_SQL,
+        ), ("the UPDATE's prediction_type join must be NULL-safe, or rows with a NULL "
+            "prediction_type are reported as repairable and then silently skipped")
+
+    def test_null_tier_rows_are_actually_written(self):
+        """End-to-end on the real UPDATE text: a NULL-prediction_type row must be repaired, and the
+        plain-equality form must be shown to MISS it (so this test fails if the join regresses)."""
+        duckdb = pytest.importorskip("duckdb")
+        m = _backfill_module()
+
+        def _run(update_sql: str):
+            conn = duckdb.connect()
+            conn.execute("""
+                create table dmp as select * from (values
+                    (1, 'morning', date '2026-05-08', timestamp '2026-05-08 12:00:00', NULL, NULL),
+                    (2, NULL,      date '2026-05-08', timestamp '2026-05-08 12:00:00', NULL, NULL)
+                ) as t(game_pk, prediction_type, score_date, inserted_at,
+                       layer4_h2h_bovada_ml_home, layer4_h2h_bovada_ml_away)
+            """)
+            conn.execute("""
+                create table bridge as select * from (values
+                    (1, 'ev1', '2026-05-08 00:00:00'),
+                    (2, 'ev2', '2026-05-08 00:00:00')
+                ) as t(game_pk, event_id, game_date)
+            """)
+            rows = []
+            for ev in ("ev1", "ev2"):
+                rows += [
+                    f"('{ev}', timestamp '2026-05-08 10:00:00', true,  -130, 'HOME', timestamp '2026-05-08 18:00:00')",
+                    f"('{ev}', timestamp '2026-05-08 10:00:00', false,  100, 'AWAY', timestamp '2026-05-08 18:00:00')",
+                ]
+            conn.execute(f"""
+                create table outc as select * from (values {', '.join(rows)}) as t(
+                    event_id, ingestion_ts, is_home_outcome, outcome_price_american,
+                    outcome_name, commence_time)
+            """)
+            sql = (update_sql.format(schema="", book="bovada", write_predicate="c.is_blank")
+                   .replace("update .daily_model_predictions dmp", "update dmp")
+                   .replace(".daily_model_predictions", "dmp")
+                   .replace("baseball_data.betting.mart_game_odds_bridge", "bridge")
+                   .replace("baseball_data.betting.mart_odds_outcomes", "outc")
+                   .replace("o.bookmaker_key = 'bovada'", "true")
+                   .replace("o.market_key = 'h2h'", "true")
+                   .replace("%(s)s", "$s").replace("%(e)s", "$e"))
+            conn.execute(sql, {"s": "2026-05-08", "e": "2026-05-08"})
+            return dict(conn.execute(
+                "select game_pk, layer4_h2h_bovada_ml_home from dmp order by game_pk").fetchall())
+
+        shipped = _run(m._UPDATE_SQL)
+        assert shipped[1] == -130, "the normal row must be repaired"
+        assert shipped[2] == -130, "the NULL-prediction_type row must ALSO be repaired"
+
+        # And prove the guard is not vacuous: the plain-equality join misses the NULL-tier row.
+        naive = m._UPDATE_SQL.replace(
+            "and (dmp.prediction_type = c.prediction_type\n"
+            "       or (dmp.prediction_type is null and c.prediction_type is null))",
+            "and dmp.prediction_type = c.prediction_type")
+        assert naive != m._UPDATE_SQL, "the naive-form substitution did not apply"
+        broken = _run(naive)
+        assert broken[1] == -130
+        assert broken[2] is None, "expected the plain '=' join to silently skip the NULL-tier row"
