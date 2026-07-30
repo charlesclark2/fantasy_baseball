@@ -113,6 +113,10 @@ def update_bet(user_id: str, bet_id: str, updates: dict) -> dict:
     bets (routers/bets.py) stuck in the pending index forever (they re-scan every settle pass
     and never clear). REMOVE of an absent attribute is a harmless no-op, so this is safe for an
     already-settled bet too.
+
+    E9.49: settling also stamps `settled_at` (if_not_exists, so the canonical close time is
+    never rewritten) — mirroring settle_user_bets.py. Without it nothing recorded WHEN a bet
+    closed, which is why a prop sitting open for days was unmeasurable.
     """
     table = _bets_table()
     resp = table.get_item(Key={"user_id": user_id, "bet_id": bet_id})
@@ -129,6 +133,11 @@ def update_bet(user_id: str, bet_id: str, updates: dict) -> dict:
     names = {f"#k{i}": k for i, k in enumerate(keys)}
     values = {f":v{i}": v for i, v in enumerate(vals)}
     set_parts = [f"#k{i} = :v{i}" for i in range(len(keys))]
+
+    if settling:
+        names["#sa"] = "settled_at"
+        values[":sa"] = _now_iso()
+        set_parts.append("#sa = if_not_exists(#sa, :sa)")
 
     expr = "SET " + ", ".join(set_parts) if set_parts else ""
     if settling:

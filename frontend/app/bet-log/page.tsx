@@ -520,6 +520,11 @@ function BetLogInner() {
   function handleSave() {
     const selectedGame = gameOptions.find(g => g.game_pk === Number(gamePk))
     if (!selectedGame || !market || !odds || !stake) return
+    // E9.49: an over/under with no line can never be GRADED — settlement compares the final
+    // total against the line, so a bet without one shows "Pending" forever (one such bet sat
+    // open from 2026-07-02). The API now rejects it; block it here so the user sees a
+    // disabled button rather than a 422.
+    if (isTotal && !totalLine) return
 
     const mp = liveProbData?.modelProb ?? null
     const bp = liveProbData?.bovadaProb ?? null
@@ -734,10 +739,13 @@ function BetLogInner() {
                 <Button
                   className="bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669] px-8"
                   onClick={handleSave}
-                  disabled={!gamePk || gamePk === "_none" || !market || !odds || !stake || saveMutation.isPending}
+                  disabled={!gamePk || gamePk === "_none" || !market || !odds || !stake || (isTotal && !totalLine) || saveMutation.isPending}
                 >
                   {saveMutation.isPending ? "Saving…" : "Save Bet"}
                 </Button>
+                {isTotal && !totalLine && (
+                  <span className="text-xs text-gray-500">Enter the total line to save</span>
+                )}
               </div>
               {saveSuccess && (
                 <div className="flex items-center gap-2 text-xs text-[#10b981] pb-0.5">

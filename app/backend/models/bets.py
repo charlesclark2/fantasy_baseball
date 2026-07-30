@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 # Game markets (h2h/totals) settle against the final score. The strikeouts prop
 # markets (E9.42) settle against the starter's actual K total — see settle_user_bets.py.
@@ -45,6 +45,25 @@ class BetCreate(BaseModel):
             raise ValueError("stake must be > 0")
         return v
 
+    @model_validator(mode="after")
+    def validate_settleable(self) -> "BetCreate":
+        """A bet must carry everything settlement needs to GRADE it — or it can never close.
+
+        E9.49: the audit found a totals bet logged with NO total_line back on 2026-07-02.
+        settle_user_bets._outcome returns None without a line, so that bet showed "Pending"
+        in the Bet Log for 27 days and would have done so forever — an unsettleable bet is
+        indistinguishable from an unfinished one. The grading inputs are therefore REQUIRED
+        at write time, per market, rather than left optional and discovered at settle time.
+        """
+        if self.market in ("over", "under") and self.total_line is None:
+            raise ValueError("total_line is required for over/under bets (needed to settle)")
+        if self.market in _PROP_MARKETS:
+            if self.prop_line is None:
+                raise ValueError("prop_line is required for strikeout prop bets (needed to settle)")
+            if self.player_id is None:
+                raise ValueError("player_id is required for strikeout prop bets (needed to settle)")
+        return self
+
 
 class BetUpdate(BaseModel):
     market: str | None = None
@@ -81,6 +100,12 @@ class Bet(BetCreate):
     placed_at: str
     outcome: str | None = None        # 'win' | 'loss' | 'push' | 'void' | None (pending)
     profit_loss: float | None = None
+    # E9.49. ⚠️ A field the STORE carries but the response model does not declare is dropped
+    # SILENTLY on serialize (the E9.41 class) — so these must stay declared here, not only
+    # written by settle_user_bets.py / dynamo.update_bet.
+    settled_at: str | None = None     # ISO-8601 UTC; None on a pending bet (or one settled
+                                      # before E9.49, which is not backfilled — see the story)
+    settle_source: str | None = None  # 'mart' | 'statsapi' — which K/score authority graded it
 
 
 class BetsResponse(BaseModel):
