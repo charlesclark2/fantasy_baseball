@@ -90,12 +90,15 @@ select
      and (stored_home is distinct from ml_home
           or stored_away is distinct from ml_away))                  as is_mismatch,
     -- ⚠️ BOTH-POSITIVE ONLY — do not "restore symmetry" here. A both-NEGATIVE pair is the NORMAL
-    -- near-pick'em quote (-109/-111, -116/-104): it is exactly what a ~4% vig coin-flip game looks
-    -- like, and 215 of the 964 CORRECT aligned quotes in 2026-05..07 are both-negative. Only
-    -- both-POSITIVE is arithmetically impossible (both sides paying better than even ⇒ the book
-    -- loses on balanced action; 0 of those 964 correct quotes are both-positive). The original
-    -- symmetric form over-counted the defect (825 vs the real 583) and — worse — flagged freshly
-    -- REPAIRED rows as broken, reporting stored-differs=0 alongside impossible-pair>0.
+    -- near-pick'em quote (-109/-111, -116/-104): it is exactly what a four-point-vig coin-flip
+    -- game looks like, and 215 of the 964 CORRECT aligned quotes in 2026-05..07 are both-negative.
+    -- Only both-POSITIVE is arithmetically impossible (both sides paying better than even means
+    -- the book loses on balanced action; 0 of those 964 correct quotes are both-positive). The
+    -- original symmetric form over-counted the defect (825 vs the real 583) and — worse — flagged
+    -- freshly REPAIRED rows as broken, reporting stored-differs=0 alongside impossible>0.
+    -- NOTE: keep this string free of literal per-cent signs. The connector binds by pyformat
+    -- interpolation, so a bare one is read as a format spec and raises ValueError before the
+    -- query is ever sent. Pinned by test_no_bare_percent_in_any_bound_sql.
     -- coalesce: a blank row's comparison is NULL, and a NULL flows through count_if into a
     -- NULL count, which then blows up int() in the reporting loop.
     coalesce(stored_home > 0 and stored_away > 0, false)            as is_impossible
