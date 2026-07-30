@@ -295,3 +295,123 @@ class TestProblemMessage:
         msg = problem_message(16, 4, PARTIAL, scope="morning")
         assert msg is not None
         assert "4/16" in msg
+
+
+# ---------------------------------------------------------------------------
+# 4. The repair script's SQL. Snowflake's UPDATE grammar has NO CTE slot, so a leading
+#    `with ... update ...` compiles fine in Postgres/DuckDB and FAILS on Snowflake with
+#    `unexpected 'update'` — which is exactly how the first --apply run died, after the dry
+#    run had passed (the dry run is a SELECT, where the CTE is legal). CI mocks all IO, so
+#    the only mechanical defence is asserting the SQL's shape.
+# ---------------------------------------------------------------------------
+_BACKFILL = _PROJECT_ROOT / "scripts" / "backfill_target_book_ml.py"
+
+
+def _backfill_module():
+    import importlib.util
+    import sys as _sys
+    spec = importlib.util.spec_from_file_location("backfill_target_book_ml", _BACKFILL)
+    mod = importlib.util.module_from_spec(spec)
+    _sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestBackfillSqlIsSnowflakeCompatible:
+    @staticmethod
+    def _cte_clauses(sql: str) -> list[str]:
+        """Lines that open a CTE (`with <name> as (`) — legal in a SELECT, fatal before UPDATE."""
+        return [ln.strip() for ln in sql.split("\n")
+                if re.match(r"^\s*with\s+\w+\s+as\s*\(", ln, re.IGNORECASE)]
+
+    def test_update_has_no_cte(self):
+        m = _backfill_module()
+        assert self._cte_clauses(m._UPDATE_SQL) == [], (
+            "Snowflake's UPDATE grammar has no CTE slot — a leading `with ... update` fails to "
+            "compile with `unexpected 'update'`, and the DRY RUN cannot catch it because the "
+            "dry run is a SELECT"
+        )
+
+    def test_diagnose_has_no_cte_either(self):
+        # Not required by Snowflake, but keeping both statements on the SAME CTE-free body is
+        # what makes them impossible to desync.
+        m = _backfill_module()
+        assert self._cte_clauses(m._DIAGNOSE_SQL) == []
+
+    def test_both_statements_share_one_body(self):
+        m = _backfill_module()
+        assert m._CLASSIFIED_BODY in m._DIAGNOSE_SQL
+        assert m._CLASSIFIED_BODY in m._UPDATE_SQL, (
+            "the reported counts and the written rows must come from the SAME selection — two "
+            "bodies would let the dry run promise something the apply does not do"
+        )
+
+    def test_body_keeps_both_e9_52_fixes(self):
+        m = _backfill_module()
+        body = m._CLASSIFIED_BODY
+        assert "game_date::date between" in body, "the bridge date filter must be cast (INC-23)"
+        assert "count(distinct o.outcome_name) >= 2" in body, "snapshot alignment is required"
+        assert "o.ingestion_ts::timestamp < o.commence_time::timestamp" in body, \
+            "the pre-game leakage guard must be present and cast"
+        assert "s.ingestion_ts::timestamp <= sv.inserted_at::timestamp" in body, \
+            "the price must be AS OF the row's own insert time, not the closing line"
+
+    def test_body_classifies_blank_and_wrong_rows(self):
+        """Behavioural check on the real SQL: a blank row is repairable, a row storing the
+        mixed-snapshot pair is flagged as both mismatched AND impossible, and a row already
+        holding the correct as-of pair is neither."""
+        duckdb = pytest.importorskip("duckdb")
+        m = _backfill_module()
+        conn = duckdb.connect()
+        conn.execute("""
+            create table dmp as select * from (values
+                -- (game_pk, prediction_type, score_date, inserted_at, stored_home, stored_away)
+                (1, 'morning', date '2026-07-25', timestamp '2026-07-25 12:00:00', NULL, NULL),
+                (2, 'morning', date '2026-07-25', timestamp '2026-07-25 12:00:00', 900, 100),
+                (3, 'morning', date '2026-07-25', timestamp '2026-07-25 12:00:00', -130, 100)
+            ) as t(game_pk, prediction_type, score_date, inserted_at,
+                   layer4_h2h_bovada_ml_home, layer4_h2h_bovada_ml_away)
+        """)
+        conn.execute("""
+            create table bridge as select * from (values
+                (1, 'ev1', '2026-07-25 00:00:00'),
+                (2, 'ev2', '2026-07-25 00:00:00'),
+                (3, 'ev3', '2026-07-25 00:00:00')
+            ) as t(game_pk, event_id, game_date)
+        """)
+        # Every event gets the same series: an early pair, then the real pair, then a one-sided
+        # partial and an in-play pair — the last two must both be excluded.
+        rows = []
+        for ev in ("ev1", "ev2", "ev3"):
+            rows += [
+                f"('{ev}', timestamp '2026-07-25 09:00:00', true,   120, 'HOME', timestamp '2026-07-25 18:00:00')",
+                f"('{ev}', timestamp '2026-07-25 09:00:00', false, -155, 'AWAY', timestamp '2026-07-25 18:00:00')",
+                f"('{ev}', timestamp '2026-07-25 10:00:00', true,  -130, 'HOME', timestamp '2026-07-25 18:00:00')",
+                f"('{ev}', timestamp '2026-07-25 10:00:00', false,  100, 'AWAY', timestamp '2026-07-25 18:00:00')",
+                f"('{ev}', timestamp '2026-07-25 11:00:00', true,   260, 'HOME', timestamp '2026-07-25 18:00:00')",
+                f"('{ev}', timestamp '2026-07-25 19:00:00', true,   900, 'HOME', timestamp '2026-07-25 18:00:00')",
+                f"('{ev}', timestamp '2026-07-25 19:00:00', false,-2000, 'AWAY', timestamp '2026-07-25 18:00:00')",
+            ]
+        conn.execute(f"""
+            create table outc as select * from (values {', '.join(rows)}) as t(
+                event_id, ingestion_ts, is_home_outcome, outcome_price_american,
+                outcome_name, commence_time)
+        """)
+        sql = (m._CLASSIFIED_BODY.format(schema="", book="bovada")
+               .replace(".daily_model_predictions", "dmp")
+               .replace("baseball_data.betting.mart_game_odds_bridge", "bridge")
+               .replace("baseball_data.betting.mart_odds_outcomes", "outc")
+               .replace("o.bookmaker_key = 'bovada'", "true")
+               .replace("o.market_key = 'h2h'", "true")
+               .replace("%(s)s", "$s").replace("%(e)s", "$e"))
+        out = {r[0]: r for r in conn.execute(
+            f"select game_pk, ml_home, ml_away, is_blank, is_mismatch, is_impossible from ({sql}) c",
+            {"s": "2026-07-25", "e": "2026-07-25"}).fetchall()}
+
+        assert len(out) == 3, "one row per served row"
+        # The as-of price is the last COMPLETE PRE-GAME pair for every row.
+        for gpk in (1, 2, 3):
+            assert (out[gpk][1], out[gpk][2]) == (-130, 100)
+        assert out[1][3] and not out[1][4]                # blank → repairable, not a mismatch
+        assert not out[2][3] and out[2][4] and out[2][5]   # stored +900/+100 → mismatch + impossible
+        assert not out[3][3] and not out[3][4]            # already correct → left alone
