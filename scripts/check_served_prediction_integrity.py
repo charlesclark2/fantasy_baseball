@@ -40,9 +40,19 @@ WHAT IT CHECKS (per prediction_type / serving tier that has rows for the served 
     4. FLAT      std of each target's prediction across the slate ≥ the model-health
                  MIN_SPREAD_* floor (the INC-24 flat-output signature). An all-NULL target
                  column on an otherwise-serving tier is flagged as "target not served".
+    5. TARGET
+       BOOK      (serving tiers only) fraction of the served slate carrying a real
+                 layer4_h2h_bovada_ml_home/away price ≥ the target-book floor. E9.52: those
+                 columns went 100% NULL from 2026-07-25 while the raw odds capture,
+                 mart_odds_outcomes and h2h_market_implied_prob were all healthy — so no
+                 existing guard saw it (the odds-coverage guard watches the bridge ATTACH,
+                 not a per-book PRICE). Bovada is the TARGET book: blank columns make the
+                 kill-criterion ROI monitors skip every settled bet and price the emailed
+                 conviction pick "@ Bovada n/a".
 
-    Thresholds are IMPORTED from betting_ml.monitoring.model_health_metrics so this
-    serve-time guard and the standing 30-day gate can NEVER drift apart.
+    Thresholds are IMPORTED from betting_ml.monitoring.model_health_metrics and
+    betting_ml.monitoring.target_book_coverage so this serve-time guard, the standing 30-day
+    gate and the source-side predict read can NEVER drift apart.
 
 TIER (E11.7 pipeline failure-handling contract):
     Default = ALERT-loud-but-continue (RUNTIME-GATE-safe rollout): a loud stderr WARNING,
@@ -78,6 +88,13 @@ from betting_ml.monitoring.model_health_metrics import (
     MIN_SPREAD_RUNDIFF,
     POST_LINEUP_AVG_COVERAGE_THRESHOLD,
 )
+# E9.52 — the SAME target-book classifier the source-side predict read alerts with, so the
+# two ends of the path can never disagree about "the target book went blank".
+from betting_ml.monitoring.target_book_coverage import (
+    TARGET_BOOK,
+    classify as classify_target_book,
+    problem_message as target_book_problem,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -94,6 +111,11 @@ MIN_GAMES_FOR_SPREAD = 12
 # Below this fraction served from the feature store, the slate degraded to intraday_fallback.
 MIN_FEATURE_STORE_FRAC = 0.80
 
+# E9.52 — tiers whose rows are an ACTUAL served pick and must therefore carry the target-book
+# price. A backfill/re-score tier is excluded: it re-prices historical dates where the book's
+# snapshot set is a different (and legitimately sparser) population.
+TARGET_BOOK_TIERS = ("morning", "post_lineup")
+
 
 @dataclass
 class TierStat:
@@ -105,6 +127,9 @@ class TierStat:
     spread_win_prob: float | None      # std(calibrated_win_prob)
     spread_total_runs: float | None    # std(pred_total_runs)
     spread_run_diff: float | None      # std(pred_run_diff_loc)
+    # E9.52 — games on this tier carrying a real target-book (Bovada) H2H moneyline.
+    # None = not measured (keeps older callers/fixtures valid; None never raises a problem).
+    n_target_book_priced: int | None = None
 
 
 def evaluate_tier(
@@ -168,6 +193,15 @@ def evaluate_tier(
                 f"{stat.tier}: {label} spread {spread:.3f} < {floor} (FLAT output — market-blind / "
                 f"constant-imputed features, the INC-24 signature)"
             )
+
+    # (5) TARGET BOOK — E9.52: the served slate must carry the real Bovada moneyline the pick
+    # would be taken at. Measured only on the genuine serving tiers, and only when the column
+    # was actually queried (None = not measured, e.g. an older fixture).
+    if stat.tier in TARGET_BOOK_TIERS and stat.n_target_book_priced is not None:
+        verdict = classify_target_book(stat.n, stat.n_target_book_priced)
+        msg = target_book_problem(stat.n, stat.n_target_book_priced, verdict, scope=stat.tier)
+        if msg:
+            problems.append(msg)
     return problems
 
 
@@ -193,6 +227,7 @@ def _fetch_tier_stats(conn, schema: str, served_date: date) -> tuple[list[TierSt
             select
                 prediction_type, game_pk, data_source, feature_coverage_score,
                 calibrated_win_prob, pred_total_runs, pred_run_diff_loc,
+                layer4_h2h_bovada_ml_home, layer4_h2h_bovada_ml_away,
                 row_number() over (
                     partition by prediction_type, game_pk
                     order by inserted_at desc
@@ -207,7 +242,10 @@ def _fetch_tier_stats(conn, schema: str, served_date: date) -> tuple[list[TierSt
             avg(feature_coverage_score)                         as avg_coverage,
             stddev(calibrated_win_prob)                         as spread_win_prob,
             stddev(pred_total_runs)                             as spread_total_runs,
-            stddev(pred_run_diff_loc)                           as spread_run_diff
+            stddev(pred_run_diff_loc)                           as spread_run_diff,
+            -- E9.52: either side present = the pick has a real target-book price to settle at.
+            count_if(layer4_h2h_bovada_ml_home is not null
+                     or layer4_h2h_bovada_ml_away is not null)  as n_target_book_priced
         from ranked
         where rn = 1
         group by prediction_type
@@ -216,7 +254,7 @@ def _fetch_tier_stats(conn, schema: str, served_date: date) -> tuple[list[TierSt
     )
     stats: list[TierStat] = []
     for row in cur.fetchall():
-        (tier, n, fsf, cov, sw, st, sr) = row
+        (tier, n, fsf, cov, sw, st, sr, ntb) = row
         stats.append(TierStat(
             tier=str(tier),
             n=int(n),
@@ -225,6 +263,7 @@ def _fetch_tier_stats(conn, schema: str, served_date: date) -> tuple[list[TierSt
             spread_win_prob=None if sw is None else float(sw),
             spread_total_runs=None if st is None else float(st),
             spread_run_diff=None if sr is None else float(sr),
+            n_target_book_priced=None if ntb is None else int(ntb),
         ))
     # INC-22: any prediction dated after the current US baseball date is a clock/date-roll bug.
     cur.execute(
@@ -297,8 +336,10 @@ def main() -> int:
         sw = "—" if stat.spread_win_prob is None else f"{stat.spread_win_prob:.3f}"
         st = "—" if stat.spread_total_runs is None else f"{stat.spread_total_runs:.2f}"
         sr = "—" if stat.spread_run_diff is None else f"{stat.spread_run_diff:.2f}"
+        tb = ("—" if stat.n_target_book_priced is None
+              else f"{stat.n_target_book_priced}/{stat.n}")
         head = (f"  tier '{stat.tier}': n={stat.n}, feature_store={fsf}, coverage={cov}, "
-                f"spread[win_prob={sw}, total_runs={st}, run_diff={sr}]")
+                f"spread[win_prob={sw}, total_runs={st}, run_diff={sr}], {TARGET_BOOK}_ml={tb}")
         if tier_problems:
             log.error(head + "  [PROBLEM]")
             problems.extend(tier_problems)
@@ -307,6 +348,13 @@ def main() -> int:
 
     print(f"[METRIC] served_integrity_problem_count={len(problems)}")
     print(f"[METRIC] served_integrity_tiers_assessed={assessed}")
+    # E9.52 — one observable number for the target book across the served serving tiers, so a
+    # slide toward blank is visible in Dagster metadata BEFORE it hits the floor.
+    _tb = [s for s in stats
+           if s.tier in TARGET_BOOK_TIERS and s.n_target_book_priced is not None and s.n > 0]
+    if _tb:
+        score = sum(s.n_target_book_priced for s in _tb) / sum(s.n for s in _tb)
+        print(f"[METRIC] served_{TARGET_BOOK}_ml_coverage={score:.4f}")
 
     if problems:
         _emit(problems, args.strict)

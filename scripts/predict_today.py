@@ -620,29 +620,83 @@ def _load_bullpen_ood_signals(target_date: str) -> dict[int, dict]:
 # Story 28.3 — latest Bovada American moneyline odds (not de-vigged) per game_pk.
 # Used as the "real-book price taken" column for the magnitude kill-criterion monitor.
 # Joins through mart_game_odds_bridge because mart_odds_outcomes is keyed by event_id.
+#
+# ⚠️ E9.52 (2026-07-29) — `game_date::date` IS LOAD-BEARING, do not simplify it away.
+# mart_game_odds_bridge.game_date is a string-wrapped TIMESTAMP (the INC-23 binary-timestamp
+# cure): VARCHAR '2026-07-25 00:00:00' in the S3 parquet. The original predicate
+# `WHERE game_date = %(d)s` therefore compared '2026-07-25 00:00:00' = '2026-07-25' on the
+# DuckDB `--s3` branch and matched NOTHING — a silent empty result (no error to catch), so
+# layer4_h2h_bovada_ml_home/away wrote 100% NULL from the day each serving tier flipped to
+# --s3 (morning at the W7B_LAKEHOUSE_S3 flip; post_lineup on 2026-07-25/26 at W7B_INTRADAY_S3
+# = the observed 7/24→7/25 boundary). It kept working on the Snowflake branch because that
+# external table declares GAME_DATE as TIMESTAMP_NTZ, which coerces the string literal. Cast
+# BOTH sides to DATE so the one SQL string is correct on either backend.
+# ⚠️ E9.52 second defect (found while verifying the fix above): the original
+# `GROUP BY event_id` + `MAX(CASE WHEN is_home_outcome ...)` aggregated over the ENTIRE
+# snapshot history, and its trailing `QUALIFY ROW_NUMBER() OVER (PARTITION BY event_id ...)`
+# was a NO-OP (the group is already one row per event_id). So the columns carried the MOST
+# FAVOURABLE price ever posted on EACH SIDE INDEPENDENTLY — mixed across snapshots and
+# including IN-PLAY quotes. Observed on game 823601 (2026-07-25): home +900 / away +100, both
+# positive = impossible for one real quote; the actual last pre-game pair was home -130 /
+# away +100, and +900 came from a live in-game snapshot. That systematically INFLATES the
+# kill-criterion ROI (a settled bet graded at a payout nobody could have taken). The cure is
+# the same one _BOOK_ODDS_BATCH in write_serving_store.py already uses: take the LATEST
+# SNAPSHOT-ALIGNED quote (both sides present in the same ingestion_ts) STRICTLY BEFORE first
+# pitch, never a per-side max over history.
 _BOVADA_ML_QUERY = """
 WITH bridge AS (
     SELECT game_pk, event_id
     FROM baseball_data.betting.mart_game_odds_bridge
-    WHERE game_date = %(d)s
+    WHERE game_date::date = %(d)s::date
+),
+bovada_h2h AS (
+    SELECT o.event_id, o.ingestion_ts, o.outcome_name, o.is_home_outcome,
+           o.outcome_price_american
+    FROM baseball_data.betting.mart_odds_outcomes o
+    INNER JOIN bridge b ON b.event_id = o.event_id
+    WHERE o.bookmaker_key = 'bovada'
+      AND o.market_key = 'h2h'
+      -- Leakage guard: a pre-game price only. Without it a re-score/backfill grades the bet
+      -- at an in-play quote (the +900 above), which is not a price anyone could have taken.
+      -- INC-23: mart_odds_outcomes.commence_time is a string-wrapped TIMESTAMP (VARCHAR in the
+      -- registered lakehouse view, TIMESTAMP_NTZ on the Snowflake external table) while
+      -- ingestion_ts is a real TIMESTAMP — an un-cast compare is a hard DuckDB binder error
+      -- (caught by the graceful except → the whole slate blanks). Cast BOTH sides explicitly;
+      -- ::timestamp is a no-op on the already-typed backend. Both are UTC.
+      AND o.ingestion_ts::timestamp < o.commence_time::timestamp
+),
+-- Only snapshots carrying BOTH sides, so a partial feed update can never pair a fresh home
+-- price with a stale away price.
+complete_snapshots AS (
+    SELECT event_id, ingestion_ts
+    FROM bovada_h2h
+    GROUP BY event_id, ingestion_ts
+    HAVING COUNT(DISTINCT outcome_name) >= 2
+),
+latest_complete AS (
+    SELECT event_id, MAX(ingestion_ts) AS latest_ts
+    FROM complete_snapshots
+    GROUP BY event_id
 ),
 latest_bovada AS (
     SELECT
         o.event_id,
         MAX(CASE WHEN o.is_home_outcome THEN o.outcome_price_american END) AS bovada_ml_home,
         MAX(CASE WHEN NOT o.is_home_outcome THEN o.outcome_price_american END) AS bovada_ml_away
-    FROM baseball_data.betting.mart_odds_outcomes o
-    INNER JOIN bridge b ON b.event_id = o.event_id
-    WHERE o.bookmaker_key = 'bovada'
-      AND o.market_key = 'h2h'
+    FROM bovada_h2h o
+    INNER JOIN latest_complete lc
+        ON lc.event_id = o.event_id AND lc.latest_ts = o.ingestion_ts
     GROUP BY o.event_id
-    QUALIFY ROW_NUMBER() OVER (PARTITION BY o.event_id ORDER BY MAX(o.ingestion_ts) DESC) = 1
 )
+-- LEFT JOIN (E9.52): every bridged game on the slate comes back, priced or not, so the
+-- caller can measure target-book COVERAGE (priced / slate) at the source instead of being
+-- unable to tell "Bovada didn't price this slate" apart from "the date predicate matched
+-- nothing". An unpriced game yields NULLs, exactly as the previous INNER JOIN's absent row did.
 SELECT b.game_pk,
        lb.bovada_ml_home,
        lb.bovada_ml_away
 FROM bridge b
-JOIN latest_bovada lb ON lb.event_id = b.event_id
+LEFT JOIN latest_bovada lb ON lb.event_id = b.event_id
 """
 
 
@@ -651,7 +705,12 @@ def _load_bovada_ml_odds(target_date: str) -> dict[int, dict]:
 
     Story 28.3: captures the actual Bovada American moneyline at scoring time so the
     magnitude kill-criterion monitor can compute real-book ROI, not vig-free estimates.
-    Graceful — returns empty dict on any failure so scoring is never blocked."""
+    Graceful — returns empty dict on any failure so scoring is never blocked.
+
+    E9.52: a blank/degraded read now ALERTS LOUDLY to stderr (ALERT-loud-but-continue tier)
+    instead of logging a benign-looking "0 game(s)". This is the at-the-SOURCE half of the
+    target-book guard — the served-side half is check_served_prediction_integrity check #5,
+    and both classify with the SAME thresholds so they cannot drift apart."""
     try:
         _cols, rows = _aux_query(_BOVADA_ML_QUERY, {"d": target_date})
         out: dict[int, dict] = {}
@@ -660,11 +719,34 @@ def _load_bovada_ml_odds(target_date: str) -> dict[int, dict]:
                 "bovada_ml_home": int(ml_home) if ml_home is not None else None,
                 "bovada_ml_away": int(ml_away) if ml_away is not None else None,
             }
-        print(f"  [28.3] Loaded Bovada ML odds for {len(out)} game(s).")
+        n_priced = sum(
+            1 for v in out.values()
+            if v["bovada_ml_home"] is not None or v["bovada_ml_away"] is not None
+        )
+        print(f"  [28.3] Loaded Bovada ML odds for {n_priced}/{len(out)} bridged game(s).")
+        _alert_target_book_coverage(target_date, len(out), n_priced)
         return out
     except Exception as exc:  # noqa: BLE001
-        print(f"  [28.3] Bovada ML odds unavailable ({exc}); columns will be NULL.")
+        # E11.7 ALERT tier: a swallowed failure here silently blanks the target-book price on
+        # the whole slate, so it must reach stderr — a bare print() is a contract violation.
+        print(f"  [28.3] [ALERT] Bovada ML odds unavailable ({exc}); "
+              f"layer4_h2h_bovada_ml_* will be NULL for {target_date}.", file=sys.stderr)
         return {}
+
+
+def _alert_target_book_coverage(target_date: str, n_games: int, n_priced: int) -> None:
+    """Loud stderr ALERT when the TARGET book priced none / too few of the slate (E9.52).
+
+    Never raises and never blocks scoring — a missing book price degrades ROI accounting and
+    the emailed pick price, not the pick itself."""
+    try:
+        from betting_ml.monitoring.target_book_coverage import classify, problem_message
+        verdict = classify(n_games, n_priced)
+        msg = problem_message(n_games, n_priced, verdict, scope=f"{target_date} (predict read)")
+        if msg:
+            print(f"  [28.3] [ALERT] {msg}", file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001
+        print(f"  [28.3] [ALERT] target-book coverage check failed ({exc}).", file=sys.stderr)
 
 
 _META_SERVE_QUERY = """
