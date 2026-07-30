@@ -541,3 +541,32 @@ class TestBackfillSqlIsSnowflakeCompatible:
         assert not out[1][2], "-109/-111 is a normal near-pick'em quote, NOT impossible"
         assert out[2][2], "+900/+100 (both positive) IS arithmetically impossible"
         assert not out[3][2], "-130/+110 (opposite signs) is the ordinary case"
+
+    def test_no_bare_percent_in_any_bound_sql(self):
+        """Every `%` in a pyformat-bound SQL string must be part of `%(name)s` (or escaped `%%`).
+
+        The Snowflake connector binds by pyformat interpolation, so a bare per-cent sign is read as
+        a format spec and raises `ValueError: unsupported format character` BEFORE the query is even
+        sent. A prose comment inside the SQL is enough to do it — writing "a ~4pct vig coin-flip
+        game" in a comment took down the diagnose query it was documenting. Third SQL-text footgun
+        in this one script (after the CTE-before-UPDATE and the NULL-safe join), hence a lint."""
+        m = _backfill_module()
+        offenders = {}
+        for name in ("_CLASSIFIED_BODY", "_DIAGNOSE_SQL", "_UPDATE_SQL", "_UNREPAIRABLE_SQL"):
+            sql = getattr(m, name)
+            hits = [sql[max(0, mm.start() - 40):mm.start() + 15].replace("\n", " ")
+                    for mm in re.finditer(r"%(?!\(\w+\)s)(?!%)", sql)]
+            if hits:
+                offenders[name] = hits
+        assert not offenders, (
+            f"bare '%' in pyformat-bound SQL — the connector reads it as a format spec: {offenders}"
+        )
+
+    def test_the_percent_lint_is_not_vacuous(self):
+        """Proof the check above actually fires — a bare per-cent sign must be detected."""
+        bad = "select 1 -- a ~4"  + "%" + " vig comment\nwhere d = %(d)s"
+        hits = list(re.finditer(r"%(?!\(\w+\)s)(?!%)", bad))
+        assert len(hits) == 1
+        # ...and the real binding path genuinely raises on it.
+        with pytest.raises(ValueError):
+            _ = bad % {"d": "2026-07-29"}
