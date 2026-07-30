@@ -238,32 +238,45 @@ def _as_date(v) -> date:
     return date.fromisoformat(str(v)[:10])
 
 
-def _collect_observations(conn, target_date: date) -> list[dict]:
+def _collect_observations(conn, target_date: date,
+                         metrics: frozenset[str] | None = None) -> list[dict]:
     """
     Chronologically-ordered per-(team, metric, game) observations:
         {team, metric, dist, game_pk, game_date, obs_value, n_obs}
+
+    `metrics` restricts collection to a subset (E9.53 per-metric catch-up). The three
+    belief chains are INDEPENDENT — `_apply_updates` keys its working state on
+    (team, metric) and `_write_updates` closes `is_current` per (team, metric) — so
+    advancing one metric's chain without the others is well-defined, not a shortcut.
+    A skipped metric's query is not even issued.
     """
     d = target_date.isoformat()
     obs: list[dict] = []
 
-    for r in _fetch_dicts(conn, _OFFENSE_SQL, {"game_date": d}):
-        obs.append({"team": r["team"], "metric": _M_OFF, "dist": "normal",
-                    "game_pk": int(r["game_pk"]), "game_date": _as_date(r["game_date"]),
-                    "obs_value": float(r["obs_mean"]), "n_obs": int(r["n_obs"])})
+    def _want(m: str) -> bool:
+        return metrics is None or m in metrics
 
-    for r in _fetch_dicts(conn, _BULLPEN_SQL, {"game_date": d}):
-        obs.append({"team": r["team"], "metric": _M_PEN, "dist": "normal",
-                    "game_pk": int(r["game_pk"]), "game_date": _as_date(r["game_date"]),
-                    "obs_value": float(r["obs_mean"]), "n_obs": int(r["n_obs"])})
+    if _want(_M_OFF):
+        for r in _fetch_dicts(conn, _OFFENSE_SQL, {"game_date": d}):
+            obs.append({"team": r["team"], "metric": _M_OFF, "dist": "normal",
+                        "game_pk": int(r["game_pk"]), "game_date": _as_date(r["game_date"]),
+                        "obs_value": float(r["obs_mean"]), "n_obs": int(r["n_obs"])})
 
-    for r in _fetch_dicts(conn, _RESULTS_SQL, {"game_date": d}):
-        home_won = bool(r["home_team_won"])
-        obs.append({"team": r["home_team"], "metric": _M_WIN, "dist": "beta",
-                    "game_pk": int(r["game_pk"]), "game_date": _as_date(r["game_date"]),
-                    "obs_value": 1.0 if home_won else 0.0, "n_obs": 1})
-        obs.append({"team": r["away_team"], "metric": _M_WIN, "dist": "beta",
-                    "game_pk": int(r["game_pk"]), "game_date": _as_date(r["game_date"]),
-                    "obs_value": 0.0 if home_won else 1.0, "n_obs": 1})
+    if _want(_M_PEN):
+        for r in _fetch_dicts(conn, _BULLPEN_SQL, {"game_date": d}):
+            obs.append({"team": r["team"], "metric": _M_PEN, "dist": "normal",
+                        "game_pk": int(r["game_pk"]), "game_date": _as_date(r["game_date"]),
+                        "obs_value": float(r["obs_mean"]), "n_obs": int(r["n_obs"])})
+
+    if _want(_M_WIN):
+        for r in _fetch_dicts(conn, _RESULTS_SQL, {"game_date": d}):
+            home_won = bool(r["home_team_won"])
+            obs.append({"team": r["home_team"], "metric": _M_WIN, "dist": "beta",
+                        "game_pk": int(r["game_pk"]), "game_date": _as_date(r["game_date"]),
+                        "obs_value": 1.0 if home_won else 0.0, "n_obs": 1})
+            obs.append({"team": r["away_team"], "metric": _M_WIN, "dist": "beta",
+                        "game_pk": int(r["game_pk"]), "game_date": _as_date(r["game_date"]),
+                        "obs_value": 0.0 if home_won else 1.0, "n_obs": 1})
 
     obs.sort(key=lambda o: (o["game_date"], o["game_pk"], o["metric"], o["team"]))
     return obs
@@ -400,13 +413,14 @@ def update_for_date(
     team_prior_neff: int,
     win_prior_strength: float,
     dry_run: bool,
+    metrics: frozenset[str] | None = None,
 ) -> dict[str, int]:
     season    = target_date.year
     update_ts = datetime.now(timezone.utc).replace(tzinfo=None)
 
     conn = get_snowflake_connection()
     try:
-        observations = _collect_observations(conn, target_date)
+        observations = _collect_observations(conn, target_date, metrics)
         if not observations:
             print(f"    {target_date}: no regular-season observations — skipping.")
             return {"rows": 0, "off": 0, "pen": 0, "win": 0, "closed": 0, "inserted": 0}
@@ -496,27 +510,75 @@ def run_backfill(season: int, sigma_obs, team_prior_neff, win_prior_strength, dr
     print(f"  total rows inserted: {tot['inserted']:,}")
 
 
+# 🩸 E9.53 (2026-07-30) — the catch-up frontier is PER METRIC.
+#
+# THE BUG THIS FIXES: the 2026-07-22 `--catchup` cure ran ONE frontier
+# (`MAX(game_date) WHERE season = …`, metric-blind) and gated readiness on the TOTAL
+# row count across all three metrics. So a date whose bullpen branch produced ZERO
+# observations (its eb_bullpen_posteriors rows not yet built) but whose offense +
+# win branches produced rows still returned `rows > 0` → the loop ADVANCED the
+# metric-blind frontier past it → that date was `<= frontier` forever after and,
+# because the chain is NON-IDEMPOTENT, could never be re-processed. Result: a
+# PERMANENT per-metric hole. Measured symptom: `*_team_sequential_bullpen_xwoba`
+# NULL for every game on 2026-07-22/23/24/27/28 while `_woba` / `_win_prob` were
+# fine on those same dates — a whole-block outage in an UNCONDITIONAL-CORE
+# DISCRIMINATIVE family, so it set is_degraded on served slates.
+#
+# The fix is not a stricter aggregate gate (that would WEDGE the offense and win
+# chains behind a late bullpen source — a permanent stall is not better than a
+# permanent skip). The three chains are genuinely INDEPENDENT: `_apply_updates` keys
+# its working state on (team, metric) and `_write_updates` closes `is_current` per
+# (team, metric). So each metric gets its OWN frontier and its own stall: bullpen_xwoba
+# can sit at 07-21 and catch up when its source lands while off_xwoba advances to
+# 07-28. No metric can be silently skipped, and no metric can block another.
+_CATCHUP_METRICS: tuple[str, ...] = (_M_OFF, _M_PEN, _M_WIN)
+
+
 def run_catchup(season_lookback_days: int, sigma_obs: float, team_prior_neff: int,
                 win_prior_strength: float, dry_run: bool) -> None:
-    """Advance the chain over every completed date missing since the frontier (2026-07-22 durable
-    fix — replaces the fragile `--date yesterday`, which silently skipped a day whose source wasn't
-    ready). Order-preserving + self-healing; see betting_ml/scripts/sequential_bayes/catchup.py."""
+    """Advance EACH METRIC's chain over every completed date missing since THAT metric's own
+    frontier. Order-preserving + self-healing per metric; see catchup.py and the block comment
+    above (E9.53) for why the frontier must not be metric-blind."""
     from betting_ml.utils.game_day import current_game_date
     from betting_ml.scripts.sequential_bayes import catchup as _catchup
 
     today = current_game_date()
-    print(f"update_team_posteriors  CATCHUP  today={today}  lookback={season_lookback_days}d  dry_run={dry_run}")
+    print(f"update_team_posteriors  CATCHUP  today={today}  lookback={season_lookback_days}d  "
+          f"dry_run={dry_run}  metrics={list(_CATCHUP_METRICS)}")
     _prep(today.year, sigma_obs, team_prior_neff, win_prior_strength, dry_run)
-    _catchup.run_catchup(
-        label="team-seq-catchup",
-        target_table=_TARGET_TABLE,
-        today=today,
-        lookback_days=season_lookback_days,
-        get_connection=get_snowflake_connection,
-        fetch_dicts=_fetch_dicts,
-        process_date=lambda gd: update_for_date(
-            gd, sigma_obs, team_prior_neff, win_prior_strength, dry_run)["rows"],
-    )
+
+    stalls: dict[str, date] = {}
+    for metric in _CATCHUP_METRICS:
+        only = frozenset({metric})
+        result = _catchup.run_catchup(
+            label=f"team-seq-catchup[{metric}]",
+            target_table=_TARGET_TABLE,
+            today=today,
+            lookback_days=season_lookback_days,
+            get_connection=get_snowflake_connection,
+            fetch_dicts=_fetch_dicts,
+            # PER-METRIC frontier — a metric-blind MAX(game_date) is exactly the defect.
+            frontier_sql=(
+                f"SELECT MAX(game_date) AS d FROM {_TARGET_TABLE} "
+                f"WHERE season = %(season)s AND metric = '{metric}'"
+            ),
+            process_date=lambda gd, _only=only: update_for_date(
+                gd, sigma_obs, team_prior_neff, win_prior_strength, dry_run, metrics=_only
+            )["rows"],
+        )
+        if result.get("stalled_at"):
+            stalls[metric] = result["stalled_at"]
+
+    if stalls:
+        # ALERT tier — loud, non-fatal. Each stalled metric retries on the next run; the
+        # served block is now robust to a per-metric hole (the consumer resolves each metric
+        # exact-or-as-of), so a stall degrades freshness, never coverage.
+        detail = ", ".join(f"{m} at {d}" for m, d in sorted(stalls.items()))
+        print(f"[ALERT] [team-seq-catchup] {len(stalls)} metric chain(s) STALLED: {detail}. "
+              f"Their upstream for that date is not ready (off_xwoba/bullpen_xwoba read "
+              f"stg_batter_pitches; bullpen_xwoba also joins eb_bullpen_posteriors; win_prob "
+              f"reads mart_game_results). They retry next run — no metric was skipped.",
+              file=sys.stderr)
 
 
 def main() -> None:

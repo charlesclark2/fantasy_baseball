@@ -1,0 +1,171 @@
+"""E9.53 — the `_seasonnorm` expression exists TWICE and the two copies must not drift.
+
+THE TRAP: `feature_pregame_game_features` is the public served feature surface, but its
+contact_quality_columns() for-loop cannot be rendered by run_w1_lakehouse's `extract_duckdb_sql`.
+So the DuckDB → S3 parquet that predict_today and the serving writers actually read is generated
+by a PYTHON PORT — `scripts/run_w1_lakehouse.py::_game_features_wrapper_sql` — not from the .sql
+file. Editing only the dbt model is a NO-OP on the served store (and vice versa): the dbt model
+and the served parquet silently diverge, which is invisible to CI (all IO mocked), to
+`dbtf compile` (the .sql file is fine on its own) and to parity-over-parquet (both sides read the
+same already-wrong parquet).
+
+`test_python_port_matches_the_dbt_model_expression` renders the dbt model's Jinja loop body for a
+concrete column and compares it to the Python port's line for that same column, so a change made
+in one place and not the other goes RED regardless of what the change is.
+
+⏭️ KNOWN DEFECT, FIX DEFERRED TO E1.12: the expression is a bare `coalesce(..., 0)`, which serves a
+missing RAW feature as a FABRICATED 0.0 ("exactly league average") — the masking that made the
+2026-07-22..28 whole-block outage look like the raw and _seasonnorm columns came from different
+paths. Fixing it changes a SERVED model input, so it lands with the E1.12 retrain, not before.
+`TestKnownMaskingDeferredToE1_12` pins the CURRENT behaviour deliberately: those tests are the ones
+E1.12 must flip, and they name what to change.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import re
+from pathlib import Path
+
+import duckdb
+import pytest
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_SCRIPT = _PROJECT_ROOT / "scripts" / "run_w1_lakehouse.py"
+_MODEL = _PROJECT_ROOT / "dbt" / "models" / "feature" / "feature_pregame_game_features.sql"
+
+_PROBE = "home_bp_eb_xwoba"   # a real contact-quality column, and a core discriminative one
+
+
+def _load_runner():
+    spec = importlib.util.spec_from_file_location("run_w1_lakehouse", _SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+rwl = _load_runner()
+WRAPPER_SQL = rwl._game_features_wrapper_sql()
+
+
+def _norm(s: str) -> str:
+    """Normalise to SEMANTICS, so formatting is not mistaken for drift.
+
+    The dbt model wraps its coalesce over several lines while the Python port emits one line; both
+    are the same expression. Collapse whitespace runs, then drop whitespace adjacent to `(`, `)`
+    and `,` so only real token differences survive.
+    """
+    s = re.sub(r"\s+", " ", s).strip().rstrip(",")
+    s = re.sub(r"\(\s+", "(", s)
+    s = re.sub(r"\s+\)", ")", s)
+    s = re.sub(r"\s*,\s*", ",", s)
+    return s
+
+
+def _dbt_expression_for(col: str) -> str:
+    """Render the dbt model's `{%- for c in cc %}` body for one column.
+
+    Extracts the loop body, drops the trailing comma control tag, and substitutes the column —
+    i.e. exactly what dbt would emit for that column.
+    """
+    src = _MODEL.read_text()
+    m = re.search(r"\{%-?\s*for c in cc\s*%\}(.*?)\{%-?\s*endfor\s*%\}", src, re.S)
+    assert m, "could not find the contact-quality for-loop in the dbt model"
+    body = m.group(1)
+    body = re.sub(r"\{\{\s*\",\" if not loop\.last\s*\}\}", "", body)
+    return _norm(body.replace("{{ c }}", col))
+
+
+def _port_expression_for(col: str) -> str:
+    """The Python port's emitted line for one column (the SERVED build)."""
+    for line in WRAPPER_SQL.splitlines():
+        if line.strip().endswith(f"as {col}_seasonnorm") or f"as {col}_seasonnorm" in line:
+            return _norm(line)
+    pytest.fail(f"the Python port emits no _seasonnorm expression for {col}")
+
+
+class TestTheTwoCopiesAgree:
+    """The durable guard: whatever the expression IS, both copies must say the same thing."""
+
+    def test_python_port_matches_the_dbt_model_expression(self):
+        assert _port_expression_for(_PROBE) == _dbt_expression_for(_PROBE), (
+            "the SERVED Python port (run_w1_lakehouse._game_features_wrapper_sql) and the dbt "
+            "model feature_pregame_game_features.sql have DRIFTED. The port is what builds the "
+            "served parquet; editing only the .sql file is a no-op on serving. Change both."
+        )
+
+    @pytest.mark.parametrize("col", ["home_bp_eb_xwoba", "home_team_sequential_bullpen_xwoba",
+                                    "away_team_sequential_bullpen_xwoba"])
+    def test_parity_holds_for_the_e9_53_blocks_specifically(self, col):
+        assert _port_expression_for(col) == _dbt_expression_for(col)
+
+    def test_both_cover_the_same_column_set(self):
+        # The dbt model loops over contact_quality_columns(); the port must use the same list, or a
+        # column is season-normalized on one side only.
+        py_cols = {n[: -len("_seasonnorm")] for n in
+                   re.findall(r"::double as (\w+_seasonnorm)", WRAPPER_SQL)}
+        assert py_cols == set(rwl._contact_quality_columns())
+        assert len(py_cols) == len(rwl._contact_quality_columns())   # no dupes
+        # …and the blocks this story is about are in it.
+        assert "home_team_sequential_bullpen_xwoba" in py_cols
+        assert "home_bp_eb_xwoba" in py_cols
+
+    def test_python_port_keeps_the_inc19_double_pin(self):
+        assert ")::double as " in WRAPPER_SQL, "the INC-19 ::double pin was lost in the port"
+        names = re.findall(r"::double as (\w+_seasonnorm)", WRAPPER_SQL)
+        assert len(names) == len(set(names)) == len(rwl._contact_quality_columns())
+
+
+class TestKnownMaskingDeferredToE1_12:
+    """⏭️ These pin the CURRENT (defective) behaviour ON PURPOSE.
+
+    E9.53 diagnosed that a missing RAW feature is served as a fabricated 0.0; the fix changes a
+    served model input, so it ships with the E1.12 retrain. **E1.12 must flip these three tests**
+    (to `is None` for a missing raw, keeping the missing-BASELINE cases at 0.0) in the same change
+    that adds `case when raw.<c> is null then null else coalesce(...) end` to BOTH copies,
+    rebuilds the store, retrains, and re-baselines the is_degraded rate.
+    """
+
+    @pytest.fixture()
+    def con(self):
+        c = duckdb.connect(":memory:")
+        yield c
+        c.close()
+
+    def _seasonnorm(self, con, raw, mu, sd):
+        """Execute the SERVED expression verbatim for one (raw, mu, sd)."""
+        expr = _port_expression_for(_PROBE).rsplit(" as ", 1)[0]
+        sql = (f"select {expr} as v from "
+               f"(select {'null' if raw is None else raw}::double as {_PROBE}) raw, "
+               f"(select {'null' if mu is None else mu}::double as {_PROBE}__mu, "
+               f"{'null' if sd is None else sd}::double as {_PROBE}__sd) b")
+        (v,) = con.execute(sql).fetchone()
+        return v
+
+    def test_a_missing_raw_feature_is_currently_served_as_zero(self, con):
+        # ⛔ THE DEFERRED DEFECT. A missing core feature is served as "exactly league average".
+        # E1.12 flips this expectation to `is None`.
+        assert self._seasonnorm(con, None, 0.310, 0.020) == pytest.approx(0.0)
+
+    def test_a_missing_raw_is_indistinguishable_from_a_genuinely_average_one(self, con):
+        # This equality IS the masking: a real league-average feature and a MISSING feature
+        # produce the same served value, so no not-null / imputed-count check can tell them apart.
+        missing = self._seasonnorm(con, None, 0.310, 0.020)
+        genuinely_average = self._seasonnorm(con, 0.310, 0.310, 0.020)
+        assert missing == genuinely_average == pytest.approx(0.0)
+
+    def test_the_seasonnorm_column_is_never_null(self, con):
+        # Hence check_feature_block_coverage.py must probe RAW columns only — enforced there by
+        # _assert_representative_columns_are_raw.
+        assert self._seasonnorm(con, None, None, None) is not None
+
+    # ── these two are CORRECT behaviour and must survive E1.12 unchanged ──
+    def test_a_missing_baseline_correctly_coalesces_to_zero(self, con):
+        # No baseline → regime-neutral 0. Documented + intended; keep it.
+        assert self._seasonnorm(con, 0.330, None, None) == pytest.approx(0.0)
+
+    def test_zero_variance_correctly_coalesces_to_zero(self, con):
+        assert self._seasonnorm(con, 0.330, 0.310, 0.0) == pytest.approx(0.0)
+
+    def test_a_present_raw_with_a_healthy_baseline_z_scores(self, con):
+        assert self._seasonnorm(con, 0.330, 0.310, 0.020) == pytest.approx(1.0)

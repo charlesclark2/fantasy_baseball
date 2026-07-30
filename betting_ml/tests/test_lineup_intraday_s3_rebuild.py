@@ -76,6 +76,7 @@ def test_regenerates_s3_chain_in_daily_order():
     assert [s[0] for s in steps] == [
         "backfill_lineup_state_scd2.py",     # SCD-2 ← fresh staging (else intraday change is invisible)
         "export_w8b_precursors_to_s3.py",    # mirror the SCD-2 lineup state → S3
+        "export_w8b_precursors_to_s3.py",    # (E9.53) mirror team_sequential_posteriors → S3
         "run_w1_lakehouse.py",               # (2026-07-22) --game-spine-only: pick up a same-day reschedule
         "run_w1_lakehouse.py",               # (2026-07-22) --eb-batter-only: fresh lineup-block EB posteriors
         "run_w1_lakehouse.py",               # rebuild the W8b feature/matchup/aggregator parquet
@@ -90,8 +91,22 @@ def test_regenerates_s3_chain_in_daily_order():
     )
     by = dict(steps)
     assert by["refresh_w1_external_tables.py"] == ["--w8b"]      # and refresh the ext table
-    # intraday-light: only the lineup_state precursor is re-mirrored (the rest are reused)
-    assert by["export_w8b_precursors_to_s3.py"] == ["--table", "feature_pregame_lineup_state"]
+    # intraday-light: only the precursors that actually change after the morning build are
+    # re-mirrored (the rest are reused by --w8b-only).
+    #   • feature_pregame_lineup_state — an intraday lineup/starter confirmation (the 824819 loop)
+    #   • team_sequential_posteriors  — E9.53: the DAILY mirror runs at lakehouse_w8b_aggregator_op,
+    #     which is BEFORE update_team_posteriors_op writes yesterday's rows (a genuine dependency
+    #     cycle, so the daily order can't just be swapped). By intraday time Snowflake HAS them, so
+    #     re-mirroring here keeps the post_lineup tier's team_sequential_* block a slate fresher.
+    mirrored = [args for script, args in steps if script == "export_w8b_precursors_to_s3.py"]
+    assert mirrored == [
+        ["--table", "feature_pregame_lineup_state"],
+        ["--table", "team_sequential_posteriors"],
+    ], "the intraday re-mirror set must stay minimal and ordered before the --w8b rebuild"
+    # …and both mirrors must precede every run_w1_lakehouse rebuild that reads them.
+    last_mirror = max(i for i, (s, _a) in enumerate(steps) if s == "export_w8b_precursors_to_s3.py")
+    first_build = min(i for i, (s, _a) in enumerate(steps) if s == "run_w1_lakehouse.py")
+    assert last_mirror < first_build, "a precursor mirror must run BEFORE the parquet rebuild (INC-25)"
     # SCD-2 write is date-scoped (not a full-history backfill on every sensor tick)
     assert by["backfill_lineup_state_scd2.py"][0] == "--since"
 

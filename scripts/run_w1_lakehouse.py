@@ -1975,7 +1975,27 @@ def _contact_baseline_sql(upstream: str) -> str:
 
 def _game_features_wrapper_sql() -> str:
     """Python PORT of feature_pregame_game_features (the public wrapper): raw.* + a season-normalized
-    `<col>_seasonnorm` per contact column (cast ::double — the INC-19 pin). Mirrors the dbt for-loop."""
+    `<col>_seasonnorm` per contact column (cast ::double — the INC-19 pin). Mirrors the dbt for-loop.
+
+    ⚠️ THIS IS THE SERVED BUILD. `extract_duckdb_sql` cannot render the wrapper's
+    contact_quality_columns() for-loop, so the DuckDB → S3 parquet that predict_today and the
+    serving writers actually read is generated HERE, not from the .sql file. Any change to the
+    wrapper's seasonnorm expression MUST be made in BOTH places or the dbt model and the served
+    parquet silently diverge. Pinned by
+    betting_ml/tests/test_w8b_wrapper_seasonnorm_parity.py.
+
+    🩸 KNOWN DEFECT (diagnosed E9.53 2026-07-30; FIX DEFERRED TO E1.12, which retrains):
+    the bare `coalesce(..., 0)` below cannot distinguish a missing/zero-variance BASELINE (where
+    z=0 is correct and intended) from a missing RAW FEATURE (where z=0 is a FABRICATED "exactly
+    league average" served in place of "we don't know"). Consequence: a _seasonnorm column reads
+    100% NOT-NULL straight through a TOTAL outage of its own block — which is why the 07-22..07-28
+    team_sequential outage LOOKED like the raw and _seasonnorm columns came from different paths;
+    THIS COALESCE IS THE ENTIRE DIFFERENCE. It also permanently dilutes
+    predict_today.discriminative_coverage (a never-NULL column can never be flagged imputed).
+    ⛔ Do NOT change it here alone: it is a SERVED model input, so it needs the E1.12 retrain.
+    Full rationale + the exact E1.12 steps are in the matching comment in
+    dbt/models/feature/feature_pregame_game_features.sql.
+    """
     cc = _contact_quality_columns()
     sn = ",\n    ".join(
         f"coalesce((raw.{c} - b.{c}__mu) / nullif(b.{c}__sd, 0), 0)::double as {c}_seasonnorm"

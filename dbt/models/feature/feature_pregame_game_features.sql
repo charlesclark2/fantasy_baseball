@@ -50,6 +50,45 @@
 -- type-stable against any upstream NUMBER<->FLOAT drift. The _seasonnorm pin is
 -- contract-checked by betting_ml/tests/test_type_contract_guard.py. ::double (not
 -- ::float = 32-bit) is value-preserving and a no-op against the current table.
+-- 🩸 KNOWN DEFECT — A MISSING RAW FEATURE IS SERVED AS A FABRICATED 0.0.
+--    Diagnosed by E9.53 (2026-07-30); the FIX IS DEFERRED TO E1.12, which retrains.
+--    ⛔ Do NOT "fix" this in isolation — see the retrain requirement at the bottom.
+--
+-- The bare `coalesce(..., 0)` below cannot distinguish two different things:
+--   (a) a missing/zero-variance BASELINE  → z = 0 is CORRECT and intended ("an average,
+--       regime-neutral matchup" — the documented behaviour, keep it); and
+--   (b) a missing RAW FEATURE             → z = 0 is a FABRICATION. It means "exactly
+--       league average", a perfectly plausible value, served in place of "we don't know".
+--
+-- Two live consequences measured in E9.53, both currently backstopped elsewhere:
+--   * The _seasonnorm column reads 100% NOT-NULL straight through a TOTAL outage of its
+--     own block, while its raw twin reads 100% NULL. That is why the 2026-07-22..28
+--     team_sequential outage LOOKED like the raw and _seasonnorm columns came from
+--     different paths (the INC-31 mirror shape) — they do not; THIS COALESCE IS THE
+--     ENTIRE DIFFERENCE. ⇒ a not-null-rate coverage probe on a _seasonnorm column can
+--     never detect anything; check_feature_block_coverage.py REFUSES to be configured
+--     with one, and asserts on the RAW columns instead.
+--   * predict_today's discriminative_coverage counts imputed CORE features from the
+--     pre-imputation matrix, and _seasonnorm variants of core discriminative blocks ARE
+--     in the served contracts — feature_columns_v6_total_runs_pre_lineup_served.json
+--     carries away_bp_eb_xwoba_seasonnorm + away_team_sequential_bullpen_xwoba_seasonnorm
+--     + home_bp_eb_xwoba_seasonnorm = 3 of its 7 core features. A never-NULL column can
+--     never be flagged imputed, so it only ever DILUTES that denominator: a total
+--     bullpen_eb / team_sequential outage is invisible to is_degraded on that model.
+--     ⇒ until E1.12, the store-level per-DATE check in check_feature_block_coverage.py is
+--     the detector for this class, NOT discriminative_coverage.
+--
+-- WHY THE FIX NEEDS E1.12 (a retrain), not a one-line edit: emitting NULL here changes a
+-- SERVED model input. The champion pickles were fit on data where these rows carried 0.0;
+-- flipping to NULL routes them through the imputer instead. The shift is small (0 is the
+-- mean of a z-score) but it is a train/serve change, so it belongs with the retrain that
+-- re-fits on an honestly-NULL store. E1.12 should: (1) apply the `case when raw.<c> is
+-- null then null else coalesce(...) end` form HERE **and** in the byte-equivalent Python
+-- port `scripts/run_w1_lakehouse.py::_game_features_wrapper_sql` (that port, not this
+-- file, is what builds the SERVED parquet — see the ⚠️ note there), (2) rebuild the store,
+-- (3) retrain, and (4) re-baseline the is_degraded rate, which will rise once genuinely
+-- missing core features stop being counted as present.
+-- Parity of the two copies is enforced by betting_ml/tests/test_w8b_wrapper_seasonnorm_parity.py.
 select
     raw.*,
     {%- for c in cc %}

@@ -239,25 +239,20 @@ home_win_rate as (
 -- team_sequential_posteriors, prior_mu is the belief ENTERING the game
 -- (= posterior after the team's previous game), so a plain game_pk + team join
 -- carries NO game-G leakage (verified: prior_mu[N] == posterior_mu[N-1]). The
--- inner qualify dedups to the latest version per (team, metric, game_pk) as
--- insurance against SCD-2 re-runs; the outer pivot collapses the 3 metrics to
--- one row per (game_pk, team, game_date).
-team_seq_pivot as (
+-- qualify dedups to the latest version per (team, metric, game_pk) as insurance
+-- against SCD-2 re-runs. One row per (team, metric, game_pk) — deliberately NOT
+-- pivoted here; see team_seq_metric below for why the pivot must come LAST.
+team_seq_versions as (
     select
         game_pk,
         team,
-        game_date::date                                          as game_date,
-        max(case when metric = 'off_xwoba'     then prior_mu end) as seq_off_xwoba,
-        max(case when metric = 'bullpen_xwoba' then prior_mu end) as seq_bullpen_xwoba,
-        max(case when metric = 'win_prob'      then prior_mu end) as seq_win_prob
-    from (
-        select game_pk, team, game_date, metric, prior_mu
-        from {{ source('betting', 'team_sequential_posteriors') }}
-        qualify row_number() over (
-            partition by team, metric, game_pk order by update_ts desc
-        ) = 1
-    )
-    group by game_pk, team, game_date::date
+        game_date::date as game_date,
+        metric,
+        prior_mu
+    from {{ source('betting', 'team_sequential_posteriors') }}
+    qualify row_number() over (
+        partition by team, metric, game_pk order by update_ts desc
+    ) = 1
 ),
 
 -- A1.11 Stage 4 — the source table is keyed by exact game_pk, so today's
@@ -265,35 +260,75 @@ team_seq_pivot as (
 -- For a SCHEDULED game the correct "belief entering the game" is simply the
 -- team's LATEST prior posterior (carry-forward), exactly mirroring the
 -- bullpen/pythagorean exact-or-as-of fallback shipped for the team features.
---   * completed games (is_scheduled = false): ONLY the exact game_pk row is
---     eligible ⇒ byte-for-byte identical to the old plain game_pk + team join.
---   * scheduled games (is_scheduled = true): only strictly-prior game_date rows
---     are eligible ⇒ latest carried forward, no game-G leakage.
 spine_teams as (
     select game_pk, game_date, is_scheduled, home_team as team, 'home' as side from games
     union all
     select game_pk, game_date, is_scheduled, away_team as team, 'away' as side from games
 ),
 
-team_seq as (
+-- 🩸 E9.53 (2026-07-30) — RESOLVE EACH METRIC INDEPENDENTLY, then pivot.
+--
+-- THE BUG THIS FIXES: the previous shape pivoted the 3 metrics to one row per
+-- (game_pk, team, game_date) FIRST and then picked exactly ONE such row per
+-- (game_pk, side). So all three metrics were forced to come from a SINGLE source
+-- row — and any metric absent from that one row read NULL even when a perfectly
+-- good posterior for it existed on an earlier date. Two live consequences:
+--   * COMPLETED games: only the exact game_pk row was eligible, with NO fallback,
+--     so a date whose producer wrote off_xwoba + win_prob but not bullpen_xwoba
+--     served `*_team_sequential_bullpen_xwoba` NULL for EVERY game on that date
+--     (observed 2026-07-22/23/24/27/28). The producer's per-metric skip is now
+--     fixed at the source too (update_team_posteriors.py per-metric catch-up
+--     frontier), but the consumer must be robust to it regardless: team_sequential_*
+--     is UNCONDITIONAL-CORE DISCRIMINATIVE, so a whole-block zero sets is_degraded.
+--   * SCHEDULED games (today's slate): the carry-forward picked the team's LATEST
+--     prior row; if THAT row was one of the metric-incomplete ones, the metric read
+--     NULL on the live slate even though an older row had it — which is how the
+--     producer holes leaked into discriminative_coverage (0.854-0.997, erratic
+--     because it depended on whether each team's latest row was a holed one).
+--
+-- Resolution rule, applied PER (game_pk, side, metric): prefer the EXACT game_pk
+-- row; else fall back to the team's latest STRICTLY-PRIOR game_date row for THAT
+-- metric. Byte-for-byte identical to the old output whenever the exact row exists
+-- (the `order by` puts it first), so this can only ADD coverage, never change a
+-- value that was already served.
+--
+-- LEAKAGE: unchanged and still safe. prior_mu on a strictly-prior game_date is the
+-- belief entering an EARLIER game — strictly LESS information than the true
+-- entering-G belief, so the completed-game fallback cannot leak game G. Same-date
+-- rows are excluded (`<`, not `<=`), so a doubleheader game 2 never reads game 1.
+-- The producer-side chain invariant is guarded by
+-- dbt/tests/assert_no_leakage_sequential_posteriors.sql (unaffected: that test
+-- reads the source table, not this resolution).
+team_seq_metric as (
     select
         st.game_pk,
         st.side,
-        ts.seq_off_xwoba,
-        ts.seq_bullpen_xwoba,
-        ts.seq_win_prob
+        v.metric,
+        v.prior_mu
     from spine_teams st
-    left join team_seq_pivot ts
-        on  ts.team = st.team
+    join team_seq_versions v
+        on  v.team = st.team
         and (
-            (not st.is_scheduled and ts.game_pk = st.game_pk)
-            or (st.is_scheduled and ts.game_date < st.game_date)
+            (not st.is_scheduled and v.game_pk = st.game_pk)
+            or v.game_date < st.game_date
         )
     qualify row_number() over (
-        partition by st.game_pk, st.side
-        order by case when ts.game_pk = st.game_pk then 1 else 0 end desc,
-                 ts.game_date desc nulls last
+        partition by st.game_pk, st.side, v.metric
+        order by case when v.game_pk = st.game_pk then 1 else 0 end desc,
+                 v.game_date desc
     ) = 1
+),
+
+-- Pivot LAST, over the per-metric resolutions (one row per game_pk × side, as before).
+team_seq as (
+    select
+        game_pk,
+        side,
+        max(case when metric = 'off_xwoba'     then prior_mu end) as seq_off_xwoba,
+        max(case when metric = 'bullpen_xwoba' then prior_mu end) as seq_bullpen_xwoba,
+        max(case when metric = 'win_prob'      then prior_mu end) as seq_win_prob
+    from team_seq_metric
+    group by game_pk, side
 ),
 
 -- A2.4: base-state (RISP / runners-on) rolling splits, spine-aware exact-or-as-of
