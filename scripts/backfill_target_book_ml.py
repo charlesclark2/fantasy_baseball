@@ -69,76 +69,82 @@ def _pred_schema(env: str) -> str:
     return "baseball_data.betting_ml" if env == "prod" else "baseball_data.dev_betting_ml"
 
 
-# The as-of correct pair per served row, plus how the stored value compares to it.
+# ⚠️ ONE SQL BODY, NO CTEs — deliberate. Snowflake's UPDATE grammar has NO CTE slot: a leading
+# `with ... update ...` is a compile error (`unexpected 'update'`), unlike Postgres. Rather than
+# keep a CTE version for the SELECT and a nested version for the UPDATE (two bodies that would
+# drift), the whole pipeline is ONE self-contained nested SELECT that both statements wrap — the
+# diagnose aggregates over it, the update joins to it. Portable, and impossible to desync.
 #
 # `game_date::date` on the bridge and the `::timestamp` casts on the leakage guard are the E9.52
 # fixes — both columns are string-wrapped TIMESTAMPs in the lakehouse chain (INC-23), so an
 # un-cast compare either matches nothing or raises.
-_ASOF_CTE = """
-with served as (
-    select game_pk, prediction_type, score_date, inserted_at,
-           layer4_h2h_bovada_ml_home as stored_home,
-           layer4_h2h_bovada_ml_away as stored_away
-    from {schema}.daily_model_predictions
-    where score_date between %(s)s and %(e)s
-),
-bridge as (
-    select game_pk, event_id
-    from baseball_data.betting.mart_game_odds_bridge
-    where game_date::date between %(s)s and %(e)s
-      and event_id is not null
-),
--- Snapshot-ALIGNED pairs only (both sides quoted in the same ingestion_ts), strictly
--- pre-first-pitch. Alignment stops a partial feed update pairing a fresh home price with a
--- stale away price; the leakage guard stops an in-play quote being graded as the price taken.
-snaps as (
-    select o.event_id, o.ingestion_ts,
-           max(case when o.is_home_outcome then o.outcome_price_american end) as ml_home,
-           max(case when not o.is_home_outcome then o.outcome_price_american end) as ml_away
-    from baseball_data.betting.mart_odds_outcomes o
-    join bridge b on b.event_id = o.event_id
-    where o.bookmaker_key = '{book}'
-      and o.market_key = 'h2h'
-      and o.ingestion_ts::timestamp < o.commence_time::timestamp
-    group by o.event_id, o.ingestion_ts
-    having count(distinct o.outcome_name) >= 2
-),
-as_of_price as (
-    select sv.game_pk, sv.prediction_type, sv.score_date, sv.inserted_at,
-           sv.stored_home, sv.stored_away,
-           s.ml_home, s.ml_away,
-           row_number() over (
-               partition by sv.game_pk, sv.prediction_type, sv.inserted_at
-               order by s.ingestion_ts desc
-           ) as rn
-    from served sv
-    join bridge b on b.game_pk = sv.game_pk
-    join snaps  s on s.event_id = b.event_id
-                 and s.ingestion_ts::timestamp <= sv.inserted_at::timestamp
-),
-classified as (
-    select *,
-           (stored_home is null and stored_away is null)              as is_blank,
-           (not (stored_home is null and stored_away is null)
-            and (stored_home is distinct from ml_home
-                 or stored_away is distinct from ml_away))            as is_mismatch,
-           -- coalesce: a blank row's comparison is NULL, and a NULL flows through count_if into
-           -- a NULL count, which then blows up int() in the reporting loop.
-           coalesce((stored_home > 0 and stored_away > 0)
-                    or (stored_home < 0 and stored_away < 0), false)  as is_impossible
-    from as_of_price
-    where rn = 1
-)
+_CLASSIFIED_BODY = """
+select
+    game_pk, prediction_type, score_date, inserted_at,
+    stored_home, stored_away, ml_home, ml_away,
+    (stored_home is null and stored_away is null)                    as is_blank,
+    (not (stored_home is null and stored_away is null)
+     and (stored_home is distinct from ml_home
+          or stored_away is distinct from ml_away))                  as is_mismatch,
+    -- coalesce: a blank row's comparison is NULL, and a NULL flows through count_if into a
+    -- NULL count, which then blows up int() in the reporting loop.
+    coalesce((stored_home > 0 and stored_away > 0)
+             or (stored_home < 0 and stored_away < 0), false)        as is_impossible
+from (
+    select
+        sv.game_pk, sv.prediction_type, sv.score_date, sv.inserted_at,
+        sv.stored_home, sv.stored_away,
+        s.ml_home, s.ml_away,
+        row_number() over (
+            partition by sv.game_pk, sv.prediction_type, sv.inserted_at
+            order by s.ingestion_ts desc
+        ) as rn
+    from (
+        select game_pk, prediction_type, score_date, inserted_at,
+               layer4_h2h_bovada_ml_home as stored_home,
+               layer4_h2h_bovada_ml_away as stored_away
+        from {schema}.daily_model_predictions
+        where score_date between %(s)s and %(e)s
+    ) sv
+    join (
+        select game_pk, event_id
+        from baseball_data.betting.mart_game_odds_bridge
+        where game_date::date between %(s)s and %(e)s
+          and event_id is not null
+    ) b on b.game_pk = sv.game_pk
+    -- Snapshot-ALIGNED pairs only (both sides quoted in the same ingestion_ts), strictly
+    -- pre-first-pitch. Alignment stops a partial feed update pairing a fresh home price with a
+    -- stale away price; the leakage guard stops an in-play quote being graded as the price taken.
+    join (
+        select o.event_id, o.ingestion_ts,
+               max(case when o.is_home_outcome then o.outcome_price_american end) as ml_home,
+               max(case when not o.is_home_outcome then o.outcome_price_american end) as ml_away
+        from baseball_data.betting.mart_odds_outcomes o
+        join (
+            select event_id
+            from baseball_data.betting.mart_game_odds_bridge
+            where game_date::date between %(s)s and %(e)s
+              and event_id is not null
+        ) bb on bb.event_id = o.event_id
+        where o.bookmaker_key = '{book}'
+          and o.market_key = 'h2h'
+          and o.ingestion_ts::timestamp < o.commence_time::timestamp
+        group by o.event_id, o.ingestion_ts
+        having count(distinct o.outcome_name) >= 2
+    ) s on s.event_id = b.event_id
+       and s.ingestion_ts::timestamp <= sv.inserted_at::timestamp
+) ranked
+where rn = 1
 """
 
-_DIAGNOSE_SQL = _ASOF_CTE + """
+_DIAGNOSE_SQL = """
 select score_date,
        prediction_type,
        count(*)                    as rows_matched,
        count_if(is_blank)          as blank_rows,
        count_if(is_mismatch)       as mismatched_rows,
        count_if(is_impossible)     as impossible_stored_pairs
-from classified
+from (""" + _CLASSIFIED_BODY + """) c
 group by score_date, prediction_type
 order by score_date, prediction_type
 """
@@ -153,17 +159,18 @@ where score_date between %(s)s and %(e)s
   and layer4_h2h_bovada_ml_away is null
 """
 
-_UPDATE_SQL = _ASOF_CTE + """
+_UPDATE_SQL = """
 update {schema}.daily_model_predictions dmp
 set layer4_h2h_bovada_ml_home = c.ml_home,
     layer4_h2h_bovada_ml_away = c.ml_away
-from classified c
+from (""" + _CLASSIFIED_BODY + """) c
 where dmp.game_pk         = c.game_pk
   and dmp.prediction_type = c.prediction_type
   and dmp.inserted_at     = c.inserted_at
   and (c.ml_home is not null or c.ml_away is not null)
   and ({write_predicate})
 """
+
 
 
 def main() -> int:
