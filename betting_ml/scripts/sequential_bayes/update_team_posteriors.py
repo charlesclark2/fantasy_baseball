@@ -593,11 +593,15 @@ def run_backfill(season: int, sigma_obs, team_prior_neff, win_prior_strength, dr
     from betting_ml.scripts.sequential_bayes import catchup as _catchup
     conn = get_snowflake_connection()
     try:
+        # ⚠️ LOAD-THEN-DELETE (2026-07-31) — see catchup.require_source_before_reset: the guard
+        # DELETEs, so it must never precede a read it depends on, or a source outage becomes an
+        # empty store. Pinned by test_backfill_reset_ordering.py.
+        rows = _fetch_dicts(conn, _SEASON_DATES_SQL, {"season": season})
+        _catchup.require_source_before_reset(rows, season=season, label="team-seq-backfill")
         _catchup.guard_or_reset_backfill(
             conn=conn, target_table=_TARGET_TABLE, season=season, reset=reset,
             fetch_dicts=_fetch_dicts, label="team-seq-backfill", dry_run=dry_run,
         )
-        rows = _fetch_dicts(conn, _SEASON_DATES_SQL, {"season": season})
     finally:
         conn.close()
     game_dates = [r["game_date"] if isinstance(r["game_date"], date)
