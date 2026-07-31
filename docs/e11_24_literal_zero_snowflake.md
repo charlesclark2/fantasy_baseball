@@ -715,6 +715,50 @@ two new ones fail 1,006 and 25 rows — a clean three-way control.
   served cell sigma **~7.1% too small** — a serving-path calibration defect, not just a store one.
   ⇒ this one warrants the repair, not merely a note.
 
+### ✅ BOTH STORES REPAIRED AND VERIFIED (2026-07-31)
+
+| Store | Rows 2026 (before → after) | versions/key-game | Conservation identity |
+|---|---|---|---|
+| `player_sequential_posteriors` | 52,300 → **47,160** | 1.1784 → **1.0000** | 0 violations, max ratio **1.0000 on all 6 seasons** |
+| `matchup_cell_sequential_posteriors` | 3,556 → **3,095** | 1.2022 → **1.0000** | 0 violations, max ratio **1.0000** |
+
+Frontier intact (`max(game_date) = 2026-07-30`, i.e. yesterday's completed slate). All three dbt
+guards now PASS. The served matchup `posterior_sigma` rose to **0.00007387**; the pre-repair value
+was only captured to 6 dp (`0.00007`), so this is **consistent with** the predicted ~7.1% widening
+rather than a precise confirmation of it.
+
+### 🚨 A SECOND DEFECT, CREATED BY THE FIRST FIX — a `--reset` that DELETES before validating its source
+
+The first live `--reset` **deleted 52,300 rows and then RAISED**, leaving the store EMPTY: the
+backfill's PA substrate `mart_pitch_play_event` no longer exists in Snowflake (dropped by E11.20
+phase-1.5) and the handed-off command omitted `--s3`. All three writers called
+`guard_or_reset_backfill` — which DELETEs — *before* reading their game-date source.
+
+⭐ **A guard that makes a repair safe against one failure mode and unsafe against another has just
+MOVED the failure** — and here to a strictly worse place: a silently inflated store degrades
+calibration, an empty one breaks the consumers' join outright.
+
+**CURE (shipped):** all three writers are now **LOAD-THEN-DELETE**, with
+`catchup.require_source_before_reset()` refusing the reset on a zero-date source and naming both
+missing preconditions in the error text. Pinned by `betting_ml/tests/test_backfill_reset_ordering.py`
+(8 tests, asserting the game-date read precedes the guard in each writer).
+
+⚠️ **Two preconditions the operator command MUST carry** for the player and matchup backfills —
+either one missing is a hard failure, and the second fails *silently* into the deleted legacy path:
+- **`--s3`** — the SF `mart_pitch_*` family is gone (phase-1.5). The daily op already passes it via
+  `_w7a_s3_args()`; a hand-run backfill does not inherit that.
+- **`LAKEHOUSE_DELTA_W1=cutover`** — `lakehouse_view_sql` routes to `delta_scan` only in cutover
+  mode; unset, it falls back to the `lakehouse/<table>/**/*.parquet` glob that phase-1.5 DELETED.
+
+```
+AWS_DEFAULT_REGION=us-east-2 LAKEHOUSE_DELTA_W1=cutover \
+uv run python betting_ml/scripts/sequential_bayes/update_player_posteriors.py \
+  --backfill --season <yr> --reset --s3
+```
+
+`update_team_posteriors` is unaffected — it reads `mart_game_results`, not the pitch mart, and has
+no `--s3` flag.
+
 ### What was deliberately NOT done, and why
 
 - **The `scd2_upsert` Delta port + dbt-reader repoint (story item 2) and the remaining intraday
