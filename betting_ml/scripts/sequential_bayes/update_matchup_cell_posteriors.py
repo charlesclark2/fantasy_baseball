@@ -555,15 +555,10 @@ def run_backfill(season: int, dry_run: bool, use_s3: bool = False, reset: bool =
     # posterior_sigma2 goes overconfident). Found on the sibling team chain at 2.7×; this writer
     # shares the identical _load_current_seq_posteriors → replay shape. Refuse unless --reset.
     # The target table is Snowflake even under --s3, so the guard takes its own SF connection.
+    # ⚠️ LOAD-THEN-DELETE (2026-07-31) — see catchup.require_source_before_reset. The guard DELETEs,
+    # so it is deferred until AFTER the source reads below; running it here turned a dropped-source
+    # error into an empty store on the sibling player writer. Pinned by test_backfill_reset_ordering.
     from betting_ml.scripts.sequential_bayes import catchup as _catchup
-    _guard_conn = get_snowflake_connection()
-    try:
-        _catchup.guard_or_reset_backfill(
-            conn=_guard_conn, target_table=_TARGET_TABLE, season=season, reset=reset,
-            label="matchup-cell-backfill", dry_run=dry_run,
-        )
-    finally:
-        _guard_conn.close()
 
     # E11.1-W7a: --s3 reads sources from S3 via DuckDB; DDL + seq-posteriors read/write stay on Snowflake.
     duck = None
@@ -593,6 +588,17 @@ def run_backfill(season: int, dry_run: bool, use_s3: bool = False, reset: bool =
     finally:
         if src_conn is not None:
             src_conn.close()
+
+    # NOW it is safe to delete: every source read this backfill depends on has succeeded.
+    _catchup.require_source_before_reset(game_dates, season=season, label="matchup-cell-backfill")
+    _guard_conn = get_snowflake_connection()
+    try:
+        _catchup.guard_or_reset_backfill(
+            conn=_guard_conn, target_table=_TARGET_TABLE, season=season, reset=reset,
+            label="matchup-cell-backfill", dry_run=dry_run,
+        )
+    finally:
+        _guard_conn.close()
 
     if not dry_run:
         print(f"\nEnsuring DDL for {_TARGET_TABLE} (Snowflake)...")

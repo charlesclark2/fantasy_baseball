@@ -189,6 +189,47 @@ def run_catchup(
 # explicitly asks for the reset.
 # ═══════════════════════════════════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════════════════════════════
+# 🚨 …AND A SECOND DEFECT THE FIRST ONE CREATED (2026-07-31, hit within hours of shipping):
+# A `--reset` THAT DELETES BEFORE VALIDATING THE SOURCE TURNS A READ ERROR INTO AN EMPTY STORE.
+#
+# `guard_or_reset_backfill` DELETEs the season, and all three writers called it BEFORE reading
+# their game-date source. The first live `--reset` deleted 52,300 rows from
+# player_sequential_posteriors and THEN raised, because the backfill's PA substrate
+# (`mart_pitch_play_event`) had been dropped from Snowflake by E11.20 phase-1.5 and the command
+# omitted `--s3`. Net effect: an inflated-but-usable store became an EMPTY one, and the two
+# consumers (eb_batter_posteriors_raw / eb_starter_posteriors) lost their as-of posterior_mu.
+#
+# ⭐ THE LESSON: a repair tool's destructive step must be ordered AFTER every read it depends on.
+# A guard that makes the fix safe against DOUBLE-APPLY, but unsafe against SOURCE-UNAVAILABLE,
+# has just moved the failure — and moved it somewhere worse, because a silent inflation degrades
+# calibration while an empty table breaks the join outright.
+#
+# ⚠️ Note the failure mode is NOT hypothetical for the other direction either: `--s3` is REQUIRED
+# on the player and matchup backfills (the SF `mart_pitch_*` family is gone), and the S3 read
+# additionally needs `LAKEHOUSE_DELTA_W1=cutover` to route to delta_scan rather than the legacy
+# parquet glob phase-1.5 deleted.
+# ═══════════════════════════════════════════════════════════════════════════════════════
+
+def require_source_before_reset(game_dates, *, season: int, label: str) -> None:
+    """RAISE if the backfill's source yielded no dates — call BEFORE guard_or_reset_backfill.
+
+    An empty source means the replay would write nothing, so deleting first would leave the store
+    strictly worse than it started. Ordering this ahead of the DELETE is the whole point; the
+    accompanying guard test pins that ordering in all three writers.
+    """
+    if not game_dates:
+        raise SystemExit(
+            f"[{label}] REFUSING TO RESET: the season-{season} source returned ZERO game dates, so "
+            f"the replay would write nothing and a --reset would leave the table EMPTY. This is "
+            f"almost always a SOURCE problem, not an empty season — the PA substrate "
+            f"(mart_pitch_play_event) no longer exists in Snowflake (E11.20 phase-1.5), so the "
+            f"player and matchup backfills REQUIRE --s3, and the S3 read requires "
+            f"LAKEHOUSE_DELTA_W1=cutover (else it falls back to the deleted parquet glob). "
+            f"Fix the source, then re-run."
+        )
+
+
 def season_row_count(conn, target_table: str, season: int, fetch_dicts=None) -> int:
     """Rows already stored for `season` in `target_table` (0 when the table does not yet exist)."""
     fetch_dicts = fetch_dicts or _default_fetch_dicts
