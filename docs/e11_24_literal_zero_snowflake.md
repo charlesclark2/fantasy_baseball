@@ -584,6 +584,164 @@ line only moves once the warehouse actually stays suspended for long stretches.
 🚨 **Clean-baseline caveat:** use **≤7/28** as the pre-flip reference. 7/29 is contaminated by the
 census's own audit queries — which is what stage 1's `MONITOR_WH` change permanently fixes.
 
+## TARGET 6 — the intraday EB/lineup + feature dbt chain (2026-07-31, code-complete, UNFLIPPED)
+
+### Fresh census first — the attribution MOVED, and it changes what is worth doing
+
+8 days to 2026-07-31, `queued_provisioning_time > 0`, run on `MONITOR_WH`. **662 total waits, down
+from 802** on the previous window (−17%) with no target-6 work done — the E11.20 phase-2a/2b flips
+are still landing.
+
+| Sub-family | Waits (8d) | Last seen | Verdict |
+|---|---|---|---|
+| **umpire chain** (`stg_statsapi_umpire_game_log` 57 + `feature_pregame_umpire_features` 54) | **111 (16.8%)** | **7/31** | ⬅ the target |
+| `pipeline_run_log` INSERT | 47 | 7/31 | live (see the standing caveat) |
+| `player_sequential_posteriors` reads | 48 | 7/31 | live |
+| `int_bullpen_ali_by_season` | 38 | 7/31 | 1b flipped 19:45 UTC 7/31 — verify 8/1 |
+| `feature_pregame_lineup_features` + `_starter_features` | 47 | 7/31 | live |
+| `stg_statsapi_lineups_wide` + `stg_statsapi_probable_pitchers` CTAS | 69 | **7/25** | ✅ **already dead** |
+| weather slate (lever 2) / metering (lever 3) / `compute_elo` (lever 1) | 45 / 27 / 29 | **7/29** | ✅ stage 1 confirmed live |
+
+Two things fall out that were not true when this story was written:
+
+1. ⭐ **The `lineups_wide` / `probable_pitchers` CTAS sub-family — 69 waits, the census's #2 and #3
+   items — went to ZERO after 7/25.** `TICK_SF_FREE` took them. A large slice of "target 6" was
+   already won by phase-2a; only the umpire chain and the lineup/starter feature CTAS remain.
+2. 🚨 **Target 6's own #2 item, the SCD-2 signal writers, is measurably NOT WORTH A SERVING FLIP.**
+   Classified by query shape over the same 662 waits:
+
+   | Family | Waits | Share |
+   |---|---|---|
+   | scd2 signal writers (`mart_sub_model_signals` / `tmp_scd2_incoming`) | **5** | **0.8%** |
+   | `feature_pregame_sub_model_signals` consumer | 7 | 1.1% |
+
+   The whole "port `scd2_upsert` once + repoint the dbt readers" item is worth **~12 waits / 8 days
+   (1.8%)** while requiring a cutover on `feature_pregame_game_features_raw` and the
+   `eb_posteriors/*` family — the highest-regression-risk surface in the program. This is exactly
+   what the stage-2 section predicted ("post-1b they are a literal-zero housekeeping item, not a
+   credit lever"); the measurement now confirms it. **Sequenced AFTER the umpire-gate soak, and
+   only after a re-measure post-1b.** See "What was deliberately NOT done" below.
+
+### 1. The per-slate umpire idempotency gate — `E11_24_UMPIRE_REBUILD_GATE` (default OFF)
+
+`betting_ml/monitoring/umpire_rebuild_gate.py` + a selector change in
+`pipeline/ops/sensor_ops.py::lineup_dbt_feature_rebuild`. On the Snowflake target both umpire
+models are literally `select * from lakehouse_ext.<model>`, so every intraday tick re-copied an
+unchanged external table.
+
+**Gate key = "an assignment newer than the last rebuild", NOT "already rebuilt today."** The
+watermark is `MAX(loaded_at)` over `lakehouse_raw/umpire_game_log/` for the slate, compared against
+a small S3 marker (`baseball/lakehouse_state/umpire_rebuild_watermark.json`). That choice is what
+keeps the gate from entrenching the separate late-assignment defect: the ~23:10 UTC write bumps the
+watermark, so it still triggers exactly one rebuild. A date-keyed gate would have latched in the
+afternoon and suppressed precisely the rebuild that matters.
+
+- **Fail-OPEN everywhere** — connect error, read error, missing marker, and "no umpire row yet" all
+  resolve to "rebuild". This block has an incident history (INC-31, F2) of silently zeroing.
+- **The marker advances only after the dbt run succeeds, and only to the watermark read BEFORE it
+  ran**, so an assignment landing mid-rebuild is not swallowed.
+- **Safety floor:** only the intraday rebuild is gated. The once-daily `dbt_umpire_feature_rebuild`
+  stays ungated, so a wedged marker can cost at most one slate's intraday freshness.
+- `ingest_umpires.py` still runs every tick (S3 write, no Snowflake) — the gate removes the dbt
+  CTAS only, leaving story 30.5's lateness fix independent.
+- 16 tests in `betting_ml/tests/test_umpire_rebuild_gate.py`, weighted toward the must-not-skip
+  paths.
+
+### 2. INC-25 durable fix — `E11_24_BULLPEN_S3_READ` (default OFF)
+
+⚠️ **CORRECTION to this story's own specification.** The story said "have the bullpen branch read
+`lakehouse_ext.eb_bullpen_posteriors` DIRECTLY". **That would not have broken the cycle.** The
+daily order is
+
+```
+lk9 (--w8a → S3 EB parquet) → lk10 (--w8b aggregator, mirrors team_sequential_posteriors)
+  → s5c → s5d (refresh_w1_external_tables) → … → dbt_build_bullpen_posteriors_op
+  → update_player/team/matchup_posteriors_op
+```
+
+The **external table is only refreshed at s5d, which is also after lk10** — so repointing to it
+swaps one post-lk10 dependency for another. The only artifact fresh at lk9 is the **S3 parquet
+itself**, so `update_team_posteriors._BULLPEN_S3_SQL` reads it through DuckDB
+(`register_lakehouse_views`, never a hardcoded glob — the 2026-07-20 phase-1.5 P0). That is also
+strictly better for E11.24: it removes a Snowflake read that dragged a full `stg_batter_pitches`
+scan with it.
+
+⛔ **Deliberately NOT fail-open.** Unlike a monitoring gate this feeds a non-idempotent,
+strictly-ordered chain: silently returning `[]` would make `run_catchup_loop` read the date as
+"source not ready" and stall the metric. A read error raises; an honest empty still stalls, exactly
+as the Snowflake path does.
+
+⏭️ **Follow-on (a separate flip):** once this soaks, `update_team_posteriors_op` can move BEFORE
+lk10, and E9.53's intraday `team_sequential_posteriors` re-mirror becomes unnecessary.
+
+### 3. The sibling posterior stores — AUDITED, and BOTH ARE DIRTY
+
+E9.53 flagged `player_sequential_posteriors` and `matchup_cell_sequential_posteriors` as
+"guarded but unaudited". Audited 2026-07-31:
+
+| Store | Seasons 2021-25 | Season 2026 | Consumed columns |
+|---|---|---|---|
+| `player_sequential_posteriors` | **exactly 1.0000**, 0 violations | **1,010 / 1,513 chains inflated**, median 1.147, max 4.0 | `posterior_mu` only |
+| `matchup_cell_sequential_posteriors` | n/a (2026 only) | **25 / 25 cells inflated**, avg 1.158 | `posterior_mu`, **`posterior_sigma`, `n_pa_cumulative`** |
+
+🔧 **A DIFFERENT MECHANISM FROM E9.53 — not a backfill.** Read off the SCD-2 history, player
+679358 / `xwoba_against` / game 823692 was written **three times on 2026-06-23** (10:21, 12:13,
+13:52 UTC), each re-absorbing the same 3 PA: `n_cumulative` 182 → 185 → 188. That is the **hourly
+`statcast_catchup_job` re-fire** (this story's own lever-1b finding) hitting writers that then ran
+`--date yesterday` unconditionally. **Duplicates stop at 2026-07-19**, when the `--catchup` frontier
+landed — so the ongoing defect is already closed and only the corrupted 2026 state remains.
+
+⭐ **The team store's identity does not transfer, so the guards use a different one.** `win_prob`
+absorbs one observation per team per game, so `n_cumulative == games played` works there; a
+player's observations are PA counts. What *is* exact — and needs no external truth table — is a
+**conservation identity**:
+
+```
+n_cumulative (at is_current)  ==  Σ n_obs over DISTINCT (chain, game_pk)
+```
+
+Validated two-sided before shipping: **exactly 1.0000 on all five clean seasons, up to 4.0 on the
+dirty one.** Shipped as `dbt/tests/assert_{player,matchup_cell}_sequential_no_double_apply.sql`,
+with both tables added to `sources.yml`. Executed live: the repaired **team guard PASSES** while the
+two new ones fail 1,006 and 25 rows — a clean three-way control.
+
+📉 **Scope the consumed quantity before escalating (the E9.53 lesson), and it splits the two:**
+- **player** — both consumers (`eb_batter_posteriors_raw`, `eb_starter_posteriors`) select
+  `sp.posterior_mu` ONLY. The corrupted second moment is **not served**. The mean *does* drift here
+  (unlike team), but slightly: median |Δ| **0.0022** xwoba, max 0.0436, on a ~0.31 scale.
+- **matchup — the argument does NOT hold.** `generate_matchup_signals._load_seq_cell_posteriors`
+  selects `posterior_sigma` and `n_pa_cumulative` and assigns
+  `active_cell_sigmas[bi, pi] = posterior_sigma`. Since σ ∝ 1/√n, a 1.158× inflation makes the
+  served cell sigma **~7.1% too small** — a serving-path calibration defect, not just a store one.
+  ⇒ this one warrants the repair, not merely a note.
+
+### What was deliberately NOT done, and why
+
+- **The `scd2_upsert` Delta port + dbt-reader repoint (story item 2) and the remaining intraday
+  repoints (item 5).** Measured at 1.8% of waits (above) against a cutover on
+  `feature_pregame_game_features_raw` + `eb_posteriors/*`. This repo's guardrail is **one
+  serving-flip per soak**, and the umpire gate + bullpen read already occupy this one. Re-measure
+  after 1b's 8/1 window before spending a flip here.
+- **No ext table dropped, no warehouse suspended** — that is target 7, explicitly out of scope.
+
+### Expected wake response and how to verify it
+
+Baseline to compare against (this doc's methodology: **resumes AND active-minutes**, never
+sum-of-elapsed; ⛔ do not read the credit line for a single lever — `account_usage` lags ≥12h):
+
+| UTC day | Resumes | Active min | Waits |
+|---|---|---|---|
+| 7/28 (clean pre-stage-1 reference) | 44 | 167 | 58 |
+| 7/30 (post stage-1 levers 1/2/3) | 43 | 141 | 60 |
+| 7/31 (partial) | 28 | 135 | 48 |
+
+The umpire gate should remove ~14 waits/day from UTC hours 13-23. Because it removes a **bursty**
+sub-family rather than an evenly-spread poller, expect it to show in **waits and resumes** — the
+mirror image of the weather lever, which moved active-minutes and left resumes flat.
+
+⚠️ 2026-07-31 is contaminated by this session's own `dbtf test`/audit runs; use **8/1 or later** as
+the post-flip reference, and **7/30** as the pre-flip one.
+
 ## Exit criterion
 
 `warehouse_events_history` shows near-zero `RESUME_WAREHOUSE` on a **zero-game window**, the warehouse

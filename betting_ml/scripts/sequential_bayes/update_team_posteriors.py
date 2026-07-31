@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -146,6 +147,97 @@ WHERE p.game_date = %(game_date)s
 GROUP BY p.game_pk, p.game_date,
          CASE WHEN p.inning_half = 'Bot' THEN p.away_team ELSE p.home_team END
 """
+
+# ── E11.24 target 6 / INC-25 DURABLE FIX — the bullpen observation read off Snowflake ──────
+#
+# WHY THIS EXISTS (and a CORRECTION to how the fix was originally specified).
+#
+# The daily graph order is:  lk9 (--w8a, writes the S3 EB parquet) → lk10 (--w8b aggregator,
+# which MIRRORS team_sequential_posteriors to S3) → s5d (refresh_w1_external_tables) → …later…
+# dbt_build_bullpen_posteriors_op → update_player/team/matchup_posteriors_op.
+#
+# So the w8b aggregator mirrors a team_sequential_posteriors that is ALWAYS ONE SLATE STALE,
+# because this writer runs long after it. The reason the two cannot simply be swapped is that
+# this writer's bullpen branch read `baseball_data.betting.eb_bullpen_posteriors` — a dbt copy
+# that only exists after s5d. E9.53 worked around it by re-mirroring the table on the intraday
+# path; the durable fix is to remove the dependency instead.
+#
+# ⚠️ CORRECTION to the E11.24 story text, which said "read lakehouse_ext.eb_bullpen_posteriors
+# DIRECTLY". That would NOT break the cycle: the external table is only refreshed at s5d, which
+# is ALSO after lk10. The ONLY artifact that is fresh at lk9 is the **S3 parquet itself**. So the
+# repoint has to go all the way to DuckDB-over-S3 — which is additionally what E11.24 wants (one
+# fewer COMPUTE_WH read, and this one drags a full stg_batter_pitches scan with it).
+#
+# Once this has soaked, update_team_posteriors_op can be moved BEFORE lk10 and E9.53's intraday
+# team_sequential_posteriors re-mirror becomes unnecessary. That reorder is a SEPARATE flip — it
+# changes the daily graph, and this repo allows one serving-flip per soak.
+#
+# INC-23: game_date may be an ISO VARCHAR or a real DATE in the lakehouse depending on the table,
+# so both sides are compared via try_cast(... AS DATE) against a bound python date. An un-cast
+# `=` against a wrapped timestamp is a SILENT EMPTY, not an error (E9.52) — which here would
+# read as "no bullpen observations", i.e. a permanently stalled metric.
+_BULLPEN_S3_ENV = "E11_24_BULLPEN_S3_READ"
+
+_BULLPEN_S3_TABLES = ("stg_batter_pitches", "eb_bullpen_posteriors")
+
+_BULLPEN_S3_SQL = """
+SELECT
+    p.game_pk,
+    p.game_date,
+    CASE WHEN p.inning_half = 'Bot' THEN p.away_team ELSE p.home_team END AS team,
+    AVG(p.xwoba) AS obs_mean,
+    COUNT(*)     AS n_obs
+FROM stg_batter_pitches p
+JOIN (
+    SELECT DISTINCT pitcher_id, game_pk
+    FROM eb_bullpen_posteriors
+    WHERE try_cast(game_date AS DATE) = ?
+) b
+  ON p.pitcher_id = b.pitcher_id AND p.game_pk = b.game_pk
+WHERE try_cast(p.game_date AS DATE) = ?
+  AND p.game_type = 'R'
+  AND p.plate_appearance_event IS NOT NULL
+  AND p.xwoba IS NOT NULL
+GROUP BY p.game_pk, p.game_date,
+         CASE WHEN p.inning_half = 'Bot' THEN p.away_team ELSE p.home_team END
+"""
+
+
+def bullpen_s3_read_on() -> bool:
+    """E11.24 cutover lever — read the bullpen observations from S3/DuckDB, not Snowflake."""
+    return os.environ.get(_BULLPEN_S3_ENV, "0").strip() == "1"
+
+
+def fetch_bullpen_obs_s3(target_date, *, conn_factory=None) -> list[dict]:
+    """The bullpen branch's observations, read from the S3 lakehouse via DuckDB.
+
+    ⛔ NOT fail-open. Unlike a monitoring gate, this feeds a NON-IDEMPOTENT, strictly-ordered
+    chain: silently returning [] would make run_catchup_loop treat the date as "source not ready"
+    and STALL the metric — which is the correct, self-healing behaviour for a genuinely absent
+    source, but a LIE if the read merely errored. So a read failure RAISES and the caller decides;
+    an honest empty result still stalls, exactly as the Snowflake path does.
+
+    Uses register_lakehouse_views (never a hardcoded glob) — the 2026-07-20 phase-1.5 P0: the
+    legacy parquet layout under lakehouse/<w1 table>/ was DELETED, so a hardcoded read_parquet on
+    a cut-over W1 mart raises and takes the whole daily job down before predict_today.
+    """
+    if conn_factory is None:
+        from betting_ml.utils.lakehouse_monitor import duck as conn_factory  # noqa: N813
+
+    from betting_ml.utils.delta_lakehouse import register_lakehouse_views
+
+    conn = conn_factory()
+    try:
+        register_lakehouse_views(conn, _BULLPEN_S3_TABLES)
+        cur = conn.execute(_BULLPEN_S3_SQL, [target_date, target_date])
+        cols = [d[0].lower() for d in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+    finally:
+        try:
+            conn.close()
+        except Exception:  # noqa: BLE001
+            pass
+
 
 _RESULTS_SQL = """
 SELECT game_pk, game_date, home_team, away_team, home_team_won
@@ -263,7 +355,14 @@ def _collect_observations(conn, target_date: date,
                         "obs_value": float(r["obs_mean"]), "n_obs": int(r["n_obs"])})
 
     if _want(_M_PEN):
-        for r in _fetch_dicts(conn, _BULLPEN_SQL, {"game_date": d}):
+        # E11.24 target 6 / INC-25 durable fix — S3/DuckDB when the lever is on, else Snowflake.
+        # Identical row shape either way (game_pk, game_date, team, obs_mean, n_obs).
+        pen_rows = (
+            fetch_bullpen_obs_s3(target_date)
+            if bullpen_s3_read_on()
+            else _fetch_dicts(conn, _BULLPEN_SQL, {"game_date": d})
+        )
+        for r in pen_rows:
             obs.append({"team": r["team"], "metric": _M_PEN, "dist": "normal",
                         "game_pk": int(r["game_pk"]), "game_date": _as_date(r["game_date"]),
                         "obs_value": float(r["obs_mean"]), "n_obs": int(r["n_obs"])})
