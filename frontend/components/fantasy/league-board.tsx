@@ -24,8 +24,8 @@ import {
   PositionTabs,
   ProvenanceLine,
   RookieBadge,
-  LowPredBadge,
   ALL_POSITIONS,
+  SKILL_POSITIONS,
   SurfaceHeader,
   UncertaintyNote,
   num,
@@ -62,9 +62,17 @@ export function LeagueBoard() {
 
   // Per-position replacement level + how many players clear it league-wide (= startable at that
   // position once flex/superflex demand is allocated).
+  //
+  // ⚠️ SKILL positions only, deliberately — this panel is NOT merely a summary of the rows below.
+  // Replacement level is the yardstick a drafter reasons with ("is this worth a pick here?"), and
+  // that reasoning only applies where the position is genuinely contested. Every league starts
+  // exactly one K and one DST off a pool that is near-flat and near-unpredictable, so their
+  // replacement level is a real number that supports no decision — showing it invites the reader to
+  // treat a ~1-point gap between DST3 and DST7 as a draft-day edge. K/DST still rank in the table
+  // below (and still carry VOR, which is what correctly sorts them LAST).
   const summary = useMemo<PosSummary[]>(() => {
     const out: PosSummary[] = []
-    for (const p of ALL_POSITIONS) {
+    for (const p of SKILL_POSITIONS) {
       const atPos = ranked.filter((r) => r.pos === p)
       if (atPos.length === 0) continue
       const replacement = atPos[0].repl ?? 0
@@ -248,7 +256,6 @@ export function LeagueBoard() {
                           <span className="flex items-center gap-1.5">
                             <span className="font-medium text-gray-200">{p.name}</span>
                             {p.rookie && <RookieBadge />}
-                        {p.lowPred && <LowPredBadge note={p.predNote} />}
                           </span>
                         </td>
                         <td className="px-3 py-2">
@@ -312,6 +319,14 @@ export function LeagueBoard() {
                     steep drop to the next player at a position, is the signal worth drafting on. The
                     80% band under each bar is carried straight through from the projection, shifted by
                     the replacement level.
+                  </p>
+                  <p className="mt-2">
+                    <span className="font-semibold text-gray-300">Kickers and defences.</span> They
+                    rank in the table but are left out of the replacement-level panel above. Every
+                    league starts one of each off a pool that is nearly flat and nearly
+                    unpredictable, so their baseline is a real number that supports no decision. Their
+                    small value over replacement is the honest answer, and it is what correctly sorts
+                    them to the end of the board.
                   </p>
                   {hasAdp && (
                     <p className="mt-2">

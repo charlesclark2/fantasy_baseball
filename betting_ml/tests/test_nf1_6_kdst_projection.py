@@ -684,14 +684,23 @@ def test_the_ranked_surfaces_do_not_filter_to_skill_positions_only(surface):
     with `SKILL_POSITIONS.includes(p.pos)`. Nothing server-side can see that: the data is correct all
     the way to the browser, and a client-side filter then discards it.
 
-    So the guard lives here, in the gate that actually runs. A ranked surface must filter on
-    `ALL_POSITIONS` (which includes K/DST), never on `SKILL_POSITIONS`."""
+    So the guard lives here, in the gate that actually runs. Every position test that decides WHICH
+    ROWS REACH THE TABLE must use `ALL_POSITIONS`.
+
+    ⚠️ Scoped to the row filter, not to the whole file: a surface may legitimately mention
+    `SKILL_POSITIONS` for a skill-only read that is NOT the row filter (the League Board's
+    replacement-level panel is deliberately skill-only). Banning the identifier file-wide would
+    forbid that, so the guard pins the thing that actually caused the outage — the `.includes(p.pos)`
+    membership test."""
     src = (_FRONTEND / "components" / "fantasy" / surface).read_text()
     assert "ALL_POSITIONS" in src, f"{surface} no longer references ALL_POSITIONS"
-    assert "SKILL_POSITIONS" not in src, (
-        f"{surface} filters on SKILL_POSITIONS — that silently drops every projected K/DST row from "
-        f"a ranked surface, which is invisible to every backend check (the data is correct right up "
-        f"to the browser). Use ALL_POSITIONS.")
+    filters = [ln.strip() for ln in src.splitlines() if ".includes(p.pos)" in ln]
+    assert filters, f"{surface} has no position row-filter to check — did the filter move or change shape?"
+    for ln in filters:
+        assert "ALL_POSITIONS" in ln, (
+            f"{surface} filters rows on a narrower set than ALL_POSITIONS ({ln!r}) — that silently "
+            f"drops every projected K/DST row from a ranked surface, which is invisible to every "
+            f"backend check (the data is correct right up to the browser).")
 
 
 def test_the_shared_position_constants_are_distinct_and_correct():
@@ -707,12 +716,49 @@ def test_the_shared_position_constants_are_distinct_and_correct():
 
 
 def test_the_frontend_types_declare_the_low_predictability_fields():
-    """A field absent from the TS interface is not a runtime error — it is silently unreadable in the
-    component (the same shape as the Pydantic response-model landmine, one layer up)."""
+    """The TS interfaces must stay in sync with what the export actually emits. A field absent from
+    the interface is not a runtime error — it is silently unreadable in the component (the same shape
+    as the Pydantic response-model landmine, one layer up), so a surface that later wants the caveat
+    would find the data 'missing' when it is right there in the payload."""
     for rel in (("lib", "draft-optimizer.ts"), ("lib", "fantasy.ts")):
         src = (_FRONTEND / rel[0] / rel[1]).read_text()
         assert "lowPred" in src and "predNote" in src, (
-            f"{rel[1]} does not declare lowPred/predNote — the honest K/DST caveat cannot render")
+            f"{rel[1]} does not declare lowPred/predNote, which the export emits on every K/DST row")
+
+
+def test_the_kdst_caveat_is_prose_not_a_per_row_badge():
+    """⭐ AN OPERATOR DECISION, PINNED (2026-07-31). The caveat first shipped as a per-row amber
+    'Tier' badge. On a board that already has a real tier COLUMN it was read as a RATING — 'Jake
+    Bates · Tier' parses as 'tier-one asset', i.e. the precise opposite of the warning it carried —
+    and on Projections it wrapped the name column.
+
+    A caveat that can be misread as a promotion is worse than no caveat, so it lives as prose in each
+    surface's notes instead. Restoring a per-row badge would re-introduce the misread, so it needs a
+    fresh decision, not a silent revert."""
+    offenders = []
+    for p in (_FRONTEND / "components" / "fantasy").glob("*.tsx"):
+        if "LowPredBadge" in p.read_text():
+            offenders.append(p.name)
+    assert not offenders, (
+        f"a per-row low-predictability badge is back in {offenders} — it was removed deliberately "
+        f"because it reads as a tier RATING beside the real tier column")
+    # ...but the caveat itself must survive somewhere on each ranked surface.
+    for surface in _RANKED_SURFACES + ("projections-table.tsx",):
+        src = (_FRONTEND / "components" / "fantasy" / surface).read_text()
+        assert "Kickers and defences" in src, (
+            f"{surface} carries no K/DST caveat at all — the badge was replaced by prose, not by "
+            f"silence; ranking a kicker with no honesty note is the outcome neither form wanted")
+
+
+def test_the_replacement_level_panel_is_skill_positions_only():
+    """The League Board's replacement-level panel is a DECISION aid, not a summary of the rows. Every
+    league starts exactly one K and one DST off a near-flat pool, so their replacement level is a real
+    number that supports no decision — publishing it invites reading a ~1-point DST3-vs-DST7 gap as a
+    draft-day edge. K/DST still rank in the table below; only the panel excludes them."""
+    src = (_FRONTEND / "components" / "fantasy" / "league-board.tsx").read_text()
+    assert "for (const p of SKILL_POSITIONS)" in src, (
+        "the replacement-level summary no longer iterates SKILL_POSITIONS — if it now covers K/DST "
+        "the panel is publishing a baseline that supports no decision")
 
 
 def test_no_surface_still_claims_kdst_are_unprojected():

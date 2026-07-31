@@ -26,7 +26,6 @@ import {
   PositionTabs,
   ProvenanceLine,
   RookieBadge,
-  LowPredBadge,
   SurfaceHeader,
   UNCERTAINTY_HELP,
   UNCERTAINTY_LABEL,
@@ -278,7 +277,6 @@ export function ProjectionsTable() {
                       <span className="flex items-center gap-1.5">
                         <span className="font-medium text-gray-200">{p.name}</span>
                         {p.rookie && <RookieBadge />}
-                        {p.lowPred && <LowPredBadge note={p.predNote} />}
                       </span>
                       {p.rookie && p.draftPick != null && (
                         <span className="text-[10px] text-gray-600">Pick {p.draftPick}</span>

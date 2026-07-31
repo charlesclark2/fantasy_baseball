@@ -32,7 +32,6 @@ import {
   RangeCell,
   ProvenanceLine,
   RookieBadge,
-  LowPredBadge,
   ALL_POSITIONS,
   SurfaceHeader,
   UncertaintyNote,
@@ -285,7 +284,6 @@ export function RankingsBoard() {
                             <span className="flex items-center gap-1.5">
                               <span className="font-medium text-gray-200">{p.name}</span>
                               {p.rookie && <RookieBadge />}
-                        {p.lowPred && <LowPredBadge note={p.predNote} />}
                             </span>
                           </td>
                           <td className="px-3 py-2">
@@ -357,6 +355,13 @@ export function RankingsBoard() {
                 Each board re-scores the same projected stat line under your league&apos;s rules, then
                 re-derives replacement level for that roster shape and league size — so superflex lifts
                 quarterbacks and full-PPR lifts pass-catchers for a real reason, not a cosmetic tweak.
+              </p>
+              <p className="mt-2">
+                <span className="font-semibold text-gray-300">Kickers and defences.</span> Both are
+                ranked here, but off a deliberately base projection: they are the least predictable
+                positions in fantasy, and the ordering within them separates good situations from bad
+                rather than good players from bad. Their tiers and ranks carry far less information
+                than the ones above them — treat that end of the board as streaming options.
               </p>
               {hasAdp && (
                 <p className="mt-2">
