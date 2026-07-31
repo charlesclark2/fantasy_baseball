@@ -15,6 +15,7 @@ import type { Player } from "@/lib/draft-optimizer"
 import {
   ADP_DELTA_LABEL,
   AdpDelta,
+  adpPositionRanks,
   EmptyBlock,
   FormatSelector,
   GLOSSARY,
@@ -24,6 +25,7 @@ import {
   PositionTabs,
   ProvenanceLine,
   RookieBadge,
+  ALL_POSITIONS,
   SKILL_POSITIONS,
   SurfaceHeader,
   UncertaintyNote,
@@ -49,17 +51,26 @@ export function LeagueBoard() {
 
   const config = manifest?.configs.find((c) => c.name === configName)
 
-  // K/DST carry no projection — they are never part of a value board.
+  // ⭐ NF1.6: K/DST now carry a real (BASE) projection with points and VOR, so they belong on the
+  // value board. The `pts`/`vor != null` tests still exclude a genuinely unprojected gap-fill row.
   const ranked = useMemo(
     () =>
       (board ?? []).filter(
-        (p) => p.pts != null && p.vor != null && (SKILL_POSITIONS as readonly string[]).includes(p.pos),
+        (p) => p.pts != null && p.vor != null && (ALL_POSITIONS as readonly string[]).includes(p.pos),
       ),
     [board],
   )
 
   // Per-position replacement level + how many players clear it league-wide (= startable at that
   // position once flex/superflex demand is allocated).
+  //
+  // ⚠️ SKILL positions only, deliberately — this panel is NOT merely a summary of the rows below.
+  // Replacement level is the yardstick a drafter reasons with ("is this worth a pick here?"), and
+  // that reasoning only applies where the position is genuinely contested. Every league starts
+  // exactly one K and one DST off a pool that is near-flat and near-unpredictable, so their
+  // replacement level is a real number that supports no decision — showing it invites the reader to
+  // treat a ~1-point gap between DST3 and DST7 as a draft-day edge. K/DST still rank in the table
+  // below (and still carry VOR, which is what correctly sorts them LAST).
   const summary = useMemo<PosSummary[]>(() => {
     const out: PosSummary[] = []
     for (const p of SKILL_POSITIONS) {
@@ -89,6 +100,14 @@ export function LeagueBoard() {
 
   const maxVor = useMemo(() => Math.max(1, ...rows.map((r) => r.vor ?? 0)), [rows])
   const hasAdp = useMemo(() => rows.some((r) => r.adp != null), [rows])
+
+  // Filtered to one position, the row index is a rank WITHIN that position, so it must be compared
+  // against the room's rank within the position rather than against ADP's overall pick number.
+  // Null on "All", where the row index and ADP are already the same scale. See `adpPositionRanks`.
+  const adpPosRank = useMemo(
+    () => (pos === "All" ? null : adpPositionRanks(rows)),
+    [rows, pos],
+  )
 
   // Drop-off to the next player at the same position — the "if I wait, this is what I lose" number
   // the draft optimizer prices as VONA. Computed over the FULL board, not the filtered view.
@@ -283,7 +302,12 @@ export function LeagueBoard() {
                             </td>
                             <td className="px-3 py-2 text-right">
                               {/* the value board's own order is the rank we compare ADP against */}
-                              <AdpDelta delta={p.adp != null ? p.adp - (i + 1) : null} />
+                              <AdpDelta
+                                delta={(() => {
+                                  const ref = adpPosRank ? (adpPosRank.get(p.id) ?? null) : p.adp ?? null
+                                  return ref != null ? ref - (i + 1) : null
+                                })()}
+                              />
                             </td>
                           </>
                         )}
@@ -309,6 +333,14 @@ export function LeagueBoard() {
                     steep drop to the next player at a position, is the signal worth drafting on. The
                     80% band under each bar is carried straight through from the projection, shifted by
                     the replacement level.
+                  </p>
+                  <p className="mt-2">
+                    <span className="font-semibold text-gray-300">Kickers and defences.</span> They
+                    rank in the table but are left out of the replacement-level panel above. Every
+                    league starts one of each off a pool that is nearly flat and nearly
+                    unpredictable, so their baseline is a real number that supports no decision. Their
+                    small value over replacement is the honest answer, and it is what correctly sorts
+                    them to the end of the board.
                   </p>
                   {hasAdp && (
                     <p className="mt-2">

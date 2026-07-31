@@ -20,6 +20,7 @@ import {
   ADP_DELTA_LABEL,
   ALL_ROWS,
   AdpDelta,
+  adpPositionRanks,
   EmptyBlock,
   FormatSelector,
   GLOSSARY,
@@ -32,7 +33,8 @@ import {
   RangeCell,
   ProvenanceLine,
   RookieBadge,
-  SKILL_POSITIONS,
+  ALL_POSITIONS,
+  LOW_PREDICTABILITY_POSITIONS,
   SurfaceHeader,
   UncertaintyNote,
   downloadCsv,
@@ -57,13 +59,15 @@ export function RankingsBoard() {
 
   // The board in its ranked order, BEFORE any search. Tiers and ranks are properties of the board,
   // so they are derived here and merely filtered below — searching never renumbers or re-tiers.
-  // K/DST carry no projection (offensive skill only) — they exist on the board purely so the draft
-  // tracker can record those picks, and must never appear in a ranked list.
+  // ⭐ NF1.6: K/DST now carry a real (BASE) projection, so they rank here like every other position.
+  // The `pts != null` test is what still excludes a genuinely unprojected row — a gap-fill K/DST
+  // placeholder for a team the projection missed — so an absent projection is shown as absent
+  // rather than as a zero.
   const ranked = useMemo(() => {
-    const skill = (board ?? []).filter(
-      (p) => p.pts != null && (SKILL_POSITIONS as readonly string[]).includes(p.pos),
+    const projected = (board ?? []).filter(
+      (p) => p.pts != null && (ALL_POSITIONS as readonly string[]).includes(p.pos),
     )
-    const scoped = skill.filter((p) => (pos === "Overall" ? true : p.pos === pos))
+    const scoped = projected.filter((p) => (pos === "Overall" ? true : p.pos === pos))
     return pos === "Overall"
       ? scoped.slice().sort((a, b) => a.ovrRank - b.ovrRank)
       : scoped.slice().sort((a, b) => a.posRank - b.posRank)
@@ -88,9 +92,20 @@ export function RankingsBoard() {
   //
   // Overall tiers on VOR (the cross-position value axis the tab is ordered by); a position tab
   // tiers on league points, which is that tab's own ordering.
+  //
+  // ⚠️ K and D/ST are NOT tiered, and that is a statement about the model rather than a UI choice.
+  // A tier break means "an unusually large drop" — it is only meaningful when the gaps carry signal.
+  // Kickers and defences project onto a near-flat board (the whole DST field spans ~10 points, and
+  // held-out rank correlation is ~0.32 for DST and ~0.23 among startable kickers), so `assignTiers`
+  // is reading NOISE and splitting on it: it will happily crown a "T1" kicker whose separation from
+  // T2 is well inside the interval either of them carries. That badge then reads as a confident
+  // rating on the one part of the board that has earned the least confidence. No tier is the honest
+  // rendering — these rows still rank, and the prose below says how to read that ranking.
   const tierOf = useMemo(() => {
     const m = new Map<string, number>()
-    const draftable = ranked.filter((p) => (p.vor ?? 0) > 0)
+    const draftable = ranked.filter(
+      (p) => (p.vor ?? 0) > 0 && !LOW_PREDICTABILITY_POSITIONS.includes(p.pos),
+    )
     if (draftable.length === 0) return m
     const vals = draftable.map((p) => (pos === "Overall" ? (p.vor ?? 0) : (p.pts ?? 0)))
     const tiers = assignTiers(vals)
@@ -119,6 +134,16 @@ export function RankingsBoard() {
 
   const hasAdp = useMemo(() => rows.some((p) => p.adp != null), [rows])
 
+  // On a position tab, our rank is 1..n WITHIN the position, so it must be compared against the
+  // room's rank within the position — not against ADP, which is an overall pick number. Null on the
+  // Overall tab, where our rank and ADP are already the same scale. See `adpPositionRanks`.
+  const adpPosRank = useMemo(
+    () => (pos === "Overall" ? null : adpPositionRanks(ranked)),
+    [ranked, pos],
+  )
+  /** The room's position for this row, on whichever scale the active tab ranks in. */
+  const adpRefOf = (p: Player) => (adpPosRank ? (adpPosRank.get(p.id) ?? null) : p.adp ?? null)
+
   const exportCsv = () => {
     downloadCsv(
       `credence-rankings-${configName}-${size}team-${pos.toLowerCase()}.csv`,
@@ -129,7 +154,9 @@ export function RankingsBoard() {
         return [
           rank, tierOf.get(p.id) ?? "", p.name, p.pos, teamLabel(p), p.bye ?? null, p.g, p.pts,
           p.ptsP10 ?? null, p.ptsP90 ?? null, p.vor, p.posRank, p.adp ?? null,
-          p.adp != null ? Math.round(p.adp - rank) : null, p.rookie ? "yes" : "no",
+          // same scale as the rendered column — see adpRefOf
+          adpRefOf(p) != null ? Math.round((adpRefOf(p) as number) - rank) : null,
+          p.rookie ? "yes" : "no",
           // carried so a downloaded board still says which ranges are class-level, not per-player
           p.rookie ? "class-level" : "player",
         ]
@@ -317,7 +344,12 @@ export function RankingsBoard() {
                                 {p.adp != null ? num(p.adp) : "—"}
                               </td>
                               <td className="px-3 py-2 text-right">
-                                <AdpDelta delta={p.adp != null ? p.adp - rank : null} />
+                                <AdpDelta
+                                  delta={(() => {
+                                    const ref = adpRefOf(p)
+                                    return ref != null ? ref - rank : null
+                                  })()}
+                                />
                               </td>
                             </>
                           )}
@@ -353,6 +385,14 @@ export function RankingsBoard() {
                 Each board re-scores the same projected stat line under your league&apos;s rules, then
                 re-derives replacement level for that roster shape and league size — so superflex lifts
                 quarterbacks and full-PPR lifts pass-catchers for a real reason, not a cosmetic tweak.
+              </p>
+              <p className="mt-2">
+                <span className="font-semibold text-gray-300">Kickers and defences.</span> Both are
+                ranked here, but off a deliberately base projection: they are the least predictable
+                positions in fantasy, and the ordering within them separates good situations from bad
+                rather than good players from bad. They are shown without tiers on purpose — the
+                whole field fits inside a few points, so any &ldquo;tier break&rdquo; there would be
+                splitting noise. Treat that end of the board as streaming options.
               </p>
               {hasAdp && (
                 <p className="mt-2">

@@ -36,8 +36,43 @@ NFL_PROFILE = SportProfile(
         "rec_td": "proj_rec_td",
         "fumbles_lost": "proj_fumbles_lost",
         "two_pt": "proj_two_pt",
+        # ── NF1.6: KICKER raw components (distance-bucketed, so a league's own 3/4/5 — or any
+        #    other per-distance schedule — is expressed exactly rather than approximated) ───────
+        "fg_att": "proj_fg_att",
+        "fg_made": "proj_fg_made",
+        "fg_made_0_39": "proj_fg_made_0_39",
+        "fg_made_40_49": "proj_fg_made_40_49",
+        "fg_made_50_plus": "proj_fg_made_50_plus",
+        "fg_missed": "proj_fg_missed",
+        "pat_att": "proj_pat_att",
+        "pat_made": "proj_pat_made",
+        # ── NF1.6: TEAM DEFENSE (DST) raw components ──────────────────────────────────────────
+        "def_sacks": "proj_def_sacks",
+        "def_int": "proj_def_int",
+        "def_fumble_rec": "proj_def_fumble_rec",
+        "def_td": "proj_def_td",
+        "st_td": "proj_st_td",
+        "def_safety": "proj_def_safety",
+        "def_blocked_kick": "proj_def_blocked_kick",
+        "dst_points_allowed": "proj_dst_points_allowed",
+        # ⭐ The POINTS-ALLOWED TIER terms. Each column is the EXPECTED NUMBER OF GAMES landing in
+        #    that points-allowed bucket, so a per-game tier table scores a season as
+        #    `Σ_bucket tier_points × expected_games` — LINEAR in these columns, which is what lets
+        #    the sport-agnostic scorer express any tier scheme EXACTLY with no engine change (and
+        #    is why NF-C0b's tier work needs no new plumbing, only its own `per_stat` weights).
+        #    The nine edges are the common refinement of the ESPN and Yahoo schemes, so both are
+        #    exact unions of them. See `kdst_projection.PA_BUCKET_LABELS`.
+        "dst_pa_g_0": "proj_dst_pa_g_0",
+        "dst_pa_g_1_6": "proj_dst_pa_g_1_6",
+        "dst_pa_g_7_13": "proj_dst_pa_g_7_13",
+        "dst_pa_g_14_17": "proj_dst_pa_g_14_17",
+        "dst_pa_g_18_20": "proj_dst_pa_g_18_20",
+        "dst_pa_g_21_27": "proj_dst_pa_g_21_27",
+        "dst_pa_g_28_34": "proj_dst_pa_g_28_34",
+        "dst_pa_g_35_45": "proj_dst_pa_g_35_45",
+        "dst_pa_g_46p": "proj_dst_pa_g_46p",
     },
-    positions=("QB", "RB", "WR", "TE"),
+    positions=("QB", "RB", "WR", "TE", "K", "DST"),
     position_column="position",
     base_points_column="proj_fp_ppr",   # the MVP-1 convenience total the interval was built on
     base_sd_column="fp_ppr_sd",
@@ -46,7 +81,19 @@ NFL_PROFILE = SportProfile(
     # rebuilding it from a single sd would silently re-centre it — the CV path stays as the fallback.
     base_p10_column="fp_ppr_p10",
     base_p90_column="fp_ppr_p90",
-    position_aliases={"FB": "RB"},       # fullbacks are RB / flex-eligible, not an un-scarce island
+    # NF1.6: the K/DST projection duplicates its convenience total + bounds into the SAME four
+    # columns, so a `concat` of the offensive and K/DST projections scores under this one profile.
+    # ⚠️ K/DST bands are MORE skewed than any offensive position (both targets floor at 0 and a cut
+    # kicker realises exactly 0), so the per-side p10/p90 path above is what keeps the rescore
+    # coherent for them — a single-`sd` reconstruction would re-symmetrise a band whose p10 IS 0.
+    position_aliases={
+        "FB": "RB",          # fullbacks are RB / flex-eligible, not an un-scarce island
+        # NF1.6: platform feeds spell the two new positions several ways — fold them all onto the
+        # canonical codes so an imported league config never creates a phantom position with no
+        # projections behind it.
+        "DEF": "DST", "D/ST": "DST", "DEFENSE": "DST", "D": "DST",
+        "PK": "K", "KICKER": "K",
+    },
 )
 
 # Standard NFL scoring shared by every preset (only the per-reception weight + roster differ). 4-pt
@@ -58,12 +105,38 @@ _BASE_SCORING = {
     "fumbles_lost": -2.0, "two_pt": 2.0,
 }
 
+# ── NF1.6: default KICKER + DST scoring, shared by every preset ────────────────────────────────
+# The modal defaults (ESPN/Yahoo agree on distance-bucketed FG 3/4/5 and PAT 1). A league overrides
+# any of these through `custom_config(scoring=ScoringRules(...))` exactly like the offensive terms —
+# nothing here is special-cased in the engine.
+_K_SCORING = {
+    "fg_made_0_39": 3.0, "fg_made_40_49": 4.0, "fg_made_50_plus": 5.0, "pat_made": 1.0,
+}
+# The ESPN-default DST takeaway terms.
+_DST_SCORING = {
+    "def_sacks": 1.0, "def_int": 2.0, "def_fumble_rec": 2.0, "def_td": 6.0, "st_td": 6.0,
+    "def_safety": 2.0, "def_blocked_kick": 2.0,
+}
+# ⭐ The ESPN-default POINTS-ALLOWED TIER table, expressed as per-bucket weights on the
+# expected-games columns. Because those columns are `games × P(bucket)`, this linear form is the
+# tier table EXACTLY — not an approximation of it. Yahoo's scheme differs only in these weights
+# (its 14-20 tier = our 14_17 + 18_20, its 21-27 = our 21_27, its 35+ = our 35_45 + 46p), which is
+# why the nine buckets were chosen as the common refinement of the two.
+_DST_PA_TIER_SCORING = {
+    "dst_pa_g_0": 5.0, "dst_pa_g_1_6": 4.0, "dst_pa_g_7_13": 3.0, "dst_pa_g_14_17": 1.0,
+    "dst_pa_g_18_20": 0.0, "dst_pa_g_21_27": 0.0, "dst_pa_g_28_34": -1.0,
+    "dst_pa_g_35_45": -3.0, "dst_pa_g_46p": -5.0,
+}
+_KDST_SCORING = {**_K_SCORING, **_DST_SCORING, **_DST_PA_TIER_SCORING}
+
 # Flex eligibility conventions (a league can redefine per slot).
 _FLEX_ELIG = ("RB", "WR", "TE")
 _SUPERFLEX_ELIG = ("QB", "RB", "WR", "TE")
 
-# Standard redraft starting lineup (dedicated + one FLEX) + bench. K/DST are declared for completeness
-# but the MVP-1 projection carries no K/DST line, so they contribute no ranked players (kept honest).
+# Standard redraft starting lineup (dedicated + one FLEX) + bench. ⭐ NF1.6: the K and DST slots are
+# now BACKED BY A PROJECTION (`run_kdst_projection`) — before it they were declared for completeness
+# but contributed no ranked players, so the slots rendered "not projected". They rank on a
+# deliberately BASE model with wide honest intervals; read them as streaming tiers, not fine ranks.
 _STD_ROSTER = (
     RosterSlot("QB", 1, ("QB",)),
     RosterSlot("RB", 2, ("RB",)),
@@ -101,7 +174,7 @@ _SUPERFLEX_ROSTER = (
 
 
 def _scoring(rec_pts: float, te_premium: float = 0.0) -> ScoringRules:
-    per_stat = dict(_BASE_SCORING, rec=rec_pts)
+    per_stat = dict(_BASE_SCORING, **_KDST_SCORING, rec=rec_pts)
     bonuses = {"TE": {"rec": te_premium}} if te_premium else {}
     return ScoringRules(per_stat=per_stat, position_bonuses=bonuses)
 

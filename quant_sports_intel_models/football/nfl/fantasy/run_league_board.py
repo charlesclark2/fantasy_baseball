@@ -88,6 +88,78 @@ def load_projection_local(artifacts_dir: Path, season: int) -> pd.DataFrame:
     return pd.read_parquet(p)
 
 
+def load_kdst_local(artifacts_dir: Path, season: int) -> pd.DataFrame:
+    """NF1.6 — the K/DST BASE projection, from its own artifact lineage.
+
+    Best-effort by design: a missing K/DST artifact must not cost the operator the offensive board,
+    which is the draft-critical output. It logs loudly and the K/DST slots fall back to the
+    pre-NF1.6 "declared but unprojected" behaviour rather than failing the run."""
+    p = artifacts_dir / f"nfl_fantasy_kdst_projections_{season}.parquet"
+    if not p.exists():
+        log.warning("[ALERT] NF1.6 K/DST projection artifact NOT FOUND at %s — the board's K and DST "
+                    "slots will render UNPROJECTED. Run run_kdst_projection.py to fill them.", p)
+        return pd.DataFrame()
+    return pd.read_parquet(p)
+
+
+def load_kdst_lake(season: int) -> pd.DataFrame:
+    """NF1.6 — the K/DST BASE projection from the S3 lake Delta (best-effort; see `load_kdst_local`)."""
+    import duckdb
+
+    from quant_sports_intel_models.football.nfl.ingest import s3io
+
+    try:
+        uri = s3io.table_uri("nfl", "kdst_projections", tier="fantasy/derived")
+        con = _kdst_lake_connection()
+        try:
+            return con.sql(
+                f"select * from delta_scan('{uri}') where projection_season = {season}").df()
+        finally:
+            con.close()
+    except Exception as exc:  # noqa: BLE001 — advisory: never lose the offensive board over K/DST
+        log.warning("[ALERT] NF1.6 K/DST lake read FAILED (%s) — the board's K and DST slots will "
+                    "render UNPROJECTED", exc)
+        return pd.DataFrame()
+
+
+def combine_projections(offense: pd.DataFrame, kdst: pd.DataFrame) -> pd.DataFrame:
+    """Concat the offensive (MVP-1) and K/DST (NF1.6) projection lineages into ONE frame the engine
+    scores with a single `SportProfile`.
+
+    This works without any engine change because both lineages publish the SAME four contract
+    columns (`proj_fp_ppr` + `fp_ppr_sd/_p10/_p90`) and the scorer reads every stat through
+    `SportProfile.stat_columns`, treating an absent/NULL raw column as a zero term for THAT term
+    only. So a kicker's missing passing line never zeroes his FG points, and a WR's missing
+    points-allowed buckets never zero his receiving line."""
+    frames = [f for f in (offense, kdst) if f is not None and len(f)]
+    if not frames:
+        raise ValueError("combine_projections: both projection lineages are empty")
+    out = pd.concat(frames, ignore_index=True, sort=False)
+    before = len(out)
+    out = out.drop_duplicates(subset=["player_id"], keep="first").reset_index(drop=True)
+    if len(out) < before:
+        log.warning("combine_projections dropped %d duplicate player_id row(s) across the two "
+                    "projection lineages — investigate the id spaces", before - len(out))
+    return out
+
+
+def _kdst_lake_connection():
+    import duckdb
+
+    from quant_sports_intel_models.football.nfl.ingest import s3io
+
+    con = duckdb.connect()
+    con.execute("install delta; load delta; install httpfs; load httpfs;")
+    opts = s3io.storage_options()
+    con.execute(f"set s3_region='{opts.get('AWS_REGION', 'us-east-2')}';")
+    if opts.get("AWS_ACCESS_KEY_ID"):
+        con.execute(f"set s3_access_key_id='{opts['AWS_ACCESS_KEY_ID']}';")
+        con.execute(f"set s3_secret_access_key='{opts['AWS_SECRET_ACCESS_KEY']}';")
+        if opts.get("AWS_SESSION_TOKEN"):
+            con.execute(f"set s3_session_token='{opts['AWS_SESSION_TOKEN']}';")
+    return con
+
+
 def load_projection_lake(season: int) -> pd.DataFrame:
     """Read the MVP-1 season projection straight from the S3 lake Delta (the real-lake path)."""
     import duckdb
@@ -280,8 +352,13 @@ def write_report(boards: dict, repl_tables: dict, season: int, path: Path, *,
     p("- **Presets over the MVP-1 raw line** — the board is only as good as the MVP-1 projection it "
       "rescores; the within-tier ordering gap vs The Fantasy Footballers (RB/WR) carries through. NF-D2 "
       "closes it upstream.")
-    p("- **K/DST carry no projection line** (MVP-1 is offensive skill players only) → those slots create "
-      "no ranked players; the board covers QB/RB/WR/TE (FB folded into RB).")
+    p("- **K/DST are now projected, but by a deliberately BASE model (NF1.6)** — those slots RANK "
+      "instead of rendering \"not projected\", scored off raw components (distance-bucketed FG; DST "
+      "takeaways plus a per-game points-allowed TIER expressed exactly as expected-games-per-bucket). "
+      "⚠️ K and DST are the LEAST predictable fantasy positions: held-out rank correlation is ~0.32 "
+      "for DST and ~0.23 among startable kickers, so read those two slots as **streaming tiers, not "
+      "fine ranks**, and read the wide intervals as the honest part. The board covers QB/RB/WR/TE "
+      "(FB folded into RB) + K/DST.")
     p("- **Uncertainty is a CV rescale**, not a per-format re-derived variance (no per-format game logs). "
       "Honest as a first-order interval; recalibrate rookie (parameter) intervals before pricing.")
     p("- **Manual formats only** — platform import (NF-C0) populates this SAME config object later; the "
@@ -313,6 +390,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="read the MVP-1 projection from the S3 lake Delta instead of a local artifact")
     ap.add_argument("--projections-parquet", default=None,
                     help="explicit path to an MVP-1 projection parquet (overrides the default artifact)")
+    ap.add_argument("--no-kdst", action="store_true",
+                    help="NF1.6 escape hatch: build the board WITHOUT the K/DST base projection (the "
+                         "pre-NF1.6 behaviour, where those slots render unprojected). Diagnostic only.")
     ap.add_argument("--out-dir", default=str(_DEFAULT_OUT))
     ap.add_argument("--s3", action="store_true", help="also land the boards to the S3 sports lake")
     ap.add_argument("--lake-root", default=None, help="land to a LOCAL-FS Delta tree instead of S3")
@@ -338,6 +418,18 @@ def main(argv: list[str] | None = None) -> int:
         proj = load_projection_lake(season)
     else:
         proj = load_projection_local(out_dir, season)
+
+    # ⭐ NF1.6 — fold in the K/DST BASE projection so those roster slots RANK instead of rendering
+    #    "not projected". Best-effort: a missing K/DST lineage logs loudly and leaves the offensive
+    #    board (the draft-critical output) untouched.
+    if not args.no_kdst:
+        kdst = (load_kdst_lake(season) if args.from_lake
+                else load_kdst_local(out_dir, season))
+        if len(kdst):
+            proj = combine_projections(proj, kdst)
+            log.info("NF1.6: folded in %d K/DST rows (%s)", len(kdst),
+                     ", ".join(f"{k}={v}" for k, v in
+                               sorted(kdst.groupby("position").size().items())))
     if proj.empty:
         ap.error(f"no MVP-1 projection rows for season {season}")
     log.info("loaded %d MVP-1 projection rows for season %d", len(proj), season)

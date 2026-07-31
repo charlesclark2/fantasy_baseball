@@ -80,6 +80,26 @@ const STAT_COLS: Record<string, StatCol[]> = {
   ],
 }
 STAT_COLS.TE = STAT_COLS.WR
+// NF1.6 — the K/DST lines. Field goals are split by DISTANCE because that is how they score (3/4/5)
+// and because leg strength is the one kicker attribute that genuinely persists. For a defence,
+// points allowed PER GAME is the number that communicates quality — the nine points-allowed tier
+// buckets behind it are a scoring input, not something a drafter reads.
+STAT_COLS.K = [
+  { key: "fgAtt", label: "FGA", nd: 0 },
+  { key: "fgMade", label: "FG" },
+  { key: "fg039", label: "0-39" },
+  { key: "fg4049", label: "40-49" },
+  { key: "fg50", label: "50+" },
+  { key: "patMade", label: "XP" },
+]
+STAT_COLS.DST = [
+  { key: "paPerG", label: "Pts Allowed/G" },
+  { key: "sacks", label: "Sacks" },
+  { key: "defInt", label: "INT" },
+  { key: "fumRec", label: "Fum Rec" },
+  { key: "defTd", label: "Def TD" },
+  { key: "stTd", label: "ST TD" },
+]
 
 export function ProjectionsTable() {
   const { data, isLoading, error } = useFantasyProjections()
@@ -324,9 +344,17 @@ export function ProjectionsTable() {
                 {UNCERTAINTY_HELP.empirical} {UNCERTAINTY_HELP.calibrated_per_player}
               </p>
               <p className="mt-2">
-                Kickers and defences are not projected, and the 80% range shown is on the reference
-                PPR total.
+                <span className="font-semibold text-gray-300">Kickers and defences.</span>{" "}
+                Both are now projected, but they are the least predictable positions in fantasy and
+                the projection is deliberately a base one. A kicker&apos;s accuracy barely carries
+                from one year to the next, and a defence&apos;s touchdowns, safeties and blocked
+                kicks are indistinguishable from noise — so those are set to the league average
+                rather than guessed per team. What does carry is the team around them: a
+                kicker&apos;s scoring offence and leg strength, and a defence&apos;s sacks,
+                takeaways and points allowed. Read them as streaming tiers — better situations
+                versus worse ones — not as precise ranks, and lean on the range.
               </p>
+              <p className="mt-2">The 80% range shown is on the reference PPR total.</p>
             </UncertaintyNote>
           </div>
         </>
