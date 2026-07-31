@@ -1,7 +1,7 @@
 # NCAAF-P1A — college → NFL translation (the NFL feeder; the MLB Edge-E7 analog)
 
-**Model:** `ncaaf_college_nfl_translation_v1` · **target metric:** `target_w_av` · **generated:** 2026-07-22T23:17:22.635942+00:00
-**Draft classes emitted:** 2016–2026 (3,804 player projections) · **seed (not emitted):** 2015
+**Model:** `ncaaf_college_nfl_translation_v1` · **target metric:** `target_w_av` · **generated:** 2026-07-29T20:37:17.811054+00:00
+**Draft classes emitted:** 2016–2026 (3,829 player projections) · **seed (not emitted):** 2015
 
 > ⚠️ **This is an NFL-rookie PRIOR/projection, not an edge claim.** It translates a player's pre-draft college body of work + combine + recruiting pedigree into a projected early-career NFL outcome, measured against realized NFL production — never a market. `best_alpha = 0` holds. The uncertainty is **PARAMETER** uncertainty (a RELATIVE confidence signal), NOT a calibrated predictive interval — **N1.2 (rookie-prop pricing) MUST recalibrate on held-out data before pricing** (the E13.6 pattern). The NFL draft is famously noisy: a ROBUST-BUT-WEAK signal (low PBO, DSR possibly <0.95) is a VALID and VALUABLE feeder — reported honestly, not forced. Even a modest projection beats the priors-only NFL rookie market.
 
@@ -12,7 +12,7 @@
 - ✅ per-player grain (gsis_id) is unique
 - ✅ projection finite + plausible (|z|≤2.59, sd≤1.07)
 - ✅ oracle-floor holds (no candidate beats a target-seeing oracle → metric not inverted)
-- ✅ join coverage surfaced: 82.2% carry college production, 49.2% trainable (n=2149)
+- ✅ join coverage surfaced: 82.3% carry college production, 49.0% trainable (n=2149)
 - ✅ winner beats the position-mean null OOS (MAE 0.7901 < 0.8107)
 - ✅ vs draft-slot benchmark: college→NFL winner does NOT beat draft-slot-only (MAE 0.7901 vs 0.6417)
 - ✅ PBO computed = 0.000 over 7 configs (<0.2 ✅)
@@ -24,13 +24,13 @@ Does every drafted player in the P0.3 xref actually carry P1.1 college productio
 
 |                             |   value |
 |:----------------------------|--------:|
-| n_xref_rows                 |  4368   |
-| n_drafted                   |  3026   |
-| n_with_college_production   |  3590   |
-| pct_with_college_production |    82.2 |
+| n_xref_rows                 |  4390   |
+| n_drafted                   |  3053   |
+| n_with_college_production   |  3612   |
+| pct_with_college_production |    82.3 |
 | n_with_nfl_outcome          |  2624   |
 | n_trainable                 |  2149   |
-| pct_trainable               |    49.2 |
+| pct_trainable               |    49   |
 
 ## 3. The §0.5 bake-off leaderboard (leave-one-draft-class-out expanding-window CV)
 
@@ -43,8 +43,8 @@ Every candidate is fit on STRICTLY-PRIOR draft classes and scored on the held-ou
 | partial_pool@2.0 |    0.7987 |              0.0119 | True         |
 | partial_pool@4.0 |    0.7988 |              0.0119 | True         |
 | position_mean    |    0.8107 |              0.0000 | False        |
-| gbm@400-3-0.03   |    0.8150 |             -0.0043 | True         |
-| gbm@200-2-0.05   |    0.8181 |             -0.0074 | True         |
+| gbm@400-3-0.03   |    0.8153 |             -0.0046 | True         |
+| gbm@200-2-0.05   |    0.8177 |             -0.0071 | True         |
 
 **Winner:** `stratified_ols` (best selectable OOS MAE), refit on all labelled draft classes for emission.
 

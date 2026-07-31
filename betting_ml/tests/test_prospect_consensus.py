@@ -17,10 +17,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from betting_ml.scripts.prospect_board.board_assembly import residual_vs_fit
+from betting_ml.scripts.prospect_board.board_assembly import ProspectBoardError, residual_vs_fit
 from betting_ml.scripts.prospect_board.build_consensus_assembly import (
     HOW_TO_READ,
     build_sources,
+    e8_0_column_order_with_consensus,
+    fold_pipeline_into_e8_0_board,
     merge_pipeline_ranks,
 )
 from betting_ml.scripts.prospect_board.consensus import (
@@ -427,3 +429,117 @@ class TestPipelineUnion:
         assert "best_alpha = 0" in text
         assert "never scraped" in text
         assert "never imputed" in text
+
+
+class TestFoldPipelineIntoE80Board:
+    """E8.0b (2026-07-31): the 8/3 board itself — not a second, separate consensus export — gets
+    MLB Pipeline's board-omitted players unioned in plus an equal-weight consensus. This pins the
+    E8.0-specific contract on top of `merge_pipeline_ranks` + `attach_consensus`: no fabricated MLE
+    for a player the E8.0 pass never scored, the AL/NL hard error survives for the NEW rows too, and
+    the pre-existing FanGraphs-board ordering is untouched.
+    """
+
+    @staticmethod
+    def _e80_board() -> pd.DataFrame:
+        """A stand-in for `board_assembly.assemble_board`'s OUTPUT — already scored, board_rank'd."""
+        return pd.DataFrame({
+            "board_rank": [1, 2],
+            "mlbam_id": pd.Series(["1", "2"], dtype="string"),
+            "player_name": ["On Board A", "On Board B"],
+            "org": ["BAL", "NYY"],
+            "mlb_league": ["AL", "AL"],
+            "position": ["SS", "RHP"],
+            "player_type": ["batter", "pitcher"],
+            "level": ["AA", "AAA"],
+            "age": [19.0, 21.0],
+            "eta": [2027, 2026],
+            "fv": [55.0, 50.0],
+            "overall_rank": [10.0, np.nan],
+            "org_rank": [1, 2],
+            "fantasy_dynasty_rank": [10.0, np.nan],
+            "fantasy_redraft_rank": [np.nan, np.nan],
+            "fv_pctile": [90.0, 60.0],
+            "mle_score": [80.0, 55.0],
+            "age_score": [70.0, 50.0],
+            "model_score": [77.5, 54.0],
+            "blend_score": [80.0, 55.5],
+            "disagreement": [1.2, -0.5],
+            "disagreement_label": ["agree", "agree"],
+            "speed_flag": ["", ""],
+            "in_majors": ["", ""],
+        })
+
+    @staticmethod
+    def _pipeline() -> pd.DataFrame:
+        return pd.DataFrame({
+            "mlbam_id": ["1", "3"],
+            "list_type": ["top100", "top100"],
+            "rank": [7, 12],
+            "player_name": ["On Board A", "Pipeline Only"],
+            "org": [None, None],
+            "org_current": ["BAL", "SDP"],
+            "position": ["SS", "OF"],
+            "age_current": [19.0, 18.0],
+            "eta": [2027, 2029],
+            "pipeline_grade_hit": [60.0, 55.0],
+        })
+
+    def test_a_pipeline_only_player_lands_with_no_fabricated_mle(self):
+        board, _ = fold_pipeline_into_e8_0_board(self._e80_board(), self._pipeline())
+        assert len(board) == 3
+        extra = board[board["mlbam_id"] == "3"].iloc[0]
+        assert not extra["on_fangraphs_board"]
+        for col in ("fv", "model_score", "mle_score", "blend_score", "disagreement"):
+            assert pd.isna(extra[col])                    # NEVER a fabricated MLE
+        assert extra["disagreement_label"] == "n/a (no MLE line)"
+        assert extra["in_majors"] == ""                    # sentinel, not a bare NaN
+        assert extra["speed_flag"] == ""
+
+    def test_original_rows_keep_their_order_new_rows_sink_to_the_bottom(self):
+        """No new row can outrank an existing one: fv/model_score/blend_score are all NaN for a
+        Pipeline-only row, and na_position='last' sinks a NaN regardless of ascending/descending —
+        the familiar top of the board is unchanged."""
+        board, _ = fold_pipeline_into_e8_0_board(self._e80_board(), self._pipeline())
+        assert list(board["mlbam_id"])[:2] == ["1", "2"]
+        assert board["board_rank"].tolist() == [1, 2, 3]
+
+    def test_an_unmapped_org_on_a_pipeline_only_row_is_a_hard_error(self):
+        """The E8.0 rule ('an unmapped org silently drops players from the single-league draft
+        sheet') must survive for rows the FanGraphs-side check never saw."""
+        pipeline = self._pipeline()
+        pipeline.loc[pipeline["mlbam_id"] == "3", "org_current"] = "ZZZ"
+        with pytest.raises(ProspectBoardError, match="ZZZ"):
+            fold_pipeline_into_e8_0_board(self._e80_board(), pipeline)
+
+    def test_the_hard_error_can_be_relaxed(self):
+        pipeline = self._pipeline()
+        pipeline.loc[pipeline["mlbam_id"] == "3", "org_current"] = "ZZZ"
+        board, _ = fold_pipeline_into_e8_0_board(self._e80_board(), pipeline, strict_league=False)
+        assert pd.isna(board.loc[board["mlbam_id"] == "3", "mlb_league"].iloc[0])
+
+    def test_consensus_is_equal_weight_the_plain_mean(self):
+        board, _ = fold_pipeline_into_e8_0_board(self._e80_board(), self._pipeline())
+        row = board[board["mlbam_id"] == "1"].iloc[0]
+        # FanGraphs overall_rank=10 + Pipeline pipeline_overall_rank=7 → mean 8.5, EQUAL weight.
+        assert row["consensus_rank_mean"] == pytest.approx(8.5)
+        assert row["consensus_n_sources"] == 2
+
+    def test_report_carries_both_the_pipeline_join_and_the_consensus_coverage(self):
+        _, report = fold_pipeline_into_e8_0_board(self._e80_board(), self._pipeline())
+        assert report["pipeline"]["pipeline_only_players"] == 1
+        assert "coverage_by_source" in report["consensus"]
+
+
+class TestE80ColumnOrderWithConsensus:
+    def test_consensus_columns_relocate_beside_the_fangraphs_block_not_the_tail(self):
+        board, _ = fold_pipeline_into_e8_0_board(
+            TestFoldPipelineIntoE80Board._e80_board(), TestFoldPipelineIntoE80Board._pipeline())
+        order = e8_0_column_order_with_consensus(board)
+        assert order.index("fantasy_redraft_rank") < order.index("consensus_rank")
+        assert order.index("consensus_rank") < order.index("fv_pctile")
+
+    def test_an_unknown_column_still_appends_at_the_end_not_dropped(self):
+        board, _ = fold_pipeline_into_e8_0_board(
+            TestFoldPipelineIntoE80Board._e80_board(), TestFoldPipelineIntoE80Board._pipeline())
+        order = e8_0_column_order_with_consensus(board.assign(brand_new_col=1))
+        assert order[-1] == "brand_new_col"

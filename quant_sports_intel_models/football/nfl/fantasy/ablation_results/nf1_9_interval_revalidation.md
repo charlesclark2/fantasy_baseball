@@ -1,6 +1,6 @@
 # Interval-band re-validation — the standing annual check on both per-position coverage floors
 
-**Generated:** 2026-07-30T05:44:54.545457+00:00 · **verdict: ✅ ALL FLOORS MET**
+**Generated:** 2026-07-31T20:52:35.074991+00:00 · **verdict: ✅ ALL FLOORS MET**
 
 ⚠️ **A per-position coverage floor is invisible at serving time** — coverage needs realized outcomes, so no board build, export guard or API check can see it break. That is how the veteran band went five stories at 0.55 coverage of its nominal 0.80. This check is the owner of both floors; a breach is a **RE-SELECTION TRIGGER** (re-run that population's bake-off), never a reason to move the floor.
 

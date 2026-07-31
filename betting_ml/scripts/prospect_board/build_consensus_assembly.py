@@ -18,13 +18,16 @@ import numpy as np
 import pandas as pd
 
 from betting_ml.scripts.prospect_board.board_assembly import (
+    ProspectBoardError,
     assign_league,
+    board_column_order,
     classify_player_type,
 )
 from betting_ml.scripts.prospect_board.consensus import (
     PAYWALLED_SOURCES,
     DISAGREEMENT_THRESHOLD,
     RankSource,
+    attach_consensus,
 )
 from betting_ml.scripts.prospect_board.mlb_pipeline import PIPELINE_SOURCE
 
@@ -33,6 +36,8 @@ __all__ = [
     "build_sources",
     "consensus_column_order",
     "consensus_sheets",
+    "e8_0_column_order_with_consensus",
+    "fold_pipeline_into_e8_0_board",
     "merge_pipeline_ranks",
 ]
 
@@ -180,6 +185,133 @@ def build_sources(df: pd.DataFrame, manual_names: list[str]) -> list[RankSource]
                 label=name.replace("_", " ").title(), access="manual",
                 note=PAYWALLED_SOURCES.get(name, "hand-keyed by the operator; never scraped")))
     return sources
+
+
+# ── E8.0b — fold the consensus INTO the 8/3 board (not a second, separate export) ──────────────
+#
+# `build_consensus.build()` is the E7.11 STANDALONE consensus board (its own file, its own tabs,
+# optional hand-keyed paywalled sources). E8.0b's whole point is that the operator drafts off
+# `e8_0_prospect_board.*`, so the same fold has to land THERE. This wraps `merge_pipeline_ranks` +
+# `attach_consensus` for exactly that target: `assemble_board`'s already-scored FanGraphs+MLE(+
+# Savant) board, extended with MLB Pipeline's rank-only players and a rank consensus across the two
+# ingested sources.
+
+# Sentinels a Pipeline-only row never gets — it never passes through `board_assembly.attach_scores`
+# (see the docstring below), so these columns arrive NaN from the union. Filled to the same "nothing
+# to report" value the FanGraphs-board rows already use, so the export doesn't mix a bare NaN and a
+# descriptive string for the same concept depending on which source a row came from.
+_E80_FOLD_DEFAULTS: dict[str, Any] = {
+    "in_majors": "",                          # Pipeline carries no level; a ranked prospect is
+                                               # not-yet-graduated by construction of the list itself
+    "speed_flag": "",
+    "disagreement_label": "n/a (no MLE line)",
+}
+
+
+def fold_pipeline_into_e8_0_board(e80_board: pd.DataFrame, pipeline: pd.DataFrame, *,
+                                  strict_league: bool = True) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """The E8.0b integration: union MLB Pipeline's players into the 8/3 board + fold in an
+    EQUAL-WEIGHT consensus across the two ingested sources.
+
+    `e80_board` is `board_assembly.assemble_board`'s OUTPUT (FanGraphs + our MLE + optional Prospect
+    Savant, already scored). This adds the ~165 players MLB Pipeline ranks that FanGraphs' board
+    omits entirely (`merge_pipeline_ranks` — reused, not hand-rolled), then a rank consensus + the
+    per-source and ours-vs-consensus RESIDUAL disagreement (`consensus.attach_consensus` — same
+    reuse).
+
+    ⚖️ WEIGHTING: `attach_consensus`'s `consensus_rank_mean` is the plain mean of the ranks that
+    exist for a player — i.e. EQUAL WEIGHT — which is the story's default (E7.14, the accuracy study
+    that could justify a different weight, has not landed as of this write). A future session swaps
+    in E7.14's weighting here if it clears its deflated gates; nothing else about this function
+    would need to change.
+
+    ⚠️ SCORES ARE NOT RECOMPUTED OVER THE ENLARGED UNIVERSE. `fv_pctile` / `mle_score` / `age_score`
+    / `model_score` / `blend_score` / `disagreement` are percentiles `attach_scores` already computed
+    over the FanGraphs-board population alone. A Pipeline-only row never carries an MLE line through
+    this path — `merge_pipeline_ranks` does not join one for it — so those columns stay blank for the
+    new rows. That is the story's own requirement, not an omission: "Pipeline-only players lacking
+    our MLE show consensus/FV-only — NEVER a fabricated MLE."
+
+    Returns `(board, report)` — `report` carries the Pipeline join coverage (`report["pipeline"]`)
+    and the full consensus report (`report["consensus"]`, `consensus.consensus_report`'s own shape).
+    """
+    base = e80_board.copy()
+    base["on_fangraphs_board"] = True
+    base["mlbam_id"] = base["mlbam_id"].astype("string")
+
+    universe, pipeline_report = merge_pipeline_ranks(base, pipeline)
+
+    # `merge_pipeline_ranks` derives `mlb_league` for the new rows but does not enforce the E8.0
+    # hard-error — do that here so a Pipeline-only player from an unmapped org can never silently
+    # vanish from the single-league draft sheet, exactly the rule `assemble_board` enforces for the
+    # FanGraphs side.
+    is_new = ~universe["on_fangraphs_board"]
+    unmapped = sorted({str(o) for o in
+                       universe.loc[is_new & universe["mlb_league"].isna(), "org"].dropna().unique()})
+    if unmapped and strict_league:
+        raise ProspectBoardError(
+            f"MLB-Pipeline-only player org(s) {unmapped} have no AL/NL mapping. `mlb_league` is a "
+            "REQUIRED filter for a single-league dynasty draft — an unmapped org silently drops "
+            "those players from the only view the operator uses. Add them to ORG_TO_LEAGUE (or "
+            "ORG_ALIASES) and re-run."
+        )
+
+    for col, default in _E80_FOLD_DEFAULTS.items():
+        if col in universe.columns:
+            universe[col] = universe[col].fillna(default)
+
+    sources = build_sources(universe, manual_names=[])
+    universe, consensus_rep = attach_consensus(universe, sources)
+
+    # Re-sort with the ORIGINAL E8.0 keys first: no new row can outrank an existing one (fv /
+    # model_score / blend_score are all NaN for a Pipeline-only row, and na_position='last' sinks a
+    # NaN regardless of ascending/descending) — the familiar top of the board is unchanged. Pipeline's
+    # own rank breaks ties among the new rows so they land in a sensible order rather than arbitrary
+    # concat order.
+    sort_cols = [c for c in ("fv", "model_score", "blend_score", "pipeline_overall_rank")
+                if c in universe.columns]
+    ascending = [False, False, False, True][:len(sort_cols)]
+    universe = universe.sort_values(sort_cols, ascending=ascending,
+                                    na_position="last").reset_index(drop=True)
+    universe["board_rank"] = np.arange(1, len(universe) + 1)
+
+    universe = universe[e8_0_column_order_with_consensus(universe)]
+    return universe, {"pipeline": pipeline_report, "consensus": consensus_rep}
+
+
+def e8_0_column_order_with_consensus(df: pd.DataFrame) -> list[str]:
+    """`board_assembly.board_column_order`, with the Pipeline/consensus columns relocated out of the
+    auto-appended tail into a readable block beside the FanGraphs columns they extend.
+
+    Never drops a column (delegates to `board_column_order`, which already guarantees that); this
+    only reorders where the consensus/pipeline columns land.
+    """
+    base = board_column_order(df)
+
+    def _is_consensus(col: str) -> bool:
+        return (col.startswith("consensus_") or col.startswith("org_consensus_")
+                or col.startswith("pctile_") or col.startswith("vs_consensus_")
+                or col in ("on_fangraphs_board", "pipeline_overall_rank", "pipeline_org_rank",
+                          "mle_vs_consensus", "mle_vs_consensus_label", "consensus_pctile_used",
+                          "consensus_scope_used"))
+
+    consensus_cols = [c for c in base if _is_consensus(c)]
+    rest = [c for c in base if c not in consensus_cols]
+
+    anchor = rest.index("fantasy_redraft_rank") + 1 if "fantasy_redraft_rank" in rest else len(rest)
+    rest = rest[:anchor] + consensus_cols + rest[anchor:]
+
+    # `pipeline_grade_*` is relocated ONLY when there is a real anchor to relocate it next to
+    # (FanGraphs' own `grade_cmd`, i.e. this player actually has FanGraphs grades). Without one, it
+    # is left wherever `board_column_order` already placed it — same as any other genuinely-unknown
+    # column — so a truly-unrecognized column added downstream still lands last, never displaced by
+    # a relocation that has nowhere principled to go.
+    if "grade_cmd" in rest:
+        grade_cols = [c for c in rest if c.startswith("pipeline_grade_")]
+        rest = [c for c in rest if c not in grade_cols]
+        g_anchor = rest.index("grade_cmd") + 1
+        rest = rest[:g_anchor] + grade_cols + rest[g_anchor:]
+    return rest
 
 
 # ── Export shape ─────────────────────────────────────────────────────────────────────────────

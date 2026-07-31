@@ -659,6 +659,17 @@ def split_sheets(board: pd.DataFrame) -> dict[str, pd.DataFrame]:
     disagree = board[board["disagreement"].abs() >= DISAGREEMENT_THRESHOLD]
     sheets["Disagreements"] = disagree.sort_values(
         "disagreement", ascending=False, na_position="last").reset_index(drop=True)
+    # E8.0b: only present once `on_fangraphs_board` has been folded in (build_consensus_assembly's
+    # `fold_pipeline_into_e8_0_board`) — absent on a plain E8.0 board, so this never fires there and
+    # every pre-existing caller/test is unaffected.
+    if "on_fangraphs_board" in board.columns:
+        pipeline_only = board[~board["on_fangraphs_board"]]
+        if not pipeline_only.empty:
+            sort_col = "pipeline_overall_rank" if "pipeline_overall_rank" in board.columns else None
+            sheets["Pipeline-only"] = (
+                pipeline_only.sort_values(sort_col, na_position="last") if sort_col
+                else pipeline_only
+            ).reset_index(drop=True)
     return sheets
 
 

@@ -1,8 +1,9 @@
-# MLB Edge-E8.0 — the LEAN prospect draft board (8/3 dynasty draft)
+# MLB Edge-E8.0(+E8.0b) — the LEAN prospect draft board (8/3 dynasty draft)
 
-**Built:** 2026-07-29 · **board snapshot:** FanGraphs THE BOARD, season 2026, as-of **2026-07-27**
-· **code:** `betting_ml/scripts/prospect_board/` · **exports:** `ablation_results/e8_0_artifacts/`
-(gitignored — regenerate in ~40s, see below)
+**Built:** 2026-07-29 · **E8.0b consensus fold:** 2026-07-31 · **board snapshot:** FanGraphs THE
+BOARD season 2026 as-of **2026-07-27**, MLB Pipeline as-of **2026-07-29** · **code:**
+`betting_ml/scripts/prospect_board/` · **exports:** `ablation_results/e8_0_artifacts/`
+(gitignored — regenerate in ~10s, see below)
 
 > 🔒 **`best_alpha = 0`.** This is *"FanGraphs consensus + our independent MLE-translated line +
 > where they disagree"*. It is **not** a ranking that claims to beat FanGraphs, and no edge or
@@ -25,10 +26,64 @@ places they disagree:
 joined through **E7.4 `dim_player_xref`** (`fg_minor_id` → MLBAM), plus `mlb_league` (AL/NL) from a
 static 30-team org map — the filter a single-league dynasty draft actually runs on.
 
-**Deliverables:** `e8_0_prospect_board.csv` (the 8/3 minimum), `_AL.csv` / `_NL.csv`, and a 9-tab
+**Deliverables:** `e8_0_prospect_board.csv` (the 8/3 minimum), `_AL.csv` / `_NL.csv`, and a 10-tab
 `.xlsx` — *How to read this · All · AL · NL · Hitters · Pitchers · Minors only · By blend ·
-Disagreements*. The **stretch in-app page was deliberately not built** — it is E8.1, and the
-story scopes E8.0 export-first so the draft cannot be gated on a serving surface.
+Disagreements · Pipeline-only* (E8.0b). The **stretch in-app page was deliberately not built** — it
+is E8.1, and the story scopes E8.0 export-first so the draft cannot be gated on a serving surface.
+
+## 0b. E8.0b (2026-07-31) — MLB Pipeline folded in as a second source + a consensus
+
+E8.0 shipped FanGraphs-only. **MLB Pipeline (E7.11) ranks 165 players FanGraphs' board omits
+entirely** — those were draft-relevant blanks in the 8/3 export. `build_prospect_board.py` now folds
+MLB Pipeline in by default (`fold_pipeline_into_e8_0_board`, `betting_ml/scripts/prospect_board/
+build_consensus_assembly.py`), reusing E7.11's `merge_pipeline_ranks` + `consensus.attach_consensus`
+— **not** a hand-rolled join, not a second rebuild of E7.11's math.
+
+**Measured on the real lake (2026-07-31, board season 2026 / Pipeline as-of 2026-07-29):**
+
+```
+FanGraphs board                    : 1,286 prospects
++ MLB-Pipeline-only players added  :   165   ("Pipeline-only" tab)
+= combined universe                : 1,451
+overall consensus (≥2 sources)     :    62   (FanGraphs Top-100-ish ∩ Pipeline Top 100)
+org consensus (≥2 sources)         :   735   (FanGraphs org rank ∩ Pipeline org Top 30)
+```
+
+**What changed on the export:**
+
+* Per-source ranks side by side: `overall_rank`/`org_rank` (FanGraphs, unchanged) +
+  `pipeline_overall_rank`/`pipeline_org_rank` (new).
+* `consensus_rank` / `consensus_rank_mean` / `consensus_tier` / `consensus_n_sources` /
+  `consensus_confidence` / `consensus_rank_spread` (overall scope) and the `org_consensus_*` siblings
+  (org scope, ~10× the coverage). **Equal weight** — `consensus_rank_mean` is the plain mean of the
+  ranks that exist for a player. E7.14 (the accuracy study that could justify a different weight) had
+  not landed at build time; ship equal-weight and let a future session apply E7.14's verdict here if
+  it clears the deflated gates.
+* `vs_consensus_<source>` (+`_label`): each source's RESIDUAL disagreement vs the consensus — never
+  the raw gap (E8.0's own regression-to-the-mean defect, §3a below) — computed **only** where
+  `consensus_n_sources ≥ 2` (a source cannot disagree with a consensus it alone constitutes; E7.11's
+  own first-run defect, restated in `sport_data_platform.md`).
+* `mle_vs_consensus` (+`_label`): the differentiated view, extended — how much higher OUR line scores
+  a player than is usual for a player the (FanGraphs + Pipeline) consensus places there, fitted within
+  player type via the shared `board_assembly.residual_vs_fit`.
+* `on_fangraphs_board`: `False` for the 165 unioned-in rows. Their `fv`, `model_score`, `mle_score`,
+  `blend_score`, `disagreement` all stay **blank — never a fabricated MLE or a fabricated FV pctile**;
+  they were never scored by the E8.0 pass (no FanGraphs row to score against, and `merge_pipeline_ranks`
+  does not join an MLE line for them). `in_majors` / `speed_flag` / `disagreement_label` are filled
+  to the same sentinel the FanGraphs-board rows use (`""` / `""` / `"n/a (no MLE line)"`) rather than
+  a bare NaN, so the export doesn't mix conventions depending on which source a row came from.
+* **`board_rank` / default sort is UNCHANGED for every original FanGraphs-board row** — the re-sort
+  keeps `fv` → `model_score` → `blend_score` first, and all three are NaN for a Pipeline-only row, so
+  none of the 165 new rows can outrank an existing one (`na_position='last'` sinks them regardless of
+  direction). They break ties among themselves on `pipeline_overall_rank` and are separately visible
+  (and Pipeline-rank-sorted) on the **Pipeline-only** tab.
+* **AL/NL hard-error preserved** for the new rows too — an MLB-Pipeline-only player from an org with
+  no AL/NL mapping raises `ProspectBoardError`, same as the pre-existing FanGraphs-side rule.
+
+Reused, not rebuilt: `board_assembly.split_sheets` gained the `Pipeline-only` tab conditionally (only
+when `on_fangraphs_board` is present — a plain FanGraphs-only board is byte-for-byte unaffected), and
+`e8_0_column_order_with_consensus` relocates the new columns out of the auto-appended tail into a
+readable block beside the FanGraphs "scouts" columns without ever dropping one.
 
 ## 1. Join match rates (measured, on the real lake)
 
@@ -146,18 +201,21 @@ level, AAA included.
 ## 5. Reproduce
 
 ```bash
-# LAPTOP — the full board, all three views (~40s; 8 polite cached HTTP calls)
+# LAPTOP — the full board: FanGraphs + MLB Pipeline consensus + our MLE + Prospect Savant (~10s)
 AWS_DEFAULT_REGION=us-east-2 uv run --with openpyxl python -m \
     betting_ml.scripts.prospect_board.build_prospect_board --prospect-savant
 
-# CSV only, no optional dependency, no network beyond S3
+# CSV only, no optional dependency
 AWS_DEFAULT_REGION=us-east-2 uv run python -m \
     betting_ml.scripts.prospect_board.build_prospect_board
 ```
 
 `--ps-probe` re-probes the Prospect Savant route shape; `--min-mle-pa` moves the sample floor;
 `--allow-unmapped-orgs` downgrades the unmapped-org HALT to a warning (not advised — a NULL
-`mlb_league` silently removes players from the only sheet the operator drafts off).
+`mlb_league` silently removes players from the only sheet the operator drafts off);
+`--skip-pipeline-consensus` is an **E8.0b emergency escape hatch** back to the plain FanGraphs-only
+board (not advised — the whole point of this story is that it stays off for 8/3);
+`--pipeline-season` / `--pipeline-from-dir` mirror E7.11's own flags for the MLB Pipeline snapshot.
 
 ## 6. Follow-ons (out of scope here, on purpose)
 

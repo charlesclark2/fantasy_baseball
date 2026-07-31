@@ -1,14 +1,22 @@
-"""build_prospect_board.py — MLB Edge-E8.0 runner: the LEAN dynasty prospect draft board.
+"""build_prospect_board.py — MLB Edge-E8.0(+E8.0b) runner: the LEAN dynasty prospect draft board.
 
 Joins the three views of a prospect into ONE ranked, human-legible board the operator can draft off
 on 8/3, and exports it as CSV + (if an xlsx engine is importable) a multi-tab workbook.
 
-    THE SCOUTS            OURS                              THEIRS (optional)
-    FanGraphs THE BOARD   E7.3 / E7.3p MiLB→MLB MLE line    Prospect Savant expected stats
-    FV · rank · ETA       MLB-equiv K% / BB% / ISO / GB%     xwOBA · EV · whiff · velo
-    · tool grades         + parameter uncertainty
+    THE SCOUTS                             OURS                        THEIRS (optional)
+    FanGraphs THE BOARD + MLB Pipeline    E7.3 / E7.3p MiLB→MLB MLE    Prospect Savant expected stats
+    FV/rank + Pipeline's Top100/org-30    MLB-equiv K%/BB%/ISO/GB%     xwOBA · EV · whiff · velo
+    + a rank CONSENSUS across them        + parameter uncertainty
               └────────────── E7.4 dim_player_xref ──────────────┘
-                       (fg_minor_id → MLBAM, 99.3%, no fuzzy leg)
+                       (fg_minor_id / MLBAM → MLBAM, no fuzzy leg)
+
+⭐ E8.0b (2026-07-31): folds E7.11's MLB Pipeline source + consensus IN, so this is the single file
+the operator opens for the 8/3 draft — not a second, separate consensus export. MLB Pipeline ranks
+~165 players FanGraphs' board omits entirely; those are unioned in (`build_consensus_assembly.
+fold_pipeline_into_e8_0_board`, reusing E7.11's `merge_pipeline_ranks` + `consensus.attach_consensus`
+verbatim) rather than left as draft-relevant blanks. Consensus = EQUAL WEIGHT (mean of the ranks
+that exist) — E7.14, the accuracy study that could justify a different weight, has not landed.
+`--skip-pipeline-consensus` is an emergency escape hatch back to the plain FanGraphs-only board.
 
 SF-FREE — pure DuckDB over the S3 lake. Not on any serving path: this writes files, nothing else.
 
@@ -18,16 +26,17 @@ hard-errors on its void-typed column, and a parquet glob silently unions TOMBSTO
 generations — which fabricated an 84.2% match rate where the truth was 99.3% during E7.4. Guarded by
 `betting_ml/tests/test_the_board_reader_guard.py`.
 
-🔒 HONEST FRAME (`best_alpha = 0`): this is "FanGraphs consensus + our independent MLE-translated
-line + where they disagree". It is NOT a ranking that claims to beat FanGraphs. Per E7.8 the board
-is POSITION-DIFFERENTIATED — FV leads for arms (it complements our line), our MLE + age-rel-to-level
-leads for bats (FV substitutes) — and per E7.3 the K%/BB% columns carry more confidence than ISO,
-which is weak-but-real. wOBA is absent and stays absent (a measured null).
+🔒 HONEST FRAME (`best_alpha = 0`): this is "FanGraphs + MLB Pipeline consensus + our independent
+MLE-translated line + where they disagree". It is NOT a ranking that claims to beat any source. Per
+E7.8 the board is POSITION-DIFFERENTIATED — FV leads for arms (it complements our line), our MLE +
+age-rel-to-level leads for bats (FV substitutes) — and per E7.3 the K%/BB% columns carry more
+confidence than ISO, which is weak-but-real. wOBA is absent and stays absent (a measured null).
 
-⚠️ OPERATOR-RUN (S3 I/O over ~40k xref rows + 26k MLE rows; ~1–3 min). `--prospect-savant` adds 8
-one-time HTTP calls to an UNOFFICIAL hobbyist endpoint (cached to disk; opt-in on purpose).
+⚠️ OPERATOR-RUN (S3 I/O over ~40k xref rows + 26k MLE rows + ~14k Pipeline rows; ~1–3 min).
+`--prospect-savant` adds 8 one-time HTTP calls to an UNOFFICIAL hobbyist endpoint (cached to disk;
+opt-in on purpose).
 
-    # LAPTOP — the 8/3 board, all three views, xlsx + CSV:
+    # LAPTOP — the 8/3 board, FanGraphs + MLB Pipeline consensus + our MLE, xlsx + CSV:
     AWS_DEFAULT_REGION=us-east-2 uv run --with openpyxl python -m \
         betting_ml.scripts.prospect_board.build_prospect_board --prospect-savant
 
@@ -36,11 +45,13 @@ one-time HTTP calls to an UNOFFICIAL hobbyist endpoint (cached to disk; opt-in o
         betting_ml.scripts.prospect_board.build_prospect_board
 
 Outputs (default `<out>` = ablation_results/e8_0_artifacts):
-  * `<out>/e8_0_prospect_board.csv`            — the full board (the 8/3 minimum)
+  * `<out>/e8_0_prospect_board.csv`            — the full board, FanGraphs ∪ MLB-Pipeline-only,
+                                                 with per-source + consensus columns (the 8/3 minimum)
   * `<out>/e8_0_prospect_board_{AL,NL}.csv`    — the single-league splits
-  * `<out>/e8_0_prospect_board.xlsx`           — All / AL / NL / Hitters / Pitchers / By blend /
-                                                 Disagreements / How to read this  (if openpyxl)
-  * `<out>/e8_0_join_report.json`              — the match-rate report
+  * `<out>/e8_0_prospect_board.xlsx`           — All / AL / NL / Hitters / Pitchers / Minors only /
+                                                 By blend / Disagreements / Pipeline-only /
+                                                 How to read this  (if openpyxl)
+  * `<out>/e8_0_join_report.json`              — the match-rate + pipeline + consensus report
 """
 from __future__ import annotations
 
@@ -69,6 +80,10 @@ from betting_ml.scripts.prospect_board.board_assembly import (  # noqa: E402
     format_report,
     split_sheets,
 )
+from betting_ml.scripts.prospect_board.build_consensus_assembly import (  # noqa: E402
+    fold_pipeline_into_e8_0_board,
+)
+from betting_ml.scripts.prospect_board.consensus import ConsensusError, format_consensus_report  # noqa: E402
 
 log = logging.getLogger("e8_0.board")
 
@@ -78,6 +93,11 @@ _DEFAULT_OUT = (_PROJECT_ROOT / "quant_sports_intel_models/baseball/edge_program
 MLE_BATTERS = f"{MILB}/derived/mle_projections"
 MLE_PITCHERS = f"{MILB}/derived/mle_projections_pitchers"
 XREF = f"{MILB}/derived/dim_player_xref"
+# E7.11's MLB Pipeline snapshot — the E8.0b second source. Owned here (not `build_consensus.py`) so
+# `build_prospect_board.py` never has to import the E7.11 RUNNER (only its pure `_assembly` module) —
+# `build_consensus.py` imports `_connect`/`load_inputs` FROM this module already, so the dependency
+# would otherwise be circular.
+PIPELINE_TABLE = f"{MILB}/mlb_pipeline_rankings"
 
 # The legend sheet. A board handed to a human without this is a board whose numbers get over-read —
 # and over-reading is the specific failure mode the honest frame exists to prevent.
@@ -157,6 +177,50 @@ HOW_TO_READ = [
      "EXPECTED, not a bug. Complex/DSL/just-drafted prospects have an identity but no "
      "minor-league PA projection yet. Those players stay on the board on FV alone rather than "
      "being silently dropped."),
+    # ── E8.0b (2026-07-31): MLB Pipeline folded in as a second source + a consensus across them ──
+    ("on_fangraphs_board",
+     "FALSE = MLB Pipeline ranks this player but FanGraphs' board does not carry him at all - the "
+     "loudest disagreement two sources can produce, so he is ADDED as a row rather than dropped by "
+     "the join. His FanGraphs columns (fv, overall_rank, mle_*, blend_score...) are blank because "
+     "there is no FanGraphs row and no MLE line was ever joined for him - blank means NOT RANKED "
+     "BY THEM / NEVER SCORED, not 'ungraded'. See the 'Pipeline-only' tab."),
+    ("pipeline_overall_rank / pipeline_org_rank",
+     "MLB Pipeline's own Top 100 place and organizational Top-30 place (E7.11) - free, MLBAM-keyed, "
+     "page-read from an allowed path (their JSON API is robots-disallowed and is never called)."),
+    ("consensus_rank / consensus_rank_mean / consensus_tier",
+     "The mean of the OVERALL ranks that exist for this player across FanGraphs and MLB Pipeline "
+     "(EQUAL WEIGHT - averaging one number when only one source ranked him returns that number), "
+     "and the board's ordering / tier bucket of those means. A source that only publishes a Top 100 "
+     "has said NOTHING about player #340 - unranked is averaged over, never imputed."),
+    ("⚠️ consensus_n_sources / consensus_confidence - READ THIS BESIDE EVERY CONSENSUS NUMBER",
+     "How many sources actually ranked him. A 1-source 'consensus' is just that source. "
+     "consensus_rank_spread (max-min of the contributing ranks) is NULL, not 0.0, for a 1-source "
+     "row - 0.0 there would read as 'the sources agree exactly', the opposite of what one opinion "
+     "means."),
+    ("org_consensus_*",
+     "The same aggregation over WITHIN-ORGANIZATION ranks (FanGraphs org_rank + MLB Pipeline's org "
+     "Top 30) - much wider coverage than the overall consensus (~900+ players vs ~130). Never "
+     "averaged with the overall scope: org rank 1 on a thin farm system is not overall rank 1."),
+    ("vs_consensus_fangraphs_overall / vs_consensus_pipeline_overall (+ the _org siblings)",
+     "How much HIGHER that one source ranks him than is usual for a player at that consensus level, "
+     "in percentile points - a RESIDUAL (board_assembly.residual_vs_fit), not source_rank minus "
+     "consensus_rank (two imperfectly-correlated rankings regress toward each other at the "
+     "extremes, so the raw gap flags the whole top of the board and is a re-encoding of rank, not a "
+     "disagreement). Computed ONLY where consensus_n_sources >= 2 - a source cannot disagree with a "
+     "consensus it alone constitutes."),
+    ("⭐ mle_vs_consensus",
+     "THE DIFFERENTIATED VIEW, extended: how much higher OUR translated line scores him than is "
+     "usual for a player the (FanGraphs + Pipeline) consensus places there. Also a residual, fitted "
+     "within player type. A conversation starter, not a verdict - same as 'disagreement' above, "
+     "just measured against the consensus instead of FV alone."),
+    ("pipeline_grade_*",
+     "MLB Pipeline's own 20-80 tool grades, parsed BEST-EFFORT from the prose of their scouting "
+     "report (not published as fields). Blank means not published or not parsed - never zero. "
+     "`grade_*` without the prefix are FanGraphs' grades."),
+    ("Pipeline-only tab",
+     "The ~165 players MLB Pipeline ranks that the FanGraphs board omits entirely (E7.11/E8.0b) - "
+     "the reason this board no longer has draft-relevant blanks where a Pipeline top-100/org-30 "
+     "talent used to be invisible. Sorted by pipeline_overall_rank."),
 ]
 
 
@@ -191,6 +255,42 @@ def load_inputs(conn, *, board_season: int | None = None) -> tuple[pd.DataFrame,
     log.info("loaded board=%d  xref=%d  mle_batters=%d  mle_pitchers=%d",
              len(board), len(xref), len(mle_bat), len(mle_pit))
     return board, xref, mle_bat, mle_pit
+
+
+def load_pipeline_ranks(conn, *, season: int | None = None,
+                        from_dir: Path | None = None) -> pd.DataFrame:
+    """The E7.11 MLB Pipeline snapshot — newest `as_of_date` of the newest (or requested) season.
+
+    Owned here (moved from `build_consensus.py` for E8.0b) rather than duplicated: `build_consensus`
+    already imports `_connect`/`load_inputs` FROM this module, so this module cannot import back from
+    it without a cycle. `build_consensus.py` now imports this function from here instead.
+
+    `from_dir` re-parses the ingest's cached HTML instead of reading the Delta table — lets a run
+    prove the join end-to-end before the S3 write exists.
+    """
+    if from_dir is not None:
+        from betting_ml.scripts.prospect_board.mlb_pipeline import (
+            ORG_SLUG_TO_ABBREV, TOP100_LIST, parse_rankings_page,
+        )
+        rows: list[dict] = []
+        for list_name in [TOP100_LIST, *sorted(ORG_SLUG_TO_ABBREV)]:
+            path = from_dir / f"{season}_{list_name}.html"
+            if not path.exists():
+                log.warning("cached page missing: %s — that organization will be ABSENT from the "
+                            "Pipeline source (its players read as unranked).", path.name)
+                continue
+            rows.extend(parse_rankings_page(path.read_text(encoding="utf-8"),
+                                            season=season, list_name=list_name))
+        return pd.DataFrame(rows)
+
+    season_clause = (f"where season = {int(season)}" if season is not None
+                     else "where season = (select max(season) from t)")
+    return conn.execute(f"""
+        with t as (select * from delta_scan('{PIPELINE_TABLE}')),
+             s as (select * from t {season_clause}),
+             newest as (select max(as_of_date) as as_of_date from s)
+        select * from s join newest using (as_of_date)
+    """).df()
 
 
 def _xlsx_engine() -> str | None:
@@ -263,6 +363,15 @@ def main(argv=None) -> int:
     p.add_argument("--allow-unmapped-orgs", action="store_true",
                    help="warn instead of failing when an org has no AL/NL mapping (NOT advised: "
                         "the league filter is what a single-league dynasty draft runs on)")
+    p.add_argument("--pipeline-season", type=int, default=None,
+                   help="MLB Pipeline snapshot season for the E8.0b consensus fold (default: the "
+                        "newest ingested)")
+    p.add_argument("--pipeline-from-dir", default=None,
+                   help="re-parse the E7.11 ingest's cached HTML instead of reading the Delta table")
+    p.add_argument("--skip-pipeline-consensus", action="store_true",
+                   help="ship the plain FanGraphs-only E8.0 board (no MLB Pipeline union, no "
+                        "consensus columns) — an emergency escape hatch only; E8.0b's whole point "
+                        "is that this stays OFF for the 8/3 board")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
@@ -300,6 +409,31 @@ def main(argv=None) -> int:
     report["min_mle_pa"] = args.min_mle_pa
     report["prospect_savant_included"] = bool(args.prospect_savant)
 
+    # ── E8.0b: fold MLB Pipeline in as a second source + a consensus across it and FanGraphs ──────
+    consensus_rep = None
+    if not args.skip_pipeline_consensus:
+        pipeline_season = args.pipeline_season or int(board["season"].max())
+        pipeline = load_pipeline_ranks(
+            conn, season=(pipeline_season if args.pipeline_from_dir else args.pipeline_season),
+            from_dir=Path(args.pipeline_from_dir) if args.pipeline_from_dir else None)
+        if pipeline.empty:
+            raise ConsensusError(
+                "the MLB Pipeline snapshot is EMPTY — run `uv run python "
+                "scripts/ingest_mlb_pipeline_to_s3.py --season "
+                f"{pipeline_season}` first. Refusing to silently ship a FanGraphs-only board when "
+                "the 8/3 board requires the consensus folded in — pass --skip-pipeline-consensus "
+                "for an emergency FanGraphs-only export instead."
+            )
+        log.info("loaded pipeline rankings: %d rows, %d distinct players",
+                 len(pipeline), pipeline["mlbam_id"].nunique())
+        final, fold_report = fold_pipeline_into_e8_0_board(
+            final, pipeline, strict_league=not args.allow_unmapped_orgs)
+        report["pipeline_join"] = fold_report["pipeline"]
+        consensus_rep = fold_report["consensus"]
+        report["pipeline_as_of_date"] = (str(pipeline["as_of_date"].max())
+                                         if "as_of_date" in pipeline.columns else None)
+    report["pipeline_consensus_included"] = not args.skip_pipeline_consensus
+
     written = write_exports(final, out_dir, report)
     print(format_report(report, extra=[
         "", f"  board snapshot as-of : {report['board_as_of_date']} "
@@ -311,6 +445,11 @@ def main(argv=None) -> int:
         "  🔒 best_alpha = 0 — no edge or win-rate claim. See the 'How to read this' tab.",
         "", "  WROTE:", *[f"    {w}" for w in written],
     ]))
+    if consensus_rep is not None:
+        print(format_consensus_report(consensus_rep, extra=[
+            "", f"  pipeline snapshot as-of : {report.get('pipeline_as_of_date')}",
+            "  ⭐ E8.0b: MLB Pipeline players FanGraphs' board omits are on the 'Pipeline-only' tab.",
+        ]))
     return 0
 
 

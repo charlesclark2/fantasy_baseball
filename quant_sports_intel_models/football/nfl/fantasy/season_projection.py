@@ -1372,6 +1372,12 @@ class RookieBandModel:
     cqr_mode: str = ""
     cqr_scale: str = "add"
     cqr_k: int = _ROOKIE_BAND_CQR_K
+    # NF-D14 — the AVAILABILITY driver (`avail_risk_z`, a per-player availability-risk z from
+    # `rookie_availability.AvailabilityPrior`). BOTH default OFF, so a model constructed without them
+    # is byte-identical to the NF1.8 band that ships today (`test_the_availability_channel_is_inert_by_default`).
+    avail_feature: bool = False      # enter the driver as a QUANTILE-REGRESSION feature
+    avail_gain: float = 0.0          # ...and/or as a strictly WIDEN-ONLY multiplicative widener
+    avail_ref: tuple = (0.0, 1.0)    # in-fold (mean, sd) of the driver
     n_fit: int = 0
     lo_q: float = 0.10
     hi_q: float = 0.90
@@ -1395,7 +1401,7 @@ class RookieBandModel:
     cqr_n_calib: dict = field(default_factory=dict)   # position -> calibration rows behind it
 
     # ── prediction ──────────────────────────────────────────────────────────────────────────
-    def band_many(self, position, pred, overall=None, resid_sd=None
+    def band_many(self, position, pred, overall=None, resid_sd=None, avail=None
                   ) -> tuple[np.ndarray, np.ndarray]:
         """Per-player (lo, hi) arrays. NaN for a row the fit cannot speak to (an unseen position, or
         a form whose required parameters were never fitted) — the caller then falls back to the
@@ -1414,6 +1420,8 @@ class RookieBandModel:
               if overall is not None else np.full(n, np.nan))
         rsd = (pd.to_numeric(pd.Series(resid_sd), errors="coerce").to_numpy(dtype=float)
                if resid_sd is not None else np.full(n, np.nan))
+        av = (pd.to_numeric(pd.Series(avail), errors="coerce").to_numpy(dtype=float)
+              if avail is not None else np.full(n, np.nan))
 
         if self.form in ("ratio_q", "ratio_q_floor"):
             for p in np.unique(pos):
@@ -1450,11 +1458,12 @@ class RookieBandModel:
                     if not clo or not chi:
                         continue
                     idx = np.where(pos == p)[0]
-                    x = self._design(pos[idx], pred[idx], ov[idx], rsd[idx], with_positions=False)
+                    x = self._design(pos[idx], pred[idx], ov[idx], rsd[idx], av[idx],
+                                     with_positions=False)
                     lo[idx] = self._apply_qreg(clo, x)
                     hi[idx] = self._apply_qreg(chi, x)
             elif self.qreg_lo and self.qreg_hi:
-                x = self._design(pos, pred, ov, rsd)
+                x = self._design(pos, pred, ov, rsd, av)
                 lo = self._apply_qreg(self.qreg_lo, x)
                 hi = self._apply_qreg(self.qreg_hi, x)
             if self.form == "qreg_sqrt":
@@ -1493,21 +1502,44 @@ class RookieBandModel:
             half = 0.5 * (hi - lo) * grow
             lo, hi = mid - half, mid + half
 
+        # ⭐ NF-D14 — the AVAILABILITY widener. Same widen-only contract as the P1A one above, and for
+        #    the same reason (NF1.7 lesson (d)): a two-sided `exp(gain·z)` would SHARPEN the half of the
+        #    field whose availability is unusually certain, i.e. buy the selection metric by narrowing
+        #    bands, which is precisely the trade a coverage floor exists to forbid. `clip(z, 0, 2)` makes
+        #    it monotone by construction — a rookie whose PLAYING TIME is unusually uncertain gets a
+        #    wider band; an unusually certain one buys NOTHING.
+        if self.avail_gain > 0:
+            a0, as0 = self.avail_ref
+            za = np.where(np.isfinite(av), (av - a0) / (as0 or 1.0), 0.0)
+            grow = np.exp(self.avail_gain * np.clip(za, 0.0, 2.0))
+            mid = 0.5 * (lo + hi)
+            half = 0.5 * (hi - lo) * grow
+            lo, hi = mid - half, mid + half
+
         lo = np.clip(np.minimum(lo, pred), 0.0, None)
         hi = np.maximum(hi, pred)
         return lo, hi
 
     # ── the quantile-regression design (shared by fit + predict, so they cannot drift) ──────
     def _design(self, pos: np.ndarray, pred: np.ndarray, overall: np.ndarray,
-                resid_sd: np.ndarray, with_positions: bool = True) -> pd.DataFrame:
+                resid_sd: np.ndarray, avail: np.ndarray | None = None,
+                with_positions: bool = True) -> pd.DataFrame:
         """`with_positions=False` drops the position dummies — the NF1.8 per-position fit, where the
-        position is the GROUPING rather than a feature (a dummy shifts only the intercept)."""
+        position is the GROUPING rather than a feature (a dummy shifts only the intercept).
+
+        NF-D14's `avail_z` column is added ONLY when `avail_feature` is set, so the default design is
+        byte-identical to NF1.8's and the shipped band cannot move by accident."""
         m0, s0 = self.resid_sd_ref
         x = pd.DataFrame({
             "log_pred": np.log1p(np.clip(pred, 0.0, None)),
             "log_overall": np.log(np.clip(np.nan_to_num(overall, nan=200.0), 1.0, None)),
             "z_sd": np.where(np.isfinite(resid_sd), (resid_sd - m0) / (s0 or 1.0), 0.0),
         })
+        if self.avail_feature:
+            a0, as0 = self.avail_ref
+            a = (np.full(len(x), np.nan) if avail is None
+                 else np.asarray(avail, dtype=float))
+            x["avail_z"] = np.where(np.isfinite(a), (a - a0) / (as0 or 1.0), 0.0)
         if with_positions:
             for p in self.qreg_positions[1:]:      # first position is the reference level
                 x[f"pos_{p}"] = (pos == p).astype(float)
@@ -1608,7 +1640,7 @@ def _interval_score(lo, hi, y, alpha: float = 0.20) -> np.ndarray:
 
 
 def _fit_qreg_into(m: RookieBandModel, pos: np.ndarray, y: np.ndarray, pred: np.ndarray,
-                   ov: np.ndarray, rsd: np.ndarray) -> None:
+                   ov: np.ndarray, rsd: np.ndarray, av: np.ndarray | None = None) -> None:
     """Fit `m`'s quantile pair in place — POOLED with position dummies, or (NF1.8) a SEPARATE pair per
     position when `m.qreg_per_pos`. Factored out of `fit_rookie_band_model` because the NF1.8
     cross-conformal calibration has to re-fit the very same arm on each fold's complement, and a
@@ -1622,22 +1654,23 @@ def _fit_qreg_into(m: RookieBandModel, pos: np.ndarray, y: np.ndarray, pred: np.
     def _fit(x: pd.DataFrame, t: np.ndarray, q: float) -> dict:
         return _pinball_fit(x, t, q, m.qreg_alpha)
 
+    avv = np.full(len(pos), np.nan) if av is None else np.asarray(av, dtype=float)
     if m.qreg_per_pos:
         for p in np.unique(pos):
             sel = pos == p
             if sel.sum() < _ROOKIE_BAND_MIN_TRAIN:
                 continue                                   # → NaN → the class-level fallback
-            x = m._design(pos[sel], pred[sel], ov[sel], rsd[sel], with_positions=False)
+            x = m._design(pos[sel], pred[sel], ov[sel], rsd[sel], avv[sel], with_positions=False)
             m.qreg_lo_pos[p] = _fit(x, target[sel], m.lo_q)
             m.qreg_hi_pos[p] = _fit(x, target[sel], m.hi_q)
         return
-    x = m._design(pos, pred, ov, rsd)
+    x = m._design(pos, pred, ov, rsd, avv)
     m.qreg_lo.update(_fit(x, target, m.lo_q))
     m.qreg_hi.update(_fit(x, target, m.hi_q))
 
 
 def _fit_conformal_into(m: RookieBandModel, pos: np.ndarray, y: np.ndarray, pred: np.ndarray,
-                        ov: np.ndarray, rsd: np.ndarray) -> None:
+                        ov: np.ndarray, rsd: np.ndarray, av: np.ndarray | None = None) -> None:
     """NF1.8 — CROSS-CONFORMAL calibration of `m`'s fitted band (Vovk cross-conformal / CQR).
 
     THE POINT: a per-POSITION coverage floor needs an instrument that delivers coverage PER GROUP, and
@@ -1663,6 +1696,7 @@ def _fit_conformal_into(m: RookieBandModel, pos: np.ndarray, y: np.ndarray, pred
     if m.form not in ("qreg", "qreg_sqrt"):
         return
     n = len(y)
+    avv = np.full(n, np.nan) if av is None else np.asarray(av, dtype=float)
     alpha = 1.0 - (m.hi_q - m.lo_q)
     # a DETERMINISTIC fold assignment (no RNG — a seeded split would make the fitted band depend on the
     # draw): order within position by the conditioning variable, then deal the rows round-robin, so
@@ -1675,11 +1709,15 @@ def _fit_conformal_into(m: RookieBandModel, pos: np.ndarray, y: np.ndarray, pred
         trn, cal = fold != f, fold == f
         if trn.sum() < _ROOKIE_BAND_MIN_TRAIN or cal.sum() < 3:
             continue
+        # ⚠️ the sub-model must carry the availability settings too — a calibration fitted on a
+        # DIFFERENT band shape than the one it inflates would silently calibrate the wrong object.
         sub = RookieBandModel(form=m.form, qreg_alpha=m.qreg_alpha, qreg_per_pos=m.qreg_per_pos,
                               lo_q=m.lo_q, hi_q=m.hi_q, resid_sd_ref=m.resid_sd_ref,
-                              qreg_positions=m.qreg_positions, n_fit=int(trn.sum()))
-        _fit_qreg_into(sub, pos[trn], y[trn], pred[trn], ov[trn], rsd[trn])
-        lo, hi = sub.band_many(pos[cal], pred[cal], overall=ov[cal], resid_sd=rsd[cal])
+                              qreg_positions=m.qreg_positions, n_fit=int(trn.sum()),
+                              avail_feature=m.avail_feature, avail_ref=m.avail_ref)
+        _fit_qreg_into(sub, pos[trn], y[trn], pred[trn], ov[trn], rsd[trn], avv[trn])
+        lo, hi = sub.band_many(pos[cal], pred[cal], overall=ov[cal], resid_sd=rsd[cal],
+                               avail=avv[cal])
         good = np.isfinite(lo) & np.isfinite(hi)
         if not good.any():
             continue
@@ -1720,6 +1758,8 @@ def fit_rookie_band_model(
     cqr_scale: str = "add",
     cqr_k: int = _ROOKIE_BAND_CQR_K,
     band_q: tuple[float, float] = _ROOKIE_BAND_Q,
+    avail_feature: bool = False,
+    avail_gain: float = 0.0,
 ) -> RookieBandModel | None:
     """NF1.7 §0.5 — fit ONE pre-registered per-player band form on the historical drafted population.
 
@@ -1750,13 +1790,21 @@ def fit_rookie_band_model(
     rsd_col = band_hist.get("projected_nfl_z_sd")
     rsd = (pd.to_numeric(rsd_col, errors="coerce").to_numpy(dtype=float)[ok]
            if rsd_col is not None else np.full(len(y), np.nan))
+    # NF-D14 — the availability driver rides on the frame exactly as `projected_nfl_z_sd` does, so
+    # production plumbing is "add the column", not "thread another argument through the board build".
+    av_col = band_hist.get("avail_risk_z")
+    av = (pd.to_numeric(av_col, errors="coerce").to_numpy(dtype=float)[ok]
+          if av_col is not None else np.full(len(y), np.nan))
 
     m = RookieBandModel(form=form, k=int(k), resid_sd_gain=float(resid_sd_gain),
                         qreg_alpha=float(qreg_alpha), qreg_per_pos=bool(qreg_per_pos),
                         cqr_mode=str(cqr_mode), cqr_scale=str(cqr_scale), cqr_k=int(cqr_k),
-                        n_fit=int(len(y)), lo_q=lo_q, hi_q=hi_q)
+                        n_fit=int(len(y)), lo_q=lo_q, hi_q=hi_q,
+                        avail_feature=bool(avail_feature), avail_gain=float(avail_gain))
     if np.isfinite(rsd).sum() >= _ROOKIE_BAND_MIN_TRAIN:
         m.resid_sd_ref = (float(np.nanmean(rsd)), float(np.nanstd(rsd)) or 1.0)
+    if np.isfinite(av).sum() >= _ROOKIE_BAND_MIN_TRAIN:
+        m.avail_ref = (float(np.nanmean(av)), float(np.nanstd(av)) or 1.0)
 
     for p in np.unique(pos):
         sel = pos == p
@@ -1789,11 +1837,11 @@ def fit_rookie_band_model(
 
     if form in ("qreg", "qreg_sqrt"):
         m.qreg_positions = tuple(sorted(np.unique(pos).tolist()))
-        _fit_qreg_into(m, pos, y, pred, ov, rsd)
+        _fit_qreg_into(m, pos, y, pred, ov, rsd, av)
         if not (m.qreg_lo or m.qreg_lo_pos):
             return None                                        # sklearn absent, or every group thin
         if cqr_mode:
-            _fit_conformal_into(m, pos, y, pred, ov, rsd)
+            _fit_conformal_into(m, pos, y, pred, ov, rsd, av)
     return m
 
 
