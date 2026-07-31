@@ -662,6 +662,38 @@ def test_export_placeholders_only_fill_the_gaps_the_projection_missed():
     assert EX.kdst_records(["AAA"], covered={("DST", "AAA"), ("K", "AAA")}) == []
 
 
+def test_a_defence_joins_adp_on_its_team_code_not_its_name():
+    """⚠️ A NAME JOIN MATCHES ZERO DEFENCES, AND LOOKS EXACTLY LIKE 'THE ROOM DOESN'T DRAFT THEM'.
+
+    FFC writes a unit as 'Denver Defense'; our board writes 'DEN D/ST'. Normalized those are
+    `denver defense` vs `den dst` — no normalizer bridges them, because the strings share no token.
+    So every defence silently carried adp=null (0 of 32 matched while FFC published 19), and the gap
+    was indistinguishable from the HONEST nulls on undrafted kickers. The team code is the real
+    identity of a fantasy defence and both sides carry it."""
+    from quant_sports_intel_models.football.nfl.fantasy import export_draft_board_json as EX
+
+    assert EX._adp_key("DST", "Denver Defense", "DEN") == EX._adp_key("DST", "DEN D/ST", "DEN"), (
+        "the FFC name and our name must resolve to the SAME defence key")
+    # a named player still joins on the name — he has no stable id across FFC
+    assert EX._adp_key("K", "Eddy Piñeiro", "SF") == EX._adp_key("K", "Eddy Pineiro", "SF")
+    assert EX._adp_key("K", "Jake Bates", "DET") != EX._adp_key("K", "Cam Little", "DET")
+    # a defence with no team code cannot be keyed at all — better null than a wrong join
+    assert EX._adp_key("DST", "DEN D/ST", None) is None
+
+
+def test_attach_adp_matches_a_defence_end_to_end():
+    """The join proven through the real entry point, not just the key helper."""
+    from quant_sports_intel_models.football.nfl.fantasy import export_draft_board_json as EX
+
+    lookup = {EX._adp_key("DST", "Denver Defense", "DEN"): 103.3,
+              EX._adp_key("K", "Jake Bates", "DET"): 131.9}
+    recs = [{"pos": "DST", "name": "DEN D/ST", "team": "DEN", "adp": None},
+            {"pos": "DST", "name": "CHI D/ST", "team": "CHI", "adp": None},   # undrafted → honest null
+            {"pos": "K", "name": "Jake Bates", "team": "DET", "adp": None}]
+    assert EX._attach_adp(recs, lookup) == 2
+    assert [r["adp"] for r in recs] == [103.3, None, 131.9]
+
+
 def test_dst_unit_names_are_not_mangled_by_the_titlecaser():
     """'DEN D/ST' is a team code plus a unit label, not a person's name — `.title()` renders it
     'Den D/St'."""
@@ -765,6 +797,23 @@ def test_kickers_and_defences_are_not_tiered():
     assert "LOW_PREDICTABILITY_POSITIONS.includes(p.pos)" in src, (
         "the Rankings tier assignment no longer excludes K/DST — a gap-based tier over a near-flat, "
         "near-unpredictable field crowns a 'T1' kicker on separation that is inside its own interval")
+
+
+def test_the_adp_delta_compares_like_with_like_on_a_position_tab():
+    """⚠️ A UNITS BUG THAT READS AS A HUGE DISAGREEMENT. ADP is an OVERALL pick number; a position tab
+    ranks 1..n within the position. Subtracting one from the other showed '+131' for the top kicker
+    (K#1 vs pick 131.9) and '+26' for Josh Allen (QB#1 vs pick 26.6) — on rows where our board and the
+    room agree EXACTLY. The fake delta scales with the position's typical draft slot, which is why
+    K/DST made it visible. Both ranked surfaces must rank ADP within the position first."""
+    assert "export function adpPositionRanks" in (
+        _FRONTEND / "components" / "fantasy" / "shared.tsx").read_text()
+    for surface in _RANKED_SURFACES:
+        src = (_FRONTEND / "components" / "fantasy" / surface).read_text()
+        assert "adpPositionRanks" in src, (
+            f"{surface} still subtracts a positional rank from an overall ADP — a row where the board "
+            f"and the room agree renders as a large fake disagreement")
+        assert "p.adp - rank" not in src and "p.adp - (i + 1)" not in src, (
+            f"{surface} still has a raw ADP-minus-rank delta")
 
 
 def test_the_replacement_level_panel_is_skill_positions_only():

@@ -20,6 +20,7 @@ import {
   ADP_DELTA_LABEL,
   ALL_ROWS,
   AdpDelta,
+  adpPositionRanks,
   EmptyBlock,
   FormatSelector,
   GLOSSARY,
@@ -133,6 +134,16 @@ export function RankingsBoard() {
 
   const hasAdp = useMemo(() => rows.some((p) => p.adp != null), [rows])
 
+  // On a position tab, our rank is 1..n WITHIN the position, so it must be compared against the
+  // room's rank within the position — not against ADP, which is an overall pick number. Null on the
+  // Overall tab, where our rank and ADP are already the same scale. See `adpPositionRanks`.
+  const adpPosRank = useMemo(
+    () => (pos === "Overall" ? null : adpPositionRanks(ranked)),
+    [ranked, pos],
+  )
+  /** The room's position for this row, on whichever scale the active tab ranks in. */
+  const adpRefOf = (p: Player) => (adpPosRank ? (adpPosRank.get(p.id) ?? null) : p.adp ?? null)
+
   const exportCsv = () => {
     downloadCsv(
       `credence-rankings-${configName}-${size}team-${pos.toLowerCase()}.csv`,
@@ -143,7 +154,9 @@ export function RankingsBoard() {
         return [
           rank, tierOf.get(p.id) ?? "", p.name, p.pos, teamLabel(p), p.bye ?? null, p.g, p.pts,
           p.ptsP10 ?? null, p.ptsP90 ?? null, p.vor, p.posRank, p.adp ?? null,
-          p.adp != null ? Math.round(p.adp - rank) : null, p.rookie ? "yes" : "no",
+          // same scale as the rendered column — see adpRefOf
+          adpRefOf(p) != null ? Math.round((adpRefOf(p) as number) - rank) : null,
+          p.rookie ? "yes" : "no",
           // carried so a downloaded board still says which ranges are class-level, not per-player
           p.rookie ? "class-level" : "player",
         ]
@@ -331,7 +344,12 @@ export function RankingsBoard() {
                                 {p.adp != null ? num(p.adp) : "—"}
                               </td>
                               <td className="px-3 py-2 text-right">
-                                <AdpDelta delta={p.adp != null ? p.adp - rank : null} />
+                                <AdpDelta
+                                  delta={(() => {
+                                    const ref = adpRefOf(p)
+                                    return ref != null ? ref - rank : null
+                                  })()}
+                                />
                               </td>
                             </>
                           )}

@@ -165,7 +165,7 @@ export const GLOSSARY = {
     "How much value you give up by passing on this player and taking the next one at his position instead. A big number means a cliff — the tier ends here. A small number means you can comfortably wait.",
   adp: "Average draft position across thousands of real public drafts (Fantasy Football Calculator), matched to your scoring format and league size. It is a picture of what other drafters are doing — a reference point, not a target and not a competitor we claim to beat.",
   adpDelta:
-    "Where our board differs from the room: ADP minus our rank. A positive number means the public typically drafts him LATER than we rank him; a negative number means they take him EARLIER. Big gaps are where our projection and the consensus genuinely disagree — read them alongside the 80% range, which tells you how sure the model is.",
+    "Where our board differs from the room. A positive number means the public typically drafts him LATER than we rank him; a negative number means they take him EARLIER. On the overall board that is ADP minus our overall rank. On a position tab it compares like with like — our rank at the position against the room's rank at that position, derived from ADP — because ADP is an overall pick number and subtracting it from a positional rank would compare two different scales. Big gaps are where our projection and the consensus genuinely disagree; read them alongside the 80% range, which tells you how sure the model is.",
   confidence:
     "How much played history sits behind the projection — high is 10 or more games in the season we project from, medium is 5 to 9, low is fewer than 5. Every rookie is low by definition, having never played an NFL game. It describes how much EVIDENCE there is, which is not the same as how good the player is: a low-confidence projection can still be a high one.",
   tier: "A grouping of players of similar value, split where there is an unusually large drop to the next player (bigger than the typical gap on this board). Tiers are the practical draft question — inside a tier you can take whoever you prefer, but letting a tier run out before you pick costs you real value. Kickers and defences are left untiered: their whole field fits inside a few points, so a tier break there would be splitting noise rather than value.",
@@ -393,6 +393,27 @@ export function PositionTabs({
 
 /** ADP delta, signed and coloured. Emerald = we rank him higher than the room drafts him. The colour
  *  is a "we differ here" cue, NOT a value/edge claim — the tooltip on the column says so. */
+/** The room's ordering WITHIN a position, derived by ranking that position's rows on ADP.
+ *
+ *  ⚠️ Needed because ADP is an OVERALL pick number while a position tab ranks 1..n within the
+ *  position, and subtracting one from the other compares two different scales. It read as a huge
+ *  disagreement that was pure units: the top kicker showed "+131" (K#1 vs pick 131.9) and Josh Allen
+ *  "+26" (QB#1 vs pick 26.6) — on rows where our board and the room actually AGREE exactly. The
+ *  bigger the position's typical draft slot, the bigger the fake delta, which is why kickers and
+ *  defences made it obvious. Ranking ADP within the position puts both sides on the same scale, so
+ *  a real disagreement (we say K2, the room says K7) is what survives. */
+export function adpPositionRanks<T extends { id: string; adp?: number | null }>(
+  rows: T[],
+): Map<string, number> {
+  const m = new Map<string, number>()
+  rows
+    .filter((r) => r.adp != null)
+    .slice()
+    .sort((a, b) => (a.adp as number) - (b.adp as number))
+    .forEach((r, i) => m.set(r.id, i + 1))
+  return m
+}
+
 export function AdpDelta({ delta }: { delta: number | null }) {
   if (delta == null) return <span className="text-gray-600">—</span>
   const rounded = Math.round(delta)

@@ -15,6 +15,7 @@ import type { Player } from "@/lib/draft-optimizer"
 import {
   ADP_DELTA_LABEL,
   AdpDelta,
+  adpPositionRanks,
   EmptyBlock,
   FormatSelector,
   GLOSSARY,
@@ -99,6 +100,14 @@ export function LeagueBoard() {
 
   const maxVor = useMemo(() => Math.max(1, ...rows.map((r) => r.vor ?? 0)), [rows])
   const hasAdp = useMemo(() => rows.some((r) => r.adp != null), [rows])
+
+  // Filtered to one position, the row index is a rank WITHIN that position, so it must be compared
+  // against the room's rank within the position rather than against ADP's overall pick number.
+  // Null on "All", where the row index and ADP are already the same scale. See `adpPositionRanks`.
+  const adpPosRank = useMemo(
+    () => (pos === "All" ? null : adpPositionRanks(rows)),
+    [rows, pos],
+  )
 
   // Drop-off to the next player at the same position — the "if I wait, this is what I lose" number
   // the draft optimizer prices as VONA. Computed over the FULL board, not the filtered view.
@@ -293,7 +302,12 @@ export function LeagueBoard() {
                             </td>
                             <td className="px-3 py-2 text-right">
                               {/* the value board's own order is the rank we compare ADP against */}
-                              <AdpDelta delta={p.adp != null ? p.adp - (i + 1) : null} />
+                              <AdpDelta
+                                delta={(() => {
+                                  const ref = adpPosRank ? (adpPosRank.get(p.id) ?? null) : p.adp ?? null
+                                  return ref != null ? ref - (i + 1) : null
+                                })()}
+                              />
                             </td>
                           </>
                         )}

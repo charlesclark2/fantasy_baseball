@@ -32,6 +32,7 @@ re-export session (NF-D11 did this unintentionally).
 from __future__ import annotations
 
 import argparse
+import collections
 import functools
 import json
 import logging
@@ -331,20 +332,38 @@ def projection_records(
     return recs
 
 
-def adp_lookup(season: int, fmt: str, teams: int) -> dict[tuple[str, str], float]:
-    """`{(normalized_name, position) -> adp}` from Fantasy Football Calculator for one (format, size).
+def _adp_key(pos: str, name: str | None, team: str | None) -> tuple[str, str] | None:
+    """The join key for one ADP row / board record.
 
-    Keyed on the NAME, not our gsis id, on purpose: the board's rookies carry synthetic ids (their
+    ⚠️ A DEFENCE JOINS ON ITS TEAM CODE, NOT ITS NAME, and that is not a nicety — a name join is
+    guaranteed to match ZERO defences. FFC writes a unit as "Denver Defense"; our board writes it as
+    "DEN D/ST". Normalized, that is `denver defense` vs `den dst` — no normalizer bridges those,
+    because the two strings share no token. This silently cost every defence its ADP (0 of 32 matched
+    while FFC published 19, including a Seattle unit going ~pick 87, the one D/ST ADP a drafter
+    genuinely acts on). The team code is the real identity of a fantasy defence, and both sides
+    already carry it, so it is also the more robust key. A NAMED player keeps the name join: he has
+    no stable id across FFC and our rookie rows carry synthetic gsis ids."""
+    from quant_sports_intel_models.football.nfl.fantasy import adp_source as A
+
+    if pos == "DST":
+        t = _norm_team(str(team)) if team else None
+        return (t, pos) if t else None
+    return (A._normalize_name(name), pos) if name else None
+
+
+def adp_lookup(season: int, fmt: str, teams: int) -> dict[tuple[str, str], float]:
+    """`{(key, position) -> adp}` from Fantasy Football Calculator for one (format, size), where the
+    key is the normalized NAME for a named player and the TEAM CODE for a defence (see `_adp_key`).
+
+    Keyed on the name, not our gsis id, on purpose: the board's rookies carry synthetic ids (their
     projection comes from the NCAAF rookie leg, not an NFL game log), so a gsis crosswalk would drop
     exactly the players a drafter most wants an ADP for. Both sides go through `adp_source`'s vetted
     normalizer, which already folds accents, generational suffixes and the FFC nickname aliases.
 
     Best-effort by design: FFC is an external free API. A failure logs a warning and yields {} → the
     ADP column renders "—" rather than failing the export, which is the draft-critical output."""
-    from quant_sports_intel_models.football.nfl.fantasy import adp_source as A
-
     try:
-        df = A.fetch_ffc_adp(season, fmt=fmt, teams=teams)
+        df = A_fetch(season, fmt, teams)
     except Exception as e:  # noqa: BLE001 — a reference column must never break the boards
         log.warning("ADP unavailable for %s %s/%dteam (%s: %s)", season, fmt, teams, type(e).__name__, e)
         return {}
@@ -352,10 +371,22 @@ def adp_lookup(season: int, fmt: str, teams: int) -> dict[tuple[str, str], float
     for _, r in df.iterrows():
         pos = NFL_PROFILE.normalize_position(str(r.get("position") or ""))
         adp = _fnum(r.get("adp"))
-        if pos in PROJECTABLE and adp is not None:
-            out.setdefault((A._normalize_name(r.get("player_name")), pos), adp)
-    log.info("ADP %s %s/%dteam: %d players", season, fmt, teams, len(out))
+        if pos not in PROJECTABLE or adp is None:
+            continue
+        key = _adp_key(pos, r.get("player_name"), r.get("team"))
+        if key is not None:
+            out.setdefault(key, adp)
+    by_pos = collections.Counter(pos for _, pos in out)
+    log.info("ADP %s %s/%dteam: %d players (%s)", season, fmt, teams, len(out),
+             ", ".join(f"{p}={by_pos[p]}" for p in PROJECTABLE))
     return out
+
+
+def A_fetch(season: int, fmt: str, teams: int):
+    """Indirection so a test can stub the FFC fetch without reaching the network."""
+    from quant_sports_intel_models.football.nfl.fantasy import adp_source as A
+
+    return A.fetch_ffc_adp(season, fmt=fmt, teams=teams)
 
 
 @functools.lru_cache(maxsize=None)
@@ -368,11 +399,10 @@ def adp_cache_for(season: int, fmt: str, teams: int) -> dict[tuple[str, str], fl
 def _attach_adp(recs: list[dict], adp: dict[tuple[str, str], float]) -> int:
     """Add `adp` to each record in place (null when the player is undrafted in that ADP sample —
     a real signal, not a gap). Returns how many matched."""
-    from quant_sports_intel_models.football.nfl.fantasy import adp_source as A
-
     n = 0
     for rec in recs:
-        val = adp.get((A._normalize_name(rec["name"]), rec["pos"])) if rec.get("pos") else None
+        key = _adp_key(rec["pos"], rec.get("name"), rec.get("team")) if rec.get("pos") else None
+        val = adp.get(key) if key is not None else None
         rec["adp"] = val
         n += val is not None
     return n
