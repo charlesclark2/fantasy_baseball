@@ -482,12 +482,22 @@ def run_single_date(target_date: date, sigma_obs, team_prior_neff, win_prior_str
           f"closed={result['closed']}  inserted={result['inserted']}")
 
 
-def run_backfill(season: int, sigma_obs, team_prior_neff, win_prior_strength, dry_run: bool) -> None:
+def run_backfill(season: int, sigma_obs, team_prior_neff, win_prior_strength, dry_run: bool,
+                 reset: bool = False) -> None:
     print(f"\nTeam sequential posteriors — backfill season {season}")
     _prep(season, sigma_obs, team_prior_neff, win_prior_strength, dry_run)
 
+    # 🚨 2026-07-31 — this chain is NON-IDEMPOTENT: replaying a season on top of existing state
+    # applies an ENTIRE EXTRA SEASON of observations (posterior_mu stays ~right, but n_cumulative
+    # inflates and posterior_sigma2 goes ~N× overconfident). Refuse unless --reset. See
+    # catchup.guard_or_reset_backfill.
+    from betting_ml.scripts.sequential_bayes import catchup as _catchup
     conn = get_snowflake_connection()
     try:
+        _catchup.guard_or_reset_backfill(
+            conn=conn, target_table=_TARGET_TABLE, season=season, reset=reset,
+            fetch_dicts=_fetch_dicts, label="team-seq-backfill", dry_run=dry_run,
+        )
         rows = _fetch_dicts(conn, _SEASON_DATES_SQL, {"season": season})
     finally:
         conn.close()
@@ -602,6 +612,12 @@ def main() -> None:
     parser.add_argument("--win-prior-strength", type=float, default=_WIN_PRIOR_STRENGTH_DEFAULT,
                         help=f"Beta prior total weight a0+b0 for win_prob (default {_WIN_PRIOR_STRENGTH_DEFAULT})")
     parser.add_argument("--dry-run", action="store_true", help="Compute updates but do not write")
+    parser.add_argument("--reset", action="store_true",
+                        help="With --backfill: DELETE the season's existing rows first, so the "
+                             "replay starts from a cold prior. REQUIRED to backfill a populated "
+                             "season — the chain is non-idempotent and replaying on top of "
+                             "existing state silently applies an extra season of observations "
+                             "(inflates n_cumulative, makes posterior_sigma2 overconfident).")
     args = parser.parse_args()
 
     if args.backfill and not args.season:
@@ -611,7 +627,8 @@ def main() -> None:
 
     if args.backfill:
         print(f"update_team_posteriors  backfill season={args.season}  dry_run={args.dry_run}")
-        run_backfill(args.season, args.sigma_obs, args.team_prior_neff, args.win_prior_strength, args.dry_run)
+        run_backfill(args.season, args.sigma_obs, args.team_prior_neff, args.win_prior_strength,
+                     args.dry_run, reset=args.reset)
     elif args.catchup:
         run_catchup(args.lookback_days, args.sigma_obs, args.team_prior_neff,
                     args.win_prior_strength, args.dry_run)

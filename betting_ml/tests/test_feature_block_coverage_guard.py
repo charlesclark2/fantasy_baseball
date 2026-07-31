@@ -83,32 +83,38 @@ class TestClassify:
         assert fbc._classify(base_cov=0.80, recent_cov=0.95, hist_cov=0.98) == "SKIPPED"
 
 
-def _spread(total_games: int, total_notnull: int, n_dates: int, zero_last: int = 0
-            ) -> list[tuple[int, int]]:
-    """Split (games, notnull) over `n_dates` per-date buckets, zeroing the LAST `zero_last`.
+def _spread(total_games: int, total_notnull: int, n_dates: int, zero_last: int = 0,
+            zero_offset: int = 1) -> list[tuple[int, int]]:
+    """Split (games, notnull) over `n_dates` per-date buckets, zeroing `zero_last` of them.
+
+    `zero_offset` shifts WHICH dates are zeroed away from the end: offset 1 (the default) zeroes
+    the dates ending just BEFORE the newest, because the guard exempts the newest played date (it
+    legitimately lags one build cycle — see _DATE_OUTAGE_SKIP_NEWEST). Pass 0 to zero the newest
+    date itself, which is what the lag-exemption tests do.
 
     Both games and notnull are spread as EVENLY as possible over their buckets (notnull over the
     NON-zeroed ones only, capped at each date's game count). Evenness matters: a greedy pack would
-    leave trailing zero dates and fabricate the very whole-slate outage these tests are trying to
-    control for. Used to build the per-date rows main() now reads — E9.53 replaced the single
-    aggregate row with one row per game_date.
+    leave trailing zero dates and fabricate the very whole-slate outage these tests control for.
     """
     if n_dates <= 0 or total_games <= 0:
         return []
     per, rem = divmod(total_games, n_dates)
     games = [per + (1 if i < rem else 0) for i in range(n_dates)]
+    hi = n_dates - zero_offset
+    zeroed = set(range(max(0, hi - zero_last), max(0, hi)))
+    live_idx = [i for i in range(n_dates) if i not in zeroed]
     notnull = [0] * n_dates
-    live = n_dates - zero_last
-    if live > 0:
-        for i in range(live):
+    if live_idx:
+        k = len(live_idx)
+        for j, i in enumerate(live_idx):
             # Even split via cumulative floors, then clamp to the date's game count.
-            share = (total_notnull * (i + 1)) // live - (total_notnull * i) // live
+            share = (total_notnull * (j + 1)) // k - (total_notnull * j) // k
             notnull[i] = min(games[i], share)
     return list(zip(games, notnull))
 
 
 def _run_main(present_cols, base_n, recent_n, block_counts, argv, capsys, hist_n=None,
-              recent_dates=8, zero_dates=None):
+              recent_dates=8, zero_dates=None, zero_offset=1):
     """Run main() with a mocked cursor. `block_counts` maps block-name -> (base_notnull,
     recent_notnull) OR (hist_notnull, base_notnull, recent_notnull). `present_cols` = the
     columns information_schema reports present. `hist_n` defaults to base_n (a populated
@@ -152,7 +158,8 @@ def _run_main(present_cols, base_n, recent_n, block_counts, argv, capsys, hist_n
         rows.append((base_date, base_n, *[resolved[b][1] for b in blocks]))
     # Recent window: one row per date, shared n_games, per-block notnull.
     per_block_dates = {
-        b: _spread(recent_n, resolved[b][2], recent_dates, zero_dates.get(b, 0)) for b in blocks
+        b: _spread(recent_n, resolved[b][2], recent_dates, zero_dates.get(b, 0), zero_offset)
+        for b in blocks
     }
     shared_games = _spread(recent_n, recent_n, recent_dates)
     for i in range(len(shared_games)):
@@ -301,7 +308,9 @@ class TestFindDateOutages:
     """BLIND SPOT 1, closed: assert PER PLAYED DATE, absolutely and low."""
 
     def test_a_fully_dead_date_is_an_outage(self):
-        per_date = [("2026-07-27", 15, 15), ("2026-07-28", 16, 0)]
+        # A trailing healthy date is required: the NEWEST played date is exempt (it lags one
+        # build cycle), so the dead date under test must not be the newest one.
+        per_date = [("2026-07-27", 15, 15), ("2026-07-28", 16, 0), ("2026-07-29", 15, 15)]
         assert fbc.find_date_outages(per_date, baseline_cov=1.0) == [("2026-07-28", 0.0)]
 
     def test_all_healthy_dates_yield_nothing(self):
@@ -311,11 +320,12 @@ class TestFindDateOutages:
     def test_a_partial_date_is_not_an_outage(self):
         # 60% covered on a date is a partial gap (a few games missing a starter etc.), NOT a
         # whole-slate block zeroing. The check must stay absolute+low so it never nags.
-        per_date = [("2026-07-28", 15, 9)]
+        per_date = [("2026-07-28", 15, 9), ("2026-07-29", 15, 15)]   # not vacuous: 07-28 is checked
         assert fbc.find_date_outages(per_date, baseline_cov=1.0) == []
 
     def test_multiple_outage_dates_are_all_reported_sorted(self):
-        per_date = [("2026-07-28", 16, 0), ("2026-07-22", 15, 0), ("2026-07-23", 15, 15)]
+        per_date = [("2026-07-28", 16, 0), ("2026-07-22", 15, 0), ("2026-07-23", 15, 15),
+                    ("2026-07-29", 15, 15)]   # trailing healthy date — the newest is exempt
         assert fbc.find_date_outages(per_date, baseline_cov=1.0) == [
             ("2026-07-22", 0.0), ("2026-07-28", 0.0),
         ]
@@ -328,14 +338,14 @@ class TestFindDateOutages:
 
     def test_history_alone_is_enough_of_a_reference(self):
         # INC-31 shape: trailing baseline dead too, but historically healthy → still an outage.
-        per_date = [("2026-07-28", 16, 0)]
+        per_date = [("2026-07-28", 16, 0), ("2026-07-29", 15, 15)]   # newest is exempt
         assert fbc.find_date_outages(per_date, baseline_cov=0.0, hist_cov=0.99) == [
             ("2026-07-28", 0.0),
         ]
 
     def test_a_tiny_date_is_ignored(self):
         # A 2-game date (all-star break / a suspended-game remnant) is too small to judge.
-        per_date = [("2026-07-28", 2, 0)]
+        per_date = [("2026-07-28", 2, 0), ("2026-07-29", 15, 15)]   # not vacuous: 07-28 is checked
         assert fbc.find_date_outages(per_date, baseline_cov=1.0) == []
 
 
@@ -374,8 +384,8 @@ class TestPerDateOutageEndToEnd:
         assert "feature_block_date_outage_count=0" in out
 
     def test_the_full_e9_53_pattern_reports_every_outage_date(self, capsys, caplog):
-        # bullpen sequential dead on 2 of the 8 recent dates (07-27 + 07-28 as seen from the
-        # 07-29 anchor) → aggregate 0.75 = OK, per-date reports BOTH dates.
+        # bullpen sequential dead on 2 of the 8 recent dates, ending just before the newest
+        # (which is exempt) → aggregate 0.75 = OK, per-date reports BOTH dates.
         counts = self._healthy_counts(120, 120)
         counts["team_sequential_bullpen"] = (120, 90)
         with caplog.at_level("ERROR"):
@@ -386,7 +396,7 @@ class TestPerDateOutageEndToEnd:
             )
         assert rc == 1
         assert "feature_block_date_outage_count=2" in out
-        assert "2026-07-28" in caplog.text and "2026-07-27" in caplog.text
+        assert "2026-07-27" in caplog.text and "2026-07-26" in caplog.text
 
     def test_a_coverage_gapped_block_with_dead_dates_still_does_not_halt(self, capsys):
         # odds_metadata is legitimately partial by tier — a zero date must not HALT.
@@ -437,3 +447,62 @@ class TestTeamSequentialBlocksAreGuarded:
         # `*_bp_eb_xwoba` was 0 games on 2026-07-27 — already registered, but it only ever had
         # the aggregate check, which the per-date check above now backstops.
         assert fbc._BLOCKS["bullpen_eb"] == "home_bp_eb_xwoba"
+
+
+class TestNewestPlayedDateIsExemptFromTheLagAlarm:
+    """⏳ The newest played date legitimately lags one build cycle — it must not ALERT.
+
+    MEASURED 2026-07-31, right after the E9.53 repair: dates 07-20..07-29 were fully covered for
+    every block and ONLY 07-30 (the newest) read bp_eb_xwoba 0/10 — while Snowflake's own
+    mart_bullpen_effectiveness already had 07-30. The aggregator's precursor chain runs early in the
+    daily job, before that day's EB posteriors exist, so the newest date populates on the FOLLOWING
+    run. Without the exemption this guard ALERTs every single day on a self-resolving condition,
+    which is alarm fatigue on the one detector for silent zeroing — and would make
+    FEATURE_COVERAGE_STRICT=1 a guaranteed daily HALT, permanently blocking its promotion.
+    """
+
+    def test_a_zero_on_the_newest_date_alone_is_not_an_outage(self):
+        # Today's exact live shape.
+        live = [(f"2026-07-{d}", 15, 15) for d in range(23, 30)] + [("2026-07-30", 10, 0)]
+        assert fbc.find_date_outages(live, baseline_cov=1.0) == []
+
+    def test_and_the_exemption_is_the_ONLY_thing_suppressing_it(self):
+        # Two-sided: with skip_newest=0 the very same input DOES report the outage, so the silence
+        # above is the exemption doing its job — not the check failing to look.
+        live = [(f"2026-07-{d}", 15, 15) for d in range(23, 30)] + [("2026-07-30", 10, 0)]
+        assert fbc.find_date_outages(live, baseline_cov=1.0, skip_newest=0) == [("2026-07-30", 0.0)]
+
+    def test_the_e9_53_pattern_is_still_caught_in_full(self):
+        # The exemption must not reopen the blind spot. Real holes persist for DAYS (07-22 was
+        # still dead on 07-29), so they always survive into the non-exempt window.
+        e953 = [("2026-07-23", 15, 0), ("2026-07-24", 15, 15), ("2026-07-25", 15, 15),
+                ("2026-07-26", 15, 15), ("2026-07-27", 11, 0), ("2026-07-28", 15, 0),
+                ("2026-07-29", 16, 16), ("2026-07-30", 10, 10)]
+        assert fbc.find_date_outages(e953, baseline_cov=1.0) == [
+            ("2026-07-23", 0.0), ("2026-07-27", 0.0), ("2026-07-28", 0.0),
+        ]
+
+    def test_a_two_day_outage_reaching_the_newest_date_still_fires(self):
+        # Only ONE date is exempt, so a genuine outage is reported a day late, never suppressed.
+        two_day = [(f"2026-07-{d}", 15, 15) for d in range(23, 29)] + [
+            ("2026-07-29", 16, 0), ("2026-07-30", 10, 0)]
+        assert fbc.find_date_outages(two_day, baseline_cov=1.0) == [("2026-07-29", 0.0)]
+
+    def test_exemption_picks_the_newest_by_DATE_not_by_row_order(self):
+        # The query orders by game_date today, but a reordered query must not silently change WHICH
+        # date is exempt — so the helper sorts explicitly.
+        shuffled = [("2026-07-30", 10, 0), ("2026-07-25", 15, 15), ("2026-07-23", 15, 15),
+                    ("2026-07-29", 16, 16), ("2026-07-24", 15, 15), ("2026-07-26", 15, 15),
+                    ("2026-07-27", 11, 15), ("2026-07-28", 15, 15)]
+        assert fbc.find_date_outages(shuffled, baseline_cov=1.0) == []
+
+    def test_end_to_end_a_newest_date_outage_does_not_halt(self, capsys):
+        counts = {b: (120, 120) for b in fbc._BLOCKS}
+        counts["bullpen_eb"] = (120, 105)
+        rc, out = _run_main(
+            _ALL_COLS, 120, 120, counts,
+            ["--env", "prod", "--date", "2026-07-31", "--strict"], capsys,
+            hist_n=120, zero_dates={"bullpen_eb": 1}, zero_offset=0,   # zero the NEWEST date
+        )
+        assert rc == 0, "a newest-date-only zero must not HALT — it self-heals next run"
+        assert "feature_block_date_outage_count=0" in out

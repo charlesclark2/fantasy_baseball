@@ -201,3 +201,90 @@ class TestMetricsAreTheThreeChains:
         # feature_pregame_game_features_raw pivots on these exact literals; a rename here would
         # silently null the block in the served store.
         assert metric in utp._CATCHUP_METRICS
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════
+# 🚨 BACKFILL IDEMPOTENCY GUARD (2026-07-31)
+#
+# `run_backfill` replays a whole season on top of whatever state exists — `_load_current_seq`
+# loads the existing posterior as the PRIOR and `_prep` only ensures DDL. So every backfill on a
+# POPULATED table applies an ENTIRE EXTRA SEASON of observations to the same chains.
+#
+# Measured on team_sequential_posteriors 2026-07-31: `win_prob` takes exactly one observation per
+# team per game (n_obs=1), so `n_cumulative == games played` is an EXACT identity — violated on all
+# 30 teams at ratio 2.72-2.76 (KC: 110 games, n_cumulative 303, param_a 133 ⇒ 129 wins in 110
+# games). Three replays had accumulated across two months.
+#
+# ⭐ WHY IT HID: duplicates are replays of the SAME games, so posterior_mu stays ≈ correct — only
+# posterior_sigma2 ∝ 1/(a+b) is wrong, leaving the served posterior ~2.7× OVERCONFIDENT. A
+# value/mean check can never see this. WHEN A REPLAY CORRUPTS ONLY THE SECOND MOMENT, ASSERT ON A
+# COUNT, NOT A VALUE.
+# ═══════════════════════════════════════════════════════════════════════════════════════
+
+class TestBackfillRefusesToDoubleApply:
+    def _conn(self, existing_rows: int):
+        conn = mock.MagicMock()
+        cur = mock.MagicMock()
+        cur.description = [("N",)]
+        cur.fetchall.return_value = [(existing_rows,)]
+        conn.cursor.return_value = cur
+        return conn, cur
+
+    def _guard(self, conn, reset=False, dry_run=False):
+        return ct.guard_or_reset_backfill(
+            conn=conn, target_table="db.sch.tbl", season=2026, reset=reset,
+            label="test", dry_run=dry_run, log=lambda *a, **k: None,
+        )
+
+    def test_empty_season_is_allowed(self):
+        conn, _ = self._conn(0)
+        self._guard(conn)   # must not raise
+
+    def test_populated_season_is_REFUSED_without_reset(self):
+        conn, _ = self._conn(9810)
+        with pytest.raises(SystemExit, match="REFUSING TO BACKFILL"):
+            self._guard(conn)
+
+    def test_the_refusal_explains_the_overconfidence_consequence(self):
+        conn, _ = self._conn(9810)
+        with pytest.raises(SystemExit) as ei:
+            self._guard(conn)
+        msg = str(ei.value)
+        assert "NON-IDEMPOTENT" in msg and "--reset" in msg
+        assert "OVERCONFIDENT" in msg, "the message must name the ACTUAL damage (variance, not mean)"
+
+    def test_reset_deletes_the_season_then_proceeds(self):
+        conn, cur = self._conn(9810)
+        self._guard(conn, reset=True)   # must not raise
+        deletes = [c for c in cur.execute.call_args_list if "DELETE" in str(c).upper()]
+        assert deletes, "--reset must DELETE the season before replaying"
+        assert "season = 2026" in str(deletes[0]).lower().replace("season=2026", "season = 2026")
+        conn.commit.assert_called()
+
+    def test_a_dry_run_over_a_populated_season_is_allowed(self):
+        # A dry run only reads, so it must not be blocked — but it must not DELETE either.
+        conn, cur = self._conn(9810)
+        self._guard(conn, dry_run=True)
+        assert not [c for c in cur.execute.call_args_list if "DELETE" in str(c).upper()]
+
+    def test_a_missing_table_counts_as_empty(self):
+        conn = mock.MagicMock()
+        conn.cursor.side_effect = Exception("table does not exist")
+        assert ct.season_row_count(conn, "db.sch.missing", 2026) == 0
+
+
+class TestEveryBackfillWriterIsGuarded:
+    """All three sequential writers share the `_load_current_seq` → replay shape, so all three
+    carry the same defect. A new one must not ship unguarded."""
+
+    @pytest.mark.parametrize("script", [
+        "update_team_posteriors.py",
+        "update_player_posteriors.py",
+        "update_matchup_cell_posteriors.py",
+    ])
+    def test_writer_calls_the_guard_and_exposes_reset(self, script):
+        from pathlib import Path
+        src = (Path(__file__).resolve().parents[2]
+               / "betting_ml" / "scripts" / "sequential_bayes" / script).read_text()
+        assert "guard_or_reset_backfill" in src, f"{script} backfills without the idempotency guard"
+        assert '"--reset"' in src, f"{script} has no --reset flag, so the guard cannot be satisfied"
