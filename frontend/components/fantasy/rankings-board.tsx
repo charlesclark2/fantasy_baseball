@@ -33,6 +33,7 @@ import {
   ProvenanceLine,
   RookieBadge,
   ALL_POSITIONS,
+  LOW_PREDICTABILITY_POSITIONS,
   SurfaceHeader,
   UncertaintyNote,
   downloadCsv,
@@ -90,9 +91,20 @@ export function RankingsBoard() {
   //
   // Overall tiers on VOR (the cross-position value axis the tab is ordered by); a position tab
   // tiers on league points, which is that tab's own ordering.
+  //
+  // ⚠️ K and D/ST are NOT tiered, and that is a statement about the model rather than a UI choice.
+  // A tier break means "an unusually large drop" — it is only meaningful when the gaps carry signal.
+  // Kickers and defences project onto a near-flat board (the whole DST field spans ~10 points, and
+  // held-out rank correlation is ~0.32 for DST and ~0.23 among startable kickers), so `assignTiers`
+  // is reading NOISE and splitting on it: it will happily crown a "T1" kicker whose separation from
+  // T2 is well inside the interval either of them carries. That badge then reads as a confident
+  // rating on the one part of the board that has earned the least confidence. No tier is the honest
+  // rendering — these rows still rank, and the prose below says how to read that ranking.
   const tierOf = useMemo(() => {
     const m = new Map<string, number>()
-    const draftable = ranked.filter((p) => (p.vor ?? 0) > 0)
+    const draftable = ranked.filter(
+      (p) => (p.vor ?? 0) > 0 && !LOW_PREDICTABILITY_POSITIONS.includes(p.pos),
+    )
     if (draftable.length === 0) return m
     const vals = draftable.map((p) => (pos === "Overall" ? (p.vor ?? 0) : (p.pts ?? 0)))
     const tiers = assignTiers(vals)
@@ -360,8 +372,9 @@ export function RankingsBoard() {
                 <span className="font-semibold text-gray-300">Kickers and defences.</span> Both are
                 ranked here, but off a deliberately base projection: they are the least predictable
                 positions in fantasy, and the ordering within them separates good situations from bad
-                rather than good players from bad. Their tiers and ranks carry far less information
-                than the ones above them — treat that end of the board as streaming options.
+                rather than good players from bad. They are shown without tiers on purpose — the
+                whole field fits inside a few points, so any &ldquo;tier break&rdquo; there would be
+                splitting noise. Treat that end of the board as streaming options.
               </p>
               {hasAdp && (
                 <p className="mt-2">

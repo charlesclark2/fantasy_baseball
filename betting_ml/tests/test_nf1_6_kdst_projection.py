@@ -693,14 +693,16 @@ def test_the_ranked_surfaces_do_not_filter_to_skill_positions_only(surface):
     forbid that, so the guard pins the thing that actually caused the outage — the `.includes(p.pos)`
     membership test."""
     src = (_FRONTEND / "components" / "fantasy" / surface).read_text()
-    assert "ALL_POSITIONS" in src, f"{surface} no longer references ALL_POSITIONS"
-    filters = [ln.strip() for ln in src.splitlines() if ".includes(p.pos)" in ln]
-    assert filters, f"{surface} has no position row-filter to check — did the filter move or change shape?"
-    for ln in filters:
-        assert "ALL_POSITIONS" in ln, (
-            f"{surface} filters rows on a narrower set than ALL_POSITIONS ({ln!r}) — that silently "
-            f"drops every projected K/DST row from a ranked surface, which is invisible to every "
-            f"backend check (the data is correct right up to the browser).")
+    tests = [ln.strip() for ln in src.splitlines() if ".includes(p.pos)" in ln]
+    assert tests, f"{surface} has no position membership test — did the row filter move or change shape?"
+    assert any("ALL_POSITIONS" in ln for ln in tests), (
+        f"{surface} no longer admits rows on ALL_POSITIONS — a narrower row filter silently drops "
+        f"every projected K/DST row, which is invisible to every backend check (the data is correct "
+        f"right up to the browser). Membership tests found: {tests}")
+    skill_filters = [ln for ln in tests if "SKILL_POSITIONS" in ln]
+    assert not skill_filters, (
+        f"{surface} filters rows on SKILL_POSITIONS ({skill_filters}) — that is the exact regression "
+        f"that shipped once and hid every K/DST row.")
 
 
 def test_the_shared_position_constants_are_distinct_and_correct():
@@ -748,6 +750,21 @@ def test_the_kdst_caveat_is_prose_not_a_per_row_badge():
         assert "Kickers and defences" in src, (
             f"{surface} carries no K/DST caveat at all — the badge was replaced by prose, not by "
             f"silence; ranking a kicker with no honesty note is the outcome neither form wanted")
+
+
+def test_kickers_and_defences_are_not_tiered():
+    """⭐ THE SAME MISREAD, ONE COLUMN OVER. Removing the 'Tier' badge left the Rankings tier COLUMN
+    still assigning K/DST a tier — so the top kicker rendered as a green 'T1', which is the confident
+    rating the badge removal was meant to stop.
+
+    It is also wrong on the merits, not just the optics: a tier break means 'an unusually large drop',
+    and `assignTiers` splits on a gap wider than mean + k·std of consecutive gaps. The whole DST field
+    spans ~10 projected points, well inside the interval any single row carries, so run over K/DST the
+    helper is splitting NOISE. No tier is the honest rendering."""
+    src = (_FRONTEND / "components" / "fantasy" / "rankings-board.tsx").read_text()
+    assert "LOW_PREDICTABILITY_POSITIONS.includes(p.pos)" in src, (
+        "the Rankings tier assignment no longer excludes K/DST — a gap-based tier over a near-flat, "
+        "near-unpredictable field crowns a 'T1' kicker on separation that is inside its own interval")
 
 
 def test_the_replacement_level_panel_is_skill_positions_only():
