@@ -1,0 +1,35 @@
+# Research memo — MiLB→MLB projection mechanisms & prospect-ranking sources (2026-07-29)
+
+Deep-research input for the E7.11 / E7.12 / E7.13 stretch stories (operator-commissioned). Framed as **incremental** to what we already run: component-rate Bayesian hierarchical partial-pool (K%/BB%/ISO batters; K%/BB%/GB% pitchers), age-relative-to-level, FanGraphs FV cold-start prior, AAA Statcast (Prospect Savant) display cross-check; coverage AAA/AA/A+/A.
+
+## Thread 1 — mechanisms to improve MiLB→MLB projections (ranked by lift × feasibility)
+
+Orientation on established systems: **KATOH/KATOH+** (Mitchell/FanGraphs) — at the lowest levels only **age, K%, ISO** survived as predictive (corroborates our components-not-composites finding); **KATOH+ added Baseball America's rank and beat stats-only** = published evidence a scouting prior adds incremental value. **Davenport Translations** — the canonical MLE: league-difficulty + park factors + level haircuts (~20% off AAA → ~60% off Low-A), and adjusts league *shape* not just level. **ZiPS** — MLE the minor line then age/regress. **THE BAT** = MLB-only (out of scope for translation). **BP/PECOTA** = modern comp/attrition apparatus, paywalled detail.
+
+1. **⭐ Minor-league PARK FACTORS + per-level run-environment/difficulty (one workstream) — highest lift × feasibility.** PF dispersion is huge (BA runs PF: AAA Iowa 132 vs AA Arkansas 67 — a 65-pt spread, far bigger than the component noise we model). Un-parked ISO/GB% carry systematic venue bias our pool absorbs as "skill." Apply the **half-weight multiplier** (players play ~half at home); anchor the level intercept to the Davenport/James gradient. **Data: free** — compute our own PF from home/road game logs (pybaseball/Baseball-Reference), or hand-key BA's ~30-park tables (paywalled article, trivial to key); MiLB.com "X-Factors" free but less complete. Prefer 3-yr L/R-split PFs (single-season MiLB PFs are noisy). Sources: BA 2024 park factors; BA 3-yr L/R splits; MiLB X-Factors; FanGraphs League Equivalencies library.
+2. **Survivorship / selection-bias correction on promotion.** Players who fail don't get promoted → training set conditioned on success → optimistic coefficients + shrunk variance. Fix: joint promotion/performance model or inverse-probability-of-promotion weight; pairs with the leakage-safe cohort refit. **No new data** (we have promotion histories). Sources: BP "An Approach to Survivor Bias"; BP "Delta Method Revisited."
+3. **Per-component reliability/stabilization weighting.** Encode the measured translatability ordering as different prior variances + level-jump attenuation: K% strongest/fastest-stabilizing (~.77 AA→MLB), BB% ~.72, ISO real-but-weaker, contact/BABIP/HximgFB near-noise. Re-parameterization of our own finding. Pitcher rates translate weaker than batter. Sources: "Which Minor League Stats Actually Predict MLB Success"; "Minor League Stat Stickiness — Hitters/Pitchers."
+4. **Tool-grade → component priors.** Extend beyond FV: map THE BOARD's 20-80 tool grades to the matching component (hit/contact→K%, discipline→BB%, raw/game power→ISO; command→BB%, FB profile→GB%). Tightens the cold-start/low-PA regime. FV also encodes risk → calibrate prior mean AND variance. **Data: free** (THE BOARD export exposes FV + tools). Sources: FanGraphs "How Do Prospect Grades Translate to Future Outcomes?"; FG Scouting Primer.
+5. **Prospect aging curves (young = steeper growth), survivor-bias-corrected.** Age-relative-to-level captures level context, not the growth trajectory; bend young prospects' MLEs up pre-peak (peak ~26-27, but the pre-peak slope is the prospect-relevant part). Age-interacted growth prior. **No new data.** Ties #2.
+6. **AAA Statcast as a predictive FEATURE (not just display).** Feed AAA batted-ball (EV/LA→xISO) into the POWER component (park/BABIP-independent skill for the weakest-translating component). **Level-gated**: full public AAA Statcast 2023+; Single-A only the 8 Statcast FSL parks; **no public AA or below** → a level-specific feature. **Data: free** (Baseball Savant minors search).
+7. **(R&D, lower priority) Player-embedding / sequence models.** Documented value for MLB props, but built on pitch-level MLB data; sub-AAA pitch-by-pitch is largely non-public → substrate for *prospect translation* mostly doesn't exist. Treat as a later learned-embedding-inside-the-hierarchy device, not a near-term lift.
+
+**Priority: 1 → 2 → 3 → 4 → 5 → 6 → 7. Items 1-5 are free/derivable or no-new-data.** Sub-A caveat (KATOH): only age/K%/ISO survive at the lowest levels → if we extend below A-ball, use a deliberately thin, heavily-regressed set.
+
+## Thread 2 — prospect-ranking-source landscape (access & ingestibility)
+
+Constraints: honor robots.txt/ToS (no scraping ToS-blocked sites), no credential handling, prefer free + compliantly ingestible. "Manual entry" = visible on a free page but hand-key a few hundred rows 1-2×/yr.
+
+- **FanGraphs THE BOARD** — Top 100 + org lists; **numeric FV + full 20-80 tool grades + ranks**; continuous updates; **FREE to view, CSV "Export Data."** Best option; already primary; the ONLY source exposing component tool grades (feeds Thread-1 #4). Keep volume polite, verify robots/ToS.
+- **MLB Pipeline (MLB.com)** — Top 100 + all 30 org Top 30 (~900), numeric ranks, some tool grades; **FREE** (no paywall). Strong free SECOND source; page-read/manual-entry (no public prospect API); verify robots.
+- **Baseball America** — Top 100 + org lists + **park factors** + tool grades; **PAYWALLED** → manual-entry only. Real value = the **park factors** (Thread-1 #1), not the rankings.
+- **Keith Law (The Athletic)** — Top 100 + write-ups; **PAYWALLED** → manual 3rd opinion only, not ingestible.
+- **ESPN / Kiley McDaniel** — Top 100/200 + org top-10s; **mostly ESPN+ PAYWALLED** → manual-entry only.
+- **Baseball Prospectus** — Top 101 + upside/attrition modeling + PECOTA comps; **PAYWALLED** → manual-entry of the public top-101 only.
+- **Prospects Live** — Top 100/300 + dynasty ranks + some tool grades; **largely FREE** (some Patreon). Best free THIRD source; check robots/ToS.
+- **Others** (FanSided/Just Baseball/SB Nation/Down on the Farm) — free but derivative; useful for consensus/aggregate features + the "how good are mainstream rankings" audit lens.
+
+**Bottom line:** only **FanGraphs THE BOARD** (have it) and **MLB Pipeline** are both free AND structured-ingestible; **Prospects Live** is the best free third. BA/Law/ESPN/BP are paywalled → manual second opinions, never scraped. Cheapest high-value adds: (a) ingest MLB Pipeline as a free second ranking, (b) hand-key BA's **park factors** (the data, not the rankings), (c) map THE BOARD tool grades to components.
+
+## Cross-thread takeaway
+The two biggest wins need **no paywalled data**: minor-league **park + level-difficulty adjustment** (compute from free game logs) and a **survivorship correction** on promotions (data we already have) — both directly de-bias the component-rate coefficients the partial-pool learns. The tool-grade→component-prior upgrade is the natural third, fully served by the free FanGraphs export.

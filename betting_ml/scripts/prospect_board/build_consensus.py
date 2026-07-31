@@ -60,7 +60,6 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from betting_ml.scripts.milb_xref.player_xref import MILB  # noqa: E402
 from betting_ml.scripts.prospect_board.board_assembly import (  # noqa: E402
     ProspectBoardError,
     assemble_board,
@@ -89,43 +88,13 @@ log = logging.getLogger("e7_11.consensus")
 _DEFAULT_OUT = (_PROJECT_ROOT / "quant_sports_intel_models/baseball/edge_program/"
                 "ablation_results/e7_11_artifacts")
 
-PIPELINE_TABLE = f"{MILB}/mlb_pipeline_rankings"
-
 
 # ── Inputs ───────────────────────────────────────────────────────────────────────────────────
-
-def load_pipeline_ranks(conn, *, season: int | None = None,
-                        from_dir: Path | None = None) -> pd.DataFrame:
-    """The E7.11 MLB Pipeline snapshot — newest `as_of_date` of the newest (or requested) season.
-
-    `from_dir` re-parses the ingest's cached HTML instead, so the consensus can be built BEFORE the
-    Delta table is written (the ingest is a hand-run job, not a daily op — this is the path that
-    lets a session prove the join end-to-end without an S3 write).
-    """
-    if from_dir is not None:
-        from betting_ml.scripts.prospect_board.mlb_pipeline import (
-            ORG_SLUG_TO_ABBREV, TOP100_LIST, parse_rankings_page,
-        )
-        rows: list[dict] = []
-        for list_name in [TOP100_LIST, *sorted(ORG_SLUG_TO_ABBREV)]:
-            path = from_dir / f"{season}_{list_name}.html"
-            if not path.exists():
-                log.warning("cached page missing: %s — that organization will be ABSENT from the "
-                            "Pipeline source (its players read as unranked).", path.name)
-                continue
-            rows.extend(parse_rankings_page(path.read_text(encoding="utf-8"),
-                                            season=season, list_name=list_name))
-        return pd.DataFrame(rows)
-
-    season_clause = (f"where season = {int(season)}" if season is not None
-                     else "where season = (select max(season) from t)")
-    return conn.execute(f"""
-        with t as (select * from delta_scan('{PIPELINE_TABLE}')),
-             s as (select * from t {season_clause}),
-             newest as (select max(as_of_date) as as_of_date from s)
-        select * from s join newest using (as_of_date)
-    """).df()
-
+#
+# `load_pipeline_ranks` (+ `PIPELINE_TABLE`) now live in `build_prospect_board.py` (E8.0b,
+# 2026-07-31) — E8.0's board runner folds this same MLB Pipeline snapshot + consensus INTO the 8/3
+# board, and since this module already imports `_connect`/`load_inputs` FROM `build_prospect_board`,
+# the function moved rather than being duplicated (this module importing the other way would cycle).
 
 def load_manual_sources(specs: list[str], universe: pd.DataFrame) -> tuple[list[pd.DataFrame], dict]:
     """`name=path.csv` specs → resolved (mlbam_id, rank_<name>) frames + a per-source report.
@@ -317,7 +286,9 @@ def main(argv=None) -> int:
         write_manual_template(out_dir)
         return 0
 
-    from betting_ml.scripts.prospect_board.build_prospect_board import _connect, load_inputs
+    from betting_ml.scripts.prospect_board.build_prospect_board import (
+        _connect, load_inputs, load_pipeline_ranks,
+    )
 
     conn = _connect()
     board, xref, mle_bat, mle_pit = load_inputs(conn, board_season=args.board_season)

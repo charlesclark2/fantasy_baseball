@@ -393,6 +393,33 @@ def test_the_export_tabs_cover_the_league_split_the_draft_needs(board, xref, mle
     assert len(sheets["Hitters"]) + len(sheets["Pitchers"]) == len(out)
 
 
+def test_split_sheets_adds_a_pipeline_only_tab_when_the_column_is_present(board, xref, mle_bat,
+                                                                          mle_pit):
+    """E8.0b: once `fold_pipeline_into_e8_0_board` has unioned MLB-Pipeline-only players in
+    (`on_fangraphs_board=False`), the export needs a dedicated tab so those rows are discoverable
+    rather than buried at the bottom of the 'All' sort."""
+    out, _ = assemble_board(board, xref, mle_bat, mle_pit)
+    out = out.assign(on_fangraphs_board=True)
+    extra = out.iloc[[0]].copy()
+    extra["on_fangraphs_board"] = False
+    extra["pipeline_overall_rank"] = 5
+    extra["mlbam_id"] = "9999999"
+    combo = pd.concat([out, extra], ignore_index=True)
+
+    sheets = split_sheets(combo)
+    assert "Pipeline-only" in sheets
+    assert len(sheets["Pipeline-only"]) == 1
+    assert sheets["Pipeline-only"]["mlbam_id"].iloc[0] == "9999999"
+
+
+def test_split_sheets_has_no_pipeline_only_tab_on_a_plain_e8_0_board(board, xref, mle_bat, mle_pit):
+    """A plain E8.0 board (no consensus fold) never carries `on_fangraphs_board` — this must be a
+    strict extension, never a behavior change for the existing export."""
+    out, _ = assemble_board(board, xref, mle_bat, mle_pit)
+    sheets = split_sheets(out)
+    assert "Pipeline-only" not in sheets
+
+
 def test_the_column_order_never_silently_drops_a_new_column(board, xref, mle_bat, mle_pit):
     out, _ = assemble_board(board, xref, mle_bat, mle_pit)
     extra = out.assign(brand_new_column=1)

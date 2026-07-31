@@ -1,6 +1,6 @@
 # Application-session bootstrap prompt
 
-**Last updated:** 2026-06-18 _(refresh on any material change)_
+**Last updated:** 2026-07-29 _(refresh on any material change)_ — added the runtime-gate attestation (DoD §4 + handoff §0b) after E9.49's CI-green-but-500-in-prod regression.
 
 **What this is:** the standard primer pasted **FIRST in every fresh app-repo session**, immediately followed by **exactly one** `▶ Story prompt` (from `story_prompts.md` or `../fantasy/story_prompts.md`).
 
@@ -55,6 +55,15 @@ DEFINITION OF DONE for an app story:
    a new block when this Monday has none. The legacy Streamlit app gets no changelog entry — it isn't shipped.
 4. CI gates BEFORE handoff — never hand off red code. Run green locally first: Python → `uv run pytest`
    (Unit Tests CI); any dbt → `dbtf build --select state:modified+` AND `dbtf compile` (both dbt-Build CI jobs).
+   🟥 CI-GREEN IS NECESSARY, NOT SUFFICIENT, FOR ANY SERVING/BACKEND CHANGE. CI mocks all IO and every fixture
+   is well-formed, so it CANNOT see the bug class that keeps reaching prod: a response/serializer that 500s on a
+   stored row (E9.49 — a tightened `BetCreate` validator inherited by the `Bet` response model blanked the whole
+   bet log on read), a silent-empty query (E9.52 — `game_date = <wrapped ts>` matched 0 rows, no error), a
+   Pydantic field dropped on serialize (E9.41). For ANY change to an API response model / serializer / router / a
+   read query / settlement, you MUST additionally EXERCISE THE READ PATH against a REAL and a MALFORMED/legacy row
+   (a row missing the new required field, an already-terminal/legacy record) and confirm the endpoint still
+   serves — then add that malformed row as a fixture. State the result in the handoff (step 0b). "The tests pass"
+   is not that check.
 5. You do NOT git commit/push, deploy, or run >1-min jobs yourself. Instead, END with an OPERATOR HANDOFF (below).
 
 ⏭️ OPERATOR HANDOFF — REQUIRED FINAL OUTPUT (every app session ends with this):
@@ -66,6 +75,10 @@ DEFINITION OF DONE for an app story:
    ⏭️ OPERATOR HANDOFF — <story id>
    0. ✅ CI gates green?  — Python `uv run pytest` (Unit Tests); dbt `dbtf build --select state:modified+` +
         `dbtf compile` (both dbt-Build jobs). State the result; if anything's red, say so — don't hand off red code.
+   0b. 🟥 Runtime gate (serving/backend changes ONLY; "none" if pure content/frontend copy)  — did you EXERCISE
+        the read path against a REAL and a MALFORMED/legacy row (not just run the mocked tests)? State exactly what
+        you ran and what it returned; confirm the malformed row is now a fixture. CI-green alone does NOT satisfy
+        this (E9.49/E9.52/E9.41 all shipped CI-green and 500'd/zeroed prod).
    1. 🔧 Backend/API (Lambda rebuild+deploy)?  — yes/no. If yes: what changed + the command:
         ./infrastructure/lambda/deploy.sh
    2. 🗄️ dbt models to run?  — list each with the exact scoped command, e.g.:
