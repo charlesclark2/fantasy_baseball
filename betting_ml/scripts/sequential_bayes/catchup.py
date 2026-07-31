@@ -161,3 +161,80 @@ def run_catchup(
         + (f"; STALLED at {stalled_at} (retries next run)" if stalled_at else "")
     )
     return {"processed": processed, "stalled_at": stalled_at}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════
+# 🚨 BACKFILL IDEMPOTENCY GUARD (2026-07-31)
+#
+# THE DEFECT THIS PREVENTS: `run_backfill` replays a whole season on top of whatever state
+# already exists. `_load_current_seq` loads the existing posterior as the PRIOR and `_prep` only
+# ensures DDL — there is no truncate and no check. So every backfill run against a POPULATED
+# table applies an ENTIRE EXTRA SEASON of observations to the same chains.
+#
+# Measured on baseball_data.betting.team_sequential_posteriors, 2026-07-31: `win_prob` absorbs
+# exactly one observation per team per game (`n_obs=1`), so `n_cumulative == games played` is an
+# EXACT identity — and it was violated on all 30 teams at ratio 2.72-2.76 (KC: 110 games but
+# n_cumulative 303, param_a 133 ⇒ 129 wins in 110 games, which is impossible). Three replays had
+# accumulated: the original 2026-06-03 backfill (correct, on an empty table), an undetected
+# re-run on 2026-06-04, and one on 2026-07-31.
+#
+# WHY IT WENT UNSEEN FOR TWO MONTHS: the duplicates are replays of the SAME games, so
+# `posterior_mu` stays ≈ the true record — the mean looks perfect. Only the VARIANCE is wrong:
+# `posterior_sigma2 ∝ 1/(a+b)`, so the served posterior is ~2.7× OVERCONFIDENT. A mean-based
+# eyeball check can never catch this; only the count identity can. That is the whole lesson —
+# ⭐ WHEN A REPLAY CORRUPTS ONLY THE SECOND MOMENT, ASSERT ON A COUNT, NOT ON A VALUE.
+#
+# The chain is NON-IDEMPOTENT by design (see the module docstring), so the only correct repair is
+# delete-then-replay-once. Hence: refuse to backfill onto a populated season unless the caller
+# explicitly asks for the reset.
+# ═══════════════════════════════════════════════════════════════════════════════════════
+
+def season_row_count(conn, target_table: str, season: int, fetch_dicts=None) -> int:
+    """Rows already stored for `season` in `target_table` (0 when the table does not yet exist)."""
+    fetch_dicts = fetch_dicts or _default_fetch_dicts
+    try:
+        rows = fetch_dicts(
+            conn, f"SELECT COUNT(*) AS N FROM {target_table} WHERE season = %(season)s",
+            {"season": season},
+        )
+    except Exception:
+        return 0
+    if not rows:
+        return 0
+    row = {str(k).lower(): v for k, v in rows[0].items()}
+    return int(row.get("n") or 0)
+
+
+def guard_or_reset_backfill(*, conn, target_table: str, season: int, reset: bool,
+                            label: str, fetch_dicts=None, dry_run: bool = False,
+                            log=print) -> None:
+    """RAISE unless the season is empty — or, with `reset=True`, DELETE it first.
+
+    A dry run never writes, so it is always allowed to proceed (it only reads).
+    """
+    n = season_row_count(conn, target_table, season, fetch_dicts)
+    if n == 0:
+        log(f"[{label}] {target_table} has no {season} rows — safe to backfill.")
+        return
+    if dry_run:
+        log(f"[{label}] DRY RUN over a populated season ({n:,} rows) — no writes, proceeding. "
+            f"⚠️ A REAL run would need --reset.")
+        return
+    if not reset:
+        raise SystemExit(
+            f"[{label}] REFUSING TO BACKFILL: {target_table} already holds {n:,} rows for season "
+            f"{season}. These chains are NON-IDEMPOTENT — replaying a season on top of existing "
+            f"state applies an ENTIRE EXTRA SEASON of observations to the same chains, which "
+            f"leaves posterior_mu looking correct while inflating n_cumulative and making "
+            f"posterior_sigma2 ~N× OVERCONFIDENT (measured 2.7× on 2026-07-31 before this guard "
+            f"existed). Re-run with --reset to DELETE season {season} and replay it exactly once."
+        )
+    log(f"[{label}] --reset: DELETING {n:,} existing rows for season {season} from {target_table} "
+        f"so the replay starts from a cold prior.")
+    cur = conn.cursor()
+    try:
+        cur.execute(f"DELETE FROM {target_table} WHERE season = {int(season)}")
+        conn.commit()
+    finally:
+        cur.close()
+    log(f"[{label}] reset complete — {n:,} rows deleted.")

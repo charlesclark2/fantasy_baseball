@@ -1,6 +1,80 @@
 # E11.24 — LITERAL-ZERO SNOWFLAKE (the August-bill lever)
 
-Status: **stage 1 CODE-COMPLETE, all levers default-OFF** (2026-07-29). Stages 2–4 scoped below.
+Status: **stage 1 SHIPPED AND LIVE except lever 1b** (re-verified 2026-07-31). Stages 2–4 scoped below.
+
+## 2026-07-31 re-census — what is actually live
+
+Levers 1, 2 and 3 were flipped on the box between 7/29 evening and 7/30. **1b is still OFF and is the
+only stage-1 lever left**; the E11.20 close (7/31) removed its blocker.
+
+Verified without box access (the laptop IAM user has no `ssm:*`) by reading **query shapes that stop**
+in `query_history` — stronger evidence than an env var, since it proves image + flag + code path at
+once. Each was cross-checked against **total executions**, because a shape falling to zero is also
+what a dead job looks like:
+
+| Lever | Evidence | Verdict |
+|---|---|---|
+| 2 weather slate/venue | executions 103 (7/27) → 103 (7/28) → **0** (7/30) → **0** (7/31); capture still running | ✅ live |
+| 1 `compute_elo` bulk games read | last seen **2026-07-29 13:17**, gone after | ✅ live |
+| 3 admin cost dashboard | 19 (7/27) → 0 (7/28) → 0 (7/30) | ✅ live |
+| **1b statcast catch-up gate** | `int_bullpen_ali_by_season` still **10×/hour, UTC 08–13**, identical on 7/28 / 7/30 / 7/31 | ❌ **still OFF** |
+
+### Measured response: resumes flat, awake-time −16%
+
+`COMPUTE_WH` resumes/day: **7/28 = 44** (clean baseline) → 7/29 = 62 (dirty, skip) → **7/30 = 43** →
+7/31 = 20 (partial; `account_usage` lagged 121 min). Resumes alone say stage 1 bought nothing.
+
+**It did.** Distinct active minutes — minutes containing ≥1 query, the closest proxy to awake-time
+under `AUTO_SUSPEND=60s` — went **167 (7/28) → 141 (7/30), −16%**.
+
+⭐ **Method note for the next census: a lever that removes an evenly-spread 24/7 poller (weather) deletes
+awake-MINUTES without deleting RESUMES**, because the remaining bursty pipeline work re-wakes the
+warehouse regardless. Report both, or you will systematically under-credit exactly the levers this
+story is built on. (Sum-of-elapsed still moved the *wrong* way, 62.9 → 79.9 min — it remains the wrong
+instrument, per E11.20-COST.)
+
+### 🚨 ROOT-CAUSED — `--backfill` IS NOT IDEMPOTENT AND SILENTLY DOUBLE-APPLIES ON A POPULATED TABLE
+
+Not E11.24 (found while censusing); **a live serving-data defect, own story required.**
+
+`team_sequential_posteriors` has absorbed **2.72–2.75× more game-outcomes than games played**, on
+every team. `win_prob` takes exactly one observation per team per game, so `n_cumulative` MUST equal
+games played — an identity, not an estimate. Measured 2026-07-31 19:50 UTC: **PHI claims 151 wins in
+109 games played; TEX 148 in 109; KC ratio 2.75.** Physically impossible.
+
+**The mechanism, read straight off the SCD-2 history (`n_cumulative` per `update_ts`, team NYY):**
+
+| Event | What happened | `n_cumulative` |
+|---|---|---|
+| 2026-06-03 06:37–06:40 | first `--backfill --season 2026`, table empty | 1 → **59** ✅ correct |
+| 2026-06-04 09:54–09:58 | **backfill re-run on the POPULATED table** | 61 → **120** 🚨 1st doubling |
+| 06-04 → 07-31 | daily `--catchup`, correct +1/game on an inflated base | 120 → 186 |
+| 2026-07-30 06:00 | backfill **dry-run** (125 per-date reads, zero writes) | — |
+| **2026-07-31 19:40–19:46** | **backfill re-run for real** | 186 → **295** 🚨 2nd doubling |
+
+⭐ **`run_backfill` has no reset and no guard.** `_prep` only ensures DDL; `_load_current_seq` reads the
+existing `is_current` posterior as the PRIOR and then replays every game date on top. So running
+`--backfill` against a populated table adds a full extra season of observations. The 6/4 instance went
+**undetected for two months** — nothing asserts `n_cumulative == games played`.
+
+📉 **Impact: the MEAN survives, the VARIANCE does not.** Duplicates are replays of the same games, so
+`posterior_mu` ≈ the true record (NYY μ=0.5619). But `posterior_sigma2 ∝ 1/(a+b)`, so the served
+posterior is now **~2.7× overconfident**. This feeds `feature_pregame_game_features_raw` via
+`source('betting','team_sequential_posteriors')` — an unconditional-core discriminative family.
+
+🔧 **Two corrections to my own earlier reads in this doc**, both worth keeping as worked examples:
+1. I first blamed the backfills, then talked myself out of it ("`n_cumulative` was already 172 on 7/18,
+   so it predates them"). **Both halves were wrong in an instructive way** — the inflation *did* come
+   from backfills, just from the **6/4** one, not the 7/30–7/31 pair I had in view. A defect can be
+   caused by the mechanism you suspect and still not by the *instance* you are looking at.
+2. The duplication hypothesis is **refuted**: `mart_game_results` 2026 is clean (1,637 rows = 1,637
+   distinct `game_pk`, 0 dupes). Not the glob-dup class, and not the double-invocation path either —
+   the daily `--catchup` increments are correct.
+
+**Remediation (operator):** the chain is non-idempotent, so the only correct repair is a clean rebuild —
+delete `season=2026` rows, then run `--backfill --season 2026` **exactly once**. And `run_backfill`
+needs a guard that refuses a populated table without an explicit `--reset`. ⚠️ Check the two sibling
+writers (`update_player_posteriors.py`, `update_matchup_cell_posteriors.py`) — same shape, same risk.
 
 ## Why this story exists
 
@@ -16,10 +90,10 @@ Resumes attributed by joining each `RESUME_WAREHOUSE` event to the first query a
 
 | # | Waker | Share | Stage | State |
 |---|-------|-------|-------|-------|
-| 1 | Hourly `CREATE TABLE IF NOT EXISTS … team_elo_history` (a no-op DDL) | 14% | 1 | ✅ shipped, `E11_24_ELO_SF_FREE` |
-| 1b | **Root cause of #1** — `statcast_catchup_job` re-fires hourly and runs the whole chain on ~5 fires that land nothing | (multiplies 1, 4 and part of "daily one-offs") | 1 | ✅ shipped, `E11_24_STATCAST_CATCHUP_GATE` |
-| 2 | 24/7 hourly weather slate/venue `SELECT` | 14% | 1 | ✅ shipped, `E11_24_WEATHER_SF_FREE` (+ matched write flip) |
-| 3 | `CREDENCE_API` metering query "waking the warehouse it measures" | **0% — REFUTED, see below** | 1 | ✅ shipped anyway, `SNOWFLAKE_MONITOR_WAREHOUSE` (backend + audit readers) |
+| 1 | Hourly `CREATE TABLE IF NOT EXISTS … team_elo_history` (a no-op DDL) | 14% | 1 | ✅ **LIVE on the box** (verified 7/31), `E11_24_ELO_SF_FREE` |
+| 1b | **Root cause of #1** — `statcast_catchup_job` re-fires hourly and runs the whole chain on ~5 fires that land nothing | (multiplies 1, 4 and part of "daily one-offs") | 1 | ⚠️ **shipped but STILL OFF** (verified 7/31) — `E11_24_STATCAST_CATCHUP_GATE`, now unblocked |
+| 2 | 24/7 hourly weather slate/venue `SELECT` | 14% | 1 | ✅ **LIVE on the box** (verified 7/31), `E11_24_WEATHER_SF_FREE` |
+| 3 | `CREDENCE_API` metering query "waking the warehouse it measures" | ~5%/day (see the methodology correction) | 1 | ✅ **LIVE on the box** (verified 7/31), `SNOWFLAKE_MONITOR_WAREHOUSE` |
 | 4 | Raw-SQL stragglers: the 3 sequential-posterior state writers | part of daily one-offs | 2 | scoped below |
 | 4b | `check_data_freshness.py` (host cron, 2×/day, 24/7) | ~2 resumes/day | 2 | scoped below |
 | 5 | The dead `predict_today` Snowflake freshness branch | 0 (it is a read, not a waker) | 3 | **soak-blocked** |

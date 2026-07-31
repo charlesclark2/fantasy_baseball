@@ -549,7 +549,22 @@ def run_single_date(target_date: date, dry_run: bool, use_s3: bool = False) -> N
         duck.close()
 
 
-def run_backfill(season: int, dry_run: bool, use_s3: bool = False) -> None:
+def run_backfill(season: int, dry_run: bool, use_s3: bool = False, reset: bool = False) -> None:
+    # 🚨 2026-07-31 — NON-IDEMPOTENT chain: replaying a season on top of existing state applies an
+    # ENTIRE EXTRA SEASON of observations (posterior_mu stays ~right, n_cumulative inflates,
+    # posterior_sigma2 goes overconfident). Found on the sibling team chain at 2.7×; this writer
+    # shares the identical _load_current_seq_posteriors → replay shape. Refuse unless --reset.
+    # The target table is Snowflake even under --s3, so the guard takes its own SF connection.
+    from betting_ml.scripts.sequential_bayes import catchup as _catchup
+    _guard_conn = get_snowflake_connection()
+    try:
+        _catchup.guard_or_reset_backfill(
+            conn=_guard_conn, target_table=_TARGET_TABLE, season=season, reset=reset,
+            label="matchup-cell-backfill", dry_run=dry_run,
+        )
+    finally:
+        _guard_conn.close()
+
     # E11.1-W7a: --s3 reads sources from S3 via DuckDB; DDL + seq-posteriors read/write stay on Snowflake.
     duck = None
     if use_s3:
@@ -683,6 +698,8 @@ def main() -> None:
                         help="Catch-up window: max days back the chain can auto-advance (default 10)")
     parser.add_argument("--season", type=int,
                         help="Season year for --backfill (e.g. 2026)")
+    parser.add_argument("--reset", action="store_true",
+                        help="With --backfill: DELETE the season's existing rows first. REQUIRED to backfill a populated season — these chains are NON-IDEMPOTENT and replaying on top of existing state silently applies an extra season of observations (inflates n_cumulative, makes posterior_sigma2 overconfident; measured 2.7x on the team chain 2026-07-31).")
     parser.add_argument("--dry-run", action="store_true",
                         help="Compute updates but do not write to Snowflake")
     parser.add_argument("--s3", action="store_true",
@@ -699,7 +716,7 @@ def main() -> None:
     if args.backfill:
         print(f"update_matchup_cell_posteriors  backfill season={args.season}  "
               f"dry_run={args.dry_run}  s3={args.s3}")
-        run_backfill(args.season, dry_run=args.dry_run, use_s3=args.s3)
+        run_backfill(args.season, dry_run=args.dry_run, use_s3=args.s3, reset=args.reset)
     elif args.catchup:
         run_catchup(args.lookback_days, dry_run=args.dry_run, use_s3=args.s3)
     else:

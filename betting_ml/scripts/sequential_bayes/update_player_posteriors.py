@@ -611,13 +611,22 @@ def run_single_date(target_date: date, sigma_obs: float, prior_neff_cap: int, dr
 
 
 def run_backfill(season: int, sigma_obs: float, prior_neff_cap: int, dry_run: bool,
-                 use_s3: bool = False) -> None:
+                 use_s3: bool = False, reset: bool = False) -> None:
     eb_priors = _load_priors_and_prep(season, sigma_obs, prior_neff_cap, dry_run)
     duck = _maybe_duck(use_s3)
 
     print(f"\nFetching game dates for season {season}...")
     conn = get_snowflake_connection()
     try:
+        # 🚨 2026-07-31 — NON-IDEMPOTENT chain: replaying a season on top of existing state applies
+        # an ENTIRE EXTRA SEASON of observations (posterior_mu stays ~right, n_cumulative inflates,
+        # posterior_sigma2 goes overconfident). Found on the sibling team chain at 2.7×; this
+        # writer shares the identical _load_current_seq → replay shape. Refuse unless --reset.
+        from betting_ml.scripts.sequential_bayes import catchup as _catchup
+        _catchup.guard_or_reset_backfill(
+            conn=conn, target_table=_TARGET_TABLE, season=season, reset=reset,
+            fetch_dicts=_fetch_dicts, label="player-seq-backfill", dry_run=dry_run,
+        )
         game_dates = _load_game_dates_for_season(conn, season, duck=duck)
     finally:
         conn.close()
@@ -682,6 +691,8 @@ def main() -> None:
     parser.add_argument("--prior-neff-cap", type=int, default=_PRIOR_NEFF_CAP_DEFAULT,
                         help=f"Max equivalent PA/BF a cold-start EB prior may be worth "
                              f"(default {_PRIOR_NEFF_CAP_DEFAULT})")
+    parser.add_argument("--reset", action="store_true",
+                        help="With --backfill: DELETE the season's existing rows first. REQUIRED to backfill a populated season — these chains are NON-IDEMPOTENT and replaying on top of existing state silently applies an extra season of observations (inflates n_cumulative, makes posterior_sigma2 overconfident; measured 2.7x on the team chain 2026-07-31).")
     parser.add_argument("--dry-run", action="store_true",
                         help="Compute updates but do not write to Snowflake")
     parser.add_argument("--s3", action="store_true",
@@ -699,7 +710,7 @@ def main() -> None:
     if args.backfill:
         print(f"update_player_posteriors  backfill season={args.season}  dry_run={args.dry_run}")
         run_backfill(args.season, args.sigma_obs, args.prior_neff_cap, dry_run=args.dry_run,
-                     use_s3=args.s3)
+                     use_s3=args.s3, reset=args.reset)
     elif args.catchup:
         run_catchup(args.lookback_days, args.sigma_obs, args.prior_neff_cap, dry_run=args.dry_run,
                     use_s3=args.s3)

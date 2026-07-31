@@ -204,11 +204,34 @@ def _classify(base_cov: float | None, recent_cov: float | None,
 _DATE_OUTAGE_MAX = 0.20      # a played date below this notnull-rate is "the block is dead here"
 _DATE_MIN_GAMES = 4         # ignore tiny dates (all-star break, a 2-game slate) — too small to judge
 
+# ⏳ THE NEWEST PLAYED DATE LEGITIMATELY LAGS ONE BUILD CYCLE — EXEMPT IT.
+#
+# Measured 2026-07-31, immediately after the E9.53 repair: every date 07-20..07-29 was fully
+# covered for every block, and ONLY 07-30 (the newest played date) read `bp_eb_xwoba` 0/10 — while
+# Snowflake's own mart_bullpen_effectiveness already HAD 07-30 (20 rows / 10 games). The aggregator's
+# precursor chain (--w8a EB posteriors → --w5b bullpen marts → --w8b aggregator) runs EARLY in the
+# daily job, before that day's EB posteriors are written, so the newest completed date populates on
+# the FOLLOWING run. That is the documented design (see dbt_umpire_feature_rebuild: "the mart's
+# 7-day lookback merge-updates yesterday's row from NULL eb to the freshly-written value"), and it
+# self-heals — which is why bullpen_eb's own baseline reads 100.0% and its history 99.6%.
+#
+# Without this exemption the per-date check fires an ALERT EVERY SINGLE DAY on a condition that
+# always resolves itself. That is not a cosmetic problem: it is alarm fatigue on the one guard that
+# exists to catch silent zeroing, and it would make FEATURE_COVERAGE_STRICT=1 a guaranteed daily
+# HALT — i.e. it would permanently block the promotion this guard is designed for.
+#
+# Cost of the exemption: a genuine outage that begins today is reported tomorrow instead. That is
+# acceptable and does not reopen the E9.53 blind spot — those holes persisted for DAYS (07-22 was
+# still dead on 07-29), so anything real survives into the non-exempt window. A one-day-only
+# zeroing that fully self-heals is, by definition, the build-cycle lag this exempts.
+_DATE_OUTAGE_SKIP_NEWEST = 1
+
 
 def find_date_outages(
     per_date: list[tuple[object, int, int]],
     baseline_cov: float | None,
     hist_cov: float | None = None,
+    skip_newest: int = _DATE_OUTAGE_SKIP_NEWEST,
 ) -> list[tuple[str, float]]:
     """PURE. Played dates on which a normally-populated block is DEAD.
 
@@ -216,6 +239,10 @@ def find_date_outages(
     [(date_str, cov), ...] for every date whose coverage is <= _DATE_OUTAGE_MAX while the block's
     own baseline (or, INC-31-style, its history) shows it is normally well-covered. Empty when the
     block has no healthy reference level — a coverage-gapped block cannot have an "outage".
+
+    The `skip_newest` most recent played dates are EXEMPT — they legitimately lag one build cycle
+    (see the block comment above). Pass 0 to assert over every date (used by the tests to prove the
+    exemption is the only thing suppressing a newest-date zero).
     """
     reference = max(
         baseline_cov if baseline_cov is not None else 0.0,
@@ -223,6 +250,10 @@ def find_date_outages(
     )
     if reference < _WELL_COVERED:
         return []
+    if skip_newest:
+        # Sort by date and drop the newest N; `per_date` arrives in query order, so sort explicitly
+        # rather than trusting it (a reordered query must not silently change WHICH date is exempt).
+        per_date = sorted(per_date, key=lambda r: str(r[0]))[: -skip_newest or None]
     out: list[tuple[str, float]] = []
     for game_date, n_games, n_notnull in per_date:
         if n_games < _DATE_MIN_GAMES:
