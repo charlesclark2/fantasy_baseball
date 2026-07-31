@@ -670,6 +670,64 @@ def test_dst_unit_names_are_not_mangled_by_the_titlecaser():
     assert _titlecase("CHRISTIAN MCCAFFREY") == "Christian McCaffrey"   # unchanged
 
 
+# ── the frontend must not silently re-filter the new positions out ────────────────────────────
+_FRONTEND = Path(KD.__file__).resolve().parents[4] / "frontend"
+_RANKED_SURFACES = ("rankings-board.tsx", "league-board.tsx")
+
+
+@pytest.mark.parametrize("surface", _RANKED_SURFACES)
+def test_the_ranked_surfaces_do_not_filter_to_skill_positions_only(surface):
+    """⚠️ THIS EXACT REGRESSION SHIPPED ONCE AND WAS INVISIBLE FROM THE BACKEND.
+
+    Every backend check passed — the projection landed, the boards carried 74 K/DST rows, the JSON
+    published to prod — and K/DST still rendered nowhere, because the frontend hard-filtered them out
+    with `SKILL_POSITIONS.includes(p.pos)`. Nothing server-side can see that: the data is correct all
+    the way to the browser, and a client-side filter then discards it.
+
+    So the guard lives here, in the gate that actually runs. A ranked surface must filter on
+    `ALL_POSITIONS` (which includes K/DST), never on `SKILL_POSITIONS`."""
+    src = (_FRONTEND / "components" / "fantasy" / surface).read_text()
+    assert "ALL_POSITIONS" in src, f"{surface} no longer references ALL_POSITIONS"
+    assert "SKILL_POSITIONS" not in src, (
+        f"{surface} filters on SKILL_POSITIONS — that silently drops every projected K/DST row from "
+        f"a ranked surface, which is invisible to every backend check (the data is correct right up "
+        f"to the browser). Use ALL_POSITIONS.")
+
+
+def test_the_shared_position_constants_are_distinct_and_correct():
+    src = (_FRONTEND / "components" / "fantasy" / "shared.tsx").read_text()
+    assert 'export const ALL_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DST"]' in src
+    assert 'export const SKILL_POSITIONS = ["QB", "RB", "WR", "TE"]' in src, (
+        "SKILL_POSITIONS must survive — it is still correct for the genuinely skill-only reads "
+        "(bye-week stacking, flex eligibility); it is just no longer the ranking universe")
+    # the position tabs must offer K/DST, or the rows are present but unreachable by filter
+    assert "positions = [...ALL_POSITIONS]" in src, (
+        "PositionTabs no longer defaults to ALL_POSITIONS — without K/DST tabs the rows are in the "
+        "payload but a user cannot filter to them, which reads as 'still not projected'")
+
+
+def test_the_frontend_types_declare_the_low_predictability_fields():
+    """A field absent from the TS interface is not a runtime error — it is silently unreadable in the
+    component (the same shape as the Pydantic response-model landmine, one layer up)."""
+    for rel in (("lib", "draft-optimizer.ts"), ("lib", "fantasy.ts")):
+        src = (_FRONTEND / rel[0] / rel[1]).read_text()
+        assert "lowPred" in src and "predNote" in src, (
+            f"{rel[1]} does not declare lowPred/predNote — the honest K/DST caveat cannot render")
+
+
+def test_no_surface_still_claims_kdst_are_unprojected():
+    """The copy must not contradict the product. A page that ranks a kicker while telling the reader
+    kickers are not projected is worse than either alone."""
+    stale = []
+    for p in (_FRONTEND / "components" / "fantasy").glob("*.tsx"):
+        text = p.read_text()
+        for phrase in ("carry no projection", "are not projected", "K & DST are unprojected",
+                       "K &amp; DST are unprojected"):
+            if phrase in text:
+                stale.append(f"{p.name}: {phrase!r}")
+    assert not stale, f"stale 'K/DST are unprojected' copy still shipping: {stale}"
+
+
 def test_the_standing_revalidation_owns_the_kdst_floors():
     """⭐ THE DECISION THE STORY REQUIRED, PINNED. A per-position coverage floor is invisible at
     serving time, so leaving two brand-new positions unmonitored is exactly the gap that let the

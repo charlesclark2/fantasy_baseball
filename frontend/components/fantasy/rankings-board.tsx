@@ -32,7 +32,8 @@ import {
   RangeCell,
   ProvenanceLine,
   RookieBadge,
-  SKILL_POSITIONS,
+  LowPredBadge,
+  ALL_POSITIONS,
   SurfaceHeader,
   UncertaintyNote,
   downloadCsv,
@@ -57,13 +58,15 @@ export function RankingsBoard() {
 
   // The board in its ranked order, BEFORE any search. Tiers and ranks are properties of the board,
   // so they are derived here and merely filtered below — searching never renumbers or re-tiers.
-  // K/DST carry no projection (offensive skill only) — they exist on the board purely so the draft
-  // tracker can record those picks, and must never appear in a ranked list.
+  // ⭐ NF1.6: K/DST now carry a real (BASE) projection, so they rank here like every other position.
+  // The `pts != null` test is what still excludes a genuinely unprojected row — a gap-fill K/DST
+  // placeholder for a team the projection missed — so an absent projection is shown as absent
+  // rather than as a zero.
   const ranked = useMemo(() => {
-    const skill = (board ?? []).filter(
-      (p) => p.pts != null && (SKILL_POSITIONS as readonly string[]).includes(p.pos),
+    const projected = (board ?? []).filter(
+      (p) => p.pts != null && (ALL_POSITIONS as readonly string[]).includes(p.pos),
     )
-    const scoped = skill.filter((p) => (pos === "Overall" ? true : p.pos === pos))
+    const scoped = projected.filter((p) => (pos === "Overall" ? true : p.pos === pos))
     return pos === "Overall"
       ? scoped.slice().sort((a, b) => a.ovrRank - b.ovrRank)
       : scoped.slice().sort((a, b) => a.posRank - b.posRank)
@@ -282,6 +285,7 @@ export function RankingsBoard() {
                             <span className="flex items-center gap-1.5">
                               <span className="font-medium text-gray-200">{p.name}</span>
                               {p.rookie && <RookieBadge />}
+                        {p.lowPred && <LowPredBadge note={p.predNote} />}
                             </span>
                           </td>
                           <td className="px-3 py-2">

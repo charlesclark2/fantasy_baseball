@@ -49,6 +49,37 @@ export interface ProjectedPlayer {
   /** Market average draft position (PPR, 12-team — see `adp_format`/`adp_teams` on the payload).
    *  A reference column; null means undrafted in that sample. */
   adp?: number | null
+
+  // ── NF1.6: KICKER + TEAM DEFENSE (DST) ────────────────────────────────────────────────────
+  /** True for the positions whose projection must NOT be read as a confident rank (K/DST). Set on
+   *  every row by the exporter (false for skill positions), so the UI never has to know which
+   *  positions are soft. Optional — payloads exported before NF1.6 do not carry it. */
+  lowPred?: boolean
+  /** The honest caveat to render beside a `lowPred` row, supplied by the exporter so the wording
+   *  lives with the model that earned it. */
+  predNote?: string | null
+  /** Kicker line. Field goals are split by DISTANCE because that is how they score (3/4/5) and
+   *  because leg strength is the one kicker attribute that genuinely persists year to year. */
+  fgAtt?: number | null
+  fgMade?: number | null
+  fg039?: number | null
+  fg4049?: number | null
+  fg50?: number | null
+  fgMiss?: number | null
+  patAtt?: number | null
+  patMade?: number | null
+  /** Team-defense line. `paPerG` (points allowed per game) is the number that communicates
+   *  defensive quality; the nine points-allowed TIER buckets are a scoring input, not a display
+   *  column, so they are deliberately not exported to this surface. */
+  sacks?: number | null
+  defInt?: number | null
+  fumRec?: number | null
+  defTd?: number | null
+  stTd?: number | null
+  safety?: number | null
+  blocked?: number | null
+  paTot?: number | null
+  paPerG?: number | null
 }
 
 export interface ProjectionPayload {

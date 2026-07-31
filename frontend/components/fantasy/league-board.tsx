@@ -24,7 +24,8 @@ import {
   PositionTabs,
   ProvenanceLine,
   RookieBadge,
-  SKILL_POSITIONS,
+  LowPredBadge,
+  ALL_POSITIONS,
   SurfaceHeader,
   UncertaintyNote,
   num,
@@ -49,11 +50,12 @@ export function LeagueBoard() {
 
   const config = manifest?.configs.find((c) => c.name === configName)
 
-  // K/DST carry no projection — they are never part of a value board.
+  // ⭐ NF1.6: K/DST now carry a real (BASE) projection with points and VOR, so they belong on the
+  // value board. The `pts`/`vor != null` tests still exclude a genuinely unprojected gap-fill row.
   const ranked = useMemo(
     () =>
       (board ?? []).filter(
-        (p) => p.pts != null && p.vor != null && (SKILL_POSITIONS as readonly string[]).includes(p.pos),
+        (p) => p.pts != null && p.vor != null && (ALL_POSITIONS as readonly string[]).includes(p.pos),
       ),
     [board],
   )
@@ -62,7 +64,7 @@ export function LeagueBoard() {
   // position once flex/superflex demand is allocated).
   const summary = useMemo<PosSummary[]>(() => {
     const out: PosSummary[] = []
-    for (const p of SKILL_POSITIONS) {
+    for (const p of ALL_POSITIONS) {
       const atPos = ranked.filter((r) => r.pos === p)
       if (atPos.length === 0) continue
       const replacement = atPos[0].repl ?? 0
@@ -246,6 +248,7 @@ export function LeagueBoard() {
                           <span className="flex items-center gap-1.5">
                             <span className="font-medium text-gray-200">{p.name}</span>
                             {p.rookie && <RookieBadge />}
+                        {p.lowPred && <LowPredBadge note={p.predNote} />}
                           </span>
                         </td>
                         <td className="px-3 py-2">

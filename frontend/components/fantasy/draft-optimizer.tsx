@@ -7,7 +7,7 @@
 // tier cliffs), with honest uncertainty. Pre-draft it doubles as a tiered cheat sheet.
 //
 // Honest framing: this is a PROJECTION product (NF-FASTPATH → NF-C1). Ranks are trustworthy; the VOR
-// interval is a first-order estimate (not yet calibrated) and K/DST carry no projection.
+// interval is a first-order estimate (not yet calibrated); K/DST carry a BASE projection (NF1.6).
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { RotateCcw, Undo2, Info, Search } from "lucide-react"
@@ -516,7 +516,8 @@ export function DraftOptimizer() {
               </div>
               <p className="mb-2 text-[11px] text-gray-600">
                 <strong className="text-gray-500">VOR</strong> = Value Over Replacement (points above the
-                last startable player at the position). K &amp; DST are unprojected — draft them late.
+                last startable player at the position). K &amp; D/ST are projected too, but only as
+                streaming tiers — their value over replacement is small by nature, so they sit late.
               </p>
               <div className="max-h-[520px] overflow-y-auto">
                 <table className="w-full text-sm">

@@ -6,8 +6,12 @@
 //   score = vor + need_bonus            (need_bonus = 0 when the position's starter slots are full)
 //   need_bonus = NEED_W[level] * positional_dropoff   (VONA — value lost at the position if you wait)
 //
-// Positions with no ranked players (K/DST — MVP-1 is offensive skill only) never appear as candidates
-// by construction; the board JSON already folds FB into RB, so positions here are exactly QB/RB/WR/TE.
+// ⭐ NF1.6: K and DST now carry a real (BASE) projection, so they ARE candidates. They need no
+// special-casing to stay out of the early rounds — their VOR is genuinely tiny (the best 2026 kicker
+// is +8 VOR against +150 for the top RB), so the same scoring that ranks everyone else already puts
+// them where they belong: late, once the starter slots that matter are full. A row that is still
+// genuinely unprojected (a gap-fill placeholder) has `vor == null` and is skipped below.
+// The board JSON folds FB into RB, so positions here are QB/RB/WR/TE/K/DST.
 
 export interface Player {
   id: string
@@ -32,6 +36,13 @@ export interface Player {
   // REFERENCE column only — never an input to the optimizer's score. Null = undrafted in that
   // sample (a real signal), and absent entirely on boards exported before NF3.
   adp?: number | null
+  // NF1.6: true for the positions whose projection must NOT be read as a confident rank (K/DST).
+  // Declared on every row by the exporter (false for skill positions), so the UI never has to know
+  // which positions are soft. OPTIONAL because boards exported before NF1.6 do not carry it.
+  lowPred?: boolean
+  /** The honest caveat to render beside a `lowPred` row. Supplied by the exporter so the wording
+   *  lives with the model that earned it, not scattered across components. */
+  predNote?: string | null
 }
 
 export interface RosterSlotDef {
@@ -205,7 +216,7 @@ export function recommend(args: RecommendArgs): Recommendation[] {
       }
       continue
     }
-    if (p.vor == null) continue // unprojected (K/DST) — never recommended
+    if (p.vor == null) continue // genuinely unprojected (a gap-fill placeholder) — never recommended
     available.push(p)
   }
   const open = openStarterSlots(myPositions, req)

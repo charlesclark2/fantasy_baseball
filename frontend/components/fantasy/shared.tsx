@@ -25,6 +25,20 @@ export const POS_COLORS: Record<string, string> = {
 
 export const SKILL_POSITIONS = ["QB", "RB", "WR", "TE"] as const
 
+/** Every position the board ranks. ⭐ NF1.6 added K + DST: before it they carried no projection and
+ *  were filtered out of every ranked surface, so those roster slots rendered empty. They now carry a
+ *  real (deliberately BASE) projection with points, VOR and an 80% range, so they belong in the
+ *  ranked lists. Use this — not SKILL_POSITIONS — anywhere the question is "what can be ranked".
+ *  SKILL_POSITIONS remains correct for the genuinely skill-only reads (bye-week stacking, flex). */
+export const ALL_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DST"] as const
+
+/** Positions whose projection must NOT be presented as a confident rank. K and D/ST are the least
+ *  predictable fantasy positions (held-out rank correlation ~0.32 for DST, ~0.23 among startable
+ *  kickers), so the surface labels them as streaming tiers and leans on the wide interval. The rows
+ *  themselves also carry `lowPred`/`predNote` from the export, which is the source of truth; this
+ *  constant exists so the UI can style/label without inspecting every row. */
+export const LOW_PREDICTABILITY_POSITIONS: readonly string[] = ["K", "DST"]
+
 /** A player's team for display: real abbreviation, or an honest label for the unteamed. A rookie's
  *  NFL team is not always resolved upstream, so an unteamed rookie shows "Rk", never a wrong "FA". */
 export const teamLabel = (p: { team: string | null; rookie: boolean }) =>
@@ -72,6 +86,29 @@ export function RookieBadge() {
     <span className="inline-block rounded border border-indigo-500/30 bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-300">
       R
     </span>
+  )
+}
+
+/** NF1.6 — the honest low-predictability marker for a K/DST row.
+ *
+ *  ⚠️ NOT a decoration. K and D/ST rank on a deliberately BASE model: held-out rank correlation is
+ *  ~0.32 for defences and ~0.23 among startable kickers, because a kicker's accuracy and a defence's
+ *  touchdowns/safeties/blocked kicks barely carry from one season to the next. The projection is
+ *  worth showing (it separates good situations from bad, and fills the roster slot) but a drafter
+ *  must not read DST3-vs-DST7 as a real distinction. The tooltip text comes from the row itself so
+ *  the wording lives with the model that earned it. */
+export function LowPredBadge({ note }: { note?: string | null }) {
+  return (
+    <InfoTip
+      label={
+        <span className="inline-block rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+          Tier
+        </span>
+      }
+    >
+      {note ??
+        "Base projection — K and D/ST are the least predictable fantasy positions. Use these as streaming tiers (better vs worse situations), not precise ranks; the wide range is the honest part."}
+    </InfoTip>
   )
 }
 
@@ -344,7 +381,7 @@ export function FormatSelector({
 export function PositionTabs({
   value,
   onChange,
-  positions = [...SKILL_POSITIONS],
+  positions = [...ALL_POSITIONS],
   allLabel = "All",
 }: {
   value: string
