@@ -623,11 +623,16 @@ def run_backfill(season: int, sigma_obs: float, prior_neff_cap: int, dry_run: bo
         # posterior_sigma2 goes overconfident). Found on the sibling team chain at 2.7×; this
         # writer shares the identical _load_current_seq → replay shape. Refuse unless --reset.
         from betting_ml.scripts.sequential_bayes import catchup as _catchup
+        # ⚠️ ORDER IS LOAD-THEN-DELETE AND MUST STAY THAT WAY (2026-07-31): guard_or_reset_backfill
+        # DELETEs, so any source read it precedes can turn a read error into an EMPTY store. That
+        # is not hypothetical — the first live --reset deleted 52,300 rows and then raised on the
+        # dropped SF mart_pitch_play_event. Pinned by test_backfill_reset_ordering.py.
+        game_dates = _load_game_dates_for_season(conn, season, duck=duck)
+        _catchup.require_source_before_reset(game_dates, season=season, label="player-seq-backfill")
         _catchup.guard_or_reset_backfill(
             conn=conn, target_table=_TARGET_TABLE, season=season, reset=reset,
             fetch_dicts=_fetch_dicts, label="player-seq-backfill", dry_run=dry_run,
         )
-        game_dates = _load_game_dates_for_season(conn, season, duck=duck)
     finally:
         conn.close()
     print(f"  {len(game_dates)} game dates found")

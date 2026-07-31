@@ -772,6 +772,28 @@ sources:
           includes the game's own observation (do NOT use as a pre-game feature).
           Grain: team × metric × season × game_pk.
 
+      # E11.24 target 6 (2026-07-31) — registered as sources so the two sibling stores can carry
+      # the same double-apply guard team_sequential_posteriors got in E9.53. They were audited and
+      # found DIRTY on season 2026 (see assert_*_no_double_apply.sql for the mechanism).
+      - name: player_sequential_posteriors
+        description: >
+          Player-level sequential Bayesian beliefs (Epic 16.2), advanced after every completed
+          regular-season game. Written by
+          betting_ml/scripts/sequential_bayes/update_player_posteriors.py (SCD-2 MERGE).
+          player_type ∈ {batter, starter, bullpen}; metric ∈ {xwoba, xwoba_against}.
+          Consumed AS-OF (strict game_date <) by eb_batter_posteriors_raw and
+          eb_starter_posteriors, which read posterior_mu ONLY.
+          Grain: player_id × player_type × metric × season × game_pk.
+
+      - name: matchup_cell_sequential_posteriors
+        description: >
+          Archetype-cell sequential Bayesian beliefs (Story 8.5), advanced per completed game.
+          Written by betting_ml/scripts/sequential_bayes/update_matchup_cell_posteriors.py
+          (SCD-2 MERGE). Consumed by betting_ml/scripts/eb_priors/generate_matchup_signals.py,
+          which reads posterior_mu, posterior_sigma AND n_pa_cumulative — so unlike the team and
+          player stores, an inflated observation count on this table IS served (as a too-small
+          cell sigma). Grain: batter_archetype × pitcher_archetype × season × game_pk.
+
       - name: mart_player_start_probability
         description: >
           Story 33.1 — per-(game_pk, side, player_id) P(start) for the candidate roster.
