@@ -126,7 +126,61 @@
         "above_p90": 0.0742,
         "note": "LEADING INDICATOR ONLY \u2014 one target season is far too thin per position to gate on"
       }
+    },
+    {
+      "population": "kdst",
+      "config": "SHIPPED K/DST base band (q0.10/q0.90 ratio quantiles, cluster_z=1.0)",
+      "form": "empirical_ratio_band",
+      "cohorts": [
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "n": 795,
+      "floors": {
+        "DST": 0.8,
+        "K": 0.8
+      },
+      "coverage": {
+        "DST": 0.8969,
+        "K": 0.8295
+      },
+      "n_by_position": {
+        "DST": 320,
+        "K": 475
+      },
+      "slack_rows": {
+        "DST": 31,
+        "K": 14
+      },
+      "unconstrained": [],
+      "misses": [],
+      "pass": true,
+      "pooled_coverage": 0.8566,
+      "interval_score": 129.562,
+      "below_p10": 0.083,
+      "above_p90": 0.0604,
+      "beats_degenerates": true,
+      "breach_response": "WIDEN the base band (kdst_projection.RatioBand.widen / BAND_CLUSTER_Z) and re-report \u2014 this band is REPORTED, not selected, so there is no bake-off to re-run. Do NOT move the floor.",
+      "newest_cohort": {
+        "cohort": 2025,
+        "n": 76,
+        "pooled_coverage": 0.8684,
+        "coverage": {
+          "DST": 0.9375,
+          "K": 0.8182
+        },
+        "above_p90": 0.0658,
+        "note": "LEADING INDICATOR ONLY \u2014 one season is ~32 DSTs + ~45 kickers, far too thin to gate a per-position floor"
+      }
     }
   ],
-  "generated_at": "2026-07-30T04:47:08.657163+00:00"
+  "generated_at": "2026-07-30T05:44:54.545457+00:00"
 }

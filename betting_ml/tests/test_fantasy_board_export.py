@@ -126,6 +126,13 @@ _PROJECTION_KEYS = {
     "fpStd", "fpHalf", "fpPpr", "fpSd", "fpP10", "fpP90", "uncType",
     "passAtt", "passCmp", "passYds", "passTd", "passInt",
     "rushAtt", "rushYds", "rushTd", "tgt", "rec", "recYds", "recTd", "fum", "twoPt",
+    # NF1.6 — the honest low-predictability marker, declared on EVERY record (false for the skill
+    # positions) so the client never has to know which positions are soft.
+    "lowPred", "predNote",
+    # NF1.6 — the K/DST raw components. Present on every record in the SAME `_STAT_KEYS` idiom (a WR
+    # simply has no `fgMade`), so the browse table needs no per-position branching.
+    "fgAtt", "fgMade", "fg039", "fg4049", "fg50", "fgMiss", "patAtt", "patMade",
+    "sacks", "defInt", "fumRec", "defTd", "stTd", "safety", "blocked", "paTot", "paPerG",
 }
 
 

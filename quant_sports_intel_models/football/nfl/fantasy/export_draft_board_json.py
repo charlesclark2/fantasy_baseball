@@ -63,9 +63,24 @@ _PROJECTION_PARQUET = "nfl_fantasy_season_projections_{season}.parquet"
 # the server-side-gated /fantasy/nfl/* endpoints read it. Default local staging dir:
 _STAGING_OUT = _ARTIFACTS / "draft_board_json"
 
-# The projectable fantasy positions (MVP-1 = offensive skill only). K/DST carry no projection → the UI
-# flags their roster slots as "draft late (no projection)"; they never appear on the board.
-PROJECTABLE = ("QB", "RB", "WR", "TE")
+# The projectable fantasy positions. ⭐ NF1.6 added K + DST: they used to carry NO projection, so the
+# UI flagged those roster slots "draft late (no projection)" and they never appeared on the board. They
+# now rank off a deliberately BASE model with wide honest intervals — see `LOW_PREDICTABILITY` below,
+# which is the caveat the surface MUST render beside them.
+PROJECTABLE = ("QB", "RB", "WR", "TE", "K", "DST")
+
+# ⚠️ THE POSITIONS THE UI MUST NOT PRESENT AS CONFIDENT RANKS. K and DST are the least predictable
+# fantasy positions: NF1.6's held-out rank correlation is ~0.32 for DST and ~0.23 among STARTABLE
+# kickers. The projection is worth shipping because it makes the slots rankable and separates good
+# situations from bad ones — not because it can tell DST3 from DST7. Every K/DST record carries
+# `lowPred: true` + `predNote` so the surface can label the tier honestly rather than the client
+# having to know which positions are soft.
+LOW_PREDICTABILITY = ("K", "DST")
+LOW_PREDICTABILITY_NOTE = (
+    "Base projection — K and D/ST are the least predictable fantasy positions. Use these as "
+    "streaming TIERS (better vs worse situations), not precise ranks; the wide interval is the "
+    "honest part."
+)
 
 # nflverse team abbreviations → the veteran-projection convention (the board's team_id style). Only a
 # couple differ; the rest pass through. Kept broad so any nflverse-alt code maps cleanly.
@@ -123,8 +138,15 @@ _NAME_SUFFIXES = {"Ii": "II", "Iii": "III", "Iv": "IV", "Vi": "VI"}
 
 def _titlecase(name: str) -> str:
     """ALLCAPS board name → display case, with the common Mc/Mac fix (MCCAFFREY → McCaffrey) and
-    generational suffixes restored (JAMES COOK III → James Cook III, not "Cook Iii")."""
-    out = str(name).title()
+    generational suffixes restored (JAMES COOK III → James Cook III, not "Cook Iii").
+
+    ⚠️ NF1.6 exception: a DST unit name is a TEAM CODE plus a unit label ("DEN D/ST"), not a person's
+    name — `.title()` would render it "Den D/St". Those names are already display-ready, so they pass
+    through untouched."""
+    raw = str(name)
+    if raw.upper().endswith(("D/ST", "DST", "DEFENSE")):
+        return raw
+    out = raw.title()
     for pre in ("Mc", "Mac"):
         i = 0
         while (i := out.find(pre, i)) != -1:
@@ -237,6 +259,22 @@ _STAT_KEYS = (
     ("proj_fumbles_lost", "fum"), ("proj_two_pt", "twoPt"),
 )
 
+# NF1.6 — the K/DST raw components the browse table renders. Kept in the SAME `_STAT_KEYS` idiom so a
+# mixed frame needs no per-position branching: an absent column yields null, and a WR simply has no
+# `fgMade` while a kicker has no `passYds`. The points-allowed BUCKET columns are deliberately NOT
+# exported: nine expected-games figures are a scoring input for NF-C1/NF-C0b, not something a drafter
+# reads — the surface shows `paPerG`, the number that actually communicates defensive quality.
+_KDST_STAT_KEYS = (
+    ("proj_fg_att", "fgAtt"), ("proj_fg_made", "fgMade"),
+    ("proj_fg_made_0_39", "fg039"), ("proj_fg_made_40_49", "fg4049"),
+    ("proj_fg_made_50_plus", "fg50"), ("proj_fg_missed", "fgMiss"),
+    ("proj_pat_att", "patAtt"), ("proj_pat_made", "patMade"),
+    ("proj_def_sacks", "sacks"), ("proj_def_int", "defInt"),
+    ("proj_def_fumble_rec", "fumRec"), ("proj_def_td", "defTd"), ("proj_st_td", "stTd"),
+    ("proj_def_safety", "safety"), ("proj_def_blocked_kick", "blocked"),
+    ("proj_dst_points_allowed", "paTot"), ("proj_dst_pa_per_game", "paPerG"),
+)
+
 
 def projection_records(
     df: pd.DataFrame,
@@ -284,8 +322,10 @@ def projection_records(
             "fpP90": _fnum(r.get("fp_ppr_p90")),
             "uncType": None if pd.isna(r.get("uncertainty_type")) else str(r["uncertainty_type"]),
             "adp": None,   # filled by _attach_adp; declared so the shape is fetch-independent
+            "lowPred": pos in LOW_PREDICTABILITY,     # NF1.6 — see LOW_PREDICTABILITY
+            "predNote": LOW_PREDICTABILITY_NOTE if pos in LOW_PREDICTABILITY else None,
         }
-        for src, key in _STAT_KEYS:
+        for src, key in (*_STAT_KEYS, *_KDST_STAT_KEYS):
             rec[key] = _fnum(r.get(src))
         recs.append(rec)
     return recs
@@ -532,6 +572,10 @@ def board_records(
             # declared here (not only added by _attach_adp) so every record has the same shape
             # whether or not the external ADP fetch succeeded
             "adp": None,
+            # NF1.6: the honest low-predictability marker. Declared on EVERY record (false for the
+            # skill positions) so the client never has to know which positions are soft.
+            "lowPred": pos in LOW_PREDICTABILITY,
+            "predNote": LOW_PREDICTABILITY_NOTE if pos in LOW_PREDICTABILITY else None,
         })
     return recs
 
@@ -617,27 +661,43 @@ def kdst_records(
     teams: list[str],
     kickers: dict[str, str] | None = None,
     byes: dict[str, int] | None = None,
+    *,
+    covered: set[tuple[str, str]] | None = None,
 ) -> list[dict]:
-    """Draftable K & DST placeholders — one per real NFL team. MVP-1 projects offensive skill only, so
-    these carry NO projection (pts/vor null): they exist purely so a manager can RECORD their K/DST
-    picks and fill those roster slots. They never get recommended (the optimizer skips null-VOR) and sort
-    to the bottom. DST is the team unit ('<TEAM> D/ST'); K uses the real kicker name where resolved."""
+    """UNPROJECTED K & DST placeholders — since NF1.6 the honest FALLBACK, not the normal path.
+
+    ⭐ K and DST are now genuinely projected and arrive through `board_records` like every other
+    position. This function now only fills the GAPS: a `(pos, team)` pair the board did NOT project
+    still needs a draftable row so a manager can RECORD the pick and fill the roster slot. Those rows
+    carry NO projection (pts/vor null), never get recommended (the optimizer skips null-VOR) and sort
+    to the bottom — the pre-NF1.6 behaviour, now scoped to what is genuinely missing instead of
+    applied to all 32 teams.
+
+    `covered=None` reproduces the old all-teams behaviour, which is exactly what the caller wants
+    when the K/DST projection is absent entirely (a loud, complete degradation rather than a board
+    with unfillable slots)."""
     kickers = kickers or {}
     byes = byes or {}
+    covered = covered or set()
     recs: list[dict] = []
     for t in teams:
         bye = byes.get(t)
-        recs.append({
-            "id": f"DST-{t}", "name": f"{t} D/ST", "pos": "DST", "team": t, "bye": bye, "rookie": False,
-            "g": None, "pts": None, "repl": None, "vor": None, "posRank": 0, "ovrRank": 9999,
-            "vorP10": None, "vorP90": None, "ptsP10": None, "ptsP90": None, "adp": None,
-        })
-        k_name = kickers.get(t)  # roster names are already proper-cased — do not re-title-case
-        recs.append({
-            "id": f"K-{t}", "name": k_name if k_name else f"{t} K", "pos": "K", "team": t, "bye": bye,
-            "rookie": False, "g": None, "pts": None, "repl": None, "vor": None, "posRank": 0,
-            "ovrRank": 9999, "vorP10": None, "vorP90": None, "ptsP10": None, "ptsP90": None, "adp": None,
-        })
+        if ("DST", t) not in covered:
+            recs.append({
+                "id": f"DST-{t}", "name": f"{t} D/ST", "pos": "DST", "team": t, "bye": bye,
+                "rookie": False, "g": None, "pts": None, "repl": None, "vor": None, "posRank": 0,
+                "ovrRank": 9999, "vorP10": None, "vorP90": None, "ptsP10": None, "ptsP90": None,
+                "adp": None, "lowPred": True, "predNote": LOW_PREDICTABILITY_NOTE,
+            })
+        if ("K", t) not in covered:
+            k_name = kickers.get(t)  # roster names are already proper-cased — do not re-title-case
+            recs.append({
+                "id": f"K-{t}", "name": k_name if k_name else f"{t} K", "pos": "K", "team": t,
+                "bye": bye, "rookie": False, "g": None, "pts": None, "repl": None, "vor": None,
+                "posRank": 0, "ovrRank": 9999, "vorP10": None, "vorP90": None, "ptsP10": None,
+                "ptsP90": None, "adp": None, "lowPred": True,
+                "predNote": LOW_PREDICTABILITY_NOTE,
+            })
     return recs
 
 
@@ -705,7 +765,9 @@ def main(argv: list[str] | None = None) -> int:
         _norm_team(str(t)) for t in df["team_id"].dropna().unique()
         if str(t) not in ("", "None", "nan") and _norm_team(str(t))
     })
-    kdst = kdst_records(teams, kicker_map(), byes)
+    # NF1.6: the placeholder set is now GAP-FILL only — see `kdst_records`. Resolved per board below
+    # because a board that failed to project K/DST needs different placeholders than one that did.
+    kicker_names = kicker_map()
 
     configs_present: list[str] = []
     sizes_present: set[int] = set()
@@ -723,7 +785,21 @@ def main(argv: list[str] | None = None) -> int:
         matched = _attach_adp(skill, adp_cache_for(args.season, adp_fmt, n_teams))
         log.info("  %s_%d: ADP (%s/%dteam) matched %d/%d players",
                  config_name, n_teams, adp_fmt, n_teams, matched, len(skill))
-        recs = skill + kdst   # skill board + draftable K/DST placeholders
+        # NF1.6: `skill` now already contains the PROJECTED K/DST rows; the placeholders only fill
+        # whatever (pos, team) pairs the projection did not cover, so no slot is ever unfillable.
+        covered = {(r["pos"], r["team"]) for r in skill
+                   if r["pos"] in LOW_PREDICTABILITY and r.get("team")}
+        gaps = kdst_records(teams, kicker_names, byes, covered=covered)
+        n_projected = len(covered)
+        if n_projected == 0:
+            log.warning("[ALERT] %s_%d: NO K/DST rows on the board — those slots fall back to "
+                        "UNPROJECTED placeholders. Run run_kdst_projection.py + rebuild the board.",
+                        config_name, n_teams)
+        else:
+            log.info("  %s_%d: %d K/DST row(s) projected across %d (pos, team) pair(s), "
+                     "%d placeholder gap row(s)", config_name, n_teams,
+                     sum(1 for r in skill if r["pos"] in LOW_PREDICTABILITY), n_projected, len(gaps))
+        recs = skill + gaps
         path = out_dir / f"board_{config_name}_{n_teams}.json"
         path.write_text(json.dumps(recs, separators=(",", ":")))
         combos += 1
@@ -740,6 +816,17 @@ def main(argv: list[str] | None = None) -> int:
     proj_meta: dict = {}
     try:
         pdf = load_projections_lake(args.season) if args.from_lake else load_projections_local(args.season)
+        # NF1.6: fold the K/DST base projection into the browse surface so those positions are
+        # BROWSABLE, not just draftable. Best-effort — a missing K/DST lineage logs loudly and leaves
+        # the offensive projections intact (they are the draft-critical output).
+        from quant_sports_intel_models.football.nfl.fantasy.run_league_board import (
+            load_kdst_lake, load_kdst_local,
+        )
+        kdf = (load_kdst_lake(args.season) if args.from_lake
+               else load_kdst_local(_ARTIFACTS, args.season))
+        if len(kdf):
+            pdf = pd.concat([pdf, kdf], ignore_index=True, sort=False)
+            log.info("  projections: folded in %d NF1.6 K/DST rows", len(kdf))
         projections = projection_records(pdf, rookie_teams, byes)
         # The projections surface is format-independent, so its ADP reference is pinned + labelled.
         proj_adp_matched = _attach_adp(

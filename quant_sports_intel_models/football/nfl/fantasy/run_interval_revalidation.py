@@ -1,5 +1,5 @@
-"""run_interval_revalidation.py — the STANDING ANNUAL RE-VALIDATION of both shipped 80% interval bands
-(NF1.8 rookies + NF1.9 veterans) against their pre-registered PER-POSITION coverage floors.
+"""run_interval_revalidation.py — the STANDING ANNUAL RE-VALIDATION of every shipped 80% interval band
+(NF1.8 rookies + NF1.9 veterans + NF1.6 K/DST) against its pre-registered coverage floor.
 
 ⚠️ WHY THIS EXISTS, and why a one-off number was not enough. **A per-position coverage floor is
 INVISIBLE at serving time.** Coverage needs REALIZED OUTCOMES, so nothing in the board-build path, the
@@ -24,6 +24,20 @@ too thin per position to be a trigger on its own (one veteran season carries ~55
 ~12), so the newest cohort is reported as a LEADING INDICATOR and never gates. Reporting it is the
 point: a new cohort that misses badly will move the pooled number next year, and that is when to look.
 
+⭐ NF1.6 ADDED A THIRD POPULATION — **K + DST** — AND THE DECISION TO COVER IT HERE WAS DELIBERATE.
+The alternative (scoping the two new positions out of this check) was rejected precisely because
+leaving a brand-new band silently unmonitored is the failure mode this file exists to prevent. Two
+things differ for it, and both are intentional:
+
+  ▸ **Its breach RESPONSE is to WIDEN, not to re-select.** The rookie/veteran bands were SELECTED by a
+    §0.5 bake-off, so a breach re-triggers that selection. The K/DST band is *reported, not selected*
+    — a deliberately BASE band on the two least predictable fantasy positions, with no candidate
+    field behind it. So a breach there means widen the base band honestly
+    (`kdst_projection.RatioBand.widen`, or raise `BAND_CLUSTER_Z`) and re-report. It still does NOT
+    mean move the floor (E2.1-r).
+  ▸ **Its floor is per POSITION (K, DST), not per offensive position**, and it is a FLOOR at the
+    nominal 0.80 exactly as the other two are.
+
 ⚠️ THE POSITION TO WATCH IS ROOKIE **RB**. NF1.8 shipped with per-position floor margins, in ROWS, of
 QB 1 / RB **0** / TE 12 / WR 8 — i.e. rookie RB clears its floor with ZERO covered rookie-seasons of
 slack, so it is the floor a future class breaks first. The veteran margins are much larger (64–337 rows)
@@ -35,7 +49,7 @@ RUN ON THE LAPTOP (~1 min with a warm panel; add --rebuild-panel after a new sea
 
     # after a new completed season has landed in the NFL marts:
     uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_interval_revalidation \\
-      --rebuild-panel
+      --rebuild-panel --rebuild-kdst-panel
 """
 from __future__ import annotations
 
@@ -171,6 +185,82 @@ def revalidate_veterans(panel_dir: Path, from_year: int, to_year: int) -> dict:
     return out
 
 
+def revalidate_kdst(panel_path: Path, *, widen: float = 1.0,
+                    cluster_z: float | None = None) -> dict:
+    """Re-score NF1.6's shipped K/DST BASE band against its per-position coverage floors.
+
+    ⚠️ The band config is DERIVED from `kdst_projection`'s own served constants (`BAND_QUANTILES`,
+    `BAND_CLUSTER_Z`), never re-typed here — a re-validation that pins a literal keeps validating the
+    band the code USED to serve after someone changes a constant, which is the one failure mode a
+    standing check must not have.
+
+    ⚠️ An unreadable or empty panel is an ERROR, not a pass. `main` treats a block without
+    `pass is True` as a failure, so a population this check could not load can never be mistaken for
+    a population that cleared its floor (the NF1.7 vacuous-anchor lesson wearing an ops hat)."""
+    from quant_sports_intel_models.football.nfl.fantasy import kdst_projection as KD
+    from quant_sports_intel_models.football.nfl.fantasy import run_kdst_projection as NF16
+
+    if not Path(panel_path).exists():
+        return {"population": "kdst",
+                "error": f"no K/DST band panel at {panel_path} — run "
+                         f"`run_kdst_projection.py --rebuild-panel` first"}
+    panel = pd.read_parquet(panel_path)
+    if panel.empty:
+        return {"population": "kdst", "error": f"the K/DST band panel at {panel_path} is EMPTY"}
+    z = KD.BAND_CLUSTER_Z if cluster_z is None else float(cluster_z)
+    try:
+        rep = NF16.walk_forward_coverage(panel, widen=widen, cluster_z=z)
+    except Exception as exc:  # noqa: BLE001 — an errored block is NOT a pass (see docstring)
+        return {"population": "kdst", "error": f"the K/DST band did not score: {exc}"}
+    positions = sorted(str(p) for p in panel["position"].dropna().unique())
+    floors = {p: KD.NOMINAL_COVERAGE for p in positions if rep.get(f"n_{p}")}
+    misses = [p for p, f in floors.items() if (rep.get(f"cov_{p}") or 0.0) < f]
+    cohorts = [int(v) for v in sorted(panel["target_season"].unique())]
+    out = {
+        "population": "kdst",
+        "config": (f"SHIPPED K/DST base band (q{KD.BAND_QUANTILES[0]:.2f}/"
+                   f"q{KD.BAND_QUANTILES[1]:.2f} ratio quantiles, cluster_z={z})"),
+        "form": "empirical_ratio_band",
+        "cohorts": rep.get("held_out_seasons", cohorts),
+        "n": rep["n"],
+        "floors": floors,
+        "coverage": {p: rep.get(f"cov_{p}") for p in floors},
+        "n_by_position": {p: rep.get(f"n_{p}") for p in floors},
+        # margin in ROWS, the NF1.8 convention — "0.83 vs 0.80" reads like a calibration statement;
+        # "12 covered rows of slack" is the number that says how close this actually is
+        "slack_rows": {p: int(np.floor((rep.get(f"cov_{p}") or 0.0) * (rep.get(f"n_{p}") or 0))
+                             - np.ceil(f * (rep.get(f"n_{p}") or 0)))
+                       for p, f in floors.items()},
+        "unconstrained": [p for p in positions if p not in floors],
+        "misses": misses,
+        "pass": not misses,
+        "pooled_coverage": rep["coverage_80"],
+        "interval_score": rep["interval_score"],
+        "below_p10": rep["below_p10"],
+        "above_p90": rep["above_p90"],
+        "beats_degenerates": rep["beats_degenerates"],
+        "breach_response": ("WIDEN the base band (kdst_projection.RatioBand.widen / BAND_CLUSTER_Z) "
+                            "and re-report — this band is REPORTED, not selected, so there is no "
+                            "bake-off to re-run. Do NOT move the floor."),
+    }
+    # newest cohort as a LEADING INDICATOR (one season is ~32 DSTs + ~45 kickers — far too thin)
+    newest = max(cohorts)
+    try:
+        nrec = NF16.walk_forward_coverage(panel[panel["target_season"] <= newest],
+                                         min_train_targets=len(cohorts) - 1, widen=widen,
+                                         cluster_z=z)
+        out["newest_cohort"] = {
+            "cohort": newest, "n": nrec["n"], "pooled_coverage": nrec["coverage_80"],
+            "coverage": {p: nrec.get(f"cov_{p}") for p in floors},
+            "above_p90": nrec["above_p90"],
+            "note": "LEADING INDICATOR ONLY — one season is ~32 DSTs + ~45 kickers, far too thin "
+                    "to gate a per-position floor",
+        }
+    except Exception as exc:  # noqa: BLE001 — advisory block only; never gates
+        out["newest_cohort"] = {"cohort": newest, "note": f"not scorable ({exc})"}
+    return out
+
+
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # Report
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -255,6 +345,19 @@ def write_report(out: dict, path: Path) -> None:
       "run_veteran_interval_ablation --rebuild-panel")
     p("```")
     p("")
+    p("   ⭐ **EXCEPT for the NF1.6 K/DST population, whose response is different by design.** That "
+      "band is *reported, not selected* — a deliberately BASE band with no candidate field behind "
+      "it — so there is no bake-off to re-run. Widen it honestly instead and re-report:")
+    p("")
+    p("```")
+    p("# K/DST (NF1.6) — widen, do not re-select:")
+    p("uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_kdst_projection \\")
+    p("  --rebuild-panel --widen 1.15    # or raise kdst_projection.BAND_CLUSTER_Z")
+    p("```")
+    p("")
+    p("   Widening is monotone by construction (it inflates the half-widths around 1.0, so it can "
+      "only ever widen, never sharpen one side — the NF1.7 (d) widen-only invariant).")
+    p("")
     p("3. ⚠️ **Rookie RB is the position to watch** — NF1.8 shipped it with **0 rows** of slack above "
       "its floor, so it is the one a new class breaks first.")
     p("")
@@ -280,22 +383,38 @@ def main(argv: list[str] | None = None) -> int:
                          "after a new completed season lands)")
     ap.add_argument("--duckdb", default="quant_sports_intel_models/sports_dbt/sports.duckdb")
     ap.add_argument("--schema", default="main_nfl_marts")
-    ap.add_argument("--only", choices=("rookies", "veterans"), default=None)
+    ap.add_argument("--kdst-panel", default=None,
+                    help="NF1.6 K/DST walk-forward band panel (default: the run_kdst_projection cache)")
+    ap.add_argument("--rebuild-kdst-panel", action="store_true",
+                    help="rebuild the NF1.6 K/DST band panel from the local NFL marts + lake first "
+                         "(do this after a new completed season lands)")
+    ap.add_argument("--only", choices=("rookies", "veterans", "kdst"), default=None)
     ap.add_argument("--no-report", action="store_true")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)-7s %(message)s")
 
+    from quant_sports_intel_models.football.nfl.fantasy import run_kdst_projection as NF16
+    kdst_panel = Path(args.kdst_panel) if args.kdst_panel else NF16._PANEL_CACHE
+
     if args.rebuild_panel:
         NF19.rebuild_panel(args.duckdb, args.schema, 2007, args.veteran_to)
+    if args.rebuild_kdst_panel:
+        log.info("rebuilding the NF1.6 K/DST band panel …")
+        NF16.main(["--duckdb", args.duckdb, "--rebuild-panel", "--no-report"])
 
     blocks = []
-    if args.only != "veterans":
+    if args.only not in ("veterans", "kdst"):
         blocks.append(revalidate_rookies(Path(args.rookie_pool), args.rookie_from, args.rookie_to))
-    if args.only != "rookies":
+    if args.only not in ("rookies", "kdst"):
         blocks.append(revalidate_veterans(Path(args.veteran_panel), args.veteran_from,
                                           args.veteran_to))
+    # ⭐ NF1.6 — the K/DST base band. Included by DECISION (see the module docstring): a brand-new
+    #    band left unmonitored is exactly the gap that let the veteran band go five stories at 0.55
+    #    of nominal.
+    if args.only not in ("rookies", "veterans"):
+        blocks.append(revalidate_kdst(kdst_panel))
     # ⚠️ An ERRORED block is NOT a pass. A re-validation that silently skips a population it could not
     #    load is the NF1.7 anchor lesson (an absent check passes on NOTHING) wearing an ops hat.
     ok = all(b.get("pass") is True for b in blocks)
