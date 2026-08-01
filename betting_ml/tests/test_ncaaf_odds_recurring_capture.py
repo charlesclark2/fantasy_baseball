@@ -85,7 +85,6 @@ def test_run_recurring_capture_no_kickoffs_needed_makes_no_paid_calls(monkeypatc
         raise AssertionError("must not fetch odds when no kickoff needs capture")
 
     monkeypatch.setattr(orc, "_odds_historical_for_kickoffs", _boom)
-    monkeypatch.setattr(orc, "_odds_ncaaf_historical", _boom)
     ctx = src.Ctx(cfbd=object())
     manifest = orc.run_recurring_capture(2025, ctx=ctx)
     assert manifest == {
@@ -137,27 +136,105 @@ def test_run_recurring_capture_fetches_and_merges_only_target_kickoffs(monkeypat
     assert manifest["rows_written"] == 1
 
 
-def test_run_recurring_capture_forced_weeks_bypasses_the_diff(monkeypatch):
+def test_run_recurring_capture_weeks_bypasses_the_auto_detect_diff(monkeypatch):
+    """--weeks sources its candidate kickoffs from the EXPLICIT week list (_season_kickoffs),
+    never the whole-season auto-detect diff (_new_kickoffs_to_capture stays untouched)."""
     monkeypatch.setattr(orc, "_captured_commence_times", lambda season, **kw: set())
 
     def _boom(*a, **kw):
-        raise AssertionError("forced weeks must bypass the kickoff diff")
+        raise AssertionError("--weeks must not go through the whole-season auto-detect diff")
 
     monkeypatch.setattr(orc, "_new_kickoffs_to_capture", _boom)
     seen = {}
+    kickoff = datetime(2025, 8, 21, 16, 0, tzinfo=timezone.utc)
 
-    def fake_ncaaf_historical(ctx, season, *, weeks=None, **kw):
+    def fake_season_kickoffs(ctx, season, weeks=None):
         seen["weeks"] = weeks
-        return [{"id": "e1", "commence_time": "2025-08-21T16:00:00Z",
-                 "_requested_snapshot": "2025-08-21T15:55:00Z"}]
+        return [kickoff]
 
-    monkeypatch.setattr(orc, "_odds_ncaaf_historical", fake_ncaaf_historical)
+    monkeypatch.setattr(orc, "_season_kickoffs", fake_season_kickoffs)
+    monkeypatch.setattr(
+        orc, "_odds_historical_for_kickoffs",
+        lambda ctx, kicks, **kw: [{"id": "e1", "commence_time": src._iso(kickoff),
+                                    "_requested_snapshot": src._iso(kickoff - timedelta(minutes=5))}],
+    )
     monkeypatch.setattr(orc, "_merge_and_write", lambda season, records, **kw: len(records))
     ctx = src.Ctx(cfbd=object())
     manifest = orc.run_recurring_capture(2025, ctx=ctx, weeks=[1])
     assert seen["weeks"] == [1]
     assert manifest["forced_weeks"] == [1]
     assert manifest["rows_written"] == 1
+
+
+# ── the actual fix requested: --weeks no longer silently re-buys credits for already-captured
+# kickoffs (the original P0.6b "operator override" bypassed the dedup check unconditionally) ──
+def test_run_recurring_capture_weeks_skips_already_captured_by_default(monkeypatch):
+    already_captured = datetime(2025, 8, 21, 16, 0, tzinfo=timezone.utc)
+    still_needed = datetime(2025, 8, 22, 19, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        orc, "_season_kickoffs", lambda ctx, season, weeks=None: [already_captured, still_needed]
+    )
+    monkeypatch.setattr(
+        orc, "_captured_commence_times", lambda season, **kw: {src._iso(already_captured)}
+    )
+    fetch_calls = []
+
+    def fake_fetch(ctx, kicks, **kw):
+        fetch_calls.append(kicks)
+        return [{"id": f"e-{i}", "commence_time": src._iso(k),
+                 "_requested_snapshot": src._iso(k - timedelta(minutes=5))}
+                for i, k in enumerate(kicks)]
+
+    monkeypatch.setattr(orc, "_odds_historical_for_kickoffs", fake_fetch)
+    monkeypatch.setattr(orc, "_merge_and_write", lambda season, records, **kw: len(records))
+    ctx = src.Ctx(cfbd=object())
+    manifest = orc.run_recurring_capture(2025, ctx=ctx, weeks=[1])
+    assert fetch_calls == [[still_needed]]  # already_captured was SKIPPED, not re-fetched
+    assert manifest["new_kickoffs"] == 1
+    assert manifest["forced_weeks"] == [1]
+
+
+def test_run_recurring_capture_weeks_fully_captured_makes_no_paid_calls(monkeypatch):
+    """The concrete AC this fix targets: a --weeks re-run against a fully-already-captured week
+    makes ZERO paid calls (0 credits), instead of unconditionally re-pulling everything."""
+    already_captured = datetime(2025, 8, 21, 16, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(orc, "_season_kickoffs", lambda ctx, season, weeks=None: [already_captured])
+    monkeypatch.setattr(
+        orc, "_captured_commence_times", lambda season, **kw: {src._iso(already_captured)}
+    )
+
+    def _boom(*a, **kw):
+        raise AssertionError("must not fetch odds when everything targeted is already captured")
+
+    monkeypatch.setattr(orc, "_odds_historical_for_kickoffs", _boom)
+    ctx = src.Ctx(cfbd=object())
+    manifest = orc.run_recurring_capture(2025, ctx=ctx, weeks=[1])
+    assert manifest["rows_written"] == 0
+    assert manifest["new_kickoffs"] == 0
+    assert manifest["forced_weeks"] == [1]
+
+
+def test_run_recurring_capture_weeks_force_refetches_already_captured(monkeypatch):
+    """force=True is the escape hatch for genuinely re-pulling a known-BAD existing capture —
+    it bypasses the per-kind skip and re-fetches every kickoff --weeks selects regardless."""
+    already_captured = datetime(2025, 8, 21, 16, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(orc, "_season_kickoffs", lambda ctx, season, weeks=None: [already_captured])
+    monkeypatch.setattr(
+        orc, "_captured_commence_times", lambda season, **kw: {src._iso(already_captured)}
+    )
+    fetch_calls = []
+
+    def fake_fetch(ctx, kicks, **kw):
+        fetch_calls.append(kicks)
+        return [{"id": "e1", "commence_time": src._iso(already_captured),
+                 "_requested_snapshot": src._iso(already_captured - timedelta(minutes=5))}]
+
+    monkeypatch.setattr(orc, "_odds_historical_for_kickoffs", fake_fetch)
+    monkeypatch.setattr(orc, "_merge_and_write", lambda season, records, **kw: len(records))
+    ctx = src.Ctx(cfbd=object())
+    manifest = orc.run_recurring_capture(2025, ctx=ctx, weeks=[1], force=True)
+    assert fetch_calls == [[already_captured]]  # re-fetched DESPITE already being captured
+    assert manifest["new_kickoffs"] == 1
 
 
 # ── NCAAF-P0.6c: T-1 day-prior snapshot capture ───────────────────────────────────────────────

@@ -148,7 +148,6 @@ from .sources import (
     NCAAF_GAME_LINE_MARKETS,
     _iso,
     _odds_historical_for_kickoffs,
-    _odds_ncaaf_historical,
     _season_kickoffs,
     build_ctx,
     current_season,
@@ -164,6 +163,30 @@ SNAPSHOT_KIND_T1 = "t_minus_1"         # K − ~24h day-prior line-movement snap
 T1_BUFFER_MIN = 24 * 60                # 1440 — the default T-1 snapshot offset
 
 
+def _filter_uncaptured_kickoffs(
+    kicks: list[datetime],
+    captured_commence: set[str],
+    *,
+    now: datetime | None = None,
+    buffer_min: int = 5,
+) -> list[datetime]:
+    """Kind-agnostic, kickoff-list-agnostic filter: of `kicks`, keep only those (a) already past
+    their SNAPSHOT instant (kickoff − `buffer_min`) and (b) not yet represented in the lake for
+    the snapshot kind `captured_commence` was built from. Pure/no paid Odds calls — safe to call
+    on every run, including `--dry-run`.
+
+    Factored out of `_new_kickoffs_to_capture` (P0.6c) so the SAME "already captured for this
+    kind? skip it" guard applies whether the candidate kickoffs come from the whole-season
+    auto-detect diff OR an operator's explicit `--weeks` list — see `run_recurring_capture`'s
+    forced-weeks path, which used to always re-fetch (and re-pay for) whatever a forced week
+    already had captured; it now shares this exact filter by default (an explicit `force=True`
+    still bypasses it, for genuinely re-pulling a known-bad capture)."""
+    now = now or datetime.now(timezone.utc)
+    buffer = timedelta(minutes=buffer_min)
+    new = [k for k in kicks if (k - buffer) <= now and _iso(k) not in captured_commence]
+    return sorted(new)
+
+
 def _new_kickoffs_to_capture(
     ctx,
     season: int,
@@ -173,17 +196,12 @@ def _new_kickoffs_to_capture(
     buffer_min: int = 5,
 ) -> list[datetime]:
     """The season's FBS kickoffs (one free CFBD call, regular + postseason together — same
-    universe the P0.6 full-season backfill already reads) that are (a) already past their
-    SNAPSHOT instant (kickoff − `buffer_min`) and (b) not yet represented in the lake for the
-    snapshot kind `captured_commence` was built from. Pure/CFBD-only (no paid Odds calls) — safe
-    to call on every run, including `--dry-run`. Kind-agnostic: P0.6c calls this twice per run
-    (once for the close buffer, once for the T-1 buffer) against two independently-diffed
-    `captured_commence` sets — see `_captured_commence_times`'s `kind=` filter."""
-    now = now or datetime.now(timezone.utc)
-    buffer = timedelta(minutes=buffer_min)
+    universe the P0.6 full-season backfill already reads), filtered by `_filter_uncaptured_kickoffs`.
+    Kind-agnostic: P0.6c calls this twice per run (once for the close buffer, once for the T-1
+    buffer) against two independently-diffed `captured_commence` sets — see
+    `_captured_commence_times`'s `kind=` filter."""
     kicks = _season_kickoffs(ctx, season)
-    new = [k for k in kicks if (k - buffer) <= now and _iso(k) not in captured_commence]
-    return sorted(new)
+    return _filter_uncaptured_kickoffs(kicks, captured_commence, now=now, buffer_min=buffer_min)
 
 
 # The DeltaKernel error DuckDB's delta_scan raises when a table/partition genuinely doesn't
@@ -385,6 +403,7 @@ def run_recurring_capture(
     buffer_min: int = 5,
     capture_t1: bool = False,
     t1_buffer_min: int = T1_BUFFER_MIN,
+    force: bool = False,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """The P0.6b driver: figure out which kickoff(s) of `season` (default `current_season()`,
@@ -392,10 +411,14 @@ def run_recurring_capture(
     ONLY those (paid, leakage-safe), and merge them into the existing season partition without
     disturbing any previously-captured game.
 
-    `weeks` FORCES a specific CFBD week (or weeks) instead of auto-detecting — an operator
-    override (e.g. to re-pull a known gap for a PRIOR season); bypasses the kickoff diff entirely
-    and calls the proven `_odds_ncaaf_historical` (odds_backfill.py's own) fetch path. Returns a
-    manifest with what was captured, rows written, and the running credit usage `ctx` observed.
+    `weeks` TARGETS a specific CFBD week (or weeks) instead of auto-detecting the whole season —
+    an operator override (e.g. to backfill/re-check a known gap for a PRIOR season). By DEFAULT
+    (`force=False`) this still SKIPS whatever a targeted kickoff already has captured PER KIND —
+    a `--weeks` backfill no longer silently re-buys credits for data already in the lake (fixed
+    post-P0.6c: the original forced-weeks path unconditionally re-fetched, including the close,
+    even when only adding a NEW kind like T-1 to an already-close-captured week). Pass
+    `force=True` to bypass that skip and unconditionally re-fetch every kickoff `weeks` selects
+    (e.g. to genuinely re-pull a known-BAD existing capture, not just fill a gap or add a kind).
 
     `capture_t1` (P0.6c, default OFF): ALSO snapshot each target kickoff `t1_buffer_min` minutes
     before kickoff (default `T1_BUFFER_MIN` = 1440 = ~24h) — the day-prior line-movement point.
@@ -404,9 +427,8 @@ def run_recurring_capture(
     turning this on. Defaults False so a plain call behaves EXACTLY like P0.6b (zero extra Odds
     calls) until a caller explicitly opts in — mirrors this whole module's `on_demand` /
     `default_status=STOPPED` gating (see the module docstring's "CREDIT GATING" note). The close
-    and T-1 kickoff-eligibility diffs run independently (each against its OWN
-    `_captured_commence_times(kind=...)` set), so a kickoff can be captured for one kind, both, or
-    neither on a given run — see `_new_kickoffs_to_capture`.
+    and T-1 diffs run independently (each against its OWN `_captured_commence_times(kind=...)`
+    set), so a kickoff can be captured for one kind, both, or neither on a given run.
     """
     season = int(season) if season is not None else current_season()
     if ctx is None:
@@ -425,21 +447,32 @@ def run_recurring_capture(
         if capture_t1 else set()
     )
 
-    new_records: list[dict] = []
-    n_close: int | None = None
-    n_t1: int | None = None
-
     if weeks is not None:
-        log.info(
-            "NCAAF odds recurring capture: season=%s FORCED weeks=%s (operator override, "
-            "bypasses the kickoff diff)%s", season, list(weeks),
-            " + capture_t1" if capture_t1 else "",
-        )
-        close_records = _odds_ncaaf_historical(ctx, season, weeks=list(weeks), buffer_min=buffer_min)
-        new_records.extend(_tag_snapshot_kind(close_records, SNAPSHOT_KIND_CLOSE))
-        if capture_t1:
-            t1_records = _odds_ncaaf_historical(ctx, season, weeks=list(weeks), buffer_min=t1_buffer_min)
-            new_records.extend(_tag_snapshot_kind(t1_records, SNAPSHOT_KIND_T1))
+        kicks = _season_kickoffs(ctx, season, weeks=list(weeks))
+        if force:
+            close_targets = kicks
+            t1_targets = kicks if capture_t1 else []
+            log.info(
+                "NCAAF odds recurring capture: season=%s FORCED weeks=%s force=True — "
+                "re-fetching ALL %d kickoff(s) regardless of existing lake coverage%s",
+                season, list(weeks), len(kicks),
+                " (close + T-1)" if capture_t1 else " (close only)",
+            )
+        else:
+            close_targets = _filter_uncaptured_kickoffs(
+                kicks, captured_close, now=now, buffer_min=buffer_min
+            )
+            t1_targets = (
+                _filter_uncaptured_kickoffs(kicks, captured_t1, now=now, buffer_min=t1_buffer_min)
+                if capture_t1 else []
+            )
+            log.info(
+                "NCAAF odds recurring capture: season=%s weeks=%s — %d/%d CLOSE kickoff(s) "
+                "already captured (skipping those)%s. Pass force=True to re-fetch anyway.",
+                season, list(weeks), len(kicks) - len(close_targets), len(kicks),
+                (f"; {len(kicks) - len(t1_targets)}/{len(kicks)} T-1 already captured"
+                 if capture_t1 else ""),
+            )
     else:
         close_targets = _new_kickoffs_to_capture(
             ctx, season, captured_close, now=now, buffer_min=buffer_min
@@ -448,36 +481,38 @@ def run_recurring_capture(
             _new_kickoffs_to_capture(ctx, season, captured_t1, now=now, buffer_min=t1_buffer_min)
             if capture_t1 else []
         )
-        n_close = len(close_targets)
-        n_t1 = len(t1_targets) if capture_t1 else None
 
-        if not close_targets and not t1_targets:
-            log.info(
-                "NCAAF odds recurring capture: season=%s — no newly-past, uncaptured kickoff "
-                "(close%s); nothing to do (0 credits).", season,
-                " or T-1" if capture_t1 else "",
-            )
-            return {
-                "season": season, "new_kickoffs": 0,
-                "new_kickoffs_t1": (0 if capture_t1 else None),
-                "forced_weeks": None, "rows_written": 0,
-                "credits_used": ctx.credits_used, "credits_remaining": ctx.credits_remaining,
-            }
+    n_close = len(close_targets)
+    n_t1 = len(t1_targets) if capture_t1 else None
 
-        if close_targets:
-            log.info(
-                "NCAAF odds recurring capture: season=%s — %d new CLOSE kickoff(s) to snapshot "
-                "(bounded catch-up, not the whole season)", season, len(close_targets),
-            )
-            close_records = _odds_historical_for_kickoffs(ctx, close_targets, buffer_min=buffer_min)
-            new_records.extend(_tag_snapshot_kind(close_records, SNAPSHOT_KIND_CLOSE))
-        if t1_targets:
-            log.info(
-                "NCAAF odds recurring capture: season=%s — %d new T-1 (day-prior) kickoff(s) to "
-                "snapshot", season, len(t1_targets),
-            )
-            t1_records = _odds_historical_for_kickoffs(ctx, t1_targets, buffer_min=t1_buffer_min)
-            new_records.extend(_tag_snapshot_kind(t1_records, SNAPSHOT_KIND_T1))
+    if not close_targets and not t1_targets:
+        log.info(
+            "NCAAF odds recurring capture: season=%s%s — nothing new to capture (close%s); "
+            "0 credits.", season, f" weeks={list(weeks)}" if weeks is not None else "",
+            " or T-1" if capture_t1 else "",
+        )
+        return {
+            "season": season, "new_kickoffs": 0,
+            "new_kickoffs_t1": (0 if capture_t1 else None),
+            "forced_weeks": list(weeks) if weeks is not None else None, "rows_written": 0,
+            "credits_used": ctx.credits_used, "credits_remaining": ctx.credits_remaining,
+        }
+
+    new_records: list[dict] = []
+    if close_targets:
+        log.info(
+            "NCAAF odds recurring capture: season=%s — %d CLOSE kickoff(s) to snapshot",
+            season, len(close_targets),
+        )
+        close_records = _odds_historical_for_kickoffs(ctx, close_targets, buffer_min=buffer_min)
+        new_records.extend(_tag_snapshot_kind(close_records, SNAPSHOT_KIND_CLOSE))
+    if t1_targets:
+        log.info(
+            "NCAAF odds recurring capture: season=%s — %d T-1 (day-prior) kickoff(s) to snapshot",
+            season, len(t1_targets),
+        )
+        t1_records = _odds_historical_for_kickoffs(ctx, t1_targets, buffer_min=t1_buffer_min)
+        new_records.extend(_tag_snapshot_kind(t1_records, SNAPSHOT_KIND_T1))
 
     rows = _merge_and_write(season, new_records, bucket=bucket, local_root=local_root)
     log.info(
@@ -504,9 +539,16 @@ def _cli() -> None:
     )
     p.add_argument(
         "--weeks",
-        help="comma list — FORCE this specific CFBD week (or weeks) instead of auto-detecting "
-             "newly-past/uncovered kickoffs (an operator override, e.g. to re-pull a known gap "
-             "for a PRIOR season). Bypasses the kickoff diff.",
+        help="comma list — TARGET this specific CFBD week (or weeks) instead of auto-detecting "
+             "(an operator override, e.g. to backfill/re-check a known gap for a PRIOR season). "
+             "By default still SKIPS whatever's already captured per kind (pass --force to "
+             "re-fetch regardless).",
+    )
+    p.add_argument(
+        "--force", action="store_true",
+        help="with --weeks: re-fetch EVERY targeted kickoff unconditionally, even ones already "
+             "captured (e.g. to genuinely re-pull a known-BAD existing capture). Default OFF — "
+             "a --weeks run normally skips whatever's already in the lake per kind.",
     )
     p.add_argument("--regions", default="us", help="Odds-API regions (default us; incl. Bovada)")
     p.add_argument("--buffer-min", type=int, default=5, help="close snapshot = kickoff − buffer minutes")
@@ -550,11 +592,29 @@ def _cli() -> None:
         )
         if weeks_override is not None:
             kicks = _season_kickoffs(ctx, season, weeks=weeks_override)
-            log.info("[dry-run] season=%s FORCED weeks=%s → %d kickoff(s)%s",
-                     season, weeks_override, len(kicks),
-                     " (close + T-1)" if args.capture_t1 else " (close only)")
-            est_close = _estimate_credits(len(kicks), args.regions)
-            est_t1 = _estimate_credits(len(kicks), args.regions) if args.capture_t1 else {"credits": 0}
+            if args.force:
+                close_target, t1_target = kicks, (kicks if args.capture_t1 else [])
+            else:
+                close_target = _filter_uncaptured_kickoffs(
+                    kicks, captured_close, buffer_min=args.buffer_min
+                )
+                t1_target = (
+                    _filter_uncaptured_kickoffs(kicks, captured_t1, buffer_min=args.t1_buffer_min)
+                    if args.capture_t1 else []
+                )
+            log.info(
+                "[dry-run] season=%s weeks=%s → %d kickoff(s) total; %d/%d CLOSE already "
+                "captured%s%s", season, weeks_override, len(kicks),
+                len(kicks) - len(close_target), len(kicks),
+                (f"; {len(kicks) - len(t1_target)}/{len(kicks)} T-1 already captured"
+                 if args.capture_t1 else ""),
+                " (--force: re-fetching all regardless)" if args.force else "",
+            )
+            if not close_target and not t1_target:
+                log.info("[dry-run] nothing new to capture for these weeks (0 credits).")
+                return
+            est_close = _estimate_credits(len(close_target), args.regions)
+            est_t1 = _estimate_credits(len(t1_target), args.regions) if args.capture_t1 else {"credits": 0}
         else:
             close_target = _new_kickoffs_to_capture(
                 ctx, season, captured_close, buffer_min=args.buffer_min
@@ -583,6 +643,7 @@ def _cli() -> None:
     manifest = run_recurring_capture(
         season, ctx=ctx, weeks=weeks_override, bucket=args.bucket, local_root=args.local_root,
         buffer_min=args.buffer_min, capture_t1=args.capture_t1, t1_buffer_min=args.t1_buffer_min,
+        force=args.force,
     )
     for k, v in manifest.items():
         print(f"  {k}: {v}")
