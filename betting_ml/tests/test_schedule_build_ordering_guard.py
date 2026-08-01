@@ -220,6 +220,20 @@ class TestSpineStalenessActuallyPages:
         assert classify(parse_spine_covers_today("[METRIC] spine_covers_today=-1"))[0] == "WARN"
         assert classify(parse_spine_covers_today("some build output\nno metric here"))[0] == "WARN"
 
+    def test_build_marts_does_not_destroy_a_non_utf8_error(self):
+        """INC-37: a DuckDB error whose message isn't valid UTF-8 surfaced as a bare
+        UnicodeDecodeError with no model name and no DuckDB text — the real diagnostic was gone."""
+        src = LAKEHOUSE.read_text()
+        body = src.split("def _build_marts")[1].split("\ndef ")[0]
+        assert "except UnicodeDecodeError" in body, (
+            "INC-37: _build_marts must catch UnicodeDecodeError around the COPY and re-raise "
+            "with the message salvaged + the model named"
+        )
+        assert 'errors="replace"' in body, (
+            "INC-37: the salvaged message must be re-decoded with errors='replace' — otherwise "
+            "the original DuckDB text is still lost"
+        )
+
     def test_the_last_metric_line_wins(self):
         """One op runs several build stages; the state after the FINAL spine build is what counts."""
         from betting_ml.monitoring.spine_horizon import (
@@ -230,3 +244,52 @@ class TestSpineStalenessActuallyPages:
         out = "[METRIC] spine_covers_today=0\nrebuilding...\n[METRIC] spine_covers_today=1\n"
         assert parse_spine_covers_today(out) == 1
         assert classify(parse_spine_covers_today(out))[0] is None
+
+
+# ── (4) A TIER GUARD THAT ASSESSED NOTHING MUST NOT READ AS A PASS ────────────────────────────
+
+class TestVacuousTierGuardPassIsSurfaced:
+    """INC-37, 2026-08-01: a mis-run left 4 of 15 games served. Both tier guards skip a tier under
+    MIN_GAMES_FOR_CHECK=5, so BOTH printed `problem_count=0` / `alert_count=0` while 11 games sat
+    unserved. `tiers_assessed=0` was the only tell and no op read it."""
+
+    CHECKS = [
+        (REPO_ROOT / "scripts" / "check_intraday_fallback.py", "intraday_fallback"),
+        (REPO_ROOT / "scripts" / "check_served_prediction_integrity.py", "served_integrity"),
+    ]
+
+    @pytest.mark.parametrize("path,prefix", CHECKS)
+    def test_script_emits_the_unassessed_row_count(self, path, prefix):
+        src = path.read_text()
+        assert f"[METRIC] {prefix}_unassessed_rows=" in src, (
+            f"INC-37: {path.name} must report how many served rows it did NOT assess — without "
+            f"it a '0 problems' result is indistinguishable from 'nothing was checked'"
+        )
+        assert "unassessed_rows += stat.n" in src, (
+            f"INC-37: {path.name} must ACCUMULATE the skipped tiers' rows, not just emit a zero"
+        )
+
+    def test_both_ops_page_when_nothing_was_assessed(self):
+        src = DAILY_OPS.read_text()
+        # Count CALL sites only — the `def` line matches the same text.
+        calls = [ln for ln in src.splitlines()
+                 if "_alert_if_nothing_assessed(context," in ln and not ln.lstrip().startswith("def ")]
+        assert len(calls) == 2, (
+            "INC-37: BOTH check_served_prediction_integrity_op and check_intraday_fallback_op "
+            f"must evaluate the not-assessed condition (found {len(calls)} call site(s))"
+        )
+        helper = src.split("def _alert_if_nothing_assessed")[1].split("\ndef ")[0]
+        assert "send_alert(" in helper, "INC-37: the not-assessed helper must genuinely page"
+        assert 'severity="WARN"' in helper, (
+            "INC-37: 'could not verify' is not 'found a problem' — it must page WARN, not CRITICAL"
+        )
+
+    def test_it_stays_silent_unless_nothing_was_assessed(self):
+        """Narrowness is the point — this must not become alert fatigue on a small-but-checked
+        slate, and a zero-prediction day must never reach it."""
+        src = DAILY_OPS.read_text()
+        helper = src.split("def _alert_if_nothing_assessed")[1].split("\ndef ")[0]
+        assert "if assessed is None or assessed > 0 or unassessed_rows <= 0:" in helper, (
+            "INC-37: the guard must fire ONLY when assessed==0 AND rows exist — any tier actually "
+            "assessed, or a slate with no rows, must stay silent"
+        )

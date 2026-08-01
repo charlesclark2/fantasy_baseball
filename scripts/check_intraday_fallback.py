@@ -211,8 +211,14 @@ def main() -> int:
     zero_fs_tiers = 0
     chronic_fallback_games = 0
     assessed = 0
+    # INC-37 — rows on tiers we SKIPPED. A skipped tier is UNVERIFIED, not healthy: on 2026-08-01
+    # a mis-run left 4 of 15 games served and BOTH tiers fell under MIN_GAMES_FOR_CHECK, so this
+    # script printed `alert_count=0` while 11 games sat unserved. Track and report it so the
+    # calling op can say "could not verify" instead of implying "verified fine".
+    unassessed_rows = 0
     for stat in sorted(stats, key=lambda s: s.tier):
         if stat.n < MIN_GAMES_FOR_CHECK:
+            unassessed_rows += stat.n
             log.info(f"  tier '{stat.tier}': n={stat.n} (< {MIN_GAMES_FOR_CHECK}) — too small to assess.")
             continue
         assessed += 1
@@ -236,6 +242,18 @@ def main() -> int:
     print(f"[METRIC] intraday_fallback_zero_feature_store_tiers={zero_fs_tiers}")
     print(f"[METRIC] intraday_fallback_chronic_games={chronic_fallback_games}")
     print(f"[METRIC] intraday_fallback_tiers_assessed={assessed}")
+    # INC-37: >0 means the served date HAS predictions this check could not verify. The op pages
+    # WARN when NOTHING was assessed (assessed=0 while rows exist) — the state in which an
+    # `alert_count=0` is entirely vacuous.
+    print(f"[METRIC] intraday_fallback_unassessed_rows={unassessed_rows}")
+
+    if assessed == 0 and unassessed_rows:
+        log.warning(
+            f"[ALERT] NOT ASSESSED — {unassessed_rows} served row(s) exist for {served_date} but "
+            f"every tier was under the {MIN_GAMES_FOR_CHECK}-game floor, so NOTHING was checked. "
+            f"Treat the metrics above as UNKNOWN, not healthy (INC-37): a mis-run that deletes "
+            f"most of a slate lands exactly here. Verify the served row count per tier directly."
+        )
 
     if problems:
         _emit(problems)

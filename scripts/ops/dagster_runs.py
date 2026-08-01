@@ -4,7 +4,13 @@
 Targets the self-hosted OSS Dagster on the AWS box (INC-16). Endpoint + auth are
 env-configurable:
     DAGSTER_GRAPHQL_URL   default https://dagster.credencesports.com/graphql
-                          (on the box, set http://localhost:3000/graphql — no auth)
+                          On the box, which value depends on WHERE you run it (INC-37):
+                            • inside a compose container (`docker compose exec dagster-codeloc …`,
+                              the usual path) → http://dagster-webserver:3000/graphql
+                            • on the EC2 host itself → http://localhost:3000/graphql
+                          Both are auth-free (Caddy terminates basic-auth for the public host
+                          only). The 401 fallback below now tries the compose form first, then
+                          the host form, so usually you need not set this at all.
     Auth, in priority order:
       • *.dagster.plus URL + DAGSTER_CLOUD_API_TOKEN → Dagster-Cloud-Api-Token (legacy)
       • DAGIT_BASIC_AUTH_USER + DAGIT_BASIC_AUTH_PASSWORD → HTTP Basic (through Caddy)
@@ -40,6 +46,9 @@ ENDPOINT = os.environ.get("DAGSTER_GRAPHQL_URL", "https://dagster.credencesports
 # basic-auth only for the public host). So the public default 401s when you run this on the box
 # without exporting DAGIT_BASIC_AUTH_*; we fall back to this on a 401-with-no-auth (see main()).
 _LOCAL_FALLBACK = "http://localhost:3000/graphql"
+# INC-37: from INSIDE a compose container (the usual `docker compose exec dagster-codeloc …`
+# path) localhost:3000 is that container, not the webserver — reach it by service name instead.
+_COMPOSE_FALLBACK = "http://dagster-webserver:3000/graphql"
 
 
 def _headers() -> dict:
@@ -77,9 +86,24 @@ def main() -> None:
         # Retry the local webserver (127.0.0.1:3000, no auth) instead of dumping a traceback.
         no_auth = not (os.environ.get("DAGIT_BASIC_AUTH_USER") and os.environ.get("DAGIT_BASIC_AUTH_PASSWORD"))
         if e.code == 401 and no_auth and "DAGSTER_GRAPHQL_URL" not in os.environ:
-            print(f"[dagster_runs] {ENDPOINT} → 401 (no auth); retrying {_LOCAL_FALLBACK} "
-                  f"(set DAGSTER_GRAPHQL_URL to silence this).", file=sys.stderr)
-            d = _post(_LOCAL_FALLBACK)
+            # INC-37: try BOTH box-local forms. `localhost:3000` is right on the HOST (the
+            # webserver publishes 127.0.0.1:3000) but WRONG inside a container — the webserver
+            # is a SEPARATE compose service, so localhost there has nothing listening and you
+            # get `Errno 99 Cannot assign requested address` on top of the 401. Inside the
+            # compose network it is reachable by service name (Caddy terminates basic-auth only
+            # for the public host, so this hop needs none). Running a script inside
+            # `dagster-codeloc` is the normal way to use this on the box, so try that first.
+            d = None
+            for url in (_COMPOSE_FALLBACK, _LOCAL_FALLBACK):
+                print(f"[dagster_runs] {ENDPOINT} → 401 (no auth); retrying {url} "
+                      f"(set DAGSTER_GRAPHQL_URL to silence this).", file=sys.stderr)
+                try:
+                    d = _post(url)
+                    break
+                except (urllib.error.URLError, OSError) as inner:
+                    print(f"[dagster_runs]   {url} unreachable: {inner}", file=sys.stderr)
+            if d is None:
+                raise
         else:
             raise
 
