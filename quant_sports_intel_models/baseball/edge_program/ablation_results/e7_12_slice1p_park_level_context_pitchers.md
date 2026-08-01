@@ -1,6 +1,6 @@
 # MLB Edge-E7.12 SLICE 1p (PITCHERS) — minor-league PARK factors, per-LEVEL run environment, and the small-sample hardening of the MiLB→MLB PITCHER MLE
 
-**generated:** 2026-08-01T02:13:15.447238+00:00 · **baseline:** the incumbent (`milb_mle_pitcher_v1`, `partial_pool`) · **learner held FIXED per metric**
+**generated:** 2026-08-01T02:30:26.678361+00:00 · **baseline:** the incumbent (`milb_mle_pitcher_v1`, `partial_pool`) · **learner held FIXED per metric**
 
 > ⚠️ **A projection, not an edge claim — `best_alpha = 0`.** This slice asks one question: does adjusting a prospect's minor-league rate for WHERE (park), WHEN (level×season run environment) and HOW MUCH (sample reliability) he accumulated it translate BETTER than the raw rate the E7.3 partial-pool sees today? A rung that does not clear its deflated gate is **DROPPED, not shipped** — the 8/3 draft board is a low-risk surface, which lowers the bar for shipping a CLEARED win, not the bar for what counts as one.
 
@@ -55,6 +55,17 @@ Parks move **balls in play**. Pre-registered before the run: a genuine park effe
 - mean park lift on **k_pct, bb_pct** (discipline): **0.106%**
 
 > ⚠️ the park lift is NOT concentrated in the ball-in-play metrics — on this evidence the adjustment is acting as generic shrinkage rather than as a venue correction, whatever the per-metric gates say. Read every ADD below with that caveat.
+
+### 📌 This is a MEASURED FINDING, not a defect — read it before filing a bug
+
+A pre-registered falsification that comes back NEGATIVE is the instrument WORKING. On this side the park factor carries **no signal**: the lift is not concentrated in the ball-in-play metrics, and on the most park-sensitive metric a deliberately-scrambled **placebo** factor scored marginally BETTER than the real one. Concretely, for the record:
+
+- **Park factors do not translate on this population.** The batter side's small real park effect does not carry over. Do not assume otherwise from the fact that the arm is still in the ladder.
+- **The arm is nonetheless RETAINED** (PM decision 2026-07-31) because a post-hoc ablation-down showed that REMOVING the park from the winning stack makes every metric slightly WORSE — it is inert-to-marginally-positive when bundled. Retained because it is harmless and marginally helpful, **NOT because park effects are real here.**
+- **The park-context table is also retained** — it IS the evidence for this negative result, and deleting it would mean rebuilding it to re-test the claim.
+- Drop the arm only as cleanup if/when a future slice re-runs this model.
+
+⭐ A negative replication of your own headline is worth more than a third confirmation of it — and it is only available because the sensitive/insensitive split was pre-registered and then LEFT ALONE, including after a pre-run look at the factor dispersion suggested it would underperform.
 
 ## 2b. ⭐ WHICH MECHANISM ACTUALLY WON — the isolation arms
 
