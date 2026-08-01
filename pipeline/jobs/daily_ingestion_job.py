@@ -10,6 +10,7 @@ from pipeline.ops.daily_ingestion_ops import (
     check_odds_coverage_op,
     check_feature_block_coverage_op,
     check_injury_status_health_op,
+    check_intraday_fallback_op,
     check_served_prediction_integrity_op,
     check_prediction_coverage,
     compute_elo,
@@ -253,6 +254,12 @@ def daily_ingestion_job():
     # FLAT output (INC-24). Fans out from predict (must run AFTER it writes) so it never blocks the
     # serving writes. ALERT-continue by default; HALTs only when SERVED_INTEGRITY_STRICT=1.
     check_served_prediction_integrity_op(start=s19)
+    # E11.27 — per-slate intraday_fallback monitor (E11.24 §8 / INC-35 blind-spot closer). A
+    # NARROWER sibling of the integrity gate above: keyed specifically on the SERIOUS
+    # slate-wide/high-share fallback signature and/or any feature_store=0 tier, silent on the
+    # chronic ~1-game/slate baseline. ALERT-tier, ALWAYS — no --strict escalation exists; it
+    # pages via send_alert but never blocks the serving writes. Fans out from predict.
+    check_intraday_fallback_op(start=s19)
     # E5.1b — daily player-prop odds catch-up (mlb/props/ S3). WARN-tier; hangs off predict so
     # its ~few-minute paid Odds API pull never delays the serving-critical predict path. Gated
     # PROPS_DAILY_INGEST (default OFF) → a no-op loud-skip until the operator flips it. Historical

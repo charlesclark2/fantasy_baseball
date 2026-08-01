@@ -990,6 +990,74 @@ def check_served_prediction_integrity_op(context):
                 pass
 
 
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def check_intraday_fallback_op(context):
+    """E11.27 — per-slate intraday_fallback monitor (the silent-degrade blind-spot closer,
+    E11.24 §8 / INC-35).
+
+    `predict_today`'s feature-source selection silently falls through to the intraday assembly
+    (data_source='intraday_fallback' / 'intraday_assembly') whenever the feature store has no
+    rows for today or its coverage is below the gate — no HALT, no alarm. This is a distinct,
+    NARROWER signal from `check_served_prediction_integrity_op`: it is keyed specifically on the
+    SERIOUS fallback signature (a slate-wide/high-share fallback, and/or any tier with
+    feature_store=0 — the phase-2b tz-incident fingerprint) while explicitly staying silent on
+    the CHRONIC ~1-game/slate baseline (INC-35) so the check never cries wolf. See the script's
+    module docstring (scripts/check_intraday_fallback.py) for the full threshold rationale.
+
+    Tier: ALERT-loud-but-continue, ALWAYS (E11.7) — this check has NO --strict escalation and
+    NEVER HALTs; a degraded slate is advisory, not a reason to fail the daily job. Runs beside
+    check_served_prediction_integrity_op (both fan out from predict so neither blocks the
+    serving writes); genuinely PAGES via send_alert (not just a log line) so the blind spot this
+    closes doesn't just move from 'nothing watches it' to 'a log line nobody reads'."""
+    try:
+        stdout = _run_script(context, "check_intraday_fallback.py", ["--env", _target_env()])
+    except Exception as e:  # noqa: BLE001 — ALERT-tier: a transient S3/DuckDB read issue must
+        # never take down the daily job.
+        context.log.warning(
+            f"[ALERT] check_intraday_fallback could not run (non-blocking; a transient S3/"
+            f"DuckDB read issue is itself informative but must not HALT): {e}"
+        )
+        return
+    alert_count = 0
+    zero_fs_tiers = 0
+    for line in stdout.splitlines():
+        if line.startswith("[METRIC] intraday_fallback_alert_count="):
+            try:
+                alert_count = int(line.split("=", 1)[1])
+                context.add_output_metadata(
+                    {"intraday_fallback_alert_count": MetadataValue.int(alert_count)})
+            except ValueError:
+                pass
+        elif line.startswith("[METRIC] intraday_fallback_zero_feature_store_tiers="):
+            try:
+                zero_fs_tiers = int(line.split("=", 1)[1])
+                context.add_output_metadata(
+                    {"intraday_fallback_zero_feature_store_tiers": MetadataValue.int(zero_fs_tiers)})
+            except ValueError:
+                pass
+        elif line.startswith("[METRIC] intraday_fallback_chronic_games="):
+            try:
+                n = int(line.split("=", 1)[1])
+                context.add_output_metadata(
+                    {"intraday_fallback_chronic_games": MetadataValue.int(n)})
+            except ValueError:
+                pass
+    if alert_count == 0:
+        return
+    from pipeline.utils.alerting import send_alert
+    severity = "CRITICAL" if zero_fs_tiers > 0 else "WARN"
+    send_alert(
+        "Serving slate fell to intraday_fallback",
+        f"{alert_count} serving tier(s) hit the serious intraday_fallback threshold today "
+        f"({zero_fs_tiers} with feature_store=0 — the phase-2b tz-incident fingerprint). "
+        "See the Dagster step log (check_intraday_fallback_op) for per-tier detail. "
+        "Investigate: load_todays_features' coverage gate, W8a/W8b served parquet freshness, "
+        "and the daily-job build ordering (INC-25 class).",
+        severity=severity,
+        dedup_key="intraday_fallback",
+    )
+
+
 # ── E11.23 — silently-not-running guard (the cutover-runtime-landmine detector) ───────
 # The E11.1 cutover left a class of RUNTIME failures CI can't see (it mocks all IO): intraday
 # refresh jobs shipped GATED-OFF and serving-critical sensors/schedules that boot STOPPED, so
