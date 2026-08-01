@@ -188,6 +188,85 @@ _RATE_PARTS: dict[str, tuple[str, str]] = {
     "iso": ("_tb_minus_h", "ab"),
 }
 
+# ── the PITCHER reduced representation (E7.12 slice 1p) ────────────────────────────────────────────
+# A park factor is the SAME venue effect measured from the other side of the plate, so every piece of
+# machinery below is shared and only the box-count vocabulary changes. `tbf` (batters faced) is the
+# pitcher's exposure unit, exactly as `minor_pa` aliases TBF in the E7.3p pairs.
+PITCHER_REDUCED_FIELDS: tuple[str, ...] = ("tbf", "so", "bb", "hr", "go", "ao")
+
+# ⚠️ `xwoba_against` is DELIBERATELY ABSENT. It has no box-line equivalent — its minor feature IS the
+# E7.2 AAA-Statcast summary — so no home/road bucket can produce a factor for it. Its park and run-env
+# arms are therefore honest no-ops (the `_active` check makes them unselectable), never fabricated.
+_PITCHER_RATE_PARTS: dict[str, tuple[str, str]] = {
+    "k_pct": ("so", "tbf"),
+    "bb_pct": ("bb", "tbf"),
+    "hr_rate": ("hr", "tbf"),
+    "gb_pct": ("go", "_go_plus_ao"),      # the ground-OUT share GO/(GO+AO), matching E7.3p's feature
+}
+
+# Derived reduced fields — a numerator or denominator that is an ARITHMETIC combination of two stored
+# fields rather than a stored field itself. Kept in one map so the reducer never grows a special case
+# per metric (`iso`'s extra-base numerator was the first; `gb_pct`'s out denominator the second).
+_DERIVED_FIELDS: dict[str, tuple[str, str, str]] = {
+    "_tb_minus_h": ("sub", "tb", "h"),
+    "_go_plus_ao": ("add", "go", "ao"),
+}
+
+
+@dataclass(frozen=True)
+class ReducedSpec:
+    """Everything that differs between the batter and pitcher park builds, in ONE place.
+
+    The park-factor mathematics is identical for both sides — the same home/road bucket ratio, the same
+    log-space EB shrink, the same exposure weighting. What differs is purely vocabulary: which game-log
+    columns are summed, which reduced fields exist, which metrics a factor can be computed for, and
+    which mart carries the MLB debut date. Bundling them means the SQL emitter, the pandas reducer and
+    the rate computation cannot drift apart per player type any more than they can per metric.
+    """
+
+    player_type: str
+    fields: tuple[str, ...]
+    rate_parts: dict[str, tuple[str, str]]
+    pf_metrics: tuple[str, ...]
+    exposure_field: str          # the reduced field that is the bucket's sample size (shrink weight)
+    exposure_col: str            # the raw game-log column that is the player's exposure weight
+    is_flag: str                 # the game-log role flag (`is_batter` / `is_pitcher`)
+    debut_table: str             # the MLB mart carrying the debut date
+    debut_id_col: str            # its player-id column
+    # The pairs column holding the LABEL's exposure (what the weight arm reads).
+    # ⚠️ It is `mlb_pa` on BOTH sides. E7.3p stores the pitcher's batters-faced under the shared
+    # `mlb_pa` / `minor_pa` names precisely so the harness needs no pitcher fork ("`minor_pa` = TBF so
+    # the shared PA floor and log(PA) feature read the right exposure"). Pointing this at a
+    # plausible-looking `mlb_tbf` produces a column that does not exist — and a missing weight column
+    # does not raise, it median-fills to a vector of ones, so the arm becomes a BYTE-EXACT NO-OP that
+    # reports "label weighting is a clean null" having never been applied. `run_ladder` now raises
+    # instead; this comment is why.
+    label_weight_col: str
+    face_metric: str             # the metric whose park-factor spread proves the build is not dead
+    artifact_suffix: str         # "" for batters, "_pitchers" — keeps the two artifacts from colliding
+
+
+BATTER_REDUCED = ReducedSpec(
+    player_type="batter", fields=REDUCED_FIELDS, rate_parts=_RATE_PARTS, pf_metrics=BATTER_METRICS,
+    exposure_field="pa", exposure_col="bat_plate_appearances", is_flag="is_batter",
+    debut_table="mart_batter_rolling_stats", debut_id_col="batter_id", label_weight_col="mlb_pa",
+    face_metric="iso", artifact_suffix="",
+)
+PITCHER_REDUCED = ReducedSpec(
+    player_type="pitcher", fields=PITCHER_REDUCED_FIELDS, rate_parts=_PITCHER_RATE_PARTS,
+    pf_metrics=("k_pct", "bb_pct", "hr_rate", "gb_pct"),
+    exposure_field="tbf", exposure_col="pit_batters_faced", is_flag="is_pitcher",
+    debut_table="mart_pitcher_rolling_stats", debut_id_col="pitcher_id", label_weight_col="mlb_pa",
+    face_metric="hr_rate", artifact_suffix="_pitchers",
+)
+REDUCED_SPECS: dict[str, ReducedSpec] = {"batter": BATTER_REDUCED, "pitcher": PITCHER_REDUCED}
+
+
+def reduced_spec(player_type: str) -> ReducedSpec:
+    if player_type not in REDUCED_SPECS:
+        raise ValueError(f"player_type={player_type!r} not in {sorted(REDUCED_SPECS)}")
+    return REDUCED_SPECS[player_type]
+
 
 def woba_numerator_sql(c: str = "") -> str:
     """The wOBA numerator as a SQL sum-expression, GENERATED from `milb_mle._WOBA_W`.
@@ -209,11 +288,20 @@ def woba_numerator_sql(c: str = "") -> str:
     )
 
 
-def reduced_aggregate_sql(prefix: str, c: str = "") -> str:
-    """`sum(...) as <prefix>_<field>` for every REDUCED_FIELD — the bucket aggregation, one place."""
+def reduced_aggregate_sql(prefix: str, c: str = "", spec: ReducedSpec = BATTER_REDUCED) -> str:
+    """`sum(...) as <prefix>_<field>` for every reduced field — the bucket aggregation, one place."""
     def s(expr: str, name: str) -> str:
         return f"sum({expr}) as {prefix}_{name}"
 
+    if spec.player_type == "pitcher":
+        return ",\n           ".join([
+            s(f"coalesce({c}pit_batters_faced,0)", "tbf"),
+            s(f"coalesce({c}pit_strike_outs,0)", "so"),
+            s(f"coalesce({c}pit_walks,0)", "bb"),
+            s(f"coalesce({c}pit_home_runs,0)", "hr"),
+            s(f"coalesce({c}pit_ground_outs,0)", "go"),
+            s(f"coalesce({c}pit_air_outs,0)", "ao"),
+        ])
     return ",\n           ".join([
         s(f"coalesce({c}bat_plate_appearances,0)", "pa"),
         s(f"coalesce({c}bat_at_bats,0)", "ab"),
@@ -225,6 +313,25 @@ def reduced_aggregate_sql(prefix: str, c: str = "") -> str:
         s(f"coalesce({c}bat_at_bats,0) + greatest(coalesce({c}bat_walks,0) - coalesce({c}bat_intentional_walks,0),0) "
           f"+ coalesce({c}bat_sac_flies,0) + coalesce({c}bat_hit_by_pitch,0)", "woba_den"),
     ])
+
+
+def pitcher_reduced_from_counts(df: pd.DataFrame, prefix: str) -> pd.DataFrame:
+    """The pandas twin of the pitcher branch of `reduced_aggregate_sql` — `pit_*` counts → 6 fields.
+
+    Exists for the same reason its batter sibling does: the fast gate proves the reduced representation
+    reproduces `compute_pitcher_rate_metrics_from_counts` exactly, without touching S3.
+    """
+    def c(name: str) -> np.ndarray:
+        return pd.to_numeric(df.get(name), errors="coerce").fillna(0.0).to_numpy(float)
+
+    out = pd.DataFrame(index=df.index)
+    out[f"{prefix}_tbf"] = c("pit_batters_faced")
+    out[f"{prefix}_so"] = c("pit_strike_outs")
+    out[f"{prefix}_bb"] = c("pit_walks")
+    out[f"{prefix}_hr"] = c("pit_home_runs")
+    out[f"{prefix}_go"] = c("pit_ground_outs")
+    out[f"{prefix}_ao"] = c("pit_air_outs")
+    return out
 
 
 def reduced_from_counts(df: pd.DataFrame, prefix: str) -> pd.DataFrame:
@@ -256,18 +363,22 @@ def reduced_from_counts(df: pd.DataFrame, prefix: str) -> pd.DataFrame:
 
 
 def rates_from_reduced(df: pd.DataFrame, prefix: str,
-                       metrics: tuple[str, ...] = PF_METRICS) -> dict[str, np.ndarray]:
-    """The four rates from a reduced bucket (`<prefix>_pa`, `<prefix>_so`, …). NaN where the denominator
+                       metrics: tuple[str, ...] = PF_METRICS,
+                       spec: ReducedSpec = BATTER_REDUCED) -> dict[str, np.ndarray]:
+    """The rates from a reduced bucket (`<prefix>_pa`, `<prefix>_so`, …). NaN where the denominator
     is non-positive — a bucket with no denominator has no rate, it does not have rate 0."""
-    def f(name: str) -> np.ndarray:
-        if name == "_tb_minus_h":
-            return (pd.to_numeric(df[f"{prefix}_tb"], errors="coerce").fillna(0.0).to_numpy(float)
-                    - pd.to_numeric(df[f"{prefix}_h"], errors="coerce").fillna(0.0).to_numpy(float))
+    def raw(name: str) -> np.ndarray:
         return pd.to_numeric(df[f"{prefix}_{name}"], errors="coerce").fillna(0.0).to_numpy(float)
+
+    def f(name: str) -> np.ndarray:
+        if name in _DERIVED_FIELDS:
+            op, left, right = _DERIVED_FIELDS[name]
+            return raw(left) - raw(right) if op == "sub" else raw(left) + raw(right)
+        return raw(name)
 
     out: dict[str, np.ndarray] = {}
     for m in metrics:
-        num_f, den_f = _RATE_PARTS[m]
+        num_f, den_f = spec.rate_parts[m]
         num, den = f(num_f), f(den_f)
         out[m] = np.divide(num, den, out=np.full_like(den, np.nan), where=den > 0)
     return out
@@ -280,6 +391,7 @@ def park_factors_from_buckets(
     clamp: tuple[float, float] = PF_CLAMP,
     home_prefix: str = "h",
     road_prefix: str = "r",
+    spec: ReducedSpec = BATTER_REDUCED,
 ) -> pd.DataFrame:
     """Raw → shrunk park factors from window-summed HOME and ROAD reduced buckets.
 
@@ -295,11 +407,13 @@ def park_factors_from_buckets(
         out["pf_n_eff_pa"] = pd.Series(dtype=float)
         return out
 
-    h_rates = rates_from_reduced(out, home_prefix, metrics)
-    r_rates = rates_from_reduced(out, road_prefix, metrics)
+    h_rates = rates_from_reduced(out, home_prefix, metrics, spec)
+    r_rates = rates_from_reduced(out, road_prefix, metrics, spec)
+    # the BINDING side's sample — a park factor is only as well-measured as its thinner bucket
+    ef = spec.exposure_field
     n_eff = np.minimum(
-        pd.to_numeric(out[f"{home_prefix}_pa"], errors="coerce").fillna(0.0).to_numpy(float),
-        pd.to_numeric(out[f"{road_prefix}_pa"], errors="coerce").fillna(0.0).to_numpy(float),
+        pd.to_numeric(out[f"{home_prefix}_{ef}"], errors="coerce").fillna(0.0).to_numpy(float),
+        pd.to_numeric(out[f"{road_prefix}_{ef}"], errors="coerce").fillna(0.0).to_numpy(float),
     )
     out["pf_n_eff_pa"] = n_eff
     for m in metrics:
@@ -491,6 +605,20 @@ def apply_context(
     applied_park = np.ones(n)
     applied_env = np.ones(n)
 
+    def _num(name: str) -> pd.Series:
+        """A numeric Series for `name`, ALL-NaN if the column is absent.
+
+        🪤 `pd.to_numeric(df.get(missing))` returns a **scalar** `np.float64('nan')`, not an empty
+        Series — so every downstream `.where` / `.isna()` / `.fillna()` raises `AttributeError` deep in
+        the arm loop instead of degrading to the documented no-op. A context legitimately has no columns
+        for a metric it cannot produce a factor for (pitcher `xwoba_against`: its minor feature IS the
+        AAA-Statcast summary, so no home/road box-line bucket exists), and "no context ⇒ factor 1.0" is
+        supposed to be an HONEST NO-OP, not a crash. One accessor so a new branch cannot re-open this.
+        """
+        if name not in out.columns:
+            return pd.Series(np.nan, index=out.index, dtype=float)
+        return pd.to_numeric(out[name], errors="coerce")
+
     # ── 1. PARK ────────────────────────────────────────────────────────────────────────
     pcol = _park_column(spec, metric)
     if pcol is not None:
@@ -499,13 +627,9 @@ def apply_context(
             # (1 + PF_home)/2 — "a player takes about half his PA at home, and his road parks average
             # out to neutral." We only fall back to it because the builder stores `pf_<m>_home`; the
             # exposure arm above needs no such assumption because we HAVE the per-game venue.
-            home = pd.to_numeric(out.get(f"pf_{metric}_home"), errors="coerce") \
-                if f"pf_{metric}_home" in out.columns else pd.Series(np.nan, index=out.index)
-            pf = (1.0 + home) / 2.0
-        elif pcol in out.columns:
-            pf = pd.to_numeric(out[pcol], errors="coerce")
+            pf = (1.0 + _num(f"pf_{metric}_home")) / 2.0
         else:
-            pf = pd.Series(np.nan, index=out.index)
+            pf = _num(pcol)
         if spec.park == "placebo":
             pf = _permute_within_level(pf, out["level"])
         pf = pf.where(pf.notna() & (pf > 0), 1.0)
@@ -514,8 +638,8 @@ def apply_context(
 
     # ── 2. LEVEL × SEASON RUN ENVIRONMENT ─────────────────────────────────────────────
     if spec.level_env:
-        env_p = pd.to_numeric(out.get(f"env_{metric}"), errors="coerce")
-        env_l = pd.to_numeric(out.get(f"env_level_{metric}"), errors="coerce")
+        env_p = _num(f"env_{metric}")
+        env_l = _num(f"env_level_{metric}")
         ratio = (env_l / env_p).where(env_p.notna() & (env_p > 0) & env_l.notna() & (env_l > 0), 1.0)
         applied_env = ratio.to_numpy(float)
         rate = rate * applied_env
@@ -524,7 +648,7 @@ def apply_context(
     applied_r = np.ones(n)
     if spec.reliability is not None:
         k = spec.reliability * STABILIZATION_PA.get(metric, 200.0)
-        pa = pd.to_numeric(out.get("minor_pa"), errors="coerce").fillna(0.0)
+        pa = _num("minor_pa").fillna(0.0)
         r = reliability_weight(pa, k)
         if spec.constant_reliability:
             # DEGENERATE FOIL — one r for everyone (the PA-weighted population mean). If this ties the
@@ -534,7 +658,7 @@ def apply_context(
             r = np.full(n, r_bar)
         # shrink toward the player's own LEVEL baseline (post-park, post-env, so the anchor lives in the
         # same adjusted space as the value being shrunk)
-        anchor = pd.to_numeric(out.get(f"env_level_{metric}"), errors="coerce")
+        anchor = _num(f"env_level_{metric}")
         if anchor.isna().all():
             anchor = pd.Series(np.full(n, float(rate.mean(skipna=True))), index=out.index)
         anchor = anchor.fillna(float(rate.mean(skipna=True)) if rate.notna().any() else 0.0)

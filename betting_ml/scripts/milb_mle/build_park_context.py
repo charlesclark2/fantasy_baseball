@@ -44,8 +44,16 @@ the ratio, and the non-LOO version ships beside it as a labelled diagnostic so t
 reported rather than assumed. (Same family as the repo's oracle-floor / degenerate-ceiling rule: score
 the thing that must lose.)
 
+PITCHERS (slice 1p) — `--player-type pitcher`. A park factor is the SAME venue effect measured from the
+other side of the plate, so the mathematics, the LOO subtraction and the shrink are shared verbatim;
+only the box-count vocabulary changes (`pit_*` sums, TBF as the exposure unit, the pitcher debut mart).
+The pitcher factor set is K% / BB% / HR-rate / GB%; `xwoba_against` gets NO factor because its minor
+feature is the AAA-Statcast summary, which has no home/road box-line bucket to form a ratio from.
+
 Run (LAPTOP or BOX; DuckDB-S3 needs `AWS_DEFAULT_REGION=us-east-2`):
     uv run python -m betting_ml.scripts.milb_mle.build_park_context --season-floor 2015
+    uv run python -m betting_ml.scripts.milb_mle.build_park_context --season-floor 2015 \
+        --player-type pitcher
 """
 from __future__ import annotations
 
@@ -63,14 +71,16 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from betting_ml.scripts.milb_mle.milb_mle import LEVEL_ORDER  # noqa: E402
 from betting_ml.scripts.milb_mle.park_context import (  # noqa: E402
+    BATTER_REDUCED,
     DEFAULT_PF_PSEUDO_PA,
     DEFAULT_PF_WINDOW,
     PF_CLAMP,
-    PF_METRICS,
+    ReducedSpec,
     exposure_weighted_pf,
     park_factors_from_buckets,
     rates_from_reduced,
     reduced_aggregate_sql,
+    reduced_spec,
 )
 
 log = logging.getLogger("e7_12.park_context")
@@ -81,7 +91,7 @@ _DEFAULT_OUT = (_PROJECT_ROOT
                 / "quant_sports_intel_models/baseball/edge_program/ablation_results/e7_12_artifacts")
 
 
-def _connect():
+def _connect(spec: ReducedSpec = BATTER_REDUCED):
     """DuckDB with the S3 credential chain + the Delta extension. Mirrors `build_graduated_pairs._connect`
     — same substrate, same reader, so a lakehouse-routing change lands in both."""
     from scripts.utils.lakehouse_read import duck_connect, register_views
@@ -91,7 +101,7 @@ def _connect():
         conn.execute("INSTALL delta; LOAD delta")
     except Exception as e:  # noqa: BLE001
         log.warning("delta extension load failed (%s) — MiLB delta_scan may fail", e)
-    register_views(conn, ["mart_batter_rolling_stats"])
+    register_views(conn, [spec.debut_table])
     conn.execute(f"CREATE OR REPLACE VIEW milb_logs AS SELECT * FROM delta_scan('{MILB}/player_game_logs')")
     return conn
 
@@ -101,20 +111,23 @@ def _connect():
 # ══════════════════════════════════════════════════════════════════════════════════════
 
 
-def _level_sql(level: str, window: int, season_floor: int | None) -> str:
+def _level_sql(level: str, window: int, season_floor: int | None,
+               spec: ReducedSpec = BATTER_REDUCED) -> str:
     """The per-level park/exposure assembly.
 
     Returns one row per (player_id, park_team_id, season) the player took a PRE-DEBUT plate appearance
-    in, carrying the window-summed HOME and ROAD reduced buckets ALREADY leave-one-player-out subtracted
-    (`h_*` / `r_*`), the non-LOO buckets (`nh_*` / `nr_*`), and the exposure weight (`pa_exposure`).
+    (pitcher: faced a PRE-DEBUT batter) in, carrying the window-summed HOME and ROAD reduced buckets
+    ALREADY leave-one-player-out subtracted (`h_*` / `r_*`), the non-LOO buckets (`nh_*` / `nr_*`), and
+    the exposure weight (`pa_exposure`).
     """
     season_filter = f"and l0.season >= {season_floor}" if season_floor else ""
     w = window - 1
-    park_h = reduced_aggregate_sql("h", "l.")
-    park_r = reduced_aggregate_sql("r", "l.")
-    play_h = reduced_aggregate_sql("ph", "l.")
-    play_r = reduced_aggregate_sql("pr", "l.")
-    fields = ("pa", "ab", "so", "bb", "h", "tb", "woba_num", "woba_den")
+    park_h = reduced_aggregate_sql("h", "l.", spec)
+    park_r = reduced_aggregate_sql("r", "l.", spec)
+    play_h = reduced_aggregate_sql("ph", "l.", spec)
+    play_r = reduced_aggregate_sql("pr", "l.", spec)
+    fields = spec.fields
+    exp = spec.exposure_col
     win_park = ",\n           ".join(
         [f"sum(b.h_{f}) as h_{f}" for f in fields] + [f"sum(b.r_{f}) as r_{f}" for f in fields])
     win_play = ",\n           ".join(
@@ -129,12 +142,12 @@ def _level_sql(level: str, window: int, season_floor: int | None) -> str:
     with logs as (
         select l0.*
         from milb_logs l0
-        where l0.is_batter = true and l0.game_type = 'R' and l0.level_name = '{level}'
+        where l0.{spec.is_flag} = true and l0.game_type = 'R' and l0.level_name = '{level}'
           {season_filter}
     ),
     mlb_debut as (
-        select batter_id::varchar as player_id, min(game_date::date) as debut_date
-        from mart_batter_rolling_stats group by batter_id
+        select {spec.debut_id_col}::varchar as player_id, min(game_date::date) as debut_date
+        from {spec.debut_table} group by {spec.debut_id_col}
     ),
     -- ONE row per game: who hosted it (the park team) and where. Aggregated rather than SELECT DISTINCT
     -- so a stray disagreeing row can never duplicate a game into the bucket twice.
@@ -211,15 +224,15 @@ def _level_sql(level: str, window: int, season_floor: int | None) -> str:
     -- whether those PA came as the HOME side (which identifies his primary home park for the foil)
     exposure as (
         select l.player_id, hm.park_team_id, hm.season,
-               sum(coalesce(l.bat_plate_appearances, 0)) as pa_exposure,
+               sum(coalesce(l.{exp}, 0)) as pa_exposure,
                sum(case when l.team_side = 'home'
-                        then coalesce(l.bat_plate_appearances, 0) else 0 end) as pa_home_side
+                        then coalesce(l.{exp}, 0) else 0 end) as pa_home_side
         from logs l
         join home_map hm on l.game_pk = hm.game_pk
         left join mlb_debut d on d.player_id = l.player_id::varchar
         where (d.debut_date is null or l.official_date::date < d.debut_date)
         group by 1, 2, 3
-        having sum(coalesce(l.bat_plate_appearances, 0)) > 0
+        having sum(coalesce(l.{exp}, 0)) > 0
     )
     select e.player_id::varchar as player_id,
            '{level}' as level,
@@ -233,31 +246,33 @@ def _level_sql(level: str, window: int, season_floor: int | None) -> str:
     """
 
 
-def _env_sql(level: str, season_floor: int | None) -> str:
-    """The level×SEASON run environment, and each player's PRE-DEBUT PA in each of those seasons."""
+def _env_sql(level: str, season_floor: int | None, spec: ReducedSpec = BATTER_REDUCED) -> str:
+    """The level×SEASON run environment, and each player's PRE-DEBUT exposure in each of those seasons."""
     season_filter = f"and l0.season >= {season_floor}" if season_floor else ""
-    env_agg = reduced_aggregate_sql("e", "l.")
+    env_agg = reduced_aggregate_sql("e", "l.", spec)
+    exp = spec.exposure_col
     return f"""
     with logs as (
         select l0.* from milb_logs l0
-        where l0.is_batter = true and l0.game_type = 'R' and l0.level_name = '{level}' {season_filter}
+        where l0.{spec.is_flag} = true and l0.game_type = 'R'
+          and l0.level_name = '{level}' {season_filter}
     ),
     mlb_debut as (
-        select batter_id::varchar as player_id, min(game_date::date) as debut_date
-        from mart_batter_rolling_stats group by batter_id
+        select {spec.debut_id_col}::varchar as player_id, min(game_date::date) as debut_date
+        from {spec.debut_table} group by {spec.debut_id_col}
     ),
     env as (select l.season, {env_agg} from logs l group by 1),
     player_season as (
         select l.player_id::varchar as player_id, l.season,
-               sum(coalesce(l.bat_plate_appearances, 0)) as pa
+               sum(coalesce(l.{exp}, 0)) as pa
         from logs l
         left join mlb_debut d on d.player_id = l.player_id::varchar
         where (d.debut_date is null or l.official_date::date < d.debut_date)
         group by 1, 2
-        having sum(coalesce(l.bat_plate_appearances, 0)) > 0
+        having sum(coalesce(l.{exp}, 0)) > 0
     )
     select ps.player_id, '{level}' as level, ps.season, ps.pa,
-           {", ".join(f"e.e_{f}" for f in ("pa", "ab", "so", "bb", "h", "tb", "woba_num", "woba_den"))}
+           {", ".join(f"e.e_{f}" for f in spec.fields)}
     from player_season ps join env e on e.season = ps.season
     """
 
@@ -268,15 +283,16 @@ def _env_sql(level: str, season_floor: int | None) -> str:
 
 
 def _level_context(raw: pd.DataFrame, env_raw: pd.DataFrame, level: str,
-                   pseudo_pa: float, clamp: tuple[float, float]) -> pd.DataFrame:
+                   pseudo_pa: float, clamp: tuple[float, float],
+                   spec: ReducedSpec = BATTER_REDUCED) -> pd.DataFrame:
     """One level's per-(player, level) context row, from the two SQL results."""
-    metrics = PF_METRICS
+    metrics = spec.pf_metrics
     if raw.empty:
         return pd.DataFrame()
 
     # ── park factors: LOO (headline) and non-LOO (diagnostic), both from the same shrink+clamp ──
-    loo = park_factors_from_buckets(raw, metrics, pseudo_pa, clamp, "h", "r")
-    noloo = park_factors_from_buckets(raw, metrics, pseudo_pa, clamp, "nh", "nr")
+    loo = park_factors_from_buckets(raw, metrics, pseudo_pa, clamp, "h", "r", spec)
+    noloo = park_factors_from_buckets(raw, metrics, pseudo_pa, clamp, "nh", "nr", spec)
     for m in metrics:
         loo[f"pfn_{m}"] = noloo[f"pf_{m}"].to_numpy(float)
 
@@ -305,7 +321,7 @@ def _level_context(raw: pd.DataFrame, env_raw: pd.DataFrame, level: str,
 
     # ── level × season run environment ────────────────────────────────────────────────
     if not env_raw.empty:
-        env_rates = rates_from_reduced(env_raw, "e", metrics)
+        env_rates = rates_from_reduced(env_raw, "e", metrics, spec)
         e = env_raw[["player_id", "level", "pa"]].copy()
         for m in metrics:
             e[f"_r_{m}"] = env_rates[m]
@@ -324,9 +340,8 @@ def _level_context(raw: pd.DataFrame, env_raw: pd.DataFrame, level: str,
         # the LEVEL's pooled environment (the normalisation anchor) — pooled over COUNTS, not a mean of
         # per-season rates, so a thin season cannot pull the anchor around
         pooled = env_raw.drop_duplicates(subset=["season"])
-        pooled_sum = pooled[[f"e_{f}" for f in
-                             ("pa", "ab", "so", "bb", "h", "tb", "woba_num", "woba_den")]].sum().to_frame().T
-        pooled_rates = rates_from_reduced(pooled_sum, "e", metrics)
+        pooled_sum = pooled[[f"e_{f}" for f in spec.fields]].sum().to_frame().T
+        pooled_rates = rates_from_reduced(pooled_sum, "e", metrics, spec)
         for m in metrics:
             g[f"env_level_{m}"] = float(pooled_rates[m][0])
         out = out.merge(g[["player_id", "level"] + [f"env_{m}" for m in metrics]
@@ -340,16 +355,17 @@ def build_park_context(levels: tuple[str, ...] = LEVEL_ORDER,
                        window: int = DEFAULT_PF_WINDOW,
                        season_floor: int | None = None,
                        pseudo_pa: float = DEFAULT_PF_PSEUDO_PA,
-                       clamp: tuple[float, float] = PF_CLAMP) -> pd.DataFrame:
-    conn = _connect()
+                       clamp: tuple[float, float] = PF_CLAMP,
+                       spec: ReducedSpec = BATTER_REDUCED) -> pd.DataFrame:
+    conn = _connect(spec)
     parts: list[pd.DataFrame] = []
     try:
         for level in levels:
             log.info("[%s] park buckets + leave-one-player-out exposure ...", level)
-            raw = conn.execute(_level_sql(level, window, season_floor)).df()
+            raw = conn.execute(_level_sql(level, window, season_floor, spec)).df()
             log.info("[%s] %d (player, park, season) exposure rows", level, len(raw))
-            env_raw = conn.execute(_env_sql(level, season_floor)).df()
-            part = _level_context(raw, env_raw, level, pseudo_pa, clamp)
+            env_raw = conn.execute(_env_sql(level, season_floor, spec)).df()
+            part = _level_context(raw, env_raw, level, pseudo_pa, clamp, spec)
             log.info("[%s] → %d (player, level) context rows", level, len(part))
             if not part.empty:
                 parts.append(part)
@@ -363,11 +379,11 @@ def build_park_context(levels: tuple[str, ...] = LEVEL_ORDER,
     return ctx
 
 
-def summarise(ctx: pd.DataFrame) -> dict:
+def summarise(ctx: pd.DataFrame, spec: ReducedSpec = BATTER_REDUCED) -> dict:
     """The face-validity read the report leads with — a park-factor table whose spread is ~0 has
     silently failed (a dead join, a collapsed shrink) even though every gate downstream would pass."""
     out: dict = {"n_rows": int(len(ctx)), "n_players": int(ctx["player_id"].nunique()) if len(ctx) else 0}
-    for m in PF_METRICS:
+    for m in spec.pf_metrics:
         col = f"pf_{m}_exposure"
         if col not in ctx:
             continue
@@ -394,32 +410,40 @@ def main(argv: list[str] | None = None) -> int:
                    help="only MiLB seasons >= this (use the SAME floor as the pairs build)")
     p.add_argument("--pf-pseudo-pa", type=float, default=DEFAULT_PF_PSEUDO_PA,
                    help="EB pseudo-count (PA) shrinking a thin park toward neutral")
+    p.add_argument("--player-type", choices=["batter", "pitcher"], default="batter",
+                   help="batter (E7.12 slice 1) or pitcher (slice 1p) — selects the box-count "
+                        "vocabulary, the role flag and the debut mart; the mathematics is shared")
     p.add_argument("--s3", action="store_true",
-                   help="also land at baseball/milb/derived/mle_park_context (Delta)")
+                   help="also land at baseball/milb/derived/mle_park_context[_pitchers] (Delta)")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)-7s %(message)s")
 
-    ctx = build_park_context(tuple(args.levels), args.pf_window, args.season_floor, args.pf_pseudo_pa)
+    spec = reduced_spec(args.player_type)
+    ctx = build_park_context(tuple(args.levels), args.pf_window, args.season_floor, args.pf_pseudo_pa,
+                             spec=spec)
     if ctx.empty:
         log.error("no park context assembled — check the MiLB substrate / level names")
         return 1
 
-    summary = summarise(ctx)
-    log.info("park-context summary: %s", summary)
+    summary = summarise(ctx, spec)
+    log.info("park-context summary (%s): %s", spec.player_type, summary)
     # FACE VALIDITY (not a gate — a HALT): a park-factor table with no spread is a dead join wearing a
-    # successful run's clothes. Real MiLB parks differ by tens of points on ISO.
-    iso = summary.get("iso") or {}
-    if iso.get("spread_p95_p05") is not None and iso["spread_p95_p05"] < 0.01:
+    # successful run's clothes. Real MiLB parks differ by tens of points on the ball-in-play metric
+    # (ISO for batters, HR-rate allowed for pitchers). The threshold is on the FACTOR, so it is the same
+    # 1% on either side.
+    face = summary.get(spec.face_metric) or {}
+    if face.get("spread_p95_p05") is not None and face["spread_p95_p05"] < 0.01:
         raise AssertionError(
-            f"park factors have essentially NO spread (ISO p95-p05 = {iso['spread_p95_p05']}) — the "
-            f"home/road buckets are not resolving. A dispersion-free park factor cannot be a park "
-            f"factor; do NOT run the ablation on this artifact.")
+            f"park factors have essentially NO spread ({spec.face_metric} p95-p05 = "
+            f"{face['spread_p95_p05']}) — the home/road buckets are not resolving. A dispersion-free "
+            f"park factor cannot be a park factor; do NOT run the ablation on this artifact.")
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    dest = out_dir / "mle_park_context.parquet"
+    name = f"mle_park_context{spec.artifact_suffix}"
+    dest = out_dir / f"{name}.parquet"
     ctx.to_parquet(dest, index=False)
     log.info("wrote %s (%d rows)", dest, len(ctx))
 
@@ -427,9 +451,9 @@ def main(argv: list[str] | None = None) -> int:
         from deltalake import write_deltalake
 
         from scripts.utils.delta_lake import storage_options
-        write_deltalake(f"{MILB}/derived/mle_park_context", ctx, mode="overwrite",
+        write_deltalake(f"{MILB}/derived/{name}", ctx, mode="overwrite",
                         storage_options=storage_options())
-        log.info("landed park context at %s/derived/mle_park_context", MILB)
+        log.info("landed park context at %s/derived/%s", MILB, name)
     return 0
 
 
