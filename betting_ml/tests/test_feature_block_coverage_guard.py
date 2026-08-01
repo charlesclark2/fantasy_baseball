@@ -199,6 +199,8 @@ class TestMain:
         assert rc == 0
         assert "feature_block_min_cov_ratio=" in out
         assert "ALERT" in caplog.text and "umpire" in caplog.text
+        # E11.30 — the discriminating count the calling op pages send_alert on.
+        assert "feature_block_degraded_count=1" in out
 
     def test_umpire_collapse_strict_halts(self, capsys, caplog):
         counts = self._healthy_counts(100, 20)
@@ -215,6 +217,7 @@ class TestMain:
                             ["--env", "prod", "--date", "2026-07-03", "--strict"], capsys)
         assert rc == 0
         assert "feature_block_min_cov_ratio=1.0000" in out
+        assert "feature_block_degraded_count=0" in out
 
     def test_coverage_gapped_block_is_skipped_not_degraded(self, capsys, caplog):
         # A block that is coverage-gapped ACROSS ALL windows (history included, e.g. odds
@@ -226,6 +229,10 @@ class TestMain:
             rc, out = _run_main(_ALL_COLS, 100, 20, counts,
                                 ["--env", "prod", "--date", "2026-07-03", "--strict"], capsys)
         assert rc == 0   # gapped baseline + gapped history is never asserted
+        # A coverage-gapped (SKIPPED) block must NEVER count toward the paging metric — it
+        # is a legitimately partial block, not a collapse (E11.30: this is what keeps
+        # check_feature_block_coverage_op's send_alert from false-firing on it).
+        assert "feature_block_degraded_count=0" in out
 
     def test_absent_column_is_skipped_gracefully(self, capsys, caplog):
         # If the umpire column is absent from the store, it is skipped with a warning,
