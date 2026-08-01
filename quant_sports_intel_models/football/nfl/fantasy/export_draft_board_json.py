@@ -293,6 +293,7 @@ def projection_records(
     df: pd.DataFrame,
     rookie_teams: dict[str, str] | None = None,
     byes: dict[str, int] | None = None,
+    bio: dict[str, dict] | None = None,
 ) -> list[dict]:
     """MVP-1's season projection → display-ready records for the NF3 browse "Projections" surface.
 
@@ -300,9 +301,14 @@ def projection_records(
     TYPE (veteran `empirical` game-to-game variance vs the rookie `calibrated` band) and the model's own
     confidence tier — the honest-uncertainty payload. `proj_fp_*` are carried as a one-format convenience
     for sorting only; the FORMAT-scored number is the league board's `league_points`, never these.
-    Sorted by PPR points desc; FB folds into RB; names title-cased; NULL (unknown) stays null."""
+    Sorted by PPR points desc; FB folds into RB; names title-cased; NULL (unknown) stays null.
+
+    NF3.1 — `bio` (see `player_bio_map`) adds birth date / height / weight / college / years of
+    experience / headshot, best-effort and format-independent (identity, not a projection), so it
+    lives here rather than on the per-league board records."""
     rookie_teams = rookie_teams or {}
     byes = byes or {}
+    bio = bio or {}
     recs: list[dict] = []
     seen: set[str] = set()
     for _, r in df.sort_values("proj_fp_ppr", ascending=False).iterrows():
@@ -338,6 +344,14 @@ def projection_records(
             "lowPred": pos in LOW_PREDICTABILITY,     # NF1.6 — see LOW_PREDICTABILITY
             "predNote": LOW_PREDICTABILITY_NOTE if pos in LOW_PREDICTABILITY else None,
         }
+        b = bio.get(pid)
+        if b:
+            rec["birthDate"] = b.get("birthDate")
+            rec["heightIn"] = b.get("heightIn")
+            rec["weightLb"] = b.get("weightLb")
+            rec["college"] = b.get("college")
+            rec["yearsExp"] = b.get("yearsExp")
+            rec["headshot"] = b.get("headshot")
         for src, key in (*_STAT_KEYS, *_KDST_STAT_KEYS, *_DST_PA_BUCKET_KEYS):
             rec[key] = _fnum(r.get(src))
         recs.append(rec)
@@ -563,6 +577,49 @@ def rookie_team_map() -> dict[str, str]:
         if r.get("gsis_id") and team:
             out[str(r["gsis_id"])] = team
     log.info("rookie team map: %d players with a resolved team", len(out))
+    return out
+
+
+def player_bio_map() -> dict[str, dict]:
+    """`{player_id -> bio dict}` for the NF3.1 player page — birth date, height, weight, college,
+    years of NFL experience and an official headshot URL, all PASSED THROUGH from `nflverse_players`
+    (the same all-time identity table `rookie_team_map` already reads, keyed the same way on
+    `gsis_id`). Nothing derived or computed here: age is left to the client (from `birthDate`) rather
+    than baked in as-of the export date, so it never goes stale between re-exports.
+
+    Verified coverage among active players (2026-08-02): birth_date/height/weight 99.8%+, college_name
+    and years_of_experience 100%, headshot 99.2% (a live nfl.com CDN URL). Best-effort like its
+    sibling: any lake-read failure logs a warning and returns {}, so a bio-enrichment outage costs
+    only the bio panel, never the projection export."""
+    from quant_sports_intel_models.football.nfl.ingest import s3io
+
+    try:
+        uri = s3io.table_uri("nfl", "nflverse_players")
+        con = _lake_connection()
+        try:
+            df = con.sql(
+                f"select gsis_id, birth_date, height, weight, college_name, years_of_experience, "
+                f"headshot from delta_scan('{uri}')"
+            ).df()
+        finally:
+            con.close()
+    except Exception as e:  # noqa: BLE001 — best-effort enrichment, never fatal
+        log.warning("player bio enrichment skipped (nflverse_players read failed: %s)", e)
+        return {}
+    out: dict[str, dict] = {}
+    for _, r in df.iterrows():
+        gid = r.get("gsis_id")
+        if not gid:
+            continue
+        out[str(gid)] = {
+            "birthDate": None if pd.isna(r.get("birth_date")) else str(r["birth_date"]),
+            "heightIn": _inum(r.get("height")),
+            "weightLb": _inum(r.get("weight")),
+            "college": None if pd.isna(r.get("college_name")) else str(r["college_name"]),
+            "yearsExp": _inum(r.get("years_of_experience")),
+            "headshot": None if pd.isna(r.get("headshot")) else str(r["headshot"]),
+        }
+    log.info("player bio map: %d players enriched", len(out))
     return out
 
 
@@ -799,6 +856,13 @@ def main(argv: list[str] | None = None) -> int:
 
     # rookie NFL teams (MVP-1 leaves them NULL) — best-effort from nflverse_players, never fatal
     rookie_teams = rookie_team_map()
+    # NF3.1 — bio for the player page (birth date/height/weight/college/experience/headshot),
+    # same table + same best-effort contract as rookie_teams above.
+    bio = player_bio_map()
+    if not bio:
+        log.warning("[ALERT] player bio map is EMPTY — every published player will show no age/"
+                    "height/weight/college/photo on the player page. See the 'player bio "
+                    "enrichment skipped' warning above for the actual read failure.")
     # bye weeks for the projection season — empty until NF-D1 lands the schedule, then auto-populates
     byes = bye_week_map(args.season)
 
@@ -869,7 +933,7 @@ def main(argv: list[str] | None = None) -> int:
         if len(kdf):
             pdf = pd.concat([pdf, kdf], ignore_index=True, sort=False)
             log.info("  projections: folded in %d NF1.6 K/DST rows", len(kdf))
-        projections = projection_records(pdf, rookie_teams, byes)
+        projections = projection_records(pdf, rookie_teams, byes, bio)
         # The projections surface is format-independent, so its ADP reference is pinned + labelled.
         proj_adp_matched = _attach_adp(
             projections, adp_cache_for(args.season, PROJECTION_ADP_FORMAT, PROJECTION_ADP_TEAMS)

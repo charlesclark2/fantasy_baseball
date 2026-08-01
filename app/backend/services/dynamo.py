@@ -677,6 +677,81 @@ def delete_fantasy_league(user_id: str, league_id: str) -> None:
     )
 
 
+# ── Fantasy platform OAuth tokens (NF-C0) ────────────────────────────────────
+# A user's per-platform OAuth grant, stored as a `platform_tokens` map
+# {platform: {refresh_token, access_token, expires_at, connected_at}} on the user
+# item — the same "ride the existing users table" pattern as the league configs.
+#
+# 🚨 WHAT IS AND IS NOT STORED. This holds a REVOCABLE, READ-SCOPED grant the user
+# issued on the platform's OWN consent screen. It NEVER holds a password: that is
+# the story's hard red line, and it is the reason Yahoo (OAuth) is buildable while
+# ESPN (session cookies) is not.
+#
+# 🔐 The refresh token arrives ALREADY ENCRYPTED (Fernet, key in SSM — see
+# `platform_import/yahoo_oauth.py`). This layer deliberately does no crypto of its
+# own so there is exactly ONE place that can decrypt, and reading the DynamoDB item
+# is not sufficient to use the grant — an attacker needs the SSM/KMS grant too.
+_PLATFORM_TOKENS_ATTR = "platform_tokens"
+
+
+def get_platform_token(user_id: str, platform: str) -> dict | None:
+    """The user's stored grant for one platform, or None.
+
+    Non-raising on a read failure (returns None) so a Dynamo blip degrades to
+    "you are not connected" — which the UI already handles with a connect button —
+    rather than 500-ing a page that also serves the password-free Sleeper path.
+    """
+    try:
+        resp = _users_table().get_item(Key={"user_id": user_id})
+        raw = resp.get("Item", {}).get(_PLATFORM_TOKENS_ATTR) or {}
+        record = _deep_from_dynamo(raw.get(platform))
+    except Exception:
+        logger.warning("dynamo.get_platform_token failed for user=%s platform=%s", user_id, platform)
+        return None
+    return record if isinstance(record, dict) else None
+
+
+def put_platform_token(user_id: str, platform: str, record: dict) -> None:
+    """Store/replace one platform grant. `record["refresh_token"]` must already be ciphertext.
+
+    Writes a SINGLE map entry so two concurrent connects (two tabs, two platforms)
+    cannot clobber each other — the same concurrency reasoning as the league writer
+    above, which needs the parent map to exist first.
+    """
+    table = _users_table()
+    try:
+        table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET #pt = :empty",
+            ExpressionAttributeNames={"#pt": _PLATFORM_TOKENS_ATTR},
+            ExpressionAttributeValues={":empty": {}},
+            ConditionExpression="attribute_not_exists(#pt)",
+        )
+    except Exception:
+        pass  # already present — the normal path
+    table.update_item(
+        Key={"user_id": user_id},
+        UpdateExpression="SET #pt.#p = :rec",
+        ExpressionAttributeNames={"#pt": _PLATFORM_TOKENS_ATTR, "#p": platform},
+        ExpressionAttributeValues={":rec": _to_ddb(dict(record))},
+    )
+
+
+def delete_platform_token(user_id: str, platform: str) -> None:
+    """Disconnect a platform. Idempotent — REMOVE on an absent key is a no-op, which is
+    the behaviour a 'disconnect' button wants (clicking twice is not an error)."""
+    try:
+        _users_table().update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="REMOVE #pt.#p",
+            ExpressionAttributeNames={"#pt": _PLATFORM_TOKENS_ATTR, "#p": platform},
+        )
+    except Exception:
+        logger.warning(
+            "dynamo.delete_platform_token failed for user=%s platform=%s", user_id, platform
+        )
+
+
 # ── Stripe subscription billing state (E9.8) ─────────────────────────────────
 # Reuses the users table with namespaced synthetic PKs so no new infra is needed.
 # The rows are invisible to the app's per-user reads (they never key on these PKs)

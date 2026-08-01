@@ -14,6 +14,7 @@ import { Info } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Picker } from "@/components/ui/picker"
 import type { LeagueConfigMeta, Manifest } from "@/lib/draft-optimizer"
+import type { ProjectedPlayer } from "@/lib/fantasy"
 
 export const POS_COLORS: Record<string, string> = {
   QB: "text-rose-400 bg-rose-500/10 border-rose-500/30",
@@ -44,6 +45,67 @@ export const ALL_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DST"] as const
  *  still carry `lowPred`/`predNote` from the export (the source of truth) for any future surface
  *  that finds an unambiguous way to show it. */
 export const LOW_PREDICTABILITY_POSITIONS: readonly string[] = ["K", "DST"]
+
+/** One column of a position's raw projected stat line (NF3 Projections table + NF3.1 player page —
+ *  the single source of truth for "which raw stats does this position's projection carry"). */
+export interface StatCol {
+  key: keyof ProjectedPlayer
+  label: string
+  nd?: number
+}
+
+/** Per-position stat lines. "All" stays condensed (a shared stat set across positions would be
+ *  mostly empty cells); pick a position to see that position's full projected line. */
+export const STAT_COLS: Record<string, StatCol[]> = {
+  QB: [
+    { key: "passCmp", label: "Cmp", nd: 0 },
+    { key: "passAtt", label: "Att", nd: 0 },
+    { key: "passYds", label: "Pass Yds", nd: 0 },
+    { key: "passTd", label: "Pass TD" },
+    { key: "passInt", label: "INT" },
+    { key: "rushAtt", label: "Rush", nd: 0 },
+    { key: "rushYds", label: "Rush Yds", nd: 0 },
+    { key: "rushTd", label: "Rush TD" },
+  ],
+  RB: [
+    { key: "rushAtt", label: "Att", nd: 0 },
+    { key: "rushYds", label: "Rush Yds", nd: 0 },
+    { key: "rushTd", label: "Rush TD" },
+    { key: "tgt", label: "Tgt", nd: 0 },
+    { key: "rec", label: "Rec", nd: 0 },
+    { key: "recYds", label: "Rec Yds", nd: 0 },
+    { key: "recTd", label: "Rec TD" },
+  ],
+  WR: [
+    { key: "tgt", label: "Tgt", nd: 0 },
+    { key: "rec", label: "Rec", nd: 0 },
+    { key: "recYds", label: "Rec Yds", nd: 0 },
+    { key: "recTd", label: "Rec TD" },
+    { key: "rushAtt", label: "Rush", nd: 0 },
+    { key: "rushYds", label: "Rush Yds", nd: 0 },
+  ],
+}
+STAT_COLS.TE = STAT_COLS.WR
+// NF1.6 — the K/DST lines. Field goals are split by DISTANCE because that is how they score (3/4/5)
+// and because leg strength is the one kicker attribute that genuinely persists. For a defence,
+// points allowed PER GAME is the number that communicates quality — the nine points-allowed tier
+// buckets behind it are a scoring input, not something a drafter reads.
+STAT_COLS.K = [
+  { key: "fgAtt", label: "FGA", nd: 0 },
+  { key: "fgMade", label: "FG" },
+  { key: "fg039", label: "0-39" },
+  { key: "fg4049", label: "40-49" },
+  { key: "fg50", label: "50+" },
+  { key: "patMade", label: "XP" },
+]
+STAT_COLS.DST = [
+  { key: "paPerG", label: "Pts Allowed/G" },
+  { key: "sacks", label: "Sacks" },
+  { key: "defInt", label: "INT" },
+  { key: "fumRec", label: "Fum Rec" },
+  { key: "defTd", label: "Def TD" },
+  { key: "stTd", label: "ST TD" },
+]
 
 /** A player's team for display: real abbreviation, or an honest label for the unteamed. A rookie's
  *  NFL team is not always resolved upstream, so an unteamed rookie shows "Rk", never a wrong "FA". */
@@ -172,6 +234,8 @@ export const GLOSSARY = {
   tier: "A grouping of players of similar value, split where there is an unusually large drop to the next player (bigger than the typical gap on this board). Tiers are the practical draft question — inside a tier you can take whoever you prefer, but letting a tier run out before you pick costs you real value. Kickers and defences are left untiered: their whole field fits inside a few points, so a tier break there would be splitting noise rather than value.",
   replacementPlayer:
     "The specific player sitting at this position's replacement level — roughly the calibre you should still be able to get for free, or very late. He is the yardstick every player at the position is measured against.",
+  overallRank:
+    "Our model's own rank across every position, for your league's format and roster shape — where WE would take this player if the draft started right now. It is not the market's rank (that's ADP, shown separately) and not a promise of where he'll actually be drafted.",
 } as const
 
 /** The ADP-delta column header. Plain English on purpose — "Δ" reads as statistical notation and

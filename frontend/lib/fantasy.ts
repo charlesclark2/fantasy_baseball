@@ -30,7 +30,10 @@ export interface ProjectedPlayer {
   fpSd: number | null
   fpP10: number | null
   fpP90: number | null
-  /** "empirical" (veteran game-to-game variance) | "calibrated" (rookie band). */
+  /** How the 80% range was produced: "empirical" (veteran game-to-game variance) |
+   *  "calibrated_per_player" (NF1.7 — a per-player rookie band, render as a REAL interval) |
+   *  "calibrated" (the thin-history rookie fallback — a shared class-level band; keep this one, and
+   *  ONLY this one, labelled "Class-level" — see UNCERTAINTY_LABEL/UNCERTAINTY_HELP). */
   uncType: string | null
   passAtt: number | null
   passCmp: number | null
@@ -49,6 +52,21 @@ export interface ProjectedPlayer {
   /** Market average draft position (PPR, 12-team — see `adp_format`/`adp_teams` on the payload).
    *  A reference column; null means undrafted in that sample. */
   adp?: number | null
+
+  // ── NF3.1: BIO — passed through from nflverse's identity table (`player_bio_map`), never
+  // derived/projected. Optional: absent for a DST (a team, not a person), for the ~0.2-1% of
+  // players the source has nothing for, and on any payload exported before NF3.1. ──────────────
+  /** ISO date. Age is computed client-side from this (not baked in server-side) so it never goes
+   *  stale between re-exports. */
+  birthDate?: string | null
+  heightIn?: number | null
+  weightLb?: number | null
+  college?: string | null
+  /** Years of NFL experience as of the export's last bio refresh. */
+  yearsExp?: number | null
+  /** An official nfl.com headshot URL — render with a fallback (initials), not assumed to always
+   *  resolve. */
+  headshot?: string | null
 
   // ── NF1.6: KICKER + TEAM DEFENSE (DST) ────────────────────────────────────────────────────
   /** True for the positions whose projection must NOT be read as a confident rank (K/DST). Set on
@@ -142,8 +160,24 @@ export function getFantasyProjections(
 
 import type { LeagueConfig } from "@/lib/league-config"
 
+/** NF-C0 import provenance — where a league CAME FROM.
+ *
+ *  Deliberately NOT part of `LeagueConfig` (which mirrors the engine's `to_dict()` exactly): this
+ *  is storage metadata in the same class as `created_at`, so an imported league and a typed-in one
+ *  remain the identical config object once the envelope is dropped. A hand-entered league leaves
+ *  these undefined. They exist for the one thing the config cannot express — going back to the
+ *  platform for LIVE draft state, which is never persisted because a stale one looks correct. */
+export interface LeagueProvenance {
+  source_platform?: string | null
+  source_league_id?: string | null
+  imported_at?: string | null
+}
+
+/** What a save accepts: the shared config, optionally stamped with where it was imported from. */
+export type LeagueSaveInput = LeagueConfig & LeagueProvenance
+
 /** A stored league: the shared config object plus its server-assigned identity + timestamps. */
-export interface SavedLeague extends LeagueConfig {
+export interface SavedLeague extends LeagueConfig, LeagueProvenance {
   league_id: string
   user_id?: string | null
   created_at?: string | null
@@ -154,14 +188,17 @@ export function listSavedLeagues(token: string | null): Promise<SavedLeague[]> {
   return apiFetch(`/fantasy/leagues`, {}, token)
 }
 
-export function createSavedLeague(token: string | null, cfg: LeagueConfig): Promise<SavedLeague> {
+export function createSavedLeague(
+  token: string | null,
+  cfg: LeagueSaveInput,
+): Promise<SavedLeague> {
   return apiFetch(`/fantasy/leagues`, { method: "POST", body: JSON.stringify(cfg) }, token)
 }
 
 export function updateSavedLeague(
   token: string | null,
   leagueId: string,
-  cfg: LeagueConfig,
+  cfg: LeagueSaveInput,
 ): Promise<SavedLeague> {
   return apiFetch(
     `/fantasy/leagues/${encodeURIComponent(leagueId)}`,

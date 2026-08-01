@@ -16,6 +16,32 @@ export function registerTokenRefresher(fn: TokenRefresher | null) {
   _refresher = fn
 }
 
+/**
+ * Extract the API's OWN explanation of a failure, falling back to the bare status.
+ *
+ * ⚠️ WHY THIS EXISTS. `apiFetch` used to throw `API error ${status}` and DISCARD the response body,
+ * so a router that had gone to the trouble of returning a precise, user-ready `detail`
+ * ("Sleeper has no user called 'X' — check the spelling, or paste your league ID instead") had that
+ * message thrown away at the boundary and replaced with a number. Every caller was then forced to
+ * guess a generic message from the status code, which is how a plain typo came to read as an
+ * unexplained failure. Same class as E9.41's dropped Pydantic field: the information was correct
+ * and complete at the source and got lost one layer out.
+ *
+ * FastAPI's `detail` is a STRING for our own `HTTPException`s, but a LIST of objects for automatic
+ * request-validation errors — dumping that at a user would be worse than the status code, so only a
+ * string is surfaced. The status is always appended so the message stays diagnosable in a bug report.
+ */
+async function errorMessage(res: Response): Promise<string> {
+  try {
+    const body = await res.json()
+    const detail = body?.detail
+    if (typeof detail === "string" && detail.trim()) return detail
+  } catch {
+    // no body, or not JSON — fall through to the status-only message
+  }
+  return `API error ${res.status}`
+}
+
 export async function apiFetch(
   path: string,
   options: RequestInit = {},
@@ -44,7 +70,7 @@ export async function apiFetch(
     }
     throw new AuthError('Unauthorized')
   }
-  if (!res.ok) throw new Error(`API error ${res.status}`)
+  if (!res.ok) throw new Error(await errorMessage(res))
   if (res.status === 204 || res.headers.get('content-length') === '0') return null
   return res.json()
 }

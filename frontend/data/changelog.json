@@ -4,6 +4,18 @@
     "items": [
       {
         "tag": "new",
+        "text": "You can now import your fantasy league straight from Sleeper, instead of typing its settings in by hand — rolling out to invited accounts first, so it won't appear for everyone yet. Go to Import League under the NFL fantasy pages and enter either your Sleeper username or your league ID — the long number in your league's Sleeper URL — and pick the league you want. We read its scoring and its roster shape — per-yard and touchdown values, PPR including a TE premium, field goals by distance, the full team-defense sheet and the points-allowed tier table, plus every starting slot, FLEX, SUPERFLEX, bench, IR and taxi spot — and save it as one of your leagues. From there it behaves exactly like a league you typed in yourself: the League Board, Rankings and Draft Optimizer all re-score the projections under your rules and recompute value over replacement against your real starting lineup. Sleeper's league data is public, so nothing is asked of you beyond your username — no sign-in, and certainly no Sleeper password. Before anything is saved you get a preview that tells you exactly what we could and could not do with your settings: which of your scoring rules move your board precisely, which ones our projection resolves more coarsely and had to fold together, and which ones we keep on record but genuinely cannot apply because we don't project that stat at all. That last group matters — a rule that quietly scores zero would look identical to one that works, so we name them rather than let you assume. If your league drafts on Sleeper, we also show the picks that have already gone; that part is read fresh every time and never stored, because a stale list of drafted players looks exactly like a correct one."
+      },
+      {
+        "tag": "new",
+        "text": "Yahoo league import is built and waiting on Yahoo. When it switches on you'll sign in on Yahoo's own page, grant read-only access to your leagues, and import them the same way — we never see or hold your Yahoo login, and you can revoke the permission from your Yahoo account settings at any time. Yahoo now reviews every application for access to their fantasy data, so the timing is theirs, not ours; until it clears, the Import League page says so plainly rather than showing you a button that fails."
+      },
+      {
+        "tag": "improved",
+        "text": "ESPN leagues can't be imported, and we'd rather say why than leave the biggest platform mysteriously missing. ESPN publishes no approved way for another app to read a private league. The only method that works is handling your ESPN login session — a credential that isn't read-only, isn't limited to fantasy, and that you couldn't revoke for us specifically — and we won't ask you for that. So if your league is on ESPN, CBS, MyFantasyLeague or Fantrax, enter it once under My League Settings: it takes a few minutes and every tool then works identically. You lose the convenience, not the product."
+      },
+      {
+        "tag": "new",
         "text": "You can now enter your league's settings by hand on the NFL fantasy pages, under My League Settings — rolling out to invited accounts first, so it won't appear for everyone yet. Until now you had to pick one of our preset formats — half-PPR, full PPR, superflex and so on — and if your league didn't match one of them, the closest preset was the best you could do. Now you can start from whichever preset is nearest and then change anything: per-yard passing, rushing and receiving values, touchdown values, PPR (including half-point and a TE premium), interceptions, fumbles, two-point conversions, field goals broken out by distance, extra points, and the full team-defense sheet including sacks, takeaways, safeties, blocked kicks and the points-allowed tier table. The roster is fully editable too — any number of FLEX slots, a SUPERFLEX, and bench and IR spots. Save it and the League Board, Rankings and Draft Optimizer all switch to your league: the projections are re-scored under your exact rules, and value over replacement is recomputed against your actual starting lineup, which is what makes a QB and a WR comparable on one board. Bench and IR slots correctly count for nothing there, since they never start. Nothing about this replaces the presets — they're still there and still the default."
       },
       {
@@ -73,6 +85,18 @@
       {
         "tag": "fixed",
         "text": "Fixed dropdowns on the fantasy pages opening detached from the control you tapped — on a phone the menu appeared near the top of the screen instead of under the field. The dropdowns are now built the same way as the ones on Bet Log and the Parlay Calculator, which were never affected, so the menu is positioned by the page itself rather than by the browser's built-in picker. The same change covers the search and filter controls on Players and the book pickers in Settings. Separately, number fields no longer fight you when you clear them to retype: clearing a field used to snap it to zero, so the next digit you typed read as \"01\". On the Kelly cap fields in Settings and the EV Tracker that was worse than cosmetic — clearing the field snapped it to 1, so typing \"5\" silently left you on 15%, which feeds bet sizing. Those fields now hold exactly what you type and only accept a complete value."
+      },
+      {
+        "tag": "new",
+        "text": "Every player on the NFL fantasy pages now has his own page — click a name on Projections, Rankings, the League Board or the Draft Optimizer to open it, or find anyone directly from the new Player Search page. It brings together his full projected stat line, fantasy points under standard, half-PPR and full-PPR scoring side by side with what he's worth in your own selected league, his 80% range drawn as a band against the realistic spread for his position rather than just printed as two numbers, his position rank, value over replacement and tier, and where the market is drafting him compared to where we have him. Rookie ranges show as real player-specific bands here, the same as everywhere else — only a rookie thin enough on draft history to fall back to the class-level band gets that label, never a per-player one. Nothing new is being calculated; it's the same numbers you'd already see on the boards, gathered onto one page per player."
+      },
+      {
+        "tag": "improved",
+        "text": "Four refinements to the new NFL fantasy player page. Fantasy points now show what percentile that projection is within his position — is 260 points a lot for a tight end? Now you can tell at a glance, separately from his league board rank. \"Overall Rank\" is now labelled as our model's own rank, not a claim about where the market will actually take him — that's what the ADP column next to it is for. A player with no Tier badge now says why instead of just showing a dash — usually that he's below replacement level in your selected format (a QB with no tier in a 1-QB league can very plausibly tier in superflex, so the format matters). And the page now shows a team logo alongside his name."
+      },
+      {
+        "tag": "new",
+        "text": "The NFL fantasy player page now shows a real headshot photo and basic bio info — age, height, weight, college and years in the NFL. The photo is his official NFL.com picture; a small number of players (mostly very recent additions the league's own data hasn't caught up to yet) show his initials instead rather than a broken image."
       }
     ]
   },

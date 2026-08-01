@@ -81,7 +81,20 @@ export const SPORTS: SportNav[] = [
               { label: "Rankings", href: "/fantasy/rankings", key: "fantasy-rankings" },
               { label: "League Board", href: "/fantasy/league-board", key: "fantasy-league-board" },
               { label: "Projections", href: "/fantasy/projections", key: "fantasy-projections" },
+              // NF3.1 — direct lookup: search a name, land on his player page. A separate nav item
+              // (not folded into Projections' own search box) because it is the entry point every
+              // OTHER surface's Player cell links out to, so it needs to be reachable on its own.
+              { label: "Player Search", href: "/fantasy/players", key: "fantasy-players" },
               { label: "Draft Optimizer", href: "/fantasy/draft", key: "fantasy-draft" },
+              // NF-C0 — platform import: pull the real league in from Sleeper/Yahoo. Sits ABOVE
+              // the manual editor because it is the path most users should take; the editor stays
+              // as the floor beneath it for every league we cannot reach compliantly.
+              {
+                label: "Import League",
+                href: "/fantasy/import",
+                key: "fantasy-import",
+                restrict: "fantasy_beta",
+              },
               // NF-C0b — the manual customization floor: hand-enter a league we cannot import.
               // Restricted to admin + fantasy_comp while the editor is still proving out.
               {

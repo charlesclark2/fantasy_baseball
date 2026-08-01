@@ -10,6 +10,7 @@
 // interval is a first-order estimate (not yet calibrated); K/DST carry a BASE projection (NF1.6).
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { RotateCcw, Undo2, Info, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Picker } from "@/components/ui/picker"
@@ -603,7 +604,12 @@ export function DraftOptimizer() {
                         <td className="py-1.5">
                           <div className="flex items-center gap-2">
                             <PosBadge pos={p.pos} small />
-                            <span className="text-white">{p.name}</span>
+                            <Link
+                              href={`/fantasy/player/${p.id}`}
+                              className="text-white hover:text-[#10b981] hover:underline"
+                            >
+                              {p.name}
+                            </Link>
                             <span className="text-xs text-gray-600">
                               {teamLabel(p)}{p.posRank ? ` · ${p.pos}${p.posRank}` : ""}
                               {p.bye != null && ` · ${byeLabel(p.bye)}`}

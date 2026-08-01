@@ -6,6 +6,27 @@
 
 ---
 
+## ⏭️ CURRENT EXECUTION ORDER — remaining NF stories (operator-set 2026-08-01)
+The organizing goal is the fantasy + multi-sport LAUNCH (monetization via E9.45 fantasy-paid; the operator's 8/22 draft = the natural GTM window). Runs as TWO concurrent lanes (one Opus-FF session, one Sonnet session), so the sequence interleaves rather than being one strict line.
+
+**Opus-FF lane (one at a time):**
+1. ~~**NF-C0** — platform league import.~~ ✅ **CODE-COMPLETE 2026-08-01.** **SLEEPER SHIPS LIVE-VERIFIED** (public read-only API, zero credentials; the adapter was run end-to-end against a real 12-team superflex dynasty league and its config round-trips byte-identical through `LeagueConfig`). **YAHOO IS BUILT AND BLOCKED ON YAHOO** — see the two findings below. **ESPN = earned NO-GO** (`docs/nf_c0_espn_access_probe.md`). Import saves into the SAME `fantasy_leagues` map NF-C0b writes, as the SAME `LeagueConfig`; provenance rides the storage envelope so the config object is unchanged.
+   - ⚠️ **THE STORY'S YAHOO PREMISE WAS STALE AND THE PROBE CAUGHT IT.** The story assumed "~5 console clicks + paste two secrets." Yahoo now gates Fantasy API access behind an **application REVIEW** (`sports.yahoo.com/developer/access/`: submit → review → "we'll reach out with next steps"), and the old `developer.yahoo.com/fantasysports/guide/` **308-redirects** to `sports.yahoo.com/developer`. ⇒ Yahoo import is **code-complete but NOT date-committable** — approval latency is Yahoo's and unbounded. Operator guide: `docs/nf_c0_yahoo_oauth_setup.md` (click-by-click, exact redirect URI, the 3 SSM keys, the IAM grant).
+   - ⛔ **ESPN NO-GO, earned on the RED LINE not on fragility** (48% MAU, so the reason matters). The only path to a PRIVATE ESPN league is replaying the user's `espn_s2`/`SWID` **session cookies** — not read-scoped, not fantasy-scoped, not individually revocable, no consent screen, months-long life ⇒ **functionally password-equivalent**, which violates the red line in substance while satisfying it in letter. ESPN publishes no developer program and no OAuth. Independent corroboration: `www.espn.com/robots.txt` carries `User-agent: anthropic-ai / Disallow: /`, so no further automated probing was possible — meaning any ESPN adapter would have shipped on ASSUMPTION, which this story's own discipline forbids. **Re-check next off-season (2027-02).**
+   - ⭐ **THE FLOOR IS WHY A NO-GO COSTS NOTHING.** NF-C0b already ships, so refusing an uncompliant path costs a user CONVENIENCE, never ACCESS. That is what makes "we will not hold your ESPN login" a decision with no hostage — and it is the general shape: **an import layer built on top of a working manual floor can afford to be principled.**
+2. **E9.46** — home-page revamp for the multi-sport + fantasy launch (the landing surface; ready BY launch, after the product it showcases is real).
+3. **NF-C2.1** — mock draft simulator. Explicitly a post-8/22 fast-follow; last.
+
+**Sonnet lane (interleaved with other Sonnet work — E5.0/E11.25/etc.):**
+1. **NF-C0b** — manual league-settings editor. FIRST: it's READY, it's the customization FLOOR (E8.2 Path-A analog — no user ever blocked regardless of platform) and it unblocks the real beta tester on an un-pullable league. Highest value-per-effort of the set.
+2. **NF3.1** — fantasy player page (kills the dead-end board rows; browse-surface completion).
+3. **NF-D13** — audit the NF-D3 competitor scorecard for the aggregate-vs-member defect. Placed BEFORE NF3.2 deliberately: it validates the benchmark a user-facing "receipts" surface leans on (publishing a track record on an un-audited competitor benchmark is a self-own for an honest-analytics brand).
+4. **NF3.2** — past-season track record (model vs ADP vs actual) — the honest "receipts"/conversion asset; after NF-D13.
+5. **E9.47** — launch blog post (the announcement; once the product surfaces + the home page are live). Last.
+
+**Collapsed critical path:** NF-C0b → NF-C0 + NF3.1 → NF-D13 → NF3.2 → E9.46 → E9.47 (NF-C2.1 after).
+⚠️ **TWO THINGS TO VERIFY BEFORE LOCKING:** (a) is the **NF3 base browse surface** live to subscribers yet? NF3.1/NF3.2 are drill-downs that assume it; MVP-3's draft tool is still admin-only, so if NF3-base isn't shipped it precedes NF3.1. (b) Confirm **NF-D13's tier** stays Sonnet (a specified correctness audit) and doesn't balloon into modeling before it's routed to the Sonnet lane.
+
 ## 0. Structure + the shared core (read first)
 🗂️ **GROUP BY SPORT, VERTICAL BY FOLDER (operator 2026-07-22).** NFL's verticals under `football/nfl/`: **betting** = `nfl_story_prompts.md` (N-series: N0.x data, N1.0 marts, N1.1 game-line, N1.2 props, futures) · **fantasy/dynasty = THIS folder** (`NF`-series — parallel to MLB's `F`-series). The college→NFL rookie feeder = NCAAF-**P1A** (done).
 🔗 **THE COMMONALITY = the WEEK-TO-WEEK PLAYER PROJECTION.** Betting-props (N1.2) and fantasy (NF) diverge downstream (props → P(over/under)/CLV; fantasy → fantasy points/dynasty board), but both consume ONE shared per-player-week posterior-predictive projection. ⚠️ **REPRIORITIZED (operator 2026-07-22 — FANTASY over betting, draft-season is hot): the shared player-week core is now a FOUNDATION that NF1 (fantasy) DRIVES/BUILDS, and N1.2 (props) CONSUMES later** — the reverse of the original plan. So building NF1 delivers the shared projection basis for BOTH; the NFL betting surfaces (N1.1 game-line, N1.2 props pricing) sequence AFTER the fantasy MVP. Build once — NF1 owns the core, N1.2 reuses it.

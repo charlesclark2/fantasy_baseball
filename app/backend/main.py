@@ -28,7 +28,7 @@ if _SENTRY_DSN:
         traces_sample_rate=0.1,
     )
 
-from app.backend.routers import admin, alerts, auth, bankroll, bets, blog, fantasy, feedback, finances, parlay, picks, performance, pipeline, players, portfolio, stripe, teams, users
+from app.backend.routers import admin, alerts, auth, bankroll, bets, blog, fantasy, fantasy_import, feedback, finances, parlay, picks, performance, pipeline, players, portfolio, stripe, teams, users
 from app.backend.routers.auth import require_subscriber_mfa
 
 logging.basicConfig(level=logging.INFO)
@@ -101,6 +101,13 @@ app.include_router(stripe.router)
 # subscriber/admin/fantasy_comp → else 403). `_paid` adds the subscriber-MFA guard
 # for consistency with the other paid content (a no-op unless ENFORCE_SUBSCRIBER_MFA=1).
 app.include_router(fantasy.router, dependencies=_paid)
+# NF-C0 platform league import. The authenticated half gates on require_fantasy_beta_access
+# (per-route, like NF-C0b's editor). The `public_router` carries EXACTLY ONE route — Yahoo's OAuth
+# callback — which the user's BROWSER enters on a redirect back from Yahoo and so cannot present a
+# bearer token; it authenticates on the HMAC-signed `state` instead (see the router's docstring).
+# It is mounted separately so that exemption stays one visible route rather than a hole in the gate.
+app.include_router(fantasy_import.router, dependencies=_paid)
+app.include_router(fantasy_import.public_router)
 
 
 @app.api_route("/health", methods=["GET", "HEAD"], tags=["health"])
