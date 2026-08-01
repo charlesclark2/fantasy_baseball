@@ -10,7 +10,7 @@
 // — ADP is a neutral reference, and the 80% range is drawn so the uncertainty is never hidden behind
 // a single number.
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { ChevronLeft } from "lucide-react"
@@ -22,6 +22,7 @@ import {
   useSavedLeagues,
 } from "@/lib/fantasy-queries"
 import { positionTierMap, type Player } from "@/lib/draft-optimizer"
+import { initials, nflTeamLogoUrl } from "@/lib/nfl-teams"
 import type { ProjectedPlayer } from "@/lib/fantasy"
 import {
   ADP_DELTA_LABEL,
@@ -48,6 +49,46 @@ import {
   teamLabel,
 } from "@/components/fantasy/shared"
 
+/** 72 → "72nd", 1 → "1st", 11 → "11th", etc. */
+function ordinal(n: number): string {
+  const mod100 = n % 100
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`
+  switch (n % 10) {
+    case 1:
+      return `${n}st`
+    case 2:
+      return `${n}nd`
+    case 3:
+      return `${n}rd`
+    default:
+      return `${n}th`
+  }
+}
+
+/** Where `value` falls in `pool` (both on the same points scale), as a 0–100 percentile. Null if
+ *  there's nothing to compare against. */
+function percentileRank(value: number | null | undefined, pool: (number | null | undefined)[]): number | null {
+  if (value == null) return null
+  const values = pool.filter((v): v is number => v != null)
+  if (values.length === 0) return null
+  const belowOrEqual = values.filter((v) => v <= value).length
+  return Math.round((belowOrEqual / values.length) * 100)
+}
+
+/** Stack a Tile's optional sub-lines, dropping falsy parts, without rendering an empty wrapper
+ *  when nothing survives. */
+function combineSub(...parts: (React.ReactNode | null | undefined | false)[]): React.ReactNode | undefined {
+  const present = parts.filter((p): p is React.ReactNode => !!p)
+  if (present.length === 0) return undefined
+  return (
+    <>
+      {present.map((p, i) => (
+        <div key={i}>{p}</div>
+      ))}
+    </>
+  )
+}
+
 function Tile({
   label,
   value,
@@ -72,6 +113,7 @@ function Tile({
 
 export function FantasyPlayerPage() {
   const { playerId } = useParams<{ playerId: string }>()
+  const [logoFailed, setLogoFailed] = useState(false)
 
   const { data: projPayload, isLoading: projLoading, error: projError } = useFantasyProjections()
   const { data: manifest } = useFantasyManifest()
@@ -101,6 +143,22 @@ export function FantasyPlayerPage() {
     const m = positionTierMap(posRows, (p) => p.pts ?? -Infinity, LOW_PREDICTABILITY_POSITIONS)
     return m.get(proj.id) ?? null
   }, [proj, board])
+
+  // WHY a player has no tier — a bare "—" with no explanation reads as a bug. Only two things ever
+  // suppress a tier (see positionTierMap): the position is deliberately never tiered (K/DST — the
+  // whole field is noise-flat), or the player is at/below his format's replacement level (only
+  // above-replacement rows are tiered — see league-board.tsx's identical rule). Below-replacement is
+  // format-DEPENDENT: a QB with no tier in a 1-QB league can easily tier in superflex.
+  const tierReason = useMemo(() => {
+    if (!proj || tier != null) return null
+    if (LOW_PREDICTABILITY_POSITIONS.includes(proj.pos)) {
+      return "Kickers and defenses aren't tiered — the whole position fits inside a few points, so a tier break there would be splitting noise, not signal."
+    }
+    if (boardRow) {
+      return `Below replacement level in ${config?.label ?? "this format"} (VOR ${num(boardRow.vor)}) — only above-replacement players are tiered, since a break below replacement isn't a meaningful draft signal. Try a format where he starts more often (e.g. superflex for a QB).`
+    }
+    return null
+  }, [proj, tier, boardRow, config])
 
   // Same scale Rankings' Overall tab compares ADP against — both are overall pick numbers.
   const adpDelta =
@@ -136,6 +194,26 @@ export function FantasyPlayerPage() {
   // bucket. Mislabelling a per-player NF1.7 band "Class-level" is exactly what this story forbids.
   const classLevel = proj?.uncType === "calibrated"
 
+  // Percentile within position: how this projection stacks up against every OTHER currently-
+  // projected player at the same position — the reference-scoring columns compare against the full
+  // projections pool (format-independent), the league column against this format's own board.
+  const posProjPool = useMemo(() => {
+    if (!proj) return { std: [], half: [], ppr: [] }
+    const rows = (projPayload?.players ?? []).filter((p) => p.pos === proj.pos)
+    return { std: rows.map((p) => p.fpStd), half: rows.map((p) => p.fpHalf), ppr: rows.map((p) => p.fpPpr) }
+  }, [proj, projPayload])
+  const posBoardPool = useMemo(
+    () => (proj ? (board ?? []).filter((p) => p.pos === proj.pos).map((p) => p.pts) : []),
+    [proj, board],
+  )
+  const pctStd = proj ? percentileRank(proj.fpStd, posProjPool.std) : null
+  const pctHalf = proj ? percentileRank(proj.fpHalf, posProjPool.half) : null
+  const pctPpr = proj ? percentileRank(proj.fpPpr, posProjPool.ppr) : null
+  const pctLeague = proj && boardRow ? percentileRank(boardRow.pts, posBoardPool) : null
+
+  const teamAbbrev = proj?.team ?? null
+  const logoUrl = !logoFailed ? nflTeamLogoUrl(teamAbbrev) : null
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
       <Link
@@ -159,21 +237,41 @@ export function FantasyPlayerPage() {
         <>
           {/* Header */}
           <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-3xl font-bold text-white">{proj.name}</h1>
-                {proj.rookie && <RookieBadge />}
+            <div className="flex items-start gap-4">
+              {/* No stable per-player photo id is threaded through the export yet (nflverse's
+                  roster crosswalk carries one — espn_id/sleeper_id — just not into
+                  projections.json), so this is initials + his team's logo, not a guessed photo
+                  URL that would 404 for most players. Swapping in a real headshot later is a
+                  drop-in replacement of this one element. */}
+              <div className="relative h-16 w-16 flex-shrink-0">
+                <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border-2 border-[#262626] bg-[#1a1a1a] text-lg font-bold text-gray-500">
+                  {initials(proj.name)}
+                </div>
+                {logoUrl && (
+                  <img
+                    src={logoUrl}
+                    alt={teamAbbrev ?? "team logo"}
+                    className="absolute -bottom-1 -right-1 h-7 w-7 rounded-full border-2 border-[#0a0a0a] bg-[#111111] object-contain p-0.5"
+                    onError={() => setLogoFailed(true)}
+                  />
+                )}
               </div>
-              <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-500">
-                <PosBadge pos={proj.pos} />
-                <span>{teamLabel(proj)}</span>
-                {proj.bye != null && <span>· Bye {proj.bye}</span>}
-                {proj.rookie && proj.draftPick != null && <span>· Draft pick {proj.draftPick}</span>}
-                <span className="inline-flex items-center gap-1">
-                  · <InfoTip label="Confidence">{GLOSSARY.confidence}</InfoTip>
-                  <ConfidenceBadge conf={proj.conf} />
-                </span>
-              </p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-3xl font-bold text-white">{proj.name}</h1>
+                  {proj.rookie && <RookieBadge />}
+                </div>
+                <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-500">
+                  <PosBadge pos={proj.pos} />
+                  <span>{teamLabel(proj)}</span>
+                  {proj.bye != null && <span>· Bye {proj.bye}</span>}
+                  {proj.rookie && proj.draftPick != null && <span>· Draft pick {proj.draftPick}</span>}
+                  <span className="inline-flex items-center gap-1">
+                    · <InfoTip label="Confidence">{GLOSSARY.confidence}</InfoTip>
+                    <ConfidenceBadge conf={proj.conf} />
+                  </span>
+                </p>
+              </div>
             </div>
             <ProvenanceLine
               season={projPayload?.season ?? 2026}
@@ -212,16 +310,23 @@ export function FantasyPlayerPage() {
               Fantasy points
             </h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Tile label="Standard" value={num(proj.fpStd)} />
-              <Tile label="Half PPR" value={num(proj.fpHalf)} />
+              <Tile
+                label="Standard"
+                value={num(proj.fpStd)}
+                sub={combineSub(pctStd != null && `${ordinal(pctStd)} pct. among ${proj.pos}s`)}
+              />
+              <Tile
+                label="Half PPR"
+                value={num(proj.fpHalf)}
+                sub={combineSub(pctHalf != null && `${ordinal(pctHalf)} pct. among ${proj.pos}s`)}
+              />
               <Tile
                 label="Full PPR (reference)"
                 value={num(proj.fpPpr)}
-                sub={
-                  proj.fpP10 != null && proj.fpP90 != null
-                    ? `80%: ${int(proj.fpP10)}–${int(proj.fpP90)}`
-                    : undefined
-                }
+                sub={combineSub(
+                  pctPpr != null && `${ordinal(pctPpr)} pct. among ${proj.pos}s`,
+                  proj.fpP10 != null && proj.fpP90 != null && `80%: ${int(proj.fpP10)}–${int(proj.fpP90)}`,
+                )}
               />
               <Tile
                 label={config ? `${config.label} (your league)` : "Your league"}
@@ -229,9 +334,12 @@ export function FantasyPlayerPage() {
                 sub={
                   !boardLoading && boardRow?.pts == null
                     ? "Not ranked in this format"
-                    : boardRow?.ptsP10 != null && boardRow?.ptsP90 != null
-                      ? `80%: ${int(boardRow.ptsP10)}–${int(boardRow.ptsP90)}`
-                      : undefined
+                    : combineSub(
+                        pctLeague != null && `${ordinal(pctLeague)} pct. among ${proj.pos}s`,
+                        boardRow?.ptsP10 != null &&
+                          boardRow?.ptsP90 != null &&
+                          `80%: ${int(boardRow.ptsP10)}–${int(boardRow.ptsP90)}`,
+                      )
                 }
                 emphasis
               />
@@ -239,7 +347,8 @@ export function FantasyPlayerPage() {
             <p className="mt-2 text-[11px] leading-relaxed text-gray-600">
               Standard / Half PPR / Full PPR are a fixed reference scoring, independent of your
               league&apos;s actual rules. The last card is this player re-scored under your selected
-              league&apos;s exact format and roster shape.
+              league&apos;s exact format and roster shape. &ldquo;Pct.&rdquo; is where this projection
+              ranks among every currently-projected player at his position — not his league board rank.
             </p>
           </section>
 
@@ -306,7 +415,10 @@ export function FantasyPlayerPage() {
                     }
                   />
                   <Tile label="Position rank" value={`${proj.pos}${boardRow.posRank}`} />
-                  <Tile label="Overall rank" value={`#${boardRow.ovrRank}`} />
+                  <Tile
+                    label={<InfoTip label="Overall Rank">{GLOSSARY.overallRank}</InfoTip>}
+                    value={`#${boardRow.ovrRank}`}
+                  />
                   <Tile
                     label={<InfoTip label="Tier">{GLOSSARY.tier}</InfoTip>}
                     value={
@@ -318,11 +430,7 @@ export function FantasyPlayerPage() {
                         "—"
                       )
                     }
-                    sub={
-                      tier == null && LOW_PREDICTABILITY_POSITIONS.includes(proj.pos)
-                        ? "Kickers and defenses aren't tiered — see below"
-                        : undefined
-                    }
+                    sub={tierReason}
                   />
                 </div>
                 {boardRow.adp != null && (
