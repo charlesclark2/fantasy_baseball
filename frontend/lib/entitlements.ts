@@ -29,3 +29,19 @@ export function canAccess(surface: Surface, groups: string[]): boolean {
 export function isFantasyComp(groups: string[]): boolean {
   return groups.includes("fantasy_comp")
 }
+
+// ── NF-C0b: a NARROWER gate than the fantasy surface ─────────────────────────
+// The manual league-settings editor ships to `admin` + `fantasy_comp` ONLY — a paying
+// `subscriber` has fantasy but NOT the editor yet. Deliberately tighter than
+// FANTASY_GROUPS: the settings saved there drive the board, VOR and the draft tool, so
+// it goes to operator + comp accounts first (the staged shape MVP-3 used when the draft
+// tool was admin-only).
+//
+// ⚠️ MIRROR OF THE SERVER RULE — `cognito.FANTASY_BETA_GROUPS` /
+// `require_fantasy_beta_access`. This helper only hides nav/pages; the API is the actual
+// gate (these are WRITE endpoints). Widen BOTH together or the two disagree.
+const FANTASY_BETA_GROUPS = ["admin", "fantasy_comp"] as const
+
+export function canAccessFantasyBeta(groups: string[]): boolean {
+  return FANTASY_BETA_GROUPS.some((g) => groups.includes(g))
+}

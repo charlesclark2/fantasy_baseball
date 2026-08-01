@@ -229,6 +229,39 @@ class TestTsMirrorMatchesPython:
             assert ts[k][0] == proj, f"{k} folds onto {ts[k][0]} in TS but {proj} in Python"
             assert abs(ts[k][1] - share) < 1e-9, f"{k} share drift: ts={ts[k][1]} py={share}"
 
+    def test_entitlement_group_list_matches_the_server(self):
+        """The client gate is a MIRROR of the server rule, not a second policy.
+
+        `frontend/lib/entitlements.ts::FANTASY_BETA_GROUPS` decides whether the nav item and
+        page render; `cognito.FANTASY_BETA_GROUPS` decides whether the API answers. If they
+        drift, the visible product and the enforced product disagree — either a user sees an
+        editor that 403s on save, or (worse) the nav hides a surface the API would serve.
+        """
+        ts_src = (REPO / "frontend" / "lib" / "entitlements.ts").read_text()
+        block = re.search(r"const FANTASY_BETA_GROUPS = \[(.*?)\] as const", ts_src, re.S)
+        assert block, "could not locate FANTASY_BETA_GROUPS in entitlements.ts"
+        ts_groups = set(re.findall(r"\"(\w+)\"", block.group(1)))
+
+        cognito = pytest.importorskip("app.backend.services.cognito")
+        assert ts_groups == set(cognito.FANTASY_BETA_GROUPS), (
+            f"client/server entitlement drift — ts={sorted(ts_groups)} "
+            f"server={sorted(cognito.FANTASY_BETA_GROUPS)}"
+        )
+        assert "subscriber" not in ts_groups
+
+    def test_the_league_settings_nav_item_is_restricted(self):
+        """The nav entry must carry `restrict: "fantasy_beta"`.
+
+        Without it the item renders for every subscriber and links to a page that bounces them
+        — a broken-looking nav rather than a staged rollout.
+        """
+        nav_src = (REPO / "frontend" / "lib" / "nav-model.ts").read_text()
+        entry = re.search(
+            r"\{\s*label:\s*\"League Settings\".*?\}", nav_src, re.S
+        )
+        assert entry, "League Settings nav item not found"
+        assert 'restrict: "fantasy_beta"' in entry.group(0)
+
     def test_captured_rule_catalog_matches(self):
         src = _ts_source()
         block = re.search(r"export const CAPTURED_RULE_CATALOG.*?= \[(.*?)\n\]", src, re.S)

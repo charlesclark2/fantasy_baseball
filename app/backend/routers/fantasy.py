@@ -25,7 +25,7 @@ import boto3
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.backend.dependencies import require_fantasy_access
+from app.backend.dependencies import require_fantasy_access, require_fantasy_beta_access
 from app.backend.models.fantasy import League, LeagueSave
 from app.backend.services import dynamo
 
@@ -122,7 +122,18 @@ def nfl_board(
 # as its `to_dict()` JSON. An imported league and a typed-in league are therefore
 # indistinguishable to every consumer, and a config is portable between them.
 #
-# Entitlement: every route inherits the router-level `require_fantasy_access`.
+# 🔒 ENTITLEMENT — NARROWER THAN THE REST OF THIS ROUTER. The read-only board endpoints
+# above run on the router-level `require_fantasy_access` (subscriber OR admin OR comp).
+# These league routes additionally require `require_fantasy_beta_access`: `admin` +
+# `fantasy_comp` ONLY, so a paying subscriber does NOT get the editor yet.
+#
+# The narrower gate lives on each ROUTE rather than on the router, because the router's
+# dependency is shared with the board endpoints that must stay open to subscribers.
+# Since FANTASY_BETA_GROUPS is a strict subset of FANTASY_ACCESS_GROUPS, both
+# dependencies run and the stricter one binds.
+#
+# These are WRITE endpoints, so server-side enforcement is the real gate — hiding the
+# nav item stops nobody from POSTing a config straight to the API.
 
 
 def _league_response(record: dict) -> dict:
@@ -135,7 +146,7 @@ def _league_response(record: dict) -> dict:
 
 
 @router.get("/leagues")
-def list_leagues(user_id: str = Depends(require_fantasy_access)):
+def list_leagues(user_id: str = Depends(require_fantasy_beta_access)):
     """Every league this user has saved."""
     out = []
     for record in dynamo.list_fantasy_leagues(user_id):
@@ -149,7 +160,7 @@ def list_leagues(user_id: str = Depends(require_fantasy_access)):
 
 
 @router.post("/leagues", status_code=201)
-def create_league(payload: LeagueSave, user_id: str = Depends(require_fantasy_access)):
+def create_league(payload: LeagueSave, user_id: str = Depends(require_fantasy_beta_access)):
     """Save a new league config (the editor's 'start from a preset, then edit' output)."""
     try:
         record = dynamo.put_fantasy_league(user_id, None, payload.model_dump())
@@ -165,7 +176,7 @@ def create_league(payload: LeagueSave, user_id: str = Depends(require_fantasy_ac
 
 @router.put("/leagues/{league_id}")
 def update_league(
-    league_id: str, payload: LeagueSave, user_id: str = Depends(require_fantasy_access)
+    league_id: str, payload: LeagueSave, user_id: str = Depends(require_fantasy_beta_access)
 ):
     if dynamo.get_fantasy_league(user_id, league_id) is None:
         raise HTTPException(status_code=404, detail="League not found")
@@ -174,7 +185,7 @@ def update_league(
 
 
 @router.delete("/leagues/{league_id}", status_code=204)
-def delete_league(league_id: str, user_id: str = Depends(require_fantasy_access)):
+def delete_league(league_id: str, user_id: str = Depends(require_fantasy_beta_access)):
     try:
         dynamo.delete_fantasy_league(user_id, league_id)
     except ValueError as e:

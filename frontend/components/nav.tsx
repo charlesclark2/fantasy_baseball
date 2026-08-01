@@ -7,8 +7,8 @@ import { useRouter } from "next/navigation"
 import { LogOut, Settings, Menu, X, ChevronDown, Lock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
-import { canAccess } from "@/lib/entitlements"
-import { SPORTS, surfaceItems, type SurfaceGroup } from "@/lib/nav-model"
+import { canAccess, canAccessFantasyBeta } from "@/lib/entitlements"
+import { SPORTS, surfaceItems, type NavItem, type SurfaceGroup } from "@/lib/nav-model"
 import changelog from "@/data/changelog.json"
 
 const latestWeek = changelog[0]?.week
@@ -45,6 +45,12 @@ export function Nav({
   // A fantasy surface the caller isn't entitled to → visible but LOCKED (upsell).
   const isLocked = (g: SurfaceGroup) =>
     g.surface === "fantasy" && !canAccess("fantasy", groups)
+
+  // An ITEM can require MORE than its surface (NF-C0b's league-settings editor is
+  // admin + fantasy_comp only). Unlike a locked surface this is HIDDEN, not upsold —
+  // it is a staged rollout, not something a subscriber can buy their way into.
+  const visibleItems = (items: NavItem[]) =>
+    items.filter((i) => i.restrict !== "fantasy_beta" || canAccessFantasyBeta(groups))
 
   const itemClass = (key: string) =>
     `block px-3 py-2 text-sm transition-colors ${
@@ -204,7 +210,7 @@ export function Nav({
                                   {section.label}
                                 </div>
                               )}
-                              {section.items.map((item) => (
+                              {visibleItems(section.items).map((item) => (
                                 <Link key={item.key} href={item.href} className={itemClass(item.key)}>
                                   {item.label}
                                 </Link>
@@ -290,7 +296,7 @@ export function Nav({
                     )
                   }
                   return g.sections.flatMap((section) =>
-                    section.items.map((item) => (
+                    visibleItems(section.items).map((item) => (
                       <Link
                         key={item.key}
                         href={item.href}

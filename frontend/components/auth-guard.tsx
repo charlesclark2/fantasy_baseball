@@ -3,7 +3,7 @@
 import React, { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
-import { canAccess } from "@/lib/entitlements"
+import { canAccess, canAccessFantasyBeta } from "@/lib/entitlements"
 import { getMfaStatus, getSessionAuthMethod, subscriberMfaRequired } from "@/lib/cognito"
 
 // Subscriber MFA enforcement (E9.19) — the SINGLE in-app gate that gates E9.8 go-live.
@@ -56,6 +56,29 @@ export function FantasyGuard({ children }: { children: React.ReactNode }) {
   }, [loading, accessToken, groups, router])
 
   if (loading || accessToken === null || !canAccess("fantasy", groups)) return null
+  return <>{children}</>
+}
+
+// NF-C0b — the manual league-settings editor: `admin` + `fantasy_comp` ONLY, which is
+// NARROWER than the fantasy surface itself (a paying subscriber does not get it yet).
+//
+// A non-entitled caller is sent to the fantasy pages they DO have rather than to
+// /subscribe: unlike a locked surface this is a staged rollout, not something a
+// subscriber can buy their way into, so an upsell there would be a false promise.
+// Server-side, /fantasy/leagues enforces the same rule (403) — these are WRITE
+// endpoints, so hiding the page is explicitly not the gate.
+export function FantasyBetaGuard({ children }: { children: React.ReactNode }) {
+  const { accessToken, groups, loading } = useAuth()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (loading) return
+    if (accessToken === null) { router.push("/login"); return }
+    if (!canAccess("fantasy", groups)) { router.push("/subscribe"); return }
+    if (!canAccessFantasyBeta(groups)) { router.push("/fantasy/league-board"); return }
+  }, [loading, accessToken, groups, router])
+
+  if (loading || accessToken === null || !canAccessFantasyBeta(groups)) return null
   return <>{children}</>
 }
 

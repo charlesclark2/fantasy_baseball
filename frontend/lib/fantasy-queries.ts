@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/lib/auth-context"
+import { canAccessFantasyBeta } from "@/lib/entitlements"
 import {
   createSavedLeague,
   deleteSavedLeague,
@@ -74,12 +75,25 @@ export function useFantasyProjections(season: number = FANTASY_SEASON) {
 // true — a saved league produces the SAME `Player[]` the pre-exported preset boards produce, so
 // every downstream surface consumes it through one interface and cannot tell the two apart.
 
+/**
+ * The user's saved leagues.
+ *
+ * ⚠️ Only FIRES for a caller entitled to the editor (`admin` + `fantasy_comp` — NF-C0b ships
+ * narrower than the fantasy surface). The board, rankings and draft surfaces all call this to offer
+ * "Your leagues" beside the presets, and those pages are open to every SUBSCRIBER — so without the
+ * `enabled` gate every subscriber page-load would fire a request that 403s by design. Skipping the
+ * call leaves `data` undefined, which those surfaces already treat as "no saved leagues" and fall
+ * back to the presets. Cosmetic only: `/fantasy/leagues` enforces the same rule server-side.
+ */
 export function useSavedLeagues() {
-  const { accessToken } = useAuth()
+  const { accessToken, groups } = useAuth()
+  const entitled = canAccessFantasyBeta(groups)
   return useQuery<SavedLeague[]>({
     queryKey: ["nfl-fantasy-leagues"],
     queryFn: () => listSavedLeagues(accessToken),
+    enabled: entitled,
     staleTime: 60_000,
+    retry: false,
   })
 }
 

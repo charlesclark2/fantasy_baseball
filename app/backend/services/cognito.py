@@ -50,6 +50,24 @@ def has_fantasy_access(groups: list[str] | frozenset[str]) -> bool:
     return bool(FANTASY_ACCESS_GROUPS.intersection(groups))
 
 
+# ── NF-C0b: a NARROWER gate than the fantasy surface itself ──────────────────
+# The manual league-settings editor ships to `admin` + `fantasy_comp` ONLY — a paying
+# `subscriber` does NOT see it yet. This is deliberately TIGHTER than
+# FANTASY_ACCESS_GROUPS: the editor is a new, unproven surface whose settings feed the
+# board, VOR and the draft tool, so it goes to operator + comp accounts first (the same
+# staged shape MVP-3 used when the draft tool was admin-only).
+#
+# ⚠️ It is a STRICT SUBSET of FANTASY_ACCESS_GROUPS, so anyone who passes this gate also
+# passes the surface gate — never the other way round. Widening it later is a one-line
+# change here plus its client mirror in `frontend/lib/entitlements.ts`.
+FANTASY_BETA_GROUPS = frozenset({GROUP_ADMIN, GROUP_FANTASY_COMP})
+
+
+def has_fantasy_beta_access(groups: list[str] | frozenset[str]) -> bool:
+    """True iff the caller may use the manual league-settings editor (NF-C0b)."""
+    return bool(FANTASY_BETA_GROUPS.intersection(groups))
+
+
 def _client():
     return boto3.client("cognito-idp", region_name=_AWS_REGION)
 

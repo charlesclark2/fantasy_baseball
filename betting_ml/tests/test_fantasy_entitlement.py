@@ -213,3 +213,58 @@ def test_router_declares_the_fantasy_gate():
     # Every route in the router must sit behind require_fantasy_access.
     dep_calls = [d.dependency for d in fantasy.router.dependencies]
     assert deps.require_fantasy_access in dep_calls
+
+
+# ── NF-C0b: the league-settings editor is gated NARROWER than the surface ────────────
+
+
+@pytest.mark.parametrize("groups", [["admin"], ["fantasy_comp"], ["admin", "subscriber"]])
+def test_require_fantasy_beta_access_grants_admin_and_comp(groups):
+    assert deps.require_fantasy_beta_access(_request(groups), user_id="user-1") == "user-1"
+
+
+@pytest.mark.parametrize("groups", [["subscriber"], ["beta_tester"], [], ["subscriber", "beta_tester"]])
+def test_require_fantasy_beta_access_denies_everyone_else(groups):
+    """A paying SUBSCRIBER is denied here while keeping the fantasy surface itself.
+
+    That divergence is the whole point of the narrower gate, so it is asserted directly
+    rather than inferred: NF-C0b ships to operator + comp accounts first.
+    """
+    with pytest.raises(HTTPException) as exc:
+        deps.require_fantasy_beta_access(_request(groups), user_id="user-1")
+    assert exc.value.status_code == 403
+
+
+def test_a_subscriber_keeps_the_fantasy_surface_but_not_the_editor():
+    """The two gates must diverge for exactly one group — `subscriber`."""
+    req = _request(["subscriber"])
+    assert deps.require_fantasy_access(req, user_id="user-1") == "user-1"  # surface: allowed
+    with pytest.raises(HTTPException):
+        deps.require_fantasy_beta_access(req, user_id="user-1")  # editor: denied
+
+
+def test_beta_groups_are_a_strict_subset_of_fantasy_access_groups():
+    """Anyone who clears the editor gate must also clear the surface gate.
+
+    If these ever crossed, a caller could reach the league WRITE endpoints without holding
+    the surface entitlement the router itself requires — an incoherent state rather than a
+    merely stricter one.
+    """
+    assert cognito.FANTASY_BETA_GROUPS < cognito.FANTASY_ACCESS_GROUPS
+    assert "subscriber" not in cognito.FANTASY_BETA_GROUPS
+
+
+def test_every_league_route_carries_the_narrower_gate():
+    """The gate lives per-ROUTE (the router-level dep is shared with the open board
+    endpoints), so a new /leagues route could silently ship without it. These are WRITE
+    endpoints — hiding the nav item stops nobody from POSTing straight to the API."""
+    league_routes = [
+        r for r in fantasy.router.routes
+        if getattr(r, "path", "").startswith("/fantasy/leagues")
+    ]
+    assert league_routes, "expected the NF-C0b /fantasy/leagues routes to exist"
+    for route in league_routes:
+        deps_for_route = [d.call for d in route.dependant.dependencies]
+        assert deps.require_fantasy_beta_access in deps_for_route, (
+            f"{route.methods} {route.path} is missing require_fantasy_beta_access"
+        )
