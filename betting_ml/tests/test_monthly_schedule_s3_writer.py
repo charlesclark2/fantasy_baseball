@@ -167,10 +167,28 @@ def test_s3_mode_writes_s3_without_touching_snowflake(monkeypatch, _patched):
 
 def test_intraday_rewrite_overwrites_the_day_and_prunes_earlier_same_month(monkeypatch, _patched):
     """Two fires same UTC day → one partition (overwrite); an earlier same-month partition is
-    pruned; a prior-month partition survives. (The live INC-20 retention.)"""
+    pruned; a prior-month partition survives. (The live INC-20 retention.)
+
+    TD3 (2026-08-01): `run_schedule` stamps every write with the REAL wall-clock fire time
+    (`datetime.now(timezone.utc)`), NOT the injected `start`/`end` schedule-range args — so the
+    seeded "earlier same month" / "prior month" partitions must be pinned to a FROZEN clock, not
+    hardcoded calendar literals. The prior version hardcoded `2026-07-01`/`2026-06-30` assuming the
+    real wall clock would stay in July; it silently broke the moment real time crossed into August
+    (the prune target's "this month" became August, so the seeded July partition stopped matching
+    and was never pruned) — a pure test-clock time bomb, not a retention-logic regression."""
     fake, _sf = _patched
     monkeypatch.setenv("W11_RAW_WRITE_MODE", "s3")
-    # Seed an earlier same-month snapshot + a prior-month one.
+
+    frozen_now = isa.datetime(2026, 7, 20, 12, 0, tzinfo=isa.timezone.utc)
+
+    class _FrozenDatetime(isa.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return frozen_now if tz is not None else frozen_now.replace(tzinfo=None)
+
+    monkeypatch.setattr(isa, "datetime", _FrozenDatetime)
+
+    # Seed an earlier same-month snapshot + a prior-month one, relative to the frozen clock above.
     fake.objects[_part_key("2026-07-01")] = b"old-july"
     fake.objects[_part_key("2026-06-30")] = b"june"
 
