@@ -87,7 +87,9 @@ def fetch_ffc_adp(
     """Fetch + normalize one season of Fantasy Football Calculator ADP. Returns one row per drafted
     player with: `season, source, adp_format, player_name, position, team, adp, adp_stdev, adp_high,
     adp_low, times_drafted`. Empty DataFrame (with the columns) when FFC has no data for the season
-    (e.g. 2025). Caches the raw JSON under `cache_dir` so subsequent runs are offline-reproducible."""
+    (e.g. 2025). Caches the raw JSON under `cache_dir` so subsequent runs are offline-reproducible —
+    ⚠️ but ONLY a `status == "Success"` payload is written, so a transient outage (or FFC's 200-with-
+    an-error-body for an unavailable season) can never be cached permanently as "no data"."""
     cache_dir = Path(cache_dir or _DEFAULT_CACHE)
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache = cache_dir / f"ffc_{fmt}_{teams}_{season}.json"
@@ -103,7 +105,18 @@ def fetch_ffc_adp(
         req = urllib.request.Request(url, headers={"User-Agent": _UA})
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — fixed https host
             payload = json.loads(resp.read().decode())
-        cache.write_text(json.dumps(payload))
+        # ⚠️ CACHE ONLY A SUCCESSFUL PAYLOAD (NF-D16 carried fix). This write used to be
+        # UNCONDITIONAL, which made a TRANSIENT failure PERMANENT: FFC answers an unavailable season
+        # with a 200 carrying `{"status":"Error","errors":"No ADP data found."}`, that 51-byte blob
+        # got persisted, and every later run read it back as "no data" and never re-fetched — which
+        # is why the archived NF1.5 run carried a stale error blob for `ffc_ppr_12_2025.json` and
+        # served 2025 market coverage 0.796 (ECR-only). A network exception already skips the write
+        # by propagating; this closes the other half, where the failure arrives as a 200.
+        if (payload or {}).get("status") == "Success":
+            cache.write_text(json.dumps(payload))
+        else:
+            log.warning("FFC ADP %s %s: NOT caching a non-Success payload (status=%s) — the next run "
+                        "will re-fetch", season, fmt, (payload or {}).get("status"))
 
     cols = ["season", "source", "adp_format", "player_name", "position", "team",
             "adp", "adp_stdev", "adp_high", "adp_low", "times_drafted"]

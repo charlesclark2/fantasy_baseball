@@ -863,9 +863,26 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     # NF1.4: the point curve fits the survivor-filtered history (unchanged); `band_hist` is
     # the FULL drafted population (zero-game rookies included) and calibrates the 80% rookie
     # interval, which the legacy `fp × cv` width missed badly (0.678 coverage, 0.444 at QB).
+    # ⏸️ NF-D16 IS RATIFIED BUT ITS SERVING FLIP IS **HELD** (PM ruling, 2026-08-01 — option C).
+    # The recalibration cleared every gate it pre-registered (pooled tier MAE 1.0738 → 0.9407, 7/7
+    # classes, PBO 0.029, DSR 0.996, p 0.0033; interval floors held and improved) — but on the 2026
+    # board it trips NF1.4's ADVISORY `rookie_board_face_validity` PLACEMENT clause: a rookie RB lands
+    # at overall rank 6 against a clause that admits no rookie inside the overall top 10.
+    #
+    # The ruling is neither "respect the veto" nor "override it" but **validate it before letting it
+    # decide**: that clause is the UNVALIDATED half of a gate whose LEVEL half was already proven
+    # mis-specified (NF1.4's first cut fired 7/7 and carried zero information until it was re-anchored
+    # on the per-class best-rookie distribution). So publish is HELD — gated on re-specifying the
+    # PLACEMENT clause under its own pre-registration (NF-D17), not on this board passing an
+    # unvalidated one.
+    #
+    # ⭐ TO RE-ENABLE, PASS `recal_hist=_rookie_full` BELOW — one line, and nothing else changes. The
+    #    recalibration is OPT-IN by construction, so leaving it off restores the pre-NF-D16 point
+    #    byte-for-byte (pinned by `test_a_curve_without_recal_hist_emits_a_byte_identical_point`).
+    _rookie_full = load_rookie_training(con, base_season, schema, include_zero_game=True)
     curve = fit_rookie_slot_curves(
         load_rookie_training(con, base_season, schema),
-        band_hist=load_rookie_training(con, base_season, schema, include_zero_game=True))
+        band_hist=_rookie_full)
     rks = project_rookies(incoming, curve, projection_season) if not incoming.empty else pd.DataFrame()
 
     proj = pd.concat([vets, rks], ignore_index=True, sort=False)
