@@ -38,7 +38,11 @@ PLATFORMS: dict[str, dict] = {
         "label": "Sleeper",
         "auth": "public",
         "available": True,
-        "help": "Enter your Sleeper username and pick the league you want to import.",
+        # Leads with the LEAGUE ID to match the input panel, which asks for the ID first: the ID is
+        # sitting in the league's URL, whereas a username has to be recalled and is what people get
+        # wrong. This string is the card's subtitle, so a username-first wording here contradicts the
+        # ID-first field directly under it.
+        "help": "Enter your league ID — the long number in your league's Sleeper URL. No sign-in needed.",
     },
     "yahoo": {
         "id": "yahoo",
