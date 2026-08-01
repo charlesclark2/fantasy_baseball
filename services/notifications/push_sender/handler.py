@@ -1,7 +1,9 @@
-"""push-notification-sender — SNS-triggered fan-out of "qualified plays today" alerts.
+"""push-notification-sender — SNS-triggered fan-out of "lineup-confirmed picks" alerts.
 
-E9.9 / A0.6. `predict_today` publishes ONE SNS message when the model posts
-`qualified_bet > 0` for today's slate. This Lambda receives it, scans the
+E9.9 / A0.6, extended by E9.50. `predict_today` publishes an SNS message after a
+POST-LINEUP (lineup-confirmed) re-score newly qualifies one or more H2H/totals
+picks for today's slate (the morning pre-lineup alert is retired — a pre-lineup
+pick is a preview, not confirmed-actionable). This Lambda receives it, scans the
 DynamoDB subscriptions table for opted-in users, and fans out per-channel:
 
   • Web Push  (pywebpush + VAPID)  — users who granted browser push permission
@@ -50,8 +52,9 @@ _APP_URL = os.environ.get("APP_URL", "https://www.credencesports.com").rstrip("/
 # Honest, model-relative disclaimer. Deliberately free of profitability / bet-rec
 # language (cf. the E5.5 honest-framing guard). Enforced by the unit tests here.
 _DISCLAIMER = (
-    "This reflects the model's qualified selections for today. It is not betting "
-    "advice. Past performance does not indicate future results."
+    "This reflects the model's lineup-confirmed qualified selections for today, sent once "
+    "each pick's game has a confirmed starting lineup. It is not betting advice. Past "
+    "performance does not indicate future results."
 )
 
 
@@ -81,8 +84,8 @@ def build_push_payload(msg: dict[str, Any]) -> dict[str, Any]:
     n = int(msg.get("n_qualified", 0))
     date = msg.get("date", "")
     return {
-        "title": f"Credence — {n} qualified {_plural(n)} for today",
-        "body": f"The model posted {n} qualified {_plural(n)} for today's slate ({date}).",
+        "title": f"Credence — {n} lineup-confirmed qualified {_plural(n)} for today",
+        "body": f"The model posted {n} lineup-confirmed qualified {_plural(n)} for today's slate ({date}).",
         "url": f"{_APP_URL}/dashboard",
         "tag": f"qualified-plays-{date}",
     }
@@ -92,8 +95,8 @@ def build_sms(msg: dict[str, Any]) -> str:
     n = int(msg.get("n_qualified", 0))
     date = msg.get("date", "")
     return (
-        f"Credence: the model posted {n} qualified {_plural(n)} for today's slate "
-        f"({date}). Review at {_APP_URL}/dashboard . Not betting advice."
+        f"Credence: the model posted {n} lineup-confirmed qualified {_plural(n)} for today's "
+        f"slate ({date}). Review at {_APP_URL}/dashboard . Not betting advice."
     )
 
 
@@ -104,10 +107,10 @@ def build_email(msg: dict[str, Any]) -> tuple[str, str, str]:
     plays = msg.get("plays") or []
     lines = render_summary_lines(plays)
 
-    subject = f"Credence — {n} qualified {_plural(n)} for today's slate"
+    subject = f"Credence — {n} lineup-confirmed qualified {_plural(n)} for today's slate"
 
     text = (
-        f"The model posted {n} qualified {_plural(n)} for today's slate ({date}).\n\n"
+        f"The model posted {n} lineup-confirmed qualified {_plural(n)} for today's slate ({date}).\n\n"
         + "\n".join(lines)
         + f"\n\nReview: {_APP_URL}/dashboard\n\n{_DISCLAIMER}\n"
     )
@@ -127,10 +130,10 @@ def build_email(msg: dict[str, Any]) -> tuple[str, str, str]:
       </td></tr>
       <tr><td style="padding:0 28px 4px;">
         <h1 style="margin:0;color:#ffffff;font-family:sans-serif;font-size:20px;font-weight:700;">
-          {n} qualified {_plural(n)} for today
+          {n} lineup-confirmed qualified {_plural(n)} for today
         </h1>
         <p style="margin:6px 0 0;color:#a3a3a3;font-family:sans-serif;font-size:13px;">
-          The model posted {n} qualified {_plural(n)} for today's slate ({_esc(date)}).
+          The model posted {n} lineup-confirmed qualified {_plural(n)} for today's slate ({_esc(date)}).
         </p>
       </td></tr>
       <tr><td style="padding:16px 28px 8px;">

@@ -62,14 +62,25 @@ def test_copy_is_model_relative_and_disclaims():
     _, _, text = mod.build_email(_MSG)
     assert "qualified" in text.lower()
     assert "not betting advice" in text.lower()
-    assert "2 qualified plays" in text
+    assert "2 lineup-confirmed qualified plays" in text
+
+
+def test_copy_frames_as_lineup_confirmed():
+    """E9.50: honesty framing — these are POST-LINEUP actionable picks, not the
+    retired pre-lineup preview. Every channel must say so explicitly."""
+    mod = _load()
+    subject, html, text = mod.build_email(_MSG)
+    push = mod.build_push_payload(_MSG)
+    sms = mod.build_sms(_MSG)
+    for blob in (subject, text, push["title"], push["body"], sms):
+        assert "lineup-confirmed" in blob.lower()
 
 
 def test_singular_plural():
     mod = _load()
     one = {"date": "2026-07-06", "n_qualified": 1, "plays": [{"matchup": "A @ B", "pick": "x"}]}
-    assert "1 qualified play" in mod.build_sms(one)
-    assert "qualified plays" in mod.build_sms(_MSG)
+    assert "1 lineup-confirmed qualified play" in mod.build_sms(one)
+    assert "lineup-confirmed qualified plays" in mod.build_sms(_MSG)
 
 
 # ── Fan-out routing ─────────────────────────────────────────────────────────

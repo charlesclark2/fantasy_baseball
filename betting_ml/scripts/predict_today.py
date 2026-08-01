@@ -47,7 +47,7 @@ from betting_ml.utils.probability_layer import (
 from betting_ml.utils.win_prob_uncertainty import compute_win_prob_beta  # Story 19.7
 from betting_ml.utils.sigma_gate import evaluate_sigma_gate             # Story 22.4
 from betting_ml.utils.pick_explanations import build_pick_explanations  # E9.13 / Story 30.15
-from betting_ml.utils.qualified_bet_notifier import notify_qualified_plays_safe  # E9.9 / A0.6
+from betting_ml.utils.qualified_bet_notifier import notify_post_lineup_actionable_picks_safe  # E9.9 / A0.6
 from betting_ml.models.total_runs_trainer import p_over_line
 from betting_ml.utils.ml_env import ml_schema
 
@@ -653,15 +653,14 @@ def _write_predictions_to_snowflake(
     except Exception as exc:
         print(f"\nWarning: Could not write predictions to Snowflake ({exc}).")
 
-    # E9.9 / A0.6 — qualified-plays alert (WARN tier: never crashes predict_today).
-    # Additive, at the very end, after compute_bet_permission has stamped qualified_bet
-    # on every row. Only fires when --notify is set (the daily morning/post-lineup ops
-    # opt in; audit/backfill runs do not), only for TODAY, only when qualified_bet>0,
-    # and at most once per slate (idempotent). notify_qualified_plays_safe swallows all
-    # errors, but wrap here too per the failure-semantics contract.
+    # E9.9 / A0.6, retired-path shim after E9.50: this legacy (deprecated-Streamlit-only,
+    # per CLAUDE.md — not on the live pipeline) predict_today never threads a lineup-
+    # confirmed post-lineup pass, so it always passes lineup_confirmed=False — the
+    # notifier's post-lineup-only gate means this path never actually sends (matching
+    # E9.50's retirement of the pre-lineup alert; kept import-safe only).
     if notify:
         try:
-            notify_qualified_plays_safe(target_date, rows)
+            notify_post_lineup_actionable_picks_safe(target_date, rows, lineup_confirmed=False)
         except Exception as exc:  # noqa: BLE001 — belt-and-suspenders WARN
             print(f"\nWarning: qualified-play alert failed (non-fatal): {exc}")
 

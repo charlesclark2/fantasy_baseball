@@ -69,7 +69,7 @@ from betting_ml.utils.feature_selection import load_retained_features
 from betting_ml.utils.model_io import load_model
 from betting_ml.utils.pick_explanations import build_pick_explanations  # Story 30.15
 from betting_ml.utils.win_prob_uncertainty import compute_win_prob_beta  # Story 19.7
-from betting_ml.utils.qualified_bet_notifier import notify_qualified_plays_safe  # E9.9 --notify
+from betting_ml.utils.qualified_bet_notifier import notify_post_lineup_actionable_picks_safe  # E9.50 --notify
 from betting_ml.utils.meta_model import (  # Story 12.4 — Bayesian CLV meta-model serve
     compute_meta_model_prediction,
     load_latest_meta_model,
@@ -1635,14 +1635,18 @@ def _write_predictions_to_snowflake(
                   f"{_ML_SCHEMA}.daily_model_predictions "
                   f"(model_version={MODEL_VERSION}, inserted_at={inserted_at.isoformat()})")
             print(f"  [22.4] sigma_tier distribution: {_tier_summary}")
-            # E9.9 — fire the qualified-plays alert ONLY after a successful commit (never
-            # notify on a slate that failed to persist). The notifier is fully self-guarded
-            # and never raises: TODAY-only (skips backfill/historical dates), qualified_bet>0
-            # only, idempotent-per-slate (one send/day across morning + post_lineup), and a
-            # loud no-op when the SNS topic env var is unset. Backfill rows never reach here
-            # (they return at the batch buffer above), but gate on `not is_backfill` too.
+            # E9.50 — fire the post-lineup actionable-picks digest ONLY after a successful
+            # commit (never notify on a slate that failed to persist). The notifier is fully
+            # self-guarded and never raises: post-lineup (lineup_confirmed) only — the morning
+            # pre-lineup alert is RETIRED — TODAY-only, actionable rows only (qualified_bet AND
+            # not intraday_fallback), deduped per (date, game_pk) so a pick is emailed exactly
+            # once even across many staggered re-score cycles, and a loud no-op when the SNS
+            # topic env var is unset. Backfill rows never reach here (they return at the batch
+            # buffer above), but gate on `not is_backfill` too.
             if notify and not is_backfill:
-                notify_qualified_plays_safe(target_date, rows)
+                notify_post_lineup_actionable_picks_safe(
+                    target_date, rows, lineup_confirmed=lineup_confirmed,
+                )
         finally:
             conn.close()
     except Exception as exc:
@@ -2107,12 +2111,14 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         default=False,
         help=(
-            "E9.9 — after a successful live write, publish ONE 'qualified plays today' SNS alert "
-            "(fans out to opted-in push/email/SMS via the push-notification-sender Lambda) when the "
-            "model posts qualified_bet>0 for TODAY's slate. WARN-tier (never crashes the op) + "
-            "idempotent per slate (one send/day across the morning + post_lineup runs) + TODAY-only "
-            "(backfill/historical re-scores never notify). No-op when QUALIFIED_BETS_SNS_TOPIC_ARN "
-            "is unset (loud skip)."
+            "E9.50 (was E9.9) — after a successful live write, publish a 'lineup-confirmed "
+            "actionable picks' SNS digest (fans out to opted-in push/email/SMS via the "
+            "push-notification-sender Lambda) for the actionable rows (qualified_bet, not "
+            "intraday_fallback) newly written THIS post-lineup (--lineup-confirmed) cycle. "
+            "No-op on a morning (pre-lineup) run — that alert is retired — and on a backfill/"
+            "historical re-score. WARN-tier (never crashes the op); deduped per (date, game_pk) "
+            "so a pick is emailed exactly once across staggered re-score cycles. No-op when "
+            "QUALIFIED_BETS_SNS_TOPIC_ARN is unset (loud skip)."
         ),
     )
     parser.add_argument(
