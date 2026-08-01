@@ -460,6 +460,27 @@ class PartialPoolProjector(Projector):
 
     prior_scale: float = 2.0
     name: str = "partial_pool"
+    # E7.12 slice 1 — OPTIONAL observation weights (default None = byte-exact E7.3 behaviour, pinned by
+    # a test). A labelled row's target is a REALIZED MLB rate whose own sampling noise scales with 1/PA,
+    # so a 150-PA rookie label is a far noisier observation of the same map than a 1,200-PA one. Weighting
+    # the likelihood by label precision is the small-sample hardening on the LABEL side; the reliability
+    # shrink in `park_context.py` is the same idea on the FEATURE side.
+    weight_col: str | None = None
+
+    def _weights(self, t: pd.DataFrame) -> np.ndarray | None:
+        if not self.weight_col:
+            return None
+        w = pd.to_numeric(t.get(self.weight_col), errors="coerce").to_numpy(float)
+        w = np.where(np.isfinite(w) & (w > 0), w, np.nan)
+        med = float(np.nanmedian(w)) if np.isfinite(w).any() else 1.0
+        w = np.nan_to_num(w, nan=med if med > 0 else 1.0)
+        # normalise to mean 1 so the weights change the RELATIVE precision only — an overall rescale
+        # would silently move sigma2 and with it every posterior width.
+        mean = float(np.mean(w))
+        w = w / mean if mean > 0 else np.ones(len(t))
+        # clip the tail: one 3,000-PA veteran must not outvote thirty rookies (a weighted fit has no
+        # partial pooling ACROSS observations — the shrinkage lives in the coefficient prior, not here)
+        return np.clip(w, 0.2, 5.0)
 
     def fit(self, train: pd.DataFrame) -> "PartialPoolProjector":
         t = train[train["has_target"]].copy().reset_index(drop=True)
@@ -469,7 +490,8 @@ class PartialPoolProjector(Projector):
         self.leagues_ = sorted(t["league"].dropna().unique())
         y = t["target"].to_numpy(float)
         X, spec = self._design(t)
-        self.post_ = fit(X, y, spec, fixed_prior_sd=self.prior_scale * (float(np.std(y)) or 1.0))
+        self.post_ = fit(X, y, spec, weights=self._weights(t),
+                         fixed_prior_sd=self.prior_scale * (float(np.std(y)) or 1.0))
         self.spec_ = spec
         self.global_mean_ = float(np.mean(y)) if len(y) else 0.0
         return self
@@ -586,7 +608,8 @@ def candidate_configs(config: MleConfig) -> list[Projector]:
 
 def _config_name(c: Projector) -> str:
     if isinstance(c, PartialPoolProjector):
-        return f"partial_pool@{c.prior_scale}"
+        w = f"|w:{c.weight_col}" if c.weight_col else ""
+        return f"partial_pool@{c.prior_scale}{w}"
     if isinstance(c, GBMProjector):
         sc = "+sc" if c.use_statcast else ""
         return f"gbm@{c.n_estimators}-{c.max_depth}-{c.learning_rate}{sc}"
@@ -596,7 +619,7 @@ def _config_name(c: Projector) -> str:
 def clone_projector(c: Projector) -> Projector:
     """A FRESH unfitted copy of a projector's config (for the expanding-window refits)."""
     if isinstance(c, PartialPoolProjector):
-        return PartialPoolProjector(prior_scale=c.prior_scale)
+        return PartialPoolProjector(prior_scale=c.prior_scale, weight_col=c.weight_col)
     if isinstance(c, GBMProjector):
         return GBMProjector(c.n_estimators, c.max_depth, c.learning_rate,
                             use_statcast=c.use_statcast, aux_cols=c.aux_cols)
