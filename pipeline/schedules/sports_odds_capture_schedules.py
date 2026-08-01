@@ -23,6 +23,14 @@ turn this ON alongside `sports_ncaaf_roll_forward_schedule`, well before the ope
 Cron 08:00 America/Los_Angeles Monday, Aug-Dec + Jan (bowls/CFP still land in January): a
 quiet-hours weekly catch-up; credit cost bounded to whichever week(s) newly crossed into
 "kicked off, not yet covered" since the last fire (module docstring: ~1,800-2,100 credits/week).
+
+🆕 NCAAF-P0.6c (day-prior T-1 line-movement capture) is a SEPARATE opt-in on top of this
+schedule, `NCAAF_ODDS_CAPTURE_T1` (default unset = OFF, read by
+`ncaaf_odds_recurring_capture_op`) — turning this schedule ON does NOT by itself enable T-1
+capture. It roughly DOUBLES the per-run credit cost above, so confirm the remaining Odds-API
+balance (`odds_recurring_capture.py --dry-run --capture-t1`) before setting the flag; the weekly
+cadence still works for a ~24h-pre-kickoff snapshot because `/historical` snapshots a PAST
+instant regardless of when the fetch runs (see that module's docstring).
 """
 
 from dagster import DefaultScheduleStatus, RunRequest, ScheduleEvaluationContext, schedule
