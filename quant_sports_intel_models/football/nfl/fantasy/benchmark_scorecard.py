@@ -285,7 +285,20 @@ def _score_pair(m: pd.DataFrame, us_col: str, sys_col: str) -> dict:
 
 def _disagreement(m: pd.DataFrame, us_col: str, sys_col: str, q: float = 0.75) -> dict:
     """Where OUR model most disagrees with the system (top-quartile |z_us − z_sys| within position),
-    who predicts the realized finish better? The edge of a NON-MARKET product lives in the fades."""
+    who predicts the realized finish better? The edge of a NON-MARKET product lives in the fades.
+
+    ⭐ NF-D13 AUDIT (2026-08-01) — checked this scorer against E7.11's baseball-side finding that a
+    source can't "disagree" with a consensus it alone constitutes (aggregate-vs-member, defect #4;
+    1-source rows + mismatched percentile denominators produced a lopsided false flag split there).
+    CLEAN here: `build_scorecard` never builds an N-source consensus — every system is graded
+    against us independently (one system per `m`, always both sides present via inner join), and
+    `zf`/`zs` below are z-scored over the IDENTICAL population `d` for both sides, so a
+    mismatched-denominator split cannot occur. If a future change ever folds multiple competitor
+    systems into one blended "consensus" entrant, re-apply the E7.11 discipline (n_sources≥2,
+    exclude-self, shared residual — see `betting_ml/scripts/prospect_board/consensus.py`) before
+    wiring it in here. Pinned by
+    `test_scorecard_systems_score_independently_of_each_other` in
+    `betting_ml/tests/test_nfl_fantasy_projection.py`."""
     pool = []
     for p in _POSITIONS:
         d = m[m["position"] == p]

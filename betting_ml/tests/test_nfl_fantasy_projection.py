@@ -569,6 +569,54 @@ def test_disagreement_panel_credits_the_right_side():
     assert dz and dz["us"] > dz["system"]
 
 
+# ── NF-D13: audited for E7.11's aggregate-vs-member defect (a source can't "disagree" with a
+# consensus it alone constitutes). CLEAN — `build_scorecard` never builds an N-source consensus
+# column; every system is graded against us independently (one inner-join `m` per system, so both
+# sides are always present and z-scored over the identical population). Pin that invariant: a
+# system's own computed stats must not depend on which OTHER systems happen to be registered —
+# if a future change ever blends multiple competitor systems into one "consensus" entrant, this
+# test is what would catch it silently leaking cross-system contamination.
+def test_scorecard_systems_score_independently_of_each_other(monkeypatch, tmp_path):
+    n = 40
+    ids = [f"P{i}" for i in range(n)]
+    real = list(range(n, 0, -1))
+    us = list(range(n, 0, -1))  # perfect order
+
+    proj = pd.DataFrame({"player_id": ids, "position": ["RB"] * n, "proj_fp_ppr": us})
+    real_df = pd.DataFrame({"player_id": ids, "g": [10] * n, "real_fp_ppr": real})
+
+    def project_fn(con, y, schema):
+        return proj.copy()
+
+    def load_realized_fn(con, y, schema):
+        return real_df.copy()
+
+    sys_a_ids = ids[:25]
+    sys_b_ids = ids[15:]  # overlaps sys_a on P15-P24, unique on P25-P39
+
+    def sys_a(con, season, schema):
+        return pd.DataFrame({"player_id": sys_a_ids, "position": ["RB"] * len(sys_a_ids),
+                             "score": [float(-i) for i in range(len(sys_a_ids))]})
+
+    def sys_b(con, season, schema):
+        return pd.DataFrame({"player_id": sys_b_ids, "position": ["RB"] * len(sys_b_ids),
+                             "score": [float(i) for i in range(len(sys_b_ids))]})  # reversed order
+
+    monkeypatch.setattr(bs, "API_SYSTEMS", {"sys_a": sys_a})
+    only_a = bs.build_scorecard(None, [2099], "sch", project_fn=project_fn,
+                                load_realized_fn=load_realized_fn, manual_dir=tmp_path)
+    row_a_alone = only_a["per_season"][0]["systems"]["sys_a"]
+
+    monkeypatch.setattr(bs, "API_SYSTEMS", {"sys_a": sys_a, "sys_b": sys_b})
+    both = bs.build_scorecard(None, [2099], "sch", project_fn=project_fn,
+                             load_realized_fn=load_realized_fn, manual_dir=tmp_path)
+    row_a_with_b = both["per_season"][0]["systems"]["sys_a"]
+
+    # sys_a's own grade must be BYTE-IDENTICAL whether or not sys_b also exists — proves there is
+    # no shared/blended consensus that a system's grading leans on (the E7.11 defect requires one).
+    assert row_a_alone == row_a_with_b
+
+
 def test_find_col_matches_case_and_space_insensitively():
     assert bs._find_col(["Player Name", "Pos", "Overall Rank"], bs._RANK_COLS) == "Overall Rank"
     assert bs._find_col(["player", "position", "FPTS"], bs._POINTS_COLS) == "FPTS"
