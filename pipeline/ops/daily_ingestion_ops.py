@@ -887,13 +887,21 @@ def check_odds_coverage_op(context):
     exits 0 and only WARNs unless ODDS_COVERAGE_STRICT=1, which promotes a CURRENT-slate FREEZE
     to a non-zero exit → HALT here. The FREEZE test requires odds_events>0, so it can NEVER
     false-fire when books simply have not posted yet (that path is NO_ODDS_YET, benign). Flip
-    ODDS_COVERAGE_STRICT=1 in the box env_file after confirming it does not false-fire."""
+    ODDS_COVERAGE_STRICT=1 in the box env_file after confirming it does not false-fire.
+
+    E11.30: in the (default) non-strict path the script always exits 0, so the `except` below
+    NEVER fires for a FREEZE — the op used to only `context.log.warning`, a detection with no
+    notification (the E11.27 finding: "ALERT-tier" had quietly meant "logged, nobody paged").
+    It now pages via send_alert on the script's discriminating `odds_coverage_freeze` metric —
+    the strict/HALT path still needs no separate page: raising there fails the op, which fails
+    daily_ingestion_job, which run_failure_alert_sensor already pages CRITICAL for."""
     strict = os.environ.get("ODDS_COVERAGE_STRICT") == "1"
     try:
         stdout = _run_script(context, "check_odds_coverage.py", ["--env", _target_env()])
     except Exception as e:
         # Non-strict: never take down serving during rollout (ALERT-continue). Strict: the
-        # script exited non-zero on a current-slate FREEZE (or a genuine crash) → let it HALT.
+        # script exited non-zero on a current-slate FREEZE (or a genuine crash) → let it HALT
+        # (run_failure_alert_sensor pages CRITICAL on the resulting job failure).
         if strict:
             raise
         context.log.warning(
@@ -901,6 +909,7 @@ def check_odds_coverage_op(context):
             f"(non-blocking; set ODDS_COVERAGE_STRICT=1 to HALT): {e}"
         )
         return
+    freeze = False
     for line in stdout.splitlines():
         if line.startswith("[METRIC] odds_coverage_score="):
             try:
@@ -908,6 +917,21 @@ def check_odds_coverage_op(context):
                 context.add_output_metadata({"odds_coverage_score": MetadataValue.float(score)})
             except ValueError:
                 pass
+        elif line.startswith("[METRIC] odds_coverage_freeze="):
+            freeze = line.split("=", 1)[1].strip() == "1"
+    if freeze:
+        from pipeline.utils.alerting import send_alert
+        send_alert(
+            "Odds bridge FREEZE on current slate",
+            "mart_game_odds_bridge has 0 has_odds rows for today's slate despite fresh "
+            "spine + odds events (the bridge did not rebuild) — predictions will run "
+            "MARKET-BLIND. See the Dagster step log (check_odds_coverage_op) for detail. "
+            "Remediate: rebuild the bridge (run_w1_lakehouse.py --w6-odds-current + "
+            "refresh_w1_external_tables.py --w6-odds) and confirm the spine (--w5-group-a) "
+            "rebuild runs daily BEFORE --w6.",
+            severity="CRITICAL",
+            dedup_key="odds_coverage_freeze",
+        )
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -927,7 +951,15 @@ def check_feature_block_coverage_op(context):
     Tier: ALERT-loud-but-continue by DEFAULT (RUNTIME-GATE-safe rollout). The script exits 0
     and only WARNs unless FEATURE_COVERAGE_STRICT=1, which promotes any DEGRADED block to a
     non-zero exit → HALT here. Flip FEATURE_COVERAGE_STRICT=1 in the box env_file after the
-    W11b umpire cutover restores the block and it is confirmed not to false-fire."""
+    W11b umpire cutover restores the block and it is confirmed not to false-fire.
+
+    E11.30: the non-strict (default) path always exits 0, so a DEGRADED block used to only
+    reach `context.log.warning` — a detection nobody was paged on (the F2 class this guard
+    exists for could recur silently). It now pages via send_alert on the script's
+    `feature_block_degraded_count` metric (never set by a SKIPPED/coverage-gapped block, so it
+    can't false-fire on a block that is legitimately partial by era/source); CRITICAL when a
+    whole-slate date outage is present (`feature_block_date_outage_count`, the E9.53 signature
+    the window-aggregate alone would dilute away), ERROR otherwise."""
     strict = os.environ.get("FEATURE_COVERAGE_STRICT") == "1"
     try:
         stdout = _run_script(context, "check_feature_block_coverage.py", ["--env", _target_env()])
@@ -939,6 +971,8 @@ def check_feature_block_coverage_op(context):
             f"(non-blocking; set FEATURE_COVERAGE_STRICT=1 to HALT): {e}"
         )
         return
+    degraded_count = 0
+    date_outage_count = 0
     for line in stdout.splitlines():
         if line.startswith("[METRIC] feature_block_min_cov_ratio="):
             try:
@@ -947,6 +981,28 @@ def check_feature_block_coverage_op(context):
                     {"feature_block_min_cov_ratio": MetadataValue.float(ratio)})
             except ValueError:
                 pass
+        elif line.startswith("[METRIC] feature_block_date_outage_count="):
+            try:
+                date_outage_count = int(line.split("=", 1)[1])
+            except ValueError:
+                pass
+        elif line.startswith("[METRIC] feature_block_degraded_count="):
+            try:
+                degraded_count = int(line.split("=", 1)[1])
+            except ValueError:
+                pass
+    if degraded_count > 0:
+        from pipeline.utils.alerting import send_alert
+        send_alert(
+            "Feature block SILENTLY COLLAPSED",
+            f"{degraded_count} served feature block(s) collapsed on recently-played slates "
+            f"({date_outage_count} whole-slate date outage(s)) — predictions run on an "
+            "amputated feature set. See the Dagster step log (check_feature_block_coverage_op) "
+            "for which block(s). Likely an ext-table VALUE:-case mismatch or a precursor build "
+            "not wired into the daily job.",
+            severity="CRITICAL" if date_outage_count > 0 else "ERROR",
+            dedup_key="feature_block_degraded",
+        )
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -968,7 +1024,16 @@ def check_served_prediction_integrity_op(context):
     Tier: ALERT-loud-but-continue by DEFAULT (RUNTIME-GATE-safe rollout). The script exits 0
     and only WARNs unless SERVED_INTEGRITY_STRICT=1, which promotes any integrity problem to a
     non-zero exit → HALT here. Flip SERVED_INTEGRITY_STRICT=1 in the box env_file after it is
-    confirmed on a live slate not to false-fire."""
+    confirmed on a live slate not to false-fire.
+
+    E11.30: this is the op the E11.27 finding names directly — it ALREADY had a
+    feature_store_frac<0.80 fallback detector (among others) when the intraday_fallback
+    blind spot persisted for days, because the non-strict path only reached
+    `context.log.warning` and nobody was paged; a human hand-querying the column was the
+    only alarm. It now pages via send_alert on the script's discriminating
+    `served_integrity_problem_count` metric (0 = healthy; every problem class it counts —
+    wrong-date, fallback, coverage collapse, flat output, blank target-book price — is a
+    genuine served-data defect, so this can't fire on a benign/chronic baseline)."""
     strict = os.environ.get("SERVED_INTEGRITY_STRICT") == "1"
     try:
         stdout = _run_script(context, "check_served_prediction_integrity.py", ["--env", _target_env()])
@@ -980,14 +1045,28 @@ def check_served_prediction_integrity_op(context):
             f"(non-blocking; set SERVED_INTEGRITY_STRICT=1 to HALT): {e}"
         )
         return
+    problem_count = 0
     for line in stdout.splitlines():
         if line.startswith("[METRIC] served_integrity_problem_count="):
             try:
-                n = int(line.split("=", 1)[1])
+                problem_count = int(line.split("=", 1)[1])
                 context.add_output_metadata(
-                    {"served_integrity_problem_count": MetadataValue.int(n)})
+                    {"served_integrity_problem_count": MetadataValue.int(problem_count)})
             except ValueError:
                 pass
+    if problem_count > 0:
+        from pipeline.utils.alerting import send_alert
+        send_alert(
+            "Served-prediction integrity problem",
+            f"{problem_count} integrity problem(s) on today's served slate — the model served "
+            "a degraded/flat/mis-dated feature vector or a blank target-book price. See the "
+            "Dagster step log (check_served_prediction_integrity_op) for the per-tier detail. "
+            "Investigate with: rescore_audit --since <date> --compare-live, load_todays_features "
+            "coverage gate, W8a/W8b served parquet freshness, and the odds/feature-block "
+            "coverage guards.",
+            severity="CRITICAL",
+            dedup_key="served_prediction_integrity",
+        )
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -1750,7 +1829,20 @@ def check_injury_status_health_op(context):
 
     Tier: ALERT-loud-but-continue. The IL badge is a profile adornment, not the serving
     path, so a stale feed must never HALT the daily job — but it must never pass
-    silently either. INJURY_STATUS_STRICT=1 promotes to HALT."""
+    silently either. INJURY_STATUS_STRICT=1 promotes to HALT.
+
+    E11.30: the non-strict path used to only re-log the script's [METRIC] lines — a
+    detection with no notification. It now pages via send_alert, but DISCRIMINATES between
+    the two independent checks the script reports (see injury_status_health.py):
+      - il_plausibility=IMPLAUSIBLE is the E9.48 bug signature itself (a player flagged
+        CURRENTLY on the IL who has since played) — CRITICAL, always page.
+      - il_plausibility=UNKNOWN (the chain produced zero current-IL rows, mid-season) — WARN.
+      - feed_freshness=STALE/UNKNOWN ALONE (il_plausibility OK) does NOT page: the script's
+        own docstring documents this as EXPECTED in the off-season (ingest_transactions'
+        7-day lookback only runs from the in-season daily job, so Nov-Feb is a known,
+        already-understood hole) — paging on it daily for ~4 months would be exactly the
+        alert-fatigue failure mode this story warns against for a condition nobody would
+        act on differently. It still logs loudly either way."""
     strict = os.environ.get("INJURY_STATUS_STRICT") == "1"
     try:
         # Bounded S3 read — a finite timeout so a stalled httpfs read can never park the
@@ -1764,10 +1856,29 @@ def check_injury_status_health_op(context):
             f"(non-blocking; set INJURY_STATUS_STRICT=1 to HALT): {e}"
         )
         return
+    metrics: dict[str, str] = {}
     for line in stdout.splitlines():
         if line.startswith("[METRIC] injury_status_"):
-            (context.log.warning if line.endswith("=0") or "OK" not in line
-             else context.log.info)(line.strip())
+            key, _, val = line[len("[METRIC] "):].partition("=")
+            metrics[key] = val.strip()
+            (context.log.warning if val.strip() not in ("1", "OK") else context.log.info)(line.strip())
+    if metrics.get("injury_status_ok") == "1":
+        return
+    il_status = metrics.get("injury_status_il_plausibility", "OK")
+    severity = "CRITICAL" if il_status == "IMPLAUSIBLE" else ("WARN" if il_status == "UNKNOWN" else None)
+    if severity is None:
+        return  # feed_freshness-only failure — the documented off-season gap; log-only.
+    from pipeline.utils.alerting import send_alert
+    send_alert(
+        "Injury/IL status check failed",
+        f"feed_freshness={metrics.get('injury_status_feed_freshness')}, "
+        f"il_plausibility={il_status}. See the Dagster step log (check_injury_status_health_op) "
+        "for detail. IMPLAUSIBLE means a player flagged CURRENTLY on the IL has played an MLB "
+        "game since (the E9.48 clearing/reconciliation logic is not being applied); UNKNOWN "
+        "means the injury chain produced zero current-IL rows mid-season.",
+        severity=severity,
+        dedup_key="injury_status_health",
+    )
 
 
 # ── Player profile update (weekly) ───────────────────────────────────────────

@@ -17,6 +17,33 @@ For each of the four batter metrics, whether ANY rung of the ladder beats the **
 held-out translation accuracy by enough to survive deflation — and, if so, re-emits `mle_projections`
 under that rung (`--apply`). **A null add is DROPPED, not shipped.** `best_alpha = 0`.
 
+SLICE 1p — THE PITCHER SIDE (`--player-type pitcher`)
+-----------------------------------------------------
+The same ladder, the same three degenerate anchors, the same deflation, run against the E7.3p incumbent
+on `mle_projections_pitchers`. E7.3p's "harness reused, not forked" precedent, one rung up: a `SideConfig`
+carries the only things that legitimately differ — the pinned incumbent prior scales, the metric list,
+the falsification split and the emission target. A test asserts the two sides are the SAME set of rungs.
+(The label-exposure column is `mlb_pa` on BOTH sides: E7.3p deliberately stores batters-faced under the
+shared `mlb_pa`/`minor_pa` names so the harness needs no pitcher fork — see the weight-column guard in
+`run_ladder` for what assuming otherwise costs.)
+
+    uv run python -m betting_ml.scripts.milb_mle.build_graduated_pairs_pitchers --season-floor 2015
+    uv run python -m betting_ml.scripts.milb_mle.build_park_context --season-floor 2015 \
+        --player-type pitcher
+    uv run python -m betting_ml.scripts.milb_mle.run_e7_12_slice1 --player-type pitcher
+
+⭐ **The pitcher run is an INDEPENDENT REPLICATION of the batter finding, not a restatement.** The batter
+slice measured a small but real park effect (+0.84% on ISO, 11/11 folds) against a much larger level×season
+RUN-ENVIRONMENT effect. The pitcher side tests the same physical claim — fences move batted balls, not the
+strike zone — on a different population, a different label and a different set of counting stats. If the
+batter park effect were an artifact of the batter substrate, this side has no reason to reproduce it.
+
+⚠️ Two honest asymmetries, stated before the run: (a) `xwoba_against` can have NO park factor and no run
+environment — its minor feature is the E7.2 AAA-Statcast summary, which has no home/road box-line bucket
+to form a ratio from, so its park/env arms are unselectable no-ops rather than fabricated 1.0s; and (b)
+only `gb_pct`, `bb_pct`, `k_pct` reach the E8.0 board — E7.3p found `hr_rate` and `xwoba_against`
+no-signal, so a lift on those two is COSMETIC (the pitcher-side twin of wOBA on the batter side).
+
 THE LADDER IS AN ABLATION, NOT A GRID SEARCH (§0.5's "pre-register a hypothesis-driven set, not open
 subset search"). Each rung adds ONE named mechanism to the one before it, plus two isolation arms that
 break the ladder apart, plus three anchors that MUST LOSE.
@@ -59,7 +86,7 @@ import itertools
 import json
 import logging
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -72,6 +99,8 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from betting_ml.scripts.milb_mle.milb_mle import (  # noqa: E402
     BATTER_METRICS,
+    PITCHER_AUX_COLS,
+    PITCHER_METRICS,
     PLAUSIBLE_RANGE,
     MleConfig,
     PartialPoolProjector,
@@ -79,10 +108,13 @@ from betting_ml.scripts.milb_mle.milb_mle import (  # noqa: E402
     emit_projections,
 )
 from betting_ml.scripts.milb_mle.park_context import (  # noqa: E402
+    BATTER_REDUCED,
     STABILIZATION_PA,
     ContextSpec,
+    ReducedSpec,
     apply_context,
     context_coverage,
+    reduced_spec,
 )
 
 log = logging.getLogger("e7_12.slice1")
@@ -101,11 +133,80 @@ _KEYS = ["player_id", "level"]
 # is how a harness silently compares a change against itself (the NF1.8 `_NF17_WINNER_LABEL` lesson).
 E73_WINNER_PRIOR_SCALE: dict[str, float] = {"woba": 4.0, "k_pct": 2.0, "bb_pct": 4.0, "iso": 2.0}
 
+# ⭐ PINNED from the E7.3p report (`ablation_results/e7_3p_milb_mle_pitchers.md` §1) — `partial_pool`
+# won all five pitcher metrics; these are the winning prior scales. Same discipline as the batter map:
+# a literal, so the ladder cannot silently re-derive its own reference from the code it is changing.
+E73P_WINNER_PRIOR_SCALE: dict[str, float] = {
+    "k_pct": 4.0, "bb_pct": 4.0, "hr_rate": 4.0, "gb_pct": 2.0, "xwoba_against": 2.0}
+
 # Parks move BALLS IN PLAY. A real park effect belongs to the contact metrics; discipline is a
 # pitcher-batter negotiation the fence distance barely touches. Pre-registered BEFORE the run so the
 # directional read cannot be written to fit whatever came out.
 PARK_SENSITIVE: tuple[str, ...] = ("iso", "woba")
 PARK_INSENSITIVE: tuple[str, ...] = ("k_pct", "bb_pct")
+
+# The pitcher MIRROR of that falsification, and it is a genuine INDEPENDENT REPLICATION rather than a
+# restatement: it is the same physical claim (fences move batted balls, not the strike zone) tested on a
+# different population, a different label and a different set of counting stats. HR-rate-allowed and
+# ground-out share are the ball-in-play metrics; K% and BB% must stay ~flat. If the batter side's small
+# real park effect were an artifact of the batter substrate, this side has no reason to reproduce it.
+PARK_SENSITIVE_PITCHER: tuple[str, ...] = ("hr_rate", "gb_pct")
+PARK_INSENSITIVE_PITCHER: tuple[str, ...] = ("k_pct", "bb_pct")
+
+
+@dataclass(frozen=True)
+class SideConfig:
+    """Everything the ladder needs to know about WHICH side of the plate it is scoring.
+
+    The batter and pitcher slices run the SAME pre-registered ladder, the same anchors and the same
+    deflation — E7.3p's "harness reused, not forked" precedent, one rung up. Only the incumbent's pinned
+    prior scales, the metric list, the falsification split and the emission target differ.
+    """
+
+    player_type: str
+    reduced: ReducedSpec
+    metrics: tuple[str, ...]
+    prior_scales: dict[str, float]
+    park_sensitive: tuple[str, ...]
+    park_insensitive: tuple[str, ...]
+    model_version: str
+    incumbent_version: str
+    s3_dest: str
+    report_name: str
+    pairs_name: str
+    board_metrics: tuple[str, ...]     # what E8.0 actually reads — the rest is cosmetic if it moves
+
+    def mle_config(self, metric: str) -> MleConfig:
+        if self.player_type == "pitcher":
+            return MleConfig(metric=metric, aux_cols=PITCHER_AUX_COLS, player_type="pitcher",
+                             model_version=self.model_version)
+        return MleConfig(metric=metric)
+
+
+BATTER_SIDE = SideConfig(
+    player_type="batter", reduced=BATTER_REDUCED, metrics=BATTER_METRICS,
+    prior_scales=E73_WINNER_PRIOR_SCALE,
+    park_sensitive=PARK_SENSITIVE, park_insensitive=PARK_INSENSITIVE,
+    model_version="milb_mle_v2_parkctx", incumbent_version="milb_mle_v1",
+    s3_dest="s3://baseball-betting-ml-artifacts/baseball/milb/derived/mle_projections",
+    report_name="e7_12_slice1_park_level_context.md",
+    pairs_name="mle_graduated_pairs.parquet",
+    board_metrics=("k_pct", "bb_pct", "iso"),
+)
+PITCHER_SIDE = SideConfig(
+    player_type="pitcher", reduced=reduced_spec("pitcher"), metrics=PITCHER_METRICS,
+    prior_scales=E73P_WINNER_PRIOR_SCALE,
+    park_sensitive=PARK_SENSITIVE_PITCHER, park_insensitive=PARK_INSENSITIVE_PITCHER,
+    model_version="milb_mle_pitcher_v2_parkctx", incumbent_version="milb_mle_pitcher_v1",
+    s3_dest="s3://baseball-betting-ml-artifacts/baseball/milb/derived/mle_projections_pitchers",
+    report_name="e7_12_slice1p_park_level_context_pitchers.md",
+    pairs_name="mle_graduated_pairs_pitchers.parquet",
+    # E7.3p's no-signal metrics (hr_rate DSR 0.130, xwoba_against DSR 0.030) are EXCLUDED from the
+    # board composite, so improving them cannot move a draft ranking — the pitcher-side twin of wOBA
+    # being cosmetic on the batter side. Scored and reported anyway; just never claimed as a board win.
+    board_metrics=("gb_pct", "bb_pct", "k_pct"),
+)
+SIDES: dict[str, SideConfig] = {"batter": BATTER_SIDE, "pitcher": PITCHER_SIDE}
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════
@@ -160,7 +261,62 @@ LADDER: tuple[Rung, ...] = (
          "DEGENERATE — everyone shrunk by the population-mean r (no PA variation)"),
 )
 
-_BY_LABEL = {r.label: r for r in LADDER}
+# ── POST-HOC arms (opt-in, `--include-posthoc`) ────────────────────────────────────────────────────
+# ⚠️ THESE WERE NOT PRE-REGISTERED. They exist because the PITCHER run (slice 1p) produced a result the
+# ladder could not interrogate: `S5_full_labelweight` won three metrics, but S5 BUNDLES park + level-env
+# + reliability + label weights, and the same run's isolation arms showed the PARK contributes nothing on
+# this side (mean lift on the park-sensitive metrics −0.0%; on HR-rate the park arm alone is NEGATIVE and
+# its placebo does marginally better). No pre-registered rung answers "does the winner get BETTER with the
+# inert component removed?" — the ladder only ever adds mechanisms, never subtracts them.
+#
+# These are ABLATIONS-DOWN from the winner, not a grid search: each drops exactly one named component and
+# asks whether it was carrying anything. They are honest only if handled as post-hoc, so:
+#   * they are OFF by default — the pre-registered ladder is what runs unless you ask for these, which
+#     keeps the already-PUBLISHED batter run byte-reproducible and makes their status impossible to miss;
+#   * they carry `kind="posthoc"` and are labelled as such in the report;
+#   * they are scored into the SAME deflation and the SAME eligible set, so choosing among a wider field
+#     costs what a wider field should cost (PBO/DSR deflate against the whole search that ran);
+#   * they must clear the SAME gate — ≥60% of folds AND, now, BH-FDR.
+POSTHOC_RUNGS: tuple[Rung, ...] = (
+    Rung("P1_env_rel_weight",
+         ContextSpec(level_env=True, reliability=1.0, weight_col="mlb_pa"), "posthoc",
+         "POST-HOC: the winning stack MINUS the park — is the park carrying anything inside it?"),
+    Rung("P2_env_weight",
+         ContextSpec(level_env=True, weight_col="mlb_pa"), "posthoc",
+         "POST-HOC: minus the park AND the reliability shrink — the two components isolation showed "
+         "smallest"),
+    Rung("P3_rel_weight",
+         ContextSpec(reliability=1.0, weight_col="mlb_pa"), "posthoc",
+         "POST-HOC: minus the park AND the run environment — for the metrics where level-env HURT"),
+)
+
+_BY_LABEL = {r.label: r for r in LADDER + POSTHOC_RUNGS}
+
+
+def ladder_for(side: SideConfig, include_posthoc: bool = False) -> tuple[Rung, ...]:
+    """The same ladder, with the label-precision arm pointed at THAT side's label-exposure column.
+
+    Today that resolves to `mlb_pa` on BOTH sides and this is a pass-through — E7.3p stores the
+    pitcher's batters-faced under the shared name on purpose. The seam is kept anyway (rather than
+    hardcoding `mlb_pa`) because it is the one thing about the weight arm that legitimately varies by
+    population, and `run_ladder`'s guard turns a wrong value into a raise instead of a fake null.
+
+    `include_posthoc` appends `POSTHOC_RUNGS` — OFF by default so the pre-registered ladder is what runs
+    unless a caller explicitly opts in (see that constant for why the opt-in IS the honesty mechanism).
+    """
+    rungs = LADDER + (POSTHOC_RUNGS if include_posthoc else ())
+    wc = side.reduced.label_weight_col
+    if wc == "mlb_pa":
+        return rungs
+    return tuple(
+        r if r.spec.weight_col is None
+        else Rung(r.label, replace(r.spec, weight_col=wc), r.kind, r.note)
+        for r in rungs
+    )
+
+
+def by_label(arms: tuple[Rung, ...]) -> dict[str, Rung]:
+    return {r.label: r for r in arms}
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════
@@ -332,7 +488,8 @@ def _adjusted(pairs: pd.DataFrame, context: pd.DataFrame | None, spec: ContextSp
 def run_ladder(pairs: pd.DataFrame, context: pd.DataFrame | None, metric: str,
                arms: tuple[Rung, ...] = LADDER,
                prior_scale: float | None = None,
-               sensitivity_scale: float | None = None) -> LadderResult:
+               sensitivity_scale: float | None = None,
+               side: SideConfig = BATTER_SIDE) -> LadderResult:
     """Score every rung under the E7.3 fold structure — leave-one-MLB-debut-cohort-out, expanding
     window — with the learner held fixed.
 
@@ -341,8 +498,38 @@ def run_ladder(pairs: pd.DataFrame, context: pd.DataFrame | None, metric: str,
     exactly the same rows. If a future rung ever changed the population, the comparison would silently
     become "different players" rather than "different adjustment" — the cheapest way an ablation lies.
     """
-    scale = prior_scale if prior_scale is not None else E73_WINNER_PRIOR_SCALE.get(metric, 2.0)
-    cfg = MleConfig(metric=metric)
+    scale = prior_scale if prior_scale is not None else side.prior_scales.get(metric, 2.0)
+    cfg = side.mle_config(metric)
+    lookup = by_label(arms)
+
+    # 🪤 A BAD WEIGHT COLUMN NEVER REACHES THE REPORT AS "BROKEN" — it reaches it as a RESULT.
+    # Two distinct ways, both silent at the ladder level, and neither raises where anyone would see it:
+    #   (a) the column is ABSENT → `_weights` throws inside the fold loop, whose `except` exists so a
+    #       degenerate fold cannot kill the sweep → every fold fails → the arm scores NaN and simply
+    #       VANISHES from the leaderboard and from the deflation count. Two pre-registered arms quietly
+    #       stop existing.
+    #   (b) the column is PRESENT but all-NaN / non-positive → `_weights` median-fills, the all-NaN
+    #       median falls back to 1.0 → every weight is exactly 1 → the arm is BYTE-IDENTICAL to the
+    #       baseline and is reported as "label weighting is a clean null" having never been applied.
+    # (b) is the worse one: it manufactures a confident negative result. Caught on the pitcher port,
+    # where the label exposure is stored under the SHARED name `mlb_pa`, not a plausible `mlb_tbf`.
+    for _r in arms:
+        wc = _r.spec.weight_col
+        if not wc:
+            continue
+        nearby = sorted(c for c in pairs.columns if "pa" in c.lower() or "tbf" in c.lower())
+        if wc not in pairs.columns:
+            raise AssertionError(
+                f"[{metric}/{_r.label}] weight_col={wc!r} is ABSENT from the pairs table (candidates: "
+                f"{nearby}). This does not fail loudly on its own — it throws per-fold into the "
+                f"degenerate-fold `except`, so the arm scores NaN and disappears from the leaderboard "
+                f"instead of being reported as broken. Fix the SideConfig's label_weight_col.")
+        w = pd.to_numeric(pairs[wc], errors="coerce")
+        if not (w.notna() & (w > 0)).any():
+            raise AssertionError(
+                f"[{metric}/{_r.label}] weight_col={wc!r} exists but has NO positive values, so every "
+                f"weight median-fills to 1.0 and this arm becomes a byte-exact copy of the baseline — "
+                f"it would be reported as 'label weighting is a clean null' having never been applied.")
 
     base_lab = build_target(pairs, cfg)
     base_mask = base_lab["has_target"].to_numpy(bool)
@@ -357,8 +544,8 @@ def run_ladder(pairs: pd.DataFrame, context: pd.DataFrame | None, metric: str,
         # a two-point prior-scale sensitivity on the two ends of the ladder — counted toward deflation,
         # never folded into the headline margin
         for lbl in ("S0_baseline", "S3_park_env"):
-            if lbl in _BY_LABEL:
-                r = _BY_LABEL[lbl]
+            if lbl in lookup:
+                r = lookup[lbl]
                 arm_specs.append((f"{lbl}|ps{sensitivity_scale:g}", r.spec, sensitivity_scale,
                                   Rung(f"{lbl}|ps{sensitivity_scale:g}", r.spec, "sensitivity",
                                        "prior-scale sensitivity")))
@@ -577,7 +764,7 @@ def dead_context_join(results: dict[str, LadderResult]) -> dict:
     }
 
 
-def directional_read(results: dict[str, LadderResult]) -> dict:
+def directional_read(results: dict[str, LadderResult], side: SideConfig = BATTER_SIDE) -> dict:
     """The pre-registered FALSIFICATION: a real park effect lives in the BALL-IN-PLAY metrics.
 
     If the park lift is as large on K%/BB% as on ISO/wOBA, the mechanism is not the park — it is generic
@@ -591,14 +778,14 @@ def directional_read(results: dict[str, LadderResult]) -> dict:
         row = r.leaderboard.loc[r.leaderboard["arm"] == "S1_park_exposure", "pct_lift_vs_S0"]
         return float(row.iloc[0]) if len(row) else float("nan")
 
-    sens = [lift(m) for m in PARK_SENSITIVE if np.isfinite(lift(m))]
-    insens = [lift(m) for m in PARK_INSENSITIVE if np.isfinite(lift(m))]
+    sens = [lift(m) for m in side.park_sensitive if np.isfinite(lift(m))]
+    insens = [lift(m) for m in side.park_insensitive if np.isfinite(lift(m))]
     s, i = (float(np.mean(sens)) if sens else float("nan"),
             float(np.mean(insens)) if insens else float("nan"))
     consistent = bool(np.isfinite(s) and np.isfinite(i) and s > i)
     return {
-        "park_sensitive_metrics": list(PARK_SENSITIVE), "mean_pct_lift_sensitive": s,
-        "park_insensitive_metrics": list(PARK_INSENSITIVE), "mean_pct_lift_insensitive": i,
+        "park_sensitive_metrics": list(side.park_sensitive), "mean_pct_lift_sensitive": s,
+        "park_insensitive_metrics": list(side.park_insensitive), "mean_pct_lift_insensitive": i,
         "direction_consistent_with_a_park_mechanism": consistent,
         "reading": (
             "✅ the park lift is concentrated in the ball-in-play metrics, which is what a park "
@@ -616,25 +803,27 @@ def directional_read(results: dict[str, LadderResult]) -> dict:
 
 
 def emit_with_context(pairs: pd.DataFrame, context: pd.DataFrame | None, spec: ContextSpec,
-                      metric: str, prior_scale: float) -> pd.DataFrame:
+                      metric: str, prior_scale: float,
+                      side: SideConfig = BATTER_SIDE) -> pd.DataFrame:
     """Re-emit the E7.3 per-(player, level) MLB-equivalent line under a winning rung.
 
     Reuses `emit_projections` verbatim — the leakage-safe expanding-window refit, the seed-cohort
     exclusion and the plausibility clip are E7.3's and stay E7.3's. Only the input feature changes.
     """
     adj = _adjusted(pairs, context, spec, metric)
-    cfg = MleConfig(metric=metric)
+    cfg = side.mle_config(metric)
     proj = emit_projections(
         adj, lambda: PartialPoolProjector(prior_scale=prior_scale, weight_col=spec.weight_col), cfg)
     if not proj.empty:
         proj["context_spec"] = spec.label
-        proj["model_version"] = "milb_mle_v2_parkctx"
+        proj["model_version"] = side.model_version
     return proj
 
 
 def build_applied_projections(pairs: pd.DataFrame, context: pd.DataFrame | None,
                               results: dict[str, LadderResult],
-                              applied: dict[str, dict]) -> tuple[pd.DataFrame | None, bool]:
+                              applied: dict[str, dict],
+                              side: SideConfig = BATTER_SIDE) -> tuple[pd.DataFrame | None, bool]:
     """Assemble the re-emitted wide projections — **EVERY metric, always**.
 
     🪤 **THE FOOTGUN THIS EXISTS TO CLOSE.** The natural implementation emits only the metrics whose
@@ -654,15 +843,18 @@ def build_applied_projections(pairs: pd.DataFrame, context: pd.DataFrame | None,
     """
     wide: pd.DataFrame | None = None
     changed = False
+    # the SUPERSET — a winner may be a post-hoc arm, and labels are unique across both sets, so
+    # resolving a label to its spec here must never depend on which run mode produced it
+    lookup = by_label(ladder_for(side, include_posthoc=True))
     for m, r in results.items():
         add = r.verdict == "ADD"
-        spec = _BY_LABEL[r.winner].spec if add else ContextSpec()
+        spec = lookup[r.winner].spec if add else ContextSpec()
         if add:
             changed = True
         else:
             log.info("[%s] verdict=%s — re-emitting the INCUMBENT for this metric so the wide table "
                      "stays a complete drop-in replacement", m, r.verdict)
-        proj = emit_with_context(pairs, context, spec, m, r.prior_scale)
+        proj = emit_with_context(pairs, context, spec, m, r.prior_scale, side)
         checks = _validate_emission(proj, m)
         if add:
             applied[m] = {"rung": r.winner, "context_spec": spec.label,
@@ -679,8 +871,8 @@ def build_applied_projections(pairs: pd.DataFrame, context: pd.DataFrame | None,
     if wide is None:
         return None, False
     wide = wide.copy()
-    wide["sport"], wide["player_type"] = "mlb", "batter"
-    wide["model_version"] = "milb_mle_v2_parkctx" if changed else "milb_mle_v1"
+    wide["sport"], wide["player_type"] = "mlb", side.player_type
+    wide["model_version"] = side.model_version if changed else side.incumbent_version
     # a complete replacement must carry EVERY metric the board reads, or it is not a replacement
     for m in results:
         assert f"mle_{m}" in wide.columns, f"the re-emission dropped mle_{m} — not a drop-in replacement"
@@ -715,14 +907,17 @@ def _validate_emission(proj: pd.DataFrame, metric: str) -> list[str]:
 
 
 def write_report(results: dict[str, LadderResult], directional: dict, fdr: dict,
-                 applied: dict, join_health: dict, path: Path) -> None:
+                 applied: dict, join_health: dict, path: Path,
+                 side: SideConfig = BATTER_SIDE) -> None:
     L: list[str] = []
     a = L.append
-    a("# MLB Edge-E7.12 SLICE 1 — minor-league PARK factors, per-LEVEL run environment, and the "
-      "small-sample hardening of the MiLB→MLB MLE")
+    tag = "SLICE 1" if side.player_type == "batter" else "SLICE 1p (PITCHERS)"
+    who = "MiLB→MLB MLE" if side.player_type == "batter" else "MiLB→MLB PITCHER MLE"
+    a(f"# MLB Edge-E7.12 {tag} — minor-league PARK factors, per-LEVEL run environment, and the "
+      f"small-sample hardening of the {who}")
     a("")
-    a(f"**generated:** {datetime.now(timezone.utc).isoformat()} · **baseline:** the E7.3 incumbent "
-      f"(`milb_mle_v1`, `partial_pool`) · **learner held FIXED per metric**")
+    a(f"**generated:** {datetime.now(timezone.utc).isoformat()} · **baseline:** the incumbent "
+      f"(`{side.incumbent_version}`, `partial_pool`) · **learner held FIXED per metric**")
     a("")
     a("> ⚠️ **A projection, not an edge claim — `best_alpha = 0`.** This slice asks one question: does "
       "adjusting a prospect's minor-league rate for WHERE (park), WHEN (level×season run environment) "
@@ -736,21 +931,47 @@ def write_report(results: dict[str, LadderResult], directional: dict, fdr: dict,
     a("")
     a("| rung | kind | mechanism |")
     a("|:--|:--|:--|")
-    for r in LADDER:
+    for r in ladder_for(side, include_posthoc=True):
         a(f"| `{r.label}` | {r.kind} | {r.note} |")
     a("")
-    a("**Per-component stabilisation points** driving the reliability shrink (`r = PA/(PA+k)`): "
-      + " · ".join(f"`{m}` k={STABILIZATION_PA[m]:g} PA" for m in BATTER_METRICS)
-      + ". At 160 PA that keeps 73% of an observed K% deviation and only 50% of an ISO deviation — "
-        "**ISO is regressed ~2.7× harder than K% at equal sample**, which is the measured "
-        "translatability ordering (E7.3: K% 0.637 · BB% 0.491 · ISO 0.429) expressed as a prior "
-        "rather than asserted.")
+    a("⚠️ **`posthoc` rungs were NOT pre-registered** and are scored only when `--include-posthoc` is "
+      "passed. They are ablations-DOWN from the winning stack (drop one named component, ask whether it "
+      "was carrying anything) — a question the pre-registered ladder cannot pose, because it only ever "
+      "ADDS mechanisms. They enter the same deflation and the same eligible set, so a wider field costs "
+      "what a wider field should cost, and they must clear the same gate: ≥60% of folds AND BH-FDR.")
     a("")
-    a("**Gate for an ADD** (all must hold): a strict out-of-sample MAE improvement over the E7.3 "
-      "incumbent, in **≥60% of held-out debut cohorts**; the arm must have MOVED >1% of rows (a dead "
-      "join is not a null); the **placebo** park must lose; the **non-LOO** park must not beat the LOO "
-      "park; and the deflation must be readable as a real separation rather than a tie (PBO + flip "
-      "distribution + Bailey degradation + contender spread, all four reported).")
+    a("**Per-component stabilisation points** driving the reliability shrink (`r = PA/(PA+k)`, PA = TBF "
+      "on the pitcher side): "
+      + " · ".join(f"`{m}` k={STABILIZATION_PA[m]:g}" for m in side.metrics if m in STABILIZATION_PA)
+      + ". The point is that they DIFFER: a metric that stabilises late is regressed harder at equal "
+        "sample, which is the measured translatability ordering expressed as a prior rather than "
+        "asserted (batters — K% 0.637 · BB% 0.491 · ISO 0.429; pitchers — GB% 0.551 · BB% 0.367 · "
+        "K% 0.366).")
+    a("")
+    if side.player_type == "pitcher":
+        a("⚠️ **`xwoba_against` can have NO park factor and NO run-environment ratio** — its minor "
+          "feature is the E7.2 AAA-Statcast summary, which has no home/road box-line bucket to form a "
+          "ratio from. Its park/env arms are therefore honest no-ops (unselectable, never fabricated); "
+          "only the reliability shrink can move it.")
+        a("")
+        a(f"⚠️ **Only `{'`, `'.join(side.board_metrics)}` reach the E8.0 board.** E7.3p found "
+          "`hr_rate` and `xwoba_against` no-signal and the board composite excludes them, so a lift on "
+          "those two is **cosmetic** — reported, never claimed as a draft-board improvement. (The "
+          "batter-side twin of this is wOBA.)")
+        a("")
+    a("**Gate for an ADD** (all must hold): a strict out-of-sample MAE improvement over the incumbent, "
+      "in **≥60% of held-out debut cohorts**; the arm must have MOVED >1% of rows (a dead join is not a "
+      "null); the **placebo** park must lose; the **non-LOO** park must not beat the LOO park; the "
+      "winner must survive **Benjamini-Hochberg FDR at α=0.10 over the whole metric family**; and the "
+      "deflation must be readable as a real separation rather than a tie (PBO + flip distribution + "
+      "Bailey degradation + contender spread, all four reported).")
+    a("")
+    a("> 🪤 **The BH-FDR clause is ENFORCED, and for one release it was not.** It was computed and "
+      "printed while the emission keyed off the per-metric fold bar alone, so a metric could fail the "
+      "family-wise correction and still be published — latent on the batter side (all four passed), and "
+      "live on the pitcher side, where `k_pct` cleared 73% of folds at p=0.113 and shipped with "
+      "FDR=False. A per-metric bar does not control a family. An FDR-downgraded metric is re-emitted "
+      "byte-exact as the incumbent.")
     a("")
 
     a("## 1. Is the context join even ALIVE? (the run-level silent-empty guard)")
@@ -768,12 +989,18 @@ def write_report(results: dict[str, LadderResult], directional: dict, fdr: dict,
     a("## 2. Directional falsification — is it actually the PARK?")
     a("")
     a("Parks move **balls in play**. Pre-registered before the run: a genuine park effect must be "
-      "concentrated in ISO/wOBA and near-zero for K%/BB%. A lift that appears uniformly across all "
-      "four metrics is generic shrinkage wearing a park costume.")
+      "concentrated in the contact metrics and near-zero for the discipline metrics. A lift that "
+      "appears uniformly across every metric is generic shrinkage wearing a park costume.")
+    if side.player_type == "pitcher":
+        a("")
+        a("⭐ On this side that is an **independent replication**, not a restatement: the same physical "
+          "claim (fences move batted balls, not the strike zone), tested on a different population, a "
+          "different label and a different set of counting stats. If the batter side's small real park "
+          "effect were an artifact of the batter substrate, this side has no reason to reproduce it.")
     a("")
-    a(f"- mean park lift on **{', '.join(PARK_SENSITIVE)}** (ball-in-play): "
+    a(f"- mean park lift on **{', '.join(directional['park_sensitive_metrics'])}** (ball-in-play): "
       f"**{directional['mean_pct_lift_sensitive']:.3f}%**")
-    a(f"- mean park lift on **{', '.join(PARK_INSENSITIVE)}** (discipline): "
+    a(f"- mean park lift on **{', '.join(directional['park_insensitive_metrics'])}** (discipline): "
       f"**{directional['mean_pct_lift_insensitive']:.3f}%**")
     a("")
     a(f"> {directional['reading']}")
@@ -944,11 +1171,23 @@ def write_report(results: dict[str, LadderResult], directional: dict, fdr: dict,
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         description="E7.12 slice 1 — park + level-run-environment + small-sample ablation ladder")
-    p.add_argument("--pairs", default=str(_E73_OUT / "mle_graduated_pairs.parquet"))
-    p.add_argument("--context", default=str(_DEFAULT_OUT / "mle_park_context.parquet"))
-    p.add_argument("--metrics", nargs="+", default=list(BATTER_METRICS))
+    p.add_argument("--player-type", choices=["batter", "pitcher"], default="batter",
+                   help="batter (slice 1) or pitcher (slice 1p) — same ladder, same anchors, same "
+                        "deflation; the incumbent prior scales, metric list, falsification split and "
+                        "emission target come from that side's SideConfig")
+    p.add_argument("--pairs", default=None,
+                   help="default: that side's E7.3/E7.3p graduated-pairs parquet")
+    p.add_argument("--context", default=None,
+                   help="default: that side's build_park_context output")
+    p.add_argument("--metrics", nargs="+", default=None,
+                   help="default: that side's full metric list")
     p.add_argument("--arms", nargs="+", default=None,
                    help="restrict to these rung labels (a cheap smoke); default = the full ladder")
+    p.add_argument("--include-posthoc", action="store_true",
+                   help="ALSO score the POST-HOC ablation-down arms (see POSTHOC_RUNGS). NOT "
+                        "pre-registered — they drop one component at a time from the winning stack to "
+                        "ask whether it was carrying anything. Scored into the same deflation and the "
+                        "same eligible set, and they must clear the same gate (folds + BH-FDR).")
     p.add_argument("--sensitivity-scale", type=float, default=None,
                    help="also score S0/S3 at this partial-pool prior scale (counted toward deflation)")
     p.add_argument("--out-dir", default=str(_DEFAULT_OUT))
@@ -963,26 +1202,43 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)-7s %(message)s")
 
-    if not Path(args.pairs).exists():
-        p.error(f"pairs parquet not found at {args.pairs} — run build_graduated_pairs.py first")
-    pairs = pd.read_parquet(args.pairs)
-    context = None
-    if Path(args.context).exists():
-        context = pd.read_parquet(args.context)
-        log.info("loaded %d park-context rows", len(context))
-    else:
-        p.error(f"park context not found at {args.context} — run build_park_context.py first "
-                f"(without it every park arm is a silent no-op, which would read as an honest null)")
+    side = SIDES[args.player_type]
+    e73_out = (_PROJECT_ROOT / "quant_sports_intel_models/baseball/edge_program/ablation_results"
+               / ("e7_3p_artifacts" if side.player_type == "pitcher" else "e7_3_artifacts"))
+    pairs_path = Path(args.pairs) if args.pairs else e73_out / side.pairs_name
+    context_path = (Path(args.context) if args.context
+                    else _DEFAULT_OUT / f"mle_park_context{side.reduced.artifact_suffix}.parquet")
+    metrics = args.metrics if args.metrics else list(side.metrics)
 
-    arms = LADDER if not args.arms else tuple(_BY_LABEL[a] for a in args.arms)
+    if not pairs_path.exists():
+        p.error(f"pairs parquet not found at {pairs_path} — run the {side.player_type} "
+                f"build_graduated_pairs first")
+    pairs = pd.read_parquet(pairs_path)
+    context = None
+    if context_path.exists():
+        context = pd.read_parquet(context_path)
+        log.info("loaded %d park-context rows (%s)", len(context), side.player_type)
+    else:
+        p.error(f"park context not found at {context_path} — run build_park_context.py "
+                f"--player-type {side.player_type} first (without it every park arm is a silent "
+                f"no-op, which would read as an honest null)")
+
+    full = ladder_for(side, include_posthoc=args.include_posthoc)
+    lookup = by_label(full)
+    if args.include_posthoc:
+        log.warning("POST-HOC arms ENABLED (%s) — these were NOT pre-registered; they are scored into "
+                    "the same deflation and must clear the same gate. The report labels them.",
+                    ", ".join(r.label for r in POSTHOC_RUNGS))
+    arms = full if not args.arms else tuple(lookup[a] for a in args.arms)
     if "S0_baseline" not in {r.label for r in arms}:
-        arms = (_BY_LABEL["S0_baseline"],) + arms
+        arms = (lookup["S0_baseline"],) + arms
 
     results: dict[str, LadderResult] = {}
-    for metric in args.metrics:
-        log.info("=== E7.12 slice-1 ladder: %s (the multi-minute part) ===", metric)
+    for metric in metrics:
+        log.info("=== E7.12 slice-1 ladder [%s]: %s (the multi-minute part) ===",
+                 side.player_type, metric)
         results[metric] = run_ladder(pairs, context, metric, arms,
-                                     sensitivity_scale=args.sensitivity_scale)
+                                     sensitivity_scale=args.sensitivity_scale, side=side)
         r = results[metric]
         log.info("[%s] verdict=%s winner=%s", metric, r.verdict, r.winner)
         for reason in r.reasons:
@@ -993,7 +1249,7 @@ def main(argv: list[str] | None = None) -> int:
     if not join_health["context_join_alive"]:
         raise AssertionError(join_health["reading"] + f" {join_health['max_pct_rows_moved_by_metric']}")
 
-    directional = directional_read(results)
+    directional = directional_read(results, side)
     log.info("directional read: %s", directional["reading"])
 
     pvals = {}
@@ -1003,12 +1259,33 @@ def main(argv: list[str] | None = None) -> int:
             row["p_one_sided"].iloc[0]) else None
     fdr = bh_fdr(pvals)
 
+    # ── BH-FDR IS A GATE, NOT A FOOTNOTE ──────────────────────────────────────────────
+    # 🪤 It was computed here and REPORTED, but `build_applied_projections` keys off `verdict == "ADD"`,
+    # which the per-metric fold-win-rate bar sets alone — so a metric could FAIL the family-wise
+    # correction and still be published. The defect was LATENT on the batter side (all four metrics
+    # passed FDR, so enforcing it would have changed nothing) and only surfaced on the pitcher run,
+    # where `k_pct` cleared 73% of folds at p=0.113 and shipped despite FDR=False.
+    # ⭐ Note the direction: this makes the gate STRICTER and moves it TOWARD the story's own
+    # pre-registration ("fully deflated — PBO/DSR/FDR"), so unlike a loosened guard it needs no
+    # licensing argument. A metric downgraded here is re-emitted byte-exact as the incumbent.
+    for m, r in results.items():
+        if r.verdict == "ADD" and fdr.get(m) is False:
+            r.verdict = "DROP"
+            r.winner = "S0_baseline"
+            r.reasons.append(
+                f"⛔ FDR-DOWNGRADED — the winner cleared the per-metric fold bar (p={pvals.get(m)}) but "
+                f"does NOT survive Benjamini-Hochberg over the {len(pvals)}-metric family at α=0.10. "
+                f"The primary contrast is a family, and a per-metric bar alone does not control it. "
+                f"DROPPED — the incumbent is re-emitted byte-exact for this metric.")
+            log.warning("[%s] FDR-DOWNGRADED to DROP (p=%s did not survive BH over %d metrics)",
+                        m, pvals.get(m), len(pvals))
+
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     applied: dict[str, dict] = {}
     if args.apply:
-        wide, changed = build_applied_projections(pairs, context, results, applied)
+        wide, changed = build_applied_projections(pairs, context, results, applied, side)
         if wide is None:
             log.info("--apply requested but nothing was emitted — check the metric list.")
         elif not changed:
@@ -1016,7 +1293,7 @@ def main(argv: list[str] | None = None) -> int:
                      "emission stands verbatim. That is the correct outcome for a null slice, not a "
                      "failure — a null add is DROPPED, never shipped.")
         else:
-            dest = out_dir / "mle_projections_parkctx.parquet"
+            dest = out_dir / f"mle_projections{side.reduced.artifact_suffix}_parkctx.parquet"
             wide.to_parquet(dest, index=False)
             log.info("wrote %s (%d rows, %d metric(s) adjusted) — a COMPLETE drop-in replacement",
                      dest, len(wide), len(applied))
@@ -1030,14 +1307,15 @@ def main(argv: list[str] | None = None) -> int:
                 # and the board reads `select *` so extra columns are inert). Without it delta-rs
                 # refuses the write on a field-count mismatch rather than widening.
                 write_deltalake(
-                    "s3://baseball-betting-ml-artifacts/baseball/milb/derived/mle_projections",
-                    wide, mode="overwrite", schema_mode="overwrite",
+                    side.s3_dest, wide, mode="overwrite", schema_mode="overwrite",
                     storage_options=storage_options())
-                log.info("landed the adjusted projections at baseball/milb/derived/mle_projections")
+                log.info("landed the adjusted projections at %s", side.s3_dest)
 
-    (out_dir / "e7_12_slice1_summary.json").write_text(json.dumps({
+    summary_name = f"e7_12_slice1{side.reduced.artifact_suffix}_summary.json"
+    (out_dir / summary_name).write_text(json.dumps({
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "baseline": "E7.3 milb_mle_v1 partial_pool (learner held fixed per metric)",
+        "player_type": side.player_type,
+        "baseline": f"{side.incumbent_version} partial_pool (learner held fixed per metric)",
         "prior_scales": {m: r.prior_scale for m, r in results.items()},
         "context_join_health": join_health,
         "directional": directional,
@@ -1052,7 +1330,8 @@ def main(argv: list[str] | None = None) -> int:
     }, indent=2, default=float))
 
     if not args.no_report:
-        write_report(results, directional, fdr, applied, join_health, _REPORT_PATH)
+        write_report(results, directional, fdr, applied, join_health,
+                     _REPORT_PATH.parent / side.report_name, side)
 
     verdicts = {m: r.verdict for m, r in results.items()}
     log.info("SLICE-1 VERDICTS: %s", verdicts)

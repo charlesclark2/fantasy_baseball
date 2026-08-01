@@ -177,6 +177,10 @@ def main() -> int:
     else:
         score = 1.0  # off-day / no slate → nothing to attach; not a failure.
     print(f"[METRIC] odds_coverage_score={score:.4f}")
+    # E11.30 — a discriminating boolean the calling op can page on WITHOUT re-parsing the
+    # classification (FREEZE only; never PARTIAL/NO_ODDS_YET/OFF_DAY, so this can never
+    # false-fire on a books-haven't-posted-yet slate).
+    print(f"[METRIC] odds_coverage_freeze={1 if current_freeze else 0}")
 
     if current_freeze:
         banner = ("ODDS BRIDGE FREEZE on the CURRENT slate — mart_game_odds_bridge has 0 "

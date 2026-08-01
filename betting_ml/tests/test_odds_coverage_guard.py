@@ -83,6 +83,8 @@ class TestMain:
         assert rc == 0
         assert "odds_coverage_score=0.0000" in out
         assert "ALERT" in caplog.text and "FREEZE" in caplog.text
+        # E11.30 — the discriminating boolean the calling op pages send_alert on.
+        assert "odds_coverage_freeze=1" in out
 
     def test_freeze_strict_halts(self, capsys, caplog):
         # --strict promotes a current-slate FREEZE to a HALT (non-zero exit).
@@ -98,12 +100,16 @@ class TestMain:
         rc, out = _run_main(rows, ["--env", "prod", "--date", "2026-07-02", "--strict"], capsys)
         assert rc == 0
         assert "odds_coverage_score=1.0000" in out
+        assert "odds_coverage_freeze=0" in out
 
     def test_no_odds_yet_current_slate_is_not_a_halt(self, capsys):
         # Books have not posted for today yet → benign even under --strict.
         rows = [("2026-07-02", 9, 0, 0, 0)]
         rc, out = _run_main(rows, ["--env", "prod", "--date", "2026-07-02", "--strict"], capsys)
         assert rc == 0
+        # E11.30 — NO_ODDS_YET must NEVER set the freeze metric (this is exactly the
+        # false-positive the send_alert page must never trigger on).
+        assert "odds_coverage_freeze=0" in out
 
     def test_off_day_scores_full(self, capsys):
         # No games today → score 1.0 (nothing to attach), never a failure.
@@ -111,3 +117,4 @@ class TestMain:
         rc, out = _run_main(rows, ["--env", "prod", "--date", "2026-07-02", "--strict"], capsys)
         assert rc == 0
         assert "odds_coverage_score=1.0000" in out
+        assert "odds_coverage_freeze=0" in out

@@ -391,6 +391,10 @@ def main() -> int:
 
     print(f"[METRIC] feature_block_min_cov_ratio={worst_ratio:.4f}")
     print(f"[METRIC] feature_block_date_outage_count={sum(len(v) for v in date_outages.values())}")
+    # E11.30 — a discriminating count the calling op can page on directly: only DEGRADED
+    # blocks set this (never SKIPPED/coverage-gapped ones), so it can never false-fire on a
+    # block that is legitimately partial by era/source.
+    print(f"[METRIC] feature_block_degraded_count={len(degraded)}")
 
     if degraded:
         banner = (f"FEATURE BLOCK(S) SILENTLY COLLAPSED in served {table}: {', '.join(degraded)}. "

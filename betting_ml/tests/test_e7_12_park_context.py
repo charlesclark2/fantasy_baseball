@@ -596,16 +596,19 @@ def _synthetic_milb_logs(seed: int = 21) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _fixture_connect(logs: pd.DataFrame, debut_sql: str):
+def _fixture_connect(logs: pd.DataFrame, debut_sql: str, debut_table: str = "mart_batter_rolling_stats"):
     """A FRESH DuckDB per call — `build_park_context` closes its connection in a `finally`, so a shared
-    handle works exactly once and then throws. Returning a factory keeps the fixture honest about that."""
+    handle works exactly once and then throws. Returning a factory keeps the fixture honest about that.
+
+    Accepts (and ignores) the `ReducedSpec` the real `_connect` takes, so one fixture serves both sides.
+    """
     import duckdb
 
-    def factory():
+    def factory(*_args, **_kwargs):
         con = duckdb.connect()
         con.register("_logs", logs)
         con.execute("create view milb_logs as select * from _logs")
-        con.execute(f"create view mart_batter_rolling_stats as {debut_sql}")
+        con.execute(f"create view {debut_table} as {debut_sql}")
         return con
     return factory
 
@@ -902,3 +905,547 @@ def test_a_real_self_shrinkage_world_still_DISQUALIFIES_the_park():
     assert not res.winner.startswith("S1_park"), res.winner
     # …and the disqualification is SCOPED — a non-park rung is still allowed to be judged
     assert res.verdict in ("ADD", "DROP") and res.verdict != "BLOCKED"
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 10. SLICE 1p — the PITCHER side
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# The pitcher slice reuses every piece of machinery above (E7.3p's "harness reused, not forked"
+# precedent, one rung up): the same ladder labels, the same three degenerate anchors, the same
+# deflation, the same LOO subtraction. Only the box-count vocabulary changes. So these tests do not
+# re-prove the mathematics — they prove the three things a PORT can get wrong:
+#
+#   1. the pitcher rate formulas and the pitcher SQL agree with `compute_pitcher_rate_metrics_from_counts`
+#      (a park factor computed on a subtly different definition of GB% than the model's feature would be
+#      a silent, permanent bias);
+#   2. the pitcher build's sample/exposure unit is TBF, not PA (a copy-paste `_pa` in the shrink would
+#      make every pitcher park factor read as maximally thin and collapse to neutral — a null that looks
+#      like an honest measurement);
+#   3. the two sides are genuinely the SAME ladder, and the pitcher emission is a COMPLETE drop-in for
+#      the three metrics E8.0's board actually reads.
+
+_PIT_COLS = [
+    "pit_batters_faced", "pit_strike_outs", "pit_walks", "pit_home_runs",
+    "pit_ground_outs", "pit_air_outs",
+]
+
+
+def _random_pit_counts(n: int, seed: int = 0) -> pd.DataFrame:
+    rng = np.random.default_rng(seed)
+    tbf = rng.integers(20, 900, n)
+    out = pd.DataFrame({"pit_batters_faced": tbf})
+    out["pit_strike_outs"] = rng.binomial(tbf, 0.23)
+    out["pit_walks"] = rng.binomial(tbf, 0.09)
+    out["pit_home_runs"] = rng.binomial(tbf, 0.03)
+    out["pit_ground_outs"] = rng.binomial(tbf, 0.20)
+    out["pit_air_outs"] = rng.binomial(tbf, 0.18)
+    # not part of the reduced representation, but `compute_pitcher_rate_metrics_from_counts` also
+    # derives start-share and reads these directly
+    out["pit_games_played"] = rng.integers(1, 30, n)
+    out["pit_games_started"] = 0
+    return out
+
+
+def test_the_pitcher_reduced_bucket_reproduces_the_e7_3p_rate_formulas_exactly():
+    """The reduced 6-field representation must be a LOSSLESS stand-in for the full `pit_*` line, or the
+    park factor is computed on a different quantity than the model's feature — a bias that would never
+    surface as an error, only as a permanently slightly-wrong projection."""
+    from betting_ml.scripts.milb_mle.milb_mle import compute_pitcher_rate_metrics_from_counts
+    from betting_ml.scripts.milb_mle.park_context import (
+        PITCHER_REDUCED,
+        pitcher_reduced_from_counts,
+    )
+
+    df = _random_pit_counts(300, seed=7)
+    direct = compute_pitcher_rate_metrics_from_counts(df)
+    reduced = pitcher_reduced_from_counts(df, "x")
+    rates = rates_from_reduced(reduced, "x", PITCHER_REDUCED.pf_metrics, PITCHER_REDUCED)
+    for m in PITCHER_REDUCED.pf_metrics:
+        np.testing.assert_allclose(rates[m], direct[f"minor_{m}"].to_numpy(float),
+                                   rtol=0, atol=1e-12, err_msg=m)
+
+
+def test_the_pitcher_reduced_aggregate_sql_round_trips_through_duckdb():
+    """The SQL emitter and the pandas reducer are two implementations of one definition. They are
+    generated from the same `ReducedSpec`, but 'generated from the same place' is a claim; executing
+    both and diffing is a proof."""
+    duckdb = pytest.importorskip("duckdb")
+    from betting_ml.scripts.milb_mle.park_context import (
+        PITCHER_REDUCED,
+        pitcher_reduced_from_counts,
+    )
+
+    df = _random_pit_counts(120, seed=11)
+    con = duckdb.connect()
+    con.register("t", df)
+    sql = reduced_aggregate_sql("x", "", PITCHER_REDUCED)
+    got = con.execute(f"select {sql} from t").df()
+    want = pitcher_reduced_from_counts(df, "x").sum().to_frame().T
+    for f in PITCHER_REDUCED.fields:
+        assert float(got[f"x_{f}"].iloc[0]) == pytest.approx(float(want[f"x_{f}"].iloc[0])), f
+
+
+def test_a_pitcher_park_factor_uses_TBF_as_its_binding_sample_not_PA():
+    """🪤 THE COPY-PASTE TRAP THIS PORT COULD MOST EASILY HIDE. The EB shrink weights a park factor by
+    the BINDING side's sample. On the pitcher side that field is `tbf`; a leftover `_pa` lookup would
+    either KeyError (loud, fine) or — worse, if a `pa` column happened to exist — silently weight every
+    factor by the wrong number and collapse the whole table toward neutral. A collapsed park table
+    produces an honest-looking null, which is the expensive failure.
+    """
+    from betting_ml.scripts.milb_mle.park_context import PITCHER_REDUCED
+
+    # a park with a big, WELL-MEASURED HR effect: 40,000 TBF a side over the window
+    buckets = pd.DataFrame({
+        "h_tbf": [40_000.0], "h_so": [9_000.0], "h_bb": [3_600.0], "h_hr": [1_600.0],
+        "h_go": [8_000.0], "h_ao": [7_200.0],
+        "r_tbf": [40_000.0], "r_so": [9_000.0], "r_bb": [3_600.0], "r_hr": [1_000.0],
+        "r_go": [8_000.0], "r_ao": [7_200.0],
+    })
+    pf = park_factors_from_buckets(buckets, PITCHER_REDUCED.pf_metrics, 2000.0, PF_CLAMP,
+                                   "h", "r", PITCHER_REDUCED)
+    assert float(pf["pf_n_eff_pa"].iloc[0]) == 40_000.0, "the shrink weight must be TBF, not 0/NaN"
+    # raw factor is 1.6; at 40k TBF vs a 2k pseudo-count the shrink should barely touch it
+    assert float(pf["pf_hr_rate_raw"].iloc[0]) == pytest.approx(1.6)
+    assert float(pf["pf_hr_rate"].iloc[0]) > 1.5, (
+        "a well-measured 60% HR park must survive the shrink", pf.to_dict("records"))
+    # and the metrics with identical buckets must come out neutral
+    assert float(pf["pf_k_pct"].iloc[0]) == pytest.approx(1.0)
+
+
+def _synthetic_milb_pitcher_logs(seed: int = 23) -> pd.DataFrame:
+    """A two-season Triple-A league where team 1's park inflates HOME RUNS ALLOWED by ~60%."""
+    rng = np.random.default_rng(seed)
+    rows, game_pk = [], 5000
+    teams, hot_park = [1, 2, 3, 4], 1
+    for season in (2022, 2023):
+        for home in teams:
+            for away in teams:
+                if home == away:
+                    continue
+                for rep in range(14):
+                    game_pk += 1
+                    day = 1 + (rep % 28)
+                    for side, team in (("home", home), ("away", away)):
+                        for slot in range(4):          # 4 pitchers a side
+                            pid = team * 100 + slot
+                            tbf = int(rng.integers(8, 20))
+                            hr_p = 0.055 if home == hot_park else 0.030
+                            rows.append({
+                                "game_pk": game_pk, "player_id": pid, "team_id": team,
+                                "team_side": side, "season": season,
+                                "level_name": "Triple-A", "league_name": "IL",
+                                "game_type": "R", "is_pitcher": True, "is_batter": False,
+                                "official_date": f"{season}-06-{day:02d}",
+                                "venue_id": home * 10, "venue_name": f"Park {home}",
+                                "age": 24.0,
+                                "pit_batters_faced": tbf,
+                                "pit_strike_outs": int(rng.binomial(tbf, 0.23)),
+                                "pit_walks": int(rng.binomial(tbf, 0.09)),
+                                "pit_home_runs": int(rng.binomial(tbf, hr_p)),
+                                "pit_ground_outs": int(rng.binomial(tbf, 0.20)),
+                                "pit_air_outs": int(rng.binomial(tbf, 0.18)),
+                            })
+    return pd.DataFrame(rows)
+
+
+_NO_PITCHER_DEBUTS = "select 999999 as pitcher_id, DATE '2019-01-01' as game_date, 2019 as game_year"
+
+
+def test_the_pitcher_builder_sql_runs_end_to_end_and_recovers_a_planted_HR_park(monkeypatch):
+    """⭐ The RUNTIME GATE for the pitcher port. The whole ~200-line generated assembly — the window
+    self-join, the full-outer join, the LOO subtraction — executed against in-memory fixtures with the
+    pitcher vocabulary. A wrong column name, a stale `is_batter`, a `bat_plate_appearances` left in the
+    exposure CTE: every one of those fails SILENTLY on the box (empty frame, all-NULL factor) and
+    nowhere else. CI mocks IO; this does not mock the SQL."""
+    pytest.importorskip("duckdb")
+    import betting_ml.scripts.milb_mle.build_park_context as bpc
+    from betting_ml.scripts.milb_mle.park_context import PITCHER_REDUCED
+
+    logs = _synthetic_milb_pitcher_logs()
+    monkeypatch.setattr(bpc, "_connect", _fixture_connect(
+        logs, _NO_PITCHER_DEBUTS, "mart_pitcher_rolling_stats"))
+
+    ctx = bpc.build_park_context(levels=("Triple-A",), window=3, season_floor=None,
+                                 spec=PITCHER_REDUCED)
+    assert not ctx.empty, "the pitcher assembly produced NOTHING — the joins are dead"
+    assert set(ctx.columns) >= {"player_id", "level", "pf_hr_rate_exposure",
+                                "pf_hr_rate_exposure_noloo", "pf_hr_rate_home",
+                                "env_hr_rate", "env_level_hr_rate", "context_pa"}
+    assert ctx.duplicated(subset=["player_id", "level"]).sum() == 0
+    assert ctx["pf_hr_rate_exposure"].notna().all()
+    # ⭐ the planted effect must be RECOVERED: team-1 pitchers throw half their innings in the hot park
+    ctx["team"] = ctx["player_id"].astype(int) // 100
+    hot = ctx.loc[ctx["team"] == 1, "pf_hr_rate_exposure"].mean()
+    rest = ctx.loc[ctx["team"] != 1, "pf_hr_rate_exposure"].mean()
+    assert hot > rest > 0, (hot, rest)
+    assert hot > 1.02, ("the planted HR park must show up above neutral", hot)
+    # …and it must NOT bleed into the metrics no park effect was planted in
+    k_spread = (ctx.groupby("team")["pf_k_pct_exposure"].mean().max()
+                - ctx.groupby("team")["pf_k_pct_exposure"].mean().min())
+    hr_spread = (ctx.groupby("team")["pf_hr_rate_exposure"].mean().max()
+                 - ctx.groupby("team")["pf_hr_rate_exposure"].mean().min())
+    assert hr_spread > k_spread, ("a HR-only park effect must not appear as a K% park effect",
+                                  hr_spread, k_spread)
+
+
+def _planted_pitcher_park_pairs(park_effect: float, n: int = 700, seed: int = 15):
+    """A pitcher world where the HR park effect is REAL and KNOWN — the sibling of
+    `_planted_park_pairs`, on the pitcher metric set."""
+    rng = np.random.default_rng(seed)
+    park = rng.choice(np.array([1.0, park_effect, 1.0 / park_effect]), n)
+    talent = np.clip(rng.normal(0.030, 0.009, n), 0.005, 0.09)
+    pairs = pd.DataFrame({
+        "player_id": [f"q{i}" for i in range(n)],
+        "level": rng.choice(["Triple-A", "Double-A"], n),
+        "league": rng.choice(["IL", "EL"], n),
+        "age": rng.normal(24.0, 1.5, n),
+        "minor_pa": rng.integers(300, 700, n).astype(float),      # TBF, per the E7.3p alias
+        "minor_hr_rate": np.clip(talent * park, 0.001, 0.15),
+        "minor_k_pct": np.clip(rng.normal(0.24, 0.05, n), 0.05, 0.45),
+        "minor_bb_pct": np.clip(rng.normal(0.09, 0.03, n), 0.01, 0.25),
+        "minor_gb_pct": np.clip(rng.normal(0.52, 0.07, n), 0.20, 0.80),
+        # ⚠️ `mlb_pa`, NOT `mlb_tbf` — E7.3p stores batters-faced under the SHARED name so the harness
+        # needs no pitcher fork. This fixture originally said `mlb_tbf` and the weight-column guard
+        # caught it, which is the guard doing exactly its job.
+        "mlb_pa": rng.integers(300, 900, n).astype(float),
+        "mlb_hr_rate": np.clip(0.8 * talent + 0.006 + rng.normal(0, 0.0022, n), 0.001, 0.09),
+        "mlb_k_pct": np.clip(rng.normal(0.22, 0.04, n), 0.05, 0.45),
+        "mlb_bb_pct": np.clip(rng.normal(0.088, 0.02, n), 0.01, 0.25),
+        "mlb_gb_pct": np.clip(rng.normal(0.44, 0.05, n), 0.15, 0.75),
+        "has_mlb_label": True,
+        "debut_cohort": rng.choice([2017, 2018, 2019, 2020, 2021, 2022, 2023], n),
+    })
+    ctx = pd.DataFrame({"player_id": pairs["player_id"], "level": pairs["level"]})
+    for m in ("k_pct", "bb_pct", "hr_rate", "gb_pct"):
+        f = park if m == "hr_rate" else np.ones(n)
+        ctx[f"pf_{m}_exposure"] = f
+        ctx[f"pf_{m}_exposure_noloo"] = f
+        ctx[f"pf_{m}_home"] = f
+        ctx[f"env_{m}"] = float(pairs[f"minor_{m}"].mean())
+        ctx[f"env_level_{m}"] = float(pairs[f"minor_{m}"].mean())
+    return pairs, ctx
+
+
+_PITCHER_SMOKE_ARMS = ("S0_baseline", "S1_park_exposure", "A_park_placebo", "A_park_noloo",
+                       "I_reliability_only", "A_rel_constant")
+
+
+def test_the_pitcher_ladder_recovers_a_PLANTED_park_effect_and_the_placebo_loses():
+    """The load-bearing anchor test, re-run on the pitcher side. An anchor that has never been shown to
+    FIRE on this side's data is an anchor that passes on nothing (NF1.7 lesson 1) — the ladder being
+    shared is not by itself evidence that it still discriminates under the pitcher vocabulary."""
+    from betting_ml.scripts.milb_mle.run_e7_12_slice1 import PITCHER_SIDE, ladder_for
+
+    pairs, ctx = _planted_pitcher_park_pairs(1.30)
+    arms = tuple(r for r in ladder_for(PITCHER_SIDE) if r.label in _PITCHER_SMOKE_ARMS)
+    res = run_ladder(pairs, ctx, "hr_rate", arms, side=PITCHER_SIDE)
+    lb = res.leaderboard.set_index("arm")["oos_mae"]
+    assert lb["S1_park_exposure"] < lb["S0_baseline"], (
+        "a REAL pitcher park effect must be recovered by dividing it out", lb.to_dict())
+    assert lb["A_park_placebo"] > lb["S1_park_exposure"], (
+        "the permuted-park placebo must LOSE to the real park", lb.to_dict())
+    assert not res.anchors["placebo_vs_real_park"]["violated"]
+    assert res.verdict == "ADD", res.reasons
+    assert res.prior_scale == 4.0, "hr_rate must inherit E7.3p's pinned partial_pool@4.0"
+
+
+def test_a_null_pitcher_world_does_not_produce_an_ADD():
+    """The other side of the instrument on the pitcher data. With no effect planted, no ADD."""
+    from betting_ml.scripts.milb_mle.run_e7_12_slice1 import PITCHER_SIDE, ladder_for
+
+    pairs, ctx = _planted_pitcher_park_pairs(1.0, seed=19)
+    arms = tuple(r for r in ladder_for(PITCHER_SIDE) if r.label in _PITCHER_SMOKE_ARMS)
+    res = run_ladder(pairs, ctx, "hr_rate", arms, side=PITCHER_SIDE)
+    assert res.verdict != "ADD", res.reasons
+
+
+def test_xwoba_against_can_have_no_park_factor_and_is_never_fabricated_as_one():
+    """`xwoba_against`'s minor feature IS the AAA-Statcast summary — there is no box-line home/road
+    bucket to form a ratio from, so it is deliberately absent from the pitcher park-factor set. The
+    thing to prove is that its absence is an honest NO-OP rather than a silently fabricated 1.0 that
+    would let a park arm 'win' on a metric parks were never applied to."""
+    from betting_ml.scripts.milb_mle.park_context import PITCHER_REDUCED
+
+    assert "xwoba_against" not in PITCHER_REDUCED.pf_metrics
+    assert "xwoba_against" not in PITCHER_REDUCED.rate_parts
+
+    pairs, ctx = _planted_pitcher_park_pairs(1.30, n=200, seed=21)
+    pairs["minor_xwoba_against"] = np.clip(np.random.default_rng(3).normal(0.320, 0.03, len(pairs)),
+                                           0.20, 0.50)
+    adj = apply_context(pairs, ctx, ContextSpec(park="exposure"), "xwoba_against")
+    # no pf_xwoba_against_* column exists → factor 1.0 everywhere, the rate untouched
+    np.testing.assert_allclose(adj["minor_xwoba_against_park_factor"], 1.0)
+    np.testing.assert_allclose(adj["minor_xwoba_against"].to_numpy(float),
+                               pairs["minor_xwoba_against"].to_numpy(float), rtol=0, atol=1e-12)
+    cov = context_coverage(adj, "xwoba_against", ContextSpec(park="exposure"))
+    assert float(cov["pct_rows_moved"]) == 0.0, "an absent factor must move NOTHING, not 'a little'"
+
+
+def test_EVERY_rung_survives_a_metric_with_NO_context_columns_at_all():
+    """🪤 THE BUG THIS EXISTS FOR — and the reason it is a whole-ladder test rather than one more branch.
+
+    `pd.to_numeric(df.get(<missing>))` returns a **scalar** `np.float64('nan')`, not an empty Series, so
+    any downstream `.where` / `.isna()` / `.fillna()` raises `AttributeError` deep inside the arm loop.
+    The PARK branch was written null-safe from the start; its LEVEL-ENV and RELIABILITY-ANCHOR siblings
+    were not — and pitcher `xwoba_against` legitimately has NO context columns at all, so the real run
+    crashed on the fifth metric after four had already scored.
+
+    ⭐ The lesson the test encodes: I had *predicted* the absent-column case and tested the ONE branch I
+    was thinking about. A premise that applies to three branches needs a test that exercises all three,
+    so this walks the ENTIRE ladder rather than naming branches — a new rung is covered automatically.
+    """
+    from betting_ml.scripts.milb_mle.run_e7_12_slice1 import PITCHER_SIDE, ladder_for
+
+    pairs, ctx = _planted_pitcher_park_pairs(1.30, n=150, seed=31)
+    rng = np.random.default_rng(5)
+    pairs["minor_xwoba_against"] = np.clip(rng.normal(0.320, 0.03, len(pairs)), 0.20, 0.50)
+    pairs["mlb_xwoba_against"] = np.clip(rng.normal(0.315, 0.03, len(pairs)), 0.20, 0.50)
+    # the context has NOT ONE column for this metric — no pf_*, no env_*, no env_level_*
+    assert not [c for c in ctx.columns if "xwoba_against" in c]
+
+    baseline = pairs["minor_xwoba_against"].to_numpy(float)
+    for rung in ladder_for(PITCHER_SIDE):
+        adj = apply_context(pairs, ctx, rung.spec, "xwoba_against")      # must not raise
+        np.testing.assert_allclose(adj["minor_xwoba_against_park_factor"], 1.0,
+                                   err_msg=f"{rung.label}: fabricated a park factor")
+        np.testing.assert_allclose(adj["minor_xwoba_against_env_ratio"], 1.0,
+                                   err_msg=f"{rung.label}: fabricated a run-environment ratio")
+        if rung.spec.reliability is None:
+            # with no context to apply, a non-reliability rung must be a byte-exact no-op
+            np.testing.assert_allclose(adj["minor_xwoba_against"].to_numpy(float), baseline,
+                                       rtol=0, atol=1e-12, err_msg=f"{rung.label} moved the rate")
+        else:
+            # the reliability shrink needs only `minor_pa`, so it legitimately still applies — and with
+            # no level anchor it must fall back to the population mean rather than to NaN
+            assert np.isfinite(adj["minor_xwoba_against"].to_numpy(float)).all(), rung.label
+
+
+def test_apply_re_emits_EVERY_pitcher_metric_the_board_reads():
+    """🪤 The pitcher instance of the partial-write footgun. E8.0 reads `mle_p_gb_pct`, `mle_p_bb_pct`
+    AND `mle_p_k_pct` from ONE wide table, so a re-emission carrying only the winners would silently
+    delete two of the board's three pitcher inputs and quietly renormalise every arm's composite."""
+    from betting_ml.scripts.milb_mle.run_e7_12_slice1 import (
+        PITCHER_SIDE,
+        build_applied_projections,
+        ladder_for,
+    )
+
+    pairs, ctx = _planted_pitcher_park_pairs(1.30, n=600, seed=27)
+    arms = tuple(r for r in ladder_for(PITCHER_SIDE) if r.label in _PITCHER_SMOKE_ARMS)
+    results = {m: run_ladder(pairs, ctx, m, arms, side=PITCHER_SIDE)
+               for m in ("hr_rate", "k_pct", "gb_pct", "bb_pct")}
+    assert results["hr_rate"].verdict == "ADD", results["hr_rate"].reasons
+
+    applied: dict = {}
+    wide, changed = build_applied_projections(pairs, ctx, results, applied, PITCHER_SIDE)
+    assert changed
+    for m in PITCHER_SIDE.board_metrics:
+        assert f"mle_{m}" in wide.columns and wide[f"mle_{m}"].notna().any(), m
+    assert set(wide["player_type"].unique()) == {"pitcher"}
+    assert set(wide["model_version"].unique()) == {"milb_mle_pitcher_v2_parkctx"}
+    # a metric that did NOT clear is re-emitted under the byte-exact incumbent, with provenance saying so
+    for m, r in results.items():
+        if r.verdict != "ADD":
+            assert set(wide[f"{m}_context_spec"].unique()) == {"baseline"}, m
+
+
+def test_the_e7_3p_winner_prior_scales_are_pinned_literals_not_recomputed():
+    """Same discipline as the batter map: the reference the pitcher ladder measures against must not be
+    rebuilt from the code the slice changes (NF1.8)."""
+    import inspect
+
+    import betting_ml.scripts.milb_mle.run_e7_12_slice1 as mod
+    src = inspect.getsource(mod)
+    assert '"k_pct": 4.0, "bb_pct": 4.0, "hr_rate": 4.0, "gb_pct": 2.0, "xwoba_against": 2.0' in src
+
+
+def test_both_sides_run_the_SAME_ladder_with_the_same_anchors():
+    """The claim 'harness reused, not forked' has to be mechanically true, or the two sides drift and a
+    cross-side comparison stops meaning anything."""
+    from dataclasses import replace as _replace
+
+    from betting_ml.scripts.milb_mle.run_e7_12_slice1 import (
+        BATTER_SIDE,
+        PITCHER_SIDE,
+        ladder_for,
+    )
+
+    b, p = ladder_for(BATTER_SIDE), ladder_for(PITCHER_SIDE)
+    assert [r.label for r in b] == [r.label for r in p]
+    assert [r.kind for r in b] == [r.kind for r in p]
+    for rb, rp in zip(b, p):
+        assert _replace(rb.spec, weight_col=None) == _replace(rp.spec, weight_col=None), rb.label
+    # the three degenerate anchors must survive the port
+    assert {r.label for r in p if r.kind == "anchor"} == {
+        "A_park_placebo", "A_park_noloo", "A_rel_constant"}
+
+
+def test_the_label_weight_column_is_mlb_pa_on_BOTH_sides_because_E7_3p_shares_the_name():
+    """⚠️ E7.3p stores the pitcher's batters-faced under the SHARED `mlb_pa`/`minor_pa` names, precisely
+    so the harness needs no pitcher fork. A plausible-looking `mlb_tbf` does not exist in the pairs."""
+    from betting_ml.scripts.milb_mle.run_e7_12_slice1 import BATTER_SIDE, PITCHER_SIDE
+
+    assert BATTER_SIDE.reduced.label_weight_col == "mlb_pa"
+    assert PITCHER_SIDE.reduced.label_weight_col == "mlb_pa"
+
+
+def test_a_BAD_weight_column_RAISES_instead_of_reaching_the_report_as_a_RESULT():
+    """🪤 THE BUG THIS GUARD EXISTS FOR — found on the pitcher port, where the label exposure is stored
+    under the shared name `mlb_pa` and a plausible-looking `mlb_tbf` does not exist.
+
+    Neither failure mode announces itself, and they fail DIFFERENTLY:
+
+      (a) column ABSENT → `_weights` throws inside the fold loop, whose `except` exists precisely so a
+          degenerate fold cannot kill the sweep → every fold fails → the arm scores NaN and VANISHES
+          from the leaderboard and the deflation count. Two pre-registered arms silently stop existing.
+      (b) column PRESENT but all-NaN → `_weights` median-fills, the all-NaN median falls back to 1.0 →
+          every weight is exactly 1 → the arm is BYTE-IDENTICAL to the baseline and is reported as
+          "label weighting is a clean null" for a mechanism that was never applied.
+
+    (b) is the worse one: a missing arm is an absence, a byte-exact no-op is a **manufactured confident
+    negative**. Both halves are asserted against the real mechanism, not against a described one.
+    """
+    from betting_ml.scripts.milb_mle.run_e7_12_slice1 import BATTER_SIDE, ladder_for
+
+    base, ctx = _planted_park_pairs(1.25, n=200, seed=8)
+    arms = tuple(r for r in ladder_for(BATTER_SIDE)
+                 if r.label in ("S0_baseline", "I_labelweight_only"))
+
+    # (b) the byte-exact no-op is REAL — prove the fit truly cannot tell an all-NaN weight from none
+    allnan = base.copy()
+    allnan["mlb_pa"] = np.nan
+    lab = build_target(allnan, MleConfig(metric="iso"))
+    lab = lab[lab["has_target"]]
+    a, _ = PartialPoolProjector(prior_scale=2.0).fit(lab).predict(lab)
+    b, _ = PartialPoolProjector(prior_scale=2.0, weight_col="mlb_pa").fit(lab).predict(lab)
+    np.testing.assert_allclose(a, b, rtol=0, atol=1e-12,
+                               err_msg="if an all-NaN weight column ever stops no-opping, this guard "
+                                       "is guarding nothing")
+    with pytest.raises(AssertionError, match="NO positive values"):
+        run_ladder(allnan, ctx, "iso", arms)
+
+    # (a) absent → the arm would score NaN and vanish; the ladder must refuse instead
+    with pytest.raises(AssertionError, match="ABSENT from the pairs table"):
+        run_ladder(base.drop(columns=["mlb_pa"]), ctx, "iso", arms)
+
+
+def test_the_pitcher_directional_falsification_is_the_ball_in_play_metrics():
+    """Parks move batted balls, not the strike zone — the same physical claim as the batter side, which
+    is what makes the pitcher run an independent REPLICATION rather than a restatement. Pinned so the
+    split cannot be quietly rewritten after seeing the result."""
+    from betting_ml.scripts.milb_mle.run_e7_12_slice1 import PITCHER_SIDE
+
+    assert PITCHER_SIDE.park_sensitive == ("hr_rate", "gb_pct")
+    assert PITCHER_SIDE.park_insensitive == ("k_pct", "bb_pct")
+    assert not set(PITCHER_SIDE.park_sensitive) & set(PITCHER_SIDE.park_insensitive)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 11. BH-FDR AS AN ENFORCED GATE, and the POST-HOC ablation-down arms
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+
+def test_bh_fdr_is_ENFORCED_not_merely_reported():
+    """🪤 THE DEFECT THIS CLOSES, AND WHY IT STAYED HIDDEN FOR A WHOLE RELEASE.
+
+    `bh_fdr` was computed in `main()` and written into the report, but `build_applied_projections` keys
+    off `verdict == "ADD"` — which the per-metric fold-win-rate bar sets on its own. So a metric could
+    FAIL the family-wise correction and still be published. It was invisible on the batter run because
+    all four metrics passed FDR, so enforcing it would have changed nothing; it went live on the pitcher
+    run, where `k_pct` cleared 73% of folds at p=0.113 with FDR=False.
+
+    ⭐ A computed-but-unconsumed statistic is the quiet cousin of the silent-empty class: the number is
+    right, it is printed, and nothing reads it. This asserts the wiring, which is the part that broke —
+    `bh_fdr`'s arithmetic already has its own test.
+    """
+    import inspect
+
+    import betting_ml.scripts.milb_mle.run_e7_12_slice1 as mod
+    src = inspect.getsource(mod.main)
+    fdr_at = src.index("fdr = bh_fdr(pvals)")
+    # the CALL SITE, not a mention — the explanatory comment names the function too
+    apply_at = src.index("build_applied_projections(pairs")
+    assert fdr_at < apply_at, "FDR must be resolved BEFORE the emission decides what to write"
+    gate = src[fdr_at:apply_at]
+    assert 'r.verdict = "DROP"' in gate and "fdr.get(m) is False" in gate, (
+        "an ADD that fails BH-FDR must be downgraded before it can be published")
+
+
+def test_an_ADD_that_fails_BH_FDR_is_downgraded_and_re_emitted_as_the_incumbent():
+    """End-to-end on the decision, not the string: a metric whose winner fails the family correction
+    must come out of `build_applied_projections` byte-exact as the incumbent."""
+    from betting_ml.scripts.milb_mle.run_e7_12_slice1 import (
+        BATTER_SIDE,
+        build_applied_projections,
+        ladder_for,
+    )
+
+    pairs, ctx = _planted_park_pairs(1.25, n=500, seed=12)
+    arms = tuple(r for r in ladder_for(BATTER_SIDE)
+                 if r.label in ("S0_baseline", "S1_park_exposure", "A_park_placebo", "A_park_noloo"))
+    res = run_ladder(pairs, ctx, "iso", arms)
+    assert res.verdict == "ADD", res.reasons
+
+    # simulate what main() does when BH rejects this metric
+    res.verdict, res.winner = "DROP", "S0_baseline"
+    applied: dict = {}
+    wide, changed = build_applied_projections(pairs, ctx, {"iso": res}, applied, BATTER_SIDE)
+    assert not changed and applied == {}, "an FDR-downgraded metric must not be counted as applied"
+    assert set(wide["iso_context_spec"].unique()) == {"baseline"}
+
+    incumbent = emit_projections(
+        build_target(pairs, MleConfig(metric="iso")),
+        lambda: PartialPoolProjector(prior_scale=res.prior_scale), MleConfig(metric="iso"))
+    merged = wide[["player_id", "level", "mle_iso"]].merge(
+        incumbent[["player_id", "level", "mle_iso"]], on=["player_id", "level"],
+        suffixes=("_new", "_old"))
+    assert len(merged) == len(incumbent) > 0
+    np.testing.assert_allclose(merged["mle_iso_new"], merged["mle_iso_old"], rtol=0, atol=1e-12)
+
+
+def test_the_posthoc_arms_are_OFF_by_default_so_the_published_ladder_is_reproducible():
+    """The opt-in IS the honesty mechanism. The batter slice is already PUBLISHED against the
+    pre-registered ladder; if post-hoc arms leaked into the default field, that run would silently stop
+    being reproducible and a reader could not tell which arms were pre-registered."""
+    from betting_ml.scripts.milb_mle.run_e7_12_slice1 import (
+        LADDER,
+        POSTHOC_RUNGS,
+        BATTER_SIDE,
+        PITCHER_SIDE,
+        ladder_for,
+    )
+
+    for side in (BATTER_SIDE, PITCHER_SIDE):
+        assert ladder_for(side) == tuple(LADDER), f"{side.player_type}: default field must be pristine"
+        with_ph = ladder_for(side, include_posthoc=True)
+        assert len(with_ph) == len(LADDER) + len(POSTHOC_RUNGS)
+        assert [r.label for r in with_ph[:len(LADDER)]] == [r.label for r in LADDER]
+    # every post-hoc arm must be labelled as such, and must be a strict SUBSET of the winning stack's
+    # mechanisms (an ablation-DOWN, never a new mechanism smuggled in after seeing results)
+    s5 = next(r for r in LADDER if r.label == "S5_full_labelweight").spec
+    for r in POSTHOC_RUNGS:
+        assert r.kind == "posthoc", r.label
+        assert r.spec.park == "off", f"{r.label}: a post-hoc arm must not introduce a park mode"
+        assert not r.spec.level_env or s5.level_env
+        assert r.spec.reliability is None or r.spec.reliability == s5.reliability
+        assert r.spec.weight_col == s5.weight_col
+        assert r.spec != s5, f"{r.label}: identical to the pre-registered winner, not an ablation"
+
+
+def test_a_posthoc_arm_is_selectable_and_counted_in_the_deflation_field():
+    """A post-hoc arm that could win but was excluded from the deflation would be free search — the
+    whole point of admitting them explicitly is that a wider field costs what a wider field costs."""
+    from betting_ml.scripts.milb_mle.run_e7_12_slice1 import PITCHER_SIDE, ladder_for
+
+    pairs, ctx = _planted_pitcher_park_pairs(1.30, n=500, seed=33)
+    arms = ladder_for(PITCHER_SIDE, include_posthoc=True)
+    res = run_ladder(pairs, ctx, "hr_rate", arms, side=PITCHER_SIDE)
+    lb = res.leaderboard.set_index("arm")
+    for r in (x for x in arms if x.kind == "posthoc"):
+        assert r.label in lb.index, f"{r.label} was not scored"
+        assert bool(lb.loc[r.label, "selectable"]), f"{r.label} must be able to win"
+    n_elig = res.deflation.get("n_eligible")
+    if n_elig is not None:
+        assert int(n_elig) >= len([x for x in arms if x.kind == "posthoc"]), (
+            "post-hoc arms must enter the eligible set the deflation is computed over")
