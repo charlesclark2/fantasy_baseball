@@ -82,7 +82,7 @@ export const SPORTS: SportNav[] = [
               // NF-C0b — the manual customization floor: hand-enter a league we cannot import.
               // Restricted to admin + fantasy_comp while the editor is still proving out.
               {
-                label: "League Settings",
+                label: "My League Settings",
                 href: "/fantasy/league-settings",
                 key: "fantasy-league-settings",
                 restrict: "fantasy_beta",

@@ -257,9 +257,9 @@ class TestTsMirrorMatchesPython:
         """
         nav_src = (REPO / "frontend" / "lib" / "nav-model.ts").read_text()
         entry = re.search(
-            r"\{\s*label:\s*\"League Settings\".*?\}", nav_src, re.S
+            r"\{\s*label:\s*\"My League Settings\".*?\}", nav_src, re.S
         )
-        assert entry, "League Settings nav item not found"
+        assert entry, "My League Settings nav item not found"
         assert 'restrict: "fantasy_beta"' in entry.group(0)
 
     def test_captured_rule_catalog_matches(self):
@@ -356,6 +356,115 @@ class TestSharedContract:
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # 4. THE API MODELS — same accept/reject as LeagueConfig.validate(), and read is not gated by write
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+class TestLeagueCrud:
+    """A user must be able to CREATE, UPDATE and DELETE their own leagues — and only their own.
+
+    Exercised against a minimal fake table rather than mocked at the function boundary, so the
+    actual UpdateExpressions are executed: the store writes a SINGLE map entry (`SET #fl.#id`) so
+    two tabs saving different leagues cannot clobber each other, and that only works if the parent
+    map is created first. Mocking the table object would assert nothing about either.
+    """
+
+    @staticmethod
+    def _fake_table():
+        class FakeTable:
+            def __init__(self):
+                self.items: dict[str, dict] = {}
+
+            def get_item(self, Key):  # noqa: N803
+                item = self.items.get(Key["user_id"])
+                return {"Item": item} if item is not None else {}
+
+            def update_item(self, Key, UpdateExpression, ExpressionAttributeNames=None,  # noqa: N803
+                            ExpressionAttributeValues=None, ConditionExpression=None):
+                names = ExpressionAttributeNames or {}
+                values = ExpressionAttributeValues or {}
+                item = self.items.setdefault(Key["user_id"], {})
+                expr = " ".join(UpdateExpression.split())
+
+                if expr == "SET #fl = :empty":
+                    if ConditionExpression and "fantasy_leagues" in item:
+                        raise RuntimeError("ConditionalCheckFailedException")
+                    item[names["#fl"]] = values[":empty"]
+                elif expr == "SET #fl.#id = :cfg":
+                    item.setdefault(names["#fl"], {})[names["#id"]] = values[":cfg"]
+                elif expr == "REMOVE #fl.#id":
+                    item.get(names["#fl"], {}).pop(names["#id"], None)
+                else:  # a new expression shape must not pass silently
+                    raise AssertionError(f"unhandled UpdateExpression: {expr}")
+
+        return FakeTable()
+
+    @pytest.fixture()
+    def store(self, monkeypatch):
+        dynamo = pytest.importorskip("app.backend.services.dynamo")
+        table = self._fake_table()
+        monkeypatch.setattr(dynamo, "_users_table", lambda: table)
+        return dynamo
+
+    @staticmethod
+    def _cfg(name="My League", n_teams=12):
+        cfg = _config(name=name, n_teams=n_teams).to_dict()
+        return cfg
+
+    def test_create_then_read_back(self, store):
+        rec = store.put_fantasy_league("u1", None, self._cfg())
+        assert rec["league_id"]
+        assert rec["created_at"] and rec["updated_at"]
+
+        listed = store.list_fantasy_leagues("u1")
+        assert [item["league_id"] for item in listed] == [rec["league_id"]]
+        assert listed[0]["name"] == "My League"
+
+    def test_update_keeps_identity_and_created_at(self, store):
+        created = store.put_fantasy_league("u1", None, self._cfg(name="Old"))
+        updated = store.put_fantasy_league(
+            "u1", created["league_id"], self._cfg(name="New", n_teams=10)
+        )
+        assert updated["league_id"] == created["league_id"]      # same league, not a duplicate
+        assert updated["created_at"] == created["created_at"]    # origin never rewritten
+        assert updated["name"] == "New" and updated["n_teams"] == 10
+        assert len(store.list_fantasy_leagues("u1")) == 1        # updated in place
+
+    def test_delete_removes_only_that_league(self, store):
+        a = store.put_fantasy_league("u1", None, self._cfg(name="A"))
+        b = store.put_fantasy_league("u1", None, self._cfg(name="B"))
+        store.delete_fantasy_league("u1", a["league_id"])
+        remaining = [item["league_id"] for item in store.list_fantasy_leagues("u1")]
+        assert remaining == [b["league_id"]]
+
+    def test_delete_of_an_unknown_league_raises_not_found(self, store):
+        with pytest.raises(ValueError, match="not_found"):
+            store.delete_fantasy_league("u1", "does-not-exist")
+
+    def test_a_user_cannot_touch_another_users_league(self, store):
+        """Leagues are keyed by the caller's own user_id (from the token), so cross-user access is
+        structurally impossible rather than merely unauthorised — pinned so a future refactor to a
+        shared key space would fail loudly."""
+        mine = store.put_fantasy_league("u1", None, self._cfg(name="Mine"))
+        store.put_fantasy_league("u2", None, self._cfg(name="Theirs"))
+
+        assert store.get_fantasy_league("u2", mine["league_id"]) is None
+        with pytest.raises(ValueError, match="not_found"):
+            store.delete_fantasy_league("u2", mine["league_id"])
+        assert len(store.list_fantasy_leagues("u1")) == 1  # untouched
+
+    def test_saving_many_leagues_is_capped(self, store):
+        for i in range(store.MAX_LEAGUES_PER_USER):
+            store.put_fantasy_league("u1", None, self._cfg(name=f"L{i}"))
+        with pytest.raises(ValueError, match="too_many_leagues"):
+            store.put_fantasy_league("u1", None, self._cfg(name="one too many"))
+
+    def test_a_malformed_stored_league_does_not_blank_the_collection(self, store):
+        """E9.49 again, at the store layer: one bad row must cost only itself."""
+        good = store.put_fantasy_league("u1", None, self._cfg(name="Good"))
+        table = store._users_table()
+        table.items["u1"]["fantasy_leagues"]["corrupt"] = "not-a-dict"
+
+        listed = store.list_fantasy_leagues("u1")
+        assert [item["league_id"] for item in listed] == [good["league_id"]]
+
+
 class TestApiModels:
     @staticmethod
     def _payload(**overrides):

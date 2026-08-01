@@ -72,6 +72,14 @@ export function LeagueSettingsEditor() {
   const [cfg, setCfg] = useState<LeagueConfig>(() => newCustomConfig())
   const [dirty, setDirty] = useState(false)
   const [saved, setSaved] = useState(false)
+  // Which preset was last loaded. Held in STATE rather than resetting the control to a
+  // placeholder: loading a preset can legitimately change very little that is on screen —
+  // "Full PPR" over a fresh config changes only the ROSTER, since the editor's defaults are
+  // already full-PPR scoring — so a control that snaps back to "Choose…" reads as broken.
+  const [presetChoice, setPresetChoice] = useState("")
+  const [presetNote, setPresetNote] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Load the first saved league once, so returning users land on their own league.
   useEffect(() => {
@@ -123,6 +131,9 @@ export function LeagueSettingsEditor() {
     setCfg(stripServerFields(found))
     setDirty(false)
     setSaved(false)
+    setPresetChoice("")
+    setPresetNote(null)
+    setConfirmDelete(false)
   }
 
   const onNew = () => {
@@ -130,16 +141,39 @@ export function LeagueSettingsEditor() {
     setCfg(newCustomConfig())
     setDirty(true)
     setSaved(false)
+    setPresetChoice("")
+    setPresetNote(null)
+    setConfirmDelete(false)
   }
 
   const onStartFromPreset = (presetName: string) => {
+    setPresetChoice(presetName)
     const meta = manifest?.configs.find((c) => c.name === presetName)
-    if (!meta) return
+    if (!meta || !meta.roster?.length) {
+      // Never leave the control showing a selection that did nothing — that is the exact
+      // failure this whole change exists to remove.
+      setPresetChoice("")
+      setPresetNote(null)
+      setLoadError("That format could not be loaded — build your league below instead.")
+      return
+    }
+    setLoadError(null)
     const next = presetToConfig(meta, cfg.n_teams)
     // Keep what the preset does not speak to: the league's NAME and the captured rules the user
     // ticked (median scoring and friends are independent of the scoring format, so changing the
     // starting point must not silently discard them).
     update({ ...next, name: cfg.name || next.name, captured_rules: { ...(cfg.captured_rules ?? {}) } })
+
+    // Say what actually changed. Loading a preset is often a SMALL edit — the editor's defaults
+    // are already full-PPR scoring, so "Full PPR" changes only the roster — and silence there is
+    // indistinguishable from a broken control.
+    const starters = next.roster.filter((s) => !s.bench).reduce((n, s) => n + s.count, 0)
+    const flex = next.roster.filter((s) => !s.bench && s.eligible.length > 1).reduce((n, s) => n + s.count, 0)
+    const rec = next.scoring.per_stat.rec ?? 0
+    setPresetNote(
+      `Loaded ${meta.label}: ${rec} pt per reception, ${starters} starting slots` +
+        `${flex ? ` (${flex} flex)` : ""}. Edit anything below.`,
+    )
   }
 
   const onDelete = async () => {
@@ -148,6 +182,8 @@ export function LeagueSettingsEditor() {
     setLeagueId(null)
     setCfg(newCustomConfig())
     setDirty(false)
+    setSaved(false)
+    setConfirmDelete(false)
   }
 
   return (
@@ -159,14 +195,14 @@ export function LeagueSettingsEditor() {
 
       {/* ── which league ─────────────────────────────────────────────────────────────────── */}
       <section className="mt-6 rounded-lg border border-gray-800 bg-[#0f0f0f] p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[220px] flex-1">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="w-full sm:min-w-[220px] sm:flex-1">
             <FieldLabel>Your leagues</FieldLabel>
             {leaguesLoading ? (
               <div className="text-sm text-gray-500">Loading…</div>
             ) : (
               <select
-                className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-1.5 text-sm text-gray-200"
+                className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-sm text-gray-200"
                 value={leagueId ?? ""}
                 onChange={(e) => (e.target.value ? onSelectLeague(e.target.value) : onNew())}
               >
@@ -179,27 +215,60 @@ export function LeagueSettingsEditor() {
               </select>
             )}
           </div>
-          <button
-            onClick={onNew}
-            className="flex items-center gap-1.5 rounded border border-gray-700 px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-800"
-          >
-            <Plus className="h-3.5 w-3.5" /> New
-          </button>
-          {leagueId && (
+          <div className="flex flex-wrap gap-2">
             <button
-              onClick={onDelete}
-              className="flex items-center gap-1.5 rounded border border-red-900/60 px-3 py-1.5 text-sm text-red-400 hover:bg-red-950/30"
+              onClick={onNew}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded border border-gray-700 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 sm:flex-none"
             >
-              <Trash2 className="h-3.5 w-3.5" /> Delete
+              <Plus className="h-3.5 w-3.5" /> New league
             </button>
-          )}
+            {leagueId && !confirmDelete && (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded border border-red-900/60 px-3 py-2 text-sm text-red-400 hover:bg-red-950/30 sm:flex-none"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        {/* Deleting a saved league is irreversible, so it asks first rather than firing on one tap
+            — easy to hit by accident on a phone, where the button sits next to "New league". */}
+        {leagueId && confirmDelete && (
+          <div className="mt-3 rounded border border-red-900/60 bg-red-950/20 p-3">
+            <p className="text-xs text-gray-300">
+              Delete <span className="font-medium text-white">{cfg.name}</span> permanently? Any
+              surface currently showing this league will fall back to a standard format.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                onClick={onDelete}
+                disabled={deleteLeague.isPending}
+                className="rounded bg-red-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
+              >
+                {deleteLeague.isPending ? "Deleting…" : "Yes, delete it"}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="rounded border border-gray-700 px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+            </div>
+            {deleteLeague.isError && (
+              <p className="mt-2 text-xs text-red-400">
+                Could not delete. {(deleteLeague.error as Error)?.message ?? "Please try again."}
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <FieldLabel>League name</FieldLabel>
             <input
-              className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-1.5 text-sm text-gray-200"
+              className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-sm text-gray-200"
               value={cfg.name}
               maxLength={80}
               onChange={(e) => update({ name: e.target.value })}
@@ -209,18 +278,20 @@ export function LeagueSettingsEditor() {
             <FieldLabel>Teams</FieldLabel>
             <input
               type="number"
+              inputMode="numeric"
               min={2}
               max={32}
-              className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-1.5 text-sm text-gray-200"
+              className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-sm text-gray-200"
               value={cfg.n_teams}
               onChange={(e) => update({ n_teams: Number(e.target.value) })}
             />
           </div>
-          <div>
+          <div className="sm:col-span-2 lg:col-span-1">
             <FieldLabel>Start from a preset</FieldLabel>
             <select
-              className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-1.5 text-sm text-gray-200"
-              value=""
+              className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-sm text-gray-200 disabled:opacity-60"
+              value={presetChoice}
+              disabled={!manifest?.configs?.length}
               onChange={(e) => e.target.value && onStartFromPreset(e.target.value)}
             >
               <option value="">Choose a starting point…</option>
@@ -230,9 +301,23 @@ export function LeagueSettingsEditor() {
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-[11px] text-gray-500">
-              Loads that format&apos;s scoring and roster, then edit anything below.
-            </p>
+            {!manifest?.configs?.length ? (
+              <p className="mt-1 text-[11px] text-amber-400">
+                Standard formats aren&apos;t available right now — you can still build your league
+                from scratch below.
+              </p>
+            ) : loadError ? (
+              <p className="mt-1 text-[11px] text-amber-400">{loadError}</p>
+            ) : presetNote ? (
+              <p className="mt-1 flex items-start gap-1 text-[11px] text-emerald-400">
+                <Check className="mt-px h-3 w-3 shrink-0" />
+                <span>{presetNote}</span>
+              </p>
+            ) : (
+              <p className="mt-1 text-[11px] text-gray-500">
+                Loads that format&apos;s scoring and roster, then edit anything below.
+              </p>
+            )}
           </div>
         </div>
       </section>
@@ -300,28 +385,35 @@ export function LeagueSettingsEditor() {
       <CoveragePanel terms={coverage.terms} byVerdict={byVerdict} />
 
       {/* ── save ─────────────────────────────────────────────────────────────────────────── */}
-      <section className="mt-6 flex flex-wrap items-center gap-3">
-        <button
-          onClick={onSave}
-          disabled={errors.length > 0 || saveLeague.isPending}
-          className="flex items-center gap-1.5 rounded bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-gray-700"
-        >
-          <Save className="h-4 w-4" />
-          {saveLeague.isPending ? "Saving…" : leagueId ? "Save changes" : "Save league"}
-        </button>
-        {saved && !dirty && (
-          <span className="flex items-center gap-1 text-xs text-emerald-400">
-            <Check className="h-3.5 w-3.5" /> Saved — the board, rankings and draft tools now use this
-            league.
-          </span>
-        )}
-        {saveLeague.isError && (
-          <span className="text-xs text-red-400">
-            Could not save. {(saveLeague.error as Error)?.message ?? ""}
-          </span>
-        )}
+      {/* Sticky on mobile so Save is always reachable — the form is long and the button would
+          otherwise sit far below the scoring grid. */}
+      <section className="sticky bottom-0 z-10 mt-6 -mx-4 border-t border-gray-800 bg-[#0a0a0a]/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:backdrop-blur-none">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={onSave}
+            disabled={errors.length > 0 || saveLeague.isPending}
+            className="flex w-full items-center justify-center gap-1.5 rounded bg-sky-600 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-gray-700 sm:w-auto"
+          >
+            <Save className="h-4 w-4" />
+            {saveLeague.isPending ? "Saving…" : leagueId ? "Save changes" : "Save league"}
+          </button>
+          {saved && !dirty && (
+            <span className="flex items-center gap-1 text-xs text-emerald-400">
+              <Check className="h-3.5 w-3.5" /> Saved — the board, rankings and draft tools now use
+              this league.
+            </span>
+          )}
+          {dirty && !saveLeague.isPending && (
+            <span className="text-xs text-amber-400">Unsaved changes.</span>
+          )}
+          {saveLeague.isError && (
+            <span className="text-xs text-red-400">
+              Could not save. {(saveLeague.error as Error)?.message ?? "Please try again."}
+            </span>
+          )}
+        </div>
         {errors.length > 0 && (
-          <ul className="text-xs text-red-400">
+          <ul className="mt-2 text-xs text-red-400">
             {errors.map((e) => (
               <li key={e}>• {e}</li>
             ))}
@@ -385,95 +477,94 @@ function RosterEditor({
         (add QB for a SUPERFLEX).
       </p>
 
-      <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[560px] text-sm">
-          <thead>
-            <tr className="border-b border-gray-800 text-left text-[11px] uppercase tracking-wide text-gray-500">
-              <th className="py-2 pr-2">Slot</th>
-              <th className="py-2 pr-2 w-20">Count</th>
-              <th className="py-2 pr-2">Eligible positions</th>
-              <th className="py-2 pr-2 w-24">Bench/IR</th>
-              <th className="py-2 w-8" />
-            </tr>
-          </thead>
-          <tbody>
-            {roster.map((s, i) => (
-              <tr key={i} className="border-b border-gray-900">
-                <td className="py-2 pr-2">
-                  <input
-                    className="w-24 rounded border border-gray-700 bg-[#151515] px-2 py-1 text-sm text-gray-200"
-                    value={s.name}
-                    onChange={(e) => patch(i, { name: e.target.value })}
-                  />
-                </td>
-                <td className="py-2 pr-2">
-                  <input
-                    type="number"
-                    min={0}
-                    max={40}
-                    className="w-16 rounded border border-gray-700 bg-[#151515] px-2 py-1 text-sm text-gray-200"
-                    value={s.count}
-                    onChange={(e) => patch(i, { count: Number(e.target.value) })}
-                  />
-                </td>
-                <td className="py-2 pr-2">
-                  <div className="flex flex-wrap gap-1">
-                    {POSITIONS.map((p) => {
-                      const on = s.eligible.includes(p)
-                      return (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => toggleEligible(i, p)}
-                          className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${
-                            on
-                              ? "border-sky-500/40 bg-sky-500/15 text-sky-300"
-                              : "border-gray-700 text-gray-600 hover:text-gray-400"
-                          }`}
-                        >
-                          {p}
-                        </button>
-                      )
-                    })}
-                    {s.bench && s.eligible.length === 0 && (
-                      <span className="text-[10px] text-gray-500">any position</span>
-                    )}
-                  </div>
-                </td>
-                <td className="py-2 pr-2">
-                  <label className="flex cursor-pointer items-center gap-1.5 text-xs text-gray-400">
-                    <input
-                      type="checkbox"
-                      className="h-3.5 w-3.5 accent-sky-500"
-                      checked={s.bench}
-                      onChange={(e) => patch(i, { bench: e.target.checked })}
-                    />
-                    bench
-                  </label>
-                </td>
-                <td className="py-2">
-                  <button
-                    type="button"
-                    onClick={() => onChange(roster.filter((_, j) => j !== i))}
-                    className="text-gray-600 hover:text-red-400"
-                    aria-label={`Remove ${s.name}`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* A CARD PER SLOT rather than a wide table: the table needed ~560px and forced horizontal
+          scrolling on a phone, which is where a lot of draft-prep actually happens. Cards reflow to
+          a single column and keep every control at a tappable size. */}
+      <div className="mt-3 space-y-2">
+        {roster.map((s, i) => (
+          <div key={i} className="rounded border border-gray-800 bg-[#131313] p-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-0 flex-1 basis-32">
+                <FieldLabel>Slot</FieldLabel>
+                <input
+                  className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-sm text-gray-200"
+                  value={s.name}
+                  onChange={(e) => patch(i, { name: e.target.value })}
+                />
+              </div>
+              <div className="w-20 shrink-0">
+                <FieldLabel>Count</FieldLabel>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={40}
+                  className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-sm text-gray-200"
+                  value={s.count}
+                  onChange={(e) => patch(i, { count: Number(e.target.value) })}
+                />
+              </div>
+              <label className="flex shrink-0 cursor-pointer items-center gap-1.5 pb-2 text-xs text-gray-400">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-sky-500"
+                  checked={s.bench}
+                  onChange={(e) => patch(i, { bench: e.target.checked })}
+                />
+                Bench / IR
+              </label>
+              <button
+                type="button"
+                onClick={() => onChange(roster.filter((_, j) => j !== i))}
+                className="ml-auto shrink-0 rounded p-2 text-gray-600 hover:bg-red-950/30 hover:text-red-400"
+                aria-label={`Remove ${s.name}`}
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-2">
+              <FieldLabel>Eligible positions</FieldLabel>
+              <div className="flex flex-wrap gap-1.5">
+                {POSITIONS.map((p) => {
+                  const on = s.eligible.includes(p)
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => toggleEligible(i, p)}
+                      className={`rounded border px-2.5 py-1 text-xs font-semibold ${
+                        on
+                          ? "border-sky-500/40 bg-sky-500/15 text-sky-300"
+                          : "border-gray-700 text-gray-600 hover:text-gray-400"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                })}
+              </div>
+              {s.bench && s.eligible.length === 0 && (
+                <p className="mt-1 text-[11px] text-gray-500">Any position.</p>
+              )}
+              {!s.bench && s.eligible.length === 0 && (
+                <p className="mt-1 text-[11px] text-amber-400">
+                  A starting slot needs at least one eligible position.
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div className="mt-3 flex items-center gap-3">
+      <div className="mt-3 flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={() =>
             onChange([...roster, { name: "NEW", count: 1, eligible: ["RB", "WR", "TE"], bench: false }])
           }
-          className="flex items-center gap-1.5 rounded border border-gray-700 px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-800"
+          className="flex items-center gap-1.5 rounded border border-gray-700 px-3 py-2 text-xs text-gray-300 hover:bg-gray-800"
         >
           <Plus className="h-3.5 w-3.5" /> Add slot
         </button>
@@ -533,7 +624,9 @@ function ScoringGroup({
               <input
                 type="number"
                 step="any"
-                className="w-20 shrink-0 rounded border border-gray-700 bg-[#151515] px-2 py-1 text-right text-sm text-gray-200"
+                inputMode="decimal"
+                aria-label={t.label}
+                className="w-20 shrink-0 rounded border border-gray-700 bg-[#151515] px-2 py-2 text-right text-sm text-gray-200"
                 value={perStat[t.key] ?? 0}
                 onChange={(e) => onChange(t.key, Number(e.target.value))}
               />
@@ -562,7 +655,9 @@ function TePremiumRow({
         <input
           type="number"
           step="any"
-          className="w-20 rounded border border-gray-700 bg-[#151515] px-2 py-1 text-right text-sm text-gray-200"
+          inputMode="decimal"
+          aria-label="Extra points per TE reception"
+          className="w-20 rounded border border-gray-700 bg-[#151515] px-2 py-2 text-right text-sm text-gray-200"
           value={value}
           onChange={(e) => {
             const v = Number(e.target.value)
