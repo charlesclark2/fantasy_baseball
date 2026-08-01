@@ -859,6 +859,10 @@ def main(argv: list[str] | None = None) -> int:
     # NF3.1 — bio for the player page (birth date/height/weight/college/experience/headshot),
     # same table + same best-effort contract as rookie_teams above.
     bio = player_bio_map()
+    if not bio:
+        log.warning("[ALERT] player bio map is EMPTY — every published player will show no age/"
+                    "height/weight/college/photo on the player page. See the 'player bio "
+                    "enrichment skipped' warning above for the actual read failure.")
     # bye weeks for the projection season — empty until NF-D1 lands the schedule, then auto-populates
     byes = bye_week_map(args.season)
 
