@@ -38,6 +38,21 @@ things differ for it, and both are intentional:
   ▸ **Its floor is per POSITION (K, DST), not per offensive position**, and it is a FLOOR at the
     nominal 0.80 exactly as the other two are.
 
+📌 A NON-GATING CADENCE POINTER — NF-D15's data-availability RE-RUN (carried by NF-D16, PM ruling 2).
+NF-D15 recorded a rookie-POINT effect that was real-but-UNDERPOWERED: it reproduced on the selecting
+metric and passed PBO, but failed DSR/BH-FDR purely at n = 7 held-out draft classes. Its computed
+power-in-classes said **TE needs 10 classes (⇒ re-runnable once the 2028 rookie season completes) and
+RB needs 11 (⇒ 2029)**; WR needs ~29, i.e. it is a genuine absence at any n this program will have. So
+when this harness is next run for one of those seasons, ALSO re-run:
+
+    uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_nf_d15_point_scaling
+
+⚠️ **THIS IS A POINTER, NOT A GATE, AND THE DISTINCTION IS DELIBERATE.** This file's contract is
+"a coverage-FLOOR breach exits NON-ZERO"; NF-D15's trigger is a *data-availability* re-run with no
+floor attached to it. Folding it into the exit code would make a non-zero exit mean two different
+things and corrupt the one contract every reader of this harness relies on. It lives here because this
+is the file with the annual cadence and an owner, which is the only property the pointer needs.
+
 ⚠️ THE POSITION TO WATCH IS ROOKIE **RB**. NF1.8 shipped with per-position floor margins, in ROWS, of
 QB 1 / RB **0** / TE 12 / WR 8 — i.e. rookie RB clears its floor with ZERO covered rookie-seasons of
 slack, so it is the floor a future class breaks first. The veteran margins are much larger (64–337 rows)

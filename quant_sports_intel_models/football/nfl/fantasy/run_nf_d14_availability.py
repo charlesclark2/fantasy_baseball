@@ -1074,6 +1074,13 @@ def _verdict_prose(ship, v1, v2, best, null, l2_null, l2_best, anchors, defl1) -
 
 
 _LIMITATIONS = [
+    "⚠️ **SUPERSEDED by NF-D15 — the mechanism asserted here (cold-bias LEVEL correction) was refuted "
+    "by NF-D15's matched foil; the lift is an AVAILABILITY effect, not a level correction. See "
+    "`nf_d15_rookie_point_scaling.md`.** (NF-D16 then tested the level correction as its own "
+    "pre-registered hypothesis — see `nf_d16_rookie_point_recalibration.md`.) This report's own "
+    "reasoning is left INTACT: it is a faithful record of what NF-D14 knew at the time, and the risk "
+    "being closed here is only that a re-run of this harness REGENERATES a known-superseded mechanism "
+    "claim with no pointer to what overturned it.",
     "**The depth-chart proxy is FRESHER than the served signal.** The historical feature is the WEEK-1 "
     "depth chart (a post-final-cuts read); the live board reads an August "
     "`stg_nfl_depth_charts_current` snapshot. That can only FLATTER the historical fit, which is why "

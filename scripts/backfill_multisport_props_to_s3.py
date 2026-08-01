@@ -94,6 +94,19 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+# Cost of the LAST API call made (the Odds API `x-requests-last` header) — a module-level
+# tracker rather than a new return value so existing 2-tuple call sites/mocks (incl.
+# betting_ml/tests/test_props_live_mode.py) don't need to change. Read via
+# `_last_credits_charged()` at the per-date/per-run log points (E5.0, 2026-08-01: the
+# multi-market widen makes cr/event a live multiplier worth confirming against reality,
+# not just the `10 × markets × regions` estimate).
+_LAST_REQUEST_COST: str = "?"
+
+
+def _last_credits_charged() -> str:
+    return _LAST_REQUEST_COST
+
+
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 ODDS_API_BASE_URL = "https://api.the-odds-api.com/v4"
@@ -480,9 +493,11 @@ def fetch_event_props(
         "regions"    : ",".join(regions),
         "oddsFormat" : "american",
     }
+    global _LAST_REQUEST_COST
     try:
         resp = _fetch_with_retry(url, params=params, timeout=30)
         remaining = resp.headers.get("x-requests-remaining", "?")
+        _LAST_REQUEST_COST = resp.headers.get("x-requests-last", "?")
         try:
             remaining_int = int(remaining)
         except (ValueError, TypeError):
@@ -559,9 +574,11 @@ def fetch_live_event_props(
         "regions"    : ",".join(regions),
         "oddsFormat" : "american",
     }
+    global _LAST_REQUEST_COST
     try:
         resp = _fetch_with_retry(url, params=params, timeout=30)
         remaining = resp.headers.get("x-requests-remaining", "?")
+        _LAST_REQUEST_COST = resp.headers.get("x-requests-last", "?")
         try:
             remaining_int = int(remaining)
         except (ValueError, TypeError):
@@ -1032,12 +1049,13 @@ def run_backfill(
                 write_to_s3(rows, key, s3_client, BUCKET)
 
             log.info(
-                "  done  date=%s  calls_so_far=%d  est_credits_used=%d  api_remaining=%s",
-                game_date, calls_made, credits_est, remaining,
+                "  done  date=%s  calls_so_far=%d  est_credits_used=%d  api_remaining=%s  "
+                "x-requests-last=%s",
+                game_date, calls_made, credits_est, remaining, _last_credits_charged(),
             )
 
-    log.info("Backfill complete.  Total calls: %d  Est. credits used: %d",
-             calls_made, credits_est)
+    log.info("Backfill complete.  Total calls: %d  Est. credits used: %d  x-requests-last=%s",
+             calls_made, credits_est, _last_credits_charged())
 
 
 # ── Live mode ────────────────────────────────────────────────────────────────────
@@ -1151,10 +1169,11 @@ def run_live(
             key = s3_key(label, mkt_key, season, game_date)
             write_to_s3(rows, key, s3_client, BUCKET)
 
-        log.info("  %s live done  calls=%d  est_credits=%d  api_remaining=%s",
-                 cfg["display"], calls_made, credits_est, remaining)
+        log.info("  %s live done  calls=%d  est_credits=%d  api_remaining=%s  x-requests-last=%s",
+                 cfg["display"], calls_made, credits_est, remaining, _last_credits_charged())
 
-    log.info("Live pull complete.  Total calls: %d  Est. credits: %d", calls_made, credits_est)
+    log.info("Live pull complete.  Total calls: %d  Est. credits: %d  x-requests-last=%s",
+             calls_made, credits_est, _last_credits_charged())
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────────

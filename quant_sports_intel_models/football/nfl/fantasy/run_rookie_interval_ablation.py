@@ -222,15 +222,29 @@ def _curve_inputs(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     return band[band["games"] > 0].copy(), band
 
 
-def build_folds(pool: pd.DataFrame, cohorts: list[int]) -> list[Fold]:
+def build_folds(pool: pd.DataFrame, cohorts: list[int], *,
+                recalibrate: bool = True) -> list[Fold]:
+    """Walk-forward folds by draft class.
+
+    ⭐ `recalibrate` (NF-D16) MUST reach BOTH curves or the harness silently contradicts itself. The
+    point comes from `curve` and the class-level band from `tercile`; before NF-D16 those two agreed
+    on the point by construction (a band cannot move a point), so passing the recalibration to only
+    one would fit a band around a point the harness does not use — NF1.7's class-level defect in a new
+    disguise. Both get `recal_hist=band` (the FULL drafted population, matching what serving passes).
+
+    `recalibrate=False` reproduces the PRE-NF-D16 incumbent exactly, and NF-D16's own bake-off runs
+    that way: a study of whether to add the recalibration cannot use the recalibrated point as its own
+    null."""
     folds: list[Fold] = []
     for y in cohorts:
         tr, te = pool[pool["draft_year"] < y], pool[pool["draft_year"] == y]
         if len(tr) < _MIN_TRAIN_ROWS or len(te) < _MIN_TEST_ROWS:
             continue
         hist, band = _curve_inputs(tr)
-        curve = SP.fit_rookie_slot_curves(hist)                       # point model only
-        tercile = SP.fit_rookie_slot_curves(hist, band_hist=band, per_player_band=False)
+        rc = band if recalibrate else None
+        curve = SP.fit_rookie_slot_curves(hist, recal_hist=rc)        # point model only
+        tercile = SP.fit_rookie_slot_curves(hist, band_hist=band, per_player_band=False,
+                                            recal_hist=rc)
         folds.append(Fold(
             year=int(y), train=band, test=te.copy(), curve=curve,
             train_pred=SP.rookie_point_projection(band, curve),

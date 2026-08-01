@@ -779,3 +779,47 @@ def test_coalesce_forward_status_handles_empty_frames():
     sleeper = pd.DataFrame({"player_id": ["Z"], "proj_status_sleeper": ["PUP"]})
     out2 = rsp._coalesce_forward_status(empty_nflverse, sleeper)
     assert out2.set_index("player_id").loc["Z", "proj_status"] == "PUP"
+
+
+# ── NF-D16 carried fix: an FFC error payload must NEVER be cached ────────────────────────────────
+# ⚠️ THE BUG THIS GUARDS. `fetch_ffc_adp` used to write the fetched payload to cache
+# UNCONDITIONALLY, which made a TRANSIENT failure PERMANENT: FFC answers an unavailable season with
+# a 200 carrying `{"status":"Error","errors":"No ADP data found."}`, that blob got persisted, and
+# every later run read it back as "no data" and never re-fetched. That is why the archived NF1.5 run
+# carried a stale 51-byte error blob for `ffc_ppr_12_2025.json` and served 2025 market coverage
+# 0.796 (ECR-only) — a data-freshness defect no model gate could see.
+def _fake_urlopen(payload):
+    import io
+    import json as _json
+    from contextlib import contextmanager
+
+    @contextmanager
+    def _open(req, timeout=None):                      # noqa: ARG001 — signature parity
+        yield io.BytesIO(_json.dumps(payload).encode())
+    return _open
+
+
+def test_an_ffc_error_payload_is_NOT_written_to_cache(tmp_path, monkeypatch):
+    """A non-Success payload must leave the cache EMPTY so the next run re-fetches. Caching it is
+    how a one-off outage becomes a permanent 'this season has no ADP'."""
+    monkeypatch.setattr(adp.urllib.request, "urlopen",
+                        _fake_urlopen({"status": "Error", "errors": "No ADP data found."}))
+    out = adp.fetch_ffc_adp(2025, cache_dir=tmp_path)
+    assert out.empty, "an error payload must still return the empty, correctly-columned frame"
+    assert list(tmp_path.glob("*.json")) == [], "an error payload was PERSISTED to the cache"
+
+
+def test_a_successful_payload_IS_cached_and_read_back_offline(tmp_path, monkeypatch):
+    """The other half of the contract — the caching that makes a run offline-reproducible must still
+    happen, or the guard would have fixed the bug by disabling the feature."""
+    payload = {"status": "Success",
+               "players": [{"name": "Bijan Robinson", "position": "RB", "team": "ATL",
+                            "adp": 3.1, "stdev": 1.2, "high": 1, "low": 8, "times_drafted": 900}]}
+    monkeypatch.setattr(adp.urllib.request, "urlopen", _fake_urlopen(payload))
+    first = adp.fetch_ffc_adp(2024, cache_dir=tmp_path)
+    assert len(first) == 1 and len(list(tmp_path.glob("*.json"))) == 1
+
+    def _boom(*a, **k):                                # the network is now gone
+        raise AssertionError("the cache was not used — this run went back to the network")
+    monkeypatch.setattr(adp.urllib.request, "urlopen", _boom)
+    assert len(adp.fetch_ffc_adp(2024, cache_dir=tmp_path)) == 1

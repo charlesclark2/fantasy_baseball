@@ -996,6 +996,28 @@ class RookieSlotCurve:
     # NF1.7: the PER-PLAYER 80% band that SUPERSEDES the tercile buckets above (which are retained
     # as the fallback + as the bake-off's degenerate-ceiling anchor). None ⇒ no per-player fit.
     band_model: "RookieBandModel | None" = None
+    # NF-D16: the per-position LEVEL RECALIBRATION of the served rookie point, `position -> (a, b)`
+    # applied as `a + b·fp` to the FINAL scored projection. Empty ⇒ no recalibration (the pre-NF-D16
+    # incumbent, byte-identical). Fitted only when `fit_rookie_slot_curves` is given `recal_hist`, so
+    # no existing caller changes behaviour by accident. QB is EXCLUDED by pre-registration.
+    fp_recal: dict = field(default_factory=dict)
+
+    def recalibrate_fp(self, positions, fp) -> np.ndarray:
+        """Apply the NF-D16 per-position level recalibration to a scored rookie fp projection.
+
+        A position with no fitted parameters — QB always, and any position whose history was too
+        thin — passes through UNCHANGED. The floor at 0 is physical: a fantasy projection cannot be
+        negative, and it is the one place an affine correction could otherwise emit one."""
+        f = np.asarray(fp, dtype=float)
+        if not self.fp_recal:
+            return f
+        pos = np.asarray([str(p).upper() for p in np.asarray(positions, dtype=object)], dtype=object)
+        out = f.copy()
+        for p, ab in self.fp_recal.items():
+            sel = pos == str(p).upper()
+            if sel.any():
+                out[sel] = float(ab[0]) + float(ab[1]) * f[sel]
+        return np.clip(out, 0.0, None)
 
     def band(self, position: str, pred: float) -> tuple[float, float] | None:
         """The CLASS-LEVEL (tercile-bucket) 80% interval for one rookie, or None when no band was
@@ -1049,7 +1071,8 @@ def fit_rookie_slot_curves(hist: pd.DataFrame, band_hist: pd.DataFrame | None = 
                            band_cqr_mode: str | None = None,
                            band_cqr_scale: str | None = None,
                            band_cqr_k: int | None = None,
-                           per_player_band: bool = True) -> RookieSlotCurve:
+                           per_player_band: bool = True,
+                           recal_hist: pd.DataFrame | None = None) -> RookieSlotCurve:
     """Fit the composite rookie model from prior classes.
 
     hist: one row per historical drafted rookie (skill positions) with `position_group`,
@@ -1098,6 +1121,27 @@ def fit_rookie_slot_curves(hist: pd.DataFrame, band_hist: pd.DataFrame | None = 
         fpp = fp[fp.notna() & (fp > 5)]
         if len(fpp) >= 8 and fpp.mean() > 0:
             curve.fp_cv_by_pos[pos] = float(np.clip(fpp.std() / fpp.mean(), 0.35, 1.2))
+    # ── NF-D16: the per-position LEVEL RECALIBRATION, fitted BEFORE any band ──────────────────────
+    # ⭐ THE ORDER IS LOAD-BEARING, TWICE OVER.
+    #   1. The recalibration is fitted while `curve.fp_recal` is still EMPTY, so `rookie_point_projection`
+    #      below returns the UN-recalibrated point and the fit is against the incumbent — not against
+    #      its own output, which would be a silent feedback loop.
+    #   2. It is set BEFORE the bands are fitted, so both band tiers condition on the point the board
+    #      will actually display. That is NF1.7's central invariant ("the band is centred on the number
+    #      the user sees"), and fitting a band around the old point and then moving the point would be
+    #      exactly the class-level defect NF1.7 removed, wearing a new hat.
+    # ⚠️ OPT-IN BY `recal_hist`, never inferred from `band_hist`: inferring it would silently change the
+    #    point for every existing caller — including NF1.4's pinned "the band does not move the point"
+    #    test, which compares a band-fitted curve against a point-only one.
+    if recal_hist is not None and not recal_hist.empty:
+        from quant_sports_intel_models.football.nfl.fantasy import (  # local: avoids an import cycle
+            rookie_point_recalibration as _RC,
+        )
+        _pts = rookie_point_projection(recal_hist, curve)
+        curve.fp_recal = _RC.fit_ols(
+            _pts, pd.to_numeric(recal_hist["rookie_fp_ppr"], errors="coerce").to_numpy(dtype=float),
+            recal_hist["position_group"].to_numpy())
+
     if band_hist is not None and not band_hist.empty:
         _fit_rookie_bands(curve, band_hist)
         if per_player_band:
@@ -2452,6 +2496,37 @@ def project_rookies(
     df["proj_two_pt"] = np.nan
     df = score_line(df, prefix="proj_")
 
+    # ── NF-D16: the per-position LEVEL RECALIBRATION of the served point ──────────────────────────
+    # NF1.4 DOCUMENTED that the rookie prior runs COLD on the draftable tier (`tier_bias` RB −58 /
+    # WR −49 / TE −44 PPR) and did not correct it. NF-D16 pre-registered the correction as its own
+    # hypothesis and it cleared the gate: pooled draftable-tier MAE 1.0738 → 0.9407 over seven
+    # held-out draft classes, all seven positive, PBO 0.029, DSR 0.996, p 0.0033, with the bias moving
+    # TOWARD zero (−20.87 → −5.41) — the signature a genuine level correction produces and a
+    # per-player one does not (CLAUDE.md NF-D15 (g′)).
+    #
+    # ⭐ APPLIED TO THE **FINAL SCORED** PROJECTION, WHICH IS WHAT THE BAKE-OFF GRADED. The obvious
+    #    alternative — folding it into `fp_target` above — is NOT the same quantity: the served point
+    #    is the target minus the fumbles-lost term (see `rookie_point_projection`, which was wrong by
+    #    up to 3.3 PPR when it re-derived the target instead of reading the emitted line), and the
+    #    target is additionally clipped to the historical ceiling. Recalibrating there would ship
+    #    something the held-out evaluation never scored — the train/serve skew class (E7.9).
+    #
+    # ⚠️ THE WHOLE STAT LINE IS CARRIED WITH IT. `proj_fp_ppr` is SCORED from the stat line, so moving
+    #    the point without the line would leave a board whose displayed points disagree with its own
+    #    yards and touchdowns. Scoring is linear in the stats and the fumble term is proportional to
+    #    touches, so ONE scalar per player moves the line and reproduces the intended point exactly
+    #    (asserted in the tests). `proj_games` is NOT scaled — it is a count of games, not production.
+    if curve.fp_recal:
+        fp_before = df["proj_fp_ppr"].to_numpy(dtype=float)
+        fp_after = curve.recalibrate_fp(pos_group, fp_before)
+        ratio = np.where(np.abs(fp_before) > 1e-6, fp_after / np.where(np.abs(fp_before) > 1e-6,
+                                                                       fp_before, 1.0), 1.0)
+        for col in stat_to_col.values():
+            df[col] = np.clip(df[col].to_numpy() * ratio, 0.0, None)
+        touches = df["proj_rush_att"].to_numpy() + df["proj_rec"].to_numpy()
+        df["proj_fumbles_lost"] = np.round(touches * 0.006, 2)
+        df = score_line(df, prefix="proj_")
+
     # ── the 80% rookie interval ────────────────────────────────────────────────────────────────
     # THREE TIERS, best first (each is the honest fallback for the one above):
     #  1. NF1.7 `band_model` — a PER-PLAYER band, width driven by the player's own point projection
@@ -2502,6 +2577,80 @@ def project_rookies(
 # and finished QB8–QB25 (mean rank ≈ QB19.5), so a rookie inside the overall top 10 is the
 # placement that has never been earned.
 _FACE_VALIDITY_TOP_N = 10
+
+
+# ── NF-D17: the PLACEMENT clause, VALIDATED against reality (PM ruling off NF-D16, 2026-08-01) ────
+# The realized per-class BEST rookie's OVERALL finish, 2019–2025, from `mart_player_season`. This is
+# the reference distribution the placement clause had NEVER been measured against — the direct
+# rank-space analogue of the per-class-best-rookie reference NF1.4 used to CORRECT the LEVEL clause.
+#   2019 Kyler Murray 15 · 2020 Justin Herbert 13 · 2021 Ja'Marr Chase 13 · 2022 Garrett Wilson 52
+#   2023 Puka Nacua 10 · 2024 Jayden Daniels 7 · 2025 Ashton Jeanty 29
+REALIZED_BEST_ROOKIE_OVERALL_RANK = (15, 13, 13, 52, 10, 7, 29)
+
+
+def placement_reference_cap(realized_best_rookie_ranks=REALIZED_BEST_ROOKIE_OVERALL_RANK,
+                            q: float = 0.10) -> float | None:
+    """⭐ THE PLACEMENT CAP, DERIVED FROM REALITY RATHER THAN ASSERTED — NF1.4's LEVEL-clause fix
+    transcribed into rank space.
+
+    NF1.4's LEVEL clause caps a projection at the **Q90** of the per-class BEST realized rookie's
+    POINTS: you may not project a rookie above what a strong class's best rookie actually achieves.
+    Ranks are better when SMALLER, so the aggressive tail mirrors to **Q10**: you may not project a
+    rookie at a better overall rank than a strong class's best rookie actually finishes.
+
+    ⚠️ WHY THIS EXISTS AT ALL. The placement clause ("no rookie in an overall top-10 slot") was the
+    one half of the face-validity gate that had NEVER been checked against realized outcomes — and its
+    sibling had already been caught mis-specified once: NF1.4's first LEVEL cut referenced the Q90 of
+    ALL drafted rookies, which the realized top rookie cleared in 25 of 28 cohort-positions, so it
+    fired 7/7 and carried zero information.
+
+    ⭐ **THE VALIDATION CAME BACK THE OTHER WAY, AND THAT IS THE FINDING.** On this reference the
+    incumbent "top 10" is approximately CORRECT: the honest re-derivation is Q10 ≈ **8.8** (about one
+    board slot tighter than 10), and reality breaches "no rookie in the overall top 10" in **2 of 7**
+    seasons (29%) — statistically indistinguishable from the corrected LEVEL clause's own 9/28 (32%).
+    So the placement clause is VALIDATED as shipped; it did not need re-specifying, and a board that
+    breaches it is breaching an honestly-calibrated bar rather than an unexamined one.
+
+    ⚠️ n = 7 is thin for a max-statistic tail, and the estimate is pinned by the two smallest
+    observations — so the cap should be read as "somewhere in 8–11", never as 8.8 exactly. A wide,
+    rarely-binding clause honestly derived beats a tight one reverse-engineered to fire (E2.1-r), which
+    is the same lesson the LEVEL half taught."""
+    r = np.asarray([x for x in realized_best_rookie_ranks
+                    if x is not None and np.isfinite(x)], dtype=float)
+    if len(r) < 3:
+        return None
+    return float(np.quantile(r, float(q)))
+
+
+def rookie_placement_breach(best_rookie_overall_rank: int | float | None,
+                            realized_best_rookie_ranks=REALIZED_BEST_ROOKIE_OVERALL_RANK,
+                            q: float = 0.10) -> dict:
+    """Does an emitted board place its top rookie better than reality's reference admits?
+
+    Returns the verdict AND its ROBUSTNESS — the range of caps over q ∈ [0.05, 0.25] plus the most
+    permissive reading available (the observed MINIMUM realized rank). ⭐ Reporting that range is the
+    point: a verdict that flips inside the defensible band is a verdict resting on a threshold
+    somebody chose, and this program's rule is that the answer must not (E2.1-r). A breach that holds
+    across the whole band — and against the observed minimum — is outside the reference's entire
+    support and cannot have been manufactured by the quantile choice."""
+    if best_rookie_overall_rank is None:
+        return {"breach": None, "note": "no rookie on the board"}
+    rank = float(best_rookie_overall_rank)
+    r = np.asarray(realized_best_rookie_ranks, dtype=float)
+    caps = {f"Q{int(qq * 100):02d}": round(float(np.quantile(r, qq)), 2)
+            for qq in (0.05, 0.10, 0.15, 0.20, 0.25)}
+    cap = placement_reference_cap(realized_best_rookie_ranks, q)
+    return {
+        "best_rookie_overall_rank": rank,
+        "cap": None if cap is None else round(cap, 2), "q": float(q),
+        "breach": None if cap is None else bool(rank < cap),
+        "caps_over_q_band": caps,
+        "observed_minimum": float(np.min(r)),
+        "breaches_even_the_observed_minimum": bool(rank < float(np.min(r))),
+        "verdict_is_threshold_invariant": bool(
+            len({rank < c for c in caps.values()} | {rank < float(np.min(r))}) == 1),
+        "reality_breach_rate_top10": round(float((r <= 10).mean()), 3),
+    }
 
 
 def rookie_board_face_validity(board: pd.DataFrame, rookie_history: pd.DataFrame,

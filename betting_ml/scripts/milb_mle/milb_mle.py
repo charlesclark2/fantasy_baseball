@@ -473,6 +473,24 @@ class PartialPoolProjector(Projector):
     # it would rig the comparison. Distinct from `GBMProjector.aux_cols`, which the pooled learner has
     # never read.
     extra_cols: tuple[str, ...] = ()
+    # E7.12 slice 5 — OPTIONAL age-bucket blocks (default None/False = byte-exact behaviour, pinned by a
+    # test). `bucket_col` names a CATEGORICAL column; `bucket_intercept` adds per-bucket intercept
+    # deviations and `bucket_slope` adds per-bucket MINOR-RATE-SLOPE deviations, each as its own
+    # penalized block with its own free tau^2 — the `level_intercept` / `level_slope` pattern reused
+    # rather than reinvented.
+    #
+    # ⭐ WHY PENALIZED, AND WHY THIS IS NOT "ADDING AGE". `age` is ALREADY an unpenalized fixed main
+    # effect above. A penalized bucket block therefore estimates DEPARTURES FROM LINEARITY — the linear
+    # part is absorbed by the main effect and the block is shrunk toward zero — which is the only thing
+    # a bucketed age term can honestly claim to add over what already ships.
+    #
+    # ⭐ WHY TWO SWITCHES AND NOT ONE FLAG. They are DIFFERENT mechanisms and the slice reads the paired
+    # delta between them (NF-D15 g′). `bucket_slope` is the only one that can express "youth changes how
+    # much the LINE MEANS"; `bucket_intercept` can only shift the level, i.e. "the age main effect is
+    # mis-specified as linear". Bundling them would make a win unattributable to either claim.
+    bucket_col: str | None = None
+    bucket_slope: bool = False
+    bucket_intercept: bool = False
 
     def _weights(self, t: pd.DataFrame) -> np.ndarray | None:
         if not self.weight_col:
@@ -489,6 +507,10 @@ class PartialPoolProjector(Projector):
         # partial pooling ACROSS observations — the shrinkage lives in the coefficient prior, not here)
         return np.clip(w, 0.2, 5.0)
 
+    @property
+    def _uses_buckets(self) -> bool:
+        return bool(self.bucket_col) and (self.bucket_slope or self.bucket_intercept)
+
     def fit(self, train: pd.DataFrame) -> "PartialPoolProjector":
         t = train[train["has_target"]].copy().reset_index(drop=True)
         self.feat_scaler_ = _Scaler().fit(t, "feat")
@@ -496,6 +518,12 @@ class PartialPoolProjector(Projector):
         self.levels_ = sorted(t["level"].dropna().unique())
         self.leagues_ = sorted(t["league"].dropna().unique())
         self.extra_scalers_ = [_Scaler().fit(t, c) for c in self.extra_cols]
+        # Buckets are the TRAIN-observed levels of the categorical. A bucket absent from train gets no
+        # column, so a test row in it falls back to the global line — the same correct partial-pooling
+        # behaviour as an unseen level, and the reason an empty early-cohort bucket degrades rather than
+        # raises. `_uses_buckets` keeps the whole feature inert unless a caller asks for it.
+        self.buckets_ = (sorted(t[self.bucket_col].dropna().unique())
+                         if self._uses_buckets and self.bucket_col in t.columns else [])
         y = t["target"].to_numpy(float)
         X, spec = self._design(t)
         self.post_ = fit(X, y, spec, weights=self._weights(t),
@@ -517,7 +545,7 @@ class PartialPoolProjector(Projector):
         ls = li * x.reshape(-1, 1)
         gi = np.column_stack([(df["league"] == g).to_numpy(float) for g in self.leagues_]) \
             if self.leagues_ else np.zeros((n, 0))
-        X = np.hstack([fixed, li, ls, gi])
+        parts = [fixed, li, ls, gi]
         blocks = [Block("fixed", ("intercept", "minor", "age") + tuple(self.extra_cols),
                         penalized=False)]
         if self.levels_:
@@ -525,7 +553,18 @@ class PartialPoolProjector(Projector):
             blocks.append(Block("level_slope", tuple(f"ls__{g}" for g in self.levels_)))
         if self.leagues_:
             blocks.append(Block("league_intercept", tuple(f"gi__{g}" for g in self.leagues_)))
-        return X, DesignSpec(tuple(blocks))
+        # E7.12 slice 5 — age-bucket blocks, appended LAST so every pre-slice-5 caller's column order
+        # and block naming is untouched (`buckets_` is empty unless a caller opted in).
+        buckets = getattr(self, "buckets_", [])
+        if len(buckets):
+            bk = np.column_stack([(df[self.bucket_col] == b).to_numpy(float) for b in buckets])
+            if self.bucket_intercept:
+                parts.append(bk)
+                blocks.append(Block("age_intercept", tuple(f"ai__{b}" for b in buckets)))
+            if self.bucket_slope:
+                parts.append(bk * x.reshape(-1, 1))
+                blocks.append(Block("age_slope", tuple(f"as__{b}" for b in buckets)))
+        return np.hstack(parts), DesignSpec(tuple(blocks))
 
     def predict(self, df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
         # rebuild the SAME design against these rows (an unseen level/league has no deviation column →
@@ -549,16 +588,23 @@ class GBMProjector(Projector):
     reads_statcast = True
 
     def __init__(self, n_estimators: int = 300, max_depth: int = 2, learning_rate: float = 0.03,
-                 use_statcast: bool = True, aux_cols: tuple[str, ...] = STATCAST_COLS):
+                 use_statcast: bool = True, aux_cols: tuple[str, ...] = STATCAST_COLS,
+                 use_age: bool = True):
         self.n_estimators, self.max_depth, self.learning_rate = n_estimators, max_depth, learning_rate
         self.use_statcast = use_statcast
         self.aux_cols = tuple(aux_cols)
+        # E7.12 slice 5 — `use_age=False` drops the age feature entirely (default True = byte-exact
+        # prior behaviour). This exists so the slice can run a MATCHED PAIR of free learners, with and
+        # without age, as a ceiling probe: a tree ensemble can express any age × line interaction it
+        # likes, so the PAIRED gap between the two is an upper bound on how much age structure is
+        # exploitable here at all — independent of whether our prescribed bucketing is the right shape.
+        self.use_age = use_age
 
     def _features(self, df: pd.DataFrame) -> np.ndarray:
         z, _ = self.feat_scaler_.transform(df)
         age, _ = self.age_scaler_.transform(df)
         logpa = np.log1p(pd.to_numeric(df.get("minor_pa"), errors="coerce").fillna(0.0).to_numpy(float))
-        cols = [z, age, logpa]
+        cols = [z, age, logpa] if self.use_age else [z, logpa]
         cols += [(df["level"] == g).to_numpy(float) for g in self.levels_]
         cols += [(df["league"] == g).to_numpy(float) for g in self.leagues_]
         if self.use_statcast:
@@ -615,20 +661,40 @@ def candidate_configs(config: MleConfig) -> list[Projector]:
 def _config_name(c: Projector) -> str:
     if isinstance(c, PartialPoolProjector):
         w = f"|w:{c.weight_col}" if c.weight_col else ""
-        return f"partial_pool@{c.prior_scale}{w}"
+        b = ""
+        if c._uses_buckets:
+            b = "|b:" + c.bucket_col + ("+i" if c.bucket_intercept else "") + \
+                ("+s" if c.bucket_slope else "")
+        return f"partial_pool@{c.prior_scale}{w}{b}"
     if isinstance(c, GBMProjector):
         sc = "+sc" if c.use_statcast else ""
-        return f"gbm@{c.n_estimators}-{c.max_depth}-{c.learning_rate}{sc}"
+        na = "" if c.use_age else "-noage"
+        return f"gbm@{c.n_estimators}-{c.max_depth}-{c.learning_rate}{sc}{na}"
     return c.name
 
 
 def clone_projector(c: Projector) -> Projector:
-    """A FRESH unfitted copy of a projector's config (for the expanding-window refits)."""
+    """A FRESH unfitted copy of a projector's config (for the expanding-window refits).
+
+    🪤 **EVERY CONFIG FIELD MUST BE CARRIED, AND ONE WAS NOT (found E7.12-S5, 2026-08-01).** This
+    dropped `extra_cols` from the moment slice 2 added it. Nothing broke, because the slice-2 and
+    slice-4 runners construct their projectors directly and never round-trip through here — but
+    `emit_projections` DOES, so the deferred S2 emission would have refit the winner with its Heckman /
+    grade regressors silently removed and served the plain incumbent under the winning arm's name. Same
+    class of silent-degradation hazard as the copied `_design` body, one layer out. A test now asserts
+    every dataclass field survives a clone, so a slice-6 parameter cannot repeat it.
+    """
     if isinstance(c, PartialPoolProjector):
-        return PartialPoolProjector(prior_scale=c.prior_scale, weight_col=c.weight_col)
+        # `name` is carried too. It is an identity string rather than a knob, so the rule could have
+        # been "carry every field EXCEPT name" — but then every future field needs someone to judge
+        # which side of that line it falls on, which is how `extra_cols` was missed. Unconditional.
+        return PartialPoolProjector(prior_scale=c.prior_scale, name=c.name,
+                                    weight_col=c.weight_col, extra_cols=c.extra_cols,
+                                    bucket_col=c.bucket_col, bucket_slope=c.bucket_slope,
+                                    bucket_intercept=c.bucket_intercept)
     if isinstance(c, GBMProjector):
         return GBMProjector(c.n_estimators, c.max_depth, c.learning_rate,
-                            use_statcast=c.use_statcast, aux_cols=c.aux_cols)
+                            use_statcast=c.use_statcast, aux_cols=c.aux_cols, use_age=c.use_age)
     if isinstance(c, MultiplicativeFactorProjector):
         return MultiplicativeFactorProjector(c.min_support)
     if isinstance(c, IdentityRefProjector):
