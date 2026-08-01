@@ -327,6 +327,24 @@ def iter_months(start: date, end: date):
         current = (current.replace(day=28) + timedelta(days=4)).replace(day=1)
 
 
+def apply_lookahead(end: date, lookahead_days: int) -> date:
+    """INC-37 — push `end` forward by `lookahead_days` so iter_months reaches the NEXT month
+    near a month boundary. PURE (unit-tested directly).
+
+    WHY (INC-37, 2026-08-01 — a P1 that recurred on 06-01, 07-01 and 08-01): run_schedule
+    iterates WHOLE months, so a capture taken on the last day of a month covers only that
+    month. The final July capture (2026-07-31T23:30Z) carried 2026-07-01..2026-07-31 and ZERO
+    games for 2026-08-01 — so the 12:00-UTC daily lakehouse build, which flattens whatever
+    schedule is already in S3, produced a game universe that stopped at 07-31. Every pregame
+    feature block for the 08-01 slate came back NULL and predict fell to intraday_fallback on
+    the whole morning tier. A non-zero lookahead makes the last N captures of every month ALSO
+    fetch the next month, so the hole cannot open regardless of build ordering.
+
+    A negative/zero lookahead is a no-op (never shortens the range).
+    """
+    return end + timedelta(days=lookahead_days) if lookahead_days > 0 else end
+
+
 # ── Venue ID loading ──────────────────────────────────────────────────────────
 
 def load_venue_ids_from_file(path: str) -> list[int]:
@@ -533,6 +551,21 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     schedule_parser.add_argument(
+        "--lookahead-days",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "INC-37 month-boundary guard. Extend the ingested month range so it also covers "
+            "`end date + N days`. run_schedule iterates WHOLE months, so with N=0 a capture "
+            "taken on the last day of a month fetches ONLY that month and contains ZERO games "
+            "for the 1st of the next month — every consumer that flattens it before the new "
+            "month's first capture lands then builds a universe that stops at the month "
+            "boundary. N=3 makes the last few captures of every month also fetch the next "
+            "month, so the hole cannot exist. Default 0 (unchanged) for backfills."
+        ),
+    )
+    schedule_parser.add_argument(
         "--capture-reason",
         default="daily_full_month",
         choices=["daily_full_month", "intraday_gameday"],
@@ -593,6 +626,8 @@ def main() -> None:
             else:
                 last_day = calendar.monthrange(today.year, today.month)[1]
                 schedule_end = today.replace(day=last_day)
+            # INC-37 — extend past the month boundary so no capture can be month-scoped short.
+            schedule_end = apply_lookahead(schedule_end, getattr(args, "lookahead_days", 0) or 0)
             run_schedule(conn, schedule_start, schedule_end, args.capture_reason)
 
         elif args.command == "venues":

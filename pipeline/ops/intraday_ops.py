@@ -479,10 +479,17 @@ def intraday_public_betting_capture(context: OpExecutionContext) -> None:
 
 @op(out=Out(Nothing))
 def intraday_schedule_capture(context: OpExecutionContext) -> None:
+    # INC-37 — --lookahead-days 3: run_schedule iterates WHOLE months, so on the last day of a
+    # month `--end-date today` fetches ONLY that month and the captured blob holds ZERO games for
+    # the 1st of the next month. The daily lakehouse build then flattens a schedule that stops at
+    # the month boundary and the entire next-day slate loses every pregame feature block
+    # (observed 2026-06-01, 07-01 and 08-01). The lookahead makes the last few captures of every
+    # month also fetch the next month, so the hole cannot open.
     _run_script(context, "ingest_statsapi.py", [
         "schedule",
         "--start-date", _today(),
         "--end-date", _today(),
+        "--lookahead-days", "3",
         "--capture-reason", "intraday_gameday",
     ])
     # Propagate the freshly-captured native snapshot to the S3 lakehouse so prod's
