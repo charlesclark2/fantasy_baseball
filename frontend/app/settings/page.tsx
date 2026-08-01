@@ -7,7 +7,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Nav } from "@/components/nav"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { Input, INPUT_BASE } from "@/components/ui/input"
+import { NumericInput } from "@/components/ui/numeric-input"
+import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Check, ChevronDown, ChevronUp, Pencil, Plus, ShieldCheck, Trash2, X } from "lucide-react"
@@ -152,7 +154,7 @@ function AddBookPanel({
           <select
             value={book}
             onChange={(e) => setBook(e.target.value)}
-            className="w-full rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-sm text-white focus:outline-none focus:border-[#10b981]"
+            className="w-full rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-base sm:text-sm text-white focus:outline-none focus:border-[#10b981]"
           >
             <option value="">Select…</option>
             {available.map((b) => (
@@ -388,7 +390,7 @@ function BookCard({
               <select
                 value={reassignTo}
                 onChange={(e) => setReassignTo(e.target.value)}
-                className="flex-1 rounded border border-[#262626] bg-[#141414] px-2 py-1 text-sm text-white focus:outline-none focus:border-[#10b981]"
+                className="flex-1 rounded border border-[#262626] bg-[#141414] px-2 py-1 text-base sm:text-sm text-white focus:outline-none focus:border-[#10b981]"
               >
                 <option value="">Rename to…</option>
                 {availableBooks.map((b) => (
@@ -923,14 +925,13 @@ export default function SettingsPage() {
               </Label>
               <div className="relative">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">$</span>
-                <Input
+                <NumericInput
                   id="bankroll"
-                  type="number"
-                  min={0}
-                  step={100}
                   value={bankroll}
-                  onChange={(e) => { setBankroll(Math.max(0, Number(e.target.value))); markSaved() }}
-                  className="pl-6 bg-[#0a0a0a] border-[#262626] text-white focus:border-[#10b981] focus:ring-[#10b981]/20"
+                  min={0}
+                  ariaLabel="Bankroll"
+                  onCommit={(n) => { setBankroll(n); markSaved() }}
+                  className={cn(INPUT_BASE, "pl-6 bg-[#0a0a0a] border-[#262626] text-white focus:border-[#10b981] focus:ring-[#10b981]/20", "max-sm:text-base")}
                 />
               </div>
             </div>
@@ -940,15 +941,14 @@ export default function SettingsPage() {
                 Kelly Cap
               </Label>
               <div className="relative">
-                <Input
+                <NumericInput
                   id="kelly-cap"
-                  type="number"
+                  value={kellyCap}
                   min={1}
                   max={25}
-                  step={1}
-                  value={kellyCap}
-                  onChange={(e) => { setKellyCap(Math.min(25, Math.max(1, Number(e.target.value)))); markSaved() }}
-                  className="pr-8 bg-[#0a0a0a] border-[#262626] text-white focus:border-[#10b981] focus:ring-[#10b981]/20"
+                  ariaLabel="Kelly cap (percent of bankroll)"
+                  onCommit={(n) => { setKellyCap(n); markSaved() }}
+                  className={cn(INPUT_BASE, "pr-8 bg-[#0a0a0a] border-[#262626] text-white focus:border-[#10b981] focus:ring-[#10b981]/20", "max-sm:text-base")}
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">%</span>
               </div>

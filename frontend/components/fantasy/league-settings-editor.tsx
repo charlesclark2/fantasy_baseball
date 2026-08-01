@@ -49,6 +49,7 @@ import type { LeagueConfig, RosterSlotConfig, TermCoverage } from "@/lib/league-
 import { availableFields } from "@/lib/league-scoring"
 import { useFantasyProjections } from "@/lib/fantasy-queries"
 import { EmptyBlock, LoadingBlock, PosBadge, SurfaceHeader, num } from "@/components/fantasy/shared"
+import { NumericInput } from "@/components/ui/numeric-input"
 
 const VERDICT_STYLE: Record<string, string> = {
   applied: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
@@ -447,74 +448,6 @@ function stripServerFields(l: SavedLeague): LeagueConfig {
     roster: (cfg.roster ?? []).map((s) => ({ ...s, eligible: [...s.eligible] })),
     captured_rules: { ...(cfg.captured_rules ?? {}) },
   }
-}
-
-/**
- * A numeric field that lets you TYPE.
- *
- * The obvious `value={n} onChange={e => set(Number(e.target.value))}` is broken in three ways, all of
- * which this fixes by holding the raw STRING while the field has focus and committing only values
- * that are actually complete:
- *
- *  1. `Number("") === 0`. Clearing the field to retype it snapped the value to 0 — so the box showed
- *     "0" and the next keystroke landed AFTER it, giving "01". That is the reported bug.
- *  2. `Number("-") === NaN`. Typing a minus to enter -2 wrote NaN into the config. `JSON.stringify`
- *     turns NaN into `null`, so a NaN could be POSTed to the API — the same for a lone ".".
- *  3. A committed 0 re-renders as "0", which cannot be deleted-and-retyped without hitting (1) again.
- *
- * On blur the draft is dropped and the field snaps back to the canonical committed value, so an
- * abandoned partial edit ("", "-") can never persist — the last good value wins rather than a zero.
- */
-function NumericInput({
-  value,
-  onCommit,
-  min,
-  max,
-  allowDecimal = false,
-  allowNegative = false,
-  className,
-  ariaLabel,
-}: {
-  value: number
-  onCommit: (n: number) => void
-  min?: number
-  max?: number
-  allowDecimal?: boolean
-  allowNegative?: boolean
-  className?: string
-  ariaLabel?: string
-}) {
-  const [draft, setDraft] = useState<string | null>(null)
-  const shown = draft ?? String(value)
-
-  const pattern = allowDecimal
-    ? allowNegative ? /^-?\d*\.?\d*$/ : /^\d*\.?\d*$/
-    : allowNegative ? /^-?\d*$/ : /^\d*$/
-
-  return (
-    <input
-      // type="text" + inputMode, NOT type="number": a number input additionally fights the user with
-      // spinners, silent locale parsing, and its own leading-zero normalisation. inputMode still
-      // brings up the numeric keypad on mobile, which is the only thing type="number" was buying us.
-      type="text"
-      inputMode={allowDecimal ? "decimal" : "numeric"}
-      aria-label={ariaLabel}
-      className={className}
-      value={shown}
-      onChange={(e) => {
-        const raw = e.target.value
-        if (!pattern.test(raw)) return // reject a keystroke that can't lead anywhere valid
-        setDraft(raw)
-        if (raw === "" || raw === "-" || raw === "." || raw === "-.") return // mid-edit, not a value
-        const n = Number(raw)
-        if (!Number.isFinite(n)) return
-        if (min != null && n < min) return
-        if (max != null && n > max) return
-        onCommit(n)
-      }}
-      onBlur={() => setDraft(null)}
-    />
-  )
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {

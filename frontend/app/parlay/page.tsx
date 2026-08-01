@@ -428,7 +428,7 @@ function ParlayPageInner() {
                             placeholder="-110"
                             value={l.odds}
                             onChange={(e) => setOdds(l.key, e.target.value.replace(/[^0-9+-]/g, ""))}
-                            className="h-7 w-24 rounded border border-[#262626] bg-[#141414] px-2 text-xs tabular-nums text-white focus:border-sky-600 focus:outline-none"
+                            className="h-7 w-24 rounded border border-[#262626] bg-[#141414] px-2 text-base sm:text-xs tabular-nums text-white focus:border-sky-600 focus:outline-none"
                           />
                           <span className="text-[10px] text-gray-600">American</span>
                         </div>
@@ -449,7 +449,7 @@ function ParlayPageInner() {
                       placeholder="+265"
                       value={parlayOdds}
                       onChange={(e) => setParlayOdds(e.target.value.replace(/[^0-9+-]/g, ""))}
-                      className="h-7 w-28 rounded border border-[#262626] bg-[#141414] px-2 text-xs tabular-nums text-white focus:border-sky-600 focus:outline-none"
+                      className="h-7 w-28 rounded border border-[#262626] bg-[#141414] px-2 text-base sm:text-xs tabular-nums text-white focus:border-sky-600 focus:outline-none"
                     />
                     <span className="text-[10px] text-gray-600">American</span>
                   </div>
