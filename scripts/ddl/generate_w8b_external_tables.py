@@ -15,7 +15,8 @@ which itself depends on:
   the W8a feature layer + prior-wave (W1-W7b) parquet already in S3.
 
 ⚠️ feature_pregame_injury_status is NOT emitted here — it already has a lakehouse_ext external table
-  (W7b / refresh_w1_external_tables.W7B_TABLES); W8b only FINALIZES its dbt else-branch to read it.
+  (W7b / refresh_w1_external_tables.W7B_INJURY_TABLES); W8b only FINALIZES its dbt else-branch to
+  read it.
 
 PREREQUISITES:
   1. run_w1_lakehouse.py --w8b (or --w8b-only) has written all 9 parquet files.

@@ -3,6 +3,10 @@
     "week": "2026-07-27",
     "items": [
       {
+        "tag": "improved",
+        "text": "Pick email alerts now go out when your lineup-confirmed picks are ready, not in the morning preview. Until now the one pick email you'd get each day fired first thing in the morning, before starting lineups were even announced — so it was showing preliminary picks that could still change once each team's lineup was set a few hours before first pitch. That email is retired. You'll now get an email as soon as new picks become official (H2H moneyline and totals only — player props aren't part of this yet), sent as lineups confirm through the afternoon and evening rather than all at once, and each pick is only ever emailed to you once. Framed the same honest way as always: these are the model's qualified selections, not a promise of profit."
+      },
+      {
         "tag": "new",
         "text": "Kickers and defenses (D/ST) are now projected on the NFL fantasy pages. Until now the tools projected offensive skill players only, so the K and D/ST roster slots rendered \"not projected\" — you could record a pick there, but there was nothing to rank. Both positions now carry a full projection: for kickers, field goals split by distance (under 40, 40-49, 50+) plus extra points; for defenses, sacks, interceptions, fumble recoveries, defensive and special-teams touchdowns, safeties, blocked kicks, and the points-allowed distribution that drives the points-allowed scoring tiers. Because the projection emits those raw components rather than a single points total, your league's own scoring — including distance-based field-goal values and any points-allowed tier table — is applied exactly rather than approximated. They rank, sort, and fill draft slots like every other position."
       },

@@ -195,16 +195,18 @@ W6_CLV_TABLES = ["mart_closing_line_value", "mart_prediction_clv", "mart_odds_li
 # scripts/ddl/generate_w7b_external_tables.py over the run_w1_lakehouse.py --w7b parquet): the
 # mart_player_profile_identity injury chain + the serving-mart backlog. BEST-EFFORT (WARN if
 # missing) like W4/W5/W5b/W6/W7 during the opt-in rollout — these don't exist until the generator
-# runs, so a "does not exist" is an expected skip, NOT a HALT. PROMOTE to required once W7b is
-# default-on. (player_transactions is read via read_parquet, not a Snowflake source → no external table.)
-W7B_TABLES = [
-    "stg_statsapi_transactions",
-    "stg_statsapi_player_injury_status",
-    "feature_pregame_injury_status",
-    "mart_player_profile_identity",
-    "stg_statsapi_probable_pitchers",
-    "stg_statsapi_lineups_wide",
-]
+# runs, so a "does not exist" is an expected skip, NOT a HALT. (player_transactions is read via
+# read_parquet, not a Snowflake source → no external table.) Split across two DAILY-refreshed
+# constants below (W7B_SERVING_TABLES + W7B_INJURY_TABLES) rather than one combined list — see
+# each constant's own history.
+#
+# ⚰️ E11.29 (2026-07-31): this comment block used to introduce a combined `W7B_TABLES` constant
+# (all 6 tables below in one list) that was DEFINED here but referenced NOWHERE in the refresh
+# flow — the E9.48 fix split its injury-chain members into W7B_INJURY_TABLES (wired into the daily
+# refresh) but left the now-fully-redundant W7B_TABLES in place, undeleted, alongside the already-
+# wired W7B_SERVING_TABLES. Between the two, all 6 original table names were already covered by a
+# wired refresh, so the dead constant was deleted rather than re-wired (E11.29 audit; see
+# test_refresh_config_orphan_guard.py, the guard that now catches this class).
 
 # INC-31 (2026-07-10): the two W7b SERVING marts whose S3 parquet is now rebuilt on the INTRADAY
 # cadence (run_w1_lakehouse.py --w7b-only inside _schedule_lakehouse_intraday) so a slate's lineups
@@ -213,18 +215,19 @@ W7B_TABLES = [
 # stg_statsapi_lineups_wide → lakehouse_ext → this parquet) stays stale and the lineup monitor is
 # blind to today's confirmed lineups (post_lineup predict never fires) + the pick-detail lineup card
 # is empty for the live slate. Added to the DEFAULT refresh (best-effort — WARN if the ext table
-# does not exist yet). Kept as a distinct constant (not the whole W7B_TABLES) to avoid re-refreshing
-# stg_statsapi_transactions, which is already in the W11TX required set.
+# does not exist yet). Kept as a distinct constant (not stg_statsapi_transactions, which is already
+# in the W11TX required set) so this refresh doesn't redundantly re-touch that table.
 W7B_SERVING_TABLES = ["stg_statsapi_lineups_wide", "stg_statsapi_probable_pitchers"]
 
-# E9.48 (2026-07-29): the INJURY-STATUS chain's ext tables were defined in W7B_TABLES but
-# W7B_TABLES is referenced NOWHERE in the refresh flow — only W7B_SERVING_TABLES made it into
-# the daily set. So `run_w1_lakehouse.py --w7b` rewrote the injury parquet every day while the
-# Snowflake external tables over it were never REFRESHed (AUTO_REFRESH=FALSE), leaving the SF
-# read path (mart_player_profile_identity → write_serving_store's _PLAYER_IDENTITY_SQL when
-# W7B_LAKEHOUSE_S3 is off) serving a stale file listing. That is the same "built but never
-# refreshed" shape as INC-25 — a fix can land in S3 and still never reach the user. Best-effort
-# tier, matching the rest of the W7b rollout (a missing ext table is an expected skip, not a HALT).
+# E9.48 (2026-07-29): the INJURY-STATUS chain's ext tables were originally defined only inside a
+# combined W7B_TABLES constant that was referenced NOWHERE in the refresh flow — only
+# W7B_SERVING_TABLES made it into the daily set. So `run_w1_lakehouse.py --w7b` rewrote the injury
+# parquet every day while the Snowflake external tables over it were never REFRESHed
+# (AUTO_REFRESH=FALSE), leaving the SF read path (mart_player_profile_identity →
+# write_serving_store's _PLAYER_IDENTITY_SQL when W7B_LAKEHOUSE_S3 is off) serving a stale file
+# listing. That is the same "built but never refreshed" shape as INC-25 — a fix can land in S3 and
+# still never reach the user. Best-effort tier, matching the rest of the W7b rollout (a missing ext
+# table is an expected skip, not a HALT).
 W7B_INJURY_TABLES = [
     "stg_statsapi_player_injury_status",
     "feature_pregame_injury_status",
@@ -272,7 +275,8 @@ W8A_TABLES = [
 # (WARN if missing) like W4-W9 during the opt-in rollout. Refreshed via the dedicated --w8b path (the
 # W8b build op calls it right after the build). feature_pregame_game_features_raw + _game_features are
 # INCREMENTAL on Snowflake — a stale external-table refresh just delays the MERGE pickup.
-# NOTE: feature_pregame_injury_status is NOT here — it reuses its W7b external table (W7B_TABLES).
+# NOTE: feature_pregame_injury_status is NOT here — it reuses its W7b external table
+# (W7B_INJURY_TABLES, refreshed in the DAILY set).
 W8B_TABLES = [
     "feature_pregame_starter_features",
     "feature_pregame_lineup_features",

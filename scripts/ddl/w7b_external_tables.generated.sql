@@ -7,7 +7,8 @@
 -- lakehouse_ext schema + s3_lakehouse stage + parquet_snappy file format (W1d).
 -- Run AFTER run_w1_lakehouse.py --w7b has written lakehouse/<model>/data.parquet, and
 -- BEFORE the parity check + the request-path last-resort / feature source repoint.
--- Refresh: scripts/refresh_w1_external_tables.py (W7B_TABLES). AUTO_REFRESH=FALSE.
+-- Refresh: scripts/refresh_w1_external_tables.py (W7B_INJURY_TABLES + W7B_SERVING_TABLES).
+-- AUTO_REFRESH=FALSE.
 -- DO NOT hand-edit — regenerate from the parquet if a model's schema changes.
 -- =============================================================================
 

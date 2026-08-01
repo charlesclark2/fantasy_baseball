@@ -466,6 +466,13 @@ class PartialPoolProjector(Projector):
     # the likelihood by label precision is the small-sample hardening on the LABEL side; the reliability
     # shrink in `park_context.py` is the same idea on the FEATURE side.
     weight_col: str | None = None
+    # E7.12 slice 2 — OPTIONAL extra columns joined to the UNPENALIZED fixed block (default () = byte-exact
+    # behaviour, pinned by a test). This exists for the Heckman arm, whose inverse-Mills ratio is a
+    # structural regressor and must NOT be shrunk toward zero by a random-effect prior: shrinking the
+    # selection correction toward 0 is precisely the null the arm is being tested against, so penalising
+    # it would rig the comparison. Distinct from `GBMProjector.aux_cols`, which the pooled learner has
+    # never read.
+    extra_cols: tuple[str, ...] = ()
 
     def _weights(self, t: pd.DataFrame) -> np.ndarray | None:
         if not self.weight_col:
@@ -488,6 +495,7 @@ class PartialPoolProjector(Projector):
         self.age_scaler_ = _Scaler().fit(t, "age")
         self.levels_ = sorted(t["level"].dropna().unique())
         self.leagues_ = sorted(t["league"].dropna().unique())
+        self.extra_scalers_ = [_Scaler().fit(t, c) for c in self.extra_cols]
         y = t["target"].to_numpy(float)
         X, spec = self._design(t)
         self.post_ = fit(X, y, spec, weights=self._weights(t),
@@ -500,14 +508,18 @@ class PartialPoolProjector(Projector):
         x, _ = self.feat_scaler_.transform(df)
         age, _ = self.age_scaler_.transform(df)
         n = len(df)
-        fixed = np.column_stack([np.ones(n), x, age])
+        # E7.12 slice 2 — extra fixed regressors, standardized on TRAIN stats (empty by default, so the
+        # column stack and every block name below are unchanged for every pre-slice-2 caller)
+        extra = [s.transform(df)[0].reshape(-1, 1) for s in getattr(self, "extra_scalers_", [])]
+        fixed = np.column_stack([np.ones(n), x, age] + extra)
         li = np.column_stack([(df["level"] == g).to_numpy(float) for g in self.levels_]) \
             if self.levels_ else np.zeros((n, 0))
         ls = li * x.reshape(-1, 1)
         gi = np.column_stack([(df["league"] == g).to_numpy(float) for g in self.leagues_]) \
             if self.leagues_ else np.zeros((n, 0))
         X = np.hstack([fixed, li, ls, gi])
-        blocks = [Block("fixed", ("intercept", "minor", "age"), penalized=False)]
+        blocks = [Block("fixed", ("intercept", "minor", "age") + tuple(self.extra_cols),
+                        penalized=False)]
         if self.levels_:
             blocks.append(Block("level_intercept", tuple(f"li__{g}" for g in self.levels_)))
             blocks.append(Block("level_slope", tuple(f"ls__{g}" for g in self.levels_)))
@@ -517,17 +529,11 @@ class PartialPoolProjector(Projector):
 
     def predict(self, df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
         # rebuild the SAME design against these rows (an unseen level/league has no deviation column →
-        # it falls back to the global line, which IS the correct partial-pooling behaviour for a new cell)
-        x, _ = self.feat_scaler_.transform(df)
-        age, _ = self.age_scaler_.transform(df)
-        n = len(df)
-        fixed = np.column_stack([np.ones(n), x, age])
-        li = np.column_stack([(df["level"] == g).to_numpy(float) for g in self.levels_]) \
-            if self.levels_ else np.zeros((n, 0))
-        ls = li * x.reshape(-1, 1)
-        gi = np.column_stack([(df["league"] == g).to_numpy(float) for g in self.leagues_]) \
-            if self.leagues_ else np.zeros((n, 0))
-        Xw = np.hstack([fixed, li, ls, gi])
+        # it falls back to the global line, which IS the correct partial-pooling behaviour for a new cell).
+        # 🪤 This used to be a verbatim COPY of `_design`'s body. The copy was faithful, but a copy is
+        # exactly how a newly-added fixed block gets wired into `fit` and silently omitted from `predict`
+        # — which would not raise, it would just serve the incumbent projection under a new arm's name.
+        Xw, _ = self._design(df)
         mean = Xw @ self.post_.mean
         var = np.einsum("ij,jk,ik->i", Xw, self.post_.cov, Xw)
         return mean, np.sqrt(np.maximum(var, 0.0))

@@ -452,9 +452,11 @@ def lineup_dbt_feature_rebuild(context: OpExecutionContext) -> None:
 def lineup_predict(context: OpExecutionContext) -> None:
     """Run post-lineup predictions for the newly confirmed game_pks."""
     game_pks = context.op_config["game_pks"]
-    # E9.9: --notify here too — if the morning slate had 0 qualified plays but a
-    # confirmed lineup re-score produces some, users still get alerted. Idempotent
-    # per slate (DynamoDB conditional put) so morning + post-lineup fire at most once.
+    # E9.50 (was E9.9): --notify is now the SOLE pick-alert trigger — the morning
+    # pre-lineup email is retired. Fires a digest of the actionable (qualified_bet,
+    # not intraday_fallback) picks THIS invocation's game_pks newly confirmed, deduped
+    # per (date, game_pk) in DynamoDB so a staggered later re-score of an
+    # already-alerted game (a pitcher-change re-trigger) never re-sends it.
     args = ["--prediction-type", "post_lineup", "--lineup-confirmed", "--notify"]
     if game_pks:
         args += ["--game-pks", game_pks]

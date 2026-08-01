@@ -1683,12 +1683,13 @@ def predict_today_morning(context):
     # serving still reads Snowflake the mirror is parity-only and must NOT red-line the predict op.
     if _w7b_mirror_on():
         _run_mirror(context, "export_features_to_s3.py")
-    # E9.9: --notify publishes a qualified-plays SNS alert (fans out to push/email/SMS)
-    # when qualified_bet>0. WARN tier inside predict_today (never crashes the op);
-    # idempotent per slate so the morning + post-lineup runs alert at most once/day.
+    # E9.50 (was E9.9): the morning pre-lineup pick email is RETIRED — a pre-lineup row is
+    # a preview (lineups unconfirmed), never actionable, so this run no longer passes
+    # --notify. The sole pick alert is now the post-lineup digest fired from lineup_predict
+    # (pipeline/ops/sensor_ops.py) once a game's lineup is confirmed.
     _run_script(
         context, "predict_today.py",
-        ["--prediction-type", "morning", "--notify"] + _w7b_s3_args(),
+        ["--prediction-type", "morning"] + _w7b_s3_args(),
     )
     # Re-export predictions Snowflake→S3 AFTER scoring (predict_today still WRITES to Snowflake
     # in W7b-1) so the downstream write_serving_store_op --s3 + the request-path last-resort serve
