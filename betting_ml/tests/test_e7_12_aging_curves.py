@@ -40,6 +40,7 @@ from betting_ml.scripts.milb_mle.run_e7_12_slice5 import (
     SURVIVORSHIP_RETENTION_MIN,
     _S2_SENSITIVITY_ARM,
     by_label,
+    placebo_fold_win_rate,
     s5_anchors,
     s5_verdict,
     survivorship_read,
@@ -266,7 +267,7 @@ class TestRecovery:
 # ══════════════════════════════════════════════════════════════════════════════════════
 def _board(rows: list[dict]) -> pd.DataFrame:
     base = {"kind": "ladder", "selectable": True, "fold_win_rate": 0.8, "oos_mae": 1.0,
-            "p_one_sided": 0.01}
+            "pct_lift_vs_ref": 1.0, "p_one_sided": 0.01}
     return pd.DataFrame([{**base, **r} for r in rows])
 
 
@@ -307,6 +308,64 @@ class TestVerdict:
         v, w, reasons = s5_verdict(board, _CLEAN, surv, [])
         assert v == "UPPER_BOUND_ONLY" and w == "Y2_rel_slope"
         assert any("SELECTION" in r for r in reasons)
+
+    def test_an_arm_that_wins_folds_but_loses_on_average_cannot_add(self):
+        """🪤 THE REAL 2026-08-01 RUN. Pitcher `k_pct` `Y2_rel_slope` won 7/11 folds while posting a
+        HIGHER mean OOS MAE than the incumbent (0.035692 vs 0.035621, lift −0.201%) and the verdict
+        said ADD. `fold_win_rate` counts narrow wins and ignores their size, so an arm winning seven
+        folds by a hair and losing four by a mile clears it. BH-FDR rescued that case — a negative
+        mean lift forces p above 0.5 — but a gate that depends on a downstream correction to catch
+        its own admissions is mis-specified, and the pre-FDR log still said ADD.
+        """
+        board = _board([
+            {"arm": "Y0_shipped", "oos_mae": 0.035621, "pct_lift_vs_ref": 0.0, "fold_win_rate": 0.0},
+            {"arm": "Y2_rel_slope", "oos_mae": 0.035692, "pct_lift_vs_ref": -0.200702,
+             "fold_win_rate": 0.636364},
+            {"arm": "A_bucket_placebo", "kind": "anchor", "selectable": False,
+             "oos_mae": 0.035605, "pct_lift_vs_ref": 0.044111, "fold_win_rate": 0.0},
+        ])
+        v, w, reasons = s5_verdict(board, _CLEAN, _SURV_OK, [])
+        assert (v, w) == ("DROP", "Y0_shipped")
+        assert any("mean OOS MAE" in r for r in reasons)
+
+    def test_a_placebo_that_clears_the_gate_disqualifies_every_bucketed_arm(self):
+        """⭐ THE OTHER REAL FINDING. On pitcher `k_pct` the permuted-bucket placebo won **9/11**
+        folds against the incumbent — MORE than the real arm's 7/11 — and beat it on mean MAE, while
+        the head-to-head paired anchor read p=0.33 'not violated'. A placebo has to be tested against
+        the SELECTION RULE, not only against the real arm: if a random bucket assignment passes the
+        gate, the gate measures 'a penalized block was added', not age.
+        """
+        board = _board([
+            {"arm": "Y0_shipped", "oos_mae": 1.00, "pct_lift_vs_ref": 0.0, "fold_win_rate": 0.0},
+            {"arm": "Y2_rel_slope", "oos_mae": 0.99, "pct_lift_vs_ref": 1.0, "fold_win_rate": 0.64},
+            {"arm": "A_bucket_placebo", "kind": "anchor", "selectable": False, "oos_mae": 0.98,
+             "pct_lift_vs_ref": 2.0, "fold_win_rate": 0.82},
+        ])
+        v, w, reasons = s5_verdict(board, _CLEAN, _SURV_OK, [])
+        assert (v, w) == ("DROP", "Y0_shipped")
+        assert any("placebo ITSELF cleared" in r for r in reasons)
+
+    def test_a_gate_clearing_placebo_does_not_disqualify_the_non_bucketed_arm(self):
+        """Scope check: this placebo permutes a BUCKET, so it foils bucketed arms. `Y5` is a single
+        continuous interaction column and is not addressed by it — over-broad disqualification would
+        retire a mechanism on evidence about a different one."""
+        board = _board([
+            {"arm": "Y0_shipped", "oos_mae": 1.00, "pct_lift_vs_ref": 0.0, "fold_win_rate": 0.0},
+            {"arm": "Y5_linear_interaction", "oos_mae": 0.99, "pct_lift_vs_ref": 1.0,
+             "fold_win_rate": 0.64},
+            {"arm": "A_bucket_placebo", "kind": "anchor", "selectable": False, "oos_mae": 0.98,
+             "pct_lift_vs_ref": 2.0, "fold_win_rate": 0.82},
+        ])
+        assert s5_verdict(board, _CLEAN, _SURV_OK, [])[:2] == ("ADD", "Y5_linear_interaction")
+
+    def test_an_absent_placebo_fails_open_rather_than_dropping_everything(self):
+        """A MISSING anchor must not silently DROP every arm — that would look like a strict gate and
+        actually be a broken one (NF1.7 lesson 1, pointed the other way)."""
+        board = _board([{"arm": "Y0_shipped", "oos_mae": 1.0, "pct_lift_vs_ref": 0.0,
+                         "fold_win_rate": 0.0},
+                        {"arm": "Y2_rel_slope", "oos_mae": 0.9, "pct_lift_vs_ref": 10.0}])
+        assert placebo_fold_win_rate(board) == 0.0
+        assert s5_verdict(board, _CLEAN, _SURV_OK, [])[:2] == ("ADD", "Y2_rel_slope")
 
     def test_a_clean_slope_win_adds(self):
         board = _board([{"arm": "Y0_shipped", "oos_mae": 1.0},

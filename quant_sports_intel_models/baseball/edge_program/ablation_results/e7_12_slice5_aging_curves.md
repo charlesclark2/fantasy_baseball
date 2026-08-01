@@ -322,7 +322,7 @@ An almost-empty bucket is not a bug, but a mechanism inert in the cell it was de
 
 ### Notes
 
-- no age arm beat the shipped configuration in >=60% of cohorts
+- no age arm both beat the shipped configuration in >=60% of cohorts AND improved mean OOS MAE
 
 ---
 
@@ -565,7 +565,7 @@ An almost-empty bucket is not a bug, but a mechanism inert in the cell it was de
 
 ### Notes
 
-- no age arm beat the shipped configuration in >=60% of cohorts
+- no age arm both beat the shipped configuration in >=60% of cohorts AND improved mean OOS MAE
 
 ---
 
@@ -773,7 +773,7 @@ An almost-empty bucket is not a bug, but a mechanism inert in the cell it was de
 
 ### Notes
 
-- no age arm beat the shipped configuration in >=60% of cohorts
+- no age arm both beat the shipped configuration in >=60% of cohorts AND improved mean OOS MAE
 
 ---
 
@@ -1023,4 +1023,4 @@ An almost-empty bucket is not a bug, but a mechanism inert in the cell it was de
 
 ### Notes
 
-- no age arm beat the shipped configuration in >=60% of cohorts
+- no age arm both beat the shipped configuration in >=60% of cohorts AND improved mean OOS MAE

@@ -34,7 +34,7 @@ Retention floor: **50%** of the unweighted lift must survive, pre-registered bef
 
 | metric        | shipped_baseline                       | verdict   | winner     |   folds | age_lift_retention_under_IPW   | BH-FDR@0.10   |
 |:--------------|:---------------------------------------|:----------|:-----------|--------:|:-------------------------------|:--------------|
-| k_pct         | baseline                               | DROP      | Y0_shipped |      11 |                                | False         |
+| k_pct         | baseline                               | DROP      | Y0_shipped |      11 |                                |               |
 | bb_pct        | park:exposure+levelenv+rel:1k+w:mlb_pa | DROP      | Y0_shipped |      11 |                                |               |
 | hr_rate       | park:exposure+levelenv+rel:1k+w:mlb_pa | DROP      | Y0_shipped |      11 |                                |               |
 | gb_pct        | baseline                               | DROP      | Y0_shipped |      11 |                                |               |
@@ -253,7 +253,7 @@ An almost-empty bucket is not a bug, but a mechanism inert in the cell it was de
 
 ### Notes
 
-- ⛔ FDR-DOWNGRADED — did not survive Benjamini-Hochberg at alpha=0.10 across the metrics tested in this run
+- no age arm both beat the shipped configuration in >=60% of cohorts AND improved mean OOS MAE
 
 ---
 
@@ -531,7 +531,7 @@ An almost-empty bucket is not a bug, but a mechanism inert in the cell it was de
 
 ### Notes
 
-- no age arm beat the shipped configuration in >=60% of cohorts
+- no age arm both beat the shipped configuration in >=60% of cohorts AND improved mean OOS MAE
 
 ---
 
@@ -725,7 +725,7 @@ An almost-empty bucket is not a bug, but a mechanism inert in the cell it was de
 
 ### Notes
 
-- no age arm beat the shipped configuration in >=60% of cohorts
+- no age arm both beat the shipped configuration in >=60% of cohorts AND improved mean OOS MAE
 
 ---
 
@@ -996,7 +996,7 @@ An almost-empty bucket is not a bug, but a mechanism inert in the cell it was de
 
 ### Notes
 
-- no age arm beat the shipped configuration in >=60% of cohorts
+- no age arm both beat the shipped configuration in >=60% of cohorts AND improved mean OOS MAE
 
 ---
 
@@ -1176,4 +1176,4 @@ An almost-empty bucket is not a bug, but a mechanism inert in the cell it was de
 
 ### Notes
 
-- no age arm beat the shipped configuration in >=60% of cohorts
+- no age arm both beat the shipped configuration in >=60% of cohorts AND improved mean OOS MAE

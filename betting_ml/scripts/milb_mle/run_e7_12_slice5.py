@@ -192,6 +192,21 @@ S5_LADDER: tuple[S5Arm, ...] = (
 # as an UPPER BOUND. Pre-registered here rather than chosen after seeing the ratio.
 SURVIVORSHIP_RETENTION_MIN = 0.50
 
+# The fold-win-rate gate, shared with slices 1/2/4. Named here (rather than inlined) because S5 adds
+# two conditions ON TOP of it and both need the same threshold.
+FOLD_WIN_GATE = 0.60
+
+
+def placebo_fold_win_rate(leaderboard: pd.DataFrame) -> float:
+    """The permuted-bucket placebo's own fold-win rate against the incumbent.
+
+    Returns 0.0 when the placebo did not run, so an ABSENT placebo can never trip the disqualifier —
+    a missing anchor must fail open on the anchor and be caught by the `available: False` report,
+    not silently DROP every arm (NF1.7 lesson 1, applied in the direction that matters here).
+    """
+    r = leaderboard.loc[leaderboard["arm"] == "A_bucket_placebo", "fold_win_rate"]
+    return float(r.iloc[0]) if len(r) and np.isfinite(r.iloc[0]) else 0.0
+
 
 def by_label(arms: tuple[S5Arm, ...] = S5_LADDER) -> dict[str, S5Arm]:
     return {a.label: a for a in arms}
@@ -440,15 +455,44 @@ def s5_verdict(leaderboard: pd.DataFrame, anchors: dict, surv: dict,
     # a sensitivity arm is a diagnostic, never a shipping candidate — it is scored against a
     # re-weighted base whose emission path the PM has deferred
     sel = sel[sel["kind"] != "sensitivity"]
-    sel = sel[sel["fold_win_rate"] >= 0.60]
+    sel = sel[sel["fold_win_rate"] >= FOLD_WIN_GATE]
+    # 🪤 **A FOLD-COUNT GATE ALONE ADMITS AN ARM THAT IS WORSE ON AVERAGE** (found on the real run,
+    # 2026-08-01: pitcher `k_pct` `Y2_rel_slope` won 7/11 folds while posting a HIGHER mean OOS MAE
+    # than the incumbent and a mean lift of −0.20%). `fold_win_rate` counts narrow wins and ignores
+    # their size, so an arm that wins seven folds by a hair and loses four by a mile clears it. BH-FDR
+    # happens to rescue this case — a negative mean lift forces the one-sided p above 0.5, so the
+    # downgrade is certain — but relying on a downstream correction to catch a mis-specified gate is
+    # exactly the "detected, nobody notified" shape, and the pre-FDR log line still said ADD. Require
+    # BOTH: wins often AND wins on average.
+    sel = sel[sel["pct_lift_vs_ref"] > 0]
     if sel.empty:
-        reasons.append("no age arm beat the shipped configuration in >=60% of cohorts")
+        reasons.append(f"no age arm both beat the shipped configuration in >={FOLD_WIN_GATE:.0%} of "
+                       f"cohorts AND improved mean OOS MAE")
         return "DROP", "Y0_shipped", reasons
 
     win = sel.sort_values("oos_mae").iloc[0]
     label = str(win["arm"])
     is_slope = label in ("Y1_age_slope", "Y2_rel_slope", "Y4_rel_slope_prior",
                          "Y5_linear_interaction")
+    uses_buckets = label in ("Y1_age_slope", "Y2_rel_slope", "Y3_age_growth_prior",
+                             "Y3b_rel_growth_prior", "Y4_rel_slope_prior")
+
+    # ⭐ **A PLACEBO MUST BE TESTED AGAINST THE SELECTION RULE, NOT ONLY HEAD-TO-HEAD.** The paired
+    # anchor below asks "does the placebo systematically beat the real arm" — a question that can
+    # answer NO while the placebo still CLEARS THE VERY GATE the real arm is being selected on. That
+    # happened on the real run: pitcher `k_pct`'s permuted-bucket placebo won **9/11** folds against
+    # the incumbent (vs the real arm's 7/11) and posted a BETTER mean MAE than both, while the paired
+    # test read p=0.33 "not violated". If a RANDOM bucket assignment passes the gate, the gate is not
+    # measuring age — it is measuring the effect of adding any penalized 5-column block — and no
+    # bucketed arm may be selected through it. Scoped to bucketed arms because that is what this
+    # placebo foils; `Y5_linear_interaction` is a single continuous column and is not addressed by it.
+    if uses_buckets and float(placebo_fold_win_rate(leaderboard)) >= FOLD_WIN_GATE:
+        reasons.append(
+            f"⛔ the PERMUTED-BUCKET placebo ITSELF cleared the {FOLD_WIN_GATE:.0%} fold gate "
+            f"({placebo_fold_win_rate(leaderboard):.3f}) — a random bucket assignment passes the "
+            f"selection rule, so the rule is measuring the addition of a penalized block, not age. "
+            f"No bucketed arm can be selected through a gate its own placebo clears.")
+        return "DROP", "Y0_shipped", reasons
 
     if anchors.get("placebo_vs_rel_slope", {}).get("violated"):
         reasons.append("⛔ the PERMUTED-BUCKET placebo matched or beat the real bucketing — the "
