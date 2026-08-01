@@ -299,32 +299,72 @@ export function LeagueImport() {
         </h2>
 
         {platformId === "sleeper" && (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {/* text-base on phones (iOS auto-zooms on focus below 16px), text-sm from sm: up. */}
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && username.trim() && void findSleeperLeagues()}
-              placeholder="Sleeper username or league ID"
-              className="w-72 rounded border border-white/10 bg-white/[0.03] px-3 py-2 text-base sm:text-sm text-gray-100 placeholder:text-gray-600 focus:border-emerald-500/50 focus:outline-none"
-            />
-            <button
-              onClick={() => void findSleeperLeagues()}
-              disabled={!username.trim() || busy === "sleeper-leagues"}
-              className="flex items-center gap-1.5 rounded bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
-            >
-              {busy === "sleeper-leagues" ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <ArrowRight className="h-3.5 w-3.5" />
-              )}
-              Find league
-            </button>
-            <span className="text-xs text-gray-500">
-              Your league ID is the long number in your league&apos;s Sleeper URL
-              (sleeper.app/leagues/<span className="text-gray-400">1234567890123456789</span>/…).
-              Sleeper&apos;s league data is public — no sign-in needed.
-            </span>
+          <div className="mt-3">
+            {/* ⭐ Lead with the LEAGUE ID, not the username. The ID is the identifier a user can
+                actually obtain (it is sitting in the league's URL); a username has to be recalled
+                and is the thing people get wrong. The username is offered second, as the fallback
+                for "I don't know my league ID." */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* text-base on phones (iOS auto-zooms on focus below 16px), text-sm from sm: up. */}
+              <input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && username.trim() && void findSleeperLeagues()}
+                placeholder="Paste your Sleeper league ID"
+                className="w-72 rounded border border-white/10 bg-white/[0.03] px-3 py-2 text-base sm:text-sm text-gray-100 placeholder:text-gray-600 focus:border-emerald-500/50 focus:outline-none"
+              />
+              <button
+                onClick={() => void findSleeperLeagues()}
+                disabled={!username.trim() || busy === "sleeper-leagues"}
+                className="flex items-center gap-1.5 rounded bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
+              >
+                {busy === "sleeper-leagues" ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <ArrowRight className="h-3.5 w-3.5" />
+                )}
+                Import
+              </button>
+            </div>
+
+            <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.02] p-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                Where to find your league ID
+              </div>
+              <ol className="mt-2 space-y-1 text-xs text-gray-400">
+                <li>
+                  <span className="text-gray-500">1.</span> Open your league at{" "}
+                  <a
+                    href="https://sleeper.app"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-emerald-400 hover:underline"
+                  >
+                    sleeper.app
+                  </a>{" "}
+                  in a browser (the mobile app does not show the ID).
+                </li>
+                <li>
+                  <span className="text-gray-500">2.</span> Look at the address bar — the league ID
+                  is the long number after <span className="text-gray-500">/leagues/</span>:
+                </li>
+              </ol>
+              <div className="mt-2 overflow-x-auto rounded bg-black/40 px-2.5 py-1.5 font-mono text-[11px] text-gray-500">
+                sleeper.app/leagues/
+                <span className="rounded bg-emerald-500/15 px-1 text-emerald-300">
+                  1234567890123456789
+                </span>
+                /team
+              </div>
+              <p className="mt-2 text-xs text-gray-500">
+                Don&apos;t have it handy? Enter your{" "}
+                <span className="text-gray-400">Sleeper username</span> in the box above instead and
+                we&apos;ll list your leagues to pick from.
+              </p>
+              <p className="mt-1 text-[11px] text-gray-600">
+                Sleeper league data is public, so this needs no sign-in and no password.
+              </p>
+            </div>
           </div>
         )}
 
