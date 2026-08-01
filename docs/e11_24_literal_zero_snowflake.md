@@ -458,6 +458,26 @@ looks perfect while the pregame path is missing ~half the slate.
 📉 Note this makes the cost case *stronger*, not weaker: the chain re-runs ~100×/day to serve a feed that
 writes once, late.
 
+### ✅ CORRECTION (E2.14 Phase 1, 2026-07-31) — this finding was a METHODOLOGY ARTIFACT, not a real gap
+
+The claim above was built from `min(loaded_at)`/`max(loaded_at)` **read from Snowflake**, where
+`ingest_umpires.py` DELETE+INSERTs every game_pk it currently sees on EVERY call — so the LAST run of the
+day (the ~23:xx UTC late op) silently **overwrites `loaded_at` for every game_pk it re-touches**, erasing
+the evidence of when the assignment first actually appeared. Re-measured off the **append-only S3 raw
+mirror** (`lakehouse_raw/umpire_game_log/`, never overwritten — each `lineup_monitor` tick appends a new
+snapshot row) joined against `stg_statsapi_games.game_date` for the true first-pitch instant:
+
+**207 games, 2026-07-17→07-31: 100% ever got a live (`data_source='statsapi'`) assignment; 206/207 (99.5%)
+had it BEFORE first pitch, average lead 150–265 min/day, worst case (excluding one outlier) 82 min lead.**
+The single miss was a split-doubleheader game 1 with an unusually early first pitch (17:35 UTC) — its
+assignment landed ~3h05m late, a 0.5%-of-sample edge case, not a systemic pattern.
+
+⇒ **the live feed reliably beats first pitch; the served umpire feature is NOT stale-at-serve.** E2.14
+closed on this measurement (null recorded) — no Opus follow-up spawned. Full methodology + numbers in
+[[project_e2_14_umpire_timeliness]] (session memory). Lesson for future timeliness audits on this table:
+**a DELETE+INSERT-then-overwrite write pattern destroys "when did it first arrive" history — read the
+append-only raw mirror, never the deduped/overwritten table, when the question is about ARRIVAL time.**
+
 ## Stages 3–4 — SOAK-BLOCKED until the E11.20 W8b soak exits (2026-07-31)
 
 The E11.20 guardrail is **one serving-flip per soak**, and the 7/30 no-false-abstain attribution must
@@ -779,12 +799,65 @@ sum-of-elapsed; ⛔ do not read the credit line for a single lever — `account_
 | 7/30 (post stage-1 levers 1/2/3) | 43 | 141 | 60 |
 | 7/31 (partial) | 28 | 135 | 48 |
 
-The umpire gate should remove ~14 waits/day from UTC hours 13-23. Because it removes a **bursty**
-sub-family rather than an evenly-spread poller, expect it to show in **waits and resumes** — the
-mirror image of the weather lever, which moved active-minutes and left resumes flat.
+Because 6a removes a **bursty** sub-family rather than an evenly-spread poller, expect it in **waits
+and resumes** — the mirror image of the weather lever, which moved active-minutes and left resumes
+flat.
 
-⚠️ 2026-07-31 is contaminated by this session's own `dbtf test`/audit runs; use **8/1 or later** as
-the post-flip reference, and **7/30** as the pre-flip one.
+#### 🔧 ATTRIBUTION CORRECTION — 6a is worth ~11.5 waits/day, NOT the 14 the 111-wait headline implies
+
+The umpire chain's 111 waits are **not all 6a's to claim.** Broken out by UTC hour over the same
+8 days:
+
+| Hours | Umpire waits | Driver | Gated by |
+|---|---|---|---|
+| **14-23** | **92 (~11.5/day)** | `lineup_dbt_feature_rebuild` — the 10-min lineup-monitor tick | **6a** |
+| 08-13 | 17 | the daily job + the statcast catch-up chain's own umpire rebuild | **1b** (and deliberately NOT 6a) |
+| 03 | 2 | the monitor's overnight tail (the tick self-guards 14:00-03:00 UTC) | 6a |
+
+The 08-13 slice is exactly the window `int_bullpen_ali_by_season` occupies (40 waits, hours 08-13),
+because the catch-up chain contains the umpire rebuild too. So **1b will reduce umpire-chain waits
+as well** — and crediting all 111 to 6a would double-count 1b's win. This is the same
+"classify a waker by what it READS, not the job it belongs to" hygiene the 7/29 census needed,
+applied one level finer.
+
+⭐ **The two levers ARE independently attributable even if both are live**, because they act in
+disjoint hour bands. **Measure per band, not per day:**
+
+```sql
+select convert_timezone('UTC', start_time)::date as d,
+       case when hour(convert_timezone('UTC', start_time)) between 8 and 13 then '08-13 (1b)'
+            else '14-23 (6a)' end as band,
+       count(*) as waits
+from snowflake.account_usage.query_history
+where warehouse_name = 'COMPUTE_WH' and queued_provisioning_time > 0
+  and start_time >= dateadd(day, -6, current_timestamp())
+group by 1, 2 order by 1, 2;
+```
+
+⚠️ **2026-07-31 is UNUSABLE as a baseline** — it carries this session's `dbtf test` runs *and* the
+two `--reset` backfills (5,815 executions vs a typical ~4,000, and the queries ran as `DBT_RW`, the
+same user as the pipeline, so they cannot be filtered out by user). Use **7/30** as the pre-flip
+reference and **8/2+** as the post-flip one.
+
+### ✅ RUNTIME PRE-VERIFICATION FROM THE LAPTOP (2026-07-31) — both read paths proven on real S3
+
+CI mocks all IO, so both levers were exercised against live S3/Snowflake before any flip:
+
+- **6b bullpen parity — EXACT.** `fetch_bullpen_obs_s3` vs the Snowflake `_BULLPEN_SQL` on two
+  completed slates: **7/30 → 20 vs 20 rows, 7/28 → 30 vs 30**, zero rows only-in-S3, zero
+  only-in-SF, **zero value differences** (`obs_mean` to 9 dp, `n_obs` exact).
+- **6a gate state machine — all three branches correct on the live watermark** (today's assignment
+  read as `2026-07-31 21:16:15 UTC`): no marker ⇒ REBUILD (fail-open); marker == watermark ⇒ SKIP;
+  marker older ⇒ REBUILD. The last is the one that matters — it is what keeps a late assignment
+  from being suppressed.
+- 🔎 **Incidental finding:** for PAST dates the watermark returns *today's* `13:03 UTC` stamp,
+  because the `umpscorecards` post-game feed re-stamps historical rows on every daily run. Harmless
+  — the gate only ever keys on the current slate — but it means a naive "has this date's umpire
+  data changed?" check over history would be true every day.
+
+⚠️ Still required and **not** substitutable by the above: a real box run of the gated ops, plus the
+`predict_today` no-new-abstain / no-new-null-contract comparison. The laptop can prove the *reads*;
+only the box can prove the *ops*.
 
 ## Exit criterion
 
