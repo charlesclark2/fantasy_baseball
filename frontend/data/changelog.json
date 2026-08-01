@@ -73,6 +73,10 @@
       {
         "tag": "fixed",
         "text": "Fixed dropdowns on the fantasy pages opening detached from the control you tapped — on a phone the menu appeared near the top of the screen instead of under the field. The dropdowns are now built the same way as the ones on Bet Log and the Parlay Calculator, which were never affected, so the menu is positioned by the page itself rather than by the browser's built-in picker. The same change covers the search and filter controls on Players and the book pickers in Settings. Separately, number fields no longer fight you when you clear them to retype: clearing a field used to snap it to zero, so the next digit you typed read as \"01\". On the Kelly cap fields in Settings and the EV Tracker that was worse than cosmetic — clearing the field snapped it to 1, so typing \"5\" silently left you on 15%, which feeds bet sizing. Those fields now hold exactly what you type and only accept a complete value."
+      },
+      {
+        "tag": "new",
+        "text": "Every player on the NFL fantasy pages now has his own page — click a name on Projections, Rankings, the League Board or the Draft Optimizer to open it. It brings together his full projected stat line, fantasy points under standard, half-PPR and full-PPR scoring side by side with what he's worth in your own selected league, his 80% range drawn as a band rather than just printed as two numbers, his position rank, value over replacement and tier, and where the market is drafting him compared to where we have him. Rookie ranges show as real player-specific bands here, the same as everywhere else — only a rookie thin enough on draft history to fall back to the class-level band gets that label, never a per-player one. Nothing new is being calculated; it's the same numbers you'd already see on the boards, gathered onto one page per player."
       }
     ]
   },

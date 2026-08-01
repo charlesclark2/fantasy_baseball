@@ -175,6 +175,25 @@ export function assignTiers(pointsDesc: number[], k = 1.0): number[] {
   return tiers
 }
 
+/** Tiers for one already-scoped slice of the board (e.g. one position's rows, or the whole board
+ *  for an overall/VOR view), keyed by player id. Mirrors the Rankings board's tier computation
+ *  (NF3): only above-replacement, genuinely-predictable rows are tiered — a tier break below
+ *  replacement or inside a near-flat/noisy field (K/DST) is not a real signal. `metric` picks the
+ *  ranking axis: VOR for a cross-position view, league points within a single position. */
+export function positionTierMap(
+  rows: Player[],
+  metric: (p: Player) => number,
+  lowPredictabilityPositions: readonly string[] = [],
+): Map<string, number> {
+  const m = new Map<string, number>()
+  const draftable = rows.filter((p) => (p.vor ?? 0) > 0 && !lowPredictabilityPositions.includes(p.pos))
+  if (draftable.length === 0) return m
+  const sorted = draftable.slice().sort((a, b) => metric(b) - metric(a))
+  const tiers = assignTiers(sorted.map(metric))
+  sorted.forEach((p, i) => m.set(p.id, tiers[i] ?? 1))
+  return m
+}
+
 export interface Recommendation {
   player: Player
   score: number

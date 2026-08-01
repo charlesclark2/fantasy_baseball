@@ -13,6 +13,7 @@
 // the honest read is "here is where we differ, and here is how sure we are", not "here is value".
 
 import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { Download, Search } from "lucide-react"
 import {
   useFantasyManifest,
@@ -314,10 +315,13 @@ export function RankingsBoard() {
                             )}
                           </td>
                           <td className="px-3 py-2">
-                            <span className="flex items-center gap-1.5">
-                              <span className="font-medium text-gray-200">{p.name}</span>
+                            <Link
+                              href={`/fantasy/player/${p.id}`}
+                              className="flex items-center gap-1.5 font-medium text-gray-200 hover:text-[#10b981] hover:underline"
+                            >
+                              <span>{p.name}</span>
                               {p.rookie && <RookieBadge />}
-                            </span>
+                            </Link>
                           </td>
                           <td className="px-3 py-2">
                             <PosBadge pos={p.pos} />

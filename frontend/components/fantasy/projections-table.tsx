@@ -9,9 +9,9 @@
 // scoring lives on Rankings / League Board, which re-score this same raw line per format.
 
 import { useId, useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { Search } from "lucide-react"
 import { useFantasyProjections, FANTASY_SEASON } from "@/lib/fantasy-queries"
-import type { ProjectedPlayer } from "@/lib/fantasy"
 import {
   ALL_ROWS,
   ConfidenceBadge,
@@ -26,6 +26,7 @@ import {
   PositionTabs,
   ProvenanceLine,
   RookieBadge,
+  STAT_COLS,
   SurfaceHeader,
   UNCERTAINTY_HELP,
   UNCERTAINTY_LABEL,
@@ -42,65 +43,6 @@ const SCORING_LABEL: Record<Scoring, string> = {
   fpHalf: "Half PPR",
   fpStd: "Standard",
 }
-
-interface StatCol {
-  key: keyof ProjectedPlayer
-  label: string
-  nd?: number
-}
-
-// Per-position stat lines. "All" stays condensed (a shared stat set across positions would be
-// mostly empty cells); pick a position to see that position's full projected line.
-const STAT_COLS: Record<string, StatCol[]> = {
-  QB: [
-    { key: "passCmp", label: "Cmp", nd: 0 },
-    { key: "passAtt", label: "Att", nd: 0 },
-    { key: "passYds", label: "Pass Yds", nd: 0 },
-    { key: "passTd", label: "Pass TD" },
-    { key: "passInt", label: "INT" },
-    { key: "rushAtt", label: "Rush", nd: 0 },
-    { key: "rushYds", label: "Rush Yds", nd: 0 },
-    { key: "rushTd", label: "Rush TD" },
-  ],
-  RB: [
-    { key: "rushAtt", label: "Att", nd: 0 },
-    { key: "rushYds", label: "Rush Yds", nd: 0 },
-    { key: "rushTd", label: "Rush TD" },
-    { key: "tgt", label: "Tgt", nd: 0 },
-    { key: "rec", label: "Rec", nd: 0 },
-    { key: "recYds", label: "Rec Yds", nd: 0 },
-    { key: "recTd", label: "Rec TD" },
-  ],
-  WR: [
-    { key: "tgt", label: "Tgt", nd: 0 },
-    { key: "rec", label: "Rec", nd: 0 },
-    { key: "recYds", label: "Rec Yds", nd: 0 },
-    { key: "recTd", label: "Rec TD" },
-    { key: "rushAtt", label: "Rush", nd: 0 },
-    { key: "rushYds", label: "Rush Yds", nd: 0 },
-  ],
-}
-STAT_COLS.TE = STAT_COLS.WR
-// NF1.6 — the K/DST lines. Field goals are split by DISTANCE because that is how they score (3/4/5)
-// and because leg strength is the one kicker attribute that genuinely persists. For a defence,
-// points allowed PER GAME is the number that communicates quality — the nine points-allowed tier
-// buckets behind it are a scoring input, not something a drafter reads.
-STAT_COLS.K = [
-  { key: "fgAtt", label: "FGA", nd: 0 },
-  { key: "fgMade", label: "FG" },
-  { key: "fg039", label: "0-39" },
-  { key: "fg4049", label: "40-49" },
-  { key: "fg50", label: "50+" },
-  { key: "patMade", label: "XP" },
-]
-STAT_COLS.DST = [
-  { key: "paPerG", label: "Pts Allowed/G" },
-  { key: "sacks", label: "Sacks" },
-  { key: "defInt", label: "INT" },
-  { key: "fumRec", label: "Fum Rec" },
-  { key: "defTd", label: "Def TD" },
-  { key: "stTd", label: "ST TD" },
-]
 
 export function ProjectionsTable() {
   const { data, isLoading, error } = useFantasyProjections()
@@ -281,10 +223,13 @@ export function ProjectionsTable() {
                     {/* the rank carried from the unsearched board — searching must not renumber */}
                     <td className="px-3 py-2 text-gray-600">{rank}</td>
                     <td className="px-3 py-2">
-                      <span className="flex items-center gap-1.5">
-                        <span className="font-medium text-gray-200">{p.name}</span>
+                      <Link
+                        href={`/fantasy/player/${p.id}`}
+                        className="flex items-center gap-1.5 font-medium text-gray-200 hover:text-[#10b981] hover:underline"
+                      >
+                        <span>{p.name}</span>
                         {p.rookie && <RookieBadge />}
-                      </span>
+                      </Link>
                       {p.rookie && p.draftPick != null && (
                         <span className="text-[10px] text-gray-600">Pick {p.draftPick}</span>
                       )}

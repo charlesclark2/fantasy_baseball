@@ -30,7 +30,10 @@ export interface ProjectedPlayer {
   fpSd: number | null
   fpP10: number | null
   fpP90: number | null
-  /** "empirical" (veteran game-to-game variance) | "calibrated" (rookie band). */
+  /** How the 80% range was produced: "empirical" (veteran game-to-game variance) |
+   *  "calibrated_per_player" (NF1.7 — a per-player rookie band, render as a REAL interval) |
+   *  "calibrated" (the thin-history rookie fallback — a shared class-level band; keep this one, and
+   *  ONLY this one, labelled "Class-level" — see UNCERTAINTY_LABEL/UNCERTAINTY_HELP). */
   uncType: string | null
   passAtt: number | null
   passCmp: number | null
