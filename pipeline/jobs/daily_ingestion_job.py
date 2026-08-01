@@ -106,7 +106,21 @@ def daily_ingestion_job():
     # stg_derivative_odds); spine before the odds bridge; W8a before W8b (the aggregator
     # reads the W8a layer); the W11 nightly tail after W8b (W11d joins the W8b spine).
     s5b = ingest_statcast_to_s3_op(start=s5)
-    lk1 = lakehouse_schedule_export_op(start=s5b)
+    # 🚨 INC-37 ORDERING INVARIANT (2026-08-01, P1 — a whole slate served on an amputated feature
+    # set) — ingest_statsapi_schedule MUST run BEFORE lakehouse_schedule_export_op / the W3pre
+    # flatten. It used to sit at s6, AFTER the entire lk1-lk10 lakehouse chain, so every daily
+    # feature build flattened whatever schedule the last INTRADAY capture had left in S3. That is
+    # harmless on 363 days (yesterday's capture already covers today) and FATAL on the 1st of a
+    # month: run_schedule iterates whole months, so the final capture of a month carries ZERO
+    # games for the 1st, and the build produced a game universe that stopped at the month
+    # boundary — no 08-01 rows in mart_game_spine / the W1-W6 marts / the whole W8a feature
+    # layer, so feature_pregame_game_features served 5 of 6 coverage blocks at 0% and
+    # predict_today fell to intraday_fallback on all 15 games. Observed identically on 06-01 and
+    # 07-01. This is the INC-25 rule for the schedule: a consumer reading an S3 mirror must be
+    # rebuilt DOWNSTREAM of the refresh that feeds it, in the SAME run.
+    # Pinned by betting_ml/tests/test_schedule_build_ordering_guard.py — do NOT move this back.
+    s6 = ingest_statsapi_schedule(start=s5b)
+    lk1 = lakehouse_schedule_export_op(start=s6)
     lk2 = lakehouse_w1_pitch_marts_op(start=lk1)
     lk3 = lakehouse_w2_marts_op(start=lk2)
     lk4 = lakehouse_w3_marts_op(start=lk3)
@@ -131,8 +145,8 @@ def daily_ingestion_job():
     # feature_pregame_game_features (ext VALUE:-case mismatch / precursor not wired) before predict.
     # ALERT-continue by default; HALTs only when FEATURE_COVERAGE_STRICT=1 (see the op docstring).
     s5f = check_feature_block_coverage_op(start=s5e)
-    s6 = ingest_statsapi_schedule(start=s5f)
-    s7 = ingest_weather(start=s6)
+    # INC-37 — ingest_statsapi_schedule moved UP to s6 (before lk1); the ingest chain continues here.
+    s7 = ingest_weather(start=s5f)
     s8 = ingest_umpires_early(start=s7)
     s9 = ingest_fangraphs_stuff_plus(start=s8)
     s10 = ingest_fangraphs_catcher_framing(start=s9)

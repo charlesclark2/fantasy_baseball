@@ -1055,8 +1055,19 @@ def _alert_stale_game_spine(conn) -> None:
         ).fetchone()
     except Exception as e:  # noqa: BLE001 — observability only; never fail the build
         print(f"  (spine-staleness check skipped: {e})", file=sys.stderr)
+        # INC-37: a check that could not RUN must not read as a pass (the NF1.7 (a) lesson —
+        # an anchor that fails to evaluate makes its assertion vacuously true). Emit the
+        # UNKNOWN sentinel so the calling op can tell "not checked" from "checked, healthy".
+        print("[METRIC] spine_covers_today=-1")
         return
     mx, covers_today = (row[0] if row else None), (row[1] if row else False)
+    # INC-37 (2026-08-01) — a discriminating METRIC line on STDOUT beside the human banner, so
+    # lakehouse_spine_odds_bridge_op can PAGE on it. This detector already existed and fired
+    # correctly on 06-01, 07-01 and 08-01; it only ever wrote a stderr WARNING nobody watched,
+    # which is exactly the E11.30 finding ("ALERT-tier had quietly meant detected, nobody
+    # notified"). Keyed on the SAME condition as the banner, so paging adds zero new
+    # false-positive surface.
+    print(f"[METRIC] spine_covers_today={1 if covers_today else 0}")
     if not covers_today:
         print(
             f"WARNING: [spine-staleness] mart_game_spine's scheduled universe does not reach today "
