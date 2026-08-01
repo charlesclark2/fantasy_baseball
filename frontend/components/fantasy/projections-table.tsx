@@ -8,7 +8,7 @@
 // (standard nflverse std/half/PPR) used to order the table, and it says so. Your league's actual
 // scoring lives on Rankings / League Board, which re-score this same raw line per format.
 
-import { useEffect, useMemo, useState } from "react"
+import { useId, useEffect, useMemo, useState } from "react"
 import { Search } from "lucide-react"
 import { useFantasyProjections, FANTASY_SEASON } from "@/lib/fantasy-queries"
 import type { ProjectedPlayer } from "@/lib/fantasy"
@@ -109,6 +109,7 @@ export function ProjectionsTable() {
   const [rookiesOnly, setRookiesOnly] = useState(false)
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState<number>(50)
+  const scoringSelectId = useId()
 
   const players = data?.players ?? []
 
@@ -186,7 +187,7 @@ export function ProjectionsTable() {
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Search player"
-                className="w-48 rounded border border-[#262626] bg-[#0f0f0f] py-1.5 pl-7 pr-2 text-xs text-gray-200 placeholder:text-gray-600 focus:border-[#10b981] focus:outline-none"
+                className="w-48 rounded border border-[#262626] bg-[#0f0f0f] py-1.5 pl-7 pr-2 text-base sm:text-xs text-gray-200 placeholder:text-gray-600 focus:border-[#10b981] focus:outline-none"
               />
             </div>
             <label className="flex items-center gap-1.5 text-xs text-gray-400">
@@ -198,12 +199,17 @@ export function ProjectionsTable() {
               />
               Rookies only
             </label>
-            <label className="ml-auto flex items-center gap-1.5 text-xs text-gray-400">
-              <span className="text-gray-500">Reference scoring</span>
+            {/* The <select> is a SIBLING of its <label> (never nested) and is 16px on mobile — see
+                `selectClass` in shared.tsx for why both matter to the native iOS picker's placement. */}
+            <div className="ml-auto flex items-center gap-1.5 text-xs text-gray-400">
+              <label htmlFor={scoringSelectId} className="text-gray-500">
+                Reference scoring
+              </label>
               <select
+                id={scoringSelectId}
                 value={scoring}
                 onChange={(e) => setScoring(e.target.value as Scoring)}
-                className="rounded border border-[#262626] bg-[#0f0f0f] px-2 py-1 text-xs text-gray-200 focus:border-[#10b981] focus:outline-none"
+                className="rounded border border-[#262626] bg-[#0f0f0f] px-2 py-1 text-base sm:text-xs text-gray-200 focus:border-[#10b981] focus:outline-none"
               >
                 {(Object.keys(SCORING_LABEL) as Scoring[]).map((s) => (
                   <option key={s} value={s}>
@@ -211,7 +217,7 @@ export function ProjectionsTable() {
                   </option>
                 ))}
               </select>
-            </label>
+            </div>
           </div>
 
           <p className="mb-3 text-[11px] text-gray-600">

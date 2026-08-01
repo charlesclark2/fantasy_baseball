@@ -316,7 +316,7 @@ export function DraftOptimizer() {
                 <select
                   value={configName}
                   onChange={(e) => setConfigName(e.target.value)}
-                  className="w-full rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-sm text-white"
+                  className="w-full rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-base sm:text-sm text-white"
                 >
                   {savedLeagues && savedLeagues.length > 0 && (
                     <optgroup label="Your leagues">
@@ -355,7 +355,7 @@ export function DraftOptimizer() {
                     value={size}
                     onChange={(e) => setSize(Number(e.target.value))}
                     disabled={!!selectedLeague}
-                    className="w-full rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-sm text-white disabled:opacity-60"
+                    className="w-full rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-base sm:text-sm text-white disabled:opacity-60"
                   >
                     {/* a saved league fixes its own size, so show that value even if the shipped
                         board sizes do not include it */}
@@ -370,7 +370,7 @@ export function DraftOptimizer() {
                   <select
                     value={mySlot}
                     onChange={(e) => setMySlot(Number(e.target.value))}
-                    className="w-full rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-sm text-white"
+                    className="w-full rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-base sm:text-sm text-white"
                   >
                     {Array.from({ length: size }, (_, i) => i + 1).map((s) => (
                       <option key={s} value={s}>
@@ -559,7 +559,7 @@ export function DraftOptimizer() {
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search…"
-                    className="w-40 rounded-md border border-[#262626] bg-[#0a0a0a] py-1.5 pl-7 pr-2 text-xs text-white placeholder:text-gray-600"
+                    className="w-40 rounded-md border border-[#262626] bg-[#0a0a0a] py-1.5 pl-7 pr-2 text-base sm:text-xs text-white placeholder:text-gray-600"
                   />
                 </div>
                 <div className="flex flex-wrap gap-1">

@@ -9,7 +9,7 @@
 // range on every number) plus transparency about how the number is built. Copy here is the one
 // place that framing is written down; keep new copy inside it.
 
-import { useState } from "react"
+import { useId, useState } from "react"
 import { Info } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { LeagueConfigMeta, Manifest } from "@/lib/draft-optimizer"
@@ -300,8 +300,14 @@ export function SurfaceHeader({
   )
 }
 
+// ⚠️ `text-base` on MOBILE is deliberate and load-bearing, not a sizing preference.
+// iOS Safari AUTO-ZOOMS the page when a form control smaller than 16px receives focus. The zoom
+// re-lays-out the viewport underneath the native picker, so the picker opens anchored to
+// pre-zoom coordinates and lands somewhere unrelated to the control — the "dropdown pops up in a
+// weird spot" report. 16px (text-base) is exactly the threshold that suppresses the zoom; the
+// control drops back to text-sm from `sm:` up, where no zoom behaviour exists.
 const selectClass =
-  "rounded border border-[#262626] bg-[#0f0f0f] px-2.5 py-1.5 text-sm text-gray-200 focus:border-[#10b981] focus:outline-none"
+  "rounded border border-[#262626] bg-[#0f0f0f] px-2.5 py-1.5 text-base sm:text-sm text-gray-200 focus:border-[#10b981] focus:outline-none"
 
 /** League format + size picker. Manifest-driven: whatever (config, size) combos were exported are
  *  exactly what is offered, so a preset that has not been built never renders as a dead option. */
@@ -323,6 +329,9 @@ export function FormatSelector({
    *  league carries its OWN team count, the size control is not applicable and is hidden. */
   savedLeagues?: { league_id: string; name: string; n_teams: number }[]
 }) {
+  // useId (not a literal) so a page rendering two selectors cannot emit duplicate ids.
+  const configSelectId = useId()
+  const sizeSelectId = useId()
   if (!manifest) return null
   const isCustom = !!configName?.startsWith("custom:")
   const config: LeagueConfigMeta | undefined = manifest.configs.find((c) => c.name === configName)
@@ -331,9 +340,17 @@ export function FormatSelector({
     : undefined
   return (
     <div className="flex flex-wrap items-end gap-3">
-      <label className="flex flex-col gap-1">
-        <span className="text-[11px] uppercase tracking-wider text-gray-500">Scoring format</span>
+      {/* ⚠️ The <select> is a SIBLING of its <label>, never a child. Nesting an interactive control
+          inside a <label> makes a tap activate it twice on iOS (once directly, once via the label's
+          forwarded activation) and leaves the native picker anchored to the LABEL's box rather than
+          the control's — a second, independent cause of the misplaced-dropdown report. htmlFor/id
+          keeps the association without the nesting. */}
+      <div className="flex flex-col gap-1">
+        <label htmlFor={configSelectId} className="text-[11px] uppercase tracking-wider text-gray-500">
+          Scoring format
+        </label>
         <select
+          id={configSelectId}
           className={selectClass}
           value={configName ?? ""}
           onChange={(e) => onConfig(e.target.value)}
@@ -355,11 +372,14 @@ export function FormatSelector({
             ))}
           </optgroup>
         </select>
-      </label>
+      </div>
       {!isCustom && (
-        <label className="flex flex-col gap-1">
-          <span className="text-[11px] uppercase tracking-wider text-gray-500">League size</span>
+        <div className="flex flex-col gap-1">
+          <label htmlFor={sizeSelectId} className="text-[11px] uppercase tracking-wider text-gray-500">
+            League size
+          </label>
           <select
+            id={sizeSelectId}
             className={selectClass}
             value={size ?? ""}
             onChange={(e) => onSize(Number(e.target.value))}
@@ -370,7 +390,7 @@ export function FormatSelector({
               </option>
             ))}
           </select>
-        </label>
+        </div>
       )}
       {config && !isCustom && (
         <p className="max-w-md pb-1.5 text-[11px] leading-relaxed text-gray-500">
@@ -474,6 +494,7 @@ export function Pagination({
   onPage: (p: number) => void
   onPageSize: (n: number) => void
 }) {
+  const pageSizeId = useId()
   const showingAll = pageSize === ALL_ROWS
   const pages = showingAll ? 1 : Math.max(1, Math.ceil(total / pageSize))
   const from = total === 0 ? 0 : showingAll ? 1 : page * pageSize + 1
@@ -482,15 +503,16 @@ export function Pagination({
     "rounded border border-[#262626] bg-[#0f0f0f] px-2 py-1 text-xs text-gray-400 transition-colors hover:text-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
   return (
     <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
-      <label className="flex items-center gap-1.5">
-        <span>Show</span>
+      <div className="flex items-center gap-1.5">
+        <label htmlFor={pageSizeId}>Show</label>
         <select
+          id={pageSizeId}
           value={pageSize}
           onChange={(e) => {
             onPageSize(Number(e.target.value))
             onPage(0)
           }}
-          className="rounded border border-[#262626] bg-[#0f0f0f] px-2 py-1 text-xs text-gray-200 focus:border-[#10b981] focus:outline-none"
+          className="rounded border border-[#262626] bg-[#0f0f0f] px-2 py-1 text-base sm:text-xs text-gray-200 focus:border-[#10b981] focus:outline-none"
         >
           {PAGE_SIZES.map((n) => (
             <option key={n} value={n}>
@@ -499,7 +521,7 @@ export function Pagination({
           ))}
           <option value={ALL_ROWS}>All</option>
         </select>
-      </label>
+      </div>
       <span>
         {from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()}
       </span>

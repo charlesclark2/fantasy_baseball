@@ -75,9 +75,12 @@ export const SPORTS: SportNav[] = [
           {
             label: null,
             items: [
-              { label: "Projections", href: "/fantasy/projections", key: "fantasy-projections" },
+              // ⭐ Order is PRODUCT order, not build order. Rankings leads because it is the actual
+              // product — the projection re-scored for YOUR league's format and roster. Projections
+              // is the format-independent raw line underneath it: useful, but a supporting view.
               { label: "Rankings", href: "/fantasy/rankings", key: "fantasy-rankings" },
               { label: "League Board", href: "/fantasy/league-board", key: "fantasy-league-board" },
+              { label: "Projections", href: "/fantasy/projections", key: "fantasy-projections" },
               { label: "Draft Optimizer", href: "/fantasy/draft", key: "fantasy-draft" },
               // NF-C0b — the manual customization floor: hand-enter a league we cannot import.
               // Restricted to admin + fantasy_comp while the editor is still proving out.

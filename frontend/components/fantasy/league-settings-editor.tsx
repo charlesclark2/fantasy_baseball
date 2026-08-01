@@ -210,7 +210,7 @@ export function LeagueSettingsEditor() {
               <div className="text-sm text-gray-500">Loading…</div>
             ) : (
               <select
-                className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-sm text-gray-200"
+                className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-base sm:text-sm text-gray-200"
                 value={leagueId ?? ""}
                 onChange={(e) => (e.target.value ? onSelectLeague(e.target.value) : onNew())}
               >
@@ -276,7 +276,7 @@ export function LeagueSettingsEditor() {
           <div>
             <FieldLabel>League name</FieldLabel>
             <input
-              className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-sm text-gray-200"
+              className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-base sm:text-sm text-gray-200"
               value={cfg.name}
               maxLength={80}
               onChange={(e) => update({ name: e.target.value })}
@@ -284,20 +284,19 @@ export function LeagueSettingsEditor() {
           </div>
           <div>
             <FieldLabel>Teams</FieldLabel>
-            <input
-              type="number"
-              inputMode="numeric"
+            <NumericInput
+              value={cfg.n_teams}
               min={2}
               max={32}
-              className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-sm text-gray-200"
-              value={cfg.n_teams}
-              onChange={(e) => update({ n_teams: Number(e.target.value) })}
+              ariaLabel="Number of teams"
+              className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-base sm:text-sm text-gray-200"
+              onCommit={(n) => update({ n_teams: n })}
             />
           </div>
           <div className="sm:col-span-2 lg:col-span-1">
             <FieldLabel>Start from a preset</FieldLabel>
             <select
-              className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-sm text-gray-200 disabled:opacity-60"
+              className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-base sm:text-sm text-gray-200 disabled:opacity-60"
               value={presetChoice}
               disabled={!manifest?.configs?.length}
               onChange={(e) => e.target.value && onStartFromPreset(e.target.value)}
@@ -450,6 +449,74 @@ function stripServerFields(l: SavedLeague): LeagueConfig {
   }
 }
 
+/**
+ * A numeric field that lets you TYPE.
+ *
+ * The obvious `value={n} onChange={e => set(Number(e.target.value))}` is broken in three ways, all of
+ * which this fixes by holding the raw STRING while the field has focus and committing only values
+ * that are actually complete:
+ *
+ *  1. `Number("") === 0`. Clearing the field to retype it snapped the value to 0 — so the box showed
+ *     "0" and the next keystroke landed AFTER it, giving "01". That is the reported bug.
+ *  2. `Number("-") === NaN`. Typing a minus to enter -2 wrote NaN into the config. `JSON.stringify`
+ *     turns NaN into `null`, so a NaN could be POSTed to the API — the same for a lone ".".
+ *  3. A committed 0 re-renders as "0", which cannot be deleted-and-retyped without hitting (1) again.
+ *
+ * On blur the draft is dropped and the field snaps back to the canonical committed value, so an
+ * abandoned partial edit ("", "-") can never persist — the last good value wins rather than a zero.
+ */
+function NumericInput({
+  value,
+  onCommit,
+  min,
+  max,
+  allowDecimal = false,
+  allowNegative = false,
+  className,
+  ariaLabel,
+}: {
+  value: number
+  onCommit: (n: number) => void
+  min?: number
+  max?: number
+  allowDecimal?: boolean
+  allowNegative?: boolean
+  className?: string
+  ariaLabel?: string
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const shown = draft ?? String(value)
+
+  const pattern = allowDecimal
+    ? allowNegative ? /^-?\d*\.?\d*$/ : /^\d*\.?\d*$/
+    : allowNegative ? /^-?\d*$/ : /^\d*$/
+
+  return (
+    <input
+      // type="text" + inputMode, NOT type="number": a number input additionally fights the user with
+      // spinners, silent locale parsing, and its own leading-zero normalisation. inputMode still
+      // brings up the numeric keypad on mobile, which is the only thing type="number" was buying us.
+      type="text"
+      inputMode={allowDecimal ? "decimal" : "numeric"}
+      aria-label={ariaLabel}
+      className={className}
+      value={shown}
+      onChange={(e) => {
+        const raw = e.target.value
+        if (!pattern.test(raw)) return // reject a keystroke that can't lead anywhere valid
+        setDraft(raw)
+        if (raw === "" || raw === "-" || raw === "." || raw === "-.") return // mid-edit, not a value
+        const n = Number(raw)
+        if (!Number.isFinite(n)) return
+        if (min != null && n < min) return
+        if (max != null && n > max) return
+        onCommit(n)
+      }}
+      onBlur={() => setDraft(null)}
+    />
+  )
+}
+
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-gray-500">{children}</label>
 }
@@ -497,21 +564,20 @@ function RosterEditor({
               <div className="min-w-0 flex-1 basis-32">
                 <FieldLabel>Slot</FieldLabel>
                 <input
-                  className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-sm text-gray-200"
+                  className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-base sm:text-sm text-gray-200"
                   value={s.name}
                   onChange={(e) => patch(i, { name: e.target.value })}
                 />
               </div>
               <div className="w-20 shrink-0">
                 <FieldLabel>Count</FieldLabel>
-                <input
-                  type="number"
-                  inputMode="numeric"
+                <NumericInput
+                  value={s.count}
                   min={0}
                   max={40}
-                  className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-sm text-gray-200"
-                  value={s.count}
-                  onChange={(e) => patch(i, { count: Number(e.target.value) })}
+                  ariaLabel={`${s.name} count`}
+                  className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-base sm:text-sm text-gray-200"
+                  onCommit={(n) => patch(i, { count: n })}
                 />
               </div>
               <label className="flex shrink-0 cursor-pointer items-center gap-1.5 pb-2 text-xs text-gray-400">
@@ -631,14 +697,15 @@ function ScoringGroup({
                 </div>
                 {t.help && <p className="truncate text-[10px] text-gray-600" title={t.help}>{t.help}</p>}
               </div>
-              <input
-                type="number"
-                step="any"
-                inputMode="decimal"
-                aria-label={t.label}
-                className="w-20 shrink-0 rounded border border-gray-700 bg-[#151515] px-2 py-2 text-right text-sm text-gray-200"
+              <NumericInput
                 value={perStat[t.key] ?? 0}
-                onChange={(e) => onChange(t.key, Number(e.target.value))}
+                allowDecimal
+                allowNegative
+                min={-1000}
+                max={1000}
+                ariaLabel={t.label}
+                className="w-20 shrink-0 rounded border border-gray-700 bg-[#151515] px-2 py-2 text-right text-base sm:text-sm text-gray-200"
+                onCommit={(n) => onChange(t.key, n)}
               />
             </div>
           )
@@ -662,15 +729,15 @@ function TePremiumRow({
       <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">TE premium</h3>
       <div className="mt-2 flex items-center justify-between gap-2 rounded border border-gray-800 bg-[#131313] px-2.5 py-1.5 sm:max-w-sm">
         <span className="text-xs text-gray-300">Extra points per TE reception</span>
-        <input
-          type="number"
-          step="any"
-          inputMode="decimal"
-          aria-label="Extra points per TE reception"
-          className="w-20 rounded border border-gray-700 bg-[#151515] px-2 py-2 text-right text-sm text-gray-200"
+        <NumericInput
           value={value}
-          onChange={(e) => {
-            const v = Number(e.target.value)
+          allowDecimal
+          allowNegative
+          min={-1000}
+          max={1000}
+          ariaLabel="Extra points per TE reception"
+          className="w-20 rounded border border-gray-700 bg-[#151515] px-2 py-2 text-right text-base sm:text-sm text-gray-200"
+          onCommit={(v) => {
             const bonuses = { ...(cfg.scoring.position_bonuses ?? {}) }
             if (v) bonuses.TE = { ...(bonuses.TE ?? {}), rec: v }
             else if (bonuses.TE) {

@@ -216,7 +216,7 @@ export function RankingsBoard() {
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Search player"
-                className="w-48 rounded border border-[#262626] bg-[#0f0f0f] py-1.5 pl-7 pr-2 text-xs text-gray-200 placeholder:text-gray-600 focus:border-[#10b981] focus:outline-none"
+                className="w-48 rounded border border-[#262626] bg-[#0f0f0f] py-1.5 pl-7 pr-2 text-base sm:text-xs text-gray-200 placeholder:text-gray-600 focus:border-[#10b981] focus:outline-none"
               />
             </div>
             <button
