@@ -281,10 +281,19 @@ def test_clv_scorecard_champion_pin_matches_the_registry():
     day a new champion is promoted, that mart silently returns ZERO rows — the app's model-vs-market
     scorecard goes blank — until the pin is edited. E7.9 step 7 (re-score history after a promotion)
     walks straight into this, so the pin is now mechanically tied to the registry: promote and this
-    test goes red until you update BOTH."""
+    test goes red until you update BOTH.
+
+    ⚠️ TD3 correction: `daily_model_predictions.model_version` is ONE value per row (both targets'
+    predictions share it) derived SOLELY from `registry["home_win"]["model_version"]` — see
+    `predict_today.py` (`MODEL_VERSION = _registry["home_win"]["model_version"]`) and
+    `backfill_predictions.py` (`model_version = registry["home_win"]["model_version"]`). Pinning
+    this test to `run_differential.model_version` instead is a LATENT FALSE-PASS: promote home_win
+    alone (the runbook explicitly allows per-target promotion) and this test would keep passing on
+    the unchanged run_differential value while the mart still zeroes on the real, now-different,
+    stamped model_version. Read from home_win — the field the stamp actually derives from."""
     sql = (DBT / "models/mart/mart_clv_labeled_games.sql").read_text()
     registry = yaml.safe_load((PROJECT_ROOT / "betting_ml/models/model_registry.yaml").read_text())
-    champion = registry["run_differential"]["model_version"]
+    champion = registry["home_win"]["model_version"]
     assert f"model_version = '{champion}'" in sql, (
         f"mart_clv_labeled_games is pinned to a model_version other than the registry champion "
         f"'{champion}'. A promotion MUST update this pin in the same PR or the scorecard zeroes."

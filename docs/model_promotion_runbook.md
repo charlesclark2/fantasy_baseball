@@ -16,6 +16,19 @@
 > `crps_ensemble` and judged by the same criteria. Only once the gate returns PROMOTE do you run
 > the S3 + contract steps below.
 
+> **TD3 — mechanically-guarded promotion touchpoints (read first).** E7.9 found
+> `mart_clv_labeled_games.sql` hardcoded to a champion `model_version` — promote a new champion
+> and the app's model-vs-market scorecard silently blanks (no error). This runbook's steps rely on
+> a human remembering every place a promotion touches; one miss zeroes a user-facing panel or goes
+> silently dark. TD3 enumerated the whole surface via a repo-wide grep and added a **fast-gate test
+> per item** (mirroring the CLV pin) that reddens BEFORE prod breaks, instead of after:
+> `betting_ml/tests/test_e7_9_train_serve_consistency.py::test_clv_scorecard_champion_pin_matches_the_registry`
+> and `betting_ml/tests/test_td3_promotion_safety.py` (7 more guards — see its module docstring for
+> the full checklist + what was investigated and found NOT to need one). **Run
+> `uv run pytest betting_ml/tests/test_td3_promotion_safety.py betting_ml/tests/test_e7_9_train_serve_consistency.py`
+> after any promotion** (or just the fast gate — both files are in it) — every touchpoint marked
+> ⚙️GUARDED below is mechanically enforced by one of these tests; anything else still needs a human.
+
 > **Why this exists (read first).** The older [`model_deploy_runbook.md`](model_deploy_runbook.md)
 > describes the *train → registry → git-tag* flow and assumes the `.pkl` artifacts are
 > git-tracked. **That is no longer how a model goes live.** Production (`predict_today.py`)
@@ -140,14 +153,24 @@ For each promoted target, edit its top-level block in `betting_ml/models/model_r
    `home_win` does): set `attribution_start` to today in the registry's monitoring block
    **and** update the matching `ATTRIBUTION_START` constant in the monitor script. A new
    champion invalidates the prior model's live-attribution sample.
+7. **If you promoted `home_win`** (or its `pre_lineup_model_version`): the served
+   `daily_model_predictions.model_version` stamp is derived SOLELY from
+   `registry["home_win"]["model_version"]` (`predict_today.py` / `backfill_predictions.py` — TD3
+   traced this; every downstream pin below keys off home_win, not the target you may think of as
+   "the one that moved"). Update `mart_clv_labeled_games.sql`'s `model_version = '<vN>'` pin and
+   `pipeline/sensors/model_health_alert_sensor.py`'s `_MODEL_VERSION` + `_GATE_FLOOR_DATE` to match.
 
-### Kill-window reset touchpoints (home_win)
+### Kill-window / champion-pin reset touchpoints (home_win)  ⚙️ mechanically guarded — see the note at the top of this doc
 
-| Where | What to change |
-|---|---|
-| `model_registry.yaml` → `home_win` monitoring block | `attribution_start: '<today>'` |
-| `scripts/ops/monitor_conviction_h2h.py` | `ATTRIBUTION_START = "<today>"` |
-| `scripts/ops/monitor_magnitude_h2h.py` | `ATTRIBUTION_START = "<today>"` |
+| Where | What to change | Guard |
+|---|---|---|
+| `model_registry.yaml` → `home_win.kill_criterion` | `attribution_start: '<today>'` | ⚙️ `test_magnitude_monitor_attribution_start_matches_the_registry` |
+| `scripts/ops/monitor_magnitude_h2h.py` | `ATTRIBUTION_START = "<today>"` | ⚙️ same test |
+| `model_registry.yaml` → `home_win.conviction_kill_criterion` | `attribution_start: '<today>'` | ⚙️ `test_conviction_monitor_attribution_start_matches_the_registry` |
+| `scripts/ops/monitor_conviction_h2h.py` | `ATTRIBUTION_START = "<today>"` | ⚙️ same test |
+| `dbt/models/mart/mart_clv_labeled_games.sql` | `model_version = '<vN>'` (home_win's, not the promoted target's — see item 7 above) | ⚙️ `test_clv_scorecard_champion_pin_matches_the_registry` |
+| `pipeline/sensors/model_health_alert_sensor.py` | `_MODEL_VERSION = "<vN>"` | ⚙️ `test_model_health_sensor_pinned_version_matches_the_registry` |
+| `pipeline/sensors/model_health_alert_sensor.py` | `_GATE_FLOOR_DATE = date(<today>)` | ⚙️ `test_model_health_sensor_gate_floor_matches_the_kill_window_reset` |
 
 > `total_runs` is bet-paused on the `eb_enriched` lineage. Promoting a tuned-totals challenger
 > is a **separate, gated** decision (beat NLL 2.8893 AND prior-naive Brier 0.248 on a rolling
@@ -280,6 +303,10 @@ picks up the new registry. Then on the next live run confirm:
 
 ## Step 6b — Purge permanent caches (E9.28)  `[run immediately after Step 6 on every promotion]`
 
+⚙️ The endpoint below is pinned to this doc by `test_permanent_cache_invalidate_endpoint_matches_the_runbook`
+(TD3) — if the route is ever renamed, that test (not a live 404 an operator hits mid-promotion)
+is what catches it.
+
 Champion promotions leave stale **permanent** blobs in both stores — the `is_permanent=TRUE`
 `picks/game/%` rows in Railway PG and the `api-cache/permanent/picks/game/` objects in S3.
 Day-scoped invalidations (`/admin/cache/invalidate`) never touch these, so without this step
@@ -314,7 +341,11 @@ S3 + git both retain the prior state, so rollback is a pointer swap — no retra
 
 1. In `model_registry.yaml`, swap `artifact_path` ↔ `prev_artifact_path` and restore the
    prior `feature_columns_path`.
-2. Restore the prior `attribution_start` in the registry + both monitor scripts (if it was reset).
+2. Restore the prior `attribution_start` in the registry + both monitor scripts (if it was reset),
+   and the prior `model_version` in `mart_clv_labeled_games.sql` + the model-health sensor's
+   `_MODEL_VERSION` / `_GATE_FLOOR_DATE` if home_win was the rolled-back target (see the
+   touchpoints table above) — ⚙️ the same guards that catch a forward promotion catch a rollback
+   that skips these.
 3. Smoke test (Step 4), commit, push, redeploy.
 
 The old S3 object remains at `prev_artifact_path`; if you overwrote a key in place in Step 2
