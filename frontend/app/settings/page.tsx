@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input, INPUT_BASE } from "@/components/ui/input"
 import { NumericInput } from "@/components/ui/numeric-input"
+import { Picker } from "@/components/ui/picker"
 import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
@@ -151,16 +152,14 @@ function AddBookPanel({
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label className="text-[11px] font-semibold uppercase tracking-widest text-gray-500">Book</Label>
-          <select
+          <Picker
             value={book}
-            onChange={(e) => setBook(e.target.value)}
-            className="w-full rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-base sm:text-sm text-white focus:outline-none focus:border-[#10b981]"
-          >
-            <option value="">Select…</option>
-            {available.map((b) => (
-              <option key={b} value={b}>{b}</option>
-            ))}
-          </select>
+            onValueChange={setBook}
+            ariaLabel="Sportsbook"
+            placeholder="Select…"
+            className="w-full rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-base sm:text-sm text-white focus:border-[#10b981]"
+            options={available.map((b) => ({ value: b, label: b }))}
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="new-balance" className="text-[11px] font-semibold uppercase tracking-widest text-gray-500">
@@ -387,16 +386,14 @@ function BookCard({
         <div className="flex items-center gap-2 min-w-0">
           {showReassign ? (
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <select
+              <Picker
                 value={reassignTo}
-                onChange={(e) => setReassignTo(e.target.value)}
-                className="flex-1 rounded border border-[#262626] bg-[#141414] px-2 py-1 text-base sm:text-sm text-white focus:outline-none focus:border-[#10b981]"
-              >
-                <option value="">Rename to…</option>
-                {availableBooks.map((b) => (
-                  <option key={b} value={b}>{b}</option>
-                ))}
-              </select>
+                onValueChange={setReassignTo}
+                ariaLabel="Rename book to"
+                placeholder="Rename to…"
+                className="h-auto flex-1 rounded border border-[#262626] bg-[#141414] px-2 py-1 text-base sm:text-sm text-white focus:border-[#10b981]"
+                options={availableBooks.map((b) => ({ value: b, label: b }))}
+              />
               <Button
                 size="sm"
                 onClick={handleReassign}

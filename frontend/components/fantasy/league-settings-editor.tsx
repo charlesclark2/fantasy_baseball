@@ -50,6 +50,11 @@ import { availableFields } from "@/lib/league-scoring"
 import { useFantasyProjections } from "@/lib/fantasy-queries"
 import { EmptyBlock, LoadingBlock, PosBadge, SurfaceHeader, num } from "@/components/fantasy/shared"
 import { NumericInput } from "@/components/ui/numeric-input"
+import { Picker } from "@/components/ui/picker"
+
+/** Sentinel for the "create a new league" row. Radix reserves "" for "nothing selected", so a
+ *  selectable action cannot use an empty value; this is deliberately not a possible league_id. */
+const NEW_LEAGUE = "__new__"
 
 const VERDICT_STYLE: Record<string, string> = {
   applied: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
@@ -210,18 +215,21 @@ export function LeagueSettingsEditor() {
             {leaguesLoading ? (
               <div className="text-sm text-gray-500">Loading…</div>
             ) : (
-              <select
+              <Picker
                 className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-base sm:text-sm text-gray-200"
-                value={leagueId ?? ""}
-                onChange={(e) => (e.target.value ? onSelectLeague(e.target.value) : onNew())}
-              >
-                <option value="">— New league —</option>
-                {(leagues ?? []).map((l) => (
-                  <option key={l.league_id} value={l.league_id}>
-                    {l.name} ({l.n_teams}-team)
-                  </option>
-                ))}
-              </select>
+                ariaLabel="Saved league"
+                // NEW_LEAGUE is a real, selectable action, so it needs a non-empty value: Radix
+                // reserves "" for "nothing selected" and would drop it.
+                value={leagueId ?? NEW_LEAGUE}
+                onValueChange={(v) => (v === NEW_LEAGUE ? onNew() : onSelectLeague(v))}
+                options={[
+                  { value: NEW_LEAGUE, label: "— New league —" },
+                  ...(leagues ?? []).map((l) => ({
+                    value: l.league_id,
+                    label: `${l.name} (${l.n_teams}-team)`,
+                  })),
+                ]}
+              />
             )}
           </div>
           <div className="flex flex-wrap gap-2">
@@ -296,19 +304,15 @@ export function LeagueSettingsEditor() {
           </div>
           <div className="sm:col-span-2 lg:col-span-1">
             <FieldLabel>Start from a preset</FieldLabel>
-            <select
+            <Picker
               className="w-full rounded border border-gray-700 bg-[#151515] px-2 py-2 text-base sm:text-sm text-gray-200 disabled:opacity-60"
+              ariaLabel="Start from a preset"
+              placeholder="Choose a starting point…"
               value={presetChoice}
               disabled={!manifest?.configs?.length}
-              onChange={(e) => e.target.value && onStartFromPreset(e.target.value)}
-            >
-              <option value="">Choose a starting point…</option>
-              {(manifest?.configs ?? []).map((c) => (
-                <option key={c.name} value={c.name}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
+              onValueChange={(v) => v && onStartFromPreset(v)}
+              options={(manifest?.configs ?? []).map((c) => ({ value: c.name, label: c.label }))}
+            />
             {!manifest?.configs?.length ? (
               <p className="mt-1 text-[11px] text-amber-400">
                 Standard formats aren&apos;t available right now — you can still build your league

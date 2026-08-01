@@ -12,6 +12,7 @@
 import { useId, useState } from "react"
 import { Info } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Picker } from "@/components/ui/picker"
 import type { LeagueConfigMeta, Manifest } from "@/lib/draft-optimizer"
 
 export const POS_COLORS: Record<string, string> = {
@@ -340,56 +341,48 @@ export function FormatSelector({
     : undefined
   return (
     <div className="flex flex-wrap items-end gap-3">
-      {/* ⚠️ The <select> is a SIBLING of its <label>, never a child. Nesting an interactive control
-          inside a <label> makes a tap activate it twice on iOS (once directly, once via the label's
-          forwarded activation) and leaves the native picker anchored to the LABEL's box rather than
-          the control's — a second, independent cause of the misplaced-dropdown report. htmlFor/id
-          keeps the association without the nesting. */}
+      {/* ⚠️ Controls are SIBLINGS of their <label>, never children — nesting an interactive control
+          inside a <label> makes a tap activate it twice on iOS. These are `Picker` (Radix) rather
+          than a raw <select>: the native popup was anchoring to the top-left of the page on iOS
+          regardless of font-size or label nesting. See components/ui/picker.tsx. */}
       <div className="flex flex-col gap-1">
         <label htmlFor={configSelectId} className="text-[11px] uppercase tracking-wider text-gray-500">
           Scoring format
         </label>
-        <select
+        <Picker
           id={configSelectId}
           className={selectClass}
-          value={configName ?? ""}
-          onChange={(e) => onConfig(e.target.value)}
-        >
-          {savedLeagues && savedLeagues.length > 0 && (
-            <optgroup label="Your leagues">
-              {savedLeagues.map((l) => (
-                <option key={l.league_id} value={`custom:${l.league_id}`}>
-                  {l.name} ({l.n_teams}-team)
-                </option>
-              ))}
-            </optgroup>
-          )}
-          <optgroup label="Standard formats">
-            {manifest.configs.map((c) => (
-              <option key={c.name} value={c.name}>
-                {c.label}
-              </option>
-            ))}
-          </optgroup>
-        </select>
+          value={configName}
+          onValueChange={onConfig}
+          ariaLabel="Scoring format"
+          groups={[
+            {
+              label: "Your leagues",
+              options: (savedLeagues ?? []).map((l) => ({
+                value: `custom:${l.league_id}`,
+                label: `${l.name} (${l.n_teams}-team)`,
+              })),
+            },
+            {
+              label: "Standard formats",
+              options: manifest.configs.map((c) => ({ value: c.name, label: c.label })),
+            },
+          ]}
+        />
       </div>
       {!isCustom && (
         <div className="flex flex-col gap-1">
           <label htmlFor={sizeSelectId} className="text-[11px] uppercase tracking-wider text-gray-500">
             League size
           </label>
-          <select
+          <Picker
             id={sizeSelectId}
             className={selectClass}
-            value={size ?? ""}
-            onChange={(e) => onSize(Number(e.target.value))}
-          >
-            {manifest.sizes.map((n) => (
-              <option key={n} value={n}>
-                {n} teams
-              </option>
-            ))}
-          </select>
+            value={size == null ? null : String(size)}
+            onValueChange={(v) => onSize(Number(v))}
+            ariaLabel="League size"
+            options={manifest.sizes.map((n) => ({ value: String(n), label: `${n} teams` }))}
+          />
         </div>
       )}
       {config && !isCustom && (
@@ -505,22 +498,20 @@ export function Pagination({
     <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
       <div className="flex items-center gap-1.5">
         <label htmlFor={pageSizeId}>Show</label>
-        <select
+        <Picker
           id={pageSizeId}
-          value={pageSize}
-          onChange={(e) => {
-            onPageSize(Number(e.target.value))
+          value={String(pageSize)}
+          onValueChange={(v) => {
+            onPageSize(Number(v))
             onPage(0)
           }}
-          className="rounded border border-[#262626] bg-[#0f0f0f] px-2 py-1 text-base sm:text-xs text-gray-200 focus:border-[#10b981] focus:outline-none"
-        >
-          {PAGE_SIZES.map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-          <option value={ALL_ROWS}>All</option>
-        </select>
+          ariaLabel="Rows per page"
+          className="h-auto rounded border border-[#262626] bg-[#0f0f0f] px-2 py-1 text-base sm:text-xs text-gray-200 focus:border-[#10b981]"
+          options={[
+            ...PAGE_SIZES.map((n) => ({ value: String(n), label: String(n) })),
+            { value: String(ALL_ROWS), label: "All" },
+          ]}
+        />
       </div>
       <span>
         {from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()}

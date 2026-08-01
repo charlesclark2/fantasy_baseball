@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { RotateCcw, Undo2, Info, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Picker } from "@/components/ui/picker"
 import {
   recommend,
   rosterRequirements,
@@ -313,28 +314,25 @@ export function DraftOptimizer() {
           {manifest && config && (
             <div className="flex flex-col gap-4">
               <Field label="League format">
-                <select
+                <Picker
                   value={configName}
-                  onChange={(e) => setConfigName(e.target.value)}
+                  onValueChange={setConfigName}
+                  ariaLabel="Scoring format"
                   className="w-full rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-base sm:text-sm text-white"
-                >
-                  {savedLeagues && savedLeagues.length > 0 && (
-                    <optgroup label="Your leagues">
-                      {savedLeagues.map((l) => (
-                        <option key={l.league_id} value={`custom:${l.league_id}`}>
-                          {l.name} ({l.n_teams}-team)
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  <optgroup label="Standard formats">
-                    {manifest.configs.map((c) => (
-                      <option key={c.name} value={c.name}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
+                  groups={[
+                    {
+                      label: "Your leagues",
+                      options: (savedLeagues ?? []).map((l) => ({
+                        value: `custom:${l.league_id}`,
+                        label: `${l.name} (${l.n_teams}-team)`,
+                      })),
+                    },
+                    {
+                      label: "Standard formats",
+                      options: manifest.configs.map((c) => ({ value: c.name, label: c.label })),
+                    },
+                  ]}
+                />
                 <p className="mt-1 text-xs text-gray-500">
                   {config.description}
                   {!selectedLeague && (
@@ -351,33 +349,31 @@ export function DraftOptimizer() {
               </Field>
               <div className="grid grid-cols-2 gap-4">
                 <Field label="League size">
-                  <select
-                    value={size}
-                    onChange={(e) => setSize(Number(e.target.value))}
+                  {/* a saved league fixes its own size, so show that value even if the shipped
+                      board sizes do not include it */}
+                  <Picker
+                    value={String(size)}
+                    onValueChange={(v) => setSize(Number(v))}
                     disabled={!!selectedLeague}
+                    ariaLabel="League size"
                     className="w-full rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-base sm:text-sm text-white disabled:opacity-60"
-                  >
-                    {/* a saved league fixes its own size, so show that value even if the shipped
-                        board sizes do not include it */}
-                    {(selectedLeague ? [selectedLeague.n_teams] : manifest.sizes).map((s) => (
-                      <option key={s} value={s}>
-                        {s} teams
-                      </option>
-                    ))}
-                  </select>
+                    options={(selectedLeague ? [selectedLeague.n_teams] : manifest.sizes).map((s) => ({
+                      value: String(s),
+                      label: `${s} teams`,
+                    }))}
+                  />
                 </Field>
                 <Field label="Your draft slot">
-                  <select
-                    value={mySlot}
-                    onChange={(e) => setMySlot(Number(e.target.value))}
+                  <Picker
+                    value={String(mySlot)}
+                    onValueChange={(v) => setMySlot(Number(v))}
+                    ariaLabel="My draft slot"
                     className="w-full rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-base sm:text-sm text-white"
-                  >
-                    {Array.from({ length: size }, (_, i) => i + 1).map((s) => (
-                      <option key={s} value={s}>
-                        Pick {s}
-                      </option>
-                    ))}
-                  </select>
+                    options={Array.from({ length: size }, (_, i) => i + 1).map((s) => ({
+                      value: String(s),
+                      label: `Pick ${s}`,
+                    }))}
+                  />
                 </Field>
               </div>
               <Button
