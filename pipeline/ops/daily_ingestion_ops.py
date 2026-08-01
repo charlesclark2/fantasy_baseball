@@ -196,22 +196,25 @@ def _w8a_mirror_on() -> bool:
     return _w8a_serving_on() or os.environ.get("W8A_LAKEHOUSE_PARALLEL") == "1"
 
 
-def _run_w8a_mirror(context, script: str, args: list[str] | None = None) -> None:
+def _run_w8a_mirror(context, script: str, args: list[str] | None = None) -> str:
     """Run a W8a precursor export / DuckDB build at the correct failure tier (mirror of
     _run_mirror, gated on the W8a flags). HALT once W8A_LAKEHOUSE_S3=1 (the feature build reads
     the W8a external tables → stale/partial = wrong features); ALERT-loud-but-continue during the
     parallel window (W8A_LAKEHOUSE_PARALLEL=1, parity-only — the dbt else branches aren't merged/
-    flipped yet, so a build failure must NOT take down the W6-critical run_w1_lakehouse_op)."""
+    flipped yet, so a build failure must NOT take down the W6-critical run_w1_lakehouse_op).
+
+    Returns the script's stdout (empty string when a parallel-window failure was swallowed) so a
+    caller can page on a `[METRIC] …` line the script already emits (INC-37)."""
     if _w8a_serving_on():
-        _run_script(context, script, args)  # HALT — the feature build reads this
-        return
+        return _run_script(context, script, args)  # HALT — the feature build reads this
     try:
-        _run_script(context, script, args)
+        return _run_script(context, script, args)
     except Exception as e:  # noqa: BLE001 — parity-only during the parallel window
         context.log.warning(
             f"[W8a parallel] mirror '{os.path.basename(script)}' failed (non-fatal; the dbt "
             f"build still computes these models natively, parity_check_w8a will show the gap): {e}"
         )
+        return ""
 
 
 def _w8b_serving_on() -> bool:
@@ -470,7 +473,20 @@ def ingest_statsapi_schedule(context):
     # forever (6/30's 4 frozen games). This also blinded finalize_prior_slate_game_detail_op on the
     # 1st: it reads stg_statsapi_games for yesterday, which the month-only pull hadn't refreshed.
     # Re-pulling from yesterday guarantees the prior day's finals land regardless of month boundary.
-    _run_script(context, "ingest_statsapi.py", ["schedule", "--start-date", _one_day_ago()])
+    #
+    # INC-37 (2026-08-01) — TWO changes here, both load-bearing:
+    #   1. This op now runs BEFORE the S3 lakehouse chain in daily_ingestion_job (it used to run
+    #      AFTER lk1-lk10), so the W3pre flatten reads a schedule captured in the SAME run rather
+    #      than whatever the last intraday capture happened to leave in S3. That is the INC-25
+    #      rule applied to the schedule: a consumer cut over to an S3 mirror must be rebuilt
+    #      DOWNSTREAM of the refresh that feeds it.
+    #   2. --lookahead-days 3 makes the last few captures of every month ALSO fetch the NEXT
+    #      month. Without it the final capture of a month contains ZERO games for the 1st, so a
+    #      consumer that flattens before the new month's first capture builds a universe that
+    #      stops at the month boundary (the INC-37 signature: the whole 08-01 morning tier fell
+    #      to intraday_fallback; the same thing happened on 06-01 and 07-01).
+    _run_script(context, "ingest_statsapi.py",
+                ["schedule", "--start-date", _one_day_ago(), "--lookahead-days", "3"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -724,6 +740,33 @@ def lakehouse_w7b_serving_op(context):
     _run_mirror(context, "run_w1_lakehouse.py", ["--w7b-only"])
 
 
+def _alert_on_stale_spine(context, stdout: str) -> None:
+    """INC-37 — page when the just-built mart_game_spine does not reach today.
+
+    ALERT-tier (never raises): the decision logic is the pure classifier in
+    betting_ml.monitoring.spine_horizon, so it is unit-testable without a live build. Any failure
+    inside the alerting path itself is swallowed — a monitor must never be the thing that takes
+    down the op it is watching.
+    """
+    from betting_ml.monitoring.spine_horizon import classify, parse_spine_covers_today
+
+    severity, message = classify(parse_spine_covers_today(stdout))
+    if severity is None:
+        context.log.info(f"[spine-staleness] OK — {message}")
+        return
+    context.log.warning(f"[ALERT] spine-staleness: {message}")
+    try:
+        from pipeline.utils.alerting import send_alert
+        send_alert(
+            "Game spine does not reach today's slate",
+            message,
+            severity=severity,
+            dedup_key="spine_staleness",
+        )
+    except Exception as e:  # noqa: BLE001 — a failed page must not fail the build
+        context.log.warning(f"[spine-staleness] send_alert failed (non-fatal): {e}")
+
+
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def lakehouse_spine_odds_bridge_op(context):
     # W8a-mirror tier — the 2026-07-02 spine-freeze + odds-bridge-freeze cures, verbatim
@@ -739,7 +782,16 @@ def lakehouse_spine_odds_bridge_op(context):
             "odds-bridge rebuild (spine-staleness ALERTs would fire at the source on use)."
         )
         return
-    _run_w8a_mirror(context, "run_w1_lakehouse.py", ["--w5-only", "--w5-group-a-only"])
+    #
+    # INC-37 (2026-08-01) — the spine-staleness detector inside run_w1_lakehouse has fired
+    # correctly on every occurrence of this class (06-01, 07-01, 08-01) and NEVER notified
+    # anyone: it wrote a stderr WARNING into the step log and nothing else, which is the E11.30
+    # "ALERT-tier meant detected-but-unpaged" finding in its purest form. It now emits a
+    # `[METRIC] spine_covers_today=` line and we page on it here. Keyed on the SAME condition as
+    # the existing banner, so this adds no new false-positive surface. Never HALTs — the op's own
+    # tier is unchanged; a stale spine is a loud page, not a reason to take the slate down.
+    spine_out = _run_w8a_mirror(context, "run_w1_lakehouse.py", ["--w5-only", "--w5-group-a-only"])
+    _alert_on_stale_spine(context, spine_out)
     _run_w8a_mirror(context, "run_w1_lakehouse.py", ["--w6-odds-current"])
     _run_w8a_mirror(context, "refresh_w1_external_tables.py", ["--w6-odds"])
     # E9.41 (2026-07-19) — mart_game_results is NOW fresh (--w5-group-a above), so rebuild the 3
@@ -2087,13 +2139,14 @@ def write_pitcher_k_projections_op(context):
 # The ONLY player-prop market the app's Player Props page surfaces (E5.5 K-projection
 # model-vs-book). write_pitcher_k_projections.py reads ONLY
 # mlb/props/market=pitcher_strikeouts/, so the daily forward pull stays scoped to that one
-# market even after E5.0 (2026-08-01) widened the LIVE host cron (below) to the full phase-1
-# set (pitcher_strikeouts/outs, batter_total_bases/hits/home_runs, --regions us,eu) — this op
-# staying pitcher_strikeouts-only means enabling PROPS_DAILY_INGEST can only double-pay for
+# market even after E5.0 (2026-08-01) widened the LIVE host cron (below) to the phase-1 set
+# (pitcher_strikeouts/outs, batter_total_bases/hits/home_runs, --regions us,eu) and E5.0b
+# (same day) widened it again to batter_runs_scored/batter_rbis/batter_hits_runs_rbis — this
+# op staying pitcher_strikeouts-only means enabling PROPS_DAILY_INGEST can only double-pay for
 # pitcher_strikeouts (the pre-existing risk this op's docstring already warns about), never for
-# the 4 markets E5.0 added. Widen this constant only if this op itself is ever promoted off
-# host-cron for the wider set — and if you do, retire the matching host-cron markets in the
-# SAME change (never both for the same market — see the docstring below).
+# any of the 7 markets E5.0/E5.0b added. Widen this constant only if this op itself is ever
+# promoted off host-cron for the wider set — and if you do, retire the matching host-cron
+# markets in the SAME change (never both for the same market — see the docstring below).
 _PROPS_DAILY_MARKETS = "pitcher_strikeouts"
 
 
@@ -2126,11 +2179,13 @@ def ingest_player_props_op(context):
     (the `0 13 * * *` props line, re-enabled 2026-07-01 — verified firing: the 7/1 slate
     landed at 13:02 UTC on 7/2; E5.0 2026-08-01 widened that same line to the phase-1 market
     set — pitcher_strikeouts/outs, batter_total_bases/hits/home_runs — plus `--regions us,eu`
-    for Pinnacle). This op is the Dagster-native ALTERNATIVE (observable in the run UI; a step
-    toward retiring host-cron) — scoped to pitcher_strikeouts only, so it overlaps with just
-    that one market of the host cron's now-wider set. Enable EXACTLY ONE PATH PER MARKET —
-    running both for pitcher_strikeouts double-pays credits for the same idempotent pull.
-    Default OFF ⇒ host cron stays the live mechanism for all phase-1 markets.
+    for Pinnacle; E5.0b, same day, widened it again to add batter_runs_scored/batter_rbis/
+    batter_hits_runs_rbis, the E13.14 cross-market RV probe substrate). This op is the
+    Dagster-native ALTERNATIVE (observable in the run UI; a step toward retiring host-cron) —
+    scoped to pitcher_strikeouts only, so it overlaps with just that one market of the host
+    cron's now-wider set. Enable EXACTLY ONE PATH PER MARKET — running both for
+    pitcher_strikeouts double-pays credits for the same idempotent pull. Default OFF ⇒ host
+    cron stays the live mechanism for all of these markets.
 
     Writes: s3://baseball-betting-ml-artifacts/mlb/props/market=pitcher_strikeouts/season=<yr>/date=<d>/
     """
