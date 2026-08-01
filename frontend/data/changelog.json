@@ -12,7 +12,7 @@
       },
       {
         "tag": "improved",
-        "text": "ESPN leagues can't be imported, and we'd rather say why than leave the biggest platform mysteriously missing. ESPN publishes no approved way for another app to read a private league. The only method that works is handling your ESPN login session — a credential that isn't read-only, isn't limited to fantasy, and that you couldn't revoke for us specifically — and we won't ask you for that. So if your league is on ESPN, CBS, MyFantasyLeague or Fantrax, enter it once under My League Settings: it takes a few minutes and every tool then works identically. You lose the convenience, not the product."
+        "text": "ESPN leagues can't be imported yet, and we'd rather say why than leave the biggest platform mysteriously missing. ESPN publishes no approved way for another app to read a private league. The only method that reaches one is handling your ESPN login session — a credential that isn't read-only, isn't limited to fantasy, and that you couldn't revoke for us specifically — and we won't ask you for that. There is one narrower path we are looking at: a league whose commissioner has switched on ESPN's own \"make league viewable to public\" setting can be read with no credential at all, the same way Sleeper works. That would cover leagues willing to flip that switch, not every ESPN league, so we're treating it as a real option rather than a solution. In the meantime, if your league is on ESPN, CBS, MyFantasyLeague or Fantrax, enter it once under My League Settings: it takes a few minutes and every tool then works identically. You lose the convenience, not the product."
       },
       {
         "tag": "new",
