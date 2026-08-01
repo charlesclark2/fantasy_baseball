@@ -61,6 +61,7 @@ from quant_sports_intel_models.football.nfl.fantasy.run_nf1_1 import (  # noqa: 
 from quant_sports_intel_models.football.nfl.fantasy.run_nf1_2 import (  # noqa: E402
     build_extended_frame,
     build_pool as build_nf1_2_pool,
+    cache_is_current,
     load_inputs,
 )
 from quant_sports_intel_models.football.nfl.fantasy.run_nf1_3 import (  # noqa: E402
@@ -100,8 +101,15 @@ def build_pool(con, base_seasons: list[int], schema: str = MARTS_SCHEMA,
     frames, missing = [], []
     for b in base_seasons:
         cache = _FEATURE_CACHE / f"pool_base{b}.parquet"
+        # a cache written before a family was registered lacks its columns — rebuild, never trust
+        # (see `run_nf1_2.cache_is_current`; NF-D10 is the family that surfaced this)
         if use_cache and cache.exists():
-            frames.append(pd.read_parquet(cache))
+            cached = pd.read_parquet(cache)
+            if cache_is_current(cached):
+                frames.append(cached)
+            else:
+                log.info("nf1_5 pool cache base%d predates a registered family — rebuilding", b)
+                missing.append(b)
         else:
             missing.append(b)
     if missing:

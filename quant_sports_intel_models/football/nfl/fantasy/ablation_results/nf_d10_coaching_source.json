@@ -1,0 +1,318 @@
+{
+  "seasons": [
+    {
+      "season": 2006,
+      "n_teams": 32,
+      "oc_coverage": 0.906,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 25,
+      "new_oc_rate": 0.48,
+      "new_hc_rate": 0.312,
+      "n_stints_known": 321,
+      "teams_missing_oc": [
+        "DAL",
+        "LAC",
+        "LV"
+      ]
+    },
+    {
+      "season": 2007,
+      "n_teams": 32,
+      "oc_coverage": 0.812,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 24,
+      "new_oc_rate": 0.417,
+      "new_hc_rate": 0.219,
+      "n_stints_known": 381,
+      "teams_missing_oc": [
+        "BUF",
+        "DAL",
+        "GB",
+        "KC",
+        "MIA",
+        "WAS"
+      ]
+    },
+    {
+      "season": 2008,
+      "n_teams": 32,
+      "oc_coverage": 0.844,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 23,
+      "new_oc_rate": 0.217,
+      "new_hc_rate": 0.125,
+      "n_stints_known": 441,
+      "teams_missing_oc": [
+        "DAL",
+        "JAX",
+        "KC",
+        "LAR",
+        "TEN"
+      ]
+    },
+    {
+      "season": 2009,
+      "n_teams": 32,
+      "oc_coverage": 0.781,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 21,
+      "new_oc_rate": 0.286,
+      "new_hc_rate": 0.281,
+      "n_stints_known": 501,
+      "teams_missing_oc": [
+        "ARI",
+        "DET",
+        "HOU",
+        "KC",
+        "LV",
+        "NE",
+        "SEA"
+      ]
+    },
+    {
+      "season": 2010,
+      "n_teams": 32,
+      "oc_coverage": 0.906,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 24,
+      "new_oc_rate": 0.208,
+      "new_hc_rate": 0.094,
+      "n_stints_known": 563,
+      "teams_missing_oc": [
+        "ARI",
+        "DAL",
+        "NE"
+      ]
+    },
+    {
+      "season": 2011,
+      "n_teams": 32,
+      "oc_coverage": 0.938,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 28,
+      "new_oc_rate": 0.393,
+      "new_hc_rate": 0.188,
+      "n_stints_known": 631,
+      "teams_missing_oc": [
+        "CLE",
+        "DAL"
+      ]
+    },
+    {
+      "season": 2012,
+      "n_teams": 32,
+      "oc_coverage": 0.969,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 29,
+      "new_oc_rate": 0.448,
+      "new_hc_rate": 0.219,
+      "n_stints_known": 698,
+      "teams_missing_oc": [
+        "IND"
+      ]
+    },
+    {
+      "season": 2013,
+      "n_teams": 32,
+      "oc_coverage": 1.0,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 32,
+      "new_oc_rate": 0.406,
+      "new_hc_rate": 0.281,
+      "n_stints_known": 766,
+      "teams_missing_oc": []
+    },
+    {
+      "season": 2014,
+      "n_teams": 32,
+      "oc_coverage": 0.906,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 29,
+      "new_oc_rate": 0.379,
+      "new_hc_rate": 0.219,
+      "n_stints_known": 828,
+      "teams_missing_oc": [
+        "DAL",
+        "HOU",
+        "IND"
+      ]
+    },
+    {
+      "season": 2015,
+      "n_teams": 32,
+      "oc_coverage": 0.969,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 28,
+      "new_oc_rate": 0.536,
+      "new_hc_rate": 0.219,
+      "n_stints_known": 892,
+      "teams_missing_oc": [
+        "PHI"
+      ]
+    },
+    {
+      "season": 2016,
+      "n_teams": 32,
+      "oc_coverage": 0.938,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 30,
+      "new_oc_rate": 0.333,
+      "new_hc_rate": 0.219,
+      "n_stints_known": 957,
+      "teams_missing_oc": [
+        "BUF",
+        "CLE"
+      ]
+    },
+    {
+      "season": 2017,
+      "n_teams": 32,
+      "oc_coverage": 0.906,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 28,
+      "new_oc_rate": 0.25,
+      "new_hc_rate": 0.156,
+      "n_stints_known": 1023,
+      "teams_missing_oc": [
+        "CLE",
+        "HOU",
+        "SF"
+      ]
+    },
+    {
+      "season": 2018,
+      "n_teams": 32,
+      "oc_coverage": 0.844,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 26,
+      "new_oc_rate": 0.577,
+      "new_hc_rate": 0.219,
+      "n_stints_known": 1084,
+      "teams_missing_oc": [
+        "GB",
+        "HOU",
+        "LAR",
+        "MIN",
+        "SF"
+      ]
+    },
+    {
+      "season": 2019,
+      "n_teams": 32,
+      "oc_coverage": 0.875,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 27,
+      "new_oc_rate": 0.481,
+      "new_hc_rate": 0.25,
+      "n_stints_known": 1151,
+      "teams_missing_oc": [
+        "ARI",
+        "LAC",
+        "LAR",
+        "SF"
+      ]
+    },
+    {
+      "season": 2020,
+      "n_teams": 32,
+      "oc_coverage": 0.875,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 27,
+      "new_oc_rate": 0.333,
+      "new_hc_rate": 0.156,
+      "n_stints_known": 1214,
+      "teams_missing_oc": [
+        "ARI",
+        "DET",
+        "PHI",
+        "SF"
+      ]
+    },
+    {
+      "season": 2021,
+      "n_teams": 32,
+      "oc_coverage": 0.938,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 28,
+      "new_oc_rate": 0.357,
+      "new_hc_rate": 0.219,
+      "n_stints_known": 1280,
+      "teams_missing_oc": [
+        "ARI",
+        "JAX"
+      ]
+    },
+    {
+      "season": 2022,
+      "n_teams": 32,
+      "oc_coverage": 0.875,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 28,
+      "new_oc_rate": 0.464,
+      "new_hc_rate": 0.312,
+      "n_stints_known": 1346,
+      "teams_missing_oc": [
+        "ARI",
+        "IND",
+        "NE",
+        "SF"
+      ]
+    },
+    {
+      "season": 2023,
+      "n_teams": 32,
+      "oc_coverage": 0.969,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 29,
+      "new_oc_rate": 0.586,
+      "new_hc_rate": 0.156,
+      "n_stints_known": 1413,
+      "teams_missing_oc": [
+        "SF"
+      ]
+    },
+    {
+      "season": 2024,
+      "n_teams": 32,
+      "oc_coverage": 0.969,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 31,
+      "new_oc_rate": 0.484,
+      "new_hc_rate": 0.219,
+      "n_stints_known": 1482,
+      "teams_missing_oc": [
+        "SF"
+      ]
+    },
+    {
+      "season": 2025,
+      "n_teams": 32,
+      "oc_coverage": 0.969,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 30,
+      "new_oc_rate": 0.433,
+      "new_hc_rate": 0.219,
+      "n_stints_known": 1547,
+      "teams_missing_oc": [
+        "LV"
+      ]
+    },
+    {
+      "season": 2026,
+      "n_teams": 32,
+      "oc_coverage": 1.0,
+      "hc_coverage": 1.0,
+      "new_oc_computable": 32,
+      "new_oc_rate": 0.656,
+      "new_hc_rate": 0.219,
+      "n_stints_known": 1612,
+      "teams_missing_oc": []
+    }
+  ],
+  "leakage": {
+    "n_mid_season_changes": 78,
+    "leaked_into_own_season": 0,
+    "visible_to_next_season": 78,
+    "leakage_safe": true
+  }
+}

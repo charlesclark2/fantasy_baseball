@@ -1449,3 +1449,38 @@ def test_a_posthoc_arm_is_selectable_and_counted_in_the_deflation_field():
     if n_elig is not None:
         assert int(n_elig) >= len([x for x in arms if x.kind == "posthoc"]), (
             "post-hoc arms must enter the eligible set the deflation is computed over")
+
+
+def test_a_failed_directional_falsification_is_reported_as_a_MEASURED_FINDING():
+    """A pre-registered falsification that comes back NEGATIVE is the instrument WORKING — but a later
+    reader who finds a null mechanism still wired into the ladder will reasonably suspect a bug. The
+    report has to say, in the report itself, that the retention is a decision and not an oversight
+    (PM decision 2026-07-31). Pinned so a report refactor cannot quietly drop the explanation."""
+    import tempfile
+    from pathlib import Path as _P
+
+    from betting_ml.scripts.milb_mle.run_e7_12_slice1 import PITCHER_SIDE, ladder_for, write_report
+
+    pairs, ctx = _planted_pitcher_park_pairs(1.30, n=200, seed=51)
+    arms = tuple(r for r in ladder_for(PITCHER_SIDE) if r.label in _PITCHER_SMOKE_ARMS)
+    res = {"hr_rate": run_ladder(pairs, ctx, "hr_rate", arms, side=PITCHER_SIDE)}
+    inconsistent = {"park_sensitive_metrics": ["hr_rate", "gb_pct"], "mean_pct_lift_sensitive": -0.0,
+                    "park_insensitive_metrics": ["k_pct", "bb_pct"], "mean_pct_lift_insensitive": 0.1,
+                    "direction_consistent_with_a_park_mechanism": False, "reading": "⚠️ not concentrated"}
+    with tempfile.TemporaryDirectory() as d:
+        out = _P(d) / "r.md"
+        write_report(res, inconsistent, {}, {}, {"max_pct_rows_moved_by_metric": {}, "reading": "ok"},
+                     out, PITCHER_SIDE)
+        txt = out.read_text()
+    assert "MEASURED FINDING" in txt and "not a defect" in txt
+    assert "NOT because park effects are real here" in txt, "the retention must be stated as a decision"
+    assert "inert-to-marginally-positive" in txt.lower() or "inert-to-marginally-POSITIVE" in txt
+
+    # …and it must NOT appear when the falsification PASSES, or it is boilerplate rather than a finding
+    consistent = {**inconsistent, "direction_consistent_with_a_park_mechanism": True,
+                  "reading": "✅ concentrated"}
+    with tempfile.TemporaryDirectory() as d:
+        out = _P(d) / "r.md"
+        write_report(res, consistent, {}, {}, {"max_pct_rows_moved_by_metric": {}, "reading": "ok"},
+                     out, PITCHER_SIDE)
+        assert "MEASURED FINDING" not in out.read_text()

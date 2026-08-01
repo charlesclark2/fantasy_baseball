@@ -1004,6 +1004,30 @@ def write_report(results: dict[str, LadderResult], directional: dict, fdr: dict,
       f"**{directional['mean_pct_lift_insensitive']:.3f}%**")
     a("")
     a(f"> {directional['reading']}")
+    if not directional.get("direction_consistent_with_a_park_mechanism", True):
+        a("")
+        a("### 📌 This is a MEASURED FINDING, not a defect — read it before filing a bug")
+        a("")
+        a("A pre-registered falsification that comes back NEGATIVE is the instrument WORKING. On this "
+          "side the park factor carries **no signal**: the lift is not concentrated in the ball-in-play "
+          "metrics, and on the most park-sensitive metric a deliberately-scrambled **placebo** factor "
+          "scored marginally BETTER than the real one. Concretely, for the record:")
+        a("")
+        a("- **Park factors do not translate on this population.** The batter side's small real park "
+          "effect does not carry over. Do not assume otherwise from the fact that the arm is still in "
+          "the ladder.")
+        a("- **The arm is nonetheless RETAINED** (PM decision 2026-07-31) because a post-hoc "
+          "ablation-down showed that REMOVING the park from the winning stack makes every metric "
+          "slightly WORSE — it is inert-to-marginally-positive when bundled. Retained because it is "
+          "harmless and marginally helpful, **NOT because park effects are real here.**")
+        a("- **The park-context table is also retained** — it IS the evidence for this negative result, "
+          "and deleting it would mean rebuilding it to re-test the claim.")
+        a("- Drop the arm only as cleanup if/when a future slice re-runs this model.")
+        a("")
+        a("⭐ A negative replication of your own headline is worth more than a third confirmation of it "
+          "— and it is only available because the sensitive/insensitive split was pre-registered and "
+          "then LEFT ALONE, including after a pre-run look at the factor dispersion suggested it would "
+          "underperform.")
     a("")
 
     a("## 2b. ⭐ WHICH MECHANISM ACTUALLY WON — the isolation arms")
