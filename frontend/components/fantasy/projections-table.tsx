@@ -34,6 +34,7 @@ import {
   int,
   teamLabel,
 } from "@/components/fantasy/shared"
+import { Picker } from "@/components/ui/picker"
 
 type Scoring = "fpPpr" | "fpHalf" | "fpStd"
 const SCORING_LABEL: Record<Scoring, string> = {
@@ -199,24 +200,24 @@ export function ProjectionsTable() {
               />
               Rookies only
             </label>
-            {/* The <select> is a SIBLING of its <label> (never nested) and is 16px on mobile — see
-                `selectClass` in shared.tsx for why both matter to the native iOS picker's placement. */}
+            {/* Control is a SIBLING of its <label>, never nested. This is `Picker` (Radix), not a
+                raw <select>: on iOS the native popup anchored to the top-left of the page no matter
+                the font-size or label nesting. See components/ui/picker.tsx. */}
             <div className="ml-auto flex items-center gap-1.5 text-xs text-gray-400">
               <label htmlFor={scoringSelectId} className="text-gray-500">
                 Reference scoring
               </label>
-              <select
+              <Picker
                 id={scoringSelectId}
                 value={scoring}
-                onChange={(e) => setScoring(e.target.value as Scoring)}
-                className="rounded border border-[#262626] bg-[#0f0f0f] px-2 py-1 text-base sm:text-xs text-gray-200 focus:border-[#10b981] focus:outline-none"
-              >
-                {(Object.keys(SCORING_LABEL) as Scoring[]).map((s) => (
-                  <option key={s} value={s}>
-                    {SCORING_LABEL[s]}
-                  </option>
-                ))}
-              </select>
+                onValueChange={(v) => setScoring(v as Scoring)}
+                ariaLabel="Reference scoring"
+                className="h-auto rounded border border-[#262626] bg-[#0f0f0f] px-2 py-1 text-base sm:text-xs text-gray-200 focus:border-[#10b981]"
+                options={(Object.keys(SCORING_LABEL) as Scoring[]).map((s) => ({
+                  value: s,
+                  label: SCORING_LABEL[s],
+                }))}
+              />
             </div>
           </div>
 

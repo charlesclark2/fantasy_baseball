@@ -41,6 +41,47 @@ EXEMPT_INPUT_TYPES = ('type="checkbox"', 'type="radio"', 'type="range"', 'type="
 SMALL_TEXT = re.compile(r"(?<![\w:-])text-(xs|sm)\b")
 
 
+def _strip_comments(src: str) -> str:
+    """Blank out // and /* */ comments, respecting quotes and template literals.
+
+    Necessary because the fixed source now *documents* the defect — several files contain the
+    literal text "raw <select>" in a comment explaining why they no longer use one. A scanner that
+    does not strip comments would read those as real elements, which would make the
+    no-native-select assertion below fail on the very code that satisfies it.
+    """
+    out = []
+    i, n = 0, len(src)
+    quote: str | None = None
+    while i < n:
+        c = src[i]
+        nxt = src[i + 1] if i + 1 < n else ""
+        if quote:
+            if c == "\\":
+                out.append(src[i : i + 2])
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+            out.append(c)
+        elif c in "\"'`":
+            quote = c
+            out.append(c)
+        elif c == "/" and nxt == "/":
+            while i < n and src[i] != "\n":
+                i += 1
+            continue
+        elif c == "/" and nxt == "*":
+            j = src.find("*/", i + 2)
+            j = n if j == -1 else j + 2
+            out.append(" " * (j - i))  # preserve offsets so line numbers stay right
+            i = j
+            continue
+        else:
+            out.append(c)
+        i += 1
+    return "".join(out)
+
+
 def _tsx_files() -> list[Path]:
     files: list[Path] = []
     for d in UI_DIRS:
@@ -82,7 +123,7 @@ def _class_attr(tag: str) -> str:
 def _iter_raw_controls():
     """Yield (path, line, tagname, opening_tag) for every raw zoomable control."""
     for path in _tsx_files():
-        src = path.read_text()
+        src = _strip_comments(path.read_text())
         for m in re.finditer(rf"<({'|'.join(ZOOMABLE_TAGS)})\b", src):
             tag = _opening_tag(src, m.start())
             if any(t in tag for t in EXEMPT_INPUT_TYPES):
@@ -94,7 +135,7 @@ class TestIosAutoZoom:
     def test_scanner_finds_controls_at_all(self):
         """Non-vacuity: a silently-empty scan would make every assertion below pass."""
         found = list(_iter_raw_controls())
-        assert len(found) > 20, f"scanner found only {len(found)} raw controls — it is broken"
+        assert len(found) > 10, f"scanner found only {len(found)} raw controls — it is broken"
 
     def test_no_raw_control_is_under_16px_on_mobile(self):
         """A raw control may use text-xs/text-sm only behind a breakpoint, with a >=16px base."""
@@ -141,6 +182,47 @@ class TestIosAutoZoom:
             "cn() is tailwind-merge — placed before, a call-site `text-sm` wins and the guard is "
             "INERT while still appearing present."
         )
+
+
+class TestNoNativeSelect:
+    """No raw ``<select>``: on iOS its popup anchors to the top-left of the page, not the control.
+
+    This is CLASS 3, and it is the one the first two fixes did NOT solve. With a 16px font, an
+    un-nested label, a correct ``width=device-width`` viewport and no transform/scroll-container
+    ancestor, the native popup was STILL misplaced. What identified it was that the defect tracked
+    the implementation rather than the page: every surface using a raw ``<select>`` reproduced it,
+    and every surface already using Radix (Bet Log, Parlay, the prop dialogs) did not — same device,
+    same session. Radix renders a ``<button>`` trigger plus a portalled, JS-positioned menu, so it
+    never depends on WebKit anchoring a native popup.
+    """
+
+    def test_no_raw_select_element(self):
+        offenders = []
+        for path, line, tag, _el in _iter_raw_controls():
+            if tag == "select":
+                offenders.append(f"{path.relative_to(FRONTEND)}:{line}")
+        assert not offenders, (
+            "Raw <select> found. Its native popup mis-anchors on iOS regardless of font-size or "
+            "label nesting. Use `Picker` (components/ui/picker.tsx), which wraps Radix:\n  "
+            + "\n  ".join(offenders)
+        )
+
+    def test_comment_stripping_does_not_hide_a_real_select(self):
+        """The stripper must remove only comments — a real element must still be seen.
+
+        Without this, `test_no_raw_select_element` could pass by silently blanking real code.
+        """
+        sample = (
+            'const a = "not // a comment"\n'
+            "// <select id='commented'>\n"
+            "/* <select id='blockCommented'> */\n"
+            "<select id='real' className='text-sm'>\n"
+        )
+        stripped = _strip_comments(sample)
+        assert "commented" not in stripped, "line comment survived stripping"
+        assert "blockCommented" not in stripped, "block comment survived stripping"
+        assert "real" in stripped, "a REAL element was stripped — the guard would be vacuous"
+        assert "not // a comment" in stripped, "a // inside a string literal must be preserved"
 
 
 class TestNumericInputCoercion:

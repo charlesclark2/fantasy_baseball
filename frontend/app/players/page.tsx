@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
 import { ChevronLeft, ChevronRight, Search } from "lucide-react"
 import { Nav } from "@/components/nav"
+import { Picker } from "@/components/ui/picker"
 import { AuthGuard } from "@/components/auth-guard"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/lib/auth-context"
@@ -256,17 +257,13 @@ function PlayersPageInner() {
               />
             </div>
             {/* Team filter */}
-            <select
+            <Picker
               value={teamFilter}
-              onChange={(e) => setTeamFilter(e.target.value)}
-              className="rounded-md border border-[#262626] bg-[#111111] px-3 py-1.5 text-base sm:text-sm text-white focus:border-[#363636] focus:outline-none"
-            >
-              {allTeams.map((t) => (
-                <option key={t} value={t}>
-                  {t === "ALL" ? "All Teams" : t}
-                </option>
-              ))}
-            </select>
+              onValueChange={setTeamFilter}
+              ariaLabel="Team filter"
+              className="h-auto rounded-md border border-[#262626] bg-[#111111] px-3 py-1.5 text-base sm:text-sm text-white focus:border-[#363636]"
+              options={allTeams.map((t) => ({ value: t, label: t === "ALL" ? "All Teams" : t }))}
+            />
           </div>
         </div>
 
