@@ -59,6 +59,21 @@ class _LeagueFields(BaseModel):
     # scoring, etc.). Stored verbatim; never read by any scorer.
     captured_rules: dict[str, object] = Field(default_factory=dict)
 
+    # ── NF-C0 import provenance ───────────────────────────────────────────────────────────────
+    # Where a league CAME FROM. Storage metadata in the same class as `created_at` — deliberately
+    # NOT part of `LeagueConfig.to_dict()`, so the shared config contract is unchanged and an
+    # imported league remains byte-identical to a hand-entered one once you drop the envelope.
+    # A hand-entered league simply leaves these None, which is what keeps "an imported league and a
+    # typed-in league are the IDENTICAL object" literally true rather than nearly true.
+    #
+    # They earn their place by enabling ONE thing the config cannot express: re-reading LIVE draft
+    # state for a saved league (`GET /fantasy/leagues/{id}/live`). Draft state is never persisted —
+    # a stored snapshot of "who is already drafted" is wrong the moment the next pick lands — so the
+    # league has to remember which platform league to go back and ask.
+    source_platform: str | None = None
+    source_league_id: str | None = None
+    imported_at: str | None = None
+
 
 class LeagueSave(_LeagueFields):
     """Inbound payload for POST/PUT. Every validator here applies to SAVES only."""
