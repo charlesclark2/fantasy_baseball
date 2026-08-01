@@ -62,16 +62,20 @@ const VERDICT_COPY: Record<string, string> = {
   captured: "Saved with your league, but NOT applied — we do not project this stat.",
 }
 
-/** Turn any thrown API error into something a person can act on. An unexplained failure on an
- *  import screen is indistinguishable from "this product is broken", so the backend's own
- *  status-specific detail is preferred over a generic message wherever it exists. */
+/** Turn a thrown API error into something a person can act on.
+ *
+ *  ⚠️ THE SERVER'S MESSAGE WINS. `apiFetch` now surfaces the API's own `detail`, which is written to
+ *  be read by a user ("Sleeper has no user called 'X' — check the spelling, or paste your league ID
+ *  instead"). Substituting a generic string keyed off the status code would throw away the only
+ *  message that actually says what to DO — so the fallbacks below fire only for a bare
+ *  `API error <status>`, i.e. when the server sent no detail at all. */
 function errorText(e: unknown): string {
   const message = e instanceof Error ? e.message : String(e)
+  if (!/^API error \d+$/.test(message)) return message || "Something went wrong."
   if (/40[13]/.test(message)) return "You do not have access to league import yet."
-  if (/422/.test(message)) return "That username or league ID was not recognised."
   if (/429/.test(message)) return "The platform is rate-limiting us. Try again in a moment."
   if (/503/.test(message)) return "That platform is not connected yet."
-  return message || "Something went wrong."
+  return "Something went wrong. Please try again."
 }
 
 export function LeagueImport() {
@@ -150,7 +154,18 @@ export function LeagueImport() {
     const res = await run("sleeper-leagues", () =>
       sleeperLeagues(accessToken, username.trim(), SEASON),
     )
-    if (res) setLeagues(res.leagues)
+    if (!res) return
+    if (res.kind === "league") {
+      // They pasted a league ID — there is nothing to pick from, so go straight to the preview
+      // rather than making them choose their league out of a list of one.
+      setLeagues([res.league])
+      await loadPreview(res.league.league_id)
+      return
+    }
+    // `?? []` is the client half of the additive-response rule: if a response ever arrives WITHOUT
+    // the key we read, fall through to the visible "no leagues found" empty state rather than
+    // leaving `leagues` undefined, which renders nothing at all and looks like a dead button.
+    setLeagues(res.leagues ?? [])
   }
 
   async function connectYahoo() {
@@ -290,8 +305,8 @@ export function LeagueImport() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && username.trim() && void findSleeperLeagues()}
-              placeholder="Sleeper username"
-              className="w-56 rounded border border-white/10 bg-white/[0.03] px-3 py-2 text-base sm:text-sm text-gray-100 placeholder:text-gray-600 focus:border-emerald-500/50 focus:outline-none"
+              placeholder="Sleeper username or league ID"
+              className="w-72 rounded border border-white/10 bg-white/[0.03] px-3 py-2 text-base sm:text-sm text-gray-100 placeholder:text-gray-600 focus:border-emerald-500/50 focus:outline-none"
             />
             <button
               onClick={() => void findSleeperLeagues()}
@@ -303,10 +318,12 @@ export function LeagueImport() {
               ) : (
                 <ArrowRight className="h-3.5 w-3.5" />
               )}
-              Find leagues
+              Find league
             </button>
             <span className="text-xs text-gray-500">
-              Sleeper&apos;s league data is public — no password or sign-in needed.
+              Your league ID is the long number in your league&apos;s Sleeper URL
+              (sleeper.app/leagues/<span className="text-gray-400">1234567890123456789</span>/…).
+              Sleeper&apos;s league data is public — no sign-in needed.
             </span>
           </div>
         )}

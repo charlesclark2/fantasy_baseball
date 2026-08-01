@@ -89,14 +89,29 @@ export function listImportPlatforms(token: string | null): Promise<ImportPlatfor
   return apiFetch(`/fantasy/import/platforms`, {}, token)
 }
 
+/** What `resolve_target` came back with. A bare number is ambiguous between a Sleeper league id and
+ *  a user id, so the server tells us which it turned out to be rather than making us guess. */
+export type SleeperResolved =
+  // `leagues` is present in BOTH branches by design — the API and this app deploy independently, so
+  // a response-shape change has to be additive or the older side renders a blank screen on a 200.
+  | { kind: "league"; season: string; league: PlatformLeagueSummary; leagues: PlatformLeagueSummary[] }
+  | {
+      kind?: "user"
+      season: string
+      user: { user_id: string; display_name: string }
+      leagues: PlatformLeagueSummary[]
+    }
+
+/** Accepts a Sleeper **username, league ID, or user ID** — whichever the user actually has. The
+ *  league ID is the common case: it is the long number in the league's own URL. */
 export function sleeperLeagues(
   token: string | null,
-  username: string,
+  identifier: string,
   season: string,
-): Promise<{ user: { user_id: string; display_name: string }; season: string; leagues: PlatformLeagueSummary[] }> {
+): Promise<SleeperResolved> {
   return apiFetch(
     `/fantasy/import/sleeper/leagues`,
-    { method: "POST", body: JSON.stringify({ username, season }) },
+    { method: "POST", body: JSON.stringify({ username: identifier, season }) },
     token,
   )
 }

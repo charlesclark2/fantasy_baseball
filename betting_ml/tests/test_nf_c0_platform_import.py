@@ -312,6 +312,60 @@ class TestSleeperTranslation:
         assert folded and all(t.verdict == DERIVED and t.exact for t in folded)
         assert not report.has_approximation
 
+    def test_the_fine_fg_buckets_map_one_to_one_and_beat_the_coarse_key(self, monkeypatch):
+        """Sleeper offers a coarse `fgm_50p` AND a fine `fgm_50_59`/`fgm_60p` pair; leagues use both.
+
+        Regression: the first cut mapped only the coarse key, so a real league paying 5 for 50-59
+        and 6 for 60+ had BOTH rules silently dropped to "captured" — despite the catalog having an
+        exact column for each. Values here are that league's actual settings.
+        """
+        league = {
+            **SLEEPER_LEAGUE,
+            "scoring_settings": {
+                **{k: v for k, v in SLEEPER_LEAGUE["scoring_settings"].items() if k != "fgm_50p"},
+                "fgm_50_59": 5.0,
+                "fgm_60p": 6.0,
+            },
+        }
+        result = _import_sleeper(monkeypatch, league)
+        per_stat = result.config["scoring"]["per_stat"]
+        assert per_stat["fg_made_50_59"] == 5.0
+        assert per_stat["fg_made_60p"] == 6.0
+        assert "fgm_60p" not in result.unmapped_scoring_keys
+
+    def test_a_league_setting_both_fg_schemes_lets_the_FINER_one_win(self, monkeypatch):
+        """The fine buckets are the more specific statement of the same rule, so the coarse key is
+        redundant — and which one lands must not be decided by alphabetical dict ordering."""
+        league = {
+            **SLEEPER_LEAGUE,
+            "scoring_settings": {
+                **SLEEPER_LEAGUE["scoring_settings"],  # carries fgm_50p = 5.0
+                "fgm_50_59": 5.0,
+                "fgm_60p": 6.0,
+            },
+        }
+        per_stat = _import_sleeper(monkeypatch, league).config["scoring"]["per_stat"]
+        assert per_stat["fg_made_60p"] == 6.0  # NOT 5.0 from the coarse key
+
+    def test_genuinely_differing_fine_buckets_are_reported_as_an_APPROXIMATION(self, monkeypatch):
+        """The other half of the fold. When the fine values AGREE the fold is exact; when they
+        genuinely differ our projection cannot express it, and `resolve_scoring` must say
+        `exact=False` rather than quietly averaging behind an 'applied' label."""
+        league = {
+            **SLEEPER_LEAGUE,
+            "scoring_settings": {
+                **{k: v for k, v in SLEEPER_LEAGUE["scoring_settings"].items() if k != "fgm_50p"},
+                "fgm_50_59": 5.0,
+                "fgm_60p": 6.0,
+            },
+        }
+        result = _import_sleeper(monkeypatch, league)
+        _, report = presets.resolve_config(lc.LeagueConfig.from_dict(result.config))
+        folded = [t for t in report.terms if t.projected_key == "fg_made_50_plus"]
+        assert folded and all(not t.exact for t in folded)
+        assert report.has_approximation
+        assert all(t.note for t in folded)  # and it explains itself
+
     def test_offensive_and_defensive_stats_are_not_conflated(self, monkeypatch):
         """The pair a careless map merges: a player's return TD vs the DEF/ST unit's.
 
@@ -469,6 +523,81 @@ class TestYahooTranslation:
         assert roster == {"QB": 1, "RB": 2, "BN": 5}
         assert result.config["scoring"]["per_stat"]["rec"] == 1.0
         assert result.config["ppr"] == "ppr"
+
+
+class TestIdentifierResolution:
+    """The identifier a user HAS is the league ID, not their username.
+
+    The first cut asked for a username, and the very first real attempt pasted a league ID and got a
+    422 — a dead end created entirely by demanding the one identifier Sleeper's UI never shows you.
+    A bare number is genuinely ambiguous (league ids and user ids are both snowflakes), so these pin
+    the disambiguation ORDER and, more importantly, that a total miss names BOTH possibilities
+    instead of blaming whichever we happened to try first.
+    """
+
+    def _resolve(self, monkeypatch, *, league=None, user=None, leagues=()):
+        def fake_get_json(url, **_):
+            if "/league/" in url and url.endswith(tuple("0123456789")):
+                return league
+            if "/user/" in url and "/leagues/" not in url:
+                return user
+            if "/leagues/" in url:
+                return list(leagues)
+            return None
+
+        monkeypatch.setattr(sleeper, "get_json", fake_get_json)
+        return sleeper.resolve_target("1268257036043292672", "2026")
+
+    def test_a_numeric_id_is_tried_as_a_league_first(self, monkeypatch):
+        """League-first because that is where a user gets a number from — the league's own URL."""
+        out = self._resolve(monkeypatch, league={"league_id": "1268257036043292672", "name": "The Megalabowl", "total_rosters": 12})
+        assert out["kind"] == "league"
+        assert out["league"]["name"] == "The Megalabowl"
+
+    def test_every_branch_carries_leagues_so_an_older_client_still_renders(self, monkeypatch):
+        """🚨 The API Lambda and the frontend deploy INDEPENDENTLY (the Lambda has no CI/CD), so a
+        response-shape change must be ADDITIVE. The first cut returned the league branch WITHOUT a
+        `leagues` key; a frontend one deploy behind read `res.leagues`, got undefined, and rendered
+        a blank screen on a 200 — no error anywhere. Pin the key in BOTH branches."""
+        as_league = self._resolve(monkeypatch, league={"league_id": "1268257036043292672", "name": "L", "total_rosters": 12})
+        assert as_league["leagues"] == [as_league["league"]]
+
+        as_user = self._resolve(
+            monkeypatch,
+            league=None,
+            user={"user_id": "1268257036043292672", "display_name": "Someone"},
+            leagues=[{"league_id": "9", "name": "L", "season": "2026"}],
+        )
+        assert isinstance(as_user["leagues"], list)
+
+    def test_a_numeric_id_falls_back_to_a_user_lookup(self, monkeypatch):
+        out = self._resolve(
+            monkeypatch,
+            league=None,
+            user={"user_id": "1268257036043292672", "display_name": "Someone"},
+            leagues=[{"league_id": "9", "name": "L", "season": "2026"}],
+        )
+        assert out["kind"] == "user"
+        assert out["leagues"][0]["league_id"] == "9"
+
+    def test_a_number_that_is_neither_names_both_possibilities(self, monkeypatch):
+        """The failure mode this replaced said 'Sleeper has no user called X' for what was, in fact,
+        a perfectly valid league ID — blaming the branch we guessed rather than the ambiguity."""
+        with pytest.raises(sleeper.SleeperInputError) as exc:
+            self._resolve(monkeypatch, league=None, user=None)
+        assert "league ID" in str(exc.value) and "username" in str(exc.value)
+
+    def test_a_username_miss_points_at_the_league_id_escape_hatch(self, monkeypatch):
+        monkeypatch.setattr(sleeper, "get_json", lambda url, **_: None)
+        with pytest.raises(sleeper.SleeperInputError, match="league ID"):
+            sleeper.resolve_user("nosuchuser")
+
+    def test_an_empty_identifier_is_refused_before_any_request(self, monkeypatch):
+        called = []
+        monkeypatch.setattr(sleeper, "get_json", lambda url, **_: called.append(url))
+        with pytest.raises(sleeper.SleeperInputError):
+            sleeper.resolve_target("   ", "2026")
+        assert not called
 
 
 class TestCanonicalHelpers:

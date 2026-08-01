@@ -81,7 +81,15 @@ SCORING_KEY_MAP: dict[str, tuple[str, ...]] = {
     "fgm_20_29": ("fg_made_20_29",),
     "fgm_30_39": ("fg_made_30_39",),
     "fgm_40_49": ("fg_made_40_49",),
+    # ⚠️ Sleeper supports BOTH a coarse 50+ bucket AND the finer 50-59 / 60+ pair, and real leagues
+    # use either — a live league was found paying 5 for 50-59 and 6 for 60+, and the first cut,
+    # which mapped only `fgm_50p`, silently dropped both of those rules to "captured" even though
+    # the catalog has an exact column for each. The coarse key fans out across both of our buckets;
+    # the fine keys map one-to-one. `_translate_scoring` drops the coarse key when a fine one is
+    # present, so a league that somehow sets both is not resolved by dict ordering.
     "fgm_50p": ("fg_made_50_59", "fg_made_60p"),
+    "fgm_50_59": ("fg_made_50_59",),
+    "fgm_60p": ("fg_made_60p",),
     "fgmiss": ("fg_missed",),
     "xpm": ("pat_made",),
     "xpmiss": ("pat_missed",),
@@ -170,11 +178,74 @@ def resolve_user(username_or_id: str) -> dict:
     payload = _as_dict(get_json(_url(f"/user/{value}")))
     user_id = str(payload.get("user_id") or "")
     if not user_id:
-        raise SleeperInputError(f"Sleeper has no user called {value!r}.")
+        raise SleeperInputError(
+            f"Sleeper has no user called {value!r}. Check the spelling, or paste your league ID "
+            "instead — it is the long number in your league's URL."
+        )
     return {
         "user_id": user_id,
         "display_name": str(payload.get("display_name") or value),
     }
+
+
+def resolve_target(value: str, season: str, sport: str = "nfl") -> dict:
+    """Accept whatever identifier the user actually has, and work out what it is.
+
+    ⭐ WHY THIS EXISTS. The first field asked for a "Sleeper username", but the identifier a user
+    has to hand is almost always the **league ID** — it sits right in the league's URL
+    (`sleeper.app/leagues/<id>`), whereas a username has to be recalled and a user ID is never
+    surfaced in Sleeper's UI at all. Making the user supply the one identifier they DON'T have is a
+    self-inflicted dead end, so this accepts a username, a league ID, or a user ID.
+
+    Returns either:
+      * `{"kind": "league", "league": {...}, "leagues": [{...}]}` — the value was a league; a caller
+        that understands `kind` goes straight to preview.
+      * `{"kind": "user", "user": {...}, "leagues": [...]}` — the value was a user; pick a league.
+
+    🚨 `leagues` IS ALWAYS PRESENT, in both branches, and that is load-bearing rather than tidy.
+    The API Lambda and the Next.js frontend deploy INDEPENDENTLY (the Lambda has no CI/CD — it ships
+    only via `infrastructure/lambda/deploy.sh`), so there is always a window where one side is newer
+    than the other. The first cut of this function returned `{"kind": "league", "league": ...}` with
+    no `leagues` key; an older frontend read `res.leagues`, got `undefined`, and rendered NOTHING on
+    a 200 — a silent empty with no error anywhere, which is this repo's most-repeated failure shape.
+    ⇒ **a change to a deployed endpoint's response must be ADDITIVE**: add `kind`, never remove the
+    key the previous client reads.
+
+    ⚠️ A bare number is AMBIGUOUS — Sleeper league ids and user ids are both snowflakes and are
+    indistinguishable by shape. **League is tried first** because that is overwhelmingly where a
+    user gets a number from (the league URL). Falling back to the user lookup costs one extra
+    request only in the rare case, and the error when BOTH miss names both possibilities rather
+    than blaming the one we happened to try.
+    """
+    value = (value or "").strip()
+    if not value:
+        raise SleeperInputError("Enter your Sleeper username or a league ID.")
+
+    if _ID_RE.match(value) and len(value) >= 6:
+        league = _as_dict(get_json(_url(f"/league/{value}")))
+        if league.get("league_id"):
+            summary = {
+                "league_id": str(league.get("league_id")),
+                "name": str(league.get("name") or "Sleeper league"),
+                "season": str(league.get("season") or ""),
+                "total_rosters": int(league.get("total_rosters") or 0),
+                "status": str(league.get("status") or ""),
+                "sport": str(league.get("sport") or "nfl"),
+            }
+            # `leagues` is duplicated here ON PURPOSE — see the docstring. A client that predates
+            # `kind` reads this key and renders a one-item picker instead of a blank screen.
+            return {"kind": "league", "league": summary, "leagues": [summary]}
+        user = _as_dict(get_json(_url(f"/user/{value}")))
+        if user.get("user_id"):
+            resolved = {"user_id": str(user["user_id"]), "display_name": str(user.get("display_name") or value)}
+            return {"kind": "user", "user": resolved, "leagues": list_leagues(resolved["user_id"], season, sport)}
+        raise SleeperInputError(
+            f"{value} is not a Sleeper league ID or user ID. If you meant your username, enter that "
+            "instead; if you meant a league, the ID is the long number in your league's URL."
+        )
+
+    user = resolve_user(value)
+    return {"kind": "user", "user": user, "leagues": list_leagues(user["user_id"], season, sport)}
 
 
 def list_leagues(user_id: str, season: str, sport: str = "nfl") -> list[dict]:
@@ -218,8 +289,16 @@ def _translate_scoring(raw: dict) -> tuple[C.ScoringTranslation, list[str]]:
     warnings: list[str] = []
 
     two_pt_values = {k: float(raw[k]) for k in _TWO_PT_KEYS if _is_number(raw.get(k))}
+
+    # A league expressing the FINE 50-59 / 60+ buckets has stated its 50+ rule at a resolution the
+    # coarse key cannot, so the coarse key is redundant — drop it rather than let alphabetical
+    # ordering decide which of two contradictory statements lands.
+    drop = set(_TWO_PT_KEYS)
+    if any(_is_number(raw.get(k)) for k in ("fgm_50_59", "fgm_60p")):
+        drop.add("fgm_50p")
+
     translated = C.apply_scoring_map(
-        {k: v for k, v in raw.items() if k not in _TWO_PT_KEYS},
+        {k: v for k, v in raw.items() if k not in drop},
         SCORING_KEY_MAP,
         bonus_map=BONUS_KEY_MAP,
     )
@@ -484,5 +563,6 @@ __all__ = [
     "fetch_draft_state",
     "import_league",
     "list_leagues",
+    "resolve_target",
     "resolve_user",
 ]
