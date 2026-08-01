@@ -69,8 +69,8 @@ select * from with_scd2_cols
 
 -- E11.1-W8b: FINALIZE the dual-branch (the W7b-deferred cutover). The Snowflake side
 -- now reads the lakehouse_ext external table over the DuckDB-built S3 parquet (created
--- by generate_w7b_external_tables.py / W7B_TABLES — feature_pregame_injury_status already
--- has an external table). Was a native `table` materialize from stg_statsapi_player_injury_status;
+-- by generate_w7b_external_tables.py / refreshed via W7B_INJURY_TABLES — feature_pregame_injury_status
+-- already has an external table). Was a native `table` materialize from stg_statsapi_player_injury_status;
 -- the DuckDB branch above is the build that produces that parquet. Parity-gated by
 -- parity_check_w8b.py. Materialized='table' so downstream ref()s (mart_player_profile_identity,
 -- feature_pregame_lineup_features) see a concrete table with the same grain.

@@ -33,7 +33,8 @@ USAGE:
 
 OUTPUT: scripts/ddl/w7b_external_tables.generated.sql — REVIEW, then run in Snowflake
 BEFORE the parity check + before the request-path last-resort / feature source repoint
-(W7b-2). Refresh: refresh_w1_external_tables.py (W7B_TABLES). AUTO_REFRESH=FALSE.
+(W7b-2). Refresh: refresh_w1_external_tables.py (W7B_INJURY_TABLES + W7B_SERVING_TABLES).
+AUTO_REFRESH=FALSE.
 Rollback: the original Snowflake builds are not dropped (the models' else arm stays the
 native build); revert the model to roll back.
 """
@@ -136,7 +137,8 @@ def main() -> None:
         "-- lakehouse_ext schema + s3_lakehouse stage + parquet_snappy file format (W1d).\n"
         "-- Run AFTER run_w1_lakehouse.py --w7b has written lakehouse/<model>/data.parquet, and\n"
         "-- BEFORE the parity check + the request-path last-resort / feature source repoint.\n"
-        "-- Refresh: scripts/refresh_w1_external_tables.py (W7B_TABLES). AUTO_REFRESH=FALSE.\n"
+        "-- Refresh: scripts/refresh_w1_external_tables.py (W7B_INJURY_TABLES + "
+        "W7B_SERVING_TABLES). AUTO_REFRESH=FALSE.\n"
         "-- DO NOT hand-edit — regenerate from the parquet if a model's schema changes.\n"
         "-- =============================================================================\n"
     )
