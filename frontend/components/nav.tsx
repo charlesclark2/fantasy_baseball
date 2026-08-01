@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -12,11 +12,24 @@ import { SPORTS, surfaceItems, type NavItem, type SurfaceGroup } from "@/lib/nav
 import changelog from "@/data/changelog.json"
 
 const latestWeek = changelog[0]?.week
-const isChangelogRecent = latestWeek
-  ? (Date.now() - new Date(latestWeek + "T00:00:00").getTime()) /
-      (1000 * 60 * 60 * 24) <=
-    7
-  : false
+
+// ⚠️ CLIENT-ONLY BY DESIGN — do NOT hoist this back to module scope.
+// It used to be a module-level constant, which made it a hydration bug on every page in the app:
+// most routes are STATICALLY PRERENDERED, so `Date.now()` on the server is frozen at BUILD time
+// while the browser evaluates it live. Once a build ages past the 7-day boundary the two disagree
+// and the "new" dot renders on one side only. (`new Date("YYYY-MM-DDT00:00:00")` has no timezone
+// designator, so it is parsed in LOCAL time too — a second, independent server/client divergence.)
+// Computing it after mount means the server and the hydration render always agree on "no dot", and
+// the dot appears a tick later if it is genuinely recent.
+function useChangelogRecent(): boolean {
+  const [recent, setRecent] = useState(false)
+  useEffect(() => {
+    if (!latestWeek) return
+    const days = (Date.now() - new Date(latestWeek + "T00:00:00").getTime()) / (1000 * 60 * 60 * 24)
+    setRecent(days <= 7)
+  }, [])
+  return recent
+}
 
 interface NavProps {
   activeLink?: string | null
@@ -41,6 +54,7 @@ export function Nav({
   const showSubNav = authenticated || isSignedIn
 
   const isAdminActive = ADMIN_ITEMS.some((i) => i.key === activeLink)
+  const isChangelogRecent = useChangelogRecent()
 
   // A fantasy surface the caller isn't entitled to → visible but LOCKED (upsell).
   const isLocked = (g: SurfaceGroup) =>

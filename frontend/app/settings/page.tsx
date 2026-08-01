@@ -220,11 +220,21 @@ function CashFlowForm({
 }) {
   const [type, setType] = useState<"deposit" | "withdrawal">("deposit")
   const [amount, setAmount] = useState(defaultAmount != null && defaultAmount > 0 ? String(defaultAmount) : "")
-  const [date, setDate] = useState(todayIso())
+  // ⚠️ Seeded AFTER mount, not in the useState initializer — `todayIso()` reads the LOCAL clock, and
+  // this route is statically prerendered, so the server baked the BUILD date into this input's
+  // `value` while the browser computes the USER's date at hydration. Those disagree on every visit
+  // made on a different day than the build (and, near midnight UTC, on the same day too), which is a
+  // real hydration mismatch on a rendered attribute. Starting empty makes the server and hydration
+  // renders agree; the effect fills it a tick later.
+  const [date, setDate] = useState("")
+  useEffect(() => {
+    setDate((d) => d || todayIso())
+  }, [])
 
   function handleSubmit() {
     const amt = parseFloat(amount)
     if (isNaN(amt) || amt <= 0) return
+    if (!date) return // not yet seeded — never submit an empty date
     onSubmit(type, amt, date)
   }
 

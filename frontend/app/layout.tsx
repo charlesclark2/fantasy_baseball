@@ -29,7 +29,13 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="dark">
+    // suppressHydrationWarning applies to THIS element's attributes only (it is not recursive), so
+    // it silences the one mismatch we can neither predict nor control: browser extensions —
+    // password managers, Grammarly, dark-mode and translation tools — routinely stamp attributes
+    // onto <html>/<body> before React hydrates. That surfaces as a "hydration failed" error with no
+    // component attribution, which is noise that buries real mismatches in Sentry. Genuine
+    // mismatches inside the tree still report normally.
+    <html lang="en" className="dark" suppressHydrationWarning>
       <body
         className={`${geist.className} font-sans antialiased bg-background`}
       >
