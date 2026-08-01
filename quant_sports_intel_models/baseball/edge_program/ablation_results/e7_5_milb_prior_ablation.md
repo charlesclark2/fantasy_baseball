@@ -1,6 +1,8 @@
 # MLB Edge-E7.5 — MiLB MLE → recalibrated rookie prior (wired into `eb_batter_posteriors_raw`)
 
-**Model:** `milb_mle_prior_v1` · **generated:** 2026-07-26T07:39:22.792567+00:00
+**Model:** `milb_mle_prior_v1` · **generated:** 2026-08-01T23:34:37.582225+00:00
+
+> ⚠️ **This run was gated by E7.5b and the served parquet is MIXED.** The recalibration and ablation tables below are the CHALLENGER's, for all metrics. What actually ships: **bb_pct, iso** from the challenger MLE; **k_pct** did NOT clear the head-to-head gate and keeps the previously-served `milb_mle_v1` values VERBATIM. Read [`e7_5b_mle_prior_head_to_head.md`](e7_5b_mle_prior_head_to_head.md) for the per-metric verdict and the numbers that are actually serving for the held-back metric(s).
 
 > ⚠️ **This wires a performance-based PRIOR for low-MLB-PA rookies, not an edge claim.** For a called-up batter with ~0 MLB PAs the served build previously shrank toward a GENERIC archetype/slot prior; E7.5 replaces that with the E7.3 MiLB→MLB MLE line for the metrics that TRANSLATE — **K%, BB%, and ISO (wide)** — and shrinks the rookie's own MLB line toward it as PAs accrue. **wOBA is NOT wired** (E7.3: no translatable signal beyond level). The E7.3 parameter sd is too tight to price, so E7.5 RECALIBRATES it on held-out MLB data (E13.6): the prior sd is the held-out predictive spread of the MLE mean around realized early-career MLB production. `best_alpha = 0`.
 
@@ -10,9 +12,9 @@
 
 | metric   |   resid_sd |   param_sd_median |   tightness_ratio |   n |   coverage_68 |   coverage_90 |   label_sampling_sd |   true_sd_est |   kappa_floor |   kappa_cap |
 |:---------|-----------:|------------------:|------------------:|----:|--------------:|--------------:|--------------------:|--------------:|--------------:|------------:|
-| k_pct    |   0.044336 |          0.006134 |             7.228 | 597 |        0.6801 |        0.9045 |            0.023677 |      0.037485 |            20 |         400 |
-| bb_pct   |   0.022223 |          0.004325 |             5.138 | 597 |        0.6667 |        0.9062 |            0.014412 |      0.016916 |            20 |         400 |
-| iso      |   0.047482 |          0.006802 |             6.981 | 597 |        0.6633 |        0.8878 |            0.019013 |      0.043509 |            20 |         400 |
+| k_pct    |   0.044539 |          0.005997 |             7.427 | 601 |        0.6739 |        0.9002 |            0.023718 |      0.037699 |            20 |         400 |
+| bb_pct   |   0.021457 |          0.004123 |             5.204 | 601 |        0.6889 |        0.9185 |            0.014447 |      0.015864 |            20 |         400 |
+| iso      |   0.046649 |          0.006444 |             7.239 | 601 |        0.6889 |        0.8985 |            0.019057 |      0.042579 |            20 |         400 |
 
 - `tightness_ratio` = σ_resid ÷ median parameter sd — how much wider the honest predictive sd is than the E7.3 parameter sd (>1 confirms the parameter sd was too tight to price).
 - `true_sd_est` = variance-decomposed between-player prior sd (σ_resid² − label-sampling-var); a diagnostic only — the SERVED prior sd stays σ_resid (conservative: the prior is a touch weaker, so the rookie's own MLB line takes over a touch faster — the safe direction).
@@ -23,13 +25,13 @@ For each debut cohort Y (≥1 strictly-prior cohort): the GENERIC baseline mean 
 
 | metric   |   n_scored |   n_cohorts |   mle_nll |   generic_nll |   mle_crps |   generic_crps |   mle_mae |   generic_mae |   mle_cov68 |   generic_cov68 |   mle_cov90 |   generic_cov90 | mle_wins   | notes   |
 |:---------|-----------:|------------:|----------:|--------------:|-----------:|---------------:|----------:|--------------:|------------:|----------------:|------------:|----------------:|:-----------|:--------|
-| k_pct    |        534 |          10 |  -1.69915 |      -1.36521 |   0.025048 |       0.034793 |  0.035808 |      0.049266 |      0.7004 |          0.6835 |      0.9176 |          0.9139 | True       | []      |
-| bb_pct   |        534 |          10 |  -2.37611 |      -2.24463 |   0.012635 |       0.014449 |  0.018066 |      0.020632 |      0.7004 |          0.7022 |      0.9232 |          0.9307 | True       | []      |
-| iso      |        534 |          10 |  -1.59148 |      -1.52416 |   0.027868 |       0.029678 |  0.03982  |      0.042328 |      0.7079 |          0.7022 |      0.9307 |          0.9494 | True       | []      |
+| k_pct    |        538 |          10 |  -1.6802  |      -1.36533 |   0.02534  |       0.034805 |  0.035755 |      0.049316 |      0.6859 |          0.6803 |      0.9126 |          0.9145 | True       | []      |
+| bb_pct   |        538 |          10 |  -2.44067 |      -2.24302 |   0.011808 |       0.014483 |  0.016751 |      0.02069  |      0.7193 |          0.7007 |      0.9331 |          0.9331 | True       | []      |
+| iso      |        538 |          10 |  -1.64763 |      -1.50727 |   0.026024 |       0.029991 |  0.037109 |      0.042628 |      0.7286 |          0.7007 |      0.9238 |          0.9498 | True       | []      |
 
-- **k_pct** — ✅ MLE prior improves rookie calibration: NLL -1.6991 vs -1.3652, CRPS 0.02505 vs 0.03479, MAE 0.03581 vs 0.04927 (n=534 rookies over 10 cohorts).
-- **bb_pct** — ✅ MLE prior improves rookie calibration: NLL -2.3761 vs -2.2446, CRPS 0.01263 vs 0.01445, MAE 0.01807 vs 0.02063 (n=534 rookies over 10 cohorts).
-- **iso** — ✅ MLE prior improves rookie calibration: NLL -1.5915 vs -1.5242, CRPS 0.02787 vs 0.02968, MAE 0.03982 vs 0.04233 (n=534 rookies over 10 cohorts).
+- **k_pct** — ✅ MLE prior improves rookie calibration: NLL -1.6802 vs -1.3653, CRPS 0.02534 vs 0.03481, MAE 0.03576 vs 0.04932 (n=538 rookies over 10 cohorts).
+- **bb_pct** — ✅ MLE prior improves rookie calibration: NLL -2.4407 vs -2.2430, CRPS 0.01181 vs 0.01448, MAE 0.01675 vs 0.02069 (n=538 rookies over 10 cohorts).
+- **iso** — ✅ MLE prior improves rookie calibration: NLL -1.6476 vs -1.5073, CRPS 0.02602 vs 0.02999, MAE 0.03711 vs 0.04263 (n=538 rookies over 10 cohorts).
 
 ## 3. What is wired (and what is not)
 
@@ -41,6 +43,6 @@ For each debut cohort Y (≥1 strictly-prior cohort): the GENERIC baseline mean 
 
 - **σ_resid carries finite-PA label sampling noise** — so it slightly over-states the between-player prior sd, making the prior marginally weaker (safe). `true_sd_est` reports the decomposed value.
 - **Graduated players are self-selected** (they reached the MLB PA floor) — the calibration is on players who established, which is the served population (a rookie getting playing time). Stated, not corrected (inherited from E7.3).
-- **Prospect coverage:** 6365 batters carry a calibrated prior (graduated + active prospects).
+- **Prospect coverage:** 6376 batters carry a calibrated prior (graduated + active prospects).
 - **best_alpha = 0** — a rookie betting prior, never a market bet.
 

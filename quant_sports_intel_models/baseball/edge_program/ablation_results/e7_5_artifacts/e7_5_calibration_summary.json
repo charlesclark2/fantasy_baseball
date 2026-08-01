@@ -1,49 +1,49 @@
 {
   "model_version": "milb_mle_prior_v1",
-  "generated_at": "2026-07-26T07:39:22.791978+00:00",
+  "generated_at": "2026-08-01T23:34:37.581167+00:00",
   "metrics": [
     "k_pct",
     "bb_pct",
     "iso"
   ],
-  "n_batters": 6365,
+  "n_batters": 6376,
   "recalibration": {
     "k_pct": {
       "metric": "k_pct",
-      "resid_sd": 0.044336,
-      "param_sd_median": 0.006134,
-      "tightness_ratio": 7.228,
-      "n": 597,
-      "coverage_68": 0.6801,
-      "coverage_90": 0.9045,
-      "label_sampling_sd": 0.023677,
-      "true_sd_est": 0.037485,
+      "resid_sd": 0.044539,
+      "param_sd_median": 0.005997,
+      "tightness_ratio": 7.427,
+      "n": 601,
+      "coverage_68": 0.6739,
+      "coverage_90": 0.9002,
+      "label_sampling_sd": 0.023718,
+      "true_sd_est": 0.037699,
       "kappa_floor": 20.0,
       "kappa_cap": 400.0
     },
     "bb_pct": {
       "metric": "bb_pct",
-      "resid_sd": 0.022223,
-      "param_sd_median": 0.004325,
-      "tightness_ratio": 5.138,
-      "n": 597,
-      "coverage_68": 0.6667,
-      "coverage_90": 0.9062,
-      "label_sampling_sd": 0.014412,
-      "true_sd_est": 0.016916,
+      "resid_sd": 0.021457,
+      "param_sd_median": 0.004123,
+      "tightness_ratio": 5.204,
+      "n": 601,
+      "coverage_68": 0.6889,
+      "coverage_90": 0.9185,
+      "label_sampling_sd": 0.014447,
+      "true_sd_est": 0.015864,
       "kappa_floor": 20.0,
       "kappa_cap": 400.0
     },
     "iso": {
       "metric": "iso",
-      "resid_sd": 0.047482,
-      "param_sd_median": 0.006802,
-      "tightness_ratio": 6.981,
-      "n": 597,
-      "coverage_68": 0.6633,
-      "coverage_90": 0.8878,
-      "label_sampling_sd": 0.019013,
-      "true_sd_est": 0.043509,
+      "resid_sd": 0.046649,
+      "param_sd_median": 0.006444,
+      "tightness_ratio": 7.239,
+      "n": 601,
+      "coverage_68": 0.6889,
+      "coverage_90": 0.8985,
+      "label_sampling_sd": 0.019057,
+      "true_sd_est": 0.042579,
       "kappa_floor": 20.0,
       "kappa_cap": 400.0
     }
@@ -51,54 +51,370 @@
   "ablation": {
     "k_pct": {
       "metric": "k_pct",
-      "n_scored": 534,
+      "n_scored": 538,
       "n_cohorts": 10,
-      "mle_nll": -1.69915,
-      "generic_nll": -1.36521,
-      "mle_crps": 0.025048,
-      "generic_crps": 0.034793,
-      "mle_mae": 0.035808,
-      "generic_mae": 0.049266,
-      "mle_cov68": 0.7004,
-      "generic_cov68": 0.6835,
-      "mle_cov90": 0.9176,
-      "generic_cov90": 0.9139,
+      "mle_nll": -1.6802,
+      "generic_nll": -1.36533,
+      "mle_crps": 0.02534,
+      "generic_crps": 0.034805,
+      "mle_mae": 0.035755,
+      "generic_mae": 0.049316,
+      "mle_cov68": 0.6859,
+      "generic_cov68": 0.6803,
+      "mle_cov90": 0.9126,
+      "generic_cov90": 0.9145,
       "mle_wins": true,
       "notes": []
     },
     "bb_pct": {
       "metric": "bb_pct",
-      "n_scored": 534,
+      "n_scored": 538,
       "n_cohorts": 10,
-      "mle_nll": -2.37611,
-      "generic_nll": -2.24463,
-      "mle_crps": 0.012635,
-      "generic_crps": 0.014449,
-      "mle_mae": 0.018066,
-      "generic_mae": 0.020632,
-      "mle_cov68": 0.7004,
-      "generic_cov68": 0.7022,
-      "mle_cov90": 0.9232,
-      "generic_cov90": 0.9307,
+      "mle_nll": -2.44067,
+      "generic_nll": -2.24302,
+      "mle_crps": 0.011808,
+      "generic_crps": 0.014483,
+      "mle_mae": 0.016751,
+      "generic_mae": 0.02069,
+      "mle_cov68": 0.7193,
+      "generic_cov68": 0.7007,
+      "mle_cov90": 0.9331,
+      "generic_cov90": 0.9331,
       "mle_wins": true,
       "notes": []
     },
     "iso": {
       "metric": "iso",
-      "n_scored": 534,
+      "n_scored": 538,
       "n_cohorts": 10,
-      "mle_nll": -1.59148,
-      "generic_nll": -1.52416,
-      "mle_crps": 0.027868,
-      "generic_crps": 0.029678,
-      "mle_mae": 0.03982,
-      "generic_mae": 0.042328,
-      "mle_cov68": 0.7079,
-      "generic_cov68": 0.7022,
-      "mle_cov90": 0.9307,
-      "generic_cov90": 0.9494,
+      "mle_nll": -1.64763,
+      "generic_nll": -1.50727,
+      "mle_crps": 0.026024,
+      "generic_crps": 0.029991,
+      "mle_mae": 0.037109,
+      "generic_mae": 0.042628,
+      "mle_cov68": 0.7286,
+      "generic_cov68": 0.7007,
+      "mle_cov90": 0.9238,
+      "generic_cov90": 0.9498,
       "mle_wins": true,
       "notes": []
+    }
+  },
+  "e7_5b_head_to_head": {
+    "challenger_projections": "s3://baseball-betting-ml-artifacts/baseball/milb/derived/mle_projections",
+    "incumbent_projections": "quant_sports_intel_models/baseball/edge_program/ablation_results/e7_3_artifacts/mle_projections.parquet",
+    "served_prior": "/tmp/milb_mle_prior_pre_e7_5b.parquet",
+    "bh_fdr_alpha_0.10": {
+      "k_pct": false,
+      "bb_pct": true,
+      "iso": true
+    },
+    "ship": [
+      "bb_pct",
+      "iso"
+    ],
+    "holdback": [
+      "k_pct"
+    ],
+    "merge": {
+      "holdback_metrics": [
+        "k_pct"
+      ],
+      "rows": 6376,
+      "served_rows": 6365,
+      "n_new_batters": 11,
+      "k_pct_held_back_nonnull": 6365,
+      "holdback_verbatim_verified": true,
+      "served_movement": {
+        "mle_k_pct": {
+          "mean_abs_delta": 0.0,
+          "p95_abs_delta": 0.0,
+          "max_abs_delta": 0.0,
+          "n_moved": 0
+        },
+        "k_pct_prior_kappa": {
+          "mean_abs_delta": 0.0,
+          "p95_abs_delta": 0.0,
+          "max_abs_delta": 0.0,
+          "n_moved": 0
+        },
+        "mle_bb_pct": {
+          "mean_abs_delta": 0.005308517189317596,
+          "p95_abs_delta": 0.012826546016511956,
+          "max_abs_delta": 0.04266677699681634,
+          "n_moved": 6365
+        },
+        "bb_pct_prior_kappa": {
+          "mean_abs_delta": 9.201639106407525,
+          "p95_abs_delta": 22.615467828788088,
+          "max_abs_delta": 72.6439631917184,
+          "n_moved": 6365
+        },
+        "mle_iso": {
+          "mean_abs_delta": 0.009388942332786285,
+          "p95_abs_delta": 0.024677259128731678,
+          "max_abs_delta": 0.07825275127101283,
+          "n_moved": 6365
+        },
+        "iso_prior_sd": {
+          "mean_abs_delta": 0.0008336292069447555,
+          "p95_abs_delta": 0.0008336292069447554,
+          "max_abs_delta": 0.0008336292069447554,
+          "n_moved": 6365
+        }
+      }
+    },
+    "per_metric": {
+      "k_pct": {
+        "metric": "k_pct",
+        "n_scored": 538,
+        "n_cohorts": 10,
+        "n_challenger_only": 0,
+        "n_incumbent_only": 0,
+        "challenger": {
+          "arm": "challenger",
+          "nll": -1.67321,
+          "crps": 0.025487,
+          "mae": 0.035992,
+          "cov68": 0.6914,
+          "cov90": 0.9126
+        },
+        "incumbent": {
+          "arm": "incumbent",
+          "nll": -1.68641,
+          "crps": 0.025324,
+          "mae": 0.036144,
+          "cov68": 0.697,
+          "cov90": 0.9145
+        },
+        "generic": {
+          "arm": "generic_degenerate",
+          "nll": -1.36103,
+          "crps": 0.034957,
+          "mae": 0.049528,
+          "cov68": 0.6803,
+          "cov90": 0.9126
+        },
+        "permuted": {
+          "arm": "permuted_challenger_degenerate",
+          "nll": -0.9828,
+          "crps": 0.041499,
+          "mae": 0.056627,
+          "cov68": 0.4647,
+          "cov90": 0.7193
+        },
+        "oracle_challenger": {
+          "arm": "oracle_challenger",
+          "nll": -1.71139,
+          "crps": 0.024597,
+          "mae": 0.034939,
+          "cov68": 0.697,
+          "cov90": 0.9275
+        },
+        "oracle_incumbent": {
+          "arm": "oracle_incumbent",
+          "nll": -1.71632,
+          "crps": 0.024435,
+          "mae": 0.034769,
+          "cov68": 0.7175,
+          "cov90": 0.9275
+        },
+        "cohort_nll_delta": [
+          -0.035964,
+          -0.011547,
+          -0.031636,
+          -0.03122,
+          -0.119719,
+          0.033735,
+          -0.000348,
+          -0.076954,
+          0.0727,
+          0.07822
+        ],
+        "fold_win_rate": 0.3,
+        "p_one_sided": 0.726296,
+        "challenger_sigma": 0.04442,
+        "incumbent_sigma": 0.044531,
+        "gate": {
+          "beats_on_nll": false,
+          "beats_on_crps": false,
+          "fold_win_rate>=0.60": false,
+          "p_one_sided<0.1": false,
+          "coverage_floor_holds": true,
+          "degenerate_ceilings_lose": true,
+          "oracle_floor_holds": true,
+          "BH-FDR@0.10": false
+        },
+        "ships": false,
+        "notes": []
+      },
+      "bb_pct": {
+        "metric": "bb_pct",
+        "n_scored": 538,
+        "n_cohorts": 10,
+        "n_challenger_only": 0,
+        "n_incumbent_only": 0,
+        "challenger": {
+          "arm": "challenger",
+          "nll": -2.44029,
+          "crps": 0.011807,
+          "mae": 0.01671,
+          "cov68": 0.7156,
+          "cov90": 0.9349
+        },
+        "incumbent": {
+          "arm": "incumbent",
+          "nll": -2.37659,
+          "crps": 0.012633,
+          "mae": 0.018079,
+          "cov68": 0.6989,
+          "cov90": 0.9238
+        },
+        "generic": {
+          "arm": "generic_degenerate",
+          "nll": -2.24365,
+          "crps": 0.014465,
+          "mae": 0.020657,
+          "cov68": 0.7026,
+          "cov90": 0.9294
+        },
+        "permuted": {
+          "arm": "permuted_challenger_degenerate",
+          "nll": -2.00627,
+          "crps": 0.017119,
+          "mae": 0.024002,
+          "cov68": 0.5428,
+          "cov90": 0.79
+        },
+        "oracle_challenger": {
+          "arm": "oracle_challenger",
+          "nll": -2.44401,
+          "crps": 0.011747,
+          "mae": 0.0166,
+          "cov68": 0.7212,
+          "cov90": 0.9312
+        },
+        "oracle_incumbent": {
+          "arm": "oracle_incumbent",
+          "nll": -2.41614,
+          "crps": 0.012039,
+          "mae": 0.017021,
+          "cov68": 0.7305,
+          "cov90": 0.9331
+        },
+        "cohort_nll_delta": [
+          0.011402,
+          0.023,
+          0.018603,
+          0.005417,
+          0.100507,
+          0.052822,
+          0.197412,
+          0.13203,
+          0.026531,
+          -0.012054
+        ],
+        "fold_win_rate": 0.9,
+        "p_one_sided": 0.013772,
+        "challenger_sigma": 0.02144,
+        "incumbent_sigma": 0.022262,
+        "gate": {
+          "beats_on_nll": true,
+          "beats_on_crps": true,
+          "fold_win_rate>=0.60": true,
+          "p_one_sided<0.1": true,
+          "coverage_floor_holds": true,
+          "degenerate_ceilings_lose": true,
+          "oracle_floor_holds": true,
+          "BH-FDR@0.10": true
+        },
+        "ships": true,
+        "notes": []
+      },
+      "iso": {
+        "metric": "iso",
+        "n_scored": 538,
+        "n_cohorts": 10,
+        "n_challenger_only": 0,
+        "n_incumbent_only": 0,
+        "challenger": {
+          "arm": "challenger",
+          "nll": -1.64577,
+          "crps": 0.025996,
+          "mae": 0.036977,
+          "cov68": 0.7305,
+          "cov90": 0.9294
+        },
+        "incumbent": {
+          "arm": "incumbent",
+          "nll": -1.57371,
+          "crps": 0.028157,
+          "mae": 0.04015,
+          "cov68": 0.7063,
+          "cov90": 0.9294
+        },
+        "generic": {
+          "arm": "generic_degenerate",
+          "nll": -1.50458,
+          "crps": 0.030019,
+          "mae": 0.042696,
+          "cov68": 0.7007,
+          "cov90": 0.948
+        },
+        "permuted": {
+          "arm": "permuted_challenger_degenerate",
+          "nll": -1.32027,
+          "crps": 0.035187,
+          "mae": 0.049287,
+          "cov68": 0.5483,
+          "cov90": 0.8048
+        },
+        "oracle_challenger": {
+          "arm": "oracle_challenger",
+          "nll": -1.68017,
+          "crps": 0.024975,
+          "mae": 0.034934,
+          "cov68": 0.7454,
+          "cov90": 0.9498
+        },
+        "oracle_incumbent": {
+          "arm": "oracle_incumbent",
+          "nll": -1.65076,
+          "crps": 0.02565,
+          "mae": 0.035723,
+          "cov68": 0.7379,
+          "cov90": 0.9461
+        },
+        "cohort_nll_delta": [
+          0.031255,
+          -0.002285,
+          0.034829,
+          0.054445,
+          0.080283,
+          0.094336,
+          0.206164,
+          0.098237,
+          0.030239,
+          0.011611
+        ],
+        "fold_win_rate": 0.9,
+        "p_one_sided": 0.004298,
+        "challenger_sigma": 0.046116,
+        "incumbent_sigma": 0.047702,
+        "gate": {
+          "beats_on_nll": true,
+          "beats_on_crps": true,
+          "fold_win_rate>=0.60": true,
+          "p_one_sided<0.1": true,
+          "coverage_floor_holds": true,
+          "degenerate_ceilings_lose": true,
+          "oracle_floor_holds": true,
+          "BH-FDR@0.10": true
+        },
+        "ships": true,
+        "notes": []
+      }
     }
   }
 }

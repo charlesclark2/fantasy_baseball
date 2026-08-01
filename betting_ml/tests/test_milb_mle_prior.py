@@ -197,3 +197,262 @@ def test_ablation_is_purged_by_cohort():
     df = _synth(cohorts=(2016, 2017, 2018), per=30)
     r = mp.ablate_metric(df, "k_pct")
     assert r.n_cohorts == 2   # 2017, 2018 (2016 is the seed)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════
+# E7.5b — the HEAD-TO-HEAD gate (a re-derived prior vs the CURRENTLY-SERVED one)
+# ══════════════════════════════════════════════════════════════════════════════════════
+#
+# These are BEHAVIOURAL guards on the gate itself, not on any particular run's verdict. The gate decides
+# whether a new MLE is allowed onto the LIVE run_diff / pre_lineup betting contract, so what has to be
+# pinned is that it can actually SAY NO — and that each of its anchors FIRES on the input it exists to
+# catch. A gate proven only on a passing case passes on nothing (the NF1.7 (a) lesson).
+
+
+def _perturb(df, metric, *, better, scale=0.5, seed=11):
+    """A challenger frame derived from `df` whose `mle_<metric>` is closer to (better) or further from
+    (worse) the realized MLB label. Everything else is byte-identical, so any score difference is
+    attributable to the metric's emission alone — a matched foil (NF-D10)."""
+    out = df.copy()
+    mcol, tcol = f"mle_{metric}", f"mlb_{metric}"
+    rng = np.random.default_rng(seed)
+    gap = out[tcol] - out[mcol]
+    if better:
+        out[mcol] = out[mcol] + scale * gap
+    else:
+        out[mcol] = out[mcol] - scale * gap + rng.normal(0, 0.01, len(out))
+    return out
+
+
+def test_head_to_head_ships_a_genuinely_better_challenger():
+    inc = _synth(translate=True)
+    ch = _perturb(inc, "k_pct", better=True)
+    r = mp.head_to_head_metric(ch, inc, "k_pct")
+    assert r.beats_on_nll and r.beats_on_crps
+    assert r.fold_win_rate >= mp.H2H_MIN_FOLD_WIN_RATE
+    assert r.ships(fdr_survives=True)
+
+
+def test_head_to_head_refuses_a_worse_challenger():
+    """The whole point: an MLE that improved on some OTHER objective must be able to FAIL here."""
+    inc = _synth(translate=True)
+    ch = _perturb(inc, "k_pct", better=False)
+    r = mp.head_to_head_metric(ch, inc, "k_pct")
+    assert not r.beats_on_nll
+    assert not r.ships(fdr_survives=True)
+
+
+def test_head_to_head_refuses_a_tie_even_when_bh_passes():
+    """A byte-identical challenger is a TIE, not a win — `<` is strict, and a tie must never ship a swap
+    on a live betting contract."""
+    inc = _synth(translate=True)
+    r = mp.head_to_head_metric(inc.copy(), inc, "iso")
+    assert not r.beats_on_nll and not r.ships(fdr_survives=True)
+
+
+def test_bh_fdr_is_binding_not_advisory():
+    """Every other condition can hold and the metric still must not ship if BH-FDR rejects it."""
+    inc = _synth(translate=True)
+    ch = _perturb(inc, "bb_pct", better=True)
+    r = mp.head_to_head_metric(ch, inc, "bb_pct")
+    assert r.ships(fdr_survives=True)
+    assert not r.ships(fdr_survives=False)
+
+
+def test_scores_are_computed_on_the_matched_intersection_only():
+    """A re-fit can ADD players. Scoring each arm on its own rows compares two populations and calls the
+    difference a model effect — so the eval set is the intersection, and the drop is REPORTED."""
+    inc = _synth(translate=True)
+    ch = _perturb(inc, "iso", better=True)
+    extra = ch[ch["player_id"] == "5"].copy()
+    extra["player_id"] = "brand_new_prospect"
+    ch = pd.concat([ch, extra], ignore_index=True)
+    r = mp.head_to_head_metric(ch, inc, "iso")
+    base = mp.head_to_head_metric(_perturb(inc, "iso", better=True), inc, "iso")
+    assert r.n_challenger_only == 1 and r.n_incumbent_only == 0
+    assert r.n_scored == base.n_scored          # the extra player did NOT enter the eval set
+    assert any("intersection" in n for n in r.notes)
+
+
+def test_permutation_degenerate_loses_and_the_anchor_fires_when_there_is_no_content():
+    """The permutation preserves the marginal EXACTLY and destroys only the per-player pairing, so it is
+    the statement 'is there per-player content here at all'. It must lose when there IS content — and the
+    anchor must FIRE (block the ship) when the challenger is pure noise, or it is a decorative check."""
+    inc = _synth(translate=True)
+    r = mp.head_to_head_metric(_perturb(inc, "k_pct", better=True), inc, "k_pct")
+    assert r.permuted.nll > r.challenger.nll and r.degenerates_lose
+
+    noise = inc.copy()
+    rng = np.random.default_rng(4)
+    noise["mle_k_pct"] = rng.permutation(noise["mle_k_pct"].to_numpy())
+    rn = mp.head_to_head_metric(noise, inc, "k_pct")
+    assert not rn.degenerates_lose or not rn.ships(fdr_survives=True)
+
+
+def test_oracle_floor_is_per_form_and_holds_for_both_arms():
+    """NF-D16 (g‴): each arm is floored by the peeking version of ITS OWN form. A shared ceiling would
+    veto a legitimately-better arm as a false metric inversion. Neither arm may beat its own oracle."""
+    inc = _synth(translate=True)
+    for better in (True, False):
+        r = mp.head_to_head_metric(_perturb(inc, "iso", better=better), inc, "iso")
+        assert r.challenger.nll >= r.oracle_challenger.nll - 1e-9
+        assert r.incumbent.nll >= r.oracle_incumbent.nll - 1e-9
+        assert r.oracle_floor_holds
+
+
+def test_coverage_is_a_floor_not_a_target():
+    """E2.1-r / NF1.8: the guard must reject an UNDER-covering challenger and stay silent on an
+    OVER-covering one. A two-sided band here would make coverage a target — the inversion this repo has
+    already paid for twice."""
+    base = mp.head_to_head_metric(_synth(translate=True), _synth(translate=True), "k_pct")
+    under = replace_cov(base, 0.40, 0.60)
+    over = replace_cov(base, 0.95, 0.99)
+    assert not under.coverage_floor_holds
+    assert over.coverage_floor_holds
+
+
+def replace_cov(r, cov68, cov90):
+    import copy
+    out = copy.deepcopy(r)
+    out.challenger = mp.ArmScores(out.challenger.name, out.challenger.nll, out.challenger.crps,
+                                  out.challenger.mae, cov68, cov90)
+    return out
+
+
+def test_head_to_head_is_purged_by_cohort_and_self_calibrates_each_arm():
+    inc = _synth(cohorts=(2016, 2017, 2018), per=30, translate=True)
+    ch = _perturb(inc, "k_pct", better=True)
+    r = mp.head_to_head_metric(ch, inc, "k_pct")
+    assert r.n_cohorts == 2                      # 2016 is the seed — never scored
+    assert len(r.cohort_nll_delta) == 2
+    # each arm carries its OWN self-calibrated sd (the challenger is sharper, so its σ is smaller)
+    assert r.challenger_sigma < r.incumbent_sigma
+
+
+def test_bh_fdr_never_passes_an_unevaluable_test():
+    survive = mp.bh_fdr({"a": 0.001, "b": None, "c": float("nan")})
+    assert survive["a"] and not survive["b"] and not survive["c"]
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════
+# E7.5b — the per-metric HOLD-BACK merge (what lands on the serving key)
+# ══════════════════════════════════════════════════════════════════════════════════════
+#
+# "A metric that does not clear keeps the served incumbent VERBATIM" is the entire safety argument for
+# shipping SOME metrics off a new MLE while withholding others. Verbatim is therefore asserted here, not
+# trusted to a join.
+
+from pathlib import Path  # noqa: E402
+
+from betting_ml.scripts.milb_mle import run_mle_prior_recalibration as runner  # noqa: E402
+
+
+def _prior_table(ids, *, k=0.22, bb=0.08, iso=0.15, kappa=100.0, sd=0.047, level="Triple-A"):
+    return pd.DataFrame({
+        "batter_id": [str(i) for i in ids], "mle_level": level, "is_prospect": False,
+        "mle_k_pct": k, "k_pct_prior_kappa": kappa,
+        "mle_bb_pct": bb, "bb_pct_prior_kappa": kappa,
+        "mle_iso": iso, "iso_prior_sd": sd,
+    })
+
+
+def test_holdback_keeps_the_served_columns_byte_identical():
+    served = _prior_table(range(5), k=0.20, bb=0.07, iso=0.14, kappa=80.0, sd=0.049)
+    challenger = _prior_table(range(6), k=0.30, bb=0.09, iso=0.19, kappa=150.0, sd=0.041)
+    for m in ("k_pct", "bb_pct", "iso"):
+        challenger[f"{m}_source"] = "milb_mle_v2"
+
+    out, stats = runner.apply_holdbacks(challenger, served, holdback=["k_pct"])
+    j = served.merge(out, on="batter_id", suffixes=("_srv", "_new"))
+    # held back → byte-identical to what is serving
+    assert (j["mle_k_pct_srv"] == j["mle_k_pct_new"]).all()
+    assert (j["k_pct_prior_kappa_srv"] == j["k_pct_prior_kappa_new"]).all()
+    # shipped → the challenger's values, unchanged by the merge
+    assert (j["mle_iso_new"] == 0.19).all() and (j["mle_bb_pct_new"] == 0.09).all()
+    # provenance says which arm each metric came from
+    assert set(out["k_pct_source"]) == {"milb_mle_v1_served"}
+    assert set(out["iso_source"]) == {"milb_mle_v2"}
+    assert stats["holdback_verbatim_verified"] is True
+    # the new batter has no served k_pct → NULL → the served build falls back to the generic prior for
+    # that metric only (he has no prior at all today, so this can only add coverage)
+    assert out.loc[out.batter_id == "5", "mle_k_pct"].isna().all()
+    assert out.loc[out.batter_id == "5", "mle_iso"].notna().all()
+
+
+def test_holdback_refuses_when_a_served_batter_would_lose_his_prior():
+    """A re-fit that DROPS a player would silently delete his served rookie prior. Refuse, don't absorb."""
+    served = _prior_table(range(5))
+    challenger = _prior_table(range(4))
+    for m in ("k_pct", "bb_pct", "iso"):
+        challenger[f"{m}_source"] = "milb_mle_v2"
+    with pytest.raises(ValueError, match="absent from the re-derived table"):
+        runner.apply_holdbacks(challenger, served, holdback=["k_pct"])
+
+
+def test_holdback_verbatim_assertion_fires_on_a_corrupted_merge():
+    """The verbatim check must be able to FAIL, or it is decorative (NF1.7 (a)). A NON-UNIQUE served key
+    is the realistic defect: the merge fans out and a batter ends up carrying two different priors."""
+    served = pd.concat([_prior_table(range(5), k=0.20),
+                        _prior_table(["3"], k=0.31)], ignore_index=True)   # batter 3 twice, disagreeing
+    challenger = _prior_table(range(5), k=0.30)
+    for m in ("k_pct", "bb_pct", "iso"):
+        challenger[f"{m}_source"] = "milb_mle_v2"
+    with pytest.raises(ValueError, match="NOT byte-identical"):
+        runner.apply_holdbacks(challenger, served, holdback=["k_pct"])
+
+
+def test_metric_column_map_matches_what_the_dbt_consumer_reads():
+    """`eb_batter_posteriors_raw` selects these six columns by name off the served parquet. A metric
+    whose columns drift out of `_METRIC_COLS` would be silently un-holdbackable."""
+    sql = (Path(__file__).resolve().parents[2]
+           / "dbt/models/eb_posteriors/eb_batter_posteriors_raw.sql").read_text()
+    cte = sql.split("mle_prior as (", 1)[1].split("from milb_mle_prior", 1)[0]
+    for m, cols in runner._METRIC_COLS.items():
+        for c in cols:
+            assert c in cte, f"{m}: served column {c} is not read by the eb_batter_posteriors_raw CTE"
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════
+# E7.5b — the post-land SERVING verifier's state classifier
+# ══════════════════════════════════════════════════════════════════════════════════════
+#
+# The verifier is IO-bound (DuckDB over S3), so what CI can pin is its DECISION LOGIC. It must name the
+# right CAUSE, not just fail: right after --s3 lands a new prior the downstream table is legitimately
+# stale, and calling that "the join is dead" sends an operator hunting a bug that isn't there.
+
+from betting_ml.scripts.milb_mle import verify_mle_prior_serving as verify  # noqa: E402
+
+
+def test_reach_verified_when_every_metric_serves_the_mle_value():
+    state, msgs = verify.classify_reach({"eb_k_pct": 434, "eb_bb_pct": 434, "eb_iso": 434}, 434)
+    assert state == "VERIFIED" and msgs == []
+
+
+def test_reach_calls_a_partial_miss_a_STALE_REBUILD_not_a_dead_join():
+    """All six prior columns arrive through ONE left join, so it cannot match for one metric and miss
+    for another — a metric hitting proves the join is alive. This is the real post-land state."""
+    state, msgs = verify.classify_reach({"eb_k_pct": 434, "eb_bb_pct": 1, "eb_iso": 2}, 434)
+    assert state == "PENDING_REBUILD"
+    assert len(msgs) == 2
+    assert all("join is ALIVE" in m and "STALE" in m for m in msgs)
+    assert not any("dead" in m for m in msgs)
+
+
+def test_reach_calls_a_total_miss_a_DEAD_JOIN():
+    state, msgs = verify.classify_reach({"eb_k_pct": 0, "eb_bb_pct": 0, "eb_iso": 3}, 434)
+    assert state == "DEGRADED"
+    assert len(msgs) == 3 and all("join is dead" in m for m in msgs)
+
+
+def test_reach_never_scores_an_unevaluable_check_as_a_pass():
+    """NF1.7 (a): no cold-start rows means the identity could not be tested — that is not a pass."""
+    state, msgs = verify.classify_reach({"eb_k_pct": 0, "eb_bb_pct": 0, "eb_iso": 0}, 0)
+    assert state == "UNEVALUABLE" and msgs == []
+
+
+def test_reach_states_are_all_actionable_failures_except_verified():
+    """PENDING_REBUILD and DEGRADED both carry messages, so both exit non-zero — they differ in the
+    ACTION they name, never in whether they are silent."""
+    for hits in ({"a": 10, "b": 0}, {"a": 0, "b": 0}):
+        state, msgs = verify.classify_reach(hits, 10)
+        assert state != "VERIFIED" and msgs
