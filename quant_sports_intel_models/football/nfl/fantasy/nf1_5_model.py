@@ -112,14 +112,30 @@ _MIN_FIT_ROWS = M11._MIN_FIT_ROWS
 # NF-D8 revealed-belief cluster — RB-positive in NF1.2) · `base_opp` (the air-yards opportunity
 # axes) · `all_skill` (skill+environment interactions, no contract) · `kitchen_sink` (everything
 # — the GBM interaction-discovery ceiling).
+#
+# ⭐ NF-D10 (2026-07-31) adds the COACHING-REGIME family and, with it, exactly TWO bundles — the
+# pre-registered H-SYSTEM test and its environment-cluster companion — plus `coach` inside
+# `kitchen_sink` (which means "everything" by definition):
+#   `base_system_coach` — the DIRECT test of the story's hypothesis: the team-rate proxy H-SYSTEM
+#                         already had, PLUS the regime change that proxy is definitionally blind
+#                         to. Its foil is `base_xfp` (same set minus system+coach) and, for
+#                         attribution, NF1.2's `system`-only add-one — so a win here is
+#                         attributable to the new data, not to the bundle being bigger.
+#   `env_coach`         — `base_env` + coach: does the regime variable add on top of the whole
+#                         environment cluster, or is it already priced by pass rate/pace/SOS?
+# ⛔ still NOT a powerset — the coach family enters in 3 places, each with a stated hypothesis,
+# and every added config counts toward the same PBO/DSR/FDR deflation as the rest of the sweep.
 BLIND_BUNDLES: dict[str, tuple[str, ...]] = {
     "base": (),
     "base_xfp": ("xfp",),
     "base_env": ("xfp", "sos", "system", "qbcorr", "spill"),
     "base_contract": ("xfp", "contract", "oline"),
     "base_opp": ("xfp", "opp"),
+    "base_system_coach": ("xfp", "system", "coach"),
+    "env_coach": ("xfp", "sos", "system", "qbcorr", "spill", "coach"),
     "all_skill": ("xfp", "opp", "sos", "system", "qbcorr", "spill"),
-    "kitchen_sink": ("xfp", "opp", "sos", "system", "qbcorr", "spill", "contract", "oline"),
+    "kitchen_sink": ("xfp", "opp", "sos", "system", "qbcorr", "spill", "contract", "oline",
+                     "coach"),
 }
 
 

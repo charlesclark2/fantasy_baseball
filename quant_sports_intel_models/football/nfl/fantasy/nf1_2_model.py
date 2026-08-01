@@ -26,8 +26,22 @@ universe. NF1.2 gates against the market-BLIND baseline (MVP-1, the fade-claim b
   H-SYSTEM `system`    — scheme/volume context of the FORWARD team: the projection team's
                          base-season pass rate + pace, and the pass-rate DELTA a mover experiences
                          (destination − origin). Extends NF-D2 slice 3 with the pass-rate
-                         dimension slice 4 didn't capture. (Forward OC changes are unobservable in
-                         our data; the destination team's realized base-season rate is the proxy.)
+                         dimension slice 4 didn't capture. (Forward OC changes were unobservable
+                         when NF1.2 ran; the destination team's realized base-season rate was the
+                         proxy. NF-D10 lifted that limit — see H-COACH below.)
+  H-COACH `coach`      — ⭐ NF-D10 (2026-07-31): the COACHING-REGIME half of H-SYSTEM, i.e. the
+                         part the base-season pass rate is definitionally blind to. A team's
+                         base-season rate is the OLD coordinator's rate; when the OC changes, the
+                         regime a projection should lean on is the NEW one's. Columns:
+                         `new_oc` / `oc_tenure_years` / `new_hc` / `coach_continuity` (the
+                         scheme-continuity candidate: 1 both retained, 0.5 one, 0 neither) and
+                         `oc_prior_pass_rate_delta` — the SCHEME-SHOCK MAGNITUDE, the new OC's last
+                         team's realized pass rate MINUS this team's base-season pass rate (0.0 for
+                         a retained OC by construction; NaN for a first-time/internally-promoted
+                         OC). Source: `coaching_source` (HC from nflverse schedules' per-game
+                         coach columns, OC from Wikipedia team-season staff), leakage-safe as-of
+                         March 15 of the projection season, so a MID-SEASON firing can never reach
+                         its own season's pre-season feature.
   H-CORR `qbcorr`      — QB↔pass-catcher structural coupling: the projection team's best QB
                          projection (`mvp1_fp` max over that team's QBs) as a feature on WR/TE
                          rows — a phenomenal QB lifts his pass-catchers' environment.
@@ -121,6 +135,8 @@ REFINEMENT_FAMILIES: dict[str, tuple[str, ...]] = {
                  "team_skill_cap_concentration"),
     "opp": ("air_yards_share", "wopr"),
     "spill": ("teammate_fp", "vacated_volume"),
+    "coach": ("new_oc", "oc_tenure_years", "new_hc", "coach_continuity",
+              "oc_prior_pass_rate_delta"),
 }
 
 # Which families apply to which position (the pre-registration): a QB is never targeted (no opp,
@@ -134,6 +150,9 @@ FAMILY_POSITIONS: dict[str, tuple[str, ...]] = {
     "contract": ("QB", "RB", "WR", "TE"),
     "opp": ("RB", "WR", "TE"),
     "spill": ("QB", "RB", "WR", "TE"),
+    # a coordinator change redistributes targets, carries, pace and pass rate — every skill spot
+    # is exposed, so H-COACH is registered league-wide rather than hand-narrowed to one position.
+    "coach": ("QB", "RB", "WR", "TE"),
 }
 
 # WR/TE never carry meaningfully → their SOS leg is pass-only (the rush column would be noise).
@@ -355,6 +374,70 @@ def attach_contract(frame: pd.DataFrame, player_contracts: pd.DataFrame,
     return out
 
 
+def attach_coach(frame: pd.DataFrame, coach: pd.DataFrame,
+                 team_rates: pd.DataFrame) -> pd.DataFrame:
+    """H-COACH (NF-D10): the FORWARD team's coaching regime, joined by (projection_season,
+    proj_team) — a mover carries his NEW team's coordinator, not his old one's.
+
+    `coach`: [season, team, new_oc, oc_tenure_years, new_hc, coach_continuity, oc_prev_team,
+              oc_prev_season] from `coaching_source.load_coach_features` (already leakage-safe:
+              built from stints known as of March 15 of the projection season).
+    `team_rates`: [season, team, off_pass_rate, …] — the same realized team-season frame H-SYSTEM
+              uses, needed for the derived scheme-shock column.
+
+    `oc_prior_pass_rate_delta` = (the new OC's LAST team's realized pass rate in his last season
+    there) − (this team's BASE-season pass rate). Both legs are historical realized rates, so the
+    column is leakage-safe. A RETAINED OC gets exactly 0.0 (no shock, by construction — not a
+    missing value); a new OC with no prior coordinator season keeps NaN (an honest unknown, which
+    the learners median-impute and the MVP-1 null ignores).
+
+    ⚠️ COVERAGE FLOOR: `rollup_nfl_team_season.off_pass_rate` exists only from 2020, so for
+    projection seasons ≤2020 this column DEGENERATES to '0.0 iff the OC was retained, NaN
+    otherwise' — the same information `new_oc` already carries, not a measured shock. It becomes a
+    genuinely distinct signal only from projection season 2021 onward. Stated so a family lift
+    that is really a pre-2021 duplicate of `new_oc` is not mistaken for the scheme-shock
+    hypothesis clearing. PURE."""
+    cols = REFINEMENT_FAMILIES["coach"]
+    frame = _ensure_cols(frame, cols)
+    if coach is None or coach.empty or "proj_team" not in frame.columns:
+        return frame
+    out = frame.drop(columns=list(cols))
+    out["_team"] = norm_team_col(out["proj_team"])
+
+    c = coach.copy()
+    c["_team"] = norm_team_col(c["team"])
+    c = c.rename(columns={"season": "projection_season"})
+    keep = ["projection_season", "_team", "new_oc", "oc_tenure_years", "new_hc",
+            "coach_continuity", "oc_prev_team", "oc_prev_season"]
+    keep = [k for k in keep if k in c.columns]
+    out = out.merge(c[keep].drop_duplicates(subset=["projection_season", "_team"]),
+                    on=["projection_season", "_team"], how="left")
+
+    out["oc_prior_pass_rate_delta"] = np.nan
+    if (team_rates is not None and not team_rates.empty
+            and {"oc_prev_team", "oc_prev_season"} <= set(out.columns)):
+        tr = team_rates.copy()
+        tr["_t"] = norm_team_col(tr["team"])
+        rate = {(int(s), t): r for s, t, r in
+                zip(pd.to_numeric(tr["season"], errors="coerce").fillna(-1).astype(int), tr["_t"],
+                    pd.to_numeric(tr["off_pass_rate"], errors="coerce"))}
+
+        def _rate(season, team):
+            if team is None or (isinstance(team, float) and np.isnan(team)):
+                return np.nan
+            s = pd.to_numeric(season, errors="coerce")
+            return rate.get((int(s), norm_team(team)), np.nan) if pd.notna(s) else np.nan
+
+        prior = [_rate(s, t) for s, t in zip(out["oc_prev_season"], out["oc_prev_team"])]
+        base = ([_rate(s, t) for s, t in zip(out["base_season"], out["_team"])]
+                if "base_season" in out.columns else [np.nan] * len(out))
+        new_oc = pd.to_numeric(out["new_oc"], errors="coerce").to_numpy(dtype=float)
+        delta = np.asarray(prior, dtype=float) - np.asarray(base, dtype=float)
+        out["oc_prior_pass_rate_delta"] = np.where(new_oc == 0.0, 0.0, delta)
+    return out.drop(columns=[c for c in ("_team", "oc_prev_team", "oc_prev_season")
+                             if c in out.columns])
+
+
 @dataclass
 class RefinementInputs:
     """The pre-loaded input frames the runner assembles ONCE (assemble-once cost hygiene); the
@@ -367,6 +450,7 @@ class RefinementInputs:
     opp_shares: pd.DataFrame = field(default_factory=pd.DataFrame)      # season, player_id, air_yards_share, wopr
     player_contracts: pd.DataFrame = field(default_factory=pd.DataFrame)  # season, player_id, $-features
     team_caps: pd.DataFrame = field(default_factory=pd.DataFrame)       # season, team_abbr, team-cap aggregates
+    coach: pd.DataFrame = field(default_factory=pd.DataFrame)           # season, team, NF-D10 regime features
 
 
 def add_refinement_features(frame: pd.DataFrame, inputs: RefinementInputs) -> pd.DataFrame:
@@ -382,4 +466,5 @@ def add_refinement_features(frame: pd.DataFrame, inputs: RefinementInputs) -> pd
     out = attach_spillover(out)
     out = attach_opportunity(out, inputs.opp_shares)
     out = attach_contract(out, inputs.player_contracts, inputs.team_caps)
+    out = attach_coach(out, inputs.coach, inputs.team_rates)
     return out

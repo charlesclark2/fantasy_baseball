@@ -56,11 +56,15 @@ _SPEC = lambda: M15.AnchorSpec(learner="pos_ridge", hp={"alpha": 1.0}, feats=("f
 # Bundle registry — bounded, hypothesis-driven, per-position correct, deduped
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 def test_bundles_are_bounded_not_a_powerset():
-    # 7 named hypotheses — nowhere near an open subset search over the family space
-    assert len(M15.BLIND_BUNDLES) == 7
+    # 9 named hypotheses (7 original + NF-D10's `base_system_coach` / `env_coach`) — nowhere near
+    # an open subset search. The exact count is pinned ON PURPOSE: a bundle may only be added with
+    # a stated hypothesis in the registry comment, and the count is what makes silent creep fail.
+    assert len(M15.BLIND_BUNDLES) == 9
     known = set(M12.REFINEMENT_FAMILIES) | {"xfp"}
     for fams in M15.BLIND_BUNDLES.values():
         assert set(fams) <= known
+    # and the search stays orders of magnitude below the powerset over the family space
+    assert len(M15.BLIND_BUNDLES) < 2 ** len(known) / 10
 
 
 def test_base_bundle_is_the_nf1_core_only():

@@ -149,6 +149,26 @@ def load_contracts(proj_seasons: list[int]) -> tuple[pd.DataFrame, pd.DataFrame]
             pd.concat(teams, ignore_index=True) if teams else pd.DataFrame())
 
 
+def load_coach(proj_seasons: list[int]) -> pd.DataFrame:
+    """NF-D10 coaching-regime features per projection season (leakage-safe: built from stints
+    known as of March 15 of that season). The stint table is assembled ONCE across the whole
+    window — tenure and 'who finished last season' both need seasons before the window's floor —
+    and every projection season's row set is derived from that one frame (assemble-once)."""
+    from quant_sports_intel_models.football.nfl.fantasy import coaching_source as CO
+
+    if not proj_seasons:
+        return pd.DataFrame()
+    lo, hi = min(proj_seasons), max(proj_seasons)
+    try:
+        stints = CO.build_coach_stints(list(range(lo - 1, hi + 1)), current_season=hi)
+    except Exception as exc:  # noqa: BLE001 — an unreachable source leaves the family NaN
+        log.warning("coaching source unavailable (%s) — H-COACH stays NaN", str(exc)[:120])
+        return pd.DataFrame()
+    frames = [CO.build_team_coach_features(stints, int(s)) for s in proj_seasons]
+    frames = [f for f in frames if not f.empty]
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
 def load_inputs(con, base_seasons: list[int], schema: str = MARTS_SCHEMA) -> M12.RefinementInputs:
     proj_seasons = sorted({b + 1 for b in base_seasons})
     pc, tc = load_contracts(proj_seasons)
@@ -159,6 +179,7 @@ def load_inputs(con, base_seasons: list[int], schema: str = MARTS_SCHEMA) -> M12
         opp_shares=load_opp_shares(con, base_seasons, schema),
         player_contracts=pc,
         team_caps=tc,
+        coach=load_coach(proj_seasons),
     )
 
 
@@ -177,6 +198,19 @@ def build_extended_frame(con, base_season: int, projection_season: int,
     return M12.add_refinement_features(feats, inputs)
 
 
+def cache_is_current(pool: pd.DataFrame) -> bool:
+    """Does a cached pool carry EVERY currently-registered refinement column?
+
+    🧨 The landmine this closes (found wiring NF-D10): the per-base-season parquet caches are
+    keyed only by season, so adding a family leaves stale caches that silently lack its columns —
+    and a bundle that then asks for them either KeyErrors deep in the matrix prep or, worse, gets
+    a median-imputed all-NaN column and reports a clean null for a family that was never actually
+    present. A cache missing any registered column is rebuilt instead of trusted. PURE."""
+    if pool is None or pool.empty:
+        return False
+    return all(c in pool.columns for c in M12.REFINEMENT_COLS)
+
+
 def build_pool(con, base_seasons: list[int], inputs: M12.RefinementInputs,
                schema: str = MARTS_SCHEMA, use_cache: bool = True) -> pd.DataFrame:
     """The NF1.2 walk-forward pool: extended frame per base season joined to the realized target
@@ -187,8 +221,11 @@ def build_pool(con, base_seasons: list[int], inputs: M12.RefinementInputs,
         y = b + 1
         cache = _FEATURE_CACHE / f"pool_base{b}.parquet"
         if use_cache and cache.exists():
-            frames.append(pd.read_parquet(cache))
-            continue
+            cached = pd.read_parquet(cache)
+            if cache_is_current(cached):
+                frames.append(cached)
+                continue
+            log.info("pool cache base%d predates a registered family — rebuilding", b)
         feats = build_extended_frame(con, b, y, inputs, schema)
         if feats.empty:
             continue
