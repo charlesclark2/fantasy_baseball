@@ -136,6 +136,7 @@ def _assembly_sql(label_window: int, min_mlb_tbf: int, season_floor: int | None)
         -- regular-season MiLB pitching games, STRICTLY BEFORE the MLB debut (prospects: keep all)
         select l.player_id::varchar as player_id, l.player_name, l.level_name as level,
                l.league_name as league, l.age, l.official_date::date as official_date,
+               l.season,
                {", ".join("l." + c for c in _PIT_SUMS)}
         from milb_logs l
         left join mlb_debut d on d.player_id = l.player_id::varchar
@@ -152,6 +153,11 @@ def _assembly_sql(label_window: int, min_mlb_tbf: int, season_floor: int | None)
                mode(league) as league,
                sum(coalesce(age, 0) * coalesce(pit_batters_faced, 0))
                    / nullif(sum(coalesce(pit_batters_faced, 0)), 0) as age,
+               -- E7.12-S2 (survivorship) — see the batter builder for why: a never-promoted player has
+               -- no `debut_cohort`, so without an as-of season there is no leakage-safe in-fold
+               -- promotion model and no way to see right-censoring ("not promoted YET" vs "not promoted").
+               min(season) as first_minor_season,
+               max(season) as last_minor_season,
                {pit_sum_select}
         from milb_pit
         group by player_id, level

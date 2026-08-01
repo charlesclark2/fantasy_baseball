@@ -123,6 +123,7 @@ def _assembly_sql(label_window: int, min_mlb_pa: int, season_floor: int | None) 
         -- regular-season MiLB batter games, STRICTLY BEFORE the MLB debut (prospects: keep all games)
         select l.player_id::varchar as player_id, l.player_name, l.level_name as level,
                l.league_name as league, l.age, l.official_date::date as official_date,
+               l.season,
                {", ".join("l." + c for c in _BAT_SUMS)}
         from milb_logs l
         left join mlb_debut d on d.player_id = l.player_id::varchar
@@ -139,6 +140,13 @@ def _assembly_sql(label_window: int, min_mlb_pa: int, season_floor: int | None) 
                mode(league) as league,
                sum(coalesce(age, 0) * coalesce(bat_plate_appearances, 0))
                    / nullif(sum(coalesce(bat_plate_appearances, 0)), 0) as age,
+               -- E7.12-S2 (survivorship): the as-of window this row's line was accumulated over. A
+               -- player who NEVER debuts has no `debut_cohort`, so without these there is no season to
+               -- fit a leakage-safe in-fold promotion model on, and no way to see RIGHT-CENSORING —
+               -- 37.3% of the never-MLB population was still active in 2023+, i.e. "not promoted YET"
+               -- rather than "not promoted". A 0/1 promotion model blind to that learns follow-up time.
+               min(season) as first_minor_season,
+               max(season) as last_minor_season,
                {bat_sum_select}
         from milb_bat
         group by player_id, level
