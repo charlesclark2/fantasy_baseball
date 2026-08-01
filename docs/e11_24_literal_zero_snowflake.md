@@ -1,6 +1,109 @@
 # E11.24 — LITERAL-ZERO SNOWFLAKE (the August-bill lever)
 
-Status: **stage 1 SHIPPED AND LIVE except lever 1b** (re-verified 2026-07-31). Stages 2–4 scoped below.
+Status: **stage 1 COMPLETE AND VERIFIED — 1b measured live on its first post-flip window
+(2026-08-01)**. Target 6 is code-complete with both levers still OFF, awaiting a quiet-window
+flip. Stages 2–4 scoped below.
+
+## 2026-08-01 — lever 1b VERIFIED (the first lever to move RESUMES), and 6a's pre-flip baseline
+
+Session scope was deliberately narrow: it was **15:11 CDT with a live 15-game slate** and the box
+had just recovered from INC-37 that morning, so the safe READ was done and the **6a flip was NOT
+attempted** (BOX_OPERATIONS §10b: flip outside a live slate; INC-36 made mid-slate deploys the
+risk window). No box access this session either — the laptop IAM user still has no `ssm:*`
+(`ssm:DescribeInstanceInformation` → AccessDenied), so every flip/box command is in the handoff.
+
+### The instrument is now a script, not a paste-buffer of SQL
+
+`scripts/report_e11_24_wake_census.py` (laptop, read-only, runs on `MONITOR_WH`) emits all three
+instruments **cut by UTC band** — resumes, distinct active-minutes, and
+`queued_provisioning_time > 0` waits — plus a per-shape table that carries **executions beside
+waits** so "the lever fired" stays separable from "the caller stopped". Re-run it for the 6a
+verification; it is the same instrument on both sides of the flip.
+
+### ✅ 1b fired. Read it in the 08–13 band, and read FIRES, not executions
+
+| 08–13 band (1b's window) | 7/28 | 7/30 | 7/31 | **8/1** |
+|---|---|---|---|---|
+| **RESUMES** | 22 | 17 | 16 | **11** |
+| provisioning waits | 24 | 21 | 22 | **15** |
+| active minutes | 86 | 59 | 60 | **37** |
+| executions | 2,568 | 2,868 | 1,455 | **877** |
+| **distinct catch-up FIRES** (hours containing `int_bullpen_ali`) | **6** | **5** | **6** | **2** |
+
+⭐ **The discriminating statistic is the FIRE COUNT, not the execution count**, and this is the
+lesson worth carrying. 8/1 was an INC-37 day: total `COMPUTE_WH` executions were ~1,820 against a
+typical 4,000–6,000, so *every* volume metric fell and a volume-based reading would have credited
+1b with an outage's work. The fire count cannot be faked that way — the chain either ran in an
+hour or it did not. Pre-flip the chain ran in **5–6 distinct hours every morning for nine
+consecutive days**; on 8/1 it ran in **two** (hours 10 and 12), with hours **09 and 11 completely
+silent on `COMPUTE_WH`** where each had carried ~190 executions on 7/30 *and* 7/31. That is the
+gate's exact fingerprint — a fire that lands no pitches yields no output, Dagster skips the chain.
+
+⚠️ **Honest limit: this is one day, and the confound is real.** "Savant published later, so the
+sensor stopped re-requesting" produces a similar shape. What argues against it is that the ~190-
+execution hourly blocks were present at hours 8–13 on *every* pre-flip day — i.e. the chain
+re-fired on a fixed hourly cadence regardless of when Savant actually published — and on 8/1 the
+no-op hours *before* the one real chain (hour 10) are the ones that went quiet. **Re-read the
+08–13 band on 8/2 and 8/3 before booking 1b as closed.**
+
+⭐ **1b is the FIRST lever in this story to move RESUMES** (22 → 11 in-band, −50% vs the clean 7/28
+reference), which is exactly the predicted asymmetry: 1b removes a **burst**, the weather lever
+removed an **evenly-spread poller**, and each is legible in a different instrument. Reporting only
+one of the two would have under-credited one of the two levers. ⛔ Wake↓ still does not imply
+credit↓ — the credit line only moves once the warehouse stays suspended for long stretches.
+
+### 6a's pre-flip reference (14–23 band) — and 8/1 is NOT usable as one
+
+| 14–23 band (6a's window) | 7/28 | 7/30 | 7/31 | 8/1 |
+|---|---|---|---|---|
+| resumes | 16 | 15 | 35 | 24 |
+| provisioning waits | 27 | 28 | 49 | 32 |
+| umpire-chain executions / waits | 49 / 11 | 49 / 13 | 71 / 13 | 38 / 5 |
+
+**Use 7/28 and 7/30.** 7/31 carries the prior session's `dbtf test` runs and two `--reset`
+backfills; **8/1's afternoon is INC-37 remediation** (a visible burst at UTC 17–19) *and* the day
+is truncated at the 20:09 UTC read. Post-flip, compare **8/3+ against 7/28 and 7/30**, in-band.
+
+### 🔎 6a's blast radius is smaller than the story assumed — the served umpire block does not move
+
+Worth stating before the flip, because it changes what "no regression" means. `lineup_dbt_feature_-
+rebuild` — the op 6a gates — **copies the Snowflake external table**; it does not regenerate the S3
+parquet. The served umpire block comes from `run_w1_lakehouse --w11b`, which runs **only in the
+nightly W11 op** (`W11B_UMPIRE_NIGHTLY`). Measured on the live 8/1 slate: the raw umpire feed had
+rows landing **16:39 → 20:20 UTC** covering 10 of 15 games, while both the built stg *and* the
+built feature table held **5** — i.e. the served umpire table is a once-nightly artifact today,
+and 6a cannot make it worse. ⇒ the post-flip acceptance test is "no NEW abstain / no NEW
+absent|all-null contract, and the W11 tail no worse than the pre-flip reading", not "umpire
+coverage is complete".
+
+### 🕳️ The blind spot INC-37 named now has an instrument — `scripts/check_w11_tail_coverage.py`
+
+The six-block coverage gate does not measure umpire, weather or public betting, and
+`check_feature_block_coverage.py` excludes the anchor date, so it is a store-HISTORY guard and
+structurally cannot see a collapsed TODAY. The new check reads each block **two-sided** — raw feed
+vs built feature table, against the non-postponed slate — so it discriminates the case that
+matters from the case that must stay silent:
+
+- **BUILD_GAP** (raw has the slate, the built table has 0) = the INC-37 fingerprint → problem.
+- **FEED_PENDING** (neither has it) = a normal morning before the HP assignment posts → silent. A
+  naive "umpire 0/15 ⇒ page" would fire every single day and get muted.
+
+ALERT tier, never exits non-zero without `--strict`. **Live reading, 2026-08-01 (the pre-flip
+reference to compare against after the 6a flip):**
+
+```
+  block             slate    raw  feature   verdict
+  umpire               15     10        5   PARTIAL      ← nightly --w11b lag, pre-existing
+  weather              15     14       14   OK
+  public_betting       15     15       15   OK
+```
+
+Serving itself was healthy at the same moment (`check_intraday_fallback`: morning 15/15 and
+post_lineup 5/5 both 100% `feature_store`), i.e. INC-37's remediation held.
+
+⏭️ Not wired into the daily job as an op this session — that is a pipeline change on a day the box
+was already recovering, and it belongs with the ALERT-tier `send_alert` family (E11.30) rather than
+bolted on mid-incident. Recorded as the obvious follow-up.
 
 ## 2026-07-31 re-census — what is actually live
 
