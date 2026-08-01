@@ -164,6 +164,38 @@ def test_projection_rookie_gets_a_backfilled_team_and_int_draft_slot():
     assert rookie["draftPick"] == 1        # an int, not 1.0
 
 
+def test_projection_records_carry_bio_when_available():
+    """NF3.1 — bio (birth date/height/weight/college/experience/headshot) passed through from
+    `player_bio_map`, keyed the same way `rookie_teams` is. Absent for a player the bio map has
+    nothing for — OPTIONAL keys (like `lowPred`/`adp` before their own fill step), never a
+    null-filled column, so an older cached export without them is unaffected."""
+    recs = ex.projection_records(
+        _projection_frame(),
+        rookie_teams={"R-1": "LV"},
+        bio={
+            "00-1": {
+                "birthDate": "1996-05-21", "heightIn": 77, "weightLb": 237,
+                "college": "Wyoming", "yearsExp": 8, "headshot": "https://example.com/allen.png",
+            },
+        },
+    )
+    allen, rookie = recs
+    assert allen["birthDate"] == "1996-05-21"
+    assert allen["heightIn"] == 77
+    assert allen["weightLb"] == 237
+    assert allen["college"] == "Wyoming"
+    assert allen["yearsExp"] == 8
+    assert allen["headshot"] == "https://example.com/allen.png"
+    assert "birthDate" not in rookie  # not in the bio map -> keys omitted entirely, not null
+
+
+def test_projection_records_omit_bio_keys_when_bio_not_supplied():
+    recs = ex.projection_records(_projection_frame(), rookie_teams={"R-1": "LV"})
+    for rec in recs:
+        assert "birthDate" not in rec
+        assert "headshot" not in rec
+
+
 # ── interval data quality ─────────────────────────────────────────────────────
 
 

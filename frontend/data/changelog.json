@@ -93,6 +93,10 @@
       {
         "tag": "improved",
         "text": "Four refinements to the new NFL fantasy player page. Fantasy points now show what percentile that projection is within his position — is 260 points a lot for a tight end? Now you can tell at a glance, separately from his league board rank. \"Overall Rank\" is now labelled as our model's own rank, not a claim about where the market will actually take him — that's what the ADP column next to it is for. A player with no Tier badge now says why instead of just showing a dash — usually that he's below replacement level in your selected format (a QB with no tier in a 1-QB league can very plausibly tier in superflex, so the format matters). And the page now shows a team logo alongside his name."
+      },
+      {
+        "tag": "new",
+        "text": "The NFL fantasy player page now shows a real headshot photo and basic bio info — age, height, weight, college and years in the NFL. The photo is his official NFL.com picture; a small number of players (mostly very recent additions the league's own data hasn't caught up to yet) show his initials instead rather than a broken image."
       }
     ]
   },

@@ -10,7 +10,7 @@
 // — ADP is a neutral reference, and the 80% range is drawn so the uncertainty is never hidden behind
 // a single number.
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { ChevronLeft } from "lucide-react"
@@ -75,6 +75,25 @@ function percentileRank(value: number | null | undefined, pool: (number | null |
   return Math.round((belowOrEqual / values.length) * 100)
 }
 
+/** Age as of TODAY, computed on the client from `birthDate` — not baked in server-side, so it
+ *  never goes stale between re-exports (a player's age changes daily; the export doesn't). */
+function ageFromBirthDate(birthDate: string | null | undefined): number | null {
+  if (!birthDate) return null
+  const bd = new Date(birthDate)
+  if (isNaN(bd.getTime())) return null
+  const now = new Date()
+  let age = now.getFullYear() - bd.getFullYear()
+  const beforeBirthdayThisYear =
+    now.getMonth() < bd.getMonth() || (now.getMonth() === bd.getMonth() && now.getDate() < bd.getDate())
+  if (beforeBirthdayThisYear) age -= 1
+  return age
+}
+
+/** 77 → `6'5"` */
+function formatHeight(inches: number): string {
+  return `${Math.floor(inches / 12)}'${inches % 12}"`
+}
+
 /** Stack a Tile's optional sub-lines, dropping falsy parts, without rendering an empty wrapper
  *  when nothing survives. */
 function combineSub(...parts: (React.ReactNode | null | undefined | false)[]): React.ReactNode | undefined {
@@ -114,6 +133,13 @@ function Tile({
 export function FantasyPlayerPage() {
   const { playerId } = useParams<{ playerId: string }>()
   const [logoFailed, setLogoFailed] = useState(false)
+  const [photoFailed, setPhotoFailed] = useState(false)
+  // Client-side nav between players (Player Search, board links) reuses this component rather than
+  // remounting it, so an image-load failure recorded for the PREVIOUS player must not carry over.
+  useEffect(() => {
+    setLogoFailed(false)
+    setPhotoFailed(false)
+  }, [playerId])
 
   const { data: projPayload, isLoading: projLoading, error: projError } = useFantasyProjections()
   const { data: manifest } = useFantasyManifest()
@@ -213,6 +239,8 @@ export function FantasyPlayerPage() {
 
   const teamAbbrev = proj?.team ?? null
   const logoUrl = !logoFailed ? nflTeamLogoUrl(teamAbbrev) : null
+  const photoUrl = proj?.headshot && !photoFailed ? proj.headshot : null
+  const age = ageFromBirthDate(proj?.birthDate)
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -238,15 +266,22 @@ export function FantasyPlayerPage() {
           {/* Header */}
           <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
             <div className="flex items-start gap-4">
-              {/* No stable per-player photo id is threaded through the export yet (nflverse's
-                  roster crosswalk carries one — espn_id/sleeper_id — just not into
-                  projections.json), so this is initials + his team's logo, not a guessed photo
-                  URL that would 404 for most players. Swapping in a real headshot later is a
-                  drop-in replacement of this one element. */}
+              {/* An official nfl.com headshot (nflverse's identity table, ~99% coverage among
+                  active players) when the export carries one; initials otherwise — e.g. a very
+                  recent addition the source hasn't caught up to yet, or the image URL 404s. */}
               <div className="relative h-16 w-16 flex-shrink-0">
-                <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border-2 border-[#262626] bg-[#1a1a1a] text-lg font-bold text-gray-500">
-                  {initials(proj.name)}
-                </div>
+                {photoUrl ? (
+                  <img
+                    src={photoUrl}
+                    alt={proj.name}
+                    className="h-16 w-16 rounded-full border-2 border-[#262626] bg-[#1a1a1a] object-cover"
+                    onError={() => setPhotoFailed(true)}
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border-2 border-[#262626] bg-[#1a1a1a] text-lg font-bold text-gray-500">
+                    {initials(proj.name)}
+                  </div>
+                )}
                 {logoUrl && (
                   <img
                     src={logoUrl}
@@ -285,6 +320,26 @@ export function FantasyPlayerPage() {
               {proj.predNote ??
                 "This position's projection is deliberately a base one — read it as a streaming tier, not a precise rank."}
             </div>
+          )}
+
+          {/* Bio — absent entirely for a DST (a team, not a person) or if the source has nothing
+              for this player yet; never rendered as a row of dashes. */}
+          {(age != null || proj.heightIn != null || proj.weightLb != null || proj.college || proj.yearsExp != null) && (
+            <section className="mb-6">
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                Player Info
+              </h2>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                <Tile label="Age" value={age != null ? String(age) : "—"} />
+                <Tile label="Height" value={proj.heightIn != null ? formatHeight(proj.heightIn) : "—"} />
+                <Tile label="Weight" value={proj.weightLb != null ? `${proj.weightLb} lbs` : "—"} />
+                <Tile label="College" value={proj.college ?? "—"} />
+                <Tile
+                  label="NFL Exp."
+                  value={proj.yearsExp != null ? `${proj.yearsExp} yr${proj.yearsExp === 1 ? "" : "s"}` : "—"}
+                />
+              </div>
+            </section>
           )}
 
           {/* League format context */}
