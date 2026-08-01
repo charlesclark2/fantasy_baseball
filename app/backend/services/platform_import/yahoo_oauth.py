@@ -132,11 +132,30 @@ def client_credentials() -> tuple[str, str]:
 
 
 def is_configured() -> bool:
+    """Are OUR Yahoo app credentials readable from SSM? (Provisioning, not permission.)"""
     try:
         client_credentials()
         return True
     except YahooNotConfigured:
         return False
+
+
+def is_enabled() -> bool:
+    """Should Yahoo import be OFFERED to users right now?
+
+    ⚠️ CREDENTIALS PRESENT ≠ FEATURE USABLE, and conflating the two ships a button that fails.
+    Creating the YDN app yields a client id/secret immediately, but Yahoo grants FANTASY DATA access
+    separately, on approval of a reviewed application (1–2 weeks). In between, the OAuth handshake
+    itself would succeed — the user would clear Yahoo's consent screen — and then every Fantasy
+    endpoint would 401. That is strictly worse than an honest "Coming soon": the user has now
+    granted a permission that buys them nothing, and the failure looks like our bug.
+
+    So provisioning (SSM) and availability (this flag) are deliberately separate. It lets the
+    operator write the parameters and prove the SSM/IAM path works — the part that is OURS and can
+    genuinely be misconfigured — while the surface keeps telling the truth. On approval it is one
+    env var, no redeploy and no code change.
+    """
+    return is_configured() and os.getenv("YAHOO_IMPORT_ENABLED", "").strip() == "1"
 
 
 # ── token encryption ──────────────────────────────────────────────────────────────────────────────
@@ -316,6 +335,7 @@ __all__ = [
     "YahooNotConfigured",
     "authorize_url",
     "client_credentials",
+    "is_enabled",
     "decrypt_token",
     "encrypt_token",
     "exchange_code",

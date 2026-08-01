@@ -114,10 +114,16 @@ def list_platforms(user_id: str = Depends(require_fantasy_beta_access)):
     for platform in PLATFORMS.values():
         entry = dict(platform)
         if platform["auth"] == "oauth":
-            configured = yahoo_oauth.is_configured()
-            entry["configured"] = configured
+            # `configured` is the gate the UI reads: OFFER this platform or say "coming soon".
+            # `credentials_present` is a DIAGNOSTIC — it distinguishes "the operator hasn't written
+            # the SSM parameters" from "the parameters are there but the platform hasn't approved
+            # us yet", which otherwise look identical from outside and would send someone
+            # re-running a provisioning step that already succeeded. Boolean only, no secret.
+            enabled = yahoo_oauth.is_enabled()
+            entry["configured"] = enabled
+            entry["credentials_present"] = yahoo_oauth.is_configured()
             entry["connected"] = bool(
-                configured and dynamo.get_platform_token(user_id, platform["id"])
+                enabled and dynamo.get_platform_token(user_id, platform["id"])
             )
             entry["attribution"] = yahoo.ATTRIBUTION
             entry["attribution_url"] = yahoo.ATTRIBUTION_URL
@@ -163,6 +169,20 @@ def sleeper_preview(payload: PreviewRequest, user_id: str = Depends(require_fant
 # ── Yahoo (official OAuth2, read scope) ──────────────────────────────────────────────────────────
 
 
+def _require_yahoo_enabled() -> None:
+    """Server-side enforcement of the availability gate.
+
+    Hiding the button is not a gate — an entitled caller can POST straight to the API, complete a
+    consent round-trip, and be left holding a Yahoo grant that buys them nothing until approval
+    lands. Every Yahoo route calls this so "coming soon" is true of the API, not just of the UI.
+    """
+    if not yahoo_oauth.is_enabled():
+        raise yahoo_oauth.YahooNotConfigured(
+            "Yahoo import is not available yet — we are waiting on Yahoo to approve our "
+            "application for access to their fantasy data."
+        )
+
+
 def _access_token(user_id: str) -> str:
     """A usable Yahoo access token for this user, refreshing it when it has aged out.
 
@@ -171,6 +191,7 @@ def _access_token(user_id: str) -> str:
     refresh token and revokes the previous one when it does, so the write-back is required for
     correctness, not just for speed.
     """
+    _require_yahoo_enabled()
     record = dynamo.get_platform_token(user_id, yahoo.PLATFORM)
     if not record or not record.get("refresh_token"):
         raise yahoo_oauth.YahooAuthError("Connect your Yahoo account to import a Yahoo league.")
@@ -200,6 +221,7 @@ def _access_token(user_id: str) -> str:
 def yahoo_authorize(user_id: str = Depends(require_fantasy_beta_access)):
     """Where to send the user to grant read access (Yahoo's OWN consent screen)."""
     try:
+        _require_yahoo_enabled()
         return {"authorize_url": yahoo_oauth.authorize_url(user_id)}
     except Exception as e:  # noqa: BLE001
         raise _handle_platform_error(e) from e

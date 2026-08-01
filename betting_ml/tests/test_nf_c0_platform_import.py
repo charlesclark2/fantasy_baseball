@@ -782,6 +782,31 @@ class TestYahooOAuth:
         with pytest.raises(yahoo_oauth.YahooAuthError):
             yahoo_oauth.decrypt_token(blob)
 
+    def test_credentials_present_does_not_mean_the_feature_is_available(self, keyed, monkeypatch):
+        """⚠️ Creating the Yahoo app yields a client id/secret IMMEDIATELY, but fantasy DATA access
+        is granted separately on approval (1–2 weeks). In between, the OAuth handshake would
+        succeed and every Fantasy endpoint would 401 — the user grants a permission that buys them
+        nothing and the failure looks like our bug. So provisioning and availability are separate,
+        and the flag must default CLOSED (an unset env var means not available)."""
+        monkeypatch.delenv("YAHOO_IMPORT_ENABLED", raising=False)
+        assert yahoo_oauth.is_configured() is True  # credentials ARE in SSM
+        assert yahoo_oauth.is_enabled() is False  # …and the feature is still not offered
+
+        monkeypatch.setenv("YAHOO_IMPORT_ENABLED", "1")
+        assert yahoo_oauth.is_enabled() is True
+
+    def test_the_availability_flag_only_opens_on_an_exact_1(self, keyed, monkeypatch):
+        """A flag that opens on any truthy-looking string opens by accident."""
+        for value in ("0", "", "true", "yes", "enabled", " "):
+            monkeypatch.setenv("YAHOO_IMPORT_ENABLED", value)
+            assert yahoo_oauth.is_enabled() is False, value
+
+    def test_the_flag_cannot_open_without_credentials(self, monkeypatch):
+        """Setting the flag must not make an unprovisioned platform look available."""
+        monkeypatch.setattr(yahoo_oauth, "_get_parameter", lambda name: None)
+        monkeypatch.setenv("YAHOO_IMPORT_ENABLED", "1")
+        assert yahoo_oauth.is_enabled() is False
+
     def test_missing_ssm_config_degrades_honestly(self, monkeypatch):
         """Unprovisioned is an EXPECTED state (the operator's Yahoo approval is pending), so it must
         raise a distinct type the router turns into a 503 with an explanation — never a 500."""
@@ -844,6 +869,12 @@ class TestRouteGating:
         assert self.SOURCE.count("Depends(require_fantasy_beta_access)") == len(
             re.findall(r"@router\.(get|post|put|delete)\(", self.SOURCE)
         )
+
+    def test_every_yahoo_route_enforces_the_availability_gate_server_side(self):
+        """Hiding the button is not a gate — an entitled caller can POST straight to the API."""
+        assert "_require_yahoo_enabled()" in self.SOURCE
+        # authorize + the shared token path (which every league/preview route goes through)
+        assert self.SOURCE.count("_require_yahoo_enabled()") >= 3  # def + authorize + _access_token
 
     def test_the_callback_verifies_the_signed_state(self):
         assert "verify_state(state)" in self.SOURCE
