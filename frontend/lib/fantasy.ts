@@ -69,8 +69,8 @@ export interface ProjectedPlayer {
   patAtt?: number | null
   patMade?: number | null
   /** Team-defense line. `paPerG` (points allowed per game) is the number that communicates
-   *  defensive quality; the nine points-allowed TIER buckets are a scoring input, not a display
-   *  column, so they are deliberately not exported to this surface. */
+   *  defensive quality; the nine points-allowed TIER buckets below are a scoring INPUT, never a
+   *  display column. */
   sacks?: number | null
   defInt?: number | null
   fumRec?: number | null
@@ -80,6 +80,21 @@ export interface ProjectedPlayer {
   blocked?: number | null
   paTot?: number | null
   paPerG?: number | null
+  /** NF-C0b — the nine points-allowed TIER buckets, each the EXPECTED NUMBER OF GAMES the defense
+   *  lands in that bucket. A per-game tier table therefore scores a season as
+   *  `Σ_bucket tier_points × expected_games`, i.e. LINEAR in these columns — which is what lets a
+   *  hand-entered D/ST scheme be applied EXACTLY rather than approximated. Never displayed.
+   *  Optional: payloads exported before NF-C0b do not carry them, and a custom tier table then
+   *  reports as captured-not-applied rather than silently scoring zero. */
+  paG0?: number | null
+  paG1_6?: number | null
+  paG7_13?: number | null
+  paG14_17?: number | null
+  paG18_20?: number | null
+  paG21_27?: number | null
+  paG28_34?: number | null
+  paG35_45?: number | null
+  paG46p?: number | null
 }
 
 export interface ProjectionPayload {
@@ -117,4 +132,48 @@ export function getFantasyProjections(
   season: number,
 ): Promise<ProjectionPayload> {
   return apiFetch(`/fantasy/nfl/projections?season=${season}`, {}, token)
+}
+
+// ── NF-C0b: saved league settings ────────────────────────────────────────────────────────────────
+// The manual customization FLOOR. A platform import (NF-C0) is the convenience path and will never
+// reach every league (private leagues, long-tail platforms, a fragile ESPN endpoint), so a user can
+// always type their settings in instead. Both paths write the SAME `fantasy_engine` LeagueConfig,
+// which is why a hand-built league feeds the board / VOR / draft tools identically to an imported one.
+
+import type { LeagueConfig } from "@/lib/league-config"
+
+/** A stored league: the shared config object plus its server-assigned identity + timestamps. */
+export interface SavedLeague extends LeagueConfig {
+  league_id: string
+  user_id?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export function listSavedLeagues(token: string | null): Promise<SavedLeague[]> {
+  return apiFetch(`/fantasy/leagues`, {}, token)
+}
+
+export function createSavedLeague(token: string | null, cfg: LeagueConfig): Promise<SavedLeague> {
+  return apiFetch(`/fantasy/leagues`, { method: "POST", body: JSON.stringify(cfg) }, token)
+}
+
+export function updateSavedLeague(
+  token: string | null,
+  leagueId: string,
+  cfg: LeagueConfig,
+): Promise<SavedLeague> {
+  return apiFetch(
+    `/fantasy/leagues/${encodeURIComponent(leagueId)}`,
+    { method: "PUT", body: JSON.stringify(cfg) },
+    token,
+  )
+}
+
+export function deleteSavedLeague(token: string | null, leagueId: string): Promise<void> {
+  return apiFetch(
+    `/fantasy/leagues/${encodeURIComponent(leagueId)}`,
+    { method: "DELETE" },
+    token,
+  )
 }

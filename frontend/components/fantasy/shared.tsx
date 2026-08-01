@@ -311,15 +311,24 @@ export function FormatSelector({
   size,
   onConfig,
   onSize,
+  savedLeagues,
 }: {
   manifest: Manifest | undefined
   configName: string | null
   size: number | null
   onConfig: (c: string) => void
   onSize: (n: number) => void
+  /** NF-C0b — the user's own hand-entered (or imported) leagues, offered alongside the shipped
+   *  presets. Selecting one switches the surface to that league's exact settings; because a saved
+   *  league carries its OWN team count, the size control is not applicable and is hidden. */
+  savedLeagues?: { league_id: string; name: string; n_teams: number }[]
 }) {
   if (!manifest) return null
+  const isCustom = !!configName?.startsWith("custom:")
   const config: LeagueConfigMeta | undefined = manifest.configs.find((c) => c.name === configName)
+  const league = isCustom
+    ? savedLeagues?.find((l) => `custom:${l.league_id}` === configName)
+    : undefined
   return (
     <div className="flex flex-wrap items-end gap-3">
       <label className="flex flex-col gap-1">
@@ -329,30 +338,52 @@ export function FormatSelector({
           value={configName ?? ""}
           onChange={(e) => onConfig(e.target.value)}
         >
-          {manifest.configs.map((c) => (
-            <option key={c.name} value={c.name}>
-              {c.label}
-            </option>
-          ))}
+          {savedLeagues && savedLeagues.length > 0 && (
+            <optgroup label="Your leagues">
+              {savedLeagues.map((l) => (
+                <option key={l.league_id} value={`custom:${l.league_id}`}>
+                  {l.name} ({l.n_teams}-team)
+                </option>
+              ))}
+            </optgroup>
+          )}
+          <optgroup label="Standard formats">
+            {manifest.configs.map((c) => (
+              <option key={c.name} value={c.name}>
+                {c.label}
+              </option>
+            ))}
+          </optgroup>
         </select>
       </label>
-      <label className="flex flex-col gap-1">
-        <span className="text-[11px] uppercase tracking-wider text-gray-500">League size</span>
-        <select
-          className={selectClass}
-          value={size ?? ""}
-          onChange={(e) => onSize(Number(e.target.value))}
-        >
-          {manifest.sizes.map((n) => (
-            <option key={n} value={n}>
-              {n} teams
-            </option>
-          ))}
-        </select>
-      </label>
-      {config && (
+      {!isCustom && (
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] uppercase tracking-wider text-gray-500">League size</span>
+          <select
+            className={selectClass}
+            value={size ?? ""}
+            onChange={(e) => onSize(Number(e.target.value))}
+          >
+            {manifest.sizes.map((n) => (
+              <option key={n} value={n}>
+                {n} teams
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {config && !isCustom && (
         <p className="max-w-md pb-1.5 text-[11px] leading-relaxed text-gray-500">
           {config.description}
+        </p>
+      )}
+      {isCustom && (
+        <p className="max-w-md pb-1.5 text-[11px] leading-relaxed text-gray-500">
+          Your saved settings for <span className="text-gray-400">{league?.name ?? "this league"}</span>
+          {league ? ` (${league.n_teams} teams)` : ""} — scored from exactly what you entered.{" "}
+          <a href="/fantasy/league-settings" className="text-sky-400 hover:underline">
+            Edit
+          </a>
         </p>
       )}
     </div>

@@ -22,7 +22,13 @@ import {
   type LeagueConfigMeta,
   type RosterSlotDef,
 } from "@/lib/draft-optimizer"
-import { FANTASY_SEASON, useFantasyBoard, useFantasyManifest } from "@/lib/fantasy-queries"
+import {
+  FANTASY_SEASON,
+  isCustomSelection,
+  useFantasyManifest,
+  useResolvedBoard,
+  useSavedLeagues,
+} from "@/lib/fantasy-queries"
 
 const SEASON = FANTASY_SEASON
 const POS_COLORS: Record<string, string> = {
@@ -61,7 +67,6 @@ const storageKey = (s: { configName: string; size: number; mySlot: number }) =>
 // 403) rather than the old public JSON, so the paid gate can't be bypassed at the asset URL.
 // The hooks themselves are shared with the NF3 browse surfaces (lib/fantasy-queries).
 const useManifest = useFantasyManifest
-const useBoard = useFantasyBoard
 
 // ── roster assignment for the "My Team" panel ───────────────────────────────────────────────────
 interface FilledSlot {
@@ -131,8 +136,39 @@ export function DraftOptimizer() {
     }
   }, [manifest, configName])
 
-  const config: LeagueConfigMeta | undefined = manifest?.configs.find((c) => c.name === configName)
-  const { data: board, isLoading: boardLoading } = useBoard(started ? configName : null, started ? size : null)
+  // ── NF-C0b: a hand-entered league drafts exactly like a preset ────────────────────────────────
+  // `useResolvedBoard` returns the same Player[] from either source, and the saved league's own
+  // roster is presented as a `LeagueConfigMeta`, so every downstream calculation in this component
+  // (roster needs, slots-per-team, the recommendation engine) is untouched by the distinction.
+  const { data: savedLeagues } = useSavedLeagues()
+  const selectedLeague = isCustomSelection(configName)
+    ? savedLeagues?.find((l) => `custom:${l.league_id}` === configName)
+    : undefined
+
+  const config: LeagueConfigMeta | undefined = selectedLeague
+    ? {
+        name: configName,
+        label: selectedLeague.name,
+        ppr: selectedLeague.ppr,
+        superflex: selectedLeague.superflex,
+        description: `Your saved settings — ${selectedLeague.n_teams}-team.`,
+        roster: selectedLeague.roster,
+      }
+    : manifest?.configs.find((c) => c.name === configName)
+
+  // A saved league carries its OWN team count; keep the draft's size in step with it so the snake
+  // order and the pick budget match the league the user actually entered.
+  useEffect(() => {
+    if (selectedLeague && size !== selectedLeague.n_teams) {
+      setSize(selectedLeague.n_teams)
+      setMySlot((s) => Math.min(s, selectedLeague.n_teams))
+    }
+  }, [selectedLeague, size])
+
+  const { board, isLoading: boardLoading } = useResolvedBoard(
+    started ? configName : null,
+    started ? size : null,
+  )
 
   // restore an in-progress draft for this exact (config, size, slot)
   useEffect(() => {
@@ -282,22 +318,48 @@ export function DraftOptimizer() {
                   onChange={(e) => setConfigName(e.target.value)}
                   className="w-full rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-sm text-white"
                 >
-                  {manifest.configs.map((c) => (
-                    <option key={c.name} value={c.name}>
-                      {c.label}
-                    </option>
-                  ))}
+                  {savedLeagues && savedLeagues.length > 0 && (
+                    <optgroup label="Your leagues">
+                      {savedLeagues.map((l) => (
+                        <option key={l.league_id} value={`custom:${l.league_id}`}>
+                          {l.name} ({l.n_teams}-team)
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="Standard formats">
+                    {manifest.configs.map((c) => (
+                      <option key={c.name} value={c.name}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
-                <p className="mt-1 text-xs text-gray-500">{config.description}</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  {config.description}
+                  {!selectedLeague && (
+                    <>
+                      {" "}
+                      Not your league?{" "}
+                      <a href="/fantasy/league-settings" className="text-sky-400 hover:underline">
+                        Enter its settings
+                      </a>
+                      .
+                    </>
+                  )}
+                </p>
               </Field>
               <div className="grid grid-cols-2 gap-4">
                 <Field label="League size">
                   <select
                     value={size}
                     onChange={(e) => setSize(Number(e.target.value))}
-                    className="w-full rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-sm text-white"
+                    disabled={!!selectedLeague}
+                    className="w-full rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-sm text-white disabled:opacity-60"
                   >
-                    {manifest.sizes.map((s) => (
+                    {/* a saved league fixes its own size, so show that value even if the shipped
+                        board sizes do not include it */}
+                    {(selectedLeague ? [selectedLeague.n_teams] : manifest.sizes).map((s) => (
                       <option key={s} value={s}>
                         {s} teams
                       </option>

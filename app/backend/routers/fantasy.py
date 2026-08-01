@@ -26,6 +26,8 @@ from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.backend.dependencies import require_fantasy_access
+from app.backend.models.fantasy import League, LeagueSave
+from app.backend.services import dynamo
 
 logger = logging.getLogger(__name__)
 
@@ -106,3 +108,75 @@ def nfl_board(
     if data is None:
         raise HTTPException(status_code=404, detail="Fantasy board not found")
     return data
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# NF-C0b — saved league settings (the manual customization FLOOR)
+# ══════════════════════════════════════════════════════════════════════════════
+# Platform import (NF-C0) is the convenience path and it will never cover every
+# league: unofficial/fragile ESPN endpoints, long-tail platforms, private leagues,
+# partial imports. These endpoints are the GUARANTEE underneath it — a user can
+# always hand-enter their settings and get the same product.
+#
+# Both paths produce the IDENTICAL object: the `fantasy_engine` LeagueConfig, stored
+# as its `to_dict()` JSON. An imported league and a typed-in league are therefore
+# indistinguishable to every consumer, and a config is portable between them.
+#
+# Entitlement: every route inherits the router-level `require_fantasy_access`.
+
+
+def _league_response(record: dict) -> dict:
+    """Serialize ONE stored league through the response model.
+
+    Row-by-row on purpose (E9.49): a single malformed stored league must cost only
+    itself, never blank the whole collection the way a list comprehension would.
+    """
+    return League(**record).model_dump()
+
+
+@router.get("/leagues")
+def list_leagues(user_id: str = Depends(require_fantasy_access)):
+    """Every league this user has saved."""
+    out = []
+    for record in dynamo.list_fantasy_leagues(user_id):
+        try:
+            out.append(_league_response(record))
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "skipping unserializable stored league %s for user", record.get("league_id")
+            )
+    return out
+
+
+@router.post("/leagues", status_code=201)
+def create_league(payload: LeagueSave, user_id: str = Depends(require_fantasy_access)):
+    """Save a new league config (the editor's 'start from a preset, then edit' output)."""
+    try:
+        record = dynamo.put_fantasy_league(user_id, None, payload.model_dump())
+    except ValueError as e:
+        if str(e) == "too_many_leagues":
+            raise HTTPException(
+                status_code=409,
+                detail=f"You can save at most {dynamo.MAX_LEAGUES_PER_USER} leagues",
+            ) from e
+        raise HTTPException(status_code=400, detail="Could not save league") from e
+    return _league_response(record)
+
+
+@router.put("/leagues/{league_id}")
+def update_league(
+    league_id: str, payload: LeagueSave, user_id: str = Depends(require_fantasy_access)
+):
+    if dynamo.get_fantasy_league(user_id, league_id) is None:
+        raise HTTPException(status_code=404, detail="League not found")
+    record = dynamo.put_fantasy_league(user_id, league_id, payload.model_dump())
+    return _league_response(record)
+
+
+@router.delete("/leagues/{league_id}", status_code=204)
+def delete_league(league_id: str, user_id: str = Depends(require_fantasy_access)):
+    try:
+        dynamo.delete_fantasy_league(user_id, league_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail="League not found") from e
+    return None

@@ -14,7 +14,12 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { Download, Search } from "lucide-react"
-import { useFantasyBoard, useFantasyManifest, useFormatSelection } from "@/lib/fantasy-queries"
+import {
+  useFantasyManifest,
+  useFormatSelection,
+  useResolvedBoard,
+  useSavedLeagues,
+} from "@/lib/fantasy-queries"
 import { assignTiers, type Player } from "@/lib/draft-optimizer"
 import {
   ADP_DELTA_LABEL,
@@ -48,8 +53,10 @@ const rankOf = (p: Player, pos: string) => (pos === "Overall" ? p.ovrRank : p.po
 
 export function RankingsBoard() {
   const { data: manifest, isLoading: manifestLoading, error: manifestError } = useFantasyManifest()
-  const { configName, size, setConfigName, setSize } = useFormatSelection(manifest)
-  const { data: board, isLoading: boardLoading } = useFantasyBoard(configName, size)
+  // NF-C0b: a saved hand-entered league ranks through the identical Player[] interface.
+  const { data: savedLeagues } = useSavedLeagues()
+  const { configName, size, setConfigName, setSize } = useFormatSelection(manifest, savedLeagues)
+  const { board, isLoading: boardLoading } = useResolvedBoard(configName, size)
   const [pos, setPos] = useState("Overall")
   const [q, setQ] = useState("")
   const [page, setPage] = useState(0)
@@ -197,6 +204,7 @@ export function RankingsBoard() {
               size={size}
               onConfig={setConfigName}
               onSize={setSize}
+              savedLeagues={savedLeagues}
             />
           </div>
 

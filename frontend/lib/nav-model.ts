@@ -74,6 +74,8 @@ export const SPORTS: SportNav[] = [
               { label: "Rankings", href: "/fantasy/rankings", key: "fantasy-rankings" },
               { label: "League Board", href: "/fantasy/league-board", key: "fantasy-league-board" },
               { label: "Draft Optimizer", href: "/fantasy/draft", key: "fantasy-draft" },
+              // NF-C0b — the manual customization floor: hand-enter a league we cannot import.
+              { label: "League Settings", href: "/fantasy/league-settings", key: "fantasy-league-settings" },
             ],
           },
         ],

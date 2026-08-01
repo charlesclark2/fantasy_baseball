@@ -150,6 +150,16 @@ class LeagueConfig:
     superflex: bool = False
     description: str = ""
     format_version: str = CONFIG_FORMAT_VERSION
+    # ── NF-C0b: league rules CAPTURED FOR FIDELITY THAT THE ENGINE DELIBERATELY DOES NOT APPLY ────
+    # A real league carries rules that are genuinely part of its identity but have NO effect on a
+    # per-player season projection or on value-over-replacement — the motivating case is Sleeper's
+    # "second matchup vs the league median", which changes STANDINGS/SCHEDULE outcomes, not what any
+    # player is projected to score. Storing them here (rather than dropping them on import, or worse
+    # smuggling them into `scoring.per_stat` where they WOULD silently move a number) keeps a
+    # round-tripped config faithful to the league while making it structurally impossible for the
+    # scorer to act on them: NOTHING in `scoring`/`vor`/`draft` reads this field, by design.
+    # The UI's contract is to SHOW these as "captured, not applied to the board".
+    captured_rules: dict[str, object] = field(default_factory=dict)
 
     # ── derived views the engine uses ─────────────────────────────────────────────────────────────
     def starter_slots(self) -> tuple[RosterSlot, ...]:
@@ -196,6 +206,7 @@ class LeagueConfig:
             "description": self.description,
             "scoring": self.scoring.to_dict(),
             "roster": [s.to_dict() for s in self.roster],
+            "captured_rules": dict(self.captured_rules),
         }
 
     @classmethod
@@ -210,6 +221,7 @@ class LeagueConfig:
             superflex=bool(d.get("superflex", False)),
             description=str(d.get("description", "")),
             format_version=str(d.get("format_version", CONFIG_FORMAT_VERSION)),
+            captured_rules=dict(d.get("captured_rules") or {}),
         ).validate()
 
     def with_overrides(self, **kwargs) -> "LeagueConfig":

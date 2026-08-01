@@ -133,6 +133,12 @@ _PROJECTION_KEYS = {
     # simply has no `fgMade`), so the browse table needs no per-position branching.
     "fgAtt", "fgMade", "fg039", "fg4049", "fg50", "fgMiss", "patAtt", "patMade",
     "sacks", "defInt", "fumRec", "defTd", "stTd", "safety", "blocked", "paTot", "paPerG",
+    # NF-C0b — the nine points-allowed TIER buckets (expected GAMES in each bucket). Never
+    # displayed; they are the scoring INPUT that lets a hand-entered D/ST tier table be applied
+    # EXACTLY (the table is linear in these columns) rather than approximated. Dropping one would
+    # silently downgrade a custom D/ST scheme to "captured, not applied".
+    "paG0", "paG1_6", "paG7_13", "paG14_17", "paG18_20", "paG21_27", "paG28_34", "paG35_45",
+    "paG46p",
 }
 
 
