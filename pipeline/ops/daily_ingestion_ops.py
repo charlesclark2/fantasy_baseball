@@ -2086,9 +2086,14 @@ def write_pitcher_k_projections_op(context):
 
 # The ONLY player-prop market the app's Player Props page surfaces (E5.5 K-projection
 # model-vs-book). write_pitcher_k_projections.py reads ONLY
-# mlb/props/market=pitcher_strikeouts/, so the daily forward pull is scoped to that one
-# market — 10 cr/event vs 80 for the full 8-market player-prop set (8× cheaper). Widen
-# this list if/when the page starts surfacing batter props.
+# mlb/props/market=pitcher_strikeouts/, so the daily forward pull stays scoped to that one
+# market even after E5.0 (2026-08-01) widened the LIVE host cron (below) to the full phase-1
+# set (pitcher_strikeouts/outs, batter_total_bases/hits/home_runs, --regions us,eu) — this op
+# staying pitcher_strikeouts-only means enabling PROPS_DAILY_INGEST can only double-pay for
+# pitcher_strikeouts (the pre-existing risk this op's docstring already warns about), never for
+# the 4 markets E5.0 added. Widen this constant only if this op itself is ever promoted off
+# host-cron for the wider set — and if you do, retire the matching host-cron markets in the
+# SAME change (never both for the same market — see the docstring below).
 _PROPS_DAILY_MARKETS = "pitcher_strikeouts"
 
 
@@ -2119,10 +2124,13 @@ def ingest_player_props_op(context):
 
     ⚠️ REDUNDANT with the ALREADY-ACTIVE host cron `services/dagster/aws/capture.crontab`
     (the `0 13 * * *` props line, re-enabled 2026-07-01 — verified firing: the 7/1 slate
-    landed at 13:02 UTC on 7/2). This op is the Dagster-native ALTERNATIVE (observable in
-    the run UI; a step toward retiring host-cron). Enable EXACTLY ONE — running both
-    double-pays credits for the same idempotent pull. Default OFF ⇒ host cron stays the
-    live mechanism.
+    landed at 13:02 UTC on 7/2; E5.0 2026-08-01 widened that same line to the phase-1 market
+    set — pitcher_strikeouts/outs, batter_total_bases/hits/home_runs — plus `--regions us,eu`
+    for Pinnacle). This op is the Dagster-native ALTERNATIVE (observable in the run UI; a step
+    toward retiring host-cron) — scoped to pitcher_strikeouts only, so it overlaps with just
+    that one market of the host cron's now-wider set. Enable EXACTLY ONE PATH PER MARKET —
+    running both for pitcher_strikeouts double-pays credits for the same idempotent pull.
+    Default OFF ⇒ host cron stays the live mechanism for all phase-1 markets.
 
     Writes: s3://baseball-betting-ml-artifacts/mlb/props/market=pitcher_strikeouts/season=<yr>/date=<d>/
     """
