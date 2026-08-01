@@ -55,7 +55,8 @@ SHELL=/bin/bash
 0 * * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml run --rm weather-capture >> /home/ec2-user/capture-cron.log 2>&1
 
 # MLB phase-1 props → S3 mlb/props/market=<market>/ (E5.1b pitcher_strikeouts; widened to the
-# phase-1 set by E5.0, 2026-08-01). TWO crons:
+# phase-1 set by E5.0 2026-08-01; widened again by E5.0b 2026-08-01 to add the 3 Tier-1
+# batter-counting markets). TWO crons:
 #   (1) LIVE (below, hourly game-hours) = the CURRENT-lines feed for TODAY (the Player Props
 #       page + E5.2 pricing dataset), on par with the h2h/totals odds crons.
 #   (2) HISTORICAL archive/gap-fill (this line, once/day) = yesterday-&-earlier canonical
@@ -65,22 +66,27 @@ SHELL=/bin/bash
 # 🚨 E5.0 (2026-08-01) — WIDENED from pitcher_strikeouts-only to the phase-1 market set
 # (pitcher_strikeouts/outs, batter_total_bases/hits/home_runs) now that the Odds-API plan is
 # back to 5M credits/mo (the 7/17 100k/mo squeeze that scoped this to one market no longer
-# applies). RECONCILIATION: this host cron stays the ONE live path for ALL phase-1 markets —
-# `ingest_player_props_op` (pipeline/ops/daily_ingestion_ops.py, PROPS_DAILY_INGEST, default OFF)
-# is the dormant Dagster-native alternative for the SAME markets; it must stay OFF or every run
-# double-pays credits + double-writes the partition (see its docstring). Also RESTORES the
-# `eu` region (Pinnacle) — the daily/live pulls had silently dropped to `us`-only since
-# 2025-06-24 (Pinnacle stopped appearing in S3 that date), so the curated "6 books + Pinnacle"
-# set (write_serving_store._BOOK_DISPLAY) was missing its sharp reference on every date since.
-# batter_runs_scored/rbis/hits_runs_rbis and pitcher_outs' sibling derivative markets are NOT
-# widened here — out of E5.0 phase-1 scope; add them to the `--markets` list on the two cron
-# lines below if a later story needs them (the script's SPORTS_CONFIG already lists them, so
-# it's a one-line change).
-# COST: 5 markets × 2 regions (us,eu) = 100 cr/event (was 10). Live: ~15 games × 100cr ≈ 1.5k
-# cr/run × ~16 runs/day ≈ 24k cr/day (~720k/mo). Daily catch-up (--force-recent 2, 2 days ×
-# same shape) adds ~3k cr/day (~90k/mo). Combined ~810k/mo — well under the 5M/mo budget but
-# a material line item; watch x-requests-last/x-requests-remaining in capture-cron.log (E5.0
-# added x-requests-last logging to backfill_multisport_props_to_s3.py for exactly this).
+# applies). Also RESTORES the `eu` region (Pinnacle) — the daily/live pulls had silently
+# dropped to `us`-only since 2025-06-24 (Pinnacle stopped appearing in S3 that date), so the
+# curated "6 books + Pinnacle" set (write_serving_store._BOOK_DISPLAY) was missing its sharp
+# reference on every date since.
+# 🚨 E5.0b (2026-08-01) — WIDENED again to add batter_runs_scored/batter_rbis/
+# batter_hits_runs_rbis — the SAME shape as the phase-1 set (already historically backfilled
+# to S3 through 2026-07-01, already in the script's SPORTS_CONFIG), flagged as the #1 spend
+# for the E13.14 cross-market RV probe (player props ↔ team totals). This is now the FULL
+# `pitcher_strikeouts,pitcher_outs,batter_total_bases,batter_hits,batter_home_runs,
+# batter_runs_scored,batter_rbis,batter_hits_runs_rbis` set on both lines below.
+# RECONCILIATION (unchanged since E5.0): this host cron stays the ONE live path for ALL of
+# these markets — `ingest_player_props_op` (pipeline/ops/daily_ingestion_ops.py,
+# PROPS_DAILY_INGEST, default OFF) is the dormant Dagster-native alternative, but it stays
+# hard-scoped to pitcher_strikeouts-only (see its docstring) so it can never double-pay for
+# any market this cron widened; it must stay OFF regardless.
+# COST: 8 markets × 2 regions (us,eu) = 160 cr/event (was 100 pre-E5.0b, 10 pre-E5.0). Live:
+# ~15 games × 160cr ≈ 2.4k cr/run × ~16 runs/day ≈ 38k cr/day (~1.15M/mo). Daily catch-up
+# (--force-recent 2, 2 days × same shape) adds ~5k cr/day (~145k/mo). Combined ~1.3M/mo —
+# still comfortably under the 5M/mo budget but watch x-requests-last/x-requests-remaining in
+# capture-cron.log (E5.0 added x-requests-last logging to backfill_multisport_props_to_s3.py
+# for exactly this).
 # Runs via `exec` on the always-up code-server. AWS_DEFAULT_REGION pinned us-east-2 (artifacts
 # bucket is us-east-2; the `run --rm` capture images set us-east-1 → an inherited region breaks
 # the S3 write). ODDS_API_KEY from the container's env_file: .env; S3 auth = the instance IAM role.
@@ -91,17 +97,18 @@ SHELL=/bin/bash
 # overwriting the thin live file; older dates still idempotent-skip so the cost stays ~2 days.
 # Yesterday's archived snapshots are complete by this 13:00 UTC run; today's aren't archived yet
 # so it's a no-op-write on today (never clobbers the live file with an empty pull).
-0 13 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/backfill_multisport_props_to_s3.py --mode backfill --sport baseball_mlb --markets pitcher_strikeouts,pitcher_outs,batter_total_bases,batter_hits,batter_home_runs --regions us,eu --force-recent 2 >> /home/ec2-user/capture-cron.log 2>&1
+0 13 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/backfill_multisport_props_to_s3.py --mode backfill --sport baseball_mlb --markets pitcher_strikeouts,pitcher_outs,batter_total_bases,batter_hits,batter_home_runs,batter_runs_scored,batter_rbis,batter_hits_runs_rbis --regions us,eu --force-recent 2 >> /home/ec2-user/capture-cron.log 2>&1
 
 # (1) LIVE phase-1 props — CURRENT lines for TODAY's slate → overwrites date=<today> each run,
 # so the Player Props page + E5.2 pricing dataset refresh intraday like the other odds
-# offerings (2026-07-02; widened to phase-1 markets 2026-08-01 — E5.0). HOURLY, game-hours
-# 13:00–04:00 UTC (props post ~morning ET through the last first-pitches). Off that window the
-# live events endpoint returns no upcoming games → the run no-ops cheaply. See the cost note
-# above the historical-catchup line — this is the ~720k/mo half of it.
+# offerings (2026-07-02; widened to phase-1 markets 2026-08-01 — E5.0; widened again same day
+# to the 3 batter-counting markets — E5.0b). HOURLY, game-hours 13:00–04:00 UTC (props post
+# ~morning ET through the last first-pitches). Off that window the live events endpoint
+# returns no upcoming games → the run no-ops cheaply. See the cost note above the
+# historical-catchup line — this is the ~1.15M/mo half of it.
 # --mode live uses the LIVE per-event endpoint (no `date` param); the US-baseball-day resolver
 # (America/LA) keeps it off the UTC-tomorrow roll (INC-22). Same container/region/auth as above.
-0 13-23,0-4 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/backfill_multisport_props_to_s3.py --mode live --sport baseball_mlb --markets pitcher_strikeouts,pitcher_outs,batter_total_bases,batter_hits,batter_home_runs --regions us,eu >> /home/ec2-user/capture-cron.log 2>&1
+0 13-23,0-4 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/backfill_multisport_props_to_s3.py --mode live --sport baseball_mlb --markets pitcher_strikeouts,pitcher_outs,batter_total_bases,batter_hits,batter_home_runs,batter_runs_scored,batter_rbis,batter_hits_runs_rbis --regions us,eu >> /home/ec2-user/capture-cron.log 2>&1
 
 # (2) K-PROJECTION RE-RUN — re-score today's starters + re-join the live prop lines so the
 # Player Props page's model-vs-book actually REFRESHES intraday (2026-07-02). The daily job's
