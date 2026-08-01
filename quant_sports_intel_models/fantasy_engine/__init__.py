@@ -38,6 +38,16 @@ from quant_sports_intel_models.fantasy_engine.draft import (  # noqa: F401
     recommend,
 )
 from quant_sports_intel_models.fantasy_engine.scoring import score_players  # noqa: F401
+from quant_sports_intel_models.fantasy_engine.settings import (  # noqa: F401
+    APPLIED,
+    CAPTURED,
+    DERIVED,
+    CoverageReport,
+    DerivedBucket,
+    StatTerm,
+    TermCoverage,
+    resolve_scoring,
+)
 from quant_sports_intel_models.fantasy_engine.vor import (  # noqa: F401
     build_board,
     compute_replacement_levels,

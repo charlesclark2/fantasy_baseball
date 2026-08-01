@@ -24,6 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { NumericInput } from "@/components/ui/numeric-input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -961,10 +962,15 @@ export default function EVTrackerPage() {
             <div className="flex h-9 items-center rounded-md border border-[#262626] bg-[#141414] px-2.5">
               <span className="mr-1.5 text-xs text-gray-500">Bankroll</span>
               <span className="text-sm text-gray-500">$</span>
-              <input
-                type="number" min={0} step={100} value={bankroll}
-                onChange={(e) => setBankroll(Number(e.target.value))}
-                className="w-20 bg-transparent pl-0.5 text-sm text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              {/* NumericInput renders type="text" + inputMode, so the [appearance:textfield] and
+                  ::-webkit-*-spin-button overrides this field used to carry are no longer needed —
+                  there are no spinners to hide. */}
+              <NumericInput
+                value={bankroll}
+                min={0}
+                ariaLabel="Bankroll"
+                onCommit={setBankroll}
+                className="w-20 bg-transparent pl-0.5 text-base sm:text-sm text-white outline-none"
               />
             </div>
 
@@ -980,10 +986,15 @@ export default function EVTrackerPage() {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-              <input
-                type="number" min={1} max={25} step={1} value={maxKelly}
-                onChange={(e) => setMaxKelly(Math.max(1, Math.min(25, Number(e.target.value))))}
-                className="w-8 bg-transparent text-sm text-white outline-none text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              <NumericInput
+                value={maxKelly}
+                min={1}
+                max={25}
+                ariaLabel="Kelly cap (percent of bankroll)"
+                onCommit={setMaxKelly}
+                // w-10 on mobile: the field is 16px there (iOS zoom guard), so a two-digit cap
+                // needs more room than the 32px the 14px desktop size fitted in.
+                className="w-10 sm:w-8 bg-transparent text-base sm:text-sm text-white outline-none text-center"
               />
               <span className="text-sm text-gray-500">%</span>
             </div>

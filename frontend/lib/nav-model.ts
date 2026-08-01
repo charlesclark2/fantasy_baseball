@@ -13,6 +13,11 @@ export interface NavItem {
   label: string
   href: string
   key: string
+  /** An extra entitlement this ITEM needs, beyond its surface's. Today the only value is
+   *  `"fantasy_beta"` (NF-C0b's league-settings editor: `admin` + `fantasy_comp` only, so a
+   *  paying subscriber does not see it yet). Items with no `restrict` follow the surface gate.
+   *  Nav visibility is cosmetic — the API enforces the same rule server-side. */
+  restrict?: "fantasy_beta"
 }
 
 export interface SurfaceGroup {
@@ -70,10 +75,21 @@ export const SPORTS: SportNav[] = [
           {
             label: null,
             items: [
-              { label: "Projections", href: "/fantasy/projections", key: "fantasy-projections" },
+              // ⭐ Order is PRODUCT order, not build order. Rankings leads because it is the actual
+              // product — the projection re-scored for YOUR league's format and roster. Projections
+              // is the format-independent raw line underneath it: useful, but a supporting view.
               { label: "Rankings", href: "/fantasy/rankings", key: "fantasy-rankings" },
               { label: "League Board", href: "/fantasy/league-board", key: "fantasy-league-board" },
+              { label: "Projections", href: "/fantasy/projections", key: "fantasy-projections" },
               { label: "Draft Optimizer", href: "/fantasy/draft", key: "fantasy-draft" },
+              // NF-C0b — the manual customization floor: hand-enter a league we cannot import.
+              // Restricted to admin + fantasy_comp while the editor is still proving out.
+              {
+                label: "My League Settings",
+                href: "/fantasy/league-settings",
+                key: "fantasy-league-settings",
+                restrict: "fantasy_beta",
+              },
             ],
           },
         ],

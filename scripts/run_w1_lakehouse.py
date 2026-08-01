@@ -625,7 +625,30 @@ def _build_marts(conn, models: list[str], dry_run: bool) -> None:
             # build being one silent black box. The elapsed time also surfaces the slow mart.
             print(f"  ▶ building {model} …", flush=True)
             _t0 = time.monotonic()
-            conn.execute(f"COPY (\n{body}\n) TO '{loc}' (FORMAT PARQUET)")
+            try:
+                conn.execute(f"COPY (\n{body}\n) TO '{loc}' (FORMAT PARQUET)")
+            except UnicodeDecodeError as e:
+                # INC-37 (2026-08-01) — A DuckDB ERROR WHOSE MESSAGE IS NOT VALID UTF-8
+                # DESTROYS ITS OWN DIAGNOSTIC. The Python client decodes the C++ exception
+                # string; if that string carries raw bytes, `execute` raises UnicodeDecodeError
+                # and the REAL error never surfaces. Observed building mart_derivative_closes:
+                # `'utf-8' codec can't decode byte 0xda in position 3` — no model name, no
+                # DuckDB message, nothing actionable, in the middle of a P1 remediation.
+                # Salvage the message lossily and name the model, so the next occurrence is a
+                # one-line answer instead of an investigation.
+                raw = getattr(e, "object", b"")
+                salvaged = (raw.decode("utf-8", errors="replace") if isinstance(raw, (bytes, bytearray))
+                            else "<no bytes on the exception>")
+                raise RuntimeError(
+                    f"{model}: DuckDB raised an error whose message is not valid UTF-8 "
+                    f"(INC-37 class — the original diagnostic was destroyed by the decode). "
+                    f"Salvaged with errors='replace': {salvaged!r}. "
+                    f"Destination was {loc}."
+                ) from e
+            except Exception as e:  # noqa: BLE001 — re-raise with the model name attached
+                # A bare DuckDB error names neither the model nor the destination; in a
+                # multi-mart loop that costs a grep to locate. Preserve the original via `from`.
+                raise RuntimeError(f"{model}: build failed writing to {loc} — {e}") from e
             print(f"  ✔ {model}: written → {loc}  ({time.monotonic() - _t0:.1f}s)", flush=True)
 
 

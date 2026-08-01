@@ -426,7 +426,9 @@ def _season_kickoffs(ctx: Ctx, year: int, *, weeks=None) -> list[datetime]:
     return sorted(kicks)
 
 
-def _odds_historical_for_kickoffs(ctx: Ctx, kicks: list[datetime]) -> list[dict]:
+def _odds_historical_for_kickoffs(
+    ctx: Ctx, kicks: list[datetime], *, buffer_min: int | None = None
+) -> list[dict]:
     """The per-kickoff `/historical` snapshot loop, factored out of `_odds_ncaaf_historical` so a
     caller that already knows EXACTLY which kickoffs it wants (P0.6b's recurring catch-up —
     `odds_recurring_capture.py`) can fetch them directly, without re-deriving kickoffs via the
@@ -438,10 +440,15 @@ def _odds_historical_for_kickoffs(ctx: Ctx, kicks: list[datetime]) -> list[dict]
     returns the last snapshot ≤ that time = the closing line. Every event carries the API's own
     `commence_time` and we stamp `_snapshot_ts` / `_requested_snapshot`, so a downstream CLV mart
     enforces the hard leakage guard (keep only snapshot_ts < commence_time) belt-and-suspenders.
+
+    `buffer_min` OVERRIDES `ctx.odds_snapshot_buffer_min` for THIS call only (defaults to the ctx
+    value — every existing caller is unaffected). NCAAF-P0.6c uses this to fetch a SECOND,
+    ~24h-pre-kickoff "day-prior" (T-1) snapshot off the SAME `ctx` (so credit accounting keeps
+    accumulating across both calls) without mutating shared ctx state between them.
     """
     if ctx.odds_max_events is not None:
         kicks = kicks[: ctx.odds_max_events]     # cheap verification pull (cap snapshots)
-    buf = timedelta(minutes=ctx.odds_snapshot_buffer_min)
+    buf = timedelta(minutes=buffer_min if buffer_min is not None else ctx.odds_snapshot_buffer_min)
     out: list[dict] = []
     for k in kicks:
         snap = _iso(k - buf)
@@ -466,7 +473,9 @@ def _odds_historical_for_kickoffs(ctx: Ctx, kicks: list[datetime]) -> list[dict]
     return out
 
 
-def _odds_ncaaf_historical(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
+def _odds_ncaaf_historical(
+    ctx: Ctx, year: int, *, weeks=None, buffer_min: int | None = None
+) -> list[dict]:
     """HISTORICAL CLOSING game lines (h2h/spreads/totals) for a season — the leakage-safe CLV
     benchmark (NOT the mis-tagged live `odds_ncaaf` feed). See `_odds_historical_for_kickoffs`
     for the per-kickoff snapshot mechanics; this wrapper derives the kickoff list from CFBD
@@ -478,14 +487,18 @@ def _odds_ncaaf_historical(ctx: Ctx, year: int, *, weeks=None) -> list[dict]:
 
     Paid `/historical`: 10 × 3 markets × #regions credits per kickoff snapshot. NCAAF slates are
     DENSER than the NFL (many staggered college start times), so the per-season kickoff count —
-    hence credit cost — is materially higher; ALWAYS `--dry-run` first."""
+    hence credit cost — is materially higher; ALWAYS `--dry-run` first.
+
+    `buffer_min` (P0.6c) passes through to `_odds_historical_for_kickoffs` to fetch a snapshot
+    instant other than the ctx default — e.g. the ~24h T-1 day-prior snapshot for a `--weeks`
+    forced re-pull that also wants T-1 coverage."""
     if int(year) < NCAAF_HISTORICAL_FLOOR:
         log.warning("ALERT [odds_ncaaf_historical] season %s < historical floor %s — no "
                     "historical closing lines exist (empty slice, no credits spent).",
                     year, NCAAF_HISTORICAL_FLOOR)
         return []
     kicks = _season_kickoffs(ctx, year, weeks=weeks)
-    return _odds_historical_for_kickoffs(ctx, kicks)
+    return _odds_historical_for_kickoffs(ctx, kicks, buffer_min=buffer_min)
 
 
 # ── nflverse fetchers (release Parquet via DuckDB — the feeder universe) ─────────────────

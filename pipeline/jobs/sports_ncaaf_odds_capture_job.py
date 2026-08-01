@@ -17,35 +17,51 @@ logs loud and returns cleanly rather than failing the job.
 ⚠️ DEPLOY PREREQUISITE (operator): the box container needs `ODDS_API_KEY` (the PAID **main**
 key — `/historical` is not available on the starter tier) AND `CFBD_API_KEY` (kickoff times +
 the per-week coverage check) in its env.
+
+🆕 NCAAF-P0.6c — day-prior (T-1) line-movement capture: gated behind `NCAAF_ODDS_CAPTURE_T1`
+(default unset = OFF), a SEPARATE opt-in from this job's own `default_status=STOPPED` schedule
+gate (`sports_odds_capture_schedules.py`) — both must be turned on. Enabling it roughly DOUBLES
+this op's paid Odds-API credit spend (a second `/historical` snapshot per kickoff, ~24h
+pre-kickoff); confirm against the remaining balance first (`odds_recurring_capture.py --dry-run
+--capture-t1`) before setting the flag on the box.
 """
+
+import os
 
 from dagster import Nothing, Out, in_process_executor, job, op
 
 
 @op(out=Out(Nothing))
 def ncaaf_odds_recurring_capture_op(context):
-    """Weekly in-season closing-line catch-up (WARN tier — see module docstring)."""
+    """Weekly in-season closing-line catch-up (WARN tier — see module docstring); optionally
+    also captures the P0.6c T-1 day-prior snapshot when `NCAAF_ODDS_CAPTURE_T1=1`."""
     from quant_sports_intel_models.football.ncaaf.ingest.odds_recurring_capture import (
         run_recurring_capture,
     )
     from quant_sports_intel_models.football.ncaaf.ingest.sources import current_season
 
     season = current_season()
-    context.log.info("NCAAF odds recurring capture: season=%s (clock-derived)", season)
+    capture_t1 = os.environ.get("NCAAF_ODDS_CAPTURE_T1") == "1"
+    context.log.info(
+        "NCAAF odds recurring capture: season=%s (clock-derived) capture_t1=%s",
+        season, capture_t1,
+    )
     try:
-        manifest = run_recurring_capture(season)
+        manifest = run_recurring_capture(season, capture_t1=capture_t1)
     except Exception as exc:  # noqa: BLE001 — ALERT-loud-but-continue (peripheral; merge-safe catch-up next fire)
         context.log.warning(
             "ALERT NCAAF odds recurring capture FAILED for season=%s: %s — will retry on the "
             "next scheduled fire (merge-safe design, no data lost).", season, exc,
         )
         return
-    weeks = manifest.get("weeks_captured") or []
-    if weeks:
+    rows = manifest.get("rows_written") or 0
+    if rows:
         context.log.info(
-            "NCAAF odds recurring capture: captured week(s) %s (%d rows) for season=%s. "
-            "credits used=%s remaining=%s", weeks, manifest.get("rows_written"), season,
-            manifest.get("credits_used"), manifest.get("credits_remaining"),
+            "NCAAF odds recurring capture: captured %s new close kickoff(s)%s (%d rows) for "
+            "season=%s. credits used=%s remaining=%s",
+            manifest.get("new_kickoffs"),
+            f", {manifest.get('new_kickoffs_t1')} new T-1 kickoff(s)" if capture_t1 else "",
+            rows, season, manifest.get("credits_used"), manifest.get("credits_remaining"),
         )
     else:
         context.log.info(

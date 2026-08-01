@@ -262,9 +262,10 @@ _STAT_KEYS = (
 
 # NF1.6 — the K/DST raw components the browse table renders. Kept in the SAME `_STAT_KEYS` idiom so a
 # mixed frame needs no per-position branching: an absent column yields null, and a WR simply has no
-# `fgMade` while a kicker has no `passYds`. The points-allowed BUCKET columns are deliberately NOT
-# exported: nine expected-games figures are a scoring input for NF-C1/NF-C0b, not something a drafter
-# reads — the surface shows `paPerG`, the number that actually communicates defensive quality.
+# `fgMade` while a kicker has no `passYds`. The points-allowed BUCKET columns are not DISPLAY columns
+# — the surface shows `paPerG`, the number that actually communicates defensive quality — but they
+# ARE exported (see `_DST_PA_BUCKET_KEYS`) because they are the scoring input a custom tier table
+# needs; NF-C0b scores a hand-entered league client-side off this payload.
 _KDST_STAT_KEYS = (
     ("proj_fg_att", "fgAtt"), ("proj_fg_made", "fgMade"),
     ("proj_fg_made_0_39", "fg039"), ("proj_fg_made_40_49", "fg4049"),
@@ -274,6 +275,17 @@ _KDST_STAT_KEYS = (
     ("proj_def_fumble_rec", "fumRec"), ("proj_def_td", "defTd"), ("proj_st_td", "stTd"),
     ("proj_def_safety", "safety"), ("proj_def_blocked_kick", "blocked"),
     ("proj_dst_points_allowed", "paTot"), ("proj_dst_pa_per_game", "paPerG"),
+)
+
+# ── NF-C0b: the nine POINTS-ALLOWED TIER columns ─────────────────────────────────────────────────
+# Each is the EXPECTED NUMBER OF GAMES a defence lands in that points-allowed bucket, so a per-game
+# tier table scores a season as `Σ_bucket tier_points × expected_games` — LINEAR in these columns.
+# That linearity is the whole reason a hand-entered tier table needs no new modelling: the client
+# scorer applies the user's own nine weights to these nine numbers and gets the tier table EXACTLY.
+# Not rendered anywhere; they exist purely so a custom D/ST scheme is scorable in the browser.
+_DST_PA_BUCKET_KEYS = tuple(
+    (f"proj_dst_pa_g_{b}", f"paG{b}")
+    for b in ("0", "1_6", "7_13", "14_17", "18_20", "21_27", "28_34", "35_45", "46p")
 )
 
 
@@ -326,7 +338,7 @@ def projection_records(
             "lowPred": pos in LOW_PREDICTABILITY,     # NF1.6 — see LOW_PREDICTABILITY
             "predNote": LOW_PREDICTABILITY_NOTE if pos in LOW_PREDICTABILITY else None,
         }
-        for src, key in (*_STAT_KEYS, *_KDST_STAT_KEYS):
+        for src, key in (*_STAT_KEYS, *_KDST_STAT_KEYS, *_DST_PA_BUCKET_KEYS):
             rec[key] = _fnum(r.get(src))
         recs.append(rec)
     return recs

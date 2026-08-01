@@ -1,22 +1,35 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { LogOut, Settings, Menu, X, ChevronDown, Lock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
-import { canAccess } from "@/lib/entitlements"
-import { SPORTS, surfaceItems, type SurfaceGroup } from "@/lib/nav-model"
+import { canAccess, canAccessFantasyBeta } from "@/lib/entitlements"
+import { SPORTS, surfaceItems, type NavItem, type SurfaceGroup } from "@/lib/nav-model"
 import changelog from "@/data/changelog.json"
 
 const latestWeek = changelog[0]?.week
-const isChangelogRecent = latestWeek
-  ? (Date.now() - new Date(latestWeek + "T00:00:00").getTime()) /
-      (1000 * 60 * 60 * 24) <=
-    7
-  : false
+
+// ⚠️ CLIENT-ONLY BY DESIGN — do NOT hoist this back to module scope.
+// It used to be a module-level constant, which made it a hydration bug on every page in the app:
+// most routes are STATICALLY PRERENDERED, so `Date.now()` on the server is frozen at BUILD time
+// while the browser evaluates it live. Once a build ages past the 7-day boundary the two disagree
+// and the "new" dot renders on one side only. (`new Date("YYYY-MM-DDT00:00:00")` has no timezone
+// designator, so it is parsed in LOCAL time too — a second, independent server/client divergence.)
+// Computing it after mount means the server and the hydration render always agree on "no dot", and
+// the dot appears a tick later if it is genuinely recent.
+function useChangelogRecent(): boolean {
+  const [recent, setRecent] = useState(false)
+  useEffect(() => {
+    if (!latestWeek) return
+    const days = (Date.now() - new Date(latestWeek + "T00:00:00").getTime()) / (1000 * 60 * 60 * 24)
+    setRecent(days <= 7)
+  }, [])
+  return recent
+}
 
 interface NavProps {
   activeLink?: string | null
@@ -41,10 +54,17 @@ export function Nav({
   const showSubNav = authenticated || isSignedIn
 
   const isAdminActive = ADMIN_ITEMS.some((i) => i.key === activeLink)
+  const isChangelogRecent = useChangelogRecent()
 
   // A fantasy surface the caller isn't entitled to → visible but LOCKED (upsell).
   const isLocked = (g: SurfaceGroup) =>
     g.surface === "fantasy" && !canAccess("fantasy", groups)
+
+  // An ITEM can require MORE than its surface (NF-C0b's league-settings editor is
+  // admin + fantasy_comp only). Unlike a locked surface this is HIDDEN, not upsold —
+  // it is a staged rollout, not something a subscriber can buy their way into.
+  const visibleItems = (items: NavItem[]) =>
+    items.filter((i) => i.restrict !== "fantasy_beta" || canAccessFantasyBeta(groups))
 
   const itemClass = (key: string) =>
     `block px-3 py-2 text-sm transition-colors ${
@@ -204,7 +224,7 @@ export function Nav({
                                   {section.label}
                                 </div>
                               )}
-                              {section.items.map((item) => (
+                              {visibleItems(section.items).map((item) => (
                                 <Link key={item.key} href={item.href} className={itemClass(item.key)}>
                                   {item.label}
                                 </Link>
@@ -265,9 +285,14 @@ export function Nav({
         <div className="border-t border-[#262626] bg-[#0a0a0a] px-4 py-3 sm:hidden">
           <div className="flex flex-col gap-0.5">
             {SPORTS.map((sport, sportIdx) => (
-              <div key={sport.sport}>
+              // ⚠️ `flex flex-col` is load-bearing, not decoration. A Next.js <Link> renders an <a>,
+              // which is INLINE by default, and the mobile item class (unlike the desktop one) has
+              // no `block` — so in a plain <div> the items flowed as inline text and wrapped MID-LABEL
+              // ("League Board" broke across two lines). Stacking them here fixes every item at once
+              // rather than relying on each link's own class.
+              <div key={sport.sport} className="flex flex-col">
                 {sportIdx > 0 && <div className="my-2 border-t border-[#262626]" />}
-                <span className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
+                <span className="block px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
                   {sport.label}
                 </span>
                 {sport.surfaces.map((g) => {
@@ -290,12 +315,12 @@ export function Nav({
                     )
                   }
                   return g.sections.flatMap((section) =>
-                    section.items.map((item) => (
+                    visibleItems(section.items).map((item) => (
                       <Link
                         key={item.key}
                         href={item.href}
                         onClick={() => setMobileOpen(false)}
-                        className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+                        className={`block whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
                           activeLink === item.key
                             ? "bg-[#1a1a1a] text-white"
                             : "text-gray-400 hover:bg-[#141414] hover:text-white"

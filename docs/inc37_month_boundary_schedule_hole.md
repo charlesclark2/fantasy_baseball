@@ -147,8 +147,82 @@ and the page itself.
 | `ingest_statsapi_schedule` (moved to `s6`, before the lakehouse chain) | **HALT** (unchanged) | The whole daily feature build now reads the schedule it captures. A failed capture must stop the build rather than let it construct a universe from a stale schedule — which is exactly INC-37. Job failure pages CRITICAL via `run_failure_alert_sensor`. |
 | `_alert_on_stale_spine` (inside `lakehouse_spine_odds_bridge_op`) | **ALERT-loud-but-continue** | Pages CRITICAL on a confirmed stale spine, WARN when the check could not be evaluated. Never raises: a stale spine is a loud page, not a reason to take the slate down, and a monitor must never be the thing that fails the op it watches. The host op keeps its existing W8a-mirror tier. |
 
+## 6b. Remediation record (2026-08-01)
+
+Final state — full slate correct:
+
+| tier | n | data_source | is_degraded |
+|---|---|---|---|
+| morning | 15 | `feature_store` | 0 |
+| post_lineup | 4 | `feature_store` | 0 |
+
+Feature-store mean block coverage went **0.178 → 0.878** (gate 0.70); the discriminative core
+(`elo`, `bp_eb`, `park_run_factor`, `team_sequential`) went from ~2/3 imputed to fully served.
+The 11 later games (22:40 UTC+) were left to the lineup-monitor sensor, which scores them on the
+corrected features as their lineups post.
+
+**Three things went wrong during the remediation itself. All three are process, not code:**
+
+1. **`--lineup-confirmed` on the MORNING tier deleted 11 games' predictions.** The flag was reached
+   for purely to get its delete-then-insert semantics, but it *also* filters the scored set to
+   games with both lineups confirmed ([predict_today.py:2225-2238]) — and with no `--game-pks` the
+   DELETE is an **unscoped full-slate wipe**. Result: 15 morning rows deleted, only the 4
+   lineup-confirmed games re-inserted. The flag is explicitly post_lineup-only ("Gated on
+   --lineup-confirmed so the morning (projected-lineup) run is unaffected"). **RULE: to re-score
+   the morning tier, run `--prediction-type morning --s3` with NO `--lineup-confirmed` — it appends
+   and every consumer dedupes to the latest `inserted_at`. Use `--lineup-confirmed` only with
+   `--game-pks`, which scopes the DELETE.**
+
+2. **🕳️ THE TIER GUARDS ABSTAIN AT n<5 AND REPORT `problem_count=0` — A VACUOUS PASS.** With only 4
+   rows on the slate, `check_intraday_fallback` and `check_served_prediction_integrity` both hit
+   `MIN_GAMES_FOR_CHECK = 5`, skipped assessment, and printed
+   `intraday_fallback_alert_count=0` / `served_integrity_problem_count=0` — which reads as GREEN
+   while 11 games sat unserved. The `*_tiers_assessed=0` metric was the only tell, and **no op
+   pages on it**. This is the same "an anchor that fails to evaluate makes its assertion vacuously
+   true" class as NF1.7 (a) — and it bites hardest during an incident, which is exactly when a
+   slate is small. See follow-up (3) below.
+
+3. **A slow serving write was chained behind `export_w6_raw_to_s3.py` with `&&`.** That script ends
+   by printing `Next: uv run python ...` advice lines that look like the chain returned to a
+   prompt, so the interrupt was ambiguous and the serving step was killed. **RULE: give a serving
+   write as its own command, never chained behind a script that prints trailing next-step hints.**
+
+Also verified and closed during remediation: the `[SERVING-GUARD] 13/15 abstained` line is NOT
+rebuild residue — the morning tier's actionable-edge abstain rate is **1.00 on 7 of the 8 prior
+days** (0.93 on 7/28); 8/1's 0.87 is the lowest in the window. Pre-lineup rows are previews and
+`best_alpha=0` suppresses actionable edges regardless.
+
 ## 7. Follow-ups (not done here)
 
+- **The `mart_derivative_closes` `UnicodeDecodeError` (blocked the remediation) — 3 hypotheses
+  ELIMINATED, 1 remaining. Recorded so the next occurrence does not re-walk them:**
+  - ❌ *Data corruption* — built CLEAN on the laptop against the identical S3 inputs
+    (2,038,349 rows, COPY OK); `stg_derivative_odds` scans fine (6,570,059 rows, no invalid UTF-8
+    in any string column); no truncated objects in `derivative_odds_raw`.
+  - ❌ *Disk / spill exhaustion* — 5.6G free on the overlay, `/tmp/duckdb_lakehouse_spill` empty.
+  - ❌ *DuckDB version drift* — measured: **box 1.5.5, laptop 1.5.3**. Patch-level, and the box is
+    NEWER. This was the leading hypothesis and it is refuted.
+  - ⏳ *Memory pressure in a shared container stack* — the one that survives.
+    `_safe_memory_limit_gb()` computes 0.6 × **host** RAM (~9GB of the 16GB r6g.large) with no
+    account of the co-resident Dagster daemon / webserver / postgres / dbt-runner / Byparr.
+    `mart_derivative_closes` runs the heaviest sort in W6 (`row_number()` over a 6-column
+    partition across 6.5M rows) and this was a SECOND W6 build layered on the box's normal work —
+    which fits "fine every other day, failed the one day we doubled up". Same family as INC-22,
+    one level up: that fix sized the limit to physical RAM but still assumes DuckDB is the only
+    tenant. NOT chased further on the available evidence.
+- **Pin DuckDB — for DIAGNOSABILITY, not because drift caused INC-37.** `duckdb>=1.1.0` is
+  unbounded, so laptop and box drifted to 1.5.3 vs 1.5.5 with nobody choosing either. That did not
+  cause this incident, but it did mean the local reproduction ran on a different engine than prod,
+  which had to be checked before it could be ruled out — mid-P1. Pin to the box's version (align
+  the laptop UP to prod, never prod down to a laptop). Same class as the serving-pickle pin
+  already applied to sklearn/ngboost/lightgbm. Low priority.
+- **Stop `_build_marts` destroying its own error message.** `conn.execute` is unwrapped there, so a
+  DuckDB error whose message isn't valid UTF-8 surfaces as `UnicodeDecodeError` and the real
+  diagnostic is lost. Catch, re-decode with `errors="replace"`, re-raise with the model name.
+- **Make a non-assessed tier guard visible.** Per 6b(2): when `*_tiers_assessed=0` but predictions
+  exist for the served date, the op should page WARN ("could not verify") rather than let
+  `problem_count=0` read as healthy — the same three-valued treatment `spine_horizon.classify`
+  already applies to an absent/unevaluable metric.
 - `schedule_freshness_alert_sensor`'s docstring still claims `ingest_statsapi_schedule` is "step 3,
   typically done by 12:05–12:10". True again after this fix, but the 14:30 UTC window still makes it
   a feed-death backstop only — it cannot protect the 12:00 UTC build.

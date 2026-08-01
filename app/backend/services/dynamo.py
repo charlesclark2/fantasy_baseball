@@ -570,6 +570,113 @@ def upsert_user_portfolio(user_id: str, prefs: dict) -> dict:
     return {"user_id": user_id, **pf}
 
 
+# ── Fantasy league settings (NF-C0b) ─────────────────────────────────────────
+# Per-user hand-entered (or imported) league configs, stored as a `fantasy_leagues`
+# map {league_id: config} on the user item (PK user_id) — the same "ride the existing
+# users table" pattern as portfolio preferences above.
+#
+# ⭐ WHY NO NEW TABLE. A league config is a couple of KB and a user keeps a handful,
+# so the whole map sits far inside the 400 KB item limit; a dedicated table would buy
+# nothing and would cost a provisioning step + an IAM grant. This repo's own landmine
+# list records the failure mode there: `aws_resources.md` has documented a table that
+# was never actually created. Reusing the users table means this ships with ZERO new
+# infrastructure — the existing GetItem/UpdateItem grant already covers it.
+MAX_LEAGUES_PER_USER = 25
+
+
+def list_fantasy_leagues(user_id: str) -> list[dict]:
+    """Every league the user has saved, newest-updated first.
+
+    Non-raising: a read failure returns [] so the fantasy surfaces still render (a user
+    with no leagues and a user whose read failed both just see the preset path).
+
+    ⚠️ Each stored league is converted INDEPENDENTLY and a malformed one is SKIPPED, never
+    raised (E9.49): one un-representable row must never blank the whole collection.
+    """
+    try:
+        resp = _users_table().get_item(Key={"user_id": user_id})
+        raw = resp.get("Item", {}).get("fantasy_leagues") or {}
+    except Exception:
+        logger.warning("dynamo.list_fantasy_leagues failed for user=%s", user_id)
+        return []
+
+    out: list[dict] = []
+    for league_id, cfg in raw.items():
+        try:
+            item = _deep_from_dynamo(cfg)
+            if not isinstance(item, dict):
+                continue
+            item["league_id"] = league_id
+            out.append(item)
+        except Exception:
+            logger.warning(
+                "dynamo.list_fantasy_leagues: skipping malformed league %s for user=%s",
+                league_id, user_id,
+            )
+    out.sort(key=lambda c: str(c.get("updated_at") or ""), reverse=True)
+    return out
+
+
+def get_fantasy_league(user_id: str, league_id: str) -> dict | None:
+    for league in list_fantasy_leagues(user_id):
+        if league.get("league_id") == league_id:
+            return league
+    return None
+
+
+def put_fantasy_league(user_id: str, league_id: str | None, config: dict) -> dict:
+    """Create or overwrite one league. Returns the stored record.
+
+    Writes a SINGLE map entry (`SET #fl.#id = :cfg`) rather than the whole map, so two
+    browser tabs saving different leagues cannot clobber each other. That needs the parent
+    map to exist, so a missing `fantasy_leagues` is created first with an
+    attribute_not_exists guard.
+    """
+    is_new = not league_id
+    league_id = league_id or str(uuid4())
+    now = _now_iso()
+
+    existing = get_fantasy_league(user_id, league_id) if not is_new else None
+    if is_new and len(list_fantasy_leagues(user_id)) >= MAX_LEAGUES_PER_USER:
+        raise ValueError("too_many_leagues")
+
+    record = dict(config)
+    record.pop("league_id", None)
+    record["created_at"] = (existing or {}).get("created_at") or now
+    record["updated_at"] = now
+
+    table = _users_table()
+    try:
+        table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET #fl = :empty",
+            ExpressionAttributeNames={"#fl": "fantasy_leagues"},
+            ExpressionAttributeValues={":empty": {}},
+            ConditionExpression="attribute_not_exists(#fl)",
+        )
+    except Exception:
+        pass  # already present — the normal path
+
+    table.update_item(
+        Key={"user_id": user_id},
+        UpdateExpression="SET #fl.#id = :cfg",
+        ExpressionAttributeNames={"#fl": "fantasy_leagues", "#id": league_id},
+        ExpressionAttributeValues={":cfg": _to_ddb(record)},
+    )
+    return {**record, "league_id": league_id}
+
+
+def delete_fantasy_league(user_id: str, league_id: str) -> None:
+    """Remove one league. Raises ValueError('not_found') when the user does not own it."""
+    if get_fantasy_league(user_id, league_id) is None:
+        raise ValueError("not_found")
+    _users_table().update_item(
+        Key={"user_id": user_id},
+        UpdateExpression="REMOVE #fl.#id",
+        ExpressionAttributeNames={"#fl": "fantasy_leagues", "#id": league_id},
+    )
+
+
 # ── Stripe subscription billing state (E9.8) ─────────────────────────────────
 # Reuses the users table with namespaced synthetic PKs so no new infra is needed.
 # The rows are invisible to the app's per-user reads (they never key on these PKs)

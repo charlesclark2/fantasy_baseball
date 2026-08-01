@@ -141,6 +141,25 @@ def require_fantasy_access(request: Request, user_id: str = Depends(get_user_id)
     raise HTTPException(status_code=403, detail="Fantasy access required")
 
 
+def require_fantasy_beta_access(request: Request, user_id: str = Depends(get_user_id)) -> str:
+    """Gate the manual league-settings editor (NF-C0b) — `admin` + `fantasy_comp` ONLY.
+
+    NARROWER than `require_fantasy_access` on purpose: a paying `subscriber` has the
+    fantasy surface but NOT this editor yet. The settings a user saves here drive the
+    board, VOR and the draft optimizer, so the surface goes to operator + comp accounts
+    first (the staged shape MVP-3 used when the draft tool was admin-only).
+
+    Server-side enforcement matters more than usual here because these are WRITE
+    endpoints: hiding the nav item is not a gate, and an unentitled caller could
+    otherwise POST a league config straight to the API.
+    """
+    from app.backend.services import cognito
+
+    if cognito.has_fantasy_beta_access(_groups_from_request(request)):
+        return user_id
+    raise HTTPException(status_code=403, detail="Fantasy league settings access required")
+
+
 def get_admin_user(request: Request, user_id: str = Depends(get_user_id)) -> str:
     """Like get_user_id, but raises 403 if the caller is not an admin.
 

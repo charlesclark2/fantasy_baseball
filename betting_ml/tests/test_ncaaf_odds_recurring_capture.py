@@ -85,11 +85,11 @@ def test_run_recurring_capture_no_kickoffs_needed_makes_no_paid_calls(monkeypatc
         raise AssertionError("must not fetch odds when no kickoff needs capture")
 
     monkeypatch.setattr(orc, "_odds_historical_for_kickoffs", _boom)
-    monkeypatch.setattr(orc, "_odds_ncaaf_historical", _boom)
     ctx = src.Ctx(cfbd=object())
     manifest = orc.run_recurring_capture(2025, ctx=ctx)
     assert manifest == {
-        "season": 2025, "new_kickoffs": 0, "rows_written": 0,
+        "season": 2025, "new_kickoffs": 0, "new_kickoffs_t1": None,
+        "forced_weeks": None, "rows_written": 0,
         "credits_used": None, "credits_remaining": None,
     }
 
@@ -121,7 +121,7 @@ def test_run_recurring_capture_fetches_and_merges_only_target_kickoffs(monkeypat
     monkeypatch.setattr(orc, "_new_kickoffs_to_capture", lambda *a, **kw: [kickoff])
     fetch_calls = []
 
-    def fake_fetch(ctx, kicks):
+    def fake_fetch(ctx, kicks, **kw):
         fetch_calls.append(kicks)
         return [{"id": "e1", "commence_time": src._iso(kickoff),
                  "_requested_snapshot": src._iso(kickoff - timedelta(minutes=5))}]
@@ -132,30 +132,241 @@ def test_run_recurring_capture_fetches_and_merges_only_target_kickoffs(monkeypat
     manifest = orc.run_recurring_capture(2025, ctx=ctx, now=now)
     assert fetch_calls == [[kickoff]]
     assert manifest["new_kickoffs"] == 1
+    assert manifest["new_kickoffs_t1"] is None  # capture_t1 defaults False — unaffected (P0.6c)
     assert manifest["rows_written"] == 1
 
 
-def test_run_recurring_capture_forced_weeks_bypasses_the_diff(monkeypatch):
+def test_run_recurring_capture_weeks_bypasses_the_auto_detect_diff(monkeypatch):
+    """--weeks sources its candidate kickoffs from the EXPLICIT week list (_season_kickoffs),
+    never the whole-season auto-detect diff (_new_kickoffs_to_capture stays untouched)."""
     monkeypatch.setattr(orc, "_captured_commence_times", lambda season, **kw: set())
 
     def _boom(*a, **kw):
-        raise AssertionError("forced weeks must bypass the kickoff diff")
+        raise AssertionError("--weeks must not go through the whole-season auto-detect diff")
 
     monkeypatch.setattr(orc, "_new_kickoffs_to_capture", _boom)
     seen = {}
+    kickoff = datetime(2025, 8, 21, 16, 0, tzinfo=timezone.utc)
 
-    def fake_ncaaf_historical(ctx, season, *, weeks=None):
+    def fake_season_kickoffs(ctx, season, weeks=None):
         seen["weeks"] = weeks
-        return [{"id": "e1", "commence_time": "2025-08-21T16:00:00Z",
-                 "_requested_snapshot": "2025-08-21T15:55:00Z"}]
+        return [kickoff]
 
-    monkeypatch.setattr(orc, "_odds_ncaaf_historical", fake_ncaaf_historical)
+    monkeypatch.setattr(orc, "_season_kickoffs", fake_season_kickoffs)
+    monkeypatch.setattr(
+        orc, "_odds_historical_for_kickoffs",
+        lambda ctx, kicks, **kw: [{"id": "e1", "commence_time": src._iso(kickoff),
+                                    "_requested_snapshot": src._iso(kickoff - timedelta(minutes=5))}],
+    )
     monkeypatch.setattr(orc, "_merge_and_write", lambda season, records, **kw: len(records))
     ctx = src.Ctx(cfbd=object())
     manifest = orc.run_recurring_capture(2025, ctx=ctx, weeks=[1])
     assert seen["weeks"] == [1]
     assert manifest["forced_weeks"] == [1]
     assert manifest["rows_written"] == 1
+
+
+# ── the actual fix requested: --weeks no longer silently re-buys credits for already-captured
+# kickoffs (the original P0.6b "operator override" bypassed the dedup check unconditionally) ──
+def test_run_recurring_capture_weeks_skips_already_captured_by_default(monkeypatch):
+    already_captured = datetime(2025, 8, 21, 16, 0, tzinfo=timezone.utc)
+    still_needed = datetime(2025, 8, 22, 19, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        orc, "_season_kickoffs", lambda ctx, season, weeks=None: [already_captured, still_needed]
+    )
+    monkeypatch.setattr(
+        orc, "_captured_commence_times", lambda season, **kw: {src._iso(already_captured)}
+    )
+    fetch_calls = []
+
+    def fake_fetch(ctx, kicks, **kw):
+        fetch_calls.append(kicks)
+        return [{"id": f"e-{i}", "commence_time": src._iso(k),
+                 "_requested_snapshot": src._iso(k - timedelta(minutes=5))}
+                for i, k in enumerate(kicks)]
+
+    monkeypatch.setattr(orc, "_odds_historical_for_kickoffs", fake_fetch)
+    monkeypatch.setattr(orc, "_merge_and_write", lambda season, records, **kw: len(records))
+    ctx = src.Ctx(cfbd=object())
+    manifest = orc.run_recurring_capture(2025, ctx=ctx, weeks=[1])
+    assert fetch_calls == [[still_needed]]  # already_captured was SKIPPED, not re-fetched
+    assert manifest["new_kickoffs"] == 1
+    assert manifest["forced_weeks"] == [1]
+
+
+def test_run_recurring_capture_weeks_fully_captured_makes_no_paid_calls(monkeypatch):
+    """The concrete AC this fix targets: a --weeks re-run against a fully-already-captured week
+    makes ZERO paid calls (0 credits), instead of unconditionally re-pulling everything."""
+    already_captured = datetime(2025, 8, 21, 16, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(orc, "_season_kickoffs", lambda ctx, season, weeks=None: [already_captured])
+    monkeypatch.setattr(
+        orc, "_captured_commence_times", lambda season, **kw: {src._iso(already_captured)}
+    )
+
+    def _boom(*a, **kw):
+        raise AssertionError("must not fetch odds when everything targeted is already captured")
+
+    monkeypatch.setattr(orc, "_odds_historical_for_kickoffs", _boom)
+    ctx = src.Ctx(cfbd=object())
+    manifest = orc.run_recurring_capture(2025, ctx=ctx, weeks=[1])
+    assert manifest["rows_written"] == 0
+    assert manifest["new_kickoffs"] == 0
+    assert manifest["forced_weeks"] == [1]
+
+
+def test_run_recurring_capture_weeks_force_refetches_already_captured(monkeypatch):
+    """force=True is the escape hatch for genuinely re-pulling a known-BAD existing capture —
+    it bypasses the per-kind skip and re-fetches every kickoff --weeks selects regardless."""
+    already_captured = datetime(2025, 8, 21, 16, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(orc, "_season_kickoffs", lambda ctx, season, weeks=None: [already_captured])
+    monkeypatch.setattr(
+        orc, "_captured_commence_times", lambda season, **kw: {src._iso(already_captured)}
+    )
+    fetch_calls = []
+
+    def fake_fetch(ctx, kicks, **kw):
+        fetch_calls.append(kicks)
+        return [{"id": "e1", "commence_time": src._iso(already_captured),
+                 "_requested_snapshot": src._iso(already_captured - timedelta(minutes=5))}]
+
+    monkeypatch.setattr(orc, "_odds_historical_for_kickoffs", fake_fetch)
+    monkeypatch.setattr(orc, "_merge_and_write", lambda season, records, **kw: len(records))
+    ctx = src.Ctx(cfbd=object())
+    manifest = orc.run_recurring_capture(2025, ctx=ctx, weeks=[1], force=True)
+    assert fetch_calls == [[already_captured]]  # re-fetched DESPITE already being captured
+    assert manifest["new_kickoffs"] == 1
+
+
+# ── NCAAF-P0.6c: T-1 day-prior snapshot capture ───────────────────────────────────────────────
+def test_run_recurring_capture_default_does_not_fetch_t1(monkeypatch):
+    """P0.6c ships default OFF (capture_t1=False) — a plain call must fetch ONLY the close
+    snapshot, zero extra Odds-API calls, exactly like P0.6b, until an operator opts in."""
+    now = datetime(2025, 9, 10, tzinfo=timezone.utc)
+    kickoff = now - timedelta(days=1)
+    captured_kind_calls = []
+
+    def fake_captured(season, *, kind=orc.SNAPSHOT_KIND_CLOSE, **kw):
+        captured_kind_calls.append(kind)
+        return set()
+
+    monkeypatch.setattr(orc, "_captured_commence_times", fake_captured)
+    monkeypatch.setattr(orc, "_new_kickoffs_to_capture", lambda *a, **kw: [kickoff])
+    fetch_buffers = []
+
+    def fake_fetch(ctx, kicks, *, buffer_min=None):
+        fetch_buffers.append(buffer_min)
+        return [{"id": "e1", "commence_time": src._iso(kickoff),
+                 "_requested_snapshot": src._iso(kickoff - timedelta(minutes=buffer_min))}]
+
+    monkeypatch.setattr(orc, "_odds_historical_for_kickoffs", fake_fetch)
+    monkeypatch.setattr(orc, "_merge_and_write", lambda season, records, **kw: len(records))
+    ctx = src.Ctx(cfbd=object())
+    manifest = orc.run_recurring_capture(2025, ctx=ctx, now=now)
+    assert fetch_buffers == [5]  # ONE fetch, close buffer only — no T-1 call at all
+    assert captured_kind_calls == [orc.SNAPSHOT_KIND_CLOSE]  # never diffed against T-1 coverage
+    assert manifest["new_kickoffs_t1"] is None
+
+
+def test_run_recurring_capture_with_capture_t1_fetches_both_kinds(monkeypatch):
+    """capture_t1=True fetches BOTH the close (5min) and T-1 (T1_BUFFER_MIN) snapshots for the
+    same kickoff, tags each record's `_snapshot_kind`, and merges both into one write."""
+    now = datetime(2025, 9, 10, tzinfo=timezone.utc)
+    kickoff = now - timedelta(days=1)
+    monkeypatch.setattr(orc, "_captured_commence_times", lambda season, **kw: set())
+    monkeypatch.setattr(orc, "_new_kickoffs_to_capture", lambda *a, **kw: [kickoff])
+    fetch_buffers = []
+
+    def fake_fetch(ctx, kicks, *, buffer_min=None):
+        fetch_buffers.append(buffer_min)
+        return [{"id": "e1", "commence_time": src._iso(kickoff),
+                 "_requested_snapshot": src._iso(kickoff - timedelta(minutes=buffer_min))}]
+
+    monkeypatch.setattr(orc, "_odds_historical_for_kickoffs", fake_fetch)
+    written = {}
+
+    def fake_merge(season, records, **kw):
+        written["records"] = records
+        return len(records)
+
+    monkeypatch.setattr(orc, "_merge_and_write", fake_merge)
+    ctx = src.Ctx(cfbd=object())
+    manifest = orc.run_recurring_capture(2025, ctx=ctx, now=now, capture_t1=True)
+    assert sorted(fetch_buffers) == sorted([5, orc.T1_BUFFER_MIN])
+    assert manifest["new_kickoffs"] == 1
+    assert manifest["new_kickoffs_t1"] == 1
+    assert manifest["rows_written"] == 2
+    kinds = {r["_snapshot_kind"] for r in written["records"]}
+    assert kinds == {orc.SNAPSHOT_KIND_CLOSE, orc.SNAPSHOT_KIND_T1}
+    # distinguishable by _requested_snapshot / _snapshot_ts (the AC) — different buffers ⇒
+    # different requested snapshots for the SAME kickoff/event.
+    requested = {r["_requested_snapshot"] for r in written["records"]}
+    assert len(requested) == 2
+
+
+def test_captured_commence_times_filters_by_snapshot_kind(tmp_path):
+    close_row = {"id": "e1", "commence_time": "2025-09-06T16:00:00Z",
+                "_requested_snapshot": "2025-09-06T15:55:00Z",
+                "_snapshot_kind": orc.SNAPSHOT_KIND_CLOSE, "bookmakers": []}
+    t1_row = {"id": "e2", "commence_time": "2025-09-06T19:00:00Z",
+             "_requested_snapshot": "2025-09-05T19:00:00Z",
+             "_snapshot_kind": orc.SNAPSHOT_KIND_T1, "bookmakers": []}
+    # A P0.6b LEGACY row with no _snapshot_kind field at all — must be treated as "close".
+    legacy_row = {"id": "e3", "commence_time": "2025-09-06T23:00:00Z",
+                 "_requested_snapshot": "2025-09-06T22:55:00Z", "bookmakers": []}
+    s3io.write_records([close_row, t1_row, legacy_row], sport="ncaaf",
+                       source=orc.ODDS_HISTORICAL_SOURCE, season=2025, local_root=str(tmp_path))
+
+    close_ct = orc._captured_commence_times(
+        2025, kind=orc.SNAPSHOT_KIND_CLOSE, local_root=str(tmp_path)
+    )
+    t1_ct = orc._captured_commence_times(2025, kind=orc.SNAPSHOT_KIND_T1, local_root=str(tmp_path))
+    assert close_ct == {"2025-09-06T16:00:00Z", "2025-09-06T23:00:00Z"}  # legacy row ⇒ close
+    assert t1_ct == {"2025-09-06T19:00:00Z"}
+
+
+def test_merge_and_write_never_loses_a_prior_snapshot_of_a_different_kind(tmp_path):
+    """NCAAF-P0.6c AC — the never-lose-prior-snapshot regression test at the SNAPSHOT grain: a
+    CLOSE snapshot and a T-1 snapshot of the SAME event must both survive a merge, in either
+    order, and re-running either capture must never clobber the other. The dedup key is (event
+    id, `_requested_snapshot`), which the two kinds always differ on by construction (5min vs
+    T1_BUFFER_MIN buffers) — this is a REUSE of the P0.6b merge guard at the snapshot grain, not
+    a new mechanism; this test proves that reuse actually holds end-to-end."""
+    close_row = {
+        "id": "e1", "commence_time": "2025-09-06T16:00:00Z",
+        "_requested_snapshot": "2025-09-06T15:55:00Z", "_snapshot_ts": "2025-09-06T15:55:00Z",
+        "_snapshot_kind": orc.SNAPSHOT_KIND_CLOSE, "bookmakers": [],
+    }
+    n = s3io.write_records([close_row], sport="ncaaf", source=orc.ODDS_HISTORICAL_SOURCE,
+                           season=2025, local_root=str(tmp_path))
+    assert n == 1
+
+    # A LATER run captures the T-1 snapshot of the SAME event — must ADD, not clobber the close.
+    t1_row = {
+        "id": "e1", "commence_time": "2025-09-06T16:00:00Z",
+        "_requested_snapshot": "2025-09-05T16:00:00Z", "_snapshot_ts": "2025-09-05T16:00:00Z",
+        "_snapshot_kind": orc.SNAPSHOT_KIND_T1, "bookmakers": [],
+    }
+    rows_written = orc._merge_and_write(2025, [t1_row], local_root=str(tmp_path))
+    assert rows_written == 2  # close preserved + t_minus_1 added
+
+    import duckdb
+
+    con = duckdb.connect()
+    con.execute("INSTALL delta; LOAD delta")
+    uri = s3io.local_table_uri(str(tmp_path), "ncaaf", orc.ODDS_HISTORICAL_SOURCE)
+    rows = con.execute(f"SELECT raw_json FROM delta_scan('{uri}')").fetchall()
+    parsed = [json.loads(r[0]) for r in rows]
+    kinds = {p["_snapshot_kind"] for p in parsed}
+    assert kinds == {orc.SNAPSHOT_KIND_CLOSE, orc.SNAPSHOT_KIND_T1}
+    snap_ts = {p["_snapshot_ts"] for p in parsed}
+    assert len(snap_ts) == 2  # distinguishable by _snapshot_ts — the AC
+
+    # Re-running the CLOSE capture again (an idempotent re-fetch) must not clobber the T-1 row.
+    rows_written_again = orc._merge_and_write(2025, [dict(close_row)], local_root=str(tmp_path))
+    assert rows_written_again == 2
+    rows2 = con.execute(f"SELECT raw_json FROM delta_scan('{uri}')").fetchall()
+    kinds2 = {json.loads(r[0])["_snapshot_kind"] for r in rows2}
+    assert kinds2 == {orc.SNAPSHOT_KIND_CLOSE, orc.SNAPSHOT_KIND_T1}
 
 
 # ── query_lake._connect(): must tolerate a credential-less sandbox for LOCAL-only reads ──────

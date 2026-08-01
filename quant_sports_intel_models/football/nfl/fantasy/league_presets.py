@@ -17,6 +17,12 @@ from quant_sports_intel_models.fantasy_engine.league_config import (
     ScoringRules,
     SportProfile,
 )
+from quant_sports_intel_models.fantasy_engine.settings import (
+    CoverageReport,
+    DerivedBucket,
+    StatTerm,
+    resolve_scoring,
+)
 
 # ── NFL sport profile: canonical stat_key → MVP-1 raw projection column ───────────────────────────
 NFL_PROFILE = SportProfile(
@@ -262,6 +268,185 @@ def get_preset(name: str, n_teams: int = 12) -> LeagueConfig:
     if name not in PRESETS:
         raise KeyError(f"unknown preset {name!r}; choose from {sorted(PRESETS)}")
     return PRESETS[name](n_teams)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# NF-C0b — the MANUAL league-settings EDITOR's catalog + honest coverage policy
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# The presets above are the four-or-so shapes we ship. A real league is not one of them, and when a
+# platform import can't reach it (private league, long-tail platform, a fragile ESPN endpoint) the
+# user must be able to type it in. That means the editor has to offer EVERY term a real league scores
+# — including terms our season projection does not produce. `fantasy_engine.settings` classifies each
+# one mechanically; this section is only the NFL POLICY: what the terms are and how the ones we
+# resolve more coarsely fold.
+
+# ── FIELD GOALS: the league's table is finer than the projection's ────────────────────────────────
+# Leagues (and the operator's Sleeper screenshots) express FG in SIX distance buckets. NF1.6's kicker
+# projection resolves three: 0-39 / 40-49 / 50+. The three sub-40 buckets therefore fold onto
+# `fg_made_0_39`, and 50-59 / 60+ fold onto `fg_made_50_plus`.
+#
+# ⭐ WHY THIS IS USUALLY LOSSLESS: almost every league pays the SAME for a 22-, 28- and 35-yarder, so
+# the fine values inside a projected bucket agree and the fold is EXACT — the shares below never
+# enter the arithmetic. They matter only for the genuinely-rare league that prices 30-39 above 20-29,
+# and in that case `resolve_scoring` reports `exact=False` so the surface can say the term is
+# approximated rather than pretending to a resolution the projection does not have.
+#
+# ⚠️ THE SHARES ARE A STATED ASSUMPTION, NOT A MEASUREMENT. They encode only the uncontroversial
+# ordering that a sub-20 attempt is vanishingly rare (a kick from inside the 2), that 30-39 dominates
+# the sub-40 bucket, and that 60+ is a small slice of the 50+ bucket. They are deliberately NOT
+# presented as fitted quantities, and nothing selects or gates on them.
+_FG_SUB40_SHARES = {"fg_made_0_19": 0.02, "fg_made_20_29": 0.30, "fg_made_30_39": 0.68}
+_FG_50PLUS_SHARES = {"fg_made_50_59": 0.88, "fg_made_60p": 0.12}
+
+FG_DERIVED_BUCKETS: tuple[DerivedBucket, ...] = tuple(
+    [DerivedBucket(k, "fg_made_0_39", s) for k, s in _FG_SUB40_SHARES.items()]
+    + [DerivedBucket(k, "fg_made_50_plus", s) for k, s in _FG_50PLUS_SHARES.items()]
+)
+# 40-49 needs no fold: the league bucket and the projected bucket are the same bucket.
+
+# ── THE EDITOR CATALOG ────────────────────────────────────────────────────────────────────────────
+# `default` is the modal league value (what a fresh custom config seeds to). A term absent from
+# `NFL_PROFILE.stat_columns` scores nothing and is reported CAPTURED — that is the mechanism, so a
+# term is never listed here as applied; `resolve_scoring` decides, against the real columns.
+SCORING_CATALOG: tuple[StatTerm, ...] = (
+    # passing
+    StatTerm("pass_yds", "Passing yards", "passing", 0.04, "Points per passing yard (0.04 = 1 per 25)."),
+    StatTerm("pass_td", "Passing TD", "passing", 4.0),
+    StatTerm("pass_int", "Interception thrown", "passing", -2.0),
+    StatTerm("pass_cmp", "Completion", "passing", 0.0, "Some leagues add a per-completion bonus."),
+    StatTerm("pass_att", "Pass attempt", "passing", 0.0),
+    # rushing
+    StatTerm("rush_yds", "Rushing yards", "rushing", 0.1, "Points per rushing yard (0.1 = 1 per 10)."),
+    StatTerm("rush_td", "Rushing TD", "rushing", 6.0),
+    StatTerm("rush_att", "Rush attempt", "rushing", 0.0),
+    # receiving
+    StatTerm("rec", "Reception (PPR)", "receiving", 1.0, "1.0 full PPR, 0.5 half, 0 standard."),
+    StatTerm("rec_yds", "Receiving yards", "receiving", 0.1),
+    StatTerm("rec_td", "Receiving TD", "receiving", 6.0),
+    StatTerm("targets", "Target", "receiving", 0.0),
+    # misc offence
+    StatTerm("two_pt", "2-point conversion", "misc", 2.0),
+    StatTerm("fumbles_lost", "Fumble lost", "misc", -2.0),
+    StatTerm("fumble_rec_td", "Fumble recovery TD", "misc", 6.0,
+             "Offensive player recovering a fumble in the end zone."),
+    StatTerm("st_player_td", "Return TD (player)", "misc", 6.0,
+             "A kick/punt return TD credited to a skill player."),
+    # kicking — the SIX league buckets; three of them fold (see FG_DERIVED_BUCKETS)
+    StatTerm("fg_made_0_19", "FG made 0-19", "kicking", 3.0),
+    StatTerm("fg_made_20_29", "FG made 20-29", "kicking", 3.0),
+    StatTerm("fg_made_30_39", "FG made 30-39", "kicking", 3.0),
+    StatTerm("fg_made_40_49", "FG made 40-49", "kicking", 4.0),
+    StatTerm("fg_made_50_59", "FG made 50-59", "kicking", 5.0),
+    StatTerm("fg_made_60p", "FG made 60+", "kicking", 5.0),
+    StatTerm("fg_missed", "FG missed", "kicking", 0.0, "Often -1; leave 0 if your league does not penalise."),
+    StatTerm("pat_made", "PAT made", "kicking", 1.0),
+    StatTerm("pat_missed", "PAT missed", "kicking", 0.0),
+    # team defence
+    StatTerm("def_td", "Defensive TD", "defense", 6.0),
+    StatTerm("st_td", "Special-teams TD (team)", "defense", 6.0),
+    StatTerm("def_sacks", "Sack", "defense", 1.0),
+    StatTerm("def_int", "Interception", "defense", 2.0),
+    StatTerm("def_fumble_rec", "Fumble recovered", "defense", 2.0),
+    StatTerm("def_forced_fumble", "Fumble forced", "defense", 0.0),
+    StatTerm("def_safety", "Safety", "defense", 2.0),
+    StatTerm("def_blocked_kick", "Blocked kick", "defense", 2.0),
+    # team defence — points-allowed tiers. Nine buckets = the common refinement of the ESPN and Yahoo
+    # tables, so a 7-tier league table restates EXACTLY (see `merge_group`).
+    StatTerm("dst_pa_g_0", "Points allowed 0", "dst_points_allowed", 5.0),
+    StatTerm("dst_pa_g_1_6", "Points allowed 1-6", "dst_points_allowed", 4.0),
+    StatTerm("dst_pa_g_7_13", "Points allowed 7-13", "dst_points_allowed", 3.0),
+    StatTerm("dst_pa_g_14_17", "Points allowed 14-17", "dst_points_allowed", 1.0, merge_group="pa_14_20"),
+    StatTerm("dst_pa_g_18_20", "Points allowed 18-20", "dst_points_allowed", 0.0, merge_group="pa_14_20"),
+    StatTerm("dst_pa_g_21_27", "Points allowed 21-27", "dst_points_allowed", 0.0),
+    StatTerm("dst_pa_g_28_34", "Points allowed 28-34", "dst_points_allowed", -1.0),
+    StatTerm("dst_pa_g_35_45", "Points allowed 35-45", "dst_points_allowed", -3.0, merge_group="pa_35p"),
+    StatTerm("dst_pa_g_46p", "Points allowed 46+", "dst_points_allowed", -5.0, merge_group="pa_35p"),
+)
+
+# Groups the editor renders, in order, with the honest header each one needs.
+SCORING_GROUPS: tuple[tuple[str, str], ...] = (
+    ("passing", "Passing"),
+    ("rushing", "Rushing"),
+    ("receiving", "Receiving"),
+    ("misc", "Miscellaneous"),
+    ("kicking", "Kicking (K)"),
+    ("defense", "Team defense (D/ST)"),
+    ("dst_points_allowed", "D/ST points allowed"),
+)
+
+# Rules a league genuinely has that DO NOT move a per-player projection or value-over-replacement.
+# Offered in the editor so a config is a faithful record of the league, stored in
+# `LeagueConfig.captured_rules`, and never read by the engine. See that field's docstring.
+CAPTURED_RULE_CATALOG: tuple[tuple[str, str, str], ...] = (
+    (
+        "median_scoring",
+        "Second matchup vs the league median",
+        "A standings/schedule rule: each week you also play the league median. It changes WIN-LOSS "
+        "records, not what any player is projected to score, so it does not affect the board.",
+    ),
+    (
+        "fractional_scoring",
+        "Fractional (decimal) scoring",
+        "Recorded for fidelity. The board is computed in decimals regardless, so this changes nothing "
+        "about the ranking.",
+    ),
+    (
+        "playoff_weeks",
+        "Playoff weeks",
+        "Recorded for fidelity. Season-long projections are full-season totals, so the playoff "
+        "schedule does not enter the board.",
+    ),
+)
+
+
+# The roster shape the operator's Sleeper screenshots show, and a good starting point for a
+# hand-entered league: 1QB/2RB/2WR/1TE/2 W-R-T flex/1K/1DEF + 5 bench + 3 IR.
+# ⭐ IR needs no schema change: it is a BENCH slot (`bench=True`), so like BN it contributes NO
+# starter demand and therefore cannot move replacement level — which is exactly right, since an IR
+# spot never starts. The two are distinguished by NAME only, which is all the fidelity a projection
+# board needs. A bench slot is also allowed an EMPTY eligibility list (`validate` only requires
+# starters to declare one), so "IR: any position" is representable as-is.
+_EDITOR_DEFAULT_ROSTER = (
+    RosterSlot("QB", 1, ("QB",)),
+    RosterSlot("RB", 2, ("RB",)),
+    RosterSlot("WR", 2, ("WR",)),
+    RosterSlot("TE", 1, ("TE",)),
+    RosterSlot("FLEX", 2, _FLEX_ELIG),
+    RosterSlot("K", 1, ("K",)),
+    RosterSlot("DST", 1, ("DST",)),
+    RosterSlot("BN", 5, ("QB", "RB", "WR", "TE", "K", "DST"), bench=True),
+    RosterSlot("IR", 3, (), bench=True),
+)
+
+
+def default_custom_roster() -> tuple[RosterSlot, ...]:
+    """The roster a fresh custom league starts from (editable in full by the editor)."""
+    return _EDITOR_DEFAULT_ROSTER
+
+
+def default_custom_scoring() -> dict[str, float]:
+    """The catalog's defaults as a `per_stat` map — what a brand-new custom config starts from."""
+    return {t.key: float(t.default) for t in SCORING_CATALOG}
+
+
+def resolve_config(
+    config: LeagueConfig, *, available_columns: frozenset[str] | None = None
+) -> tuple[LeagueConfig, CoverageReport]:
+    """Fold a (possibly hand-entered) config onto what the NFL projection can express + report coverage.
+
+    This is the ONE place a manually-built config and an imported one are treated identically: both
+    are just `LeagueConfig`s, both go through this, and the board is scored from the result. Returns
+    `(config_ready_to_score, report)` — the report is what the UI renders as applied / derived /
+    captured, so the surface never has to guess which of a user's settings actually moved a number.
+    """
+    resolved, report = resolve_scoring(
+        config.scoring,
+        NFL_PROFILE,
+        derived_buckets=FG_DERIVED_BUCKETS,
+        available_columns=available_columns,
+        captured_rules=tuple(str(k) for k in config.captured_rules),
+    )
+    return config.with_overrides(scoring=resolved), report
 
 
 def custom_config(base: str = "full_ppr", *, n_teams: int = 12, **overrides) -> LeagueConfig:

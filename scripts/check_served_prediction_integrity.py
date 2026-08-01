@@ -325,9 +325,14 @@ def main() -> int:
         return 0
 
     assessed = 0
+    # INC-37 — rows on tiers we SKIPPED. A skipped tier is UNVERIFIED, not healthy (see the
+    # matching note in check_intraday_fallback.py): on 2026-08-01 a mis-run left 4 of 15 games
+    # served, both tiers fell under the floor, and this script printed `problem_count=0`.
+    unassessed_rows = 0
     for stat in sorted(stats, key=lambda s: s.tier):
         tier_problems = evaluate_tier(stat)
         if stat.n < MIN_GAMES_FOR_CHECK:
+            unassessed_rows += stat.n
             log.info(f"  tier '{stat.tier}': n={stat.n} (< {MIN_GAMES_FOR_CHECK}) — too small to assess.")
             continue
         assessed += 1
@@ -348,6 +353,15 @@ def main() -> int:
 
     print(f"[METRIC] served_integrity_problem_count={len(problems)}")
     print(f"[METRIC] served_integrity_tiers_assessed={assessed}")
+    # INC-37: >0 means the served date HAS rows this check could not verify (see above).
+    print(f"[METRIC] served_integrity_unassessed_rows={unassessed_rows}")
+    if assessed == 0 and unassessed_rows:
+        log.warning(
+            f"[ALERT] NOT ASSESSED — {unassessed_rows} served row(s) exist for {served_date} but "
+            f"every tier was under the {MIN_GAMES_FOR_CHECK}-game floor, so NOTHING was checked. "
+            f"Treat problem_count=0 as UNKNOWN, not healthy (INC-37). Cross-check the served row "
+            f"count against the scheduled slate (check_prediction_coverage.py)."
+        )
     # E9.52 — one observable number for the target book across the served serving tiers, so a
     # slide toward blank is visible in Dagster metadata BEFORE it hits the floor.
     _tb = [s for s in stats

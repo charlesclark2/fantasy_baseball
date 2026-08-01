@@ -10,7 +10,12 @@
 // definition the scoring engine uses.
 
 import { useMemo, useState } from "react"
-import { useFantasyBoard, useFantasyManifest, useFormatSelection } from "@/lib/fantasy-queries"
+import {
+  useFantasyManifest,
+  useFormatSelection,
+  useResolvedBoard,
+  useSavedLeagues,
+} from "@/lib/fantasy-queries"
 import type { Player } from "@/lib/draft-optimizer"
 import {
   ADP_DELTA_LABEL,
@@ -45,8 +50,11 @@ interface PosSummary {
 
 export function LeagueBoard() {
   const { data: manifest, isLoading: manifestLoading, error: manifestError } = useFantasyManifest()
-  const { configName, size, setConfigName, setSize } = useFormatSelection(manifest)
-  const { data: board, isLoading: boardLoading } = useFantasyBoard(configName, size)
+  // NF-C0b: a hand-entered league is selectable beside the shipped presets, and `useResolvedBoard`
+  // hands back the SAME Player[] either way — nothing below this line branches on provenance.
+  const { data: savedLeagues } = useSavedLeagues()
+  const { configName, size, setConfigName, setSize } = useFormatSelection(manifest, savedLeagues)
+  const { board, isLoading: boardLoading, isCustom, league } = useResolvedBoard(configName, size)
   const [pos, setPos] = useState("All")
 
   const config = manifest?.configs.find((c) => c.name === configName)
@@ -165,8 +173,16 @@ export function LeagueBoard() {
               size={size}
               onConfig={setConfigName}
               onSize={setSize}
+              savedLeagues={savedLeagues}
             />
           </div>
+
+          {isCustom && !league && (
+            <EmptyBlock
+              title="That league is no longer saved"
+              detail="Pick another league or format above, or re-create it in League Settings."
+            />
+          )}
 
           {boardLoading && <LoadingBlock label="Building the value board…" />}
 

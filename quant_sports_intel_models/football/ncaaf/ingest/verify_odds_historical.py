@@ -195,6 +195,21 @@ def verify(seasons: list[int], *, source: str = "odds_ncaaf_historical") -> bool
         print(_fmt(fbs_orphans[["part_season", "home", "away", "commence", "cfbd_start"]]))
 
     print("\n" + "=" * 90)
+    print("F. Snapshot-kind breakdown (NCAAF-P0.6c day-prior T-1 vs close) — informational, not a gate")
+    print("   A pre-P0.6c row carries no _snapshot_kind at all; coalesced to 'close' below (the")
+    print("   only kind P0.6/P0.6b ever captured) so legacy seasons still read correctly.")
+    print("=" * 90)
+    f = q(f"""
+        select season,
+               coalesce(json_extract_string(raw_json,'$._snapshot_kind'), 'close') as snapshot_kind,
+               count(*) as rows,
+               count(distinct json_extract_string(raw_json,'$.id')) as events
+        from {D} group by 1,2 order by 1,2
+    """)
+    print(_fmt(f))
+    t1_present = "t_minus_1" in set(f["snapshot_kind"])
+
+    print("\n" + "=" * 90)
     print("E. Distinct sportsbooks across the table (unnest bookmakers[])")
     print("=" * 90)
     e = q(f"""
@@ -238,6 +253,8 @@ def verify(seasons: list[int], *, source: str = "odds_ncaaf_historical") -> bool
               f"({n_fbs_orphan} game(s) lose a close to a CFBD/OddsAPI kickoff disagreement; "
               f"{n_orphan - n_fbs_orphan} further orphan(s) are inert non-FBS collateral)")
     print(f"  {'✓' if has_bovada else '⚠'} Bovada present (the target book): {has_bovada}")
+    print(f"  {'✓' if t1_present else 'ℹ'} T-1 day-prior snapshots present (P0.6c, informational — "
+          f"not a gate; absent until an operator enables NCAAF_ODDS_CAPTURE_T1): {t1_present}")
     print("\n  OVERALL:", "PASS ✓" if ok else "FAIL ✗ — see above")
     return ok
 

@@ -740,6 +740,40 @@ def lakehouse_w7b_serving_op(context):
     _run_mirror(context, "run_w1_lakehouse.py", ["--w7b-only"])
 
 
+def _alert_if_nothing_assessed(context, check_name: str, assessed: int | None,
+                               unassessed_rows: int, *, dedup_key: str) -> None:
+    """INC-37 — page WARN when a tier guard verified NOTHING but rows exist.
+
+    THE FAILURE THIS CLOSES (2026-08-01): both tier guards skip a serving tier under
+    MIN_GAMES_FOR_CHECK (=5) and then print `problem_count=0` / `alert_count=0`. During the
+    INC-37 remediation a mis-run left 4 of 15 games served; BOTH tiers fell under the floor, so
+    both guards reported zero problems while 11 games sat unserved. `tiers_assessed=0` was the
+    only tell and no op read it. A check that could not evaluate must never read as healthy —
+    the same three-valued treatment spine_horizon.classify applies to an absent metric.
+
+    Deliberately narrow so it cannot become alert fatigue: it fires ONLY when `assessed == 0`
+    AND rows exist. A genuinely small slate with SOME assessable tier stays silent, and a
+    zero-prediction day never reaches here (the scripts return before emitting rows).
+    WARN, not CRITICAL: "we could not verify" is not "we found a problem".
+    """
+    if assessed is None or assessed > 0 or unassessed_rows <= 0:
+        return
+    msg = (
+        f"{check_name}: NOTHING was assessed for today's slate — {unassessed_rows} served row(s) "
+        f"exist but every serving tier was under the minimum-games floor, so the check's "
+        f"'0 problems' result is VACUOUS, not a pass (INC-37). The usual cause is that most of "
+        f"the slate is missing: cross-check the served row count per tier against the scheduled "
+        f"slate (scripts/check_prediction_coverage.py) before trusting any green result today."
+    )
+    context.log.warning("[ALERT] " + msg)
+    try:
+        from pipeline.utils.alerting import send_alert
+        send_alert("Serving check could not verify today's slate", msg,
+                   severity="WARN", dedup_key=dedup_key)
+    except Exception as e:  # noqa: BLE001 — a failed page must not fail the op
+        context.log.warning(f"[{check_name}] send_alert failed (non-fatal): {e}")
+
+
 def _alert_on_stale_spine(context, stdout: str) -> None:
     """INC-37 — page when the just-built mart_game_spine does not reach today.
 
@@ -1098,6 +1132,8 @@ def check_served_prediction_integrity_op(context):
         )
         return
     problem_count = 0
+    assessed = None
+    unassessed_rows = 0
     for line in stdout.splitlines():
         if line.startswith("[METRIC] served_integrity_problem_count="):
             try:
@@ -1106,6 +1142,18 @@ def check_served_prediction_integrity_op(context):
                     {"served_integrity_problem_count": MetadataValue.int(problem_count)})
             except ValueError:
                 pass
+        elif line.startswith("[METRIC] served_integrity_tiers_assessed="):
+            try:
+                assessed = int(line.split("=", 1)[1])
+            except ValueError:
+                pass
+        elif line.startswith("[METRIC] served_integrity_unassessed_rows="):
+            try:
+                unassessed_rows = int(line.split("=", 1)[1])
+            except ValueError:
+                pass
+    _alert_if_nothing_assessed(context, "served-prediction integrity", assessed, unassessed_rows,
+                               dedup_key="served_integrity_unassessed")
     if problem_count > 0:
         from pipeline.utils.alerting import send_alert
         send_alert(
@@ -1151,8 +1199,20 @@ def check_intraday_fallback_op(context):
         return
     alert_count = 0
     zero_fs_tiers = 0
+    assessed = None
+    unassessed_rows = 0
     for line in stdout.splitlines():
-        if line.startswith("[METRIC] intraday_fallback_alert_count="):
+        if line.startswith("[METRIC] intraday_fallback_tiers_assessed="):
+            try:
+                assessed = int(line.split("=", 1)[1])
+            except ValueError:
+                pass
+        elif line.startswith("[METRIC] intraday_fallback_unassessed_rows="):
+            try:
+                unassessed_rows = int(line.split("=", 1)[1])
+            except ValueError:
+                pass
+        elif line.startswith("[METRIC] intraday_fallback_alert_count="):
             try:
                 alert_count = int(line.split("=", 1)[1])
                 context.add_output_metadata(
@@ -1173,6 +1233,8 @@ def check_intraday_fallback_op(context):
                     {"intraday_fallback_chronic_games": MetadataValue.int(n)})
             except ValueError:
                 pass
+    _alert_if_nothing_assessed(context, "intraday_fallback monitor", assessed, unassessed_rows,
+                               dedup_key="intraday_fallback_unassessed")
     if alert_count == 0:
         return
     from pipeline.utils.alerting import send_alert

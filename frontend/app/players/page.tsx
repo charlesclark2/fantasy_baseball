@@ -252,14 +252,14 @@ function PlayersPageInner() {
                 placeholder="Search players…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-md border border-[#262626] bg-[#111111] py-1.5 pl-8 pr-3 text-sm text-white placeholder:text-gray-600 focus:border-[#363636] focus:outline-none"
+                className="w-full rounded-md border border-[#262626] bg-[#111111] py-1.5 pl-8 pr-3 text-base sm:text-sm text-white placeholder:text-gray-600 focus:border-[#363636] focus:outline-none"
               />
             </div>
             {/* Team filter */}
             <select
               value={teamFilter}
               onChange={(e) => setTeamFilter(e.target.value)}
-              className="rounded-md border border-[#262626] bg-[#111111] px-3 py-1.5 text-sm text-white focus:border-[#363636] focus:outline-none"
+              className="rounded-md border border-[#262626] bg-[#111111] px-3 py-1.5 text-base sm:text-sm text-white focus:border-[#363636] focus:outline-none"
             >
               {allTeams.map((t) => (
                 <option key={t} value={t}>
