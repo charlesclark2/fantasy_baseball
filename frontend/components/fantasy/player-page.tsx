@@ -112,6 +112,25 @@ export function FantasyPlayerPage() {
   const rangeP10 = boardRow?.ptsP10 ?? proj?.fpP10 ?? null
   const rangeP90 = boardRow?.ptsP90 ?? proj?.fpP90 ?? null
   const rangePoint = boardRow?.pts ?? proj?.fpPpr ?? null
+
+  // ⚠️ The bar's domain must NOT be the player's own [p10, p90] — that draws his band across the
+  // FULL width every time (a solid line, uninformative regardless of whether his range is narrow
+  // or wide relative to his position). The domain is his position's realistic spread instead — the
+  // widest band any player at his position carries in the same source (board points once loaded,
+  // else the reference PPR projection), floored at 0 since fantasy points can't go negative — so
+  // the drawn band shows where THIS player sits (and how wide he is) relative to his peers.
+  const rangeDomain = useMemo(() => {
+    if (!proj) return null
+    if (boardRow?.ptsP10 != null && board) {
+      let max = -Infinity
+      for (const p of board) if (p.pos === proj.pos && p.ptsP90 != null) max = Math.max(max, p.ptsP90)
+      if (Number.isFinite(max) && max > 0) return { min: 0, max }
+    }
+    let max = -Infinity
+    for (const p of projPayload?.players ?? []) if (p.pos === proj.pos && p.fpP90 != null) max = Math.max(max, p.fpP90)
+    if (Number.isFinite(max) && max > 0) return { min: 0, max }
+    return rangeP10 != null && rangeP90 != null ? { min: rangeP10, max: rangeP90 } : null
+  }, [proj, boardRow, board, projPayload, rangeP10, rangeP90])
   // Per-player vs class-level is a property of the MODEL (uncType, NF1.7), never of the raw
   // `rookie` flag — a rookie's band is per-player unless it fell back to the thin-history class
   // bucket. Mislabelling a per-player NF1.7 band "Class-level" is exactly what this story forbids.
@@ -120,11 +139,11 @@ export function FantasyPlayerPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
       <Link
-        href="/fantasy/rankings"
+        href="/fantasy/players"
         className="mb-5 inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors"
       >
         <ChevronLeft className="h-3.5 w-3.5" />
-        Fantasy
+        Player Search
       </Link>
 
       {projLoading && <LoadingBlock label="Loading player…" />}
@@ -237,18 +256,21 @@ export function FantasyPlayerPage() {
                 {proj.uncType ? UNCERTAINTY_LABEL[proj.uncType] ?? proj.uncType : "—"}
               </span>
             </div>
-            {rangeP10 != null && rangeP90 != null ? (
+            {rangeP10 != null && rangeP90 != null && rangeDomain ? (
               <>
                 <IntervalBar
                   p10={rangeP10}
                   point={rangePoint}
                   p90={rangeP90}
-                  min={rangeP10}
-                  max={rangeP90}
+                  min={rangeDomain.min}
+                  max={rangeDomain.max}
                   classLevel={classLevel}
                 />
-                <div className="mt-2">
+                <div className="mt-2 flex items-center justify-between">
                   <RangeCell p10={rangeP10} p90={rangeP90} classLevel={classLevel} />
+                  <span className="text-[10px] text-gray-600">
+                    vs. {proj.pos} field: 0–{int(rangeDomain.max)}
+                  </span>
                 </div>
               </>
             ) : (
