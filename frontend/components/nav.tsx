@@ -285,9 +285,14 @@ export function Nav({
         <div className="border-t border-[#262626] bg-[#0a0a0a] px-4 py-3 sm:hidden">
           <div className="flex flex-col gap-0.5">
             {SPORTS.map((sport, sportIdx) => (
-              <div key={sport.sport}>
+              // ⚠️ `flex flex-col` is load-bearing, not decoration. A Next.js <Link> renders an <a>,
+              // which is INLINE by default, and the mobile item class (unlike the desktop one) has
+              // no `block` — so in a plain <div> the items flowed as inline text and wrapped MID-LABEL
+              // ("League Board" broke across two lines). Stacking them here fixes every item at once
+              // rather than relying on each link's own class.
+              <div key={sport.sport} className="flex flex-col">
                 {sportIdx > 0 && <div className="my-2 border-t border-[#262626]" />}
-                <span className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
+                <span className="block px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
                   {sport.label}
                 </span>
                 {sport.surfaces.map((g) => {
@@ -315,7 +320,7 @@ export function Nav({
                         key={item.key}
                         href={item.href}
                         onClick={() => setMobileOpen(false)}
-                        className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+                        className={`block whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
                           activeLink === item.key
                             ? "bg-[#1a1a1a] text-white"
                             : "text-gray-400 hover:bg-[#141414] hover:text-white"

@@ -397,3 +397,21 @@ export function validateConfig(cfg: LeagueConfig): string[] {
 export function detectSuperflex(roster: RosterSlotConfig[]): boolean {
   return roster.some((s) => !s.bench && s.count > 0 && s.eligible.length > 1 && s.eligible.includes("QB"))
 }
+
+/**
+ * The `ppr` label DERIVED from the actual per-reception weight.
+ *
+ * `ppr` is documented as a human-readable label so a config is self-describing without the engine —
+ * the real weight always lives in `scoring.per_stat.rec`. That only holds if the label is kept in
+ * step: editing a saved half-PPR league up to 1.0 per reception must not leave it still calling
+ * itself "half", or the config contradicts its own scoring and an imported league and a hand-entered
+ * one stop describing themselves the same way. Derived on save, exactly like `superflex`.
+ */
+export function derivePprLabel(scoring: ScoringRules): string {
+  const rec = Number(scoring.per_stat?.rec ?? 0)
+  if (!Number.isFinite(rec)) return "custom"
+  if (Math.abs(rec) < 1e-9) return "standard"
+  if (Math.abs(rec - 0.5) < 1e-9) return "half"
+  if (Math.abs(rec - 1) < 1e-9) return "ppr"
+  return "custom"
+}

@@ -38,6 +38,7 @@ import {
   POSITIONS,
   SCORING_CATALOG,
   SCORING_GROUPS,
+  derivePprLabel,
   detectSuperflex,
   newCustomConfig,
   presetToConfig,
@@ -116,7 +117,14 @@ export function LeagueSettingsEditor() {
 
   const onSave = async () => {
     if (errors.length) return
-    const payload: LeagueConfig = { ...cfg, superflex: detectSuperflex(cfg.roster) }
+    // `superflex` and `ppr` are DERIVED descriptors, never independently-edited fields — recompute
+    // both from what the config actually says so a saved league can't contradict itself (e.g. a
+    // half-PPR league edited up to 1.0/reception must stop calling itself "half").
+    const payload: LeagueConfig = {
+      ...cfg,
+      superflex: detectSuperflex(cfg.roster),
+      ppr: derivePprLabel(cfg.scoring),
+    }
     const result = await saveLeague.mutateAsync({ leagueId, config: payload })
     setLeagueId(result.league_id)
     setCfg(stripServerFields(result))
@@ -315,7 +323,9 @@ export function LeagueSettingsEditor() {
               </p>
             ) : (
               <p className="mt-1 text-[11px] text-gray-500">
-                Loads that format&apos;s scoring and roster, then edit anything below.
+                {leagueId
+                  ? "Replaces this league's scoring AND roster with that format. Nothing is saved until you press Save."
+                  : "Loads that format's scoring and roster, then edit anything below."}
               </p>
             )}
           </div>
