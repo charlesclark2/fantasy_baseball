@@ -35,6 +35,7 @@ league 1182033380414181376; Yahoo's from its published resource documentation).
 """
 from __future__ import annotations
 
+import json
 import re
 import time
 from pathlib import Path
@@ -660,8 +661,25 @@ class TestNoCredentialHandling:
             for tok in tokenize.generate_tokens(io.StringIO(source).readline):
                 if tok.type == tokenize.COMMENT:
                     skip.update(range(tok.start[0], tok.end[0] + 1))
+            # ⭐ THE ONE EXEMPTION, AND WHY IT IS NARROW.
+            # `espn.py` must NAME these tokens in order to REFUSE them: its scrubber rejects a
+            # paste containing a session cookie. Naming a credential to reject it is the opposite
+            # of handling one, but a blanket file-level exemption would gut the lint for the whole
+            # ESPN adapter. So the exemption is scoped to the `_CREDENTIAL_SIGNATURES` assignment
+            # ONLY, and `TestEspnCredentialScrubber` below pins that the tokens appear nowhere else
+            # in that module and that the scrubber genuinely fires.
+            exempt: set[int] = set()
+            if path.name == "espn.py":
+                tree = ast.parse(source)
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.AnnAssign | ast.Assign):
+                        targets = [node.target] if isinstance(node, ast.AnnAssign) else node.targets
+                        names = {t.id for t in targets if isinstance(t, ast.Name)}
+                        if "_CREDENTIAL_SIGNATURES" in names:
+                            exempt.update(range(node.lineno, (node.end_lineno or node.lineno) + 1))
+
             for lineno, line in enumerate(source.splitlines(), 1):
-                if lineno in skip:
+                if lineno in skip or lineno in exempt:
                     continue
                 if re.search(r"\bpassword\b|\bespn_s2\b|\bSWID\b", line, re.IGNORECASE):
                     offenders.append(f"{path.name}:{lineno}")
@@ -893,3 +911,232 @@ class TestRouteGating:
         it looks identical to a correct one — so state is always re-read, never saved."""
         assert "fetch_draft_state" in self.SOURCE
         assert "put_fantasy_league" not in self.SOURCE  # the import router never writes a config
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# 6. ESPN — user-mediated paste (NF-C0f). No network client exists in that module BY DESIGN.
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+
+ESPN_FIXTURE = Path(__file__).parent / "fixtures" / "espn_league_mSettings_real.json"
+
+
+@pytest.fixture
+def espn_payload() -> str:
+    """A REAL `?view=mSettings` response from a live 12-team private league (financeSettings
+    removed). Real, because a hand-written fixture inherits the author's assumptions about the
+    shape — the NF-C0 lesson that cost a mapping bug."""
+    return ESPN_FIXTURE.read_text()
+
+
+class TestEspnCredentialScrubber:
+    """The guard that keeps the paste flow from decaying into the cookie flow it replaced."""
+
+    def test_a_copy_as_curl_paste_is_refused(self):
+        from app.backend.services.platform_import import espn
+
+        curl = (
+            "curl 'https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/2026/"
+            "segments/0/leagues/998005?view=mSettings' "
+            "-H 'Cookie: SWID={ABC-123}; espn_s2=AEBxyz%2Fdeadbeef'"
+        )
+        with pytest.raises(espn.EspnCredentialPasteError) as exc:
+            espn.parse_settings_payload(curl)
+        # THE invariant: the refusal must never echo the pasted VALUE back. An error string is a
+        # log line waiting to happen, and the cookie's value is the actual secret (its NAME is not).
+        msg = str(exc.value)
+        assert "AEBxyz" not in msg and "deadbeef" not in msg and "ABC-123" not in msg
+        # ...and it must still tell the user what to do instead of just refusing.
+        assert "JSON" in msg
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            "Cookie: espn_s2=abc",
+            "-H 'cookie: SWID={x}'",
+            "authorization: Bearer abc",
+            '{"SWID": "{ABC}"}',
+            "set-cookie: espn_s2=zzz",
+        ],
+    )
+    def test_every_credential_shape_is_refused(self, bad):
+        from app.backend.services.platform_import import espn
+
+        with pytest.raises(espn.EspnCredentialPasteError):
+            espn.parse_settings_payload(bad)
+
+    def test_the_scrubber_runs_before_the_parser(self):
+        """Order matters: a cURL paste is not valid JSON, so if parsing ran first the user would get
+        a confusing 'not JSON' message and we'd have no idea a credential had been pasted."""
+        from app.backend.services.platform_import import espn
+
+        with pytest.raises(espn.EspnCredentialPasteError):
+            espn.parse_settings_payload("not json at all, but has espn_s2=abc in it")
+
+    def test_espn_module_names_credentials_ONLY_in_the_refusal_constant(self):
+        """Compensating control for the narrow lint exemption above."""
+        import ast
+        import io
+        import tokenize
+
+        source = (IMPORT_PKG / "espn.py").read_text()
+        tree = ast.parse(source)
+        allowed: set[int] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.AnnAssign | ast.Assign):
+                targets = [node.target] if isinstance(node, ast.AnnAssign) else node.targets
+                if any(isinstance(t, ast.Name) and t.id == "_CREDENTIAL_SIGNATURES" for t in targets):
+                    allowed.update(range(node.lineno, (node.end_lineno or node.lineno) + 1))
+        assert allowed, "_CREDENTIAL_SIGNATURES not found — the exemption is pointing at nothing"
+
+        skip: set[int] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+                doc = ast.get_docstring(node, clean=False)
+                if doc is not None:
+                    expr = node.body[0]
+                    skip.update(range(expr.lineno, (expr.end_lineno or expr.lineno) + 1))
+        for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+            if tok.type == tokenize.COMMENT:
+                skip.update(range(tok.start[0], tok.end[0] + 1))
+
+        strays = [
+            n for n, line in enumerate(source.splitlines(), 1)
+            if n not in skip and n not in allowed
+            and re.search(r"\bespn_s2\b|\bSWID\b|\bpassword\b", line, re.IGNORECASE)
+        ]
+        assert not strays, f"credential tokens outside the refusal constant: {strays}"
+
+    def test_the_espn_module_makes_no_network_call_at_all(self):
+        """§3(d) rests on us never REQUESTING anything from ESPN. Enforce it structurally: if a
+        future edit imports an HTTP client here, the paste flow has quietly become the cookie flow."""
+        source = (IMPORT_PKG / "espn.py").read_text()
+        for banned in ("import requests", "import httpx", "urllib.request", "from .http", "http.client"):
+            assert banned not in source, f"espn.py must make no network call, found: {banned}"
+
+
+class TestEspnPositionOverrides:
+    """🚨 The trap: 16 of 43 real rules have `points: 0.0` with their true value ONLY in
+    `pointsOverrides['16']` (slot 16 = D/ST). Reading `points` alone silently zeroes the entire
+    team-defense sheet AND reports it APPLIED — indistinguishable from working."""
+
+    def test_the_real_payload_actually_contains_the_trap(self, espn_payload):
+        """Guard the guard: if ESPN ever stops using overrides this test tells us the fixture no
+        longer exercises the thing the parser exists to handle."""
+        items = json.loads(espn_payload)["settings"]["scoringSettings"]["scoringItems"]
+        zero_base_with_override = [
+            i for i in items if i.get("pointsOverrides", {}).get("16") and i["points"] == 0.0
+        ]
+        assert len(zero_base_with_override) >= 10, "fixture no longer exercises the override trap"
+
+    def test_dst_values_survive_flattening(self, espn_payload):
+        from app.backend.services.platform_import import espn
+
+        items = json.loads(espn_payload)["settings"]["scoringSettings"]["scoringItems"]
+        flat, _ = espn.flatten_scoring_items(items)
+        # statId 89 is points=0.0 / D/ST=12.0 in the real payload.
+        assert flat.get("89@dst") == 12.0
+        assert "89" not in flat, "a 0.0 base must not be emitted as a real rule"
+        # statId 102 scores 6.0 for a player and 0.0 for a D/ST — both facts must be preserved
+        # distinctly, the same player-vs-unit split Sleeper draws between st_td and def_st_td.
+        assert flat.get("102") == 6.0
+        assert "102@dst" not in flat
+
+    def test_a_naive_points_only_parser_would_lose_these(self, espn_payload):
+        """Quantifies the bug this module exists to prevent, so the cost is on record."""
+        from app.backend.services.platform_import import espn
+
+        items = json.loads(espn_payload)["settings"]["scoringSettings"]["scoringItems"]
+        naive = {str(i["statId"]): i["points"] for i in items if i["points"]}
+        flat, _ = espn.flatten_scoring_items(items)
+        recovered = [k for k in flat if k.endswith("@dst")]
+        assert len(recovered) >= 15
+        assert not any(k in naive for k in recovered)
+
+
+class TestEspnImport:
+    def test_a_real_private_league_imports(self, espn_payload):
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload)
+        assert league.platform == "espn"
+        assert league.config["name"] == "Sundays Best"
+        assert league.config["n_teams"] == 12
+        assert league.season == "2026"
+
+    def test_the_paste_reaches_a_PRIVATE_league(self, espn_payload):
+        """The whole reason §3(d) beats the public-visibility toggle: it works on a league that is
+        NOT public, which is the population the feature exists to serve."""
+        assert json.loads(espn_payload)["settings"]["isPublic"] is False
+
+    def test_roster_matches_the_real_league(self, espn_payload):
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload)
+        counts = {s["name"]: s["count"] for s in league.config["roster"]}
+        assert counts == {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1, "DST": 1, "K": 1,
+                          "BN": 6, "IR": 3}
+        starters = sum(s["count"] for s in league.config["roster"] if not s["bench"])
+        assert starters == 9
+
+    def test_superflex_is_false_for_this_league(self, espn_payload):
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload)
+        assert C.detect_superflex(league.config["roster"]) is False
+
+    def test_core_scoring_is_applied(self, espn_payload):
+        from app.backend.services.platform_import import espn
+
+        per_stat = espn.parse_settings_payload(espn_payload).config["scoring"]["per_stat"]
+        assert per_stat["pass_yd"] == 0.04
+        assert per_stat["pass_td"] == 4.0
+        assert per_stat["pass_int"] == -1.0
+        assert per_stat["rush_yd"] == 0.1
+        assert per_stat["rush_td"] == 6.0
+        assert per_stat["rec"] == 1.0          # the league's own playerRankType reads "PPR"
+        assert per_stat["rec_yd"] == 0.1
+        assert per_stat["rec_td"] == 6.0
+        assert per_stat["fum_lost"] == -1.0
+
+    def test_unmapped_ids_are_CAPTURED_not_dropped(self, espn_payload):
+        """ESPN publishes no stat-id dictionary, so the map is deliberately partial. The contract is
+        that everything unmapped is stored faithfully and reported, never silently discarded —
+        an unmapped id tells the truth; a guessed id silently misprices the league."""
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload)
+        assert league.unmapped_scoring_keys, "expected captured terms from a 43-rule league"
+        # Every D/ST rule is currently unmapped and must be visible as such.
+        assert any(k.endswith("@dst") for k in league.unmapped_scoring_keys)
+        stored = league.config["scoring"]["per_stat"]
+        for key in league.unmapped_scoring_keys:
+            assert key in stored, f"{key} reported unmapped but not stored"
+
+    def test_config_round_trips_through_the_real_engine(self, espn_payload):
+        """Same shared-contract proof the Sleeper and Yahoo adapters carry — no forked schema."""
+        from app.backend.services.platform_import import espn
+
+        config = espn.parse_settings_payload(espn_payload).config
+        assert lc.LeagueConfig.from_dict(config).to_dict() == config
+
+    def test_an_unauthorized_espn_response_gets_an_actionable_message(self):
+        from app.backend.services.platform_import import espn
+
+        body = json.dumps({"messages": ["You are not authorized to view this League."]})
+        with pytest.raises(espn.EspnInputError) as exc:
+            espn.parse_settings_payload(body)
+        assert "signed in" in str(exc.value).lower()
+
+    def test_the_read_url_rejects_a_non_numeric_league_id(self):
+        from app.backend.services.platform_import import espn
+
+        assert espn.build_read_url("998005", 2026).endswith("leagues/998005?view=mSettings")
+        for bad in ("../../etc", "998005; rm -rf /", "http://evil", ""):
+            with pytest.raises(espn.EspnInputError):
+                espn.build_read_url(bad, 2026)
+
+    def test_an_oversized_paste_is_refused_before_parsing(self):
+        from app.backend.services.platform_import import espn
+
+        with pytest.raises(espn.EspnInputError):
+            espn.parse_settings_payload("x" * (espn.MAX_PASTE_BYTES + 1))

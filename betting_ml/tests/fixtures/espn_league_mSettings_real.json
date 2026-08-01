@@ -1,0 +1,615 @@
+{
+ "draftDetail": {
+  "drafted": false,
+  "inProgress": false
+ },
+ "gameId": 1,
+ "id": 998005,
+ "scoringPeriodId": 0,
+ "seasonId": 2026,
+ "segmentId": 0,
+ "settings": {
+  "acquisitionSettings": {
+   "acquisitionBudget": 100,
+   "acquisitionLimit": -1,
+   "acquisitionType": "WAIVERS_TRADITIONAL",
+   "finalPlaceTransactionEligible": 0,
+   "isUsingAcquisitionBudget": false,
+   "matchupAcquisitionLimit": 0.0,
+   "matchupLimitPerScoringPeriod": false,
+   "minimumBid": 1,
+   "transactionLockingEnabled": false,
+   "waiverHours": 24,
+   "waiverOrderReset": true,
+   "waiverProcessDays": [
+    "SUNDAY",
+    "FRIDAY",
+    "SATURDAY",
+    "WEDNESDAY",
+    "THURSDAY",
+    "MONDAY"
+   ],
+   "waiverProcessHour": 11
+  },
+  "draftSettings": {
+   "auctionBudget": 200,
+   "availableDate": 1788390000000,
+   "date": 1788393600000,
+   "isTradingEnabled": false,
+   "keeperCount": 0,
+   "keeperCountFuture": 1,
+   "keeperOrderType": "TRADITIONAL",
+   "leagueSubType": "NONE",
+   "orderType": "MANUAL",
+   "pickOrder": [
+    10,
+    2,
+    5,
+    6,
+    13,
+    3,
+    7,
+    12,
+    11,
+    14,
+    1,
+    9
+   ],
+   "timePerSelection": 90,
+   "type": "SNAKE"
+  },
+  "isAutoReactivate": false,
+  "isCustomizable": true,
+  "isPublic": false,
+  "name": "Sundays Best",
+  "restrictionType": "NONE",
+  "rosterSettings": {
+   "autoPilotTypeSupported": "NONE",
+   "isBenchUnlimited": true,
+   "isUsingUndroppableList": false,
+   "lineupLocktimeType": "INDIVIDUAL_GAME",
+   "lineupSlotCounts": {
+    "0": 1,
+    "1": 0,
+    "2": 2,
+    "3": 0,
+    "4": 2,
+    "5": 0,
+    "6": 1,
+    "7": 0,
+    "8": 0,
+    "9": 0,
+    "10": 0,
+    "11": 0,
+    "12": 0,
+    "13": 0,
+    "14": 0,
+    "15": 0,
+    "16": 1,
+    "17": 1,
+    "18": 0,
+    "19": 0,
+    "20": 6,
+    "21": 3,
+    "22": 0,
+    "23": 1,
+    "24": 0
+   },
+   "lineupSlotStatLimits": {},
+   "moveLimit": -1,
+   "positionLimits": {
+    "0": 0,
+    "1": 4,
+    "2": 8,
+    "3": 8,
+    "4": 4,
+    "5": 3,
+    "6": 0,
+    "7": 0,
+    "8": 0,
+    "9": 0,
+    "10": 0,
+    "11": 0,
+    "12": 0,
+    "13": 0,
+    "14": 0,
+    "15": -1,
+    "16": 3,
+    "17": -1
+   },
+   "rosterLocktimeType": "INDIVIDUAL_GAME",
+   "universeIds": [
+    0
+   ]
+  },
+  "scheduleSettings": {
+   "consolationLadderDisabled": false,
+   "divisions": [
+    {
+     "id": 0,
+     "name": "Degenerates Division",
+     "size": 12
+    }
+   ],
+   "matchupPeriodCount": 14,
+   "matchupPeriodLength": 1,
+   "matchupPeriods": {
+    "1": [
+     1
+    ],
+    "2": [
+     2
+    ],
+    "3": [
+     3
+    ],
+    "4": [
+     4
+    ],
+    "5": [
+     5
+    ],
+    "6": [
+     6
+    ],
+    "7": [
+     7
+    ],
+    "8": [
+     8
+    ],
+    "9": [
+     9
+    ],
+    "10": [
+     10
+    ],
+    "11": [
+     11
+    ],
+    "12": [
+     12
+    ],
+    "13": [
+     13
+    ],
+    "14": [
+     14
+    ],
+    "15": [
+     15
+    ],
+    "16": [
+     16
+    ],
+    "17": [
+     17
+    ]
+   },
+   "periodTypeId": 1,
+   "playoffMatchupPeriodLength": 1,
+   "playoffReseed": false,
+   "playoffSeedingRule": "TOTAL_POINTS_SCORED",
+   "playoffSeedingRuleBy": 0,
+   "playoffTeamCount": 7,
+   "variablePlayoffMatchupPeriodLength": false
+  },
+  "scoringSettings": {
+   "allowOutOfPositionScoring": false,
+   "homeTeamBonus": 0,
+   "matchupTieRule": "SLOT_POINTS",
+   "matchupTieRuleBy": 20,
+   "playerRankType": "PPR",
+   "playoffHomeTeamBonus": 0,
+   "playoffMatchupTieRule": "NONE",
+   "playoffMatchupTieRuleBy": 0,
+   "scoringItems": [
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 6.0
+     },
+     "statId": 93
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": -1.0,
+     "statId": 72
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 1.0
+     },
+     "statId": 122
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": -1.0
+     },
+     "statId": 123
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 6.0,
+     "pointsOverrides": {
+      "16": 0.0
+     },
+     "statId": 102
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 6.0,
+     "pointsOverrides": {
+      "16": 0.0
+     },
+     "statId": 101
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 1.0,
+     "statId": 15
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 1.0,
+     "statId": 16
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 6.0,
+     "statId": 25
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 6.0
+     },
+     "statId": 91
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 1.0,
+     "statId": 19
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 1.0,
+     "statId": 53
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 3.0
+     },
+     "statId": 92
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 2.0
+     },
+     "statId": 98
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 2.0,
+     "statId": 80
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 6.0,
+     "statId": 43
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 4.0,
+     "statId": 4
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 1.0,
+     "statId": 36
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.1,
+     "statId": 24
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 3.0,
+     "statId": 77
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 4.0,
+     "statId": 198
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 6.0,
+     "statId": 63
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 6.0,
+     "pointsOverrides": {
+      "16": 6.0
+     },
+     "statId": 104
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 2.0,
+     "statId": 26
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 1.0
+     },
+     "statId": 95
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 1.0,
+     "statId": 45
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 1.0,
+     "statId": 46
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 1.0
+     },
+     "statId": 99
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 1.0
+     },
+     "statId": 96
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 1.0
+     },
+     "statId": 97
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": -1.0,
+     "statId": 20
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.04,
+     "statId": 3
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": -3.0
+     },
+     "statId": 124
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 9.0
+     },
+     "statId": 90
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 1.0,
+     "statId": 86
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": -3.0
+     },
+     "statId": 125
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.1,
+     "statId": 42
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 2.0,
+     "statId": 44
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 6.0
+     },
+     "statId": 103
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 5.0,
+     "statId": 201
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 1.0,
+     "statId": 35
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 3.0
+     },
+     "statId": 121
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 12.0
+     },
+     "statId": 89
+    }
+   ],
+   "scoringType": "H2H_POINTS"
+  },
+  "size": 12,
+  "tradeSettings": {
+   "allowOutOfUniverse": false,
+   "deadlineDate": 1795766400000,
+   "max": -1,
+   "revisionHours": 0,
+   "vetoVotesRequired": 0
+  }
+ },
+ "status": {
+  "activatedDate": 1778813165741,
+  "createdAsLeagueType": 0,
+  "currentLeagueType": 0,
+  "currentMatchupPeriod": 1,
+  "finalScoringPeriod": 17,
+  "firstScoringPeriod": 1,
+  "isActive": true,
+  "isExpired": false,
+  "isFull": true,
+  "isPlayoffMatchupEdited": false,
+  "isToBeDeleted": false,
+  "isViewable": true,
+  "isWaiverOrderEdited": false,
+  "latestScoringPeriod": 0,
+  "previousSeasons": [
+   2010,
+   2011,
+   2012,
+   2013,
+   2014,
+   2015,
+   2016,
+   2017,
+   2018,
+   2019,
+   2020,
+   2021,
+   2022,
+   2023,
+   2024,
+   2025
+  ],
+  "teamsJoined": 12,
+  "transactionScoringPeriod": 0,
+  "waiverLastExecutionDate": 1785568546980,
+  "waiverProcessStatus": {}
+ }
+}
