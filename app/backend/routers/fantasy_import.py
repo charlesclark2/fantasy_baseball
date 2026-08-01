@@ -56,6 +56,9 @@ _DEFAULT_SEASON = os.getenv("NFL_FANTASY_SEASON", "2026")
 
 
 class SleeperUserRequest(BaseModel):
+    # Named `username` for backwards compatibility, but it accepts a username, a league ID or a
+    # user ID — see `sleeper.resolve_target`. The league ID is the one people actually have to
+    # hand (it is in the league's URL), so requiring a username was a self-inflicted dead end.
     username: str = Field(min_length=1, max_length=64)
     season: str = Field(default=_DEFAULT_SEASON, min_length=4, max_length=4)
 
@@ -130,13 +133,16 @@ def list_platforms(user_id: str = Depends(require_fantasy_beta_access)):
 
 @router.post("/sleeper/leagues")
 def sleeper_leagues(payload: SleeperUserRequest, user_id: str = Depends(require_fantasy_beta_access)):
-    """Resolve a Sleeper username → their leagues for the season (the picker's data)."""
+    """Resolve whatever identifier the user has — username, league ID or user ID.
+
+    Returns `{"kind": "league", "league": {...}}` when the value WAS a league (the caller skips the
+    picker and previews it directly), or `{"kind": "user", "user": ..., "leagues": [...]}`.
+    """
     try:
-        user = sleeper.resolve_user(payload.username)
-        leagues = sleeper.list_leagues(user["user_id"], payload.season)
+        resolved = sleeper.resolve_target(payload.username, payload.season)
     except Exception as e:  # noqa: BLE001 - mapped to an honest status below
         raise _handle_platform_error(e) from e
-    return {"user": user, "season": payload.season, "leagues": leagues}
+    return {"season": payload.season, **resolved}
 
 
 @router.post("/sleeper/preview")
