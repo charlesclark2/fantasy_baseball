@@ -259,6 +259,9 @@ def score_arm(folds: list[NF17.Fold], scales: dict[int, dict], cfg: dict,
         "label": cfg["label"], "key": PS.config_key(cfg),
         **{q: cfg[q] for q in ("family", "base", "lam", "uses_availability", "shippable")},
         "per_cohort": per_cohort,
+        # the scale-free pooled tier_mae PER CLASS, kept (not just its mean) so the POOLED
+        # single-hypothesis framing can be tested rather than speculated about — see §3d.
+        "per_cohort_pooled": {y: v.get("tier_mae") for y, v in per_cohort_scaled.items()},
         "pooled_tier_mae": _mean([v.get("tier_mae") for v in per_cohort_scaled.values()], 4),
         # ROW-POOLED universe reads over the SCALED positions — the bridge back to NF-D14 §6.
         "universe_mae": round(float((scaled["_pred"] - scaled[_REAL]).abs().mean()), 3),
@@ -781,6 +784,53 @@ def write_report(out: dict, path: Path) -> None:          # noqa: C901 — a rep
       "needs dozens is a null at any n this program will have.")
     p("")
 
+    p("### ⭐ 3d. THE FRAMING I CHOSE — the pooled single-hypothesis reading, and a POST-HOC LEAD")
+    p("")
+    fa = out["framing_alternatives"]
+    p("The DSR level was not the only choice this story made. Splitting the question into THREE "
+      "per-position searches carries a multiplicity penalty a single POOLED test would not — so the "
+      "pooled framing ('does availability scaling help RB/TE/WR JOINTLY?') is computed here too, on "
+      f"the pooled scale-free tier_mae (incumbent {fa['incumbent_pooled']}). **Reported, never "
+      "selected on:** the pre-registered per-position framing governs, and this table exists so the "
+      "disclosure is a number rather than a shrug.")
+    p("")
+    p(_md(pd.DataFrame(fa["rows"])))
+    p("")
+    ba, bc = fa.get("best_avail"), fa.get("best_const")
+    if ba:
+        p(f"⚠️ **The framing IS partly load-bearing for the availability claim, and that is worth "
+          f"saying plainly.** Pooled as ONE test the best availability arm reads "
+          f"p {ba['one-sided p (POOLED, 1 test)']} against the three-test BH cutoff of "
+          f"{round(PS.FDR_Q / 3, 4)} it actually faced. **The pre-registered framing governs** — a "
+          f"story that re-frames its hypothesis after seeing which framing passes has no hypothesis "
+          f"(E2.1-r) — and the per-position framing is the right one for a per-position product, "
+          f"which is why it was chosen in advance. But it is the multiplicity correction, not the "
+          f"effect size, that is doing the blocking here, and a reader should know that.")
+        p("")
+    if bc:
+        p("🔎 **A POST-HOC LEAD, FLAGGED AS ONE — the low-risk half of this study has the strongest "
+          "evidence in it.** The best CONSTANT arm (`" + bc["arm"] + "`) — a per-position "
+          f"recalibration carrying ZERO per-player information and doing ZERO ordering harm by "
+          f"construction — reads pooled tier MAE {bc['pooled tier MAE']} against the incumbent's "
+          f"{fa['incumbent_pooled']}, winning {bc['classes won']} classes at p "
+          f"{bc['one-sided p (POOLED, 1 test)']}, with a per-class spread (sd {bc['sd Δ']}) a FIFTH "
+          f"of the availability arm's. It beats the incumbent at all three scaled positions.")
+        p("")
+        p("⚠️⚠️ **THIS IS A LEAD, NOT A RESULT, AND THE DISTINCTION IS THE WHOLE POINT.** That arm is "
+          "the best of 33 chosen AFTER seeing them; its p-value is undeflated, it was never "
+          "pre-registered as its own hypothesis, and reading it as shippable here would be exactly "
+          "the E2.1-r inversion — re-reading a field until something in it clears. It belongs in its "
+          "OWN pre-registered story (a rookie-point LEVEL recalibration of NF1.4's documented cold "
+          "bias), where it gets a clean gate and its own deflation.")
+        p("")
+        p("⭐ **AND IT SHARPENS §3's MECHANISM FINDING RATHER THAN CONTRADICTING IT — read the two "
+          "together.** The matched foil showed the AVAILABILITY arm's lift is NOT a level correction "
+          "(the constant built at its own base fails to beat the incumbent at RB and TE). This lead "
+          "shows a level correction independently DOES help. Both are true, and they are SEPARATE "
+          "effects: NF-D14's mechanism claim was wrong about what makes the availability arm win, "
+          "and right that there is something cold to correct. Neither statement implies the other, "
+          "and collapsing them is how a report ends up asserting more than it measured.")
+        p("")
     p("## 4. What this does to the board (the ordering movement, measured)")
     p("")
     p(_md(pd.DataFrame(out["board_movement"])))
@@ -897,6 +947,7 @@ def main(argv: list[str] | None = None) -> int:            # noqa: C901 — orch
         "ship": verdict_gate["ship"], "verdict_gate": verdict_gate,
         "nf_d14_reproduction": repro,
         "gate_sensitivity": _gate_sensitivity(per_pos, fdr, ship_by_pos),
+        "framing_alternatives": _framing_alternatives(arms, incumbent, cohorts),
         "power_in_classes": _power_in_classes(per_pos),
         "board_movement": _board_movement(folds, scales, per_pos, ship_by_pos),
         "degenerate_reading": _degenerate_reading(anchors, incumbent, ref),
@@ -1050,6 +1101,51 @@ def _gate_sensitivity(per_pos: list[dict], fdr: dict, ship_by_pos: dict) -> dict
                              "ships_without_dsr": no_dsr[p]}
                          for p in ship_by_pos},
     }
+
+
+def _framing_alternatives(arms: list[dict], incumbent: dict, cohorts: list[int]) -> dict:
+    """⭐ THE FRAMING THIS STORY DID NOT PRE-REGISTER, TESTED RATHER THAN SPECULATED ABOUT.
+
+    NF-D15 pre-registered THREE per-position searches with BH-FDR across them, because the story asked
+    for per-position deflation and because "which positions does this help" is the question a
+    per-position product asks. That choice is not free: three tests carry a multiplicity penalty a
+    single POOLED test would not, and a reader is entitled to know whether the framing decided the
+    answer — the same duty `_gate_sensitivity` discharges for the DSR level.
+
+    So the pooled single-hypothesis framing ("does availability scaling help RB/TE/WR JOINTLY?") is
+    computed here on the pooled scale-free tier_mae. ⚠️ **REPORTED, NEVER SELECTED ON.** The
+    pre-registered per-position framing governs; this exists so the disclosure is a number instead of
+    a shrug.
+
+    ⚠️⚠️ AND THE SECOND ENTRY IS A POST-HOC LEAD, NOT A RESULT. The best CONSTANT (`mean_ratio`) arm is
+    the strongest-evidenced thing in the whole field on this framing — but it is the best of 33 arms
+    chosen AFTER seeing them, so its p-value is undeflated and means much less than it looks like it
+    means. It is a candidate for its OWN pre-registered story, and reading it as a shippable result
+    here would be the E2.1-r inversion (re-reading the field until something clears)."""
+    def _series(rec: dict) -> np.ndarray:
+        return np.array([rec.get("per_cohort_pooled", {}).get(y, np.nan) for y in cohorts],
+                        dtype=float)
+
+    inc = _series(incumbent)
+
+    def _rec(arm: dict) -> dict:
+        d = inc - _series(arm)                       # > 0 ⇒ the arm beats the incumbent
+        d = d[np.isfinite(d)]
+        return {"arm": arm["label"], "pooled tier MAE": arm["pooled_tier_mae"],
+                "mean Δ": round(float(d.mean()), 4) if len(d) else None,
+                "sd Δ": round(float(d.std(ddof=1)), 4) if len(d) > 1 else None,
+                "one-sided p (POOLED, 1 test)": M14.onesided_paired_pvalue(d) if len(d) >= 3 else None,
+                "classes won": f"{int((d > 0).sum())}/{len(d)}"}
+
+    avail = [a for a in arms if a["uses_availability"] and a["pooled_tier_mae"] is not None]
+    const = [a for a in arms if a["family"] == "mean_ratio" and a["pooled_tier_mae"] is not None]
+    best_avail = min(avail, key=lambda a: a["pooled_tier_mae"]) if avail else None
+    best_const = min(const, key=lambda a: a["pooled_tier_mae"]) if const else None
+    ratio_pos = next((a for a in arms if a["base"] == "ratio_pos" and a["lam"] == 1.0), None)
+    rows = [_rec(a) for a in (best_avail, ratio_pos, best_const) if a is not None]
+    return {"incumbent_pooled": incumbent["pooled_tier_mae"], "rows": rows,
+            "best_avail": None if not best_avail else _rec(best_avail),
+            "best_const": None if not best_const else _rec(best_const)}
 
 
 def _power_in_classes(per_pos: list[dict], q: float = PS.FDR_Q, n_tests: int = 3,

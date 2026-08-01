@@ -1,6 +1,6 @@
 # NF-D15 — the AVAILABILITY-SCALED rookie POINT projection (RB/TE/WR) — §0.5 bake-off
 
-**Generated:** 2026-08-01T03:11:30.236405+00:00 · **held-out draft classes:** 2019–2025 (7) · **arms:** 33 · **held-out rookie-seasons (RB/TE/WR):** 472 · **availability prior:** `tier_empirical[depth] · blend 1` (NF-D14 leg-1 winner, REUSED not refitted)
+**Generated:** 2026-08-01T03:16:24.040943+00:00 · **held-out draft classes:** 2019–2025 (7) · **arms:** 33 · **held-out rookie-seasons (RB/TE/WR):** 472 · **availability prior:** `tier_empirical[depth] · blend 1` (NF-D14 leg-1 winner, REUSED not refitted)
 
 ## ⭐ VERDICT — 🟡 RECORDED NULL — no availability-scaled rookie POINT arm clears its own gate; the shipped rookie point STANDS
 
@@ -200,6 +200,24 @@ This story pre-registered NF-D14's stricter **DSR ≥ 0.95** rather than NF1.4's
 | WR         |             7 |         2.0700 |       5.7900 |        0.1902 |                               0.0333 |               29 |
 
 'p = 0.07 against a cutoff of 0.067' reads like a hair's breadth of evidence. What it actually is, is SEVEN held-out draft classes of a quantity whose per-class spread is larger than its mean — the same shape NF1.8 diagnosed on rookie QBs and NF-D14 confirmed. Stating the margin in CLASSES rather than in p-value decimals is NF1.8's 'state the margin in ROWS' convention one unit over, and it is what separates **'underpowered'** from **'absent'**: an effect that needs a plausible number of further classes is a story to re-run when they exist; one that needs dozens is a null at any n this program will have.
+
+### ⭐ 3d. THE FRAMING I CHOSE — the pooled single-hypothesis reading, and a POST-HOC LEAD
+
+The DSR level was not the only choice this story made. Splitting the question into THREE per-position searches carries a multiplicity penalty a single POOLED test would not — so the pooled framing ('does availability scaling help RB/TE/WR JOINTLY?') is computed here too, on the pooled scale-free tier_mae (incumbent 1.0738). **Reported, never selected on:** the pre-registered per-position framing governs, and this table exists so the disclosure is a number rather than a shrug.
+
+| arm                               |   pooled tier MAE |   mean Δ |   sd Δ |   one-sided p (POOLED, 1 test) | classes won   |
+|:----------------------------------|------------------:|---------:|-------:|-------------------------------:|:--------------|
+| learned scale · λ 1               |            0.9835 |   0.0903 | 0.1498 |                         0.0810 | 6/7           |
+| avail ratio[pos] · λ 1            |            1.0337 |   0.0401 | 0.0809 |                         0.1187 | 4/7           |
+| MATCHED FOIL mean[residual] · λ 1 |            1.0301 |   0.0437 | 0.0315 |                         0.0052 | 6/7           |
+
+⚠️ **The framing IS partly load-bearing for the availability claim, and that is worth saying plainly.** Pooled as ONE test the best availability arm reads p 0.081 against the three-test BH cutoff of 0.0333 it actually faced. **The pre-registered framing governs** — a story that re-frames its hypothesis after seeing which framing passes has no hypothesis (E2.1-r) — and the per-position framing is the right one for a per-position product, which is why it was chosen in advance. But it is the multiplicity correction, not the effect size, that is doing the blocking here, and a reader should know that.
+
+🔎 **A POST-HOC LEAD, FLAGGED AS ONE — the low-risk half of this study has the strongest evidence in it.** The best CONSTANT arm (`MATCHED FOIL mean[residual] · λ 1`) — a per-position recalibration carrying ZERO per-player information and doing ZERO ordering harm by construction — reads pooled tier MAE 1.0301 against the incumbent's 1.0738, winning 6/7 classes at p 0.0052, with a per-class spread (sd 0.0315) a FIFTH of the availability arm's. It beats the incumbent at all three scaled positions.
+
+⚠️⚠️ **THIS IS A LEAD, NOT A RESULT, AND THE DISTINCTION IS THE WHOLE POINT.** That arm is the best of 33 chosen AFTER seeing them; its p-value is undeflated, it was never pre-registered as its own hypothesis, and reading it as shippable here would be exactly the E2.1-r inversion — re-reading a field until something in it clears. It belongs in its OWN pre-registered story (a rookie-point LEVEL recalibration of NF1.4's documented cold bias), where it gets a clean gate and its own deflation.
+
+⭐ **AND IT SHARPENS §3's MECHANISM FINDING RATHER THAN CONTRADICTING IT — read the two together.** The matched foil showed the AVAILABILITY arm's lift is NOT a level correction (the constant built at its own base fails to beat the incumbent at RB and TE). This lead shows a level correction independently DOES help. Both are true, and they are SEPARATE effects: NF-D14's mechanism claim was wrong about what makes the availability arm win, and right that there is something cold to correct. Neither statement implies the other, and collapsing them is how a report ends up asserting more than it measured.
 
 ## 4. What this does to the board (the ordering movement, measured)
 
