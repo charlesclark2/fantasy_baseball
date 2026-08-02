@@ -77,3 +77,77 @@ def test_subject_clamped_and_ascii(monkeypatch):
     assert len(subj) <= 100
     assert "\n" not in subj
     assert subj.isascii()
+
+
+# ── INC-39 — a SMOKE page must be distinguishable, and must never blind the real one ──────
+# E11.30 mandates a live-box smoke for every ALERT-tier monitor (CI mocks all IO, so only a real
+# box run proves the page path). Before `smoke=`, such a self-test went out through the ordinary
+# path: same `[Credence PROD]` subject, same severity, same body — a synthetic 2026-08-02
+# `public_betting BUILD_GAP 0/15` was read as a genuine serving defect and opened a P2 incident on
+# a slate whose built table held 15/15. The dedup collision is the worse half: firing the
+# PRODUCTION key parks the real page for the full hour-long TTL, so smoke-testing a monitor could
+# blind it exactly while someone is poking at the box.
+
+def _client(monkeypatch):
+    monkeypatch.setenv("ALERT_SNS_TOPIC_ARN", "arn:aws:sns:us-east-1:1:t")
+    client = MagicMock()
+    monkeypatch.setattr("boto3.client", lambda *a, **k: client)
+    return client
+
+
+def test_smoke_alert_is_labelled_in_the_subject(monkeypatch):
+    client = _client(monkeypatch)
+    alerting.send_alert("W11 serving tail coverage gap", "body",
+                        severity="CRITICAL", dedup_key="w11_tail_coverage", smoke=True)
+    assert "[SMOKE TEST]" in client.publish.call_args.kwargs["Subject"]
+
+
+def test_smoke_alert_says_so_in_the_body(monkeypatch):
+    """The subject is clamped to 100 chars, so the body banner is the durable signal."""
+    client = _client(monkeypatch)
+    alerting.send_alert("s", "the real detail", smoke=True)
+    body = client.publish.call_args.kwargs["Message"]
+    assert "SMOKE TEST" in body and "NOT a real incident" in body
+    assert "the real detail" in body
+
+
+def test_a_smoke_never_suppresses_the_real_page_on_the_same_key(monkeypatch):
+    """THE INC-39 HAZARD. A smoke on the production dedup_key must leave the real key free."""
+    client = _client(monkeypatch)
+    assert alerting.send_alert("s", "b", dedup_key="w11_tail_coverage", smoke=True) is True
+    # ...and the genuine page fires immediately after, not an hour later.
+    assert alerting.send_alert("s", "b", dedup_key="w11_tail_coverage") is True
+    assert client.publish.call_count == 2
+
+
+def test_a_real_page_never_suppresses_a_smoke_either(monkeypatch):
+    client = _client(monkeypatch)
+    assert alerting.send_alert("s", "b", dedup_key="k") is True
+    assert alerting.send_alert("s", "b", dedup_key="k", smoke=True) is True
+    assert client.publish.call_count == 2
+
+
+def test_smoke_pages_still_rate_limit_among_themselves(monkeypatch):
+    client = _client(monkeypatch)
+    assert alerting.send_alert("s", "b", dedup_key="k", smoke=True) is True
+    assert alerting.send_alert("s", "b", dedup_key="k", smoke=True) is False
+    assert client.publish.call_count == 1
+
+
+def test_a_real_page_is_never_labelled_a_smoke(monkeypatch):
+    """The mirror-image failure — a real incident dismissed as a self-test — is strictly worse
+    than the one this fixes, which is why `smoke` is a keyword arg with no env-var backdoor."""
+    client = _client(monkeypatch)
+    alerting.send_alert("real problem", "body", severity="CRITICAL")
+    assert "SMOKE" not in client.publish.call_args.kwargs["Subject"]
+    assert "SMOKE" not in client.publish.call_args.kwargs["Message"]
+
+
+def test_there_is_no_env_var_that_can_turn_smoke_mode_on(monkeypatch):
+    """A left-set `ALERT_SMOKE_TEST=1` would label every real page a smoke — this repo's
+    documented-but-never-set flag class (cf. W7B_LAKEHOUSE_S3), facing the dangerous way."""
+    client = _client(monkeypatch)
+    for var in ("ALERT_SMOKE_TEST", "SMOKE_TEST", "ALERT_SMOKE"):
+        monkeypatch.setenv(var, "1")
+    alerting.send_alert("real problem", "body", severity="CRITICAL")
+    assert "SMOKE" not in client.publish.call_args.kwargs["Subject"]

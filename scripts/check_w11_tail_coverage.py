@@ -193,6 +193,15 @@ def main() -> int:
     args = ap.parse_args()
 
     served = date.fromisoformat(args.date) if args.date else current_game_date()
+    # INC-39 — STAMP THE SLATE THIS OUTPUT IS ABOUT, on EVERY exit path.
+    # The per-block `[METRIC]` lines carry no date, so a consumer parsing them could not tell
+    # WHICH slate they described: replayed, stale or synthetic output parsed identically to a
+    # live read of the requested date, and `check_w11_tail_coverage_op` would page CRITICAL on
+    # it. (That is how a 2026-08-02 CRITICAL "public_betting BUILD_GAP 0/15" reached the inbox
+    # while the built table actually held 15/15 — the numbers were real, the SLATE was not.)
+    # Printed before the read so it survives a failure, and unconditionally so the op's
+    # cross-check can never be vacuously satisfied by an absent line (NF1.7 (a)).
+    print(f"[METRIC] w11_tail_date={served.isoformat()}")
     try:
         blocks = _fetch(served)
     except Exception as exc:  # noqa: BLE001 — ALERT tier: report loudly, never take a slate down
