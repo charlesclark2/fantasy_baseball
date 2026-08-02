@@ -733,7 +733,12 @@ export function LeagueImport() {
                       <div className="mt-2 max-h-40 overflow-y-auto text-[11px] opacity-90">
                         {terms.map((t) => (
                           <div key={t.key} className="flex justify-between gap-2 py-0.5">
-                            <span className="truncate">{t.key}</span>
+                            {/* ESPN numbers its scoring rules, so a captured key renders as
+                                "129@dst" unless the server sends a label. `?? t.key` keeps a
+                                missing label a cosmetic fallback rather than a blank row. */}
+                            <span className="truncate" title={t.key}>
+                              {preview.unmapped_labels?.[t.key] ?? t.key}
+                            </span>
                             <span className="shrink-0 tabular-nums">{num(t.weight, 2)}</span>
                           </div>
                         ))}

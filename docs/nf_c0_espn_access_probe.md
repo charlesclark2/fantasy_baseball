@@ -194,3 +194,34 @@ exactly the pressure that would produce it.
 **Re-check trigger: next off-season (2027-02), or sooner if ESPN announces a developer program.**
 Nothing here is a permanent judgement about ESPN — it is a statement about what ESPN offered on
 2026-08-01.
+
+---
+
+## 4. What the SECOND real league found (2026-08-01, after ship)
+
+The map was built and 112 tests were green against one real league (998005, 12-team, full PPR). A
+second league from a different account (642070, 10-team, half-PPR) was then run through it. The
+adapter handled it — no crash, correct roster, correct scoring — but it contained **an entire
+scoring family the first payload does not have**: the nine-rung **yards-allowed ladder**
+(statIds 128–136, scored here from **+5 down to −7**). League 998005 sets none of it. No amount of
+testing against the first payload could have surfaced it.
+
+Two consequences, both now shipped:
+
+1. **The gap is disclosed, not hidden.** We project no yards-allowed column, so those tiers are
+   honestly CAPTURED — but the coverage panel rendered them as `129@dst · 3.00`, which discloses
+   nothing. ESPN numbers its rules where Sleeper and Yahoo name them, so captured ESPN keys now
+   carry a human label, and a league that scores the ladder is told plainly that a yardage-suppressing
+   defence will be under-rated on its board.
+2. **A verification claim of ours was overstated.** The stat-id map's header cited "the eight
+   yards-allowed buckets (129..136) sum to exactly 17.000000 games." That sum holds only because
+   ESPN projects no sub-100-yard game — statId **128 is a real ninth rung**, which league 642070
+   scores. The identity establishes the ladder's ORDER, not its EXTENT, and the comment now says so.
+   The labels deliberately carry **no yard thresholds**, because the evidence does not fix the cut
+   points and a fabricated boundary shown to a user is the same "it looked right in a table" guess
+   the map's own header forbids — one layer over, in the display layer.
+
+⭐ This is the second time the rule has paid on this story (the first was Sleeper's coarse `fgm_50p`
+vs fine `fgm_50_59`/`fgm_60p`, which survived 56 tests and a live-verified league). **Both fixtures
+are kept, and a test asserts they exercise disjoint scoring families** — if they ever converge, the
+second has stopped buying coverage and a genuinely different third league should replace it.

@@ -151,6 +151,11 @@ class ImportedLeague:
     # whole module is shaped against.
     warnings: tuple[str, ...] = ()
     unmapped_scoring_keys: tuple[str, ...] = ()
+    # Human labels for CAPTURED keys whose platform key is not self-describing. Sleeper and Yahoo
+    # name their rules in words (`pass_2pt`), so they leave this empty; ESPN numbers them, and
+    # "129@dst · 3.00" in the coverage panel tells a user nothing about what they are being told
+    # is unapplied. Optional and additive by design — an older client simply renders the raw key.
+    unmapped_labels: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -162,6 +167,7 @@ class ImportedLeague:
             "draft": self.draft.to_dict() if self.draft else None,
             "warnings": list(self.warnings),
             "unmapped_scoring_keys": list(self.unmapped_scoring_keys),
+            "unmapped_labels": dict(self.unmapped_labels),
         }
 
 

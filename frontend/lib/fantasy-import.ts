@@ -85,6 +85,10 @@ export interface ImportPreview {
    *  They are STORED (so the league stays a faithful record) and contribute nothing to the board;
    *  the coverage panel reports them as "captured". */
   unmapped_scoring_keys: string[]
+  /** Display labels for captured keys whose platform key is not self-describing — ESPN numbers its
+   *  rules, so "129@dst" needs to read "Yards allowed tier (D/ST)". Optional: the field is additive
+   *  and older API builds omit it, in which case the raw key is rendered (never a blank row). */
+  unmapped_labels?: Record<string, string>
 }
 
 export function listImportPlatforms(token: string | null): Promise<ImportPlatform[]> {

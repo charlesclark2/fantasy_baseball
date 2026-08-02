@@ -242,7 +242,9 @@ def flatten_scoring_items(items: object) -> tuple[dict[str, float], list[str]]:
 #
 #   * the nine points-allowed buckets (89/90/91/92/121/122/123/124/125) SUM TO EXACTLY 17.000000
 #     games for a team — they partition the season, which fixes both their identity and their ORDER;
-#   * the eight yards-allowed buckets (129..136) likewise sum to 17.000000;
+#   * the yards-allowed buckets 129..136 likewise sum to 17.000000 — but ⚠️ SEE THE CORRECTION AT
+#     `_YARDS_ALLOWED_KEYS`: that sum is 17 only because ESPN projects no sub-100-yard game, so it
+#     establishes the ladder's ORDER and not its EXTENT. A second real league scores 128 as well;
 #   * stat 126 == points_allowed/17 and stat 137 == yards_allowed/17 to full precision;
 #   * 80 + 77 + 74 == 83 (the sub-40, 40-49 and 50+ field goals partition total FGM);
 #   * receiving_yards / stat-53 == stat-60 (yards per reception) ⇒ **53 is receptions**, despite
@@ -334,6 +336,41 @@ for _target, _keys, _ in _COLLAPSE_GROUPS:
 # projection catalog has no 40+/50+ touchdown column, so there is nothing to apply them to. They
 # flow through as CAPTURED, which is the honest answer, and NF-C0e is where they would be earned.
 
+# ── CAPTURED-key labels ───────────────────────────────────────────────────────────────────────
+#
+# A captured rule is only honest if the user can tell WHAT was captured. Sleeper and Yahoo name
+# their rules in words; ESPN numbers them, so an unlabelled coverage panel reports "129@dst · 3.00"
+# — which discloses nothing. These labels exist purely for display and never affect scoring.
+#
+# ⚠️ DELIBERATELY NO YARD/DISTANCE THRESHOLDS IN THESE LABELS. The identity evidence above fixes
+# the yards-allowed ladder's ORDER (monotone, nine rungs) but NOT its cut points, and a label is a
+# claim shown to a user. Naming a boundary I have not verified would be the same "it looked right
+# in a table" guess this map's header forbids — one rung over, in the display layer.
+_YARDS_ALLOWED_KEYS: tuple[str, ...] = tuple(f"{i}@dst" for i in range(128, 137))
+
+CAPTURED_LABELS: dict[str, str] = {
+    # The yards-allowed ladder. Present in league 642070 across nine rungs (+5 down to −7); absent
+    # entirely from league 998005 — which is exactly why one payload could not have found it.
+    **{key: "Yards allowed tier (D/ST)" for key in _YARDS_ALLOWED_KEYS},
+    # Long-touchdown bonuses — no 40+/50+ touchdown column exists to apply them to.
+    "15": "Long passing touchdown bonus",
+    "16": "Long passing touchdown bonus",
+    "35": "Long rushing touchdown bonus",
+    "36": "Long rushing touchdown bonus",
+    "45": "Long receiving touchdown bonus",
+    "46": "Long receiving touchdown bonus",
+    # The BASE (non-D/ST) side of two defensive scores. Their `@dst` twins are applied as `def_td`;
+    # these carry the value for an INDIVIDUAL defensive player, and we project no IDP positions.
+    "93": "Blocked-kick return touchdown by an individual defender",
+    "103": "Interception returned for touchdown by an individual defender",
+}
+
+_YARDS_ALLOWED_NOTE = (
+    "Your league scores your defence on total yards allowed. We don't project yards allowed, so "
+    "those tiers are saved with your league but don't affect its D/ST rankings — a defence that "
+    "wins by suppressing yardage will be under-rated on your board."
+)
+
 _PA_BOUNDARY_NOTE = (
     "ESPN scores a game where your defence allows exactly 21 points in its 18-21 tier; we resolve "
     "points allowed on buckets that split at 20/21, so that one case scores at your 22-27 rate "
@@ -392,6 +429,12 @@ def translate_scoring(flat: dict[str, float]) -> tuple[ScoringTranslation, list[
     t18, t22 = flat.get("121@dst"), flat.get("122@dst")
     if t18 is not None and t22 is not None and t18 != t22:
         warnings.append(_PA_BOUNDARY_NOTE)
+
+    # Same conditional-disclosure rule for the yards-allowed ladder: say it only when the league
+    # actually scores it. A league that leaves those tiers unset loses nothing and should not be
+    # handed a caveat about a rule it does not have.
+    if any(flat.get(key) for key in _YARDS_ALLOWED_KEYS):
+        warnings.append(_YARDS_ALLOWED_NOTE)
 
     translation = canonical.apply_scoring_map(flat, SCORING_KEY_MAP, ignore=IGNORE_KEYS)
     return translation, warnings
@@ -491,6 +534,11 @@ def parse_settings_payload(pasted: str, *, season: int | None = None) -> Importe
         config=config,
         warnings=tuple(warnings),
         unmapped_scoring_keys=tuple(translation.unmapped),
+        # Labels only for what was ACTUALLY captured, so the panel never explains a rule this
+        # league does not have.
+        unmapped_labels={
+            key: CAPTURED_LABELS[key] for key in translation.unmapped if key in CAPTURED_LABELS
+        },
     )
 
 
