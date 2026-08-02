@@ -830,7 +830,48 @@ the Snowflake copy only; the SERVED umpire parquet comes from the nightly `--w11
 
 **PRECURSOR that would actually unlock this gate (a SEPARATE story, deliberately not bundled):**
 make `--skip-if-exists` work on the S3 leg AND per-game rather than any-row. Until then 6a is a
-correct, safe, inert flag.
+correct, safe, inert flag. → **built as FU-3, see below; it unlocks ~28%, not "the rest".**
+
+#### FU-3 / 6a-PRE (2026-08-02) — the precursor, and the MEASURED CEILING it runs into
+
+`scripts/ingest_umpires.py --skip-if-exists` is now **per-game AND content-aware**: it reads the
+latest `data_source='statsapi'` row per `game_pk` from the append-only S3 mirror (via `lh_raw()` +
+DuckDB) and writes only the games whose `(umpire_id, umpire_name)` is absent or **changed**.
+Content-awareness is free — the Stats API returns the whole slate in one request either way — and
+it buys a mid-slate **reassignment** still being ingested, which a per-game *existence* check would
+silently pin stale for the rest of the day (the daily early/late ops run in the MORNING, hours
+before assignments post, so nothing else would correct it in time).
+
+⚠️ **THE PRE-REGISTERED TARGET ("instants fall to ~1–2") IS ARITHMETICALLY UNREACHABLE, AND
+REACHING IT WOULD REQUIRE THE REGRESSION THE STORY FORBIDS.** Replaying all 14 slates
+(07-20..08-02) of the real mirror through this exact filter — for each recorded write instant, was
+the fetched `{game_pk: umpire}` map different from the accumulated state?
+
+| slate | 07-20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 08-01 | 02 | **total** |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| instants **now** | 10 | 7 | 20 | 8 | 7 | 8 | 11 | 7 | 7 | 9 | 7 | 9 | 10 | 6 | **126** |
+| instants **with FU-3** | 9 | 5 | 11 | 4 | 5 | 6 | 8 | 5 | 7 | 8 | 4 | 8 | 5 | 6 | **91** |
+
+**−28% of write-instants; median 8 → 6.** Every one of the 91 surviving writes carries at least one
+**genuinely new game assignment**, so the residual is **IRREDUCIBLE**: MLB announces HP umpires in
+waves across the afternoon (07-31: 1→5→7→9→10→11→13→15 games over seven hours), and each wave is a
+real content change that must be written. Two slates (07-28, 08-02) cut to **ZERO** because every
+tick on them brought a new game. ⇒ **the only way to drive instants toward ~1–2 is to swallow a
+late-announced assignment — i.e. the any-row form this change exists to remove.** A one-sided
+"fewer instants is better" reading of this lever is therefore wrong; the correct floor is *the
+number of announcement waves*, and FU-3 attains it exactly.
+
+⇒ **RE-SIZED EXPECTATION FOR 6a.** Watermark bumps drop from a median of 8 to ~6 (−28%), so 6a's
+skip rate rises but nothing like to the "written once per slate" premise. Post-FU-2 the fires-vs-
+bumps ratio should be re-derived on fresh data rather than re-using the ≈1.5 above.
+
+**On the "per-tick Snowflake connect" this was also meant to remove:** ⚠️ measured, it was **not a
+live waker**. Under `W11_RAW_WRITE_MODE=s3` the guard's `and do_sf` conjunct short-circuited before
+the connect, so `main()` opened **no** Snowflake connection on any tick — the same conjunct that
+disabled the guard also suppressed its cost. Deleting the connect is therefore **prophylactic**: it
+removes a **latent** waker that would have fired the moment the write mode went back to
+`snowflake`/`both`, and the honest wake-census credit for it today is **zero**. (`import
+snowflake.connector`, dead at module scope, was removed in the same change.)
 
 #### Monitor policy — 6a does NOT decouple umpire from the nightly `--w11b`, so nothing changes
 

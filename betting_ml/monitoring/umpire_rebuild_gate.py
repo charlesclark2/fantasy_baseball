@@ -53,6 +53,17 @@ The precursor that would actually unlock the rest is making ``--skip-if-exists``
 (and per-game rather than any-row, so a later-announced assignment is not swallowed) — a separate
 change, deliberately NOT bundled with this flip.
 
+⭐ THAT PRECURSOR IS NOW BUILT (FU-3, 2026-08-02) AND IT UNLOCKS ~28%, NOT "THE REST" — because the
+assignment feed is genuinely WAVE-shaped, and a wave is a real content change that must be written.
+``--skip-if-exists`` is now per-game and content-aware (write only the games whose umpire is absent
+or CHANGED). Replaying all 14 slates 07-20..08-02 of the real mirror through that exact filter:
+**126 write-instants → 91 (−28%), median 8 → 6**, with two slates (07-28, 08-02) cutting to ZERO
+because every tick on them brought a new game. EVERY surviving write carries at least one genuinely
+new assignment, so the residual is IRREDUCIBLE: driving instants lower necessarily means SWALLOWING
+a late-announced assignment. ⇒ this gate's ceiling is set by the number of ANNOUNCEMENT WAVES, not
+by the ingest's idempotency, and the ≈1.5 fires-per-bump ratio above must be re-derived on
+post-FU-3 data rather than assumed to improve proportionally.
+
 ⭐ WHY THE SKIP IS SAFE REGARDLESS (the bound that makes flipping this a low-risk act). The two
 umpire ``lakehouse_ext`` tables are refreshed ONLY by ``refresh_w1_external_tables.py --w11b``,
 which early-returns and is called only by the nightly W11b mirror op — never intraday, and NOT part
