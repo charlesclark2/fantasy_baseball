@@ -485,11 +485,20 @@ def intraday_schedule_capture(context: OpExecutionContext) -> None:
     # the month boundary and the entire next-day slate loses every pregame feature block
     # (observed 2026-06-01, 07-01 and 08-01). The lookahead makes the last few captures of every
     # month also fetch the next month, so the hole cannot open.
+    #
+    # INC-38 — --lookback-days 3, the mirror. This tick is the caller that MOST needs it: the
+    # daily op has passed `--start-date <yesterday>` since 2026-07-15, but the S3 raw writer
+    # replaces the whole dt=<fire date> partition with only the months ITS fire pulled, so this
+    # month-only tick running minutes later CLOBBERED the daily's wider fetch — which is why the
+    # 07-15 cure never actually held. Without the lookback nothing revisits a month after the 1st,
+    # so a game that first-pitches after 00:00 UTC on the 1st never gets its Final + score written
+    # and every user bet on it sits PENDING forever (INC-38: 14 of 15 games frozen on 07-31).
     _run_script(context, "ingest_statsapi.py", [
         "schedule",
         "--start-date", _today(),
         "--end-date", _today(),
         "--lookahead-days", "3",
+        "--lookback-days", "3",
         "--capture-reason", "intraday_gameday",
     ])
     # Propagate the freshly-captured native snapshot to the S3 lakehouse so prod's

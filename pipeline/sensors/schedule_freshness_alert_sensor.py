@@ -198,7 +198,13 @@ def schedule_freshness_alert_sensor(context: SensorEvaluationContext):
         + "; ".join(problems)
         + ". Check the host-cron schedule_capture (capture.crontab), the daily_ingestion_job "
         "ingest_statsapi_schedule op, and the Dagit run history. "
-        "Manual fix: uv run python scripts/ingest_statsapi.py schedule"
+        # INC-37/INC-38: the prescribed command MUST carry both month-boundary flags. A bare
+        # `schedule` defaults to the current calendar month — and the likeliest time a human
+        # runs this fix is a boundary morning, i.e. exactly when a month-scoped capture re-opens
+        # the hole they are trying to close (forward: no games for the 1st; backward: last
+        # month's late games never reach Final, stranding every bet on them).
+        "Manual fix: uv run python scripts/ingest_statsapi.py schedule "
+        "--lookahead-days 3 --lookback-days 3"
     )
     # INC-16-P6: email directly (Dagster+ tick-failure alerting is gone post-cutover);
     # still raise so the tick is marked FAILED in Dagit.

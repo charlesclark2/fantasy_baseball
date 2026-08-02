@@ -185,8 +185,15 @@ def lineup_ingest_schedule(context: OpExecutionContext) -> None:
     E11.4 (2026-06-19) — NOT USED in lineup_monitor_job. The Railway
     schedule_capture cron (services/schedule_capture/) handles statsapi schedule
     ingestion every 30 min off Dagster's bill. Retained here for manual/emergency
-    use from the Dagster UI."""
-    _run_script(context, "ingest_statsapi.py", ["schedule"])
+    use from the Dagster UI.
+
+    INC-37 / INC-38 — carries the same month-boundary guards as every other caller even though it
+    is manual-only: a hand-run emergency capture on the 1st is EXACTLY when someone is already
+    fighting a boundary hole, and a bare `schedule` defaults to the current calendar month, which
+    would re-open it. --lookahead-days 3 reaches the next month; --lookback-days 3 reaches the
+    previous one so a game that first-pitched after 00:00 UTC on the 1st still gets its Final."""
+    _run_script(context, "ingest_statsapi.py",
+                ["schedule", "--lookahead-days", "3", "--lookback-days", "3"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

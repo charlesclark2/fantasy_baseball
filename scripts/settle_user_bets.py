@@ -34,6 +34,25 @@ boxscore itself marks as a STARTER, and only after an INDEPENDENT live Final con
 from the same authority — so a mis-stated Final in our own table can never settle a bet
 off a partial K count. Every settled bet records `settle_source` ('mart' | 'statsapi').
 
+INC-38 — the STATS-API SCORE FALLBACK (why h2h/totals bets used to sit pending FOREVER):
+stg_statsapi_games is the flatten of a MONTH-SCOPED schedule capture, so once the calendar rolls
+no capture ever revisits the previous month. A game that first-pitches after 00:00 UTC on the 1st
+is still Pre-Game/In-Progress in the last same-month capture and never gets its Final + score
+written — it stays frozen non-final forever (measured 2026-07-31: 14 of 15 games), and every bet
+on it stays PENDING forever, with no error and no self-heal. So a game-market bet whose game our
+own table does not report final now asks the Stats API directly, exactly as props already do.
+The lakehouse stays PRIMARY; the API is consulted only for the gap, only for games our table has
+no final for, only when the LIVE schedule reports the game terminal (never a partial in-game
+score — the frozen rows carry non-null PARTIAL scores, so the terminal-status gate is what makes
+this safe), and only when a full score pair is present. `settle_source` records which answered.
+
+INC-38 also adds the STALE-PENDING-BET guard. A bet whose game first-pitched more than 24h ago
+and is still pending is a data defect, not a slow game — nothing else distinguishes "the game
+isn't over yet" from "this game's Final will never arrive". Every pass prints
+`[METRIC] stale_pending_bets=<n|-1>`; _alert_on_stale_pending_bets in the Dagster op turns that
+into a CRITICAL page. -1 = the check could not be evaluated, which is reported as unknown, never
+as healthy.
+
 Called by settle_user_bets_op — wired into BOTH daily_ingestion_job (after dbt_daily_build)
 AND the evening settle_user_bets_job schedule (E11.20 phase-2a): the daily morning pass
 alone left a full slate's evening finals unsettled for 12-24h, so the evening passes settle
@@ -47,6 +66,8 @@ Env vars:
     AWS_REGION       DynamoDB region (default us-east-1)
     USER_BETS_TABLE  (default credence-prod-dynamo-user-bets)
     PROP_STATSAPI_FALLBACK  '0' disables the E9.49 boxscore fallback (default on)
+    SETTLE_SCORE_STATSAPI_FALLBACK  '0' disables the INC-38 game-market score fallback
+                     (default on). Not a deploy-gated flag — nothing in env.required.
     (Snowflake env is NO LONGER required — scores/K totals come from the S3 lakehouse;
      DuckDB resolves S3 creds via the credential chain = the box instance role.)
 
@@ -62,7 +83,7 @@ import argparse
 import logging
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -81,6 +102,15 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 from scripts.utils.lakehouse_read import duck_connect, query_upper, register_views
+
+# INC-38 — the stale-pending-bet metric contract. PURE stdlib module (no pandas/Snowflake), and
+# it lives in betting_ml/ rather than pipeline/ so the fast gate can import both sides of the
+# contract: pipeline/__init__.py reads the dbt manifest, absent in CI (E11.23).
+from betting_ml.monitoring.stale_pending_bets import (
+    METRIC_PREFIX,
+    STALE_AFTER_HOURS,
+    UNKNOWN,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -149,6 +179,33 @@ def _final_scores(conn, game_pks: list[int]) -> dict[int, tuple[int, int]]:
     return {int(r["GAME_PK"]): (int(r["HOME_SCORE"]), int(r["AWAY_SCORE"])) for r in rows}
 
 
+def _first_pitch_utc(conn, game_pks: list[int]) -> dict[int, datetime]:
+    """game_pk -> scheduled first pitch (UTC), for the INC-38 stale-pending-bet check.
+
+    game_date is a string-wrapped TIMESTAMP in the lakehouse parquet (the INC-23 binary-timestamp
+    cure), so it is cast at the USE SITE — `try_cast(... as timestamptz)`, never a bare compare.
+    A game whose row is absent or whose timestamp will not parse is simply omitted: the caller
+    counts only bets it can positively age, so an unparseable row can never manufacture a page.
+    """
+    if not game_pks:
+        return {}
+    placeholders = ",".join(str(int(g)) for g in game_pks)
+    sql = (
+        "SELECT game_pk, try_cast(game_date AS timestamptz) AS first_pitch_utc "
+        "FROM baseball_data.betting.stg_statsapi_games "
+        f"WHERE game_pk IN ({placeholders})"
+    )
+    out: dict[int, datetime] = {}
+    for r in query_upper(conn, sql):
+        ts = r.get("FIRST_PITCH_UTC")
+        if ts is None:
+            continue
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        out[int(r["GAME_PK"])] = ts
+    return out
+
+
 def _starter_strikeouts(conn, game_pks: list[int]) -> dict[tuple[int, int], int]:
     """(game_pk, pitcher_id) -> actual strikeouts for starters in the given games.
 
@@ -187,19 +244,29 @@ def _fallback_enabled() -> bool:
     return os.environ.get("PROP_STATSAPI_FALLBACK", "1") != "0"
 
 
-def _statsapi_final_games(game_pks: list[int]) -> set[int]:
-    """The subset of game_pks the LIVE Stats API schedule reports as terminal.
+def _score_fallback_enabled() -> bool:
+    """INC-38 kill switch for the game-market (h2h/totals) Stats-API score fallback."""
+    return os.environ.get("SETTLE_SCORE_STATSAPI_FALLBACK", "1") != "0"
+
+
+def _statsapi_final_scores(game_pks: list[int]) -> dict[int, tuple[int, int] | None]:
+    """game_pk -> (home_score, away_score) for every game the LIVE Stats API reports terminal.
 
     An INDEPENDENT Final confirmation. Our own stg_statsapi_games could be wrong or stale
-    (the postponed-DH dedup landmine is exactly this class), and settling a prop off a
-    boxscore mid-game would bank a PARTIAL K count as final — the one way this fallback
-    could produce a wrong answer. One batched call for every candidate game.
+    (the postponed-DH dedup landmine is exactly this class, and INC-38's month-boundary hole is
+    another), and settling a prop off a boxscore mid-game would bank a PARTIAL K count as final —
+    the one way this fallback could produce a wrong answer. One batched call for every candidate
+    game serves BOTH consumers (the prop Final-confirm and the INC-38 score fallback).
 
-    Returns an empty set on any failure: no confirmation ⇒ no fallback ⇒ the bet simply
-    stays pending for the next pass. Never raises.
+    The value is None when the game is terminal but the schedule payload carried no usable score
+    pair — terminal is still a valid answer for the prop path, but a game-market bet must not be
+    settled off a missing score.
+
+    Returns {} on any failure: no confirmation ⇒ no fallback ⇒ the bet simply stays pending for
+    the next pass. Never raises.
     """
     if not game_pks:
-        return set()
+        return {}
     try:
         import requests
 
@@ -211,22 +278,37 @@ def _statsapi_final_games(game_pks: list[int]) -> set[int]:
         resp.raise_for_status()
         payload = resp.json()
     except Exception:
-        log.warning("Stats API schedule confirm failed — skipping the prop fallback this pass",
+        log.warning("Stats API schedule confirm failed — skipping the settle fallback this pass",
                     exc_info=True)
-        return set()
+        return {}
 
-    final: set[int] = set()
+    final: dict[int, tuple[int, int] | None] = {}
     for day in payload.get("dates", []) or []:
         for game in day.get("games", []) or []:
             status = game.get("status") or {}
             # codedGameState is the terminal flag; detailedState screens out a game that is
-            # 'Final' only because it was Postponed/Suspended (no complete K count exists).
-            if status.get("codedGameState") in _TERMINAL_CODES and status.get("detailedState") in ("Final", "Game Over", "Completed Early"):
-                try:
-                    final.add(int(game["gamePk"]))
-                except (KeyError, TypeError, ValueError):
-                    continue
+            # 'Final' only because it was Postponed/Suspended (no complete score/K count exists).
+            if status.get("codedGameState") not in _TERMINAL_CODES:
+                continue
+            if status.get("detailedState") not in ("Final", "Game Over", "Completed Early"):
+                continue
+            try:
+                gp = int(game["gamePk"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            teams = game.get("teams") or {}
+            home = (teams.get("home") or {}).get("score")
+            away = (teams.get("away") or {}).get("score")
+            try:
+                final[gp] = (int(home), int(away)) if home is not None and away is not None else None
+            except (TypeError, ValueError):
+                final[gp] = None
     return final
+
+
+def _statsapi_final_games(game_pks: list[int]) -> set[int]:
+    """The subset of game_pks the LIVE Stats API schedule reports as terminal (prop path)."""
+    return set(_statsapi_final_scores(game_pks))
 
 
 def _boxscore_starter_strikeouts(game_pk: int) -> dict[int, int]:
@@ -369,6 +451,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if not pending:
         log.info("No pending bets to settle.")
+        # Nothing pending is the healthiest possible state, but it must still SAY so: an absent
+        # metric is classified UNKNOWN (WARN), so returning silently here would page on every
+        # quiet pass — the alert-fatigue failure mode (INC-38).
+        _report_stale_pending([], {}, True)
         return 0
 
     game_pks = sorted({int(b["pending_game_pk"]) for b in pending})
@@ -379,6 +465,8 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:
         log.exception("Failed to connect to the S3 lakehouse (DuckDB)")
         return 1
+    first_pitch: dict[int, datetime] = {}
+    first_pitch_read_ok = True
     try:
         scores = _final_scores(conn, game_pks)
         # Only pay for the starter-K read when a prop bet is actually pending.
@@ -387,8 +475,48 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:
         log.exception("Failed to load settlement data from the S3 lakehouse")
         return 1
+    else:
+        # INC-38 stale-pending-bet check (best-effort, never fails the pass): a failure here means
+        # the check is UNEVALUATED, which is reported as unknown — never as healthy.
+        try:
+            first_pitch = _first_pitch_utc(conn, game_pks)
+        except Exception:
+            first_pitch_read_ok = False
+            log.warning("Failed to read first-pitch times for the stale-pending-bet check",
+                        exc_info=True)
     finally:
         conn.close()
+
+    # INC-38: a game whose Final never reached stg_statsapi_games leaves its bets pending FOREVER.
+    # The month-boundary schedule hole did exactly that to 14 of 15 games on 2026-07-31 — the
+    # capture is month-scoped, so no capture taken on or after the 1st ever revisits a game that
+    # first-pitched after 00:00 UTC. Settlement must therefore NOT depend on that flatten: for any
+    # game-market bet whose game our own table does not report final, ask the Stats API directly
+    # (the same authority, and the same independent-confirmation discipline E9.49 already applies
+    # to props). This is the E9.54 theme — settle off the intraday-fresh authority, not off a
+    # table that is only as fresh as the build that wrote it.
+    api_scored: dict[int, tuple[int, int]] = {}
+    unscored_game_markets = sorted({
+        int(b["pending_game_pk"])
+        for b in pending
+        if b.get("market") not in _PROP_MARKETS
+        and not b.get("outcome")
+        and int(b["pending_game_pk"]) not in scores
+    })
+    if unscored_game_markets and not _score_fallback_enabled():
+        log.warning("SETTLE_SCORE_STATSAPI_FALLBACK is off — %s game(s) with unsettled "
+                    "game-market bet(s) left pending", len(unscored_game_markets))
+    elif unscored_game_markets:
+        for gp, pair in _statsapi_final_scores(unscored_game_markets).items():
+            if pair is None:
+                log.warning("Game %s is terminal per the Stats API but carried no score pair — "
+                            "leaving its bet(s) pending", gp)
+                continue
+            api_scored[gp] = pair
+        if api_scored:
+            log.info("Stats API resolved final scores for %s of %s game(s) our lakehouse does "
+                     "not report final (INC-38)", len(api_scored), len(unscored_game_markets))
+        scores = {**scores, **api_scored}
 
     # E9.49: for prop bets whose game is FINAL but whose starter has no mart row yet (the
     # Statcast/daily-W2 lag), resolve the K count from the live Stats API boxscore. Computed
@@ -416,6 +544,8 @@ def main(argv: list[str] | None = None) -> int:
     # "game not final yet" skip, and settlement is otherwise invisible (WARN-tier op).
     final_unsettled = 0
     orphans = 0
+    # INC-38: every bet this pass leaves pending, so the stale check below can age them.
+    unresolved: list[dict] = []
     for bet in pending:
         gp = int(bet["pending_game_pk"])
         # E9.49 self-heal: a bet that ALREADY carries a terminal outcome but still has
@@ -439,14 +569,19 @@ def main(argv: list[str] | None = None) -> int:
                 log.exception("Failed to de-index already-settled bet %s", bet.get("bet_id"))
             continue
         if gp not in scores:
-            continue  # game not final yet — the benign, expected skip
+            # Usually the benign "game not final yet" skip — but it is ALSO exactly what a game
+            # whose Final will never arrive looks like (INC-38). The stale check below is what
+            # tells the two apart; nothing here can.
+            unresolved.append(bet)
+            continue
         market = bet["market"]
-        source = "mart"
+        source = "statsapi" if gp in api_scored else "mart"
         if market in _PROP_MARKETS:
             pid = bet.get("player_id")
             if pid is None:
                 log.warning("Bet %s: prop market=%s missing player_id (skipping)", bet.get("bet_id"), market)
                 final_unsettled += 1
+                unresolved.append(bet)
                 continue
             actual_k = strikeouts.get((gp, int(pid)))
             if actual_k is None:
@@ -461,6 +596,7 @@ def main(argv: list[str] | None = None) -> int:
                             "Stats API fallback could not resolve it (leaving pending)",
                             bet.get("bet_id"), pid, gp)
                 final_unsettled += 1
+                unresolved.append(bet)
                 continue
             outcome = _prop_outcome(market, actual_k, bet.get("prop_line"))
         else:
@@ -469,6 +605,7 @@ def main(argv: list[str] | None = None) -> int:
         if outcome is None:
             log.warning("Bet %s: cannot settle market=%s (skipping)", bet.get("bet_id"), market)
             final_unsettled += 1
+            unresolved.append(bet)
             continue
         pl = _profit_loss(outcome, Decimal(str(bet["stake"])), Decimal(str(bet["american_odds"])))
         if dry_run:
@@ -492,6 +629,7 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             log.exception("Failed to settle bet %s", bet.get("bet_id"))
             final_unsettled += 1
+            unresolved.append(bet)
 
     # ALERT-loud-but-continue (CLAUDE.md pipeline-failure contract): if any bet's game is
     # FINAL yet unsettled, surface it to stderr so a real settlement gap is visible rather
@@ -505,7 +643,49 @@ def main(argv: list[str] | None = None) -> int:
     if orphans:
         log.info("De-indexed %s already-settled bet(s) stuck in the pending index", orphans)
     log.info("Settled %s of %s pending bet(s) in %s", settled, len(pending), _USER_BETS_TABLE)
+
+    _report_stale_pending(unresolved, first_pitch, first_pitch_read_ok)
     return 0
+
+
+def _report_stale_pending(unresolved: list[dict], first_pitch: dict[int, datetime],
+                          read_ok: bool) -> int:
+    """INC-38 — emit `[METRIC] stale_pending_bets=<n|-1>` for the op-side page.
+
+    A bet is STALE when its game first-pitched more than STALE_AFTER_HOURS ago and it is STILL
+    pending. That is the only signal that separates "the game is not over yet" (benign, the
+    overwhelmingly common case) from "this game's Final will never arrive, so this bet will never
+    settle" (INC-38) — the settle loop itself cannot tell them apart, which is exactly why three
+    bets sat pending for two days with a clean-looking op.
+
+    Never raises and never changes the exit code: the settle op is WARN-tier and a monitor must
+    never be the thing that takes down the job it watches. Returns the emitted value (for tests).
+    """
+    if not read_ok:
+        # UNEVALUATED is not healthy (NF1.7 (a)): a check that could not run must say so.
+        print(f"{METRIC_PREFIX}{UNKNOWN}")
+        return UNKNOWN
+
+    now = datetime.now(timezone.utc)
+    cutoff = timedelta(hours=STALE_AFTER_HOURS)
+    stale = []
+    for bet in unresolved:
+        ts = first_pitch.get(int(bet["pending_game_pk"]))
+        # No parseable first pitch ⇒ we cannot age it ⇒ we do not count it. The check only ever
+        # pages on bets it can positively prove are overdue.
+        if ts is not None and (now - ts) > cutoff:
+            stale.append(bet)
+
+    for bet in stale:
+        log.warning("Bet %s on game %s is STILL pending %.1fh after first pitch — its game has no "
+                    "final in our data and it will not self-heal (INC-38)",
+                    bet.get("bet_id"), bet.get("pending_game_pk"),
+                    (now - first_pitch[int(bet["pending_game_pk"])]).total_seconds() / 3600)
+    if stale:
+        print(f"[ALERT] settle_user_bets: {len(stale)} bet(s) still pending more than "
+              f"{STALE_AFTER_HOURS}h after first pitch (INC-38)", file=sys.stderr)
+    print(f"{METRIC_PREFIX}{len(stale)}")
+    return len(stale)
 
 
 if __name__ == "__main__":

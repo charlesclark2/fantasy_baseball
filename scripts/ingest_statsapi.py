@@ -345,6 +345,34 @@ def apply_lookahead(end: date, lookahead_days: int) -> date:
     return end + timedelta(days=lookahead_days) if lookahead_days > 0 else end
 
 
+def apply_lookback(start: date, lookback_days: int) -> date:
+    """INC-38 — pull `start` BACK by `lookback_days` so iter_months also reaches the PREVIOUS
+    month just after a month boundary. The mirror image of apply_lookahead. PURE.
+
+    WHY (INC-38, 2026-08-02): the INC-37 lookahead is FORWARD-only, so it fixes "the last capture
+    of July has no games for 08-01" but NOT "no capture ever revisits July after 08-01". A game
+    that first-pitches AFTER 00:00 UTC on the 1st (every West-coast night game on the last day of a
+    month) is still Pre-Game/In-Progress in the final same-month capture, and from then on every
+    default capture is scoped to the NEW month — so its Final + score is never written. Measured
+    on 2026-07-31: 14 of 15 games were frozen non-final in stg_statsapi_games, and 3 user bets on
+    two of them (first pitch 00:40Z and 01:40Z) sat PENDING forever — the settle filter
+    (status_code in ('F','O')) matched nothing and never self-healed.
+
+    A lookback makes the FIRST N captures of every month re-fetch the prior month, so the tail of
+    a month always gets a post-midnight capture carrying its finals.
+
+    ⚠️ This must be set on EVERY caller, not just the daily one. The daily op has effectively had a
+    1-day lookback since 2026-07-15 (`--start-date <yesterday>`) and it did NOT hold, because the
+    S3 raw writer uses mode='overwrite_partition' keyed on the FIRE DATE: every fire replaces the
+    whole dt=<today> partition with only the months IT fetched. So a narrow month-only intraday
+    tick minutes later CLOBBERS the wide daily fetch that sits in the same partition. Both callers
+    must carry the lookback or the wider one is transient.
+
+    A negative/zero lookback is a no-op (never shortens the range).
+    """
+    return start - timedelta(days=lookback_days) if lookback_days > 0 else start
+
+
 # ── Venue ID loading ──────────────────────────────────────────────────────────
 
 def load_venue_ids_from_file(path: str) -> list[int]:
@@ -566,6 +594,22 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     schedule_parser.add_argument(
+        "--lookback-days",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "INC-38 month-boundary guard, the mirror of --lookahead-days. Extend the ingested "
+            "month range BACKWARD so it also covers `start date - N days`. With N=0 no capture "
+            "taken on or after the 1st ever revisits the previous month, so a game that "
+            "first-pitches after 00:00 UTC on the 1st (every West-coast night game on the last "
+            "day of a month) never gets its Final + score written — it stays frozen non-final in "
+            "stg_statsapi_games forever and any user bet on it stays PENDING forever. N=3 makes "
+            "the first few captures of every month also re-fetch the prior month. Default 0 "
+            "(unchanged) for backfills."
+        ),
+    )
+    schedule_parser.add_argument(
         "--capture-reason",
         default="daily_full_month",
         choices=["daily_full_month", "intraday_gameday"],
@@ -628,6 +672,10 @@ def main() -> None:
                 schedule_end = today.replace(day=last_day)
             # INC-37 — extend past the month boundary so no capture can be month-scoped short.
             schedule_end = apply_lookahead(schedule_end, getattr(args, "lookahead_days", 0) or 0)
+            # INC-38 — and BACKWARD, so the first captures of a month still revisit the prior
+            # month's tail (a game that first-pitches after 00:00 UTC on the 1st is never Final
+            # in any same-month capture).
+            schedule_start = apply_lookback(schedule_start, getattr(args, "lookback_days", 0) or 0)
             run_schedule(conn, schedule_start, schedule_end, args.capture_reason)
 
         elif args.command == "venues":
