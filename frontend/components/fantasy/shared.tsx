@@ -372,20 +372,33 @@ export function PlayerContributionsPanel({
         typical player at his level, then these signals move it, based on what makes {playerName}{" "}
         himself different.
       </p>
-      <div className="space-y-2">
+      <div className="space-y-3">
         {contrib.drivers.map((d) => {
           const entry = legend[d.feature]
           const positive = d.pts >= 0
           return (
-            <div key={d.feature} className="flex items-center gap-3">
-              <span className="w-40 flex-shrink-0 truncate text-xs text-gray-300">
-                {entry ? (
-                  <InfoTip label={entry.label}>{entry.description}</InfoTip>
-                ) : (
-                  d.feature
-                )}
-              </span>
-              <div className="relative h-1.5 flex-1 rounded-full bg-[#1a1a1a]">
+            <div key={d.feature}>
+              {/* label + value share the top line but never fight for space with the bar — a label
+                  wraps onto a second line rather than being cut off (the whole point of this panel
+                  is that the label is legible; a truncated one defeats it, esp. on a narrow phone) */}
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-xs leading-snug text-gray-300">
+                  {entry ? (
+                    <InfoTip label={entry.label}>{entry.description}</InfoTip>
+                  ) : (
+                    d.feature
+                  )}
+                </span>
+                <span
+                  className={`flex-shrink-0 text-right text-[11px] tabular-nums ${
+                    positive ? "text-emerald-400" : "text-rose-400"
+                  }`}
+                >
+                  {positive ? "+" : ""}
+                  {d.pts.toFixed(1)}
+                </span>
+              </div>
+              <div className="relative mt-1 h-1.5 w-full rounded-full bg-[#1a1a1a]">
                 <div
                   className={`absolute top-0 h-1.5 rounded-full ${positive ? "bg-emerald-500/60" : "bg-rose-500/60"}`}
                   style={{
@@ -395,14 +408,6 @@ export function PlayerContributionsPanel({
                 />
                 <div className="absolute left-1/2 top-0 h-1.5 w-px bg-gray-700" />
               </div>
-              <span
-                className={`w-14 flex-shrink-0 text-right text-[11px] tabular-nums ${
-                  positive ? "text-emerald-400" : "text-rose-400"
-                }`}
-              >
-                {positive ? "+" : ""}
-                {d.pts.toFixed(1)}
-              </span>
             </div>
           )
         })}

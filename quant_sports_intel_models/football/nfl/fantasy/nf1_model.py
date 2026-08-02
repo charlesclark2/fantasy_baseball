@@ -485,7 +485,8 @@ _RAW_SCALE_COLS = (
 
 def apply_learned_ordering(mvp1: pd.DataFrame, learned_score: np.ndarray,
                            positions: tuple = LEARN_POSITIONS,
-                           lo: float = 0.30, hi: float = 3.5) -> pd.DataFrame:
+                           lo: float = 0.30, hi: float = 3.5,
+                           eligible: np.ndarray | None = None) -> pd.DataFrame:
     """Apply the learned model as an ORDERING within each position, PRESERVING MVP-1's calibrated
     point-level distribution (a within-position quantile remap — the `blend_adp_prior` mechanism).
 
@@ -503,15 +504,26 @@ def apply_learned_ordering(mvp1: pd.DataFrame, learned_score: np.ndarray,
     within-multiset promotion can be large) but bounded to guard a degenerate line.
 
     Rows outside `positions` (FB / rookies handled elsewhere) keep their MVP-1 line. A position with
-    <2 players is a no-op."""
+    <2 players is a no-op.
+
+    ⭐ `eligible` (NF1.5b) restricts the permutation to a SUBSET of each position's rows: only eligible
+    rows are reordered, and they are handed back only THEIR OWN sub-multiset of point levels, so an
+    ineligible row keeps its MVP-1 point, line and interval EXACTLY. Default `None` = every row is
+    eligible, which is byte-identical to the pre-NF1.5b behaviour. It exists because the learner's
+    feature frame is assembled from a NARROWER universe than the shipped board (NF-D11's base-anchor
+    rescue adds ~68 players the research frame never sees), and the alternative — scoring an unscored
+    player by his MVP-1 points on a scale the learner does not share — silently interleaves two
+    different scales. A player the model cannot speak to should be left alone, not guessed at."""
     from quant_sports_intel_models.football.nfl.fantasy import season_projection as _SP
     out = mvp1.copy()
     base = _SP.score_line(out, prefix="proj_")["proj_fp_ppr"].to_numpy(dtype=float)
     remapped = base.copy()
     pos = np.array([(p or "").upper() for p in out["position"]], dtype=object)
     score = np.asarray(learned_score, dtype=float)
+    elig = (np.ones(len(out), dtype=bool) if eligible is None
+            else np.asarray(eligible, dtype=bool))
     for p in positions:
-        idx = np.where(pos == p)[0]
+        idx = np.where((pos == p) & elig)[0]
         if len(idx) < 2:
             continue
         s = score[idx]
