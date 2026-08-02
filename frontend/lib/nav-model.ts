@@ -67,6 +67,30 @@ export const SPORTS: SportNav[] = [
           },
         ],
       },
+      // E8.1 — MLB→Fantasy. The comment at the top of this file said "today MLB has Betting only
+      // and NFL has Fantasy only… adding MLB→Fantasy later is a data edit here, not a nav rewrite";
+      // this is that edit. It inherits the fantasy surface gate automatically (`isLocked` in
+      // nav.tsx keys on `g.surface === "fantasy"`, not on the sport), so the MLB board is upsold to
+      // an unentitled visitor exactly like the NFL one.
+      {
+        surface: "fantasy",
+        label: "Fantasy",
+        sections: [
+          {
+            label: null,
+            items: [
+              // Order is PRODUCT order: the board is the surface, the disagreement view is the
+              // differentiated cut OF that board and only makes sense after it.
+              { label: "Prospect Board", href: "/fantasy/mlb/prospects", key: "mlb-prospects" },
+              {
+                label: "Where We Disagree",
+                href: "/fantasy/mlb/disagreements",
+                key: "mlb-disagreements",
+              },
+            ],
+          },
+        ],
+      },
     ],
   },
   {
