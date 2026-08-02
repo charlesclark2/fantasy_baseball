@@ -450,9 +450,18 @@ def player_feature_contributions(
     elsewhere on the page (NF1 sets the served ORDERING, not the served LEVEL — see
     `apply_learned_ordering`). Callers must show `total_pts` as our research model's separate estimate,
     never silently relabel it as "his projection." `mvp1_fp`'s own contribution is folded into
-    `baseline_pts` (with the model's bias/expected-value term) rather than listed as a "driver" — it's
-    the model's OWN starting estimate for him, not an independent signal a drafter can act on (same
-    reasoning as `_TAUTOLOGICAL_FEATURES` in `feature_importance_report`)."""
+    `baseline_pts` rather than listed as a "driver" — it's the model's OWN starting estimate for him,
+    not an independent signal a drafter can act on (same reasoning as `_TAUTOLOGICAL_FEATURES` in
+    `feature_importance_report`).
+
+    ⚠️ `baseline_pts` is NOT one number, and a caller must not describe it as if it were: it is
+    `bias_pts` (the model's expected value — the SAME constant for every player, its unconditional
+    average prediction) PLUS `own_prior_pts` (this player's OWN `mvp1_fp` contribution — genuinely
+    player-specific, since it scales with his own baseline heuristic projection). Two players at the
+    same position have DIFFERENT `baseline_pts` almost entirely because `own_prior_pts` differs, not
+    because the model treats them as different "tiers" — a caption that says "a typical player at his
+    level" is describing `bias_pts` alone and silently smuggling `own_prior_pts` in as if it were the
+    same shared quantity. Both are exported separately so a caller can be honest about which is which."""
     booster = fitted_model.booster_
     contrib = booster.predict(F, pred_contrib=True)
     names = list(F.columns)                              # matches contrib's column order + a bias col
@@ -461,12 +470,15 @@ def player_feature_contributions(
     out: dict[str, dict] = {}
     for i, pid in enumerate(player_ids):
         row = dict(zip(names, vals[i]))
-        baseline = float(row.get("mvp1_fp", 0.0)) + float(bias[i])
+        own_prior = float(row.get("mvp1_fp", 0.0))
+        bias_i = float(bias[i])
         total = float(vals[i].sum() + bias[i])
         others = {f: float(row.get(f, 0.0)) for f in feats if f not in _TAUTOLOGICAL_FEATURES}
         ranked = sorted(others.items(), key=lambda kv: abs(kv[1]), reverse=True)[:top_n]
         out[str(pid)] = {
-            "baseline_pts": round(baseline, 1),
+            "bias_pts": round(bias_i, 1),
+            "own_prior_pts": round(own_prior, 1),
+            "baseline_pts": round(own_prior + bias_i, 1),
             "total_pts": round(total, 1),
             "drivers": [{"feature": f, "pts": round(v, 1)} for f, v in ranked if abs(v) >= min_pts],
         }

@@ -144,6 +144,10 @@ _PROJECTION_KEYS = {
     # silently downgrade a custom D/ST scheme to "captured, not applied".
     "paG0", "paG1_6", "paG7_13", "paG14_17", "paG18_20", "paG21_27", "paG28_34", "paG35_45",
     "paG46p",
+    # NF1.5b — how MARKET-LEANING this row's ordering is. Declared on every record (null on the
+    # market-blind board) so a player page can carry the "this position incorporates consensus"
+    # caveat for the one player it renders, without the client re-deriving it from the manifest.
+    "mktLean",
 }
 
 
@@ -333,13 +337,13 @@ def test_load_player_contributions_corrupt_json_is_best_effort(tmp_path, monkeyp
 def test_projection_records_attaches_contrib_when_present():
     # "00-1" = Josh Allen (veteran, NF1-covered); "R-1" = the rookie (NF1 doesn't cover rookies)
     contrib_map = {
-        "00-1": {"baseline_pts": 150.2, "total_pts": 160.9,
+        "00-1": {"bias_pts": 101.8, "own_prior_pts": 48.4, "baseline_pts": 150.2, "total_pts": 160.9,
                  "drivers": [{"feature": "age", "pts": -4.1}, {"feature": "team_env", "pts": 3.0}]},
     }
     allen, mendoza = ex.projection_records(_projection_frame(), contributions=contrib_map)
     assert allen["id"] == "00-1" and mendoza["id"] == "R-1"
     assert allen["contrib"] == {
-        "baselinePts": 150.2, "totalPts": 160.9,
+        "biasPts": 101.8, "ownPriorPts": 48.4, "baselinePts": 150.2, "totalPts": 160.9,
         "drivers": [{"feature": "age", "pts": -4.1}, {"feature": "team_env", "pts": 3.0}],
     }
     assert mendoza["contrib"] is None

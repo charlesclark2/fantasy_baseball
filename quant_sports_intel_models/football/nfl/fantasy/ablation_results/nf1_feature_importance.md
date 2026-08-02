@@ -2,7 +2,7 @@
 
 ⚠️ The player page surfaces PER-PLAYER contributions (`nf1_player_contributions.json`), not this report — see `run_nf1_feature_importance.py`'s module docstring for why both exist.
 
-Generated: 2026-08-02T02:52:29.665408+00:00  ·  model: `nfl_fantasy_nf1_v1`  ·  pool: 2995 rows over base seasons [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]
+Generated: 2026-08-02T03:28:31.887546+00:00  ·  model: `nfl_fantasy_nf1_v1`  ·  pool: 2995 rows over base seasons [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]
 
 ## Global (pooled across positions, LightGBM gain importance) — baseline (`mvp1_fp`) share: 75.1%
 

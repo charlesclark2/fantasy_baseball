@@ -20,6 +20,7 @@ import {
   InfoTip,
   IntervalBar,
   LoadingBlock,
+  MarketLeanNote,
   Pagination,
   PosBadge,
   RangeCell,
@@ -307,6 +308,7 @@ export function ProjectionsTable() {
                 versus worse ones — not as precise ranks, and lean on the range.
               </p>
               <p className="mt-2">The 80% range shown is on the reference PPR total.</p>
+              <MarketLeanNote lean={data?.market_lean} note={data?.market_lean_note} />
             </UncertaintyNote>
           </div>
         </>

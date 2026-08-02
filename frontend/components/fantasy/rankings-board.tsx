@@ -42,6 +42,7 @@ import {
   ALL_POSITIONS,
   LOW_PREDICTABILITY_POSITIONS,
   SurfaceHeader,
+  MarketLeanNote,
   UncertaintyNote,
   downloadCsv,
   num,
@@ -415,6 +416,10 @@ export function RankingsBoard() {
                   knows. Undrafted players show no ADP.
                 </p>
               )}
+              <MarketLeanNote
+                lean={manifest?.projections?.market_lean}
+                note={manifest?.projections?.market_lean_note}
+              />
             </UncertaintyNote>
           </div>
         </>

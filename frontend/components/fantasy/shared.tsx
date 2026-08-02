@@ -14,6 +14,7 @@ import { Info } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Picker } from "@/components/ui/picker"
 import type { LeagueConfigMeta, Manifest } from "@/lib/draft-optimizer"
+import { marketLeaningPositions } from "@/lib/fantasy"
 import type { ProjectedPlayer } from "@/lib/fantasy"
 
 export const POS_COLORS: Record<string, string> = {
@@ -188,9 +189,18 @@ export const UNCERTAINTY_HELP: Record<string, string> = {
 export function InfoTip({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
   // Built on POPOVER, not Tooltip, and that is deliberate: Radix's Tooltip closes on pointerdown by
   // design, so a tap can never open it — on a phone (no hover) the definition would be unreachable,
-  // and these definitions are what make the boards readable. Popover is click/tap-driven, and the
-  // hover handlers below restore the usual tooltip feel on a mouse. `button` keeps it keyboard-
-  // focusable. Verified on a real touch context, not assumed.
+  // and these definitions are what make the boards readable. Popover is click/tap-driven (Radix
+  // toggles the controlled `open` state on click on its own), and the hover handlers below ADD the
+  // usual tooltip feel on a mouse on top of that. `button` keeps it keyboard-focusable.
+  //
+  // 🐛 the hover handlers must be POINTER events gated to `pointerType === "mouse"`, not plain
+  // `onMouseEnter`/`onMouseLeave` (2026-08-02 mobile bug): a touch tap fires a real `click` (which
+  // Radix uses to open it) immediately followed by a browser-synthesized `mouseleave` on the same
+  // element (touch simulates a brief hover-then-leave on many mobile browsers) — a plain
+  // `onMouseLeave` closed it again in the same frame, so the definition "popped up and immediately
+  // went away" on a phone. Pointer events reliably carry `pointerType`, so gating on `=== "mouse"`
+  // makes a touch tap invisible to these handlers entirely; Radix's own click-to-toggle is then the
+  // ONLY thing driving touch, exactly like the tap-to-open guarantee this component already promises.
   const [open, setOpen] = useState(false)
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -198,8 +208,12 @@ export function InfoTip({ label, children }: { label: React.ReactNode; children:
         <button
           type="button"
           aria-label={typeof label === "string" ? `${label} — what this means` : "What this means"}
-          onMouseEnter={() => setOpen(true)}
-          onMouseLeave={() => setOpen(false)}
+          onPointerEnter={(e) => {
+            if (e.pointerType === "mouse") setOpen(true)
+          }}
+          onPointerLeave={(e) => {
+            if (e.pointerType === "mouse") setOpen(false)
+          }}
           className="inline-flex cursor-help items-center gap-1 underline decoration-dotted decoration-gray-600 underline-offset-4"
         >
           {label}
@@ -327,13 +341,37 @@ export function UncertaintyNote({ children }: { children?: React.ReactNode }) {
   )
 }
 
-/** NF3.4 — "what our {POS} model weights most", the transparency panel.
+/** NF1.5b — the MARKET-LEAN caveat: which positions' ordering incorporates market consensus.
  *
- *  🚨 HONEST LABELLING is the whole point of this component, not a copy afterthought: it is a
- *  MODEL-LEVEL description (what the fitted research model leans on for this POSITION, in
- *  aggregate) — it never claims to explain why THIS player's number is what it is. Renders nothing
- *  for a position NF1 wasn't fitted on (K/DST) or if the manifest carries no featureImportance yet
- *  (an older export) — see `FeatureImportancePayload` in draft-optimizer.ts. */
+ *  🚨 THIS IS THE HONEST FRAME FOR THE SERVED BOARD, and it is deliberately rendered from the
+ *  PAYLOAD rather than hard-coded. The board we serve re-orders our own calibrated projections using
+ *  market consensus (ADP/ECR) at the positions where doing so measurably helped on the backtest. So
+ *  the ordering DID beat consensus ADP overall — a real, measured result — but at a market-leaning
+ *  position it is NOT an independent read on the market, and it must never be presented as beating a
+ *  market it is partly built from. Which positions those are is a MODEL decision that can change on
+ *  the next re-selection, so the copy takes them from `market_lean` and the sentence itself from
+ *  `market_lean_note`: the wording travels with the model that earned it and cannot drift.
+ *
+ *  Renders nothing for a market-BLIND payload (no `market_lean`) — there is nothing to caveat. */
+export function MarketLeanNote({
+  lean,
+  note,
+}: {
+  lean?: Record<string, string> | null
+  note?: string | null
+}) {
+  const positions = marketLeaningPositions(lean)
+  if (!note || positions.length === 0) return null
+  return (
+    <p className="mt-2">
+      <span className="font-semibold text-gray-300">
+        Where the ranking uses the market: {positions.join(", ")}.
+      </span>{" "}
+      {note}
+    </p>
+  )
+}
+
 /** NF3.4 — "what pushes {player}'s number up or down", the PER-PLAYER transparency panel.
  *
  *  🚨 HONEST LABELLING is the whole point of this component: every point value comes from our NF1
@@ -368,9 +406,12 @@ export function PlayerContributionsPanel({
         </InfoTip>
       </h2>
       <p className="mb-3 text-[11px] leading-relaxed text-gray-600">
-        Player-specific — our research model starts at {contrib.baselinePts.toFixed(1)} points for a
-        typical player at his level, then these signals move it, based on what makes {playerName}{" "}
-        himself different.
+        Player-specific. Across every player our research model scores, its average is{" "}
+        {contrib.biasPts.toFixed(1)} points — that part is the same for everyone.{" "}
+        {playerName}&apos;s own baseline projection already puts HIM at {contrib.baselinePts.toFixed(1)}{" "}
+        before any signal below is applied (a different starting point than another player at his
+        position would have, because his own baseline differs) — these signals move it further still,
+        based on what specifically stands out about him.
       </p>
       <div className="space-y-3">
         {contrib.drivers.map((d) => {

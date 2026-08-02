@@ -34,6 +34,7 @@ import {
   ALL_POSITIONS,
   SKILL_POSITIONS,
   SurfaceHeader,
+  MarketLeanNote,
   UncertaintyNote,
   num,
   int,
@@ -370,6 +371,10 @@ export function LeagueBoard() {
                       reference point, not a scoreboard — we make no claim to beat it.
                     </p>
                   )}
+                  <MarketLeanNote
+                    lean={manifest?.projections?.market_lean}
+                    note={manifest?.projections?.market_lean_note}
+                  />
                 </UncertaintyNote>
               </div>
             </>

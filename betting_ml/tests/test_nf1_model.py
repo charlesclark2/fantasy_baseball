@@ -351,6 +351,10 @@ def test_player_feature_contributions_sum_to_the_players_own_prediction():
         # the SHAP identity: baseline + every contribution (not just the displayed top-N) sums to
         # exactly this player's own model prediction — `total_pts` must match regardless of top_n
         assert c["total_pts"] == pytest.approx(float(pred[i]), abs=0.15)
+        # baseline_pts must decompose into bias (shared) + own_prior (player-specific) — this is the
+        # split the panel copy relies on to explain why two same-position players differ. Both sides
+        # are independently rounded to 1dp, so allow the resulting double-rounding slack (<=0.1).
+        assert c["baseline_pts"] == pytest.approx(c["bias_pts"] + c["own_prior_pts"], abs=0.15)
         assert len(c["drivers"]) <= 4
         assert all(d["feature"] != "mvp1_fp" for d in c["drivers"])   # never listed as a "driver"
         # drivers are sorted by |pts| descending
@@ -372,3 +376,23 @@ def test_player_feature_contributions_differ_across_players():
     contrib = M.player_feature_contributions(learner._model, F, player_ids, top_n=3)
     totals = {pid: contrib[pid]["total_pts"] for pid in player_ids}
     assert len(set(totals.values())) > 1
+
+
+def test_bias_is_shared_but_own_prior_is_player_specific():
+    # the exact claim the panel copy makes: bias_pts is the SAME constant for every player (the
+    # model's unconditional expected value), own_prior_pts varies (his own mvp1_fp contribution) —
+    # this is WHY two same-position players show different baseline_pts, and the copy must not
+    # attribute that difference to a shared "typical player at his level" number.
+    pool = _synthetic(n=500, seed=13)
+    learner = _fitted_gbm(pool)
+    current = _synthetic(n=20, seed=23)
+    cur_pos = current["position"].to_numpy()
+    F = learner._frame(current, cur_pos)
+    F["_pos"] = F["_pos"].astype("category")
+    player_ids = [f"cur{i}" for i in range(len(current))]
+    contrib = M.player_feature_contributions(learner._model, F, player_ids)
+
+    bias_values = {round(contrib[pid]["bias_pts"], 3) for pid in player_ids}
+    assert len(bias_values) == 1                                      # one constant across everyone
+    own_prior_values = {contrib[pid]["own_prior_pts"] for pid in player_ids}
+    assert len(own_prior_values) > 1                                  # genuinely player-specific

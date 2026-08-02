@@ -79,6 +79,26 @@ export interface Manifest {
   positions: string[]
   sizes: number[]
   configs: LeagueConfigMeta[]
+  /** NF1.5b — which projection lineage EVERY blob in this export came from: `"nf1_5"` (the
+   *  market-aware refined board, the served default since the NF1.5b re-land) or `"mvp1"` (the
+   *  market-blind board). Optional: absent on an export made before NF1.5b. */
+  projectionSource?: string | null
+  projectionLabel?: string | null
+  /** Provenance for the projections blob, mirrored into the manifest so a board-only surface can
+   *  carry the model's own caveats without fetching `projections.json`. Null until that blob
+   *  exports; absent entirely on a pre-NF3 manifest. */
+  projections?: {
+    players: number
+    model_version?: string | null
+    base_season?: number | null
+    adp_format?: string | null
+    adp_teams?: number | null
+    /** NF1.5b — `{position -> market lean}` and the standing caveat sentence. See `MarketLeanNote`. */
+    projection_source?: string | null
+    projection_label?: string | null
+    market_lean?: Record<string, string> | null
+    market_lean_note?: string | null
+  } | null
   /** NF3.4 — `{feature key -> label/description}` for every feature a player's `contrib.drivers` can
    *  reference. Optional: absent on a manifest exported before this shipped, or if the underlying
    *  artifact hadn't been (re-)built at export time. */

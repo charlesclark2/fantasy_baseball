@@ -57,8 +57,40 @@ log = logging.getLogger("nfl.fantasy.export_draft_board")
 
 _ARTIFACTS = _PROJECT_ROOT / "quant_sports_intel_models/football/nfl/fantasy/artifacts"
 _BOARDS_DIR = _ARTIFACTS / "league_boards"
-# MVP-1's season projection (the format-INDEPENDENT raw line the boards are scored from).
-_PROJECTION_PARQUET = "nfl_fantasy_season_projections_{season}.parquet"
+
+# ── WHICH season projection this export SERVES (NF1.5b) ──────────────────────────────────────────
+# ⭐ The default is the NF1.5 REFINED market-aware board, not MVP-1. That is the whole of NF1.5b:
+# NF1.5 produced a board that beats ADP on the NF-D3 product scorecard at all four positions, the
+# operator ruled (2026-08-01) to serve it, and until then `nf1_5_season_projections` was written and
+# read by nothing. `mvp1` stays available as the escape hatch / the market-BLIND baseline.
+#
+# 🔒 HONEST FRAME — carried in the payload (`marketLean` below), not only in a doc. The refined board
+# INCORPORATES market consensus at the market-leaning positions, so "beats ADP overall" is a real,
+# measured, public-scrutinizable backtest result but it is ⛔ NEVER "we beat the market we use". It
+# is also a RE-ORDERING claim, not a re-pricing one: the point projections and their 80% bands are
+# MVP-1's calibrated numbers; NF1.5 changes WHICH player gets which level, nothing else.
+PROJECTION_SOURCES = ("nf1_5", "mvp1")
+DEFAULT_PROJECTION_SOURCE = "nf1_5"
+_PROJECTION_PARQUET = {
+    # MVP-1's season projection (the format-INDEPENDENT raw line the boards are scored from).
+    "mvp1": "nfl_fantasy_season_projections_{season}.parquet",
+    # NF1.5's refined market-aware re-ordering OF that projection (same points, same bands, new order).
+    "nf1_5": "nf1_5_season_projections_{season}.parquet",
+}
+_PROJECTION_LAKE_SOURCE = {"mvp1": "season_projections", "nf1_5": "nf1_5_season_projections"}
+_PROJECTION_LABEL = {
+    "mvp1": "market-blind (MVP-1)",
+    "nf1_5": "market-aware refined (NF1.5)",
+}
+# The standing caveat the surfaces must be able to render. Shipped WITH the data so a client can
+# never present the board's market-aware positions as an independent edge over the market.
+MARKET_LEAN_NOTE = (
+    "At positions labelled market-led or market-blend, the ranking INCORPORATES market consensus "
+    "(ADP/ECR) alongside our own model — so it is not an independent read on the market at those "
+    "positions. The ordering beat consensus ADP across every position on our held-out backtest; the "
+    "point projections and their ranges are unchanged from the market-blind model, so this is a "
+    "re-ORDERING of the same numbers, not a re-pricing."
+)
 # E9.45: the draft board is a PAID surface, so it is no longer shipped as public JSON
 # (a public asset URL is bypassable). It is staged locally then uploaded to S3, where
 # the server-side-gated /fantasy/nfl/* endpoints read it. Default local staging dir:
@@ -227,21 +259,23 @@ def load_boards_lake(season: int) -> pd.DataFrame:
         con.close()
 
 
-def load_projections_local(season: int) -> pd.DataFrame:
-    """MVP-1's season projection from the local artifacts parquet (what run_season_projection.py writes)."""
-    path = _ARTIFACTS / _PROJECTION_PARQUET.format(season=season)
+def load_projections_local(season: int, source: str = DEFAULT_PROJECTION_SOURCE) -> pd.DataFrame:
+    """The served season projection from the local artifacts parquet — NF1.5's refined board by
+    default, MVP-1's with `source='mvp1'` (see `PROJECTION_SOURCES`)."""
+    path = _ARTIFACTS / _PROJECTION_PARQUET[source].format(season=season)
     if not path.is_file():
+        script = ("run_nf1_5.py --mode build" if source == "nf1_5" else "run_season_projection.py")
         raise FileNotFoundError(
-            f"no season projection at {path}. Run run_season_projection.py first, or use --from-lake."
+            f"no {source} season projection at {path}. Run {script} first, or use --from-lake."
         )
     return pd.read_parquet(path)
 
 
-def load_projections_lake(season: int) -> pd.DataFrame:
-    """MVP-1's season projection from the S3 Delta (`mart_nfl_fantasy_season_projection`'s source)."""
+def load_projections_lake(season: int, source: str = DEFAULT_PROJECTION_SOURCE) -> pd.DataFrame:
+    """The served season projection from the S3 Delta (NF1.5's refined board by default)."""
     from quant_sports_intel_models.football.nfl.ingest import s3io
 
-    uri = s3io.table_uri("nfl", "season_projections", tier="fantasy/derived")
+    uri = s3io.table_uri("nfl", _PROJECTION_LAKE_SOURCE[source], tier="fantasy/derived")
     con = _lake_connection()
     try:
         return con.sql(
@@ -249,6 +283,40 @@ def load_projections_lake(season: int) -> pd.DataFrame:
         ).df()
     finally:
         con.close()
+
+
+def market_lean_by_position(df: pd.DataFrame) -> dict[str, str]:
+    """`{position -> market lean}` from the projection's own `market_lean` column (NF1.5 stamps it
+    per row from the selected learner's blend weight). `{}` for a projection that carries none —
+    the market-BLIND MVP-1 board, where there is nothing to caveat.
+
+    ⚠️ A position is reported by ITS LEARNER'S lean, not by a value count, and the distinction is
+    substantive. Rows the refined ordering did not touch — rookies, and the veterans the research
+    frame cannot score — carry `independent` because nothing re-ordered THEM, not because the
+    position is market-blind. Counting values would therefore label every real position "mixed" and
+    the caveat would read as hedging rather than as the honest statement it is. The learners stamp
+    one lean per position, so a genuinely conflicting pair is a data defect and is surfaced as
+    `mixed:` rather than resolved."""
+    if "market_lean" not in df.columns:
+        return {}
+    # normalize FIRST (FB folds into RB) — grouping on the raw column would let FB's `independent`
+    # rows claim the RB key before RB's own rows are seen
+    seen: dict[str, set[str]] = {}
+    for pos_raw, lean in zip(df["position"], df["market_lean"]):
+        pos = NFL_PROFILE.normalize_position(str(pos_raw))
+        if pos not in PROJECTABLE or pd.isna(lean):
+            continue
+        seen.setdefault(pos, set()).add(str(lean))
+    out: dict[str, str] = {}
+    for pos, vals in seen.items():
+        leaning = sorted(v for v in vals if not v.startswith("independent"))
+        if len(leaning) == 1:
+            out[pos] = leaning[0]
+        elif leaning:                               # conflicting learners: report it, never pick
+            out[pos] = "mixed:" + "|".join(leaning)
+        else:
+            out[pos] = sorted(vals)[0]
+    return dict(sorted(out.items()))
 
 
 # The projection's RAW STAT LINE → the compact JSON keys the browse table renders. Season totals.
@@ -351,10 +419,20 @@ def projection_records(
             "lowPred": pos in LOW_PREDICTABILITY,     # NF1.6 — see LOW_PREDICTABILITY
             "predNote": LOW_PREDICTABILITY_NOTE if pos in LOW_PREDICTABILITY else None,
             "contrib": None,   # filled below when NF1 covers this player; None for rookies/K/DST
+            # NF1.5b — how market-leaning THIS row's ordering is ("market-led" / "market-blend" /
+            # "independent-lean" / "independent"). Null on a board with no market input at all. It
+            # rides on the row rather than only in the manifest because the caveat is per-POSITION
+            # and a player page renders one player, not the whole board.
+            "mktLean": (None if pd.isna(r.get("market_lean")) else str(r["market_lean"])),
         }
         c = contributions.get(pid)
         if c:
             rec["contrib"] = {
+                # NF3.4: the model's SHARED constant (biasPts) vs THIS player's OWN starting
+                # projection (ownPriorPts) — kept separate so the UI can explain why two players at
+                # the same position start from different baselines (see player_feature_contributions).
+                "biasPts": c.get("bias_pts"),
+                "ownPriorPts": c.get("own_prior_pts"),
                 "baselinePts": c.get("baseline_pts"),
                 "totalPts": c.get("total_pts"),
                 "drivers": [{"feature": d["feature"], "pts": d["pts"]} for d in c.get("drivers", [])],
@@ -861,9 +939,48 @@ def config_manifest_entry(name: str) -> dict:
     }
 
 
+def assert_board_projection_source(df: pd.DataFrame, want: str, season: int) -> None:
+    """REFUSE to export when the league boards were scored from a DIFFERENT projection than the one
+    the Projections surface will serve.
+
+    ⚠️ THIS IS THE FAILURE MODE NF1.5b HAD TO GUARD, not a hypothetical. The draft board (`board_*.json`
+    → Rankings / Draft Optimizer / League Board) is scored by `run_league_board.py`, while
+    `projections.json` (→ Projections / the player page) is read here. They are two views of ONE
+    ranking, but they come from two SEPARATE reads of two SEPARATE artifacts — so a re-land that
+    repoints only one of them ships a board where a player is WR4 on one surface and WR9 on another,
+    with no error anywhere. A silent disagreement between two serving surfaces is worse than a failed
+    export, so this raises.
+
+    A board with NO `projection_source` column predates NF1.5b, i.e. it was scored from MVP-1 before
+    the flip and is exactly the stale artifact this exists to catch — it refuses too, with the re-run
+    command."""
+    rerun = (f"uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_league_board "
+             f"--projection-season {season} --projection-source {want}")
+    if "projection_source" not in df.columns:
+        raise SystemExit(
+            f"the league boards carry no `projection_source` — they were built before NF1.5b, so "
+            f"they are scored from MVP-1 while this export would serve '{want}' projections. "
+            f"Re-score the boards first:\n  {rerun}")
+    got = sorted({str(v) for v in df["projection_source"].dropna().unique()})
+    if got != [want]:
+        raise SystemExit(
+            f"projection-source MISMATCH: the league boards were scored from {got} but this export "
+            f"would serve '{want}' projections — the draft board and the Projections surface would "
+            f"rank the same player differently. Re-score the boards:\n  {rerun}")
+    log.info("projection source: %s (%s) — boards and projections agree", want,
+             _PROJECTION_LABEL[want])
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--season", type=int, default=2026)
+    ap.add_argument("--projection-source", choices=PROJECTION_SOURCES,
+                    default=DEFAULT_PROJECTION_SOURCE,
+                    help="WHICH season projection the Projections surface serves. Default 'nf1_5' = "
+                         "the market-aware refined board (NF1.5b re-land); 'mvp1' = the market-blind "
+                         "MVP-1 board. ⚠️ this must MATCH the projection run_league_board.py scored "
+                         "the board CSVs from, or the Projections surface and the draft board will "
+                         "rank the same player differently — the export refuses on a mismatch.")
     ap.add_argument("--from-lake", action="store_true",
                     help="read the boards + season projection from the S3 Delta instead of local artifacts")
     ap.add_argument("--out", type=Path, default=None, help="override the local staging output dir")
@@ -893,6 +1010,7 @@ def main(argv: list[str] | None = None) -> int:
     df = load_boards_lake(args.season) if args.from_lake else load_boards_local(args.season)
     if "config_name" not in df.columns or "n_teams" not in df.columns:
         raise ValueError("board frame missing config_name / n_teams — cannot key by (config, size)")
+    assert_board_projection_source(df, args.projection_source, args.season)
 
     out_dir = (args.out or (_STAGING_OUT / str(args.season)))
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -973,7 +1091,8 @@ def main(argv: list[str] | None = None) -> int:
     projections: list[dict] = []
     proj_meta: dict = {}
     try:
-        pdf = load_projections_lake(args.season) if args.from_lake else load_projections_local(args.season)
+        pdf = (load_projections_lake(args.season, args.projection_source) if args.from_lake
+               else load_projections_local(args.season, args.projection_source))
         # NF1.6: fold the K/DST base projection into the browse surface so those positions are
         # BROWSABLE, not just draftable. Best-effort — a missing K/DST lineage logs loudly and leaves
         # the offensive projections intact (they are the draft-critical output).
@@ -1000,6 +1119,13 @@ def main(argv: list[str] | None = None) -> int:
         proj_meta = {
             "adp_format": PROJECTION_ADP_FORMAT,
             "adp_teams": PROJECTION_ADP_TEAMS,
+            # NF1.5b — which projection lineage this board IS, and (for the market-aware one) how
+            # market-leaning each position's ordering is. Shipped so the surfaces can carry the
+            # caveat from the data instead of hard-coding a claim that can go stale.
+            "projection_source": args.projection_source,
+            "projection_label": _PROJECTION_LABEL[args.projection_source],
+            "market_lean": market_lean_by_position(pdf) or None,
+            "market_lean_note": (MARKET_LEAN_NOTE if "market_lean" in pdf.columns else None),
             "model_version": (
                 str(pdf["model_version"].dropna().iloc[0]) if "model_version" in pdf.columns
                 and pdf["model_version"].notna().any() else None
@@ -1029,6 +1155,11 @@ def main(argv: list[str] | None = None) -> int:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "source": "lake" if args.from_lake else "local-artifacts",
         "positions": list(PROJECTABLE),
+        # NF1.5b — which projection lineage EVERY blob in this export came from. Top-level (not only
+        # inside `projections`) because the league boards carry it too, and they are exported even
+        # when the projections blob is not.
+        "projectionSource": args.projection_source,
+        "projectionLabel": _PROJECTION_LABEL[args.projection_source],
         "sizes": sorted(sizes_present),
         "configs": [config_manifest_entry(c) for c in sorted(configs_present)],
         # NF3: the browse surfaces read this to know whether the projections blob is available
