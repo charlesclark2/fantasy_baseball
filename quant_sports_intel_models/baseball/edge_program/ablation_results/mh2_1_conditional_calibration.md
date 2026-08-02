@@ -1,5 +1,37 @@
 # MH2.1 — conditional calibration: does the homoscedastic winner lose per-game variance?
 
+> # 🔴 CORRECTION (2026-08-02) — THIS REPORT'S VERDICT IS RETRACTED. DO NOT CITE ITS FIGURES.
+>
+> The champion swap this report cleared was promoted and **rolled back the same day**. The finding
+> below did not reproduce on the served population and **reversed in every window measurable**
+> — see **`mh2_1_rollback.md`**, which supersedes this document.
+>
+> **The defect: the stratifier was never validated.** Everything below is computed over deciles of
+> `plus_eb::ngboost_normal`'s predicted σ (the arm this report itself scores *worst*, 0.180), and
+> nothing here asks whether those strata **separate realized dispersion**. The controls that are
+> present — the σ-CV floor (0.0798 vs 0.02), the matched heteroscedastic foil, the flattened
+> positive control, the 400-permutation null — all ask *"does σ vary, and can the instrument detect
+> a known defect?"*, which is a different question. Re-run against a stratifier that demonstrably
+> does separate realized dispersion (the served v6's own σ: realized SD 3.671 → 4.973 across
+> deciles, +35%, ρ ≈ 0.66), the ordering flips: RMS |Var(z)−1| **0.2275 for the served NGBoost vs
+> 0.2519 for the homoscedastic leader** on 459 games held out from the NGBoost's fit.
+>
+> ⭐ **A conditional-calibration result is a property of its stratifier.** A stratifier that does not
+> demonstrably separate realized dispersion measures nothing, and this metric computed over it can
+> be silently inverted — the E2.1-r inversion class raised one level, from the metric to the
+> partition the metric is computed over.
+>
+> **Specifically retracted:** the verdict `INCUMBENT_VARIANCE_UNINFORMATIVE`; the RMS figures
+> 0.0498 / 0.1582 / 0.1796 / 0.1069; "the incumbent's per-game σ is actively MISCALIBRATED"; "Var(z)
+> 1.44 in the calmest decile"; and "on this evidence it is a calibration IMPROVEMENT."
+>
+> **Not retracted:** the *methodological* section below on why CRPS and PIT-KS cannot answer this
+> (both are structurally blind to a homoscedastic model losing per-game variance) — that reasoning
+> stands and is why the question was worth asking. Nor is the finding that a max−min-of-per-stratum
+> statistic is noise-dominated. The MH2.1 CRPS bake-off result is likewise untouched.
+>
+> Retained below **verbatim, unedited**, as the record of what was measured and believed.
+
 > ⚠️ **Not an edge claim.** `best_alpha = 0`. A calibration diagnostic; it says nothing about win rate, edge or ROI.
 
 > 💸 **Snowflake-free and network-free** — reads only the local training-matrix parquet MH2.1's bake-off already cached, and HALTs rather than pulling if it is absent.

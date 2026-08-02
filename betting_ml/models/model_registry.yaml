@@ -609,89 +609,96 @@ total_runs:
   # (re-confirms Epic 10.6/16.6/30.x); v6's value = leanness + leak-clean + fixing the morning-contract
   # overfit. This is the totals PROJECTION source. ⚠️ OPERATOR PREREQ: run finalize_v6_champion.py
   #   --target total_runs --tier {post_lineup,pre_lineup} --refresh-cache before deploy.
-  # ── MH2.1 (2026-08-02) WIDE-WINDOW RETRAIN — post_lineup champion swap (PRICING/CALIBRATION) ──
+  # ── MH2.1 (2026-08-02) WIDE-WINDOW RETRAIN — PROMOTED, THEN ROLLED BACK THE SAME DAY ──────────
   # MH2.1 re-ran E7.9's retrain bake-off on 2016–2026 (8 purged/embargoed folds vs E7.9's 3) with a
-  # PRE-REGISTERED 4-arm family and returned SHIP_CHALLENGER for `plus_eb × glm_elasticnet`:
-  # CRPS margin +0.0297 (noise floor 0.02), PBO 0.010 (E7.9's was UNDEFINED — CSCV needs ≥4 folds),
-  # DSR 0.9998, lift in 8/8 folds, sensitivity (exclude 2020) +0.0299 — did NOT flip.
+  # PRE-REGISTERED 4-arm family and returned SHIP_CHALLENGER for `plus_eb × glm_elasticnet`
+  # (CRPS +0.0297, PBO 0.010, DSR 0.9998, 8/8 folds). It was promoted here on 2026-08-02 and
+  # ROLLED BACK to the v6 NGBoost hours later, BEFORE any live served slate reached a user.
   #
-  # ⚠️ READ THE DECOMPOSITION, NOT THE MARGIN: +0.0175 (59%) is the LEARNER SWAP and only +0.0122 is
-  #    the plus_eb block; NEITHER clears the 0.02 floor alone. This is "LEARNER SWAP + FEATURE
-  #    BLOCK", NOT "plus_eb won".
-  # ⚠️ ONLY 3 OF THE 8 FOLDS TEST THE SERVED CONTRACT — `away_lineup_bat_speed_vs_starter_velo`
-  #    (0.000 through 2022) and `home_starter_proj_fip` (0.000 for 2016–2019) are structurally
-  #    absent earlier. The contrast is fair (both arms take the identical handicap every fold) but
-  #    the wide-window certification of the SERVED model is bounded.
-  # ⚠️ E2.1-r: selected on PRICING (CRPS + conditional calibration). An edge-detection story wanting
-  #    sharp per-side means must RE-SELECT on a discrimination metric — it may NOT inherit this.
-  # ⚠️ best_alpha=0. NO edge / win-rate / ROI claim. bet_paused stays true.
+  # 🔻 WHY THE ROLLBACK — THE DECIDING EVIDENCE DID NOT REPRODUCE ON THE SERVED POPULATION.
+  #    MH2.1's decisive claim was conditional calibration: RMS |Var(z)−1| across σ-deciles of 0.050
+  #    for the challenger vs 0.158 for the served v6, i.e. "the NGBoost's per-game σ is actively
+  #    wrong." The E7.9 step-7 backtest (both arms re-scored over the SAME 1,362 games of 2026,
+  #    retrain_tags `mh2_1_backtest` / `v6_baseline_refit`) REVERSES that ordering in every window:
+  #      window                       challenger   v6 (served)
+  #      in-sample for v6   (n=903)      0.1829       0.1228
+  #      OUT-OF-SAMPLE for v6 (n=459)    0.2519       0.2275     <- v6 fit 2026-06-23; held out
+  #    The OOS split is the discriminating one and it runs AGAINST the challenger under a bias that
+  #    FAVOURS it (those 459 games are in-sample for the challenger, which was fit through 08-01).
+  #    v6's advantage does shrink ~60% out of sample — its σ IS partly overfit, which was the
+  #    hypothesis — but it does not vanish or reverse. The challenger wins in no window.
   #
-  # THE DECIDING EVIDENCE WAS CALIBRATION, not the thin CRPS margin. RMS |Var(z)−1| across σ-deciles
-  # (Var(z)=1 in every stratum is the analytic truth for a conditionally calibrated predictive):
-  #   incumbent::ngboost_normal (was served) 0.158 (pooled Var(z) 1.124)
-  #   plus_eb::ngboost_normal                0.180 (pooled 1.111)
-  #   plus_eb::glm_elasticnet (THIS)         0.050 (pooled 0.997)
-  #   ngboost with σ deliberately FLATTENED  0.107 (pooled 1.090)
-  # The retired NGBoost under-estimated σ, worst in the games it called calm (Var(z) 1.44 in the
-  # calmest decile ⇒ served P(over) was overconfident exactly where P(over)-at-a-line is most
-  # sensitive), and flattening its σ IMPROVED its calibration — the per-game σ was actively wrong.
+  # 🧪 WHY MH2.1's ORIGINAL FINDING WAS AN ARTIFACT — AN UNVALIDATED STRATIFIER.
+  #    MH2.1 stratified by `plus_eb::ngboost_normal`'s σ — the WORST-calibrated arm in its own field
+  #    (0.180) — and never checked that those strata separate realized dispersion. Re-run against
+  #    the SERVED v6's σ, the strata do separate (realized SD 3.671 in decile 1 → 4.973 in decile
+  #    10, +35% across a σ range of only +23%; Spearman ρ≈0.66, endpoints ~4.8 SE apart), and the
+  #    ordering flips. ⭐ THE DURABLE LESSON, sibling of NF1.7 (a)/(b): A CONDITIONAL-CALIBRATION
+  #    RESULT IS A PROPERTY OF ITS STRATIFIER. A stratifier that does not demonstrably separate
+  #    realized dispersion measures nothing, and a metric computed over it can be silently
+  #    INVERTED. Validate the stratifier (realized SD must rise across its bins) BEFORE reading
+  #    any Var(z)-by-stratum number — that check is now part of the metric, not optional.
   #
-  # 🔻 CONSEQUENCE — `pred_total_runs_scale` IS NOW CONSTANT ACROSS GAMES (homoscedastic σ̂=4.4521).
-  #    Story 22.4's totals σ-gate therefore stops varying with model uncertainty: `totals_ci_width`
-  #    becomes a function of |μ − line| alone, and `sigma_tier` loses its σ dimension on the totals
-  #    leg (the h2h leg is untouched). This is the deliberate trade above, not an oversight — a
-  #    constant honest σ beat a varying wrong one on every calibration lens measured.
-  # ⚠️ ARCHITECTURE: the champion is a POINT learner. It is served through
-  #    betting_ml.utils.homoscedastic_regressor.HomoscedasticNormalRegressor, which exposes
-  #    NGBoost's `.pred_dist(X).params["loc"|"scale"]` surface (the analog of
-  #    PlattCalibratedLinearClassifier on home_win). `dist: Normal` stays correct.
-  # ⚠️ TRAINING WINDOW is 2016+ (what MH2.1 validated), NOT the incumbent's 2021+. Disclosed seam:
-  #    bullpen_v3 de-leak caches exist only for 2021+, so 2016–2020 keep pre-de-leak values in
-  #    home_/away_bp_eb_uncertainty (uncovered mean 0.0368 vs covered 0.0318). Measured cost of the
-  #    window choice on 2024+ rows: mean|Δloc| 0.084 runs (0.019 σ), σ̂ 4.4521 vs 4.4134. The clean
-  #    alternative is `--min-year 2021` (one flag); the durable fix is a bullpen_v3 backfill for
-  #    2016–2020 (~1,600 Snowflake round-trips — deliberately deferred on cost).
-  # ⚠️ OPERATOR PREREQ (post-merge): finalize_mh2_1_champion.py uploads the artifact to the S3 key
-  #    below. Serving reads models from S3 — the local .pkl is a fallback only.
-  artifact_path: s3://baseball-betting-ml-artifacts/total_runs/glm_elasticnet_plus_eb_mh2_1_post_lineup_2026.pkl
-  prev_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_normal_deleaked_v6_post_lineup_2026.pkl  # E13.11 v6 rollback (MH2.1 — was the v5 seasonnorm)
-  v5_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_tuned_seasonnorm_2026.pkl  # older v5 rollback
+  # 📌 WHAT SURVIVES, AND WHAT DOES NOT.
+  #    SURVIVES: the CRPS bake-off result itself (+0.0297, held out, 8/8 folds, PBO 0.010) is
+  #      untouched by this — it was never the basis the promotion was argued on, and it is real.
+  #    SURVIVES: MH2's thesis that the 3-fold ceiling was a WINDOW choice, not a data limit (the
+  #      DSR bar fell 7.28→1.18 as folds went 3→8) — reproduced exactly, unaffected.
+  #    DOES NOT SURVIVE: "the served NGBoost's per-game σ is actively wrong / flattening it helps."
+  #      Not established. Do not cite the 0.050-vs-0.158 figures; they are stratifier artifacts.
+  #    NEITHER MODEL IS WELL CALIBRATED per-game out of sample (0.23–0.25 for BOTH, vs 0.12–0.18
+  #      in-sample). That is the honest state of totals uncertainty and it is MH2.5's actual target.
+  #    ⚠️ The CRPS margin ALSO decomposes as +0.0175 LEARNER SWAP / +0.0122 plus_eb block, NEITHER
+  #      clearing the 0.02 noise floor alone — so a future re-promotion cannot lean on it unaided.
+  #    ⚠️ Only 3 of the 8 folds test the SERVED contract (`away_lineup_bat_speed_vs_starter_velo`
+  #      0.000 through 2022; `home_starter_proj_fip` 0.000 for 2016–2019).
+  #    ⚠️ E2.1-r: MH2.1 selected on PRICING. An edge-detection story must RE-SELECT on a
+  #      discrimination metric — it may NOT inherit this either way.
+  #    ⚠️ best_alpha=0 throughout. NO edge / win-rate / ROI claim was made and none is retracted.
+  #      bet_paused stays true; no bet ever rode on either model.
+  #
+  # 🔁 RE-PROMOTION BAR (pre-registered here so it is not re-litigated from the answer): the
+  #    challenger returns only on FORWARD live-served evidence — not another 2026 backtest, which
+  #    cannot settle it while the challenger is fit through 2026-08-01. Required: a validated
+  #    stratifier (realized SD must separate across its bins) AND the challenger ahead on
+  #    conditional calibration over live rows the challenger never saw.
+  #
+  # ⚠️ The MH2.1 serving machinery is KEPT and is NOT dead code: HomoscedasticNormalRegressor,
+  #    finalize_mh2_1_champion.py, the 25-col sidecar and the fitted artifact all remain, so a
+  #    re-promotion is a registry edit. Only the SERVED pointers below revert.
+  # ⚠️ OPERATOR PREREQ (unchanged, v6): finalize_v6_champion.py --target total_runs --tier
+  #    {post_lineup,pre_lineup} --refresh-cache before deploy. Serving reads models from S3.
+  artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_normal_deleaked_v6_post_lineup_2026.pkl  # MH2.1 ROLLBACK — restored E13.11 v6
+  prev_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_tuned_seasonnorm_2026.pkl  # v5 rollback
+  mh2_1_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/glm_elasticnet_plus_eb_mh2_1_post_lineup_2026.pkl  # rolled-back challenger, retained for a re-promotion
   backfill_date: '2026-06-13'
-  cv_mae: 3.3251  # ⚠️ v6 figure; MH2.1 selected on CRPS, not MAE — see mh2_1_retrain_* reports
+  cv_mae: 3.3251
   deployed_date: '2026-06-13'
-  promoted_at: '2026-08-02T00:00:00Z'  # MH2.1 (was 2026-06-23 for v6)
+  promoted_at: '2026-06-23T00:00:00Z'  # MH2.1 ROLLBACK — restored (the 08-02 promotion was reverted)
   dist: Normal
   eval_year: 2026
-  feature_columns_path: betting_ml/models/total_runs/feature_columns_mh2_1_total_runs_post_lineup_served.json  # MH2.1 (25 served = 23 + 2)
-  prev_feature_columns_path: betting_ml/models/total_runs/feature_columns_v6_total_runs_post_lineup_served.json  # E13.11 v6 rollback (15 served = 13 + 2)
-  v5_feature_columns_path: betting_ml/models/total_runs/feature_columns_ngboost_tuned_seasonnorm_2026.json  # older v5 rollback (113)
+  feature_columns_path: betting_ml/models/total_runs/feature_columns_v6_total_runs_post_lineup_served.json  # E13.11 v6 (15 served = 13 + 2)
+  prev_feature_columns_path: betting_ml/models/total_runs/feature_columns_ngboost_tuned_seasonnorm_2026.json  # v5 rollback (113)
+  mh2_1_feature_columns_path: betting_ml/models/total_runs/feature_columns_mh2_1_total_runs_post_lineup_served.json  # rolled-back challenger (25 served = 23 + 2)
   # Story 33.0 — pre-lineup (morning) serving variant. E13.11: now the de-leaked v6 ngboost_normal
   # (re-pruned 14-feat — fixed the prior 87-feat morning-contract PBO-0.543 overfit).
   pre_lineup: s3://baseball-betting-ml-artifacts/total_runs/ngboost_normal_deleaked_v6_pre_lineup_2026.pkl
   pre_lineup_feature_columns_path: betting_ml/models/total_runs/feature_columns_v6_total_runs_pre_lineup_served.json  # E13.11 v6 (16 served = 14 + 2)
   prev_pre_lineup: s3://baseball-betting-ml-artifacts/total_runs/ngboost_pre_lineup_2026.pkl  # pre_lineup_v1 rollback
   pre_lineup_model_version: v6  # E13.11 — was v1
-  features: 25  # MH2.1 (was 15 for v6)
-  max_depth: 3  # ⚠️ v6/NGBoost artefact — the MH2.1 champion is a linear ElasticNet, no depth
-  model_name: glm_elasticnet_plus_eb  # MH2.1 — was ngboost_normal_deleaked (v6)
-  model_version: mh2_1  # MH2.1 — was v6. Deliberately NOT "v7": a distinct lineage (point learner
-                        # + homoscedastic σ), not the next NGBoost revision.
-  # ⚠️ MEASURED, NOT ASSUMED: this key does NOT reach the served rows. `predict_today` sets the
-  # global stamp from `_registry["home_win"]["model_version"]` (scripts/predict_today.py:2268) —
-  # home_win ONLY — so `daily_model_predictions.model_version` will keep reading "v6" after this
-  # swap, and a totals champion change is INVISIBLE in that column. Consequences to know:
-  #   • the Model Performance page cannot separate pre/post-MH2.1 totals rows by model_version;
-  #   • the registry's own `model_version_policy` ("if a new champion is promoted mid-season, RESET
-  #     attribution_start") cannot be enforced from the served column for a totals-only swap.
-  # Not fixed here on purpose: the stamp is shared by all three targets, so making it per-target is
-  # a serving-schema change well outside a champion repoint. Use `promoted_at` (2026-08-02) as the
-  # cut date when attributing totals rows. Pinned by test_mh2_1_promotion.py so the next reader
-  # inherits the measurement rather than re-deriving it.
-  model_class: glm_elasticnet  # MH2.1 — Pipeline(StandardScaler, ElasticNet(alpha=0.1, l1_ratio=0.5))
-  serving_wrapper: betting_ml.utils.homoscedastic_regressor.HomoscedasticNormalRegressor  # MH2.1
-  homoscedastic: true  # MH2.1 — pred_total_runs_scale is CONSTANT across games (σ̂ below)
-  sigma_served: 4.4521  # MH2.1 — train-residual std; OOF check 4.4542 (ratio 1.0005, not tight)
-  n_estimators: 400  # ⚠️ v6/NGBoost artefact — unused by the MH2.1 linear champion
+  features: 15  # MH2.1 ROLLBACK — restored v6 (the challenger was 25)
+  max_depth: 3
+  model_name: ngboost_normal_deleaked  # E13.11 — was ngboost_tuned_seasonnorm (v5)
+  model_version: v6  # MH2.1 ROLLBACK — restored (the challenger stamped `mh2_1`)
+  # ⚠️ MEASURED, NOT ASSUMED — this key reaches the served rows only through the PER-TARGET stamp.
+  # `predict_today`'s global `MODEL_VERSION` comes from `_registry["home_win"]["model_version"]`
+  # (home_win ONLY), so `daily_model_predictions.model_version` is BLIND to a totals champion swap.
+  # MH2.1 added `daily_model_predictions.totals_model_version`, fed from THIS key and following
+  # total_runs' OWN resolved tier — that column is KEPT through the rollback (it is a real gap
+  # closed, independent of which champion is served) and now reads "v6" again. Use it, not
+  # `model_version`, to attribute totals rows. Pinned by test_mh2_1_promotion.py.
+  homoscedastic: false  # MH2.1 ROLLBACK — v6 NGBoost is heteroscedastic; pred_total_runs_scale VARIES
+  n_estimators: 400  # E13.11 v6 bake-off default (was 500); override at fit via --n-estimators
   notes: "E13.11 (2026-06-23) de-leaked v6 ROLLOUT (totals PROJECTION source) — see the\
     \ header comment block at the top of this entry. Champion = E1.9 v6 ngboost_normal (post 15-served\
     \ / pre 16-served), fit by betting_ml/scripts/finalize_v6_champion.py. v5 (ngboost_tuned_seasonnorm,\
@@ -712,21 +719,43 @@ total_runs:
     \ Rollback: ngboost_eb_enriched_2026.pkl (v4, 369 feats, S3).\n"
   rollback_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_eb_enriched_2026.pkl
   rollback_feature_columns_path: betting_ml/models/total_runs/feature_columns_eb_2026.json
-  selected_at: '2026-08-02T00:00:00Z'  # MH2.1 (was 2026-06-13 for v6)
-  training_cutoff: 2016+  # MH2.1 — the validated wide window (was 2021+ for v6); see the seam note above
-  training_rows: 21006    # MH2.1 (was 10264 for v6)
-  # ── MH2.1 promotion record ──────────────────────────────────────────────────────────────────
+  selected_at: '2026-06-13T00:00:00Z'  # MH2.1 ROLLBACK — restored
+  training_cutoff: 2021+  # MH2.1 ROLLBACK — restored (the challenger used the wide 2016+ window)
+  training_rows: 10264    # MH2.1 ROLLBACK — restored
+  # ── MH2.1 promotion record — PROMOTED 2026-08-02, ROLLED BACK 2026-08-02 ────────────────────
   mh2_1_promotion:
     story: MH2.1
+    status: ROLLED_BACK          # ⚠️ NOT the served model. Kept as the lineage record.
     promoted_at: '2026-08-02'
+    rolled_back_at: '2026-08-02'
+    # ⚠️ NOT zero, and do NOT record it as zero. `orchestration_cd.yml` auto-deploys the box on
+    # merge to main and the registry ships inside that image (root Dockerfile `COPY . .`), so the
+    # challenger went LIVE at ~19:40Z on 2026-08-02 without a separate deploy step. The 08-02 daily
+    # tier had already run, but the lineup-monitor sensor writes post_lineup rows PER GAME as
+    # lineups confirm — evening games on 08-02 were scored by the challenger.
+    served_live_rows: VERIFY — count game_date='2026-08-02', prediction_type='post_lineup',
+      totals_model_version='mh2_1' in daily_model_predictions (see mh2_1_rollback.md §Reproduction).
+      This is exactly what the totals_model_version column was added for; a bundle model_version
+      read would show 'v6' for both and make the boundary invisible.
+    served_rows_are_not_wrong: >-
+      Nothing needs correcting in those rows. best_alpha=0 and bet_paused=true, so no bet rode on
+      them; they are a projection whose per-game uncertainty band was constant for one evening.
+      They stay as-written (rewriting served history to match a later verdict is worse than the
+      inconsistency), and totals_model_version makes them separable for any future analysis.
     arm: plus_eb::glm_elasticnet
-    replaces: incumbent::ngboost_normal (E13.11 v6)
-    tier: post_lineup            # pre_lineup UNTOUCHED — still the v6 NGBoost
+    would_have_replaced: incumbent::ngboost_normal (E13.11 v6)
+    tier: post_lineup            # pre_lineup was never touched
     best_alpha: 0
-    claim: PRICING/CALIBRATION only — no edge, win-rate, or ROI claim; bet_paused stays true
+    claim: PRICING/CALIBRATION only — no edge, win-rate, or ROI claim was ever made; bet_paused true
     window: 2016-2026 (8 purged/embargoed folds; E7.9 had 3)
     field: pre-registered 4 arms ({incumbent, plus_eb} x {ngboost_normal, glm_elasticnet})
-    gates:
+    rollback_reason: >-
+      The DECIDING evidence (conditional calibration) did not reproduce on the served population
+      and reversed in every window measurable. MH2.1's stratifier was never validated; re-run
+      against a stratifier that demonstrably separates realized dispersion, the ordering flips.
+      The CRPS bake-off result below is unaffected and stands — it was simply not the basis the
+      promotion was argued on, and it does not carry the decision alone (see decomposition).
+    gates:                       # ⚠️ THESE STAND — held out, unaffected by the rollback
       crps_margin: 0.0297        # noise floor 0.02
       crps_margin_ex_2020: 0.0299  # sensitivity did NOT flip
       pbo: 0.010                 # E7.9's was UNDEFINED (CSCV needs >=4 folds)
@@ -738,19 +767,50 @@ total_runs:
       plus_eb_block: 0.0122
       note: NEITHER component clears the 0.02 noise floor alone — only their sum does.
     conditional_calibration_rms_var_z_minus_1:
-      incumbent_ngboost_normal_served: 0.158
-      plus_eb_ngboost_normal: 0.180
-      plus_eb_glm_elasticnet_promoted: 0.050
-      ngboost_sigma_flattened_control: 0.107
+      status: RETRACTED — stratifier artifact; do NOT cite these figures
+      stratifier_used: plus_eb::ngboost_normal sigma (RMS 0.180 — the worst-calibrated arm in the field)
+      stratifier_validated: false
+      as_reported:
+        incumbent_ngboost_normal_served: 0.158
+        plus_eb_ngboost_normal: 0.180
+        plus_eb_glm_elasticnet: 0.050
+        ngboost_sigma_flattened_control: 0.107
+    post_hoc_check:              # E7.9 step-7 backtest, both arms over the SAME 1,362 games of 2026
+      instrument: daily_model_predictions retrain_tag in (mh2_1_backtest, v6_baseline_refit)
+      stratifier_used: served v6 sigma
+      stratifier_validated: true   # realized SD 3.671 (decile 1) -> 4.973 (decile 10), rho ~0.66
+      rms_var_z_minus_1_in_sample_for_v6:  {n: 903, challenger: 0.1829, v6_served: 0.1228}
+      rms_var_z_minus_1_oos_for_v6:        {n: 459, challenger: 0.2519, v6_served: 0.2275}
+      reading: >-
+        The OOS split is discriminating and runs against the challenger under a bias that FAVOURS
+        it (those games are in-sample for the challenger, fit through 2026-08-01). v6's edge does
+        shrink ~60% out of sample — its sigma IS partly overfit — but does not vanish or reverse.
+        The challenger wins in no window. Both are POORLY calibrated per-game out of sample
+        (0.23-0.25 vs 0.12-0.18 in-sample); that is the honest state, and MH2.5's real target.
+      pooled_point_accuracy: {mae_challenger: 3.56, mae_v6: 3.5401}  # also weakly favours v6
+    lesson:                      # ⭐ the durable finding — sibling of NF1.7 (a)/(b)
+      A CONDITIONAL-CALIBRATION RESULT IS A PROPERTY OF ITS STRATIFIER. A stratifier that does not
+      demonstrably separate realized dispersion measures nothing, and a Var(z)-by-stratum metric
+      computed over it can be silently INVERTED. Validate the stratifier (realized SD must rise
+      across its bins) BEFORE reading any per-stratum calibration number.
+    re_promotion_bar:            # pre-registered so it is not re-litigated from the answer
+      - a VALIDATED stratifier (realized SD must separate across its bins)
+      - challenger ahead on conditional calibration over FORWARD live-served rows it never saw
+      - NOT another 2026 backtest — it cannot settle this while the challenger is fit through 08-01
+    retained_machinery:          # a re-promotion is a registry edit, not a rebuild
+      - betting_ml/utils/homoscedastic_regressor.py
+      - betting_ml/scripts/finalize_mh2_1_champion.py
+      - betting_ml/models/total_runs/feature_columns_mh2_1_total_runs_post_lineup_served.json
+      - s3://baseball-betting-ml-artifacts/total_runs/glm_elasticnet_plus_eb_mh2_1_post_lineup_2026.pkl
     caveats:
       folds_testing_served_contract: 3 of 8 (2024-26) — bat_speed + proj_fip structurally absent earlier
       selection_basis: PRICING (E2.1-r) — an edge-detection story must RE-SELECT, never inherit
-      sigma_is_constant: Story 22.4's totals sigma-gate no longer varies with model uncertainty
       bullpen_v3_seam: 2016-2020 lack de-leak caches (bp_eb_uncertainty 0.0368 vs 0.0318 covered)
     reports:
       - quant_sports_intel_models/baseball/edge_program/ablation_results/mh2_1_preregistration.md
       - quant_sports_intel_models/baseball/edge_program/ablation_results/mh2_1_retrain_total_runs_post_lineup_w2016.md
       - quant_sports_intel_models/baseball/edge_program/ablation_results/mh2_1_conditional_calibration.md
+      - quant_sports_intel_models/baseball/edge_program/ablation_results/mh2_1_rollback.md
     fit_script: betting_ml/scripts/finalize_mh2_1_champion.py
   wave5_gates:
     card: 8.W
@@ -953,24 +1013,28 @@ total_runs:
     part_b_wire_in_site: scripts/predict_today.py  # p_over_v (~L1111) -> totals_model_prob (~L1257)
     refit_required_after:
       - total_runs_model_rebuild  # a genuinely more-discriminating P(over) could change this verdict
-    # 🔴 TRIGGER FIRED — MH2.1 (2026-08-02). `total_runs_model_rebuild` is exactly what the champion
-    # swap is, and this candidate is now STALE IN BOTH ITS INPUT AND ITS TARGET:
-    #   (a) it was fit on the served P(over) of the RETIRED v6 NGBoost, i.e. a different predictive;
-    #   (b) that P(over) came from a per-game σ MH2.1 measured as MISCALIBRATED (pooled Var(z) 1.124,
-    #       1.44 in the calmest decile) — so a slice of what this isotonic map was correcting was the
-    #       σ defect the promotion removes. The promoted arm serves pooled Var(z) 0.997, so the
-    #       correction it needs is materially smaller and possibly nil.
-    # Refitting it on the OLD sample would bake the retired model's miscalibration into the new one.
-    # ⚠️ DO NOT wire Part B until it is re-fit on a served sample from the MH2.1 champion. It was
-    # never live (status CANDIDATE_PART_A), so nothing regresses by holding — but the candidate
-    # artifact must not be promoted as-is.
+    # 🟢 TRIGGER FIRED THEN STOOD DOWN — MH2.1 (2026-08-02), same day. The champion swap DID fire
+    # `total_runs_model_rebuild` and this candidate was marked STALE; the swap was then ROLLED BACK
+    # (see total_runs.mh2_1_promotion.status = ROLLED_BACK). The v6 NGBoost this candidate was fit
+    # on is the served model again, so its input predictive is UNCHANGED and the candidate is NOT
+    # stale. It reverts to plain CANDIDATE_PART_A, held only by its original E11.20 gate.
+    # ⚠️ TWO THINGS TO CARRY FORWARD, because the staleness note asserted more than was true:
+    #   (a) the "the served σ is miscalibrated, so this isotonic map is partly correcting a σ defect"
+    #       reasoning rested on MH2.1's RETRACTED conditional-calibration figures (an unvalidated
+    #       stratifier) — do not re-cite it. The v6 σ is imperfect (RMS |Var(z)-1| 0.2275 on rows it
+    #       never saw) but it was NOT shown to be worse than the flat alternative; the flat
+    #       alternative measured worse (0.2519).
+    #   (b) the trigger itself is correctly specified and stays armed: if total_runs is genuinely
+    #       re-promoted later, this candidate goes stale again for reason (a)-as-stated-generically
+    #       (fit on a different predictive), which is sound independent of any σ claim.
     refit_trigger_fired:
       trigger: total_runs_model_rebuild
       fired_by: MH2.1 champion swap (plus_eb::glm_elasticnet)
       fired_at: '2026-08-02'
-      status: STALE_AWAITING_REFIT_ON_MH2_1_SERVED_SAMPLE
-      action: re-run betting_ml/scripts/fit_totals_calibrator_e13_6b.py once the MH2.1 champion has
-        accrued a served sample; the pre-MH2.1 candidate is superseded, not merely aged.
+      stood_down_at: '2026-08-02'
+      status: STOOD_DOWN — the champion swap was rolled back; input predictive is the v6 NGBoost again
+      action: none; candidate remains CANDIDATE_PART_A, held by its original E11.20 cutover gate.
+        The trigger stays armed for a future genuine total_runs re-promotion.
 layer3_totals:
   artifact_path: s3://baseball-betting-ml-artifacts/sub_models/totals_v1.pkl
   feature_columns_path: betting_ml/models/layer3/layer3_feature_columns.json
