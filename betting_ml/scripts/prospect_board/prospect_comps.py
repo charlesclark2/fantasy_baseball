@@ -1302,48 +1302,20 @@ def attach_comp_ranking(board: pd.DataFrame, *,
                         weight: float = COMP_RANK_WEIGHT) -> pd.DataFrame:
     """Mix the comp read into `model_score`, then re-sort the board on the E8.0 lexicographic keys.
 
-    Preserves the pre-comp columns as `*_no_comps` and emits `comp_rank_delta` (positive = the comps
-    moved him UP) so every movement on the board is attributable to a number you can read.
+    ⭐ THIN DELEGATE (E8.1, 2026-08-02). The implementation moved to
+    `board_assembly.apply_comp_term` — scoring belongs to the scoring module, and E7.13's ordering
+    had been reachable ONLY through this module's separate re-export script, so a plain
+    `build_prospect_board.py` rebuild silently produced the PRE-comp order. `build_prospect_board.py`
+    now applies the same term natively.
 
-    A row with no comps keeps its original `model_score` and is never penalised for lacking one —
-    the same rule `attach_scores` already applies to an un-projected player.
+    This stays as the public E7.13 name (its callers and its measured evidence above are unchanged)
+    and delegates rather than reimplementing, so the native path and this one cannot drift apart —
+    "byte-for-byte identical" is then a structural property, not a claim a test has to keep re-proving
+    against two copies of the arithmetic.
     """
-    from betting_ml.scripts.prospect_board.board_assembly import FV_WEIGHT_BY_TYPE
+    from betting_ml.scripts.prospect_board.board_assembly import apply_comp_term
 
-    df = board.copy()
-    ptype = df.get("player_type", pd.Series("batter", index=df.index)).astype(str)
-    # two-way players ride the batter board (board_assembly's own rule)
-    grp = ptype.where(ptype != "two_way", "batter")
-
-    # comp percentile WITHIN player type — batters and pitchers are ranked against their own kind,
-    # because a cross-type percentile would compare a GB% neighbourhood to an ISO one.
-    med = pd.to_numeric(df.get("comp_fp_median"), errors="coerce")
-    comp_score = pd.Series(np.nan, index=df.index)
-    for g in grp.dropna().unique():
-        m = grp == g
-        comp_score.loc[m] = med.loc[m].rank(pct=True, na_option="keep") * 100.0
-    df["comp_score"] = comp_score.round(1)
-
-    model = pd.to_numeric(df.get("model_score"), errors="coerce")
-    mixed = (1 - weight) * model + weight * comp_score
-    df["model_score_no_comps"] = model
-    df["model_score"] = mixed.where(model.notna() & comp_score.notna(),
-                                    model.fillna(comp_score)).round(1)
-
-    fv_w = grp.map(FV_WEIGHT_BY_TYPE).fillna(0.5)
-    fv_p = pd.to_numeric(df.get("fv_pctile"), errors="coerce")
-    blend = fv_w * fv_p + (1 - fv_w) * df["model_score"]
-    df["blend_score_no_comps"] = pd.to_numeric(df.get("blend_score"), errors="coerce")
-    df["blend_score"] = blend.where(fv_p.notna() & df["model_score"].notna(),
-                                    fv_p.fillna(df["model_score"])).round(1)
-
-    df["board_rank_no_comps"] = pd.to_numeric(df.get("board_rank"), errors="coerce")
-    df = df.sort_values(["fv", "model_score", "blend_score"],
-                        ascending=[False, False, False],
-                        na_position="last").reset_index(drop=True)
-    df["board_rank"] = np.arange(1, len(df) + 1)
-    df["comp_rank_delta"] = (df["board_rank_no_comps"] - df["board_rank"]).astype("Int64")
-    return df
+    return apply_comp_term(board, weight=weight)
 
 
 #: The board columns this module contributes, in display order.
