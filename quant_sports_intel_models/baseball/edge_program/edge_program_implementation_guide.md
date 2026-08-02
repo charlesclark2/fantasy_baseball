@@ -153,12 +153,24 @@ in this order — each state is one the binary reading silently mislabels):
 | **POWER-LIMITED** | every gate reachable, MDE > meaningful effect | folds and/or fewer arms | call it dead |
 | **TRUSTWORTHY DEAD** | MDE ≤ the pre-registered meaningful effect | none | over-claim beyond that size |
 
-**2. A FAMILY GETS ITS OWN PRE-REGISTERED FIELD.** Bundling unrelated mechanisms taxes a real
-finding through **two** channels — the trial COUNT `N` *and* the cross-trial Sharpe DISPERSION `V`
-that far-away arms inflate. On E7.15-H3 the dispersion channel dominates (`V` falls ~65× going 7
-arms → 2, vs ~2.5× for `z`), which is why the same winner on the same folds scores DSR 0.607 in the
-7-arm field and 0.998 in its own 2-arm family. ⇒ the rule is **run a coherent family**, not "run
-fewer arms". Use `cv_power.dsr_max_field_size` to size the field BEFORE the run.
+**2. A FAMILY GETS ITS OWN PRE-REGISTERED FIELD — AND THE RULE IS TWO-SIDED.** Bundling unrelated
+mechanisms taxes a real finding through **two** channels: the trial COUNT `N` *and* the cross-trial
+Sharpe DISPERSION `V` that far-away arms inflate. On E7.15-H3 the dispersion channel dominates (`V`
+falls ~65× going 7 arms → 2, vs ~2.5× for `z`), which is why the same winner on the same folds
+scores DSR 0.607 in the 7-arm field and 0.998 in a 2-arm one.
+
+⚠️ **But that 2-arm field is POST-HOC, and trimming after the fact is a SECOND layer of the very
+selection bias DSR exists to deflate — the arm you drop is chosen because it LOST.** H3's own
+pre-registration names THREE trajectory arms (`T1_traj_ladder`, `T2_traj_raw`, `T3_tenure`); the
+0.998 figure drops `T3_tenure`. Restore it and the same winner reaches **0.849**. Scored against
+their own pre-registered families, **nothing in H3 clears** (batter `bb_pct` 0.849 / `iso` 0.759 /
+`k_pct` 0.748; pitcher `gb_pct` 0.564) — and the pitcher side's largest lift (`k_pct` +1.713%)
+belongs to the PLAYER-STRUCTURE family, not to trajectory at all.
+
+⇒ **You get to pre-register a family; you do not get to discover one.** Declare it in the
+pre-registration, size it with `cv_power.dsr_max_field_size` BEFORE the run, and if a declared arm
+turns out weak, that is a cost already agreed to. Regenerate the split with
+`mh2_cv_power.family_rescoring()`.
 
 **3. State the shortfall in the unit that GROWS, and say whether it is reachable NOW.** Folds,
 seasons, cohorts, rows — never p-decimals. A trigger reachable by a **wider window** or a **smaller

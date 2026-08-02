@@ -316,6 +316,44 @@ class TestFieldSizeAxis:
             assert wide < 0.95 <= narrow, (
                 f"{metric}: the recorded field-size flip did not reproduce ({wide} → {narrow})")
 
+    def test_a_post_hoc_trimmed_family_is_NOT_evidence(self):
+        """⭐ THE TWO-SIDED HALF OF THE FIELD-SIZE RULE. E7.15-H3's recorded "clears at 0.998 over
+        the 2-arm trajectory family" drops `T3_tenure`, a NAMED member of that family in H3's own
+        pre-registration. Scored against the family as DECLARED, nothing clears. Pinned because the
+        0.998 figure is quoted in the story record and would otherwise be carried forward as
+        "basically there"."""
+        p = ABL / "e7_15_artifacts/e7_15_h3_summary.json"
+        if not p.exists():                                     # pragma: no cover - corpus optional
+            pytest.skip("E7.15-H3 artifact not present")
+        d = json.loads(p.read_text())
+
+        def _sr(x):
+            x = np.asarray(x, float)
+            x = x[np.isfinite(x)]
+            sd = float(np.std(x, ddof=1))
+            return float(np.mean(x) / sd) if sd > 0 else 0.0
+
+        pm = d["per_metric"]["bb_pct"]
+        mae = pd.DataFrame(pm["mae_by_fold"])
+        skill = pd.DataFrame(mae[["L0_foil"]].to_numpy(float) - mae.to_numpy(float),
+                             index=mae.index, columns=mae.columns)
+        declared = ["T1_traj_ladder", "T2_traj_raw", "T3_tenure"]
+        assert all(a in mae.columns for a in declared), "the declared family must be in the run"
+        best = max(declared, key=lambda c: skill[c].mean())
+        s = skill[best].dropna().to_numpy(float)
+        rc, sd0 = s - s.mean(), s.std(ddof=0)
+        sk, ku = float((rc**3).mean() / sd0**3), float((rc**4).mean() / sd0**4)
+        full = dsr_from_sr(_sr(s), n_obs=len(s), n_trials=len(declared),
+                           var_trials_sr=float(np.var([_sr(skill[c]) for c in declared], ddof=1)),
+                           skew=sk, kurt=ku)
+        trimmed = dsr_from_sr(_sr(s), n_obs=len(s), n_trials=2,
+                              var_trials_sr=float(np.var([_sr(skill[c]) for c in declared[:2]],
+                                                         ddof=1)), skew=sk, kurt=ku)
+        assert trimmed >= 0.95 > full, (
+            "the point of this guard is that the POST-HOC field clears and the DECLARED one does "
+            f"not (declared={full:.3f}, trimmed={trimmed:.3f})")
+        assert full == pytest.approx(0.849, abs=0.01)
+
     def test_the_decomposition_separates_the_two_channels(self):
         """Shrinking a field moves BOTH the trial count and the trial dispersion; reporting only
         the count under-explains the change and invites 'just run fewer arms'."""

@@ -569,6 +569,68 @@ def _h3_field_size_cases() -> list[dict]:
 # The power table
 # ══════════════════════════════════════════════════════════════════════════════════════════════════
 
+def family_rescoring() -> pd.DataFrame:
+    """⭐ **THE COUNTERPART TO "A FAMILY GETS ITS OWN FIELD": YOU GET TO PRE-REGISTER A FAMILY, YOU
+    DO NOT GET TO DISCOVER ONE.**
+
+    E7.15-H3's 7-arm field holds two mechanisms — a TRAJECTORY family (`T1_traj_ladder`,
+    `T2_traj_raw`, `T3_tenure`) and a PLAYER-STRUCTURE family (`P1`…`P4`). Scoring each family's
+    best arm against its OWN pre-registered field is the right correction and is what this table
+    does.
+
+    ⚠️ **AND IT OVERTURNS THE HEADLINE THE FIELD-SIZE CASE WAS BEING USED TO SUPPORT.** The recorded
+    "clears at 0.998 over the 2-arm trajectory family" drops `T3_tenure` — a genuine, named,
+    pre-registered member of that family (H3's own pre-registration lists all three). Restore it and
+    the SAME winner on the SAME folds reaches **0.849** (batter `bb_pct`), not 0.95. Retrospectively
+    shrinking a field to the arms nearest the winner is a SECOND layer of exactly the selection bias
+    DSR exists to deflate — the arm you drop is chosen because it lost.
+
+    So the honest statement is two-sided and both halves matter: bundling unrelated mechanisms
+    over-taxes a real finding (the E7.15-H3 7-arm reading is too harsh), AND a family trimmed after
+    the fact under-taxes it (the 2-arm reading is too generous). At the pre-registered 3-arm family
+    **nothing in H3 clears** — which is the number a successor story has to beat.
+    """
+    fam_of = (lambda a: "trajectory" if a.startswith(("T1_", "T2_", "T3_"))
+              else "player-structure")
+    rows = []
+    for f, side in (("e7_15_h3_summary.json", "batter"),
+                    ("e7_15_h3_pitchers_summary.json", "pitcher")):
+        p = ABL / "e7_15_artifacts" / f
+        if not p.exists():                                     # pragma: no cover - corpus optional
+            continue
+        d = json.loads(p.read_text())
+        for m, pm in d.get("per_metric", {}).items():
+            mae = pd.DataFrame(pm.get("mae_by_fold") or {})
+            lb = pd.DataFrame(pm["leaderboard"])
+            if "L0_foil" not in mae.columns or "selectable" not in lb.columns:
+                continue
+            elig = [a for a in lb.loc[lb["selectable"], "arm"]
+                    if a in mae.columns and a != "L0_foil"]
+            skill = pd.DataFrame(mae[["L0_foil"]].to_numpy(float) - mae.to_numpy(float),
+                                 index=mae.index, columns=mae.columns)
+            for fam in ("trajectory", "player-structure"):
+                cols = [a for a in elig if fam_of(a) == fam]
+                if len(cols) < 2:
+                    continue
+                best = max(cols, key=lambda c: skill[c].mean())
+                s = skill[best].dropna().to_numpy(float)
+                n = len(s)
+                sk, ku = _moments(s)
+                cl = fold_consistency_clause(n)
+                wins = int((s > 0).sum())
+                lift = 100.0 * (mae["L0_foil"].mean() - mae[best].mean()) / mae["L0_foil"].mean()
+                v = float(np.var([_sharpe(skill[c].dropna().to_numpy(float)) for c in cols], ddof=1))
+                dsr = dsr_from_sr(_sharpe(s), n_obs=n, n_trials=len(cols),
+                                  var_trials_sr=v, skew=sk, kurt=ku)
+                rows.append({
+                    "side": side, "metric": m, "family": fam, "arms": len(cols), "best arm": best,
+                    "%lift": round(lift, 3), "folds": f"{wins}/{n}",
+                    "clause": "pass" if cl.passes(wins) else "fail",
+                    "DSR in its OWN family": round(dsr, 3),
+                    "clears": bool(lift > 0 and cl.passes(wins) and dsr >= 0.95)})
+    return pd.DataFrame(rows)
+
+
 def retest_trigger_corrections() -> pd.DataFrame:
     """Every stored `folds_needed_DSR` recomputed against the closed form — the DEFECT-1 impact.
 
@@ -681,7 +743,7 @@ def _md(df: pd.DataFrame) -> str:
 
 def render(inv: pd.DataFrame, census: dict, md_meta: dict, cases: list[dict],
            pw: pd.DataFrame, arms: pd.DataFrame, skipped: list[str],
-           corr: pd.DataFrame) -> str:
+           corr: pd.DataFrame, fam: pd.DataFrame) -> str:
     a: list[str] = []
     w = a.append
     w("# MH2 — CV-power characterization for §0.5 bake-offs")
@@ -730,6 +792,36 @@ def render(inv: pd.DataFrame, census: dict, md_meta: dict, cases: list[dict],
               f"{c['folds_needed_DSR_as_recorded_by_null_analysis']} — see §5, defect 3).")
             w("")
 
+    w("### ⚠️⚠️ THE FIELD-SIZE CASE DOES NOT SUPPORT THE HEADLINE IT WAS BEING USED FOR")
+    w("")
+    w("The recorded flip is real and reproduces exactly — but **the \"2-arm trajectory family\" is "
+      "a POST-HOC field.** H3's own pre-registration names THREE trajectory arms "
+      "(`T1_traj_ladder`, `T2_traj_raw`, `T3_tenure`); the 0.998 figure drops `T3_tenure`. Restore "
+      "it and the SAME winner on the SAME folds reaches **0.849**, not 0.95.")
+    w("")
+    w("Scoring each mechanism's best arm against its OWN pre-registered family:")
+    w("")
+    w(_md(fam))
+    w("")
+    w("⭐ **At the honestly pre-registered family sizes, NOTHING in E7.15-H3 clears.** That is the "
+      "number a successor has to beat, and it is a materially different starting point from "
+      "\"0.998, basically there\".")
+    w("")
+    w("⚖️ **So the field-size rule is TWO-SIDED and both halves bind.** Bundling unrelated "
+      "mechanisms OVER-taxes a real finding (the 7-arm reading, DSR 0.607, is too harsh) — but a "
+      "family trimmed AFTER the fact UNDER-taxes it (the 2-arm reading is too generous), because "
+      "the arm you drop is chosen precisely because it lost. That is a second layer of exactly the "
+      "selection bias DSR exists to deflate. **You get to pre-register a family; you do not get to "
+      "discover one.** The corollary for any successor: declare the family in the "
+      "pre-registration, and if an arm in it turns out to be weak, that is a cost you have already "
+      "agreed to pay.")
+    w("")
+    w("(This also re-reads the H3 record itself: the pitcher side's largest lift — `k_pct` "
+      "+1.713% — belongs to the PLAYER-STRUCTURE family (`P4_re_dedup`), not to the trajectory "
+      "mechanism at all, and its own-family DSR is 0.695. A story that carries \"H3's trajectory "
+      "arms are a real effect\" forward without splitting the families would attribute a "
+      "player-structure result to trajectory.)")
+    w("")
     w("### ⚠️ A correction to the story prompt's framing of this case")
     w("")
     w("The prompt states the validation case as *\"iso +1.418%, 9/11 folds … FAILED DSR at 0.607 "
@@ -1040,6 +1132,7 @@ def main(argv: list[str] | None = None) -> int:
     inv = pd.DataFrame([asdict(r) for r in rich + coarse])
     census = corpus_census()
     cases = validation_cases()
+    fam = family_rescoring()
     corr = retest_trigger_corrections()
     pw = power_table(n_sims=args.n_sims)
     arms = arm_count_table()
@@ -1064,11 +1157,12 @@ def main(argv: list[str] | None = None) -> int:
         "power_table": json.loads(pw.to_json(orient="records")),
         "arm_count_table": json.loads(arms.to_json(orient="records")),
         "retest_trigger_corrections": json.loads(corr.to_json(orient="records")),
+        "family_rescoring": json.loads(fam.to_json(orient="records")),
         "null_state_counts": inv["null_state"].value_counts().to_dict(),
         "bound_by_counts": inv["bound_by"].value_counts().to_dict(),
     }, indent=1, default=str))
     (out / "mh2_cv_power_characterization.md").write_text(
-        render(inv, census, md_meta, cases, pw, arms, skipped_summaries, corr))
+        render(inv, census, md_meta, cases, pw, arms, skipped_summaries, corr, fam))
     log.info("wrote mh2_cv_power_characterization.md / mh2_null_inventory.csv / mh2_cv_power.json "
              "to %s (validation_all_pass=%s)", out, not failed)
     return 0 if not failed else 1

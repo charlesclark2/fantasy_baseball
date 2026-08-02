@@ -2,7 +2,7 @@
 
 > 🔒 **DIAGNOSTIC OF THE EVAL, NOT A MODEL.** `best_alpha = 0`. Nothing here re-fits an arm, re-scores a metric or changes a recorded verdict — every ADD and DROP in the record stands exactly as scored. What changes is how a null may be READ.
 
-_Generated 2026-08-02T06:20:57+00:00 from stored artifacts only (no Snowflake, no re-fit)._
+_Generated 2026-08-02T06:28:14+00:00 from stored artifacts only (no Snowflake, no re-fit)._
 
 ## 0. The finding, in one paragraph
 
@@ -59,6 +59,39 @@ A power diagnostic that cannot reproduce results already on file is not evidence
 ```
 - Largest field this effect still clears at the OBSERVED dispersion: **0 arms**.
 - Folds needed to clear DSR *in the wide field*: **166** (`null_analysis` recorded 120 — see §5, defect 3).
+
+### ⚠️⚠️ THE FIELD-SIZE CASE DOES NOT SUPPORT THE HEADLINE IT WAS BEING USED FOR
+
+The recorded flip is real and reproduces exactly — but **the "2-arm trajectory family" is a POST-HOC field.** H3's own pre-registration names THREE trajectory arms (`T1_traj_ladder`, `T2_traj_raw`, `T3_tenure`); the 0.998 figure drops `T3_tenure`. Restore it and the SAME winner on the SAME folds reaches **0.849**, not 0.95.
+
+Scoring each mechanism's best arm against its OWN pre-registered family:
+
+| side    | metric        | family           |   arms | best arm       |   %lift | folds   | clause   |   DSR in its OWN family | clears   |
+|:--------|:--------------|:-----------------|-------:|:---------------|--------:|:--------|:---------|------------------------:|:---------|
+| batter  | woba          | trajectory       |      3 | T2_traj_raw    |  -0.255 | 5/11    | fail     |                   0.285 | False    |
+| batter  | woba          | player-structure |      4 | P3_player_re   |   0.841 | 7/11    | fail     |                   0.528 | False    |
+| batter  | k_pct         | trajectory       |      3 | T1_traj_ladder |   1.183 | 9/11    | pass     |                   0.748 | False    |
+| batter  | k_pct         | player-structure |      4 | P2_dedup_sqrt  |  -0.238 | 5/11    | fail     |                   0.072 | False    |
+| batter  | bb_pct        | trajectory       |      3 | T2_traj_raw    |   1.404 | 9/11    | pass     |                   0.849 | False    |
+| batter  | bb_pct        | player-structure |      4 | P2_dedup_sqrt  |  -0.213 | 5/11    | fail     |                   0.045 | False    |
+| batter  | iso           | trajectory       |      3 | T1_traj_ladder |   1.418 | 9/11    | pass     |                   0.759 | False    |
+| batter  | iso           | player-structure |      4 | P2_dedup_sqrt  |  -0.133 | 5/11    | fail     |                   0.16  | False    |
+| pitcher | k_pct         | trajectory       |      3 | T1_traj_ladder |  -0.257 | 6/11    | fail     |                   0.12  | False    |
+| pitcher | k_pct         | player-structure |      4 | P4_re_dedup    |   1.713 | 9/11    | pass     |                   0.695 | False    |
+| pitcher | bb_pct        | trajectory       |      3 | T1_traj_ladder |  -0.335 | 8/11    | pass     |                   0.137 | False    |
+| pitcher | bb_pct        | player-structure |      4 | P4_re_dedup    |   0.438 | 6/11    | fail     |                   0.423 | False    |
+| pitcher | hr_rate       | trajectory       |      3 | T2_traj_raw    |   0.013 | 5/11    | fail     |                   0.089 | False    |
+| pitcher | hr_rate       | player-structure |      4 | P4_re_dedup    |   0.107 | 6/11    | fail     |                   0.521 | False    |
+| pitcher | gb_pct        | trajectory       |      3 | T1_traj_ladder |   1.209 | 9/11    | pass     |                   0.564 | False    |
+| pitcher | gb_pct        | player-structure |      4 | P2_dedup_sqrt  |  -0.245 | 2/11    | fail     |                   0     | False    |
+| pitcher | xwoba_against | trajectory       |      3 | T1_traj_ladder |   0     | 1/4     | fail     |                   0.497 | False    |
+| pitcher | xwoba_against | player-structure |      4 | P4_re_dedup    |   0.773 | 3/4     | fail     |                   0.771 | False    |
+
+⭐ **At the honestly pre-registered family sizes, NOTHING in E7.15-H3 clears.** That is the number a successor has to beat, and it is a materially different starting point from "0.998, basically there".
+
+⚖️ **So the field-size rule is TWO-SIDED and both halves bind.** Bundling unrelated mechanisms OVER-taxes a real finding (the 7-arm reading, DSR 0.607, is too harsh) — but a family trimmed AFTER the fact UNDER-taxes it (the 2-arm reading is too generous), because the arm you drop is chosen precisely because it lost. That is a second layer of exactly the selection bias DSR exists to deflate. **You get to pre-register a family; you do not get to discover one.** The corollary for any successor: declare the family in the pre-registration, and if an arm in it turns out to be weak, that is a cost you have already agreed to pay.
+
+(This also re-reads the H3 record itself: the pitcher side's largest lift — `k_pct` +1.713% — belongs to the PLAYER-STRUCTURE family (`P4_re_dedup`), not to the trajectory mechanism at all, and its own-family DSR is 0.695. A story that carries "H3's trajectory arms are a real effect" forward without splitting the families would attribute a player-structure result to trajectory.)
 
 ### ⚠️ A correction to the story prompt's framing of this case
 
