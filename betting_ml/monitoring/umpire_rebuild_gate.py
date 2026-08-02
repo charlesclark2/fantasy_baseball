@@ -9,10 +9,55 @@ chain is the single largest waker left on ``COMPUTE_WH``:
                                           111  (~14/day, UTC hours 13-23)
 
 Both are rebuilt by ``lineup_dbt_feature_rebuild``, the last op of ``lineup_monitor_job`` — which
-the 10-minute ``lineup_monitor_sensor`` fires all the way through the slate. But the HP-umpire
-ASSIGNMENT is written **once per slate and never re-written**: measured over the 6 dates the live
-feed has ever produced rows for, ``min(loaded_at) == max(loaded_at)`` on every one. So essentially
-every umpire rebuild after the slate's single write recomputes a byte-identical answer.
+the 10-minute ``lineup_monitor_sensor`` fires all the way through the slate.
+
+🚨 THE ORIGINAL PREMISE IS FALSE ON CURRENT DATA — RE-MEASURED 2026-08-02, PRE-FLIP.
+
+This module was written on the premise that the HP-umpire ASSIGNMENT is "written once per slate
+and never re-written" (``min(loaded_at) == max(loaded_at)`` on all 6 dates the feed had then
+produced). Re-measured over ``lakehouse_raw/umpire_game_log/`` for the 13 slates 2026-07-20..08-01,
+counting DISTINCT same-day ``loaded_at`` instants per slate:
+
+    10, 7, 20, 8, 7, 8, 11, 7, 7, 9, 7, 9, 10   →   median 8, range 7-20
+
+i.e. the assignment is re-stamped roughly ONCE PER TICK from the moment MLB posts it (~16:00 UTC)
+to the end of the slate — not once per slate.
+
+MECHANISM (established, not inferred). ``ingest_umpires.py`` runs one op earlier in the SAME job
+(``lineup_ingest_umpires``) with ``--skip-if-exists``, whose whole purpose is to make the repeated
+fires no-ops. But that guard is gated ``if args.skip_if_exists and not args.dry_run and do_sf`` —
+**SF-leg-only** — and the box runs ``W11_RAW_WRITE_MODE=s3`` ⇒ ``do_sf=False`` ⇒ **the guard never
+executes**. So every post-assignment tick re-fetches the Stats API and re-writes the S3 mirror,
+bumping ``loaded_at`` even though the content is unchanged.
+
+⇒ CONSEQUENCE FOR THIS GATE. Correctness is UNAFFECTED — the gate can still only ever skip a
+re-copy of an external table that provably did not move (see the ext-table note below), and it
+still cannot swallow a real change. But the SAVING is bounded by the write-instant count: the gate
+skips only a tick on which the ingest wrote nothing, and a pre-assignment tick already takes the
+"no umpire row yet" fail-open path.
+
+Sized by counting INVOCATIONS, not executions (the E11.24 lever-1b lesson — executions inflate with
+per-model/metadata queries). Umpire-rebuild FIRES = distinct 5-minute windows in the 14-23 UTC band
+containing an umpire CTAS, against same-day watermark bumps, 2026-07-22..08-01:
+
+    fires    31  12  11  11  16  13   7   9  11  16  19     median 12
+    bumps    20   8   7   8  11   7   7   9   7   9  10     median  8
+
+Median ratio ≈ **1.5** ⇒ roughly **ONE FIRE IN THREE is not preceded by a fresh watermark** and is
+what this gate removes. So expect an umpire-wait cut of order **30-35% in the band** — against the
+clean pre-flip references of 11 waits (7/28) and 13 waits (7/30), roughly 7-9 post-flip. NOT the
+~90% the "written once per slate" premise implies, and not zero either. Do not diagnose a ~30% cut
+as a broken flip, and do not report it as the premise being vindicated.
+
+The precursor that would actually unlock the rest is making ``--skip-if-exists`` work on the S3 leg
+(and per-game rather than any-row, so a later-announced assignment is not swallowed) — a separate
+change, deliberately NOT bundled with this flip.
+
+⭐ WHY THE SKIP IS SAFE REGARDLESS (the bound that makes flipping this a low-risk act). The two
+umpire ``lakehouse_ext`` tables are refreshed ONLY by ``refresh_w1_external_tables.py --w11b``,
+which early-returns and is called only by the nightly W11b mirror op — never intraday, and NOT part
+of the default no-arg daily refresh. So across a slate the ext tables are FROZEN, and the CTAS this
+gate skips is byte-identical by construction, whatever the raw watermark did.
 
 On the Snowflake target BOTH models are literally ``select * from lakehouse_ext.<model>`` — a CTAS
 copy of an S3-derived external table. Re-copying an unchanged external table is a pure no-op that
