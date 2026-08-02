@@ -1,5 +1,44 @@
 # MLB Edge-E7.5b — re-deriving the SERVED rookie prior from the E7.12 MLE, behind E7.5's own held-out gate
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": "BH-FDR over the ablation's per-metric p-values (alpha=0.10)",
+ "gates": null,
+ "n_arms": 2,
+ "n_folds": null,
+ "per_metric": [
+  {
+   "metric": "k_pct",
+   "n_arms": 2,
+   "n_folds": null,
+   "pbo": null,
+   "verdict": "DROP"
+  },
+  {
+   "metric": "bb_pct",
+   "n_arms": 2,
+   "n_folds": null,
+   "pbo": null,
+   "verdict": "ADD"
+  },
+  {
+   "metric": "iso",
+   "n_arms": 2,
+   "n_folds": null,
+   "pbo": null,
+   "verdict": "ADD"
+  }
+ ],
+ "primary_contrast": "challenger (recalibrated) vs incumbent served prior, per metric",
+ "reason": null,
+ "schema": 1,
+ "source_artifact": "e7_5_artifacts/e7_5_calibration_summary.json",
+ "status": "recovered",
+ "verdict": "ship=['bb_pct', 'iso'], holdback=['k_pct']"
+}
+-->
+
+
 **generated:** 2026-08-01T23:34:37.625186+00:00
 
 - **challenger projections:** `s3://baseball-betting-ml-artifacts/baseball/milb/derived/mle_projections`  (model_version `milb_mle_v2_parkctx`, 12423 rows)

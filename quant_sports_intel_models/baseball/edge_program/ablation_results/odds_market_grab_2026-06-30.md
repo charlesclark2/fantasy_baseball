@@ -1,5 +1,22 @@
 # Pre-reset MLB odds DATA-GRAB — probe + validation + handoff (2026-06-30)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "an operational data-GRAB log (credits spent, probe results, a value-ranked queue handed to the operator) \u2014 no model, no arms.",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "exempt",
+ "verdict": null
+}
+-->
+
+
 **Probe-first, value-ranked, idempotent.** Land in S3 `mlb/props/market={key}/season=/date=/data.parquet`
 (NOT Snowflake), single region `us`, via `backfill_multisport_props_to_s3.py` (instance-role
 `credential_chain` / boto3 default chain; bucket `baseball-betting-ml-artifacts`, `us-east-2`).

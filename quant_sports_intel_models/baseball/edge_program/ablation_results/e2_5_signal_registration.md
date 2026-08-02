@@ -1,5 +1,22 @@
 # E2.5 — Signal registration + leakage-safe backfill (`totals_generative_v1`)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "a serving-registration write-up for the E2.1-r winner (already gated elsewhere) \u2014 registers a decision already made, runs no bake-off of its own.",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "exempt",
+ "verdict": null
+}
+-->
+
+
 **Status:** code-complete + fast gate green (2026-07-26); awaiting the operator's leakage-safe
 backfill run + box deploy. `best_alpha = 0` (market-blind marginal; the edge question is E2.6).
 

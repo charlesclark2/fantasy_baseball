@@ -1,5 +1,22 @@
 # E7.12 slice 2 — promotion-selection (survivorship) correction (batters)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "no `*_summary.json` (or any other JSON) exists anywhere under ablation_results for slice2 \u2014 `find \u2026 -iname '*slice2*'` returns only the two .md files. run_e7_12_slice2.py still exists and could re-emit a summary artifact on a future run (LOCK 1: that re-run is not this story's to trigger).",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "unrecoverable",
+ "verdict": null
+}
+-->
+
+
 > ⚠️ **A projection, not an edge claim — `best_alpha = 0`.**
 
 This slice asks whether correcting for the fact that the MLE is FIT ON GRADUATES and SERVED ON PROSPECTS improves the translation. Two distinct mechanisms are registered separately because they address different problems:

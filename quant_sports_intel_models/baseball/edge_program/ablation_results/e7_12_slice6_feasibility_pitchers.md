@@ -1,5 +1,22 @@
 # E7.12 slice 6 — AAA-Statcast FEASIBILITY MEMO (pitchers)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "same as the batter report \u2014 no stored artifact survives for slice6 (pitcher side).",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "unrecoverable",
+ "verdict": null
+}
+-->
+
+
 > ⚠️ **This is a feasibility memo, not a bake-off.** `best_alpha = 0`.
 
 ## Verdict: **STOP — RECORD THE CEILING**

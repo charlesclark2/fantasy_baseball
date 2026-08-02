@@ -1,5 +1,22 @@
 # E13.2 Phase 0 — Completion Report
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "Phase-0 completion report (cost-hygiene guard + W1 parity check) \u2014 a plumbing/parity gate, not an arm bake-off; no fold/arm/verdict concept in the document.",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "exempt",
+ "verdict": null
+}
+-->
+
+
 **Story:** E13.2 Bottom-up PA-level game simulator (Singlearity blueprint) — Phase 0 (cost-hygiene + W1 data dependency)
 **Date:** 2026-06-24 · **Status:** ✅ COMPLETE — training source verified, parity green, Phase 1 unblocked
 

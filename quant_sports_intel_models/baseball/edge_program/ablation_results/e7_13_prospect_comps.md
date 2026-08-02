@@ -1,5 +1,35 @@
 # E7.13 — PECOTA-style prospect → historical-MLB COMPS
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": "forward, relaxed maturity",
+ "gates": null,
+ "n_arms": 2,
+ "n_folds": 4,
+ "per_metric": [
+  {
+   "metric": "batter",
+   "n_arms": null,
+   "n_folds": 4,
+   "verdict": "BLEND_ELIGIBLE_NOT_WIRED"
+  },
+  {
+   "metric": "pitcher",
+   "n_arms": null,
+   "n_folds": 4,
+   "verdict": "DISPLAY_ONLY"
+  }
+ ],
+ "primary_contrast": "randomized-PIT max decile deviation <= 0.05",
+ "reason": null,
+ "schema": 1,
+ "source_artifact": "e7_13_artifacts/e7_13_comp_validation.json",
+ "status": "recovered",
+ "verdict": "DISPLAY_ONLY"
+}
+-->
+
+
 **Status (2026-08-01):** Phase 1 **SHIPPED** (comps on the board). Phase 2 **RUN**. The comp term
 **IS WIRED INTO THE BOARD'S RANKING** at operator direction, on the strength of a separate
 ORDERING study (§6) — the CRPS study alone did not license that and is recorded as

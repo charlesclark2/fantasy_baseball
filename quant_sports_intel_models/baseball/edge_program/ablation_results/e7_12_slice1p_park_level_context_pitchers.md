@@ -1,5 +1,68 @@
 # MLB Edge-E7.12 SLICE 1p (PITCHERS) — minor-league PARK factors, per-LEVEL run environment, and the small-sample hardening of the MiLB→MLB PITCHER MLE
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": "leave-one-MLB-debut-cohort-out (n_cohorts)",
+ "gates": null,
+ "n_arms": 14,
+ "n_folds": null,
+ "per_metric": [
+  {
+   "dsr": null,
+   "fold_win_rate": 0.7272727272727273,
+   "metric": "k_pct",
+   "n_arms": 14,
+   "n_folds": 11,
+   "pbo": 0.4142857142857143,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": null,
+   "fold_win_rate": 0.7272727272727273,
+   "metric": "bb_pct",
+   "n_arms": 14,
+   "n_folds": 11,
+   "pbo": 0.32857142857142857,
+   "verdict": "ADD"
+  },
+  {
+   "dsr": null,
+   "fold_win_rate": 0.7272727272727273,
+   "metric": "hr_rate",
+   "n_arms": 14,
+   "n_folds": 11,
+   "pbo": 0.17142857142857143,
+   "verdict": "ADD"
+  },
+  {
+   "dsr": null,
+   "fold_win_rate": 0.5454545454545454,
+   "metric": "gb_pct",
+   "n_arms": 14,
+   "n_folds": 11,
+   "pbo": 0.0,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": null,
+   "fold_win_rate": 0.5,
+   "metric": "xwoba_against",
+   "n_arms": 14,
+   "n_folds": 4,
+   "pbo": 0.5,
+   "verdict": "DROP"
+  }
+ ],
+ "primary_contrast": "paired-t",
+ "reason": null,
+ "schema": 1,
+ "source_artifact": "quant_sports_intel_models/baseball/edge_program/ablation_results/e7_12_artifacts/e7_12_slice1_pitchers_summary.json",
+ "status": "recovered",
+ "verdict": "k_pct=DROP, bb_pct=ADD, hr_rate=ADD, gb_pct=DROP, xwoba_against=DROP"
+}
+-->
+
+
 **generated:** 2026-08-01T02:30:26.678361+00:00 · **baseline:** the incumbent (`milb_mle_pitcher_v1`, `partial_pool`) · **learner held FIXED per metric**
 
 > ⚠️ **A projection, not an edge claim — `best_alpha = 0`.** This slice asks one question: does adjusting a prospect's minor-league rate for WHERE (park), WHEN (level×season run environment) and HOW MUCH (sample reliability) he accumulated it translate BETTER than the raw rate the E7.3 partial-pool sees today? A rung that does not clear its deflated gate is **DROPPED, not shipped** — the 8/3 draft board is a low-risk surface, which lowers the bar for shipping a CLEARED win, not the bar for what counts as one.

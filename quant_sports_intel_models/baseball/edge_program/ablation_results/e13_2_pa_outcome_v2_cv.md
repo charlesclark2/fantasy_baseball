@@ -1,5 +1,25 @@
 # E13.2 Phase 1 — PA-outcome multiclass CV — feature set v2 (2026-06-24)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": "expanding-window by season (train < eval_year)",
+ "gates": {
+  "mean_delta_vs_log5": 0.0043,
+  "nll_noise_floor": 0.01
+ },
+ "n_arms": 1,
+ "n_folds": 8,
+ "per_metric": null,
+ "primary_contrast": "paired vs log5 + marginal foils",
+ "reason": null,
+ "schema": 1,
+ "source_artifact": "e13_2_pa_outcome_v2_cv.json",
+ "status": "recovered",
+ "verdict": "POWER_LIMITED (beats both foils every fold, but below the pre-registered NLL noise floor)"
+}
+-->
+
+
 - Substrate: 1,960,682 R-season PAs, 65 features (5 categorical + 8 entering-state + 52 point-in-time).
 - No-skill marginal-prior floor (Phase 0): 1.5074 nats. nll noise floor: 0.01.
 

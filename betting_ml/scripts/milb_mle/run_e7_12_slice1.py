@@ -116,6 +116,10 @@ from betting_ml.scripts.milb_mle.park_context import (  # noqa: E402
     context_coverage,
     reduced_spec,
 )
+from betting_ml.utils.design_block import (  # noqa: E402
+    design_block_from_ladder_results,
+    insert_design_block,
+)
 
 log = logging.getLogger("e7_12.slice1")
 
@@ -1182,8 +1186,10 @@ def write_report(results: dict[str, LadderResult], directional: dict, fdr: dict,
       "(E7.12 slice 2). Every number is conditional on the graduated population E7.3 trains on.")
     a("- **`best_alpha = 0`** — a Dynasty/board projection and a betting prior, never a market bet.")
     a("")
+    db = design_block_from_ladder_results(
+        results, fold_rule="leave-one-MLB-debut-cohort-out (n_cohorts)")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(L) + "\n")
+    path.write_text(insert_design_block("\n".join(L) + "\n", db))
     log.info("report → %s", path)
 
 

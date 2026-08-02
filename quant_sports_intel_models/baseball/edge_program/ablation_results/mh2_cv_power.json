@@ -1,64 +1,123 @@
 {
  "story": "MH2 \u2014 CV-power characterization for \u00a70.5 bake-offs",
  "best_alpha": 0,
- "generated_at": "2026-08-02T06:28:14+00:00",
+ "generated_at": "2026-08-02T18:38:03+00:00",
  "diagnostic_only": "no re-fit, no verdict change, no champion change",
  "corpus_census": {
-  "markdown_reports": 75,
-  "json_artifacts": 270,
-  "story_prompt_entries": 251,
+  "markdown_reports": 74,
+  "json_artifacts": 265,
+  "story_prompt_entries": 255,
   "note": "the JSON count includes per-Optuna-trial artifacts, which are trial records rather than verdicts and carry no gate to classify."
  },
  "extraction": {
-  "unextractable_reports": [
-   "E13_2_phase0_report.md",
-   "e13_14_cross_market_coherence.md",
-   "e13_14_cross_market_coherence_smoke.md",
-   "e13_2_pa_outcome_v1_cv.md",
-   "e13_2_pa_outcome_v2_cv.md",
-   "e13_2b_feature_augmented_retest.md",
-   "e13_8_market_accuracy_benchmark.md",
-   "e2_2_copula_decision.md",
-   "e2_3_convolution_calibration.md",
-   "e2_5_signal_registration.md",
-   "e2_6_preregistration.md",
-   "e5_3_join_coverage.md",
-   "e7_11_artifacts/manual_source_ACCESS.md",
-   "e7_11_prospect_consensus.md",
-   "e7_12_slice1_park_level_context.md",
-   "e7_12_slice1p_park_level_context_pitchers.md",
-   "e7_12_slice2_survivorship.md",
-   "e7_12_slice2_survivorship_pitchers.md",
-   "e7_12_slice4_tool_grades.md",
-   "e7_12_slice4_tool_grades_pitchers.md",
-   "e7_12_slice5_aging_curves.md",
-   "e7_12_slice5_aging_curves_pitchers.md",
-   "e7_12_slice6_feasibility.md",
-   "e7_12_slice6_feasibility_pitchers.md",
-   "e7_13_artifacts/e7_13_comp_validation.md",
-   "e7_13_prospect_comps.md",
-   "e7_15_h1_level_ladder.md",
-   "e7_15_h1_level_ladder_pitchers.md",
-   "e7_15_h1_preregistration.md",
-   "e7_15_h2_opponent_quality.md",
-   "e7_15_h2_opponent_quality_pitchers.md",
-   "e7_15_h3_player_structure_pitchers.md",
-   "e7_15_h3_preregistration.md",
-   "e7_16_artifacts/e7_14_source_accuracy.md",
-   "e7_16_artifacts/e7_16_comp_validation.md",
-   "e7_16_pipeline_comp_pool.md",
-   "e7_4_prospect_xref.md",
-   "e7_5_milb_prior_ablation.md",
-   "e7_5b_mle_prior_head_to_head.md",
-   "e7_8_fv_translation.md",
-   "e7_9_historical_backfill_procedure.md",
-   "e7_9_train_serve_audit.md",
-   "e8_0_prospect_board.md",
-   "e8_2a_cbs_access_probe.md",
-   "odds_market_grab_2026-06-30.md",
-   "odds_market_inventory_2026-06-30.md"
+  "unextractable_reports": [],
+  "n_unextractable": 0,
+  "exempt_reports": [
+   {
+    "file": "E13_2_phase0_report.md",
+    "reason": "Phase-0 completion report (cost-hygiene guard + W1 parity check) \u2014 a plumbing/parity gate, not an arm bake-off; no fold/arm/verdict concept in the document."
+   },
+   {
+    "file": "e13_8_market_accuracy_benchmark.md",
+    "reason": "a market-accuracy BENCHMARK ('what are we targeting'), not a model bake-off \u2014 no arms, no candidate being selected against a foil."
+   },
+   {
+    "file": "e2_2_copula_decision.md",
+    "reason": "a single-fit dependence-structure DECISION record (rho estimate + a conditioning choice) \u2014 one fit, not a multi-arm bake-off with folds/PBO/DSR."
+   },
+   {
+    "file": "e2_3_convolution_calibration.md",
+    "reason": "a calibration record for one convolution pipeline (per-side dispersion fit) \u2014 no competing arms."
+   },
+   {
+    "file": "e2_5_signal_registration.md",
+    "reason": "a serving-registration write-up for the E2.1-r winner (already gated elsewhere) \u2014 registers a decision already made, runs no bake-off of its own."
+   },
+   {
+    "file": "e2_6_preregistration.md",
+    "reason": "explicitly a PRE-REGISTRATION, written before any arm was scored \u2014 by definition carries no verdict yet; the results (when run) land in e2_6_derivative_gates.md, which the header regex already extracts."
+   },
+   {
+    "file": "e5_3_join_coverage.md",
+    "reason": "a name-to-ID join-coverage AUDIT (resolution rate table) \u2014 a data-quality check, not a model comparison."
+   },
+   {
+    "file": "e7_11_prospect_consensus.md",
+    "reason": "states its own standing explicitly: 'A consensus is a DESCRIPTION, not a claim ... no accuracy test against realized outcomes was run and none is implied.'"
+   },
+   {
+    "file": "e7_15_h1_preregistration.md",
+    "reason": "a pre-registration ('written before any arm was scored', per run_e7_15_h1.py's own citation) \u2014 the results land in e7_15_h1_level_ladder.md, covered above."
+   },
+   {
+    "file": "e7_15_h3_preregistration.md",
+    "reason": "same as h1: a pre-registration, cited by run_e7_15_h3.py as 'written before any arm was scored'; results land in e7_15_h3_player_structure(_pitchers).md."
+   },
+   {
+    "file": "e7_4_prospect_xref.md",
+    "reason": "an identity/ETA cross-reference BUILD status report (rows landed, tripwires clear) \u2014 no arms, no fold structure."
+   },
+   {
+    "file": "e7_9_historical_backfill_procedure.md",
+    "reason": "explicitly 'Status: NOT TRIGGERED' \u2014 a pre-agreed CONDITIONAL procedure document with no run behind it yet."
+   },
+   {
+    "file": "e7_9_train_serve_audit.md",
+    "reason": "a train/serve feature-EXPOSURE scoping table (which served contracts touch the MLE columns) \u2014 an audit, not a bake-off; no fold/PBO/DSR anywhere in its own artifact either."
+   },
+   {
+    "file": "e8_0_prospect_board.md",
+    "reason": "states its own standing explicitly: 'best_alpha = 0 ... not a ranking that claims to beat FanGraphs ... nothing here has been validated as a ranking.'"
+   },
+   {
+    "file": "e8_2a_cbs_access_probe.md",
+    "reason": "a feasibility SPIKE with a GO/NO-GO recommendation (four access paths tried live) \u2014 not a statistical gate; explicitly 'research spike only'."
+   },
+   {
+    "file": "odds_market_grab_2026-06-30.md",
+    "reason": "an operational data-GRAB log (credits spent, probe results, a value-ranked queue handed to the operator) \u2014 no model, no arms."
+   },
+   {
+    "file": "odds_market_inventory_2026-06-30.md",
+    "reason": "a read-only S3 market-INVENTORY audit (which Odds-API keys are present/stale) \u2014 a coverage check, not a bake-off."
+   }
   ],
-  "n_unextractable": 46
+  "n_exempt": 17,
+  "unrecoverable_reports": [
+   {
+    "file": "e7_12_slice2_survivorship.md",
+    "reason": "no `*_summary.json` (or any other JSON) exists anywhere under ablation_results for slice2 \u2014 `find \u2026 -iname '*slice2*'` returns only the two .md files. run_e7_12_slice2.py still exists and could re-emit a summary artifact on a future run (LOCK 1: that re-run is not this story's to trigger)."
+   },
+   {
+    "file": "e7_12_slice2_survivorship_pitchers.md",
+    "reason": "same as the batter report \u2014 no stored artifact survives for slice2 (pitcher side)."
+   },
+   {
+    "file": "e7_12_slice4_tool_grades.md",
+    "reason": "no `*_summary.json` (or any other JSON) exists for slice4 \u2014 same gap as slice2. run_e7_12_slice4.py still exists."
+   },
+   {
+    "file": "e7_12_slice4_tool_grades_pitchers.md",
+    "reason": "same as the batter report \u2014 no stored artifact survives for slice4 (pitcher side)."
+   },
+   {
+    "file": "e7_12_slice5_aging_curves.md",
+    "reason": "no `*_summary.json` (or any other JSON) exists for slice5. run_e7_12_slice5.py still exists."
+   },
+   {
+    "file": "e7_12_slice5_aging_curves_pitchers.md",
+    "reason": "same as the batter report \u2014 no stored artifact survives for slice5 (pitcher side)."
+   },
+   {
+    "file": "e7_12_slice6_feasibility.md",
+    "reason": "no `*_summary.json` (or any other JSON) exists for slice6 (a feasibility ceiling-probe, not a leaderboard bake-off \u2014 s6_feasibility.py still exists)."
+   },
+   {
+    "file": "e7_12_slice6_feasibility_pitchers.md",
+    "reason": "same as the batter report \u2014 no stored artifact survives for slice6 (pitcher side)."
+   }
+  ],
+  "n_unrecoverable": 8
  },
  "skipped_non_bakeoff_summaries": [],
  "validation_cases": [
@@ -812,8 +871,8 @@
   }
  ],
  "null_state_counts": {
-  "POWER_LIMITED": 29,
-  "not-classifiable-from-header": 23,
+  "not-classifiable-from-header": 59,
+  "POWER_LIMITED": 57,
   "GENUINE_ABSENCE": 9,
   "UNKNOWN": 9,
   "SHIPPED (not a null)": 6,
@@ -822,15 +881,15 @@
   "DSR_UNREACHABLE": 1
  },
  "bound_by_counts": {
-  "unknown \u2014 the artifact records no fold structure": 32,
-  "fold-consistency clause": 11,
-  "PBO": 10,
+  "unknown \u2014 the artifact records no fold structure": 43,
+  "fold-consistency clause": 23,
+  "nothing \u2014 this arm SHIPPED under its own study's gate": 22,
+  "PBO": 20,
+  "unattributed (the recorded stats do not identify a binding clause)": 12,
+  "DSR": 11,
   "point estimate (best arm loses on average)": 9,
-  "nothing \u2014 this arm SHIPPED under its own study's gate": 6,
-  "DSR": 6,
-  "unattributed (the recorded stats do not identify a binding clause)": 3,
   "PBO UNDEFINED (<4 folds)": 3,
-  "n/a \u2014 the mechanism cannot act on this population": 1,
-  "anchor/plumbing (BLOCKED \u2014 no verdict was reached)": 1
+  "anchor/plumbing (BLOCKED \u2014 no verdict was reached)": 2,
+  "n/a \u2014 the mechanism cannot act on this population": 1
  }
 }
