@@ -91,6 +91,21 @@ def test_player_track_record_frame_fade_matches_disagreement_frame(monkeypatch):
     assert got_fade_ids == expected_fade_ids
     assert len(got_fade_ids) > 0, "fixture must be large enough to trigger the >=12-per-position gate"
 
+    # fade_result is graded ONLY on fade rows (nothing to grade on a row we didn't flag) and always
+    # one of the three defined outcomes there — never silently blank on a real fade.
+    assert out.loc[out["is_fade"], "fade_result"].isin(["hit", "miss", "push"]).all()
+    assert out.loc[~out["is_fade"], "fade_result"].isna().all()
+
+
+def test_fade_result_hit_vs_miss_vs_push():
+    """Pure-function unit test for the hit/miss/push readout itself — our rank distance to the actual
+    finish vs ADP's, the only apples-to-apples per-row comparison since ADP isn't on a points scale."""
+    assert bs._fade_result(our_rank=2, adp_rank=8, actual_rank=3) == "hit"   # we were closer
+    assert bs._fade_result(our_rank=8, adp_rank=2, actual_rank=3) == "miss"  # ADP was closer
+    assert bs._fade_result(our_rank=2, adp_rank=4, actual_rank=3) == "push"  # tied distance (1 vs 1)
+    assert bs._fade_result(our_rank=None, adp_rank=4, actual_rank=3) is None
+    assert bs._fade_result(our_rank=2, adp_rank=pd.NA, actual_rank=3) is None
+
 
 def test_player_track_record_frame_rank_directions(monkeypatch):
     ids = ["P1", "P2", "P3"]
@@ -140,11 +155,10 @@ def test_player_track_record_frame_excludes_under_6_games(monkeypatch):
     assert set(out["player_id"]) == {"P1"}
 
 
-def test_player_track_record_frame_ships_our_vs_actual_when_adp_is_structurally_unavailable(monkeypatch):
-    """NF3.2 / 2026-08-02: FFC has no archive for some seasons (2025 confirmed live). The frame must
-    NOT blank the whole season in that case — it ships real our_points/our_rank/actual_points/
-    actual_rank, with adp/adp_rank null and is_fade False (never fabricated or backfilled from a
-    different consensus source)."""
+def test_player_track_record_frame_ships_our_vs_actual_when_no_adp_source_has_the_season(monkeypatch):
+    """NF3.2 / 2026-08-02: when NEITHER FFC nor its MFL fallback has this season, the frame must NOT
+    blank the whole season — it ships real our_points/our_rank/actual_points/actual_rank, with
+    adp/adp_rank/adp_source null and is_fade False (never fabricated or backfilled from anywhere)."""
     ids = ["P1", "P2", "P3"]
     positions = ["QB", "QB", "QB"]
     proj = _proj_frame(ids, ["A", "B", "C"], positions, [300.0, 200.0, 100.0])  # our_rank 1,2,3
@@ -158,6 +172,7 @@ def test_player_track_record_frame_ships_our_vs_actual_when_adp_is_structurally_
 
     empty_adp = pd.DataFrame(columns=["player_id", "position", "adp"])
     monkeypatch.setattr(bs.A, "load_adp_for_season", lambda con, season, schema=None: empty_adp.copy())
+    monkeypatch.setattr(bs.MFL, "load_adp_for_season", lambda con, season, schema=None: empty_adp.copy())
 
     out = bs.player_track_record_frame(
         None, 2025, "sch", project_fn=project_fn, load_realized_fn=load_realized_fn,
@@ -168,7 +183,41 @@ def test_player_track_record_frame_ships_our_vs_actual_when_adp_is_structurally_
     assert out.loc["P3", "actual_rank"] == 1
     assert out["adp"].isna().all()
     assert out["adp_rank"].isna().all()
+    assert out["adp_source"].isna().all()
     assert (out["is_fade"] == False).all()  # noqa: E712 — explicit False check reads clearer here
+    assert out["fade_result"].isna().all()  # nothing to grade without an ADP to disagree with
+
+
+def test_player_track_record_frame_falls_back_to_mfl_when_ffc_is_empty(monkeypatch):
+    """NF3.2 / 2026-08-02: when FFC has no archive for a season (2025 confirmed live via its own
+    API — see mfl_adp_source.py's docstring) but MFL DOES have it, the frame uses MFL's real ADP
+    rather than falling all the way through to the no-ADP-at-all fallback. `adp_source` names it
+    explicitly so a consumer never mistakes a fallback season for FFC's primary source."""
+    ids = ["P1", "P2", "P3"]
+    positions = ["QB", "QB", "QB"]
+    proj = _proj_frame(ids, ["A", "B", "C"], positions, [300.0, 200.0, 100.0])  # our_rank 1,2,3
+    real = _real_frame(ids, [10, 10, 10], [50.0, 150.0, 250.0])                # actual_rank 3,2,1
+    mfl_adp = _adp_frame(ids, positions, [5.0, 1.0, 10.0])                     # adp_rank 2,1,3
+
+    def project_fn(con, season, schema):
+        return proj.copy()
+
+    def load_realized_fn(con, season, schema):
+        return real.copy()
+
+    empty_adp = pd.DataFrame(columns=["player_id", "position", "adp"])
+    monkeypatch.setattr(bs.A, "load_adp_for_season", lambda con, season, schema=None: empty_adp.copy())
+    monkeypatch.setattr(bs.MFL, "load_adp_for_season", lambda con, season, schema=None: mfl_adp.copy())
+
+    out = bs.player_track_record_frame(
+        None, 2025, "sch", project_fn=project_fn, load_realized_fn=load_realized_fn,
+    ).set_index("player_id")
+
+    assert set(out.index) == {"P1", "P2", "P3"}
+    assert (out["adp_source"] == "mfl").all()
+    assert out.loc["P2", "adp_rank"] == 1  # lowest ADP (best draft slot) = rank 1, same as FFC's convention
+    assert out.loc["P3", "adp_rank"] == 3
+    assert out["adp"].notna().all()
 
 
 # ── export_track_record_json.build_headline ──────────────────────────────────────────────────────
@@ -231,24 +280,38 @@ def test_season_records_shape():
     df = pd.DataFrame([{
         "season": 2024, "player_id": "P1", "player_name": "A", "position": "RB",
         "our_points": 200.4, "our_rank": 1, "adp": 5.2, "adp_rank": 2,
-        "actual_points": 190.1, "actual_rank": 1, "is_fade": True,
+        "actual_points": 190.1, "actual_rank": 1, "is_fade": True, "fade_result": "hit",
+        "adp_source": "ffc",
     }])
     recs = ex.season_records(df)
     assert recs == [{
         "season": 2024, "playerId": "P1", "playerName": "A", "position": "RB",
         "ourPoints": 200.4, "ourRank": 1, "adp": 5.2, "adpRank": 2,
-        "actualPoints": 190.1, "actualRank": 1, "isFade": True,
+        "actualPoints": 190.1, "actualRank": 1, "isFade": True, "fadeResult": "hit",
+        "adpSource": "ffc",
     }]
 
 
-def test_season_records_null_adp_rank_when_ffc_has_no_archive():
-    """2025-shaped row: `adp`/`adp_rank` are `pd.NA` (the no-ADP fallback in `player_track_record_frame`)
-    — must serialize to JSON `null`, not raise or coerce to 0."""
+def test_season_records_null_adp_rank_when_no_source_has_the_season():
+    """2025-shaped row with NEITHER source available: `adp`/`adp_rank`/`adp_source`/`fade_result` are
+    `pd.NA`/`None` (the no-ADP-at-all fallback in `player_track_record_frame`) — must serialize to
+    JSON `null`, not raise or coerce to 0/empty-string."""
     df = pd.DataFrame([{
         "season": 2025, "player_id": "P1", "player_name": "A", "position": "RB",
         "our_points": 200.4, "our_rank": 1, "adp": pd.NA, "adp_rank": pd.NA,
-        "actual_points": 190.1, "actual_rank": 1, "is_fade": False,
+        "actual_points": 190.1, "actual_rank": 1, "is_fade": False, "fade_result": None,
+        "adp_source": None,
     }])
     recs = ex.season_records(df)
     assert recs[0]["adp"] is None
     assert recs[0]["adpRank"] is None
+    assert recs[0]["fadeResult"] is None
+    assert recs[0]["adpSource"] is None
+
+
+def test_adp_source_for_season_reads_the_uniform_per_row_value():
+    df = pd.DataFrame([
+        {"adp_source": "mfl"}, {"adp_source": "mfl"},
+    ])
+    assert ex.adp_source_for_season(df) == "mfl"
+    assert ex.adp_source_for_season(pd.DataFrame(columns=["adp_source"])) is None

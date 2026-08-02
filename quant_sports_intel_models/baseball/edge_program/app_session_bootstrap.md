@@ -1,6 +1,6 @@
 # Application-session bootstrap prompt
 
-**Last updated:** 2026-07-29 _(refresh on any material change)_ — added the runtime-gate attestation (DoD §4 + handoff §0b) after E9.49's CI-green-but-500-in-prod regression.
+**Last updated:** 2026-08-02 _(refresh on any material change)_ — 🌿 added the PER-SESSION-BRANCH + publish-from-merged-`dev` rules (TRIAL, to fix the NF1.5b/NF3.4 cross-session collisions: each session works on its own branch off `dev` → PR to merge; `--publish`/`deploy.sh` only from merged `dev`). Prev 2026-07-29: the runtime-gate attestation (DoD §4 + handoff §0b) after E9.49's CI-green-but-500-in-prod regression.
 
 **What this is:** the standard primer pasted **FIRST in every fresh app-repo session**, immediately followed by **exactly one** `▶ Story prompt` (from `story_prompts.md` or `../fantasy/story_prompts.md`).
 
@@ -23,8 +23,17 @@ exactly one ▶ Story prompt. Do THAT story only — do not start, scope, or "wh
 - FOOTGUN: `app/` is half-alive — `app/backend/` is live, but the dead Streamlit UI sits right next to it,
   and Next.js has its own `frontend/app/` router dir. "The app's UI" is ALWAYS `frontend/`, never app/home.py.
 - FIRST ACTIONS, before anything else:
-    1. Read the repo-root `CLAUDE.md`.
-    2. Run `cat frontend/package.json` and confirm Next.js ("next" in deps, "dev": "next dev").
+    1. 🌿 BRANCH: `git checkout dev && git pull && git checkout -b <story-branch>` (name it for the story, e.g.
+       `nf3.2-receipts`). Work + commit + push on THIS branch ONLY — ⛔ NEVER `dev`/`main` directly. The closeout
+       hands the operator a PR (branch → `dev`) to merge. If another LIVE session shares files you'll touch,
+       say so in the handoff so the operator rebases/merges in order.
+    2. Read the repo-root `CLAUDE.md` (esp. the 🌿 per-session-branches + publish-discipline section).
+    3. Run `cat frontend/package.json` and confirm Next.js ("next" in deps, "dev": "next dev").
+- 🚨 PUBLISH/DEPLOY ONLY FROM MERGED `dev`, NEVER FROM YOUR BRANCH. There is ONE prod S3 api-cache bucket + ONE
+  API Lambda, NO staging plane; `--publish`/`deploy.sh` reach around git entirely. BUILD + verify on your branch,
+  but `export … --publish` (prod S3) and `infrastructure/lambda/deploy.sh` are POST-MERGE OPERATOR steps — list
+  them in the closeout, do NOT run them mid-session. (The NF3.4 near-miss: a WIP re-export stamped the wrong
+  model_version, one --publish from shipping another story's UNRELEASED board.)
 - TRIPWIRE: if you are doing UI work and open `streamlit_app.py`, `st.set_page_config`, `app/home.py`, or
   `app/pages/*.py` → STOP, wrong place → go to `frontend/`.
 

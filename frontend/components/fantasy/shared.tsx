@@ -150,6 +150,78 @@ export function ConfidenceBadge({ conf }: { conf: string | null }) {
   )
 }
 
+/** NF3.2 — a fade, graded. `isFade` alone only says "we disagreed with the market"; it says nothing
+ *  about whether that disagreement paid off. `fadeResult` answers that: "hit" (our rank landed
+ *  closer to how the season actually finished than ADP's did), "miss" (ADP was the better call), or
+ *  "push" (a dead-even tie) — see `_fade_result` in `benchmark_scorecard.py` for the exact
+ *  definition. Colour follows the existing hit/miss convention on these boards (emerald = good,
+ *  rose = bad) rather than a single undifferentiated green "fade" chip, so "the full picture, wins
+ *  and losses both" (the Track Record page's own blurb) is true of this column too. Renders nothing
+ *  for a non-fade row — same as before. */
+export function FadeBadge({
+  isFade,
+  fadeResult,
+}: {
+  isFade: boolean
+  fadeResult: "hit" | "miss" | "push" | null | undefined
+}) {
+  if (!isFade) return null
+  // ⚠️ Explicit `== null` (covers BOTH `null` and `undefined`), never a `=== "hit" ? : === "miss" ? :
+  // else "push"` fallthrough — an export that predates this field, or one read before republishing,
+  // omits the key entirely, which is `undefined` in JS, not `"push"`. A fallthrough silently painted
+  // every ungraded fade amber as a fake tie (2026-08-02 mobile report: "everything is showing up as
+  // push"). An ungraded row gets the original plain "fade" chip instead.
+  if (fadeResult == null) {
+    return (
+      <span className="rounded border border-[#10b981]/40 bg-[#10b981]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#10b981]">
+        fade
+      </span>
+    )
+  }
+  const style =
+    fadeResult === "hit"
+      ? "border-[#10b981]/40 bg-[#10b981]/10 text-[#10b981]"
+      : fadeResult === "miss"
+        ? "border-rose-500/40 bg-rose-500/10 text-rose-400"
+        : "border-amber-500/40 bg-amber-500/10 text-amber-500"
+  const label = fadeResult === "hit" ? "fade · hit" : fadeResult === "miss" ? "fade · miss" : "fade · push"
+  return (
+    <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${style}`}>{label}</span>
+  )
+}
+
+/** The hit/miss/push definitions, spelled out in-line rather than left to the "Fade" column's
+ *  tooltip alone — the user report that prompted this: "even I'm confused by it" applied to the
+ *  bare word "Fade"; a bare colour-coded chip has the same problem one level down. Shared so the
+ *  Track Record page (scatter + table) and a player's own track-record table say the identical
+ *  thing rather than two slightly different explanations drifting apart. */
+export function FadeLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] leading-relaxed text-gray-500">
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-2 w-2 flex-shrink-0 rounded-full bg-[#10b981]" />
+        <span>
+          <span className="font-semibold text-[#10b981]">Hit</span> — our rank landed closer to how the
+          season actually finished than ADP&apos;s did.
+        </span>
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-2 w-2 flex-shrink-0 rounded-full bg-rose-500" />
+        <span>
+          <span className="font-semibold text-rose-400">Miss</span> — ADP&apos;s rank was the better
+          call.
+        </span>
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-2 w-2 flex-shrink-0 rounded-full bg-amber-500" />
+        <span>
+          <span className="font-semibold text-amber-500">Push</span> — a dead-even tie.
+        </span>
+      </span>
+    </div>
+  )
+}
+
 export function RookieBadge() {
   return (
     <span className="inline-block rounded border border-indigo-500/30 bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-300">
@@ -214,6 +286,13 @@ export function InfoTip({ label, children }: { label: React.ReactNode; children:
           onPointerLeave={(e) => {
             if (e.pointerType === "mouse") setOpen(false)
           }}
+          // Browsers' default stylesheet resets `text-transform: none` on <button> — it is otherwise
+          // an INHERITED property, so a plain <th> in an `uppercase` header row picks that up for
+          // free but this button doesn't, and silently renders "Fade" instead of "FADE" next to
+          // "POS"/"ADP" siblings that never went through a button. `inherit` restores the normal CSS
+          // inheritance so this reads correctly both inside an uppercase header AND inline mid-sentence
+          // (e.g. the Confidence badge on the player page), which is exactly what "inherit" should do.
+          style={{ textTransform: "inherit" }}
           className="inline-flex cursor-help items-center gap-1 underline decoration-dotted decoration-gray-600 underline-offset-4"
         >
           {label}
@@ -250,6 +329,7 @@ export const GLOSSARY = {
     "The specific player sitting at this position's replacement level — roughly the calibre you should still be able to get for free, or very late. He is the yardstick every player at the position is measured against.",
   overallRank:
     "Our model's own rank across every position, for your league's format and roster shape — where WE would take this player if the draft started right now. It is not the market's rank (that's ADP, shown separately) and not a promise of where he'll actually be drafted.",
+  fade: "A player where our rank and that season's ADP genuinely disagreed — his gap between the two, within his position, was in the top quarter of gaps that season. This runs BOTH ways: it flags a player we had much higher on our board than the room did, or much lower — not just one direction. These are our highest-conviction calls against the market, which is where an honest track record is most informative: anyone can look good agreeing with consensus. Each one is also graded: hit (green) means our rank ended up closer to how the season actually finished than ADP's did; miss (red) means ADP's rank was the better call; push (gray) means it was a dead-even tie. A fade is a high-conviction call, not a guaranteed win — the misses are shown here too.",
 } as const
 
 /** The ADP-delta column header. Plain English on purpose — "Δ" reads as statistical notation and

@@ -485,8 +485,16 @@ def ingest_statsapi_schedule(context):
     #      consumer that flattens before the new month's first capture builds a universe that
     #      stops at the month boundary (the INC-37 signature: the whole 08-01 morning tier fell
     #      to intraday_fallback; the same thing happened on 06-01 and 07-01).
+    # INC-38 (2026-08-02) — --lookback-days 3, the mirror of the lookahead. The
+    # `--start-date <yesterday>` above was added 2026-07-15 for exactly this symptom and it did
+    # NOT hold: the S3 raw writer overwrites the whole dt=<fire date> partition with only the
+    # months THAT fire pulled, so the month-only intraday tick minutes later CLOBBERS this wider
+    # daily fetch. An explicit lookback on BOTH callers is what makes it stick. Without it a game
+    # that first-pitches after 00:00 UTC on the 1st is never re-fetched, stays frozen non-final in
+    # stg_statsapi_games, and any user bet on it stays PENDING forever (14 of 15 games on 07-31).
     _run_script(context, "ingest_statsapi.py",
-                ["schedule", "--start-date", _one_day_ago(), "--lookahead-days", "3"])
+                ["schedule", "--start-date", _one_day_ago(),
+                 "--lookahead-days", "3", "--lookback-days", "3"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -2195,9 +2203,40 @@ def _run_settlement(context) -> None:
     OR an evening settle_user_bets_job) retries. Soft-fail mirrors ingest_umpire_scorecards.
     """
     try:
-        _run_script(context, "settle_user_bets.py")
+        stdout = _run_script(context, "settle_user_bets.py")
     except Exception as e:
         context.log.warning(f"User-bet settlement failed (non-fatal, retried next pass): {e}")
+        return
+    _alert_on_stale_pending_bets(context, stdout)
+
+
+def _alert_on_stale_pending_bets(context, stdout: str) -> None:
+    """INC-38 — page when a bet is still pending long after its game's first pitch.
+
+    ALERT-tier (never raises), and it does NOT change _run_settlement's WARN tier: settlement is
+    off the prediction path, so a stuck bet is a loud page, never a reason to fail the job. The
+    decision logic is the pure classifier in betting_ml.monitoring.stale_pending_bets, so it is
+    unit-testable without a live DynamoDB scan. Keyed on the SAME condition the script already
+    logs, so this adds no new false-positive surface — it only makes the existing detection
+    audible (the E11.30 finding: "ALERT-tier" had quietly meant "detected, nobody notified").
+    """
+    from betting_ml.monitoring.stale_pending_bets import classify, parse_stale_pending_bets
+
+    severity, message = classify(parse_stale_pending_bets(stdout))
+    if severity is None:
+        context.log.info(f"[stale-pending-bets] OK — {message}")
+        return
+    context.log.warning(f"[ALERT] stale-pending-bets: {message}")
+    try:
+        from pipeline.utils.alerting import send_alert
+        send_alert(
+            "User bets stuck pending past their game's final",
+            message,
+            severity=severity,
+            dedup_key="stale_pending_bets",
+        )
+    except Exception as e:  # noqa: BLE001 — a failed page must not fail the op
+        context.log.warning(f"[stale-pending-bets] send_alert failed (non-fatal): {e}")
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

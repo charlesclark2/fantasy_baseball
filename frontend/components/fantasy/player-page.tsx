@@ -45,6 +45,8 @@ import {
   ALL_POSITIONS,
   ConfidenceBadge,
   EmptyBlock,
+  FadeBadge,
+  FadeLegend,
   FormatSelector,
   GLOSSARY,
   InfoTip,
@@ -630,6 +632,11 @@ function PublicPlayerView({ playerId }: { playerId: string }) {
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
               Past-season track record
             </h2>
+            {playerRows.some((r) => r.isFade) && (
+              <div className="mb-3">
+                <FadeLegend />
+              </div>
+            )}
             <div className="overflow-x-auto rounded-lg border border-[#262626] bg-[#0f0f0f]">
               <table className="w-full text-left text-xs">
                 <thead>
@@ -639,7 +646,9 @@ function PublicPlayerView({ playerId }: { playerId: string }) {
                     <th className="px-3 py-2 text-right">ADP rank</th>
                     <th className="px-3 py-2 text-right">Actual rank</th>
                     <th className="px-3 py-2 text-right">Actual pts</th>
-                    <th className="px-3 py-2">Fade</th>
+                    <th className="px-3 py-2">
+                      <InfoTip label="Fade">{GLOSSARY.fade}</InfoTip>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -653,11 +662,7 @@ function PublicPlayerView({ playerId }: { playerId: string }) {
                         {num(r.actualPoints)}
                       </td>
                       <td className="px-3 py-2">
-                        {r.isFade && (
-                          <span className="rounded border border-[#10b981]/40 bg-[#10b981]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#10b981]">
-                            fade
-                          </span>
-                        )}
+                        <FadeBadge isFade={r.isFade} fadeResult={r.fadeResult} />
                       </td>
                     </tr>
                   ))}

@@ -41,7 +41,26 @@ TODAY=$(python -c "from datetime import datetime; from zoneinfo import ZoneInfo;
 echo "[schedule_capture] $(date -u +%FT%TZ) start — baseball-day(LA)=$TODAY"
 
 # Step 1: re-ingest today's schedule (picks up retroactive lineup confirmations).
-python ingest_statsapi.py schedule --start-date "$TODAY" --end-date "$TODAY" --capture-reason intraday_gameday
+#
+# INC-37 / INC-38 — the month-boundary guards. run_schedule iterates WHOLE calendar months, so a
+# bare --start-date/--end-date on a boundary day is scoped short in BOTH directions:
+#   --lookahead-days 3 : the last captures of a month also fetch the NEXT one, so the flatten
+#                        never builds a game universe that stops at the boundary (INC-37).
+#   --lookback-days 3  : the first captures of a month also re-fetch the PREVIOUS one, so a game
+#                        that first-pitches after 00:00 UTC on the 1st still gets its Final +
+#                        score written — otherwise it stays frozen non-final forever and every
+#                        user bet on it sits PENDING forever (INC-38).
+#
+# ⭐ THIS caller is the one that matters most, and it is the one both incidents missed. It IS the
+# live 30-min game-day capture (the Dagster intraday op is the retained alternative path), so it
+# writes the last snapshot of every month — and because the raw writer uses
+# mode='overwrite_partition' keyed on the FIRE DATE, this month-only tick CLOBBERED the daily
+# op's wider `--start-date <yesterday>` fetch in the same dt= partition. That is why the daily
+# op's 2026-07-15 cure never actually held. Keep these flags in sync with
+# pipeline/ops/{daily_ingestion_ops,intraday_ops,sensor_ops}.py — pinned by
+# betting_ml/tests/test_inc38_month_boundary_settlement.py.
+python ingest_statsapi.py schedule --start-date "$TODAY" --end-date "$TODAY" \
+  --lookahead-days 3 --lookback-days 3 --capture-reason intraday_gameday
 
 echo "[schedule_capture] schedule ingest done — triggering dbt staging rebuild"
 

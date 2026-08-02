@@ -8,7 +8,7 @@ import { LogOut, Settings, Menu, X, ChevronDown, Lock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
 import { canAccess, canAccessFantasyBeta } from "@/lib/entitlements"
-import { SPORTS, surfaceItems, type NavItem, type SurfaceGroup } from "@/lib/nav-model"
+import { SPORTS, surfaceItems, publicNavItems, type NavItem, type SurfaceGroup } from "@/lib/nav-model"
 import changelog from "@/data/changelog.json"
 
 const latestWeek = changelog[0]?.week
@@ -102,6 +102,24 @@ export function Nav({
           >
             Blog
           </Link>
+
+          {/* NF3.2 fix: `item.public` (e.g. Track Record) only matters once a visitor is INSIDE a
+              surface's dropdown — but the whole sub-nav below is itself hidden pre-login
+              (`showSubNav`), so a public item was structurally unreachable for a signed-out
+              visitor, the exact opposite of the point of marking it public. Render it here
+              instead — visible on mobile AND desktop, independent of `showSubNav` — ONLY when
+              signed out; a signed-in visitor (entitled or not) already sees it in its normal
+              dropdown slot, so this would be a duplicate link once authenticated. */}
+          {!showSubNav &&
+            publicNavItems().map((item) => (
+              <Link
+                key={item.key}
+                href={item.href}
+                className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
+              >
+                {item.label}
+              </Link>
+            ))}
 
           {/* User actions — desktop only */}
           {authenticated ? (

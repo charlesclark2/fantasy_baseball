@@ -65,8 +65,15 @@ def _prop_bet(**over):
     return bet
 
 
-def _install(monkeypatch, pending, *, scores, mart_ks, api_final=None, boxscore=None):
-    """Wire settle_user_bets against fakes. Returns the FakeTable."""
+def _install(monkeypatch, pending, *, scores, mart_ks, api_final=None, boxscore=None,
+             api_scores=None, first_pitch=None):
+    """Wire settle_user_bets against fakes. Returns the FakeTable.
+
+    INC-38 added two more IO hops that MUST be stubbed here or a unit test would reach the live
+    Stats API / S3: the game-market score fallback (_statsapi_final_scores) and the
+    stale-pending-bet first-pitch read (_first_pitch_utc). Both default to "knows nothing", the
+    fail-safe branch, so every pre-existing test keeps its exact old behaviour.
+    """
     table = _FakeTable(pending)
 
     class _Res:
@@ -85,6 +92,9 @@ def _install(monkeypatch, pending, *, scores, mart_ks, api_final=None, boxscore=
     # the fail-safe branch; a test opts in by passing api_final/boxscore.
     monkeypatch.setattr(sub, "_statsapi_final_games", lambda pks: set(api_final or ()))
     monkeypatch.setattr(sub, "_boxscore_starter_strikeouts", lambda gp: dict((boxscore or {}).get(gp, {})))
+    # INC-38 hops (see the docstring) — default to "the API knows nothing" / "no first pitch".
+    monkeypatch.setattr(sub, "_statsapi_final_scores", lambda pks: dict(api_scores or {}))
+    monkeypatch.setattr(sub, "_first_pitch_utc", lambda conn, pks: dict(first_pitch or {}))
     return table
 
 
@@ -401,7 +411,11 @@ class TestFallbackSourceInvariants:
     def test_fallback_failures_are_fail_safe_not_fatal(self):
         # Every fallback path returns empty on error so the bet stays pending; settlement is
         # WARN-tier and must never take down the op.
-        body = SETTLE[SETTLE.find("def _statsapi_final_games"):SETTLE.find("# ── Settlement math")]
+        # INC-38 moved the schedule-confirm hop into _statsapi_final_scores (which now serves BOTH
+        # the prop Final-confirm and the game-market score fallback) and left _statsapi_final_games
+        # as a thin set() view over it — so the slice starts at the new entry point. Still exactly
+        # two guarded network hops: the schedule confirm and the boxscore fetch.
+        body = SETTLE[SETTLE.find("def _statsapi_final_scores"):SETTLE.find("# ── Settlement math")]
         assert body.count("except Exception") == 2
         # No `raise` STATEMENT (resp.raise_for_status() is fine — it is caught).
         assert not [ln for ln in body.splitlines() if ln.strip().startswith("raise ")], (

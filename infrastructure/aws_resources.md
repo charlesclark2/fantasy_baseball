@@ -210,7 +210,25 @@ self-hosted EC2 dagit instead of Dagster+ Cloud. Set on `credence-prod-lambda-ex
 | Issuer URL | `https://cognito-idp.us-east-1.amazonaws.com/us-east-1_gG9zMbwQt` |
 | Audience | `1qh95e78bd7g6ipqcvdcpf7ou6` |
 
-Apply this authorizer to all routes except `GET /health`.
+Apply this authorizer to all routes except:
+- `GET /health`
+- `GET /fantasy/nfl/track-record/manifest` (NF3.2 public receipts manifest — added 2026-08-02)
+- `GET /fantasy/nfl/track-record/{season}` (NF3.2 public receipts per-season data — added 2026-08-02)
+
+⚠️ **This authorizer is applied per explicit ROUTE, not globally on a catch-all** — `GET /health`
+itself has no explicit route in API Gateway (`aws apigatewayv2 get-routes` returns `[]` for it), so
+its exemption works some other way (likely a `$default`/proxy+ catch-all with `AuthorizationType:
+NONE`, with authorization instead enforced per-route for protected paths — or vice versa; never
+fully confirmed, since the `baseball-access-user` CLI profile lacks `apigateway:GET`). What IS
+confirmed: HTTP API route matching is most-specific-wins, so adding an **explicit route for a
+specific path with `--authorization-type NONE`** reliably exempts that exact path regardless of
+whatever the catch-all does. That's the mechanism used for the two track-record routes above —
+mirror it (`aws apigatewayv2 create-route --route-key "GET /your/new/public/path" --target
+"integrations/p093jnh" --authorization-type NONE --api-id 8dhmehjak7 --region us-east-1`) for any
+future public route. A router with no `Depends()` in FastAPI is NOT sufficient by itself — this
+authorizer sits in front of the Lambda entirely and rejects an unauthenticated request before
+Mangum/FastAPI ever sees it (see NF3.2: `fantasy_public.router` shipped correct at the app layer
+but still 401'd until this API Gateway route was added).
 
 ### Lambda Integration
 

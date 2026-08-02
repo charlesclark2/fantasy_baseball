@@ -34,12 +34,15 @@ import { useTrackRecordManifest, useTrackRecordSeason } from "@/lib/fantasy-trac
 import type { TrackRecordRow } from "@/lib/fantasy-track-record"
 import {
   EmptyBlock,
+  FadeBadge,
+  FadeLegend,
+  GLOSSARY,
+  InfoTip,
   LoadingBlock,
   Pagination,
   PosBadge,
   PositionTabs,
   SurfaceHeader,
-  int,
   num,
   ALL_ROWS,
   PAGE_SIZES,
@@ -90,16 +93,38 @@ function LockedCurrentSeasonCard({ lockedSeason }: { lockedSeason: number }) {
   )
 }
 
+/** Emerald = fade hit (or an ungraded fade, from an export that predates `fadeResult`), rose = fade
+ *  miss, amber = a genuine push (tie), muted gray = not a fade at all — "wins and losses both"
+ *  applies to the chart too, not just the table's badge.
+ *
+ *  ⚠️ Match on the exact string, never a fallthrough `else` — `fadeResult` is `undefined` (not
+ *  `"push"`) on a row from a stale/pre-grading export, and an `else` branch there paints every
+ *  ungraded fade amber as a fake tie (see `FadeBadge`'s comment for the live incident this caused). */
+function fadeDotColor(row: TrackRecordRow): string {
+  if (!row.isFade) return "#4b5563"
+  if (row.fadeResult === "miss") return "#f43f5e"
+  if (row.fadeResult === "push") return "#f59e0b"
+  return "#10b981" // "hit", or ungraded (null/undefined)
+}
+
 function FadeDot({ cx, cy, payload }: any) {
   const row = payload as TrackRecordRow
   return (
-    <circle
-      cx={cx}
-      cy={cy}
-      r={row.isFade ? 4 : 2.5}
-      fill={row.isFade ? "#10b981" : "#4b5563"}
-      fillOpacity={row.isFade ? 0.85 : 0.4}
-    />
+    <g>
+      {/* Invisible larger hit-area — a real finger touch point is ~40-48px, and the visible dot
+          below (r=2.5-4) is far smaller than that, so a tap on a real phone was landing between
+          dots more often than on one. This circle is unstyled/transparent but still receives
+          pointer events by default in SVG (no `pointer-events: none` here), so it enlarges the
+          effective tap target without changing what's drawn. */}
+      <circle cx={cx} cy={cy} r={14} fill="transparent" />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={row.isFade ? 4 : 2.5}
+        fill={fadeDotColor(row)}
+        fillOpacity={row.isFade ? 0.85 : 0.4}
+      />
+    </g>
   )
 }
 
@@ -115,6 +140,9 @@ function RankScatter({ rows }: { rows: TrackRecordRow[] }) {
         highest-conviction disagreements with ADP that season (the &ldquo;fades&rdquo;) — where the
         airtight independent claim lives.
       </p>
+      <div className="mb-3">
+        <FadeLegend />
+      </div>
       <div className="h-72 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart margin={{ top: 8, right: 12, bottom: 8, left: 0 }}>
@@ -152,8 +180,23 @@ function RankScatter({ rows }: { rows: TrackRecordRow[] }) {
                     <div className="font-medium text-gray-100">
                       {row.playerName} · {row.position}
                     </div>
-                    <div>Our rank {row.ourRank} · ADP rank {int(row.adpRank)} · actual {row.actualRank}</div>
-                    {row.isFade && <div className="text-[#10b981]">high-conviction fade</div>}
+                    <div>
+                      Our rank {posRank(row.position, row.ourRank)} · ADP rank{" "}
+                      {posRank(row.position, row.adpRank)} · actual {posRank(row.position, row.actualRank)}
+                    </div>
+                    {row.isFade && (
+                      <div
+                        className={
+                          row.fadeResult === "miss"
+                            ? "text-rose-400"
+                            : row.fadeResult === "push"
+                              ? "text-amber-500"
+                              : "text-[#10b981]"
+                        }
+                      >
+                        high-conviction fade{row.fadeResult ? ` · ${row.fadeResult}` : ""}
+                      </div>
+                    )}
                   </div>
                 )
               }}
@@ -164,6 +207,14 @@ function RankScatter({ rows }: { rows: TrackRecordRow[] }) {
       </div>
     </div>
   )
+}
+
+/** All three ranks in this table are WITHIN-POSITION (the scatter chart's axis already says so —
+ *  "Our rank (within position)" — but the table's bare "1"/"2"/"3" reads as an overall rank,
+ *  especially on the "All" position tab where several different positions' #1s all show "1"). Prefix
+ *  with the position so it reads unambiguously regardless of which tab is active, e.g. "QB1"/"RB12". */
+function posRank(pos: string, rank: number | null): string {
+  return rank == null ? "—" : `${pos}${rank}`
 }
 
 function TrackRecordTable({ rows }: { rows: TrackRecordRow[] }) {
@@ -187,36 +238,44 @@ function TrackRecordTable({ rows }: { rows: TrackRecordRow[] }) {
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="border-b border-[#262626] text-[10px] uppercase tracking-wider text-gray-500">
-              <th className="px-3 py-2">Player</th>
+              {/* Sticky so a player's identity stays visible while scrolling right on mobile, where
+                  this table is wider than the screen — otherwise a scrolled-right row is anonymous
+                  numbers with no name attached. */}
+              <th className="sticky left-0 z-10 bg-[#0f0f0f] px-3 py-2">Player</th>
               <th className="px-3 py-2">Pos</th>
-              <th className="px-3 py-2 text-right">Our rank</th>
+              <th className="px-3 py-2 text-right">Our rank (pos)</th>
               <th className="px-3 py-2 text-right">Our pts</th>
-              <th className="px-3 py-2 text-right">ADP rank</th>
+              <th className="px-3 py-2 text-right">ADP rank (pos)</th>
               <th className="px-3 py-2 text-right">ADP</th>
-              <th className="px-3 py-2 text-right">Actual rank</th>
+              <th className="px-3 py-2 text-right">Actual rank (pos)</th>
               <th className="px-3 py-2 text-right">Actual pts</th>
-              <th className="px-3 py-2">Fade</th>
+              <th className="px-3 py-2">
+                <InfoTip label="Fade">{GLOSSARY.fade}</InfoTip>
+              </th>
             </tr>
           </thead>
           <tbody>
             {paged.map((r) => (
               <tr key={r.playerId} className="border-b border-[#1a1a1a] last:border-0">
-                <td className="px-3 py-2 text-gray-200">{r.playerName}</td>
+                <td className="sticky left-0 bg-[#0f0f0f] px-3 py-2">
+                  <Link
+                    href={`/fantasy/player/${r.playerId}`}
+                    className="text-gray-200 hover:text-[#10b981] transition-colors"
+                  >
+                    {r.playerName}
+                  </Link>
+                </td>
                 <td className="px-3 py-2">
                   <PosBadge pos={r.position} />
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums text-gray-300">{r.ourRank}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-gray-300">{posRank(r.position, r.ourRank)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-400">{num(r.ourPoints)}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-gray-300">{int(r.adpRank)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-gray-300">{posRank(r.position, r.adpRank)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-400">{num(r.adp)}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-gray-300">{r.actualRank}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-gray-300">{posRank(r.position, r.actualRank)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-400">{num(r.actualPoints)}</td>
                 <td className="px-3 py-2">
-                  {r.isFade && (
-                    <span className="rounded border border-[#10b981]/40 bg-[#10b981]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#10b981]">
-                      fade
-                    </span>
-                  )}
+                  <FadeBadge isFade={r.isFade} fadeResult={r.fadeResult} />
                 </td>
               </tr>
             ))}
@@ -291,9 +350,16 @@ export function FantasyTrackRecordPage() {
           {seasonLoading && <LoadingBlock label="Loading the season…" />}
           {!seasonLoading && seasonRows && (
             <>
-              {activeSeason != null && !manifest.seasonsWithAdp.includes(activeSeason) && (
+              {activeSeason != null && manifest.adpSourceBySeason[String(activeSeason)] === "mfl" && (
                 <p className="mb-4 rounded border border-[#262626] bg-[#0f0f0f] px-3 py-2 text-[11px] leading-relaxed text-gray-500">
-                  Fantasy Football Calculator has no ADP archive for {activeSeason} — this season shows
+                  Fantasy Football Calculator has no ADP archive for {activeSeason} — the ADP column
+                  below is sourced from MyFantasyLeague instead, a second independent real-draft
+                  consensus.
+                </p>
+              )}
+              {activeSeason != null && manifest.adpSourceBySeason[String(activeSeason)] === undefined && (
+                <p className="mb-4 rounded border border-[#262626] bg-[#0f0f0f] px-3 py-2 text-[11px] leading-relaxed text-gray-500">
+                  No ADP archive is available for {activeSeason} from either source — this season shows
                   our projection vs. the realized outcome only, no ADP column or fade highlighting.
                 </p>
               )}

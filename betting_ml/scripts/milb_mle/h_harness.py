@@ -25,10 +25,24 @@ from betting_ml.scripts.milb_mle.run_e7_12_slice1 import (
     deflation_report,
     paired_anchor,
 )
+from betting_ml.utils.cv_power import (
+    FOLD_CONSISTENCY_ALPHA,
+    fold_consistency_clause,
+    fold_gate_false_fire,
+    folds_to_clear_dsr,
+)
 
 log = logging.getLogger("e7_15.harness")
 
 # ── Pre-registered gate thresholds (readiness lock 1 + the §0.5 deflation contract) ────────────────
+# ⚠️ **MH2/H8: THIS RATE IS RETAINED ONLY AS A REPORTED REFERENCE — IT IS NO LONGER THE CLAUSE.**
+# `fold_win_rate ≥ 0.60` fires on a TRUE lift of ZERO 49.7% of the time at 3 folds and 27.4% at 11,
+# i.e. its stringency is a side-effect of `n` rather than a property of the gate. `numeric_gate` now
+# additionally requires `cv_power.fold_consistency_clause`, which holds the FALSE-FIRE RATE fixed and
+# lets the required win COUNT move with `n`. The calibrated clause is weakly STRICTER at every fold
+# count, so adopting it can only prevent a false ADD — verified against the stored record to
+# re-decide none of the 8 ADDs on file (E7.12-S1/S2 all sit at 8–10 wins of 11 against a requirement
+# of 8). See `ablation_results/mh2_cv_power_characterization.md` §6.
 MIN_FOLD_WIN_RATE = 0.60
 MAX_PBO = 0.20
 MIN_DSR = 0.95
@@ -237,21 +251,48 @@ def pbo_reading(defl: dict) -> tuple[bool, str]:
 
 
 def numeric_gate(cand: pd.Series, foil_mae: float, defl: dict, dsr: dict,
-                 mechanism: str) -> tuple[bool, str | None]:
+                 mechanism: str, n_folds: int | None = None) -> tuple[bool, str | None]:
     """The gate every slice shares: beats the foil, on enough folds, past PBO and DSR.
 
     Returns `(passed, failure_reason_or_None)`. Anchors and the tercile read are the CALLER's, because
     they are the parts that genuinely differ per hypothesis.
+
+    ⭐ **MH2/H8 — THE FOLD CLAUSE IS NOW CALIBRATED, NOT A FIXED RATE.** `n_folds` (when supplied)
+    activates `cv_power.fold_consistency_clause`: the required WIN COUNT is the smallest `k` whose
+    null probability `P(Bin(n,½) ≥ k)` is ≤ 0.20, so the clause's false-fire rate is bounded at every
+    fold count instead of drifting from 0.50 (n=3) to 0.27 (n=11). Two consequences worth stating in
+    the failure text rather than burying: (1) the clause can be **UNATTAINABLE** at very low fold
+    counts, and an unattainable clause is UNDEFINED, not passed — the same honesty `deflation_report`
+    already applies to CSCV; (2) it is weakly stricter than the legacy rate everywhere, so it can
+    only prevent a false ADD. `n_folds=None` preserves the legacy behaviour exactly, so an existing
+    caller that has not been updated cannot silently change its own verdicts.
     """
     beats = bool(cand["oos_mae"] < foil_mae - 1e-12)
     consistent = bool(np.isfinite(cand["fold_win_rate"])
                       and cand["fold_win_rate"] >= MIN_FOLD_WIN_RATE)
+    clause_note = ""
+    if n_folds:
+        cl = fold_consistency_clause(int(n_folds), FOLD_CONSISTENCY_ALPHA)
+        wins = int(round(float(cand["fold_win_rate"]) * int(n_folds)))
+        if not cl.attainable:
+            return False, (
+                f"⛔ UNDEFINED — at {n_folds} folds the smallest attainable fold-sign false-fire "
+                f"rate is 2^-{n_folds} = {0.5 ** int(n_folds):.4f} > α={FOLD_CONSISTENCY_ALPHA}, so "
+                f"NO win count makes the consistency clause meaningful. The legacy "
+                f"`≥{MIN_FOLD_WIN_RATE:.0%}` bar would have fired here on a true lift of zero "
+                f"{fold_gate_false_fire(int(n_folds)):.1%} of the time. This is a statement about "
+                f"the DESIGN, not the mechanism — not a failed gate (MH2/H8).")
+        consistent = consistent and wins >= cl.wins_required
+        clause_note = (f"; calibrated clause needs {cl.wins_required}/{n_folds} at "
+                       f"α={FOLD_CONSISTENCY_ALPHA} (got {wins}; the legacy "
+                       f"≥{MIN_FOLD_WIN_RATE:.0%} bar would fire "
+                       f"{cl.legacy_false_fire:.1%} of the time on a NULL)")
     if not (beats and consistent):
         return False, (
             f"🟡 no arm clears: best eligible `{cand['arm']}` MAE {cand['oos_mae']:.5f} vs foil "
             f"{foil_mae:.5f} ({cand['pct_lift_vs_foil']:.2f}%, fold win rate "
             f"{cand['fold_win_rate']:.0%}; the pre-registered bar is a strict OOS improvement in "
-            f"≥{MIN_FOLD_WIN_RATE:.0%} of folds). DROPPED.")
+            f"≥{MIN_FOLD_WIN_RATE:.0%} of folds{clause_note}). DROPPED.")
     pbo = defl.get("pbo")
     if not (pbo is None or float(pbo) < MAX_PBO):
         _tie, sentence = pbo_reading(defl)
@@ -393,8 +434,6 @@ def null_analysis(results: dict, pvals: dict, foil: str = "L0_foil") -> dict:
     """
     from scipy import stats
 
-    from betting_ml.utils.overfitting import deflated_sharpe
-
     m_family = len([m for m, r in results.items()
                     if not r.leaderboard[r.leaderboard["selectable"]
                                          & r.leaderboard["active"]].empty])
@@ -433,11 +472,32 @@ def null_analysis(results: dict, pvals: dict, foil: str = "L0_foil") -> dict:
             need_fdr = next((k for k in range(n, 4001)
                              if float(stats.t.sf(t_obs * np.sqrt(k / n), df=k - 1)) <= strictest_bh),
                             None)
-            need_dsr = next((k for k in range(n, 4001)
-                             if float(deflated_sharpe(
-                                 np.resize(skill, k),
-                                 n_trials=max(2, len(eligible_arms) or len(sel)),
-                                 trial_sharpes=trial_sharpes or None).dsr) >= MIN_DSR), None)
+            # 🪤 **THE THIRD DEFECT IN THIS EXTRAPOLATION (MH2, 2026-08-02) — `np.resize` DOES NOT
+            # HOLD THE EFFECT SIZE FIXED, though the docstring above says it does.** Resizing TILES
+            # the series; tiling preserves the population SD but the Sharpe is computed with
+            # `ddof=1`, so the resized Sharpe is inflated by ≈√(n/(n−1)) — 4.9% at n=11 — and the
+            # partial final tile makes the inflation NON-MONOTONE in k, so `next(...)` can stop
+            # early on a wobble rather than at the true crossing. Measured on the live record:
+            # E7.15-H3 `bb_pct` recorded 140 folds where the honest answer is 372, i.e. every
+            # re-test trigger this function produced was OPTIMISTIC. `cv_power.folds_to_clear_dsr`
+            # is the closed-form solution of the SAME gate — `n` enters the DSR statistic only
+            # through √(n−1), so the crossing has an exact expression and no search is needed. It
+            # also returns None for the RIGHT reason (`SR ≤ SR0` ⇒ unreachable at any n), which the
+            # old search could only discover by exhausting its horizon.
+            rc, sd0 = skill - skill.mean(), float(np.std(skill, ddof=0))
+            _sk = float((rc ** 3).mean() / sd0 ** 3) if sd0 > 0 else 0.0
+            _ku = float((rc ** 4).mean() / sd0 ** 4) if sd0 > 0 else 3.0
+            # …and the branch matters: `deflated_sharpe` uses the MEASURED cross-trial dispersion
+            # when ≥2 trial Sharpes exist (a field constant, held fixed) and otherwise falls back to
+            # the asymptotic `1/n_obs`, which genuinely shrinks as folds accrue. Extrapolate the
+            # branch the gate actually took, not the convenient one.
+            _measured = len(trial_sharpes) > 1
+            need_dsr = folds_to_clear_dsr(
+                observed_sr=float(np.mean(skill) / np.std(skill, ddof=1)),
+                n_trials=max(2, len(eligible_arms) or len(sel)),
+                var_trials_sr=(float(np.var(trial_sharpes, ddof=1)) if _measured else 1.0 / n),
+                skew=_sk, kurt=_ku, confidence=MIN_DSR, max_folds=4000,
+                n_obs_now=n, var_is_asymptotic_fallback=not _measured)
         rows.append({
             "metric": m, "arm": str(cand["arm"]),
             "pct_lift_vs_foil": round(float(cand["pct_lift_vs_foil"]), 4),
@@ -475,6 +535,7 @@ def null_analysis(results: dict, pvals: dict, foil: str = "L0_foil") -> dict:
 
 __all__ = [
     "Anchor", "evaluate_anchors", "dsr_report", "pbo_reading", "numeric_gate",
+    "fold_consistency_clause", "FOLD_CONSISTENCY_ALPHA",
     "stratified_lift", "propensity_composition", "low_tercile_read", "null_analysis",
     "deflation_report", "MIN_FOLD_WIN_RATE", "MAX_PBO", "MIN_DSR", "FDR_ALPHA",
     "MIN_PCT_ROWS_MOVED", "TIE_CONTENDER_SPREAD_PCT",

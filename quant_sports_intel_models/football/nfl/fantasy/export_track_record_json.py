@@ -107,8 +107,26 @@ def season_records(df: pd.DataFrame) -> list[dict]:
             "actualPoints": _fnum(r["actual_points"]),
             "actualRank": int(r["actual_rank"]),
             "isFade": bool(r["is_fade"]),
+            # "hit" | "miss" | "push" | null — whether OUR rank or ADP's rank landed closer to the
+            # actual finish (see `_fade_result`). Always null for a non-fade row (nothing to grade)
+            # or a season with no ADP at all; never conflate with `isFade` — a fade can be a miss.
+            "fadeResult": (None if pd.isna(r["fade_result"]) else str(r["fade_result"])),
+            # NF3.2: "ffc" (the primary/established source), "mfl" (MyFantasyLeague — the fallback
+            # used ONLY when FFC has no archive for this season, e.g. 2025), or null (neither source
+            # had this season at all). Never silently blended — a consumer must be able to tell which
+            # real-world draft population backs a given season's ADP column.
+            "adpSource": (None if pd.isna(r["adp_source"]) else str(r["adp_source"])),
         })
     return recs
+
+
+def adp_source_for_season(df: pd.DataFrame) -> str | None:
+    """The single `adp_source` value backing every row in a season's frame (uniform per season by
+    construction — see `player_track_record_frame`) — None if the season has no ADP at all."""
+    if df.empty or "adp_source" not in df.columns:
+        return None
+    non_null = df["adp_source"].dropna()
+    return str(non_null.iloc[0]) if len(non_null) else None
 
 
 def build_headline(scorecard: dict) -> str:
@@ -202,9 +220,6 @@ def main(argv: list[str] | None = None) -> int:
         )
     scorecard = json.loads(args.scorecard_json.read_text())
     headline = build_headline(scorecard)
-    seasons_with_adp = sorted(
-        row["season"] for row in (scorecard.get("per_season") or []) if "adp" in (row.get("systems") or {})
-    )
 
     if not Path(args.duckdb).exists():
         raise SystemExit(f"DuckDB not found at {args.duckdb} — build the NFL marts first")
@@ -216,6 +231,7 @@ def main(argv: list[str] | None = None) -> int:
 
     con = duckdb.connect(args.duckdb, read_only=True)
     seasons_written: list[int] = []
+    adp_source_by_season: dict[str, str] = {}
     try:
         for y in seasons:
             try:
@@ -233,17 +249,21 @@ def main(argv: list[str] | None = None) -> int:
             path = out_dir / f"season_{y}.json"
             path.write_text(json.dumps(recs, separators=(",", ":")))
             seasons_written.append(y)
-            log.info("wrote %s (%d players, %d fades)", path.name, len(recs),
-                     sum(1 for r in recs if r["isFade"]))
+            src = adp_source_for_season(df)
+            if src:
+                adp_source_by_season[str(y)] = src
+            log.info("wrote %s (%d players, %d fades, adp_source=%s)", path.name, len(recs),
+                     sum(1 for r in recs if r["isFade"]), src)
     finally:
         con.close()
 
     manifest = {
         "seasons": seasons_written,
-        # Seasons whose per-player rows carry a real `adp`/`adpRank` (FFC has no archive for some
-        # seasons — 2025 confirmed live — so this can be a strict subset of `seasons`; the frontend
-        # uses it to render an honest "ADP unavailable" note rather than a blank/misleading column).
-        "seasonsWithAdp": [y for y in seasons_with_adp if y in seasons_written],
+        # NF3.2: which ADP source backs each season — "ffc" (primary) or "mfl" (MyFantasyLeague,
+        # fallback used ONLY when FFC has no archive at all, e.g. 2025). A season absent from this
+        # dict has no ADP from either source. The frontend uses this to label a fallback season
+        # honestly rather than presenting it as an unlabeled "ADP" identical to every other season.
+        "adpSourceBySeason": adp_source_by_season,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "headline": headline,
         "lockedSeason": LOCKED_SEASON,

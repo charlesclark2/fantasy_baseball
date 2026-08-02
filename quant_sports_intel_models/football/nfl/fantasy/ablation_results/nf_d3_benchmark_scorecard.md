@@ -1,6 +1,6 @@
 # NF-D3 — competitor projection scorecard (us vs consensus)
 
-**Generated:** 2026-08-02T00:29:09.412894+00:00 · **seasons scored:** 2019–2025 · **model:** the SHIPPED projection (slices 1/3/4/5 on), each season built from ≤season−1 data.
+**Generated:** 2026-08-02T00:38:16.684436+00:00 · **seasons scored:** 2019–2025 · **model:** the SHIPPED projection (slices 1/3/4/5 on), each season built from ≤season−1 data.
 
 > ⚖️ **The honesty bar (this is a GTM proof asset — a cherry-picked claim backfires):** every system is graded on the SHARED universe of players it AND our model both cover with ≥6 realized games, PPR format held fixed, same realized truth. Ordering is measured by within-position Spearman ρ (what wins drafts) + rank-MAE (rank-space, so a RANKING system — ADP/ECR/Fantasy Footballers — grades identically to our point projection). Our projection is a genuine holdout (≤season−1 data); ADP/ECR are frozen PRESEASON snapshots. `+Δ` favours US.
 
