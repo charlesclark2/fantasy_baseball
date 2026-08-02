@@ -1,0 +1,94 @@
+{
+  "feature_cols": [
+    "away_bp_eb_coverage_pct",
+    "away_bp_eb_uncertainty",
+    "away_lineup_bat_speed_vs_starter_velo",
+    "away_losses",
+    "away_wins",
+    "home_bp_eb_coverage_pct",
+    "home_bp_eb_uncertainty",
+    "home_pit_woba_against_14d",
+    "home_pit_woba_against_30d",
+    "home_pit_woba_against_std",
+    "home_starter_avg_ip_season",
+    "home_starter_proj_fip",
+    "park_run_factor_3yr",
+    "home_avg_eb_k_pct",
+    "home_avg_eb_bb_pct",
+    "home_avg_eb_iso",
+    "away_avg_eb_k_pct",
+    "away_avg_eb_bb_pct",
+    "away_avg_eb_iso",
+    "home_starter_eb_k_pct",
+    "home_starter_eb_bb_pct",
+    "away_starter_eb_k_pct",
+    "away_starter_eb_bb_pct"
+  ],
+  "_provenance": {
+    "story": "MH2.1",
+    "derived": "2026-08-02",
+    "model_class": "glm_elasticnet",
+    "serving_wrapper": "betting_ml.utils.homoscedastic_regressor.HomoscedasticNormalRegressor",
+    "tier": "post_lineup",
+    "registry_target": "total_runs",
+    "source_contract": "betting_ml/models/total_runs/feature_columns_ngboost_pruned_clustered_deleaked_2026.json",
+    "variant": "plus_eb",
+    "n_base": 13,
+    "n_plus_eb": 10,
+    "n_contract": 23,
+    "n_served": 25,
+    "training_window": "2016+",
+    "training_rows": 21006,
+    "config": {
+      "alpha": 0.1,
+      "l1_ratio": 0.5,
+      "random_state": 42
+    },
+    "sigma_served": 4.452065649780527,
+    "sigma_oof_disclosure": 4.454242420588952,
+    "best_alpha": 0,
+    "bullpen_v3_provenance": {
+      "seasons": [
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025,
+        2026
+      ],
+      "bullpen_v3_covered": [
+        2021,
+        2022,
+        2023,
+        2024,
+        2025,
+        2026
+      ],
+      "bullpen_v3_missing": [
+        2016,
+        2017,
+        2018,
+        2019,
+        2020
+      ],
+      "seam_by_column": {
+        "home_bp_eb_uncertainty": {
+          "uncovered_mean": 0.036805,
+          "covered_mean": 0.031777
+        },
+        "away_bp_eb_uncertainty": {
+          "uncovered_mean": 0.036843,
+          "covered_mean": 0.031775
+        }
+      }
+    },
+    "smoke": false,
+    "refresh_cache": false,
+    "method": "MH2.1 wide-window (2016\u20132026, 8 purged folds) pre-registered bake-off winner. PointNormalSpec (homoscedastic Normal) persisted so the served object is the validated object. PRICING/CALIBRATION promotion; best_alpha=0, no edge claim."
+  }
+}

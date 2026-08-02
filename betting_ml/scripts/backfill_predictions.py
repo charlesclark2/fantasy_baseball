@@ -57,6 +57,12 @@ ADD COLUMN IF NOT EXISTS retrain_tag VARCHAR(50)
 """
 
 # Story 30.7: explicit, non-overloaded provenance flag (TRUE for backfilled rows).
+# MH2.1 — per-target totals champion stamp (additive; `model_version` keeps its prior meaning).
+_ALTER_TOTALS_MODEL_VERSION = f"""
+ALTER TABLE {_ML_SCHEMA}.daily_model_predictions
+ADD COLUMN IF NOT EXISTS totals_model_version VARCHAR(20)
+"""
+
 _ALTER_IS_BACKFILL = f"""
 ALTER TABLE {_ML_SCHEMA}.daily_model_predictions
 ADD COLUMN IF NOT EXISTS is_backfill BOOLEAN DEFAULT FALSE
@@ -75,7 +81,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     alpha,
     h2h_market_implied_prob, h2h_posterior_prob, h2h_edge, h2h_kelly_fraction,
     total_line_consensus, over_prob_consensus,
-    totals_model_prob, totals_posterior_prob, totals_edge, totals_kelly_fraction
+    totals_model_prob, totals_posterior_prob, totals_edge, totals_kelly_fraction,
+    totals_model_version
 ) VALUES (
     %(model_version)s, %(inserted_at)s, %(score_date)s, %(prediction_type)s, %(retrain_tag)s, %(is_backfill)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
@@ -89,7 +96,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(alpha)s,
     %(h2h_market_implied_prob)s, %(h2h_posterior_prob)s, %(h2h_edge)s, %(h2h_kelly_fraction)s,
     %(total_line_consensus)s, %(over_prob_consensus)s,
-    %(totals_model_prob)s, %(totals_posterior_prob)s, %(totals_edge)s, %(totals_kelly_fraction)s
+    %(totals_model_prob)s, %(totals_posterior_prob)s, %(totals_edge)s, %(totals_kelly_fraction)s,
+    %(totals_model_version)s
 )
 """
 
@@ -137,7 +145,15 @@ def _load_best_alpha() -> float:
     return 0.5
 
 
-def _get_existing_game_pks(model_version: str) -> set[int]:
+def _get_existing_game_pks(model_version: str, retrain_tag: str = _RETRAIN_TAG) -> set[int]:
+    """Rows already written for this (model_version, retrain_tag).
+
+    ⚠️ MH2.1 — `retrain_tag` MUST be parameterised. The idempotency key is
+    (game_pk, model_version, retrain_tag), and `model_version` is the home_win-derived BUNDLE
+    stamp, which a totals-only champion swap does NOT move. With the tag hardcoded, an MH2.1
+    backtest would match the E13.11-era rows on BOTH key parts and be skipped as "already
+    backfilled" — writing nothing, silently, and reporting success.
+    """
     try:
         conn = get_snowflake_connection()
         try:
@@ -145,7 +161,7 @@ def _get_existing_game_pks(model_version: str) -> set[int]:
             cur.execute(
                 f"SELECT DISTINCT game_pk FROM {_ML_SCHEMA}.daily_model_predictions "
                 "WHERE model_version = %s AND retrain_tag = %s",
-                (model_version, _RETRAIN_TAG),
+                (model_version, retrain_tag),
             )
             return {int(row[0]) for row in cur.fetchall() if row[0] is not None}
         finally:
@@ -186,6 +202,8 @@ def _to_date(val) -> date | None:
 def _build_rows(
     df: pd.DataFrame,
     model_version: str,
+    totals_model_version: str,
+    retrain_tag: str,
     p_hw_ngb: np.ndarray,
     p_hw_clf: np.ndarray,
     loc_tot: np.ndarray,
@@ -249,10 +267,11 @@ def _build_rows(
 
         rows.append(_sanitize({
             "model_version":          model_version,
+            "totals_model_version":   totals_model_version,   # MH2.1 — per-target totals champion
             "inserted_at":            inserted_at,
             "score_date":             game_date_val,
             "prediction_type":        _PREDICTION_TYPE,
-            "retrain_tag":            _RETRAIN_TAG,
+            "retrain_tag":            retrain_tag,
             "is_backfill":            True,  # Story 30.7: explicit provenance flag
             "game_pk":                _col(df, "game_pk", i),
             "game_date":              game_date_val,
@@ -287,7 +306,7 @@ def _build_rows(
     return rows
 
 
-def _write_rows(rows: list[dict], model_version: str) -> None:
+def _write_rows(rows: list[dict], model_version: str, retrain_tag: str) -> None:
     conn = get_snowflake_connection()
     try:
         cur = conn.cursor()
@@ -304,7 +323,7 @@ def _write_rows(rows: list[dict], model_version: str) -> None:
             print(f"  Inserted {total}/{len(rows)} rows...")
         conn.commit()
         print(f"\nWrote {len(rows)} rows to {_ML_SCHEMA}.daily_model_predictions "
-              f"(model_version={model_version}, retrain_tag={_RETRAIN_TAG})")
+              f"(model_version={model_version}, retrain_tag={retrain_tag})")
     finally:
         conn.close()
 
@@ -318,6 +337,17 @@ def main() -> None:
         help="First season to include (default: 2024)",
     )
     parser.add_argument(
+        "--retrain-tag", default=_RETRAIN_TAG,
+        help=(
+            "Idempotency/label tag written to retrain_tag. Defaults to the historical "
+            f"'{_RETRAIN_TAG}' so existing behaviour is unchanged. Pass a DISTINCT tag for a new "
+            "champion's backtest (MH2.1 uses 'mh2_1_backtest') — otherwise the run collides with "
+            "the previous champion's rows on the (model_version, retrain_tag) key and silently "
+            "writes nothing. These rows are a BACKTEST, never a real-time record: they are also "
+            "stamped prediction_type='backfill' and is_backfill=TRUE."
+        ),
+    )
+    parser.add_argument(
         "--dry-run", action="store_true", default=False,
         help="Print row count and sample row without writing to Snowflake",
     )
@@ -325,6 +355,9 @@ def main() -> None:
 
     registry = yaml.safe_load(_REGISTRY_PATH.read_text())
     model_version = registry["home_win"]["model_version"]
+    # MH2.1 — per-target totals stamp; `model_version` is a home_win-derived BUNDLE stamp and
+    # does not move on a totals-only champion swap. Same column predict_today writes.
+    totals_model_version = str(registry["total_runs"].get("model_version") or "unknown")
     tot_dist = registry["total_runs"]["dist"]
     diff_dist = registry["run_differential"]["dist"]
 
@@ -352,6 +385,7 @@ def main() -> None:
             try:
                 conn.cursor().execute(_ALTER_RETRAIN_TAG)
                 conn.cursor().execute(_ALTER_IS_BACKFILL)
+                conn.cursor().execute(_ALTER_TOTALS_MODEL_VERSION)   # MH2.1
                 conn.commit()
             finally:
                 conn.close()
@@ -359,7 +393,7 @@ def main() -> None:
             print(f"[WARN] Could not add retrain_tag/is_backfill column ({exc})")
 
         print("\nChecking for existing backfill rows in Snowflake...")
-        existing_pks = _get_existing_game_pks(model_version)
+        existing_pks = _get_existing_game_pks(model_version, args.retrain_tag)
         if existing_pks and "game_pk" in df.columns:
             before = len(df)
             df = df[~df["game_pk"].isin(existing_pks)].reset_index(drop=True)
@@ -376,22 +410,59 @@ def main() -> None:
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
     pipe = build_imputation_pipeline()
     pipe.fit(df[numeric_cols])
-    df_t = pd.DataFrame(
-        pipe.transform(df[numeric_cols]),
-        columns=numeric_cols,
-        index=df.index,
-    )
+    _transformed = pipe.transform(df[numeric_cols])
+    # ⚠️ Keep the transform's OWN columns. `build_imputation_pipeline` runs `_AddIndicators`, which
+    # APPENDS has_starter_platoon_data + is_new_venue — both of which are in every served sidecar.
+    # Re-wrapping a returned DataFrame as `pd.DataFrame(t, columns=numeric_cols)` does not RENAME,
+    # it SELECTS: the two indicators were silently dropped, and the later
+    # `reindex(columns=..., fill_value=0.0)` then filled them with 0.0 for every game — i.e. "no
+    # platoon data / not a new venue" asserted for the whole backfill. That is a wrong VALUE, not a
+    # crash, so it would have scored an entire history quietly. predict_today never had this bug
+    # (it carries the imputer's output frame through unchanged).
+    df_t = (_transformed.set_index(df.index) if isinstance(_transformed, pd.DataFrame)
+            else pd.DataFrame(_transformed, columns=numeric_cols, index=df.index))
     print(f"  Transformed shape: {df_t.shape}")
+    for _ind in ("has_starter_platoon_data", "is_new_venue"):
+        if _ind not in df_t.columns:
+            print(f"  [WARN] imputer indicator '{_ind}' absent from the transformed frame — it "
+                  f"will be 0.0-filled for every game, which is a VALUE the models were not "
+                  f"trained to see uniformly. Investigate before trusting this backfill.")
 
     def feat_cols(target: str) -> list[str]:
+        """The served column list for a target.
+
+        ⚠️ Sidecars come in TWO shapes: a bare JSON list (pre-E13.11) and
+        `{"feature_cols": [...], "_provenance": {...}}` (E13.11+). Returning the parsed JSON
+        unconditionally yields the DICT for the modern shape, whose `len()` is 2 and whose
+        iteration order is `["feature_cols", "_provenance"]` — so `reindex(columns=...)` built a
+        2-column matrix out of the KEY NAMES and every model raised a feature-count error. This
+        script was left behind when the sidecars gained provenance; `predict_today._load_cols` has
+        carried the unwrap since E13.11. Mirrored here.
+        """
         path = PROJECT_ROOT / registry[target]["feature_columns_path"]
-        return json.loads(path.read_text())
+        raw = json.loads(path.read_text())
+        return raw["feature_cols"] if isinstance(raw, dict) else raw
 
     hw_cols = feat_cols("home_win")
     tot_cols = feat_cols("total_runs")
     diff_cols = feat_cols("run_differential")
     print(f"  Feature columns: home_win={len(hw_cols)}, "
           f"total_runs={len(tot_cols)}, run_diff={len(diff_cols)}")
+
+    # Fail HERE, with a readable message, rather than ~20 frames deep in sklearn's
+    # `_check_n_features`. The registry advertises each target's served width; a contract that
+    # resolves to a different count means the sidecar was misread (the dict-vs-list bug above) or
+    # the registry and the sidecar have drifted — either way the scored matrix would be wrong.
+    for _tgt, _cols in (("home_win", hw_cols), ("total_runs", tot_cols),
+                        ("run_differential", diff_cols)):
+        _advertised = registry[_tgt].get("features")
+        if _advertised is not None and len(_cols) != int(_advertised):
+            raise SystemExit(
+                f"❌ {_tgt}: sidecar resolved {len(_cols)} feature(s) but the registry advertises "
+                f"{_advertised}. Resolved head: {list(_cols)[:4]}. If that looks like JSON KEYS "
+                f"('feature_cols', '_provenance') the sidecar unwrap regressed; otherwise the "
+                f"registry `features` and {registry[_tgt]['feature_columns_path']} have drifted."
+            )
 
     print("\nLoading production models from registry...")
     clf_hw = load_model("home_win", "prod")
@@ -406,8 +477,24 @@ def main() -> None:
     print(f"  best_alpha={best_alpha}")
 
     print("\nRunning inference...")
-    # Elasticnet uses its own internal imputer — pass raw df with NaN fill
-    X_hw = df.reindex(columns=hw_cols, fill_value=np.nan).values.astype(np.float32)
+    # ⚠️ EVERY model input comes from the IMPUTED frame `df_t`, never the raw `df`.
+    # This line used to read `df.reindex(..., fill_value=np.nan)` under the comment "Elasticnet uses
+    # its own internal imputer" — describing an architecture that is no longer served. The E13.11
+    # home_win champion is `PlattCalibratedLinearClassifier(Pipeline(StandardScaler,
+    # LogisticRegression))`, which has NO imputer and rejects NaN outright ("LogisticRegression does
+    # not accept missing values encoded as NaN natively"). The previous XGBoost champion consumed
+    # NaN natively, so the raw-frame path was silently invalidated by that swap and nothing noticed
+    # — the backfill was already unrunnable for a different reason (the sidecar unwrap).
+    # `predict_today` builds ALL THREE inputs from its imputed matrix (`X_today_imp`); this now
+    # matches it exactly, including fill_value and dtype.
+    X_hw = df_t.reindex(columns=hw_cols, fill_value=0.0).values.astype(np.float32)
+    if not np.isfinite(X_hw).all():
+        _bad = [c for c in hw_cols if c in df_t.columns and not np.isfinite(df_t[c]).all()]
+        raise SystemExit(
+            f"❌ home_win matrix still contains NaN/inf after imputation in {len(_bad)} column(s): "
+            f"{_bad[:8]}. The served classifier rejects NaN, so this would fail deep inside sklearn "
+            f"with a message naming neither the column nor the target."
+        )
     p_hw_clf = clf_hw.predict_proba(X_hw)[:, 1]
 
     # NGBoost models use the externally imputed df_t
@@ -435,7 +522,7 @@ def main() -> None:
 
     inserted_at = datetime.now(timezone.utc).replace(tzinfo=None)
     rows = _build_rows(
-        df, model_version,
+        df, model_version, totals_model_version, args.retrain_tag,
         p_hw_ngb, p_hw_clf,
         loc_tot, scale_tot,
         loc_diff, scale_diff,
@@ -462,7 +549,7 @@ def main() -> None:
         return
 
     print("\nWriting to Snowflake...")
-    _write_rows(rows, model_version)
+    _write_rows(rows, model_version, args.retrain_tag)
 
 
 if __name__ == "__main__":
