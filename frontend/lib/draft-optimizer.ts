@@ -200,17 +200,31 @@ export function openStarterSlots(myPositions: string[], req: RosterRequirements)
 // (> mean + k*std of consecutive gaps). Sample-robust, no magic threshold.
 //
 // ⭐ NF-D19: a real gap can still cliff off a tier of exactly one player (T1=Bijan, T2=Chase, ...),
-// which reads as broken rather than as a signal — a "tier" of one is not a group. So a MINIMUM TIER
-// SIZE is enforced as a second pass after the gap-based split: any resulting group smaller than
-// `minSize` is merged FORWARD into the tier below it (a trailing undersized group, with nothing
-// below it, merges BACKWARD into the one above). This keeps the "unusually large gap = a real
-// boundary" semantics — a genuine cliff still separates two tiers — it just refuses to let a group
-// stand alone below the floor. Chosen over a fixed target-tier-count: that would abandon gap
-// detection entirely and manufacture boundaries the data doesn't support.
-export function assignTiers(pointsDesc: number[], k = 1.0, minSize = 3): number[] {
+// which reads as broken rather than as a signal — a "tier" of one is not a group. The first cut of
+// this fix enforced a flat minimum size (3) — but a flat floor only merges the tiny groups; it does
+// nothing about the mirror problem, a long flat stretch (no gap ever clears the threshold) collapsing
+// into ONE undifferentiated tier that can swallow most of a position (full-PPR WR: nearly the whole
+// position landed in just two tiers). So both bounds are enforced, and both SCALE WITH THE POOL SIZE
+// (`n`) rather than being a fixed count — a ~20-player TE pool and an ~84-player Overall board should
+// not use the same absolute floor/ceiling:
+//   minSize = max(2, round(n * MIN_TIER_FRAC))     — a tier below this merges into its neighbor
+//   maxSize = max(minSize + 1, round(n * MAX_TIER_FRAC)) — a tier above this is split further
+// MIN_TIER_FRAC/MAX_TIER_FRAC (4%/15%) target roughly 7-25 tiers regardless of n. An oversized group
+// is split at its OWN largest internal gaps (recursively, largest first) rather than sliced evenly by
+// count — the split points still come from the data, they just use a per-group relative threshold
+// instead of the whole-pool mean+k·std one. A split is skipped if it would leave either side under
+// `minSize` (the min is the harder constraint; an oversized-but-otherwise-unsplittable tail is left
+// as is rather than manufacturing a below-floor sliver).
+const MIN_TIER_FRAC = 0.04
+const MAX_TIER_FRAC = 0.15
+
+export function assignTiers(pointsDesc: number[], k = 1.0): number[] {
   const n = pointsDesc.length
   if (n === 0) return []
   if (n === 1) return [1]
+  const minSize = Math.max(2, Math.round(n * MIN_TIER_FRAC))
+  const maxSize = Math.max(minSize + 1, Math.round(n * MAX_TIER_FRAC))
+
   const gaps: number[] = []
   for (let i = 0; i < n - 1; i++) gaps.push(Math.max(0, pointsDesc[i] - pointsDesc[i + 1]))
   const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length
@@ -225,7 +239,7 @@ export function assignTiers(pointsDesc: number[], k = 1.0, minSize = 3): number[
     else groups[groups.length - 1].push(i + 1)
   }
 
-  // Enforce the size floor: fold any undersized group into its neighbor.
+  // Pass 1 — fold any undersized group into its neighbor.
   const merged: number[][] = []
   for (const g of groups) {
     if (merged.length > 0 && merged[merged.length - 1].length < minSize) {
@@ -239,8 +253,26 @@ export function assignTiers(pointsDesc: number[], k = 1.0, minSize = 3): number[
     merged[merged.length - 1].push(...last)
   }
 
+  // Pass 2 — split any oversized group at its largest internal gap(s), recursively, until every
+  // piece is at or under `maxSize` or no further split can respect `minSize` on both sides.
+  const splitOversized = (g: number[]): number[][] => {
+    if (g.length <= maxSize) return [g]
+    let bestPos = -1
+    let bestGap = -Infinity
+    for (let pos = minSize; pos <= g.length - minSize; pos++) {
+      const gapVal = gaps[g[pos - 1]] // the gap between g[pos-1] and g[pos] — a contiguous run
+      if (gapVal > bestGap) {
+        bestGap = gapVal
+        bestPos = pos
+      }
+    }
+    if (bestPos === -1) return [g] // can't split without leaving a sliver under minSize
+    return [...splitOversized(g.slice(0, bestPos)), ...splitOversized(g.slice(bestPos))]
+  }
+  const final = merged.flatMap(splitOversized)
+
   const tiers = new Array<number>(n)
-  merged.forEach((g, t) => g.forEach((idx) => (tiers[idx] = t + 1)))
+  final.forEach((g, t) => g.forEach((idx) => (tiers[idx] = t + 1)))
   return tiers
 }
 

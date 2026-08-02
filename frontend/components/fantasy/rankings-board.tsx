@@ -99,9 +99,12 @@ export function RankingsBoard() {
   // pool (~84 here) the same k=1.0 yields ~10 genuine tiers. It is also the right definition:
   // below replacement there is no value to group. Sub-replacement players get no tier.
   //
-  // ⭐ NF-D19: `assignTiers` also enforces a MINIMUM TIER SIZE (3) — a real gap can still cliff off a
-  // lone player at the top (T1=Bijan alone), which reads as broken; an undersized group merges into
-  // its neighbor rather than standing alone. See the size-floor note on `assignTiers` itself.
+  // ⭐ NF-D19: `assignTiers` also enforces MIN/MAX TIER SIZE bounds, scaled to the pool size rather
+  // than a fixed count — a lone player at the top (T1=Bijan alone) merges into its neighbor, and a
+  // long flat stretch that never clears the gap threshold (which, at a flat min-size-only floor, was
+  // swallowing nearly a whole full-PPR WR pool into one or two tiers) gets split at its own largest
+  // internal gaps instead of staying one giant undifferentiated tier. See the bounds note on
+  // `assignTiers` itself.
   //
   // Overall tiers on VOR (the cross-position value axis the tab is ordered by); a position tab
   // tiers on league points, which is that tab's own ordering.
