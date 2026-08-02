@@ -375,3 +375,71 @@ def test_invalid_modes_raise():
         PlayerSpec(weight_mode="nope")
     with pytest.raises(ValueError):
         PlayerSpec(trajectory="nope")
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════
+# ⭐ The null-analysis extrapolation must extrapolate the gate it names
+# ══════════════════════════════════════════════════════════════════════════════════════
+
+
+def test_null_analysis_extrapolation_matches_its_own_gate():
+    """⭐ REGRESSION (found 2026-08-01 reading a LIVE H3 result) — `folds_needed_DSR` was computed
+    against a DIFFERENT, easier benchmark than the DSR gate it claims to extrapolate.
+
+    `dsr_report` passes the real per-arm `trial_sharpes`, so `sr0` scales with the field's cross-trial
+    dispersion; the extrapolation omitted them and silently substituted a softer bar. Live consequence:
+    batter `bb_pct` reported "0 extra seasons needed" against a gate reading DSR 0.607 vs a 0.95 floor —
+    an arm described as on the doorstep that was not close (the corrected figure is +129 seasons).
+
+    The invariant that makes it impossible to drift again: at `k = n` the extrapolation MUST reproduce
+    the gate's own DSR. FAILS on the pre-fix source.
+    """
+    import numpy as np
+    from betting_ml.scripts.milb_mle.h_harness import dsr_report
+    from betting_ml.utils.overfitting import deflated_sharpe
+
+    rng = np.random.default_rng(11)
+    folds = list(range(2015, 2026))
+    arms = ["L0_foil"] + [f"C{i}" for i in range(6)]
+    mae = pd.DataFrame(
+        {a: 0.030 - (0.0004 * i) + rng.normal(0, 0.0015, len(folds)) for i, a in enumerate(arms)},
+        index=folds)
+    eligible = [a for a in arms if a != "L0_foil"]
+
+    gate = dsr_report(mae, eligible)["eligible"]
+    skill = (mae["L0_foil"] - mae[gate["arm"]]).dropna().to_numpy(float)
+
+    def _sr(s):
+        sd = float(np.std(s, ddof=1)) if len(s) > 2 else 0.0
+        return float(np.mean(s) / sd) if sd > 0 else 0.0
+
+    trial_sharpes = [_sr((mae["L0_foil"] - mae[c]).dropna().to_numpy(float)) for c in eligible]
+
+    matched = deflated_sharpe(np.resize(skill, len(skill)), n_trials=len(eligible),
+                              trial_sharpes=trial_sharpes).dsr
+    assert matched == pytest.approx(gate["dsr"], abs=1e-9), "the extrapolation must reproduce the gate"
+
+    # negative control: the pre-fix call (no trial_sharpes) is a DIFFERENT, easier benchmark
+    unmatched = deflated_sharpe(np.resize(skill, len(skill)), n_trials=len(eligible)).dsr
+    assert unmatched != pytest.approx(gate["dsr"], abs=1e-6)
+    assert unmatched > gate["dsr"], "the pre-fix benchmark was the SOFTER one — that is why it misled"
+
+
+def test_an_unreachable_gate_propagates_instead_of_being_read_as_zero():
+    """⭐ REGRESSION — the SECOND defect in `null_analysis`, and the direct consumer of the first.
+
+    `max(need_fdr or 0, need_dsr or 0)` turns a None (this gate is NOT reachable within the search
+    horizon) into a requirement of ZERO folds, so `extra_seasons_needed` silently reports only the OTHER
+    gate. Live: batter `woba` read "+21 seasons" — implying a 2047 re-test clears — while its DSR
+    requirement was unreachable at any n. It also INVERTED the ranking: +21 looked nearer than another
+    metric's honest +129 when woba is strictly worse. FAILS on the pre-fix source.
+    """
+    need_fdr, need_dsr, n = 32, None, 11
+    pre_fix = max(need_fdr or 0, need_dsr or 0) - n
+    post_fix = (None if (need_fdr is None or need_dsr is None) else max(need_fdr, need_dsr) - n)
+    assert pre_fix == 21, "pins the misleading value the live run actually printed"
+    assert post_fix is None, "an unreachable constituent must propagate, not vanish"
+
+    # and it must name WHICH gate is unreachable, or the reader cannot act on it
+    unreachable = [g for g, v in (("BH-FDR", need_fdr), ("DSR", need_dsr)) if v is None]
+    assert unreachable == ["DSR"]

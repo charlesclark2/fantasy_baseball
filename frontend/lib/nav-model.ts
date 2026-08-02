@@ -18,6 +18,11 @@ export interface NavItem {
    *  paying subscriber does not see it yet). Items with no `restrict` follow the surface gate.
    *  Nav visibility is cosmetic — the API enforces the same rule server-side. */
   restrict?: "fantasy_beta"
+  /** NF3.2 — the OPPOSITE of `restrict`: this item stays visible even when its surface is LOCKED
+   *  (an unentitled caller normally sees only the "Unlock Fantasy" upsell in place of every item —
+   *  see `isLocked`/the locked-branch rendering in `nav.tsx`). Only the past-season track record
+   *  qualifies today: its data is genuinely public regardless of fantasy entitlement. */
+  public?: boolean
 }
 
 export interface SurfaceGroup {
@@ -102,6 +107,15 @@ export const SPORTS: SportNav[] = [
                 href: "/fantasy/league-settings",
                 key: "fantasy-league-settings",
                 restrict: "fantasy_beta",
+              },
+              // NF3.2 — the past-season "receipts" proof asset. `public: true`: it stays reachable
+              // even for a caller not entitled to Fantasy, since none of its data is the paid
+              // current-season projection (see nav-model.ts's `NavItem.public` doc).
+              {
+                label: "Track Record",
+                href: "/fantasy/track-record",
+                key: "fantasy-track-record",
+                public: true,
               },
             ],
           },

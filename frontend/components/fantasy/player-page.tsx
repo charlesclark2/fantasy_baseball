@@ -9,11 +9,25 @@
 // 🔒 HONEST (NF-D3 / best_alpha=0): a projection and transparency page. No "beats consensus" framing
 // — ADP is a neutral reference, and the 80% range is drawn so the uncertainty is never hidden behind
 // a single number.
+//
+// 🔓 NF3.2 — SEASON-SCOPED ENTITLEMENT. This route is now reachable with no fantasy entitlement at
+// all (the route file dropped `FantasyGuard`). `FantasyPlayerPage` below is a thin DISPATCHER — it
+// calls no data hooks of its own beyond `useAuth`, and mounts one of two genuinely separate child
+// components based on entitlement, which is what keeps this rules-of-hooks-safe (each child owns its
+// own hook call sequence rather than the same component conditionally skipping hooks):
+//   • `EntitledPlayerView` — the ENTIRE pre-NF3.2 page, byte-for-byte unchanged, for anyone who
+//     already has fantasy access. Nothing about the paying experience changes.
+//   • `PublicPlayerView` — identity + past-season track record ONLY, sourced from the PUBLIC
+//     `lib/fantasy-track-record.ts` endpoints. It never calls `useFantasyProjections`/
+//     `useFantasyBoard` at all (not "calls them and hides the result" — genuinely never invoked), so
+//     there is no path by which the current/locked season's projection reaches an unentitled client.
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
-import { ChevronLeft } from "lucide-react"
+import { ChevronLeft, Lock } from "lucide-react"
+import { useAuth } from "@/lib/auth-context"
+import { canAccess } from "@/lib/entitlements"
 import {
   useFantasyManifest,
   useFantasyProjections,
@@ -21,6 +35,7 @@ import {
   useResolvedBoard,
   useSavedLeagues,
 } from "@/lib/fantasy-queries"
+import { useAllTrackRecordSeasons, useTrackRecordManifest } from "@/lib/fantasy-track-record"
 import { positionTierMap, type Player } from "@/lib/draft-optimizer"
 import { initials, nflTeamLogoUrl } from "@/lib/nfl-teams"
 import type { ProjectedPlayer } from "@/lib/fantasy"
@@ -132,8 +147,17 @@ function Tile({
   )
 }
 
+/** Entry point — see the module docstring for why this is a plain dispatcher with no hooks of its
+ *  own besides `useAuth`/`useParams`. */
 export function FantasyPlayerPage() {
   const { playerId } = useParams<{ playerId: string }>()
+  const { groups, loading: authLoading } = useAuth()
+  if (authLoading) return <LoadingBlock label="Loading player…" />
+  if (!canAccess("fantasy", groups)) return <PublicPlayerView playerId={playerId} />
+  return <EntitledPlayerView playerId={playerId} />
+}
+
+function EntitledPlayerView({ playerId }: { playerId: string }) {
   const [logoFailed, setLogoFailed] = useState(false)
   const [photoFailed, setPhotoFailed] = useState(false)
   // Client-side nav between players (Player Search, board links) reuses this component rather than
@@ -546,6 +570,113 @@ export function FantasyPlayerPage() {
               note={projPayload?.market_lean_note}
             />
           </UncertaintyNote>
+        </>
+      )}
+    </div>
+  )
+}
+
+/** NF3.2 — the PUBLIC half of the split: identity + past-season track record only, for a visitor
+ *  with no fantasy entitlement. Sourced ENTIRELY from `lib/fantasy-track-record.ts`'s public
+ *  endpoints — never `useFantasyProjections`/`useResolvedBoard` (those stay unused in this
+ *  component's whole body, not merely unrendered). The current/locked season renders as a static
+ *  upsell card, never a fetched-then-hidden number. */
+function PublicPlayerView({ playerId }: { playerId: string }) {
+  const { data: manifest, isLoading: manifestLoading } = useTrackRecordManifest()
+  const seasons = manifest?.seasons ?? []
+  const { rows, isLoading: rowsLoading } = useAllTrackRecordSeasons(seasons)
+  const playerRows = useMemo(
+    () => rows.filter((r) => r.playerId === playerId).sort((a, b) => b.season - a.season),
+    [rows, playerId],
+  )
+  const identity = playerRows[0]
+  const loading = manifestLoading || (seasons.length > 0 && rowsLoading)
+  const lockedSeason = manifest?.lockedSeason ?? 2026
+
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-8">
+      <Link
+        href="/fantasy/track-record"
+        className="mb-5 inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" />
+        Track Record
+      </Link>
+
+      {loading && <LoadingBlock label="Loading player…" />}
+
+      {!loading && !identity && (
+        <EmptyBlock
+          title="Player not found"
+          detail="This player doesn't appear in the published past-season track record — the export may not include him, or the link is out of date."
+        />
+      )}
+
+      {identity && (
+        <>
+          <div className="mb-6 flex items-center gap-4">
+            <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[#262626] bg-[#1a1a1a] text-lg font-bold text-gray-500">
+              {initials(identity.playerName)}
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-white">{identity.playerName}</h1>
+              <p className="mt-1">
+                <PosBadge pos={identity.position} />
+              </p>
+            </div>
+          </div>
+
+          <section className="mb-6">
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
+              Past-season track record
+            </h2>
+            <div className="overflow-x-auto rounded-lg border border-[#262626] bg-[#0f0f0f]">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-[#262626] text-[10px] uppercase tracking-wider text-gray-500">
+                    <th className="px-3 py-2">Season</th>
+                    <th className="px-3 py-2 text-right">Our rank</th>
+                    <th className="px-3 py-2 text-right">ADP rank</th>
+                    <th className="px-3 py-2 text-right">Actual rank</th>
+                    <th className="px-3 py-2 text-right">Actual pts</th>
+                    <th className="px-3 py-2">Fade</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {playerRows.map((r) => (
+                    <tr key={r.season} className="border-b border-[#1a1a1a] last:border-0">
+                      <td className="px-3 py-2 text-gray-200">{r.season}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-300">{r.ourRank}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-300">{int(r.adpRank)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-300">{r.actualRank}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-400">
+                        {num(r.actualPoints)}
+                      </td>
+                      <td className="px-3 py-2">
+                        {r.isFade && (
+                          <span className="rounded border border-[#10b981]/40 bg-[#10b981]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#10b981]">
+                            fade
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <div className="rounded-lg border border-[#262626] bg-[#111111] p-4 text-center">
+            <p className="mb-2 text-sm text-gray-300">
+              Want his {lockedSeason} projection, 80% range, and league-scored rank?
+            </p>
+            <Link
+              href="/subscribe"
+              className="inline-flex items-center gap-1.5 rounded border border-[#10b981]/40 bg-[#10b981]/10 px-3 py-1.5 text-xs font-semibold text-[#10b981] transition-colors hover:bg-[#10b981]/20"
+            >
+              <Lock className="h-3 w-3" /> Unlock {lockedSeason} projections
+            </Link>
+          </div>
         </>
       )}
     </div>

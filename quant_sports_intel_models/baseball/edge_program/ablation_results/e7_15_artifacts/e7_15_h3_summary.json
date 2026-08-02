@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-02T04:41:38.357323+00:00",
+  "generated_at": "2026-08-02T05:10:08.723618+00:00",
   "player_type": "batter",
   "foil": "the SHIPPED E7.12-slice-1 configuration per metric (learner + weight_col held fixed)",
   "pseudo_replication_census": {
@@ -48,8 +48,11 @@
         "kind": "underpowered",
         "folds_have": 11,
         "folds_needed_BH": 32,
-        "folds_needed_DSR": 59,
-        "extra_seasons_needed": 48
+        "folds_needed_DSR": null,
+        "unreachable_gates": [
+          "DSR"
+        ],
+        "extra_seasons_needed": null
       },
       {
         "metric": "k_pct",
@@ -65,8 +68,11 @@
         "kind": "underpowered",
         "folds_have": 11,
         "folds_needed_BH": 24,
-        "folds_needed_DSR": 63,
-        "extra_seasons_needed": 52
+        "folds_needed_DSR": null,
+        "unreachable_gates": [
+          "DSR"
+        ],
+        "extra_seasons_needed": null
       },
       {
         "metric": "bb_pct",
@@ -82,8 +88,9 @@
         "kind": "underpowered",
         "folds_have": 11,
         "folds_needed_BH": 11,
-        "folds_needed_DSR": 11,
-        "extra_seasons_needed": 0
+        "folds_needed_DSR": 140,
+        "unreachable_gates": [],
+        "extra_seasons_needed": 129
       },
       {
         "metric": "iso",
@@ -99,8 +106,9 @@
         "kind": "underpowered",
         "folds_have": 11,
         "folds_needed_BH": 11,
-        "folds_needed_DSR": 18,
-        "extra_seasons_needed": 7
+        "folds_needed_DSR": 120,
+        "unreachable_gates": [],
+        "extra_seasons_needed": 109
       }
     ]
   },

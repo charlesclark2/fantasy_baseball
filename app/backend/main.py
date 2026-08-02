@@ -28,7 +28,7 @@ if _SENTRY_DSN:
         traces_sample_rate=0.1,
     )
 
-from app.backend.routers import admin, alerts, auth, bankroll, bets, blog, fantasy, fantasy_import, feedback, finances, parlay, picks, performance, pipeline, players, portfolio, stripe, teams, users
+from app.backend.routers import admin, alerts, auth, bankroll, bets, blog, fantasy, fantasy_import, fantasy_public, feedback, finances, parlay, picks, performance, pipeline, players, portfolio, stripe, teams, users
 from app.backend.routers.auth import require_subscriber_mfa
 
 logging.basicConfig(level=logging.INFO)
@@ -108,6 +108,10 @@ app.include_router(fantasy.router, dependencies=_paid)
 # It is mounted separately so that exemption stays one visible route rather than a hole in the gate.
 app.include_router(fantasy_import.router, dependencies=_paid)
 app.include_router(fantasy_import.public_router)
+# NF3.2 — the past-season track-record ("receipts") surface, deliberately PUBLIC (no
+# require_fantasy_access, no _paid). See fantasy_public.py's module docstring: the public/paid split
+# is enforced by what the export writer will ever emit, not by a runtime check on this router.
+app.include_router(fantasy_public.router)
 
 
 @app.api_route("/health", methods=["GET", "HEAD"], tags=["health"])

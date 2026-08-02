@@ -173,6 +173,24 @@ def test_the_build_no_longer_exposes_a_dispersion_knob():
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF3.2 — `--mode build`'s base-season resolution must not invert leakage on a PAST-season build
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def test_forward_build_keeps_the_latest_played_season_as_base():
+    """The pre-existing, unchanged case: building the CURRENT (forward) season anchors on the
+    latest played season — exactly what shipped before NF3.2 touched this function."""
+    assert R15._resolve_build_base_season(latest_played_season=2025, proj_season=2026) == 2025
+
+
+def test_a_past_season_build_anchors_on_proj_season_minus_one_not_the_latest_played_season():
+    """The bug this guards: `--mode build --projection-season 2019` must NOT anchor on 2025 (today's
+    latest played season) — that would build 2019's board off 2025 data, a leakage-safe holdout
+    inverted, silently (the output shape gives no sign of it). It must anchor on 2018, the same
+    convention `run_season_projection.build_projection` itself uses for every other season."""
+    assert R15._resolve_build_base_season(latest_played_season=2025, proj_season=2019) == 2018
+    assert R15._resolve_build_base_season(latest_played_season=2025, proj_season=2024) == 2023
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
 # 3. The two serving surfaces cannot disagree about which board they are
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 def _boards(source: str | None) -> pd.DataFrame:

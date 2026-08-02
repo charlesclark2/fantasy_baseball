@@ -770,6 +770,109 @@ afternoon and suppressed precisely the rebuild that matters.
 - 16 tests in `betting_ml/tests/test_umpire_rebuild_gate.py`, weighted toward the must-not-skip
   paths.
 
+#### 🚨 PRE-FLIP RE-MEASUREMENT (2026-08-02, quiet window) — the premise is FALSE, the saving is ~0
+
+Before flipping, the gate's own stated premise was re-checked against live S3. It does not hold.
+
+**Premise as written:** "the assignment is written once per slate and never re-written —
+`min(loaded_at) == max(loaded_at)` on all 6 dates the feed had produced."
+**Measured** over `lakehouse_raw/umpire_game_log/`, DISTINCT same-day `loaded_at` instants per
+slate, 13 slates 2026-07-20..08-01:
+
+```
+10, 7, 20, 8, 7, 8, 11, 7, 7, 9, 7, 9, 10      median 8, range 7-20
+```
+
+On 2026-07-31 those instants are `16:14, 19:14, 19:44, 20:14, 20:46, 21:16, 22:16, 22:46, 23:16`
+UTC — one per tick from the moment MLB posts the assignment to the end of the slate.
+
+**MECHANISM (established, not inferred).** `lineup_ingest_umpires` runs `ingest_umpires.py --date
+today --skip-if-exists` one op earlier in the same job, and that guard exists precisely to make the
+repeated fires no-ops. It is gated:
+
+```python
+if args.skip_if_exists and not args.dry_run and do_sf:   # ← SF-leg-only
+```
+
+The box runs `W11_RAW_WRITE_MODE=s3` ⇒ `lakehouse_write_legs('s3')` ⇒ `do_sf=False` ⇒ **the guard
+never executes.** Every post-assignment tick re-fetches the Stats API and re-writes the S3 mirror,
+re-stamping `loaded_at` on content that did not change. (Two side-notes: the guard is also an
+ANY-ROW check, so even when live it would skip once the FIRST game's umpire lands and swallow
+later-announced ones; and it costs a Snowflake connect per tick purely to decide — itself a
+`COMPUTE_WH` waker 6a does not remove.)
+
+**⇒ WHAT 6a IS NOW EXPECTED TO DO.** Correctness is unaffected. The saving is a THIRD, not a tenth.
+
+Sized by counting **INVOCATIONS, not executions** — the lever-1b lesson from this same story
+(executions inflate with per-model/metadata queries, and an outage fakes every volume metric). A
+umpire-rebuild FIRE = a distinct 5-minute window in the 14–23 UTC band containing an umpire CTAS.
+
+| UTC day | 07-22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 08-01 | median |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| rebuild **fires** (5-min windows) | 31 | 12 | 11 | 11 | 16 | 13 | 7 | 9 | 11 | 16 | 19 | **12** |
+| watermark **bumps** (same-day instants) | 20 | 8 | 7 | 8 | 11 | 7 | 7 | 9 | 7 | 9 | 10 | **8** |
+
+Median ratio **≈ 1.5** ⇒ roughly **one fire in three is not preceded by a fresh watermark**, and
+that is exactly what the gate removes. Against the clean pre-flip band references — **11 waits
+(7/28) and 13 waits (7/30)** — expect **~7–9 waits post-flip, a ~30–35% cut in the band**.
+
+⚠️ **Read that honestly in BOTH directions on 8/3.** A ~30% cut is the PREDICTION, so it neither
+vindicates the "written once per slate" premise (which would have implied ~90%) nor indicates a
+broken flip. A cut materially larger than ~40% means the model of the writer above is wrong and
+should be re-derived, not celebrated.
+
+**⭐ WHY FLIPPING IS NEVERTHELESS SAFE (the bound worth keeping).** `refresh_w1_external_tables.py
+--w11b` is an early-return path called only by the nightly W11b mirror op; the W11B tables are NOT
+in the default no-arg daily refresh. So across a slate `lakehouse_ext.stg_statsapi_umpire_game_log`
+and `lakehouse_ext.feature_pregame_umpire_features` are **frozen**, and the CTAS the gate skips is
+byte-identical *by construction* — independent of what the raw watermark did. The blast radius is
+the Snowflake copy only; the SERVED umpire parquet comes from the nightly `--w11b`.
+
+**PRECURSOR that would actually unlock this gate (a SEPARATE story, deliberately not bundled):**
+make `--skip-if-exists` work on the S3 leg AND per-game rather than any-row. Until then 6a is a
+correct, safe, inert flag.
+
+#### Monitor policy — 6a does NOT decouple umpire from the nightly `--w11b`, so nothing changes
+
+Checked explicitly (the INC-37-W11GUARD flag on this story). `check_w11_tail_coverage.py` reads
+`feature_pregame_umpire_features` through `register_lakehouse_views` — i.e. **the S3 parquet built
+by the nightly `--w11b`**, not the Snowflake CTAS copy that 6a gates. And
+`lineup_intraday_s3_feature_rebuild`'s step list contains `--game-spine-only`, `--eb-batter-only`,
+`--w8b-only` and `refresh_w1_external_tables --w8b` — **no `--w11b`**, so nothing rebuilds the
+umpire parquet intraday either. ⇒ umpire's build cadence is unchanged by 6a, it stays
+**BUILD_LAGGED**, and `SAME_DAY_BLOCKS` / `BUILD_LAGGED_BLOCKS` in
+`betting_ml/monitoring/w11_tail_coverage.py` need **no edit** in this change.
+
+#### Pre-flip reference state (2026-08-02 ~05:0x UTC, slate 2026-08-01 complete)
+
+All read SF-free from the laptop except where noted.
+
+| check | 2026-07-31 | 2026-08-01 |
+|---|---|---|
+| W11 tail umpire | **15/15 OK** ⬅ the prior-slate comparison for 6a | 5/15 PARTIAL (build-lagged, expected) |
+| W11 tail weather / public_betting | 14/15 OK / 15/15 OK | 14/15 OK / 15/15 OK |
+| intraday_fallback | — | morning + post_lineup **100% feature_store, 0 fallback** |
+| served integrity, morning | cov 0.80, total_runs spread 0.473 **FLAT** | cov 0.89, spread 0.351 **FLAT** |
+| served integrity, post_lineup | cov 0.94, spread 0.473 **FLAT** | cov 0.99, spread 0.79 OK |
+| bovada_ml coverage | 15/15 | 15/15 |
+| post_lineup `h2h_edge is not null` | 13/15 | 13/15 |
+| morning `h2h_edge is not null` | 0/15 | 3/15 |
+| `abstain_reason` post_lineup | 13× `edge_to_sigma=0.000<0.25`, 2× `ci_width_unavailable` | identical |
+
+⚠️ **Two traps in reading that table post-flip.** (1) `sigma_tier='abstain'` is **100% on every tier
+every day** (the `best_alpha=0` regime) — it is saturated and therefore useless as a "new abstain"
+signal; use `h2h_edge is not null`, `feature_coverage_score` and the `abstain_reason` MIX instead.
+(2) The `total_runs` FLAT finding is **CHRONIC and pre-existing** (both tiers on 7/31, morning on
+8/1) — it must not be attributed to 6a. Also: running
+`check_served_prediction_integrity.py --date <a past date>` falsely reports "N rows dated AFTER
+<date>" because the DATE check compares against today's baseball date; that check is only
+meaningful on the current slate.
+
+⚠️ **Self-contamination recorded:** `check_served_prediction_integrity.py` connects on
+`COMPUTE_WH` (`SNOWFLAKE_WAREHOUSE` default), so the two pre-flip runs above **resumed COMPUTE_WH
+twice at ~05:05 UTC on 2026-08-02**. Outside the 14–23 UTC measurement band, so 6a's read is
+unaffected — but do not count those as pipeline wakes.
+
 ### 2. INC-25 durable fix — `E11_24_BULLPEN_S3_READ` (default OFF)
 
 ⚠️ **CORRECTION to this story's own specification.** The story said "have the bullpen branch read
