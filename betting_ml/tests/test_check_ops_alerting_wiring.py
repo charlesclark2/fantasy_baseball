@@ -113,6 +113,48 @@ class TestWiringServedPredictionIntegrity:
         pytest.fail("no problem_count guard found wrapping the send_alert call")
 
 
+class TestWiringW11TailCoverage:
+    """INC-37 — the W11 serving tail (umpire/weather/public_betting) today-guard. The script
+    existed but was a MANUAL post-rebuild step; this is the recurrence guard that it stays
+    wired as a paging op."""
+
+    def test_pages_via_the_pure_classifier(self):
+        src = _op_src("check_w11_tail_coverage_op")
+        assert "send_alert(" in src
+        assert "w11_tail_coverage" in src
+        assert "classify(" in src
+
+    def test_page_is_guarded_by_the_classifier_verdict_not_unconditional(self):
+        """severity None = do not page; the op must return before send_alert on a clean slate."""
+        fn = _op_fn("check_w11_tail_coverage_op")
+        src = ast.unparse(fn)
+        assert "if severity is None:" in src
+        assert src.index("if severity is None:") < src.index("send_alert(")
+
+    def test_it_judges_both_the_current_and_the_prior_slate(self):
+        """umpire/weather feeds land AFTER the W11 build, so judging them on the current slate
+        would page CRITICAL every morning — the policy module reads them off the prior slate."""
+        src = _op_src("check_w11_tail_coverage_op")
+        assert "_one_day_ago()" in src and "_today()" in src
+
+    def test_the_subprocess_has_a_finite_timeout(self):
+        """INC-32: an un-timed-out subprocess on a daemon/serialized path wedges a worker."""
+        fn = _op_fn("check_w11_tail_coverage_op")
+        for node in ast.walk(fn):
+            if isinstance(node, ast.Call) and "_run_script" in ast.unparse(node.func):
+                assert any(k.arg == "timeout" for k in node.keywords), \
+                    "_run_script must be called with a finite timeout="
+                return
+        pytest.fail("no _run_script call found in check_w11_tail_coverage_op")
+
+    def test_it_never_raises_it_is_alert_tier_always(self):
+        """ALERT-tier with NO strict escalation: a blank transparency panel must never withhold
+        a slate's predictions."""
+        fn = _op_fn("check_w11_tail_coverage_op")
+        for node in ast.walk(fn):
+            assert not isinstance(node, ast.Raise)
+
+
 class TestWiringInjuryStatusHealth:
     def test_pages_on_implausible_and_unknown_but_not_feed_freshness_alone(self):
         src = _op_src("check_injury_status_health_op")

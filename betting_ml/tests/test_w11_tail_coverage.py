@@ -90,9 +90,25 @@ class TestBlocksRegistry:
         assert {b[0] for b in w11.BLOCKS} == {"umpire", "weather", "public_betting"}
 
     def test_each_block_names_a_feature_table_and_its_raw_mirror(self):
-        for block, feature_table, raw_table, raw_key in w11.BLOCKS:
+        for block, feature_table, raw_table, raw_key, _raw_filter in w11.BLOCKS:
             assert feature_table.startswith("feature_pregame_")
             assert raw_table and raw_key in ("game_pk", "game_date")
+
+    def test_weather_counts_only_the_observation_type_its_build_consumes(self):
+        """`stg_weather_raw_snapshots` (the model feeding feature_pregame_weather_features)
+        selects `weather_observation_type='forecast_pregame'` ONLY. Counting the 00:00-02:00 UTC
+        forecast_intraday rows as "the feed has the slate" would report a permanent
+        BUILD_GAP/PARTIAL against a table that was never going to contain them — the raw side of
+        the two-sided read has to match what the BUILD actually consumes."""
+        raw_filter = {b[0]: b[4] for b in w11.BLOCKS}["weather"]
+        assert raw_filter == "weather_observation_type = 'forecast_pregame'"
+
+    def test_blocks_match_the_paging_policy_module(self):
+        """The op's page policy (betting_ml.monitoring.w11_tail_coverage) names each block
+        explicitly; a block added here but not there would be silently unpageable."""
+        from betting_ml.monitoring.w11_tail_coverage import ALL_BLOCKS
+
+        assert set(ALL_BLOCKS) == {b[0] for b in w11.BLOCKS}
 
 
 class TestMainIsAlertTier:

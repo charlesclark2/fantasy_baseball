@@ -1251,6 +1251,87 @@ def check_intraday_fallback_op(context):
     )
 
 
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def check_w11_tail_coverage_op(context):
+    """INC-37 — the daily TODAY-guard for the W11 serving tail (umpire / weather /
+    public_betting), the three feature blocks the six-block coverage gate CANNOT see.
+
+    `_FEATURE_STORE_COVERAGE_BLOCKS` — the set `predict_today` gates on and
+    `check_feature_block_coverage_op` asserts over — covers lineup, starter, team_rolling,
+    bullpen_eb, sequential and odds. It does not cover the W11 tail, and
+    `check_feature_block_coverage` structurally cannot: it EXCLUDES the anchor date and asserts
+    only over dates already in the store, so it is a store-HISTORY guard, never a TODAY guard.
+    On 2026-08-01 the month-boundary schedule hole built the whole tail on a July-only game
+    universe — `feature_pregame_weather_features` and `feature_pregame_public_betting_features`
+    held 0 of 15 slate games and a front-end panel had no rows — while the coverage gate read a
+    healthy 0.878 and nothing paged. `scripts/check_w11_tail_coverage.py` was written as the
+    missing today-guard but stayed a MANUAL post-rebuild step, so the blind spot was still open
+    in prod. This op closes it: the E11.30 rule that an ALERT-tier op must actually call
+    send_alert, keyed on the discriminating verdict the script already computes.
+
+    TWO RUNS, ONE PER SLATE — and that is the crux, not an optimisation. The script's BUILD_GAP
+    verdict (the feed HAS the slate, the built table does not) is only a DEFECT for a block whose
+    feed lands BEFORE the build that consumes it. Measured 2026-08-01 UTC: public_betting's
+    ActionNetwork ingest (s4, 12:00) precedes the ~12:40 `lakehouse_w11_nightly_op` build, but
+    `ingest_weather` (s7) writes forecast_pregame at 12:50 and `ingest_umpires.py --date today`
+    (s8/s17) lands 12:0x–16:39 — both AFTER it. Paging on the current slate for umpire/weather
+    would therefore fire CRITICAL every single morning on the normal build cadence, which is the
+    alert-fatigue failure mode this check's own two-sided design exists to avoid. So
+    public_betting is judged on TODAY (the same-day INC-37 detector) and umpire/weather on the
+    PRIOR slate, where exactly one build cycle has elapsed — the same exemption
+    `check_feature_block_coverage._DATE_OUTAGE_SKIP_NEWEST` already makes for the same reason.
+    The policy + severities live in `betting_ml.monitoring.w11_tail_coverage` (import-safe /
+    unit-testable without the dbt manifest).
+
+    Tier: ALERT-loud-but-continue, ALWAYS (E11.7) — no strict escalation exists here and it NEVER
+    HALTs: a blank transparency panel must never withhold a slate's predictions. Fans out from
+    predict (which is far downstream of the W11 build it validates), so it can never gate the
+    serving writes. The script's own `--strict` stays the OPERATOR's acceptance-gate mode after a
+    targeted rebuild/flip — a stricter question ("did the rebuild I just ran cover this slate")
+    than the daily monitor's.
+
+    A finite subprocess timeout is mandatory (INC-32): an un-timed-out DuckDB/S3 read on a daemon
+    path can wedge a worker thread."""
+    from betting_ml.monitoring.w11_tail_coverage import (
+        classify,
+        parse_block_coverage,
+        parse_block_verdicts,
+    )
+
+    today, prior = _today(), _one_day_ago()
+
+    def _run(day: str) -> str:
+        try:
+            return _run_script(context, "check_w11_tail_coverage.py", ["--date", day],
+                               timeout=900)
+        except Exception as e:  # noqa: BLE001 — ALERT tier: a transient S3/DuckDB read issue
+            # must never take down the daily job. An empty stdout reads as UNVERIFIED
+            # downstream (never as healthy), so the failure still surfaces as a WARN page.
+            context.log.warning(
+                f"[ALERT] check_w11_tail_coverage could not run for {day} (non-blocking; the "
+                f"slate's W11 tail is UNVERIFIED for this run, not verified-healthy): {e}"
+            )
+            return ""
+
+    today_out, prior_out = _run(today), _run(prior)
+
+    for label, out in (("today", today_out), ("prior_slate", prior_out)):
+        verdicts = parse_block_verdicts(out)
+        for block, (n, m) in parse_block_coverage(out).items():
+            context.add_output_metadata(
+                {f"w11_tail_{label}_{block}": MetadataValue.text(
+                    f"{n}/{m} {verdicts.get(block, 'UNVERIFIED')}")})
+
+    severity, msg = classify(today_out, prior_out, today_date=today, prior_date=prior)
+    if severity is None:
+        context.log.info(msg)
+        return
+    context.log.warning("[ALERT] " + msg)
+    from pipeline.utils.alerting import send_alert
+    send_alert("W11 serving tail coverage gap", msg, severity=severity,
+               dedup_key="w11_tail_coverage")
+
+
 # ── E11.23 — silently-not-running guard (the cutover-runtime-landmine detector) ───────
 # The E11.1 cutover left a class of RUNTIME failures CI can't see (it mocks all IO): intraday
 # refresh jobs shipped GATED-OFF and serving-critical sensors/schedules that boot STOPPED, so

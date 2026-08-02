@@ -12,6 +12,7 @@ from pipeline.ops.daily_ingestion_ops import (
     check_injury_status_health_op,
     check_intraday_fallback_op,
     check_served_prediction_integrity_op,
+    check_w11_tail_coverage_op,
     check_prediction_coverage,
     compute_elo,
     compute_model_health,
@@ -274,6 +275,15 @@ def daily_ingestion_job():
     # chronic ~1-game/slate baseline. ALERT-tier, ALWAYS — no --strict escalation exists; it
     # pages via send_alert but never blocks the serving writes. Fans out from predict.
     check_intraday_fallback_op(start=s19)
+    # INC-37 — the W11 serving tail (umpire / weather / public_betting) today-guard. Those three
+    # blocks are the ones _FEATURE_STORE_COVERAGE_BLOCKS does not contain and
+    # check_feature_block_coverage_op structurally cannot see (it excludes the anchor date, so it
+    # is a store-HISTORY guard): on 2026-08-01 they held 0 of 15 slate games and a front-end panel
+    # was blank while the coverage gate read 0.878 and nothing paged. Fans out from predict —
+    # which is far downstream of the lakehouse_w11_nightly_op build it validates — so a blank
+    # transparency panel can never withhold a slate's predictions. ALERT-tier, always: it pages
+    # via send_alert and has no strict escalation.
+    check_w11_tail_coverage_op(start=s19)
     # E5.1b — daily player-prop odds catch-up (mlb/props/ S3). WARN-tier; hangs off predict so
     # its ~few-minute paid Odds API pull never delays the serving-critical predict path. Gated
     # PROPS_DAILY_INGEST (default OFF) → a no-op loud-skip until the operator flips it. Historical

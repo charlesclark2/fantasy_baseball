@@ -78,6 +78,32 @@ Confirmed recurring — same `feature_store=0` morning signature:
 | 2026-07-01 | `feature_store=0/14` (all `intraday_fallback`) | recovered, 14/14 feature_store |
 | 2026-08-01 | `feature_store=0/15` (all `intraday_fallback`) | **1 row only at time of triage** |
 
+## 2b. ONE ordering bug, THREE independent downstream victims
+
+The stale flatten was not consumed by one thing. Anything that read the game universe during that
+window scoped itself to July. Found in this order, each only after the previous was fixed:
+
+1. **The feature build** — `mart_game_spine`, the W1–W6 marts, the odds bridge and the entire W8a
+   layer missed 08-01 → the whole morning tier fell to `intraday_fallback` (§2).
+2. **`ingest_weather`** — reads its game list from the same flattened schedule, found no 08-01
+   games, and **never captured a `forecast_pregame` observation for the slate at all**. Measured:
+   `weather_raw` held 0 `forecast_pregame` rows for 08-01 vs 9 on 07-30 and 14 on 07-31 (the
+   intraday capture kept working — it writes `forecast_intraday`, which
+   `stg_weather_raw_snapshots` rejects by design, `where weather_observation_type =
+   'forecast_pregame'`). This is the INC-34 shape rather than a build-ordering one: an **INGEST**
+   silently scoped to a stale universe. **Partly UNRECOVERABLE** — the pregame forecast window had
+   closed for games already underway by the time it was found.
+3. **The W11 serving tail** — W11b umpire / W11c weather / W11d public betting built on the July
+   universe and produced ZERO 08-01 rows, leaving front-end panels blank
+   (`feature_pregame_public_betting_features` 0/15, `feature_pregame_weather_features` 0/15).
+
+⚠️ **Victim 3 was invisible to every gate, INCLUDING during the remediation.**
+`_FEATURE_STORE_COVERAGE_BLOCKS` covers only lineup/starter/team_rolling/bullpen_eb/sequential/odds
+— umpire, weather and public betting are NOT in it. So the coverage gate read a healthy **0.878**
+while two whole blocks were empty and a front-end table had no rows at all. **RULE: after any
+targeted lakehouse rebuild, verify the tiers the coverage gate does NOT measure (the W11 tail) —
+"the gate is green" is not "the slate is complete".**
+
 ## 3. Why nothing caught it
 
 - **`check_feature_block_coverage_op` is structurally blind to it.** It excludes the anchor date
@@ -146,6 +172,7 @@ and the page itself.
 |---|---|---|
 | `ingest_statsapi_schedule` (moved to `s6`, before the lakehouse chain) | **HALT** (unchanged) | The whole daily feature build now reads the schedule it captures. A failed capture must stop the build rather than let it construct a universe from a stale schedule — which is exactly INC-37. Job failure pages CRITICAL via `run_failure_alert_sensor`. |
 | `_alert_on_stale_spine` (inside `lakehouse_spine_odds_bridge_op`) | **ALERT-loud-but-continue** | Pages CRITICAL on a confirmed stale spine, WARN when the check could not be evaluated. Never raises: a stale spine is a loud page, not a reason to take the slate down, and a monitor must never be the thing that fails the op it watches. The host op keeps its existing W8a-mirror tier. |
+| `check_w11_tail_coverage_op` (fans out from predict) | **ALERT-loud-but-continue** (no strict escalation) | Victim 3's guard (§6c). CRITICAL on BUILD_GAP, WARN on PARTIAL, silent on FEED_PENDING/OK/NO_SLATE, WARN on unevaluable. Never HALTs: a blank transparency panel must not withhold a slate's predictions, and it fans out from predict so it cannot gate the serving writes. Finite subprocess `timeout=` per INC-32. |
 
 ## 6b. Remediation record (2026-08-01)
 
@@ -182,7 +209,19 @@ corrected features as their lineups post.
    true" class as NF1.7 (a) — and it bites hardest during an incident, which is exactly when a
    slate is small. See follow-up (3) below.
 
-3. **A slow serving write was chained behind `export_w6_raw_to_s3.py` with `&&`.** That script ends
+3. **⏳ THE LINEUP SENSOR KEEPS WRITING ONE-AND-DONE ROWS BEHIND YOU WHILE YOU REMEDIATE.** Game
+   824405 (first pitch 23:15) was scored by `lineup_monitor` at **19:44:13** — mid-remediation,
+   after the W8a fix but BEFORE the weather rebuild landed at 19:46:31. Because `post_lineup` is
+   one-and-done (INC-32: step 2b only re-fires games *missing* a row), that degraded row would
+   never have self-healed, and it was invisible to the "which games still need a re-run" reasoning
+   because it did not exist when the remediation started. **RULE: a remediation spanning the
+   lineup-posting window must RE-CHECK for newly-written post_lineup rows after every stage, not
+   once at the start** — and the check must compare each row's `inserted_at` against the feature
+   store's actual rebuild time, not merely "is pre-game and has a row" (the first version of the
+   triage query omitted that and re-flagged already-fixed games forever). Cutoff comes from the S3
+   `LastModified` of the served feature parquet read via **boto3** (true UTC) — never `aws s3 ls`,
+   which prints shell-local time.
+4. **A slow serving write was chained behind `export_w6_raw_to_s3.py` with `&&`.** That script ends
    by printing `Next: uv run python ...` advice lines that look like the chain returned to a
    prompt, so the interrupt was ambiguous and the serving step was killed. **RULE: give a serving
    write as its own command, never chained behind a script that prints trailing next-step hints.**
@@ -191,6 +230,46 @@ Also verified and closed during remediation: the `[SERVING-GUARD] 13/15 abstaine
 rebuild residue — the morning tier's actionable-edge abstain rate is **1.00 on 7 of the 8 prior
 days** (0.93 on 7/28); 8/1's 0.87 is the lowest in the window. Pre-lineup rows are previews and
 `best_alpha=0` suppresses actionable edges regardless.
+
+## 6c. The W11-tail guard is now a daily paging op (2026-08-01, follow-up session)
+
+`scripts/check_w11_tail_coverage.py` (written during this incident) was a MANUAL post-rebuild
+step, so victim 3's blind spot was still open in prod — nothing ran it daily and nothing paged on
+it. That is the E11.30 shape ("detected, nobody notified") one story later.
+`check_w11_tail_coverage_op` now runs it in `daily_ingestion_job`, fanned out from predict
+(ALERT-tier, never HALTs — a blank transparency panel must not withhold a slate), and pages via
+`send_alert`: **CRITICAL on BUILD_GAP**, **WARN on PARTIAL**, **silent on FEED_PENDING/OK/NO_SLATE**,
+**WARN on unevaluable** (an anchor that fails to evaluate is never scored healthy). The paging
+policy is `betting_ml/monitoring/w11_tail_coverage.py`.
+
+⭐ **Wiring it surfaced a second, separate cadence defect — and it would have made the monitor
+useless if shipped naively.** A BUILD_GAP ("the raw feed HAS the slate, the built table does not")
+is a defect only for a block whose feed lands BEFORE the build that consumes it. Measured on the
+live lakehouse (UTC):
+
+| block | feed lands | W11 build (`lakehouse_w11_nightly_op`, s5c) | same-day assertable? |
+|---|---|---|---|
+| public_betting | 12:00 `ingest_action_network` (s4) | ~12:40 | **yes** |
+| weather | 12:50 `ingest_weather` (s7) writes `forecast_pregame` | ~12:40 | no — +1 build cycle |
+| umpire | 12:0x–16:39 `ingest_umpires.py --date today` (s8/s17) | ~12:40 | no — +1 build cycle |
+
+So umpire and weather populate the current slate one build cycle late **by design**, and a monitor
+paging on all three same-day would fire CRITICAL every single morning. Each block is judged on the
+newest slate its build could actually have reached: `public_betting` on TODAY (the same-day INC-37
+detector — on 08-01 it held 240 raw rows for the slate against 0 built rows), `umpire`/`weather` on
+the PRIOR slate. This is the exemption `check_feature_block_coverage._DATE_OUTAGE_SKIP_NEWEST`
+already documents for the identical reason, and it costs a genuine outage one day of latency —
+which those outages always survive.
+
+Second defect fixed in the same pass: the weather block's RAW side counted rows its own build
+rejects. `stg_weather_raw_snapshots` selects `weather_observation_type='forecast_pregame'` only,
+but the check counted any `weather_raw` row including the 00:00–02:00 UTC `forecast_intraday`
+capture — a permanent false PARTIAL/BUILD_GAP against a table that was never going to contain
+them. **In a two-sided raw-vs-built read the raw predicate must match what the build consumes.**
+
+⚠️ Runtime gate still open: `send_alert` hits SNS and CI mocks all IO, so the decision logic is
+proven by mocked-SNS tests but the page PATH needs one live-box smoke (trip a BUILD_GAP for a
+date; confirm a normal pre-assignment morning is silent).
 
 ## 7. Follow-ups (not done here)
 
@@ -210,6 +289,11 @@ days** (0.93 on 7/28); 8/1's 0.87 is the lowest in the window. Pre-lineup rows a
     which fits "fine every other day, failed the one day we doubled up". Same family as INC-22,
     one level up: that fix sized the limit to physical RAM but still assumes DuckDB is the only
     tenant. NOT chased further on the available evidence.
+- ⛔ **Pin DuckDB — DECLINED by the operator (2026-08-01). Do NOT re-open as a TODO without
+  asking.** Kept here only so a future session does not re-derive it: the drift hypothesis was
+  REFUTED (box 1.5.5 / laptop 1.5.3, patch-level, box newer), so the remaining case was
+  diagnosability only, and that did not justify touching the lockfile every build depends on.
+  Original reasoning follows.
 - **Pin DuckDB — for DIAGNOSABILITY, not because drift caused INC-37.** `duckdb>=1.1.0` is
   unbounded, so laptop and box drifted to 1.5.3 vs 1.5.5 with nobody choosing either. That did not
   cause this incident, but it did mean the local reproduction ran on a different engine than prod,
