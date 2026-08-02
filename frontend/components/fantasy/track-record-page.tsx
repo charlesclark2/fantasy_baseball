@@ -35,6 +35,7 @@ import type { TrackRecordRow } from "@/lib/fantasy-track-record"
 import {
   EmptyBlock,
   FadeBadge,
+  FadeLegend,
   GLOSSARY,
   InfoTip,
   LoadingBlock,
@@ -92,13 +93,18 @@ function LockedCurrentSeasonCard({ lockedSeason }: { lockedSeason: number }) {
   )
 }
 
-/** Emerald = fade hit, rose = fade miss, amber = fade push, muted gray = not a fade at all — "wins
- *  and losses both" applies to the chart too, not just the table's badge. */
+/** Emerald = fade hit (or an ungraded fade, from an export that predates `fadeResult`), rose = fade
+ *  miss, amber = a genuine push (tie), muted gray = not a fade at all — "wins and losses both"
+ *  applies to the chart too, not just the table's badge.
+ *
+ *  ⚠️ Match on the exact string, never a fallthrough `else` — `fadeResult` is `undefined` (not
+ *  `"push"`) on a row from a stale/pre-grading export, and an `else` branch there paints every
+ *  ungraded fade amber as a fake tie (see `FadeBadge`'s comment for the live incident this caused). */
 function fadeDotColor(row: TrackRecordRow): string {
   if (!row.isFade) return "#4b5563"
-  if (row.fadeResult === "hit") return "#10b981"
   if (row.fadeResult === "miss") return "#f43f5e"
-  return "#f59e0b"
+  if (row.fadeResult === "push") return "#f59e0b"
+  return "#10b981" // "hit", or ungraded (null/undefined)
 }
 
 function FadeDot({ cx, cy, payload }: any) {
@@ -132,11 +138,11 @@ function RankScatter({ rows }: { rows: TrackRecordRow[] }) {
       <p className="mb-3 text-[11px] leading-relaxed text-gray-600">
         Every dot is a player; closer to the diagonal is a better call. Highlighted dots are our
         highest-conviction disagreements with ADP that season (the &ldquo;fades&rdquo;) — where the
-        airtight independent claim lives:{" "}
-        <span className="text-[#10b981]">green = hit</span>,{" "}
-        <span className="text-rose-400">red = miss</span>,{" "}
-        <span className="text-amber-500">amber = push</span>.
+        airtight independent claim lives.
       </p>
+      <div className="mb-3">
+        <FadeLegend />
+      </div>
       <div className="h-72 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart margin={{ top: 8, right: 12, bottom: 8, left: 0 }}>
@@ -181,14 +187,14 @@ function RankScatter({ rows }: { rows: TrackRecordRow[] }) {
                     {row.isFade && (
                       <div
                         className={
-                          row.fadeResult === "hit"
-                            ? "text-[#10b981]"
-                            : row.fadeResult === "miss"
-                              ? "text-rose-400"
-                              : "text-amber-500"
+                          row.fadeResult === "miss"
+                            ? "text-rose-400"
+                            : row.fadeResult === "push"
+                              ? "text-amber-500"
+                              : "text-[#10b981]"
                         }
                       >
-                        high-conviction fade · {row.fadeResult ?? "—"}
+                        high-conviction fade{row.fadeResult ? ` · ${row.fadeResult}` : ""}
                       </div>
                     )}
                   </div>

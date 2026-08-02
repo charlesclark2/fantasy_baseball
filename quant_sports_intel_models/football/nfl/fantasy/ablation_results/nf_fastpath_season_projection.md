@@ -1,6 +1,6 @@
 # NF-FASTPATH — 2026 NFL fantasy season projections (raw stat-line, MVP-1)
 
-**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-08-01T04:46:50.674018+00:00
+**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-08-02T05:04:49.084987+00:00
 
 > ⚖️ **A PROJECTION PRODUCT, edge-independent** — no `best_alpha`/PBO/DSR/CLV gate (that is the betting posture). The gate is FACE-VALIDITY + COVERAGE + a holdout rank-correlation sanity check. The emitted `proj_*` columns are a **RAW STAT LINE** (season totals); the `proj_fp_*` points are a CONVENIENCE (standard nflverse scoring) for ranking/validation only — **MVP-2 / NF-C1 rescore the raw line per league**. Uncertainty is surfaced (an 80% PPR interval), not hidden; NULL = unknown kept NULL. Rookie intervals use PARAMETER uncertainty (slot-curve + P1A) and must be recalibrated before pricing.
 
@@ -148,6 +148,15 @@
 
 Each PRIOR season below was projected with the SAME model (base = season−1, 3-yr regression) and scored against what actually happened — the FULL projection (veterans + rookies), over players who played ≥6 games. `spearman_all` (rank) is the headline; `sp_<POS>` is within-position rank correlation (what matters for drafting); `topN_hit` = of the realized top-24, how many the model ranked top-24. A signal check across seasons, not a calibration claim.
 
+|   projection_season |   n |   spearman_all |   mae_ppr | top24_hit   |   sp_QB |   sp_RB |   sp_WR |   sp_TE |
+|--------------------:|----:|---------------:|----------:|:------------|--------:|--------:|--------:|--------:|
+|                2019 | 413 |            0.7 |      45.6 | 10/24       |     0.6 |     0.7 |     0.7 |     0.7 |
+|                2020 | 439 |            0.7 |      48.1 | 8/24        |     0.6 |     0.6 |     0.7 |     0.7 |
+|                2021 | 469 |            0.7 |      44.9 | 11/24       |     0.7 |     0.7 |     0.7 |     0.7 |
+|                2022 | 453 |            0.8 |      43.3 | 11/24       |     0.7 |     0.7 |     0.7 |     0.7 |
+|                2023 | 449 |            0.7 |      44.0 | 12/24       |     0.6 |     0.8 |     0.7 |     0.8 |
+|                2024 | 448 |            0.8 |      43.5 | 11/24       |     0.7 |     0.8 |     0.8 |     0.7 |
+|                2025 | 473 |            0.8 |      39.1 | 11/24       |     0.6 |     0.8 |     0.8 |     0.8 |
 
 ## 4. Face validity — top 25 overall (projected PPR)
 

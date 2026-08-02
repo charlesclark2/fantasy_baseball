@@ -46,6 +46,7 @@ import {
   ConfidenceBadge,
   EmptyBlock,
   FadeBadge,
+  FadeLegend,
   FormatSelector,
   GLOSSARY,
   InfoTip,
@@ -631,6 +632,11 @@ function PublicPlayerView({ playerId }: { playerId: string }) {
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
               Past-season track record
             </h2>
+            {playerRows.some((r) => r.isFade) && (
+              <div className="mb-3">
+                <FadeLegend />
+              </div>
+            )}
             <div className="overflow-x-auto rounded-lg border border-[#262626] bg-[#0f0f0f]">
               <table className="w-full text-left text-xs">
                 <thead>

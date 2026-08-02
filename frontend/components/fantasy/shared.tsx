@@ -163,18 +163,62 @@ export function FadeBadge({
   fadeResult,
 }: {
   isFade: boolean
-  fadeResult: "hit" | "miss" | "push" | null
+  fadeResult: "hit" | "miss" | "push" | null | undefined
 }) {
   if (!isFade) return null
+  // ⚠️ Explicit `== null` (covers BOTH `null` and `undefined`), never a `=== "hit" ? : === "miss" ? :
+  // else "push"` fallthrough — an export that predates this field, or one read before republishing,
+  // omits the key entirely, which is `undefined` in JS, not `"push"`. A fallthrough silently painted
+  // every ungraded fade amber as a fake tie (2026-08-02 mobile report: "everything is showing up as
+  // push"). An ungraded row gets the original plain "fade" chip instead.
+  if (fadeResult == null) {
+    return (
+      <span className="rounded border border-[#10b981]/40 bg-[#10b981]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#10b981]">
+        fade
+      </span>
+    )
+  }
   const style =
     fadeResult === "hit"
       ? "border-[#10b981]/40 bg-[#10b981]/10 text-[#10b981]"
       : fadeResult === "miss"
         ? "border-rose-500/40 bg-rose-500/10 text-rose-400"
-        : "border-gray-500/40 bg-gray-500/10 text-gray-400"
+        : "border-amber-500/40 bg-amber-500/10 text-amber-500"
   const label = fadeResult === "hit" ? "fade · hit" : fadeResult === "miss" ? "fade · miss" : "fade · push"
   return (
     <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${style}`}>{label}</span>
+  )
+}
+
+/** The hit/miss/push definitions, spelled out in-line rather than left to the "Fade" column's
+ *  tooltip alone — the user report that prompted this: "even I'm confused by it" applied to the
+ *  bare word "Fade"; a bare colour-coded chip has the same problem one level down. Shared so the
+ *  Track Record page (scatter + table) and a player's own track-record table say the identical
+ *  thing rather than two slightly different explanations drifting apart. */
+export function FadeLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] leading-relaxed text-gray-500">
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-2 w-2 flex-shrink-0 rounded-full bg-[#10b981]" />
+        <span>
+          <span className="font-semibold text-[#10b981]">Hit</span> — our rank landed closer to how the
+          season actually finished than ADP&apos;s did.
+        </span>
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-2 w-2 flex-shrink-0 rounded-full bg-rose-500" />
+        <span>
+          <span className="font-semibold text-rose-400">Miss</span> — ADP&apos;s rank was the better
+          call.
+        </span>
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-2 w-2 flex-shrink-0 rounded-full bg-amber-500" />
+        <span>
+          <span className="font-semibold text-amber-500">Push</span> — a dead-even tie.
+        </span>
+      </span>
+    </div>
   )
 }
 
