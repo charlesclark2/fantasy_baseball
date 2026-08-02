@@ -743,14 +743,20 @@ def contract_coverage_by_season(df, cols: list[str]) -> dict[int, dict]:
     were really fitted and scored on.
 
     ⚠️ **A PER-SEASON MEAN HIDES THE THING THAT ACTUALLY MATTERS, so this also reports which
-    columns are STRUCTURALLY ABSENT.** Measured on the served 13-column `total_runs/post_lineup`
-    contract: `away_lineup_bat_speed_vs_starter_velo` is a Statcast BAT-TRACKING feature that did
-    not exist before 2023 — it is **0.000 non-null in 2021 and 2022, 0.483 in 2023, 1.000 from
-    2024**. A mean of "0.83" reads like uniformly noisier data; the truth is that a *specific
-    feature is entirely missing* for the older half of the window, so those folds evaluate a
-    **12-feature** model imputed to a constant in the 13th slot — a structurally DIFFERENT contract,
-    not merely a sparser one. That distinction is the whole point of Lock 2 and a pooled mean cannot
-    express it.
+    columns are STRUCTURALLY ABSENT.** Measured on the REAL served store (2026-08-02), TWO of the
+    13 `total_runs/post_lineup` contract columns are absent for part of the MH2.1 window:
+
+      * `away_lineup_bat_speed_vs_starter_velo` — Statcast BAT-TRACKING, launched mid-2023:
+        **0.000 non-null 2016–2022**, 0.431 in 2023, ~0.98 from 2024.
+      * `home_starter_proj_fip` — a FanGraphs projection that begins in 2020:
+        **0.000 non-null 2016–2019**, ~0.97+ thereafter.
+
+    A mean of "0.83" reads like uniformly noisier data. The truth is that eval fold 2019 evaluates
+    **11 of 13** features, 2020–2022 evaluate **12**, 2023 evaluates 12 + a 43%-covered 13th, and
+    only **2024–2026 evaluate the contract that is actually served** — a structurally DIFFERENT
+    contract, not merely a sparser one. That distinction is the whole point of Lock 2 and a pooled
+    mean cannot express it. (2015 has SEVEN of the 13 absent, which is why the window starts at
+    2016.)
     """
     present = [c for c in cols if c in df.columns]
     out: dict[int, dict] = {}

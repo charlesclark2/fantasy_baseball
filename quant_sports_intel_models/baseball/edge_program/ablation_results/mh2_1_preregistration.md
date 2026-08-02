@@ -135,31 +135,47 @@ The served 13-column contract is:
 `home_pit_woba_against_14d`, `home_pit_woba_against_30d`, `home_pit_woba_against_std`,
 `home_starter_avg_ip_season`, `home_starter_proj_fip`, `park_run_factor_3yr`
 
-`away_lineup_bat_speed_vs_starter_velo` is a **Statcast BAT-TRACKING** feature that **did not exist
-before 2023**. Measured on the cached matrix:
+**TWO** of those columns are structurally absent for part of the window. Measured on the REAL served
+store (`s3://…/lakehouse/feature_pregame_game_features`, read 2026-08-02 — non-null share):
 
-| season | 2021 | 2022 | 2023 | 2024 | 2025 | 2026 |
-|---|---:|---:|---:|---:|---:|---:|
-| `away_lineup_bat_speed_vs_starter_velo` non-null | **0.000** | **0.000** | 0.483 | 1.000 | 1.000 | 1.000 |
+| season | 2016 | 2017 | 2018 | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 | 2025 | 2026 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `away_lineup_bat_speed_vs_starter_velo` | **0.000** | **0.000** | **0.000** | **0.000** | **0.000** | **0.000** | **0.000** | 0.431 | 0.988 | 0.989 | 0.979 |
+| `home_starter_proj_fip` | **0.000** | **0.000** | **0.000** | **0.000** | 0.973 | 0.963 | 0.987 | 0.985 | 0.986 | 0.987 | 0.963 |
+| **mean contract coverage** | 0.828 | 0.826 | 0.834 | 0.829 | 0.886 | 0.900 | 0.906 | 0.938 | 0.982 | 0.982 | 0.976 |
 
-Pooled, that reads as "0.83–0.91 coverage" — i.e. *uniformly noisier data*. **The truth is that one
-specific contract feature is entirely absent for the older half of the window**, so eval folds
-**2019, 2020, 2021 and 2022 score a structurally SMALLER model** (12 real features + a constant),
-and 2023 is half-covered. Only 2024–2026 evaluate the actual served contract.
+`away_lineup_bat_speed_vs_starter_velo` is **Statcast BAT-TRACKING** (launched mid-2023);
+`home_starter_proj_fip` is a **FanGraphs projection** that begins in 2020.
+
+Pooled, this reads as "0.83–0.91 coverage" — i.e. *uniformly noisier data*. **The truth is that
+specific contract features are entirely absent for the older part of the window**, so what each fold
+actually evaluates is:
+
+| eval fold | season | real contract features | absent |
+|---:|---:|---:|---|
+| 1 | 2019 | **11 of 13** | `bat_speed`, `proj_fip` |
+| 2–4 | 2020–2022 | **12 of 13** | `bat_speed` |
+| 5 | 2023 | 12 + a 43%-covered 13th | `bat_speed` partial |
+| 6–8 | 2024–2026 | **13 of 13** | — (the served contract) |
 
 ⇒ **The early and late folds differ in WHICH contract they are testing, not merely in how noisy it
-is.** Every report therefore names the structurally-absent columns per fold rather than reporting a
-pooled mean. Two consequences fixed in advance:
+is** — and only **3 of the 8 folds** evaluate the contract that is actually served. Every report
+therefore names the structurally-absent columns per fold rather than reporting a pooled mean. Three
+consequences fixed in advance:
 
 - a cross-fold difference must **not** be attributed to the `plus_eb` block without accounting for
   this;
-- ⚠️ it is a live possibility that the *added power is partly cosmetic* — four of the eight folds
-  test a different contract from the one being served. **That does not invalidate the re-run** (the
-  incumbent and the challenger face the identical handicap in every fold, so the CONTRAST stays
-  fair), but it does bound what the extra folds can certify about the SERVED model, and the verdict
-  must say so.
+- ⚠️ **the added power is PARTLY COSMETIC, and by more than first estimated** — five of the eight
+  folds test a contract the model does not serve, and the oldest fold is missing two features.
+  **That does not invalidate the re-run**: the incumbent and the challenger face the *identical*
+  handicap in every fold, so the CONTRAST stays fair and the verdict is still a valid answer to "does
+  `plus_eb` beat the incumbent?". But it bounds what the extra folds certify about the **served**
+  model, and the verdict must say so rather than claiming 8 clean folds;
 - **No column is dropped and no fold is excluded over this.** Doing so after measuring it would be
   exactly the post-hoc trim Lock 1 and Lock 1b forbid. It is disclosed, not acted on.
+
+*(This also confirms the Lock-1 choice to start at 2016: 2015 has **seven** of the 13 absent, hence
+its 0.449.)*
 
 ---
 
