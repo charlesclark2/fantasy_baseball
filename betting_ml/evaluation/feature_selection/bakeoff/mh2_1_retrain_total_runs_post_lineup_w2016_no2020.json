@@ -1,0 +1,488 @@
+{
+  "story": "E7.9",
+  "mode": "bakeoff",
+  "best_alpha": 0,
+  "target": "total_runs",
+  "tier": "post_lineup",
+  "metric": "crps",
+  "smoke": false,
+  "seed": 42,
+  "window": {
+    "min_year": 2016,
+    "excluded_seasons": [
+      2020
+    ],
+    "seasons": [
+      2016,
+      2017,
+      2018,
+      2019,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025,
+      2026
+    ],
+    "n_seasons": 10,
+    "family": "mh2_1",
+    "is_mh2_1": true,
+    "arm": "SENSITIVITY (2020 dropped from train AND eval)"
+  },
+  "design_bar": {
+    "n_folds": 7,
+    "n_arms": 4,
+    "pbo_evaluable": true,
+    "dsr_ceiling_at_any_effect": 0.9997,
+    "dsr_required_per_fold_sr_asymptotic_V": 1.314,
+    "reference_e7_9_design": {
+      "n_folds": 3,
+      "n_arms": 28,
+      "dsr_ceiling_at_any_effect": 0.9772,
+      "dsr_required_per_fold_sr_asymptotic_V": 7.279,
+      "pbo_evaluable": false
+    },
+    "achievable_folds_check": 7
+  },
+  "contract_coverage_by_season": {
+    "2016": {
+      "rows": 2146,
+      "coverage": 0.8338,
+      "structurally_absent": [
+        "away_lineup_bat_speed_vs_starter_velo",
+        "home_starter_proj_fip"
+      ],
+      "per_column": {
+        "away_bp_eb_coverage_pct": 0.9823,
+        "away_bp_eb_uncertainty": 0.9823,
+        "away_lineup_bat_speed_vs_starter_velo": 0.0,
+        "away_losses": 0.966,
+        "away_wins": 0.966,
+        "home_bp_eb_coverage_pct": 0.9818,
+        "home_bp_eb_uncertainty": 0.9818,
+        "home_pit_woba_against_14d": 1.0,
+        "home_pit_woba_against_30d": 1.0,
+        "home_pit_woba_against_std": 1.0,
+        "home_starter_avg_ip_season": 0.979,
+        "home_starter_proj_fip": 0.0,
+        "park_run_factor_3yr": 1.0
+      }
+    },
+    "2017": {
+      "rows": 2079,
+      "coverage": 0.8346,
+      "structurally_absent": [
+        "away_lineup_bat_speed_vs_starter_velo",
+        "home_starter_proj_fip"
+      ],
+      "per_column": {
+        "away_bp_eb_coverage_pct": 0.9856,
+        "away_bp_eb_uncertainty": 0.9856,
+        "away_lineup_bat_speed_vs_starter_velo": 0.0,
+        "away_losses": 0.9644,
+        "away_wins": 0.9644,
+        "home_bp_eb_coverage_pct": 0.9889,
+        "home_bp_eb_uncertainty": 0.9889,
+        "home_pit_woba_against_14d": 1.0,
+        "home_pit_woba_against_30d": 1.0,
+        "home_pit_woba_against_std": 1.0,
+        "home_starter_avg_ip_season": 0.9726,
+        "home_starter_proj_fip": 0.0,
+        "park_run_factor_3yr": 1.0
+      }
+    },
+    "2018": {
+      "rows": 2133,
+      "coverage": 0.8407,
+      "structurally_absent": [
+        "away_lineup_bat_speed_vs_starter_velo",
+        "home_starter_proj_fip"
+      ],
+      "per_column": {
+        "away_bp_eb_coverage_pct": 0.9911,
+        "away_bp_eb_uncertainty": 0.9911,
+        "away_lineup_bat_speed_vs_starter_velo": 0.0,
+        "away_losses": 1.0,
+        "away_wins": 1.0,
+        "home_bp_eb_coverage_pct": 0.992,
+        "home_bp_eb_uncertainty": 0.992,
+        "home_pit_woba_against_14d": 1.0,
+        "home_pit_woba_against_30d": 1.0,
+        "home_pit_woba_against_std": 1.0,
+        "home_starter_avg_ip_season": 0.9634,
+        "home_starter_proj_fip": 0.0,
+        "park_run_factor_3yr": 1.0
+      }
+    },
+    "2019": {
+      "rows": 2142,
+      "coverage": 0.8349,
+      "structurally_absent": [
+        "away_lineup_bat_speed_vs_starter_velo",
+        "home_starter_proj_fip"
+      ],
+      "per_column": {
+        "away_bp_eb_coverage_pct": 0.993,
+        "away_bp_eb_uncertainty": 0.993,
+        "away_lineup_bat_speed_vs_starter_velo": 0.0,
+        "away_losses": 0.9664,
+        "away_wins": 0.9664,
+        "home_bp_eb_coverage_pct": 0.9874,
+        "home_bp_eb_uncertainty": 0.9874,
+        "home_pit_woba_against_14d": 1.0,
+        "home_pit_woba_against_30d": 1.0,
+        "home_pit_woba_against_std": 1.0,
+        "home_starter_avg_ip_season": 0.9603,
+        "home_starter_proj_fip": 0.0,
+        "park_run_factor_3yr": 1.0
+      }
+    },
+    "2021": {
+      "rows": 2090,
+      "coverage": 0.9105,
+      "structurally_absent": [
+        "away_lineup_bat_speed_vs_starter_velo"
+      ],
+      "per_column": {
+        "away_bp_eb_coverage_pct": 0.9885,
+        "away_bp_eb_uncertainty": 1.0,
+        "away_lineup_bat_speed_vs_starter_velo": 0.0,
+        "away_losses": 0.9665,
+        "away_wins": 0.9665,
+        "home_bp_eb_coverage_pct": 0.9909,
+        "home_bp_eb_uncertainty": 1.0,
+        "home_pit_woba_against_14d": 1.0,
+        "home_pit_woba_against_30d": 1.0,
+        "home_pit_woba_against_std": 1.0,
+        "home_starter_avg_ip_season": 0.955,
+        "home_starter_proj_fip": 0.9694,
+        "park_run_factor_3yr": 1.0
+      }
+    },
+    "2022": {
+      "rows": 2149,
+      "coverage": 0.9138,
+      "structurally_absent": [
+        "away_lineup_bat_speed_vs_starter_velo"
+      ],
+      "per_column": {
+        "away_bp_eb_coverage_pct": 0.9916,
+        "away_bp_eb_uncertainty": 1.0,
+        "away_lineup_bat_speed_vs_starter_velo": 0.0,
+        "away_losses": 0.9688,
+        "away_wins": 0.9688,
+        "home_bp_eb_coverage_pct": 0.9921,
+        "home_bp_eb_uncertainty": 1.0,
+        "home_pit_woba_against_14d": 1.0,
+        "home_pit_woba_against_30d": 1.0,
+        "home_pit_woba_against_std": 1.0,
+        "home_starter_avg_ip_season": 0.9679,
+        "home_starter_proj_fip": 0.9907,
+        "park_run_factor_3yr": 1.0
+      }
+    },
+    "2023": {
+      "rows": 2151,
+      "coverage": 0.9497,
+      "structurally_absent": [],
+      "per_column": {
+        "away_bp_eb_coverage_pct": 0.993,
+        "away_bp_eb_uncertainty": 1.0,
+        "away_lineup_bat_speed_vs_starter_velo": 0.4826,
+        "away_losses": 0.9665,
+        "away_wins": 0.9665,
+        "home_bp_eb_coverage_pct": 0.9912,
+        "home_bp_eb_uncertainty": 1.0,
+        "home_pit_woba_against_14d": 1.0,
+        "home_pit_woba_against_30d": 1.0,
+        "home_pit_woba_against_std": 1.0,
+        "home_starter_avg_ip_season": 0.96,
+        "home_starter_proj_fip": 0.9865,
+        "park_run_factor_3yr": 1.0
+      }
+    },
+    "2024": {
+      "rows": 2146,
+      "coverage": 0.9897,
+      "structurally_absent": [],
+      "per_column": {
+        "away_bp_eb_coverage_pct": 0.9944,
+        "away_bp_eb_uncertainty": 1.0,
+        "away_lineup_bat_speed_vs_starter_velo": 1.0,
+        "away_losses": 0.9651,
+        "away_wins": 0.9651,
+        "home_bp_eb_coverage_pct": 0.993,
+        "home_bp_eb_uncertainty": 1.0,
+        "home_pit_woba_against_14d": 1.0,
+        "home_pit_woba_against_30d": 1.0,
+        "home_pit_woba_against_std": 1.0,
+        "home_starter_avg_ip_season": 0.9604,
+        "home_starter_proj_fip": 0.9888,
+        "park_run_factor_3yr": 1.0
+      }
+    },
+    "2025": {
+      "rows": 2025,
+      "coverage": 0.9953,
+      "structurally_absent": [],
+      "per_column": {
+        "away_bp_eb_coverage_pct": 0.9931,
+        "away_bp_eb_uncertainty": 1.0,
+        "away_lineup_bat_speed_vs_starter_velo": 1.0,
+        "away_losses": 1.0,
+        "away_wins": 1.0,
+        "home_bp_eb_coverage_pct": 0.9946,
+        "home_bp_eb_uncertainty": 1.0,
+        "home_pit_woba_against_14d": 1.0,
+        "home_pit_woba_against_30d": 1.0,
+        "home_pit_woba_against_std": 1.0,
+        "home_starter_avg_ip_season": 0.96,
+        "home_starter_proj_fip": 0.9916,
+        "park_run_factor_3yr": 1.0
+      }
+    },
+    "2026": {
+      "rows": 1362,
+      "coverage": 0.9901,
+      "structurally_absent": [],
+      "per_column": {
+        "away_bp_eb_coverage_pct": 0.986,
+        "away_bp_eb_uncertainty": 0.9883,
+        "away_lineup_bat_speed_vs_starter_velo": 1.0,
+        "away_losses": 1.0,
+        "away_wins": 1.0,
+        "home_bp_eb_coverage_pct": 0.9875,
+        "home_bp_eb_uncertainty": 0.9905,
+        "home_pit_woba_against_14d": 1.0,
+        "home_pit_woba_against_30d": 1.0,
+        "home_pit_woba_against_std": 1.0,
+        "home_starter_avg_ip_season": 0.9486,
+        "home_starter_proj_fip": 0.9706,
+        "park_run_factor_3yr": 1.0
+      }
+    }
+  },
+  "per_fold": [
+    {
+      "fold": 1,
+      "eval_season": 2019,
+      "eval_rows": 2142,
+      "contract_coverage": 0.8349,
+      "structurally_absent": [
+        "away_lineup_bat_speed_vs_starter_velo",
+        "home_starter_proj_fip"
+      ],
+      "incumbent": 2.5994,
+      "leader": 2.5888,
+      "leader_minus_incumbent": -0.0107
+    },
+    {
+      "fold": 2,
+      "eval_season": 2021,
+      "eval_rows": 2090,
+      "contract_coverage": 0.9105,
+      "structurally_absent": [
+        "away_lineup_bat_speed_vs_starter_velo"
+      ],
+      "incumbent": 2.5348,
+      "leader": 2.4588,
+      "leader_minus_incumbent": -0.076
+    },
+    {
+      "fold": 3,
+      "eval_season": 2022,
+      "eval_rows": 2149,
+      "contract_coverage": 0.9138,
+      "structurally_absent": [
+        "away_lineup_bat_speed_vs_starter_velo"
+      ],
+      "incumbent": 2.4694,
+      "leader": 2.454,
+      "leader_minus_incumbent": -0.0153
+    },
+    {
+      "fold": 4,
+      "eval_season": 2023,
+      "eval_rows": 2151,
+      "contract_coverage": 0.9497,
+      "structurally_absent": [],
+      "incumbent": 2.5352,
+      "leader": 2.5163,
+      "leader_minus_incumbent": -0.0189
+    },
+    {
+      "fold": 5,
+      "eval_season": 2024,
+      "eval_rows": 2146,
+      "contract_coverage": 0.9897,
+      "structurally_absent": [],
+      "incumbent": 2.4423,
+      "leader": 2.3925,
+      "leader_minus_incumbent": -0.0498
+    },
+    {
+      "fold": 6,
+      "eval_season": 2025,
+      "eval_rows": 2025,
+      "contract_coverage": 0.9953,
+      "structurally_absent": [],
+      "incumbent": 2.5635,
+      "leader": 2.5432,
+      "leader_minus_incumbent": -0.0203
+    },
+    {
+      "fold": 7,
+      "eval_season": 2026,
+      "eval_rows": 1362,
+      "contract_coverage": 0.9901,
+      "structurally_absent": [],
+      "incumbent": 2.5114,
+      "leader": 2.4987,
+      "leader_minus_incumbent": -0.0127
+    }
+  ],
+  "dsr_fixed": {
+    "convention": "per-FOLD observations + measured trial_sharpes (MH2.1 Lock 3)",
+    "n_obs": 7,
+    "n_trials": 4,
+    "dsr": 0.9999999692442197,
+    "observed_sr": 1.1870148550417363,
+    "sr0": 0.10677457011775082,
+    "var_trials_sr": 0.010299183098636543,
+    "available": true,
+    "skill_mean": 0.029101487776632746,
+    "skill_sd": 0.024516532083003726,
+    "trial_arms": [
+      "incumbent::glm_elasticnet",
+      "plus_eb::ngboost_normal",
+      "plus_eb::glm_elasticnet"
+    ],
+    "trial_sharpes": [
+      0.9878,
+      1.0538,
+      1.187
+    ],
+    "dsr_asymptotic_V": 0.999961949344679,
+    "sr0_asymptotic_V": 0.3976650487856887,
+    "degenerate_trial_arms": []
+  },
+  "dsr_legacy_convention": {
+    "convention": "per-BUCKET (year-month) observations, no trial_sharpes \u2014 E7.9 as recorded",
+    "n_obs": 44,
+    "dsr": 0.9999820903767743,
+    "binding": false
+  },
+  "pbo_fold_level": 0.0,
+  "point_in_time_caveat": "\u26a0\ufe0f **NOT POINT-IN-TIME \u2014 every number here is a CEILING.** `load_features` reads each game's row as it exists NOW (post-game backfilled and dense); the live serve only ever saw the sparse pre-game row. Widening the window to 2016 WIDENS this exposure rather than shrinking it \u2014 the oldest rows have had the longest to be backfilled \u2014 so a wide-window score is if anything a MORE optimistic ceiling than E7.9's. The honest live figure comes from scoring the ACTUALLY-SERVED predictions (`honest_live_skill.py`), never from this matrix.",
+  "n_arms": 4,
+  "n_folds": 7,
+  "n_rows": 20423,
+  "variants": {
+    "incumbent": {
+      "n_features": 13,
+      "added_vs_incumbent": []
+    },
+    "plus_eb": {
+      "n_features": 23,
+      "added_vs_incumbent": [
+        "away_avg_eb_bb_pct",
+        "away_avg_eb_iso",
+        "away_avg_eb_k_pct",
+        "away_starter_eb_bb_pct",
+        "away_starter_eb_k_pct",
+        "home_avg_eb_bb_pct",
+        "home_avg_eb_iso",
+        "home_avg_eb_k_pct",
+        "home_starter_eb_bb_pct",
+        "home_starter_eb_k_pct"
+      ]
+    }
+  },
+  "dropped_variants": [],
+  "incumbent_arm": "incumbent::ngboost_normal",
+  "incumbent_metric": 2.5224578405843063,
+  "leader_arm": "plus_eb::glm_elasticnet",
+  "leader_metric": 2.4925550578081386,
+  "margin_vs_incumbent": 0.029903,
+  "noise_floor": 0.02,
+  "pbo": 0.002,
+  "dsr": 0.9999999692442197,
+  "oracle_metric": 0.00023369497725510914,
+  "oracle_floor_ok": true,
+  "gates": {
+    "beats_incumbent_by_more_than_noise_floor": true,
+    "pbo_lt_0_2": true,
+    "dsr_gt_0_at_95": true,
+    "calibration_not_degraded": true
+  },
+  "verdict": "SHIP_CHALLENGER",
+  "margin_decomposition": {
+    "available": true,
+    "total": 0.029903,
+    "learner_swap": 0.018576,
+    "contract": 0.011327,
+    "learner_share": 0.6212,
+    "same_learner_reference_arm": "incumbent::glm_elasticnet"
+  },
+  "variant_effect_by_learner": [
+    {
+      "learner": "glm_elasticnet",
+      "incumbent": 2.5039,
+      "plus_gb": null,
+      "plus_eb": 0.0113,
+      "plus_both": null
+    },
+    {
+      "learner": "ngboost_normal",
+      "incumbent": 2.5225,
+      "plus_gb": null,
+      "plus_eb": 0.0152,
+      "plus_both": null
+    }
+  ],
+  "calibration_tolerance": 0.006893517016643865,
+  "calibration_amendment": "2026-07-29",
+  "calibration_would_fail_pre_amendment": false,
+  "table": [
+    {
+      "arm": "oracle_floor",
+      "variant": "oracle_floor",
+      "learner": "-",
+      "crps_mean": 0.00023369497725510914,
+      "pit_ks": 0.5,
+      "n": 14065
+    },
+    {
+      "arm": "plus_eb::glm_elasticnet",
+      "variant": "plus_eb",
+      "learner": "glm_elasticnet",
+      "crps_mean": 2.4925550578081386,
+      "pit_ks": 0.06053753201231956,
+      "n": 14065
+    },
+    {
+      "arm": "incumbent::glm_elasticnet",
+      "variant": "incumbent",
+      "learner": "glm_elasticnet",
+      "crps_mean": 2.5038822929240903,
+      "pit_ks": 0.0646376433011751,
+      "n": 14065
+    },
+    {
+      "arm": "plus_eb::ngboost_normal",
+      "variant": "plus_eb",
+      "learner": "ngboost_normal",
+      "crps_mean": 2.5072677268125103,
+      "pit_ks": 0.06440009174005533,
+      "n": 14065
+    },
+    {
+      "arm": "incumbent::ngboost_normal",
+      "variant": "incumbent",
+      "learner": "ngboost_normal",
+      "crps_mean": 2.5224578405843063,
+      "pit_ks": 0.06893517016643864,
+      "n": 14065
+    }
+  ]
+}

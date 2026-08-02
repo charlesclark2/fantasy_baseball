@@ -1,0 +1,1099 @@
+{
+  "story": "MH2.1-cal",
+  "best_alpha": 0,
+  "target": "total_runs",
+  "tier": "post_lineup",
+  "seasons": [
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025,
+    2026
+  ],
+  "excluded_seasons": [],
+  "n_folds": 8,
+  "n_rows": 21006,
+  "nominal_coverage": 0.8,
+  "seed": 42,
+  "snowflake_free": true,
+  "smoke": false,
+  "verdict": "INCUMBENT_VARIANCE_UNINFORMATIVE",
+  "verdict_detail": {
+    "stratifier": "plus_eb::ngboost_normal predicted sigma (deciles)",
+    "sigma_coefficient_of_variation": 0.0798,
+    "var_z_slope_foil_heteroscedastic": -0.04297,
+    "positive_control": {
+      "slope_vs_foil": 0.0539,
+      "null_sd": 0.00104,
+      "z_score": 51.66,
+      "p_one_sided": 0.0025
+    },
+    "leader": {
+      "slope_vs_foil": 0.0543,
+      "null_sd": 0.00139,
+      "z_score": 39.04,
+      "p_one_sided": 0.0025
+    },
+    "instrument_detects_variance_loss": true,
+    "n_permutations": 400,
+    "share_of_the_full_flattening_penalty": 1.007,
+    "rms_abs_var_z_minus_1": {
+      "incumbent::ngboost_normal": 0.1582,
+      "plus_eb::ngboost_normal": 0.1796,
+      "plus_eb::glm_elasticnet": 0.0498,
+      "plus_eb::ngboost_FLATTENED": 0.1069
+    },
+    "var_z_slope": {
+      "incumbent::ngboost_normal": -0.02373,
+      "plus_eb::ngboost_normal": -0.04297,
+      "plus_eb::glm_elasticnet": 0.01133,
+      "plus_eb::ngboost_FLATTENED": 0.01093
+    },
+    "positive_control_slope_test": {
+      "slope_vs_foil": 0.0539,
+      "null_sd": 0.00104,
+      "z_score": 51.66,
+      "p_one_sided": 0.0025
+    },
+    "leader_slope_test": {
+      "slope_vs_foil": 0.0543,
+      "null_sd": 0.00139,
+      "z_score": 39.04,
+      "p_one_sided": 0.0025
+    },
+    "rms_leader": 0.0498,
+    "rms_incumbent": 0.1582,
+    "rms_foil": 0.1796,
+    "rms_flattened_control": 0.1069,
+    "flattening_the_incumbent_sigma_hurts": false,
+    "leader_better_than_incumbent": true,
+    "rescored": true,
+    "rescore_note": "re-emitted from the stored per-stratum Var(z) under the corrected distance-from-Var(z)=1 rule; NOTHING was refitted and no arm's numbers changed \u2014 only the scoring rule applied to them"
+  },
+  "reading": "\u2b50 **THE VARIANCE OBJECTION IS REFUTED AT ITS SOURCE \u2014 and note this REVERSES the concern this script was built to test.** Deliberately FLATTENING the heteroscedastic arm's own per-game \u03c3 did not worsen its conditional calibration; it **improved** it (RMS |Var(z)\u22121| 0.1796 \u2192 0.1069). So that per-game \u03c3 is not merely uninformative, it is actively MISCALIBRATED, and there is nothing for a homoscedastic arm to destroy.\n\nDirectly: the MH2.1 leader is **3.2\u00d7 BETTER conditionally calibrated than the SERVED champion** (RMS |Var(z)\u22121| **0.0498** vs **0.1582**), with pooled Var(z) essentially perfect. The incumbent under-estimates \u03c3 worst in the games it calls calm. **The homoscedastic swap cannot be blocked on variance grounds \u2014 on this evidence it is a calibration IMPROVEMENT.**",
+  "profiles": {
+    "sigma_stratum": {
+      "incumbent::ngboost_normal": {
+        "strata": [
+          {
+            "stratum": 0,
+            "n": 1465,
+            "coverage": 0.7385665529010239,
+            "var_z": 1.3687778843164662,
+            "pit_ks": 0.0748767851818235,
+            "crps": 2.516584013362416,
+            "mean_sigma": 3.8909796016150864
+          },
+          {
+            "stratum": 1,
+            "n": 1465,
+            "coverage": 0.7699658703071672,
+            "var_z": 1.2333611475659496,
+            "pit_ks": 0.07309828174845939,
+            "crps": 2.518930486657473,
+            "mean_sigma": 4.083393362286991
+          },
+          {
+            "stratum": 2,
+            "n": 1465,
+            "coverage": 0.8006825938566553,
+            "var_z": 1.0653739838626795,
+            "pit_ks": 0.07489441430936283,
+            "crps": 2.3771514941669825,
+            "mean_sigma": 4.165814465591109
+          },
+          {
+            "stratum": 3,
+            "n": 1464,
+            "coverage": 0.7848360655737705,
+            "var_z": 1.126700057969256,
+            "pit_ks": 0.05973391308036835,
+            "crps": 2.4979331466195656,
+            "mean_sigma": 4.230573986086471
+          },
+          {
+            "stratum": 4,
+            "n": 1465,
+            "coverage": 0.8006825938566553,
+            "var_z": 1.1024805492405678,
+            "pit_ks": 0.043248199943767385,
+            "crps": 2.4862087249554703,
+            "mean_sigma": 4.276908803673235
+          },
+          {
+            "stratum": 5,
+            "n": 1465,
+            "coverage": 0.8013651877133106,
+            "var_z": 1.035499527937169,
+            "pit_ks": 0.040899439825136386,
+            "crps": 2.4435164708249153,
+            "mean_sigma": 4.3166453363320265
+          },
+          {
+            "stratum": 6,
+            "n": 1464,
+            "coverage": 0.7882513661202186,
+            "var_z": 1.1044879573710107,
+            "pit_ks": 0.054980144850017565,
+            "crps": 2.5625519990758217,
+            "mean_sigma": 4.378452017014041
+          },
+          {
+            "stratum": 7,
+            "n": 1465,
+            "coverage": 0.8054607508532423,
+            "var_z": 1.064889453734318,
+            "pit_ks": 0.058985158068616095,
+            "crps": 2.5387550265345635,
+            "mean_sigma": 4.422734174816881
+          },
+          {
+            "stratum": 8,
+            "n": 1465,
+            "coverage": 0.8034129692832764,
+            "var_z": 1.0285580409553685,
+            "pit_ks": 0.06531523945789275,
+            "crps": 2.55080386054157,
+            "mean_sigma": 4.526047335312365
+          },
+          {
+            "stratum": 9,
+            "n": 1465,
+            "coverage": 0.7822525597269625,
+            "var_z": 1.1080616726614407,
+            "pit_ks": 0.08808589179137327,
+            "crps": 2.71065471329355,
+            "mean_sigma": 4.658734672399077
+          }
+        ],
+        "var_z_slope": -0.02373398560551049,
+        "pooled_var_z": 1.1242358823481455,
+        "pooled_coverage": 0.7875477880939378,
+        "pooled_pit_ks": 0.05618098345381778,
+        "pooled_crps": 2.520307637298038
+      },
+      "plus_eb::ngboost_normal": {
+        "strata": [
+          {
+            "stratum": 0,
+            "n": 1465,
+            "coverage": 0.7187713310580205,
+            "var_z": 1.4420748467499527,
+            "pit_ks": 0.07036737218989281,
+            "crps": 2.504201293317435,
+            "mean_sigma": 3.7192418418298394
+          },
+          {
+            "stratum": 1,
+            "n": 1465,
+            "coverage": 0.757679180887372,
+            "var_z": 1.2711017355937286,
+            "pit_ks": 0.06926916698137753,
+            "crps": 2.514191688907755,
+            "mean_sigma": 3.9978941868075175
+          },
+          {
+            "stratum": 2,
+            "n": 1465,
+            "coverage": 0.8,
+            "var_z": 1.076230713154824,
+            "pit_ks": 0.07508971333316694,
+            "crps": 2.3683467810499934,
+            "mean_sigma": 4.101011348735256
+          },
+          {
+            "stratum": 3,
+            "n": 1464,
+            "coverage": 0.7889344262295082,
+            "var_z": 1.1393085571603756,
+            "pit_ks": 0.06917439950845389,
+            "crps": 2.483718009585651,
+            "mean_sigma": 4.1756022495432745
+          },
+          {
+            "stratum": 4,
+            "n": 1465,
+            "coverage": 0.7979522184300342,
+            "var_z": 1.1080067744731492,
+            "pit_ks": 0.04249215275504542,
+            "crps": 2.469272652845241,
+            "mean_sigma": 4.236604990643799
+          },
+          {
+            "stratum": 5,
+            "n": 1465,
+            "coverage": 0.8102389078498293,
+            "var_z": 1.0309406158509278,
+            "pit_ks": 0.041176513087824995,
+            "crps": 2.4310805416219163,
+            "mean_sigma": 4.294068462013393
+          },
+          {
+            "stratum": 6,
+            "n": 1464,
+            "coverage": 0.7807377049180327,
+            "var_z": 1.1042558833560434,
+            "pit_ks": 0.0581654834293685,
+            "crps": 2.5622448064579104,
+            "mean_sigma": 4.357808875888235
+          },
+          {
+            "stratum": 7,
+            "n": 1465,
+            "coverage": 0.8136518771331058,
+            "var_z": 1.017927552667282,
+            "pit_ks": 0.0594783833403108,
+            "crps": 2.5179139934798345,
+            "mean_sigma": 4.439290149579756
+          },
+          {
+            "stratum": 8,
+            "n": 1465,
+            "coverage": 0.8068259385665529,
+            "var_z": 0.9738193929601174,
+            "pit_ks": 0.06791619422267325,
+            "crps": 2.528834402647077,
+            "mean_sigma": 4.559801079044889
+          },
+          {
+            "stratum": 9,
+            "n": 1465,
+            "coverage": 0.8232081911262799,
+            "var_z": 0.938199965654465,
+            "pit_ks": 0.08727425670199279,
+            "crps": 2.688143525241216,
+            "mean_sigma": 4.929524464982862
+          }
+        ],
+        "var_z_slope": -0.042967214004652046,
+        "pooled_var_z": 1.1108594172044546,
+        "pooled_coverage": 0.789800655379574,
+        "pooled_pit_ks": 0.05882380075552335,
+        "pooled_crps": 2.5067925594336846
+      },
+      "plus_eb::glm_elasticnet": {
+        "strata": [
+          {
+            "stratum": 0,
+            "n": 1465,
+            "coverage": 0.8218430034129692,
+            "var_z": 0.9703201705429033,
+            "pit_ks": 0.05046303937804397,
+            "crps": 2.468414547881904,
+            "mean_sigma": 4.471126048743946
+          },
+          {
+            "stratum": 1,
+            "n": 1465,
+            "coverage": 0.8293515358361775,
+            "var_z": 1.0014570498970532,
+            "pit_ks": 0.058456359304919325,
+            "crps": 2.48686186863294,
+            "mean_sigma": 4.466486092510423
+          },
+          {
+            "stratum": 2,
+            "n": 1465,
+            "coverage": 0.8409556313993174,
+            "var_z": 0.9048396855176462,
+            "pit_ks": 0.07557709301722448,
+            "crps": 2.3667706046449104,
+            "mean_sigma": 4.464056561798841
+          },
+          {
+            "stratum": 3,
+            "n": 1464,
+            "coverage": 0.8244535519125683,
+            "var_z": 0.9916509166551322,
+            "pit_ks": 0.05552882485475563,
+            "crps": 2.4761398677187088,
+            "mean_sigma": 4.464979989577196
+          },
+          {
+            "stratum": 4,
+            "n": 1465,
+            "coverage": 0.8273037542662116,
+            "var_z": 0.9904126549722095,
+            "pit_ks": 0.04595040642347803,
+            "crps": 2.461533492624648,
+            "mean_sigma": 4.463521866608122
+          },
+          {
+            "stratum": 5,
+            "n": 1465,
+            "coverage": 0.8245733788395905,
+            "var_z": 0.951162422271959,
+            "pit_ks": 0.04355789034135984,
+            "crps": 2.4295931872484564,
+            "mean_sigma": 4.462873845387164
+          },
+          {
+            "stratum": 6,
+            "n": 1464,
+            "coverage": 0.7978142076502732,
+            "var_z": 1.042109672691922,
+            "pit_ks": 0.05720762639378002,
+            "crps": 2.5489192234137894,
+            "mean_sigma": 4.464677318727285
+          },
+          {
+            "stratum": 7,
+            "n": 1465,
+            "coverage": 0.816382252559727,
+            "var_z": 1.010369600570389,
+            "pit_ks": 0.05947155085205491,
+            "crps": 2.522028231851461,
+            "mean_sigma": 4.466844475374944
+          },
+          {
+            "stratum": 8,
+            "n": 1465,
+            "coverage": 0.7952218430034129,
+            "var_z": 1.0078966364316653,
+            "pit_ks": 0.06824589432012107,
+            "crps": 2.5203817321101734,
+            "mean_sigma": 4.468133060599412
+          },
+          {
+            "stratum": 9,
+            "n": 1465,
+            "coverage": 0.7877133105802048,
+            "var_z": 1.1019610677908702,
+            "pit_ks": 0.077078098921956,
+            "crps": 2.627433227118359,
+            "mean_sigma": 4.468959772368248
+          }
+        ],
+        "var_z_slope": 0.011331035100895883,
+        "pooled_var_z": 0.9971936923541184,
+        "pooled_coverage": 0.8165619879847078,
+        "pooled_pit_ks": 0.0520709835615315,
+        "pooled_crps": 2.490804632466091
+      },
+      "plus_eb::ngboost_FLATTENED": {
+        "strata": [
+          {
+            "stratum": 0,
+            "n": 1465,
+            "coverage": 0.7959044368600683,
+            "var_z": 1.0764884727840298,
+            "pit_ks": 0.05266283537761096,
+            "crps": 2.4875472445877143,
+            "mean_sigma": 4.276613274427478
+          },
+          {
+            "stratum": 1,
+            "n": 1465,
+            "coverage": 0.7938566552901024,
+            "var_z": 1.1082028536938076,
+            "pit_ks": 0.06149605414819015,
+            "crps": 2.5097808083064823,
+            "mean_sigma": 4.285304759900249
+          },
+          {
+            "stratum": 2,
+            "n": 1465,
+            "coverage": 0.8170648464163822,
+            "var_z": 0.9841068648268638,
+            "pit_ks": 0.07743380039794578,
+            "crps": 2.369144977411073,
+            "mean_sigma": 4.288970428585613
+          },
+          {
+            "stratum": 3,
+            "n": 1464,
+            "coverage": 0.8039617486338798,
+            "var_z": 1.0790699240356743,
+            "pit_ks": 0.0664401463586754,
+            "crps": 2.4827950805384877,
+            "mean_sigma": 4.290133567521664
+          },
+          {
+            "stratum": 4,
+            "n": 1465,
+            "coverage": 0.8075085324232082,
+            "var_z": 1.0813998776779221,
+            "pit_ks": 0.043198851212359,
+            "crps": 2.4693500670338517,
+            "mean_sigma": 4.293275699922081
+          },
+          {
+            "stratum": 5,
+            "n": 1465,
+            "coverage": 0.8102389078498293,
+            "var_z": 1.027964296885537,
+            "pit_ks": 0.04166101468779382,
+            "crps": 2.430308050231053,
+            "mean_sigma": 4.294849832550175
+          },
+          {
+            "stratum": 6,
+            "n": 1464,
+            "coverage": 0.7773224043715847,
+            "var_z": 1.1364323532015108,
+            "pit_ks": 0.058434228537785904,
+            "crps": 2.5632550754370698,
+            "mean_sigma": 4.299771967394417
+          },
+          {
+            "stratum": 7,
+            "n": 1465,
+            "coverage": 0.7938566552901024,
+            "var_z": 1.0850101144698798,
+            "pit_ks": 0.06114618461591892,
+            "crps": 2.518649546483823,
+            "mean_sigma": 4.3007771944219515
+          },
+          {
+            "stratum": 8,
+            "n": 1465,
+            "coverage": 0.778839590443686,
+            "var_z": 1.091327894362177,
+            "pit_ks": 0.07245722655215364,
+            "crps": 2.528912767888921,
+            "mean_sigma": 4.3050465907043645
+          },
+          {
+            "stratum": 9,
+            "n": 1465,
+            "coverage": 0.752901023890785,
+            "var_z": 1.2207264128743311,
+            "pit_ks": 0.10493745546611644,
+            "crps": 2.6930306180575974,
+            "mean_sigma": 4.308724059492806
+          }
+        ],
+        "var_z_slope": 0.010928392123706039,
+        "pooled_var_z": 1.0899801822820536,
+        "pooled_coverage": 0.7931458219552158,
+        "pooled_pit_ks": 0.05826897678142062,
+        "pooled_crps": 2.505275000378821
+      }
+    },
+    "mean_stratum": {
+      "incumbent::ngboost_normal": {
+        "strata": [
+          {
+            "stratum": 0,
+            "n": 1465,
+            "coverage": 0.7931740614334472,
+            "var_z": 1.114797419188856,
+            "pit_ks": 0.07131684321127302,
+            "crps": 2.4177351499135624,
+            "mean_sigma": 4.118921072554797
+          },
+          {
+            "stratum": 1,
+            "n": 1465,
+            "coverage": 0.7890784982935154,
+            "var_z": 1.0773421219983315,
+            "pit_ks": 0.06035088467094746,
+            "crps": 2.3944425114426267,
+            "mean_sigma": 4.180072168756666
+          },
+          {
+            "stratum": 2,
+            "n": 1465,
+            "coverage": 0.7959044368600683,
+            "var_z": 1.054240395024242,
+            "pit_ks": 0.09270974235253066,
+            "crps": 2.395116761331272,
+            "mean_sigma": 4.20516842768175
+          },
+          {
+            "stratum": 3,
+            "n": 1464,
+            "coverage": 0.7793715846994536,
+            "var_z": 1.1346017024496289,
+            "pit_ks": 0.06027362373539402,
+            "crps": 2.477575532232495,
+            "mean_sigma": 4.232304446300302
+          },
+          {
+            "stratum": 4,
+            "n": 1465,
+            "coverage": 0.8013651877133106,
+            "var_z": 1.11793486740024,
+            "pit_ks": 0.057641221691944855,
+            "crps": 2.501504483010961,
+            "mean_sigma": 4.270519046226247
+          },
+          {
+            "stratum": 5,
+            "n": 1465,
+            "coverage": 0.7754266211604095,
+            "var_z": 1.0851154014502427,
+            "pit_ks": 0.06324131200300609,
+            "crps": 2.5006845788386074,
+            "mean_sigma": 4.306655059233508
+          },
+          {
+            "stratum": 6,
+            "n": 1464,
+            "coverage": 0.799863387978142,
+            "var_z": 1.125882317783057,
+            "pit_ks": 0.05427632283424183,
+            "crps": 2.534909849463127,
+            "mean_sigma": 4.337437924475536
+          },
+          {
+            "stratum": 7,
+            "n": 1465,
+            "coverage": 0.8054607508532423,
+            "var_z": 1.0533065507355805,
+            "pit_ks": 0.05823824088501761,
+            "crps": 2.4692503801599703,
+            "mean_sigma": 4.351636563844074
+          },
+          {
+            "stratum": 8,
+            "n": 1465,
+            "coverage": 0.774061433447099,
+            "var_z": 1.2468115659694414,
+            "pit_ks": 0.05327709268327252,
+            "crps": 2.707672908194518,
+            "mean_sigma": 4.408942194262717
+          },
+          {
+            "stratum": 9,
+            "n": 1465,
+            "coverage": 0.7617747440273037,
+            "var_z": 1.2289875764381746,
+            "pit_ks": 0.0792027143424956,
+            "crps": 2.8041650171011607,
+            "mean_sigma": 4.538600037025593
+          }
+        ],
+        "var_z_slope": 0.013032428373627987,
+        "pooled_var_z": 1.1242358823481455,
+        "pooled_coverage": 0.7875477880939378,
+        "pooled_pit_ks": 0.05618098345381778,
+        "pooled_crps": 2.520307637298038
+      },
+      "plus_eb::ngboost_normal": {
+        "strata": [
+          {
+            "stratum": 0,
+            "n": 1465,
+            "coverage": 0.7931740614334472,
+            "var_z": 1.1096292177914528,
+            "pit_ks": 0.05516335398541711,
+            "crps": 2.3908759079463726,
+            "mean_sigma": 4.0588147456795385
+          },
+          {
+            "stratum": 1,
+            "n": 1465,
+            "coverage": 0.7911262798634813,
+            "var_z": 1.0846426555456237,
+            "pit_ks": 0.07877814214963463,
+            "crps": 2.3737491590530513,
+            "mean_sigma": 4.125508374789184
+          },
+          {
+            "stratum": 2,
+            "n": 1465,
+            "coverage": 0.78839590443686,
+            "var_z": 1.0410001008711591,
+            "pit_ks": 0.1145699512087946,
+            "crps": 2.374513334756496,
+            "mean_sigma": 4.171064223130387
+          },
+          {
+            "stratum": 3,
+            "n": 1464,
+            "coverage": 0.7841530054644809,
+            "var_z": 1.1201573549450239,
+            "pit_ks": 0.08935644250836583,
+            "crps": 2.4637299584187318,
+            "mean_sigma": 4.205334575535875
+          },
+          {
+            "stratum": 4,
+            "n": 1465,
+            "coverage": 0.7972696245733788,
+            "var_z": 1.108952925560025,
+            "pit_ks": 0.08257227237976728,
+            "crps": 2.4833237236135393,
+            "mean_sigma": 4.246759319554601
+          },
+          {
+            "stratum": 5,
+            "n": 1465,
+            "coverage": 0.7747440273037542,
+            "var_z": 1.079856100479998,
+            "pit_ks": 0.09816925267288512,
+            "crps": 2.4863091931745025,
+            "mean_sigma": 4.288628873357683
+          },
+          {
+            "stratum": 6,
+            "n": 1464,
+            "coverage": 0.8025956284153005,
+            "var_z": 1.11008541284548,
+            "pit_ks": 0.09459612084896946,
+            "crps": 2.51888888357269,
+            "mean_sigma": 4.320157738050864
+          },
+          {
+            "stratum": 7,
+            "n": 1465,
+            "coverage": 0.81160409556314,
+            "var_z": 1.0446235509339654,
+            "pit_ks": 0.09653238347799209,
+            "crps": 2.4645784945507425,
+            "mean_sigma": 4.356458292100331
+          },
+          {
+            "stratum": 8,
+            "n": 1465,
+            "coverage": 0.7897610921501707,
+            "var_z": 1.2167471140805475,
+            "pit_ks": 0.07979385892138702,
+            "crps": 2.6916049629252337,
+            "mean_sigma": 4.431803994187322
+          },
+          {
+            "stratum": 9,
+            "n": 1465,
+            "coverage": 0.7651877133105802,
+            "var_z": 1.1767919239535691,
+            "pit_ks": 0.10284675382835251,
+            "crps": 2.820330838935127,
+            "mean_sigma": 4.606312107350718
+          }
+        ],
+        "var_z_slope": 0.009018182812962976,
+        "pooled_var_z": 1.1108594172044546,
+        "pooled_coverage": 0.789800655379574,
+        "pooled_pit_ks": 0.05882380075552335,
+        "pooled_crps": 2.5067925594336846
+      },
+      "plus_eb::glm_elasticnet": {
+        "strata": [
+          {
+            "stratum": 0,
+            "n": 1465,
+            "coverage": 0.8457337883959044,
+            "var_z": 0.8891036258382595,
+            "pit_ks": 0.061060099690040004,
+            "crps": 2.373109484833596,
+            "mean_sigma": 4.4660043232674544
+          },
+          {
+            "stratum": 1,
+            "n": 1465,
+            "coverage": 0.8348122866894198,
+            "var_z": 0.904195312640802,
+            "pit_ks": 0.05450757752905078,
+            "crps": 2.371892025110424,
+            "mean_sigma": 4.463433714602123
+          },
+          {
+            "stratum": 2,
+            "n": 1465,
+            "coverage": 0.8491467576791809,
+            "var_z": 0.8963476046727991,
+            "pit_ks": 0.09099965537294596,
+            "crps": 2.374834361117798,
+            "mean_sigma": 4.4628089151487735
+          },
+          {
+            "stratum": 3,
+            "n": 1464,
+            "coverage": 0.8155737704918032,
+            "var_z": 0.9847340823908978,
+            "pit_ks": 0.07087908666885179,
+            "crps": 2.4610902373665264,
+            "mean_sigma": 4.4630824196051515
+          },
+          {
+            "stratum": 4,
+            "n": 1465,
+            "coverage": 0.8136518771331058,
+            "var_z": 0.9851205403280485,
+            "pit_ks": 0.061694122720708955,
+            "crps": 2.476751111917665,
+            "mean_sigma": 4.463608650638042
+          },
+          {
+            "stratum": 5,
+            "n": 1465,
+            "coverage": 0.7911262798634813,
+            "var_z": 0.9832266870191241,
+            "pit_ks": 0.07226569879808598,
+            "crps": 2.483164654789855,
+            "mean_sigma": 4.46499649189408
+          },
+          {
+            "stratum": 6,
+            "n": 1464,
+            "coverage": 0.8183060109289617,
+            "var_z": 1.0164033593335862,
+            "pit_ks": 0.0679275158197925,
+            "crps": 2.510793156025101,
+            "mean_sigma": 4.466084146224938
+          },
+          {
+            "stratum": 7,
+            "n": 1465,
+            "coverage": 0.8279863481228669,
+            "var_z": 0.967345282367536,
+            "pit_ks": 0.06902284275128501,
+            "crps": 2.455518681387421,
+            "mean_sigma": 4.4683570560967185
+          },
+          {
+            "stratum": 8,
+            "n": 1465,
+            "coverage": 0.7979522184300342,
+            "var_z": 1.154862024865263,
+            "pit_ks": 0.05732000088781802,
+            "crps": 2.666839918855113,
+            "mean_sigma": 4.471084729793724
+          },
+          {
+            "stratum": 9,
+            "n": 1465,
+            "coverage": 0.7713310580204779,
+            "var_z": 1.1881471711315181,
+            "pit_ks": 0.05241950998742306,
+            "crps": 2.7340460544372496,
+            "mean_sigma": 4.472198249446776
+          }
+        ],
+        "var_z_slope": 0.029661583389111387,
+        "pooled_var_z": 0.9971936923541184,
+        "pooled_coverage": 0.8165619879847078,
+        "pooled_pit_ks": 0.0520709835615315,
+        "pooled_crps": 2.490804632466091
+      },
+      "plus_eb::ngboost_FLATTENED": {
+        "strata": [
+          {
+            "stratum": 0,
+            "n": 1465,
+            "coverage": 0.8341296928327645,
+            "var_z": 0.9799887273273644,
+            "pit_ks": 0.05449720175896092,
+            "crps": 2.388171387972593,
+            "mean_sigma": 4.289983422179611
+          },
+          {
+            "stratum": 1,
+            "n": 1465,
+            "coverage": 0.8238907849829351,
+            "var_z": 0.9817040600243555,
+            "pit_ks": 0.08062672252604103,
+            "crps": 2.3695541529062245,
+            "mean_sigma": 4.2870962496342795
+          },
+          {
+            "stratum": 2,
+            "n": 1465,
+            "coverage": 0.8061433447098976,
+            "var_z": 0.9731962724424458,
+            "pit_ks": 0.11701831612882052,
+            "crps": 2.3728675848416536,
+            "mean_sigma": 4.287781311333881
+          },
+          {
+            "stratum": 3,
+            "n": 1464,
+            "coverage": 0.7855191256830601,
+            "var_z": 1.0719719204894926,
+            "pit_ks": 0.09203759606894912,
+            "crps": 2.463480371676112,
+            "mean_sigma": 4.29102201085764
+          },
+          {
+            "stratum": 4,
+            "n": 1465,
+            "coverage": 0.7952218430034129,
+            "var_z": 1.0684994351896038,
+            "pit_ks": 0.0871409715471122,
+            "crps": 2.4800054325429173,
+            "mean_sigma": 4.295026122916701
+          },
+          {
+            "stratum": 5,
+            "n": 1465,
+            "coverage": 0.7767918088737201,
+            "var_z": 1.0628937309308886,
+            "pit_ks": 0.09905680905817404,
+            "crps": 2.482468297672972,
+            "mean_sigma": 4.296917583779431
+          },
+          {
+            "stratum": 6,
+            "n": 1464,
+            "coverage": 0.8019125683060109,
+            "var_z": 1.1094241869096995,
+            "pit_ks": 0.09484458784615718,
+            "crps": 2.516843597815022,
+            "mean_sigma": 4.29306217259722
+          },
+          {
+            "stratum": 7,
+            "n": 1465,
+            "coverage": 0.7993174061433447,
+            "var_z": 1.0502632755026209,
+            "pit_ks": 0.0982401893167168,
+            "crps": 2.4609130029778714,
+            "mean_sigma": 4.294898757777848
+          },
+          {
+            "stratum": 8,
+            "n": 1465,
+            "coverage": 0.7802047781569966,
+            "var_z": 1.262292100825028,
+            "pit_ks": 0.09125294366062436,
+            "crps": 2.6885747482383233,
+            "mean_sigma": 4.297184825089557
+          },
+          {
+            "stratum": 9,
+            "n": 1465,
+            "coverage": 0.7283276450511945,
+            "var_z": 1.322577464261739,
+            "pit_ks": 0.10989758612334244,
+            "crps": 2.8298507950412666,
+            "mean_sigma": 4.310490945135887
+          }
+        ],
+        "var_z_slope": 0.03357273350495071,
+        "pooled_var_z": 1.0899801822820536,
+        "pooled_coverage": 0.7931458219552158,
+        "pooled_pit_ks": 0.05826897678142062,
+        "pooled_crps": 2.505275000378821
+      }
+    },
+    "park_stratum": {
+      "incumbent::ngboost_normal": {
+        "strata": [
+          {
+            "stratum": 0,
+            "n": 4883,
+            "coverage": 0.7892688920745443,
+            "var_z": 1.104930186644826,
+            "pit_ks": 0.05735370805904644,
+            "crps": 2.4452366310339566,
+            "mean_sigma": 4.19746501102186
+          },
+          {
+            "stratum": 1,
+            "n": 4882,
+            "coverage": 0.7892257271609996,
+            "var_z": 1.1068685145506063,
+            "pit_ks": 0.05916922917191392,
+            "crps": 2.4849466560333586,
+            "mean_sigma": 4.262248662184472
+          },
+          {
+            "stratum": 2,
+            "n": 4883,
+            "coverage": 0.7841490886749949,
+            "var_z": 1.1604774532409299,
+            "pit_ks": 0.06192248899753294,
+            "crps": 2.630732383175916,
+            "mean_sigma": 4.425360855550692
+          }
+        ],
+        "var_z_slope": 0.02777363329805199,
+        "pooled_var_z": 1.1242358823481455,
+        "pooled_coverage": 0.7875477880939378,
+        "pooled_pit_ks": 0.05618098345381778,
+        "pooled_crps": 2.520307637298038
+      },
+      "plus_eb::ngboost_normal": {
+        "strata": [
+          {
+            "stratum": 0,
+            "n": 4883,
+            "coverage": 0.79193118984231,
+            "var_z": 1.0890554310973053,
+            "pit_ks": 0.053217947181768366,
+            "crps": 2.4272654948928785,
+            "mean_sigma": 4.180144937871228
+          },
+          {
+            "stratum": 1,
+            "n": 4882,
+            "coverage": 0.7896353953297829,
+            "var_z": 1.0954670475014956,
+            "pit_ks": 0.06104158646914404,
+            "crps": 2.4817705765784464,
+            "mean_sigma": 4.253398556762124
+          },
+          {
+            "stratum": 2,
+            "n": 4883,
+            "coverage": 0.7878353471226704,
+            "var_z": 1.1471905277749608,
+            "pit_ks": 0.06356609598293661,
+            "crps": 2.6113364825244134,
+            "mean_sigma": 4.40971101966465
+          }
+        ],
+        "var_z_slope": 0.029067548338827735,
+        "pooled_var_z": 1.1108594172044546,
+        "pooled_coverage": 0.789800655379574,
+        "pooled_pit_ks": 0.05882380075552335,
+        "pooled_crps": 2.5067925594336846
+      },
+      "plus_eb::glm_elasticnet": {
+        "strata": [
+          {
+            "stratum": 0,
+            "n": 4883,
+            "coverage": 0.8330944091746877,
+            "var_z": 0.9332089457392233,
+            "pit_ks": 0.04527083519960375,
+            "crps": 2.412885975833445,
+            "mean_sigma": 4.464325504376397
+          },
+          {
+            "stratum": 1,
+            "n": 4882,
+            "coverage": 0.8168783285538713,
+            "var_z": 0.9718309020501058,
+            "pit_ks": 0.06083055170332896,
+            "crps": 2.4662406428456443,
+            "mean_sigma": 4.46511197276396
+          },
+          {
+            "stratum": 2,
+            "n": 4883,
+            "coverage": 0.7997132910096252,
+            "var_z": 1.0855102309081193,
+            "pit_ks": 0.060687886901573895,
+            "crps": 2.593282248207282,
+            "mean_sigma": 4.4690605642478225
+          }
+        ],
+        "var_z_slope": 0.07615064258444794,
+        "pooled_var_z": 0.9971936923541184,
+        "pooled_coverage": 0.8165619879847078,
+        "pooled_pit_ks": 0.0520709835615315,
+        "pooled_crps": 2.490804632466091
+      },
+      "plus_eb::ngboost_FLATTENED": {
+        "strata": [
+          {
+            "stratum": 0,
+            "n": 4883,
+            "coverage": 0.810976858488634,
+            "var_z": 1.0186900994858883,
+            "pit_ks": 0.050408639575068026,
+            "crps": 2.424490226567009,
+            "mean_sigma": 4.293484043833089
+          },
+          {
+            "stratum": 1,
+            "n": 4882,
+            "coverage": 0.7935272429332241,
+            "var_z": 1.0625567748980624,
+            "pit_ks": 0.059439075926452756,
+            "crps": 2.479489088289526,
+            "mean_sigma": 4.29385989133971
+          },
+          {
+            "stratum": 2,
+            "n": 4883,
+            "coverage": 0.7749334425558059,
+            "var_z": 1.1877472009737575,
+            "pit_ks": 0.06677056115117003,
+            "crps": 2.611840405527913,
+            "mean_sigma": 4.295695929380836
+          }
+        ],
+        "var_z_slope": 0.08452855074393455,
+        "pooled_var_z": 1.0899801822820536,
+        "pooled_coverage": 0.7931458219552158,
+        "pooled_pit_ks": 0.05826897678142062,
+        "pooled_crps": 2.505275000378821
+      }
+    }
+  },
+  "contract_coverage_by_season": {
+    "2016": {
+      "rows": 2146,
+      "coverage": 0.8338,
+      "structurally_absent": [
+        "away_lineup_bat_speed_vs_starter_velo",
+        "home_starter_proj_fip"
+      ]
+    },
+    "2017": {
+      "rows": 2079,
+      "coverage": 0.8346,
+      "structurally_absent": [
+        "away_lineup_bat_speed_vs_starter_velo",
+        "home_starter_proj_fip"
+      ]
+    },
+    "2018": {
+      "rows": 2133,
+      "coverage": 0.8407,
+      "structurally_absent": [
+        "away_lineup_bat_speed_vs_starter_velo",
+        "home_starter_proj_fip"
+      ]
+    },
+    "2019": {
+      "rows": 2142,
+      "coverage": 0.8349,
+      "structurally_absent": [
+        "away_lineup_bat_speed_vs_starter_velo",
+        "home_starter_proj_fip"
+      ]
+    },
+    "2020": {
+      "rows": 583,
+      "coverage": 0.9082,
+      "structurally_absent": [
+        "away_lineup_bat_speed_vs_starter_velo"
+      ]
+    },
+    "2021": {
+      "rows": 2090,
+      "coverage": 0.9105,
+      "structurally_absent": [
+        "away_lineup_bat_speed_vs_starter_velo"
+      ]
+    },
+    "2022": {
+      "rows": 2149,
+      "coverage": 0.9138,
+      "structurally_absent": [
+        "away_lineup_bat_speed_vs_starter_velo"
+      ]
+    },
+    "2023": {
+      "rows": 2151,
+      "coverage": 0.9497,
+      "structurally_absent": []
+    },
+    "2024": {
+      "rows": 2146,
+      "coverage": 0.9897,
+      "structurally_absent": []
+    },
+    "2025": {
+      "rows": 2025,
+      "coverage": 0.9953,
+      "structurally_absent": []
+    },
+    "2026": {
+      "rows": 1362,
+      "coverage": 0.9901,
+      "structurally_absent": []
+    }
+  }
+}
