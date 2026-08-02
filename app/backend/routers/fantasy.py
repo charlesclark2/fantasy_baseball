@@ -25,7 +25,11 @@ import boto3
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.backend.dependencies import require_fantasy_access, require_fantasy_beta_access
+from app.backend.dependencies import (
+    get_admin_user,
+    require_fantasy_access,
+    require_fantasy_beta_access,
+)
 from app.backend.models.fantasy import League, LeagueSave
 from app.backend.services import dynamo
 
@@ -51,17 +55,23 @@ _CONFIG_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 _s3 = boto3.client("s3", region_name="us-east-1")
 
 
-def _load_json(rel_key: str) -> dict | list | None:
+def _load_json(rel_key: str, sport: str = "nfl") -> dict | list | None:
     """Load a board JSON blob by its relative key ("<season>/manifest.json"), from a
-    local dir when configured, else S3. Returns None on miss."""
-    if _LOCAL_BOARD_DIR:
-        path = Path(_LOCAL_BOARD_DIR) / rel_key
+    local dir when configured, else S3. Returns None on miss.
+
+    `sport` selects the key space (`fantasy/nfl/...` vs E8.1's `fantasy/mlb/...`). It defaults to
+    `"nfl"` so every pre-E8.1 caller — including `fantasy_public.py`, which imports this helper —
+    keeps its exact behaviour: this is an ADDITIVE parameter, not a signature change (NF-C0).
+    """
+    local_dir = _LOCAL_BOARD_DIR if sport == "nfl" else os.getenv("MLB_FANTASY_BOARD_DIR")
+    if local_dir:
+        path = Path(local_dir) / rel_key
         if path.is_file():
             return json.loads(path.read_text())
         return None
     if not _CACHE_BUCKET:
         raise HTTPException(status_code=503, detail="Fantasy data store is not configured")
-    key = f"fantasy/nfl/{rel_key}"
+    key = f"fantasy/{sport}/{rel_key}"
     try:
         resp = _s3.get_object(Bucket=_CACHE_BUCKET, Key=key)
         return json.loads(resp["Body"].read().decode("utf-8"))
@@ -107,6 +117,83 @@ def nfl_board(
     data = _load_json(f"{season}/board_{config}_{size}.json")
     if data is None:
         raise HTTPException(status_code=404, detail="Fantasy board not found")
+    return data
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# E8.1 — MLB DYNASTY PROSPECT BOARD (the baseball analog of the NFL surfaces above)
+# ══════════════════════════════════════════════════════════════════════════════
+# Same serving shape as NFL, deliberately: static JSON written by
+# `quant_sports_intel_models/baseball/fantasy/export_prospect_board_json.py` to
+# s3://$CACHE_BUCKET/fantasy/mlb/<season>/, read here behind the router's
+# `require_fantasy_access`. NF3 rejected a request-time `lakehouse_query` for the NFL
+# boards because a wide lakehouse read fails SILENTLY inside the API Lambda (E9.26b —
+# `lakehouse_query` catches and returns `[]`, so the panel renders empty with no error
+# anywhere); the same reasoning applies verbatim to a ~1,450-row prospect board.
+#
+# 🔒 ADMIN-ONLY WHILE THIS SURFACE IS IN DEVELOPMENT (operator, 2026-08-02).
+#
+# ⚠️ NARROWER THAN THE ROUTER, AND NARROWER THAN NF-C0b's BETA GATE. The router's
+# `require_fantasy_access` grants `subscriber` OR `admin` OR `fantasy_comp` — that is
+# correct for the shipped NFL board endpoints it is shared with, and WRONG here: it
+# would put an in-development surface in front of every paying subscriber.
+# `require_fantasy_beta_access` (`admin` + `fantasy_comp`) is still too wide. So these
+# two routes additionally depend on `get_admin_user` — the only genuinely admin-only
+# gate in the codebase.
+#
+# The extra dependency lives on each ROUTE rather than on the router because the router
+# object is shared with the NFL board endpoints, which must stay open to subscribers.
+# Both dependencies run and the stricter one binds, exactly as NF-C0b's beta gate does.
+#
+# ⏭️ TO OPEN THIS TO SUBSCRIBERS LATER: delete the `_admin` parameter from both routes
+# AND flip `restrict: "admin"` on the two MLB items in `frontend/lib/nav-model.ts`, AND
+# swap `AdminGuard` back to `FantasyGuard` on both pages. All four move together — the
+# server gate is the real one, but leaving a nav item pointing at a route that 403s is
+# its own bug.
+#
+# ⚠️ The API Gateway Cognito authorizer must stay ON for `/fantasy/mlb/*`: an authorizer
+# is per-ROUTE console config, outside this repo's IaC (NF3.2), so these need NO gateway
+# change — they inherit the default. An explicit `--authorization-type NONE` route would
+# silently un-gate the board.
+#
+# ⚠️ BUILD-TIME FRESHNESS. These blobs change only when the exporter re-publishes. A
+# rebuilt board does NOT reach users until then.
+
+_MLB_DEFAULT_SEASON = int(os.getenv("MLB_PROSPECT_BOARD_SEASON", "2026"))
+
+
+@router.get("/mlb/prospects/manifest")
+def mlb_prospect_manifest(
+    season: int = Query(default=_MLB_DEFAULT_SEASON, ge=2000, le=2100),
+    _admin: str = Depends(get_admin_user),
+):
+    """Board meta: counts, the filter vocabularies (orgs / levels / positions / ETAs / AL-NL),
+    and the honest framing strings — which are carried in the PAYLOAD, not written into the
+    frontend, so the wording lives with the model that earned it (E7.8's position asymmetry,
+    E7.3's per-metric confidence, the measured absences).
+
+    ADMIN ONLY while the surface is in development — see the block above."""
+    data = _load_json(f"{season}/manifest.json", sport="mlb")
+    if data is None:
+        raise HTTPException(status_code=404, detail="Prospect board manifest not found")
+    return data
+
+
+@router.get("/mlb/prospects/board")
+def mlb_prospect_board(
+    season: int = Query(default=_MLB_DEFAULT_SEASON, ge=2000, le=2100),
+    _admin: str = Depends(get_admin_user),
+):
+    """The full prospect board — one row per prospect, all three views plus the E7.13 comps.
+
+    Served whole (~2 MB) and filtered/sorted CLIENT-side: the board is a browse surface where
+    every interaction is a re-filter, so per-query round trips would be strictly worse, and the
+    exporter guards the size against Lambda's 6 MB proxy-response cap.
+
+    ADMIN ONLY while the surface is in development — see the block above."""
+    data = _load_json(f"{season}/board.json", sport="mlb")
+    if data is None:
+        raise HTTPException(status_code=404, detail="Prospect board not found")
     return data
 
 

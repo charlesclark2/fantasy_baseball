@@ -16,6 +16,8 @@ version — a rosier median, a tighter band, a closer comp — and would therefo
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -605,3 +607,120 @@ class TestCompRanking:
         """0.30 is the E7.13 ordering study's clean-fold winner on BOTH player types, not a round
         number. A silent drift here changes the board with no measurement behind it."""
         assert COMP_RANK_WEIGHT == 0.30
+
+
+# ── 15. E8.1 — the comp term is part of THE BOARD, not of one script ─────────────────────────
+
+class TestNativeCompWiringMatchesTheAugmenter:
+    """E7.13 shipped the comp-aware order inside `attach_comp_ranking`, called ONLY by the separate
+    `build_prospect_comps.py` re-export. So a plain `build_prospect_board.py` rebuild produced a
+    board that had silently reverted to the PRE-comp ordering — invisible, because a reverted board
+    looks exactly like a correct one. E8.1 wires the term into the build itself.
+
+    ⚠️ The operator drafts off the AUGMENTER's file, so the native path must not be a SECOND
+    ordering. These pin that it is the same one.
+    """
+
+    def _board(self) -> pd.DataFrame:
+        return pd.DataFrame({
+            "board_rank": [1, 2, 3, 4, 5, 6],
+            "player_name": list("ABCDEF"),
+            "player_type": ["batter", "batter", "pitcher", "pitcher", "two_way", "batter"],
+            "fv": [60.0, 50.0, 50.0, 50.0, 50.0, 40.0],
+            "fv_pctile": [95.0, 60.0, 60.0, 60.0, 60.0, 20.0],
+            "model_score": [50.0, 50.0, 50.0, 50.0, 50.0, 50.0],
+            "blend_score": [80.0, 55.0, 55.0, 55.0, 55.0, 32.0],
+            "comp_fp_median": [5.0, 10.0, 400.0, np.nan, 200.0, 90.0],
+        })
+
+    def test_the_two_entry_points_are_the_same_implementation(self):
+        """`prospect_comps.attach_comp_ranking` (E7.13's public name, used by the augmenter) and
+        `board_assembly.apply_comp_term` (where the scoring now lives, used by the native build)
+        must return the IDENTICAL frame. They delegate, so this is structural — the test exists to
+        catch a future edit that re-forks the arithmetic into two copies."""
+        from betting_ml.scripts.prospect_board.board_assembly import apply_comp_term
+
+        b = self._board()
+        pd.testing.assert_frame_equal(attach_comp_ranking(b), apply_comp_term(b))
+
+    def test_a_csv_round_trip_does_not_change_the_order(self):
+        """⭐ THE BYTE-FOR-BYTE CLAIM, made runnable. The augmenter reads an EXPORTED CSV; the native
+        path scores the in-memory frame. If a CSV round-trip could permute the board the two would
+        be different orderings even running identical code — so prove it cannot.
+
+        (The real hazard is tie-breaking: `sort_values` on multiple keys is stable, so rows tied on
+        all three sort keys keep their INCOMING order. Both paths therefore have to hand the sort the
+        same incoming order — which is why the term is applied AFTER the pre-comp rank, not inside
+        `attach_scores`.)"""
+        import io
+
+        b = self._board()
+        native = attach_comp_ranking(b)
+        via_csv = attach_comp_ranking(pd.read_csv(io.StringIO(b.to_csv(index=False))))
+        assert native["player_name"].tolist() == via_csv["player_name"].tolist()
+        assert native["board_rank"].tolist() == via_csv["board_rank"].tolist()
+        pd.testing.assert_series_equal(native["comp_rank_delta"], via_csv["comp_rank_delta"])
+
+    def test_ties_on_every_sort_key_keep_the_pre_comp_order(self):
+        """The tie case the placement decision is about: identical fv / model_score / blend_score and
+        NO comps at all must leave the board exactly as it came in, in `board_rank` order."""
+        b = pd.DataFrame({
+            "board_rank": [1, 2, 3],
+            "player_name": ["X", "Y", "Z"],
+            "player_type": ["batter"] * 3,
+            "fv": [50.0] * 3, "fv_pctile": [60.0] * 3,
+            "model_score": [50.0] * 3, "blend_score": [55.0] * 3,
+            "comp_fp_median": [np.nan] * 3,
+        })
+        out = attach_comp_ranking(b)
+        assert out["player_name"].tolist() == ["X", "Y", "Z"]
+        assert (out["comp_rank_delta"] == 0).all()
+
+    def test_the_board_runner_actually_applies_the_comp_term(self, monkeypatch, tmp_path):
+        """⭐ THE ACTUAL FOOTGUN GUARD — and it exercises the real `main()` wiring rather than
+        grepping the source, because a source-inspection check can be satisfied by a COMMENT that
+        merely mentions the call (the INC-38 lesson).
+
+        Everything that touches S3 is stubbed; the assertion is that a default `main([])` reaches
+        `attach_comps_to_board`. Delete the wiring and this goes red."""
+        import betting_ml.scripts.prospect_board.build_prospect_board as runner
+        import betting_ml.scripts.prospect_board.build_prospect_comps as augmenter
+
+        calls: list[pd.DataFrame] = []
+
+        def _fake_attach(board, **kwargs):
+            calls.append(board)
+            return attach_comp_ranking(board), pd.DataFrame(), {"ranking": {"rows_moved": 0}}
+
+        monkeypatch.setattr(runner, "_connect", lambda: object())
+        monkeypatch.setattr(runner, "load_inputs", lambda conn, **kw: (
+            pd.DataFrame({"season": [2026], "as_of_date": ["2026-07-27"]}),
+            pd.DataFrame(), pd.DataFrame(), pd.DataFrame()))
+        monkeypatch.setattr(runner, "assemble_board",
+                            lambda *a, **kw: (self._board().assign(season=2026), {}))
+        monkeypatch.setattr(runner, "write_exports", lambda *a, **kw: [])
+        monkeypatch.setattr(augmenter, "attach_comps_to_board", _fake_attach)
+        # The comp inputs are gitignored research artifacts. Point the runner's existence check at
+        # real files in tmp_path rather than stubbing `Path.exists` globally — the check itself is a
+        # guard worth keeping live in this test (it is what turns a missing artifact into a HARD
+        # stop instead of a silently pre-comp board).
+        for name in ("DEFAULT_POOL", "DEFAULT_PAIRS_BAT", "DEFAULT_PAIRS_PIT"):
+            stub = tmp_path / f"{name.lower()}.parquet"
+            stub.write_bytes(b"")
+            monkeypatch.setattr(augmenter, name, stub)
+
+        assert runner.main(["--out-dir", str(tmp_path), "--skip-pipeline-consensus"]) == 0
+        assert calls, ("build_prospect_board.main() did not apply the E7.13 comp term — a plain "
+                       "board rebuild has silently reverted to the PRE-comp ordering (E8.1)")
+
+    def test_skipping_comps_is_opt_in_not_the_default(self):
+        """The pre-E8.1 behaviour still has to be REACHABLE (the artifacts are gitignored, so a
+        fresh machine needs an escape hatch) — but it must never be what you get by accident."""
+        import betting_ml.scripts.prospect_board.build_prospect_board as runner
+
+        parser_src = Path(runner.__file__).read_text(encoding="utf-8")
+        assert '"--skip-comps", action="store_true"' in parser_src
+        assert '"--comps"' not in parser_src, (
+            "comps must be ON by default (a --skip-comps opt-OUT), never an opt-IN flag: an "
+            "opt-in restores the exact footgun E8.1 closed."
+        )

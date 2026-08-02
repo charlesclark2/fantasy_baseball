@@ -506,3 +506,103 @@ class TestBackfillSidecarUnwrap:
         src = (PROJECT_ROOT / "betting_ml/scripts/backfill_predictions.py").read_text()
         assert "np.isfinite(X_hw).all()" in src
         assert "naming neither the column nor the target" in src
+
+
+# ── 9. the two follow-up hardenings (silent no-op; apples-to-apples baseline) ──────────────────
+
+class TestBackfillNoOpGuard:
+    """A 100%-skip run used to print 'Nothing to backfill.' and exit 0 — indistinguishable from
+    success. That is the exact shape of this script's most likely failure: reusing a `retrain_tag`
+    after a PER-TARGET promotion, where `model_version` (home_win-derived) does not move either, so
+    both halves of the idempotency key match the previous champion's rows."""
+
+    def test_a_total_noop_raises_instead_of_exiting_zero(self):
+        src = (PROJECT_ROOT / "betting_ml/scripts/backfill_predictions.py").read_text()
+        assert "if df.empty and not args.allow_noop:" in src
+        assert "EVERY game was skipped as already-present" in src
+        assert "raise SystemExit(" in src
+
+    def test_the_error_names_the_LIKELY_CAUSE_not_just_the_symptom(self):
+        """'nothing to write' is the symptom; the actionable content is WHY — the bundle stamp not
+        moving on a per-target promotion — and the fix (a distinct --retrain-tag)."""
+        src = (PROJECT_ROOT / "betting_ml/scripts/backfill_predictions.py").read_text()
+        assert "derived from home_win ALONE" in src
+        assert "DISTINCT --retrain-tag" in src
+
+    def test_a_deliberate_rerun_has_an_escape_hatch(self):
+        """State cannot separate 'deliberate re-run' from 'silent no-op', so the default fails and
+        the operator declares intent. The asymmetry is deliberate: a needless --allow-noop costs one
+        retry; a silent no-op costs a whole believed-complete backfill."""
+        src = (PROJECT_ROOT / "betting_ml/scripts/backfill_predictions.py").read_text()
+        assert '"--allow-noop", action="store_true"' in src
+
+    def test_exiting_nonzero_is_safe_because_nothing_automated_calls_this(self):
+        """A non-zero exit would be a regression if a Dagster op/cron ran this. Verified it does not
+        — this assertion re-checks that premise rather than trusting the original grep."""
+        import subprocess
+
+        hits = subprocess.run(
+            ["grep", "-rIl", "backfill_predictions.py", "pipeline", "services", ".github"],
+            cwd=PROJECT_ROOT, capture_output=True, text=True,
+        ).stdout.split()
+        assert not hits, (
+            f"backfill_predictions.py is now invoked by {hits} — a non-zero exit on no-op may "
+            f"break an automated caller. Re-evaluate the guard's default."
+        )
+
+
+class TestPreviousChampionBaseline:
+    """Every row written before 2026-08-02 carries the dropped-imputer-indicator defect (present
+    since the script's first commit, 2026-05-12). So the pre-existing rows for a previous champion
+    are NOT a valid baseline for a new one — a new-vs-old comparison would confound the champion
+    swap with an input fix. `--totals-artifact prev` re-scores the previous champion on fixed code."""
+
+    def test_prev_scores_the_replaced_artifact_and_contract_together(self):
+        """⚠️ This assertion was VACUOUS in its first form. It matched the bare string
+        `"prev_feature_columns_path"`, which also appears in the `--totals-artifact` help text and
+        in the missing-key check — so it passed with the contract resolution reverted to always use
+        the prod path (verified: the deliberate break stayed GREEN). A source-inspection guard that
+        prose can satisfy is not a guard (the INC-38 lesson). It now matches the RESOLUTION
+        EXPRESSION itself, and was re-verified to go RED on that same break.
+        """
+        src = (PROJECT_ROOT / "betting_ml/scripts/backfill_predictions.py").read_text()
+        assert '"--totals-artifact", choices=["prod", "prev"]' in src
+        assert '"prev_artifact_path" if _tot_is_prev else "prod"' in src
+        # the contract must be selected by the SAME condition as the artifact
+        assert 'if (target == "total_runs" and _tot_is_prev) else "feature_columns_path"' in src, (
+            "the PREV contract must travel with the PREV artifact — a prod contract (25 cols) "
+            "against the prev model (15) either raises or, worse, silently scores misaligned columns"
+        )
+
+    def test_only_total_runs_varies(self):
+        """home_win and run_differential are unchanged by a totals-only promotion. Varying them too
+        would add a second difference and destroy the contrast the flag exists to create."""
+        src = (PROJECT_ROOT / "betting_ml/scripts/backfill_predictions.py").read_text()
+        assert 'load_model("home_win", "prod")' in src
+        assert 'load_model("run_differential", "prod")' in src
+
+    def test_the_row_is_stamped_with_the_model_that_actually_scored_it(self):
+        src = (PROJECT_ROOT / "betting_ml/scripts/backfill_predictions.py").read_text()
+        assert "totals_model_version = str(" in src and "prev_model_version" in src
+
+    def test_an_absent_previous_champion_fails_rather_than_falling_back_to_prod(self):
+        """A silent fallback to the CURRENT champion would produce a 'baseline' identical to the
+        thing being compared — the comparison would read as 'no change' and be entirely fictional."""
+        src = (PROJECT_ROOT / "betting_ml/scripts/backfill_predictions.py").read_text()
+        assert "requires" in src and "There is no recorded previous champion to score." in src
+
+    def test_the_version_label_is_provisional_when_it_cannot_be_known(self):
+        from betting_ml.scripts.backfill_predictions import _infer_prev_version
+
+        assert _infer_prev_version(
+            "s3://b/total_runs/ngboost_normal_deleaked_v6_post_lineup_2026.pkl") == "v6"
+        # no vN token → must be OBVIOUSLY approximate, never a clean guess that could collide
+        # with a real champion label in a group-by
+        odd = _infer_prev_version("s3://b/total_runs/some_legacy_artifact.pkl")
+        assert odd.startswith("prev:")
+
+    def test_the_registry_width_check_is_skipped_for_the_prev_artifact(self):
+        """`features` in the registry names the CURRENT champion (25 for MH2.1). Checking the prev
+        contract (15) against it would false-fail every prev run."""
+        src = (PROJECT_ROOT / "betting_ml/scripts/backfill_predictions.py").read_text()
+        assert '_advertised = (None if (_tgt == "total_runs" and _tot_is_prev)' in src

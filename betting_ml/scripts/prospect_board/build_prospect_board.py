@@ -44,9 +44,17 @@ opt-in on purpose).
     AWS_DEFAULT_REGION=us-east-2 uv run python -m \
         betting_ml.scripts.prospect_board.build_prospect_board
 
+⭐ E8.1 (2026-08-02): E7.13's historical COMPS — the comp columns AND the comp-aware ORDER — are now
+applied HERE, natively, instead of only by the separate `build_prospect_comps.py` re-export. Before
+this, running the command below produced a board that had silently reverted to the PRE-comp ordering:
+the draft order was a property of which script you happened to run last. `--skip-comps` is the escape
+hatch. The shared implementation is `build_prospect_comps.attach_comps_to_board` (one function, both
+callers), so the native order and the augmenter's are identical by construction.
+
 Outputs (default `<out>` = ablation_results/e8_0_artifacts):
   * `<out>/e8_0_prospect_board.csv`            — the full board, FanGraphs ∪ MLB-Pipeline-only,
-                                                 with per-source + consensus columns (the 8/3 minimum)
+                                                 with per-source + consensus + E7.13 comp columns
+  * `<out>/e8_0_comp_detail.csv`               — one row per prospect × comp (unless --skip-comps)
   * `<out>/e8_0_prospect_board_{AL,NL}.csv`    — the single-league splits
   * `<out>/e8_0_prospect_board.xlsx`           — All / AL / NL / Hitters / Pitchers / Minors only /
                                                  By blend / Disagreements / Pipeline-only /
@@ -221,6 +229,34 @@ HOW_TO_READ = [
      "The ~165 players MLB Pipeline ranks that the FanGraphs board omits entirely (E7.11/E8.0b) - "
      "the reason this board no longer has draft-relevant blanks where a Pipeline top-100/org-30 "
      "talent used to be invisible. Sorted by pipeline_overall_rank."),
+    # ── E7.13 comps, applied natively as of E8.1 (2026-08-02) ──────────────────────────────────
+    ("comp_names / comp_names_5",
+     "The most similar HISTORICAL prospects, with the similarity distance in brackets (0 = "
+     "identical profile; lower is closer). Matched on what the comp looked like THEN, never on "
+     "what he became - every comp comes from a board season whose entire 3-season outcome window "
+     "closed before this board's season."),
+    ("comp_note",
+     "The honest one-liner: how many comps never reached MLB, how the rest turned out, and the "
+     "outcome band. The bust share is usually the MAJORITY - that is the point of it."),
+    ("comp_quality",
+     "strong / fair / thin, calibrated against how well players in this feature space typically "
+     "match ('strong' = closer than the median historical prospect's own comp set). THIN = read the "
+     "band, not the median."),
+    ("comp_fp_median / comp_band_lo / comp_band_hi",
+     "Dynasty fantasy points the comps ACTUALLY accumulated in their first 3 seasons after the "
+     "board - median and band. A band starting at 0 means most comparable players produced "
+     "nothing. This is a similarity estimate with real uncertainty, NOT a projection."),
+    ("comp_score / comp_rank_delta / *_no_comps",
+     "comp_score is the comp read's percentile WITHIN player type; it enters model_score at 30% "
+     "(E7.13's measured weight - positive in 10 of 10 fold x type combinations, including the "
+     "strictly-matured zero-overlap fold), which is the key that actually sorts this board. "
+     "comp_rank_delta is how far the comps moved him (positive = UP) against board_rank_no_comps, "
+     "so every movement is attributable to a number you can read."),
+    ("⚠️ comps are ORDERING, not a projection",
+     "The comp distribution is displayed and it feeds the ORDER. It is not added to any point "
+     "projection: E7.13's absolute comp CRPS is honest about DELTAS but optimistic about LEVELS, so "
+     "no comp number is quoted as an accuracy claim. E8.1 wired the term into the board build "
+     "itself - before that a plain rebuild silently reverted to the pre-comp order."),
 ]
 
 
@@ -372,6 +408,14 @@ def main(argv=None) -> int:
                    help="ship the plain FanGraphs-only E8.0 board (no MLB Pipeline union, no "
                         "consensus columns) — an emergency escape hatch only; E8.0b's whole point "
                         "is that this stays OFF for the 8/3 board")
+    p.add_argument("--skip-comps", action="store_true",
+                   help="ship the board WITHOUT E7.13's comp columns and comp-aware order. ⚠️ This "
+                        "reverts the board to the PRE-comp ordering — the exact silent regression "
+                        "E8.1 wired the comp term in to prevent. Escape hatch only (e.g. the E7.8 "
+                        "cohort / E7.3 pairs artifacts are not on this machine).")
+    p.add_argument("--comp-pool", default=None,
+                   help="E7.8 FV-translation cohort parquet = the COMP POOL (default: the "
+                        "e7_8_artifacts path build_prospect_comps.py uses)")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
@@ -434,7 +478,47 @@ def main(argv=None) -> int:
                                          if "as_of_date" in pipeline.columns else None)
     report["pipeline_consensus_included"] = not args.skip_pipeline_consensus
 
+    # ── E7.13 comps, applied NATIVELY (E8.1, 2026-08-02) ─────────────────────────────────────────
+    # ⭐ THE FOOTGUN THIS CLOSES: E7.13's comp columns AND its comp-aware ORDER used to be reachable
+    # only by running `build_prospect_comps.py` as a second, separate re-export. So a plain rebuild
+    # of THIS script — the one the board's own docstring tells the operator to run — produced a board
+    # that had silently reverted to the pre-comp ordering, with no warning and no visible difference
+    # except the draft order itself. Comps are now part of what "the board" means.
+    #
+    # Runs AFTER the E8.0b pipeline fold, matching the augmenter (which reads the fully-folded
+    # exported CSV) — the comp term percentiles `comp_fp_median` within player type, so the row set
+    # it sees has to be the final one, Pipeline-only players included.
+    comp_detail = None
+    if not args.skip_comps:
+        from betting_ml.scripts.prospect_board.build_prospect_comps import (
+            DEFAULT_PAIRS_BAT, DEFAULT_PAIRS_PIT, DEFAULT_POOL, attach_comps_to_board,
+        )
+
+        pool = Path(args.comp_pool) if args.comp_pool else DEFAULT_POOL
+        missing = [str(p) for p in (pool, DEFAULT_PAIRS_BAT, DEFAULT_PAIRS_PIT) if not p.exists()]
+        if missing:
+            # HARD stop, not a warn-and-ship. A board that quietly loses its comp ordering looks
+            # exactly like a board that has it — which is how the pre-E8.1 footgun stayed invisible.
+            raise ProspectBoardError(
+                "E7.13 comp inputs are missing: " + ", ".join(missing) + ". The comp-aware order is "
+                "part of the board (E7.13 §10); refusing to silently ship the PRE-comp ordering. "
+                "Re-run the E7.8 / E7.3 / E7.3p artifact builds, or pass --skip-comps to "
+                "deliberately ship the pre-comp board."
+            )
+        final, comp_detail, comp_report = attach_comps_to_board(
+            final, pool_path=pool, pairs_bat=DEFAULT_PAIRS_BAT, pairs_pit=DEFAULT_PAIRS_PIT,
+            as_of_season=report["board_season"])
+        report["comps"] = comp_report
+        log.info("E7.13 comps attached natively: %d rows moved (median |move| %.1f)",
+                 comp_report.get("ranking", {}).get("rows_moved", 0),
+                 comp_report.get("ranking", {}).get("median_abs_move", 0.0))
+    report["comps_included"] = not args.skip_comps
+
     written = write_exports(final, out_dir, report)
+    if comp_detail is not None and not comp_detail.empty:
+        detail_path = out_dir / "e8_0_comp_detail.csv"
+        comp_detail.to_csv(detail_path, index=False)
+        written.append(detail_path)
     print(format_report(report, extra=[
         "", f"  board snapshot as-of : {report['board_as_of_date']} "
             f"(season {report['board_season']})",

@@ -60,11 +60,23 @@ def _xlsx_engine() -> str | None:
     return None
 
 
-def run(board_path: Path, pool_path: Path, pairs_bat: Path, pairs_pit: Path,
-        out_dir: Path, *, k: int = pc.DEFAULT_K, metric: str = "gower",
-        as_of_season: int | None = None, write: bool = True,
-        rank_with_comps: bool = True) -> dict:
-    board = pd.read_csv(board_path)
+def attach_comps_to_board(board: pd.DataFrame, *, pool_path: Path, pairs_bat: Path,
+                          pairs_pit: Path, k: int = pc.DEFAULT_K, metric: str = "gower",
+                          as_of_season: int | None = None,
+                          rank_with_comps: bool = True) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    """Attach E7.13's comp columns (and, by default, the comp-aware ORDER) to an assembled board.
+
+    ⭐ THE SHARED ENTRY POINT (E8.1, 2026-08-02). Two callers, one implementation:
+
+      * `run()` below — the standalone re-export that reads an already-exported board CSV. This is
+        how E7.13 shipped, and it is what produced the operator's 8/3 draft file.
+      * `build_prospect_board.py --comps` — the NATIVE path, so a plain board rebuild no longer
+        silently reverts to the pre-comp order (the E8.1 footgun).
+
+    Both call THIS function on the same assembled frame, so the two orders are identical by
+    construction rather than by assertion. Returns `(board_with_comps, comp_detail, report)`;
+    writing is the caller's business.
+    """
     board = board.loc[board["player_name"].notna()].reset_index(drop=True)
     cohort = pd.read_parquet(pool_path)
 
@@ -131,6 +143,17 @@ def run(board_path: Path, pool_path: Path, pairs_bat: Path, pairs_pit: Path,
     report["detail_rows"] = int(len(detail_all))
     report["comp_quality_overall"] = full["comp_quality"].value_counts().to_dict() \
         if "comp_quality" in full else {}
+    return full, detail_all, report
+
+
+def run(board_path: Path, pool_path: Path, pairs_bat: Path, pairs_pit: Path,
+        out_dir: Path, *, k: int = pc.DEFAULT_K, metric: str = "gower",
+        as_of_season: int | None = None, write: bool = True,
+        rank_with_comps: bool = True) -> dict:
+    """Read an already-exported E8.0 board CSV, attach comps, and write the augmented export."""
+    full, detail_all, report = attach_comps_to_board(
+        pd.read_csv(board_path), pool_path=pool_path, pairs_bat=pairs_bat, pairs_pit=pairs_pit,
+        k=k, metric=metric, as_of_season=as_of_season, rank_with_comps=rank_with_comps)
 
     if write:
         out_dir.mkdir(parents=True, exist_ok=True)

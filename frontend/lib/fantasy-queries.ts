@@ -26,6 +26,12 @@ import type { LeagueConfig } from "@/lib/league-config"
 import { buildBoard } from "@/lib/league-scoring"
 import type { BuiltBoard } from "@/lib/league-scoring"
 import type { Manifest, Player } from "@/lib/draft-optimizer"
+import {
+  PROSPECT_SEASON,
+  getProspectBoard,
+  getProspectManifest,
+} from "@/lib/mlb-prospects"
+import type { ProspectBoardPayload, ProspectManifest } from "@/lib/mlb-prospects"
 
 /** The NFL fantasy season every surface reads. */
 export const FANTASY_SEASON = 2026
@@ -262,4 +268,66 @@ export function useFormatSelection(
     setConfigName: (c: string) => persist({ configName: c }),
     setSize: (n: number) => persist({ size: n }),
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// E8.1 — MLB dynasty PROSPECT BOARD
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// Same policy as the NFL hooks above and for the same reasons: the hook refuses to ISSUE the gated
+// request for a caller who cannot have it (not merely hide its result), and `staleTime: Infinity`
+// because the board is a build-time artifact — it changes when an operator re-publishes it, never
+// within a session.
+//
+// 🔒 The `enabled` predicate here is `isAdmin`, NOT `canAccess("fantasy", …)`: this surface is
+// ADMIN ONLY while it is in development (operator, 2026-08-02), matching `get_admin_user` on the
+// routes. Using the fantasy predicate would have every subscriber firing a request that 403s.
+
+/** The AL/NL scope a user drafts in. Persisted because a single-league dynasty owner picks it ONCE
+ *  and every subsequent visit should already be scoped — re-choosing it every page load is the
+ *  single most annoying thing this surface could do. */
+const PROSPECT_LEAGUE_STORAGE_KEY = "mlb-prospect-league"
+
+export function useProspectManifest(season: number = PROSPECT_SEASON) {
+  const { accessToken, isAdmin } = useAuth()
+  return useQuery<ProspectManifest>({
+    queryKey: ["mlb-prospect-manifest", season],
+    queryFn: () => getProspectManifest(accessToken, season),
+    enabled: isAdmin,
+    staleTime: Infinity,
+  })
+}
+
+export function useProspectBoard(season: number = PROSPECT_SEASON) {
+  const { accessToken, isAdmin } = useAuth()
+  return useQuery<ProspectBoardPayload>({
+    queryKey: ["mlb-prospect-board", season],
+    queryFn: () => getProspectBoard(accessToken, season),
+    enabled: isAdmin,
+    staleTime: Infinity,
+  })
+}
+
+/** The persisted AL/NL/both scope. Returns "ALL" until the stored value is read, so the first
+ *  render is never a flash of the WRONG league (which would read as data changing under you). */
+export function useProspectLeague(): [string, (v: string) => void] {
+  const [league, setLeague] = useState<string>("ALL")
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(PROSPECT_LEAGUE_STORAGE_KEY)
+      if (stored === "AL" || stored === "NL" || stored === "ALL") setLeague(stored)
+    } catch {
+      /* storage unavailable (private mode) — the session default is fine */
+    }
+  }, [])
+  return [
+    league,
+    (v: string) => {
+      setLeague(v)
+      try {
+        localStorage.setItem(PROSPECT_LEAGUE_STORAGE_KEY, v)
+      } catch {
+        /* storage unavailable — selection still works for this session */
+      }
+    },
+  ]
 }
