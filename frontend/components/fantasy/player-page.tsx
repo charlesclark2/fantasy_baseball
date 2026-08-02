@@ -639,7 +639,9 @@ function PublicPlayerView({ playerId }: { playerId: string }) {
                     <th className="px-3 py-2 text-right">ADP rank</th>
                     <th className="px-3 py-2 text-right">Actual rank</th>
                     <th className="px-3 py-2 text-right">Actual pts</th>
-                    <th className="px-3 py-2">Fade</th>
+                    <th className="px-3 py-2">
+                      <InfoTip label="Fade">{GLOSSARY.fade}</InfoTip>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>

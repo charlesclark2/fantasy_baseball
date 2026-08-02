@@ -34,6 +34,8 @@ import { useTrackRecordManifest, useTrackRecordSeason } from "@/lib/fantasy-trac
 import type { TrackRecordRow } from "@/lib/fantasy-track-record"
 import {
   EmptyBlock,
+  GLOSSARY,
+  InfoTip,
   LoadingBlock,
   Pagination,
   PosBadge,
@@ -92,13 +94,21 @@ function LockedCurrentSeasonCard({ lockedSeason }: { lockedSeason: number }) {
 function FadeDot({ cx, cy, payload }: any) {
   const row = payload as TrackRecordRow
   return (
-    <circle
-      cx={cx}
-      cy={cy}
-      r={row.isFade ? 4 : 2.5}
-      fill={row.isFade ? "#10b981" : "#4b5563"}
-      fillOpacity={row.isFade ? 0.85 : 0.4}
-    />
+    <g>
+      {/* Invisible larger hit-area — a real finger touch point is ~40-48px, and the visible dot
+          below (r=2.5-4) is far smaller than that, so a tap on a real phone was landing between
+          dots more often than on one. This circle is unstyled/transparent but still receives
+          pointer events by default in SVG (no `pointer-events: none` here), so it enlarges the
+          effective tap target without changing what's drawn. */}
+      <circle cx={cx} cy={cy} r={14} fill="transparent" />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={row.isFade ? 4 : 2.5}
+        fill={row.isFade ? "#10b981" : "#4b5563"}
+        fillOpacity={row.isFade ? 0.85 : 0.4}
+      />
+    </g>
   )
 }
 
@@ -197,7 +207,10 @@ function TrackRecordTable({ rows }: { rows: TrackRecordRow[] }) {
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="border-b border-[#262626] text-[10px] uppercase tracking-wider text-gray-500">
-              <th className="px-3 py-2">Player</th>
+              {/* Sticky so a player's identity stays visible while scrolling right on mobile, where
+                  this table is wider than the screen — otherwise a scrolled-right row is anonymous
+                  numbers with no name attached. */}
+              <th className="sticky left-0 z-10 bg-[#0f0f0f] px-3 py-2">Player</th>
               <th className="px-3 py-2">Pos</th>
               <th className="px-3 py-2 text-right">Our rank (pos)</th>
               <th className="px-3 py-2 text-right">Our pts</th>
@@ -205,13 +218,15 @@ function TrackRecordTable({ rows }: { rows: TrackRecordRow[] }) {
               <th className="px-3 py-2 text-right">ADP</th>
               <th className="px-3 py-2 text-right">Actual rank (pos)</th>
               <th className="px-3 py-2 text-right">Actual pts</th>
-              <th className="px-3 py-2">Fade</th>
+              <th className="px-3 py-2">
+                <InfoTip label="Fade">{GLOSSARY.fade}</InfoTip>
+              </th>
             </tr>
           </thead>
           <tbody>
             {paged.map((r) => (
               <tr key={r.playerId} className="border-b border-[#1a1a1a] last:border-0">
-                <td className="px-3 py-2">
+                <td className="sticky left-0 bg-[#0f0f0f] px-3 py-2">
                   <Link
                     href={`/fantasy/player/${r.playerId}`}
                     className="text-gray-200 hover:text-[#10b981] transition-colors"

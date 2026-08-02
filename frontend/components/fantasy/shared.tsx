@@ -250,6 +250,7 @@ export const GLOSSARY = {
     "The specific player sitting at this position's replacement level — roughly the calibre you should still be able to get for free, or very late. He is the yardstick every player at the position is measured against.",
   overallRank:
     "Our model's own rank across every position, for your league's format and roster shape — where WE would take this player if the draft started right now. It is not the market's rank (that's ADP, shown separately) and not a promise of where he'll actually be drafted.",
+  fade: "A player where our rank and that season's ADP genuinely disagreed — his gap between the two, within his position, was in the top quarter of gaps that season. This runs BOTH ways: it flags a player we had much higher on our board than the room did, or much lower — not just one direction. These are our highest-conviction calls against the market, which is where an honest track record is most informative: anyone can look good agreeing with consensus.",
 } as const
 
 /** The ADP-delta column header. Plain English on purpose — "Δ" reads as statistical notation and
