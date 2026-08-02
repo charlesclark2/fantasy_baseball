@@ -1,5 +1,68 @@
 # E7.15 H1 — the within-player level-translation ladder (pitcher side)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": "leave-one-MLB-debut-cohort-out (n_cohorts)",
+ "gates": null,
+ "n_arms": 5,
+ "n_folds": null,
+ "per_metric": [
+  {
+   "dsr": 0.8569800343170187,
+   "fold_win_rate": 0.6363636363636364,
+   "metric": "k_pct",
+   "n_arms": 5,
+   "n_folds": 11,
+   "pbo": 0.6714285714285714,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": 0.489409680498217,
+   "fold_win_rate": 0.5454545454545454,
+   "metric": "bb_pct",
+   "n_arms": 5,
+   "n_folds": 11,
+   "pbo": 0.8142857142857143,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": 0.6021126972644208,
+   "fold_win_rate": 0.7272727272727273,
+   "metric": "hr_rate",
+   "n_arms": 5,
+   "n_folds": 11,
+   "pbo": 0.14285714285714285,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": 0.37165402019110017,
+   "fold_win_rate": 0.5454545454545454,
+   "metric": "gb_pct",
+   "n_arms": 5,
+   "n_folds": 11,
+   "pbo": 0.6428571428571429,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": null,
+   "fold_win_rate": null,
+   "metric": "xwoba_against",
+   "n_arms": 5,
+   "n_folds": 4,
+   "pbo": 0.16666666666666666,
+   "verdict": "DROP"
+  }
+ ],
+ "primary_contrast": "paired-t",
+ "reason": null,
+ "schema": 1,
+ "source_artifact": "quant_sports_intel_models/baseball/edge_program/ablation_results/e7_15_artifacts/e7_15_h1_pitchers_summary.json",
+ "status": "recovered",
+ "verdict": "k_pct=DROP, bb_pct=DROP, hr_rate=DROP, gb_pct=DROP, xwoba_against=DROP"
+}
+-->
+
+
 _generated 2026-08-02T03:34:21.592229+00:00 · foil = the SHIPPED E7.12-slice-1 configuration · `best_alpha = 0`_
 
 > ⚠️ **A projection, not an edge claim.** H1 asks one question: does learning the LEVEL part of the MiLB→MLB translation from within-player minor→minor transitions — a substrate with no MLB label, no promotion selection, and 4–7× the rows of the labelled per-level cohort — translate better than learning it from graduates alone? An arm that does not clear its deflated gate is **DROPPED, not shipped**.

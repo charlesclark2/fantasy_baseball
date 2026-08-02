@@ -1,5 +1,22 @@
 # E7.12 slice 6 — AAA-Statcast FEASIBILITY MEMO (batters)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "no `*_summary.json` (or any other JSON) exists for slice6 (a feasibility ceiling-probe, not a leaderboard bake-off \u2014 s6_feasibility.py still exists).",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "unrecoverable",
+ "verdict": null
+}
+-->
+
+
 > ⚠️ **This is a feasibility memo, not a bake-off.** `best_alpha = 0`.
 
 ## Verdict: **STOP — RECORD THE CEILING**

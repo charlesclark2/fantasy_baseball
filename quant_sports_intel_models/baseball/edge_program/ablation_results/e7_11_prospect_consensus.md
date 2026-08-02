@@ -1,5 +1,22 @@
 # MLB Edge-E7.11 — multi-source prospect-ranking CONSENSUS (beyond FanGraphs)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "states its own standing explicitly: 'A consensus is a DESCRIPTION, not a claim ... no accuracy test against realized outcomes was run and none is implied.'",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "exempt",
+ "verdict": null
+}
+-->
+
+
 **Built:** 2026-07-29 · **board:** FanGraphs THE BOARD season 2026 as-of **2026-07-27** ·
 **new source:** MLB Pipeline season 2026, fetched **2026-07-29** ·
 **code:** `betting_ml/scripts/prospect_board/{mlb_pipeline,consensus,build_consensus,build_consensus_assembly}.py`

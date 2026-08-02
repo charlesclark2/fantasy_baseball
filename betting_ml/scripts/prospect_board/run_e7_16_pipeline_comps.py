@@ -50,6 +50,10 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from betting_ml.scripts.prospect_board import comp_validation as cv  # noqa: E402
 from betting_ml.scripts.prospect_board.prospect_comps import build_pool, validate_pool  # noqa: E402
+from betting_ml.utils.design_block import (  # noqa: E402
+    design_block_from_comp_validation_report,
+    insert_design_block,
+)
 from betting_ml.scripts.prospect_board.run_e7_13_comp_validation import (  # noqa: E402
     _ordering_study,
     _score_type,
@@ -287,7 +291,12 @@ def run(cohort_path: Path, out_dir: Path, *, seed: int = 0, write: bool = True,
     if write:
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "e7_16_comp_validation.json").write_text(json.dumps(report, indent=2, default=str))
-        (out_dir / "e7_16_comp_validation.md").write_text(_markdown(report))
+        db = design_block_from_comp_validation_report(
+            report, fold_rule="forward, 3-season outcome horizon matured "
+            f"(primary_fold_rule={report.get('primary_fold_rule')!r})",
+            primary_contrast="forward-outcome comparison", use_fold_census=True)
+        (out_dir / "e7_16_comp_validation.md").write_text(
+            insert_design_block(_markdown(report), db))
     return report
 
 

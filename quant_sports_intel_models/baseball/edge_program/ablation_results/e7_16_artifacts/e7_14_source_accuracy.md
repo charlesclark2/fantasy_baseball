@@ -1,5 +1,24 @@
 # E7.14 — source accuracy: NULL — no source robustly out-orders the other. The measured gap is 0.0040 against a minimum detectable 0.0245, and it does not hold its sign across folds. E7.11's EQUAL WEIGHT is the honest default; the shipped 8/3 board is CONFIRMED, not corrected.
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": "per board season on matched support",
+ "gates": {
+  "min_detectable_gap_95": 0.0245
+ },
+ "n_arms": 9,
+ "n_folds": 5,
+ "per_metric": null,
+ "primary_contrast": "fold-SIGN test (two-sided)",
+ "reason": null,
+ "schema": 1,
+ "source_artifact": "e7_16_artifacts/e7_14_source_accuracy.json",
+ "status": "recovered",
+ "verdict": "NULL"
+}
+-->
+
+
 🔒 `best_alpha = 0` — this is ORDERING ACCURACY, not edge.
 
 ## ⚠️ The asymmetry, before any number

@@ -1,5 +1,22 @@
 # MLB Edge-E8.0(+E8.0b) — the LEAN prospect draft board (8/3 dynasty draft)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "states its own standing explicitly: 'best_alpha = 0 ... not a ranking that claims to beat FanGraphs ... nothing here has been validated as a ranking.'",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "exempt",
+ "verdict": null
+}
+-->
+
+
 **Built:** 2026-07-29 · **E8.0b consensus fold:** 2026-07-31 · **board snapshot:** FanGraphs THE
 BOARD season 2026 as-of **2026-07-27**, MLB Pipeline as-of **2026-07-29** · **code:**
 `betting_ml/scripts/prospect_board/` · **exports:** `ablation_results/e8_0_artifacts/`

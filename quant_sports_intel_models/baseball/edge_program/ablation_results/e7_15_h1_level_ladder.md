@@ -1,5 +1,59 @@
 # E7.15 H1 — the within-player level-translation ladder (batter side)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": "leave-one-MLB-debut-cohort-out (n_cohorts)",
+ "gates": null,
+ "n_arms": 5,
+ "n_folds": 11,
+ "per_metric": [
+  {
+   "dsr": 0.024282308667881346,
+   "fold_win_rate": 0.45454545454545453,
+   "metric": "woba",
+   "n_arms": 5,
+   "n_folds": 11,
+   "pbo": 0.44285714285714284,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": 0.16094185910429348,
+   "fold_win_rate": 0.36363636363636365,
+   "metric": "k_pct",
+   "n_arms": 5,
+   "n_folds": 11,
+   "pbo": 0.6285714285714286,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": 0.8439847627571027,
+   "fold_win_rate": 0.7272727272727273,
+   "metric": "bb_pct",
+   "n_arms": 5,
+   "n_folds": 11,
+   "pbo": 0.5142857142857142,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": 0.7044825433259194,
+   "fold_win_rate": 0.7272727272727273,
+   "metric": "iso",
+   "n_arms": 5,
+   "n_folds": 11,
+   "pbo": 0.7,
+   "verdict": "DROP"
+  }
+ ],
+ "primary_contrast": "paired-t",
+ "reason": null,
+ "schema": 1,
+ "source_artifact": "quant_sports_intel_models/baseball/edge_program/ablation_results/e7_15_artifacts/e7_15_h1_summary.json",
+ "status": "recovered",
+ "verdict": "woba=DROP, k_pct=DROP, bb_pct=DROP, iso=DROP"
+}
+-->
+
+
 _generated 2026-08-02T03:33:57.869347+00:00 · foil = the SHIPPED E7.12-slice-1 configuration · `best_alpha = 0`_
 
 > ⚠️ **A projection, not an edge claim.** H1 asks one question: does learning the LEVEL part of the MiLB→MLB translation from within-player minor→minor transitions — a substrate with no MLB label, no promotion selection, and 4–7× the rows of the labelled per-level cohort — translate better than learning it from graduates alone? An arm that does not clear its deflated gate is **DROPPED, not shipped**.
