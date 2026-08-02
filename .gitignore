@@ -125,3 +125,7 @@ ablation_results/**/*.parquet
 
 # E7.x ablation artifacts live in *_artifacts/ SUBDIRS; line 66 only globs one level.
 quant_sports_intel_models/baseball/edge_program/ablation_results/**/*.parquet
+
+# Scratch dir — never commit (NF-C0 2026-08-01: raw platform payloads land here with
+# leaguemates' real names + account GUIDs; the anonymised fixture is committed separately).
+tmp/
