@@ -11,17 +11,23 @@
 import { useQueries, useQuery } from "@tanstack/react-query"
 import { apiFetch } from "@/lib/api"
 
+export type AdpSource = "ffc" | "mfl"
+
 export interface TrackRecordManifest {
   seasons: number[]
-  /** Seasons whose rows carry a real `adp`/`adpRank` — Fantasy Football Calculator has no archive
-   *  for some seasons (2025 confirmed: their live API returns `{"status":"Error"}`), so this can be
-   *  a strict subset of `seasons`. A season NOT in this list still has real our/actual rows — only
-   *  its ADP columns are null. Use this to render an honest "ADP unavailable" note instead of
-   *  guessing from a blank column. */
-  seasonsWithAdp: number[]
+  /** Which ADP source backs each season, keyed by season as a STRING (JSON object keys) — "ffc"
+   *  (the primary/established source, Fantasy Football Calculator) or "mfl" (MyFantasyLeague, used
+   *  ONLY as a fallback when FFC has no archive for that season at all — 2025 confirmed: FFC's live
+   *  API returns `{"status":"Error"}` across every teams/format combination). A season absent from
+   *  this map has no ADP from either source (still has real our/actual rows — only its ADP columns
+   *  are null). Use this to render an honest per-season source note instead of guessing from a
+   *  blank column or presenting a fallback season as identical to a primary-source one. */
+  adpSourceBySeason: Record<string, AdpSource>
   generated_at: string
   /** The honest headline, built ENTIRELY from the NF-D3 scorecard's own numbers at export time —
-   *  render this verbatim rather than writing new claim copy in a component. */
+   *  render this verbatim rather than writing new claim copy in a component. Scoped to FFC's own
+   *  archive span (the scorecard's "adp" aggregate) even in a season where the per-player rows below
+   *  fall back to MFL — the headline's claim and the fallback are deliberately independent. */
   headline: string
   lockedSeason: number
   scorecardGeneratedAt: string
@@ -34,7 +40,7 @@ export interface TrackRecordRow {
   position: string
   ourPoints: number | null
   ourRank: number
-  /** Null when this season has no ADP benchmark at all — see `TrackRecordManifest.seasonsWithAdp`. */
+  /** Null when NEITHER ADP source has this season at all — see `TrackRecordManifest.adpSourceBySeason`. */
   adp: number | null
   adpRank: number | null
   actualPoints: number | null
@@ -43,6 +49,9 @@ export interface TrackRecordRow {
    *  airtight independent claim is about. Always `false` for a season with no ADP benchmark (fade
    *  is an ADP-disagreement signal and cannot be computed without it — never a claim of "no fade"). */
   isFade: boolean
+  /** "ffc" | "mfl" | null — same meaning as `TrackRecordManifest.adpSourceBySeason`, carried on the
+   *  row itself so a consumer never needs the manifest just to label one row. */
+  adpSource: AdpSource | null
 }
 
 export function getTrackRecordManifest(): Promise<TrackRecordManifest> {

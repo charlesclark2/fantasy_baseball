@@ -129,3 +129,13 @@ export const SPORTS: SportNav[] = [
 export function surfaceItems(g: SurfaceGroup): NavItem[] {
   return g.sections.flatMap((s) => s.items)
 }
+
+// NF3.2 fix: `item.public` only matters once a visitor is INSIDE a surface's dropdown, but the
+// whole sub-nav (every sport/surface dropdown) is itself hidden for a fully signed-out visitor
+// (`showSubNav` in nav.tsx) — so a `public` item was structurally unreachable pre-login, the exact
+// opposite of the point of marking it public. This flattens every `public` item across every
+// sport/surface so nav.tsx can render them as a small always-visible link set regardless of auth
+// state, independent of whether the full sub-nav is showing.
+export function publicNavItems(): NavItem[] {
+  return SPORTS.flatMap((sport) => sport.surfaces.flatMap((g) => surfaceItems(g).filter((i) => i.public)))
+}

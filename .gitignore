@@ -121,6 +121,11 @@ quant_sports_intel_models/football/nfl/fantasy/artifacts/*_projection_summary_*.
 # tracked copies were ~3 MB of churn (16 files rewritten per run) with no reviewable diff.
 # ⚠️ If a board is ever needed for review, publish it or diff the S3 object — do NOT re-track these.
 quant_sports_intel_models/football/nfl/fantasy/artifacts/draft_board_json/
+# NF3.2 track-record STAGING output — same reasoning as draft_board_json/ above:
+# `export_track_record_json.py`'s local staging dir before `--publish` uploads to S3; the served copy
+# is the S3 object `app/backend/routers/fantasy_public.py` reads, nothing reads these locally at
+# runtime or in tests, and every season is re-emitted wholesale on each export.
+quant_sports_intel_models/football/nfl/fantasy/artifacts/track_record_json/
 ablation_results/**/*.parquet
 
 # E7.x ablation artifacts live in *_artifacts/ SUBDIRS; line 66 only globs one level.

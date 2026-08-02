@@ -40,6 +40,7 @@ import pandas as pd
 from quant_sports_intel_models.football.nfl.fantasy import adp_source as A
 from quant_sports_intel_models.football.nfl.fantasy import espn_source as E
 from quant_sports_intel_models.football.nfl.fantasy import fantasypros_source as F
+from quant_sports_intel_models.football.nfl.fantasy import mfl_adp_source as MFL
 from quant_sports_intel_models.football.nfl.fantasy import sleeper_source as S
 
 log = logging.getLogger("nfl.fantasy.scorecard")
@@ -222,12 +223,29 @@ def _espn_system(con, season, schema):
     return df[["player_id", "position", "score"]].dropna(subset=["score"])
 
 
+def _mfl_adp_system(con, season, schema):
+    """NF3.2: MyFantasyLeague as a SECOND, INDEPENDENT real-draft ADP source — registered so the
+    scorecard's "we beat ADP" claim is cross-validated against a crowd separate from FFC's, not just
+    reproduced on the same one. Confirmed genuinely year-scoped (unlike FantasyPros' live-only ADP
+    page) and covers all 7 backtest seasons, incl. 2025 where FFC itself has no archive at all."""
+    mfl = MFL.load_adp_for_season(con, season, schema=schema)
+    mfl = mfl[mfl["player_id"].notna()].copy()
+    if mfl.empty:
+        return mfl.reindex(columns=["player_id", "position", "score"])
+    mfl["player_id"] = mfl["player_id"].astype(str)
+    mfl["score"] = -pd.to_numeric(mfl["adp"], errors="coerce")
+    return mfl[["player_id", "position", "score"]].dropna(subset=["score"])
+
+
 # API systems always attempted; file systems discovered at runtime and appended. Each is scored the
 # same way — see the per-system leakage basis documented in `benchmark_scorecard.py` header / the
 # report: adp (FFC, dated week-before-Week-1), ecr (FantasyPros, dated early-Sept snapshot) and sleeper
 # (Rotowire, verified frozen-preseason by the gp=17 test) are leakage-safe; espn (draft rank) is a
 # preseason artifact but its as-of date is unstamped → lower-verified.
-API_SYSTEMS = {"adp": _adp_system, "ecr": _ecr_system, "sleeper": _sleeper_system, "espn": _espn_system}
+API_SYSTEMS = {
+    "adp": _adp_system, "ecr": _ecr_system, "sleeper": _sleeper_system, "espn": _espn_system,
+    "mfl_adp": _mfl_adp_system,
+}
 
 
 def load_systems(con, season, schema, manual_dir=None) -> dict[str, pd.DataFrame]:
@@ -429,7 +447,7 @@ def build_scorecard(con, seasons, schema, *, project_fn, load_realized_fn, manua
 
 
 _TRACK_RECORD_COLS = ("season", "player_id", "player_name", "position", "our_points", "our_rank",
-                      "adp", "adp_rank", "actual_points", "actual_rank", "is_fade")
+                      "adp", "adp_rank", "actual_points", "actual_rank", "is_fade", "adp_source")
 
 
 def player_track_record_frame(con, season, schema, *, project_fn, load_realized_fn) -> pd.DataFrame:
@@ -443,16 +461,20 @@ def player_track_record_frame(con, season, schema, *, project_fn, load_realized_
     is deliberately NOT a parallel re-derivation of `_adp_system`'s merge.
 
     Returns columns: season, player_id, player_name, position, our_points, our_rank, adp, adp_rank,
-    actual_points, actual_rank, is_fade — one row per player with BOTH a shipped projection AND that
-    season's ADP AND >=6 realized games (the same "aligned universe" `build_scorecard` scores).
+    actual_points, actual_rank, is_fade, adp_source — one row per player with BOTH a shipped projection
+    AND that season's ADP AND >=6 realized games (the same "aligned universe" `build_scorecard` scores).
 
-    ⚠️ FFC has NO archive for some seasons (2025 confirmed live: `{"status":"Error"}` — a genuine,
-    permanent gap, not a cache problem; see `adp_source.fetch_ffc_adp`'s docstring). When that happens
-    this does NOT blank the season — it still ships real our-vs-actual rows (our_points/our_rank/
-    actual_points/actual_rank), with `adp`/`adp_rank` null and `is_fade=False` (fade is an ADP-
-    disagreement signal and cannot be computed without it). A season with a shipped board and a
-    completed realized outcome always has SOMETHING honest to show, even when one external benchmark
-    is unavailable for it."""
+    ⚠️ FFC has NO archive for some seasons (2025 confirmed live: `{"status":"Error"}` across every
+    teams/format combination — a genuine, permanent gap, not a cache problem; see
+    `adp_source.fetch_ffc_adp`'s docstring). When that happens this FALLS BACK to MyFantasyLeague
+    (`mfl_adp_source.py`) — a second, independently-verified real-draft ADP source that DOES cover
+    2025 — rather than blanking the season's ADP columns. `adp_source` on every row names which one
+    actually backed it ("ffc" or "mfl"), so a consumer can label the season honestly instead of
+    silently blending two different real-world draft populations under one undifferentiated "ADP".
+    Only if BOTH sources are empty does this fall through to real our-vs-actual rows with `adp`/
+    `adp_rank` null, `adp_source=None`, and `is_fade=False` (fade is an ADP-disagreement signal and
+    cannot be computed without ANY ADP) — a season with a shipped board and a completed realized
+    outcome always has SOMETHING honest to show, even when no external ADP benchmark is available."""
     proj = project_fn(con, season, schema)
     proj = proj[proj["position"].isin(_POSITIONS)].copy()
     proj["player_id"] = proj["player_id"].astype(str)
@@ -471,6 +493,17 @@ def player_track_record_frame(con, season, schema, *, project_fn, load_realized_
         adp["player_id"] = adp["player_id"].astype(str)
         adp["sys_score"] = -pd.to_numeric(adp["adp"], errors="coerce")
         adp = adp.dropna(subset=["sys_score"])
+    adp_source_used = "ffc"
+
+    if adp.empty:
+        mfl = MFL.load_adp_for_season(con, season, schema=schema)
+        mfl = mfl[mfl["player_id"].notna()].copy()
+        if not mfl.empty:
+            mfl["player_id"] = mfl["player_id"].astype(str)
+            mfl["sys_score"] = -pd.to_numeric(mfl["adp"], errors="coerce")
+            mfl = mfl.dropna(subset=["sys_score"])
+        adp = mfl
+        adp_source_used = "mfl"
 
     if adp.empty:
         out = base.rename(columns={"proj_fp_ppr": "our_points", "real_fp_ppr": "actual_points"}).copy()
@@ -481,6 +514,7 @@ def player_track_record_frame(con, season, schema, *, project_fn, load_realized_
         out["adp"] = pd.NA
         out["adp_rank"] = pd.NA
         out["is_fade"] = False
+        out["adp_source"] = None
         out["season"] = season
         return out[list(_TRACK_RECORD_COLS)].sort_values(["position", "our_rank"]).reset_index(drop=True)
 
@@ -496,6 +530,7 @@ def player_track_record_frame(con, season, schema, *, project_fn, load_realized_
     m["adp_rank"] = m.groupby("position")["adp"].rank(ascending=True, method="min").astype(int)
     m["actual_rank"] = m.groupby("position")["actual_points"].rank(ascending=False, method="min").astype(int)
     m["is_fade"] = m["player_id"].isin(fade_ids)
+    m["adp_source"] = adp_source_used
     m["season"] = season
     return m[list(_TRACK_RECORD_COLS)].sort_values(["position", "our_rank"]).reset_index(drop=True)
 

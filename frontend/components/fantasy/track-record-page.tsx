@@ -39,7 +39,6 @@ import {
   PosBadge,
   PositionTabs,
   SurfaceHeader,
-  int,
   num,
   ALL_ROWS,
   PAGE_SIZES,
@@ -152,7 +151,10 @@ function RankScatter({ rows }: { rows: TrackRecordRow[] }) {
                     <div className="font-medium text-gray-100">
                       {row.playerName} · {row.position}
                     </div>
-                    <div>Our rank {row.ourRank} · ADP rank {int(row.adpRank)} · actual {row.actualRank}</div>
+                    <div>
+                      Our rank {posRank(row.position, row.ourRank)} · ADP rank{" "}
+                      {posRank(row.position, row.adpRank)} · actual {posRank(row.position, row.actualRank)}
+                    </div>
                     {row.isFade && <div className="text-[#10b981]">high-conviction fade</div>}
                   </div>
                 )
@@ -164,6 +166,14 @@ function RankScatter({ rows }: { rows: TrackRecordRow[] }) {
       </div>
     </div>
   )
+}
+
+/** All three ranks in this table are WITHIN-POSITION (the scatter chart's axis already says so —
+ *  "Our rank (within position)" — but the table's bare "1"/"2"/"3" reads as an overall rank,
+ *  especially on the "All" position tab where several different positions' #1s all show "1"). Prefix
+ *  with the position so it reads unambiguously regardless of which tab is active, e.g. "QB1"/"RB12". */
+function posRank(pos: string, rank: number | null): string {
+  return rank == null ? "—" : `${pos}${rank}`
 }
 
 function TrackRecordTable({ rows }: { rows: TrackRecordRow[] }) {
@@ -189,11 +199,11 @@ function TrackRecordTable({ rows }: { rows: TrackRecordRow[] }) {
             <tr className="border-b border-[#262626] text-[10px] uppercase tracking-wider text-gray-500">
               <th className="px-3 py-2">Player</th>
               <th className="px-3 py-2">Pos</th>
-              <th className="px-3 py-2 text-right">Our rank</th>
+              <th className="px-3 py-2 text-right">Our rank (pos)</th>
               <th className="px-3 py-2 text-right">Our pts</th>
-              <th className="px-3 py-2 text-right">ADP rank</th>
+              <th className="px-3 py-2 text-right">ADP rank (pos)</th>
               <th className="px-3 py-2 text-right">ADP</th>
-              <th className="px-3 py-2 text-right">Actual rank</th>
+              <th className="px-3 py-2 text-right">Actual rank (pos)</th>
               <th className="px-3 py-2 text-right">Actual pts</th>
               <th className="px-3 py-2">Fade</th>
             </tr>
@@ -201,15 +211,22 @@ function TrackRecordTable({ rows }: { rows: TrackRecordRow[] }) {
           <tbody>
             {paged.map((r) => (
               <tr key={r.playerId} className="border-b border-[#1a1a1a] last:border-0">
-                <td className="px-3 py-2 text-gray-200">{r.playerName}</td>
+                <td className="px-3 py-2">
+                  <Link
+                    href={`/fantasy/player/${r.playerId}`}
+                    className="text-gray-200 hover:text-[#10b981] transition-colors"
+                  >
+                    {r.playerName}
+                  </Link>
+                </td>
                 <td className="px-3 py-2">
                   <PosBadge pos={r.position} />
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums text-gray-300">{r.ourRank}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-gray-300">{posRank(r.position, r.ourRank)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-400">{num(r.ourPoints)}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-gray-300">{int(r.adpRank)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-gray-300">{posRank(r.position, r.adpRank)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-400">{num(r.adp)}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-gray-300">{r.actualRank}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-gray-300">{posRank(r.position, r.actualRank)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-400">{num(r.actualPoints)}</td>
                 <td className="px-3 py-2">
                   {r.isFade && (
@@ -291,9 +308,16 @@ export function FantasyTrackRecordPage() {
           {seasonLoading && <LoadingBlock label="Loading the season…" />}
           {!seasonLoading && seasonRows && (
             <>
-              {activeSeason != null && !manifest.seasonsWithAdp.includes(activeSeason) && (
+              {activeSeason != null && manifest.adpSourceBySeason[String(activeSeason)] === "mfl" && (
                 <p className="mb-4 rounded border border-[#262626] bg-[#0f0f0f] px-3 py-2 text-[11px] leading-relaxed text-gray-500">
-                  Fantasy Football Calculator has no ADP archive for {activeSeason} — this season shows
+                  Fantasy Football Calculator has no ADP archive for {activeSeason} — the ADP column
+                  below is sourced from MyFantasyLeague instead, a second independent real-draft
+                  consensus.
+                </p>
+              )}
+              {activeSeason != null && manifest.adpSourceBySeason[String(activeSeason)] === undefined && (
+                <p className="mb-4 rounded border border-[#262626] bg-[#0f0f0f] px-3 py-2 text-[11px] leading-relaxed text-gray-500">
+                  No ADP archive is available for {activeSeason} from either source — this season shows
                   our projection vs. the realized outcome only, no ADP column or fade highlighting.
                 </p>
               )}
