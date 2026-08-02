@@ -115,6 +115,83 @@ class TestServedPredictionIntegrityExecution:
         mock_alert.assert_not_called()
 
 
+class TestW11TailCoverageExecution:
+    """INC-37 — the op runs the check twice (current slate + prior slate) because umpire and
+    weather cannot be judged same-day; `_run_script` is mocked per --date so the two legs can
+    disagree, which is the whole point of the policy."""
+
+    @staticmethod
+    def _run(monkeypatch, *, today: str, prior: str):
+        def _fake(context, script, args=None, **kwargs):
+            day = (args or [])[-1]
+            return today if day >= "2026-08-01" else prior
+
+        monkeypatch.setattr(dio, "_run_script", _fake)
+        monkeypatch.setattr(dio, "_today", lambda: "2026-08-01")
+        monkeypatch.setattr(dio, "_one_day_ago", lambda: "2026-07-31")
+        mock_alert = MagicMock()
+        monkeypatch.setattr(alerting, "send_alert", mock_alert)
+
+        @job(executor_def=in_process_executor)
+        def _j():
+            dio.check_w11_tail_coverage_op()
+
+        assert _j.execute_in_process(instance=DagsterInstance.ephemeral()).success
+        return mock_alert
+
+    @staticmethod
+    def _stdout(**verdicts: str) -> str:
+        lines = ["[METRIC] w11_tail_evaluated=1"]
+        for block, verdict in verdicts.items():
+            n = 0 if verdict == "BUILD_GAP" else 15
+            lines.append(f"[METRIC] w11_tail_{block}_covered={n}/15 verdict={verdict}")
+        return "\n".join(lines)
+
+    def test_the_inc37_fingerprint_pages_critical(self, monkeypatch):
+        clean = self._stdout(umpire="OK", weather="OK", public_betting="OK")
+        gap = self._stdout(umpire="FEED_PENDING", weather="OK", public_betting="BUILD_GAP")
+        mock_alert = self._run(monkeypatch, today=gap, prior=clean)
+        mock_alert.assert_called_once()
+        assert mock_alert.call_args.kwargs["severity"] == "CRITICAL"
+        assert mock_alert.call_args.kwargs["dedup_key"] == "w11_tail_coverage"
+
+    def test_a_normal_morning_never_pages(self, monkeypatch):
+        """The current slate legitimately looks gapped for umpire/weather every morning (their
+        feeds land after the W11 build). Paging on that would mute the monitor in a week."""
+        today = self._stdout(umpire="BUILD_GAP", weather="BUILD_GAP", public_betting="OK")
+        prior = self._stdout(umpire="OK", weather="OK", public_betting="OK")
+        mock_alert = self._run(monkeypatch, today=today, prior=prior)
+        mock_alert.assert_not_called()
+
+    def test_a_lagged_block_still_gapped_a_cycle_later_pages(self, monkeypatch):
+        today = self._stdout(umpire="BUILD_GAP", weather="BUILD_GAP", public_betting="OK")
+        prior = self._stdout(umpire="OK", weather="BUILD_GAP", public_betting="OK")
+        mock_alert = self._run(monkeypatch, today=today, prior=prior)
+        assert mock_alert.call_args.kwargs["severity"] == "CRITICAL"
+
+    def test_partial_pages_warn(self, monkeypatch):
+        today = self._stdout(umpire="FEED_PENDING", weather="OK", public_betting="PARTIAL")
+        prior = self._stdout(umpire="OK", weather="OK", public_betting="OK")
+        mock_alert = self._run(monkeypatch, today=today, prior=prior)
+        assert mock_alert.call_args.kwargs["severity"] == "WARN"
+
+    def test_a_read_failure_pages_warn_and_never_fails_the_op(self, monkeypatch):
+        """ALERT-tier: the op still succeeds, but an unevaluable check is never scored healthy."""
+        def _boom(context, script, args=None, **kwargs):
+            raise RuntimeError("s3 unreachable")
+
+        monkeypatch.setattr(dio, "_run_script", _boom)
+        mock_alert = MagicMock()
+        monkeypatch.setattr(alerting, "send_alert", mock_alert)
+
+        @job(executor_def=in_process_executor)
+        def _j():
+            dio.check_w11_tail_coverage_op()
+
+        assert _j.execute_in_process(instance=DagsterInstance.ephemeral()).success
+        assert mock_alert.call_args.kwargs["severity"] == "WARN"
+
+
 class TestInjuryStatusHealthExecution:
     def test_implausible_pages_critical(self, monkeypatch):
         stdout = (

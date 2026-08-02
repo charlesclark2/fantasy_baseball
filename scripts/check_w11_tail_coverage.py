@@ -37,9 +37,25 @@ WHY THIS EXISTS
 
     The BUILD_GAP verdict is the one that fires on INC-37 and stays silent on a normal morning.
 
+⏳ WHICH SLATE A BLOCK CAN BE JUDGED ON — read this before wiring a page onto a block.
+    "The built table has not caught up with the feed" is a DEFECT only for a block whose feed
+    lands BEFORE the build that consumes it. In the daily job the W11 tail is built by
+    `lakehouse_w11_nightly_op` (s5c) and two of the three feeds land AFTER it (measured
+    2026-08-01 UTC): public_betting's ActionNetwork ingest at 12:00 (s4) precedes the ~12:40
+    build, but `ingest_weather` (s7) writes `forecast_pregame` at 12:50 and
+    `ingest_umpires.py --date today` (s8/s17) lands at 12:0x–16:39 — both AFTER it. So umpire and
+    weather populate the current slate one build cycle late BY DESIGN, and only public_betting is
+    a valid same-day assertion. `betting_ml/monitoring/w11_tail_coverage.py` owns that policy for
+    the daily op (same-day for public_betting, the PRIOR slate for umpire/weather) — the same
+    exemption `check_feature_block_coverage._DATE_OUTAGE_SKIP_NEWEST` already makes for the same
+    reason. This CLI still reports every block for whatever date you give it: as a post-rebuild
+    acceptance gate you are asking "did the rebuild I just ran cover this slate", which is a
+    different (and legitimately stricter) question than the daily monitor's.
+
 TIER (E11.7): ALERT-loud-but-continue by default — it never exits non-zero, because a blank
     transparency panel must not withhold a slate's predictions. `--strict` escalates to exit 1 for
-    an operator running it as an explicit acceptance gate after a rebuild/flip.
+    an operator running it as an explicit acceptance gate after a rebuild/flip. The daily
+    `check_w11_tail_coverage_op` runs this script and pages via send_alert on the same verdicts.
 
 Snowflake-FREE: DuckDB over the S3 lakehouse (`register_lakehouse_views` for the built tables — a
     hardcoded glob is the 2026-07-20 phase-1.5 P0 — and `lh_raw()` for the raw mirrors).
@@ -71,10 +87,19 @@ log = logging.getLogger(__name__)
 # that proves whether the feed has the slate at all. `raw_key` is the join column against the
 # slate: umpire/weather carry game_pk; public_betting_raw carries only ActionNetwork's own id and
 # a game_date, so it is matched on the date.
+#
+# ⚠️ `raw_filter` must match what the FEATURE BUILD actually consumes, or the two-sided read is
+# broken from the raw side. weather_raw holds three observation types and
+# `stg_weather_raw_snapshots` (the model feeding feature_pregame_weather_features) selects
+# `weather_observation_type='forecast_pregame'` ONLY — the 00:00–02:00 UTC `forecast_intraday`
+# rows are rejected by design. Counting them as "the feed has the slate" would report a
+# permanent BUILD_GAP/PARTIAL against a table that was never going to contain them.
 BLOCKS = (
-    ("umpire", "feature_pregame_umpire_features", "umpire_game_log", "game_pk"),
-    ("weather", "feature_pregame_weather_features", "weather_raw", "game_pk"),
-    ("public_betting", "feature_pregame_public_betting_features", "public_betting_raw", "game_date"),
+    ("umpire", "feature_pregame_umpire_features", "umpire_game_log", "game_pk", None),
+    ("weather", "feature_pregame_weather_features", "weather_raw", "game_pk",
+     "weather_observation_type = 'forecast_pregame'"),
+    ("public_betting", "feature_pregame_public_betting_features", "public_betting_raw",
+     "game_date", None),
 )
 
 
@@ -125,12 +150,14 @@ def _fetch(served_date: date) -> list[BlockCoverage]:
             f"select count(*) from ({slate_sql})", [served_date.isoformat()]
         ).fetchone()[0]
 
-        for block, feature_table, raw_table, raw_key in BLOCKS:
+        for block, feature_table, raw_table, raw_key, raw_filter in BLOCKS:
+            where_raw = f"where {raw_filter}" if raw_filter else ""
             if raw_key == "game_pk":
                 raw_games = conn.execute(
                     f"""select count(distinct s.game_pk) from ({slate_sql}) s
                         where s.game_pk in (
                           select game_pk from read_parquet('{lh_raw(raw_table)}', union_by_name=true)
+                          {where_raw}
                         )""",
                     [served_date.isoformat()],
                 ).fetchone()[0]
@@ -139,7 +166,8 @@ def _fetch(served_date: date) -> list[BlockCoverage]:
                 # may be a string-wrapped timestamp — cast at the use-site (INC-23).
                 raw_rows = conn.execute(
                     f"""select count(*) from read_parquet('{lh_raw(raw_table)}', union_by_name=true)
-                        where try_cast(game_date as date) = ?::date""",
+                        where try_cast(game_date as date) = ?::date
+                        {f'and {raw_filter}' if raw_filter else ''}""",
                     [served_date.isoformat()],
                 ).fetchone()[0]
                 # Cap at the slate so the "feature < raw" PARTIAL test compares like with like.
@@ -189,7 +217,7 @@ def main() -> int:
             log.warning(
                 "[ALERT] W11 tail %s: %d/%d slate games in %s while the raw feed has %d — %s",
                 b.block, b.feature_games, b.slate_games,
-                dict((x[0], x[1]) for x in BLOCKS)[b.block], b.raw_games,
+                {x[0]: x[1] for x in BLOCKS}[b.block], b.raw_games,
                 "the BUILD ran on a stale game universe (the INC-37 fingerprint)"
                 if b.verdict == "BUILD_GAP" else "partially built",
             )
