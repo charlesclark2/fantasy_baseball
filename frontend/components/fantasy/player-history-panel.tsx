@@ -14,7 +14,7 @@
 // is named, and only when nflverse's feed actually reported one.
 
 import { FadeBadge, FadeLegend, GLOSSARY, InfoTip, num, int } from "@/components/fantasy/shared"
-import type { PlayerHistory } from "@/lib/fantasy"
+import type { PastSeasonRecord, PlayerHistory } from "@/lib/fantasy"
 
 /** Weekly report status -> badge color. Unrecognized/null status (a practice-only entry with no
  *  game-report designation) falls to the neutral style rather than being hidden — an entry the
@@ -35,6 +35,58 @@ function StatusBadge({ status }: { status: string | null }) {
   )
 }
 
+/** A season's points PER GAME — pure display arithmetic on numbers the payload already carries
+ *  (`actualPoints` / `gamesPlayed`), so this needs no export/backend change. Null when
+ *  `gamesPlayed` is missing or 0 (an export from before NF3.3, or — in principle — a scored season
+ *  with no games, which `player_track_record_frame`'s own >=6-games filter should already exclude,
+ *  but this stays defensive rather than dividing by zero). */
+function ptsPerGame(r: PastSeasonRecord): number | null {
+  if (r.gamesPlayed == null || r.gamesPlayed <= 0) return null
+  return r.actualPoints / r.gamesPlayed
+}
+
+const MIN_SEASONS_FOR_CONSISTENCY = 3
+
+type ConsistencyLabel = "Steady" | "Somewhat variable" | "Boom-or-bust"
+
+/** How much this player's points-PER-GAME have swung season to season — see GLOSSARY.consistency
+ *  for the full plain-language explanation shown to the user. Deliberately a RATE (points per game
+ *  he actually played), never a season total: a season cut short by injury would otherwise read as
+ *  a "down year" for scoring level when his per-game output may have been unchanged — that
+ *  confound (availability, not performance) is exactly what the Games/missed column beside this
+ *  already covers, so this metric stays about performance alone. Requires >= 3 qualifying seasons
+ *  (gamesPlayed > 0) — a read on 1-2 seasons is not a meaningful statement about consistency, so
+ *  this returns null (renders nothing) rather than a shaky badge. Coefficient of variation
+ *  (sample stddev / mean) is the standard scale-free way to compare variability across players
+ *  whose average output differs wildly (a QB and a kicker are not on the same points scale). */
+function seasonConsistency(pastSeasons: PastSeasonRecord[]): { label: ConsistencyLabel; nSeasons: number } | null {
+  const rates = pastSeasons.map(ptsPerGame).filter((r): r is number => r != null && r > 0)
+  if (rates.length < MIN_SEASONS_FOR_CONSISTENCY) return null
+  const mean = rates.reduce((a, b) => a + b, 0) / rates.length
+  const variance = rates.reduce((sum, r) => sum + (r - mean) ** 2, 0) / (rates.length - 1)
+  const cv = Math.sqrt(variance) / mean
+  const label: ConsistencyLabel = cv < 0.2 ? "Steady" : cv < 0.4 ? "Somewhat variable" : "Boom-or-bust"
+  return { label, nSeasons: rates.length }
+}
+
+const CONSISTENCY_STYLE: Record<ConsistencyLabel, string> = {
+  Steady: "border-[#10b981]/40 bg-[#10b981]/10 text-[#10b981]",
+  "Somewhat variable": "border-amber-500/40 bg-amber-500/10 text-amber-500",
+  "Boom-or-bust": "border-rose-500/40 bg-rose-500/10 text-rose-400",
+}
+
+function ConsistencyBadge({ result }: { result: { label: ConsistencyLabel; nSeasons: number } }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
+      <InfoTip label="Year-to-year consistency">{GLOSSARY.consistency}</InfoTip>
+      <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${CONSISTENCY_STYLE[result.label]}`}>
+        {result.label}
+      </span>
+      <span className="text-gray-600">({result.nSeasons} seasons)</span>
+    </span>
+  )
+}
+
 export function PlayerHistoryPanel({ history }: { history: PlayerHistory | null | undefined }) {
   if (!history) return null
   const { pastSeasons, injuries, gamesMissedBySeason } = history
@@ -43,6 +95,7 @@ export function PlayerHistoryPanel({ history }: { history: PlayerHistory | null 
   const missedBySeason = new Map(gamesMissedBySeason.map((g) => [g.season, g]))
   const sortedSeasons = [...pastSeasons].sort((a, b) => b.season - a.season)
   const sortedInjuries = [...injuries].sort((a, b) => (b.season - a.season) || (b.week - a.week))
+  const consistency = seasonConsistency(pastSeasons)
 
   return (
     <section className="mb-6">
@@ -57,9 +110,12 @@ export function PlayerHistoryPanel({ history }: { history: PlayerHistory | null 
       {/* Past-season actual vs ADP */}
       {sortedSeasons.length > 0 && (
         <div className="mb-4">
-          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-            Past seasons
-          </h3>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+              Past seasons
+            </h3>
+            {consistency && <ConsistencyBadge result={consistency} />}
+          </div>
           {sortedSeasons.some((r) => r.isFade) && (
             <div className="mb-2">
               <FadeLegend />
@@ -76,6 +132,7 @@ export function PlayerHistoryPanel({ history }: { history: PlayerHistory | null 
                   </th>
                   <th className="px-3 py-2 text-right">Actual rank</th>
                   <th className="px-3 py-2 text-right">Actual pts</th>
+                  <th className="px-3 py-2 text-right">Pts/G</th>
                   <th className="px-3 py-2 text-right">Games</th>
                   <th className="px-3 py-2">
                     <InfoTip label="Fade">{GLOSSARY.fade}</InfoTip>
@@ -95,6 +152,7 @@ export function PlayerHistoryPanel({ history }: { history: PlayerHistory | null 
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-gray-300">{r.actualRank}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-gray-400">{num(r.actualPoints)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-400">{num(ptsPerGame(r))}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-gray-500">
                         {r.gamesPlayed ?? "—"}
                         {missed != null && (
