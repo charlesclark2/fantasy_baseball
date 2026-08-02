@@ -143,7 +143,23 @@ closes; the flatten then reverts to the stale `dt=2026-07-31` snapshot, which is
 still holds 1/15 final.
 
 **So the lookback heals the live window every daily consumer reads, but does not permanently heal
-history.** A durable fix needs content-aware retention — keep the latest partition per *content*
+history.** Concretely, the lookback window closes on the 4th of each month, so 07-31 reverts to
+1/15 in `stg_statsapi_games` from 2026-08-05.
+
+### Blast radius of the residual (measured, 2026-08-02)
+
+Smaller than the paragraph above implies, and worth stating so nobody redesigns raw retention for
+a non-problem:
+
+- `mart_game_results` — Statcast-derived, an **independent** pipeline — carries **15/15 scored**
+  for 2026-07-31. The results substrate was never affected by any of this.
+- The reversion costs only `stg_statsapi_games.status_code` on 14 games (07-31) and 4 (06-30).
+- Nothing serving-critical reads finality there after the fact: the floor signal generators use
+  the table for the game **universe**, not the status; `run_env` reads `mart_game_results` (the
+  INC-34 correction); and settlement no longer reads it for finality at all.
+
+⇒ A historical status inconsistency in one staging table, not a serving defect. Schedule the
+content-aware retention fix; do not scramble for it. A durable fix needs content-aware retention — keep the latest partition per *content*
 month, which requires a month column on the raw mirror. That is a change to a serving-critical raw
 table's retention and was deliberately left out of an incident fix.
 
