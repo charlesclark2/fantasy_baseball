@@ -124,6 +124,59 @@ what NOT to commit (artifacts → S3/registry), the CI-gate result, and the gate
 
 **Model prompts that ablate features carry:** *"🧬 FEATURES (per §0.5): pre-register the candidate adds/drops [list + rationale]; select IN-FOLD via `derive_clustered_contract.py`/`incremental_lift_eval.py` (or Optuna-tuned regularization); every config counts toward PBO/DSR; a single contract's miss is NOT a null."*
 
+### §0.5.4 — Reading a null's POWER (MH2, 2026-08-02)
+
+> Instrument: `betting_ml/utils/cv_power.py`. Characterization + mechanical null inventory:
+> `ablation_results/mh2_cv_power_characterization.md`, `mh2_null_inventory.csv`.
+> Regenerate: `uv run python -m betting_ml.scripts.mh2_cv_power` (~20s, laptop, no IO).
+
+The §0.5 gates are **not fixed bars**. Their stringency is a function of the design, so the same
+verdict text means different things at different fold counts and field sizes:
+
+| gate | how its meaning moves | consequence |
+|---|---|---|
+| fold consistency (`≥60%`) | null false-fire **0.50 at 3 folds → 0.27 at 11** | nearly free at low `n` |
+| PBO / CSCV | **UNDEFINED below 4 folds** | "could not be computed" ≠ "failed" |
+| BH-FDR on a fold-SIGN test | floor is `2⁻ⁿ`; can exceed the cutoff | **no effect of any size can pass** |
+| DSR | `SR0 = √V·z(N)` rises with the **FIELD SIZE** | same effect clears at 2 arms, fails at 7 |
+
+**1. Every §0.5 report states which of SEVEN states its null is in** (`cv_power.classify_null`, checked
+in this order — each state is one the binary reading silently mislabels):
+
+| state | test | remedy | never |
+|---|---|---|---|
+| **INACTIVE** | the mechanism has no rows it can move | a different population | hunt a defect; wait for seasons |
+| **UNKNOWN** | the artifact records no fold structure | record the design | classify it at all |
+| **UNDEFINED** | a stat was not COMPUTABLE, or the run was anchor-BLOCKED | more folds / fix the anchor | record as a failed gate |
+| **GENUINE ABSENCE** | the best arm loses ON AVERAGE | none — do not re-test | state a re-test trigger |
+| **DSR-UNREACHABLE** | `SR ≤ SR0` ⇒ no `n` ever clears | a SMALLER pre-registered field | say "needs N more seasons" |
+| **POWER-LIMITED** | every gate reachable, MDE > meaningful effect | folds and/or fewer arms | call it dead |
+| **TRUSTWORTHY DEAD** | MDE ≤ the pre-registered meaningful effect | none | over-claim beyond that size |
+
+**2. A FAMILY GETS ITS OWN PRE-REGISTERED FIELD.** Bundling unrelated mechanisms taxes a real
+finding through **two** channels — the trial COUNT `N` *and* the cross-trial Sharpe DISPERSION `V`
+that far-away arms inflate. On E7.15-H3 the dispersion channel dominates (`V` falls ~65× going 7
+arms → 2, vs ~2.5× for `z`), which is why the same winner on the same folds scores DSR 0.607 in the
+7-arm field and 0.998 in its own 2-arm family. ⇒ the rule is **run a coherent family**, not "run
+fewer arms". Use `cv_power.dsr_max_field_size` to size the field BEFORE the run.
+
+**3. State the shortfall in the unit that GROWS, and say whether it is reachable NOW.** Folds,
+seasons, cohorts, rows — never p-decimals. A trigger reachable by a **wider window** or a **smaller
+field** is a live re-test; only a calendar-bound one is a future note. Worked example: the MLB game
+model's 3-fold ceiling is a **window choice** (E7.9 used 2021–2026) while the served store holds
+2015–2026, so **8 folds are available today**.
+
+**4. A consistency clause's false-fire rate is a design constant** (H8). `numeric_gate` takes
+`n_folds=` and applies `cv_power.fold_consistency_clause` — required wins =
+`max(⌈0.6n⌉, smallest k with P(Bin(n,½) ≥ k) ≤ 0.20)` — which bounds the false-fire rate at every
+`n`, declares itself UNDEFINED rather than passed when unattainable, and is weakly stricter than the
+legacy rate everywhere (so it can only prevent a false ADD).
+
+**Every `[Model-*]` prompt whose outcome may be a null carries:** *"🔭 POWER (per §0.5.4): state the
+achievable fold count and field size BEFORE the run; on a null, classify it with
+`cv_power.classify_null` and state the re-test trigger in the unit that grows — or say plainly that
+it is a genuine absence / DSR-unreachable / inactive."*
+
 ---
 
 ## 1. Strategic thesis (why these epics)

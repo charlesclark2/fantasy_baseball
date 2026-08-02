@@ -1,0 +1,618 @@
+{
+ "story": "MH2 \u2014 CV-power characterization for \u00a70.5 bake-offs",
+ "best_alpha": 0,
+ "generated_at": "2026-08-02T06:20:57+00:00",
+ "diagnostic_only": "no re-fit, no verdict change, no champion change",
+ "corpus_census": {
+  "markdown_reports": 75,
+  "json_artifacts": 270,
+  "story_prompt_entries": 251,
+  "note": "the JSON count includes per-Optuna-trial artifacts, which are trial records rather than verdicts and carry no gate to classify."
+ },
+ "extraction": {
+  "unextractable_reports": [
+   "E13_2_phase0_report.md",
+   "e13_14_cross_market_coherence.md",
+   "e13_14_cross_market_coherence_smoke.md",
+   "e13_2_pa_outcome_v1_cv.md",
+   "e13_2_pa_outcome_v2_cv.md",
+   "e13_2b_feature_augmented_retest.md",
+   "e13_8_market_accuracy_benchmark.md",
+   "e2_2_copula_decision.md",
+   "e2_3_convolution_calibration.md",
+   "e2_5_signal_registration.md",
+   "e2_6_preregistration.md",
+   "e5_3_join_coverage.md",
+   "e7_11_artifacts/manual_source_ACCESS.md",
+   "e7_11_prospect_consensus.md",
+   "e7_12_slice1_park_level_context.md",
+   "e7_12_slice1p_park_level_context_pitchers.md",
+   "e7_12_slice2_survivorship.md",
+   "e7_12_slice2_survivorship_pitchers.md",
+   "e7_12_slice4_tool_grades.md",
+   "e7_12_slice4_tool_grades_pitchers.md",
+   "e7_12_slice5_aging_curves.md",
+   "e7_12_slice5_aging_curves_pitchers.md",
+   "e7_12_slice6_feasibility.md",
+   "e7_12_slice6_feasibility_pitchers.md",
+   "e7_13_artifacts/e7_13_comp_validation.md",
+   "e7_13_prospect_comps.md",
+   "e7_15_h1_level_ladder.md",
+   "e7_15_h1_level_ladder_pitchers.md",
+   "e7_15_h1_preregistration.md",
+   "e7_15_h2_opponent_quality.md",
+   "e7_15_h2_opponent_quality_pitchers.md",
+   "e7_15_h3_player_structure_pitchers.md",
+   "e7_15_h3_preregistration.md",
+   "e7_16_artifacts/e7_14_source_accuracy.md",
+   "e7_16_artifacts/e7_16_comp_validation.md",
+   "e7_16_pipeline_comp_pool.md",
+   "e7_4_prospect_xref.md",
+   "e7_5_milb_prior_ablation.md",
+   "e7_5b_mle_prior_head_to_head.md",
+   "e7_8_fv_translation.md",
+   "e7_9_historical_backfill_procedure.md",
+   "e7_9_train_serve_audit.md",
+   "e8_0_prospect_board.md",
+   "e8_2a_cbs_access_probe.md",
+   "odds_market_grab_2026-06-30.md",
+   "odds_market_inventory_2026-06-30.md"
+  ],
+  "n_unextractable": 46
+ },
+ "skipped_non_bakeoff_summaries": [],
+ "validation_cases": [
+  {
+   "case": "E7.9 \u2014 achievable folds from the window",
+   "recorded": "3 purged/embargoed folds on a 2021-04-18 \u2192 2026-07-27 matrix (6 seasons)",
+   "reproduced": "achievable_folds(6) = 3",
+   "agrees": true
+  },
+  {
+   "case": "E7.12-S6 \u2014 fold-clause false-fire at 3 folds (H8's diagnosis)",
+   "recorded": "0.4968 (simulated, `fold_gate_false_fire_at_zero_lift`)",
+   "reproduced": "exact binomial P(Bin(3,\u00bd) \u2265 2) = 0.5000",
+   "agrees": true
+  },
+  {
+   "case": "E7.14 \u2014 fold-sign certifiability floor",
+   "recorded": "sign_test_p floor 0.0625 at 5 folds; `folds_required_to_certify` = 8",
+   "reproduced": "sign_test_floor(5, two_sided) = 0.0625; folds_for_sign_certifiability(0.010) = 8",
+   "agrees": true
+  },
+  {
+   "case": "E7.15-H3 `bb_pct` \u2014 SAME winner/folds/effect, field 7 \u2192 2 arms",
+   "recorded": "DSR 0.6065 (7 arms) \u2192 ~0.998 (2-arm trajectory family)",
+   "reproduced": "DSR 0.6065 \u2192 0.9985  (SR 1.0061 held fixed; SR0 0.9147 \u2192 0.0028)",
+   "agrees": true,
+   "decomposition": {
+    "dsr_wide_field": 0.6065,
+    "dsr_narrow_field": 0.9985,
+    "dsr_if_only_trial_count_shrank": 0.9751,
+    "dsr_if_only_dispersion_shrank": 0.9984,
+    "dsr_ceiling_at_this_n_obs": 1.0,
+    "sr0_wide": 0.9147,
+    "sr0_narrow": 0.0028,
+    "share_from_trial_count": 0.94,
+    "share_from_dispersion": 1.0,
+    "passes_wide": false,
+    "passes_narrow": true
+   },
+   "max_field_at_observed_dispersion": 2,
+   "folds_to_clear_in_the_wide_field": 372,
+   "folds_needed_DSR_as_recorded_by_null_analysis": 140
+  },
+  {
+   "case": "E7.15-H3 `iso` \u2014 SAME winner/folds/effect, field 7 \u2192 2 arms",
+   "recorded": "DSR 0.6573 (7 arms) \u2192 ~0.981 (2-arm trajectory family)",
+   "reproduced": "DSR 0.6573 \u2192 0.9812  (SR 0.9098 held fixed; SR0 0.7408 \u2192 0.0422)",
+   "agrees": true,
+   "decomposition": {
+    "dsr_wide_field": 0.6573,
+    "dsr_narrow_field": 0.9812,
+    "dsr_if_only_trial_count_shrank": 0.9351,
+    "dsr_if_only_dispersion_shrank": 0.972,
+    "dsr_ceiling_at_this_n_obs": 1.0,
+    "sr0_wide": 0.7408,
+    "sr0_narrow": 0.0422,
+    "share_from_trial_count": 0.858,
+    "share_from_dispersion": 0.972,
+    "passes_wide": false,
+    "passes_narrow": true
+   },
+   "max_field_at_observed_dispersion": 0,
+   "folds_to_clear_in_the_wide_field": 166,
+   "folds_needed_DSR_as_recorded_by_null_analysis": 120
+  }
+ ],
+ "validation_all_pass": true,
+ "meaningful_effects": [
+  {
+   "family": "crps_game_model",
+   "unit": "CRPS (runs)",
+   "value": 0.02,
+   "derivation": "`promotion_gate.NOISE_FLOOR['crps']` \u2014 the program's PRE-EXISTING pre-registered noise floor for the runs targets. A margin below it is defined by the program itself as a TIE that ships nothing, so it IS the smallest serving-decision-changing effect. Not chosen here; read off the gate that already binds."
+  },
+  {
+   "family": "mae_pct_lift_translation",
+   "unit": "% held-out MAE lift",
+   "value": 1.0,
+   "derivation": "The SMALLEST lift that has ever actually changed a served MiLB\u2192MLB configuration: E7.12 slice 1's `woba` ADD at +0.932%. Rounded UP to 1.0% so the bar is not set by the single luckiest shipped case. An empirical decision anchor from the record, not a convention."
+  },
+  {
+   "family": "rank_ic_board",
+   "unit": "Spearman rank-IC",
+   "value": 0.04,
+   "derivation": "The median ACROSS-SEASON SD of a single source's own rank-IC on E7.14's cohort (0.041\u20130.048 over 7 sources). A between-source gap smaller than one source's own year-to-year wobble cannot justify re-weighting a board, so this is the ordering delta that would actually change a board decision. A noise property of the design, computable before any comparison is run."
+  },
+  {
+   "family": "nll_pricing",
+   "unit": "NLL (nats)",
+   "value": 0.01,
+   "derivation": "`promotion_gate.NOISE_FLOOR['nll']`, same standing as the CRPS row."
+  },
+  {
+   "family": "brier_classification",
+   "unit": "Brier",
+   "value": 0.002,
+   "derivation": "`promotion_gate.NOISE_FLOOR['brier']`, same standing as the CRPS row."
+  }
+ ],
+ "tier_windows": [
+  {
+   "tier": "MLB game model \u2014 post_lineup",
+   "fold_rule": "PurgedWalkForwardSplit (n_seasons \u2212 3)",
+   "window": "2021\u20132026",
+   "n_periods": 6,
+   "n_folds": 3,
+   "typical_arms": 28,
+   "metric_family": "crps_game_model",
+   "provenance": "E7.9 `e7_9_retrain_total_runs_post_lineup.md`: '28 arms \u00d7 3 purged/embargoed folds', matrix 2021-04-18 \u2192 2026-07-27. `achievable_folds(6) = 3` reproduces it exactly.",
+   "lever": "\u2b50 WINDOW, available NOW \u2014 see the served-store measurement below.",
+   "primary_contrast": "noise-floor margin (no fold clause, no BH family)",
+   "bh_family_size": null
+  },
+  {
+   "tier": "MLB game model \u2014 pre_lineup",
+   "fold_rule": "PurgedWalkForwardSplit (n_seasons \u2212 3)",
+   "window": "2021\u20132026",
+   "n_periods": 6,
+   "n_folds": 3,
+   "typical_arms": 24,
+   "metric_family": "crps_game_model",
+   "provenance": "E7.9 `e7_9_retrain_run_diff_pre_lineup.md`: '24 arms \u00d7 3 purged/embargoed folds'.",
+   "lever": "\u2b50 WINDOW, available NOW.",
+   "primary_contrast": "noise-floor margin (no fold clause, no BH family)",
+   "bh_family_size": null
+  },
+  {
+   "tier": "MiLB\u2192MLB translation (batter)",
+   "fold_rule": "leave-one-MLB-debut-cohort-out (n_cohorts)",
+   "window": "2016\u20132026",
+   "n_periods": 11,
+   "n_folds": 11,
+   "typical_arms": 7,
+   "metric_family": "mae_pct_lift_translation",
+   "provenance": "E7.12-S1 / E7.15-H1..H4 stored `mae_by_fold` \u2014 11 fold keys 2016\u20262026.",
+   "lever": "calendar only: +1 fold per completed debut cohort.",
+   "primary_contrast": "paired-t",
+   "bh_family_size": 4
+  },
+  {
+   "tier": "MiLB\u2192MLB translation (pitcher)",
+   "fold_rule": "leave-one-MLB-debut-cohort-out (n_cohorts)",
+   "window": "2016\u20132026",
+   "n_periods": 11,
+   "n_folds": 11,
+   "typical_arms": 7,
+   "metric_family": "mae_pct_lift_translation",
+   "provenance": "E7.15 pitcher summaries \u2014 same 11 fold keys.",
+   "lever": "calendar only: +1 fold per completed debut cohort.",
+   "primary_contrast": "paired-t",
+   "bh_family_size": 4
+  },
+  {
+   "tier": "Prospect comps \u2014 strict maturity",
+   "fold_rule": "forward, 3-season outcome horizon matured",
+   "window": "2015\u20132022 boards",
+   "n_periods": 8,
+   "n_folds": 4,
+   "typical_arms": 12,
+   "metric_family": "crps_game_model",
+   "provenance": "E7.16 `fold_census.by_type.*.strictly_matured_folds = 4` (query seasons 2019\u20132022).",
+   "lever": "calendar only: the 3-season horizon must mature.",
+   "primary_contrast": "paired-t",
+   "bh_family_size": 4
+  },
+  {
+   "tier": "Prospect comps \u2014 relaxed context",
+   "fold_rule": "forward, relaxed maturity",
+   "window": "2015\u20132022 boards",
+   "n_periods": 8,
+   "n_folds": 7,
+   "typical_arms": 12,
+   "metric_family": "crps_game_model",
+   "provenance": "E7.16 `fold_census.by_type.*.relaxed_folds = 7`.",
+   "lever": "already the widest reading of the same data.",
+   "primary_contrast": "paired-t",
+   "bh_family_size": 4
+  },
+  {
+   "tier": "Prospect source head-to-head",
+   "fold_rule": "per board season on matched support",
+   "window": "2018\u20132022 overlap",
+   "n_periods": 5,
+   "n_folds": 5,
+   "typical_arms": 9,
+   "metric_family": "rank_ic_board",
+   "provenance": "E7.14 `org_scope.folds = [2018\u20262022]` \u2014 the FanGraphs\u00d7Pipeline archive OVERLAP, not either archive's own reach (E7.14b closed the FanGraphs floor at 2018).",
+   "lever": "calendar only: +1 overlapping season per year.",
+   "primary_contrast": "fold-SIGN test (two-sided)",
+   "bh_family_size": 10
+  },
+  {
+   "tier": "AAA-Statcast translation",
+   "fold_rule": "leave-one-debut-cohort-out, \u226530 covered held-out rows",
+   "window": "2022\u2013 coverage",
+   "n_periods": 3,
+   "n_folds": 3,
+   "typical_arms": 4,
+   "metric_family": "mae_pct_lift_translation",
+   "provenance": "E7.12-S6 `reopen_trigger.usable_folds_now = 3`.",
+   "lever": "calendar only: one usable cohort per completed season.",
+   "primary_contrast": "paired-t",
+   "bh_family_size": 4
+  }
+ ],
+ "power_table": [
+  {
+   "tier": "MLB game model \u2014 post_lineup",
+   "window": "2021\u20132026",
+   "fold_rule": "PurgedWalkForwardSplit (n_seasons \u2212 3)",
+   "periods": 6,
+   "folds": 3,
+   "typical_arms": 28,
+   "primary_contrast": "noise-floor margin (no fold clause, no BH family)",
+   "PBO_evaluable": false,
+   "sign_floor": "n/a (not a sign test)",
+   "sign_floor_vs_BH_rank1": "n/a",
+   "legacy_clause": "2/3 (false-fire 0.500)",
+   "calibrated_clause": "3/3 (false-fire 0.125)",
+   "DSR_ceiling_at_any_effect": 0.9772,
+   "DSR_required_SR@typical_arms": 7.28,
+   "DSR_required_SR@4_arms": 4.44,
+   "MDE_sd_legacy": 1.65,
+   "MDE_sd_calibrated": 1.65,
+   "metric_family": "crps_game_model",
+   "lever": "\u2b50 WINDOW, available NOW \u2014 see the served-store measurement below."
+  },
+  {
+   "tier": "MLB game model \u2014 pre_lineup",
+   "window": "2021\u20132026",
+   "fold_rule": "PurgedWalkForwardSplit (n_seasons \u2212 3)",
+   "periods": 6,
+   "folds": 3,
+   "typical_arms": 24,
+   "primary_contrast": "noise-floor margin (no fold clause, no BH family)",
+   "PBO_evaluable": false,
+   "sign_floor": "n/a (not a sign test)",
+   "sign_floor_vs_BH_rank1": "n/a",
+   "legacy_clause": "2/3 (false-fire 0.500)",
+   "calibrated_clause": "3/3 (false-fire 0.125)",
+   "DSR_ceiling_at_any_effect": 0.9772,
+   "DSR_required_SR@typical_arms": 7.08,
+   "DSR_required_SR@4_arms": 4.44,
+   "MDE_sd_legacy": 1.65,
+   "MDE_sd_calibrated": 1.65,
+   "metric_family": "crps_game_model",
+   "lever": "\u2b50 WINDOW, available NOW."
+  },
+  {
+   "tier": "MiLB\u2192MLB translation (batter)",
+   "window": "2016\u20132026",
+   "fold_rule": "leave-one-MLB-debut-cohort-out (n_cohorts)",
+   "periods": 11,
+   "folds": 11,
+   "typical_arms": 7,
+   "primary_contrast": "paired-t",
+   "PBO_evaluable": true,
+   "sign_floor": "n/a (not a sign test)",
+   "sign_floor_vs_BH_rank1": "n/a",
+   "legacy_clause": "7/11 (false-fire 0.274)",
+   "calibrated_clause": "8/11 (false-fire 0.113)",
+   "DSR_ceiling_at_any_effect": 1.0,
+   "DSR_required_SR@typical_arms": 1.07,
+   "DSR_required_SR@4_arms": 0.94,
+   "MDE_sd_legacy": 0.95,
+   "MDE_sd_calibrated": 1.0,
+   "metric_family": "mae_pct_lift_translation",
+   "lever": "calendar only: +1 fold per completed debut cohort."
+  },
+  {
+   "tier": "MiLB\u2192MLB translation (pitcher)",
+   "window": "2016\u20132026",
+   "fold_rule": "leave-one-MLB-debut-cohort-out (n_cohorts)",
+   "periods": 11,
+   "folds": 11,
+   "typical_arms": 7,
+   "primary_contrast": "paired-t",
+   "PBO_evaluable": true,
+   "sign_floor": "n/a (not a sign test)",
+   "sign_floor_vs_BH_rank1": "n/a",
+   "legacy_clause": "7/11 (false-fire 0.274)",
+   "calibrated_clause": "8/11 (false-fire 0.113)",
+   "DSR_ceiling_at_any_effect": 1.0,
+   "DSR_required_SR@typical_arms": 1.07,
+   "DSR_required_SR@4_arms": 0.94,
+   "MDE_sd_legacy": 0.95,
+   "MDE_sd_calibrated": 1.0,
+   "metric_family": "mae_pct_lift_translation",
+   "lever": "calendar only: +1 fold per completed debut cohort."
+  },
+  {
+   "tier": "Prospect comps \u2014 strict maturity",
+   "window": "2015\u20132022 boards",
+   "fold_rule": "forward, 3-season outcome horizon matured",
+   "periods": 8,
+   "folds": 4,
+   "typical_arms": 12,
+   "primary_contrast": "paired-t",
+   "PBO_evaluable": true,
+   "sign_floor": "n/a (not a sign test)",
+   "sign_floor_vs_BH_rank1": "n/a",
+   "legacy_clause": "3/4 (false-fire 0.312)",
+   "calibrated_clause": "4/4 (false-fire 0.062)",
+   "DSR_ceiling_at_any_effect": 0.9928,
+   "DSR_required_SR@typical_arms": 3.15,
+   "DSR_required_SR@4_arms": 2.39,
+   "MDE_sd_legacy": 2.15,
+   "MDE_sd_calibrated": 2.15,
+   "metric_family": "crps_game_model",
+   "lever": "calendar only: the 3-season horizon must mature."
+  },
+  {
+   "tier": "Prospect comps \u2014 relaxed context",
+   "window": "2015\u20132022 boards",
+   "fold_rule": "forward, relaxed maturity",
+   "periods": 8,
+   "folds": 7,
+   "typical_arms": 12,
+   "primary_contrast": "paired-t",
+   "PBO_evaluable": true,
+   "sign_floor": "n/a (not a sign test)",
+   "sign_floor_vs_BH_rank1": "n/a",
+   "legacy_clause": "5/7 (false-fire 0.227)",
+   "calibrated_clause": "6/7 (false-fire 0.062)",
+   "DSR_ceiling_at_any_effect": 0.9997,
+   "DSR_required_SR@typical_arms": 1.67,
+   "DSR_required_SR@4_arms": 1.31,
+   "MDE_sd_legacy": 1.3,
+   "MDE_sd_calibrated": 1.35,
+   "metric_family": "crps_game_model",
+   "lever": "already the widest reading of the same data."
+  },
+  {
+   "tier": "Prospect source head-to-head",
+   "window": "2018\u20132022 overlap",
+   "fold_rule": "per board season on matched support",
+   "periods": 5,
+   "folds": 5,
+   "typical_arms": 9,
+   "primary_contrast": "fold-SIGN test (two-sided)",
+   "PBO_evaluable": true,
+   "sign_floor": 0.0625,
+   "sign_floor_vs_BH_rank1": "\u26d4 ABOVE (0.0625 > 0.0100) \u2014 no effect of any size can pass",
+   "legacy_clause": "3/5 (false-fire 0.500)",
+   "calibrated_clause": "4/5 (false-fire 0.188)",
+   "DSR_ceiling_at_any_effect": 0.9977,
+   "DSR_required_SR@typical_arms": 2.2,
+   "DSR_required_SR@4_arms": 1.8,
+   "MDE_sd_legacy": 2.2,
+   "MDE_sd_calibrated": 2.2,
+   "metric_family": "rank_ic_board",
+   "lever": "calendar only: +1 overlapping season per year."
+  },
+  {
+   "tier": "AAA-Statcast translation",
+   "window": "2022\u2013 coverage",
+   "fold_rule": "leave-one-debut-cohort-out, \u226530 covered held-out rows",
+   "periods": 3,
+   "folds": 3,
+   "typical_arms": 4,
+   "primary_contrast": "paired-t",
+   "PBO_evaluable": false,
+   "sign_floor": "n/a (not a sign test)",
+   "sign_floor_vs_BH_rank1": "n/a",
+   "legacy_clause": "2/3 (false-fire 0.500)",
+   "calibrated_clause": "3/3 (false-fire 0.125)",
+   "DSR_ceiling_at_any_effect": 0.9772,
+   "DSR_required_SR@typical_arms": 4.44,
+   "DSR_required_SR@4_arms": 4.44,
+   "MDE_sd_legacy": 3.3,
+   "MDE_sd_calibrated": 3.3,
+   "metric_family": "mae_pct_lift_translation",
+   "lever": "calendar only: one usable cohort per completed season."
+  }
+ ],
+ "arm_count_table": [
+  {
+   "folds": 3,
+   "2 arms": 3.11,
+   "4 arms": 4.44,
+   "7 arms": 5.36,
+   "12 arms": 6.16,
+   "20 arms": 6.85,
+   "28 arms": 7.28
+  },
+  {
+   "folds": 5,
+   "2 arms": 1.38,
+   "4 arms": 1.8,
+   "7 arms": 2.09,
+   "12 arms": 2.33,
+   "20 arms": 2.54,
+   "28 arms": 2.67
+  },
+  {
+   "folds": 8,
+   "2 arms": 0.93,
+   "4 arms": 1.18,
+   "7 arms": 1.35,
+   "12 arms": 1.49,
+   "20 arms": 1.62,
+   "28 arms": 1.69
+  },
+  {
+   "folds": 11,
+   "2 arms": 0.74,
+   "4 arms": 0.94,
+   "7 arms": 1.07,
+   "12 arms": 1.18,
+   "20 arms": 1.27,
+   "28 arms": 1.33
+  }
+ ],
+ "retest_trigger_corrections": [
+  {
+   "study": "e7_15_h1 (pitcher)",
+   "metric": "k_pct",
+   "folds_have": 11,
+   "recorded folds_needed_DSR": 15,
+   "corrected (closed form)": 25
+  },
+  {
+   "study": "e7_15_h1 (pitcher)",
+   "metric": "bb_pct",
+   "folds_have": 11,
+   "recorded folds_needed_DSR": 35,
+   "corrected (closed form)": "UNREACHABLE at any n"
+  },
+  {
+   "study": "e7_15_h1 (pitcher)",
+   "metric": "hr_rate",
+   "folds_have": 11,
+   "recorded folds_needed_DSR": 15,
+   "corrected (closed form)": 405
+  },
+  {
+   "study": "e7_15_h1 (pitcher)",
+   "metric": "gb_pct",
+   "folds_have": 11,
+   "recorded folds_needed_DSR": 45,
+   "corrected (closed form)": "UNREACHABLE at any n"
+  },
+  {
+   "study": "e7_15_h1 (batter)",
+   "metric": "bb_pct",
+   "folds_have": 11,
+   "recorded folds_needed_DSR": 35,
+   "corrected (closed form)": 28
+  },
+  {
+   "study": "e7_15_h1 (batter)",
+   "metric": "iso",
+   "folds_have": 11,
+   "recorded folds_needed_DSR": 37,
+   "corrected (closed form)": 95
+  },
+  {
+   "study": "e7_15_h2 (pitcher)",
+   "metric": "k_pct",
+   "folds_have": 11,
+   "recorded folds_needed_DSR": 247,
+   "corrected (closed form)": "UNREACHABLE at any n"
+  },
+  {
+   "study": "e7_15_h2 (pitcher)",
+   "metric": "hr_rate",
+   "folds_have": 11,
+   "recorded folds_needed_DSR": 42,
+   "corrected (closed form)": 40
+  },
+  {
+   "study": "e7_15_h2 (pitcher)",
+   "metric": "gb_pct",
+   "folds_have": 11,
+   "recorded folds_needed_DSR": 496,
+   "corrected (closed form)": "UNREACHABLE at any n"
+  },
+  {
+   "study": "e7_15_h2 (batter)",
+   "metric": "woba",
+   "folds_have": 11,
+   "recorded folds_needed_DSR": 1231,
+   "corrected (closed form)": "UNREACHABLE at any n"
+  },
+  {
+   "study": "e7_15_h2 (batter)",
+   "metric": "k_pct",
+   "folds_have": 11,
+   "recorded folds_needed_DSR": 38,
+   "corrected (closed form)": "UNREACHABLE at any n"
+  },
+  {
+   "study": "e7_15_h2 (batter)",
+   "metric": "bb_pct",
+   "folds_have": 11,
+   "recorded folds_needed_DSR": 70,
+   "corrected (closed form)": 243
+  },
+  {
+   "study": "e7_15_h2 (batter)",
+   "metric": "iso",
+   "folds_have": 11,
+   "recorded folds_needed_DSR": 348,
+   "corrected (closed form)": "UNREACHABLE at any n"
+  },
+  {
+   "study": "e7_15_h3 (pitcher)",
+   "metric": "k_pct",
+   "folds_have": 11,
+   "recorded folds_needed_DSR": 2010,
+   "corrected (closed form)": "UNREACHABLE at any n"
+  },
+  {
+   "study": "e7_15_h3 (batter)",
+   "metric": "bb_pct",
+   "folds_have": 11,
+   "recorded folds_needed_DSR": 140,
+   "corrected (closed form)": 372
+  },
+  {
+   "study": "e7_15_h3 (batter)",
+   "metric": "iso",
+   "folds_have": 11,
+   "recorded folds_needed_DSR": 120,
+   "corrected (closed form)": 166
+  },
+  {
+   "study": "e7_15_h4 (pitcher)",
+   "metric": "xwoba_against",
+   "folds_have": 4,
+   "recorded folds_needed_DSR": 17,
+   "corrected (closed form)": 33
+  }
+ ],
+ "null_state_counts": {
+  "POWER_LIMITED": 29,
+  "not-classifiable-from-header": 23,
+  "GENUINE_ABSENCE": 9,
+  "UNKNOWN": 9,
+  "SHIPPED (not a null)": 6,
+  "UNDEFINED": 4,
+  "INACTIVE": 1,
+  "DSR_UNREACHABLE": 1
+ },
+ "bound_by_counts": {
+  "unknown \u2014 the artifact records no fold structure": 32,
+  "fold-consistency clause": 11,
+  "PBO": 10,
+  "point estimate (best arm loses on average)": 9,
+  "nothing \u2014 this arm SHIPPED under its own study's gate": 6,
+  "DSR": 6,
+  "unattributed (the recorded stats do not identify a binding clause)": 3,
+  "PBO UNDEFINED (<4 folds)": 3,
+  "n/a \u2014 the mechanism cannot act on this population": 1,
+  "anchor/plumbing (BLOCKED \u2014 no verdict was reached)": 1
+ }
+}
