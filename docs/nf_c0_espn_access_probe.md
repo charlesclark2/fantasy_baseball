@@ -221,6 +221,51 @@ Two consequences, both now shipped:
    points and a fabricated boundary shown to a user is the same "it looked right in a table" guess
    the map's own header forbids — one layer over, in the display layer.
 
+### 4b. Rosters (2026-08-01) — and the one thing still unvalidated
+
+The read link now requests `mSettings` + `mTeam` + `mRoster` in one URL (ESPN takes repeated
+`view=` params), so importing rosters costs the user no extra paste. Teams, owner display names and
+rostered players all come across; a settings-only paste from an older link still imports completely,
+because rosters are additive rather than a new precondition.
+
+**The pre-draft case is the normal case, not an edge case.** People import *before* drafting — that
+is when a draft tool is worth having — and an undrafted ESPN league returns its teams with empty
+rosters. That reads as a successful import with a next step ("import again after your draft"), never
+as a partial failure. Both real leagues are undrafted, so this is the path with real-payload backing.
+
+Two deliberate limitations, both disclosed in the preview rather than papered over:
+
+* **We do not mark which team is yours.** ESPN's response never identifies the requesting account,
+  and the credential that would is exactly the one we refuse to hold. Guessing would be worse than
+  saying so.
+* **Member SWID GUIDs are used to label a team and then dropped.** A GUID is an identifier, not a
+  credential — it cannot authenticate without `espn_s2` — but "not a credential" is not a reason to
+  keep one.
+
+⚠️ **THE CREDENTIAL SCRUBBER WAS NARROWED, ON PURPOSE.** `mTeam` returns `members[].id` as a SWID
+GUID, so the original bare `\bSWID\b` pattern was a **false-refusal landmine**: had ESPN labelled
+that field with the literal word, every honest import would have been rejected with a message
+accusing the user of pasting credentials. It now matches the cookie-assignment form (`SWID=`). The
+asymmetry decides it — narrowing costs nothing, because a pasted cookie header is caught three times
+over (`espn_s2` anywhere, the `Cookie:`/`-H cookie:` patterns, and this), while over-matching breaks
+the feature for everyone. A dedicated test class re-proves the guard against real DevTools copies.
+
+🚧 **STILL UNVALIDATED: the populated-roster path.** Both real leagues have `draftDetail.drafted ==
+false`, so **no obtainable payload contains a roster**, and the player-object field names
+(`playerPoolEntry.player.fullName` / `eligibleSlots` / `proTeamId`) are shape-plausible rather than
+confirmed. The tests around them pin OUR logic — position derivation, the starter flag, row-by-row
+resilience — not ESPN's field names. Position is derived from `eligibleSlots` against the
+**already-verified** `ROSTER_SLOT_MAP` rather than ESPN's separate `defaultPositionId` table, so no
+new unverified numbering was introduced. `_PRO_TEAM_BY_ID` ships at a **deliberately lower evidence
+bar** than `SCORING_KEY_MAP`: a wrong stat id silently misprices a league, whereas a wrong pro-team
+abbreviation shows a wrong badge beside a correct player on a roster we display but do not score —
+and an unknown id yields `None` rather than a guess.
+
+**How to close it: a PRIOR SEASON.** League 642070 lists `previousSeasons: [2013…2025]`, and those
+are drafted. Swapping `seasons/2026` for `seasons/2025` in the same link returns a populated roster
+today, which pins the field names and lets several `proTeamId` rows be confirmed by identity against
+known players. Until that lands, treat rostered ESPN imports as unproven.
+
 ⭐ This is the second time the rule has paid on this story (the first was Sleeper's coarse `fgm_50p`
 vs fine `fgm_50_59`/`fgm_60p`, which survived 56 tests and a live-verified league). **Both fixtures
 are kept, and a test asserts they exercise disjoint scoring families** — if they ever converge, the

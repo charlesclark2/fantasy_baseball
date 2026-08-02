@@ -237,15 +237,19 @@ def _score_type(cohort: pd.DataFrame, player_type: str, *, strict: bool, seed: i
 
 
 def _ordering_study(cohort: pd.DataFrame, player_type: str, *, seed: int,
-                    comp_arm: str = "comp_gower_k25") -> dict:
+                    comp_arm: str = "comp_gower_k25", strict: bool = False) -> dict:
     """Does adding a comp term improve the ORDERING the board already produces?
 
     Separate from the CRPS study on purpose — see `comp_validation` §4. CRPS grades a distribution;
     a draft board is purely ordinal, and an arm can win CRPS on calibration while ordering no
     better. This is the statistic that licensed `prospect_comps.attach_comp_ranking`.
+
+    `strict` selects the production maturity rule for the fold plan. It DEFAULTS TO FALSE so E7.13's
+    own run reproduces byte-identically; E7.16 passes True because its cohort (the point-in-time MLB
+    Pipeline archive) is deep enough to admit a strictly-matured plan, which E7.13's was not.
     """
     pool = build_pool(cohort, player_type=player_type)
-    plan = cv.fold_plan(pool, strict=False)
+    plan = cv.fold_plan(pool, strict=strict)
     arm = next(a for a in cv.ARM_FIELD if a.name == comp_arm)
     rng = np.random.default_rng(seed)
 
@@ -273,11 +277,39 @@ def _ordering_study(cohort: pd.DataFrame, player_type: str, *, seed: int,
         d = d.loc[d["board_proxy"].notna()].reset_index(drop=True)
 
         names = list(cv.ordering_arms(form))
-        ic = {n: float(np.nanmean([cv.rank_ic(g[n].to_numpy(float), g["y"].to_numpy(float))
-                                   for _, g in d.groupby("fold")]))
-              for n in names}
+        # ⭐⭐ MATCHED SUPPORT — every arm scored on the SAME rows (E7.16 fix, 2026-08-01).
+        #
+        # 🚨 THE DEFECT THIS REPLACES, AND WHY IT LOOKED LIKE A RESULT. `rank_ic` drops non-finite
+        # rows, and `comp_only` is finite ONLY where the engine produced comps (~64–69% of the pool)
+        # while `board_proxy` is finite nearly everywhere. So the two were scored on DIFFERENT
+        # POPULATIONS — and the comped subpopulation is intrinsically easier to order, because
+        # having comps means having a minor-league record. MEASURED on E7.16's strictly-matured
+        # folds: `board_proxy` itself scores +0.4385 over the full population but **+0.5320 on the
+        # comped rows alone** (batters). Read the naive way, `comp_only` beat the board by +0.1073;
+        # on matched support the same number is **+0.0138** — 87% of the "win" was the population.
+        # (Pitchers: +0.0991 → +0.0514.) This is the CRPS half's own `usable`-intersection rule —
+        # "a comparison over different row sets is not a comparison" — which this half was missing.
+        #
+        # ⚖️ The BLEND arms (`board_plus_comp_w*`) were never affected: they fall back to the
+        # board's score where a comp is absent, so they were always defined on the same rows as the
+        # incumbent. That is why this fix CONFIRMS rather than overturns what E7.13 wired — on
+        # matched support the w30 blend's edge over the incumbent GROWS (batters +0.0368 → +0.0436,
+        # pitchers +0.0280 → +0.0535). What it corrects is the `comp_only` column, which E7.13
+        # measured, reported, and deliberately did NOT wire.
+        matched = np.ones(len(d), dtype=bool)
+        for n in names:
+            matched &= np.isfinite(d[n].to_numpy(float))
+        dm = d.loc[matched].reset_index(drop=True)
+
+        def _ic_frame(frame: pd.DataFrame) -> dict[str, float]:
+            return {n: float(np.nanmean([cv.rank_ic(g[n].to_numpy(float), g["y"].to_numpy(float))
+                                         for _, g in frame.groupby("fold")]))
+                    for n in names}
+
+        ic = _ic_frame(dm)
+        ic_full = _ic_frame(d)          # reported as CONTEXT only — never selected on
         fm = np.vstack([[-cv.rank_ic(g[n].to_numpy(float), g["y"].to_numpy(float)) for n in names]
-                        for _, g in d.groupby("fold")])
+                        for _, g in dm.groupby("fold")])
         contenders = [n for n, k in cv.ordering_arms(form).items()
                       if k in ("contender", "incumbent")]
         best = max(contenders, key=lambda n: ic[n])
@@ -287,9 +319,10 @@ def _ordering_study(cohort: pd.DataFrame, player_type: str, *, seed: int,
                                         for k, v in pbo["flip_distribution"].items()}
         deltas = np.array([cv.rank_ic(g[best].to_numpy(float), g["y"].to_numpy(float))
                            - cv.rank_ic(g["board_proxy"].to_numpy(float), g["y"].to_numpy(float))
-                           for _, g in d.groupby("fold")])
+                           for _, g in dm.groupby("fold")])
         per_form[form] = {
             "rank_ic": {n: round(v, 4) for n, v in ic.items()},
+            "rank_ic_unmatched_support": {n: round(v, 4) for n, v in ic_full.items()},
             "best_contender": best,
             "delta_vs_board_proxy": round(float(ic[best] - ic["board_proxy"]), 4),
             "delta_by_fold": [round(float(x), 4) for x in deltas],
@@ -304,6 +337,8 @@ def _ordering_study(cohort: pd.DataFrame, player_type: str, *, seed: int,
             },
             "rows_with_comp": float(d["has_comp"].mean()),
             "n_rows": int(len(d)),
+            "n_rows_matched_support": int(len(dm)),
+            "matched_support_share": round(float(matched.mean()), 4),
         }
     return {"player_type": player_type, "comp_arm": comp_arm, "by_form": per_form}
 

@@ -233,6 +233,21 @@ lexicographically on **`fv` → `model_score` → `blend_score`**, and because F
 Two consequences decided the implementation: a comp term added to `blend_score` alone would barely
 move the board (third key), so it enters **`model_score`**; and the FV-first *shape* is kept.
 
+> 🔧 **CORRECTION (E7.16, 2026-08-01) — the `comp_only` column below is scored on a DIFFERENT
+> POPULATION than the arms it is compared to, and the harness has been fixed.** `rank_ic` drops
+> non-finite rows; `comp_only` is finite only where the engine produced comps (~80–88% of this
+> pool) while `board_proxy` is finite nearly everywhere, and the comped subpopulation is
+> intrinsically easier to order. `_ordering_study` now scores every arm on MATCHED SUPPORT and the
+> artifacts here are regenerated. **What changed:** `comp_only` is no longer the best batter arm —
+> the winner becomes `board_plus_comp_w40` on all four type × form cells (batters ΔIC +0.0934 →
+> +0.0817; pitchers were already blend-won). **What did NOT change:** the blend arms fall back to
+> the board's score where a comp is absent, so they were always defined on the same rows as the
+> incumbent — **the wired decision in §6.3 is unaffected and its margin grows.** §6.2's reading of
+> `comp_only`'s relaxed-fold win as an *era artifact* now has a second, measurable co-explanation
+> (the population); both point the same way, and `comp_only` was measured, reported and
+> deliberately never wired. See `e7_16_pipeline_comp_pool.md` §5. The §3 CRPS verdicts are
+> untouched (that half already intersected its support).
+
 ### 6.2 ⚠️ The relaxed folds would have given the wrong answer, and a direct test caught it
 
 §4's "every arm shares the hindsight, so the head-to-head is fair" argument **does not hold here** —

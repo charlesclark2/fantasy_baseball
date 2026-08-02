@@ -1,0 +1,401 @@
+{
+  "story": "E7.14 \u2014 which prospect-ranking SOURCE orders realized MLB value best?",
+  "generated_at": "2026-08-02T01:59:59+00:00",
+  "best_alpha": 0,
+  "asymmetry": {
+    "fangraphs_board_is_retained": "E7.8's stated risk; E7.13 measured the `level` leak on it. MLB Pipeline's archive scans clean (E7.16 \u00a71).",
+    "fangraphs_snapshot_is_5_months_later": "FanGraphs rows are stamped <season>-07-01 (E7.7's retained-board convention); MLB Pipeline rows are stamped <season>-02-01. The FanGraphs rank has seen ~5 more months of the season \u2014 an advantage TO FanGraphs, on top of the retained-board risk.",
+    "consequence": "Both inequalities favour FanGraphs \u21d2 a FanGraphs win is UNINTERPRETABLE; a Pipeline win or a tie is conservative."
+  },
+  "cohort": {
+    "pipeline_rows": 7186,
+    "pipeline_seasons": [
+      2015,
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022
+    ],
+    "fangraphs_rows": 5245,
+    "fangraphs_seasons": [
+      2018,
+      2019,
+      2020,
+      2021,
+      2022
+    ],
+    "head_to_head_rows": 3667,
+    "head_to_head_seasons": [
+      2018,
+      2019,
+      2020,
+      2021,
+      2022
+    ],
+    "distinct_players": 1790,
+    "rows_by_season": {
+      "2018": 628,
+      "2019": 731,
+      "2020": 769,
+      "2021": 788,
+      "2022": 751
+    },
+    "by_type": {
+      "batter": 1953,
+      "pitcher": 1714
+    },
+    "both_org_ranked": 3667,
+    "both_overall_ranked": 443,
+    "snapshot_gap_note": "FanGraphs rows are stamped <season>-07-01 (E7.7's retained-board convention); MLB Pipeline rows are stamped <season>-02-01. The FanGraphs rank has seen ~5 more months of the season \u2014 an advantage TO FanGraphs, on top of the retained-board risk."
+  },
+  "primary_metric": "Spearman rank-IC of each source's ordering against realized 3-season dynasty fantasy points (0 for a prospect who never reached MLB), per board season, on matched support",
+  "org_scope": {
+    "restrict": "org",
+    "n_rows": 3667,
+    "n_rows_matched_support": 3207,
+    "matched_support_share": 0.8746,
+    "n_clusters": 1690,
+    "folds": [
+      2018,
+      2019,
+      2020,
+      2021,
+      2022
+    ],
+    "rank_ic": {
+      "fangraphs_org": 0.3128,
+      "pipeline_org": 0.3167,
+      "consensus_equal": 0.321,
+      "consensus_fg25": 0.3245,
+      "consensus_fg75": 0.3222,
+      "fangraphs_fv": 0.3371,
+      "pipeline_grade": 0.3772,
+      "oracle_order": 1.0,
+      "random_order": 0.0101
+    },
+    "rank_ic_by_fold": {
+      "fangraphs_org": {
+        "2018": 0.257,
+        "2019": 0.3187,
+        "2020": 0.3109,
+        "2021": 0.2891,
+        "2022": 0.3881
+      },
+      "pipeline_org": {
+        "2018": 0.2958,
+        "2019": 0.3369,
+        "2020": 0.3326,
+        "2021": 0.2572,
+        "2022": 0.3611
+      },
+      "consensus_equal": {
+        "2018": 0.2875,
+        "2019": 0.3339,
+        "2020": 0.3315,
+        "2021": 0.2684,
+        "2022": 0.3839
+      },
+      "consensus_fg25": {
+        "2018": 0.2967,
+        "2019": 0.3408,
+        "2020": 0.3336,
+        "2021": 0.2706,
+        "2022": 0.3808
+      },
+      "consensus_fg75": {
+        "2018": 0.275,
+        "2019": 0.3302,
+        "2020": 0.3226,
+        "2021": 0.2879,
+        "2022": 0.3954
+      },
+      "fangraphs_fv": {
+        "2018": 0.2879,
+        "2019": 0.3369,
+        "2020": 0.3316,
+        "2021": 0.3284,
+        "2022": 0.4006
+      },
+      "pipeline_grade": {
+        "2018": 0.3431,
+        "2019": 0.3471,
+        "2020": 0.3372,
+        "2021": 0.4231,
+        "2022": 0.4356
+      },
+      "oracle_order": {
+        "2018": 1.0,
+        "2019": 1.0,
+        "2020": 1.0,
+        "2021": 1.0,
+        "2022": 1.0
+      },
+      "random_order": {
+        "2018": 0.0569,
+        "2019": 0.0341,
+        "2020": -0.1096,
+        "2021": 0.0323,
+        "2022": 0.0367
+      }
+    },
+    "arm_kinds": {
+      "fangraphs_org": "contender",
+      "pipeline_org": "contender",
+      "consensus_equal": "incumbent",
+      "consensus_fg25": "contender",
+      "consensus_fg75": "contender",
+      "fangraphs_fv": "contender",
+      "pipeline_grade": "contender",
+      "oracle_order": "anchor",
+      "random_order": "placebo"
+    },
+    "best_contender": "pipeline_grade",
+    "incumbent": "consensus_equal",
+    "anchors": {
+      "oracle_is_the_ceiling": true,
+      "oracle_ic": 1.0,
+      "placebo_loses_to_every_contender": true,
+      "placebo_ic": 0.0101
+    },
+    "paired": {
+      "pipeline_vs_fangraphs": {
+        "arm": "pipeline_org",
+        "foil": "fangraphs_org",
+        "mean_delta_ic": 0.004,
+        "by_fold": [
+          0.0388,
+          0.0182,
+          0.0217,
+          -0.0319,
+          -0.027
+        ],
+        "folds_improved": 3,
+        "n_folds": 5,
+        "arm_better": true,
+        "sign_consistent": false,
+        "p_value_fold_sign": 1.0,
+        "cluster_boot_ci95": [
+          -0.0189,
+          0.0272
+        ],
+        "n_clusters": 1690
+      },
+      "consensus_vs_fangraphs": {
+        "arm": "consensus_equal",
+        "foil": "fangraphs_org",
+        "mean_delta_ic": 0.0083,
+        "by_fold": [
+          0.0305,
+          0.0152,
+          0.0206,
+          -0.0207,
+          -0.0042
+        ],
+        "folds_improved": 3,
+        "n_folds": 5,
+        "arm_better": true,
+        "sign_consistent": false,
+        "p_value_fold_sign": 1.0,
+        "cluster_boot_ci95": [
+          -0.0032,
+          0.0208
+        ],
+        "n_clusters": 1690
+      },
+      "consensus_vs_pipeline": {
+        "arm": "consensus_equal",
+        "foil": "pipeline_org",
+        "mean_delta_ic": 0.0043,
+        "by_fold": [
+          -0.0082,
+          -0.003,
+          -0.0011,
+          0.0112,
+          0.0228
+        ],
+        "folds_improved": 2,
+        "n_folds": 5,
+        "arm_better": true,
+        "sign_consistent": false,
+        "p_value_fold_sign": 1.0,
+        "cluster_boot_ci95": [
+          -0.0088,
+          0.017
+        ],
+        "n_clusters": 1690
+      },
+      "consensus_vs_best_single": {
+        "arm": "consensus_equal",
+        "foil": "pipeline_org",
+        "mean_delta_ic": 0.0043,
+        "by_fold": [
+          -0.0082,
+          -0.003,
+          -0.0011,
+          0.0112,
+          0.0228
+        ],
+        "folds_improved": 2,
+        "n_folds": 5,
+        "arm_better": true,
+        "sign_consistent": false,
+        "p_value_fold_sign": 1.0,
+        "cluster_boot_ci95": [
+          -0.0088,
+          0.017
+        ],
+        "n_clusters": 1690
+      },
+      "selected_vs_incumbent": {
+        "arm": "pipeline_grade",
+        "foil": "consensus_equal",
+        "mean_delta_ic": 0.0562,
+        "by_fold": [
+          0.0556,
+          0.0132,
+          0.0057,
+          0.1547,
+          0.0517
+        ],
+        "folds_improved": 5,
+        "n_folds": 5,
+        "arm_better": true,
+        "sign_consistent": true,
+        "p_value_fold_sign": 0.0625,
+        "cluster_boot_ci95": [
+          0.0321,
+          0.0795
+        ],
+        "n_clusters": 1690
+      },
+      "pipeline_grade_vs_fangraphs_fv": {
+        "arm": "pipeline_grade",
+        "foil": "fangraphs_fv",
+        "mean_delta_ic": 0.0401,
+        "by_fold": [
+          0.0552,
+          0.0102,
+          0.0056,
+          0.0947,
+          0.035
+        ],
+        "folds_improved": 5,
+        "n_folds": 5,
+        "arm_better": true,
+        "sign_consistent": true,
+        "p_value_fold_sign": 0.0625,
+        "cluster_boot_ci95": [
+          0.0113,
+          0.0697
+        ],
+        "n_clusters": 1690
+      }
+    },
+    "deflation": {
+      "pbo_contender_set": {
+        "pbo": 0.0,
+        "n_splits": 10,
+        "computable": true,
+        "median_oos_rank_of_is_winner": 0.0,
+        "performance_degradation": 0.0,
+        "flip_distribution": {
+          "pipeline_grade": 10
+        }
+      },
+      "dsr": null,
+      "dsr_computable": false,
+      "dsr_note": "UNCOMPUTABLE at 5 folds \u2014 DSR needs >=8 observations and the observation here is the FOLD, not the row. This is a POWER limit, not a passed or a failed gate.",
+      "contender_spread_ic": 0.0645,
+      "bh_fdr": {
+        "cutoff": 0.010000000000000002,
+        "reject": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "alpha": 0.05,
+        "n_tests": 5,
+        "family": [
+          "pipeline_vs_fangraphs",
+          "consensus_vs_fangraphs",
+          "consensus_vs_pipeline",
+          "selected_vs_incumbent",
+          "pipeline_grade_vs_fangraphs_fv"
+        ]
+      },
+      "multiplicity_is_unattainable_at_this_fold_count": {
+        "n_folds": 5,
+        "smallest_attainable_sign_p": 0.0625,
+        "bh_rank1_cutoff": 0.01,
+        "attainable": false,
+        "folds_required_to_certify": 8,
+        "note": "At this fold count NO effect of any size can clear the BH-FDR family \u2014 the binding constraint is the number of overlapping board seasons, not the strength of the signal. A result reported as 'tested, nothing there' would be wrong; it is 'not certifiable until the overlap reaches 8 seasons'."
+      }
+    },
+    "power": {
+      "se_of_ic_gap": 0.0125,
+      "min_detectable_ic_gap_95": 0.0245,
+      "n_clusters": 1690,
+      "n_folds": 5,
+      "note": "A measured gap smaller than the minimum detectable one is 'cannot distinguish at this N', NOT 'the sources are equally accurate'."
+    }
+  },
+  "fv_replication": {
+    "pooled": {
+      "fangraphs_fv_ic": 0.3371,
+      "pipeline_grade_ic": 0.3772,
+      "delta_pipeline_minus_fangraphs": 0.0401,
+      "folds_pipeline_better": 5,
+      "n_folds": 5
+    },
+    "by_type": {
+      "batter": {
+        "n": 1734,
+        "fangraphs_fv_ic": 0.3903,
+        "pipeline_grade_ic": 0.4376,
+        "delta_pipeline_minus_fangraphs": 0.0473
+      },
+      "pitcher": {
+        "n": 1473,
+        "fangraphs_fv_ic": 0.3109,
+        "pipeline_grade_ic": 0.3426,
+        "delta_pipeline_minus_fangraphs": 0.0317
+      }
+    },
+    "e7_13_fv_alone_baselines": {
+      "batter": 0.4161,
+      "pitcher": 0.3733,
+      "note": "E7.13's FV-alone rank-IC on ITS cohort (FanGraphs 2018\u20132022, relaxed folds) \u2014 a reference point, not a comparison: different cohort, different folds."
+    }
+  },
+  "verdict": {
+    "source_rank_head_to_head": {
+      "pipeline_minus_fangraphs_ic": 0.004,
+      "min_detectable_gap_95": 0.0245,
+      "folds_improved": "3/5",
+      "sign_consistent": false,
+      "distinguishable": false,
+      "ruling": "NULL \u2014 no source robustly out-orders the other. The measured gap is 0.0040 against a minimum detectable 0.0245, and it does not hold its sign across folds. E7.11's EQUAL WEIGHT is the honest default; the shipped 8/3 board is CONFIRMED, not corrected."
+    },
+    "does_the_consensus_beat_the_best_single_source": {
+      "delta_ic": 0.0043,
+      "folds_improved": "2/5",
+      "ruling": "NOT EARNED \u2014 the consensus is +0.0043 over the better single source, a fifth of the detectable gap and positive in only 2 of 5 folds. E7.11's refusal to claim 'averaging is more accurate' stands; equal weight is kept because it is the honest default, NOT because it was shown to be better."
+    },
+    "grade_beats_rank": {
+      "best_contender": "pipeline_grade",
+      "pipeline_grade_minus_fangraphs_fv_ic": 0.0401,
+      "folds_improved": "5/5",
+      "sign_test_p": 0.0625,
+      "certifiable_at_this_fold_count": false,
+      "folds_required_to_certify": 8,
+      "ruling": "REAL BUT NOT CERTIFIABLE HERE \u2014 the point-in-time MLB Pipeline GRADE out-orders every rank arm and FanGraphs' FV in 5 of 5 folds, but at 5 overlapping board seasons the sign test's floor (0.0625) sits above the BH-FDR cutoff (0.0100), so no effect of any size could pass. This is 'underpowered, not absent': it needs 8 overlapping seasons, and the overlap grows one per year."
+    },
+    "headline": "NULL \u2014 no source robustly out-orders the other. The measured gap is 0.0040 against a minimum detectable 0.0245, and it does not hold its sign across folds. E7.11's EQUAL WEIGHT is the honest default; the shipped 8/3 board is CONFIRMED, not corrected."
+  }
+}

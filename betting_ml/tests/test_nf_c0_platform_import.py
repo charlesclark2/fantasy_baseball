@@ -963,7 +963,7 @@ class TestEspnCredentialScrubber:
             "Cookie: espn_s2=abc",
             "-H 'cookie: SWID={x}'",
             "authorization: Bearer abc",
-            '{"SWID": "{ABC}"}',
+            "SWID={ABC-123}; espn_s2=zzz",
             "set-cookie: espn_s2=zzz",
         ],
     )
@@ -1134,10 +1134,19 @@ class TestEspnImport:
             espn.parse_settings_payload(body)
         assert "signed in" in str(exc.value).lower()
 
+    def test_the_read_url_asks_for_settings_teams_and_rosters_in_ONE_link(self):
+        """ESPN takes repeated `view=` params, so importing rosters costs the user no extra step.
+        One link, one paste — the copy burden is what the whole flow is designed around."""
+        from app.backend.services.platform_import import espn
+
+        url = espn.build_read_url("998005", 2026)
+        assert "leagues/998005?" in url
+        for view in ("mSettings", "mTeam", "mRoster"):
+            assert f"view={view}" in url
+
     def test_the_read_url_rejects_a_non_numeric_league_id(self):
         from app.backend.services.platform_import import espn
 
-        assert espn.build_read_url("998005", 2026).endswith("leagues/998005?view=mSettings")
         for bad in ("../../etc", "998005; rm -rf /", "http://evil", ""):
             with pytest.raises(espn.EspnInputError):
                 espn.build_read_url(bad, 2026)
@@ -1528,3 +1537,213 @@ class TestEspnCapturedKeysAreLegible:
             platform="sleeper", source_league_id="1", season="2026", config={}
         )
         assert league.to_dict()["unmapped_labels"] == {}
+
+
+class TestEspnRosterImport:
+    """Rosters from the `mTeam` + `mRoster` views.
+
+    ⏳ **The PRE-DRAFT case is the normal case.** People import BEFORE their draft — that is when a
+    draft tool earns its keep — and an undrafted ESPN league returns teams with EMPTY rosters. Both
+    real fixtures are undrafted, so that is the path with real-payload backing; the populated path
+    is marked below and is NOT yet validated against a real rostered payload.
+    """
+
+    def test_a_settings_only_payload_still_imports_cleanly(self, espn_payload):
+        """An older single-view link, or any response without `teams`, must remain a COMPLETE
+        settings import — rosters are additive, never a new precondition."""
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload)
+        assert league.teams == ()
+        assert league.config["scoring"]["per_stat"]  # the real import is untouched
+        assert not [w for w in league.warnings if "hasn't drafted" in w]
+
+    def test_an_undrafted_league_reports_it_as_expected_not_as_a_failure(self):
+        from app.backend.services.platform_import import espn
+
+        payload = json.loads(ESPN_FIXTURE_2.read_text())
+        payload["teams"] = [
+            {"id": 1, "name": "Team One", "owners": ["{GUID-1}"], "roster": {"entries": []}},
+            {"id": 2, "location": "Team", "nickname": "Two", "owners": ["{GUID-2}"]},
+        ]
+        payload["members"] = [
+            {"id": "{GUID-1}", "displayName": "alice"},
+            {"id": "{GUID-2}", "displayName": "bob"},
+        ]
+        league = espn.parse_settings_payload(json.dumps(payload))
+
+        assert [t.name for t in league.teams] == ["Team One", "Team Two"]
+        assert [t.owner for t in league.teams] == ["alice", "bob"]
+        assert all(t.players == () for t in league.teams)
+        note = [w for w in league.warnings if "hasn't drafted" in w]
+        assert len(note) == 1
+        # It must tell the user what to DO, not merely that something is missing.
+        assert "Import again after your draft" in note[0]
+
+    def test_a_member_guid_is_used_as_a_label_and_then_dropped(self):
+        """A SWID GUID identifies a real ESPN account. It is not a credential — but "not a
+        credential" is not a reason to keep it."""
+        from app.backend.services.platform_import import espn
+
+        payload = json.loads(ESPN_FIXTURE_2.read_text())
+        payload["teams"] = [{"id": 1, "name": "T", "owners": ["{SECRET-GUID}"]}]
+        payload["members"] = [{"id": "{SECRET-GUID}", "displayName": "alice"}]
+        league = espn.parse_settings_payload(json.dumps(payload))
+
+        assert league.teams[0].owner == "alice"
+        assert "SECRET-GUID" not in json.dumps(league.to_dict())
+
+    def test_nobody_is_marked_as_the_importing_user(self):
+        """ESPN's response never says which team belongs to the requesting account, and we
+        deliberately do not hold the credential that would tell us. Guessing would be worse."""
+        from app.backend.services.platform_import import espn
+
+        payload = json.loads(ESPN_FIXTURE_2.read_text())
+        payload["teams"] = [
+            {"id": i, "name": f"T{i}", "roster": {"entries": [_espn_entry(i)]}} for i in (1, 2)
+        ]
+        league = espn.parse_settings_payload(json.dumps(payload))
+        assert not any(t.is_owner for t in league.teams)
+        assert [w for w in league.warnings if "which of these teams is yours" in w]
+
+    # ── the POPULATED path — shape-plausible, NOT yet real-payload validated ────────────────────
+
+    def test_a_rostered_player_is_read_with_position_and_starter_flag(self):
+        from app.backend.services.platform_import import espn
+
+        payload = json.loads(ESPN_FIXTURE_2.read_text())
+        payload["teams"] = [
+            {
+                "id": 7,
+                "name": "Roster Test",
+                "roster": {
+                    "entries": [
+                        _espn_entry(3139477, "Patrick Mahomes", slots=[0, 20, 21], lineup=0, pro=12),
+                        _espn_entry(4262921, "Bench Back", slots=[2, 3, 23, 20, 21], lineup=20, pro=9),
+                    ]
+                },
+            }
+        ]
+        league = espn.parse_settings_payload(json.dumps(payload))
+        players = {p.name: p for p in league.teams[0].players}
+
+        assert players["Patrick Mahomes"].position == "QB"
+        assert players["Patrick Mahomes"].starter is True
+        assert players["Bench Back"].position == "RB"
+        assert players["Bench Back"].starter is False
+        assert not [w for w in league.warnings if "hasn't drafted" in w]
+
+    def test_position_comes_from_the_ALREADY_VERIFIED_slot_map(self):
+        """⭐ Derived from `eligibleSlots` against `ROSTER_SLOT_MAP`, which the settings work already
+        established — NOT from ESPN's separate `defaultPositionId` table, which is a second
+        numbering with no identity to check it against. Reusing verified evidence beats importing a
+        new guess."""
+        from app.backend.services.platform_import import espn
+
+        for slot, expected in ((0, "QB"), (2, "RB"), (4, "WR"), (6, "TE"), (16, "DST"), (17, "K")):
+            assert espn._player_position({"eligibleSlots": [slot, 20, 21]}) == expected
+        # A bench-only or unrecognised player yields None rather than a fabricated position.
+        assert espn._player_position({"eligibleSlots": [20, 21]}) is None
+        assert espn._player_position({}) is None
+        # Slot 1 is TQB — a whole-team QB slot, not an individual's position.
+        assert 1 not in espn._POSITION_BY_SLOT
+
+    def test_an_unknown_pro_team_id_yields_none_rather_than_a_guess(self):
+        from app.backend.services.platform_import import espn
+
+        payload = json.loads(ESPN_FIXTURE_2.read_text())
+        payload["teams"] = [
+            {"id": 1, "name": "T", "roster": {"entries": [_espn_entry(1, "Nobody", pro=999)]}}
+        ]
+        league = espn.parse_settings_payload(json.dumps(payload))
+        assert league.teams[0].players[0].team is None
+
+    def test_a_malformed_roster_entry_costs_only_itself(self):
+        """The E9.49 row-by-row rule: one bad entry must never blank a whole roster."""
+        from app.backend.services.platform_import import espn
+
+        payload = json.loads(ESPN_FIXTURE_2.read_text())
+        payload["teams"] = [
+            {
+                "id": 1,
+                "name": "T",
+                "roster": {
+                    "entries": [
+                        "not-a-dict",
+                        {"playerPoolEntry": None},
+                        {"playerPoolEntry": {"player": {"fullName": ""}}},
+                        _espn_entry(5, "Good Player", slots=[4, 20], lineup=4, pro=21),
+                    ]
+                },
+            }
+        ]
+        league = espn.parse_settings_payload(json.dumps(payload))
+        assert [p.name for p in league.teams[0].players] == ["Good Player"]
+
+
+class TestEspnScrubberStillRefusesEveryRealCredentialPaste:
+    """The SWID pattern was narrowed to the cookie-assignment form when `mTeam` was added. That is a
+    security-guard change, so the guard's real job is re-proven here rather than assumed."""
+
+    @pytest.mark.parametrize(
+        "curl",
+        [
+            "curl 'https://lm-api-reads.fantasy.espn.com/x' -H 'Cookie: SWID={A}; espn_s2=AEBdead'",
+            "curl 'https://x' -H 'cookie: espn_s2=AEBdead; SWID={A}'",
+            "GET /x\nCookie: SWID={A}; espn_s2=AEBdead",
+        ],
+    )
+    def test_a_real_devtools_copy_is_still_refused(self, curl):
+        from app.backend.services.platform_import import espn
+
+        with pytest.raises(espn.EspnCredentialPasteError):
+            espn.assert_no_credentials(curl)
+
+    def test_the_narrowing_cannot_let_the_actual_credential_through(self):
+        """`espn_s2` is the session credential and is matched ANYWHERE, in any syntax — the
+        narrowing applies only to SWID, which is an identifier."""
+        from app.backend.services.platform_import import espn
+
+        for text in ('{"espn_s2": "AEBdead"}', "espn_s2=AEBdead", "ESPN_S2 AEBdead"):
+            with pytest.raises(espn.EspnCredentialPasteError):
+                espn.assert_no_credentials(text)
+
+    def test_a_bare_swid_identifier_no_longer_false_refuses_an_honest_paste(self):
+        """⚠️ THE REASON FOR THE NARROWING. `mTeam` returns `members[].id` as a SWID GUID, so a
+        pattern matching the bare word would reject every honest ESPN import — with a message
+        accusing the user of pasting credentials. A GUID cannot authenticate without `espn_s2`."""
+        from app.backend.services.platform_import import espn
+
+        espn.assert_no_credentials('{"members": [{"id": "{7B2A-SWID-LOOKING-GUID}"}]}')
+
+    def test_the_real_payloads_pass_the_scrubber(self, espn_payload, espn_payload_2):
+        from app.backend.services.platform_import import espn
+
+        espn.assert_no_credentials(espn_payload)
+        espn.assert_no_credentials(espn_payload_2)
+
+
+def _espn_entry(
+    player_id: int,
+    name: str = "Player",
+    *,
+    slots: list[int] | None = None,
+    lineup: int = 20,
+    pro: int = 12,
+) -> dict:
+    """⚠️ A HAND-BUILT ESPN roster entry — the shape is plausible, NOT confirmed against a real
+    rostered payload, because BOTH real leagues are undrafted (`draftDetail.drafted == false`) so
+    neither can produce one. Per this story's own twice-learned lesson, a fixture written by the
+    author cannot disconfirm the author's assumptions: these tests pin OUR logic (position
+    derivation, starter flag, row-by-row resilience), not ESPN's field names."""
+    return {
+        "lineupSlotId": lineup,
+        "playerPoolEntry": {
+            "player": {
+                "id": player_id,
+                "fullName": name,
+                "eligibleSlots": slots if slots is not None else [0, 20, 21],
+                "proTeamId": pro,
+            }
+        },
+    }

@@ -506,8 +506,17 @@ export function LeagueImport() {
                   ) : (
                     <Download className="h-3.5 w-3.5" />
                   )}
-                  Read my league settings
+                  Read my league
                 </button>
+                {/* Sets the expectation BEFORE the paste. Most people import pre-draft, so an
+                    empty roster is the common outcome and must not read as a broken import — the
+                    preview says so again, per league, once we can see the actual draft state. */}
+                <p className="mt-2 text-[11px] leading-relaxed text-gray-500">
+                  This brings over your scoring, roster shape, teams and rosters. If you
+                  haven&apos;t drafted yet there are no rosters to bring — that&apos;s expected, and
+                  everything the draft tools need is in your settings. Import again afterwards to
+                  pull the rosters.
+                </p>
                 {/* ⭐ The reason this flow is a copy-paste at all. Users will wonder why ESPN is
                     harder than Sleeper; saying it plainly turns friction into a reason to trust us,
                     and pre-empts "why don't you just ask for my ESPN login?" */}

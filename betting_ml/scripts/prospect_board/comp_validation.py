@@ -110,7 +110,11 @@ from betting_ml.scripts.prospect_board.prospect_comps import (
 
 __all__ = [
     "ARM_FIELD",
+    "LEAK_AUC_CEILING",
+    "LEAK_BLOCK_PURITY",
+    "LEAK_BLOCK_SHARE",
     "bh_fdr",
+    "leakage_scan",
     "cluster_bootstrap_pvalue",
     "crps_sample",
     "deflated_sharpe",
@@ -192,6 +196,110 @@ def interval_coverage(lo: np.ndarray, hi: np.ndarray, y: np.ndarray) -> float:
     lo, hi, y = (np.asarray(a, dtype=float) for a in (lo, hi, y))
     ok = np.isfinite(lo) & np.isfinite(hi) & np.isfinite(y)
     return float(np.mean((y[ok] >= lo[ok]) & (y[ok] <= hi[ok]))) if ok.any() else float("nan")
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 1b. THE AS-OF LEAKAGE SCAN — the mechanical form of how E7.13's `level` leak was actually found
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# 🚨 E7.13's headline defect was NOT caught by reasoning about which columns might be post-hoc; it
+# was caught by CROSSTABBING each column against the outcome and noticing that 1,908 rows sat on one
+# side of `level` of which exactly ONE debuted. This function is that crosstab, made mechanical, so
+# every future cohort (E7.16's Pipeline pool, E7.14's source cohort) gets the check for free.
+#
+# ⭐ THE PRIMARY TELL IS THE ONE-SIDED BLOCK, NOT THE AUC. An honest scouting grade and a contaminated
+# status column are only 0.10 of AUC apart on the live data (`fv` 0.701 vs `level` 0.800), which is
+# far too narrow a gap to gate on. What separates them is STRUCTURE: a real predictor is graded — its
+# bins carry intermediate debut rates — whereas a post-hoc status column produces a large, nearly
+# PURE block. So the flag is driven by the block, and the AUC is reported beside it as context.
+#
+# ⚖️ A DETECTOR THAT HAS NEVER FIRED ON A KNOWN POSITIVE IS NOT EVIDENCE (NF1.7 (a)). The E7.16
+# runner scores this scan on E7.8's cohort as a POSITIVE CONTROL and asserts it flags `level`, in the
+# same pass that it scores the Pipeline cohort and expects a clean result. A clean scan is only
+# meaningful next to a fired one.
+
+#: A bin covering at least this share of rows …
+LEAK_BLOCK_SHARE = 0.10
+#: … in which at most this share (or at least 1 − this share) of players debuted is a one-sided
+#: block: the `level` signature. Calibrated on the measured live case (1,908 rows, ONE debut).
+LEAK_BLOCK_PURITY = 0.02
+#: Reported beside the block, and enough on its own to flag. `level` measured 0.800 and `fv` 0.701,
+#: so this sits above an honest scouting grade and below the contaminated column.
+LEAK_AUC_CEILING = 0.75
+
+
+def _auc(score: np.ndarray, label: np.ndarray) -> float:
+    """Mann-Whitney AUC of `score` against a binary `label`, tie-corrected. NaN-safe."""
+    s = np.asarray(score, dtype=float)
+    y = np.asarray(label).astype(bool)
+    ok = np.isfinite(s)
+    s, y = s[ok], y[ok]
+    if y.sum() == 0 or (~y).sum() == 0:
+        return float("nan")
+    r = pd.Series(s).rank().to_numpy(float)
+    n1, n0 = int(y.sum()), int((~y).sum())
+    return float((r[y].sum() - n1 * (n1 + 1) / 2.0) / (n1 * n0))
+
+
+def leakage_scan(df: pd.DataFrame, columns: Sequence[str], *, outcome_col: str = "debuted",
+                 n_bins: int = 10) -> pd.DataFrame:
+    """Crosstab each candidate as-of column against the realized outcome. One row per column.
+
+    A numeric column is binned into `n_bins` quantile bins (so the block test applies to it too — a
+    numeric column updated post-hoc shows up as a pure decile, not as a high AUC); a categorical
+    column uses its own levels. `missing` is a level in its own right, because "absent" is exactly
+    the shape a status column takes for the players it never applied to.
+    """
+    y = df[outcome_col].astype(bool).to_numpy()
+    n = len(df)
+    rows: list[dict[str, Any]] = []
+    for col in columns:
+        if col not in df.columns:
+            rows.append({"column": col, "present": False})
+            continue
+        raw = df[col]
+        num = pd.to_numeric(raw, errors="coerce")
+        is_numeric = bool(num.notna().sum() >= 0.5 * raw.notna().sum()) and raw.notna().any()
+        if is_numeric:
+            auc = _auc(num.to_numpy(float), y)
+            try:
+                binned = pd.qcut(num, n_bins, duplicates="drop").astype(str)
+            except (ValueError, TypeError):
+                binned = num.astype(str)
+            # ⚠️ A HEAVILY-REPEATED VALUE GETS ITS OWN BIN. A post-hoc numeric column usually
+            # announces itself as a SENTINEL (a status code, a hard 0, a placeholder) repeated
+            # across the block it applies to — and `qcut` would merge that block into a quantile bin
+            # with ordinary neighbours, diluting exactly the purity the block test is looking for.
+            # Splitting it out is what lets a numeric leak be caught by the same rule as a
+            # categorical one.
+            counts = num.value_counts(dropna=True)
+            for value, cnt in counts.items():
+                if cnt >= LEAK_BLOCK_SHARE * max(n, 1):
+                    binned = binned.where(num != value, f"=={value}")
+        else:
+            auc = float("nan")
+            binned = raw.astype(str)
+        binned = binned.where(raw.notna(), "(missing)")
+        grp = pd.DataFrame({"bin": binned, "y": y}).groupby("bin", dropna=False)["y"]
+        stat = pd.DataFrame({"n": grp.size(), "rate": grp.mean()})
+        pure = stat.loc[(stat["rate"] <= LEAK_BLOCK_PURITY) | (stat["rate"] >= 1 - LEAK_BLOCK_PURITY)]
+        block_n = int(pure["n"].max()) if len(pure) else 0
+        block = pure.loc[pure["n"].idxmax()] if len(pure) else None
+        share = block_n / max(n, 1)
+        flag = bool(share >= LEAK_BLOCK_SHARE
+                    or (np.isfinite(auc) and max(auc, 1 - auc) >= LEAK_AUC_CEILING))
+        rows.append({
+            "column": col, "present": True, "kind": "numeric" if is_numeric else "categorical",
+            "n_observed": int(raw.notna().sum()),
+            "auc_vs_outcome": round(auc, 4) if np.isfinite(auc) else None,
+            "largest_one_sided_bin": None if block is None else str(pure["n"].idxmax()),
+            "one_sided_bin_n": block_n,
+            "one_sided_bin_share": round(share, 4),
+            "one_sided_bin_debut_rate": None if block is None else round(float(block["rate"]), 4),
+            "n_bins": int(len(stat)),
+            "leak_flag": flag,
+        })
+    return pd.DataFrame(rows)
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
