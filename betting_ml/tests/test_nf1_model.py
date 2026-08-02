@@ -273,3 +273,47 @@ def test_truncnorm_cdf_monotone_and_bounded():
     c = M.truncnorm_cdf(y, mu, sd)
     assert (np.diff(c) >= -1e-9).all()                              # monotone non-decreasing in y
     assert (c >= 0).all() and (c <= 1).all()
+
+
+# ══════════════════════════════════════════════════════ NF3.4 — feature-importance transparency
+def test_feature_labels_cover_every_feature():
+    # a label the panel can't render is worse than no panel — every FEATURES entry must resolve
+    assert set(M.FEATURES) <= set(M.FEATURE_LABELS)
+    assert all(isinstance(v, str) and v for v in M.FEATURE_LABELS.values())
+
+
+def test_feature_importance_report_shape_and_honesty():
+    pool = _synthetic(n=600, seed=3)
+    hp = {"n_estimators": 30, "num_leaves": 7, "learning_rate": 0.1, "min_child_samples": 10}
+    report = M.feature_importance_report(pool, hp, top_n=4, n_repeats=5)
+
+    assert report["model_version"] == M.MODEL_VERSION
+    assert report["n_pool"] == len(pool)
+    assert set(report["positions"]) <= set(M.LEARN_POSITIONS)
+    assert set(report["positions"]) == set(report["positions_baseline_pct"])
+
+    # the tautological incumbent-prior feature never appears in the displayed driver lists...
+    for rows in [report["global"], *report["positions"].values()]:
+        assert all(r["feature"] != "mvp1_fp" for r in rows)
+        assert len(rows) <= 4
+        # every listed feature resolves to its plain-language label, and every pct is a real share
+        for r in rows:
+            assert r["label"] == M.FEATURE_LABELS[r["feature"]]
+            assert 0.0 <= r["pct"] <= 100.0
+    # ...but its true share is disclosed, not hidden, and is a real percentage
+    assert 0.0 <= report["baseline_pct"] <= 100.0
+    for pct in report["positions_baseline_pct"].values():
+        assert 0.0 <= pct <= 100.0
+
+
+def test_feature_importance_report_skips_thin_positions():
+    pool = _synthetic(n=600, seed=5)
+    # collapse everyone to QB except a handful of RB rows — RB is below the n>=20 floor
+    pos = pool["position"].to_numpy().copy()
+    pos[:] = "QB"
+    pos[:10] = "RB"
+    pool = pool.assign(position=pos)
+    hp = {"n_estimators": 20, "num_leaves": 7, "learning_rate": 0.1, "min_child_samples": 10}
+    report = M.feature_importance_report(pool, hp, top_n=3, n_repeats=3)
+    assert "QB" in report["positions"]
+    assert "RB" not in report["positions"]                          # too few rows to be trustworthy

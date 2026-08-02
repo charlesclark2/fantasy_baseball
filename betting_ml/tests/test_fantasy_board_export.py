@@ -11,6 +11,8 @@ Pure/offline: builds tiny DataFrames, no lake read, no S3.
 
 from __future__ import annotations
 
+import json
+
 import pandas as pd
 import pytest
 
@@ -294,3 +296,31 @@ def test_projection_veteran_draft_slot_stays_null():
     allen, _ = ex.projection_records(_projection_frame())
     assert allen["draftPick"] is None
     assert allen["team"] == "BUF"
+
+
+# ── NF3.4: feature-importance transparency, folded into the manifest ──────────────────────────
+
+
+def test_load_feature_importance_missing_artifact_is_best_effort(tmp_path, monkeypatch):
+    # No artifact yet (run_nf1_feature_importance.py hasn't been run) must degrade to None, never
+    # raise — the boards + projections are the draft-critical output and must ship regardless.
+    monkeypatch.setattr(ex, "_ARTIFACTS", tmp_path)
+    assert ex.load_feature_importance() is None
+
+
+def test_load_feature_importance_reads_the_artifact(tmp_path, monkeypatch):
+    monkeypatch.setattr(ex, "_ARTIFACTS", tmp_path)
+    payload = {
+        "model_version": "nfl_fantasy_nf1_v1", "baseline_pct": 75.1,
+        "global": [{"feature": "pergame_fp", "label": "Recent per-game scoring pace", "pct": 14.0}],
+        "positions": {"RB": [{"feature": "age", "label": "Player age", "pct": 6.9}]},
+        "positions_baseline_pct": {"RB": 73.4},
+    }
+    (tmp_path / "nf1_feature_importance.json").write_text(json.dumps(payload))
+    assert ex.load_feature_importance() == payload
+
+
+def test_load_feature_importance_corrupt_json_is_best_effort(tmp_path, monkeypatch):
+    monkeypatch.setattr(ex, "_ARTIFACTS", tmp_path)
+    (tmp_path / "nf1_feature_importance.json").write_text("{not valid json")
+    assert ex.load_feature_importance() is None

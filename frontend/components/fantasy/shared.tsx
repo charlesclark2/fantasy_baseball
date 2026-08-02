@@ -327,6 +327,68 @@ export function UncertaintyNote({ children }: { children?: React.ReactNode }) {
   )
 }
 
+/** NF3.4 — "what our {POS} model weights most", the transparency panel.
+ *
+ *  🚨 HONEST LABELLING is the whole point of this component, not a copy afterthought: it is a
+ *  MODEL-LEVEL description (what the fitted research model leans on for this POSITION, in
+ *  aggregate) — it never claims to explain why THIS player's number is what it is. Renders nothing
+ *  for a position NF1 wasn't fitted on (K/DST) or if the manifest carries no featureImportance yet
+ *  (an older export) — see `FeatureImportancePayload` in draft-optimizer.ts. */
+export function FeatureDriversPanel({
+  pos,
+  importance,
+}: {
+  pos: string
+  importance: import("@/lib/draft-optimizer").FeatureImportancePayload | null | undefined
+}) {
+  const drivers = importance?.positions?.[pos]
+  if (!importance || !drivers || drivers.length === 0) return null
+  const basePct = importance.positions_baseline_pct?.[pos]
+  const maxPct = Math.max(...drivers.map((d) => d.pct), 1)
+  return (
+    <section className="mb-6 rounded-lg border border-[#262626] bg-[#0f0f0f] p-4">
+      <div className="mb-1 flex items-center gap-1.5">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+          What our {pos} model weights most
+        </h2>
+        <InfoTip label="What our model weights most">
+          These weights come from our validated research model (NF1) — a learned re-weighting of the
+          same underlying signals every {pos} projection is built from. They describe the MODEL, in
+          aggregate for every {pos} we project, not why any one player&apos;s number is what it is
+          — that would take a different, per-player method we don&apos;t compute. They also aren&apos;t
+          necessarily the literal formula behind the specific projection above; think of this as &ldquo;what
+          moves a {pos} projection in general,&rdquo; not a receipt for this one.
+        </InfoTip>
+      </div>
+      <p className="mb-3 text-[11px] leading-relaxed text-gray-600">
+        Model-level, not player-specific — ranked by how much each signal shifts our {pos} model&apos;s
+        output overall.
+        {basePct != null && (
+          <> The model keeps most of its weight (~{Math.round(basePct)}%) on its own starting estimate; below is what moves it from there.</>
+        )}
+      </p>
+      <div className="space-y-2">
+        {drivers.map((d) => (
+          <div key={d.feature} className="flex items-center gap-3">
+            <span className="w-40 flex-shrink-0 truncate text-xs text-gray-300" title={d.label}>
+              {d.label}
+            </span>
+            <div className="h-1.5 flex-1 rounded-full bg-[#1a1a1a]">
+              <div
+                className="h-1.5 rounded-full bg-sky-500/50"
+                style={{ width: `${Math.max((d.pct / maxPct) * 100, 3)}%` }}
+              />
+            </div>
+            <span className="w-10 flex-shrink-0 text-right text-[11px] tabular-nums text-gray-500">
+              {d.pct}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 /** Provenance strip — what the numbers were built from and when. */
 export function ProvenanceLine({
   season,

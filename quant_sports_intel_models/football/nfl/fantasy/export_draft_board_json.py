@@ -580,6 +580,30 @@ def rookie_team_map() -> dict[str, str]:
     return out
 
 
+def load_feature_importance() -> dict | None:
+    """NF3.4 — the NF1 GBM's own per-position feature importances (`run_nf1_feature_importance.py`'s
+    output), folded into the manifest so the player page's transparency panel needs no extra fetch.
+
+    Best-effort like `rookie_team_map`/`player_bio_map`: a missing/stale artifact costs the transparency
+    panel only, never the boards (the draft-critical output) or the projections surface. It is a LOCAL
+    artifact (no S3/lake read) — re-run `run_nf1_feature_importance.py` to refresh it.
+
+    🚨 HONEST LABELLING lives with the DATA here, not just the UI: every record already carries
+    `model_version` (NF1's, not MVP-1's) so a caller can never present these as describing the SERVED
+    MVP-1 projection without the model identity travelling with them."""
+    path = _ARTIFACTS / "nf1_feature_importance.json"
+    if not path.is_file():
+        log.warning("nf1_feature_importance.json not found at %s — the player-page transparency panel "
+                    "will be empty until run_nf1_feature_importance.py is (re-)run", path)
+        return None
+    try:
+        return json.loads(path.read_text())
+    except Exception as e:  # noqa: BLE001 — best-effort enrichment, never fatal
+        log.warning("nf1_feature_importance.json failed to parse (%s: %s) — transparency panel skipped",
+                    type(e).__name__, e)
+        return None
+
+
 def player_bio_map() -> dict[str, dict]:
     """`{player_id -> bio dict}` for the NF3.1 player page — birth date, height, weight, college,
     years of NFL experience and an official headshot URL, all PASSED THROUGH from `nflverse_players`
@@ -968,6 +992,13 @@ def main(argv: list[str] | None = None) -> int:
         log.warning("projections.json SKIPPED (%s: %s) — the browse Projections surface will 404 "
                     "until the season projection is exported", type(e).__name__, e)
 
+    # NF3.4 — the transparency panel's data, folded into the manifest (already fetched by the player
+    # page) so no extra round trip is needed. None when the artifact hasn't been (re-)exported yet.
+    feature_importance = load_feature_importance()
+    if feature_importance is None:
+        log.warning("[ALERT] manifest will ship with no featureImportance — the player-page "
+                    "transparency panel renders nothing until run_nf1_feature_importance.py is run")
+
     # manifest — meta + per-config roster shapes + available combos
     manifest = {
         "season": args.season,
@@ -979,6 +1010,8 @@ def main(argv: list[str] | None = None) -> int:
         # NF3: the browse surfaces read this to know whether the projections blob is available
         # (and to show its provenance) without a speculative fetch.
         "projections": {"players": len(projections), **proj_meta} if projections else None,
+        # NF3.4: per-position feature-importance transparency (MODEL-level, see load_feature_importance).
+        "featureImportance": feature_importance,
     }
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     log.info("wrote manifest.json — %d configs, sizes %s, %d combos, %d player-rows total",

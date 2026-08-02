@@ -69,6 +69,24 @@ FEATURES = (
     "fp_sd",           # base-season game-to-game PPR sd
 )
 
+# NF3.4 — plain-language labels for the transparency panel. One short phrase per feature, written for
+# a drafter with no modelling background. Keys must cover every entry in FEATURES (pinned by a test).
+FEATURE_LABELS: dict[str, str] = {
+    "mvp1_fp": "Our baseline heuristic projection",
+    "pergame_fp": "Recent per-game scoring pace",
+    "base_games": "Games played last season",
+    "expected_games": "Expected games this season (health/role)",
+    "snap_share": "Snap share (playing time)",
+    "target_share": "Target share (receiving role)",
+    "carry_share": "Carry share (rushing role)",
+    "depth_rank": "Depth-chart standing",
+    "mover_scale": "Team-change opportunity",
+    "team_env": "Team offensive environment (Vegas win total)",
+    "injury_cap_ratio": "Injury / availability risk",
+    "age": "Player age",
+    "fp_sd": "Week-to-week scoring volatility",
+}
+
 # A learned rescale of the MVP-1 line is clamped so a single feature-driven prediction can never
 # produce a physically implausible line — the same discipline as the mover/env scalar clamps.
 _RESCALE_LO, _RESCALE_HI = 0.55, 1.75
@@ -269,6 +287,109 @@ LEARNER_REGISTRY = {
 def make_learner(name: str, feats: tuple[str, ...] = FEATURES, **hp):
     cls = LEARNER_REGISTRY[name]
     return cls(feats=feats, **hp)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF3.4 — feature-importance transparency (the model's own drivers, MODEL-level not per-player)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#: excluded from the displayed "top drivers" list — `mvp1_fp` is NF1's incumbent-prior FEATURE (the
+#: served MVP-1 heuristic's own output, fed back in as one of NF1's 13 inputs), and it dominates every
+#: position's importance (62-80%, measured) precisely because NF1 is a re-weighting OF that prior, not
+#: an independent signal a drafter can act on. Reporting "our own baseline projection" as the #1
+#: "driver" of a signal-weighting panel is circular, not informative — the story's own example
+#: ("snap share, age, prior-year efficiency") is about the REFINEMENT signals, not the restated prior.
+#: `baseline_pct` on the report carries its true share so nothing is hidden, just not top-ranked.
+_TAUTOLOGICAL_FEATURES = ("mvp1_fp",)
+
+
+def _normalize_top(raw: dict[str, float], top_n: int, exclude: tuple[str, ...] = ()) -> list[dict]:
+    """`{feature -> raw importance}` → the top-N as `[{feature, label, pct}]`, percentages of the
+    FULL set's total INCLUDING any excluded features (so truncating/excluding never inflates what's
+    shown — a dropped feature's share just isn't displayed, rather than being redistributed onto the
+    ones that are)."""
+    total = sum(v for v in raw.values() if v > 0)
+    ranked = sorted(
+        ((f, v) for f, v in raw.items() if f not in exclude), key=lambda kv: kv[1], reverse=True
+    )[:top_n]
+    return [
+        {"feature": f, "label": FEATURE_LABELS.get(f, f),
+         "pct": round(100.0 * v / total, 1) if total > 0 else 0.0}
+        for f, v in ranked if v > 0
+    ]
+
+
+def feature_importance_report(
+    pool: pd.DataFrame,
+    hp: dict,
+    feats: tuple[str, ...] = FEATURES,
+    positions: tuple[str, ...] = LEARN_POSITIONS,
+    top_n: int = 6,
+    n_repeats: int = 20,
+    seed: int = 13,
+) -> dict:
+    """Fit the NF1 GBM (the §0.5 bake-off winner — see `nf1_season_bakeoff.json`) on `pool` and report
+    which signals it leans on: GLOBALLY (LightGBM's own gain-based split importance, across every
+    position pooled) and PER POSITION (permutation importance — how much shuffling one feature within
+    a position's own rows degrades the FITTED model's accuracy for that position specifically).
+
+    🚨 MODEL-LEVEL, NOT PER-PLAYER: every number here describes the FITTED MODEL's aggregate
+    sensitivity to a signal for a position as a whole — never an attribution of any individual
+    player's own projection (that would need a per-player method, e.g. SHAP, which this is not).
+    Callers must label it accordingly (NF3.4's honest-labelling crux).
+
+    NF1 is the validated, market-blind re-weighting of the SAME signal set MVP-1's
+    served heuristic pipeline is built from (see the module docstring) — it is the one model in this
+    package that is actually fitted with a genuine `.feature_importances_`, so it is what this panel
+    describes. It is NOT necessarily the exact mechanism behind the specific number MVP-1 serves for
+    any one player today; the panel is a description of what the underlying signals are worth to a
+    validated model over the same feature set, not a live attribution of the served projection."""
+    learner = PooledGBM(feats=feats, **hp)
+    y = pd.to_numeric(pool["real_fp_ppr"], errors="coerce").to_numpy(dtype=float)
+    pos = np.array([str(p) for p in pool["position"]], dtype=object)
+    learner.fit(pool, y, pos)
+    model = learner._model
+    F = learner._frame(pool, pos)
+    F["_pos"] = F["_pos"].astype("category")
+
+    booster = model.booster_
+    gains = dict(zip(booster.feature_name(), booster.feature_importance(importance_type="gain")))
+    global_raw = {f: float(gains.get(f, 0.0)) for f in feats}
+    global_total = sum(v for v in global_raw.values() if v > 0)
+    global_importance = _normalize_top(global_raw, top_n, exclude=_TAUTOLOGICAL_FEATURES)
+    global_baseline_pct = (round(100.0 * global_raw.get("mvp1_fp", 0.0) / global_total, 1)
+                           if global_total > 0 else 0.0)
+
+    from sklearn.inspection import permutation_importance
+
+    per_position: dict[str, list[dict]] = {}
+    baseline_pct: dict[str, float] = {}
+    for p in positions:
+        m = pos == p
+        if int(m.sum()) < 20:
+            continue
+        result = permutation_importance(
+            model, F[m], y[m], scoring="neg_mean_squared_error",
+            n_repeats=n_repeats, random_state=seed,
+        )
+        raw = {f: max(float(result.importances_mean[i]), 0.0)
+               for i, f in enumerate(F.columns) if f in feats}
+        raw_total = sum(v for v in raw.values() if v > 0)
+        per_position[p] = _normalize_top(raw, top_n, exclude=_TAUTOLOGICAL_FEATURES)
+        baseline_pct[p] = (round(100.0 * raw.get("mvp1_fp", 0.0) / raw_total, 1)
+                           if raw_total > 0 else 0.0)
+
+    return {
+        "model_version": MODEL_VERSION,
+        "method": "LightGBM gain importance (global, pooled across positions); permutation importance "
+                  "vs held-in-sample squared error (per position, evaluated on the fitted model)",
+        "n_pool": int(len(pool)),
+        # the share of importance NF1 keeps on its own incumbent-prior feature (mvp1_fp) — not shown
+        # in `global`/`positions` (see _TAUTOLOGICAL_FEATURES) but disclosed here so nothing is hidden.
+        "baseline_pct": global_baseline_pct,
+        "global": global_importance,
+        "positions": per_position,
+        "positions_baseline_pct": baseline_pct,
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
