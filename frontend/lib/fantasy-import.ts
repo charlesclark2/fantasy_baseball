@@ -13,7 +13,9 @@ import type { LeagueConfig } from "@/lib/league-config"
 export interface ImportPlatform {
   id: string
   label: string
-  auth: "public" | "oauth"
+  /** `paste` = ESPN: the USER makes the request in their own browser and gives us the response
+   *  body. We never call ESPN, and we never hold a credential — see the ESPN block below. */
+  auth: "public" | "oauth" | "paste"
   /** We built an adapter for it. */
   available: boolean
   /** It is usable RIGHT NOW — false for an OAuth platform whose app registration is still pending.
@@ -120,6 +122,40 @@ export function sleeperPreview(token: string | null, leagueId: string): Promise<
   return apiFetch(
     `/fantasy/import/sleeper/preview`,
     { method: "POST", body: JSON.stringify({ league_id: leagueId }) },
+    token,
+  )
+}
+
+// ── ESPN — user-mediated paste ──────────────────────────────────────────────────────────────────
+//
+// ESPN publishes no delegated grant, and the only automated way into a private league is replaying
+// a full-account session cookie, which we refuse. So the user opens the link in their OWN browser
+// and pastes the response. `espn_s2` is an HTTP cookie and is never echoed into a response body,
+// so what they paste structurally cannot contain their sign-in.
+
+/** Build the settings link for the user to open THEMSELVES. Nothing fetches it. */
+export function espnReadUrl(
+  token: string | null,
+  leagueId: string,
+  season: string,
+): Promise<{ url: string }> {
+  return apiFetch(
+    `/fantasy/import/espn/read-url`,
+    { method: "POST", body: JSON.stringify({ league_id: leagueId, season }) },
+    token,
+  )
+}
+
+/** Parse a pasted ESPN settings response. The server refuses a paste containing credential
+ *  material (a "Copy as cURL" carries the whole Cookie header) and never logs the body. */
+export function espnPreview(
+  token: string | null,
+  payload: string,
+  season: string,
+): Promise<ImportPreview> {
+  return apiFetch(
+    `/fantasy/import/espn/preview`,
+    { method: "POST", body: JSON.stringify({ payload, season }) },
     token,
   )
 }

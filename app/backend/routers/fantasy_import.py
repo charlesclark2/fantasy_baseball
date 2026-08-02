@@ -7,9 +7,13 @@ blocked when a platform cannot be reached (they fall back to the floor, which al
 
 🚨 THE HARD RED LINE. No endpoint here accepts, stores, or replays a platform PASSWORD. Sleeper
 needs no credential at all (public read API); Yahoo goes through Yahoo's own OAuth consent screen
-and we keep only an encrypted, revocable, read-scoped grant. ESPN is deliberately absent — its only
-private-league path is replaying full-account session cookies, which is the same line CBS was
-refused on at E8.2a (`docs/nf_c0_espn_access_probe.md`).
+and we keep only an encrypted, revocable, read-scoped grant. ESPN is USER-MEDIATED: the user makes
+the request in their own signed-in browser and pastes the RESPONSE BODY — the server never calls
+ESPN and never sees a cookie (a body structurally cannot carry `espn_s2`, which is an HTTP cookie).
+We still refuse a paste that contains credential material, because a user can paste the wrong
+artifact — DevTools' "Copy as cURL" embeds the whole `Cookie:` header. ESPN's automated
+private-league path remains refused: it is the same line CBS was declined on at E8.2a. Full
+reasoning, including why the paste flow is categorically different: `docs/nf_c0_espn_access_probe.md`.
 
 🔒 ENTITLEMENT. Every route requires `require_fantasy_beta_access` (admin + fantasy_comp), matching
 NF-C0b's editor rather than the wider board surface — these WRITE a user's league configuration, so
@@ -37,7 +41,7 @@ from pydantic import BaseModel, Field
 
 from app.backend.dependencies import require_fantasy_beta_access
 from app.backend.services import dynamo
-from app.backend.services.platform_import import PLATFORMS, sleeper, yahoo, yahoo_oauth
+from app.backend.services.platform_import import PLATFORMS, espn, sleeper, yahoo, yahoo_oauth
 from app.backend.services.platform_import.http import PlatformHTTPError
 
 logger = logging.getLogger(__name__)
@@ -76,7 +80,10 @@ def _handle_platform_error(e: Exception) -> HTTPException:
     actually mistyped their username — the E9.26b "a swallowed error reads as an outage" lesson,
     facing outward.
     """
-    if isinstance(e, (sleeper.SleeperInputError, yahoo.YahooInputError)):
+    if isinstance(e, (sleeper.SleeperInputError, yahoo.YahooInputError, espn.EspnInputError)):
+        # `EspnCredentialPasteError` is a subclass and lands here too: a 422 with an actionable
+        # message. It must NOT reach the `logger.exception` fallback below — that would write the
+        # offending paste into CloudWatch, which is the one place a stray cookie must never go.
         return HTTPException(status_code=422, detail=str(e))
     if isinstance(e, yahoo_oauth.YahooNotConfigured):
         return HTTPException(status_code=503, detail=str(e))
@@ -164,6 +171,53 @@ def sleeper_preview(payload: PreviewRequest, user_id: str = Depends(require_fant
         return sleeper.import_league(payload.league_id, include_draft=payload.include_draft).to_dict()
     except Exception as e:  # noqa: BLE001
         raise _handle_platform_error(e) from e
+
+
+# ── ESPN (user-mediated paste — this server never calls ESPN) ────────────────────────────────────
+
+
+class EspnReadUrlRequest(BaseModel):
+    league_id: str = Field(min_length=1, max_length=24)
+    season: str = Field(default=_DEFAULT_SEASON, min_length=4, max_length=4)
+
+
+class EspnPasteRequest(BaseModel):
+    # ⚠️ Deliberately NOT `Field(max_length=...)`: pydantic would reject an oversized paste with its
+    # own validation error, whose `detail` is a LIST of objects that `apiFetch` cannot surface (see
+    # frontend/lib/api.ts). The adapter's own size check returns a plain, actionable string instead.
+    payload: str = Field(min_length=1)
+    season: str | None = None
+
+
+@router.post("/espn/read-url")
+def espn_read_url(payload: EspnReadUrlRequest, user_id: str = Depends(require_fantasy_beta_access)):
+    """Build the link the USER opens themselves. Nothing here fetches it.
+
+    We construct it server-side so the user never has to assemble a URL by hand, and so the league
+    id is format-checked before it is rendered into a link.
+    """
+    try:
+        return {"url": espn.build_read_url(payload.league_id, int(payload.season))}
+    except Exception as e:  # noqa: BLE001
+        raise _handle_platform_error(e) from e
+
+
+@router.post("/espn/preview")
+def espn_preview(payload: EspnPasteRequest, user_id: str = Depends(require_fantasy_beta_access)):
+    """Parse a pasted ESPN settings response WITHOUT saving it.
+
+    🔒 The pasted body is treated as hostile input and is NEVER logged — not on the happy path and
+    not on failure. `_handle_platform_error` maps the adapter's own errors before the
+    `logger.exception` fallback can see them, and nothing here interpolates `payload.payload` into
+    a log line or an error message.
+    """
+    try:
+        league = espn.parse_settings_payload(
+            payload.payload, season=int(payload.season) if payload.season else None
+        )
+    except Exception as e:  # noqa: BLE001
+        raise _handle_platform_error(e) from e
+    return league.to_dict()
 
 
 # ── Yahoo (official OAuth2, read scope) ──────────────────────────────────────────────────────────

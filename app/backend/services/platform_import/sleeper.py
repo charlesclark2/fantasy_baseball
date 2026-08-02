@@ -102,8 +102,14 @@ SCORING_KEY_MAP: dict[str, tuple[str, ...]] = {
     "blk_kick": ("def_blocked_kick",),
     "def_td": ("def_td",),
     "def_st_td": ("st_td",),
-    # team defence — points allowed. Sleeper's 7-tier table restates EXACTLY on our nine buckets,
-    # which were chosen as the common refinement of the ESPN and Yahoo schemes.
+    # team defence — points allowed. Sleeper's 7-tier table restates EXACTLY on our nine buckets.
+    # ⚠️ CORRECTION (NF-C0f, 2026-08-01): this comment used to claim the nine buckets are "the
+    # common refinement of the ESPN and Yahoo schemes". They are not — they are the YAHOO
+    # refinement. ESPN splits at 18-21 / 22-27 while ours splits at 18-20 / 21-27, so a true common
+    # refinement needs **21 as a bucket of its own**. Sleeper and Yahoo restate exactly; ESPN
+    # misplaces exactly one point value, which `espn.py` maps to the nearest exact bucket and
+    # DISCLOSES. Adding a `dst_pa_g_21` bucket would make all three exact, at the cost of a
+    # catalog/projection column change — worth doing if a future story touches this table.
     "pts_allow_0": ("dst_pa_g_0",),
     "pts_allow_1_6": ("dst_pa_g_1_6",),
     "pts_allow_7_13": ("dst_pa_g_7_13",),

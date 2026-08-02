@@ -713,17 +713,26 @@ class TestNoCredentialHandling:
         assert scan('COOKIES = {"espn_s2": token}\n')
         assert not scan('"""We never store a password."""\n# nor an espn_s2 cookie\nX = 1\n')
 
-    def test_espn_is_not_an_offered_platform(self):
+    def test_espn_is_offered_ONLY_as_a_paste_never_as_a_credential_flow(self):
+        """ESPN was originally refused outright. NF-C0f re-opened it via user-mediated paste, which
+        is categorically different: the user makes the request in their own browser and hands us the
+        RESPONSE BODY, which structurally cannot carry `espn_s2` (an HTTP cookie is never echoed
+        into a body). What must never come back is a credential-accepting ESPN path — so this pins
+        the auth KIND rather than merely the platform's presence."""
         from app.backend.services.platform_import import PLATFORMS
 
-        assert "espn" not in PLATFORMS
+        assert PLATFORMS["espn"]["auth"] == "paste"
+        assert PLATFORMS["espn"]["auth"] not in ("password", "cookie", "session")
 
-    def test_the_espn_probe_memo_exists_and_records_a_no_go(self):
-        """The NO-GO has to be an EARNED, written finding — not an undocumented omission a later
-        session re-litigates from scratch."""
+    def test_the_espn_memo_records_BOTH_the_refusal_and_the_reopening(self):
+        """The refusal has to stay an EARNED, written finding — and the correction that re-opened a
+        narrower path has to sit beside it, or a later session re-litigates one or the other from
+        scratch."""
         memo = (REPO / "docs" / "nf_c0_espn_access_probe.md").read_text()
         assert "NO-GO" in memo
-        assert "espn_s2" in memo  # names the specific mechanism it refuses
+        assert "espn_s2" in memo          # names the specific mechanism it refuses
+        assert "NF-C0f" in memo           # names the path that WAS opened
+        assert "USER-MEDIATED PASTE" in memo
 
     def test_user_supplied_ids_are_validated_before_a_url_is_built(self):
         """SSRF guard: these values come from a form field and are interpolated into a URL."""
@@ -1106,8 +1115,6 @@ class TestEspnImport:
 
         league = espn.parse_settings_payload(espn_payload)
         assert league.unmapped_scoring_keys, "expected captured terms from a 43-rule league"
-        # Every D/ST rule is currently unmapped and must be visible as such.
-        assert any(k.endswith("@dst") for k in league.unmapped_scoring_keys)
         stored = league.config["scoring"]["per_stat"]
         for key in league.unmapped_scoring_keys:
             assert key in stored, f"{key} reported unmapped but not stored"
@@ -1140,3 +1147,186 @@ class TestEspnImport:
 
         with pytest.raises(espn.EspnInputError):
             espn.parse_settings_payload("x" * (espn.MAX_PASTE_BYTES + 1))
+
+
+class TestEspnStatIdMapIsVerifiedNotTrusted:
+    """The stat-ID map was established by IDENTITIES a wrong map fails, not by a published table
+    (ESPN has none). These pin the identities so a future edit can't quietly re-guess an id.
+
+    Values are from a real `kona_player_info` season-projection export (2026, league 998005).
+    """
+
+    # Denver D/ST, 2026 season projection: the nine claimed points-allowed buckets in ESPN's order.
+    BRONCOS_PA = (0.310716074, 1.40460691, 4.596895343, 3.745618428, 2.468703055,
+                  2.851777666, 1.40460691, 0.212819229, 0.004256385)
+    BRONCOS_YDS = (0.809320972, 6.304184415, 4.557754949, 3.492858933,
+                   1.490854422, 0.255575044, 0.085191681, 0.004259584)
+
+    def test_points_allowed_buckets_partition_the_season(self):
+        """THE decisive check: nine buckets that partition 17 games fixes both their IDENTITY and
+        their ORDER. A map that mislabels or reorders them cannot sum to 17."""
+        assert abs(sum(self.BRONCOS_PA) - 17.0) < 1e-6
+
+    def test_yards_allowed_buckets_partition_the_season(self):
+        assert abs(sum(self.BRONCOS_YDS) - 17.0) < 1e-6
+
+    def test_per_game_stats_are_the_season_totals_over_seventeen(self):
+        assert abs(317.7855711 / 17 - 18.69326889) < 1e-6   # stat 126 = points allowed per game
+        assert abs(5447.733929 / 17 - 320.454937) < 1e-6    # stat 137 = yards allowed per game
+
+    def test_field_goal_buckets_partition_total_made(self):
+        """80 (<40) + 77 (40-49) + 74 (50+) == 83 (total FGM), for Brandon Aubrey."""
+        assert abs((19.2313044 + 9.2261031 + 7.02552502) - 35.48293252) < 1e-6
+
+    def test_stat_53_is_receptions_despite_its_common_label(self):
+        """`receiving_yards / stat_53 == stat_60` (yards per reception) ⇒ 53 IS receptions. It is
+        widely labelled "receptions_alternate", and ESPN emits no stat 41 at all — so trusting that
+        label would drop PPR scoring, which is exactly what this league sets on 53."""
+        assert abs(1589.937424 / 122.9659744 - 12.92989733) < 1e-6
+        assert espn_mod().SCORING_KEY_MAP["53"] == ("rec",)
+
+    def test_completions_plus_incompletions_equals_attempts(self):
+        assert abs((340.1123125 + 168.7780519) - 508.8903644) < 1e-6
+
+
+class TestEspnLossyEdgesAreDisclosed:
+    """Both edges below change a user's scoring. Neither may be silent."""
+
+    def test_the_points_allowed_boundary_mismatch_is_disclosed(self, espn_payload):
+        """🚨 ESPN splits points-allowed at 18-21 / 22-27; our canonical buckets split at
+        18-20 / 21-27. (The comment in `sleeper.py` calling these "the common refinement of the
+        ESPN and Yahoo schemes" is wrong — they are the YAHOO refinement; a true common refinement
+        needs 21 as its own bucket.) Exactly one point value is misplaced, and the user is told."""
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload)
+        assert any("exactly 21 points" in w for w in league.warnings)
+
+    def test_the_boundary_note_is_SILENT_when_the_two_tiers_pay_the_same(self):
+        """A warning that cannot affect the board is noise. If 18-21 and 22-27 carry equal weight
+        the misplacement is a no-op and must not be reported."""
+        from app.backend.services.platform_import import espn
+
+        translation, warnings = espn.translate_scoring({"121@dst": 2.0, "122@dst": 2.0})
+        assert not any("exactly 21 points" in w for w in warnings)
+        translation, warnings = espn.translate_scoring({"121@dst": 3.0, "122@dst": 1.0})
+        assert any("exactly 21 points" in w for w in warnings)
+
+    def test_disagreeing_two_point_values_are_collapsed_AND_disclosed(self, espn_payload):
+        """This real league pays 1.0 for a passing 2-pt but 2.0 for rushing/receiving."""
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload)
+        assert league.config["scoring"]["per_stat"]["two_pt"] == 2.0
+        assert any("two-point conversions" in w for w in league.warnings)
+
+    def test_a_player_return_td_is_never_conflated_with_the_defence_unit(self):
+        """Mapping both onto one canonical key double-counts a single return touchdown."""
+        from app.backend.services.platform_import import espn
+
+        assert espn.SCORING_KEY_MAP["101"] == ("st_player_td",)
+        assert espn.SCORING_KEY_MAP["101@dst"] == ("st_td",)
+
+    def test_the_fine_field_goal_keys_beat_the_coarse_one(self):
+        """74 is the coarse 50+ bucket; 198/201 are the fine 50-59 / 60+ pair. A league setting the
+        fine keys means them — and which won must not depend on dict ordering."""
+        from app.backend.services.platform_import import espn
+
+        flat = {"74": 5.0, "198": 4.0, "201": 6.0}
+        translation, _ = espn.translate_scoring(flat)
+        assert translation.per_stat["fg_made_50_59"] == 4.0
+        assert translation.per_stat["fg_made_60p"] == 6.0
+
+    def test_every_collapse_group_member_is_actually_mapped(self):
+        """A group member missing from SCORING_KEY_MAP collapses to an agreed value and is then
+        reported CAPTURED anyway — silently inert. The map derives them, so this pins the wiring."""
+        from app.backend.services.platform_import import espn
+
+        for target, keys, _label in espn._COLLAPSE_GROUPS:
+            for key in keys:
+                assert espn.SCORING_KEY_MAP.get(key) == (target,), f"{key} not mapped to {target}"
+
+    def test_a_real_league_applies_most_of_its_rules(self, espn_payload):
+        """Regression floor: the first cut applied 12 of 43 rules. Long-TD bonuses stay CAPTURED
+        because no projection column exists for them — that is honest, not a gap to paper over."""
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload)
+        per_stat = league.config["scoring"]["per_stat"]
+        applied = [k for k in per_stat if not k.split("@")[0].isdigit()]
+        assert len(applied) >= 34
+        assert set(league.unmapped_scoring_keys) == {"15", "16", "35", "36", "45", "46"}
+
+
+def espn_mod():
+    from app.backend.services.platform_import import espn
+
+    return espn
+
+
+class TestEspnRouteAndUi:
+    """The serving surface for the paste flow (NF-C0f)."""
+
+    ROUTER_SRC = ROUTER.read_text()
+    UI = REPO / "frontend" / "components" / "fantasy" / "league-import.tsx"
+    CLIENT = REPO / "frontend" / "lib" / "fantasy-import.ts"
+
+    def test_both_espn_routes_exist_and_are_gated(self):
+        from app.backend.routers import fantasy_import as fi
+
+        paths = {r.path for r in fi.router.routes}
+        assert "/fantasy/import/espn/read-url" in paths
+        assert "/fantasy/import/espn/preview" in paths
+        # The callback stays the ONLY ungated route — ESPN adds no exemption.
+        public = {r.path for r in fi.public_router.routes}
+        assert public == {"/fantasy/import/yahoo/callback"}
+
+    def test_a_credential_paste_is_a_422_and_never_reaches_the_logging_fallback(self):
+        """🔒 THE ONE THAT MATTERS. `_handle_platform_error`'s fallback calls `logger.exception`,
+        which would write the offending paste into CloudWatch — the single place a stray cookie must
+        never land. `EspnCredentialPasteError` must be matched BEFORE that fallback."""
+        from app.backend.routers import fantasy_import as fi
+        from app.backend.services.platform_import import espn
+
+        err = espn.EspnCredentialPasteError("that paste includes your ESPN sign-in cookie")
+        mapped = fi._handle_platform_error(err)
+        assert mapped.status_code == 422
+        assert "sign-in" in str(mapped.detail)
+
+    def test_the_router_never_interpolates_the_pasted_body(self):
+        """Source check: no log line or error message may carry the paste."""
+        src = self.ROUTER_SRC
+        for forbidden in ("payload.payload}", "{payload.payload", "logger.info(payload"):
+            assert forbidden not in src
+
+    def test_the_paste_field_has_no_pydantic_max_length(self):
+        """A pydantic length rejection produces a `detail` that is a LIST of objects, which
+        `apiFetch` deliberately will not surface (see frontend/lib/api.ts) — the user would get a
+        bare "API error 422". The adapter's own size check returns an actionable string instead."""
+        from app.backend.routers.fantasy_import import EspnPasteRequest
+
+        field = EspnPasteRequest.model_fields["payload"]
+        assert all(getattr(m, "max_length", None) is None for m in field.metadata)
+
+    def test_the_ui_no_longer_says_espn_is_unavailable(self):
+        """The old copy told users ESPN can't be imported. Leaving it beside a working ESPN option
+        would be worse than either state alone."""
+        ui = self.UI.read_text()
+        assert "ESPN is not listed" not in ui
+        assert "espn" in ui.lower()
+
+    def test_the_ui_explains_WHY_the_paste_is_needed(self):
+        """Users will ask why ESPN is harder than Sleeper. Saying it plainly is what stops the
+        obvious 'just ask for my ESPN login' suggestion — which is the red line."""
+        ui = self.UI.read_text()
+        assert "Why the copy-paste?" in ui
+        assert "read-only" in ui
+
+    def test_the_paste_textarea_is_16px_on_phones(self):
+        """iOS auto-zooms any focused input under 16px — the repo's mobile-form guard rule."""
+        ui = self.UI.read_text()
+        assert "text-base sm:text-xs" in ui or "text-base sm:text-sm" in ui
+
+    def test_the_client_sends_the_season_with_the_paste(self):
+        client = self.CLIENT.read_text()
+        assert "espn/preview" in client and "espn/read-url" in client

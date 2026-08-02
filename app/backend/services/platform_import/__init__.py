@@ -55,6 +55,17 @@ PLATFORMS: dict[str, dict] = {
         # future author to weaken the lint rather than the code.
         "help": "Sign in on Yahoo's own page to grant read-only access. Your Yahoo login stays with Yahoo.",
     },
+    "espn": {
+        "id": "espn",
+        "label": "ESPN",
+        # A THIRD auth kind, and the reason it exists is the point: ESPN publishes no delegated
+        # grant, and its only automated private-league path is replaying a full-account session
+        # cookie — refused at §3(c). "paste" means the USER makes the request in their own browser
+        # and hands us the response body; we never call ESPN. See docs/nf_c0_espn_access_probe.md.
+        "auth": "paste",
+        "available": True,
+        "help": "Open your league's settings link, then paste what ESPN shows you. Nothing to sign in to here.",
+    },
 }
 
 __all__ = ["PLATFORMS"]

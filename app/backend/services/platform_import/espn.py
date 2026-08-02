@@ -78,9 +78,9 @@ def assert_no_credentials(text: str) -> None:
     for label, pattern in _CREDENTIAL_SIGNATURES:
         if pattern.search(text):
             raise EspnCredentialPasteError(
-                f"That paste includes {label}, which is part of your ESPN sign-in — we don't want "
-                "it and won't accept it. Copy just the JSON response body (the text starting with "
-                '"{" that the page displays), not the request or its headers.'
+                f"That paste includes {label} — we don't want it and won't accept it. Copy just "
+                'the JSON response body (the text starting with "{" that the page displays), not '
+                "the request or its headers."
             )
 
 
@@ -235,55 +235,163 @@ def flatten_scoring_items(items: object) -> tuple[dict[str, float], list[str]]:
 
 # ESPN statId → canonical key(s).
 #
-# ⚠️ DELIBERATELY PARTIAL, AND THAT IS SAFE. ESPN publishes no stat-id dictionary, so this map covers
-# only ids confirmed against a real payload whose values are self-identifying (0.04/pt passing yard,
-# 6/rushing TD, 1/reception on a league whose own `playerRankType` reads "PPR", …). Every id NOT here
-# flows through `apply_scoring_map` under its original key and is reported **CAPTURED** — stored
-# faithfully, visibly not applied. Guessing an id would be far worse: a wrong guess silently
-# MISPRICES a league, whereas an unmapped id merely tells the truth about what we don't know.
+# 🔬 HOW THESE WERE ESTABLISHED — VERIFIED, NOT TRUSTED. ESPN publishes no stat-id dictionary, so a
+# label from memory or a blog post is a guess, and a wrong guess silently MISPRICES a league (far
+# worse than an unmapped id, which merely reports CAPTURED and tells the truth). Every id below was
+# confirmed against a real `kona_player_info` projection export using an identity a wrong map fails:
 #
-# ⛔ Do not extend this map from memory or from a blog post. Extend it only against a real payload
-# whose human-readable ESPN settings page confirms the label (the NF-C0 "second real payload" rule).
+#   * the nine points-allowed buckets (89/90/91/92/121/122/123/124/125) SUM TO EXACTLY 17.000000
+#     games for a team — they partition the season, which fixes both their identity and their ORDER;
+#   * the eight yards-allowed buckets (129..136) likewise sum to 17.000000;
+#   * stat 126 == points_allowed/17 and stat 137 == yards_allowed/17 to full precision;
+#   * 80 + 77 + 74 == 83 (the sub-40, 40-49 and 50+ field goals partition total FGM);
+#   * receiving_yards / stat-53 == stat-60 (yards per reception) ⇒ **53 is receptions**, despite
+#     being commonly labelled "receptions_alternate"; ESPN reports no stat 41 at all;
+#   * stat-1 + stat-2 == stat-0 (completions + incompletions = attempts).
+#
+# ⛔ Extend this map ONLY with an id that passes a comparable identity or is confirmed against the
+# human-readable ESPN settings page. "It looked right in a table" is how a league gets mispriced.
 SCORING_KEY_MAP: dict[str, tuple[str, ...]] = {
+    # ── offence ────────────────────────────────────────────────────────────────────────────────
     "3": ("pass_yd",),
     "4": ("pass_td",),
-    "19": ("two_pt",),        # 2-pt passing conversion
     "20": ("pass_int",),
     "24": ("rush_yd",),
     "25": ("rush_td",),
-    "26": ("two_pt",),        # 2-pt rush
     "42": ("rec_yd",),
     "43": ("rec_td",),
-    "44": ("two_pt",),        # 2-pt reception
-    "53": ("rec",),
-    "63": ("fum_rec_td",),
+    "53": ("rec",),                      # receptions — see the yards-per-reception identity above
     "72": ("fum_lost",),
-    "86": ("xp_made",),
+    # ── kicking ────────────────────────────────────────────────────────────────────────────────
+    # ESPN's "under 40" is COARSER than our three sub-40 buckets, so it fans out across all three.
+    # Writing one weight to each is an EXACT restatement of the league's rule (every sub-40 kick
+    # scores the same), the mirror image of the fine→coarse FOLD that `resolve_scoring` flags.
+    "80": ("fg_made_0_19", "fg_made_20_29", "fg_made_30_39"),
+    "77": ("fg_made_40_49",),
+    # ⚠️ 74 is the COARSE 50+ bucket; 198/201 are the FINE 50-59 / 60+ pair — the same coarse/fine
+    # duality that cost a silent mapping bug on Sleeper (`fgm_50p` vs `fgm_50_59`/`fgm_60p`). In the
+    # projection export 198 is byte-identical to 74 ONLY because ESPN projects no 60-yard makes;
+    # that is not evidence they are the same field. `_drop_coarse_when_fine_present` resolves a
+    # league that sets both, so dict ordering never decides it.
+    "74": ("fg_made_50_59", "fg_made_60p"),
+    "198": ("fg_made_50_59",),
+    "201": ("fg_made_60p",),
+    "85": ("fg_missed",),
+    "86": ("pat_made",),
+    "88": ("pat_missed",),
+    # ── team defence (the "@dst" namespace — see the pointsOverrides note above) ───────────────
+    "95@dst": ("def_int",),
+    "96@dst": ("def_fumble_rec",),
+    "97@dst": ("def_blocked_kick",),
+    "98@dst": ("def_safety",),
+    "99@dst": ("def_sacks",),
+    "106@dst": ("def_forced_fumble",),
+    "94@dst": ("def_td",),
+    # ── team defence, points allowed ──────────────────────────────────────────────────────────
+    # 🚨 ESPN'S TIERS DO **NOT** RESTATE EXACTLY ON OUR NINE BUCKETS, contrary to the comment in
+    # `sleeper.py` that calls them "the common refinement of the ESPN and Yahoo schemes". They are
+    # the YAHOO refinement: ESPN splits at 18-21 / 22-27 while ours splits at 18-20 / 21-27, so a
+    # true common refinement would need **21 as a bucket of its own**. Exactly one point value is
+    # therefore misplaced — a game allowing exactly 21 points scores at our 21-27 rate rather than
+    # ESPN's 18-21 rate. It is mapped to the nearest exact bucket and DISCLOSED as a warning; see
+    # `_PA_BOUNDARY_NOTE`. Silently fanning 121 across both buckets would be worse: it would apply
+    # the 18-21 weight to the whole of 22-27.
+    "89@dst": ("dst_pa_g_0",),
+    "90@dst": ("dst_pa_g_1_6",),
+    "91@dst": ("dst_pa_g_7_13",),
+    "92@dst": ("dst_pa_g_14_17",),
+    "121@dst": ("dst_pa_g_18_20",),
+    "122@dst": ("dst_pa_g_21_27",),
+    "123@dst": ("dst_pa_g_28_34",),
+    "124@dst": ("dst_pa_g_35_45",),
+    "125@dst": ("dst_pa_g_46p",),
 }
+
+# Several ESPN ids land on ONE canonical key. Collapsing is lossless only when they AGREE, so each
+# group is resolved explicitly (and disclosed when it does not) rather than by dict ordering —
+# the same discipline `_TWO_PT_KEYS` applies on Sleeper.
+_COLLAPSE_GROUPS: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    # ESPN prices the 2-point conversion per play type; our catalog has one `two_pt`.
+    ("two_pt", ("19", "26", "44"), "two-point conversions"),
+    # A player-credited return TD. ⚠️ Kept STRICTLY apart from the D/ST unit's return TD below —
+    # mapping both onto one key double-counts a single return (the Sleeper st_td/def_st_td rule).
+    ("st_player_td", ("101", "102"), "kick and punt return touchdowns"),
+    # The DEF unit's own scores: blocked-kick, interception-return and fumble-return touchdowns.
+    ("def_td", ("93@dst", "103@dst", "104@dst"), "defensive touchdowns"),
+    ("st_td", ("101@dst", "102@dst"), "special-teams touchdowns by the defence"),
+    # A player recovering a fumble for a score; ESPN reports it under two ids.
+    ("fumble_rec_td", ("63", "104"), "fumble-recovery touchdowns"),
+)
+
+# Every collapse-group member also has to BE in the map, or it collapses to an agreed value and is
+# then reported CAPTURED anyway. Deriving those entries from the group table keeps one source of
+# truth — listing them twice is exactly how the two drift apart.
+for _target, _keys, _ in _COLLAPSE_GROUPS:
+    for _key in _keys:
+        SCORING_KEY_MAP.setdefault(_key, (_target,))
+
+# Long-touchdown bonuses (15/16 pass, 35/36 rush, 45/46 receiving) are deliberately ABSENT: the
+# projection catalog has no 40+/50+ touchdown column, so there is nothing to apply them to. They
+# flow through as CAPTURED, which is the honest answer, and NF-C0e is where they would be earned.
+
+_PA_BOUNDARY_NOTE = (
+    "ESPN scores a game where your defence allows exactly 21 points in its 18-21 tier; we resolve "
+    "points allowed on buckets that split at 20/21, so that one case scores at your 22-27 rate "
+    "instead. Every other tier matches your league exactly."
+)
 
 # Non-scoring bookkeeping fields that would be noise in the coverage report.
 IGNORE_KEYS: frozenset[str] = frozenset()
 
 
-def translate_scoring(flat: dict[str, float]) -> tuple[ScoringTranslation, list[str]]:
-    """Map the flattened ESPN keys onto canonical stats, collapsing the three 2-point rules."""
-    warnings: list[str] = []
+def _drop_coarse_when_fine_present(flat: dict[str, float]) -> dict[str, float]:
+    """ESPN exposes BOTH a coarse 50+ field-goal bucket (74) and the fine 50-59 / 60+ pair
+    (198/201). A league that sets a fine key means it; the coarse one would double-write the same
+    canonical column, and which won would depend on dict ordering. Prefer the fine keys."""
+    if "198" in flat or "201" in flat:
+        flat = {k: v for k, v in flat.items() if k != "74"}
+    return flat
 
-    # ESPN prices 2-pt conversions separately by play type (19/26/44); our canonical schema has ONE
-    # `two_pt`. Collapse only when they agree, and DISCLOSE when they don't rather than silently
-    # picking one — the same rule the Sleeper adapter applies to pass_2pt/rush_2pt/rec_2pt.
-    two_pt_keys = [k for k in ("19", "26", "44") if k in flat]
-    values = {flat[k] for k in two_pt_keys}
-    if len(values) > 1:
-        chosen = max(values, key=lambda v: sum(1 for k in two_pt_keys if flat[k] == v))
-        warnings.append(
-            "Your league pays different amounts for passing, rushing and receiving two-point "
-            f"conversions ({', '.join(str(flat[k]) for k in two_pt_keys)}); we apply a single value "
-            f"of {chosen} to all of them."
-        )
-        flat = dict(flat)
-        for k in two_pt_keys:
-            flat[k] = chosen
+
+def _collapse_group(
+    flat: dict[str, float], keys: tuple[str, ...], label: str
+) -> tuple[dict[str, float], list[str]]:
+    """Force one canonical key's ESPN sources to a single value, disclosing any disagreement."""
+    present = [k for k in keys if k in flat]
+    values = {flat[k] for k in present}
+    if len(values) <= 1:
+        return flat, []
+    # Pick the modal value so the majority rule survives, and say plainly that we flattened it.
+    chosen = max(values, key=lambda v: sum(1 for k in present if flat[k] == v))
+    flat = dict(flat)
+    for k in present:
+        flat[k] = chosen
+    return flat, [
+        f"Your league pays different amounts for {label} "
+        f"({', '.join(str(v) for v in sorted(values))}); we apply a single value of {chosen}."
+    ]
+
+
+def translate_scoring(flat: dict[str, float]) -> tuple[ScoringTranslation, list[str]]:
+    """Map the flattened ESPN keys onto canonical stats.
+
+    Two lossy edges are handled EXPLICITLY here rather than left to dict ordering, because both
+    would otherwise change a user's scoring silently: several ESPN ids collapse onto one canonical
+    key (resolved only when they agree), and the points-allowed tiers do not align at 20/21.
+    """
+    warnings: list[str] = []
+    flat = _drop_coarse_when_fine_present(flat)
+
+    for _canonical_key, keys, label in _COLLAPSE_GROUPS:
+        flat, notes = _collapse_group(flat, keys, label)
+        warnings.extend(notes)
+
+    # Disclose the 18-21 / 22-27 boundary only when the league actually scores those tiers
+    # DIFFERENTLY — if both tiers carry the same weight the misplacement is a no-op, and warning
+    # about a difference that cannot affect the board would be noise.
+    t18, t22 = flat.get("121@dst"), flat.get("122@dst")
+    if t18 is not None and t22 is not None and t18 != t22:
+        warnings.append(_PA_BOUNDARY_NOTE)
 
     translation = canonical.apply_scoring_map(flat, SCORING_KEY_MAP, ignore=IGNORE_KEYS)
     return translation, warnings
