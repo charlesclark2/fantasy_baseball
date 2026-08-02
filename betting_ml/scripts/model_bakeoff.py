@@ -313,10 +313,23 @@ def _binary_ece(y, p, n_bins: int = 10) -> float:
     return float(ece)
 
 
-def load_clean_matrix(*, refresh_cache: bool, smoke: bool) -> pd.DataFrame:
+def load_clean_matrix(*, refresh_cache: bool, smoke: bool, min_year: int = 2021) -> pd.DataFrame:
     """The cached training matrix with BOTH E1 de-leak swaps applied in memory — i.e. exactly
-    the matrix the E1.8 slim contracts were derived on. `--smoke` caps to 400 rows/season."""
-    df = get_cached_df("edge_e1_training", load_features, refresh=refresh_cache).reset_index(drop=True)
+    the matrix the E1.8 slim contracts were derived on. `--smoke` caps to 400 rows/season.
+
+    `min_year` is the WINDOW — the earliest season loaded (`load_features`' own parameter). It
+    defaults to 2021 so every existing caller is byte-unchanged.
+
+    ⚠️ **A WIDER WINDOW GETS ITS OWN CACHE KEY, and that is not a nicety.** `get_cached_df` keys
+    only on the string it is given, so serving a 2016-window request out of the `edge_e1_training`
+    parquet would silently return the 2021 matrix and the run would report a fold count it did not
+    have — the repo's recurring "reports on a quantity it is not measuring" shape. MH2.1 depends on
+    the window being real, so the key carries it.
+    """
+    key = "edge_e1_training" if int(min_year) == 2021 else f"edge_e1_training_from{int(min_year)}"
+    df = get_cached_df(
+        key, lambda: load_features(min_year=int(min_year)), refresh=refresh_cache
+    ).reset_index(drop=True)
     print("Applying E1 de-leak swaps (bullpen_v3 + Stuff+ prior-season) ...")
     df = _swap_bullpen_v3(df, 1.0)
     df = _swap_stuff_plus_deleaked(df).reset_index(drop=True)
