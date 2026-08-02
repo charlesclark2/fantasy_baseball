@@ -53,6 +53,40 @@ export interface ProjectedPlayer {
    *  A reference column; null means undrafted in that sample. */
   adp?: number | null
 
+  /** NF1.5b — how MARKET-LEANING this row's ORDERING is: `"market-led"` / `"market-led-adaptive"` /
+   *  `"market-blend"` / `"independent-lean"` / `"independent"`.
+   *
+   *  🚨 It is the honest caveat, not a decoration. The served board re-orders our own calibrated
+   *  projections using market consensus (ADP/ECR) at the positions where that measurably helped — so
+   *  at a market-led position the ranking is NOT an independent read on the market, and must never be
+   *  presented as beating a market it is partly built from. Null on a market-blind payload and on
+   *  rows with no market input (rookies, K/DST). */
+  mktLean?: string | null
+
+  // ── NF3.4: PER-PLAYER feature contributions — genuine per-player attribution (LightGBM TreeSHAP),
+  // NOT a position-level description. Null for a rookie or K/DST (NF1 has no base-season feature row
+  // to attribute for either). 🚨 `totalPts` is NF1's OWN separate research-model prediction for this
+  // player — it is NOT guaranteed to equal `fpPpr` above (the served MVP-1 number); see
+  // `nf1_model.player_feature_contributions`'s docstring. Feature labels/descriptions live in the
+  // manifest's `featureLegend`, not repeated here. ──────────────────────────────────────────────
+  contrib?: {
+    /** The model's SHARED constant — its unconditional expected value, the SAME number for every
+     *  player it scores. NOT player-specific; never describe this as "his" anything. */
+    biasPts: number
+    /** THIS player's own `mvp1_fp` contribution — genuinely player-specific (it scales with his own
+     *  baseline heuristic projection), which is WHY two players at the same position show different
+     *  `baselinePts` even though `biasPts` is identical for both. */
+    ownPriorPts: number
+    /** `biasPts + ownPriorPts` — NF1's starting point for him specifically, shown as "starting
+     *  point", not as one of `drivers` (a driver a model can't act on isn't a useful lever to show a
+     *  drafter). */
+    baselinePts: number
+    /** `baselinePts` + every driver's `pts` (not just the ones shown) — NF1's full own prediction. */
+    totalPts: number
+    /** Ranked by |pts| descending; a positive value pushes his number up, negative pushes it down. */
+    drivers: { feature: string; pts: number }[]
+  } | null
+
   // ── NF3.1: BIO — passed through from nflverse's identity table (`player_bio_map`), never
   // derived/projected. Optional: absent for a DST (a team, not a person), for the ~0.2-1% of
   // players the source has nothing for, and on any payload exported before NF3.1. ──────────────
@@ -125,7 +159,29 @@ export interface ProjectionPayload {
    *  ADP reference is pinned rather than varying, and is labelled with these. */
   adp_format?: string | null
   adp_teams?: number | null
+  /** NF1.5b — which projection lineage this payload IS: `"nf1_5"` (market-aware refined, the served
+   *  default since the re-land) or `"mvp1"` (market-blind). Absent on a pre-NF1.5b export. */
+  projection_source?: string | null
+  projection_label?: string | null
+  /** `{position -> market lean}` for the whole board — the per-position form of `mktLean`. */
+  market_lean?: Record<string, string> | null
+  /** The standing caveat, supplied BY THE EXPORT so the wording lives with the model that earned it
+   *  and cannot drift out of sync with which positions actually use the market. */
+  market_lean_note?: string | null
   players: ProjectedPlayer[]
+}
+
+/** NF1.5b — the positions whose ordering INCORPORATES market consensus, from a `market_lean` map.
+ *  Anything that is not explicitly independent counts, so a new lean label added upstream is treated
+ *  as market-leaning (the conservative direction) rather than silently dropping the caveat. */
+export function marketLeaningPositions(
+  lean: Record<string, string> | null | undefined,
+): string[] {
+  if (!lean) return []
+  return Object.entries(lean)
+    .filter(([, v]) => typeof v === "string" && !v.startsWith("independent"))
+    .map(([pos]) => pos)
+    .sort()
 }
 
 export function getFantasyManifest(token: string | null, season: number): Promise<Manifest> {

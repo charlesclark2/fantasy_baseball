@@ -1,6 +1,6 @@
 # NF1.5 — CAPSTONE feature-combination bake-off (market-aware refinements + the market-blind ceiling proof)
 
-**Model:** `nfl_fantasy_nf1_5_v1` · **updated:** 2026-08-01T02:20:01.558648+00:00
+**Model:** `nfl_fantasy_nf1_5_v1` · **updated:** 2026-08-02T03:36:18.362292+00:00
 
 > 🔒 **HONEST FRAME:** stage 1's bar is the NF1.3 STORED incumbent per position (the market-aware winner); stage 2's bar is the market-blind MVP-1 null — with the blind space exhausted 4×, a clean stage-2 NULL is the LIKELY + valuable outcome (it PROVES the incumbent is the feature-library ceiling). At market-leaning positions we INCORPORATE consensus and ⛔ never claim to beat the market we use. `best_alpha = 0`.
 
@@ -336,5 +336,5 @@ targets [2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021,
 
 - **serve:** `refined-dual-board`
 - why: the refined market-aware board beats the NF1.3 incumbent on the product metric with a verified calibrated interval; the market-blind MVP-1 board stays the fade-claim baseline (dual-board)
-- calibration verify: calib_80 = 0.804 (floor 0.80, tolerance ≥0.78) · product Δρ-vs-ADP (refined − NF1.3): 0.011
+- calibration verify: calib_80 = 0.847 (floor 0.80, tolerance ≥0.78) · product Δρ-vs-ADP (refined − NF1.3): 0.007
 

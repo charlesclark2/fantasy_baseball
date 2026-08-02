@@ -30,13 +30,13 @@ import {
   ALL_POSITIONS,
   ConfidenceBadge,
   EmptyBlock,
-  FeatureDriversPanel,
   FormatSelector,
   GLOSSARY,
   InfoTip,
   IntervalBar,
   LoadingBlock,
   LOW_PREDICTABILITY_POSITIONS,
+  PlayerContributionsPanel,
   PosBadge,
   ProvenanceLine,
   RangeCell,
@@ -44,6 +44,7 @@ import {
   STAT_COLS,
   UNCERTAINTY_HELP,
   UNCERTAINTY_LABEL,
+  MarketLeanNote,
   UncertaintyNote,
   num,
   int,
@@ -510,8 +511,12 @@ export function FantasyPlayerPage() {
             )}
           </section>
 
-          {/* NF3.4 — what our model weights most for this position (model-level, not per-player) */}
-          <FeatureDriversPanel pos={proj.pos} importance={manifest?.featureImportance} />
+          {/* NF3.4 — what pushes THIS player's number up or down (a separate research-model read) */}
+          <PlayerContributionsPanel
+            playerName={proj.name}
+            contrib={proj.contrib}
+            legend={manifest?.featureLegend}
+          />
 
           {/* Raw season stat line */}
           {statCols.length > 0 && (
@@ -534,6 +539,12 @@ export function FantasyPlayerPage() {
 
           <UncertaintyNote>
             <p className="mt-2">{UNCERTAINTY_HELP.empirical} {UNCERTAINTY_HELP.calibrated_per_player}</p>
+            {/* Scoped to THIS player's own position — the page renders one player, so listing every
+                market-leaning position on the board would be noise he has to filter himself. */}
+            <MarketLeanNote
+              lean={proj.mktLean ? { [proj.pos]: proj.mktLean } : null}
+              note={projPayload?.market_lean_note}
+            />
           </UncertaintyNote>
         </>
       )}

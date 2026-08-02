@@ -14,6 +14,7 @@ import { Info } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Picker } from "@/components/ui/picker"
 import type { LeagueConfigMeta, Manifest } from "@/lib/draft-optimizer"
+import { marketLeaningPositions } from "@/lib/fantasy"
 import type { ProjectedPlayer } from "@/lib/fantasy"
 
 export const POS_COLORS: Record<string, string> = {
@@ -188,9 +189,18 @@ export const UNCERTAINTY_HELP: Record<string, string> = {
 export function InfoTip({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
   // Built on POPOVER, not Tooltip, and that is deliberate: Radix's Tooltip closes on pointerdown by
   // design, so a tap can never open it — on a phone (no hover) the definition would be unreachable,
-  // and these definitions are what make the boards readable. Popover is click/tap-driven, and the
-  // hover handlers below restore the usual tooltip feel on a mouse. `button` keeps it keyboard-
-  // focusable. Verified on a real touch context, not assumed.
+  // and these definitions are what make the boards readable. Popover is click/tap-driven (Radix
+  // toggles the controlled `open` state on click on its own), and the hover handlers below ADD the
+  // usual tooltip feel on a mouse on top of that. `button` keeps it keyboard-focusable.
+  //
+  // 🐛 the hover handlers must be POINTER events gated to `pointerType === "mouse"`, not plain
+  // `onMouseEnter`/`onMouseLeave` (2026-08-02 mobile bug): a touch tap fires a real `click` (which
+  // Radix uses to open it) immediately followed by a browser-synthesized `mouseleave` on the same
+  // element (touch simulates a brief hover-then-leave on many mobile browsers) — a plain
+  // `onMouseLeave` closed it again in the same frame, so the definition "popped up and immediately
+  // went away" on a phone. Pointer events reliably carry `pointerType`, so gating on `=== "mouse"`
+  // makes a touch tap invisible to these handlers entirely; Radix's own click-to-toggle is then the
+  // ONLY thing driving touch, exactly like the tap-to-open guarantee this component already promises.
   const [open, setOpen] = useState(false)
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -198,8 +208,12 @@ export function InfoTip({ label, children }: { label: React.ReactNode; children:
         <button
           type="button"
           aria-label={typeof label === "string" ? `${label} — what this means` : "What this means"}
-          onMouseEnter={() => setOpen(true)}
-          onMouseLeave={() => setOpen(false)}
+          onPointerEnter={(e) => {
+            if (e.pointerType === "mouse") setOpen(true)
+          }}
+          onPointerLeave={(e) => {
+            if (e.pointerType === "mouse") setOpen(false)
+          }}
           className="inline-flex cursor-help items-center gap-1 underline decoration-dotted decoration-gray-600 underline-offset-4"
         >
           {label}
@@ -327,63 +341,117 @@ export function UncertaintyNote({ children }: { children?: React.ReactNode }) {
   )
 }
 
-/** NF3.4 — "what our {POS} model weights most", the transparency panel.
+/** NF1.5b — the MARKET-LEAN caveat: which positions' ordering incorporates market consensus.
  *
- *  🚨 HONEST LABELLING is the whole point of this component, not a copy afterthought: it is a
- *  MODEL-LEVEL description (what the fitted research model leans on for this POSITION, in
- *  aggregate) — it never claims to explain why THIS player's number is what it is. Renders nothing
- *  for a position NF1 wasn't fitted on (K/DST) or if the manifest carries no featureImportance yet
- *  (an older export) — see `FeatureImportancePayload` in draft-optimizer.ts. */
-export function FeatureDriversPanel({
-  pos,
-  importance,
+ *  🚨 THIS IS THE HONEST FRAME FOR THE SERVED BOARD, and it is deliberately rendered from the
+ *  PAYLOAD rather than hard-coded. The board we serve re-orders our own calibrated projections using
+ *  market consensus (ADP/ECR) at the positions where doing so measurably helped on the backtest. So
+ *  the ordering DID beat consensus ADP overall — a real, measured result — but at a market-leaning
+ *  position it is NOT an independent read on the market, and it must never be presented as beating a
+ *  market it is partly built from. Which positions those are is a MODEL decision that can change on
+ *  the next re-selection, so the copy takes them from `market_lean` and the sentence itself from
+ *  `market_lean_note`: the wording travels with the model that earned it and cannot drift.
+ *
+ *  Renders nothing for a market-BLIND payload (no `market_lean`) — there is nothing to caveat. */
+export function MarketLeanNote({
+  lean,
+  note,
 }: {
-  pos: string
-  importance: import("@/lib/draft-optimizer").FeatureImportancePayload | null | undefined
+  lean?: Record<string, string> | null
+  note?: string | null
 }) {
-  const drivers = importance?.positions?.[pos]
-  if (!importance || !drivers || drivers.length === 0) return null
-  const basePct = importance.positions_baseline_pct?.[pos]
-  const maxPct = Math.max(...drivers.map((d) => d.pct), 1)
+  const positions = marketLeaningPositions(lean)
+  if (!note || positions.length === 0) return null
+  return (
+    <p className="mt-2">
+      <span className="font-semibold text-gray-300">
+        Where the ranking uses the market: {positions.join(", ")}.
+      </span>{" "}
+      {note}
+    </p>
+  )
+}
+
+/** NF3.4 — "what pushes {player}'s number up or down", the PER-PLAYER transparency panel.
+ *
+ *  🚨 HONEST LABELLING is the whole point of this component: every point value comes from our NF1
+ *  research model's OWN separate prediction for this player (LightGBM TreeSHAP, exact — the
+ *  contributions always sum to `contrib.totalPts`), which is NOT guaranteed to equal the served
+ *  projection shown elsewhere on this page. The panel says so plainly rather than implying the two
+ *  numbers are the same thing. Renders nothing for a rookie or K/DST (NF1 doesn't cover them) or if
+ *  the manifest carries no legend yet (an older export) — see `ProjectedPlayer.contrib` / `Manifest.
+ *  featureLegend`. */
+export function PlayerContributionsPanel({
+  playerName,
+  contrib,
+  legend,
+}: {
+  playerName: string
+  contrib: import("@/lib/fantasy").ProjectedPlayer["contrib"]
+  legend: Record<string, { label: string; description: string }> | null | undefined
+}) {
+  if (!contrib || !legend || contrib.drivers.length === 0) return null
+  const maxAbs = Math.max(...contrib.drivers.map((d) => Math.abs(d.pts)), 0.1)
   return (
     <section className="mb-6 rounded-lg border border-[#262626] bg-[#0f0f0f] p-4">
-      <div className="mb-1 flex items-center gap-1.5">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-          What our {pos} model weights most
-        </h2>
-        <InfoTip label="What our model weights most">
-          These weights come from our validated research model (NF1) — a learned re-weighting of the
-          same underlying signals every {pos} projection is built from. They describe the MODEL, in
-          aggregate for every {pos} we project, not why any one player&apos;s number is what it is
-          — that would take a different, per-player method we don&apos;t compute. They also aren&apos;t
-          necessarily the literal formula behind the specific projection above; think of this as &ldquo;what
-          moves a {pos} projection in general,&rdquo; not a receipt for this one.
+      <h2 className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
+        <InfoTip label={`What pushes ${playerName}'s number up or down`}>
+          These points come from our separate research model (NF1) — it re-weights the same
+          underlying signals your projection above is built from, but LEARNS how much each one
+          matters instead of using a fixed formula. Its own total for {playerName} is{" "}
+          {contrib.totalPts.toFixed(1)} points, which is <strong>not necessarily the same number</strong>{" "}
+          as the projection shown above (that one comes from our served model, not this research
+          one) — think of this as &ldquo;what our research model sees in him specifically,&rdquo; a second,
+          independent read, not a receipt for the number above it.
         </InfoTip>
-      </div>
+      </h2>
       <p className="mb-3 text-[11px] leading-relaxed text-gray-600">
-        Model-level, not player-specific — ranked by how much each signal shifts our {pos} model&apos;s
-        output overall.
-        {basePct != null && (
-          <> The model keeps most of its weight (~{Math.round(basePct)}%) on its own starting estimate; below is what moves it from there.</>
-        )}
+        Player-specific. Across every player our research model scores, its average is{" "}
+        {contrib.biasPts.toFixed(1)} points — that part is the same for everyone.{" "}
+        {playerName}&apos;s own baseline projection already puts HIM at {contrib.baselinePts.toFixed(1)}{" "}
+        before any signal below is applied (a different starting point than another player at his
+        position would have, because his own baseline differs) — these signals move it further still,
+        based on what specifically stands out about him.
       </p>
-      <div className="space-y-2">
-        {drivers.map((d) => (
-          <div key={d.feature} className="flex items-center gap-3">
-            <span className="w-40 flex-shrink-0 truncate text-xs text-gray-300" title={d.label}>
-              {d.label}
-            </span>
-            <div className="h-1.5 flex-1 rounded-full bg-[#1a1a1a]">
-              <div
-                className="h-1.5 rounded-full bg-sky-500/50"
-                style={{ width: `${Math.max((d.pct / maxPct) * 100, 3)}%` }}
-              />
+      <div className="space-y-3">
+        {contrib.drivers.map((d) => {
+          const entry = legend[d.feature]
+          const positive = d.pts >= 0
+          return (
+            <div key={d.feature}>
+              {/* label + value share the top line but never fight for space with the bar — a label
+                  wraps onto a second line rather than being cut off (the whole point of this panel
+                  is that the label is legible; a truncated one defeats it, esp. on a narrow phone) */}
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-xs leading-snug text-gray-300">
+                  {entry ? (
+                    <InfoTip label={entry.label}>{entry.description}</InfoTip>
+                  ) : (
+                    d.feature
+                  )}
+                </span>
+                <span
+                  className={`flex-shrink-0 text-right text-[11px] tabular-nums ${
+                    positive ? "text-emerald-400" : "text-rose-400"
+                  }`}
+                >
+                  {positive ? "+" : ""}
+                  {d.pts.toFixed(1)}
+                </span>
+              </div>
+              <div className="relative mt-1 h-1.5 w-full rounded-full bg-[#1a1a1a]">
+                <div
+                  className={`absolute top-0 h-1.5 rounded-full ${positive ? "bg-emerald-500/60" : "bg-rose-500/60"}`}
+                  style={{
+                    left: positive ? "50%" : `${50 - (Math.abs(d.pts) / maxAbs) * 50}%`,
+                    width: `${Math.max((Math.abs(d.pts) / maxAbs) * 50, 2)}%`,
+                  }}
+                />
+                <div className="absolute left-1/2 top-0 h-1.5 w-px bg-gray-700" />
+              </div>
             </div>
-            <span className="w-10 flex-shrink-0 text-right text-[11px] tabular-nums text-gray-500">
-              {d.pct}%
-            </span>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </section>
   )

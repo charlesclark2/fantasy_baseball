@@ -31,6 +31,7 @@ from __future__ import annotations
 import re
 
 from app.backend.services.platform_import import canonical as C
+from app.backend.services.platform_import import sleeper_players
 from app.backend.services.platform_import.http import PlatformHTTPError, get_json
 
 BASE_URL = "https://api.sleeper.app/v1"
@@ -404,15 +405,29 @@ def _player_from_pick_metadata(player_id: str, meta: dict, *, starter: bool = Fa
     )
 
 
+def _build_roster_player(player_id: str, hit: "dict | None", starter: bool) -> C.ImportedPlayer:
+    if hit:
+        return C.ImportedPlayer(
+            player_key=player_id,
+            name=str(hit.get("name") or "") or player_id,
+            position=str(hit.get("position") or "") or None,
+            team=str(hit.get("team") or "") or None,
+            starter=starter,
+        )
+    return C.ImportedPlayer(player_key=player_id, name="", starter=starter)
+
+
 def _fetch_teams(league_id: str) -> tuple[tuple[C.ImportedTeam, ...], list[str]]:
     """Rosters + their owners.
 
     ⚠️ Sleeper's roster payload carries PLAYER IDS ONLY (`["11599","5846",…]`) — no names. Resolving
     them needs the `/players/nfl` dump, which Sleeper documents as ~5 MB and asks callers to fetch at
     most once per day; pulling it inside a request would blow the Lambda's memory and the platform's
-    own guidance at once. So roster entries carry the id and an empty name, and the caller is told
-    so explicitly — an honest gap beats a fabricated name. The DRAFT payload, by contrast, embeds
-    full player metadata per pick, which is why draft state comes back fully named.
+    own guidance at once. So roster entries are resolved against `sleeper_players` — a NARROW,
+    MEMOIZED read (NF-C0c) of a daily-published artifact — rather than fetched live here. A player id
+    the artifact does not carry (or an artifact that could not be loaded at all) still shows honestly
+    with an empty name; it is never hidden. The DRAFT payload, by contrast, embeds full player
+    metadata per pick, which is why draft state comes back fully named regardless.
     """
     rosters = _as_list(get_json(_url(f"/league/{league_id}/rosters")))
     users = {
@@ -420,16 +435,23 @@ def _fetch_teams(league_id: str) -> tuple[tuple[C.ImportedTeam, ...], list[str]]
         for u in _as_list(get_json(_url(f"/league/{league_id}/users")))
     }
 
-    teams: list[C.ImportedTeam] = []
+    parsed = []
+    all_ids: set[str] = set()
     for raw in rosters:
         roster = _as_dict(raw)
+        starters = {str(p) for p in _as_list(roster.get("starters")) if p and str(p) != "0"}
+        pids = [str(pid) for pid in _as_list(roster.get("players")) if pid and str(pid) != "0"]
+        all_ids.update(pids)
+        parsed.append((roster, starters, pids))
+
+    resolved, artifact_loaded = sleeper_players.resolve(all_ids)
+
+    teams: list[C.ImportedTeam] = []
+    for roster, starters, pids in parsed:
         owner_id = str(roster.get("owner_id") or "")
         user = users.get(owner_id, {})
-        starters = {str(p) for p in _as_list(roster.get("starters")) if p and str(p) != "0"}
         players = tuple(
-            C.ImportedPlayer(player_key=str(pid), name="", starter=str(pid) in starters)
-            for pid in _as_list(roster.get("players"))
-            if pid and str(pid) != "0"
+            _build_roster_player(pid, resolved.get(pid), pid in starters) for pid in pids
         )
         display = str(user.get("display_name") or "")
         team_name = str(_as_dict(user.get("metadata")).get("team_name") or "") or display or "Team"
@@ -441,15 +463,25 @@ def _fetch_teams(league_id: str) -> tuple[tuple[C.ImportedTeam, ...], list[str]]
                 players=players,
             )
         )
-    note = (
-        [
+
+    total = len(all_ids)
+    matched = len(resolved)
+    note: list[str] = []
+    if total and not artifact_loaded:
+        # Same wording as before NF-C0c: we could not read the name cache at all (unconfigured or a
+        # transient miss), so this is exactly the original honest gap.
+        note = [
             "Sleeper's roster endpoint returns player IDs without names. Resolving them needs "
             "Sleeper's ~5 MB player file, which they ask callers to download at most once a day, so "
             "roster spots are shown by ID. Draft picks below DO carry full names."
         ]
-        if any(t.players for t in teams)
-        else []
-    )
+    elif total and matched < total:
+        # The cache loaded, but some ids (e.g. a very recently added player, or one Sleeper's own
+        # feed dropped) were not in it — say exactly how many, rather than blanket "IDs only".
+        note = [
+            f"We matched names for {matched} of {total} rostered players; the rest are shown by "
+            "Sleeper ID until our name cache next refreshes."
+        ]
     return tuple(teams), note
 
 

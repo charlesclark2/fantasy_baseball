@@ -64,31 +64,12 @@ export interface LeagueConfigMeta {
   adpFormat?: string | null
 }
 
-/** One row of the NF3.4 transparency panel: a signal, its plain-language label, and its share of the
- *  model's importance. `pct` is NOT the share of the top-N list — it's the share of the FULL feature
- *  set, so a short list under-summing to 100% is expected and honest (the rest is spread thin). */
-export interface FeatureDriver {
-  feature: string
+/** NF3.4 — the plain-language label + description for one FEATURE key, shared across every player's
+ *  `contrib.drivers[].feature` — kept once here (the manifest's `featureLegend`) rather than repeated
+ *  on every player record. */
+export interface FeatureLegendEntry {
   label: string
-  pct: number
-}
-
-/** NF3.4 — the NF1 GBM's own feature importances, exported per position. 🚨 MODEL-LEVEL, NOT
- *  PER-PLAYER: this describes what the FITTED research model weights most for a POSITION overall,
- *  never an attribution of any individual player's number (that would need a per-player method like
- *  SHAP, which this is not) — see `run_nf1_feature_importance.py` / `nf1_model.feature_importance_report`.
- *  It also describes NF1 (a validated research model over the same signal set), not necessarily the
- *  literal mechanism behind the SERVED MVP-1 projection shown elsewhere on the page — `model_version`
- *  travels with it so that distinction is never silently lost. */
-export interface FeatureImportancePayload {
-  model_version: string
-  /** The share of importance kept on NF1's own incumbent-prior feature (its starting point) — real,
-   *  but excluded from `global`/`positions` as circular ("our baseline drives our baseline"). */
-  baseline_pct: number
-  global: FeatureDriver[]
-  /** Present only for positions NF1 was fitted on (QB/RB/WR/TE) — absent for K/DST. */
-  positions: Record<string, FeatureDriver[]>
-  positions_baseline_pct: Record<string, number>
+  description: string
 }
 
 export interface Manifest {
@@ -98,9 +79,40 @@ export interface Manifest {
   positions: string[]
   sizes: number[]
   configs: LeagueConfigMeta[]
-  /** NF3.4 — optional: absent on a manifest exported before this shipped, or if the artifact hadn't
-   *  been (re-)built at export time. */
-  featureImportance?: FeatureImportancePayload | null
+  /** NF1.5b — which projection lineage EVERY blob in this export came from: `"nf1_5"` (the
+   *  market-aware refined board, the served default since the NF1.5b re-land) or `"mvp1"` (the
+   *  market-blind board). Optional: absent on an export made before NF1.5b. */
+  projectionSource?: string | null
+  projectionLabel?: string | null
+  /** Provenance for the projections blob, mirrored into the manifest so a board-only surface can
+   *  carry the model's own caveats without fetching `projections.json`. Null until that blob
+   *  exports; absent entirely on a pre-NF3 manifest. */
+  projections?: {
+    players: number
+    model_version?: string | null
+    base_season?: number | null
+    adp_format?: string | null
+    adp_teams?: number | null
+    /** NF1.5b — `{position -> market lean}` and the standing caveat sentence. See `MarketLeanNote`. */
+    projection_source?: string | null
+    projection_label?: string | null
+    market_lean?: Record<string, string> | null
+    market_lean_note?: string | null
+  } | null
+  /** NF3.4 — `{feature key -> label/description}` for every feature a player's `contrib.drivers` can
+   *  reference. Optional: absent on a manifest exported before this shipped, or if the underlying
+   *  artifact hadn't been (re-)built at export time. */
+  featureLegend?: Record<string, FeatureLegendEntry> | null
+  /** NF3.4 — provenance for the contributions data (which model, which season, when built) — kept
+   *  separate from the per-player payload so the page can show/hide the panel without waiting on
+   *  `projections.json`. */
+  featureContributionsMeta?: {
+    model_version: string
+    generated_at: string
+    base_season: number
+    projection_season: number
+    n_players: number
+  } | null
 }
 
 const NEED_W_DEDICATED = 1.0

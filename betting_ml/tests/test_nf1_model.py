@@ -282,6 +282,11 @@ def test_feature_labels_cover_every_feature():
     assert all(isinstance(v, str) and v for v in M.FEATURE_LABELS.values())
 
 
+def test_feature_descriptions_cover_every_feature():
+    assert set(M.FEATURES) <= set(M.FEATURE_DESCRIPTIONS)
+    assert all(isinstance(v, str) and len(v) > 15 for v in M.FEATURE_DESCRIPTIONS.values())
+
+
 def test_feature_importance_report_shape_and_honesty():
     pool = _synthetic(n=600, seed=3)
     hp = {"n_estimators": 30, "num_leaves": 7, "learning_rate": 0.1, "min_child_samples": 10}
@@ -317,3 +322,77 @@ def test_feature_importance_report_skips_thin_positions():
     report = M.feature_importance_report(pool, hp, top_n=3, n_repeats=3)
     assert "QB" in report["positions"]
     assert "RB" not in report["positions"]                          # too few rows to be trustworthy
+
+
+def _fitted_gbm(pool):
+    hp = {"n_estimators": 30, "num_leaves": 7, "learning_rate": 0.1, "min_child_samples": 10}
+    learner = M.PooledGBM(feats=M.FEATURES, **hp)
+    y = pool["real_fp_ppr"].to_numpy(dtype=float)
+    pos = pool["position"].to_numpy()
+    learner.fit(pool, y, pos)
+    return learner
+
+
+def test_player_feature_contributions_sum_to_the_players_own_prediction():
+    pool = _synthetic(n=500, seed=7)
+    learner = _fitted_gbm(pool)
+
+    current = _synthetic(n=40, seed=99)                     # stand-in for "today's board" frame
+    cur_pos = current["position"].to_numpy()
+    F = learner._frame(current, cur_pos)
+    F["_pos"] = F["_pos"].astype("category")
+    player_ids = [f"cur{i}" for i in range(len(current))]
+    pred = learner._model.predict(F)
+
+    contrib = M.player_feature_contributions(learner._model, F, player_ids, top_n=4)
+    assert set(contrib) == set(player_ids)
+    for i, pid in enumerate(player_ids):
+        c = contrib[pid]
+        # the SHAP identity: baseline + every contribution (not just the displayed top-N) sums to
+        # exactly this player's own model prediction — `total_pts` must match regardless of top_n
+        assert c["total_pts"] == pytest.approx(float(pred[i]), abs=0.15)
+        # baseline_pts must decompose into bias (shared) + own_prior (player-specific) — this is the
+        # split the panel copy relies on to explain why two same-position players differ. Both sides
+        # are independently rounded to 1dp, so allow the resulting double-rounding slack (<=0.1).
+        assert c["baseline_pts"] == pytest.approx(c["bias_pts"] + c["own_prior_pts"], abs=0.15)
+        assert len(c["drivers"]) <= 4
+        assert all(d["feature"] != "mvp1_fp" for d in c["drivers"])   # never listed as a "driver"
+        # drivers are sorted by |pts| descending
+        pts = [abs(d["pts"]) for d in c["drivers"]]
+        assert pts == sorted(pts, reverse=True)
+
+
+def test_player_feature_contributions_differ_across_players():
+    # two players with genuinely different inputs must not collapse to the same breakdown — this
+    # would be the tell that the frame/player_id alignment is broken (a real risk since a mismatched
+    # row order would silently mislabel one player's drivers as another's).
+    pool = _synthetic(n=500, seed=11)
+    learner = _fitted_gbm(pool)
+    current = _synthetic(n=10, seed=21)
+    cur_pos = current["position"].to_numpy()
+    F = learner._frame(current, cur_pos)
+    F["_pos"] = F["_pos"].astype("category")
+    player_ids = [f"cur{i}" for i in range(len(current))]
+    contrib = M.player_feature_contributions(learner._model, F, player_ids, top_n=3)
+    totals = {pid: contrib[pid]["total_pts"] for pid in player_ids}
+    assert len(set(totals.values())) > 1
+
+
+def test_bias_is_shared_but_own_prior_is_player_specific():
+    # the exact claim the panel copy makes: bias_pts is the SAME constant for every player (the
+    # model's unconditional expected value), own_prior_pts varies (his own mvp1_fp contribution) —
+    # this is WHY two same-position players show different baseline_pts, and the copy must not
+    # attribute that difference to a shared "typical player at his level" number.
+    pool = _synthetic(n=500, seed=13)
+    learner = _fitted_gbm(pool)
+    current = _synthetic(n=20, seed=23)
+    cur_pos = current["position"].to_numpy()
+    F = learner._frame(current, cur_pos)
+    F["_pos"] = F["_pos"].astype("category")
+    player_ids = [f"cur{i}" for i in range(len(current))]
+    contrib = M.player_feature_contributions(learner._model, F, player_ids)
+
+    bias_values = {round(contrib[pid]["bias_pts"], 3) for pid in player_ids}
+    assert len(bias_values) == 1                                      # one constant across everyone
+    own_prior_values = {contrib[pid]["own_prior_pts"] for pid in player_ids}
+    assert len(own_prior_values) > 1                                  # genuinely player-specific

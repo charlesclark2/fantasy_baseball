@@ -70,11 +70,8 @@ from quant_sports_intel_models.football.nfl.fantasy.run_nf1_3 import (  # noqa: 
 from quant_sports_intel_models.football.nfl.fantasy.run_season_projection import (  # noqa: E402
     MARTS_SCHEMA,
     OUTPUT_COLS,
-    fit_rookie_slot_curves,
+    build_projection,
     load_realized_season,
-    load_rookie_training,
-    project_rookies,
-    _ROOKIE_PARQUET,
 )
 
 log = logging.getLogger("nfl.fantasy.nf1_5")
@@ -463,83 +460,128 @@ def _make_selected_learner(pos: str, sel: dict, nf11: dict):
     return M13.make_pos_learner(name, feats=M13.POSITION_FEATURES[pos], **sel["hp"])
 
 
-def build_season_projection(con, base_season: int, projection_season: int, schema: str,
-                            selections: dict[str, dict], inputs, base_from: int = 2017,
-                            disp_kappa: float = 1.0, pool: pd.DataFrame | None = None) -> pd.DataFrame:
-    """The NF1.5 refined board: selected learners fit on ALL completed history, applied as a
-    WITHIN-POSITION ORDERING over MVP-1's calibrated point multiset (never the learned level);
-    unselected positions keep MVP-1's order. Rookies = the unchanged NF1.4 slot-curve board."""
-    nf11, _ = _load_incumbents()
-    if pool is None:
-        base_seasons = [b for b in range(base_from, base_season) if b + 1 < projection_season]
-        pool = build_pool(con, base_seasons, schema) if selections else pd.DataFrame()
+def learned_scores_by_player(con, base_season: int, projection_season: int, schema: str,
+                             selections: dict[str, dict], inputs,
+                             pool: pd.DataFrame) -> dict[str, float]:
+    """`{player_id -> learned ordering score}` for the selected positions, fit on ALL completed
+    history in `pool` and applied to the NF1.5 research feature frame for `projection_season`.
 
+    Keyed by player rather than returned as a per-position array because the frame it is APPLIED to
+    (the shipped board) is a different, wider universe than the frame it is COMPUTED on — see
+    `build_season_projection`."""
+    nf11, _ = _load_incumbents()
     feats = build_extended_frame(con, base_season, projection_season, inputs, schema)
+    if feats.empty:
+        return {}
     feats = attach_market(con, feats, schema)
-    position_scores: dict[str, np.ndarray] = {}
+    out: dict[str, float] = {}
     for pos, sel in selections.items():
         tr = pool[pool["position"] == pos] if not pool.empty else pd.DataFrame()
         learner = _make_selected_learner(pos, sel, nf11)
         if len(tr) >= 30:
             learner.fit(tr, tr["real_fp_ppr"].to_numpy())
         te = feats[feats["position"] == pos]
-        if not te.empty:
-            position_scores[pos] = learner.predict(te)
+        if te.empty:
+            continue
+        s = np.asarray(learner.predict(te), dtype=float)
+        for pid, v in zip(te["player_id"].astype(str), s):
+            if np.isfinite(v):
+                out[pid] = float(v)
+    return out
 
-    score = M15.combined_ordering_score(feats, position_scores)
-    vets = M1.apply_learned_ordering(feats, score)
-    vets = SP.score_line(vets, prefix="proj_")
 
-    fp = vets["proj_fp_ppr"].to_numpy()
-    season_sd = pd.to_numeric(vets.get("fp_ppr_sd"), errors="coerce").fillna(0.0).to_numpy() * disp_kappa
-    z80 = 1.2815515594
-    vets["fp_ppr_sd"] = np.round(season_sd, 2)
-    vets["fp_ppr_p10"] = np.round(np.clip(fp - z80 * season_sd, 0.0, None), 1)
-    vets["fp_ppr_p90"] = np.round(fp + z80 * season_sd, 1)
-    vets["uncertainty_type"] = "calibrated"
-    vets["is_rookie"] = False
-    vets["source"] = "veteran"
-    vets["draft_overall"] = np.nan
-    g = pd.to_numeric(vets["base_games"], errors="coerce").fillna(0).to_numpy()
-    vets["confidence"] = np.where(g >= 10, "high", np.where(g >= 5, "medium", "low"))
-    vets["nf1_5_learner"] = [
-        (selections[p]["learner"] if p in selections else "mvp1_null") for p in vets["position"]]
-    vets["nf1_5_blend_w"] = [
+def build_season_projection(con, base_season: int, projection_season: int, schema: str,
+                            selections: dict[str, dict], inputs, base_from: int = 2017,
+                            pool: pd.DataFrame | None = None,
+                            band_panel: pd.DataFrame | None = None) -> pd.DataFrame:
+    """The NF1.5 refined board = **the SHIPPED MVP-1 board with the veteran ORDER re-assigned**.
+
+    ⭐ NF1.5b REBUILT THIS AS A TRANSFORM OF THE SHIPPED BOARD rather than a parallel assembly, and
+    that is the whole substance of the re-land. The refined board is ORDERING-ONLY by design (each
+    position's players are handed that position's own MVP-1 point multiset in learned-rank order), so
+    everything except the order must be INHERITED. The previous implementation re-derived the board
+    from `run_nf1_2.build_extended_frame`'s research frame instead, and drifted on three axes that
+    all reached users:
+
+      * **UNIVERSE** — the research frame is assembled from `load_base_season` WITHOUT NF-D11's
+        base-anchor rescue, so the refined board carried **716 players against the shipped 784**: 68
+        returning veterans would have VANISHED from the draft board on the flip.
+      * **INTERVAL** — it re-priced every band as `point ± 1.2816·κ·sd`, i.e. the PRE-NF1.9 normal
+        approximation whose measured coverage is ~0.55 of its nominal 0.80, and stamped it
+        `calibrated`. Flipping the served board would have silently reverted the NF1.9 per-player
+        band (`calibrated_per_player`) on ~90% of the draft board — a straight regression of the
+        exact quantity NF1.7/1.8/1.9 exist to protect.
+      * **ROOKIES / provenance** — a private copy of the rookie leg, drifting from the shipped one
+        (which now carries NF-D16's held opt-in and NF-D11's confidence demotion).
+
+    Now: the shipped `build_projection` runs unchanged, and the re-order is injected as its
+    `veteran_postprocess` hook. The interval is re-derived through MVP-1's OWN
+    `attach_season_interval` at the new level (an interval must follow the point it prices), so the
+    refined board serves the NF1.9 per-player band exactly as the incumbent does.
+
+    ⚠️ ORDERING-ONLY is enforced, not asserted: the per-position point MULTISET is unchanged by
+    construction (a within-position permutation), so the board's estimand — MVP-1's calibrated point
+    level — is preserved. What NF1.5 changes is WHICH player gets which level.
+
+    A veteran the research frame cannot score (the rescued 68) is left EXACTLY as MVP-1 projected
+    him — point, line and band — via `apply_learned_ordering(eligible=...)`. Guessing his rank from
+    his MVP-1 points would interleave two different scales."""
+    if pool is None:
+        base_seasons = [b for b in range(base_from, base_season) if b + 1 < projection_season]
+        pool = build_pool(con, base_seasons, schema) if selections else pd.DataFrame()
+
+    scores = (learned_scores_by_player(con, base_season, projection_season, schema, selections,
+                                       inputs, pool) if selections else {})
+    positions = tuple(p for p in M1.LEARN_POSITIONS if p in selections)
+    scale_by_pid: dict[str, float] = {}
+
+    def _reorder(vets: pd.DataFrame, band_model):
+        pid = vets["player_id"].astype(str)
+        elig = pid.isin(scores).to_numpy()
+        score = np.array([scores.get(x, np.nan) for x in pid], dtype=float)
+        n_by_pos = {p: int(((vets["position"] == p) & elig).sum()) for p in positions}
+        log.info("refined re-order: %d/%d veterans scored %s; %d left at their MVP-1 level",
+                 int(elig.sum()), len(vets), n_by_pos, int((~elig).sum()))
+        out = M1.apply_learned_ordering(vets, score, positions=positions, eligible=elig)
+        out = SP.score_line(out, prefix="proj_")
+        # `nf1_scale` is the per-row raw-line rescale the re-level needed. Stashed here because
+        # `build_projection` trims to `OUTPUT_COLS` and would drop it — and it is the diagnostic that
+        # says whether the CLAMP bound (0.30/3.5) is binding, which is the one way a within-multiset
+        # promotion can silently fail to land on its assigned level.
+        scale_by_pid.update(zip(out["player_id"].astype(str),
+                                pd.to_numeric(out["nf1_scale"], errors="coerce")))
+        sat = int(((out["nf1_scale"] <= 0.3001) | (out["nf1_scale"] >= 3.4999)).sum())
+        if sat:
+            log.warning("[ALERT] %d veteran row(s) SATURATED the raw-line rescale clamp — their "
+                        "served points cannot reach the level the ordering assigned them", sat)
+        # the interval must follow the point it prices — re-derived through MVP-1's own code, so the
+        # refined board carries the SAME NF1.9 per-player band tier the incumbent does
+        return SP.attach_season_interval(out, band_model=band_model)
+
+    proj = build_projection(con, base_season, projection_season, schema,
+                            band_panel=band_panel, veteran_postprocess=_reorder)
+
+    # ── provenance: which learner ordered each row, and how market-leaning it is ───────────────
+    is_rk = proj["is_rookie"].astype(bool).to_numpy()
+    pos_arr = proj["position"].to_numpy()
+    proj["nf1_5_learner"] = np.where(
+        is_rk, "rookie_slot_curve",
+        [(selections[p]["learner"] if p in selections else "mvp1_null") for p in pos_arr])
+    proj["nf1_5_blend_w"] = np.where(is_rk, np.nan, [
         (float(selections[p]["hp"].get("blend_w", np.nan)) if p in selections else np.nan)
-        for p in vets["position"]]
-    vets["nf1_5_disp_slope"] = [
+        for p in pos_arr])
+    proj["nf1_5_disp_slope"] = np.where(is_rk, np.nan, [
         (float(selections[p]["hp"].get("disp_slope", np.nan)) if p in selections else np.nan)
-        for p in vets["position"]]
-    vets["market_lean"] = [
-        (_market_lean(selections[p]) if p in selections else "independent")
-        for p in vets["position"]]
-
-    rookies_all = pd.read_parquet(_ROOKIE_PARQUET)
-    incoming = rookies_all[pd.to_numeric(rookies_all["draft_year"], errors="coerce") == projection_season]
-    curve = fit_rookie_slot_curves(
-        load_rookie_training(con, base_season, schema),
-        band_hist=load_rookie_training(con, base_season, schema, include_zero_game=True))
-    rks = project_rookies(incoming, curve, projection_season) if not incoming.empty else pd.DataFrame()
-    if not rks.empty:
-        rks["nf1_scale"] = 1.0
-        rks["nf1_5_learner"] = "rookie_slot_curve"
-        rks["nf1_5_blend_w"] = np.nan
-        rks["nf1_5_disp_slope"] = np.nan
-        rks["market_lean"] = "independent"
-
-    proj = pd.concat([vets, rks], ignore_index=True, sort=False)
-    proj["sport"] = "nfl"
-    proj["base_season"] = int(base_season)
-    proj["projection_season"] = int(projection_season)
+        for p in pos_arr])
+    proj["market_lean"] = np.where(is_rk, "independent", [
+        (_market_lean(selections[p]) if p in selections else "independent") for p in pos_arr])
+    proj["nf1_scale"] = [scale_by_pid.get(str(p), np.nan) for p in proj["player_id"]]
     proj["model_version"] = M15.MODEL_VERSION
-    proj["generated_at"] = datetime.now(timezone.utc).isoformat()
-    proj = proj[proj["position"].isin(("QB", "RB", "WR", "TE", "FB"))].copy()
     cols = OUTPUT_COLS + [c for c in NF1_5_EXTRA_COLS if c not in OUTPUT_COLS]
     for c in cols:
         if c not in proj.columns:
             proj[c] = np.nan
-    proj = proj[cols].sort_values("proj_fp_ppr", ascending=False).reset_index(drop=True)
-    return proj.drop_duplicates(subset=["player_id"], keep="first").reset_index(drop=True)
+    return proj[cols].sort_values("proj_fp_ppr", ascending=False).reset_index(drop=True)
 
 
 def _market_lean(sel: dict) -> str:
@@ -556,39 +598,52 @@ def _market_lean(sel: dict) -> str:
     return "market-informed"
 
 
-def calibrate_season_interval(con, base_from: int, base_to: int, schema: str,
-                              selections: dict[str, dict], inputs) -> dict:
-    """The NF1.3 refinement-#5 CALIBRATION VERIFY over the refined board: tune κ on the
-    walk-forward holdout (coverage as a FLOOR, E2.1-r) + report PIT flatness."""
-    from scipy.stats import norm
+def verify_season_interval(con, base_from: int, base_to: int, schema: str,
+                           selections: dict[str, dict], inputs) -> dict:
+    """Does the SERVED 80% band still cover 0.80 once the veteran ORDER is re-assigned?
 
-    resid, sd, cdf_all = [], [], []
+    ⭐ NF1.5b replaced a κ CALIBRATION with a COVERAGE VERIFY, and the difference is the point. The
+    old version tuned a dispersion multiplier κ and the board applied it — a second, NF1.5-private
+    interval model layered on top of the shipped one. The refined board now re-derives MVP-1's own
+    NF1.9 per-player band at the re-assigned level (`season_projection.attach_season_interval`), so
+    there is no κ to fit: the only open question is whether the SAME band, moved onto a different
+    player, still covers. That is a check, not a knob.
+
+    ⚠️ COVERAGE IS A **FLOOR**, NEVER A TARGET (E2.1-r / NF1.8): this reports how far ABOVE 0.80 the
+    band lands and never rescales toward it. Reported per position as well as pooled, because a
+    pooled number can hide a position that broke (NF1.8's per-group floor lesson), and pooled over
+    ROWS — not as a mean of per-season means — for the same reason.
+
+    Held-out by construction: for each target season Y the board is built from base season Y-1 with
+    a band fitted only on panel seasons strictly before Y."""
+    per_season, rows = {}, []
     for y in range(base_from + 1, base_to + 2):
         if y - 1 < base_from:
             continue
         proj = build_season_projection(con, y - 1, y, schema, selections, inputs,
-                                       base_from=base_from, disp_kappa=1.0)
+                                       base_from=base_from)
         real = load_realized_season(con, y, schema)
-        m = proj[~proj["is_rookie"]].merge(real, on="player_id", how="inner")
+        m = proj[~proj["is_rookie"].astype(bool)].merge(real, on="player_id", how="inner")
         m = m[m["g"] >= 6]
         if len(m) < 30:
             continue
-        r = (m["real_fp_ppr"] - m["proj_fp_ppr"]).to_numpy()
-        s = np.clip(pd.to_numeric(m["fp_ppr_sd"], errors="coerce").fillna(0.0).to_numpy(), 1e-6, None)
-        resid.append(r)
-        sd.append(s)
-        cdf_all.append(norm.cdf(r / s))
-    if not resid:
-        return {"kappa": 1.0, "note": "insufficient holdout"}
-    resid, sd = np.concatenate(resid), np.concatenate(sd)
-    kappa = M1.calibrate_dispersion(resid, sd, target_cov=0.80)
-    z80 = 1.2815515594
-    cov80 = M1.calib_coverage(resid, -z80 * kappa * sd, z80 * kappa * sd)
-    cdf = np.concatenate(cdf_all)
-    pit = M1.randomized_pit(resid, cdf, cdf)
-    return {"kappa": float(kappa), "calib_80": round(float(cov80), 3),
-            "pit_max_decile_dev": round(float(M1.pit_max_decile_deviation(pit)), 4),
-            "n": int(len(resid))}
+        hit = ((m["real_fp_ppr"] >= m["fp_ppr_p10"])
+               & (m["real_fp_ppr"] <= m["fp_ppr_p90"])).to_numpy()
+        per_season[y] = round(float(hit.mean()), 3)
+        rows.append(pd.DataFrame({"position": m["position"].to_numpy(), "hit": hit,
+                                  "width": (m["fp_ppr_p90"] - m["fp_ppr_p10"]).to_numpy()}))
+    if not rows:
+        return {"note": "insufficient holdout"}
+    allrows = pd.concat(rows, ignore_index=True)
+    by_pos = {p: {"calib_80": round(float(g["hit"].mean()), 3),
+                  "mean_width": round(float(g["width"].mean()), 1), "n": int(len(g))}
+              for p, g in allrows.groupby("position")}
+    return {"calib_80": round(float(allrows["hit"].mean()), 3),
+            "per_position": by_pos, "per_season": per_season,
+            "mean_width": round(float(allrows["width"].mean()), 1),
+            "floor": 0.80, "n": int(len(allrows)),
+            "uncertainty_tiers": {str(k): int(v) for k, v in
+                                  proj["uncertainty_type"].value_counts().items()}}
 
 
 def grade_vs_consensus(con, seasons: list[int], schema: str, selections: dict[str, dict],
@@ -827,14 +882,14 @@ def main(argv: list[str] | None = None) -> int:
                                     base_from=args.base_from)
             sc["board"] = args.board
             sc["selections"] = selections
-            cal = calibrate_season_interval(con, args.base_from,
-                                            min(args.base_to, max(seasons) - 1),
-                                            args.schema, selections, inputs)
-            sc["interval_calibration"] = cal
+            cal = verify_season_interval(con, args.base_from,
+                                         min(args.base_to, max(seasons) - 1),
+                                         args.schema, selections, inputs)
+            sc["interval_verify"] = cal
             (_REPORT_DIR / f"nf1_5_vs_consensus_scorecard{suffix}.json").write_text(
                 json.dumps(sc, indent=2, default=float))
             print(json.dumps(sc.get("aggregate", {}), indent=2, default=float))
-            print(f"calibration verify: {json.dumps(cal, default=float)}")
+            print(f"interval verify (coverage is a FLOOR): {json.dumps(cal, default=float)}")
 
             # the serving recommendation: refined vs the stored NF1.3 scorecard on Δρ-vs-ADP pooled
             nf13_adp = None
@@ -867,14 +922,17 @@ def main(argv: list[str] | None = None) -> int:
             proj_season = args.projection_season or (base_season + 1)
             base_seasons = [b for b in range(args.base_from, base_season) if b + 1 < proj_season]
             inputs = load_inputs(con, sorted(set(base_seasons + [base_season])), args.schema)
-            cal = calibrate_season_interval(con, args.base_from, min(args.base_to, base_season),
-                                            args.schema, selections, inputs)
-            kappa = cal.get("kappa", 1.0)
-            log.info("season interval calibration: %s", cal)
+            # NF1.5b: no κ to fit — the band is MVP-1's own NF1.9 per-player band, re-derived at the
+            # re-assigned level. The held-out coverage VERIFY lives in `--mode grade`.
             proj = build_season_projection(con, base_season, proj_season, args.schema, selections,
-                                           inputs, base_from=args.base_from, disp_kappa=kappa)
-            log.info("NF1.5 %d: %d players (%d vets, %d rookies)", proj_season, len(proj),
-                     int((~proj["is_rookie"]).sum()), int(proj["is_rookie"].sum()))
+                                           inputs, base_from=args.base_from)
+            cal = {"note": "band inherited from the shipped NF1.9 per-player fit; "
+                           "held-out coverage verified in --mode grade",
+                   "uncertainty_tiers": {str(k): int(v) for k, v in
+                                         proj["uncertainty_type"].value_counts().items()}}
+            log.info("NF1.5 %d: %d players (%d vets, %d rookies); interval tiers %s",
+                     proj_season, len(proj), int((~proj["is_rookie"]).sum()),
+                     int(proj["is_rookie"].sum()), cal["uncertainty_tiers"])
             _ART.mkdir(parents=True, exist_ok=True)
             proj.to_parquet(_ART / f"nf1_5_season_projections_{proj_season}.parquet", index=False)
             ranked = proj.copy()
@@ -891,10 +949,11 @@ def main(argv: list[str] | None = None) -> int:
             (_ART / f"nf1_5_projection_summary_{proj_season}.json").write_text(json.dumps({
                 "model_version": M15.MODEL_VERSION, "board": args.board, "selections": selections,
                 "market_lean": {p: _market_lean(s) for p, s in selections.items()},
-                "projection_season": proj_season, "interval_calibration": cal,
+                "projection_season": proj_season, "interval": cal,
                 "n_players": int(len(proj)), "generated_at": datetime.now(timezone.utc).isoformat(),
             }, indent=2, default=float))
-            print(f"NF1.5 {proj_season} built (board={args.board}); interval κ={kappa}; top: "
+            print(f"NF1.5 {proj_season} built (board={args.board}); interval tiers "
+                  f"{cal['uncertainty_tiers']}; top: "
                   + ", ".join(proj.head(5)["player_name"].tolist()))
     finally:
         con.close()

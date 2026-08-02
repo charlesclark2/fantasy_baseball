@@ -65,6 +65,20 @@ _REPORT_PATH = (
 
 ENGINE_VERSION = "nfl_fantasy_league_board_v1"
 
+# ── WHICH season projection the boards are SCORED from (NF1.5b) ─────────────────────────────────
+# ⭐ Default = the NF1.5 REFINED market-aware board (the NF1.5b re-land), not MVP-1. The board and
+# the Projections surface MUST come from the same projection: they are two views of one ranking, and
+# a drafter who sees a player at WR4 on one and WR9 on the other has been handed a bug, not a nuance.
+# `export_draft_board_json.py` refuses to publish when its `--projection-source` disagrees with the
+# `projection_source` these boards carry, which is why the column is emitted rather than implied.
+PROJECTION_SOURCES = ("nf1_5", "mvp1")
+DEFAULT_PROJECTION_SOURCE = "nf1_5"
+_PROJECTION_PARQUET = {
+    "mvp1": "nfl_fantasy_season_projections_{season}.parquet",
+    "nf1_5": "nf1_5_season_projections_{season}.parquet",
+}
+_PROJECTION_LAKE_SOURCE = {"mvp1": "season_projections", "nf1_5": "nf1_5_season_projections"}
+
 # The emitted per-league board schema (MVP-3's input contract). Ordered for readability.
 BOARD_COLS = [
     "config_name", "sport", "season", "player_id", "player_name", "position", "team_id",
@@ -72,17 +86,22 @@ BOARD_COLS = [
     "league_points", "replacement_points", "vor", "positional_rank", "overall_rank",
     "league_points_p10", "league_points_p90", "vor_p10", "vor_p90",
     "uncertainty_type", "n_teams", "ppr", "superflex", "engine_version", "generated_at",
+    # NF1.5b — the projection lineage this board was scored from ("nf1_5" | "mvp1"). Emitted so the
+    # export can PROVE the draft board and the Projections surface agree, rather than assuming it.
+    "projection_source",
 ]
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # Read the MVP-1 raw projection
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-def load_projection_local(artifacts_dir: Path, season: int) -> pd.DataFrame:
-    p = artifacts_dir / f"nfl_fantasy_season_projections_{season}.parquet"
+def load_projection_local(artifacts_dir: Path, season: int,
+                          source: str = DEFAULT_PROJECTION_SOURCE) -> pd.DataFrame:
+    p = artifacts_dir / _PROJECTION_PARQUET[source].format(season=season)
     if not p.exists():
+        script = ("run_nf1_5.py --mode build" if source == "nf1_5" else "run_season_projection.py")
         raise FileNotFoundError(
-            f"MVP-1 projection artifact not found: {p}. Run run_season_projection.py first, "
+            f"{source} projection artifact not found: {p}. Run {script} first, "
             f"or use --from-lake to read the S3 Delta, or pass --projections-parquet."
         )
     return pd.read_parquet(p)
@@ -160,13 +179,13 @@ def _kdst_lake_connection():
     return con
 
 
-def load_projection_lake(season: int) -> pd.DataFrame:
-    """Read the MVP-1 season projection straight from the S3 lake Delta (the real-lake path)."""
+def load_projection_lake(season: int, source: str = DEFAULT_PROJECTION_SOURCE) -> pd.DataFrame:
+    """Read the served season projection straight from the S3 lake Delta (the real-lake path)."""
     import duckdb
 
     from quant_sports_intel_models.football.nfl.ingest import s3io
 
-    uri = s3io.table_uri("nfl", "season_projections", tier="fantasy/derived")
+    uri = s3io.table_uri("nfl", _PROJECTION_LAKE_SOURCE[source], tier="fantasy/derived")
     con = duckdb.connect()
     try:
         con.execute("install delta; load delta; install httpfs; load httpfs;")
@@ -188,7 +207,9 @@ def load_projection_lake(season: int) -> pd.DataFrame:
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # Board assembly per config
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-def board_for_config(proj: pd.DataFrame, config, season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+def board_for_config(proj: pd.DataFrame, config, season: int,
+                     projection_source: str = DEFAULT_PROJECTION_SOURCE
+                     ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Score + VOR the raw projection under one config. Returns (board, replacement_summary)."""
     scored = score_players(proj, config, NFL_PROFILE)
     board = build_board(scored, config, NFL_PROFILE)
@@ -201,6 +222,7 @@ def board_for_config(proj: pd.DataFrame, config, season: int) -> tuple[pd.DataFr
     board["ppr"] = config.ppr
     board["superflex"] = config.superflex
     board["engine_version"] = ENGINE_VERSION
+    board["projection_source"] = projection_source
     board["generated_at"] = datetime.now(timezone.utc).isoformat()
     # rename the carried point-interval columns to the emitted names
     board = board.rename(columns={
@@ -386,10 +408,17 @@ def main(argv: list[str] | None = None) -> int:
                     help="league size(s) to score. Size is a normalized dimension of the board grain "
                          "(config_name, n_teams, player_id) — VOR replacement scales with it, so each "
                          "size is a genuinely different value board. Default: 12 and 10.")
+    ap.add_argument("--projection-source", choices=PROJECTION_SOURCES,
+                    default=DEFAULT_PROJECTION_SOURCE,
+                    help="WHICH season projection to score. Default 'nf1_5' = the market-aware "
+                         "refined board (the NF1.5b re-land); 'mvp1' = the market-blind MVP-1 board. "
+                         "Stamped onto every board row as `projection_source` so the JSON export can "
+                         "prove the draft board and the Projections surface came from the same one.")
     ap.add_argument("--from-lake", action="store_true",
-                    help="read the MVP-1 projection from the S3 lake Delta instead of a local artifact")
+                    help="read the season projection from the S3 lake Delta instead of a local artifact")
     ap.add_argument("--projections-parquet", default=None,
-                    help="explicit path to an MVP-1 projection parquet (overrides the default artifact)")
+                    help="explicit path to a projection parquet (overrides the default artifact). "
+                         "⚠️ still stamped with --projection-source — name them consistently.")
     ap.add_argument("--no-kdst", action="store_true",
                     help="NF1.6 escape hatch: build the board WITHOUT the K/DST base projection (the "
                          "pre-NF1.6 behaviour, where those slots render unprojected). Diagnostic only.")
@@ -415,9 +444,9 @@ def main(argv: list[str] | None = None) -> int:
         proj = proj[pd.to_numeric(proj.get("projection_season"), errors="coerce") == season] \
             if "projection_season" in proj.columns else proj
     elif args.from_lake:
-        proj = load_projection_lake(season)
+        proj = load_projection_lake(season, args.projection_source)
     else:
-        proj = load_projection_local(out_dir, season)
+        proj = load_projection_local(out_dir, season, args.projection_source)
 
     # ⭐ NF1.6 — fold in the K/DST BASE projection so those roster slots RANK instead of rendering
     #    "not projected". Best-effort: a missing K/DST lineage logs loudly and leaves the offensive
@@ -431,8 +460,11 @@ def main(argv: list[str] | None = None) -> int:
                      ", ".join(f"{k}={v}" for k, v in
                                sorted(kdst.groupby("position").size().items())))
     if proj.empty:
-        ap.error(f"no MVP-1 projection rows for season {season}")
-    log.info("loaded %d MVP-1 projection rows for season %d", len(proj), season)
+        ap.error(f"no {args.projection_source} projection rows for season {season}")
+    log.info("loaded %d %s projection rows for season %d (model_version %s)", len(proj),
+             args.projection_source, season,
+             (proj["model_version"].dropna().iloc[0] if "model_version" in proj.columns
+              and proj["model_version"].notna().any() else "—"))
 
     sizes = sorted(set(args.n_teams), reverse=True)
     ref_size = 12 if 12 in sizes else sizes[0]  # the size the report's main tables use
@@ -443,7 +475,7 @@ def main(argv: list[str] | None = None) -> int:
     for size in sizes:
         for name in args.presets:
             cfg = get_preset(name, size)
-            board, repl_tbl = board_for_config(proj, cfg, season)
+            board, repl_tbl = board_for_config(proj, cfg, season, args.projection_source)
             boards_all[(name, size)] = board
             # persist the config object (the shared contract NF-C0 populates) + a readable CSV, per size
             (out_dir / "league_configs" / f"{name}_{size}team.json").write_text(

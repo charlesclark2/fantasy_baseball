@@ -87,6 +87,37 @@ FEATURE_LABELS: dict[str, str] = {
     "fp_sd": "Week-to-week scoring volatility",
 }
 
+# NF3.4 — one-sentence plain-language definitions, surfaced on hover/tap next to each driver in the
+# transparency panel (the same job GLOSSARY does for the boards' VOR/ADP/tier terms). Keys must cover
+# every entry in FEATURES (pinned by the same test as FEATURE_LABELS).
+FEATURE_DESCRIPTIONS: dict[str, str] = {
+    "mvp1_fp": "Our own baseline heuristic projection — NF1's starting point before weighing anything "
+               "else below.",
+    "pergame_fp": "Points per game over his most recent games, weighted toward the latest ones — how "
+                  "well he's scoring right now, before accounting for how many games he's expected to "
+                  "play.",
+    "base_games": "How many games he actually played last season — more games played is a stronger "
+                  "signal than a small sample.",
+    "expected_games": "Our own estimate of how many games he's projected to play this season, based "
+                      "on his role and recent availability.",
+    "snap_share": "The share of his team's offensive snaps he played — how big a role he holds on the "
+                  "field.",
+    "target_share": "The share of his team's pass targets thrown his way — his role in the passing "
+                    "game.",
+    "carry_share": "The share of his team's rushing attempts he gets — his role in the running game.",
+    "depth_rank": "Where he sits on his team's depth chart at his position — starter vs. backup.",
+    "mover_scale": "An adjustment for players who changed teams — a new opportunity, or a lost one, "
+                   "with a different roster around him.",
+    "team_env": "How good his team's offense is expected to be this season, from Vegas win totals — a "
+               "rising tide that lifts every skill player on that offense.",
+    "injury_cap_ratio": "How much his availability is capped by injury risk — 1.0 means no cap; lower "
+                        "means games are expected to be missed.",
+    "age": "The player's age — older players carry more decline risk, younger players carry more "
+          "unproven-role uncertainty.",
+    "fp_sd": "How much his fantasy scoring bounces around week to week — a volatile player vs. a "
+             "consistent one.",
+}
+
 # A learned rescale of the MVP-1 line is clamped so a single feature-driven prediction can never
 # produce a physically implausible line — the same discipline as the mover/env scalar clamps.
 _RESCALE_LO, _RESCALE_HI = 0.55, 1.75
@@ -392,6 +423,68 @@ def feature_importance_report(
     }
 
 
+def player_feature_contributions(
+    fitted_model,
+    F: pd.DataFrame,
+    player_ids,
+    feats: tuple[str, ...] = FEATURES,
+    top_n: int = 6,
+    min_pts: float = 0.05,
+) -> dict[str, dict]:
+    """Per-PLAYER contributions — how many fantasy points each signal is estimated to add or subtract
+    for THIS player specifically, via LightGBM's exact TreeSHAP (`pred_contrib=True`; no external `shap`
+    dependency — it's built into the booster). This is the genuine per-player method the story's own
+    honest-labelling note calls out as the alternative to a model-level description; unlike
+    `feature_importance_report` (a position-level aggregate), a player's contributions here sum
+    EXACTLY to his own NF1 prediction — verified: `contrib.sum(axis=1) == fitted_model.predict(F)` to
+    floating-point precision.
+
+    `fitted_model` must be the already-`.fit()`-ted `PooledGBM._model` (an `lgb.LGBMRegressor`); `F`
+    must be the matching `PooledGBM._frame(X, pos)` output (features + `_pos` categorical, in the
+    SAME column order the model was fit on — mismatched columns would silently mislabel contributions,
+    which is why this takes the frame directly rather than rebuilding it, so the caller's `_frame` call
+    is the single source of truth for both fit and predict).
+
+    🚨 STILL NF1, NOT THE SERVED NUMBER: `total_pts` is NF1's OWN prediction for this player — a
+    validated research-model estimate, not necessarily equal to the served MVP-1 projection shown
+    elsewhere on the page (NF1 sets the served ORDERING, not the served LEVEL — see
+    `apply_learned_ordering`). Callers must show `total_pts` as our research model's separate estimate,
+    never silently relabel it as "his projection." `mvp1_fp`'s own contribution is folded into
+    `baseline_pts` rather than listed as a "driver" — it's the model's OWN starting estimate for him,
+    not an independent signal a drafter can act on (same reasoning as `_TAUTOLOGICAL_FEATURES` in
+    `feature_importance_report`).
+
+    ⚠️ `baseline_pts` is NOT one number, and a caller must not describe it as if it were: it is
+    `bias_pts` (the model's expected value — the SAME constant for every player, its unconditional
+    average prediction) PLUS `own_prior_pts` (this player's OWN `mvp1_fp` contribution — genuinely
+    player-specific, since it scales with his own baseline heuristic projection). Two players at the
+    same position have DIFFERENT `baseline_pts` almost entirely because `own_prior_pts` differs, not
+    because the model treats them as different "tiers" — a caption that says "a typical player at his
+    level" is describing `bias_pts` alone and silently smuggling `own_prior_pts` in as if it were the
+    same shared quantity. Both are exported separately so a caller can be honest about which is which."""
+    booster = fitted_model.booster_
+    contrib = booster.predict(F, pred_contrib=True)
+    names = list(F.columns)                              # matches contrib's column order + a bias col
+    bias = contrib[:, -1]
+    vals = contrib[:, :-1]
+    out: dict[str, dict] = {}
+    for i, pid in enumerate(player_ids):
+        row = dict(zip(names, vals[i]))
+        own_prior = float(row.get("mvp1_fp", 0.0))
+        bias_i = float(bias[i])
+        total = float(vals[i].sum() + bias[i])
+        others = {f: float(row.get(f, 0.0)) for f in feats if f not in _TAUTOLOGICAL_FEATURES}
+        ranked = sorted(others.items(), key=lambda kv: abs(kv[1]), reverse=True)[:top_n]
+        out[str(pid)] = {
+            "bias_pts": round(bias_i, 1),
+            "own_prior_pts": round(own_prior, 1),
+            "baseline_pts": round(own_prior + bias_i, 1),
+            "total_pts": round(total, 1),
+            "drivers": [{"feature": f, "pts": round(v, 1)} for f, v in ranked if abs(v) >= min_pts],
+        }
+    return out
+
+
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # Rescale the MVP-1 raw line to the learned level (preserves the raw-line contract)
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -404,7 +497,8 @@ _RAW_SCALE_COLS = (
 
 def apply_learned_ordering(mvp1: pd.DataFrame, learned_score: np.ndarray,
                            positions: tuple = LEARN_POSITIONS,
-                           lo: float = 0.30, hi: float = 3.5) -> pd.DataFrame:
+                           lo: float = 0.30, hi: float = 3.5,
+                           eligible: np.ndarray | None = None) -> pd.DataFrame:
     """Apply the learned model as an ORDERING within each position, PRESERVING MVP-1's calibrated
     point-level distribution (a within-position quantile remap — the `blend_adp_prior` mechanism).
 
@@ -422,15 +516,26 @@ def apply_learned_ordering(mvp1: pd.DataFrame, learned_score: np.ndarray,
     within-multiset promotion can be large) but bounded to guard a degenerate line.
 
     Rows outside `positions` (FB / rookies handled elsewhere) keep their MVP-1 line. A position with
-    <2 players is a no-op."""
+    <2 players is a no-op.
+
+    ⭐ `eligible` (NF1.5b) restricts the permutation to a SUBSET of each position's rows: only eligible
+    rows are reordered, and they are handed back only THEIR OWN sub-multiset of point levels, so an
+    ineligible row keeps its MVP-1 point, line and interval EXACTLY. Default `None` = every row is
+    eligible, which is byte-identical to the pre-NF1.5b behaviour. It exists because the learner's
+    feature frame is assembled from a NARROWER universe than the shipped board (NF-D11's base-anchor
+    rescue adds ~68 players the research frame never sees), and the alternative — scoring an unscored
+    player by his MVP-1 points on a scale the learner does not share — silently interleaves two
+    different scales. A player the model cannot speak to should be left alone, not guessed at."""
     from quant_sports_intel_models.football.nfl.fantasy import season_projection as _SP
     out = mvp1.copy()
     base = _SP.score_line(out, prefix="proj_")["proj_fp_ppr"].to_numpy(dtype=float)
     remapped = base.copy()
     pos = np.array([(p or "").upper() for p in out["position"]], dtype=object)
     score = np.asarray(learned_score, dtype=float)
+    elig = (np.ones(len(out), dtype=bool) if eligible is None
+            else np.asarray(eligible, dtype=bool))
     for p in positions:
-        idx = np.where(pos == p)[0]
+        idx = np.where((pos == p) & elig)[0]
         if len(idx) < 2:
             continue
         s = score[idx]

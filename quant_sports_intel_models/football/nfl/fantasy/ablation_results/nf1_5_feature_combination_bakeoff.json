@@ -973,7 +973,7 @@
     "fdr_q": 0.1,
     "generated_at": "2026-07-29T03:15:10.378877+00:00"
   },
-  "updated_at": "2026-08-01T02:20:01.558648+00:00",
+  "updated_at": "2026-08-02T03:36:18.362292+00:00",
   "stage2": {
     "stage": "blind_ceiling_proof",
     "pool_base_seasons": [
@@ -2991,8 +2991,8 @@
       "WR": false,
       "TE": false
     },
-    "product_delta_vs_nf1_3": 0.011,
-    "calib_80": 0.804
+    "product_delta_vs_nf1_3": 0.007,
+    "calib_80": 0.847
   },
   "archived_stages": [
     {

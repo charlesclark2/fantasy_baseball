@@ -122,5 +122,6 @@
       ],
       "bench": true
     }
-  ]
+  ],
+  "captured_rules": {}
 }

@@ -1,0 +1,25 @@
+rung,level_src,level_dst,adjacent,to_reference,n_transitions,n_never_mlb_src,pct_never_mlb,median_pair_pa,metric
+Single-A -> High-A,Single-A,High-A,True,False,2204,1727,78.4,372.0,woba
+Single-A -> Double-A,Single-A,Double-A,False,False,1494,977,65.4,397.7,woba
+Single-A -> Triple-A,Single-A,Triple-A,False,True,695,314,45.2,345.8,woba
+High-A -> Double-A,High-A,Double-A,True,False,2102,1361,64.7,423.3,woba
+High-A -> Triple-A,High-A,Triple-A,False,True,982,439,44.7,365.6,woba
+Double-A -> Triple-A,Double-A,Triple-A,True,True,1314,577,43.9,437.0,woba
+Single-A -> High-A,Single-A,High-A,True,False,2204,1727,78.4,372.0,k_pct
+Single-A -> Double-A,Single-A,Double-A,False,False,1494,977,65.4,397.7,k_pct
+Single-A -> Triple-A,Single-A,Triple-A,False,True,695,314,45.2,345.8,k_pct
+High-A -> Double-A,High-A,Double-A,True,False,2102,1361,64.7,423.3,k_pct
+High-A -> Triple-A,High-A,Triple-A,False,True,982,439,44.7,365.6,k_pct
+Double-A -> Triple-A,Double-A,Triple-A,True,True,1314,577,43.9,437.0,k_pct
+Single-A -> High-A,Single-A,High-A,True,False,2204,1727,78.4,372.0,bb_pct
+Single-A -> Double-A,Single-A,Double-A,False,False,1494,977,65.4,397.7,bb_pct
+Single-A -> Triple-A,Single-A,Triple-A,False,True,695,314,45.2,345.8,bb_pct
+High-A -> Double-A,High-A,Double-A,True,False,2102,1361,64.7,423.3,bb_pct
+High-A -> Triple-A,High-A,Triple-A,False,True,982,439,44.7,365.6,bb_pct
+Double-A -> Triple-A,Double-A,Triple-A,True,True,1314,577,43.9,437.0,bb_pct
+Single-A -> High-A,Single-A,High-A,True,False,2204,1727,78.4,372.0,iso
+Single-A -> Double-A,Single-A,Double-A,False,False,1494,977,65.4,397.7,iso
+Single-A -> Triple-A,Single-A,Triple-A,False,True,695,314,45.2,345.8,iso
+High-A -> Double-A,High-A,Double-A,True,False,2102,1361,64.7,423.3,iso
+High-A -> Triple-A,High-A,Triple-A,False,True,982,439,44.7,365.6,iso
+Double-A -> Triple-A,Double-A,Triple-A,True,True,1314,577,43.9,437.0,iso
