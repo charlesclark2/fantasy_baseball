@@ -1,6 +1,6 @@
 # E7.15 H1 — the within-player level-translation ladder (batter side)
 
-_generated 2026-08-02T03:17:12.503081+00:00 · foil = the SHIPPED E7.12-slice-1 configuration · `best_alpha = 0`_
+_generated 2026-08-02T03:33:57.869347+00:00 · foil = the SHIPPED E7.12-slice-1 configuration · `best_alpha = 0`_
 
 > ⚠️ **A projection, not an edge claim.** H1 asks one question: does learning the LEVEL part of the MiLB→MLB translation from within-player minor→minor transitions — a substrate with no MLB label, no promotion selection, and 4–7× the rows of the labelled per-level cohort — translate better than learning it from graduates alone? An arm that does not clear its deflated gate is **DROPPED, not shipped**.
 
@@ -191,18 +191,18 @@ Calendar-PURGED transitions available per fold (the sensitivity arm's cost — t
 
 **Anchors**
 
-- identity byte no-op: `True` (max |Δ| = 0.0)
-- `meanshift_vs_best_ladder`: challenger wins 7/11 folds, p=0.32218690399219424, violated=False
-- `shuffled_vs_best_ladder`: challenger wins 5/11 folds, p=0.7582015631669896, violated=False
-- `degenerate_vs_best_ladder`: challenger wins 4/11 folds, p=0.7459610244070206, violated=False
+- identity byte no-op: `None` (max |Δ| = None)
+- `meanshift_vs_best_ladder`: challenger wins None/None folds, p=None, violated=None
+- `shuffled_vs_best_ladder`: challenger wins None/None folds, p=None, violated=None
+- `degenerate_vs_best_ladder`: challenger wins None/None folds, p=None, violated=None
 
-**⚠️ What the propensity terciles actually CONTAIN** — read this before reading the tercile lifts. E7.12 slice 2 introduced these terciles as "the observable proxy for the un-promoted prospects we serve" and H5 inherited that reading; on the labelled cohort it does not hold. The LOW-propensity tercile is dominated by **Triple-A** rows — late graduates, not low-level prospects — and a Triple-A row is the ladder's REFERENCE level, so its delta is identically 0 and it cannot be moved at all:
+**⚠️ What the propensity terciles actually CONTAIN** — read this before reading the tercile lifts. E7.12 slice 2 introduced these terciles as "the observable proxy for the un-promoted prospects we serve" and H5 inherited that reading; on the labelled cohort it runs the other way. The LOW-propensity tercile is the one RICHEST in **Triple-A** rows and POOREST in Single-A rows — it selects late-arriving graduates, not low-level prospects — and a Triple-A row is the ladder's REFERENCE level, so its delta is identically 0 and it cannot be moved at all:
 
-|   stratum |   n_rows |   pct_rows_the_ladder_can_move |   Double-A |   High-A |   Single-A |   Triple-A |
-|----------:|---------:|-------------------------------:|-----------:|---------:|-----------:|-----------:|
-|         0 |      162 |                           48.1 |       47.5 |     11.7 |        4.3 |       36.4 |
-|         1 |      570 |                           56.9 |       37.9 |     25.8 |       10   |       26.3 |
-|         2 |      962 |                           61.2 |       26.3 |     27.5 |       25.2 |       21   |
+|   stratum |   n_rows |   pct_rows_the_mechanism_can_move |   Double-A |   High-A |   Single-A |   Triple-A |
+|----------:|---------:|----------------------------------:|-----------:|---------:|-----------:|-----------:|
+|         0 |      162 |                              48.1 |       47.5 |     11.7 |        4.3 |       36.4 |
+|         1 |      570 |                              56.9 |       37.9 |     25.8 |       10   |       26.3 |
+|         2 |      962 |                              61.2 |       26.3 |     27.5 |       25.2 |       21   |
 
 **Per promotion-propensity tercile — rows the ladder CAN move (⭐ what the H5 gate reads)** (stratum 0 = LOWEST propensity; a reference-level row contributes exactly zero lift by construction, so including it averages the mechanism over rows it structurally cannot touch):
 
@@ -290,18 +290,18 @@ Flip distribution (which arm wins the in-sample halves):
 
 **Anchors**
 
-- identity byte no-op: `True` (max |Δ| = 0.0)
-- `meanshift_vs_best_ladder`: challenger wins 5/11 folds, p=0.2223476518980932, violated=False
-- `shuffled_vs_best_ladder`: challenger wins 0/11 folds, p=0.9996756429727006, violated=False
-- `degenerate_vs_best_ladder`: challenger wins 0/11 folds, p=0.999998604827037, violated=False
+- identity byte no-op: `None` (max |Δ| = None)
+- `meanshift_vs_best_ladder`: challenger wins None/None folds, p=None, violated=None
+- `shuffled_vs_best_ladder`: challenger wins None/None folds, p=None, violated=None
+- `degenerate_vs_best_ladder`: challenger wins None/None folds, p=None, violated=None
 
-**⚠️ What the propensity terciles actually CONTAIN** — read this before reading the tercile lifts. E7.12 slice 2 introduced these terciles as "the observable proxy for the un-promoted prospects we serve" and H5 inherited that reading; on the labelled cohort it does not hold. The LOW-propensity tercile is dominated by **Triple-A** rows — late graduates, not low-level prospects — and a Triple-A row is the ladder's REFERENCE level, so its delta is identically 0 and it cannot be moved at all:
+**⚠️ What the propensity terciles actually CONTAIN** — read this before reading the tercile lifts. E7.12 slice 2 introduced these terciles as "the observable proxy for the un-promoted prospects we serve" and H5 inherited that reading; on the labelled cohort it runs the other way. The LOW-propensity tercile is the one RICHEST in **Triple-A** rows and POOREST in Single-A rows — it selects late-arriving graduates, not low-level prospects — and a Triple-A row is the ladder's REFERENCE level, so its delta is identically 0 and it cannot be moved at all:
 
-|   stratum |   n_rows |   pct_rows_the_ladder_can_move |   Double-A |   High-A |   Single-A |   Triple-A |
-|----------:|---------:|-------------------------------:|-----------:|---------:|-----------:|-----------:|
-|         0 |      162 |                           48.1 |       47.5 |     11.7 |        4.3 |       36.4 |
-|         1 |      570 |                           56.9 |       37.9 |     25.8 |       10   |       26.3 |
-|         2 |      962 |                           61.2 |       26.3 |     27.5 |       25.2 |       21   |
+|   stratum |   n_rows |   pct_rows_the_mechanism_can_move |   Double-A |   High-A |   Single-A |   Triple-A |
+|----------:|---------:|----------------------------------:|-----------:|---------:|-----------:|-----------:|
+|         0 |      162 |                              48.1 |       47.5 |     11.7 |        4.3 |       36.4 |
+|         1 |      570 |                              56.9 |       37.9 |     25.8 |       10   |       26.3 |
+|         2 |      962 |                              61.2 |       26.3 |     27.5 |       25.2 |       21   |
 
 **Per promotion-propensity tercile — rows the ladder CAN move (⭐ what the H5 gate reads)** (stratum 0 = LOWEST propensity; a reference-level row contributes exactly zero lift by construction, so including it averages the mechanism over rows it structurally cannot touch):
 
@@ -390,18 +390,18 @@ Flip distribution (which arm wins the in-sample halves):
 
 **Anchors**
 
-- identity byte no-op: `True` (max |Δ| = 0.0)
-- `meanshift_vs_best_ladder`: challenger wins 5/11 folds, p=0.8723735654201463, violated=False
-- `shuffled_vs_best_ladder`: challenger wins 0/11 folds, p=0.9998726519026071, violated=False
-- `degenerate_vs_best_ladder`: challenger wins 0/11 folds, p=0.9999437404277971, violated=False
+- identity byte no-op: `None` (max |Δ| = None)
+- `meanshift_vs_best_ladder`: challenger wins None/None folds, p=None, violated=None
+- `shuffled_vs_best_ladder`: challenger wins None/None folds, p=None, violated=None
+- `degenerate_vs_best_ladder`: challenger wins None/None folds, p=None, violated=None
 
-**⚠️ What the propensity terciles actually CONTAIN** — read this before reading the tercile lifts. E7.12 slice 2 introduced these terciles as "the observable proxy for the un-promoted prospects we serve" and H5 inherited that reading; on the labelled cohort it does not hold. The LOW-propensity tercile is dominated by **Triple-A** rows — late graduates, not low-level prospects — and a Triple-A row is the ladder's REFERENCE level, so its delta is identically 0 and it cannot be moved at all:
+**⚠️ What the propensity terciles actually CONTAIN** — read this before reading the tercile lifts. E7.12 slice 2 introduced these terciles as "the observable proxy for the un-promoted prospects we serve" and H5 inherited that reading; on the labelled cohort it runs the other way. The LOW-propensity tercile is the one RICHEST in **Triple-A** rows and POOREST in Single-A rows — it selects late-arriving graduates, not low-level prospects — and a Triple-A row is the ladder's REFERENCE level, so its delta is identically 0 and it cannot be moved at all:
 
-|   stratum |   n_rows |   pct_rows_the_ladder_can_move |   Double-A |   High-A |   Single-A |   Triple-A |
-|----------:|---------:|-------------------------------:|-----------:|---------:|-----------:|-----------:|
-|         0 |      162 |                           48.1 |       47.5 |     11.7 |        4.3 |       36.4 |
-|         1 |      570 |                           56.9 |       37.9 |     25.8 |       10   |       26.3 |
-|         2 |      962 |                           61.2 |       26.3 |     27.5 |       25.2 |       21   |
+|   stratum |   n_rows |   pct_rows_the_mechanism_can_move |   Double-A |   High-A |   Single-A |   Triple-A |
+|----------:|---------:|----------------------------------:|-----------:|---------:|-----------:|-----------:|
+|         0 |      162 |                              48.1 |       47.5 |     11.7 |        4.3 |       36.4 |
+|         1 |      570 |                              56.9 |       37.9 |     25.8 |       10   |       26.3 |
+|         2 |      962 |                              61.2 |       26.3 |     27.5 |       25.2 |       21   |
 
 **Per promotion-propensity tercile — rows the ladder CAN move (⭐ what the H5 gate reads)** (stratum 0 = LOWEST propensity; a reference-level row contributes exactly zero lift by construction, so including it averages the mechanism over rows it structurally cannot touch):
 
@@ -450,7 +450,7 @@ Flip distribution (which arm wins the in-sample halves):
 
 **Reading**
 
-- ⛔ DEFLATION — PBO over the ELIGIBLE set is 0.514 ≥ 0.2. ⭐ READ IT AS A **TIE**, NOT AS OVERFITTING: the contender spread is 0.355% and the in-sample halves split across arms that are a fraction of a percent apart (L1p_chain_purged 45% (+0.000%), L4_ladder_delta 27% (+0.476%), L1_chain_ols 13% (+0.362%)). Which tied arm wins is noise — which is exactly what a trustworthy learner-null looks like (E2.1-r). The honest record is 'no ladder formulation robustly beats the shipped configuration', so the shipped configuration is now PROVEN rather than assumed. Either way it does not ship.
+- ⛔ DEFLATION — PBO over the ELIGIBLE set is 0.514 ≥ 0.2. ⭐ READ IT AS A **TIE**, NOT AS OVERFITTING: the contender spread is 0.355% and the in-sample halves split across arms a fraction of a percent apart (L1p_chain_purged 45% (+0.000%), L4_ladder_delta 27% (+0.476%), L1_chain_ols 13% (+0.362%)). Which tied arm wins is noise — exactly what a trustworthy learner-null looks like (E2.1-r). The honest record is 'no candidate robustly beats the shipped configuration', so the shipped configuration is now PROVEN rather than assumed. Either way it does not ship.
 
 ## 3.iso — the arm set (`partial_pool@2`, context `park:exposure+levelenv+rel:2k`, learner held fixed)
 
@@ -490,18 +490,18 @@ Flip distribution (which arm wins the in-sample halves):
 
 **Anchors**
 
-- identity byte no-op: `True` (max |Δ| = 0.0)
-- `meanshift_vs_best_ladder`: challenger wins 3/11 folds, p=0.9024397623524839, violated=False
-- `shuffled_vs_best_ladder`: challenger wins 1/11 folds, p=0.9963466150008367, violated=False
-- `degenerate_vs_best_ladder`: challenger wins 1/11 folds, p=0.9992789894150923, violated=False
+- identity byte no-op: `None` (max |Δ| = None)
+- `meanshift_vs_best_ladder`: challenger wins None/None folds, p=None, violated=None
+- `shuffled_vs_best_ladder`: challenger wins None/None folds, p=None, violated=None
+- `degenerate_vs_best_ladder`: challenger wins None/None folds, p=None, violated=None
 
-**⚠️ What the propensity terciles actually CONTAIN** — read this before reading the tercile lifts. E7.12 slice 2 introduced these terciles as "the observable proxy for the un-promoted prospects we serve" and H5 inherited that reading; on the labelled cohort it does not hold. The LOW-propensity tercile is dominated by **Triple-A** rows — late graduates, not low-level prospects — and a Triple-A row is the ladder's REFERENCE level, so its delta is identically 0 and it cannot be moved at all:
+**⚠️ What the propensity terciles actually CONTAIN** — read this before reading the tercile lifts. E7.12 slice 2 introduced these terciles as "the observable proxy for the un-promoted prospects we serve" and H5 inherited that reading; on the labelled cohort it runs the other way. The LOW-propensity tercile is the one RICHEST in **Triple-A** rows and POOREST in Single-A rows — it selects late-arriving graduates, not low-level prospects — and a Triple-A row is the ladder's REFERENCE level, so its delta is identically 0 and it cannot be moved at all:
 
-|   stratum |   n_rows |   pct_rows_the_ladder_can_move |   Double-A |   High-A |   Single-A |   Triple-A |
-|----------:|---------:|-------------------------------:|-----------:|---------:|-----------:|-----------:|
-|         0 |      162 |                           48.1 |       47.5 |     11.7 |        4.3 |       36.4 |
-|         1 |      570 |                           56.9 |       37.9 |     25.8 |       10   |       26.3 |
-|         2 |      962 |                           61.2 |       26.3 |     27.5 |       25.2 |       21   |
+|   stratum |   n_rows |   pct_rows_the_mechanism_can_move |   Double-A |   High-A |   Single-A |   Triple-A |
+|----------:|---------:|----------------------------------:|-----------:|---------:|-----------:|-----------:|
+|         0 |      162 |                              48.1 |       47.5 |     11.7 |        4.3 |       36.4 |
+|         1 |      570 |                              56.9 |       37.9 |     25.8 |       10   |       26.3 |
+|         2 |      962 |                              61.2 |       26.3 |     27.5 |       25.2 |       21   |
 
 **Per promotion-propensity tercile — rows the ladder CAN move (⭐ what the H5 gate reads)** (stratum 0 = LOWEST propensity; a reference-level row contributes exactly zero lift by construction, so including it averages the mechanism over rows it structurally cannot touch):
 
@@ -550,7 +550,7 @@ Flip distribution (which arm wins the in-sample halves):
 
 **Reading**
 
-- ⛔ DEFLATION — PBO over the ELIGIBLE set is 0.700 ≥ 0.2. ⭐ READ IT AS A **TIE**, NOT AS OVERFITTING: the contender spread is 0.061% and the in-sample halves split across arms that are a fraction of a percent apart (L3_direct_to_ref 51% (+0.000%), L2_chain_paweighted 22% (+0.099%), L0_foil 11% (+0.052%)). Which tied arm wins is noise — which is exactly what a trustworthy learner-null looks like (E2.1-r). The honest record is 'no ladder formulation robustly beats the shipped configuration', so the shipped configuration is now PROVEN rather than assumed. Either way it does not ship.
+- ⛔ DEFLATION — PBO over the ELIGIBLE set is 0.700 ≥ 0.2. ⭐ READ IT AS A **TIE**, NOT AS OVERFITTING: the contender spread is 0.061% and the in-sample halves split across arms a fraction of a percent apart (L3_direct_to_ref 51% (+0.000%), L2_chain_paweighted 22% (+0.099%), L0_foil 11% (+0.052%)). Which tied arm wins is noise — exactly what a trustworthy learner-null looks like (E2.1-r). The honest record is 'no candidate robustly beats the shipped configuration', so the shipped configuration is now PROVEN rather than assumed. Either way it does not ship.
 
 ## 3b. ⭐ Reading the null honestly — is it the data, or is it my gate?
 

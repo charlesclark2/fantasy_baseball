@@ -1,0 +1,33 @@
+metric,n_players,half_corr,reliability_spearman_brown,signal_share_of_sd,level,variant,player_type,window
+k_pct,4091,-0.1437,-0.3355,0.0,Triple-A,league_normalised (headline),pitcher,1
+bb_pct,4091,-0.1673,-0.402,0.0,Triple-A,league_normalised (headline),pitcher,1
+hr_rate,4091,-0.1466,-0.3437,0.0,Triple-A,league_normalised (headline),pitcher,1
+gb_pct,4091,-0.1016,-0.2263,0.0,Triple-A,league_normalised (headline),pitcher,1
+k_pct,4091,0.7036,0.826,0.9089,Triple-A,level_normalised (POSITIVE CONTROL),pitcher,1
+bb_pct,4091,0.0006,0.0012,0.0347,Triple-A,level_normalised (POSITIVE CONTROL),pitcher,1
+hr_rate,4091,0.2739,0.43,0.6557,Triple-A,level_normalised (POSITIVE CONTROL),pitcher,1
+gb_pct,4091,0.3472,0.5155,0.718,Triple-A,level_normalised (POSITIVE CONTROL),pitcher,1
+k_pct,4741,-0.2758,-0.7615,0.0,Double-A,league_normalised (headline),pitcher,1
+bb_pct,4741,-0.3042,-0.8744,0.0,Double-A,league_normalised (headline),pitcher,1
+hr_rate,4741,-0.2313,-0.6019,0.0,Double-A,league_normalised (headline),pitcher,1
+gb_pct,4741,-0.2696,-0.7383,0.0,Double-A,league_normalised (headline),pitcher,1
+k_pct,4741,0.0868,0.1598,0.3998,Double-A,level_normalised (POSITIVE CONTROL),pitcher,1
+bb_pct,4741,0.2344,0.3798,0.6163,Double-A,level_normalised (POSITIVE CONTROL),pitcher,1
+hr_rate,4741,0.139,0.2441,0.4941,Double-A,level_normalised (POSITIVE CONTROL),pitcher,1
+gb_pct,4741,-0.0166,-0.0337,0.0,Double-A,level_normalised (POSITIVE CONTROL),pitcher,1
+k_pct,6054,-0.2821,-0.7859,0.0,High-A,league_normalised (headline),pitcher,1
+bb_pct,6054,-0.2834,-0.7911,0.0,High-A,league_normalised (headline),pitcher,1
+hr_rate,6054,-0.1473,-0.3455,0.0,High-A,league_normalised (headline),pitcher,1
+gb_pct,6054,-0.2465,-0.6543,0.0,High-A,league_normalised (headline),pitcher,1
+k_pct,6054,0.3091,0.4722,0.6872,High-A,level_normalised (POSITIVE CONTROL),pitcher,1
+bb_pct,6054,0.0425,0.0815,0.2855,High-A,level_normalised (POSITIVE CONTROL),pitcher,1
+hr_rate,6054,0.4953,0.6625,0.8139,High-A,level_normalised (POSITIVE CONTROL),pitcher,1
+gb_pct,6054,0.0635,0.1194,0.3455,High-A,level_normalised (POSITIVE CONTROL),pitcher,1
+k_pct,6898,-0.2493,-0.6641,0.0,Single-A,league_normalised (headline),pitcher,1
+bb_pct,6898,-0.1422,-0.3315,0.0,Single-A,league_normalised (headline),pitcher,1
+hr_rate,6898,-0.2076,-0.5239,0.0,Single-A,league_normalised (headline),pitcher,1
+gb_pct,6898,-0.2601,-0.7031,0.0,Single-A,league_normalised (headline),pitcher,1
+k_pct,6898,-0.1139,-0.257,0.0,Single-A,level_normalised (POSITIVE CONTROL),pitcher,1
+bb_pct,6898,0.299,0.4604,0.6785,Single-A,level_normalised (POSITIVE CONTROL),pitcher,1
+hr_rate,6898,0.1218,0.2172,0.466,Single-A,level_normalised (POSITIVE CONTROL),pitcher,1
+gb_pct,6898,0.1314,0.2322,0.4819,Single-A,level_normalised (POSITIVE CONTROL),pitcher,1

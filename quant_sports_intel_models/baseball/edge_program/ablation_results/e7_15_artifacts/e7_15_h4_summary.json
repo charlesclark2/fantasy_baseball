@@ -1,0 +1,2604 @@
+{
+  "generated_at": "2026-08-02T04:44:04.374721+00:00",
+  "player_type": "batter",
+  "estimand_note": "H4 changes the TRAINING target only; the evaluation target is the untouched realized rate for every arm. A winner still costs board/betting comparability (readiness lock 6).",
+  "bh_fdr_alpha": 0.1,
+  "bh_fdr": {
+    "k_pct": false,
+    "woba": false,
+    "iso": false,
+    "bb_pct": false
+  },
+  "null_analysis": {
+    "family_size": 4,
+    "strictest_bh_cutoff": 0.025,
+    "survivors_with_PBO_and_DSR_gates_REMOVED": [],
+    "binding_constraint": "BH-FDR multiplicity \u2014 no arm's p clears the strictest rung, so removing the deflation gates changes nothing",
+    "per_metric": [
+      {
+        "metric": "woba",
+        "arm": "R3_shrink_to_level",
+        "pct_lift_vs_foil": -0.307,
+        "fold_win_rate": 0.45454545454545453,
+        "p_one_sided": 0.6381486157154375,
+        "beats_foil": false,
+        "clears_fold_bar": false,
+        "clears_PBO": false,
+        "clears_DSR": false,
+        "clears_BH_rank1": false,
+        "kind": "genuine absence \u2014 the best arm does not beat the foil on average",
+        "folds_have": 11,
+        "folds_needed_BH": null,
+        "folds_needed_DSR": null,
+        "extra_seasons_needed": null
+      },
+      {
+        "metric": "k_pct",
+        "arm": "R1_eb_shrink",
+        "pct_lift_vs_foil": -0.0796,
+        "fold_win_rate": 0.45454545454545453,
+        "p_one_sided": 0.562275844213463,
+        "beats_foil": false,
+        "clears_fold_bar": false,
+        "clears_PBO": false,
+        "clears_DSR": false,
+        "clears_BH_rank1": false,
+        "kind": "genuine absence \u2014 the best arm does not beat the foil on average",
+        "folds_have": 11,
+        "folds_needed_BH": null,
+        "folds_needed_DSR": null,
+        "extra_seasons_needed": null
+      },
+      {
+        "metric": "bb_pct",
+        "arm": "R1_eb_shrink",
+        "pct_lift_vs_foil": -0.8963,
+        "fold_win_rate": 0.18181818181818182,
+        "p_one_sided": 0.8013985476145965,
+        "beats_foil": false,
+        "clears_fold_bar": false,
+        "clears_PBO": true,
+        "clears_DSR": false,
+        "clears_BH_rank1": false,
+        "kind": "genuine absence \u2014 the best arm does not beat the foil on average",
+        "folds_have": 11,
+        "folds_needed_BH": null,
+        "folds_needed_DSR": null,
+        "extra_seasons_needed": null
+      },
+      {
+        "metric": "iso",
+        "arm": "R1_eb_shrink",
+        "pct_lift_vs_foil": -0.4292,
+        "fold_win_rate": 0.45454545454545453,
+        "p_one_sided": 0.6692614359944825,
+        "beats_foil": false,
+        "clears_fold_bar": false,
+        "clears_PBO": true,
+        "clears_DSR": false,
+        "clears_BH_rank1": false,
+        "kind": "genuine absence \u2014 the best arm does not beat the foil on average",
+        "folds_have": 11,
+        "folds_needed_BH": null,
+        "folds_needed_DSR": null,
+        "extra_seasons_needed": null
+      }
+    ]
+  },
+  "per_metric": {
+    "woba": {
+      "verdict": "DROP",
+      "winner": "L0_foil",
+      "leaderboard": [
+        {
+          "arm": "A_shrink_constant",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.028507237530791315,
+          "pct_lift_vs_foil": 0.9839306715762943,
+          "fold_win_rate": 0.7272727272727273,
+          "p_one_sided": 0.13061434519515944,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.4905,
+          "target_sd_ratio": 0.4905,
+          "note": "\u2b50 THE MATCHED FOIL THAT DECIDES THE SLICE \u2014 the SAME average compression with ZERO per-player content. If it ties R1, 'reliability weighting' was a global rescale the regression already had, not a per-player de-noising (slice 1's `constant_reliability` instrument, applied to the target instead of the feature)."
+        },
+        {
+          "arm": "L0_foil",
+          "kind": "foil",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.02879051625068698,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "target_sd_ratio": 1.0,
+          "note": "\u2b50 THE DIRECT-LEARNED FOIL \u2014 the shipped E7.12-slice-1 configuration, trained on the raw realized MLB rate"
+        },
+        {
+          "arm": "A_target_identity",
+          "kind": "anchor",
+          "selectable": false,
+          "active": false,
+          "oos_mae": 0.02879051625068698,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "target_sd_ratio": 1.0,
+          "note": "BYTE NO-OP \u2014 r = 1. Its MAE gap to the foil must be EXACTLY 0."
+        },
+        {
+          "arm": "R3_shrink_to_level",
+          "kind": "target",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.02887890683564285,
+          "pct_lift_vs_foil": -0.30701285168430364,
+          "fold_win_rate": 0.45454545454545453,
+          "p_one_sided": 0.6381486157154375,
+          "pct_rows_moved": 98.53,
+          "mean_shrink_r": 0.4217,
+          "target_sd_ratio": 0.4442,
+          "note": "shrink toward the row's LEVEL mean rather than the global mean \u2014 the anchor the feature-side reliability shrink already uses, applied to the target for symmetry"
+        },
+        {
+          "arm": "R1_eb_shrink",
+          "kind": "target",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.02895850255021596,
+          "pct_lift_vs_foil": -0.583477899688488,
+          "fold_win_rate": 0.45454545454545453,
+          "p_one_sided": 0.6763626039246322,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.4217,
+          "target_sd_ratio": 0.394,
+          "note": "\u2b50 HEADLINE \u2014 each training label shrunk toward the population mean by its OWN reliability PA/(PA+k), k the metric's stabilization point. A 150-PA label stops counting as much as a 1,200-PA one."
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.029034853034293196,
+          "pct_lift_vs_foil": -0.8486710744562619,
+          "fold_win_rate": 0.36363636363636365,
+          "p_one_sided": 0.7533290547792559,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "target_sd_ratio": 1.0,
+          "note": "DEGENERATE CEILING (NF-D11/NF-D14) \u2014 predict the population mean of the target."
+        },
+        {
+          "arm": "R2_eb_shrink_2k",
+          "kind": "target",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.02929890157745541,
+          "pct_lift_vs_foil": -1.7658083041713173,
+          "fold_win_rate": 0.5454545454545454,
+          "p_one_sided": 0.7780520391172525,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.2753,
+          "target_sd_ratio": 0.2576,
+          "note": "MATCHED PARTNER to R1 \u2014 twice the stabilization constant. 'the published k is right for a MiLB-translation label' is an assumption, not a measurement, and a field carrying only one k cannot test it."
+        },
+        {
+          "arm": "A_shrink_full",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.05764004486542638,
+          "pct_lift_vs_foil": -100.20497153833078,
+          "fold_win_rate": 0.18181818181818182,
+          "p_one_sided": 0.8637013065292776,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.0,
+          "target_sd_ratio": 0.0,
+          "note": "\u2b50 THE FAMILY'S OWN DEGENERATE \u2014 r = 0, so the training target is CONSTANT and the model can learn nothing. Must lose catastrophically; a metric that likes it is inverted, which is the specific risk when the mechanism under test IS shrinkage."
+        }
+      ],
+      "mae_by_fold": {
+        "L0_foil": {
+          "2016": 0.027647974818002262,
+          "2017": 0.03399323325254379,
+          "2018": 0.02744993744127829,
+          "2019": 0.030084365134358255,
+          "2020": 0.03064857810878026,
+          "2021": 0.03449201983509803,
+          "2022": 0.03053796121041519,
+          "2023": 0.02405757377550626,
+          "2024": 0.02521978706912114,
+          "2025": 0.0244495496282355,
+          "2026": 0.02811469848421784
+        },
+        "R1_eb_shrink": {
+          "2016": 0.0301906028755474,
+          "2017": 0.03237062927726615,
+          "2018": 0.028006918103767296,
+          "2019": 0.029390248881547086,
+          "2020": 0.031900467753126945,
+          "2021": 0.035231632658019915,
+          "2022": 0.030287657395558505,
+          "2023": 0.024222740174378952,
+          "2024": 0.025996324126731453,
+          "2025": 0.02399871331703459,
+          "2026": 0.026947593489397313
+        },
+        "R2_eb_shrink_2k": {
+          "2016": 0.033907765650813854,
+          "2017": 0.03213631727130059,
+          "2018": 0.02807229185671694,
+          "2019": 0.029559956232809333,
+          "2020": 0.03217946790051314,
+          "2021": 0.03492072059360482,
+          "2022": 0.030397728853916346,
+          "2023": 0.023951739366932123,
+          "2024": 0.02603440906373856,
+          "2025": 0.02386770545221004,
+          "2026": 0.027259815109453724
+        },
+        "R3_shrink_to_level": {
+          "2016": 0.028798680288122987,
+          "2017": 0.032774214775052816,
+          "2018": 0.028005005700764016,
+          "2019": 0.029566080944199928,
+          "2020": 0.03174855911951963,
+          "2021": 0.03469557050672139,
+          "2022": 0.030286808138157446,
+          "2023": 0.024110609290572144,
+          "2024": 0.026269369224857703,
+          "2025": 0.024115936418639367,
+          "2026": 0.02729714078546392
+        },
+        "A_target_identity": {
+          "2016": 0.027647974818002262,
+          "2017": 0.03399323325254379,
+          "2018": 0.02744993744127829,
+          "2019": 0.030084365134358255,
+          "2020": 0.03064857810878026,
+          "2021": 0.03449201983509803,
+          "2022": 0.03053796121041519,
+          "2023": 0.02405757377550626,
+          "2024": 0.02521978706912114,
+          "2025": 0.0244495496282355,
+          "2026": 0.02811469848421784
+        },
+        "A_shrink_constant": {
+          "2016": 0.028831594173880152,
+          "2017": 0.0321629278067249,
+          "2018": 0.02758940821401962,
+          "2019": 0.029659541819969475,
+          "2020": 0.03133574409283223,
+          "2021": 0.03403734601943001,
+          "2022": 0.029980226500588257,
+          "2023": 0.023408303197022626,
+          "2024": 0.02520766765353369,
+          "2025": 0.023732021025118448,
+          "2026": 0.027634832335585075
+        },
+        "A_shrink_full": {
+          "2016": 0.3039870107175212,
+          "2017": 0.04494643114656397,
+          "2018": 0.02810024913137646,
+          "2019": 0.030821935993232942,
+          "2020": 0.03452802165479579,
+          "2021": 0.05842786567233446,
+          "2022": 0.030885383344362298,
+          "2023": 0.02369777477244667,
+          "2024": 0.02587411916999,
+          "2025": 0.023848625080585495,
+          "2026": 0.02892307683648078
+        },
+        "A_degenerate_mean": {
+          "2016": 0.028724915162815997,
+          "2017": 0.031470537769101914,
+          "2018": 0.02836684709640295,
+          "2019": 0.030579584543872728,
+          "2020": 0.03243919962405791,
+          "2021": 0.034397940152132704,
+          "2022": 0.030885431533439936,
+          "2023": 0.023697832179366704,
+          "2024": 0.025993818322267322,
+          "2025": 0.023895848937237046,
+          "2026": 0.02893142805652991
+        }
+      },
+      "coverage": {
+        "L0_foil": {
+          "n_rows": 68,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "r_p05": 1.0,
+          "r_p95": 1.0,
+          "target_sd_ratio": 1.0
+        },
+        "R1_eb_shrink": {
+          "n_rows": 68,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.4217,
+          "r_p05": 0.2552,
+          "r_p95": 0.6511,
+          "target_sd_ratio": 0.394
+        },
+        "R2_eb_shrink_2k": {
+          "n_rows": 68,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.2753,
+          "r_p05": 0.1462,
+          "r_p95": 0.4828,
+          "target_sd_ratio": 0.2576
+        },
+        "R3_shrink_to_level": {
+          "n_rows": 68,
+          "pct_rows_moved": 98.53,
+          "mean_shrink_r": 0.4217,
+          "r_p05": 0.2552,
+          "r_p95": 0.6511,
+          "target_sd_ratio": 0.4442
+        },
+        "A_target_identity": {
+          "n_rows": 68,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "r_p05": 1.0,
+          "r_p95": 1.0,
+          "target_sd_ratio": 1.0
+        },
+        "A_shrink_constant": {
+          "n_rows": 68,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.4905,
+          "r_p05": 0.4905,
+          "r_p95": 0.4905,
+          "target_sd_ratio": 0.4905
+        },
+        "A_shrink_full": {
+          "n_rows": 68,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.0,
+          "r_p05": 0.0,
+          "r_p95": 0.0,
+          "target_sd_ratio": 0.0
+        },
+        "A_degenerate_mean": {
+          "n_rows": 68,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "r_p05": 1.0,
+          "r_p95": 1.0,
+          "target_sd_ratio": 1.0
+        }
+      },
+      "deflation": {
+        "n_configs": 4,
+        "n_folds": 11,
+        "pbo": 0.45714285714285713,
+        "os_gap_pct": 0.9059,
+        "os_gap_p90_pct": 3.9938,
+        "contender_spread_pct": 0.583,
+        "full_spread_pct": 1.766,
+        "flips": [
+          {
+            "config": "L0_foil",
+            "IS_half_wins": 262,
+            "share": 0.567,
+            "mean_oos_mae": 0.02879,
+            "pct_vs_best": 0.0
+          },
+          {
+            "config": "R2_eb_shrink_2k",
+            "IS_half_wins": 77,
+            "share": 0.167,
+            "mean_oos_mae": 0.0293,
+            "pct_vs_best": 1.766
+          },
+          {
+            "config": "R1_eb_shrink",
+            "IS_half_wins": 72,
+            "share": 0.156,
+            "mean_oos_mae": 0.02896,
+            "pct_vs_best": 0.583
+          },
+          {
+            "config": "R3_shrink_to_level",
+            "IS_half_wins": 51,
+            "share": 0.11,
+            "mean_oos_mae": 0.02888,
+            "pct_vs_best": 0.307
+          }
+        ],
+        "whole_field": {
+          "n_configs": 8,
+          "n_folds": 11,
+          "pbo": 0.0,
+          "os_gap_pct": 0.0,
+          "os_gap_p90_pct": 2.0322,
+          "contender_spread_pct": 0.994,
+          "full_spread_pct": 102.194,
+          "flips": [
+            {
+              "config": "A_shrink_constant",
+              "IS_half_wins": 389,
+              "share": 0.842,
+              "mean_oos_mae": 0.02851,
+              "pct_vs_best": 0.0
+            },
+            {
+              "config": "L0_foil",
+              "IS_half_wins": 70,
+              "share": 0.152,
+              "mean_oos_mae": 0.02879,
+              "pct_vs_best": 0.994
+            },
+            {
+              "config": "R1_eb_shrink",
+              "IS_half_wins": 3,
+              "share": 0.006,
+              "mean_oos_mae": 0.02896,
+              "pct_vs_best": 1.583
+            }
+          ]
+        }
+      },
+      "dsr": {
+        "available": true,
+        "eligible": {
+          "arm": "R3_shrink_to_level",
+          "n_trials": 3,
+          "dsr": 0.2984004686403551,
+          "observed_sr": -0.10963916557513241,
+          "sr0": 0.05802020937548632,
+          "passes": false
+        },
+        "whole_field": {
+          "arm": "A_shrink_constant",
+          "n_trials": 7,
+          "dsr": 0.5479214447204935,
+          "observed_sr": 0.35904130596844375,
+          "sr0": 0.31920937860864407,
+          "passes": false
+        },
+        "binds": "eligible"
+      },
+      "anchors": {
+        "required_anchors_present": true,
+        "missing_anchors": [],
+        "best_arm": "R3_shrink_to_level",
+        "foil": "L0_foil",
+        "A_degenerate_mean__vs_best": {
+          "available": true,
+          "challenger": "A_degenerate_mean",
+          "defender": "R3_shrink_to_level",
+          "mean_gap": 0.00015594619865034293,
+          "challenger_fold_wins": 6,
+          "n_folds": 11,
+          "p_challenger_better": 0.7324244342523742,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_degenerate_mean__mae": 0.029034853034293196,
+        "A_shrink_full__vs_best": {
+          "available": true,
+          "challenger": "A_shrink_full",
+          "defender": "R3_shrink_to_level",
+          "mean_gap": 0.028761138029783525,
+          "challenger_fold_wins": 3,
+          "n_folds": 11,
+          "p_challenger_better": 0.8639512433188288,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_shrink_full__mae": 0.05764004486542638,
+        "A_target_identity__max_abs_gap": 0.0,
+        "A_target_identity__is_a_noop": true,
+        "A_target_identity__mae": 0.02879051625068698,
+        "A_shrink_constant__vs_R1_eb_shrink": {
+          "available": true,
+          "challenger": "A_shrink_constant",
+          "defender": "R1_eb_shrink",
+          "mean_gap": -0.0004512650194246478,
+          "challenger_fold_wins": 9,
+          "n_folds": 11,
+          "p_challenger_better": 0.015547321565981027,
+          "violated": true,
+          "alpha": 0.1
+        },
+        "A_shrink_constant__mae": 0.028507237530791315,
+        "inert_anchors": [],
+        "refuted_arms": {
+          "R1_eb_shrink": "`A_shrink_constant` (CONSTANT shrink \u2014 identical average compression, no per-player content) systematically beat `R1_eb_shrink` (9/11 folds, p=0.016). The gain is a global rescale of the target, which the regression's own slope already absorbs \u2014 not a per-player de-noising. The stated mechanism is refuted."
+        },
+        "oracle_floor_ok": true,
+        "low_propensity_tercile_lift_pct": -5.472805474524485,
+        "low_propensity_tercile_lift_pct_all_rows": -5.472805474524485,
+        "shrinkage_inversion_probe_full_shrink_lift_pct": -100.20497153833078,
+        "per_player_content_pct": -1.5674085712647823
+      },
+      "stratified": [
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.02932311956822406,
+          "pct_lift_vs_foil": -6.2960194002736625
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.028465917113699335,
+          "pct_lift_vs_foil": -2.3195454453176194
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.028972081231499813,
+          "pct_lift_vs_foil": 1.268584935476113
+        },
+        {
+          "arm": "A_shrink_constant",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.028091317898702586,
+          "pct_lift_vs_foil": -1.8307504899824232
+        },
+        {
+          "arm": "A_shrink_constant",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.027784357851712814,
+          "pct_lift_vs_foil": 0.13029074306029675
+        },
+        {
+          "arm": "A_shrink_constant",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.02865739229727271,
+          "pct_lift_vs_foil": 2.3409857593288406
+        },
+        {
+          "arm": "A_shrink_full",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.07772824640264236,
+          "pct_lift_vs_foil": -181.76412705140157
+        },
+        {
+          "arm": "A_shrink_full",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.05124811903256677,
+          "pct_lift_vs_foil": -84.20921494976949
+        },
+        {
+          "arm": "A_shrink_full",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.042811103166247096,
+          "pct_lift_vs_foil": -45.89220437092097
+        },
+        {
+          "arm": "A_target_identity",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.027586281907512864,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "A_target_identity",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.0278206055253757,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "A_target_identity",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.02934433909669552,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.027586281907512864,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.0278206055253757,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.02934433909669552,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "R1_eb_shrink",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.028879853716600543,
+          "pct_lift_vs_foil": -4.689185057357772
+        },
+        {
+          "arm": "R1_eb_shrink",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.028117005211685777,
+          "pct_lift_vs_foil": -1.0653962439448745
+        },
+        {
+          "arm": "R1_eb_shrink",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.029155817452313004,
+          "pct_lift_vs_foil": 0.6424463804118952
+        },
+        {
+          "arm": "R2_eb_shrink_2k",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.030068634677817056,
+          "pct_lift_vs_foil": -8.998504324093583
+        },
+        {
+          "arm": "R2_eb_shrink_2k",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.028379880437216648,
+          "pct_lift_vs_foil": -2.010290219351352
+        },
+        {
+          "arm": "R2_eb_shrink_2k",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.029175210224862937,
+          "pct_lift_vs_foil": 0.5763594513928992
+        },
+        {
+          "arm": "R3_shrink_to_level",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.02909602545396498,
+          "pct_lift_vs_foil": -5.472805474524485
+        },
+        {
+          "arm": "R3_shrink_to_level",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.028164090390600492,
+          "pct_lift_vs_foil": -1.2346419451995743
+        },
+        {
+          "arm": "R3_shrink_to_level",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.02900089451818573,
+          "pct_lift_vs_foil": 1.1703946624187722
+        }
+      ],
+      "propensity_tercile_composition": [
+        {
+          "stratum": 0,
+          "n_rows": 162,
+          "pct_rows_the_mechanism_can_move": 100.0,
+          "Double-A": 47.5,
+          "High-A": 11.7,
+          "Single-A": 4.3,
+          "Triple-A": 36.4
+        },
+        {
+          "stratum": 1,
+          "n_rows": 570,
+          "pct_rows_the_mechanism_can_move": 100.0,
+          "Double-A": 37.9,
+          "High-A": 25.8,
+          "Single-A": 10.0,
+          "Triple-A": 26.3
+        },
+        {
+          "stratum": 2,
+          "n_rows": 962,
+          "pct_rows_the_mechanism_can_move": 100.0,
+          "Double-A": 26.3,
+          "High-A": 27.5,
+          "Single-A": 25.2,
+          "Triple-A": 21.0
+        }
+      ],
+      "reasons": [
+        "\u26d4 MECHANISM REFUTED (scoped to `R1_eb_shrink`) \u2014 `A_shrink_constant` (CONSTANT shrink \u2014 identical average compression, no per-player content) systematically beat `R1_eb_shrink` (9/11 folds, p=0.016). The gain is a global rescale of the target, which the regression's own slope already absorbs \u2014 not a per-player de-noising. The stated mechanism is refuted. That arm is disqualified from selection; other arms on this metric are untouched.",
+        "\ud83d\udfe1 no arm clears: best eligible `R3_shrink_to_level` MAE 0.02888 vs foil 0.02879 (-0.31%, fold win rate 45%; the pre-registered bar is a strict OOS improvement in \u226560% of folds). DROPPED."
+      ]
+    },
+    "k_pct": {
+      "verdict": "DROP",
+      "winner": "L0_foil",
+      "leaderboard": [
+        {
+          "arm": "A_shrink_constant",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.0383601234684735,
+          "pct_lift_vs_foil": 0.19371935131310566,
+          "fold_win_rate": 0.6363636363636364,
+          "p_one_sided": 0.3111063878192329,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.8709,
+          "target_sd_ratio": 0.8709,
+          "note": "\u2b50 THE MATCHED FOIL THAT DECIDES THE SLICE \u2014 the SAME average compression with ZERO per-player content. If it ties R1, 'reliability weighting' was a global rescale the regression already had, not a per-player de-noising (slice 1's `constant_reliability` instrument, applied to the target instead of the feature)."
+        },
+        {
+          "arm": "L0_foil",
+          "kind": "foil",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.038434578684981964,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "target_sd_ratio": 1.0,
+          "note": "\u2b50 THE DIRECT-LEARNED FOIL \u2014 the shipped E7.12-slice-1 configuration, trained on the raw realized MLB rate"
+        },
+        {
+          "arm": "A_target_identity",
+          "kind": "anchor",
+          "selectable": false,
+          "active": false,
+          "oos_mae": 0.038434578684981964,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "target_sd_ratio": 1.0,
+          "note": "BYTE NO-OP \u2014 r = 1. Its MAE gap to the foil must be EXACTLY 0."
+        },
+        {
+          "arm": "R1_eb_shrink",
+          "kind": "target",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.03846515401369085,
+          "pct_lift_vs_foil": -0.07955161668215924,
+          "fold_win_rate": 0.45454545454545453,
+          "p_one_sided": 0.562275844213463,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.8372,
+          "target_sd_ratio": 0.8127,
+          "note": "\u2b50 HEADLINE \u2014 each training label shrunk toward the population mean by its OWN reliability PA/(PA+k), k the metric's stabilization point. A 150-PA label stops counting as much as a 1,200-PA one."
+        },
+        {
+          "arm": "R3_shrink_to_level",
+          "kind": "target",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.03859158069759368,
+          "pct_lift_vs_foil": -0.4084915666658589,
+          "fold_win_rate": 0.45454545454545453,
+          "p_one_sided": 0.7761481160269188,
+          "pct_rows_moved": 98.53,
+          "mean_shrink_r": 0.8372,
+          "target_sd_ratio": 0.8313,
+          "note": "shrink toward the row's LEVEL mean rather than the global mean \u2014 the anchor the feature-side reliability shrink already uses, applied to the target for symmetry"
+        },
+        {
+          "arm": "R2_eb_shrink_2k",
+          "kind": "target",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.03898964533263236,
+          "pct_lift_vs_foil": -1.444185591833431,
+          "fold_win_rate": 0.36363636363636365,
+          "p_one_sided": 0.9430439523620388,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.7254,
+          "target_sd_ratio": 0.6946,
+          "note": "MATCHED PARTNER to R1 \u2014 twice the stabilization constant. 'the published k is right for a MiLB-translation label' is an assumption, not a measurement, and a field carrying only one k cannot test it."
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.04994876646914512,
+          "pct_lift_vs_foil": -29.957887345496612,
+          "fold_win_rate": 0.0,
+          "p_one_sided": 0.9999985655715755,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "target_sd_ratio": 1.0,
+          "note": "DEGENERATE CEILING (NF-D11/NF-D14) \u2014 predict the population mean of the target."
+        },
+        {
+          "arm": "A_shrink_full",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.06827580633499096,
+          "pct_lift_vs_foil": -77.64161510548632,
+          "fold_win_rate": 0.0,
+          "p_one_sided": 0.9417704809419656,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.0,
+          "target_sd_ratio": 0.0,
+          "note": "\u2b50 THE FAMILY'S OWN DEGENERATE \u2014 r = 0, so the training target is CONSTANT and the model can learn nothing. Must lose catastrophically; a metric that likes it is inverted, which is the specific risk when the mechanism under test IS shrinkage."
+        }
+      ],
+      "mae_by_fold": {
+        "L0_foil": {
+          "2016": 0.0344001058640404,
+          "2017": 0.04595430701995689,
+          "2018": 0.037615990005237285,
+          "2019": 0.0353168292108571,
+          "2020": 0.0379997171840941,
+          "2021": 0.040521864011757586,
+          "2022": 0.038128544923246924,
+          "2023": 0.030974208053392516,
+          "2024": 0.040183030606081596,
+          "2025": 0.038984502298133265,
+          "2026": 0.042701266358004
+        },
+        "R1_eb_shrink": {
+          "2016": 0.0344896176607089,
+          "2017": 0.0455997357683833,
+          "2018": 0.036931045787951144,
+          "2019": 0.03457632491119275,
+          "2020": 0.03880517918417565,
+          "2021": 0.041131801519575406,
+          "2022": 0.038160465462022154,
+          "2023": 0.030555333479953,
+          "2024": 0.039901461638906115,
+          "2025": 0.040232809560359094,
+          "2026": 0.042732919177371834
+        },
+        "R2_eb_shrink_2k": {
+          "2016": 0.03593047774561015,
+          "2017": 0.04595895810592653,
+          "2018": 0.0369909621390422,
+          "2019": 0.034675597810188634,
+          "2020": 0.03980054274101834,
+          "2021": 0.04191206080435098,
+          "2022": 0.03870026364287636,
+          "2023": 0.03062188323537372,
+          "2024": 0.03997111928851994,
+          "2025": 0.04139645799255153,
+          "2026": 0.04292777515349759
+        },
+        "R3_shrink_to_level": {
+          "2016": 0.03548778298368453,
+          "2017": 0.04545689018551648,
+          "2018": 0.03723873287902165,
+          "2019": 0.03467614596502193,
+          "2020": 0.03873864541179785,
+          "2021": 0.04111126260299425,
+          "2022": 0.038174598068202885,
+          "2023": 0.030660603579008374,
+          "2024": 0.03998289213957816,
+          "2025": 0.04024726464152001,
+          "2026": 0.04273256921718431
+        },
+        "A_target_identity": {
+          "2016": 0.0344001058640404,
+          "2017": 0.04595430701995689,
+          "2018": 0.037615990005237285,
+          "2019": 0.0353168292108571,
+          "2020": 0.0379997171840941,
+          "2021": 0.040521864011757586,
+          "2022": 0.038128544923246924,
+          "2023": 0.030974208053392516,
+          "2024": 0.040183030606081596,
+          "2025": 0.038984502298133265,
+          "2026": 0.042701266358004
+        },
+        "A_shrink_constant": {
+          "2016": 0.033953601941755084,
+          "2017": 0.04557772709501729,
+          "2018": 0.03702976144723548,
+          "2019": 0.03474146395885087,
+          "2020": 0.03843997620728673,
+          "2021": 0.04081632107234863,
+          "2022": 0.03802432033720186,
+          "2023": 0.030615402000974446,
+          "2024": 0.039930102919458976,
+          "2025": 0.039920378811838644,
+          "2026": 0.04291230236124047
+        },
+        "A_shrink_full": {
+          "2016": 0.2368362383333404,
+          "2017": 0.07415193534917258,
+          "2018": 0.048173775555618775,
+          "2019": 0.0446125024922102,
+          "2020": 0.054042882479072296,
+          "2021": 0.05245002635999091,
+          "2022": 0.04877637364678884,
+          "2023": 0.036833415084775424,
+          "2024": 0.048369829886542495,
+          "2025": 0.05712341605099287,
+          "2026": 0.04966347444639578
+        },
+        "A_degenerate_mean": {
+          "2016": 0.05168809624581647,
+          "2017": 0.058210432414065504,
+          "2018": 0.04817042711074144,
+          "2019": 0.044485801191695144,
+          "2020": 0.0537022663274527,
+          "2021": 0.05245000312642686,
+          "2022": 0.04877641765394011,
+          "2023": 0.03683351154576019,
+          "2024": 0.048369825696241944,
+          "2025": 0.057089314217146435,
+          "2026": 0.04966033563130951
+        }
+      },
+      "coverage": {
+        "L0_foil": {
+          "n_rows": 68,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "r_p05": 1.0,
+          "r_p95": 1.0,
+          "target_sd_ratio": 1.0
+        },
+        "R1_eb_shrink": {
+          "n_rows": 68,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.8372,
+          "r_p05": 0.7285,
+          "r_p95": 0.9359,
+          "target_sd_ratio": 0.8127
+        },
+        "R2_eb_shrink_2k": {
+          "n_rows": 68,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.7254,
+          "r_p05": 0.573,
+          "r_p95": 0.8796,
+          "target_sd_ratio": 0.6946
+        },
+        "R3_shrink_to_level": {
+          "n_rows": 68,
+          "pct_rows_moved": 98.53,
+          "mean_shrink_r": 0.8372,
+          "r_p05": 0.7285,
+          "r_p95": 0.9359,
+          "target_sd_ratio": 0.8313
+        },
+        "A_target_identity": {
+          "n_rows": 68,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "r_p05": 1.0,
+          "r_p95": 1.0,
+          "target_sd_ratio": 1.0
+        },
+        "A_shrink_constant": {
+          "n_rows": 68,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.8709,
+          "r_p05": 0.8709,
+          "r_p95": 0.8709,
+          "target_sd_ratio": 0.8709
+        },
+        "A_shrink_full": {
+          "n_rows": 68,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.0,
+          "r_p05": 0.0,
+          "r_p95": 0.0,
+          "target_sd_ratio": 0.0
+        },
+        "A_degenerate_mean": {
+          "n_rows": 68,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "r_p05": 1.0,
+          "r_p95": 1.0,
+          "target_sd_ratio": 1.0
+        }
+      },
+      "deflation": {
+        "n_configs": 4,
+        "n_folds": 11,
+        "pbo": 0.22857142857142856,
+        "os_gap_pct": 0.3427,
+        "os_gap_p90_pct": 0.8159,
+        "contender_spread_pct": 0.408,
+        "full_spread_pct": 1.444,
+        "flips": [
+          {
+            "config": "L0_foil",
+            "IS_half_wins": 248,
+            "share": 0.537,
+            "mean_oos_mae": 0.03843,
+            "pct_vs_best": 0.0
+          },
+          {
+            "config": "R1_eb_shrink",
+            "IS_half_wins": 203,
+            "share": 0.439,
+            "mean_oos_mae": 0.03847,
+            "pct_vs_best": 0.08
+          },
+          {
+            "config": "R3_shrink_to_level",
+            "IS_half_wins": 11,
+            "share": 0.024,
+            "mean_oos_mae": 0.03859,
+            "pct_vs_best": 0.408
+          }
+        ],
+        "whole_field": {
+          "n_configs": 8,
+          "n_folds": 11,
+          "pbo": 0.17142857142857143,
+          "os_gap_pct": 0.2752,
+          "os_gap_p90_pct": 0.7659,
+          "contender_spread_pct": 0.194,
+          "full_spread_pct": 77.986,
+          "flips": [
+            {
+              "config": "A_shrink_constant",
+              "IS_half_wins": 262,
+              "share": 0.567,
+              "mean_oos_mae": 0.03836,
+              "pct_vs_best": 0.0
+            },
+            {
+              "config": "L0_foil",
+              "IS_half_wins": 154,
+              "share": 0.333,
+              "mean_oos_mae": 0.03843,
+              "pct_vs_best": 0.194
+            },
+            {
+              "config": "R1_eb_shrink",
+              "IS_half_wins": 44,
+              "share": 0.095,
+              "mean_oos_mae": 0.03847,
+              "pct_vs_best": 0.274
+            },
+            {
+              "config": "R3_shrink_to_level",
+              "IS_half_wins": 2,
+              "share": 0.004,
+              "mean_oos_mae": 0.03859,
+              "pct_vs_best": 0.603
+            }
+          ]
+        }
+      },
+      "dsr": {
+        "available": true,
+        "eligible": {
+          "arm": "R1_eb_shrink",
+          "n_trials": 3,
+          "dsr": 0.2095082340669417,
+          "observed_sr": -0.04848485298738211,
+          "sr0": 0.20335183140688565,
+          "passes": false
+        },
+        "whole_field": {
+          "arm": "A_shrink_constant",
+          "n_trials": 7,
+          "dsr": 7.953352111057755e-05,
+          "observed_sr": 0.15328251050505604,
+          "sr0": 1.4237782718588534,
+          "passes": false
+        },
+        "binds": "eligible"
+      },
+      "anchors": {
+        "required_anchors_present": true,
+        "missing_anchors": [],
+        "best_arm": "R1_eb_shrink",
+        "foil": "L0_foil",
+        "A_degenerate_mean__vs_best": {
+          "available": true,
+          "challenger": "A_degenerate_mean",
+          "defender": "R1_eb_shrink",
+          "mean_gap": 0.011483612455454272,
+          "challenger_fold_wins": 0,
+          "n_folds": 11,
+          "p_challenger_better": 0.9999994343674281,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_degenerate_mean__mae": 0.04994876646914512,
+        "A_shrink_full__vs_best": {
+          "available": true,
+          "challenger": "A_shrink_full",
+          "defender": "R1_eb_shrink",
+          "mean_gap": 0.02981065232130011,
+          "challenger_fold_wins": 0,
+          "n_folds": 11,
+          "p_challenger_better": 0.9417055344912503,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_shrink_full__mae": 0.06827580633499096,
+        "A_target_identity__max_abs_gap": 0.0,
+        "A_target_identity__is_a_noop": true,
+        "A_target_identity__mae": 0.038434578684981964,
+        "A_shrink_constant__vs_R1_eb_shrink": {
+          "available": true,
+          "challenger": "A_shrink_constant",
+          "defender": "R1_eb_shrink",
+          "mean_gap": -0.00010503054521735197,
+          "challenger_fold_wins": 6,
+          "n_folds": 11,
+          "p_challenger_better": 0.09088137738290566,
+          "violated": true,
+          "alpha": 0.1
+        },
+        "A_shrink_constant__mae": 0.0383601234684735,
+        "inert_anchors": [],
+        "refuted_arms": {
+          "R1_eb_shrink": "`A_shrink_constant` (CONSTANT shrink \u2014 identical average compression, no per-player content) systematically beat `R1_eb_shrink` (6/11 folds, p=0.091). The gain is a global rescale of the target, which the regression's own slope already absorbs \u2014 not a per-player de-noising. The stated mechanism is refuted."
+        },
+        "oracle_floor_ok": true,
+        "low_propensity_tercile_lift_pct": 0.829093762522543,
+        "low_propensity_tercile_lift_pct_all_rows": 0.829093762522543,
+        "shrinkage_inversion_probe_full_shrink_lift_pct": -77.64161510548632,
+        "per_player_content_pct": -0.2732709679952649
+      },
+      "stratified": [
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.0479581328116196,
+          "pct_lift_vs_foil": -39.78934096033295
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.04946569177535955,
+          "pct_lift_vs_foil": -31.16170512550207
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.04956444182000959,
+          "pct_lift_vs_foil": -27.51605878501138
+        },
+        {
+          "arm": "A_shrink_constant",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.03370175028716258,
+          "pct_lift_vs_foil": 1.765452788630621
+        },
+        {
+          "arm": "A_shrink_constant",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.037743972447620525,
+          "pct_lift_vs_foil": -0.08075510036457284
+        },
+        {
+          "arm": "A_shrink_constant",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.03879015809564666,
+          "pct_lift_vs_foil": 0.2032929581489777
+        },
+        {
+          "arm": "A_shrink_full",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.08356677827150719,
+          "pct_lift_vs_foil": -143.58214500631965
+        },
+        {
+          "arm": "A_shrink_full",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.06411654114088944,
+          "pct_lift_vs_foil": -70.00944616279624
+        },
+        {
+          "arm": "A_shrink_full",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.05724322996391269,
+          "pct_lift_vs_foil": -47.27152791571181
+        },
+        {
+          "arm": "A_target_identity",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.03430743179855777,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "A_target_identity",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.037713516859229836,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "A_target_identity",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.03886917639414648,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.03430743179855777,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.037713516859229836,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.03886917639414648,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "R1_eb_shrink",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.03367040083197653,
+          "pct_lift_vs_foil": 1.8568308182369289
+        },
+        {
+          "arm": "R1_eb_shrink",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.037800624218451484,
+          "pct_lift_vs_foil": -0.23097119143459205
+        },
+        {
+          "arm": "R1_eb_shrink",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.03893353838808529,
+          "pct_lift_vs_foil": -0.16558620457034004
+        },
+        {
+          "arm": "R2_eb_shrink_2k",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.03386780495312428,
+          "pct_lift_vs_foil": 1.2814332708284304
+        },
+        {
+          "arm": "R2_eb_shrink_2k",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.03841221152981612,
+          "pct_lift_vs_foil": -1.852637273777071
+        },
+        {
+          "arm": "R2_eb_shrink_2k",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.039408518420107924,
+          "pct_lift_vs_foil": -1.3875828509777082
+        },
+        {
+          "arm": "R3_shrink_to_level",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.03402299102143425,
+          "pct_lift_vs_foil": 0.829093762522543
+        },
+        {
+          "arm": "R3_shrink_to_level",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.03793484623442168,
+          "pct_lift_vs_foil": -0.586870155912489
+        },
+        {
+          "arm": "R3_shrink_to_level",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.0389816383857255,
+          "pct_lift_vs_foil": -0.28933463996928427
+        }
+      ],
+      "propensity_tercile_composition": [
+        {
+          "stratum": 0,
+          "n_rows": 162,
+          "pct_rows_the_mechanism_can_move": 100.0,
+          "Double-A": 47.5,
+          "High-A": 11.7,
+          "Single-A": 4.3,
+          "Triple-A": 36.4
+        },
+        {
+          "stratum": 1,
+          "n_rows": 570,
+          "pct_rows_the_mechanism_can_move": 100.0,
+          "Double-A": 37.9,
+          "High-A": 25.8,
+          "Single-A": 10.0,
+          "Triple-A": 26.3
+        },
+        {
+          "stratum": 2,
+          "n_rows": 962,
+          "pct_rows_the_mechanism_can_move": 100.0,
+          "Double-A": 26.3,
+          "High-A": 27.5,
+          "Single-A": 25.2,
+          "Triple-A": 21.0
+        }
+      ],
+      "reasons": [
+        "\u26d4 MECHANISM REFUTED (scoped to `R1_eb_shrink`) \u2014 `A_shrink_constant` (CONSTANT shrink \u2014 identical average compression, no per-player content) systematically beat `R1_eb_shrink` (6/11 folds, p=0.091). The gain is a global rescale of the target, which the regression's own slope already absorbs \u2014 not a per-player de-noising. The stated mechanism is refuted. That arm is disqualified from selection; other arms on this metric are untouched.",
+        "\ud83d\udfe1 no arm clears: best eligible `R3_shrink_to_level` MAE 0.03859 vs foil 0.03843 (-0.41%, fold win rate 45%; the pre-registered bar is a strict OOS improvement in \u226560% of folds). DROPPED."
+      ]
+    },
+    "bb_pct": {
+      "verdict": "DROP",
+      "winner": "L0_foil",
+      "leaderboard": [
+        {
+          "arm": "L0_foil",
+          "kind": "foil",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.017957313776055105,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "target_sd_ratio": 1.0,
+          "note": "\u2b50 THE DIRECT-LEARNED FOIL \u2014 the shipped E7.12-slice-1 configuration, trained on the raw realized MLB rate"
+        },
+        {
+          "arm": "A_target_identity",
+          "kind": "anchor",
+          "selectable": false,
+          "active": false,
+          "oos_mae": 0.017957313776055105,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "target_sd_ratio": 1.0,
+          "note": "BYTE NO-OP \u2014 r = 1. Its MAE gap to the foil must be EXACTLY 0."
+        },
+        {
+          "arm": "A_shrink_constant",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.01800883805011774,
+          "pct_lift_vs_foil": -0.28692640060307933,
+          "fold_win_rate": 0.36363636363636365,
+          "p_one_sided": 0.6315973472974575,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.7763,
+          "target_sd_ratio": 0.7763,
+          "note": "\u2b50 THE MATCHED FOIL THAT DECIDES THE SLICE \u2014 the SAME average compression with ZERO per-player content. If it ties R1, 'reliability weighting' was a global rescale the regression already had, not a per-player de-noising (slice 1's `constant_reliability` instrument, applied to the target instead of the feature)."
+        },
+        {
+          "arm": "R1_eb_shrink",
+          "kind": "target",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.018118258398995,
+          "pct_lift_vs_foil": -0.8962622413743475,
+          "fold_win_rate": 0.18181818181818182,
+          "p_one_sided": 0.8013985476145965,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.7254,
+          "target_sd_ratio": 0.6945,
+          "note": "\u2b50 HEADLINE \u2014 each training label shrunk toward the population mean by its OWN reliability PA/(PA+k), k the metric's stabilization point. A 150-PA label stops counting as much as a 1,200-PA one."
+        },
+        {
+          "arm": "R3_shrink_to_level",
+          "kind": "target",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.01821020621701412,
+          "pct_lift_vs_foil": -1.4082977226595768,
+          "fold_win_rate": 0.18181818181818182,
+          "p_one_sided": 0.9179509222988822,
+          "pct_rows_moved": 98.53,
+          "mean_shrink_r": 0.7254,
+          "target_sd_ratio": 0.7204,
+          "note": "shrink toward the row's LEVEL mean rather than the global mean \u2014 the anchor the feature-side reliability shrink already uses, applied to the target for symmetry"
+        },
+        {
+          "arm": "R2_eb_shrink_2k",
+          "kind": "target",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.018382419572739842,
+          "pct_lift_vs_foil": -2.3673128508317878,
+          "fold_win_rate": 0.18181818181818182,
+          "p_one_sided": 0.9208953073843784,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.5781,
+          "target_sd_ratio": 0.5438,
+          "note": "MATCHED PARTNER to R1 \u2014 twice the stabilization constant. 'the published k is right for a MiLB-translation label' is an assumption, not a measurement, and a field carrying only one k cannot test it."
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.020766733277752088,
+          "pct_lift_vs_foil": -15.644987533954893,
+          "fold_win_rate": 0.09090909090909091,
+          "p_one_sided": 0.9998264866386645,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "target_sd_ratio": 1.0,
+          "note": "DEGENERATE CEILING (NF-D11/NF-D14) \u2014 predict the population mean of the target."
+        },
+        {
+          "arm": "A_shrink_full",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.02604867862384771,
+          "pct_lift_vs_foil": -45.05888212847239,
+          "fold_win_rate": 0.0,
+          "p_one_sided": 0.9879529801138787,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.0,
+          "target_sd_ratio": 0.0,
+          "note": "\u2b50 THE FAMILY'S OWN DEGENERATE \u2014 r = 0, so the training target is CONSTANT and the model can learn nothing. Must lose catastrophically; a metric that likes it is inverted, which is the specific risk when the mechanism under test IS shrinkage."
+        }
+      ],
+      "mae_by_fold": {
+        "L0_foil": {
+          "2016": 0.019589358950053735,
+          "2017": 0.021966655302667493,
+          "2018": 0.01651872415591209,
+          "2019": 0.018110516591596855,
+          "2020": 0.014625920512895524,
+          "2021": 0.014352293636877992,
+          "2022": 0.018748966033771526,
+          "2023": 0.015929237006155537,
+          "2024": 0.01794518841962344,
+          "2025": 0.018756220702433882,
+          "2026": 0.02098737022461805
+        },
+        "R1_eb_shrink": {
+          "2016": 0.01967427544537119,
+          "2017": 0.02056978357498667,
+          "2018": 0.016701414943120198,
+          "2019": 0.01836372195246255,
+          "2020": 0.01424201475522924,
+          "2021": 0.014936356814781686,
+          "2022": 0.01944425730279698,
+          "2023": 0.016519495243179333,
+          "2024": 0.018071708794883852,
+          "2025": 0.019277800884135828,
+          "2026": 0.021500012677997456
+        },
+        "R2_eb_shrink_2k": {
+          "2016": 0.02028668584107372,
+          "2017": 0.019992272970004093,
+          "2018": 0.016939251105332374,
+          "2019": 0.01867288399732497,
+          "2020": 0.014192954013650474,
+          "2021": 0.015314001032656479,
+          "2022": 0.0200750334553879,
+          "2023": 0.01695094716274037,
+          "2024": 0.018212104650700053,
+          "2025": 0.019699761790267473,
+          "2026": 0.021870719281000355
+        },
+        "R3_shrink_to_level": {
+          "2016": 0.020406463482716925,
+          "2017": 0.02087037882304044,
+          "2018": 0.01668655289678996,
+          "2019": 0.018390396241550137,
+          "2020": 0.014239988309672717,
+          "2021": 0.014960349858049456,
+          "2022": 0.019438954456304808,
+          "2023": 0.01651355235666616,
+          "2024": 0.018067002748272797,
+          "2025": 0.019280437380138706,
+          "2026": 0.021458191833953227
+        },
+        "A_target_identity": {
+          "2016": 0.019589358950053735,
+          "2017": 0.021966655302667493,
+          "2018": 0.01651872415591209,
+          "2019": 0.018110516591596855,
+          "2020": 0.014625920512895524,
+          "2021": 0.014352293636877992,
+          "2022": 0.018748966033771526,
+          "2023": 0.015929237006155537,
+          "2024": 0.01794518841962344,
+          "2025": 0.018756220702433882,
+          "2026": 0.02098737022461805
+        },
+        "A_shrink_constant": {
+          "2016": 0.019518761598939453,
+          "2017": 0.02077008506606473,
+          "2018": 0.01648841413796963,
+          "2019": 0.018172965182587274,
+          "2020": 0.014278380614759877,
+          "2021": 0.014811079020506941,
+          "2022": 0.019244944702276556,
+          "2023": 0.016367948072383117,
+          "2024": 0.0179794271327123,
+          "2025": 0.019091231656925566,
+          "2026": 0.021373981366169678
+        },
+        "A_shrink_full": {
+          "2016": 0.026955691981328037,
+          "2017": 0.02507991435637585,
+          "2018": 0.04509743524932473,
+          "2019": 0.045904402159589734,
+          "2020": 0.015035812358424886,
+          "2021": 0.019230587859390483,
+          "2022": 0.023748703035826494,
+          "2023": 0.020106287064231326,
+          "2024": 0.019484890133716546,
+          "2025": 0.022440736167498563,
+          "2026": 0.02345100449661812
+        },
+        "A_degenerate_mean": {
+          "2016": 0.023755538553991193,
+          "2017": 0.02123355376779347,
+          "2018": 0.019356449436828606,
+          "2019": 0.021536563073091222,
+          "2020": 0.01503580964871052,
+          "2021": 0.018235723266011854,
+          "2022": 0.023748715580794694,
+          "2023": 0.020136315685037095,
+          "2024": 0.01948489173439184,
+          "2025": 0.02243137425410691,
+          "2026": 0.023479131054515566
+        }
+      },
+      "coverage": {
+        "L0_foil": {
+          "n_rows": 68,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "r_p05": 1.0,
+          "r_p95": 1.0,
+          "target_sd_ratio": 1.0
+        },
+        "R1_eb_shrink": {
+          "n_rows": 68,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.7254,
+          "r_p05": 0.573,
+          "r_p95": 0.8796,
+          "target_sd_ratio": 0.6945
+        },
+        "R2_eb_shrink_2k": {
+          "n_rows": 68,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.5781,
+          "r_p05": 0.4015,
+          "r_p95": 0.7851,
+          "target_sd_ratio": 0.5438
+        },
+        "R3_shrink_to_level": {
+          "n_rows": 68,
+          "pct_rows_moved": 98.53,
+          "mean_shrink_r": 0.7254,
+          "r_p05": 0.573,
+          "r_p95": 0.8796,
+          "target_sd_ratio": 0.7204
+        },
+        "A_target_identity": {
+          "n_rows": 68,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "r_p05": 1.0,
+          "r_p95": 1.0,
+          "target_sd_ratio": 1.0
+        },
+        "A_shrink_constant": {
+          "n_rows": 68,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.7763,
+          "r_p05": 0.7763,
+          "r_p95": 0.7763,
+          "target_sd_ratio": 0.7763
+        },
+        "A_shrink_full": {
+          "n_rows": 68,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.0,
+          "r_p05": 0.0,
+          "r_p95": 0.0,
+          "target_sd_ratio": 0.0
+        },
+        "A_degenerate_mean": {
+          "n_rows": 68,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "r_p05": 1.0,
+          "r_p95": 1.0,
+          "target_sd_ratio": 1.0
+        }
+      },
+      "deflation": {
+        "n_configs": 4,
+        "n_folds": 11,
+        "pbo": 0.17142857142857143,
+        "os_gap_pct": 0.0,
+        "os_gap_p90_pct": 2.188,
+        "contender_spread_pct": 1.408,
+        "full_spread_pct": 2.367,
+        "flips": [
+          {
+            "config": "L0_foil",
+            "IS_half_wins": 349,
+            "share": 0.755,
+            "mean_oos_mae": 0.01796,
+            "pct_vs_best": 0.0
+          },
+          {
+            "config": "R1_eb_shrink",
+            "IS_half_wins": 113,
+            "share": 0.245,
+            "mean_oos_mae": 0.01812,
+            "pct_vs_best": 0.896
+          }
+        ],
+        "whole_field": {
+          "n_configs": 8,
+          "n_folds": 11,
+          "pbo": 0.0,
+          "os_gap_pct": 0.6302,
+          "os_gap_p90_pct": 1.3118,
+          "contender_spread_pct": 0.287,
+          "full_spread_pct": 45.059,
+          "flips": [
+            {
+              "config": "L0_foil",
+              "IS_half_wins": 285,
+              "share": 0.617,
+              "mean_oos_mae": 0.01796,
+              "pct_vs_best": 0.0
+            },
+            {
+              "config": "A_shrink_constant",
+              "IS_half_wins": 177,
+              "share": 0.383,
+              "mean_oos_mae": 0.01801,
+              "pct_vs_best": 0.287
+            }
+          ]
+        }
+      },
+      "dsr": {
+        "available": true,
+        "eligible": {
+          "arm": "R1_eb_shrink",
+          "n_trials": 3,
+          "dsr": 0.17815651144309125,
+          "observed_sr": -0.266681834666697,
+          "sr0": 0.09340962463877578,
+          "passes": false
+        },
+        "whole_field": {
+          "arm": "A_target_identity",
+          "dsr": null,
+          "note": "too few folds / zero variance"
+        },
+        "binds": "eligible"
+      },
+      "anchors": {
+        "required_anchors_present": true,
+        "missing_anchors": [],
+        "best_arm": "R1_eb_shrink",
+        "foil": "L0_foil",
+        "A_degenerate_mean__vs_best": {
+          "available": true,
+          "challenger": "A_degenerate_mean",
+          "defender": "R1_eb_shrink",
+          "mean_gap": 0.0026484748787570897,
+          "challenger_fold_wins": 0,
+          "n_folds": 11,
+          "p_challenger_better": 0.9999799213838709,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_degenerate_mean__mae": 0.020766733277752088,
+        "A_shrink_full__vs_best": {
+          "available": true,
+          "challenger": "A_shrink_full",
+          "defender": "R1_eb_shrink",
+          "mean_gap": 0.007930420224852706,
+          "challenger_fold_wins": 0,
+          "n_folds": 11,
+          "p_challenger_better": 0.9870630341132274,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_shrink_full__mae": 0.02604867862384771,
+        "A_target_identity__max_abs_gap": 0.0,
+        "A_target_identity__is_a_noop": true,
+        "A_target_identity__mae": 0.017957313776055105,
+        "A_shrink_constant__vs_R1_eb_shrink": {
+          "available": true,
+          "challenger": "A_shrink_constant",
+          "defender": "R1_eb_shrink",
+          "mean_gap": -0.00010942034887726016,
+          "challenger_fold_wins": 9,
+          "n_folds": 11,
+          "p_challenger_better": 0.007504251655237654,
+          "violated": true,
+          "alpha": 0.1
+        },
+        "A_shrink_constant__mae": 0.01800883805011774,
+        "inert_anchors": [],
+        "refuted_arms": {
+          "R1_eb_shrink": "`A_shrink_constant` (CONSTANT shrink \u2014 identical average compression, no per-player content) systematically beat `R1_eb_shrink` (9/11 folds, p=0.008). The gain is a global rescale of the target, which the regression's own slope already absorbs \u2014 not a per-player de-noising. The stated mechanism is refuted."
+        },
+        "oracle_floor_ok": true,
+        "low_propensity_tercile_lift_pct": -5.336990113823642,
+        "low_propensity_tercile_lift_pct_all_rows": -5.336990113823642,
+        "shrinkage_inversion_probe_full_shrink_lift_pct": -45.05888212847239,
+        "per_player_content_pct": -0.6093358407712681
+      },
+      "stratified": [
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.02134775556987427,
+          "pct_lift_vs_foil": -36.989729437665495
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.021722626070540856,
+          "pct_lift_vs_foil": -23.684994570475848
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.020309635662492508,
+          "pct_lift_vs_foil": -10.63301649860196
+        },
+        {
+          "arm": "A_shrink_constant",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.015886940957819565,
+          "pct_lift_vs_foil": -1.9473797271272815
+        },
+        {
+          "arm": "A_shrink_constant",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.017904849952324428,
+          "pct_lift_vs_foil": -1.9472167843329822
+        },
+        {
+          "arm": "A_shrink_constant",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.01827772667417931,
+          "pct_lift_vs_foil": 0.43543516460839504
+        },
+        {
+          "arm": "A_shrink_full",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.025529433939007053,
+          "pct_lift_vs_foil": -63.823791056360136
+        },
+        {
+          "arm": "A_shrink_full",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.027455155688276865,
+          "pct_lift_vs_foil": -56.3250580850027
+        },
+        {
+          "arm": "A_shrink_full",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.025881989643906988,
+          "pct_lift_vs_foil": -40.987393120945555
+        },
+        {
+          "arm": "A_target_identity",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.015583471591268563,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "A_target_identity",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.01756286293739802,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "A_target_identity",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.018357662391632567,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.015583471591268563,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.01756286293739802,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.018357662391632567,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "R1_eb_shrink",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.01611909547640015,
+          "pct_lift_vs_foil": -3.43712812639065
+        },
+        {
+          "arm": "R1_eb_shrink",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.01811234064294931,
+          "pct_lift_vs_foil": -3.1286340245885595
+        },
+        {
+          "arm": "R1_eb_shrink",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.018331852262672484,
+          "pct_lift_vs_foil": 0.1405959452214932
+        },
+        {
+          "arm": "R2_eb_shrink_2k",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.016806438833465685,
+          "pct_lift_vs_foil": -7.847848504323977
+        },
+        {
+          "arm": "R2_eb_shrink_2k",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.01858814503036733,
+          "pct_lift_vs_foil": -5.837784515109406
+        },
+        {
+          "arm": "R2_eb_shrink_2k",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.018450506649171104,
+          "pct_lift_vs_foil": -0.5057520699413799
+        },
+        {
+          "arm": "R3_shrink_to_level",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.016415159929485078,
+          "pct_lift_vs_foil": -5.336990113823642
+        },
+        {
+          "arm": "R3_shrink_to_level",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.01816852986642091,
+          "pct_lift_vs_foil": -3.448566052025575
+        },
+        {
+          "arm": "R3_shrink_to_level",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.018370611492053948,
+          "pct_lift_vs_foil": -0.07053785032717577
+        }
+      ],
+      "propensity_tercile_composition": [
+        {
+          "stratum": 0,
+          "n_rows": 162,
+          "pct_rows_the_mechanism_can_move": 100.0,
+          "Double-A": 47.5,
+          "High-A": 11.7,
+          "Single-A": 4.3,
+          "Triple-A": 36.4
+        },
+        {
+          "stratum": 1,
+          "n_rows": 570,
+          "pct_rows_the_mechanism_can_move": 100.0,
+          "Double-A": 37.9,
+          "High-A": 25.8,
+          "Single-A": 10.0,
+          "Triple-A": 26.3
+        },
+        {
+          "stratum": 2,
+          "n_rows": 962,
+          "pct_rows_the_mechanism_can_move": 100.0,
+          "Double-A": 26.3,
+          "High-A": 27.5,
+          "Single-A": 25.2,
+          "Triple-A": 21.0
+        }
+      ],
+      "reasons": [
+        "\u26d4 MECHANISM REFUTED (scoped to `R1_eb_shrink`) \u2014 `A_shrink_constant` (CONSTANT shrink \u2014 identical average compression, no per-player content) systematically beat `R1_eb_shrink` (9/11 folds, p=0.008). The gain is a global rescale of the target, which the regression's own slope already absorbs \u2014 not a per-player de-noising. The stated mechanism is refuted. That arm is disqualified from selection; other arms on this metric are untouched.",
+        "\ud83d\udfe1 no arm clears: best eligible `R3_shrink_to_level` MAE 0.01821 vs foil 0.01796 (-1.41%, fold win rate 18%; the pre-registered bar is a strict OOS improvement in \u226560% of folds). DROPPED."
+      ]
+    },
+    "iso": {
+      "verdict": "DROP",
+      "winner": "L0_foil",
+      "leaderboard": [
+        {
+          "arm": "A_shrink_constant",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.03831135191889055,
+          "pct_lift_vs_foil": 0.411574234033696,
+          "fold_win_rate": 0.6363636363636364,
+          "p_one_sided": 0.282679358198181,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.7254,
+          "target_sd_ratio": 0.7254,
+          "note": "\u2b50 THE MATCHED FOIL THAT DECIDES THE SLICE \u2014 the SAME average compression with ZERO per-player content. If it ties R1, 'reliability weighting' was a global rescale the regression already had, not a per-player de-noising (slice 1's `constant_reliability` instrument, applied to the target instead of the feature)."
+        },
+        {
+          "arm": "L0_foil",
+          "kind": "foil",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.0384696832229506,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "target_sd_ratio": 1.0,
+          "note": "\u2b50 THE DIRECT-LEARNED FOIL \u2014 the shipped E7.12-slice-1 configuration, trained on the raw realized MLB rate"
+        },
+        {
+          "arm": "A_target_identity",
+          "kind": "anchor",
+          "selectable": false,
+          "active": false,
+          "oos_mae": 0.0384696832229506,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "target_sd_ratio": 1.0,
+          "note": "BYTE NO-OP \u2014 r = 1. Its MAE gap to the foil must be EXACTLY 0."
+        },
+        {
+          "arm": "R1_eb_shrink",
+          "kind": "target",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.038634777476714684,
+          "pct_lift_vs_foil": -0.42915418046797393,
+          "fold_win_rate": 0.45454545454545453,
+          "p_one_sided": 0.6692614359944825,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.6677,
+          "target_sd_ratio": 0.6466,
+          "note": "\u2b50 HEADLINE \u2014 each training label shrunk toward the population mean by its OWN reliability PA/(PA+k), k the metric's stabilization point. A 150-PA label stops counting as much as a 1,200-PA one."
+        },
+        {
+          "arm": "R3_shrink_to_level",
+          "kind": "target",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.03881471048258011,
+          "pct_lift_vs_foil": -0.8968809481219567,
+          "fold_win_rate": 0.45454545454545453,
+          "p_one_sided": 0.8200916841928014,
+          "pct_rows_moved": 98.53,
+          "mean_shrink_r": 0.6677,
+          "target_sd_ratio": 0.6911,
+          "note": "shrink toward the row's LEVEL mean rather than the global mean \u2014 the anchor the feature-side reliability shrink already uses, applied to the target for symmetry"
+        },
+        {
+          "arm": "R2_eb_shrink_2k",
+          "kind": "target",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.03914218757710164,
+          "pct_lift_vs_foil": -1.7481411277902972,
+          "fold_win_rate": 0.36363636363636365,
+          "p_one_sided": 0.8951818391914739,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.5112,
+          "target_sd_ratio": 0.4904,
+          "note": "MATCHED PARTNER to R1 \u2014 twice the stabilization constant. 'the published k is right for a MiLB-translation label' is an assumption, not a measurement, and a field carrying only one k cannot test it."
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.043138423513522754,
+          "pct_lift_vs_foil": -12.13615475727866,
+          "fold_win_rate": 0.09090909090909091,
+          "p_one_sided": 0.9992712370961743,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "target_sd_ratio": 1.0,
+          "note": "DEGENERATE CEILING (NF-D11/NF-D14) \u2014 predict the population mean of the target."
+        },
+        {
+          "arm": "A_shrink_full",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.05339257608807191,
+          "pct_lift_vs_foil": -38.79130685489625,
+          "fold_win_rate": 0.09090909090909091,
+          "p_one_sided": 0.931891587580355,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.0,
+          "target_sd_ratio": 0.0,
+          "note": "\u2b50 THE FAMILY'S OWN DEGENERATE \u2014 r = 0, so the training target is CONSTANT and the model can learn nothing. Must lose catastrophically; a metric that likes it is inverted, which is the specific risk when the mechanism under test IS shrinkage."
+        }
+      ],
+      "mae_by_fold": {
+        "L0_foil": {
+          "2016": 0.04165237823018756,
+          "2017": 0.04201950491506042,
+          "2018": 0.037607101883396984,
+          "2019": 0.04674610708449418,
+          "2020": 0.03158554695241676,
+          "2021": 0.0397931600733812,
+          "2022": 0.039484808486978266,
+          "2023": 0.036010641126333016,
+          "2024": 0.031211435108134875,
+          "2025": 0.03366766332422041,
+          "2026": 0.0433881682678529
+        },
+        "R1_eb_shrink": {
+          "2016": 0.04226948651810532,
+          "2017": 0.04023288235190294,
+          "2018": 0.03746070856492742,
+          "2019": 0.04624401195594511,
+          "2020": 0.03111128561987288,
+          "2021": 0.04031582215316977,
+          "2022": 0.041033297985453035,
+          "2023": 0.037704997610108926,
+          "2024": 0.03286220909612103,
+          "2025": 0.03397123196611822,
+          "2026": 0.04177661842213679
+        },
+        "R2_eb_shrink_2k": {
+          "2016": 0.043771897058326036,
+          "2017": 0.04028633903820288,
+          "2018": 0.038333142117308164,
+          "2019": 0.046412089946978506,
+          "2020": 0.031184399409468995,
+          "2021": 0.040482191059678506,
+          "2022": 0.04191850615604555,
+          "2023": 0.03853876208490279,
+          "2024": 0.0339240117495799,
+          "2025": 0.034280928933279,
+          "2026": 0.04143179579434771
+        },
+        "R3_shrink_to_level": {
+          "2016": 0.043254071941399644,
+          "2017": 0.040639889086221764,
+          "2018": 0.03759503602295623,
+          "2019": 0.04637010096592521,
+          "2020": 0.031239195848701728,
+          "2021": 0.04036879097988455,
+          "2022": 0.04102880816100705,
+          "2023": 0.03765182321096042,
+          "2024": 0.03292323341262425,
+          "2025": 0.0340280921091066,
+          "2026": 0.04186277356959376
+        },
+        "A_target_identity": {
+          "2016": 0.04165237823018756,
+          "2017": 0.04201950491506042,
+          "2018": 0.037607101883396984,
+          "2019": 0.04674610708449418,
+          "2020": 0.03158554695241676,
+          "2021": 0.0397931600733812,
+          "2022": 0.039484808486978266,
+          "2023": 0.036010641126333016,
+          "2024": 0.031211435108134875,
+          "2025": 0.03366766332422041,
+          "2026": 0.0433881682678529
+        },
+        "A_shrink_constant": {
+          "2016": 0.041917582970911034,
+          "2017": 0.040467535915661594,
+          "2018": 0.03752233181303418,
+          "2019": 0.04627659704100424,
+          "2020": 0.030786910312223564,
+          "2021": 0.03976354868652379,
+          "2022": 0.04054417581066473,
+          "2023": 0.03681226733647463,
+          "2024": 0.03196248940105862,
+          "2025": 0.03352695223453597,
+          "2026": 0.041844479585703684
+        },
+        "A_shrink_full": {
+          "2016": 0.05957817225485155,
+          "2017": 0.14779357218301495,
+          "2018": 0.04577434172291958,
+          "2019": 0.05014855910715455,
+          "2020": 0.03405565754475676,
+          "2021": 0.04317277980629813,
+          "2022": 0.04727208754348845,
+          "2023": 0.04157285785443995,
+          "2024": 0.038960338348968046,
+          "2025": 0.03782768876288831,
+          "2026": 0.04116228184001067
+        },
+        "A_degenerate_mean": {
+          "2016": 0.052277417108088635,
+          "2017": 0.044450901851773486,
+          "2018": 0.045497198240332125,
+          "2019": 0.049763623546942484,
+          "2020": 0.0341027598997781,
+          "2021": 0.04225461443578294,
+          "2022": 0.04634151677246047,
+          "2023": 0.04176721494725222,
+          "2024": 0.039077106565417935,
+          "2025": 0.03782769653208948,
+          "2026": 0.04116260874883235
+        }
+      },
+      "coverage": {
+        "L0_foil": {
+          "n_rows": 68,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "r_p05": 1.0,
+          "r_p95": 1.0,
+          "target_sd_ratio": 1.0
+        },
+        "R1_eb_shrink": {
+          "n_rows": 68,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.6677,
+          "r_p05": 0.5016,
+          "r_p95": 0.8457,
+          "target_sd_ratio": 0.6466
+        },
+        "R2_eb_shrink_2k": {
+          "n_rows": 68,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.5112,
+          "r_p05": 0.3347,
+          "r_p95": 0.7327,
+          "target_sd_ratio": 0.4904
+        },
+        "R3_shrink_to_level": {
+          "n_rows": 68,
+          "pct_rows_moved": 98.53,
+          "mean_shrink_r": 0.6677,
+          "r_p05": 0.5016,
+          "r_p95": 0.8457,
+          "target_sd_ratio": 0.6911
+        },
+        "A_target_identity": {
+          "n_rows": 68,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "r_p05": 1.0,
+          "r_p95": 1.0,
+          "target_sd_ratio": 1.0
+        },
+        "A_shrink_constant": {
+          "n_rows": 68,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.7254,
+          "r_p05": 0.7254,
+          "r_p95": 0.7254,
+          "target_sd_ratio": 0.7254
+        },
+        "A_shrink_full": {
+          "n_rows": 68,
+          "pct_rows_moved": 100.0,
+          "mean_shrink_r": 0.0,
+          "r_p05": 0.0,
+          "r_p95": 0.0,
+          "target_sd_ratio": 0.0
+        },
+        "A_degenerate_mean": {
+          "n_rows": 68,
+          "pct_rows_moved": 0.0,
+          "mean_shrink_r": 1.0,
+          "r_p05": 1.0,
+          "r_p95": 1.0,
+          "target_sd_ratio": 1.0
+        }
+      },
+      "deflation": {
+        "n_configs": 4,
+        "n_folds": 11,
+        "pbo": 0.12857142857142856,
+        "os_gap_pct": 0.4782,
+        "os_gap_p90_pct": 1.6101,
+        "contender_spread_pct": 0.897,
+        "full_spread_pct": 1.748,
+        "flips": [
+          {
+            "config": "L0_foil",
+            "IS_half_wins": 300,
+            "share": 0.649,
+            "mean_oos_mae": 0.03847,
+            "pct_vs_best": 0.0
+          },
+          {
+            "config": "R1_eb_shrink",
+            "IS_half_wins": 162,
+            "share": 0.351,
+            "mean_oos_mae": 0.03863,
+            "pct_vs_best": 0.429
+          }
+        ],
+        "whole_field": {
+          "n_configs": 8,
+          "n_folds": 11,
+          "pbo": 0.11428571428571428,
+          "os_gap_pct": 0.1778,
+          "os_gap_p90_pct": 1.2634,
+          "contender_spread_pct": 0.413,
+          "full_spread_pct": 39.365,
+          "flips": [
+            {
+              "config": "A_shrink_constant",
+              "IS_half_wins": 314,
+              "share": 0.68,
+              "mean_oos_mae": 0.03831,
+              "pct_vs_best": 0.0
+            },
+            {
+              "config": "L0_foil",
+              "IS_half_wins": 146,
+              "share": 0.316,
+              "mean_oos_mae": 0.03847,
+              "pct_vs_best": 0.413
+            },
+            {
+              "config": "R1_eb_shrink",
+              "IS_half_wins": 2,
+              "share": 0.004,
+              "mean_oos_mae": 0.03863,
+              "pct_vs_best": 0.844
+            }
+          ]
+        }
+      },
+      "dsr": {
+        "available": true,
+        "eligible": {
+          "arm": "R1_eb_shrink",
+          "n_trials": 3,
+          "dsr": 0.21796198997560762,
+          "observed_sr": -0.1360396986280648,
+          "sr0": 0.11476725318471166,
+          "passes": false
+        },
+        "whole_field": {
+          "arm": "A_shrink_constant",
+          "n_trials": 7,
+          "dsr": 0.056149765712691015,
+          "observed_sr": 0.17926078786788952,
+          "sr0": 0.6687472085279139,
+          "passes": false
+        },
+        "binds": "eligible"
+      },
+      "anchors": {
+        "required_anchors_present": true,
+        "missing_anchors": [],
+        "best_arm": "R1_eb_shrink",
+        "foil": "L0_foil",
+        "A_degenerate_mean__vs_best": {
+          "available": true,
+          "challenger": "A_degenerate_mean",
+          "defender": "R1_eb_shrink",
+          "mean_gap": 0.004503646036808071,
+          "challenger_fold_wins": 1,
+          "n_folds": 11,
+          "p_challenger_better": 0.9997941769217635,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_degenerate_mean__mae": 0.043138423513522754,
+        "A_shrink_full__vs_best": {
+          "available": true,
+          "challenger": "A_shrink_full",
+          "defender": "R1_eb_shrink",
+          "mean_gap": 0.014757798611357226,
+          "challenger_fold_wins": 1,
+          "n_folds": 11,
+          "p_challenger_better": 0.9266178420394909,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_shrink_full__mae": 0.05339257608807191,
+        "A_target_identity__max_abs_gap": 0.0,
+        "A_target_identity__is_a_noop": true,
+        "A_target_identity__mae": 0.0384696832229506,
+        "A_shrink_constant__vs_R1_eb_shrink": {
+          "available": true,
+          "challenger": "A_shrink_constant",
+          "defender": "R1_eb_shrink",
+          "mean_gap": -0.00032342555782412745,
+          "challenger_fold_wins": 7,
+          "n_folds": 11,
+          "p_challenger_better": 0.00975928476859809,
+          "violated": true,
+          "alpha": 0.1
+        },
+        "A_shrink_constant__mae": 0.03831135191889055,
+        "inert_anchors": [],
+        "refuted_arms": {
+          "R1_eb_shrink": "`A_shrink_constant` (CONSTANT shrink \u2014 identical average compression, no per-player content) systematically beat `R1_eb_shrink` (7/11 folds, p=0.010). The gain is a global rescale of the target, which the regression's own slope already absorbs \u2014 not a per-player de-noising. The stated mechanism is refuted."
+        },
+        "oracle_floor_ok": true,
+        "low_propensity_tercile_lift_pct": -1.8146631826394402,
+        "low_propensity_tercile_lift_pct_all_rows": -1.8146631826394402,
+        "shrinkage_inversion_probe_full_shrink_lift_pct": -38.79130685489625,
+        "per_player_content_pct": -0.8407284145016699
+      },
+      "stratified": [
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.04456198151520211,
+          "pct_lift_vs_foil": -13.30588911649686
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.04325094063977439,
+          "pct_lift_vs_foil": -18.389806602356188
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.04319256990079748,
+          "pct_lift_vs_foil": -10.636059607844278
+        },
+        {
+          "arm": "A_shrink_constant",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.0390200339518036,
+          "pct_lift_vs_foil": 0.7853894747312924
+        },
+        {
+          "arm": "A_shrink_constant",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.03715946250441169,
+          "pct_lift_vs_foil": -1.715743386610302
+        },
+        {
+          "arm": "A_shrink_constant",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.03878371383062037,
+          "pct_lift_vs_foil": 0.6570508531175677
+        },
+        {
+          "arm": "A_shrink_full",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.05960055525320783,
+          "pct_lift_vs_foil": -51.543842423116295
+        },
+        {
+          "arm": "A_shrink_full",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.05556214288171719,
+          "pct_lift_vs_foil": -52.08897778583186
+        },
+        {
+          "arm": "A_shrink_full",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.049316414694736986,
+          "pct_lift_vs_foil": -26.322045859821593
+        },
+        {
+          "arm": "A_target_identity",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.039328919143280495,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "A_target_identity",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.03653265587724477,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "A_target_identity",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.03904022798163272,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.039328919143280495,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.03653265587724477,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.03904022798163272,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "R1_eb_shrink",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.039348542795304746,
+          "pct_lift_vs_foil": -0.04989624035369261
+        },
+        {
+          "arm": "R1_eb_shrink",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.037509615423918924,
+          "pct_lift_vs_foil": -2.6742089322957847
+        },
+        {
+          "arm": "R1_eb_shrink",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.039175195455359954,
+          "pct_lift_vs_foil": -0.3457138462171282
+        },
+        {
+          "arm": "R2_eb_shrink_2k",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.03974261324095272,
+          "pct_lift_vs_foil": -1.0518827028148827
+        },
+        {
+          "arm": "R2_eb_shrink_2k",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.03841873119700007,
+          "pct_lift_vs_foil": -5.162710661094019
+        },
+        {
+          "arm": "R2_eb_shrink_2k",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.03957485248400656,
+          "pct_lift_vs_foil": -1.369419519336211
+        },
+        {
+          "arm": "R3_shrink_to_level",
+          "stratum": 0,
+          "n": 162,
+          "mae": 0.04004260655910365,
+          "pct_lift_vs_foil": -1.8146631826394402
+        },
+        {
+          "arm": "R3_shrink_to_level",
+          "stratum": 1,
+          "n": 570,
+          "mae": 0.03763293284104849,
+          "pct_lift_vs_foil": -3.011762866353927
+        },
+        {
+          "arm": "R3_shrink_to_level",
+          "stratum": 2,
+          "n": 962,
+          "mae": 0.03923235256511075,
+          "pct_lift_vs_foil": -0.49211952237678663
+        }
+      ],
+      "propensity_tercile_composition": [
+        {
+          "stratum": 0,
+          "n_rows": 162,
+          "pct_rows_the_mechanism_can_move": 100.0,
+          "Double-A": 47.5,
+          "High-A": 11.7,
+          "Single-A": 4.3,
+          "Triple-A": 36.4
+        },
+        {
+          "stratum": 1,
+          "n_rows": 570,
+          "pct_rows_the_mechanism_can_move": 100.0,
+          "Double-A": 37.9,
+          "High-A": 25.8,
+          "Single-A": 10.0,
+          "Triple-A": 26.3
+        },
+        {
+          "stratum": 2,
+          "n_rows": 962,
+          "pct_rows_the_mechanism_can_move": 100.0,
+          "Double-A": 26.3,
+          "High-A": 27.5,
+          "Single-A": 25.2,
+          "Triple-A": 21.0
+        }
+      ],
+      "reasons": [
+        "\u26d4 MECHANISM REFUTED (scoped to `R1_eb_shrink`) \u2014 `A_shrink_constant` (CONSTANT shrink \u2014 identical average compression, no per-player content) systematically beat `R1_eb_shrink` (7/11 folds, p=0.010). The gain is a global rescale of the target, which the regression's own slope already absorbs \u2014 not a per-player de-noising. The stated mechanism is refuted. That arm is disqualified from selection; other arms on this metric are untouched.",
+        "\ud83d\udfe1 no arm clears: best eligible `R3_shrink_to_level` MAE 0.03881 vs foil 0.03847 (-0.90%, fold win rate 45%; the pre-registered bar is a strict OOS improvement in \u226560% of folds). DROPPED."
+      ]
+    }
+  }
+}

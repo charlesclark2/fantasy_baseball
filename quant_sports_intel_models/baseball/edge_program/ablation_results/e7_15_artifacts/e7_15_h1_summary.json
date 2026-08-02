@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-02T03:17:12.490480+00:00",
+  "generated_at": "2026-08-02T03:33:57.857044+00:00",
   "player_type": "batter",
   "foil": "the SHIPPED E7.12-slice-1 configuration per metric (learner + weight_col held fixed)",
   "shipped_context": {
@@ -1066,31 +1066,12 @@
       "anchors": {
         "required_anchors_present": true,
         "missing_anchors": [],
-        "identity_max_abs_gap": 0.0,
-        "identity_is_a_noop": true,
-        "meanshift_vs_best_ladder": {
-          "available": true,
-          "challenger": "A_ladder_meanshift",
-          "defender": "L3_direct_to_ref",
-          "mean_gap": -4.543950616913315e-06,
-          "challenger_fold_wins": 7,
-          "n_folds": 11,
-          "p_challenger_better": 0.32218690399219424,
-          "violated": false,
-          "alpha": 0.1
-        },
-        "shuffled_vs_best_ladder": {
-          "available": true,
-          "challenger": "A_ladder_shuffled",
-          "defender": "L3_direct_to_ref",
-          "mean_gap": 0.00016059356978557376,
-          "challenger_fold_wins": 5,
-          "n_folds": 11,
-          "p_challenger_better": 0.7582015631669896,
-          "violated": false,
-          "alpha": 0.1
-        },
-        "degenerate_vs_best_ladder": {
+        "best_arm": "L3_direct_to_ref",
+        "foil": "L0_foil",
+        "A_ladder_identity__max_abs_gap": 0.0,
+        "A_ladder_identity__is_a_noop": true,
+        "A_ladder_identity__mae": 0.02879051625068698,
+        "A_degenerate_mean__vs_best": {
           "available": true,
           "challenger": "A_degenerate_mean",
           "defender": "L3_direct_to_ref",
@@ -1101,13 +1082,35 @@
           "violated": false,
           "alpha": 0.1
         },
+        "A_degenerate_mean__mae": 0.029034853034293196,
+        "A_ladder_meanshift__vs_best": {
+          "available": true,
+          "challenger": "A_ladder_meanshift",
+          "defender": "L3_direct_to_ref",
+          "mean_gap": -4.543950616913315e-06,
+          "challenger_fold_wins": 7,
+          "n_folds": 11,
+          "p_challenger_better": 0.32218690399219424,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_ladder_meanshift__mae": 0.028797061973303006,
+        "A_ladder_shuffled__vs_best": {
+          "available": true,
+          "challenger": "A_ladder_shuffled",
+          "defender": "L3_direct_to_ref",
+          "mean_gap": 0.00016059356978557376,
+          "challenger_fold_wins": 5,
+          "n_folds": 11,
+          "p_challenger_better": 0.7582015631669896,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_ladder_shuffled__mae": 0.0289621994937055,
+        "oracle_floor_ok": true,
         "best_ladder": "L3_direct_to_ref",
         "best_ladder_mae": 0.028801605923919924,
         "foil_mae": 0.02879051625068698,
-        "meanshift_mae": 0.028797061973303006,
-        "shuffled_mae": 0.0289621994937055,
-        "degenerate_mae": 0.029034853034293196,
-        "oracle_floor_ok": true,
         "low_propensity_tercile_lift_pct": 0.47207236686897125,
         "low_propensity_tercile_lift_pct_all_rows": 0.31690148715416283
       },
@@ -1539,7 +1542,7 @@
         {
           "stratum": 0,
           "n_rows": 162,
-          "pct_rows_the_ladder_can_move": 48.1,
+          "pct_rows_the_mechanism_can_move": 48.1,
           "Double-A": 47.5,
           "High-A": 11.7,
           "Single-A": 4.3,
@@ -1548,7 +1551,7 @@
         {
           "stratum": 1,
           "n_rows": 570,
-          "pct_rows_the_ladder_can_move": 56.9,
+          "pct_rows_the_mechanism_can_move": 56.9,
           "Double-A": 37.9,
           "High-A": 25.8,
           "Single-A": 10.0,
@@ -1557,7 +1560,7 @@
         {
           "stratum": 2,
           "n_rows": 962,
-          "pct_rows_the_ladder_can_move": 61.2,
+          "pct_rows_the_mechanism_can_move": 61.2,
           "Double-A": 26.3,
           "High-A": 27.5,
           "Single-A": 25.2,
@@ -3524,31 +3527,12 @@
       "anchors": {
         "required_anchors_present": true,
         "missing_anchors": [],
-        "identity_max_abs_gap": 0.0,
-        "identity_is_a_noop": true,
-        "meanshift_vs_best_ladder": {
-          "available": true,
-          "challenger": "A_ladder_meanshift",
-          "defender": "L3_direct_to_ref",
-          "mean_gap": -3.1622939583418105e-05,
-          "challenger_fold_wins": 5,
-          "n_folds": 11,
-          "p_challenger_better": 0.2223476518980932,
-          "violated": false,
-          "alpha": 0.1
-        },
-        "shuffled_vs_best_ladder": {
-          "available": true,
-          "challenger": "A_ladder_shuffled",
-          "defender": "L3_direct_to_ref",
-          "mean_gap": 0.006172832073771437,
-          "challenger_fold_wins": 0,
-          "n_folds": 11,
-          "p_challenger_better": 0.9996756429727006,
-          "violated": false,
-          "alpha": 0.1
-        },
-        "degenerate_vs_best_ladder": {
+        "best_arm": "L3_direct_to_ref",
+        "foil": "L0_foil",
+        "A_ladder_identity__max_abs_gap": 0.0,
+        "A_ladder_identity__is_a_noop": true,
+        "A_ladder_identity__mae": 0.038434578684981964,
+        "A_degenerate_mean__vs_best": {
           "available": true,
           "challenger": "A_degenerate_mean",
           "defender": "L3_direct_to_ref",
@@ -3559,13 +3543,35 @@
           "violated": false,
           "alpha": 0.1
         },
+        "A_degenerate_mean__mae": 0.04994876646914512,
+        "A_ladder_meanshift__vs_best": {
+          "available": true,
+          "challenger": "A_ladder_meanshift",
+          "defender": "L3_direct_to_ref",
+          "mean_gap": -3.1622939583418105e-05,
+          "challenger_fold_wins": 5,
+          "n_folds": 11,
+          "p_challenger_better": 0.2223476518980932,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_ladder_meanshift__mae": 0.038417045610583844,
+        "A_ladder_shuffled__vs_best": {
+          "available": true,
+          "challenger": "A_ladder_shuffled",
+          "defender": "L3_direct_to_ref",
+          "mean_gap": 0.006172832073771437,
+          "challenger_fold_wins": 0,
+          "n_folds": 11,
+          "p_challenger_better": 0.9996756429727006,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_ladder_shuffled__mae": 0.0446215006239387,
+        "oracle_floor_ok": true,
         "best_ladder": "L3_direct_to_ref",
         "best_ladder_mae": 0.03844866855016726,
         "foil_mae": 0.038434578684981964,
-        "meanshift_mae": 0.038417045610583844,
-        "shuffled_mae": 0.0446215006239387,
-        "degenerate_mae": 0.04994876646914512,
-        "oracle_floor_ok": true,
         "low_propensity_tercile_lift_pct": -1.181981430467571,
         "low_propensity_tercile_lift_pct_all_rows": -0.799991791047939
       },
@@ -3997,7 +4003,7 @@
         {
           "stratum": 0,
           "n_rows": 162,
-          "pct_rows_the_ladder_can_move": 48.1,
+          "pct_rows_the_mechanism_can_move": 48.1,
           "Double-A": 47.5,
           "High-A": 11.7,
           "Single-A": 4.3,
@@ -4006,7 +4012,7 @@
         {
           "stratum": 1,
           "n_rows": 570,
-          "pct_rows_the_ladder_can_move": 56.9,
+          "pct_rows_the_mechanism_can_move": 56.9,
           "Double-A": 37.9,
           "High-A": 25.8,
           "Single-A": 10.0,
@@ -4015,7 +4021,7 @@
         {
           "stratum": 2,
           "n_rows": 962,
-          "pct_rows_the_ladder_can_move": 61.2,
+          "pct_rows_the_mechanism_can_move": 61.2,
           "Double-A": 26.3,
           "High-A": 27.5,
           "Single-A": 25.2,
@@ -5989,31 +5995,12 @@
       "anchors": {
         "required_anchors_present": true,
         "missing_anchors": [],
-        "identity_max_abs_gap": 0.0,
-        "identity_is_a_noop": true,
-        "meanshift_vs_best_ladder": {
-          "available": true,
-          "challenger": "A_ladder_meanshift",
-          "defender": "L1p_chain_purged",
-          "mean_gap": 0.00012186420581193135,
-          "challenger_fold_wins": 5,
-          "n_folds": 11,
-          "p_challenger_better": 0.8723735654201463,
-          "violated": false,
-          "alpha": 0.1
-        },
-        "shuffled_vs_best_ladder": {
-          "available": true,
-          "challenger": "A_ladder_shuffled",
-          "defender": "L1p_chain_purged",
-          "mean_gap": 0.0017002159581495117,
-          "challenger_fold_wins": 0,
-          "n_folds": 11,
-          "p_challenger_better": 0.9998726519026071,
-          "violated": false,
-          "alpha": 0.1
-        },
-        "degenerate_vs_best_ladder": {
+        "best_arm": "L1p_chain_purged",
+        "foil": "L0_foil",
+        "A_ladder_identity__max_abs_gap": 0.0,
+        "A_ladder_identity__is_a_noop": true,
+        "A_ladder_identity__mae": 0.017957313776055105,
+        "A_degenerate_mean__vs_best": {
           "available": true,
           "challenger": "A_degenerate_mean",
           "defender": "L1p_chain_purged",
@@ -6024,13 +6011,35 @@
           "violated": false,
           "alpha": 0.1
         },
+        "A_degenerate_mean__mae": 0.020766733277752088,
+        "A_ladder_meanshift__vs_best": {
+          "available": true,
+          "challenger": "A_ladder_meanshift",
+          "defender": "L1p_chain_purged",
+          "mean_gap": 0.00012186420581193135,
+          "challenger_fold_wins": 5,
+          "n_folds": 11,
+          "p_challenger_better": 0.8723735654201463,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_ladder_meanshift__mae": 0.017986284691970663,
+        "A_ladder_shuffled__vs_best": {
+          "available": true,
+          "challenger": "A_ladder_shuffled",
+          "defender": "L1p_chain_purged",
+          "mean_gap": 0.0017002159581495117,
+          "challenger_fold_wins": 0,
+          "n_folds": 11,
+          "p_challenger_better": 0.9998726519026071,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_ladder_shuffled__mae": 0.019564636444308243,
+        "oracle_floor_ok": true,
         "best_ladder": "L1p_chain_purged",
         "best_ladder_mae": 0.017864420486158734,
         "foil_mae": 0.017957313776055105,
-        "meanshift_mae": 0.017986284691970663,
-        "shuffled_mae": 0.019564636444308243,
-        "degenerate_mae": 0.020766733277752088,
-        "oracle_floor_ok": true,
         "low_propensity_tercile_lift_pct": 0.04635129819605584,
         "low_propensity_tercile_lift_pct_all_rows": 0.07092374989463279
       },
@@ -6462,7 +6471,7 @@
         {
           "stratum": 0,
           "n_rows": 162,
-          "pct_rows_the_ladder_can_move": 48.1,
+          "pct_rows_the_mechanism_can_move": 48.1,
           "Double-A": 47.5,
           "High-A": 11.7,
           "Single-A": 4.3,
@@ -6471,7 +6480,7 @@
         {
           "stratum": 1,
           "n_rows": 570,
-          "pct_rows_the_ladder_can_move": 56.9,
+          "pct_rows_the_mechanism_can_move": 56.9,
           "Double-A": 37.9,
           "High-A": 25.8,
           "Single-A": 10.0,
@@ -6480,7 +6489,7 @@
         {
           "stratum": 2,
           "n_rows": 962,
-          "pct_rows_the_ladder_can_move": 61.2,
+          "pct_rows_the_mechanism_can_move": 61.2,
           "Double-A": 26.3,
           "High-A": 27.5,
           "Single-A": 25.2,
@@ -7480,7 +7489,7 @@
         }
       ],
       "reasons": [
-        "\u26d4 DEFLATION \u2014 PBO over the ELIGIBLE set is 0.514 \u2265 0.2. \u2b50 READ IT AS A **TIE**, NOT AS OVERFITTING: the contender spread is 0.355% and the in-sample halves split across arms that are a fraction of a percent apart (L1p_chain_purged 45% (+0.000%), L4_ladder_delta 27% (+0.476%), L1_chain_ols 13% (+0.362%)). Which tied arm wins is noise \u2014 which is exactly what a trustworthy learner-null looks like (E2.1-r). The honest record is 'no ladder formulation robustly beats the shipped configuration', so the shipped configuration is now PROVEN rather than assumed. Either way it does not ship."
+        "\u26d4 DEFLATION \u2014 PBO over the ELIGIBLE set is 0.514 \u2265 0.2. \u2b50 READ IT AS A **TIE**, NOT AS OVERFITTING: the contender spread is 0.355% and the in-sample halves split across arms a fraction of a percent apart (L1p_chain_purged 45% (+0.000%), L4_ladder_delta 27% (+0.476%), L1_chain_ols 13% (+0.362%)). Which tied arm wins is noise \u2014 exactly what a trustworthy learner-null looks like (E2.1-r). The honest record is 'no candidate robustly beats the shipped configuration', so the shipped configuration is now PROVEN rather than assumed. Either way it does not ship."
       ]
     },
     "iso": {
@@ -8454,31 +8463,12 @@
       "anchors": {
         "required_anchors_present": true,
         "missing_anchors": [],
-        "identity_max_abs_gap": 0.0,
-        "identity_is_a_noop": true,
-        "meanshift_vs_best_ladder": {
-          "available": true,
-          "challenger": "A_ladder_meanshift",
-          "defender": "L3_direct_to_ref",
-          "mean_gap": 2.8373690978543735e-05,
-          "challenger_fold_wins": 3,
-          "n_folds": 11,
-          "p_challenger_better": 0.9024397623524839,
-          "violated": false,
-          "alpha": 0.1
-        },
-        "shuffled_vs_best_ladder": {
-          "available": true,
-          "challenger": "A_ladder_shuffled",
-          "defender": "L3_direct_to_ref",
-          "mean_gap": 0.0026920265624759926,
-          "challenger_fold_wins": 1,
-          "n_folds": 11,
-          "p_challenger_better": 0.9963466150008367,
-          "violated": false,
-          "alpha": 0.1
-        },
-        "degenerate_vs_best_ladder": {
+        "best_arm": "L3_direct_to_ref",
+        "foil": "L0_foil",
+        "A_ladder_identity__max_abs_gap": 0.0,
+        "A_ladder_identity__is_a_noop": true,
+        "A_ladder_identity__mae": 0.0384696832229506,
+        "A_degenerate_mean__vs_best": {
           "available": true,
           "challenger": "A_degenerate_mean",
           "defender": "L3_direct_to_ref",
@@ -8489,13 +8479,35 @@
           "violated": false,
           "alpha": 0.1
         },
+        "A_degenerate_mean__mae": 0.043138423513522754,
+        "A_ladder_meanshift__vs_best": {
+          "available": true,
+          "challenger": "A_ladder_meanshift",
+          "defender": "L3_direct_to_ref",
+          "mean_gap": 2.8373690978543735e-05,
+          "challenger_fold_wins": 3,
+          "n_folds": 11,
+          "p_challenger_better": 0.9024397623524839,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_ladder_meanshift__mae": 0.03847819488916396,
+        "A_ladder_shuffled__vs_best": {
+          "available": true,
+          "challenger": "A_ladder_shuffled",
+          "defender": "L3_direct_to_ref",
+          "mean_gap": 0.0026920265624759926,
+          "challenger_fold_wins": 1,
+          "n_folds": 11,
+          "p_challenger_better": 0.9963466150008367,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_ladder_shuffled__mae": 0.04114184776066141,
+        "oracle_floor_ok": true,
         "best_ladder": "L3_direct_to_ref",
         "best_ladder_mae": 0.038449821198185415,
         "foil_mae": 0.0384696832229506,
-        "meanshift_mae": 0.03847819488916396,
-        "shuffled_mae": 0.04114184776066141,
-        "degenerate_mae": 0.043138423513522754,
-        "oracle_floor_ok": true,
         "low_propensity_tercile_lift_pct": 0.4232116965163527,
         "low_propensity_tercile_lift_pct_all_rows": 0.27242050636534476
       },
@@ -8927,7 +8939,7 @@
         {
           "stratum": 0,
           "n_rows": 162,
-          "pct_rows_the_ladder_can_move": 48.1,
+          "pct_rows_the_mechanism_can_move": 48.1,
           "Double-A": 47.5,
           "High-A": 11.7,
           "Single-A": 4.3,
@@ -8936,7 +8948,7 @@
         {
           "stratum": 1,
           "n_rows": 570,
-          "pct_rows_the_ladder_can_move": 56.9,
+          "pct_rows_the_mechanism_can_move": 56.9,
           "Double-A": 37.9,
           "High-A": 25.8,
           "Single-A": 10.0,
@@ -8945,7 +8957,7 @@
         {
           "stratum": 2,
           "n_rows": 962,
-          "pct_rows_the_ladder_can_move": 61.2,
+          "pct_rows_the_mechanism_can_move": 61.2,
           "Double-A": 26.3,
           "High-A": 27.5,
           "Single-A": 25.2,
@@ -9945,7 +9957,7 @@
         }
       ],
       "reasons": [
-        "\u26d4 DEFLATION \u2014 PBO over the ELIGIBLE set is 0.700 \u2265 0.2. \u2b50 READ IT AS A **TIE**, NOT AS OVERFITTING: the contender spread is 0.061% and the in-sample halves split across arms that are a fraction of a percent apart (L3_direct_to_ref 51% (+0.000%), L2_chain_paweighted 22% (+0.099%), L0_foil 11% (+0.052%)). Which tied arm wins is noise \u2014 which is exactly what a trustworthy learner-null looks like (E2.1-r). The honest record is 'no ladder formulation robustly beats the shipped configuration', so the shipped configuration is now PROVEN rather than assumed. Either way it does not ship."
+        "\u26d4 DEFLATION \u2014 PBO over the ELIGIBLE set is 0.700 \u2265 0.2. \u2b50 READ IT AS A **TIE**, NOT AS OVERFITTING: the contender spread is 0.061% and the in-sample halves split across arms a fraction of a percent apart (L3_direct_to_ref 51% (+0.000%), L2_chain_paweighted 22% (+0.099%), L0_foil 11% (+0.052%)). Which tied arm wins is noise \u2014 exactly what a trustworthy learner-null looks like (E2.1-r). The honest record is 'no candidate robustly beats the shipped configuration', so the shipped configuration is now PROVEN rather than assumed. Either way it does not ship."
       ]
     }
   },

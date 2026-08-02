@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-02T03:17:38.553168+00:00",
+  "generated_at": "2026-08-02T03:34:21.572233+00:00",
   "player_type": "pitcher",
   "foil": "the SHIPPED E7.12-slice-1 configuration per metric (learner + weight_col held fixed)",
   "shipped_context": {
@@ -100,7 +100,7 @@
       {
         "metric": "xwoba_against",
         "arm": null,
-        "verdict_reason": "no active arm (inert mechanism)"
+        "kind": "no active arm \u2014 the mechanism cannot act on this metric"
       }
     ]
   },
@@ -1062,31 +1062,12 @@
       "anchors": {
         "required_anchors_present": true,
         "missing_anchors": [],
-        "identity_max_abs_gap": 0.0,
-        "identity_is_a_noop": true,
-        "meanshift_vs_best_ladder": {
-          "available": true,
-          "challenger": "A_ladder_meanshift",
-          "defender": "L3_direct_to_ref",
-          "mean_gap": 0.0001300918435804865,
-          "challenger_fold_wins": 3,
-          "n_folds": 11,
-          "p_challenger_better": 0.8925436883961071,
-          "violated": false,
-          "alpha": 0.1
-        },
-        "shuffled_vs_best_ladder": {
-          "available": true,
-          "challenger": "A_ladder_shuffled",
-          "defender": "L3_direct_to_ref",
-          "mean_gap": 0.0005169704600748742,
-          "challenger_fold_wins": 2,
-          "n_folds": 11,
-          "p_challenger_better": 0.7690088429908082,
-          "violated": false,
-          "alpha": 0.1
-        },
-        "degenerate_vs_best_ladder": {
+        "best_arm": "L3_direct_to_ref",
+        "foil": "L0_foil",
+        "A_ladder_identity__max_abs_gap": 0.0,
+        "A_ladder_identity__is_a_noop": true,
+        "A_ladder_identity__mae": 0.035620828857329465,
+        "A_degenerate_mean__vs_best": {
           "available": true,
           "challenger": "A_degenerate_mean",
           "defender": "L3_direct_to_ref",
@@ -1097,13 +1078,35 @@
           "violated": false,
           "alpha": 0.1
         },
+        "A_degenerate_mean__mae": 0.037359439524967314,
+        "A_ladder_meanshift__vs_best": {
+          "available": true,
+          "challenger": "A_ladder_meanshift",
+          "defender": "L3_direct_to_ref",
+          "mean_gap": 0.0001300918435804865,
+          "challenger_fold_wins": 3,
+          "n_folds": 11,
+          "p_challenger_better": 0.8925436883961071,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_ladder_meanshift__mae": 0.03570947767987262,
+        "A_ladder_shuffled__vs_best": {
+          "available": true,
+          "challenger": "A_ladder_shuffled",
+          "defender": "L3_direct_to_ref",
+          "mean_gap": 0.0005169704600748742,
+          "challenger_fold_wins": 2,
+          "n_folds": 11,
+          "p_challenger_better": 0.7690088429908082,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_ladder_shuffled__mae": 0.03609635629636701,
+        "oracle_floor_ok": true,
         "best_ladder": "L3_direct_to_ref",
         "best_ladder_mae": 0.03557938583629214,
         "foil_mae": 0.035620828857329465,
-        "meanshift_mae": 0.03570947767987262,
-        "shuffled_mae": 0.03609635629636701,
-        "degenerate_mae": 0.037359439524967314,
-        "oracle_floor_ok": true,
         "low_propensity_tercile_lift_pct": 0.654792853122779,
         "low_propensity_tercile_lift_pct_all_rows": 0.3797895380929476
       },
@@ -1535,7 +1538,7 @@
         {
           "stratum": 0,
           "n_rows": 394,
-          "pct_rows_the_ladder_can_move": 44.7,
+          "pct_rows_the_mechanism_can_move": 44.7,
           "Double-A": 32.2,
           "High-A": 17.0,
           "Single-A": 10.4,
@@ -1544,7 +1547,7 @@
         {
           "stratum": 1,
           "n_rows": 725,
-          "pct_rows_the_ladder_can_move": 62.1,
+          "pct_rows_the_mechanism_can_move": 62.1,
           "Double-A": 37.0,
           "High-A": 29.1,
           "Single-A": 14.2,
@@ -1553,7 +1556,7 @@
         {
           "stratum": 2,
           "n_rows": 855,
-          "pct_rows_the_ladder_can_move": 64.5,
+          "pct_rows_the_mechanism_can_move": 64.5,
           "Double-A": 29.6,
           "High-A": 28.7,
           "Single-A": 24.8,
@@ -2553,7 +2556,7 @@
         }
       ],
       "reasons": [
-        "\u26d4 DEFLATION \u2014 PBO over the ELIGIBLE set is 0.671 \u2265 0.2. \u2b50 READ IT AS A **TIE**, NOT AS OVERFITTING: the contender spread is 0.114% and the in-sample halves split across arms that are a fraction of a percent apart (L3_direct_to_ref 66% (+0.000%), L1_chain_ols 22% (+0.078%), L2_chain_paweighted 6% (+0.114%)). Which tied arm wins is noise \u2014 which is exactly what a trustworthy learner-null looks like (E2.1-r). The honest record is 'no ladder formulation robustly beats the shipped configuration', so the shipped configuration is now PROVEN rather than assumed. Either way it does not ship."
+        "\u26d4 DEFLATION \u2014 PBO over the ELIGIBLE set is 0.671 \u2265 0.2. \u2b50 READ IT AS A **TIE**, NOT AS OVERFITTING: the contender spread is 0.114% and the in-sample halves split across arms a fraction of a percent apart (L3_direct_to_ref 66% (+0.000%), L1_chain_ols 22% (+0.078%), L2_chain_paweighted 6% (+0.114%)). Which tied arm wins is noise \u2014 exactly what a trustworthy learner-null looks like (E2.1-r). The honest record is 'no candidate robustly beats the shipped configuration', so the shipped configuration is now PROVEN rather than assumed. Either way it does not ship."
       ]
     },
     "bb_pct": {
@@ -3513,31 +3516,12 @@
       "anchors": {
         "required_anchors_present": true,
         "missing_anchors": [],
-        "identity_max_abs_gap": 0.0,
-        "identity_is_a_noop": true,
-        "meanshift_vs_best_ladder": {
-          "available": true,
-          "challenger": "A_ladder_meanshift",
-          "defender": "L2_chain_paweighted",
-          "mean_gap": 4.1998693430067944e-05,
-          "challenger_fold_wins": 6,
-          "n_folds": 11,
-          "p_challenger_better": 0.7524847166438743,
-          "violated": false,
-          "alpha": 0.1
-        },
-        "shuffled_vs_best_ladder": {
-          "available": true,
-          "challenger": "A_ladder_shuffled",
-          "defender": "L2_chain_paweighted",
-          "mean_gap": 0.0014448525996330992,
-          "challenger_fold_wins": 0,
-          "n_folds": 11,
-          "p_challenger_better": 0.9999175483500784,
-          "violated": false,
-          "alpha": 0.1
-        },
-        "degenerate_vs_best_ladder": {
+        "best_arm": "L2_chain_paweighted",
+        "foil": "L0_foil",
+        "A_ladder_identity__max_abs_gap": 0.0,
+        "A_ladder_identity__is_a_noop": true,
+        "A_ladder_identity__mae": 0.01907110163146404,
+        "A_degenerate_mean__vs_best": {
           "available": true,
           "challenger": "A_degenerate_mean",
           "defender": "L2_chain_paweighted",
@@ -3548,13 +3532,35 @@
           "violated": false,
           "alpha": 0.1
         },
+        "A_degenerate_mean__mae": 0.02124786782199983,
+        "A_ladder_meanshift__vs_best": {
+          "available": true,
+          "challenger": "A_ladder_meanshift",
+          "defender": "L2_chain_paweighted",
+          "mean_gap": 4.1998693430067944e-05,
+          "challenger_fold_wins": 6,
+          "n_folds": 11,
+          "p_challenger_better": 0.7524847166438743,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_ladder_meanshift__mae": 0.019056253964515005,
+        "A_ladder_shuffled__vs_best": {
+          "available": true,
+          "challenger": "A_ladder_shuffled",
+          "defender": "L2_chain_paweighted",
+          "mean_gap": 0.0014448525996330992,
+          "challenger_fold_wins": 0,
+          "n_folds": 11,
+          "p_challenger_better": 0.9999175483500784,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_ladder_shuffled__mae": 0.020459107870718033,
+        "oracle_floor_ok": true,
         "best_ladder": "L2_chain_paweighted",
         "best_ladder_mae": 0.019014255271084936,
         "foil_mae": 0.01907110163146404,
-        "meanshift_mae": 0.019056253964515005,
-        "shuffled_mae": 0.020459107870718033,
-        "degenerate_mae": 0.02124786782199983,
-        "oracle_floor_ok": true,
         "low_propensity_tercile_lift_pct": 0.4001231033600124,
         "low_propensity_tercile_lift_pct_all_rows": 0.31369202463815793
       },
@@ -3986,7 +3992,7 @@
         {
           "stratum": 0,
           "n_rows": 394,
-          "pct_rows_the_ladder_can_move": 44.7,
+          "pct_rows_the_mechanism_can_move": 44.7,
           "Double-A": 32.2,
           "High-A": 17.0,
           "Single-A": 10.4,
@@ -3995,7 +4001,7 @@
         {
           "stratum": 1,
           "n_rows": 725,
-          "pct_rows_the_ladder_can_move": 62.1,
+          "pct_rows_the_mechanism_can_move": 62.1,
           "Double-A": 37.0,
           "High-A": 29.1,
           "Single-A": 14.2,
@@ -4004,7 +4010,7 @@
         {
           "stratum": 2,
           "n_rows": 855,
-          "pct_rows_the_ladder_can_move": 64.5,
+          "pct_rows_the_mechanism_can_move": 64.5,
           "Double-A": 29.6,
           "High-A": 28.7,
           "Single-A": 24.8,
@@ -5971,31 +5977,12 @@
       "anchors": {
         "required_anchors_present": true,
         "missing_anchors": [],
-        "identity_max_abs_gap": 0.0,
-        "identity_is_a_noop": true,
-        "meanshift_vs_best_ladder": {
-          "available": true,
-          "challenger": "A_ladder_meanshift",
-          "defender": "L3_direct_to_ref",
-          "mean_gap": -3.3637727321343492e-06,
-          "challenger_fold_wins": 4,
-          "n_folds": 11,
-          "p_challenger_better": 0.17805160628719546,
-          "violated": false,
-          "alpha": 0.1
-        },
-        "shuffled_vs_best_ladder": {
-          "available": true,
-          "challenger": "A_ladder_shuffled",
-          "defender": "L3_direct_to_ref",
-          "mean_gap": 5.872569743837063e-05,
-          "challenger_fold_wins": 1,
-          "n_folds": 11,
-          "p_challenger_better": 0.9857956416171907,
-          "violated": false,
-          "alpha": 0.1
-        },
-        "degenerate_vs_best_ladder": {
+        "best_arm": "L3_direct_to_ref",
+        "foil": "L0_foil",
+        "A_ladder_identity__max_abs_gap": 0.0,
+        "A_ladder_identity__is_a_noop": true,
+        "A_ladder_identity__mae": 0.009774367403539465,
+        "A_degenerate_mean__vs_best": {
           "available": true,
           "challenger": "A_degenerate_mean",
           "defender": "L3_direct_to_ref",
@@ -6006,13 +5993,35 @@
           "violated": false,
           "alpha": 0.1
         },
+        "A_degenerate_mean__mae": 0.009921280039840831,
+        "A_ladder_meanshift__vs_best": {
+          "available": true,
+          "challenger": "A_ladder_meanshift",
+          "defender": "L3_direct_to_ref",
+          "mean_gap": -3.3637727321343492e-06,
+          "challenger_fold_wins": 4,
+          "n_folds": 11,
+          "p_challenger_better": 0.17805160628719546,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_ladder_meanshift__mae": 0.009760836805405721,
+        "A_ladder_shuffled__vs_best": {
+          "available": true,
+          "challenger": "A_ladder_shuffled",
+          "defender": "L3_direct_to_ref",
+          "mean_gap": 5.872569743837063e-05,
+          "challenger_fold_wins": 1,
+          "n_folds": 11,
+          "p_challenger_better": 0.9857956416171907,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_ladder_shuffled__mae": 0.009822926275576228,
+        "oracle_floor_ok": true,
         "best_ladder": "L3_direct_to_ref",
         "best_ladder_mae": 0.009764200578137858,
         "foil_mae": 0.009774367403539465,
-        "meanshift_mae": 0.009760836805405721,
-        "shuffled_mae": 0.009822926275576228,
-        "degenerate_mae": 0.009921280039840831,
-        "oracle_floor_ok": true,
         "low_propensity_tercile_lift_pct": 0.4602456942569708,
         "low_propensity_tercile_lift_pct_all_rows": 0.31963016635299674
       },
@@ -6444,7 +6453,7 @@
         {
           "stratum": 0,
           "n_rows": 394,
-          "pct_rows_the_ladder_can_move": 44.7,
+          "pct_rows_the_mechanism_can_move": 44.7,
           "Double-A": 32.2,
           "High-A": 17.0,
           "Single-A": 10.4,
@@ -6453,7 +6462,7 @@
         {
           "stratum": 1,
           "n_rows": 725,
-          "pct_rows_the_ladder_can_move": 62.1,
+          "pct_rows_the_mechanism_can_move": 62.1,
           "Double-A": 37.0,
           "High-A": 29.1,
           "Single-A": 14.2,
@@ -6462,7 +6471,7 @@
         {
           "stratum": 2,
           "n_rows": 855,
-          "pct_rows_the_ladder_can_move": 64.5,
+          "pct_rows_the_mechanism_can_move": 64.5,
           "Double-A": 29.6,
           "High-A": 28.7,
           "Single-A": 24.8,
@@ -7462,7 +7471,7 @@
         }
       ],
       "reasons": [
-        "\u26d4 DEFLATION \u2014 DSR over the eligible trial set is 0.602 < 0.95 (n_trials=5). State the shortfall in the unit that GROWS \u2014 folds and rungs, not p-decimals \u2014 before recording this as an absence (NF-D15 g\u2033)."
+        "\u26d4 DEFLATION \u2014 DSR over the eligible trial set is 0.602 < 0.95 (n_trials=5). State the shortfall in the unit that GROWS \u2014 folds and seasons, not p-decimals \u2014 before recording this as an absence (NF-D15 g\u2033)."
       ]
     },
     "gb_pct": {
@@ -8436,31 +8445,12 @@
       "anchors": {
         "required_anchors_present": true,
         "missing_anchors": [],
-        "identity_max_abs_gap": 0.0,
-        "identity_is_a_noop": true,
-        "meanshift_vs_best_ladder": {
-          "available": true,
-          "challenger": "A_ladder_meanshift",
-          "defender": "L3_direct_to_ref",
-          "mean_gap": 0.00013119996574596844,
-          "challenger_fold_wins": 5,
-          "n_folds": 11,
-          "p_challenger_better": 0.8221923435110334,
-          "violated": false,
-          "alpha": 0.1
-        },
-        "shuffled_vs_best_ladder": {
-          "available": true,
-          "challenger": "A_ladder_shuffled",
-          "defender": "L3_direct_to_ref",
-          "mean_gap": 0.004486844922056448,
-          "challenger_fold_wins": 0,
-          "n_folds": 11,
-          "p_challenger_better": 0.9999757405127295,
-          "violated": false,
-          "alpha": 0.1
-        },
-        "degenerate_vs_best_ladder": {
+        "best_arm": "L3_direct_to_ref",
+        "foil": "L0_foil",
+        "A_ladder_identity__max_abs_gap": 0.0,
+        "A_ladder_identity__is_a_noop": true,
+        "A_ladder_identity__mae": 0.04783505574164752,
+        "A_degenerate_mean__vs_best": {
           "available": true,
           "challenger": "A_degenerate_mean",
           "defender": "L3_direct_to_ref",
@@ -8471,13 +8461,35 @@
           "violated": false,
           "alpha": 0.1
         },
+        "A_degenerate_mean__mae": 0.05731237220048184,
+        "A_ladder_meanshift__vs_best": {
+          "available": true,
+          "challenger": "A_ladder_meanshift",
+          "defender": "L3_direct_to_ref",
+          "mean_gap": 0.00013119996574596844,
+          "challenger_fold_wins": 5,
+          "n_folds": 11,
+          "p_challenger_better": 0.8221923435110334,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_ladder_meanshift__mae": 0.04784752842353021,
+        "A_ladder_shuffled__vs_best": {
+          "available": true,
+          "challenger": "A_ladder_shuffled",
+          "defender": "L3_direct_to_ref",
+          "mean_gap": 0.004486844922056448,
+          "challenger_fold_wins": 0,
+          "n_folds": 11,
+          "p_challenger_better": 0.9999757405127295,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_ladder_shuffled__mae": 0.052203173379840685,
+        "oracle_floor_ok": true,
         "best_ladder": "L3_direct_to_ref",
         "best_ladder_mae": 0.04771632845778424,
         "foil_mae": 0.04783505574164752,
-        "meanshift_mae": 0.04784752842353021,
-        "shuffled_mae": 0.052203173379840685,
-        "degenerate_mae": 0.05731237220048184,
-        "oracle_floor_ok": true,
         "low_propensity_tercile_lift_pct": 0.8563193208594161,
         "low_propensity_tercile_lift_pct_all_rows": 0.4674397682764499
       },
@@ -8909,7 +8921,7 @@
         {
           "stratum": 0,
           "n_rows": 394,
-          "pct_rows_the_ladder_can_move": 44.7,
+          "pct_rows_the_mechanism_can_move": 44.7,
           "Double-A": 32.2,
           "High-A": 17.0,
           "Single-A": 10.4,
@@ -8918,7 +8930,7 @@
         {
           "stratum": 1,
           "n_rows": 725,
-          "pct_rows_the_ladder_can_move": 62.1,
+          "pct_rows_the_mechanism_can_move": 62.1,
           "Double-A": 37.0,
           "High-A": 29.1,
           "Single-A": 14.2,
@@ -8927,7 +8939,7 @@
         {
           "stratum": 2,
           "n_rows": 855,
-          "pct_rows_the_ladder_can_move": 64.5,
+          "pct_rows_the_mechanism_can_move": 64.5,
           "Double-A": 29.6,
           "High-A": 28.7,
           "Single-A": 24.8,
@@ -10742,9 +10754,24 @@
       "anchors": {
         "required_anchors_present": true,
         "missing_anchors": [],
-        "identity_max_abs_gap": 0.0,
-        "identity_is_a_noop": true,
-        "meanshift_vs_best_ladder": {
+        "best_arm": "L0_foil",
+        "foil": "L0_foil",
+        "A_ladder_identity__max_abs_gap": 0.0,
+        "A_ladder_identity__is_a_noop": true,
+        "A_ladder_identity__mae": 0.02624036882055308,
+        "A_degenerate_mean__vs_best": {
+          "available": true,
+          "challenger": "A_degenerate_mean",
+          "defender": "L0_foil",
+          "mean_gap": -0.00013162133073682351,
+          "challenger_fold_wins": 2,
+          "n_folds": 4,
+          "p_challenger_better": 0.36721060414120466,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_degenerate_mean__mae": 0.02610874748981626,
+        "A_ladder_meanshift__vs_best": {
           "available": true,
           "challenger": "A_ladder_meanshift",
           "defender": "L0_foil",
@@ -10756,7 +10783,8 @@
           "alpha": 0.1,
           "note": "zero-variance gap \u2014 decided on sign (a constant advantage IS systematic)"
         },
-        "shuffled_vs_best_ladder": {
+        "A_ladder_meanshift__mae": 0.02624036882055308,
+        "A_ladder_shuffled__vs_best": {
           "available": true,
           "challenger": "A_ladder_shuffled",
           "defender": "L0_foil",
@@ -10768,24 +10796,11 @@
           "alpha": 0.1,
           "note": "zero-variance gap \u2014 decided on sign (a constant advantage IS systematic)"
         },
-        "degenerate_vs_best_ladder": {
-          "available": true,
-          "challenger": "A_degenerate_mean",
-          "defender": "L0_foil",
-          "mean_gap": -0.00013162133073682351,
-          "challenger_fold_wins": 2,
-          "n_folds": 4,
-          "p_challenger_better": 0.36721060414120466,
-          "violated": false,
-          "alpha": 0.1
-        },
+        "A_ladder_shuffled__mae": 0.02624036882055308,
+        "oracle_floor_ok": true,
         "best_ladder": "L0_foil",
         "best_ladder_mae": 0.02624036882055308,
         "foil_mae": 0.02624036882055308,
-        "meanshift_mae": 0.02624036882055308,
-        "shuffled_mae": 0.02624036882055308,
-        "degenerate_mae": 0.02610874748981626,
-        "oracle_floor_ok": true,
         "low_propensity_tercile_lift_pct": 0.0,
         "low_propensity_tercile_lift_pct_all_rows": 0.0
       },
@@ -11006,19 +11021,19 @@
         {
           "stratum": 0,
           "n_rows": 58,
-          "pct_rows_the_ladder_can_move": 0.0,
+          "pct_rows_the_mechanism_can_move": 0.0,
           "Triple-A": 100.0
         },
         {
           "stratum": 1,
           "n_rows": 60,
-          "pct_rows_the_ladder_can_move": 0.0,
+          "pct_rows_the_mechanism_can_move": 0.0,
           "Triple-A": 100.0
         },
         {
           "stratum": 2,
           "n_rows": 33,
-          "pct_rows_the_ladder_can_move": 0.0,
+          "pct_rows_the_mechanism_can_move": 0.0,
           "Triple-A": 100.0
         }
       ],

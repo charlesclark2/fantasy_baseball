@@ -102,14 +102,29 @@ from betting_ml.scripts.milb_mle.milb_mle import (  # noqa: E402
     emit_projections,
 )
 from betting_ml.scripts.milb_mle.park_context import ContextSpec, apply_context  # noqa: E402
+from betting_ml.scripts.milb_mle.h_harness import (  # noqa: E402
+    FDR_ALPHA,
+    MAX_PBO,
+    MIN_DSR,
+    MIN_FOLD_WIN_RATE,
+    MIN_PCT_ROWS_MOVED,
+    TIE_CONTENDER_SPREAD_PCT,
+    Anchor,
+    deflation_report,
+    dsr_report,
+    evaluate_anchors,
+    low_tercile_read,
+    null_analysis,
+    numeric_gate,
+    propensity_composition,
+    stratified_lift,
+)
 from betting_ml.scripts.milb_mle.run_e7_12_slice1 import (  # noqa: E402
     SIDES,
     SideConfig,
     _paired_p,
     _validate_emission,
     bh_fdr,
-    deflation_report,
-    paired_anchor,
 )
 from betting_ml.scripts.milb_mle.run_e7_12_slice2 import propensity_for_fold  # noqa: E402
 from betting_ml.scripts.milb_mle.survivorship import propensity_strata  # noqa: E402
@@ -146,20 +161,6 @@ SHIPPED_CONTEXT: dict[str, dict[str, ContextSpec]] = {
         "xwoba_against": ContextSpec(),
     },
 }
-
-# Pre-registered gate thresholds (readiness lock 1 + the §0.5 deflation contract).
-MIN_FOLD_WIN_RATE = 0.60
-MAX_PBO = 0.20
-MIN_DSR = 0.95
-FDR_ALPHA = 0.10
-MIN_PCT_ROWS_MOVED = 1.0
-
-# DESCRIPTIVE, NOT DECISIVE. A high PBO means two completely different things and the verdict is DROP for
-# both, but the RECORD is not the same: with the contenders inside this spread the field is TIED, and
-# E2.1-r's reading applies — "no candidate robustly beats the incumbent ⇒ the incumbent's choice is now
-# PROVEN, not assumed". With a WIDE spread the same PBO is genuine instability. The threshold changes no
-# gate; it only stops the report from asking its reader to do the classification by hand (NF1.8).
-TIE_CONTENDER_SPREAD_PCT = 0.5
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════
@@ -395,11 +396,11 @@ def run_h1(pairs: pd.DataFrame, context: pd.DataFrame | None, metric: str,
     eligible = [a.label for a in arms if a.selectable or a.label == "L0_foil"]
     defl = deflation_report(mae, eligible)
     defl["whole_field"] = deflation_report(mae)
-    dsr = _dsr_report(mae, eligible)
+    dsr = dsr_report(mae, eligible)
 
     oracle_ok = bool(np.nanmin(leaderboard["oos_mae"].to_numpy(float)) >= -1e-9)
     anchors, stratified, stratified_moved, verdict, winner, reasons = _judge(
-        metric, side, mae, leaderboard, rows_df, defl, dsr, oracle_ok, notes)
+        metric, side, mae, leaderboard, rows_df, defl, dsr, oracle_ok, notes, coverage)
 
     return H1Result(
         metric=metric, prior_scale=scale, shipped_spec=shipped, leaderboard=leaderboard,
@@ -410,119 +411,36 @@ def run_h1(pairs: pd.DataFrame, context: pd.DataFrame | None, metric: str,
         oracle_floor_ok=oracle_ok)
 
 
-def _dsr_report(mae: pd.DataFrame, eligible: list[str]) -> dict:
-    """Deflated Sharpe on the winner's per-fold SKILL series, reported over BOTH trial fields.
-
-    ⭐ **NF-D14: A DEFLATION STATISTIC COMPUTED OVER A FIELD CONTAINING ITS OWN NULLS MEASURES THE
-    NULLS.** `deflated_sharpe`'s expected-max term scales with the cross-trial Sharpe DISPERSION, and this
-    field deliberately contains anchors that are far away by construction. So the ELIGIBLE-set figure is
-    the one PRE-REGISTERED to bind and the whole-field figure is reported beside it; if both clear,
-    nothing turns on the choice, which is the clean shape.
-    """
-    from betting_ml.utils.overfitting import deflated_sharpe
-
-    if "L0_foil" not in mae.columns:
-        return {"available": False, "note": "no foil column — DSR undefined"}
-    skill = mae[["L0_foil"]].to_numpy(float) - mae.to_numpy(float)   # >0 ⇒ beats the foil
-    skill = pd.DataFrame(skill, index=mae.index, columns=mae.columns)
-
-    def _sr(s: np.ndarray) -> float:
-        s = s[np.isfinite(s)]
-        return float(np.mean(s) / np.std(s, ddof=1)) if len(s) > 2 and np.std(s, ddof=1) > 0 else 0.0
-
-    out: dict = {"available": True}
-    for tag, cols in (("eligible", [c for c in eligible if c in skill.columns and c != "L0_foil"]),
-                      ("whole_field", [c for c in skill.columns if c != "L0_foil"])):
-        if not cols:
-            out[tag] = None
-            continue
-        means = skill[cols].mean(axis=0, skipna=True)
-        best = str(means.idxmax())
-        series = skill[best].to_numpy(float)
-        series = series[np.isfinite(series)]
-        if len(series) < 3 or np.std(series) == 0:
-            out[tag] = {"arm": best, "dsr": None, "note": "too few folds / zero variance"}
-            continue
-        res = deflated_sharpe(series, n_trials=len(cols),
-                              trial_sharpes=[_sr(skill[c].to_numpy(float)) for c in cols])
-        out[tag] = {"arm": best, "n_trials": len(cols), "dsr": float(res.dsr),
-                    "observed_sr": float(res.observed_sr), "sr0": float(res.sr0),
-                    "passes": bool(res.dsr >= MIN_DSR)}
-    out["binds"] = "eligible"
-    return out
-
-
-def stratified_lift(rows: pd.DataFrame, reference: str = "L0_foil",
-                    moved_only: bool = False) -> pd.DataFrame:
-    """Held-out MAE by promotion-propensity TERCILE, per arm (H5). Stratum 0 = LOWEST propensity.
-
-    ⭐ **`moved_only` RESTRICTS TO ROWS THE LADDER CAN ACTUALLY ACT ON, AND ON THIS POPULATION THAT IS
-    THE DIFFERENCE BETWEEN A READING AND A DILUTION.** A Triple-A row is the reference level, so its
-    ladder delta is identically 0 and it contributes exactly zero lift by construction. Measured on the
-    scored population (`propensity_composition`), only **48.1%** of the LOW-propensity tercile's batter
-    rows are movable at all, against **61.2%** of the high tercile (pitcher: 44.7% vs 64.5%) — so an
-    all-rows tercile read systematically dilutes the low end HARDEST, which is the exact end the H5 gate
-    is about. Same class as the NF1.8 "a per-group constraint evaluated on a quietly different
-    population than the one it names" lesson.
-    """
-    if rows.empty or "stratum" not in rows.columns:
-        return pd.DataFrame()
-    if moved_only:
-        if "moved" not in rows.columns:
-            return pd.DataFrame()
-        movable = set(map(tuple, rows.loc[rows["moved"], ["fold", "player_id", "level"]]
-                          .drop_duplicates().to_numpy()))
-        if not movable:
-            return pd.DataFrame()
-        keys = list(map(tuple, rows[["fold", "player_id", "level"]].to_numpy()))
-        rows = rows[[k in movable for k in keys]]
-    ref = (rows[rows["arm"] == reference]
-           .set_index(["fold", "player_id", "level"])["abs_err"].rename("ref_err"))
-    ref = ref[~ref.index.duplicated()]
-    out = []
-    for arm, d in rows.groupby("arm"):
-        j = d.set_index(["fold", "player_id", "level"]).join(ref, how="inner")
-        for s, ds in j.dropna(subset=["stratum"]).groupby("stratum"):
-            base_mae = float(ds["ref_err"].mean())
-            out.append({"arm": arm, "stratum": int(s), "n": int(len(ds)),
-                        "mae": float(ds["abs_err"].mean()),
-                        "pct_lift_vs_foil": (100.0 * float((ds["ref_err"] - ds["abs_err"]).mean())
-                                             / base_mae if base_mae else np.nan)})
-    return pd.DataFrame(out)
-
-
-def propensity_composition(rows: pd.DataFrame) -> pd.DataFrame:
-    """⚠️ **WHAT THE PROPENSITY TERCILE ACTUALLY CONTAINS — published so nobody re-reads it as what it
-    is not.**
-
-    E7.12 slice 2 introduced these terciles as "the only observable proxy for the un-promoted prospects
-    we serve", and H5 inherited that reading. On the scored LABELLED cohort it runs the other way: the
-    LOW-propensity tercile is the one RICHEST in Triple-A rows (36.4% batter / 40.4% pitcher, vs 21.0% /
-    17.0% in the high tercile) and POOREST in Single-A rows (4.3% / 10.4% vs 25.2% / 24.8%). It selects
-    late-arriving graduates, not low-level prospects. The stratification is real and stable; the
-    INTERPRETATION attached to it was never checked against the level mix, and for a level-translation
-    mechanism that matters directly, because a reference-level row cannot be moved at all.
-
-    So the level mix is reported beside every tercile table. A per-group read whose group composition is
-    unstated is a per-group read of something else.
-    """
-    if rows.empty or "stratum" not in rows.columns or "level" not in rows.columns:
-        return pd.DataFrame()
-    d = rows[rows["arm"] == "L0_foil"].dropna(subset=["stratum"])
-    if d.empty:
-        return pd.DataFrame()
-    ct = pd.crosstab(d["stratum"], d["level"], normalize="index").mul(100.0).round(1)
-    ct.insert(0, "n_rows", d.groupby("stratum").size())
-    if "moved" in rows.columns:
-        mv = (rows[rows["arm"] != "L0_foil"].dropna(subset=["stratum"])
-              .groupby("stratum")["moved"].mean().mul(100.0).round(1))
-        ct.insert(1, "pct_rows_the_ladder_can_move", mv)
-    return ct.reset_index()
+# ⭐ H1's anchors, DECLARED. The numeric gate, the deflation reading and the tercile machinery are
+# shared with every other E7.15 slice (`h_harness`); the anchors are not, because each hypothesis has
+# its own way of being wrong. Declaring them as records is what stops a later slice from silently
+# shipping with fewer anchors than this one.
+H1_ANCHORS: tuple[Anchor, ...] = (
+    Anchor("A_ladder_identity", "noop",
+           "rung maps forced to 0 + 1·x",
+           "The ladder CODE PATH perturbs the fit on its own, so every arm's margin is confounded with "
+           "plumbing rather than with the ladder."),
+    Anchor("A_degenerate_mean", "block",
+           "the DEGENERATE CEILING — predict the population mean",
+           "A metric a 'predict nothing' arm wins cannot select a projection (NF-D11); the selection "
+           "metric is inverted for this cohort.",
+           must_move=False),   # a degenerate PROJECTOR transforms no feature — legitimately moves 0%
+    Anchor("A_ladder_meanshift", "refute",
+           "the MATCHED LEVEL-ONLY foil — per-rung additive mean shift, slope pinned to 1",
+           "Whatever helps here is a per-LEVEL re-centring, which the E7.3 level intercepts already "
+           "own — not the per-player 'how his line changed as he climbed' content H1 claims "
+           "(NF-D15 g′)."),
+    Anchor("A_ladder_shuffled", "refute",
+           "the LINK anchor — destination rates permuted within rung, both marginals intact",
+           "The within-player pairing is not what is doing the work."),
+)
 
 
 def _judge(metric: str, side: SideConfig, mae: pd.DataFrame, leaderboard: pd.DataFrame,
            rows_df: pd.DataFrame, defl: dict, dsr: dict, oracle_ok: bool,
-           notes: list[str]) -> tuple[dict, pd.DataFrame, pd.DataFrame, str, str, list[str]]:
+           notes: list[str],
+           coverage: dict | None = None
+           ) -> tuple[dict, pd.DataFrame, pd.DataFrame, str, str, list[str]]:
     """Anchors → disqualification → verdict. Pre-registered; nothing here is decided after the fact."""
     reasons: list[str] = list(notes)
 
@@ -534,90 +452,27 @@ def _judge(metric: str, side: SideConfig, mae: pd.DataFrame, leaderboard: pd.Dat
     sel = leaderboard[leaderboard["selectable"] & leaderboard["active"]]
     best = str(sel.iloc[0]["arm"]) if not sel.empty else "L0_foil"
 
-    # 🪤 NF1.7 (a): a MISSING anchor makes its check vacuously true. Enumerate them explicitly and treat
-    # an absent one as a hard failure rather than a silent pass.
-    required = ["A_ladder_identity", "A_ladder_meanshift", "A_ladder_shuffled", "A_degenerate_mean"]
-    missing = [a for a in required if a not in mae.columns]
-    identity_gap = (float(np.nanmax(np.abs((mae["A_ladder_identity"] - mae["L0_foil"]).to_numpy(float))))
-                    if "A_ladder_identity" in mae.columns else np.nan)
-    anchors = {
-        "required_anchors_present": not missing,
-        "missing_anchors": missing,
-        "identity_max_abs_gap": identity_gap,
-        "identity_is_a_noop": bool(np.isfinite(identity_gap) and identity_gap < 1e-9),
-        "meanshift_vs_best_ladder": paired_anchor(mae, "A_ladder_meanshift", best),
-        "shuffled_vs_best_ladder": paired_anchor(mae, "A_ladder_shuffled", best),
-        "degenerate_vs_best_ladder": paired_anchor(mae, "A_degenerate_mean", best),
-        "best_ladder": best,
-        "best_ladder_mae": m_of(best), "foil_mae": m_of("L0_foil"),
-        "meanshift_mae": m_of("A_ladder_meanshift"), "shuffled_mae": m_of("A_ladder_shuffled"),
-        "degenerate_mae": m_of("A_degenerate_mean"),
-        "oracle_floor_ok": oracle_ok,
-    }
+    anchors, anchor_verdict, anchor_reason = evaluate_anchors(
+        mae, H1_ANCHORS, best, "L0_foil", coverage=coverage)
+    anchors["oracle_floor_ok"] = oracle_ok
+    anchors["best_ladder"] = best
+    anchors["best_ladder_mae"], anchors["foil_mae"] = m_of(best), m_of("L0_foil")
 
-    # Two readings, and the GATE uses the MOVED-ONLY one. A reference-level row cannot be moved by any
-    # ladder, so it contributes exactly zero lift by construction; on this substrate the low-propensity
-    # tercile is the one POOREST in movable rows (48.1% vs 61.2% — `propensity_composition`), so the
-    # all-rows figure dilutes the low end hardest. The all-rows number is still
-    # published, because changing which population a gate reads without showing both is how a gate
-    # quietly starts measuring something else.
+    # Two readings, and the GATE uses the MOVED-ONLY one — see `h_harness.stratified_lift`.
     stratified = stratified_lift(rows_df)
     stratified_moved = stratified_lift(rows_df, moved_only=True)
-
-    def _low(frame: pd.DataFrame) -> float:
-        if frame.empty:
-            return np.nan
-        r = frame[(frame["arm"] == best) & (frame["stratum"] == 0)]
-        return float(r["pct_lift_vs_foil"].iloc[0]) if len(r) else np.nan
-
-    low_all, low = _low(stratified), _low(stratified_moved)
-    if not np.isfinite(low):
-        low = low_all                      # no movable rows at all ⇒ fall back, and the arm is INACTIVE
+    low, low_all = low_tercile_read(stratified, stratified_moved, best)
     anchors["low_propensity_tercile_lift_pct"] = low
     anchors["low_propensity_tercile_lift_pct_all_rows"] = low_all
 
-    verdict, winner = "DROP", "L0_foil"
-
+    winner = "L0_foil"
     # ── metric-wide BLOCKS ────────────────────────────────────────────────────────────
     if not oracle_ok:
         reasons.append("⛔ ORACLE-FLOOR VIOLATION — a candidate scored MAE < 0; the metric is inverted.")
         return anchors, stratified, stratified_moved, "BLOCKED", winner, reasons
-    if missing:
-        reasons.append(
-            f"⛔ BLOCKED — required anchor(s) {missing} are ABSENT from this run. An anchor that did not "
-            f"run is not an anchor that passed (NF1.7 (a)); nothing may ship without them.")
-        return anchors, stratified, stratified_moved, "BLOCKED", winner, reasons
-    if not anchors["identity_is_a_noop"]:
-        reasons.append(
-            f"⛔ BLOCKED — `A_ladder_identity` (rung maps forced to 0 + 1·x) is NOT a byte no-op vs the "
-            f"foil (max |Δ| = {identity_gap:.3e}). The ladder CODE PATH perturbs the fit on its own, so "
-            f"every arm's margin is confounded with plumbing.")
-        return anchors, stratified, stratified_moved, "BLOCKED", winner, reasons
-    if anchors["degenerate_vs_best_ladder"].get("violated"):
-        reasons.append(
-            "⛔ BLOCKED — the DEGENERATE CEILING (predict the population mean) systematically beat the "
-            "best ladder arm. A metric a 'predict nothing' arm wins cannot select a projection "
-            "(NF-D11); the selection metric is inverted for this cohort.")
-        return anchors, stratified, stratified_moved, "BLOCKED", winner, reasons
-
-    # ── mechanism disqualification ────────────────────────────────────────────────────
-    if anchors["meanshift_vs_best_ladder"].get("violated"):
-        a = anchors["meanshift_vs_best_ladder"]
-        reasons.append(
-            f"⛔ MECHANISM REFUTED — the MATCHED LEVEL-ONLY foil (per-rung additive mean shift, slope "
-            f"pinned to 1) systematically beat the fitted ladder ({a['challenger_fold_wins']}/"
-            f"{a['n_folds']} folds, p={a['p_challenger_better']:.3f}). Whatever helps here is a per-LEVEL "
-            f"re-centring, which the E7.3 level intercepts already own — not the per-player 'how his line "
-            f"changed as he climbed' content H1 claims (NF-D15 g′).")
-        return anchors, stratified, stratified_moved, "DROP", winner, reasons
-    if anchors["shuffled_vs_best_ladder"].get("violated"):
-        a = anchors["shuffled_vs_best_ladder"]
-        reasons.append(
-            f"⛔ MECHANISM REFUTED — the LINK anchor (destination rates permuted within rung, both "
-            f"marginals intact) systematically beat the fitted ladder ({a['challenger_fold_wins']}/"
-            f"{a['n_folds']} folds, p={a['p_challenger_better']:.3f}). The within-player pairing is not "
-            f"what is doing the work.")
-        return anchors, stratified, stratified_moved, "DROP", winner, reasons
+    if anchor_verdict:
+        reasons.append(anchor_reason)
+        return anchors, stratified, stratified_moved, anchor_verdict, winner, reasons
 
     # ── the gate ──────────────────────────────────────────────────────────────────────
     inactive = leaderboard[leaderboard["selectable"] & ~leaderboard["active"]]["arm"].tolist()
@@ -633,57 +488,20 @@ def _judge(metric: str, side: SideConfig, mae: pd.DataFrame, leaderboard: pd.Dat
         return anchors, stratified, stratified_moved, "DROP", winner, reasons
 
     cand = sel.iloc[0]
-    beats = bool(cand["oos_mae"] < m_of("L0_foil") - 1e-12)
-    consistent = bool(np.isfinite(cand["fold_win_rate"]) and cand["fold_win_rate"] >= MIN_FOLD_WIN_RATE)
-    pbo = defl.get("pbo")
-    pbo_ok = pbo is None or float(pbo) < MAX_PBO
-    d_elig = (dsr or {}).get("eligible") or {}
-    dsr_ok = d_elig.get("dsr") is None or bool(d_elig.get("passes"))
-    if not (beats and consistent):
-        reasons.append(
-            f"🟡 no arm clears: best eligible `{cand['arm']}` MAE {cand['oos_mae']:.5f} vs foil "
-            f"{m_of('L0_foil'):.5f} ({cand['pct_lift_vs_foil']:.2f}%, fold win rate "
-            f"{cand['fold_win_rate']:.0%}; the pre-registered bar is a strict OOS improvement in "
-            f"≥{MIN_FOLD_WIN_RATE:.0%} of folds). DROPPED.")
-        return anchors, stratified, stratified_moved, "DROP", winner, reasons
-    if not pbo_ok:
-        spread = defl.get("contender_spread_pct")
-        flips = defl.get("flips") or []
-        top = ", ".join(f"{f['config']} {f['share']:.0%} (+{f['pct_vs_best']:.3f}%)" for f in flips[:3])
-        tie = spread is not None and float(spread) < TIE_CONTENDER_SPREAD_PCT
-        reasons.append(
-            f"⛔ DEFLATION — PBO over the ELIGIBLE set is {float(pbo):.3f} ≥ {MAX_PBO}. "
-            + (f"⭐ READ IT AS A **TIE**, NOT AS OVERFITTING: the contender spread is {spread}% and the "
-               f"in-sample halves split across arms that are a fraction of a percent apart ({top}). "
-               f"Which tied arm wins is noise — which is exactly what a trustworthy learner-null looks "
-               f"like (E2.1-r). The honest record is 'no ladder formulation robustly beats the shipped "
-               f"configuration', so the shipped configuration is now PROVEN rather than assumed."
-               if tie else
-               f"The contender spread is {spread}%, WIDE relative to the margin, and the in-sample "
-               f"winners are spread thinly ({top}) — this is genuine instability, a search that learnt "
-               f"nothing, not a tie (NF1.8).")
-            + " Either way it does not ship.")
-        return anchors, stratified, stratified_moved, "DROP", winner, reasons
-    if not dsr_ok:
-        reasons.append(
-            f"⛔ DEFLATION — DSR over the eligible trial set is {d_elig.get('dsr'):.3f} < {MIN_DSR} "
-            f"(n_trials={d_elig.get('n_trials')}). State the shortfall in the unit that GROWS — folds "
-            f"and rungs, not p-decimals — before recording this as an absence (NF-D15 g″).")
+    passed, reason = numeric_gate(cand, m_of("L0_foil"), defl, dsr, "within-player level ladder")
+    reasons.append(reason)
+    if not passed:
         return anchors, stratified, stratified_moved, "DROP", winner, reasons
 
     verdict, winner = "ADD", str(cand["arm"])
-    reasons.append(
-        f"✅ `{winner}` beats the shipped slice-1 configuration OOS ({cand['oos_mae']:.5f} vs "
-        f"{m_of('L0_foil'):.5f}, {cand['pct_lift_vs_foil']:.2f}%) in {cand['fold_win_rate']:.0%} of "
-        f"folds, PBO(eligible)={pbo}, DSR(eligible)={d_elig.get('dsr')}.")
 
     # ── H5: the board serves the LOW-propensity population ────────────────────────────
     if metric in side.board_metrics and np.isfinite(low) and low < 0:
         verdict, winner = "DROP", "L0_foil"
         reasons.append(
             f"⛔ LOW-TERCILE DOWNGRADE — `{cand['arm']}` improves the OVERALL held-out MAE but is "
-            f"{low:+.3f}% in the LOWEST promotion-propensity tercile, the only observable proxy for the "
-            f"un-promoted prospects the E8.0 board actually serves. A board metric that helps the "
+            f"{low:+.3f}% in the LOWEST promotion-propensity tercile, the closest observable proxy we "
+            f"have for the un-promoted prospects the E8.0 board serves. A board metric that helps the "
             f"players we do NOT serve is not a board improvement (H5). Reported, not shipped.")
     elif np.isfinite(low):
         scope = ("board metric" if metric in side.board_metrics else
@@ -692,86 +510,10 @@ def _judge(metric: str, side: SideConfig, mae: pd.DataFrame, leaderboard: pd.Dat
     return anchors, stratified, stratified_moved, verdict, winner, reasons
 
 
+
 # ══════════════════════════════════════════════════════════════════════════════════════
 # Reading a null honestly (NF-D15 g″) — computed, not asserted
 # ══════════════════════════════════════════════════════════════════════════════════════
-
-
-def null_analysis(results: dict[str, "H1Result"], pvals: dict[str, float | None]) -> dict:
-    """⭐ **TWO DISCIPLINES THAT SEPARATE AN HONEST NULL FROM A SHRUG** (NF-D15 g″), both computed here
-    rather than argued in prose:
-
-    **(a) PROVE THE NULL DOES NOT REST ON YOUR OWN GATE CHOICE.** Re-decide the whole run with the
-    deflation gates REMOVED — no PBO ceiling, no DSR floor — and report who survives. If the answer is
-    still "nobody", the binding constraint is elsewhere and the null is a property of the data, not of a
-    threshold this session picked. If a metric only dies at DSR, that must be said plainly.
-
-    **(b) STATE THE MARGIN IN THE UNIT THAT GROWS.** For each metric whose best arm is positive but
-    undetectable, solve for the number of held-out DEBUT COHORTS at which the observed per-fold effect
-    would clear the strictest BH rung and the DSR floor — holding the effect size fixed. Folds here ARE
-    seasons (one per MLB debut cohort), so the answer is a calendar date, which is what makes it an
-    actionable re-test trigger instead of a p-decimal.
-
-    ⚠️ And the distinction the same lesson insists on: a best arm that does NOT beat the foil on average
-    is a **GENUINE ABSENCE** — no sample size rescues a negative point estimate — not an underpowered
-    effect. The two must not be recorded as the same kind of null.
-    """
-    from scipy import stats
-
-    from betting_ml.utils.overfitting import deflated_sharpe
-
-    m_family = len([m for m, r in results.items()
-                    if not r.leaderboard[r.leaderboard["selectable"]
-                                         & r.leaderboard["active"]].empty])
-    strictest_bh = FDR_ALPHA / m_family if m_family else FDR_ALPHA
-    rows, survivors = [], []
-    for m, r in results.items():
-        sel = r.leaderboard[r.leaderboard["selectable"] & r.leaderboard["active"]]
-        if sel.empty:
-            rows.append({"metric": m, "arm": None, "verdict_reason": "no active arm (inert mechanism)"})
-            continue
-        cand = sel.iloc[0]
-        mae = r.mae_by_fold
-        skill = (mae["L0_foil"] - mae[str(cand["arm"])]).dropna().to_numpy(float)
-        n = len(skill)
-        beats = bool(cand["oos_mae"] < float(mae["L0_foil"].mean()) - 1e-12)
-        consistent = bool(cand["fold_win_rate"] >= MIN_FOLD_WIN_RATE)
-        fdr_ok = bool(pvals.get(m) is not None and pvals[m] <= strictest_bh)
-        if beats and consistent and fdr_ok:
-            survivors.append(m)
-        need_fdr = need_dsr = None
-        kind = "underpowered"
-        if not beats or n < 3 or float(np.std(skill, ddof=1)) == 0 or float(np.mean(skill)) <= 0:
-            kind = "genuine absence — the best arm does not beat the foil on average"
-        else:
-            t_obs = float(np.mean(skill) / (np.std(skill, ddof=1) / np.sqrt(n)))
-            need_fdr = next((k for k in range(n, 4001)
-                             if float(stats.t.sf(t_obs * np.sqrt(k / n), df=k - 1)) <= strictest_bh),
-                            None)
-            need_dsr = next((k for k in range(n, 4001)
-                             if float(deflated_sharpe(np.resize(skill, k),
-                                                      n_trials=max(2, len(sel))).dsr) >= MIN_DSR), None)
-        rows.append({
-            "metric": m, "arm": str(cand["arm"]), "pct_lift_vs_foil": round(float(
-                cand["pct_lift_vs_foil"]), 4),
-            "fold_win_rate": float(cand["fold_win_rate"]), "p_one_sided": pvals.get(m),
-            "beats_foil": beats, "clears_fold_bar": consistent,
-            "clears_PBO": bool(r.deflation.get("pbo") is None
-                               or float(r.deflation["pbo"]) < MAX_PBO),
-            "clears_DSR": bool(((r.dsr or {}).get("eligible") or {}).get("passes")),
-            "clears_BH_rank1": fdr_ok, "kind": kind,
-            "folds_have": n, "folds_needed_BH": need_fdr, "folds_needed_DSR": need_dsr,
-            "extra_seasons_needed": (None if kind != "underpowered" or not (need_fdr or need_dsr)
-                                     else max(need_fdr or 0, need_dsr or 0) - n),
-        })
-    return {
-        "family_size": m_family, "strictest_bh_cutoff": round(strictest_bh, 4),
-        "survivors_with_PBO_and_DSR_gates_REMOVED": survivors,
-        "binding_constraint": ("BH-FDR multiplicity — no arm's p clears the strictest rung, so removing "
-                               "the deflation gates changes nothing" if not survivors else
-                               "the deflation gates — at least one arm would ship without them"),
-        "per_metric": rows,
-    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════

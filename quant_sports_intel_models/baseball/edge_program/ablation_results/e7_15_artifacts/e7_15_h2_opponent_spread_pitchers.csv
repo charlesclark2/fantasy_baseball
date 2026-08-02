@@ -1,0 +1,5 @@
+metric,n_players,p5,p50,p95,p95_minus_p5_pct,sd_pct,pct_players_beyond_1pct,pct_players_beyond_3pct,reliability,sd_true_pct,p95_minus_p5_true_pct,player_type,window
+k_pct,23867,0.9607,0.9983,1.035,7.43,2.488,54.5,14.7,-0.16825,0.0,0.0,pitcher,1
+bb_pct,23867,0.9514,0.997,1.0488,9.74,3.213,63.0,22.1,-0.1845125,0.0,0.0,pitcher,1
+hr_rate,23867,0.8861,0.9863,1.0918,20.57,6.861,83.3,54.0,-0.03264999999999999,0.0,0.0,pitcher,1
+gb_pct,23867,0.978,0.9991,1.0194,4.15,1.405,31.2,5.1,-0.186075,0.0,0.0,pitcher,1
