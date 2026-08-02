@@ -273,10 +273,14 @@ export function useFormatSelection(
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 // E8.1 — MLB dynasty PROSPECT BOARD
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-// Same policy as the NFL hooks above and for the same reasons: `enabled: canAccess("fantasy", …)`
-// so an unentitled caller never ISSUES the gated request (not merely hides its result), and
-// `staleTime: Infinity` because the board is a build-time artifact — it changes when an operator
-// re-publishes it, never within a session.
+// Same policy as the NFL hooks above and for the same reasons: the hook refuses to ISSUE the gated
+// request for a caller who cannot have it (not merely hide its result), and `staleTime: Infinity`
+// because the board is a build-time artifact — it changes when an operator re-publishes it, never
+// within a session.
+//
+// 🔒 The `enabled` predicate here is `isAdmin`, NOT `canAccess("fantasy", …)`: this surface is
+// ADMIN ONLY while it is in development (operator, 2026-08-02), matching `get_admin_user` on the
+// routes. Using the fantasy predicate would have every subscriber firing a request that 403s.
 
 /** The AL/NL scope a user drafts in. Persisted because a single-league dynasty owner picks it ONCE
  *  and every subsequent visit should already be scoped — re-choosing it every page load is the
@@ -284,21 +288,21 @@ export function useFormatSelection(
 const PROSPECT_LEAGUE_STORAGE_KEY = "mlb-prospect-league"
 
 export function useProspectManifest(season: number = PROSPECT_SEASON) {
-  const { accessToken, groups } = useAuth()
+  const { accessToken, isAdmin } = useAuth()
   return useQuery<ProspectManifest>({
     queryKey: ["mlb-prospect-manifest", season],
     queryFn: () => getProspectManifest(accessToken, season),
-    enabled: canAccess("fantasy", groups),
+    enabled: isAdmin,
     staleTime: Infinity,
   })
 }
 
 export function useProspectBoard(season: number = PROSPECT_SEASON) {
-  const { accessToken, groups } = useAuth()
+  const { accessToken, isAdmin } = useAuth()
   return useQuery<ProspectBoardPayload>({
     queryKey: ["mlb-prospect-board", season],
     queryFn: () => getProspectBoard(accessToken, season),
-    enabled: canAccess("fantasy", groups),
+    enabled: isAdmin,
     staleTime: Infinity,
   })
 }

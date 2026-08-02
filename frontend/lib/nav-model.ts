@@ -13,11 +13,16 @@ export interface NavItem {
   label: string
   href: string
   key: string
-  /** An extra entitlement this ITEM needs, beyond its surface's. Today the only value is
-   *  `"fantasy_beta"` (NF-C0b's league-settings editor: `admin` + `fantasy_comp` only, so a
-   *  paying subscriber does not see it yet). Items with no `restrict` follow the surface gate.
-   *  Nav visibility is cosmetic — the API enforces the same rule server-side. */
-  restrict?: "fantasy_beta"
+  /** An extra entitlement this ITEM needs, beyond its surface's. Items with no `restrict`
+   *  follow the surface gate. Nav visibility is cosmetic — the API enforces the same rule
+   *  server-side.
+   *
+   *   • `"fantasy_beta"` — NF-C0b's league-settings editor: `admin` + `fantasy_comp` only, so a
+   *     paying subscriber does not see it yet.
+   *   • `"admin"` — admin ONLY, the narrowest tier there is. E8.1's MLB prospect board uses it
+   *     while the surface is in development: `require_fantasy_access` would expose an unfinished
+   *     surface to every subscriber, and even `fantasy_beta` is too wide. */
+  restrict?: "fantasy_beta" | "admin"
   /** NF3.2 — the OPPOSITE of `restrict`: this item stays visible even when its surface is LOCKED
    *  (an unentitled caller normally sees only the "Unlock Fantasy" upsell in place of every item —
    *  see `isLocked`/the locked-branch rendering in `nav.tsx`). Only the past-season track record
@@ -81,11 +86,23 @@ export const SPORTS: SportNav[] = [
             items: [
               // Order is PRODUCT order: the board is the surface, the disagreement view is the
               // differentiated cut OF that board and only makes sense after it.
-              { label: "Prospect Board", href: "/fantasy/mlb/prospects", key: "mlb-prospects" },
+              //
+              // 🔒 `restrict: "admin"` — ADMIN ONLY while the surface is in development
+              // (operator, 2026-08-02). Deliberately NOT `fantasy_beta`, which would also admit
+              // `fantasy_comp`. Mirrors `get_admin_user` on the two `/fantasy/mlb/prospects/*`
+              // routes; the API is the real gate, this only hides the nav entries. Both move
+              // together when the surface opens up.
+              {
+                label: "Prospect Board",
+                href: "/fantasy/mlb/prospects",
+                key: "mlb-prospects",
+                restrict: "admin",
+              },
               {
                 label: "Where We Disagree",
                 href: "/fantasy/mlb/disagreements",
                 key: "mlb-disagreements",
+                restrict: "admin",
               },
             ],
           },

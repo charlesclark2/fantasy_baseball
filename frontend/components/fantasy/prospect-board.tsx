@@ -205,6 +205,42 @@ function CompPanel({ p, framing }: { p: Prospect; framing?: ProspectFraming }) {
   )
 }
 
+/** Why THIS player has no line from us — and it is two genuinely different reasons.
+ *
+ *  🚨 THE COPY THIS REPLACES WAS WRONG IN A WAY THAT COST CREDIBILITY. It said a blank line meant
+ *  "complex/DSL and just-drafted prospects have an identity but no minor-league record to translate".
+ *  That is true for the complex/DSL half and FALSE for the case that actually gets noticed: Josuar
+ *  González, Luis Hernández, Dax Kilby and Trey Yesavage are all top-100-type names sitting blank,
+ *  and every one of them HAS a Single-A-or-higher record — 26, 33 and 120 PA, and a pitcher split
+ *  across four levels. They are under E7.3's 150-PA/TBF floor, not absent from the data. Telling a
+ *  user "no record" about a player he watched last week is how a surface loses him.
+ *
+ *  So: pick the reason from the row's own level against the levels the translation actually covers
+ *  (both supplied by the exporter, so the UI owns no threshold of its own). */
+function NoLineNote({ p, framing }: { p: Prospect; framing?: ProspectFraming }) {
+  const covered = framing?.mleLevels
+  // Unknown level ⇒ fall back to the thin-sample wording: it is the more common cause and the more
+  // conservative claim ("we won't publish it yet" rather than "we don't model this at all").
+  const isComplex = p.level != null && covered != null && !covered.includes(p.level)
+  const text = isComplex
+    ? framing?.noLine?.complex ??
+      "We don't publish a translated line for complex-league or DSL players — our translation is " +
+        "built for Single-A through Triple-A, so this is a limit of what we model."
+    : framing?.noLine?.thinSample ??
+      `He has a professional record, but not yet enough of one for us to translate: our line needs ` +
+        `at least ${framing?.minSample ?? 150} plate appearances (or batters faced) at a level ` +
+        `before we'll publish it, because anything thinner is too noisy to mean much.`
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[11px] leading-relaxed text-gray-500">{text}</p>
+      <p className="text-[11px] leading-relaxed text-gray-600">
+        He stays on the board on the scouts’ grade rather than being dropped — and his rank here
+        rests on that grade plus his age relative to his level, with no projection of ours behind it.
+      </p>
+    </div>
+  )
+}
+
 /** The expanded row: our full line, the scouts' full view, the comps, and the blurb. */
 function DetailPanel({ p, framing }: { p: Prospect; framing?: ProspectFraming }) {
   const bat = isBatter(p)
@@ -227,13 +263,7 @@ function DetailPanel({ p, framing }: { p: Prospect; framing?: ProspectFraming })
             <Row label="Sample" value={p.mlePTbf != null ? `${p.mlePTbf} TBF @ ${p.mlePLevel ?? "—"}` : "—"} />
           </dl>
         )}
-        {p.mleK == null && p.mlePK == null && (
-          <p className="text-[11px] leading-relaxed text-gray-600">
-            No translated line yet — complex/DSL and just-drafted prospects have an identity but no
-            minor-league record to translate. He stays on the board on the scouts’ grade alone
-            rather than being dropped.
-          </p>
-        )}
+        {p.mleK == null && p.mlePK == null && <NoLineNote p={p} framing={framing} />}
         {p.speedFlag && (
           <p className="text-[11px] leading-relaxed text-amber-500/80">
             Plus speed — and stolen bases are invisible to us. Every metric we translate is a
@@ -314,7 +344,10 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
   const [league, setLeague] = useProspectLeague()
   const [tab, setTab] = useState<TypeTab>("all")
   const [org, setOrg] = useState("ALL")
-  const [level, setLevel] = useState("ALL")
+  // ⭐ Level is MULTI-select (operator, 2026-08-02): "A and A+" or "AA and AAA" is the natural way
+  // to scope a dynasty board, and a single-select forced a user to look at one rung at a time. An
+  // EMPTY set means "all levels" rather than "no rows" — an empty board would read as broken.
+  const [levels, setLevels] = useState<string[]>([])
   const [eta, setEta] = useState("ALL")
   const [minorsOnly, setMinorsOnly] = useState(false)
   const [q, setQ] = useState("")
@@ -325,7 +358,6 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
   const [open, setOpen] = useState<number | null>(null)
   const leagueId = useId()
   const orgId = useId()
-  const levelId = useId()
   const etaId = useId()
 
   // ⚠️ Defensive read (NF-C0): a payload missing `players` must fall through to a VISIBLE empty
@@ -343,7 +375,7 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
       if (tab === "batter" && !isBatter(p)) return false
       if (tab === "pitcher" && isBatter(p)) return false
       if (org !== "ALL" && p.org !== org) return false
-      if (level !== "ALL" && p.level !== level) return false
+      if (levels.length && !levels.includes(p.level ?? "")) return false
       if (eta !== "ALL" && String(p.eta ?? "") !== eta) return false
       if (minorsOnly && p.inMajors) return false
       if (needle && !p.name.toLowerCase().includes(needle)) return false
@@ -384,14 +416,14 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
       if (bv == null) return -1
       return (desc ? 1 : -1) * flip * (bv - av)
     })
-  }, [players, league, tab, org, level, eta, minorsOnly, q, view, sort, desc])
+  }, [players, league, tab, org, levels, eta, minorsOnly, q, view, sort, desc])
 
   const paged = useMemo(
     () => (pageSize === ALL_ROWS ? rows : rows.slice(page * pageSize, page * pageSize + pageSize)),
     [rows, page, pageSize],
   )
 
-  useEffect(() => setPage(0), [league, tab, org, level, eta, minorsOnly, q, sort, desc])
+  useEffect(() => setPage(0), [league, tab, org, levels, eta, minorsOnly, q, sort, desc])
 
   const lead = leadWith(tab)
   // #, Player, Age, ETA, FV, Our line, Our score, Disagree, Comps, chevron (+ Level unless FV leads)
@@ -408,6 +440,40 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
       {sort === key && <span className="text-[9px]">{desc ? "▼" : "▲"}</span>}
     </button>
   )
+
+  // "Our line" is three bare percentages under an ambiguous label — the single least self-evident
+  // thing on the board. Say what the numbers ARE, which side they belong to, and which of them the
+  // measurement says you may lean on. The per-metric wording is the EXPORTER's (`metricNotes`) so it
+  // stays tied to the corr figures that earned it.
+  const notes = framing?.metricNotes
+  const ourLineHeader = (
+    <InfoTip label="Our line">
+      <>
+        OUR OWN projection, translated from this player's minor-league record into what it implies at
+        the major-league level (not his raw minor-league stats). Hitters show{" "}
+        <strong>K% · BB% · ISO</strong>; pitchers show <strong>GB% · K% · BB%</strong>. The smaller
+        number under each is its uncertainty.
+        <br />
+        <br />
+        {notes?.mleK ??
+          "Strikeout and walk rates translate well and can be read with confidence."}{" "}
+        {notes?.mleIso ??
+          "Isolated power translates weakly — read it as a direction, not a number."}{" "}
+        Anything greyed out and marked <em>weak</em> is exactly that: real, but not something to lean
+        on. A dash means we have no line for him — open the row to see why.
+      </>
+    </InfoTip>
+  )
+  const fvHeader = sortBtn(
+    "fv",
+    "FV",
+    <>
+      FanGraphs&apos; Future Value grade on the 20–80 scouting scale — THEIR number, unmodified, not
+      ours. Higher is better; 50 is roughly an average regular. The small line under it is his
+      overall Board rank, or his risk tier when he is unranked.
+    </>,
+  )
+
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -476,7 +542,16 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
             </div>
 
             <FilterPicker id={orgId} label="Org" value={org} onChange={setOrg} options={filters?.orgs ?? []} />
-            <FilterPicker id={levelId} label="Level" value={level} onChange={setLevel} options={filters?.levels ?? []} />
+            <LevelFilter
+              levels={filters?.levels ?? []}
+              selected={levels}
+              onToggle={(lv) =>
+                setLevels((cur) =>
+                  cur.includes(lv) ? cur.filter((x) => x !== lv) : [...cur, lv],
+                )
+              }
+              onClear={() => setLevels([])}
+            />
             <FilterPicker
               id={etaId}
               label="ETA"
@@ -520,20 +595,35 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
             <table className="w-full min-w-[900px] text-left">
               <thead className="border-b border-[#262626] bg-[#0f0f0f] text-[11px] uppercase tracking-wide text-gray-500">
                 <tr>
-                  <th className="px-3 py-2 font-medium">{sortBtn("rank", "#")}</th>
+                  {/* The ▲/▼ badge beside a rank was unexplained until a user hovered a row — and an
+                      unexplained arrow on a DRAFT BOARD reads as "trending", which it is not. It is
+                      how far the historical comps moved him off his pre-comp rank. Explained on the
+                      column that carries it, plus a legend under the table. */}
+                  <th className="px-3 py-2 font-medium">
+                    {sortBtn(
+                      "rank",
+                      "#",
+                      <>
+                        Board rank. A green ▲ or red ▼ beside it is how many places the HISTORICAL
+                        COMPS moved this player — the comp read is 30% of our score, so it shifts the
+                        order. ▲ means the comps liked him more than the rest of our line did. It is
+                        movement against our own pre-comp rank, not movement week over week.
+                      </>,
+                    )}
+                  </th>
                   <th className="px-3 py-2 font-medium">Player</th>
                   {lead !== "fv" && <th className="px-3 py-2 font-medium">Level</th>}
                   <th className="px-3 py-2 font-medium">{sortBtn("age", "Age")}</th>
                   <th className="px-3 py-2 font-medium">{sortBtn("eta", "ETA")}</th>
                   {lead === "fv" ? (
                     <>
-                      <th className="px-3 py-2 font-medium">{sortBtn("fv", "FV")}</th>
-                      <th className="px-3 py-2 font-medium">Our line</th>
+                      <th className="px-3 py-2 font-medium">{fvHeader}</th>
+                      <th className="px-3 py-2 font-medium">{ourLineHeader}</th>
                     </>
                   ) : (
                     <>
-                      <th className="px-3 py-2 font-medium">Our line</th>
-                      <th className="px-3 py-2 font-medium">{sortBtn("fv", "FV")}</th>
+                      <th className="px-3 py-2 font-medium">{ourLineHeader}</th>
+                      <th className="px-3 py-2 font-medium">{fvHeader}</th>
                     </>
                   )}
                   <th className="px-3 py-2 font-medium">
@@ -685,6 +775,18 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
             </table>
           </div>
 
+          {/* A standing legend, not only a hover tooltip: the ▲/▼ badges are the one glyph on this
+              board whose meaning cannot be guessed, and a tooltip is invisible until you go looking
+              for it. Kept to one line so it reads as a key rather than a paragraph. */}
+          <p className="mt-2 text-[11px] text-gray-600">
+            <span className="text-emerald-500">▲</span>/<span className="text-rose-500">▼</span>{" "}
+            beside a rank = places the historical comps moved him off our pre-comp order ·{" "}
+            <span className="text-emerald-500">−1.8</span> beside an age = years younger than the
+            median player at his level · <span className="text-gray-500">—</span> in Our line = no
+            translated projection yet; open the row for why · greyed, <em>weak</em>-marked rates
+            translate poorly and should not be leaned on.
+          </p>
+
           <div className="mt-4">
             <Pagination
               page={page}
@@ -774,6 +876,64 @@ function OurLineCell({ p, bat }: { p: Prospect; bat: boolean }) {
         {bat ? "K% · BB% · ISO" : "GB% · K% · BB%"}
       </div>
     </td>
+  )
+}
+
+/** Level as MULTI-select toggles rather than a dropdown (operator, 2026-08-02).
+ *
+ *  There are only seven levels and a dynasty owner routinely wants two or three of them at once
+ *  ("A and A+", "the upper minors") — a single-select dropdown made that impossible, and a
+ *  multi-select dropdown would hide the options behind a click for no benefit at this cardinality.
+ *  Chips show the whole vocabulary and the current selection at a glance.
+ *
+ *  ⚠️ Ordered by the LADDER (DSL → MLB), not alphabetically: "A+, A, AA, AAA" is nonsense to a
+ *  reader who thinks in rungs. Levels absent from the board are simply not offered. */
+function LevelFilter({
+  levels,
+  selected,
+  onToggle,
+  onClear,
+}: {
+  levels: string[]
+  selected: string[]
+  onToggle: (lv: string) => void
+  onClear: () => void
+}) {
+  const LADDER = ["DSL", "CPX", "ROK", "A", "A+", "AA", "AAA", "MLB"]
+  const ordered = LADDER.filter((l) => levels.includes(l)).concat(
+    levels.filter((l) => !LADDER.includes(l)),
+  )
+  if (ordered.length === 0) return null
+  return (
+    <div className="flex items-center gap-1.5 text-xs">
+      <span className="text-gray-500">Level</span>
+      <div className="inline-flex overflow-hidden rounded border border-[#262626]">
+        {/* "All" is the empty selection, not a ninth level — so clearing is one click and the
+            board can never be filtered down to nothing by accident. */}
+        <button
+          onClick={onClear}
+          className={`px-2 py-1 transition-colors ${
+            selected.length === 0 ? "bg-[#1a1a1a] text-gray-100" : "text-gray-500 hover:text-gray-300"
+          }`}
+        >
+          All
+        </button>
+        {ordered.map((lv) => (
+          <button
+            key={lv}
+            onClick={() => onToggle(lv)}
+            aria-pressed={selected.includes(lv)}
+            className={`border-l border-[#262626] px-2 py-1 transition-colors ${
+              selected.includes(lv)
+                ? "bg-[#10b981]/15 text-[#10b981]"
+                : "text-gray-500 hover:text-gray-300"
+            }`}
+          >
+            {lv}
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }
 

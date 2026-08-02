@@ -291,6 +291,37 @@ FRAMING = {
              "absolute LEVELS, so no comp number is quoted as an accuracy figure.",
     "inMajors": "Some players carry a prospect grade while already listed at MLB. Most minor-league "
                 "dynasty drafts do not make them draftable — check your league's rules.",
+
+    # ── WHY A TOP PROSPECT CAN HAVE NO LINE FROM US (E8.1 follow-up, 2026-08-02) ───────────────
+    #
+    # ⚠️ THE ORIGINAL COPY HERE WAS WRONG IN A WAY THAT MATTERED. It said a blank line meant
+    # "complex/DSL and just-drafted prospects have an identity but no minor-league record to
+    # translate" — true for the DSL/complex half, and FALSE for the case the operator actually hit.
+    # Josuar González, Luis Hernández, Dax Kilby and Trey Yesavage are all top-100-type names with
+    # blank lines, and all four DO have a Single-A (or higher) record; they are simply UNDER E7.3's
+    # `min_minor_pa = 150` floor (26 / 33 / 120 PA, and a pitcher split across four levels). Telling
+    # a user "no record" about a player he just watched play is the fastest way to lose him.
+    #
+    # Two genuinely different causes, so two strings, chosen by the row's own level:
+    #   * complex/DSL — the MLE is built for Single-A through Triple-A ONLY. There is no complex or
+    #     DSL translation at all, so those rows are 0% covered BY CONSTRUCTION, not by thin sample.
+    #   * everywhere else — he has a record, it is just under the 150-PA/TBF floor E7.3 set because
+    #     a line thinner than that is too noisy to translate.
+    "noLine": {
+        "complex": "We don't publish a translated line for complex-league or DSL players at all — "
+                   "our minor-league translation is built for Single-A through Triple-A, so this is "
+                   "a limit of what we model, not a thin record. He stays on the board on the "
+                   "scouts' grade.",
+        "thinSample": "He has a professional record, but not yet enough of one for us to translate: "
+                      "our line needs at least 150 plate appearances (or batters faced) at a level "
+                      "before we'll publish it, because anything thinner is too noisy to mean "
+                      "much. This is us declining to guess, not an absence of data — expect a line "
+                      "once he accumulates the playing time.",
+    },
+    "minSample": 150,
+    # The LEVELS the translation actually covers. Carried so the UI decides which `noLine` string to
+    # show from the exporter's own list rather than hard-coding a level vocabulary of its own.
+    "mleLevels": ["A", "A+", "AA", "AAA", "MLB"],
 }
 
 
