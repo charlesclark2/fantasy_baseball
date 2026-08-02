@@ -799,6 +799,20 @@ def _connect(duckdb_path: str):
     return duckdb.connect(duckdb_path, read_only=True)
 
 
+def _resolve_build_base_season(latest_played_season: int, proj_season: int) -> int:
+    """NF3.2 — the base season `--mode build` anchors a projection on.
+
+    For the FORWARD (current) build, `proj_season == latest_played_season + 1` and the latest played
+    season IS the correct base — the pre-existing, unchanged behavior. For a PAST-season (backtest)
+    build (`--projection-season <a past year>`), anchoring on the latest played season would build
+    that past season's board off data from AFTER it — a leakage-safe holdout inverted, and silently
+    so (nothing about the output shape signals it). The base must instead be `proj_season - 1`, the
+    same convention `run_season_projection.build_projection` itself uses. This is what makes NF3.2's
+    per-past-season NF1.5 board builds (`--mode build --projection-season 2019`, `2020`, …) genuine
+    holdouts rather than the forward build's base repeated onto a different projection season."""
+    return proj_season - 1 if proj_season <= latest_played_season else latest_played_season
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="NF1.5 — capstone feature-combination bake-off")
     ap.add_argument("--mode", required=True, choices=["market", "blind", "grade", "build"])
@@ -917,9 +931,10 @@ def main(argv: list[str] | None = None) -> int:
             selections = load_selection(report, board=args.board)
             log.info("building board=%s selections=%s", args.board,
                      {p: (s["learner"], s["source"]) for p, s in selections.items()})
-            base_season = int(con.sql(
+            latest_played_season = int(con.sql(
                 f"select max(season) from {args.schema}.fct_player_week where played_flag").fetchone()[0])
-            proj_season = args.projection_season or (base_season + 1)
+            proj_season = args.projection_season or (latest_played_season + 1)
+            base_season = _resolve_build_base_season(latest_played_season, proj_season)
             base_seasons = [b for b in range(args.base_from, base_season) if b + 1 < proj_season]
             inputs = load_inputs(con, sorted(set(base_seasons + [base_season])), args.schema)
             # NF1.5b: no κ to fit — the band is MVP-1's own NF1.9 per-player band, re-derived at the

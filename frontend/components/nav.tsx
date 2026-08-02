@@ -207,15 +207,24 @@ export function Nav({
                           {locked && <Lock className="h-3 w-3 text-gray-500" />}
                         </div>
                         {locked ? (
-                          <Link
-                            href="/subscribe"
-                            className="flex items-center justify-between px-3 py-2 text-sm text-gray-500 hover:bg-[#1a1a1a] hover:text-gray-300 transition-colors"
-                          >
-                            <span>Unlock Fantasy</span>
-                            <span className="rounded bg-[#10b981]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[#10b981]">
-                              Upgrade
-                            </span>
-                          </Link>
+                          <>
+                            <Link
+                              href="/subscribe"
+                              className="flex items-center justify-between px-3 py-2 text-sm text-gray-500 hover:bg-[#1a1a1a] hover:text-gray-300 transition-colors"
+                            >
+                              <span>Unlock Fantasy</span>
+                              <span className="rounded bg-[#10b981]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[#10b981]">
+                                Upgrade
+                              </span>
+                            </Link>
+                            {/* NF3.2 — items marked `public` stay reachable even when the surface
+                                itself is locked (the past-season track record needs no entitlement). */}
+                            {surfaceItems(g).filter((i) => i.public).map((item) => (
+                              <Link key={item.key} href={item.href} className={itemClass(item.key)}>
+                                {item.label}
+                              </Link>
+                            ))}
+                          </>
                         ) : (
                           g.sections.map((section, si) => (
                             <div key={si}>
@@ -299,19 +308,31 @@ export function Nav({
                   const locked = isLocked(g)
                   if (locked) {
                     return (
-                      <Link
-                        key={g.surface}
-                        href="/subscribe"
-                        onClick={() => setMobileOpen(false)}
-                        className="flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-medium text-gray-400 hover:bg-[#141414] hover:text-white transition-colors"
-                      >
-                        <span className="flex items-center gap-1.5">
-                          <Lock className="h-3.5 w-3.5" /> {g.label} — Unlock
-                        </span>
-                        <span className="rounded bg-[#10b981]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[#10b981]">
-                          Upgrade
-                        </span>
-                      </Link>
+                      <div key={g.surface} className="flex flex-col">
+                        <Link
+                          href="/subscribe"
+                          onClick={() => setMobileOpen(false)}
+                          className="flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-medium text-gray-400 hover:bg-[#141414] hover:text-white transition-colors"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <Lock className="h-3.5 w-3.5" /> {g.label} — Unlock
+                          </span>
+                          <span className="rounded bg-[#10b981]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[#10b981]">
+                            Upgrade
+                          </span>
+                        </Link>
+                        {/* NF3.2 — `public` items stay reachable even when the surface is locked. */}
+                        {surfaceItems(g).filter((i) => i.public).map((item) => (
+                          <Link
+                            key={item.key}
+                            href={item.href}
+                            onClick={() => setMobileOpen(false)}
+                            className="block whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium text-gray-400 hover:bg-[#141414] hover:text-white transition-colors"
+                          >
+                            {item.label}
+                          </Link>
+                        ))}
+                      </div>
                     )
                   }
                   return g.sections.flatMap((section) =>

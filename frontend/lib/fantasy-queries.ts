@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/lib/auth-context"
-import { canAccessFantasyBeta } from "@/lib/entitlements"
+import { canAccess, canAccessFantasyBeta } from "@/lib/entitlements"
 import {
   createSavedLeague,
   deleteSavedLeague,
@@ -30,11 +30,19 @@ import type { Manifest, Player } from "@/lib/draft-optimizer"
 /** The NFL fantasy season every surface reads. */
 export const FANTASY_SEASON = 2026
 
+// NF3.2 — every hook below now GATES on fantasy entitlement (mirroring `useSavedLeagues`'s existing
+// `enabled: entitled` pattern), not just on its own query-specific conditions. Every EXISTING caller
+// of these hooks lives on a page already wrapped in `FantasyGuard` (so `entitled` is already true by
+// the time it mounts) — this is a no-op for them. The reason it moved here rather than staying only a
+// per-page concern: NF3.1's player page is now reachable WITHOUT `FantasyGuard` (past-season track
+// record is public, the current-season projection is locked), so the hook itself must refuse to ever
+// ISSUE the gated request for a non-entitled caller — never merely hide its result in the render.
 export function useFantasyManifest(season: number = FANTASY_SEASON) {
-  const { accessToken } = useAuth()
+  const { accessToken, groups } = useAuth()
   return useQuery<Manifest>({
     queryKey: ["nfl-fantasy-manifest", season],
     queryFn: () => getFantasyManifest(accessToken, season),
+    enabled: canAccess("fantasy", groups),
     staleTime: Infinity,
   })
 }
@@ -44,10 +52,10 @@ export function useFantasyBoard(
   size: number | null,
   season: number = FANTASY_SEASON,
 ) {
-  const { accessToken } = useAuth()
+  const { accessToken, groups } = useAuth()
   return useQuery<Player[]>({
     queryKey: ["nfl-fantasy-board", season, configName, size],
-    enabled: !!configName && !!size,
+    enabled: canAccess("fantasy", groups) && !!configName && !!size,
     queryFn: async () => {
       const rows = await getFantasyBoard(accessToken, season, configName as string, size as number)
       // dedupe by id (defensive — a duplicate player_id would collide React keys and corrupt rendering)
@@ -59,10 +67,11 @@ export function useFantasyBoard(
 }
 
 export function useFantasyProjections(season: number = FANTASY_SEASON) {
-  const { accessToken } = useAuth()
+  const { accessToken, groups } = useAuth()
   return useQuery<ProjectionPayload>({
     queryKey: ["nfl-fantasy-projections", season],
     queryFn: () => getFantasyProjections(accessToken, season),
+    enabled: canAccess("fantasy", groups),
     staleTime: Infinity,
     // The projections blob 404s until the operator's first NF3 export — surface that as an
     // honest empty state immediately instead of burning retries on a known-missing object.

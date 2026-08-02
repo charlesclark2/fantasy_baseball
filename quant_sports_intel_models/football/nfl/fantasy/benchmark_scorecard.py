@@ -322,6 +322,27 @@ def _score_pair(m: pd.DataFrame, us_col: str, sys_col: str) -> dict:
     }
 
 
+def _disagreement_frame(m: pd.DataFrame, us_col: str, sys_col: str, q: float = 0.75) -> pd.DataFrame:
+    """Row-level basis for `_disagreement()`: z-score `us_col`/`sys_col` WITHIN POSITION (position needs
+    >=12 aligned rows to enter at all), then flag the top-quartile |z_us − z_sys| across the POOLED
+    (all-position) distribution as `is_fade`. Extracted so a per-player export (NF3.2) can carry the
+    IDENTICAL fade flag the aggregate scorecard reports, never a re-derived one — `_disagreement()` below
+    is now a thin aggregate over this same frame. Returns all of `m`'s columns plus `z_us`, `z_sys`,
+    `_dis`, `is_fade`; empty (with those columns) if no position has >=12 rows."""
+    pool = []
+    for p in _POSITIONS:
+        d = m[m["position"] == p]
+        if len(d) < 12:
+            continue
+        zf, zs = _zscore(d[us_col].to_numpy()), _zscore(d[sys_col].to_numpy())
+        pool.append(d.assign(z_us=zf, z_sys=zs, _dis=np.abs(zf - zs)))
+    if not pool:
+        return m.iloc[0:0].assign(z_us=pd.Series(dtype="float64"), z_sys=pd.Series(dtype="float64"),
+                                   _dis=pd.Series(dtype="float64"), is_fade=pd.Series(dtype="bool"))
+    allp = pd.concat(pool, ignore_index=True)
+    return allp.assign(is_fade=allp["_dis"] >= allp["_dis"].quantile(q))
+
+
 def _disagreement(m: pd.DataFrame, us_col: str, sys_col: str, q: float = 0.75) -> dict:
     """Where OUR model most disagrees with the system (top-quartile |z_us − z_sys| within position),
     who predicts the realized finish better? The edge of a NON-MARKET product lives in the fades.
@@ -338,18 +359,8 @@ def _disagreement(m: pd.DataFrame, us_col: str, sys_col: str, q: float = 0.75) -
     wiring it in here. Pinned by
     `test_scorecard_systems_score_independently_of_each_other` in
     `betting_ml/tests/test_nfl_fantasy_projection.py`."""
-    pool = []
-    for p in _POSITIONS:
-        d = m[m["position"] == p]
-        if len(d) < 12:
-            continue
-        zf, zs = _zscore(d[us_col].to_numpy()), _zscore(d[sys_col].to_numpy())
-        dd = d.assign(_dis=np.abs(zf - zs))
-        pool.append(dd[["position", us_col, sys_col, "real_fp_ppr", "_dis"]])
-    if not pool:
-        return {}
-    allp = pd.concat(pool, ignore_index=True)
-    hi = allp[allp["_dis"] >= allp["_dis"].quantile(q)]
+    allp = _disagreement_frame(m, us_col, sys_col, q)
+    hi = allp[allp["is_fade"]]
     if len(hi) < 10:
         return {}
     return {
@@ -415,6 +426,78 @@ def build_scorecard(con, seasons, schema, *, project_fn, load_realized_fn, manua
     aggregate = _aggregate(per_season)
     return {"per_season": per_season, "aggregate": aggregate,
             "seasons_scored": [r["season"] for r in per_season]}
+
+
+_TRACK_RECORD_COLS = ("season", "player_id", "player_name", "position", "our_points", "our_rank",
+                      "adp", "adp_rank", "actual_points", "actual_rank", "is_fade")
+
+
+def player_track_record_frame(con, season, schema, *, project_fn, load_realized_fn) -> pd.DataFrame:
+    """NF3.2 — the per-PLAYER materialization behind `build_scorecard`'s aggregate "adp" numbers for one
+    season: our projection vs that season's preseason ADP vs the realized outcome, one row per player.
+
+    Reuses the IDENTICAL proj/realized join + g>=6 filter `build_scorecard` uses (see `base` there) and
+    the identical `_disagreement_frame` fade flag (vs ADP specifically — the aggregate's ADP-vs-us
+    comparison is the one NF1.5b's headline claim is about; ECR/ESPN/Sleeper still out-order us). A
+    per-player row can therefore never disagree with the season's own aggregate scorecard number — this
+    is deliberately NOT a parallel re-derivation of `_adp_system`'s merge.
+
+    Returns columns: season, player_id, player_name, position, our_points, our_rank, adp, adp_rank,
+    actual_points, actual_rank, is_fade — one row per player with BOTH a shipped projection AND that
+    season's ADP AND >=6 realized games (the same "aligned universe" `build_scorecard` scores).
+
+    ⚠️ FFC has NO archive for some seasons (2025 confirmed live: `{"status":"Error"}` — a genuine,
+    permanent gap, not a cache problem; see `adp_source.fetch_ffc_adp`'s docstring). When that happens
+    this does NOT blank the season — it still ships real our-vs-actual rows (our_points/our_rank/
+    actual_points/actual_rank), with `adp`/`adp_rank` null and `is_fade=False` (fade is an ADP-
+    disagreement signal and cannot be computed without it). A season with a shipped board and a
+    completed realized outcome always has SOMETHING honest to show, even when one external benchmark
+    is unavailable for it."""
+    proj = project_fn(con, season, schema)
+    proj = proj[proj["position"].isin(_POSITIONS)].copy()
+    proj["player_id"] = proj["player_id"].astype(str)
+    real = load_realized_fn(con, season, schema)
+    real["player_id"] = real["player_id"].astype(str)
+    base = proj.merge(real, on="player_id", how="inner", suffixes=("", "_r"))
+    base = base[base["g"] >= 6].copy()
+    base = base[["player_id", "player_name", "position", "proj_fp_ppr", "real_fp_ppr"]]
+
+    # Mirrors `_adp_system`'s exact filter/transform (notna -> str id -> score=-adp -> dropna score) so
+    # this frame's ADP side is byte-identical to the aggregate's, while also keeping the raw `adp`
+    # value for display (which `_adp_system` discards).
+    adp = A.load_adp_for_season(con, season, schema=schema)
+    adp = adp[adp["player_id"].notna()].copy()
+    if not adp.empty:
+        adp["player_id"] = adp["player_id"].astype(str)
+        adp["sys_score"] = -pd.to_numeric(adp["adp"], errors="coerce")
+        adp = adp.dropna(subset=["sys_score"])
+
+    if adp.empty:
+        out = base.rename(columns={"proj_fp_ppr": "our_points", "real_fp_ppr": "actual_points"}).copy()
+        if out.empty:
+            return pd.DataFrame(columns=_TRACK_RECORD_COLS)
+        out["our_rank"] = out.groupby("position")["our_points"].rank(ascending=False, method="min").astype(int)
+        out["actual_rank"] = out.groupby("position")["actual_points"].rank(ascending=False, method="min").astype(int)
+        out["adp"] = pd.NA
+        out["adp_rank"] = pd.NA
+        out["is_fade"] = False
+        out["season"] = season
+        return out[list(_TRACK_RECORD_COLS)].sort_values(["position", "our_rank"]).reset_index(drop=True)
+
+    m = base.merge(adp[["player_id", "adp", "sys_score"]], on="player_id", how="inner")
+    if m.empty:
+        return pd.DataFrame(columns=_TRACK_RECORD_COLS)
+
+    disagreement = _disagreement_frame(m, "proj_fp_ppr", "sys_score")
+    fade_ids = set(disagreement.loc[disagreement["is_fade"], "player_id"]) if len(disagreement) else set()
+
+    m = m.rename(columns={"proj_fp_ppr": "our_points", "real_fp_ppr": "actual_points"})
+    m["our_rank"] = m.groupby("position")["our_points"].rank(ascending=False, method="min").astype(int)
+    m["adp_rank"] = m.groupby("position")["adp"].rank(ascending=True, method="min").astype(int)
+    m["actual_rank"] = m.groupby("position")["actual_points"].rank(ascending=False, method="min").astype(int)
+    m["is_fade"] = m["player_id"].isin(fade_ids)
+    m["season"] = season
+    return m[list(_TRACK_RECORD_COLS)].sort_values(["position", "our_rank"]).reset_index(drop=True)
 
 
 def forward_comparison(con, season, schema, *, project_fn, manual_dir=None) -> dict:
