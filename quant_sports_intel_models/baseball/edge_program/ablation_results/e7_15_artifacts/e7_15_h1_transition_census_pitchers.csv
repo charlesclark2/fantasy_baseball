@@ -1,0 +1,25 @@
+rung,level_src,level_dst,adjacent,to_reference,n_transitions,n_never_mlb_src,pct_never_mlb,median_pair_pa,metric
+Single-A -> High-A,Single-A,High-A,True,False,2207.0,1691.0,76.6,311.1,k_pct
+Single-A -> Double-A,Single-A,Double-A,False,False,1534.0,998.0,65.1,330.2,k_pct
+Single-A -> Triple-A,Single-A,Triple-A,False,True,680.0,350.0,51.5,302.3,k_pct
+High-A -> Double-A,High-A,Double-A,True,False,2172.0,1399.0,64.4,344.9,k_pct
+High-A -> Triple-A,High-A,Triple-A,False,True,983.0,493.0,50.2,313.1,k_pct
+Double-A -> Triple-A,Double-A,Triple-A,True,True,1367.0,714.0,52.2,354.5,k_pct
+Single-A -> High-A,Single-A,High-A,True,False,2207.0,1691.0,76.6,311.1,bb_pct
+Single-A -> Double-A,Single-A,Double-A,False,False,1534.0,998.0,65.1,330.2,bb_pct
+Single-A -> Triple-A,Single-A,Triple-A,False,True,680.0,350.0,51.5,302.3,bb_pct
+High-A -> Double-A,High-A,Double-A,True,False,2172.0,1399.0,64.4,344.9,bb_pct
+High-A -> Triple-A,High-A,Triple-A,False,True,983.0,493.0,50.2,313.1,bb_pct
+Double-A -> Triple-A,Double-A,Triple-A,True,True,1367.0,714.0,52.2,354.5,bb_pct
+Single-A -> High-A,Single-A,High-A,True,False,2207.0,1691.0,76.6,311.1,hr_rate
+Single-A -> Double-A,Single-A,Double-A,False,False,1534.0,998.0,65.1,330.2,hr_rate
+Single-A -> Triple-A,Single-A,Triple-A,False,True,680.0,350.0,51.5,302.3,hr_rate
+High-A -> Double-A,High-A,Double-A,True,False,2172.0,1399.0,64.4,344.9,hr_rate
+High-A -> Triple-A,High-A,Triple-A,False,True,983.0,493.0,50.2,313.1,hr_rate
+Double-A -> Triple-A,Double-A,Triple-A,True,True,1367.0,714.0,52.2,354.5,hr_rate
+Single-A -> High-A,Single-A,High-A,True,False,2207.0,1691.0,76.6,311.1,gb_pct
+Single-A -> Double-A,Single-A,Double-A,False,False,1534.0,998.0,65.1,330.2,gb_pct
+Single-A -> Triple-A,Single-A,Triple-A,False,True,680.0,350.0,51.5,302.3,gb_pct
+High-A -> Double-A,High-A,Double-A,True,False,2172.0,1399.0,64.4,344.9,gb_pct
+High-A -> Triple-A,High-A,Triple-A,False,True,983.0,493.0,50.2,313.1,gb_pct
+Double-A -> Triple-A,Double-A,Triple-A,True,True,1367.0,714.0,52.2,354.5,gb_pct
