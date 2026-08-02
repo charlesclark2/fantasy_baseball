@@ -95,6 +95,10 @@ export function LeagueImport() {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
+  // NF-C0c — which team roster rows are expanded to show their players. Collapsed by default: a
+  // 12-team league can carry 300+ roster spots, so showing every name up front would bury the
+  // settings review this page exists for.
+  const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set())
 
   // ESPN: the league id the user reads off their own URL, the link we build for them to open, and
   // the response body they bring back. `espnPaste` holds a credential-free settings blob — it is
@@ -803,16 +807,57 @@ export function LeagueImport() {
               <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                 Teams · {preview.teams.length}
               </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {preview.teams.map((t) => (
-                  <span
-                    key={t.team_key}
-                    className="rounded border border-white/10 px-2 py-1 text-[11px] text-gray-400"
-                  >
-                    {t.name}
-                    {t.owner ? ` · ${t.owner}` : ""} ({t.players.length})
-                  </span>
-                ))}
+              <p className="mt-1 text-[11px] text-gray-600">
+                Click a team to see its roster.
+              </p>
+              <div className="mt-2 space-y-1.5">
+                {preview.teams.map((t) => {
+                  const isOpen = expandedTeams.has(t.team_key)
+                  return (
+                    <div key={t.team_key} className="rounded border border-white/10">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedTeams((prev) => {
+                            const next = new Set(prev)
+                            if (next.has(t.team_key)) next.delete(t.team_key)
+                            else next.add(t.team_key)
+                            return next
+                          })
+                        }
+                        className="flex w-full items-center justify-between px-2 py-1 text-left text-[11px] text-gray-400 hover:bg-white/[0.03]"
+                      >
+                        <span>
+                          {t.name}
+                          {t.owner ? ` · ${t.owner}` : ""} ({t.players.length})
+                        </span>
+                      </button>
+                      {isOpen && (
+                        <div className="flex flex-wrap gap-1 border-t border-white/5 p-2">
+                          {t.players.length === 0 && (
+                            <span className="text-[11px] text-gray-600">No players on this roster.</span>
+                          )}
+                          {t.players.map((p) => (
+                            <span
+                              key={p.player_key}
+                              title={p.position ? `${p.position}${p.team ? ` · ${p.team}` : ""}` : undefined}
+                              className={`rounded px-1.5 py-0.5 text-[10px] ${
+                                p.starter
+                                  ? "bg-emerald-500/10 text-emerald-300"
+                                  : "bg-white/[0.03] text-gray-500"
+                              }`}
+                            >
+                              {/* An id we could not resolve to a name still shows honestly — as its
+                                  Sleeper id — rather than being hidden (NF-C0c). */}
+                              {p.name || `#${p.player_key}`}
+                              {p.position ? ` · ${p.position}` : ""}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
