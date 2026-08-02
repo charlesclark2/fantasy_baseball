@@ -468,10 +468,17 @@ def translate_scoring(flat: dict[str, float]) -> tuple[ScoringTranslation, list[
 # why the paste is still safe — but "not a credential" is not a reason to keep it.
 
 # A player's own position, derived from `eligibleSlots` against the ALREADY-VERIFIED slot map rather
-# than from ESPN's separate `defaultPositionId` table — which is a second numbering I have no
-# identity to check. A real position slot admits exactly one position, so the intersection is a
-# singleton for an ordinary player; slot 1 (TQB, a whole-team QB slot) is excluded because it is not
-# an individual's position.
+# than from ESPN's separate `defaultPositionId` table. A real position slot admits exactly one
+# position, so the intersection is a singleton for an ordinary player; slot 1 (TQB, a whole-team QB
+# slot) is excluded because it is not an individual's position.
+#
+# 🪤 DO NOT "SIMPLIFY" THIS TO `defaultPositionId`. The two numberings overlap enough to look
+# interchangeable and are NOT: ESPN's `defaultPositionId` 4 means TIGHT END, while lineup SLOT 4
+# means WIDE RECEIVER. Measured against the real 2025 payload, reading the position id against the
+# slot map would have labelled George Kittle and Mark Andrews **WR**, and left Mahomes, Adams and
+# McMillan with **no position at all** — silently, on a roster we display. Reusing evidence the
+# settings work already verified is what avoids importing a second, unchecked numbering.
+# Pinned by `test_espn_position_ids_are_a_DIFFERENT_numbering_from_lineup_slots`.
 _POSITION_BY_SLOT: dict[int, str] = {
     slot: eligible[0]
     for slot, (_name, eligible, is_bench) in ROSTER_SLOT_MAP.items()
@@ -481,12 +488,15 @@ _POSITION_BY_SLOT: dict[int, str] = {
 # ESPN's pro-team ids: 1988-era alphabetical-by-city, with relocations applied and expansion teams
 # appended (29 CAR, 30 JAX, 33 BAL, 34 HOU). 0 = free agent.
 #
-# ⚖️ WHY THIS SHIPS AT A LOWER EVIDENCE BAR THAN `SCORING_KEY_MAP`, deliberately and not by
-# oversight: a wrong stat id SILENTLY MISPRICES a league — it changes numbers the user acts on. A
-# wrong pro-team abbreviation shows a wrong badge next to a correct player, on a roster we display
-# but do not score. The consequences differ by orders of magnitude, so the rigor does too. An id
-# that is NOT in this table yields `None` rather than a guess, and `test_pro_team_ids_are_pinned_
-# against_a_real_payload` upgrades this to identity-checked the moment a rostered payload exists.
+# ✅ SEVEN ROWS IDENTITY-CHECKED against the real 2025 payload (GB 9, LAR 14, SF 25, SEA 26, CAR 29,
+# KC 12, BAL 33 — confirmed by the players actually on those teams). The rest remain structural
+# inference from the same 1988-alphabetical ordering, and an id NOT in this table yields `None`
+# rather than a guess.
+#
+# ⚖️ It originally shipped at a LOWER evidence bar than `SCORING_KEY_MAP`, deliberately: a wrong
+# stat id SILENTLY MISPRICES a league — it changes numbers the user acts on — whereas a wrong
+# pro-team abbreviation shows a wrong badge next to a correct player, on a roster we display but do
+# not score. Rigor scaled to blast radius; the bar was then raised as soon as evidence existed.
 _PRO_TEAM_BY_ID: dict[int, str] = {
     1: "ATL", 2: "BUF", 3: "CHI", 4: "CIN", 5: "CLE", 6: "DAL", 7: "DEN", 8: "DET",
     9: "GB", 10: "TEN", 11: "IND", 12: "KC", 13: "LV", 14: "LAR", 15: "MIA", 16: "MIN",

@@ -1544,8 +1544,10 @@ class TestEspnRosterImport:
 
     ⏳ **The PRE-DRAFT case is the normal case.** People import BEFORE their draft — that is when a
     draft tool earns its keep — and an undrafted ESPN league returns teams with EMPTY rosters. Both
-    real fixtures are undrafted, so that is the path with real-payload backing; the populated path
-    is marked below and is NOT yet validated against a real rostered payload.
+    current-season fixtures are undrafted, so that is what this class covers. The POPULATED path is
+    validated separately in `TestEspnDraftedRealLeague` against a real prior-season payload; the
+    hand-built entries below deliberately remain, because they cover malformed and edge-shaped rows
+    that a well-formed real payload does not contain.
     """
 
     def test_a_settings_only_payload_still_imports_cleanly(self, espn_payload):
@@ -1731,11 +1733,9 @@ def _espn_entry(
     lineup: int = 20,
     pro: int = 12,
 ) -> dict:
-    """⚠️ A HAND-BUILT ESPN roster entry — the shape is plausible, NOT confirmed against a real
-    rostered payload, because BOTH real leagues are undrafted (`draftDetail.drafted == false`) so
-    neither can produce one. Per this story's own twice-learned lesson, a fixture written by the
-    author cannot disconfirm the author's assumptions: these tests pin OUR logic (position
-    derivation, starter flag, row-by-row resilience), not ESPN's field names."""
+    """A hand-built ESPN roster entry. Its field names ARE now confirmed (see
+    `TestEspnDraftedRealLeague`, built from a real prior-season payload); this helper exists to
+    construct the MALFORMED and edge-shaped rows a well-formed real payload cannot supply."""
     return {
         "lineupSlotId": lineup,
         "playerPoolEntry": {
@@ -1747,3 +1747,125 @@ def _espn_entry(
             }
         },
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# 8. ESPN — the DRAFTED league (a PRIOR SEASON, which is how a rostered payload was obtainable at
+#    all: both current-season leagues are undrafted). Real structure and real players; the members
+#    block is anonymised because the real one carries the operator's leaguemates' names and ESPN
+#    account GUIDs, which are not ours to commit. The GUID SHAPE is preserved, since that is what
+#    the parser and the credential scrubber actually have to handle.
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+
+ESPN_FIXTURE_DRAFTED = Path(__file__).parent / "fixtures" / "espn_league_642070_2025_drafted.json"
+
+
+@pytest.fixture
+def espn_payload_drafted() -> str:
+    return ESPN_FIXTURE_DRAFTED.read_text()
+
+
+class TestEspnDraftedRealLeague:
+    """The populated-roster path, against a real payload rather than the author's guess."""
+
+    # The seven real entries, with the position and pro team each ACTUALLY had in 2025.
+    REAL = [
+        ("Josh Jacobs", "RB", "GB", True),
+        ("Davante Adams", "WR", "LAR", False),
+        ("George Kittle", "TE", "SF", True),
+        ("Kenneth Walker III", "RB", "SEA", True),
+        ("Tetairoa McMillan", "WR", "CAR", True),
+        ("Patrick Mahomes", "QB", "KC", False),   # on IR (lineupSlotId 21)
+        ("Mark Andrews", "TE", "BAL", False),
+    ]
+
+    def test_every_real_player_reads_correctly(self, espn_payload_drafted):
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload_drafted)
+        got = {p.name: p for p in league.teams[0].players}
+        assert len(got) == 7
+        for name, position, team, starter in self.REAL:
+            assert got[name].position == position, name
+            assert got[name].team == team, name
+            assert got[name].starter is starter, name
+
+    def test_pro_team_ids_are_pinned_against_a_real_payload(self, espn_payload_drafted):
+        """⭐ The promised upgrade from "plausible" to "identity-checked".
+
+        `_PRO_TEAM_BY_ID` shipped at a deliberately lower evidence bar than the scoring map, on the
+        argument that a wrong abbreviation is cosmetic where a wrong stat id misprices a league.
+        Seven real players now confirm seven of its rows by identity — the same discipline the
+        scoring map was held to, applied as soon as the evidence existed.
+        """
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload_drafted)
+        got = {p.name: p.team for p in league.teams[0].players}
+        assert got == {name: team for name, _pos, team, _s in self.REAL}
+        # An id outside the table must stay None rather than become a neighbouring team.
+        assert espn._PRO_TEAM_BY_ID.get(999) is None
+
+    def test_espn_position_ids_are_a_DIFFERENT_numbering_from_lineup_slots(self):
+        """🪤 THE NEAR-MISS THIS FIXTURE CAUGHT — do not "simplify" position derivation to use
+        `defaultPositionId`.
+
+        The two numberings overlap enough to look interchangeable and are not: `defaultPositionId`
+        4 means TE, while lineup SLOT 4 means WR. Reading ESPN's position id against the slot map
+        would have labelled George Kittle and Mark Andrews **WR**, and left Mahomes, Adams and
+        McMillan with **no position at all** — silently, on a roster we display. Deriving from
+        `eligibleSlots` against the map the settings work already verified is what avoids it.
+        """
+        from app.backend.services.platform_import import espn
+
+        # The collision, stated as an assertion so it cannot be re-argued from memory.
+        assert espn._POSITION_BY_SLOT[4] == "WR"      # lineup slot 4
+        assert espn._POSITION_BY_SLOT[6] == "TE"      # lineup slot 6
+        # ESPN's defaultPositionId 4 is a TIGHT END. Kittle carries it and must still read as TE.
+        kittle = {"defaultPositionId": 4, "eligibleSlots": [5, 6, 23, 7, 20, 21]}
+        assert espn._player_position(kittle) == "TE"
+        # defaultPositionId 3 (WR) is not even a single-position lineup slot — slot 3 is RB/WR.
+        assert 3 not in espn._POSITION_BY_SLOT
+
+    def test_an_unknown_eligible_slot_does_not_break_derivation(self, espn_payload_drafted):
+        """The real payload carries slot 25 (McMillan) — an id absent from `ROSTER_SLOT_MAP`. An
+        unrecognised eligibility must be ignored, never allowed to blank a known position."""
+        from app.backend.services.platform_import import espn
+
+        assert 25 not in espn._POSITION_BY_SLOT
+        league = espn.parse_settings_payload(espn_payload_drafted)
+        mcmillan = next(p for p in league.teams[0].players if p.name == "Tetairoa McMillan")
+        assert mcmillan.position == "WR"
+
+    def test_a_drafted_league_does_not_get_the_pre_draft_note(self, espn_payload_drafted):
+        from app.backend.services.platform_import import espn
+
+        warnings = espn.parse_settings_payload(espn_payload_drafted).warnings
+        assert not [w for w in warnings if "hasn't drafted" in w]
+        assert [w for w in warnings if "which of these teams is yours" in w]
+
+    def test_a_real_guid_bearing_payload_passes_the_credential_scrubber(self, espn_payload_drafted):
+        """The concrete reason the bare-`SWID` pattern had to be narrowed: `mTeam` really does
+        return member ids in SWID GUID form, on every ESPN league."""
+        from app.backend.services.platform_import import espn
+
+        assert '"id": "{' in espn_payload_drafted  # the GUID shape is genuinely present
+        espn.assert_no_credentials(espn_payload_drafted)
+
+    def test_member_identity_never_reaches_the_response(self, espn_payload_drafted):
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload_drafted)
+        out = json.dumps(league.to_dict())
+        assert "manager1" in out                     # the display name labels the team…
+        assert "-4000-8000-" not in out              # …and the account GUID is dropped
+        assert "Last1" not in out                    # as is the member's surname
+
+    def test_teams_without_a_roster_block_still_import(self, espn_payload_drafted):
+        """ESPN returns the other nine teams here with empty entries; a team that carries no roster
+        at all must be a team with no players, never a parse failure."""
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload_drafted)
+        assert len(league.teams) == 10
+        assert [len(t.players) for t in league.teams[1:]] == [0] * 9

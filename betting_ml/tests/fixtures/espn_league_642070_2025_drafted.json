@@ -1,0 +1,1104 @@
+{
+ "draftDetail": {
+  "drafted": true,
+  "inProgress": false
+ },
+ "gameId": 1,
+ "id": 642070,
+ "members": [
+  {
+   "displayName": "manager1",
+   "firstName": "First1",
+   "id": "{A0000001-0000-4000-8000-000000000001}",
+   "lastName": "Last1"
+  },
+  {
+   "displayName": "manager2",
+   "firstName": "First2",
+   "id": "{A0000002-0000-4000-8000-000000000002}",
+   "lastName": "Last2"
+  },
+  {
+   "displayName": "manager3",
+   "firstName": "First3",
+   "id": "{A0000003-0000-4000-8000-000000000003}",
+   "lastName": "Last3"
+  },
+  {
+   "displayName": "manager4",
+   "firstName": "First4",
+   "id": "{A0000004-0000-4000-8000-000000000004}",
+   "lastName": "Last4"
+  },
+  {
+   "displayName": "manager5",
+   "firstName": "First5",
+   "id": "{A0000005-0000-4000-8000-000000000005}",
+   "lastName": "Last5"
+  },
+  {
+   "displayName": "manager6",
+   "firstName": "First6",
+   "id": "{A0000006-0000-4000-8000-000000000006}",
+   "lastName": "Last6"
+  },
+  {
+   "displayName": "manager7",
+   "firstName": "First7",
+   "id": "{A0000007-0000-4000-8000-000000000007}",
+   "lastName": "Last7"
+  },
+  {
+   "displayName": "manager8",
+   "firstName": "First8",
+   "id": "{A0000008-0000-4000-8000-000000000008}",
+   "lastName": "Last8"
+  },
+  {
+   "displayName": "manager9",
+   "firstName": "First9",
+   "id": "{A0000009-0000-4000-8000-000000000009}",
+   "lastName": "Last9"
+  },
+  {
+   "displayName": "manager10",
+   "firstName": "First10",
+   "id": "{A000000A-0000-4000-8000-00000000000A}",
+   "lastName": "Last10"
+  }
+ ],
+ "scoringPeriodId": 19,
+ "seasonId": 2025,
+ "segmentId": 0,
+ "settings": {
+  "acquisitionSettings": {
+   "acquisitionBudget": 100,
+   "acquisitionLimit": -1,
+   "acquisitionType": "WAIVERS_TRADITIONAL",
+   "finalPlaceTransactionEligible": 0,
+   "isUsingAcquisitionBudget": false,
+   "matchupAcquisitionLimit": 0.0,
+   "matchupLimitPerScoringPeriod": false,
+   "minimumBid": 1,
+   "transactionLockingEnabled": false,
+   "waiverHours": 24,
+   "waiverOrderReset": true,
+   "waiverProcessDays": [
+    "SUNDAY",
+    "FRIDAY",
+    "SATURDAY",
+    "WEDNESDAY",
+    "THURSDAY",
+    "MONDAY"
+   ],
+   "waiverProcessHour": 11
+  },
+  "draftSettings": {
+   "auctionBudget": 200,
+   "isTradingEnabled": false,
+   "keeperCount": 0,
+   "keeperCountFuture": 0,
+   "keeperOrderType": "TRADITIONAL",
+   "leagueSubType": "NONE",
+   "orderType": "DRAFT_START",
+   "pickOrder": [
+    13,
+    6,
+    9,
+    11,
+    7,
+    2,
+    1,
+    8,
+    10,
+    12
+   ],
+   "timePerSelection": 120,
+   "type": "SNAKE"
+  },
+  "isAutoReactivate": false,
+  "isCustomizable": true,
+  "isPublic": false,
+  "name": "Dubbya Bee League",
+  "restrictionType": "NONE",
+  "rosterSettings": {
+   "autoPilotTypeSupported": "NONE",
+   "isBenchUnlimited": true,
+   "isUsingUndroppableList": true,
+   "lineupLocktimeType": "INDIVIDUAL_GAME",
+   "lineupSlotCounts": {
+    "0": 1,
+    "1": 0,
+    "10": 0,
+    "11": 0,
+    "12": 0,
+    "13": 0,
+    "14": 0,
+    "15": 0,
+    "16": 1,
+    "17": 1,
+    "18": 0,
+    "19": 0,
+    "2": 2,
+    "20": 7,
+    "21": 2,
+    "22": 0,
+    "23": 1,
+    "24": 0,
+    "3": 0,
+    "4": 2,
+    "5": 0,
+    "6": 1,
+    "7": 0,
+    "8": 0,
+    "9": 0
+   },
+   "lineupSlotStatLimits": {},
+   "moveLimit": -1,
+   "positionLimits": {
+    "0": 0,
+    "1": 4,
+    "10": 0,
+    "11": 0,
+    "12": 0,
+    "13": 0,
+    "14": 0,
+    "15": -1,
+    "16": 3,
+    "17": 0,
+    "2": 8,
+    "3": 8,
+    "4": 3,
+    "5": 3,
+    "6": 0,
+    "7": 0,
+    "8": 0,
+    "9": 0
+   },
+   "rosterLocktimeType": "INDIVIDUAL_GAME",
+   "universeIds": [
+    0
+   ]
+  },
+  "scheduleSettings": {
+   "consolationLadderDisabled": false,
+   "divisions": [
+    {
+     "id": 0,
+     "name": "East",
+     "size": 5
+    },
+    {
+     "id": 1,
+     "name": "West",
+     "size": 5
+    }
+   ],
+   "matchupPeriodCount": 13,
+   "matchupPeriodLength": 1,
+   "matchupPeriods": {
+    "1": [
+     1
+    ],
+    "10": [
+     10
+    ],
+    "11": [
+     11
+    ],
+    "12": [
+     12
+    ],
+    "13": [
+     13
+    ],
+    "14": [
+     14,
+     15
+    ],
+    "15": [
+     16,
+     17
+    ],
+    "2": [
+     2
+    ],
+    "3": [
+     3
+    ],
+    "4": [
+     4
+    ],
+    "5": [
+     5
+    ],
+    "6": [
+     6
+    ],
+    "7": [
+     7
+    ],
+    "8": [
+     8
+    ],
+    "9": [
+     9
+    ]
+   },
+   "periodTypeId": 1,
+   "playoffMatchupPeriodLength": 2,
+   "playoffReseed": false,
+   "playoffSeedingRule": "TOTAL_POINTS_SCORED",
+   "playoffSeedingRuleBy": 0,
+   "playoffTeamCount": 4,
+   "variablePlayoffMatchupPeriodLength": false
+  },
+  "scoringSettings": {
+   "allowOutOfPositionScoring": false,
+   "homeTeamBonus": 0,
+   "matchupTieRule": "NONE",
+   "matchupTieRuleBy": 0,
+   "playerRankType": "PPR",
+   "playoffHomeTeamBonus": 0,
+   "playoffMatchupTieRule": "NONE",
+   "playoffMatchupTieRuleBy": 0,
+   "scoringItems": [
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 5.0
+     },
+     "statId": 89
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 4.0
+     },
+     "statId": 90
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": -1.0
+     },
+     "statId": 123
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": -3.0
+     },
+     "statId": 133
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 6.0,
+     "statId": 25
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": -5.0
+     },
+     "statId": 134
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": -2.0,
+     "statId": 72
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": -6.0
+     },
+     "statId": 135
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 2.0
+     },
+     "statId": 95
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": -7.0
+     },
+     "statId": 136
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 6.0,
+     "pointsOverrides": {
+      "16": 6.0
+     },
+     "statId": 93
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 2.0
+     },
+     "statId": 98
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 3.0
+     },
+     "statId": 91
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 2.0
+     },
+     "statId": 96
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 2.0,
+     "statId": 19
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 6.0,
+     "statId": 43
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 2.0
+     },
+     "statId": 97
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 6.0,
+     "pointsOverrides": {
+      "16": 6.0
+     },
+     "statId": 102
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 4.0,
+     "statId": 4
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": -2.0,
+     "statId": 20
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 6.0,
+     "pointsOverrides": {
+      "16": 6.0
+     },
+     "statId": 103
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.1,
+     "statId": 24
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.5,
+     "statId": 53
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 6.0,
+     "pointsOverrides": {
+      "16": 6.0
+     },
+     "statId": 101
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 6.0,
+     "statId": 63
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 3.0,
+     "statId": 80
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 6.0,
+     "pointsOverrides": {
+      "16": 6.0
+     },
+     "statId": 104
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 2.0,
+     "statId": 26
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 4.0,
+     "statId": 77
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 5.0
+     },
+     "statId": 128
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 1.0
+     },
+     "statId": 92
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 1.0
+     },
+     "statId": 99
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": -5.0
+     },
+     "statId": 125
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.04,
+     "statId": 3
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": -1.0,
+     "statId": 85
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": -3.0
+     },
+     "statId": 124
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": -1.0
+     },
+     "statId": 132
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 1.0,
+     "statId": 86
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.1,
+     "statId": 42
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 3.0
+     },
+     "statId": 129
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 2.0,
+     "statId": 44
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 5.0,
+     "statId": 201
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 0.0,
+     "pointsOverrides": {
+      "16": 2.0
+     },
+     "statId": 130
+    },
+    {
+     "isReverseItem": false,
+     "leagueRanking": 0.0,
+     "leagueTotal": 0.0,
+     "points": 5.0,
+     "statId": 198
+    }
+   ],
+   "scoringType": "H2H_POINTS"
+  },
+  "size": 10,
+  "tradeSettings": {
+   "allowOutOfUniverse": false,
+   "deadlineDate": 1796371200000,
+   "max": -1,
+   "revisionHours": 48,
+   "vetoVotesRequired": 4
+  }
+ },
+ "status": {
+  "createdAsLeagueType": 0,
+  "currentLeagueType": 0,
+  "currentMatchupPeriod": 15,
+  "finalScoringPeriod": 17,
+  "firstScoringPeriod": 1,
+  "isActive": true,
+  "isExpired": false,
+  "isFull": true,
+  "isPlayoffMatchupEdited": false,
+  "isToBeDeleted": false,
+  "isViewable": true,
+  "isWaiverOrderEdited": false,
+  "latestScoringPeriod": 19,
+  "previousSeasons": [
+   2013,
+   2014,
+   2015,
+   2016,
+   2017,
+   2018,
+   2019,
+   2020,
+   2021,
+   2022,
+   2023,
+   2024
+  ],
+  "teamsJoined": 10,
+  "transactionScoringPeriod": 0,
+  "waiverLastExecutionDate": 1774447866190,
+  "waiverProcessStatus": {}
+ },
+ "teams": [
+  {
+   "abbrev": "MML",
+   "divisionId": 0,
+   "id": 1,
+   "name": "The Man The Myth The Legend",
+   "owners": [
+    "{A0000001-0000-4000-8000-000000000001}"
+   ],
+   "playoffSeed": 4,
+   "points": 1413.44,
+   "primaryOwner": "{A0000001-0000-4000-8000-000000000001}",
+   "roster": {
+    "appliedStatTotal": 41.38,
+    "entries": [
+     {
+      "acquisitionDate": 1756779115739,
+      "acquisitionType": "DRAFT",
+      "injuryStatus": "NORMAL",
+      "lineupSlotId": 2,
+      "pendingTransactionIds": null,
+      "playerId": 4047365,
+      "playerPoolEntry": {
+       "appliedStatTotal": 0.0,
+       "id": 4047365,
+       "lineupLocked": true,
+       "onTeamId": 1,
+       "player": {
+        "active": true,
+        "defaultPositionId": 2,
+        "droppable": true,
+        "eligibleSlots": [
+         2,
+         3,
+         23,
+         7,
+         20,
+         21
+        ],
+        "firstName": "Josh",
+        "fullName": "Josh Jacobs",
+        "id": 4047365,
+        "injured": false,
+        "injuryStatus": "ACTIVE",
+        "lastName": "Jacobs",
+        "proTeamId": 9,
+        "stats": []
+       },
+       "rosterLocked": true,
+       "status": "ONTEAM",
+       "tradeLocked": false
+      },
+      "status": "NORMAL"
+     },
+     {
+      "acquisitionDate": 1756779115739,
+      "acquisitionType": "DRAFT",
+      "injuryStatus": "NORMAL",
+      "lineupSlotId": 20,
+      "pendingTransactionIds": null,
+      "playerId": 16800,
+      "playerPoolEntry": {
+       "appliedStatTotal": 0.0,
+       "id": 16800,
+       "lineupLocked": true,
+       "onTeamId": 1,
+       "player": {
+        "active": true,
+        "defaultPositionId": 3,
+        "droppable": true,
+        "eligibleSlots": [
+         3,
+         4,
+         5,
+         23,
+         7,
+         20,
+         21
+        ],
+        "firstName": "Davante",
+        "fullName": "Davante Adams",
+        "id": 16800,
+        "injured": false,
+        "injuryStatus": "ACTIVE",
+        "lastName": "Adams",
+        "proTeamId": 14,
+        "stats": []
+       },
+       "rosterLocked": true,
+       "status": "ONTEAM",
+       "tradeLocked": false
+      },
+      "status": "NORMAL"
+     },
+     {
+      "acquisitionDate": 1756779115739,
+      "acquisitionType": "DRAFT",
+      "injuryStatus": "NORMAL",
+      "lineupSlotId": 6,
+      "pendingTransactionIds": null,
+      "playerId": 3040151,
+      "playerPoolEntry": {
+       "appliedStatTotal": 0.0,
+       "id": 3040151,
+       "lineupLocked": true,
+       "onTeamId": 1,
+       "player": {
+        "active": true,
+        "defaultPositionId": 4,
+        "droppable": true,
+        "eligibleSlots": [
+         5,
+         6,
+         23,
+         7,
+         20,
+         21
+        ],
+        "firstName": "George",
+        "fullName": "George Kittle",
+        "id": 3040151,
+        "injured": false,
+        "injuryStatus": "ACTIVE",
+        "lastName": "Kittle",
+        "proTeamId": 25,
+        "stats": []
+       },
+       "rosterLocked": true,
+       "status": "ONTEAM",
+       "tradeLocked": false
+      },
+      "status": "NORMAL"
+     },
+     {
+      "acquisitionDate": 1756779115739,
+      "acquisitionType": "DRAFT",
+      "injuryStatus": "NORMAL",
+      "lineupSlotId": 2,
+      "pendingTransactionIds": null,
+      "playerId": 4567048,
+      "playerPoolEntry": {
+       "appliedStatTotal": 0.0,
+       "id": 4567048,
+       "lineupLocked": true,
+       "onTeamId": 1,
+       "player": {
+        "active": true,
+        "defaultPositionId": 2,
+        "droppable": true,
+        "eligibleSlots": [
+         2,
+         3,
+         23,
+         7,
+         20,
+         21
+        ],
+        "firstName": "Kenneth",
+        "fullName": "Kenneth Walker III",
+        "id": 4567048,
+        "injured": false,
+        "injuryStatus": "ACTIVE",
+        "lastName": "Walker III",
+        "proTeamId": 26,
+        "stats": []
+       },
+       "rosterLocked": true,
+       "status": "ONTEAM",
+       "tradeLocked": false
+      },
+      "status": "NORMAL"
+     },
+     {
+      "acquisitionDate": 1756779115739,
+      "acquisitionType": "DRAFT",
+      "injuryStatus": "NORMAL",
+      "lineupSlotId": 4,
+      "pendingTransactionIds": null,
+      "playerId": 4685472,
+      "playerPoolEntry": {
+       "appliedStatTotal": 0.0,
+       "id": 4685472,
+       "lineupLocked": true,
+       "onTeamId": 1,
+       "player": {
+        "active": true,
+        "defaultPositionId": 3,
+        "droppable": true,
+        "eligibleSlots": [
+         25,
+         3,
+         4,
+         5,
+         23,
+         7,
+         20,
+         21
+        ],
+        "firstName": "Tetairoa",
+        "fullName": "Tetairoa McMillan",
+        "id": 4685472,
+        "injured": false,
+        "injuryStatus": "ACTIVE",
+        "lastName": "McMillan",
+        "proTeamId": 29,
+        "stats": []
+       },
+       "rosterLocked": true,
+       "status": "ONTEAM",
+       "tradeLocked": false
+      },
+      "status": "NORMAL"
+     },
+     {
+      "acquisitionDate": 1756779115739,
+      "acquisitionType": "DRAFT",
+      "injuryStatus": "NORMAL",
+      "lineupSlotId": 21,
+      "pendingTransactionIds": null,
+      "playerId": 3139477,
+      "playerPoolEntry": {
+       "appliedStatTotal": 0.0,
+       "id": 3139477,
+       "lineupLocked": true,
+       "onTeamId": 1,
+       "player": {
+        "active": true,
+        "defaultPositionId": 1,
+        "droppable": true,
+        "eligibleSlots": [
+         0,
+         7,
+         20,
+         21
+        ],
+        "firstName": "Patrick",
+        "fullName": "Patrick Mahomes",
+        "id": 3139477,
+        "injured": false,
+        "injuryStatus": "ACTIVE",
+        "lastName": "Mahomes",
+        "proTeamId": 12,
+        "stats": []
+       },
+       "rosterLocked": true,
+       "status": "ONTEAM",
+       "tradeLocked": false
+      },
+      "status": "NORMAL"
+     },
+     {
+      "acquisitionDate": 1756779115739,
+      "acquisitionType": "DRAFT",
+      "injuryStatus": "NORMAL",
+      "lineupSlotId": 20,
+      "pendingTransactionIds": null,
+      "playerId": 3116365,
+      "playerPoolEntry": {
+       "appliedStatTotal": 0.0,
+       "id": 3116365,
+       "lineupLocked": true,
+       "onTeamId": 1,
+       "player": {
+        "active": true,
+        "defaultPositionId": 4,
+        "droppable": true,
+        "eligibleSlots": [
+         5,
+         6,
+         23,
+         7,
+         20,
+         21
+        ],
+        "firstName": "Mark",
+        "fullName": "Mark Andrews",
+        "id": 3116365,
+        "injured": false,
+        "injuryStatus": "ACTIVE",
+        "lastName": "Andrews",
+        "proTeamId": 33,
+        "stats": []
+       },
+       "rosterLocked": true,
+       "status": "ONTEAM",
+       "tradeLocked": false
+      },
+      "status": "NORMAL"
+     }
+    ]
+   }
+  },
+  {
+   "abbrev": "T2",
+   "divisionId": 0,
+   "id": 2,
+   "name": "Team 2",
+   "owners": [
+    "{A0000002-0000-4000-8000-000000000002}"
+   ],
+   "primaryOwner": "{A0000002-0000-4000-8000-000000000002}",
+   "roster": {
+    "entries": []
+   }
+  },
+  {
+   "abbrev": "T3",
+   "divisionId": 1,
+   "id": 3,
+   "name": "Team 3",
+   "owners": [
+    "{A0000003-0000-4000-8000-000000000003}"
+   ],
+   "primaryOwner": "{A0000003-0000-4000-8000-000000000003}",
+   "roster": {
+    "entries": []
+   }
+  },
+  {
+   "abbrev": "T4",
+   "divisionId": 0,
+   "id": 4,
+   "name": "Team 4",
+   "owners": [
+    "{A0000004-0000-4000-8000-000000000004}"
+   ],
+   "primaryOwner": "{A0000004-0000-4000-8000-000000000004}",
+   "roster": {
+    "entries": []
+   }
+  },
+  {
+   "abbrev": "T5",
+   "divisionId": 1,
+   "id": 5,
+   "name": "Team 5",
+   "owners": [
+    "{A0000005-0000-4000-8000-000000000005}"
+   ],
+   "primaryOwner": "{A0000005-0000-4000-8000-000000000005}",
+   "roster": {
+    "entries": []
+   }
+  },
+  {
+   "abbrev": "T6",
+   "divisionId": 0,
+   "id": 6,
+   "name": "Team 6",
+   "owners": [
+    "{A0000006-0000-4000-8000-000000000006}"
+   ],
+   "primaryOwner": "{A0000006-0000-4000-8000-000000000006}",
+   "roster": {
+    "entries": []
+   }
+  },
+  {
+   "abbrev": "T7",
+   "divisionId": 1,
+   "id": 7,
+   "name": "Team 7",
+   "owners": [
+    "{A0000007-0000-4000-8000-000000000007}"
+   ],
+   "primaryOwner": "{A0000007-0000-4000-8000-000000000007}",
+   "roster": {
+    "entries": []
+   }
+  },
+  {
+   "abbrev": "T8",
+   "divisionId": 0,
+   "id": 8,
+   "name": "Team 8",
+   "owners": [
+    "{A0000008-0000-4000-8000-000000000008}"
+   ],
+   "primaryOwner": "{A0000008-0000-4000-8000-000000000008}",
+   "roster": {
+    "entries": []
+   }
+  },
+  {
+   "abbrev": "T9",
+   "divisionId": 1,
+   "id": 9,
+   "name": "Team 9",
+   "owners": [
+    "{A0000009-0000-4000-8000-000000000009}"
+   ],
+   "primaryOwner": "{A0000009-0000-4000-8000-000000000009}",
+   "roster": {
+    "entries": []
+   }
+  },
+  {
+   "abbrev": "T10",
+   "divisionId": 0,
+   "id": 10,
+   "name": "Team 10",
+   "owners": [
+    "{A000000A-0000-4000-8000-00000000000A}"
+   ],
+   "primaryOwner": "{A000000A-0000-4000-8000-00000000000A}",
+   "roster": {
+    "entries": []
+   }
+  }
+ ]
+}

@@ -250,21 +250,38 @@ asymmetry decides it — narrowing costs nothing, because a pasted cookie header
 over (`espn_s2` anywhere, the `Cookie:`/`-H cookie:` patterns, and this), while over-matching breaks
 the feature for everyone. A dedicated test class re-proves the guard against real DevTools copies.
 
-🚧 **STILL UNVALIDATED: the populated-roster path.** Both real leagues have `draftDetail.drafted ==
-false`, so **no obtainable payload contains a roster**, and the player-object field names
-(`playerPoolEntry.player.fullName` / `eligibleSlots` / `proTeamId`) are shape-plausible rather than
-confirmed. The tests around them pin OUR logic — position derivation, the starter flag, row-by-row
-resilience — not ESPN's field names. Position is derived from `eligibleSlots` against the
-**already-verified** `ROSTER_SLOT_MAP` rather than ESPN's separate `defaultPositionId` table, so no
-new unverified numbering was introduced. `_PRO_TEAM_BY_ID` ships at a **deliberately lower evidence
-bar** than `SCORING_KEY_MAP`: a wrong stat id silently misprices a league, whereas a wrong pro-team
-abbreviation shows a wrong badge beside a correct player on a roster we display but do not score —
-and an unknown id yields `None` rather than a guess.
+### 4c. ✅ The rostered path, validated by a PRIOR SEASON (2026-08-01)
 
-**How to close it: a PRIOR SEASON.** League 642070 lists `previousSeasons: [2013…2025]`, and those
-are drafted. Swapping `seasons/2026` for `seasons/2025` in the same link returns a populated roster
-today, which pins the field names and lets several `proTeamId` rows be confirmed by identity against
-known players. Until that lands, treat rostered ESPN imports as unproven.
+Both current-season leagues are `drafted: false`, so no obtainable payload contained a roster. A
+**prior season does** — swapping `seasons/2026` for `seasons/2025` on the same link returned a fully
+drafted league, which is the general trick: **a historical read supplies a payload state the current
+season cannot produce.** Results:
+
+* **All four guessed field names are correct** — `playerPoolEntry.player.fullName`, `eligibleSlots`,
+  `proTeamId`, `lineupSlotId`.
+* **`_PRO_TEAM_BY_ID` is now identity-checked on seven rows** (GB 9, LAR 14, SF 25, SEA 26, CAR 29,
+  KC 12, BAL 33), confirmed by the players actually on those teams in 2025. The lower evidence bar
+  was raised the moment evidence existed.
+* All seven players read with the correct position, pro team and starter flag — including Mahomes
+  on IR (`lineupSlotId` 21) correctly counted as a non-starter.
+
+🪤 **THE NEAR-MISS, and the best argument in this memo for reusing verified evidence.** ESPN's
+`defaultPositionId` is a **different numbering from lineup slots**, and they overlap enough to look
+interchangeable: `defaultPositionId` 4 means **TE**, while lineup **slot** 4 means **WR**. Had
+position been read from ESPN's position id against the slot map — the obvious "simplification" — 
+**George Kittle and Mark Andrews would have imported as WR, and Mahomes, Adams and McMillan would
+have had no position at all**, silently, on a roster we display. Deriving from `eligibleSlots`
+against the map the scoring work had already verified avoided it. There is now a test asserting the
+collision so the simplification cannot be re-proposed from memory.
+
+Two smaller findings: the payload carries eligibility slot **25**, absent from `ROSTER_SLOT_MAP`
+(ignored, and proven not to blank a known position); and `mTeam` really does return member ids in
+**SWID GUID form on every league**, which is the concrete justification for narrowing the scrubber.
+
+🔒 **The committed fixture is anonymised.** The real payload carries the operator's leaguemates'
+first and last names, their ESPN account GUIDs, and per-member notification settings. The GUID
+*shape* is preserved because the parser and scrubber must handle it; the identities are not ours to
+commit, and the multi-KB per-player `stats` arrays are trimmed since we never read them.
 
 ⭐ This is the second time the rule has paid on this story (the first was Sleeper's coarse `fgm_50p`
 vs fine `fgm_50_59`/`fgm_60p`, which survived 56 tests and a live-verified league). **Both fixtures
