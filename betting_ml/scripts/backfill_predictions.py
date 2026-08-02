@@ -477,8 +477,24 @@ def main() -> None:
     print(f"  best_alpha={best_alpha}")
 
     print("\nRunning inference...")
-    # Elasticnet uses its own internal imputer — pass raw df with NaN fill
-    X_hw = df.reindex(columns=hw_cols, fill_value=np.nan).values.astype(np.float32)
+    # ⚠️ EVERY model input comes from the IMPUTED frame `df_t`, never the raw `df`.
+    # This line used to read `df.reindex(..., fill_value=np.nan)` under the comment "Elasticnet uses
+    # its own internal imputer" — describing an architecture that is no longer served. The E13.11
+    # home_win champion is `PlattCalibratedLinearClassifier(Pipeline(StandardScaler,
+    # LogisticRegression))`, which has NO imputer and rejects NaN outright ("LogisticRegression does
+    # not accept missing values encoded as NaN natively"). The previous XGBoost champion consumed
+    # NaN natively, so the raw-frame path was silently invalidated by that swap and nothing noticed
+    # — the backfill was already unrunnable for a different reason (the sidecar unwrap).
+    # `predict_today` builds ALL THREE inputs from its imputed matrix (`X_today_imp`); this now
+    # matches it exactly, including fill_value and dtype.
+    X_hw = df_t.reindex(columns=hw_cols, fill_value=0.0).values.astype(np.float32)
+    if not np.isfinite(X_hw).all():
+        _bad = [c for c in hw_cols if c in df_t.columns and not np.isfinite(df_t[c]).all()]
+        raise SystemExit(
+            f"❌ home_win matrix still contains NaN/inf after imputation in {len(_bad)} column(s): "
+            f"{_bad[:8]}. The served classifier rejects NaN, so this would fail deep inside sklearn "
+            f"with a message naming neither the column nor the target."
+        )
     p_hw_clf = clf_hw.predict_proba(X_hw)[:, 1]
 
     # NGBoost models use the externally imputed df_t
