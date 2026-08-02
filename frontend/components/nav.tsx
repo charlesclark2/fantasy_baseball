@@ -8,7 +8,7 @@ import { LogOut, Settings, Menu, X, ChevronDown, Lock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
 import { canAccess, canAccessFantasyBeta } from "@/lib/entitlements"
-import { SPORTS, surfaceItems, publicNavItems, type NavItem, type SurfaceGroup } from "@/lib/nav-model"
+import { SPORTS, surfaceItems, publicNavItems, type NavItem, type SportNav, type SurfaceGroup } from "@/lib/nav-model"
 import changelog from "@/data/changelog.json"
 
 const latestWeek = changelog[0]?.week
@@ -61,10 +61,25 @@ export function Nav({
     g.surface === "fantasy" && !canAccess("fantasy", groups)
 
   // An ITEM can require MORE than its surface (NF-C0b's league-settings editor is
-  // admin + fantasy_comp only). Unlike a locked surface this is HIDDEN, not upsold —
-  // it is a staged rollout, not something a subscriber can buy their way into.
+  // admin + fantasy_comp only; E8.1's MLB prospect board is admin-only while it is in
+  // development). Unlike a locked surface this is HIDDEN, not upsold — it is a staged
+  // rollout, not something a subscriber can buy their way into.
   const visibleItems = (items: NavItem[]) =>
-    items.filter((i) => i.restrict !== "fantasy_beta" || canAccessFantasyBeta(groups))
+    items.filter((i) => {
+      if (i.restrict === "fantasy_beta") return canAccessFantasyBeta(groups)
+      if (i.restrict === "admin") return isAdmin
+      return true
+    })
+
+  // 🐛 A surface whose items are ALL restricted away must not render at all. E8.1 added an
+  // MLB→Fantasy surface whose only two items are admin-only, so for an entitled NON-admin
+  // `isLocked` is false (they do have fantasy) while `visibleItems` is empty — which would draw
+  // a bare "FANTASY" heading with nothing under it. An empty dropdown section reads as a broken
+  // menu, so drop the whole group. A LOCKED group still renders: its upsell is the content.
+  const visibleSurfaces = (sport: SportNav) =>
+    sport.surfaces.filter(
+      (g) => isLocked(g) || g.sections.some((s) => visibleItems(s.items).length > 0),
+    )
 
   const itemClass = (key: string) =>
     `block px-3 py-2 text-sm transition-colors ${
@@ -216,7 +231,7 @@ export function Nav({
                   <ChevronDown className="h-3 w-3" />
                 </button>
                 <div className="absolute left-0 top-full z-50 hidden w-56 rounded-md border border-[#262626] bg-[#0f0f0f] py-1 shadow-xl group-hover:block">
-                  {sport.surfaces.map((g) => {
+                  {visibleSurfaces(sport).map((g) => {
                     const locked = isLocked(g)
                     return (
                       <div key={g.surface} className="py-1">
@@ -322,7 +337,7 @@ export function Nav({
                 <span className="block px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
                   {sport.label}
                 </span>
-                {sport.surfaces.map((g) => {
+                {visibleSurfaces(sport).map((g) => {
                   const locked = isLocked(g)
                   if (locked) {
                     return (

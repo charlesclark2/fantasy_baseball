@@ -141,6 +141,15 @@ export interface ProspectFraming {
   disagreement?: string
   comps?: string
   inMajors?: string
+  /** Why a player can carry NO line from us — two genuinely different causes, keyed `complex`
+   *  (the translation is not built for complex/DSL at all) and `thinSample` (he HAS a record, it is
+   *  under the minimum-sample floor). Picking the right one matters: telling a user "no record"
+   *  about a top-100 prospect he just watched play is how a surface loses its credibility. */
+  noLine?: { complex?: string; thinSample?: string }
+  /** The minimum PA/TBF at a level before we publish a translated line (E7.3's `min_minor_pa`). */
+  minSample?: number
+  /** The levels the translation actually covers. Any level outside this list is the `complex` case. */
+  mleLevels?: string[]
 }
 
 export interface ProspectManifest {

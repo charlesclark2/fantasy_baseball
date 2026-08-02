@@ -184,6 +184,32 @@ class TestHonestFrame:
         assert any("STOLEN BASES" in a for a in exporter.FRAMING["absences"])
         assert any(key == "speedFlag" for _, key, _ in exporter._COLUMNS)
 
+    def test_a_missing_line_is_explained_by_its_two_real_causes(self):
+        """🚨 THE COPY THAT WAS WRONG, now pinned (operator-reported, 2026-08-02).
+
+        The original wording told a user a blank line meant the player had "no minor-league record
+        to translate". True for complex/DSL, and FALSE for the case that actually got noticed:
+        Josuar González (26 PA), Luis Hernández (33 PA), Dax Kilby (120 PA) and Trey Yesavage (a
+        pitcher split across four levels) all have Single-A-or-higher records and sit blank because
+        they are under E7.3's `min_minor_pa = 150` floor. Two causes ⇒ two strings, and the
+        thin-sample one must NOT claim an absence of data."""
+        no_line = exporter.FRAMING["noLine"]
+        assert set(no_line) == {"complex", "thinSample"}
+        assert "150" in no_line["thinSample"] or str(exporter.FRAMING["minSample"]) == "150"
+        # the thin-sample case must say he HAS a record — the exact thing the old copy denied
+        assert "has a professional record" in no_line["thinSample"]
+        # …and the complex case must be about SCOPE, not sample size
+        assert "Single-A through Triple-A" in no_line["complex"]
+
+    def test_the_covered_levels_are_declared_so_the_ui_owns_no_threshold(self):
+        """The UI picks WHICH no-line reason to show by testing the row's level against this list.
+        Declaring it here keeps the level vocabulary and the 150 floor in one place — the exporter,
+        beside the model that set them — rather than hard-coded in a component."""
+        assert exporter.FRAMING["mleLevels"] == ["A", "A+", "AA", "AAA", "MLB"]
+        assert "CPX" not in exporter.FRAMING["mleLevels"]
+        assert "DSL" not in exporter.FRAMING["mleLevels"]
+        assert exporter.FRAMING["minSample"] == 150
+
     def test_the_weak_metrics_are_marked_weak(self):
         """E7.3/E7.3p: batter K%/BB% (0.64/0.49) and pitcher GB% (0.55) are strong; ISO (0.43) and
         pitcher K%/BB% (~0.37) are weak-but-real. The UI demotes them off THIS map, so an inverted
@@ -220,14 +246,35 @@ class TestServingPath:
                 fn(season=2019)
             assert exc.value.status_code == 404
 
-    def test_the_paid_board_sits_behind_the_fantasy_gate(self):
-        """🔒 E9.56 / NF-C6 — the current-season board is the PAID product and there is no public
-        tier of it. Unlike `fantasy_public.py` these routes carry NO exemption, so the router-level
-        `require_fantasy_access` must actually cover them."""
+    def test_the_board_is_admin_only_while_in_development(self):
+        """🔒 ADMIN ONLY (operator, 2026-08-02) — the STRICTEST gate in the codebase, and the
+        assertion that matters most here.
+
+        The router-level `require_fantasy_access` grants `subscriber` OR `admin` OR `fantasy_comp`,
+        which is correct for the shipped NFL routes it is shared with and WRONG for an
+        in-development surface: it would expose the board to every paying subscriber. Even
+        `require_fantasy_beta_access` (`admin` + `fantasy_comp`) is too wide. So each MLB route must
+        additionally depend on `get_admin_user` — checked PER ROUTE, because the router-level
+        dependency cannot express a rule narrower than its other routes need."""
+        by_path = {r.path: r for r in fantasy.router.routes}
+        for path in ("/fantasy/mlb/prospects/board", "/fantasy/mlb/prospects/manifest"):
+            assert path in by_path, f"{path} is not registered"
+            route_deps = [d.call for d in by_path[path].dependant.dependencies]
+            assert deps.get_admin_user in route_deps, (
+                f"{path} is NOT admin-only — it would be readable by every paying subscriber"
+            )
+        # …and the router-level fantasy gate still applies underneath (defence in depth).
         assert deps.require_fantasy_access in [d.dependency for d in fantasy.router.dependencies]
-        paths = {r.path for r in fantasy.router.routes}
-        assert "/fantasy/mlb/prospects/board" in paths
-        assert "/fantasy/mlb/prospects/manifest" in paths
+
+    def test_the_nfl_routes_did_not_get_the_admin_gate_by_accident(self):
+        """The inverse. `get_admin_user` was added PER ROUTE precisely so the shipped NFL board
+        endpoints stay open to subscribers — pinning that keeps a future 'tidy-up' from hoisting it
+        to the router and silently locking paying users out of a product they bought."""
+        by_path = {r.path: r for r in fantasy.router.routes}
+        for path in ("/fantasy/nfl/board", "/fantasy/nfl/projections", "/fantasy/nfl/manifest"):
+            route_deps = [d.call for d in by_path[path].dependant.dependencies]
+            assert deps.get_admin_user not in route_deps, f"{path} became admin-only"
+        assert deps.get_admin_user not in [d.dependency for d in fantasy.router.dependencies]
 
     def test_the_reads_hit_the_mlb_key_space_not_nfl(self, monkeypatch):
         """A shared bucket makes a wrong prefix a data-mixing bug that still returns 200. Pin that
@@ -335,13 +382,30 @@ def _write_csv(tmp_path, board: pd.DataFrame):
 _FRONTEND = pathlib.Path(__file__).resolve().parents[2] / "frontend"
 
 
+def _mlb_nav_block(strip_comments: bool = True) -> str:
+    """Just the MLB sport entry of `SPORTS`, with `//` comment lines removed by default.
+
+    ⚠️ BOTH halves of this are load-bearing, and both were caught by this test failing:
+      * scoped from `sport: "mlb"` (not the top of the file) because the `NavItem` interface above
+        the array names every `restrict` value in its own doc comment;
+      * COMMENTS STRIPPED because the explanatory comment above the MLB items itself contains the
+        literal `restrict: "admin"`, which inflated a count-based assertion from 2 to 3. That is the
+        INC-38 "prose can satisfy a source guard" hazard facing the other way — a source-inspection
+        test must match CODE, never the commentary about it.
+    """
+    nav = (_FRONTEND / "lib/nav-model.ts").read_text(encoding="utf-8")
+    block = nav[nav.index('sport: "mlb"'):nav.index('sport: "nfl"')]
+    if not strip_comments:
+        return block
+    return "\n".join(ln for ln in block.splitlines() if not ln.strip().startswith("//"))
+
+
 class TestNavWiring:
     def test_the_mlb_fantasy_surface_is_declared(self):
         """E9.45's nav is sport-first with only the (sport × surface) combos that EXIST declared.
         E8.1 is the first MLB→Fantasy surface, so it has to be added there or the pages are
         unreachable from the nav even though they build and route fine."""
-        nav = (_FRONTEND / "lib/nav-model.ts").read_text(encoding="utf-8")
-        mlb_block = nav.split('sport: "nfl"')[0]
+        mlb_block = _mlb_nav_block()
         assert 'surface: "fantasy"' in mlb_block, "MLB has no Fantasy surface in the nav model"
         assert "/fantasy/mlb/prospects" in mlb_block
         assert "/fantasy/mlb/disagreements" in mlb_block
@@ -357,19 +421,48 @@ class TestNavWiring:
         assert f'key: "{key}"' in nav, f"{key} is not a nav key"
         assert f'activeLink="{key}"' in src, f"{page} does not pass activeLink={key}"
 
+    def test_the_mlb_fantasy_items_are_admin_restricted(self):
+        """🔒 The nav mirror of the server gate. `restrict: "admin"` — NOT `"fantasy_beta"`, which
+        would also show the items to `fantasy_comp` accounts. Cosmetic (the API is the real gate),
+        but a nav item pointing at a route that 403s is its own bug."""
+        mlb_block = _mlb_nav_block()
+        assert mlb_block.count('restrict: "admin"') == 2, (
+            "both MLB fantasy items must be admin-restricted while the surface is in development"
+        )
+        assert 'restrict: "fantasy_beta"' not in mlb_block
+
     @pytest.mark.parametrize(
         "page", ["app/fantasy/mlb/prospects/page.tsx", "app/fantasy/mlb/disagreements/page.tsx"],
     )
-    def test_each_page_is_wrapped_in_the_fantasy_guard(self, page):
-        """Client-side defence in depth. The API is the real gate (these pages read gated
-        endpoints), but an unentitled visitor must get the upsell rather than a page that renders
-        its chrome and then fails every fetch."""
-        assert "<FantasyGuard>" in (_FRONTEND / page).read_text(encoding="utf-8")
+    def test_each_page_uses_the_admin_guard_not_the_fantasy_guard(self, page):
+        """The page-level mirror. `FantasyGuard` would let any subscriber render the surface and
+        then watch every fetch 403 — a worse experience than not showing it at all."""
+        src = (_FRONTEND / page).read_text(encoding="utf-8")
+        assert "<AdminGuard>" in src
+        assert "<FantasyGuard>" not in src
+
+    def test_the_prospect_hooks_refuse_to_issue_the_request_for_a_non_admin(self):
+        """The hooks must not merely hide the result — an unentitled caller should never ISSUE the
+        gated request at all (the NF3.2 rule), and here the predicate has to be `isAdmin` rather
+        than the fantasy one or every subscriber fires a request that 403s."""
+        src = (_FRONTEND / "lib/fantasy-queries.ts").read_text(encoding="utf-8")
+        mlb = src[src.index("E8.1 — MLB dynasty PROSPECT BOARD"):]
+        assert mlb.count("enabled: isAdmin") == 2
+        assert 'enabled: canAccess("fantasy", groups)' not in mlb
+
+    def test_a_surface_whose_items_are_all_hidden_does_not_render(self):
+        """🐛 The bug this pairs with: for an entitled NON-admin the MLB→Fantasy surface is not
+        LOCKED (they do have fantasy) but every item is filtered away — which would draw a bare
+        "FANTASY" heading with nothing under it. `visibleSurfaces` drops the whole group."""
+        nav = (_FRONTEND / "components/nav.tsx").read_text(encoding="utf-8")
+        assert "const visibleSurfaces" in nav
+        assert nav.count("visibleSurfaces(sport).map") == 2, (
+            "both the desktop and mobile sub-navs must filter empty surface groups"
+        )
+        assert "{sport.surfaces.map" not in nav
 
     def test_the_mlb_fantasy_items_are_not_marked_public(self):
         """🔒 `public: true` keeps a nav item visible when its surface is LOCKED — correct for NF3.2's
         genuinely-public track record, WRONG here: the current-season board is the paid product
         (E9.56). Marking it public would advertise a route that 403s."""
-        nav = (_FRONTEND / "lib/nav-model.ts").read_text(encoding="utf-8")
-        mlb_block = nav.split('sport: "nfl"')[0]
-        assert "public: true" not in mlb_block
+        assert "public: true" not in _mlb_nav_block()
