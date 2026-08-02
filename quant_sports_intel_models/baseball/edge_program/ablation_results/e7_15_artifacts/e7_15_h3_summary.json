@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-02T04:57:49.597110+00:00",
+  "generated_at": "2026-08-02T05:10:08.723618+00:00",
   "player_type": "batter",
   "foil": "the SHIPPED E7.12-slice-1 configuration per metric (learner + weight_col held fixed)",
   "pseudo_replication_census": {
@@ -49,7 +49,10 @@
         "folds_have": 11,
         "folds_needed_BH": 32,
         "folds_needed_DSR": null,
-        "extra_seasons_needed": 21
+        "unreachable_gates": [
+          "DSR"
+        ],
+        "extra_seasons_needed": null
       },
       {
         "metric": "k_pct",
@@ -66,7 +69,10 @@
         "folds_have": 11,
         "folds_needed_BH": 24,
         "folds_needed_DSR": null,
-        "extra_seasons_needed": 13
+        "unreachable_gates": [
+          "DSR"
+        ],
+        "extra_seasons_needed": null
       },
       {
         "metric": "bb_pct",
@@ -83,6 +89,7 @@
         "folds_have": 11,
         "folds_needed_BH": 11,
         "folds_needed_DSR": 140,
+        "unreachable_gates": [],
         "extra_seasons_needed": 129
       },
       {
@@ -100,6 +107,7 @@
         "folds_have": 11,
         "folds_needed_BH": 11,
         "folds_needed_DSR": 120,
+        "unreachable_gates": [],
         "extra_seasons_needed": 109
       }
     ]

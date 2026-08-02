@@ -1,6 +1,6 @@
 # E7.15 H4 — regressing the TARGET toward true talent (batter side)
 
-_generated 2026-08-02T05:00:37.040338+00:00 · foil = the SHIPPED E7.12-slice-1 configuration · `best_alpha = 0`_
+_generated 2026-08-02T05:12:56.508375+00:00 · foil = the SHIPPED E7.12-slice-1 configuration · `best_alpha = 0`_
 
 > ⚠️ **H4 CHANGES THE ESTIMAND — the one thing H1 deliberately did not do.** The change is confined to the TRAINING target; every arm is scored against the SAME untouched realized held-out rate, asserted per fold. A winner here still costs board/betting comparability and cannot ship without re-running E7.5b's batter gate (or BUILDING the pitcher one, which does not exist) — readiness lock 6.
 
@@ -167,12 +167,12 @@ _shipped foil: `park:exposure+levelenv+rel:2k` · prior_scale 2.0 · 11 folds [2
 
 **Binding constraint: BH-FDR multiplicity — no arm's p clears the strictest rung, so removing the deflation gates changes nothing**
 
-| metric   | arm                |   pct_lift_vs_foil |   fold_win_rate |   p_one_sided | beats_foil   | clears_fold_bar   | clears_PBO   | clears_DSR   | clears_BH_rank1   | kind                                                             |   folds_have | folds_needed_BH   | folds_needed_DSR   | extra_seasons_needed   |
-|:---------|:-------------------|-------------------:|----------------:|--------------:|:-------------|:------------------|:-------------|:-------------|:------------------|:-----------------------------------------------------------------|-------------:|:------------------|:-------------------|:-----------------------|
-| woba     | R3_shrink_to_level |            -0.307  |        0.454545 |      0.638149 | False        | False             | False        | False        | False             | genuine absence — the best arm does not beat the foil on average |           11 |                   |                    |                        |
-| k_pct    | R1_eb_shrink       |            -0.0796 |        0.454545 |      0.562276 | False        | False             | False        | False        | False             | genuine absence — the best arm does not beat the foil on average |           11 |                   |                    |                        |
-| bb_pct   | R1_eb_shrink       |            -0.8963 |        0.181818 |      0.801399 | False        | False             | True         | False        | False             | genuine absence — the best arm does not beat the foil on average |           11 |                   |                    |                        |
-| iso      | R1_eb_shrink       |            -0.4292 |        0.454545 |      0.669261 | False        | False             | True         | False        | False             | genuine absence — the best arm does not beat the foil on average |           11 |                   |                    |                        |
+| metric   | arm                |   pct_lift_vs_foil |   fold_win_rate |   p_one_sided | beats_foil   | clears_fold_bar   | clears_PBO   | clears_DSR   | clears_BH_rank1   | kind                                                             |   folds_have | folds_needed_BH   | folds_needed_DSR   | unreachable_gates   | extra_seasons_needed   |
+|:---------|:-------------------|-------------------:|----------------:|--------------:|:-------------|:------------------|:-------------|:-------------|:------------------|:-----------------------------------------------------------------|-------------:|:------------------|:-------------------|:--------------------|:-----------------------|
+| woba     | R3_shrink_to_level |            -0.307  |        0.454545 |      0.638149 | False        | False             | False        | False        | False             | genuine absence — the best arm does not beat the foil on average |           11 |                   |                    | []                  |                        |
+| k_pct    | R1_eb_shrink       |            -0.0796 |        0.454545 |      0.562276 | False        | False             | False        | False        | False             | genuine absence — the best arm does not beat the foil on average |           11 |                   |                    | []                  |                        |
+| bb_pct   | R1_eb_shrink       |            -0.8963 |        0.181818 |      0.801399 | False        | False             | True         | False        | False             | genuine absence — the best arm does not beat the foil on average |           11 |                   |                    | []                  |                        |
+| iso      | R1_eb_shrink       |            -0.4292 |        0.454545 |      0.669261 | False        | False             | True         | False        | False             | genuine absence — the best arm does not beat the foil on average |           11 |                   |                    | []                  |                        |
 
 ## Registered but NOT run — the 'more data, not more statistics' alternative
 

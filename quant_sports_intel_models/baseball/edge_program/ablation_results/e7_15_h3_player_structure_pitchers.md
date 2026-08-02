@@ -1,6 +1,6 @@
 # E7.15 H3 — player-level structure (pitcher side)
 
-_generated 2026-08-02T05:00:13.991612+00:00 · foil = the SHIPPED E7.12-slice-1 configuration · `best_alpha = 0`_
+_generated 2026-08-02T05:12:30.528285+00:00 · foil = the SHIPPED E7.12-slice-1 configuration · `best_alpha = 0`_
 
 > Pre-registration (written before any arm was scored): `e7_15_h3_preregistration.md`.
 
@@ -443,13 +443,13 @@ _shipped foil: `baseline` · prior_scale 2.0 · 4 folds [2023, 2024, 2025, 2026]
 
 **Binding constraint: BH-FDR multiplicity — no arm's p clears the strictest rung, so removing the deflation gates changes nothing**
 
-| metric        | arm            |   pct_lift_vs_foil |   fold_win_rate |   p_one_sided | beats_foil   | clears_fold_bar   | clears_PBO   | clears_DSR   | clears_BH_rank1   | kind         |   folds_have |   folds_needed_BH |   folds_needed_DSR |   extra_seasons_needed |
-|:--------------|:---------------|-------------------:|----------------:|--------------:|:-------------|:------------------|:-------------|:-------------|:------------------|:-------------|-------------:|------------------:|-------------------:|-----------------------:|
-| k_pct         | P4_re_dedup    |             1.713  |        0.818182 |     0.0467305 | True         | True              | True         | False        | False             | underpowered |           11 |                17 |               2010 |                   1999 |
-| bb_pct        | P4_re_dedup    |             0.4381 |        0.545455 |     0.327934  | True         | False             | False        | False        | False             | underpowered |           11 |               223 |                nan |                    212 |
-| hr_rate       | P4_re_dedup    |             0.1065 |        0.545455 |     0.361029  | True         | False             | False        | False        | False             | underpowered |           11 |               350 |                nan |                    339 |
-| gb_pct        | T1_traj_ladder |             1.2088 |        0.818182 |     0.0961093 | True         | True              | True         | False        | False             | underpowered |           11 |                27 |                nan |                     16 |
-| xwoba_against | P4_re_dedup    |             0.7732 |        0.75     |     0.242796  | True         | True              | False        | False        | False             | underpowered |            4 |                30 |                nan |                     26 |
+| metric        | arm            |   pct_lift_vs_foil |   fold_win_rate |   p_one_sided | beats_foil   | clears_fold_bar   | clears_PBO   | clears_DSR   | clears_BH_rank1   | kind         |   folds_have |   folds_needed_BH |   folds_needed_DSR | unreachable_gates   |   extra_seasons_needed |
+|:--------------|:---------------|-------------------:|----------------:|--------------:|:-------------|:------------------|:-------------|:-------------|:------------------|:-------------|-------------:|------------------:|-------------------:|:--------------------|-----------------------:|
+| k_pct         | P4_re_dedup    |             1.713  |        0.818182 |     0.0467305 | True         | True              | True         | False        | False             | underpowered |           11 |                17 |               2010 | []                  |                   1999 |
+| bb_pct        | P4_re_dedup    |             0.4381 |        0.545455 |     0.327934  | True         | False             | False        | False        | False             | underpowered |           11 |               223 |                nan | ['DSR']             |                    nan |
+| hr_rate       | P4_re_dedup    |             0.1065 |        0.545455 |     0.361029  | True         | False             | False        | False        | False             | underpowered |           11 |               350 |                nan | ['DSR']             |                    nan |
+| gb_pct        | T1_traj_ladder |             1.2088 |        0.818182 |     0.0961093 | True         | True              | True         | False        | False             | underpowered |           11 |                27 |                nan | ['DSR']             |                    nan |
+| xwoba_against | P4_re_dedup    |             0.7732 |        0.75     |     0.242796  | True         | True              | False        | False        | False             | underpowered |            4 |                30 |                nan | ['DSR']             |                    nan |
 
 ## Reading notes
 

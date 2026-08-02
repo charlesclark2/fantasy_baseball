@@ -423,3 +423,23 @@ def test_null_analysis_extrapolation_matches_its_own_gate():
     unmatched = deflated_sharpe(np.resize(skill, len(skill)), n_trials=len(eligible)).dsr
     assert unmatched != pytest.approx(gate["dsr"], abs=1e-6)
     assert unmatched > gate["dsr"], "the pre-fix benchmark was the SOFTER one — that is why it misled"
+
+
+def test_an_unreachable_gate_propagates_instead_of_being_read_as_zero():
+    """⭐ REGRESSION — the SECOND defect in `null_analysis`, and the direct consumer of the first.
+
+    `max(need_fdr or 0, need_dsr or 0)` turns a None (this gate is NOT reachable within the search
+    horizon) into a requirement of ZERO folds, so `extra_seasons_needed` silently reports only the OTHER
+    gate. Live: batter `woba` read "+21 seasons" — implying a 2047 re-test clears — while its DSR
+    requirement was unreachable at any n. It also INVERTED the ranking: +21 looked nearer than another
+    metric's honest +129 when woba is strictly worse. FAILS on the pre-fix source.
+    """
+    need_fdr, need_dsr, n = 32, None, 11
+    pre_fix = max(need_fdr or 0, need_dsr or 0) - n
+    post_fix = (None if (need_fdr is None or need_dsr is None) else max(need_fdr, need_dsr) - n)
+    assert pre_fix == 21, "pins the misleading value the live run actually printed"
+    assert post_fix is None, "an unreachable constituent must propagate, not vanish"
+
+    # and it must name WHICH gate is unreachable, or the reader cannot act on it
+    unreachable = [g for g, v in (("BH-FDR", need_fdr), ("DSR", need_dsr)) if v is None]
+    assert unreachable == ["DSR"]

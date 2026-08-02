@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-02T05:00:13.981422+00:00",
+  "generated_at": "2026-08-02T05:12:30.519072+00:00",
   "player_type": "pitcher",
   "foil": "the SHIPPED E7.12-slice-1 configuration per metric (learner + weight_col held fixed)",
   "pseudo_replication_census": {
@@ -47,6 +47,7 @@
         "folds_have": 11,
         "folds_needed_BH": 17,
         "folds_needed_DSR": 2010,
+        "unreachable_gates": [],
         "extra_seasons_needed": 1999
       },
       {
@@ -64,7 +65,10 @@
         "folds_have": 11,
         "folds_needed_BH": 223,
         "folds_needed_DSR": null,
-        "extra_seasons_needed": 212
+        "unreachable_gates": [
+          "DSR"
+        ],
+        "extra_seasons_needed": null
       },
       {
         "metric": "hr_rate",
@@ -81,7 +85,10 @@
         "folds_have": 11,
         "folds_needed_BH": 350,
         "folds_needed_DSR": null,
-        "extra_seasons_needed": 339
+        "unreachable_gates": [
+          "DSR"
+        ],
+        "extra_seasons_needed": null
       },
       {
         "metric": "gb_pct",
@@ -98,7 +105,10 @@
         "folds_have": 11,
         "folds_needed_BH": 27,
         "folds_needed_DSR": null,
-        "extra_seasons_needed": 16
+        "unreachable_gates": [
+          "DSR"
+        ],
+        "extra_seasons_needed": null
       },
       {
         "metric": "xwoba_against",
@@ -115,7 +125,10 @@
         "folds_have": 4,
         "folds_needed_BH": 30,
         "folds_needed_DSR": null,
-        "extra_seasons_needed": 26
+        "unreachable_gates": [
+          "DSR"
+        ],
+        "extra_seasons_needed": null
       }
     ]
   },

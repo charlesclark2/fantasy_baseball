@@ -1,6 +1,6 @@
 # E7.15 H3 — player-level structure (batter side)
 
-_generated 2026-08-02T04:57:49.606003+00:00 · foil = the SHIPPED E7.12-slice-1 configuration · `best_alpha = 0`_
+_generated 2026-08-02T05:10:08.731714+00:00 · foil = the SHIPPED E7.12-slice-1 configuration · `best_alpha = 0`_
 
 > Pre-registration (written before any arm was scored): `e7_15_h3_preregistration.md`.
 
@@ -358,12 +358,12 @@ _shipped foil: `park:exposure+levelenv+rel:2k` · prior_scale 2.0 · 11 folds [2
 
 **Binding constraint: the deflation gates — at least one arm would ship without them**
 
-| metric   | arm            |   pct_lift_vs_foil |   fold_win_rate |   p_one_sided | beats_foil   | clears_fold_bar   | clears_PBO   | clears_DSR   | clears_BH_rank1   | kind         |   folds_have |   folds_needed_BH |   folds_needed_DSR |   extra_seasons_needed |
-|:---------|:---------------|-------------------:|----------------:|--------------:|:-------------|:------------------|:-------------|:-------------|:------------------|:-------------|-------------:|------------------:|-------------------:|-----------------------:|
-| woba     | P3_player_re   |             0.8407 |        0.636364 |    0.126808   | True         | True              | False        | False        | False             | underpowered |           11 |                32 |                nan |                     21 |
-| k_pct    | T1_traj_ladder |             1.1828 |        0.818182 |    0.0951929  | True         | True              | True         | False        | False             | underpowered |           11 |                24 |                nan |                     13 |
-| bb_pct   | T2_traj_raw    |             1.4038 |        0.818182 |    0.00376528 | True         | True              | True         | False        | True              | underpowered |           11 |                11 |                140 |                    129 |
-| iso      | T1_traj_ladder |             1.4183 |        0.818182 |    0.00647658 | True         | True              | True         | False        | True              | underpowered |           11 |                11 |                120 |                    109 |
+| metric   | arm            |   pct_lift_vs_foil |   fold_win_rate |   p_one_sided | beats_foil   | clears_fold_bar   | clears_PBO   | clears_DSR   | clears_BH_rank1   | kind         |   folds_have |   folds_needed_BH |   folds_needed_DSR | unreachable_gates   |   extra_seasons_needed |
+|:---------|:---------------|-------------------:|----------------:|--------------:|:-------------|:------------------|:-------------|:-------------|:------------------|:-------------|-------------:|------------------:|-------------------:|:--------------------|-----------------------:|
+| woba     | P3_player_re   |             0.8407 |        0.636364 |    0.126808   | True         | True              | False        | False        | False             | underpowered |           11 |                32 |                nan | ['DSR']             |                    nan |
+| k_pct    | T1_traj_ladder |             1.1828 |        0.818182 |    0.0951929  | True         | True              | True         | False        | False             | underpowered |           11 |                24 |                nan | ['DSR']             |                    nan |
+| bb_pct   | T2_traj_raw    |             1.4038 |        0.818182 |    0.00376528 | True         | True              | True         | False        | True              | underpowered |           11 |                11 |                140 | []                  |                    129 |
+| iso      | T1_traj_ladder |             1.4183 |        0.818182 |    0.00647658 | True         | True              | True         | False        | True              | underpowered |           11 |                11 |                120 | []                  |                    109 |
 
 ## Reading notes
 

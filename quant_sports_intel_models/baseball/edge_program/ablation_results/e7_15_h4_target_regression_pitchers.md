@@ -1,6 +1,6 @@
 # E7.15 H4 — regressing the TARGET toward true talent (pitcher side)
 
-_generated 2026-08-02T05:02:01.520211+00:00 · foil = the SHIPPED E7.12-slice-1 configuration · `best_alpha = 0`_
+_generated 2026-08-02T05:13:31.261024+00:00 · foil = the SHIPPED E7.12-slice-1 configuration · `best_alpha = 0`_
 
 > ⚠️ **H4 CHANGES THE ESTIMAND — the one thing H1 deliberately did not do.** The change is confined to the TRAINING target; every arm is scored against the SAME untouched realized held-out rate, asserted per fold. A winner here still costs board/betting comparability and cannot ship without re-running E7.5b's batter gate (or BUILDING the pitcher one, which does not exist) — readiness lock 6.
 
@@ -200,13 +200,13 @@ _shipped foil: `baseline` · prior_scale 2.0 · 4 folds [2023, 2024, 2025, 2026]
 
 **Binding constraint: the deflation gates — at least one arm would ship without them**
 
-| metric        | arm                |   pct_lift_vs_foil |   fold_win_rate |   p_one_sided | beats_foil   | clears_fold_bar   | clears_PBO   | clears_DSR   | clears_BH_rank1   | kind                                                             |   folds_have |   folds_needed_BH |   folds_needed_DSR |   extra_seasons_needed |
-|:--------------|:-------------------|-------------------:|----------------:|--------------:|:-------------|:------------------|:-------------|:-------------|:------------------|:-----------------------------------------------------------------|-------------:|------------------:|-------------------:|-----------------------:|
-| k_pct         | R2_eb_shrink_2k    |             1.476  |       0.909091  |     0.0144734 | True         | True              | False        | False        | True              | underpowered                                                     |           11 |                11 |                 14 |                      3 |
-| bb_pct        | R1_eb_shrink       |             0.1274 |       0.363636  |     0.443239  | True         | False             | False        | False        | False             | underpowered                                                     |           11 |              2166 |                nan |                   2155 |
-| hr_rate       | R1_eb_shrink       |            -1.3341 |       0.0909091 |     0.953228  | False        | False             | True         | False        | False             | genuine absence — the best arm does not beat the foil on average |           11 |               nan |                nan |                    nan |
-| gb_pct        | R1_eb_shrink       |            -0.5031 |       0.272727  |     0.869742  | False        | False             | True         | False        | False             | genuine absence — the best arm does not beat the foil on average |           11 |               nan |                nan |                    nan |
-| xwoba_against | R3_shrink_to_level |             1.0972 |       0.5       |     0.299041  | True         | False             | False        | False        | False             | underpowered                                                     |            4 |                52 |                 17 |                     48 |
+| metric        | arm                |   pct_lift_vs_foil |   fold_win_rate |   p_one_sided | beats_foil   | clears_fold_bar   | clears_PBO   | clears_DSR   | clears_BH_rank1   | kind                                                             |   folds_have |   folds_needed_BH |   folds_needed_DSR | unreachable_gates   |   extra_seasons_needed |
+|:--------------|:-------------------|-------------------:|----------------:|--------------:|:-------------|:------------------|:-------------|:-------------|:------------------|:-----------------------------------------------------------------|-------------:|------------------:|-------------------:|:--------------------|-----------------------:|
+| k_pct         | R2_eb_shrink_2k    |             1.476  |       0.909091  |     0.0144734 | True         | True              | False        | False        | True              | underpowered                                                     |           11 |                11 |                 14 | []                  |                      3 |
+| bb_pct        | R1_eb_shrink       |             0.1274 |       0.363636  |     0.443239  | True         | False             | False        | False        | False             | underpowered                                                     |           11 |              2166 |                nan | ['DSR']             |                    nan |
+| hr_rate       | R1_eb_shrink       |            -1.3341 |       0.0909091 |     0.953228  | False        | False             | True         | False        | False             | genuine absence — the best arm does not beat the foil on average |           11 |               nan |                nan | []                  |                    nan |
+| gb_pct        | R1_eb_shrink       |            -0.5031 |       0.272727  |     0.869742  | False        | False             | True         | False        | False             | genuine absence — the best arm does not beat the foil on average |           11 |               nan |                nan | []                  |                    nan |
+| xwoba_against | R3_shrink_to_level |             1.0972 |       0.5       |     0.299041  | True         | False             | False        | False        | False             | underpowered                                                     |            4 |                52 |                 17 | []                  |                     48 |
 
 ## Registered but NOT run — the 'more data, not more statistics' alternative
 

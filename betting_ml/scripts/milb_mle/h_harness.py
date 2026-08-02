@@ -448,8 +448,20 @@ def null_analysis(results: dict, pvals: dict, foil: str = "L0_foil") -> dict:
             "clears_DSR": bool(((r.dsr or {}).get("eligible") or {}).get("passes")),
             "clears_BH_rank1": fdr_ok, "kind": kind,
             "folds_have": n, "folds_needed_BH": need_fdr, "folds_needed_DSR": need_dsr,
-            "extra_seasons_needed": (None if kind != "underpowered" or not (need_fdr or need_dsr)
-                                     else max(need_fdr or 0, need_dsr or 0) - n),
+            # 🪤 **AN `or 0` COLLAPSES "UNREACHABLE" INTO "ALREADY SATISFIED" — the SECOND defect in this
+            # function, and the direct consumer of the first (E7.15 H3, 2026-08-01).** `max(need_fdr or 0,
+            # need_dsr or 0)` treats a None (the gate is NOT reachable within the search horizon) as a
+            # requirement of ZERO folds, so the answer silently reports only the OTHER gate. Live: batter
+            # `woba` read "+21 seasons" — implying a 2047 re-test would clear — while its DSR requirement
+            # was UNREACHABLE at any n, i.e. more seasons will never fix it. It also inverted the ranking:
+            # "+21" looked NEARER than `bb_pct`'s honest "+129" when woba is strictly worse. A shortfall
+            # is only a re-test trigger if EVERY gate it must clear is reachable, so an unreachable
+            # constituent must propagate, and WHICH gate is unreachable must be named.
+            "unreachable_gates": [g for g, v in (("BH-FDR", need_fdr), ("DSR", need_dsr))
+                                  if kind == "underpowered" and v is None],
+            "extra_seasons_needed": (
+                None if (kind != "underpowered" or need_fdr is None or need_dsr is None)
+                else max(need_fdr, need_dsr) - n),
         })
     return {
         "family_size": m_family, "strictest_bh_cutoff": round(strictest_bh, 4),
