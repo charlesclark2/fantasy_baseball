@@ -410,22 +410,59 @@ def main() -> None:
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
     pipe = build_imputation_pipeline()
     pipe.fit(df[numeric_cols])
-    df_t = pd.DataFrame(
-        pipe.transform(df[numeric_cols]),
-        columns=numeric_cols,
-        index=df.index,
-    )
+    _transformed = pipe.transform(df[numeric_cols])
+    # ⚠️ Keep the transform's OWN columns. `build_imputation_pipeline` runs `_AddIndicators`, which
+    # APPENDS has_starter_platoon_data + is_new_venue — both of which are in every served sidecar.
+    # Re-wrapping a returned DataFrame as `pd.DataFrame(t, columns=numeric_cols)` does not RENAME,
+    # it SELECTS: the two indicators were silently dropped, and the later
+    # `reindex(columns=..., fill_value=0.0)` then filled them with 0.0 for every game — i.e. "no
+    # platoon data / not a new venue" asserted for the whole backfill. That is a wrong VALUE, not a
+    # crash, so it would have scored an entire history quietly. predict_today never had this bug
+    # (it carries the imputer's output frame through unchanged).
+    df_t = (_transformed.set_index(df.index) if isinstance(_transformed, pd.DataFrame)
+            else pd.DataFrame(_transformed, columns=numeric_cols, index=df.index))
     print(f"  Transformed shape: {df_t.shape}")
+    for _ind in ("has_starter_platoon_data", "is_new_venue"):
+        if _ind not in df_t.columns:
+            print(f"  [WARN] imputer indicator '{_ind}' absent from the transformed frame — it "
+                  f"will be 0.0-filled for every game, which is a VALUE the models were not "
+                  f"trained to see uniformly. Investigate before trusting this backfill.")
 
     def feat_cols(target: str) -> list[str]:
+        """The served column list for a target.
+
+        ⚠️ Sidecars come in TWO shapes: a bare JSON list (pre-E13.11) and
+        `{"feature_cols": [...], "_provenance": {...}}` (E13.11+). Returning the parsed JSON
+        unconditionally yields the DICT for the modern shape, whose `len()` is 2 and whose
+        iteration order is `["feature_cols", "_provenance"]` — so `reindex(columns=...)` built a
+        2-column matrix out of the KEY NAMES and every model raised a feature-count error. This
+        script was left behind when the sidecars gained provenance; `predict_today._load_cols` has
+        carried the unwrap since E13.11. Mirrored here.
+        """
         path = PROJECT_ROOT / registry[target]["feature_columns_path"]
-        return json.loads(path.read_text())
+        raw = json.loads(path.read_text())
+        return raw["feature_cols"] if isinstance(raw, dict) else raw
 
     hw_cols = feat_cols("home_win")
     tot_cols = feat_cols("total_runs")
     diff_cols = feat_cols("run_differential")
     print(f"  Feature columns: home_win={len(hw_cols)}, "
           f"total_runs={len(tot_cols)}, run_diff={len(diff_cols)}")
+
+    # Fail HERE, with a readable message, rather than ~20 frames deep in sklearn's
+    # `_check_n_features`. The registry advertises each target's served width; a contract that
+    # resolves to a different count means the sidecar was misread (the dict-vs-list bug above) or
+    # the registry and the sidecar have drifted — either way the scored matrix would be wrong.
+    for _tgt, _cols in (("home_win", hw_cols), ("total_runs", tot_cols),
+                        ("run_differential", diff_cols)):
+        _advertised = registry[_tgt].get("features")
+        if _advertised is not None and len(_cols) != int(_advertised):
+            raise SystemExit(
+                f"❌ {_tgt}: sidecar resolved {len(_cols)} feature(s) but the registry advertises "
+                f"{_advertised}. Resolved head: {list(_cols)[:4]}. If that looks like JSON KEYS "
+                f"('feature_cols', '_provenance') the sidecar unwrap regressed; otherwise the "
+                f"registry `features` and {registry[_tgt]['feature_columns_path']} have drifted."
+            )
 
     print("\nLoading production models from registry...")
     clf_hw = load_model("home_win", "prod")
