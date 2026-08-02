@@ -49,6 +49,11 @@ export interface TrackRecordRow {
    *  airtight independent claim is about. Always `false` for a season with no ADP benchmark (fade
    *  is an ADP-disagreement signal and cannot be computed without it — never a claim of "no fade"). */
   isFade: boolean
+  /** Whether the fade was RIGHT: "hit" (our rank landed closer to the actual finish than ADP's did),
+   *  "miss" (ADP was the better call), or "push" (an exact tie). Always `null` when `isFade` is
+   *  false — there is nothing to grade on a row we didn't flag as a real disagreement. See
+   *  `_fade_result` in `benchmark_scorecard.py` for the exact definition. */
+  fadeResult: "hit" | "miss" | "push" | null
   /** "ffc" | "mfl" | null — same meaning as `TrackRecordManifest.adpSourceBySeason`, carried on the
    *  row itself so a consumer never needs the manifest just to label one row. */
   adpSource: AdpSource | null

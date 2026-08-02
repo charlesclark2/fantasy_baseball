@@ -447,7 +447,29 @@ def build_scorecard(con, seasons, schema, *, project_fn, load_realized_fn, manua
 
 
 _TRACK_RECORD_COLS = ("season", "player_id", "player_name", "position", "our_points", "our_rank",
-                      "adp", "adp_rank", "actual_points", "actual_rank", "is_fade", "adp_source")
+                      "adp", "adp_rank", "actual_points", "actual_rank", "is_fade", "fade_result",
+                      "adp_source")
+
+
+def _fade_result(our_rank, adp_rank, actual_rank):
+    """NF3.2 — per-PLAYER "was the fade right?" readout: which side's within-position rank landed
+    closer to how the season actually finished. This is deliberately a DIFFERENT statistic from
+    `_disagreement()`'s aggregate (which compares Spearman correlation of RAW POINTS vs realized
+    points, pooled over the whole fade set, and can't be evaluated player-by-player since correlation
+    needs a pool) — here there is no points scale ADP shares with us (a draft pick number isn't
+    points), so rank-distance-to-the-actual-finish is the only apples-to-apples per-row comparison,
+    using the exact `our_rank`/`adp_rank`/`actual_rank` columns already shown in the table. Returns
+    "hit" (we were closer), "miss" (ADP was closer), "push" (exact tie), or None if any input is
+    missing."""
+    if pd.isna(our_rank) or pd.isna(adp_rank) or pd.isna(actual_rank):
+        return None
+    our_err = abs(actual_rank - our_rank)
+    adp_err = abs(actual_rank - adp_rank)
+    if our_err < adp_err:
+        return "hit"
+    if our_err > adp_err:
+        return "miss"
+    return "push"
 
 
 def player_track_record_frame(con, season, schema, *, project_fn, load_realized_fn) -> pd.DataFrame:
@@ -461,8 +483,10 @@ def player_track_record_frame(con, season, schema, *, project_fn, load_realized_
     is deliberately NOT a parallel re-derivation of `_adp_system`'s merge.
 
     Returns columns: season, player_id, player_name, position, our_points, our_rank, adp, adp_rank,
-    actual_points, actual_rank, is_fade, adp_source — one row per player with BOTH a shipped projection
-    AND that season's ADP AND >=6 realized games (the same "aligned universe" `build_scorecard` scores).
+    actual_points, actual_rank, is_fade, fade_result, adp_source — one row per player with BOTH a
+    shipped projection AND that season's ADP AND >=6 realized games (the same "aligned universe"
+    `build_scorecard` scores). `fade_result` (see `_fade_result`) is only ever non-null when
+    `is_fade` is True — it grades the fade, so a non-fade row has nothing to grade.
 
     ⚠️ FFC has NO archive for some seasons (2025 confirmed live: `{"status":"Error"}` across every
     teams/format combination — a genuine, permanent gap, not a cache problem; see
@@ -514,6 +538,7 @@ def player_track_record_frame(con, season, schema, *, project_fn, load_realized_
         out["adp"] = pd.NA
         out["adp_rank"] = pd.NA
         out["is_fade"] = False
+        out["fade_result"] = None
         out["adp_source"] = None
         out["season"] = season
         return out[list(_TRACK_RECORD_COLS)].sort_values(["position", "our_rank"]).reset_index(drop=True)
@@ -530,6 +555,10 @@ def player_track_record_frame(con, season, schema, *, project_fn, load_realized_
     m["adp_rank"] = m.groupby("position")["adp"].rank(ascending=True, method="min").astype(int)
     m["actual_rank"] = m.groupby("position")["actual_points"].rank(ascending=False, method="min").astype(int)
     m["is_fade"] = m["player_id"].isin(fade_ids)
+    m["fade_result"] = m.apply(
+        lambda r: _fade_result(r["our_rank"], r["adp_rank"], r["actual_rank"]) if r["is_fade"] else None,
+        axis=1,
+    )
     m["adp_source"] = adp_source_used
     m["season"] = season
     return m[list(_TRACK_RECORD_COLS)].sort_values(["position", "our_rank"]).reset_index(drop=True)

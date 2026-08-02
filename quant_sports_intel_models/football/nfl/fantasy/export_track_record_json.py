@@ -107,6 +107,10 @@ def season_records(df: pd.DataFrame) -> list[dict]:
             "actualPoints": _fnum(r["actual_points"]),
             "actualRank": int(r["actual_rank"]),
             "isFade": bool(r["is_fade"]),
+            # "hit" | "miss" | "push" | null — whether OUR rank or ADP's rank landed closer to the
+            # actual finish (see `_fade_result`). Always null for a non-fade row (nothing to grade)
+            # or a season with no ADP at all; never conflate with `isFade` — a fade can be a miss.
+            "fadeResult": (None if pd.isna(r["fade_result"]) else str(r["fade_result"])),
             # NF3.2: "ffc" (the primary/established source), "mfl" (MyFantasyLeague — the fallback
             # used ONLY when FFC has no archive for this season, e.g. 2025), or null (neither source
             # had this season at all). Never silently blended — a consumer must be able to tell which

@@ -34,6 +34,7 @@ import { useTrackRecordManifest, useTrackRecordSeason } from "@/lib/fantasy-trac
 import type { TrackRecordRow } from "@/lib/fantasy-track-record"
 import {
   EmptyBlock,
+  FadeBadge,
   GLOSSARY,
   InfoTip,
   LoadingBlock,
@@ -91,6 +92,15 @@ function LockedCurrentSeasonCard({ lockedSeason }: { lockedSeason: number }) {
   )
 }
 
+/** Emerald = fade hit, rose = fade miss, amber = fade push, muted gray = not a fade at all — "wins
+ *  and losses both" applies to the chart too, not just the table's badge. */
+function fadeDotColor(row: TrackRecordRow): string {
+  if (!row.isFade) return "#4b5563"
+  if (row.fadeResult === "hit") return "#10b981"
+  if (row.fadeResult === "miss") return "#f43f5e"
+  return "#f59e0b"
+}
+
 function FadeDot({ cx, cy, payload }: any) {
   const row = payload as TrackRecordRow
   return (
@@ -105,7 +115,7 @@ function FadeDot({ cx, cy, payload }: any) {
         cx={cx}
         cy={cy}
         r={row.isFade ? 4 : 2.5}
-        fill={row.isFade ? "#10b981" : "#4b5563"}
+        fill={fadeDotColor(row)}
         fillOpacity={row.isFade ? 0.85 : 0.4}
       />
     </g>
@@ -122,7 +132,10 @@ function RankScatter({ rows }: { rows: TrackRecordRow[] }) {
       <p className="mb-3 text-[11px] leading-relaxed text-gray-600">
         Every dot is a player; closer to the diagonal is a better call. Highlighted dots are our
         highest-conviction disagreements with ADP that season (the &ldquo;fades&rdquo;) — where the
-        airtight independent claim lives.
+        airtight independent claim lives:{" "}
+        <span className="text-[#10b981]">green = hit</span>,{" "}
+        <span className="text-rose-400">red = miss</span>,{" "}
+        <span className="text-amber-500">amber = push</span>.
       </p>
       <div className="h-72 w-full">
         <ResponsiveContainer width="100%" height="100%">
@@ -165,7 +178,19 @@ function RankScatter({ rows }: { rows: TrackRecordRow[] }) {
                       Our rank {posRank(row.position, row.ourRank)} · ADP rank{" "}
                       {posRank(row.position, row.adpRank)} · actual {posRank(row.position, row.actualRank)}
                     </div>
-                    {row.isFade && <div className="text-[#10b981]">high-conviction fade</div>}
+                    {row.isFade && (
+                      <div
+                        className={
+                          row.fadeResult === "hit"
+                            ? "text-[#10b981]"
+                            : row.fadeResult === "miss"
+                              ? "text-rose-400"
+                              : "text-amber-500"
+                        }
+                      >
+                        high-conviction fade · {row.fadeResult ?? "—"}
+                      </div>
+                    )}
                   </div>
                 )
               }}
@@ -244,11 +269,7 @@ function TrackRecordTable({ rows }: { rows: TrackRecordRow[] }) {
                 <td className="px-3 py-2 text-right tabular-nums text-gray-300">{posRank(r.position, r.actualRank)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-400">{num(r.actualPoints)}</td>
                 <td className="px-3 py-2">
-                  {r.isFade && (
-                    <span className="rounded border border-[#10b981]/40 bg-[#10b981]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#10b981]">
-                      fade
-                    </span>
-                  )}
+                  <FadeBadge isFade={r.isFade} fadeResult={r.fadeResult} />
                 </td>
               </tr>
             ))}

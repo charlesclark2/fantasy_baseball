@@ -45,6 +45,7 @@ import {
   ALL_POSITIONS,
   ConfidenceBadge,
   EmptyBlock,
+  FadeBadge,
   FormatSelector,
   GLOSSARY,
   InfoTip,
@@ -655,11 +656,7 @@ function PublicPlayerView({ playerId }: { playerId: string }) {
                         {num(r.actualPoints)}
                       </td>
                       <td className="px-3 py-2">
-                        {r.isFade && (
-                          <span className="rounded border border-[#10b981]/40 bg-[#10b981]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#10b981]">
-                            fade
-                          </span>
-                        )}
+                        <FadeBadge isFade={r.isFade} fadeResult={r.fadeResult} />
                       </td>
                     </tr>
                   ))}
