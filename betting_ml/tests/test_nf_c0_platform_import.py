@@ -1783,8 +1783,8 @@ class TestEspnDraftedRealLeague:
         from app.backend.services.platform_import import espn
 
         league = espn.parse_settings_payload(espn_payload_drafted)
-        got = {p.name: p for p in league.teams[0].players}
-        assert len(got) == 7
+        got = {p.name: p for p in (pl for t in league.teams for pl in t.players)}
+        assert len(got) >= 160, "the full 10-team roster set should be present"
         for name, position, team, starter in self.REAL:
             assert got[name].position == position, name
             assert got[name].team == team, name
@@ -1801,8 +1801,10 @@ class TestEspnDraftedRealLeague:
         from app.backend.services.platform_import import espn
 
         league = espn.parse_settings_payload(espn_payload_drafted)
-        got = {p.name: p.team for p in league.teams[0].players}
-        assert got == {name: team for name, _pos, team, _s in self.REAL}
+        by_name = {p.name: p.team for t in league.teams for p in t.players}
+        assert {n: by_name[n] for n, _p, _t, _s in self.REAL} == {
+            n: t for n, _p, t, _s in self.REAL
+        }
         # An id outside the table must stay None rather than become a neighbouring team.
         assert espn._PRO_TEAM_BY_ID.get(999) is None
 
@@ -1861,11 +1863,122 @@ class TestEspnDraftedRealLeague:
         assert "-4000-8000-" not in out              # …and the account GUID is dropped
         assert "Last1" not in out                    # as is the member's surname
 
-    def test_teams_without_a_roster_block_still_import(self, espn_payload_drafted):
-        """ESPN returns the other nine teams here with empty entries; a team that carries no roster
-        at all must be a team with no players, never a parse failure."""
+    def test_the_whole_league_parses_with_no_gaps(self, espn_payload_drafted):
+        """172 real roster entries across 10 teams. A player who reads with no position or no pro
+        team is a silent hole on a roster we display, so the bar is zero of either."""
         from app.backend.services.platform_import import espn
 
         league = espn.parse_settings_payload(espn_payload_drafted)
+        players = [p for t in league.teams for p in t.players]
         assert len(league.teams) == 10
-        assert [len(t.players) for t in league.teams[1:]] == [0] * 9
+        assert len(players) == 172
+        assert [p.name for p in players if not p.position] == []
+        assert [p.name for p in players if not p.team] == []
+        assert all(t.name for t in league.teams)
+
+    def test_kickers_and_team_defenses_read_correctly(self, espn_payload_drafted):
+        """⭐ The two shapes the FIRST look at this payload could not reach — the visible portion
+        contained only QB/RB/WR/TE. A D/ST is not a person but a TEAM (`fullName` "Packers D/ST",
+        a NEGATIVE player id), so it is the entry most likely to fall through name/position
+        handling written for skill players."""
+        from app.backend.services.platform_import import espn
+
+        players = [p for t in espn.parse_settings_payload(espn_payload_drafted).teams
+                   for p in t.players]
+        by_pos = {}
+        for p in players:
+            by_pos.setdefault(p.position, []).append(p)
+
+        assert len(by_pos["K"]) == 13
+        assert len(by_pos["DST"]) == 15
+        # Every D/ST names its own club and carries that club's proTeamId — so each is a free
+        # identity check on `_PRO_TEAM_BY_ID`, and all 15 must agree.
+        for dst in by_pos["DST"]:
+            assert dst.name.endswith("D/ST"), dst.name
+            assert dst.team, dst.name
+        packers = next(p for p in by_pos["DST"] if p.name.startswith("Packers"))
+        assert packers.team == "GB"
+        # A D/ST id is NEGATIVE in ESPN's namespace; it must survive as an opaque key.
+        assert packers.player_key.startswith("-")
+
+    def test_every_pro_team_id_in_a_real_league_is_mapped(self, espn_payload_drafted):
+        """A 10-team drafted league touches all 32 clubs, so this exercises the whole table."""
+        from app.backend.services.platform_import import espn
+
+        doc = json.loads(espn_payload_drafted)
+        ids = {int(e["playerPoolEntry"]["player"]["proTeamId"])
+               for t in doc["teams"] for e in (t.get("roster") or {}).get("entries", [])}
+        assert len(ids) == 32
+        assert not [i for i in ids if i not in espn._PRO_TEAM_BY_ID]
+
+
+class TestEspnPayloadIsPrunedBeforeUpload:
+    """A real drafted payload is 3.3 MB, of which ~96% is data the import never reads.
+
+    Measured against the server's 4 MB cap that is 82% for a 10-team league, **~99% for a 12-team
+    league and OVER THE CAP for 14-team** — i.e. the most common league sizes failing on size
+    alone, with a message about the paste being too large. The client therefore drops the unread
+    bulk before upload (3.3 MB → ~147 KB).
+    """
+
+    CLIENT = Path(__file__).resolve().parents[2] / "frontend" / "lib" / "fantasy-import.ts"
+
+    def test_the_client_prunes_before_posting(self):
+        src = self.CLIENT.read_text()
+        assert "export function pruneEspnPayload" in src
+        assert "payload: pruneEspnPayload(payload)" in src, "prune is defined but not applied"
+
+    def test_only_verified_unread_fields_are_dropped(self):
+        """Each name here must be a field the PARSER never touches. If the adapter ever starts
+        reading one, it has to come off this list in the same change."""
+        from app.backend.services.platform_import import espn
+
+        src = self.CLIENT.read_text()
+        adapter = Path(espn.__file__).read_text()
+        for field in ("stats", "draftRanksByRankType", "ownership", "outlooks",
+                      "ratings", "notificationSettings"):
+            assert field in src, f"{field} no longer pruned"
+            assert f'"{field}"' not in adapter and f"'{field}'" not in adapter, (
+                f"the adapter now reads {field!r} — it must not be pruned client-side"
+            )
+
+    def test_it_is_a_denylist_not_an_allowlist(self):
+        """The API and the frontend deploy independently, so a client that kept ONLY today's known
+        fields would silently starve a newer server of one it had begun to read. Removing just the
+        verified-unread fields is safe in both skew directions."""
+        src = self.CLIENT.read_text()
+        assert "DENYLIST, NOT AN ALLOWLIST" in src
+
+    def test_a_non_json_paste_is_passed_through_untouched(self):
+        """A pruning bug must never turn a good paste into a rejected one, and a cURL paste must
+        still reach the server's credential scrubber rather than dying in the client."""
+        src = self.CLIENT.read_text()
+        assert "return text" in src and "catch" in src
+
+    def test_pruning_does_not_change_what_gets_imported(self, espn_payload_drafted):
+        """⭐ THE INVARIANT THAT MATTERS. The committed fixture IS the pruned shape; parsing it must
+        produce the same league the untrimmed response would. Proven here by re-pruning an already
+        pruned payload — idempotence — since the 3.3 MB original is far too large to commit."""
+        from app.backend.services.platform_import import espn
+
+        doc = json.loads(espn_payload_drafted)
+        for m in doc.get("members") or []:
+            m.pop("notificationSettings", None)
+        for t in doc.get("teams") or []:
+            for e in ((t.get("roster") or {}).get("entries") or []):
+                pool = e.get("playerPoolEntry") or {}
+                pool.pop("ratings", None)
+                for f in ("stats", "draftRanksByRankType", "ownership", "outlooks"):
+                    (pool.get("player") or {}).pop(f, None)
+
+        again = espn.parse_settings_payload(json.dumps(doc))
+        assert again.to_dict() == espn.parse_settings_payload(espn_payload_drafted).to_dict()
+
+    def test_the_pruned_fixture_is_small_enough_for_a_big_league(self, espn_payload_drafted):
+        """A 10-team league pruned, scaled to 16 teams, must sit far under the cap — the headroom
+        this whole class exists to create."""
+        from app.backend.services.platform_import import espn
+
+        pruned = len(espn_payload_drafted.encode())
+        assert pruned < 400_000, f"pruned fixture unexpectedly large: {pruned:,}"
+        assert pruned / 10 * 16 < espn.MAX_PASTE_BYTES / 4

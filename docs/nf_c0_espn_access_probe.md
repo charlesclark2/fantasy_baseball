@@ -278,6 +278,26 @@ Two smaller findings: the payload carries eligibility slot **25**, absent from `
 (ignored, and proven not to blank a known position); and `mTeam` really does return member ids in
 **SWID GUID form on every league**, which is the concrete justification for narrowing the scrubber.
 
+### 4d. 📦 The size wall the full file exposed — and it was a ship-blocker
+
+The complete drafted response is **3.29 MB for a TEN-team league**, and the server's paste cap is
+4 MB. Scaled by team count that is **~99% of the cap at 12 teams and OVER it at 14** — so the most
+common league sizes would have failed on payload size alone, with a message about the paste being
+too large and no way for the user to act on it. Only the full file showed this; the truncated paste
+never could.
+
+**~96% of those bytes are fields the import never reads** — per-player season/projection `stats`
+blocks, `draftRanksByRankType`, `ownership`, `ratings`, and per-member `notificationSettings`. The
+client now drops them before upload (`pruneEspnPayload`): **3.29 MB → 147 KB (4.5%)**, which puts a
+16-team league at ~235 KB.
+
+Two deliberate choices: it is a **DENYLIST, not an allowlist** — the API and the frontend deploy
+independently, so a client keeping only today's known fields would silently starve a newer server
+of a field it had begun to read, whereas removing only verified-unread fields is safe in both skew
+directions; and a paste that fails to parse is **passed through untouched**, so a pruning bug can
+never turn a good paste into a rejected one and a cURL paste still reaches the credential scrubber.
+The invariant — pruning does not change the imported league — is asserted in the tests.
+
 🔒 **The committed fixture is anonymised.** The real payload carries the operator's leaguemates'
 first and last names, their ESPN account GUIDs, and per-member notification settings. The GUID
 *shape* is preserved because the parser and scrubber must handle it; the identities are not ours to
