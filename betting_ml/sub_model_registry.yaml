@@ -1116,8 +1116,18 @@ milb_mle_prior_v1:
     iso:    {chal_nll: -1.6458, inc_nll: -1.5737, chal_crps: 0.02600, inc_crps: 0.02816, fold_win_rate: 0.90, p_one_sided: 0.0043, bh_fdr: true,  ships: true}
   uncertainty: recalibrated_predictive       # σ_resid is honest (cov ≈ 0.68/0.90) — was parameter-only
   best_alpha: 0                              # a rookie prior, never a market bet
-  promotion_status: pending                  # harness code-complete + fast gate + SQL smoke green; awaiting operator W8a run + serving parity
-  promoted_at: null
+  promotion_status: promoted                 # E7.5b 2026-08-01: landed + serving-verified on a live slate
+  promoted_at: '2026-08-01'
+  serving_verification:                      # the gate that counts — CI mocks IO and cannot see this
+    verifier: betting_ml/scripts/milb_mle/verify_mle_prior_serving.py
+    result: |
+      2026-08-01 (post W8a+W8b rebuild). The check is the model's own PA=0 identity — a cold-start
+      batter WITH an MLE must serve eb_<m> == round(mle_<m>, 4), else he silently got the ZiPS/generic
+      prior. A non-null count CANNOT see that failure; a fully-degraded build passes it.
+      434/434 cold-start rows on all three metrics; avg_eb_{k_pct,bb_pct,iso} populated on all 30
+      lineup rows of the live slate (k 0.2236 / bb 0.0858 / iso 0.1612).
+      ⭐ k_pct held at 434/434 THROUGH the rebuild — it was held back byte-identical, so it doubles as
+      a free control: if it ever drops, the fault is the join, not the E7.5b swap.
   ablation_report: quant_sports_intel_models/baseball/edge_program/ablation_results/e7_5_milb_prior_ablation.md
   tests: betting_ml/tests/test_milb_mle_prior.py
   notes: |
