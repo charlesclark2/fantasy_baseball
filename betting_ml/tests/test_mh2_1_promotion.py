@@ -255,6 +255,32 @@ def test_the_totals_calibrator_refit_trigger_is_recorded_as_fired():
     assert cal["status"].startswith("CANDIDATE"), "it was never live, so holding regresses nothing"
 
 
+# ── 5b. the CLV scorecard must NOT be re-pinned (the same coin as the invisible stamp) ────────
+
+def test_the_clv_scorecard_pin_stays_v6_and_that_is_correct():
+    """⚠️ E7.9 step 7's documented landmine: `mart_clv_labeled_games.sql` HARDCODES
+    `model_version = 'v6'`, and "the day a new champion is promoted that mart returns ZERO rows and
+    the app's model-vs-market scorecard goes blank — no error, no HALT".
+
+    For MH2.1 it does NOT, and the reason is worth pinning because it is counter-intuitive: the
+    stamped `model_version` is derived from **home_win**, which this promotion does not touch, so
+    served rows keep reading 'v6' and the mart keeps matching them. The very bundle-stamp coupling
+    that made this swap invisible in the app (and that `totals_model_version` exists to work around)
+    is ALSO what keeps the scorecard alive here.
+
+    ⇒ Re-pinning this mart to 'mh2_1' would be the actual outage: it would match NOTHING. This test
+    exists so a future reader following the step-7 checklist mechanically does not "helpfully"
+    update a pin that must not move for a totals-only promotion.
+    """
+    sql = (PROJECT_ROOT / "dbt/models/mart/mart_clv_labeled_games.sql").read_text()
+    assert "model_version = 'v6'" in sql
+    assert "model_version = 'mh2_1'" not in sql, (
+        "the CLV pin must track the HOME_WIN-derived stamp, which MH2.1 does not change; pinning it "
+        "to the totals lineage would match zero rows and blank the scorecard"
+    )
+    assert REGISTRY["home_win"]["model_version"] == "v6", "premise: the stamp source is unchanged"
+
+
 # ── 6. FRAMING LOCKS — the claims a future reader inherits ────────────────────────────────────
 
 class TestFramingLocks:
