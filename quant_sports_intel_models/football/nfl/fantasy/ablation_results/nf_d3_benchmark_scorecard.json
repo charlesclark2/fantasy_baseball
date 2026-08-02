@@ -2,653 +2,653 @@
   "per_season": [
     {
       "season": 2019,
-      "n_scored_universe": 342,
+      "n_scored_universe": 353,
       "systems": {
         "adp": {
-          "n_aligned": 144,
+          "n_aligned": 146,
           "us": {
             "rho_by_pos": {
               "QB": 0.201,
-              "RB": 0.611,
-              "WR": 0.495,
-              "TE": 0.439
+              "RB": 0.617,
+              "WR": 0.493,
+              "TE": 0.424
             },
-            "rho_pooled": 0.436,
-            "rank_mae": 10.06,
-            "top24_hit": "12/24"
+            "rho_pooled": 0.434,
+            "rank_mae": 10.1,
+            "top24_hit": "11/24"
           },
           "system": {
             "rho_by_pos": {
               "QB": 0.413,
-              "RB": 0.695,
-              "WR": 0.58,
-              "TE": 0.318
+              "RB": 0.699,
+              "WR": 0.579,
+              "TE": 0.329
             },
-            "rho_pooled": 0.501,
-            "rank_mae": 8.94,
+            "rho_pooled": 0.505,
+            "rank_mae": 8.96,
             "top24_hit": "9/24"
           },
           "delta_rho_by_pos": {
             "QB": -0.212,
-            "RB": -0.084,
-            "WR": -0.085,
-            "TE": 0.121
+            "RB": -0.082,
+            "WR": -0.086,
+            "TE": 0.095
           },
-          "delta_rho_pooled": -0.065,
-          "delta_rank_mae": 1.12,
+          "delta_rho_pooled": -0.071,
+          "delta_rank_mae": 1.14,
           "disagreement": {
-            "n_high_disagreement": 36,
-            "us": 0.453,
-            "system": 0.353
+            "n_high_disagreement": 37,
+            "us": 0.402,
+            "system": 0.309
           },
-          "coverage_pct": 42.1
-        },
-        "ecr": {
-          "n_aligned": 291,
-          "us": {
-            "rho_by_pos": {
-              "QB": 0.651,
-              "RB": 0.747,
-              "WR": 0.708,
-              "TE": 0.558
-            },
-            "rho_pooled": 0.666,
-            "rank_mae": 14.48,
-            "top24_hit": "12/24"
-          },
-          "system": {
-            "rho_by_pos": {
-              "QB": 0.791,
-              "RB": 0.844,
-              "WR": 0.751,
-              "TE": 0.603
-            },
-            "rho_pooled": 0.747,
-            "rank_mae": 12.53,
-            "top24_hit": "7/24"
-          },
-          "delta_rho_by_pos": {
-            "QB": -0.14,
-            "RB": -0.097,
-            "WR": -0.043,
-            "TE": -0.045
-          },
-          "delta_rho_pooled": -0.081,
-          "delta_rank_mae": 1.95,
-          "disagreement": {
-            "n_high_disagreement": 73,
-            "us": 0.652,
-            "system": 0.714
-          },
-          "coverage_pct": 85.1
-        },
-        "sleeper": {
-          "n_aligned": 299,
-          "us": {
-            "rho_by_pos": {
-              "QB": 0.68,
-              "RB": 0.757,
-              "WR": 0.745,
-              "TE": 0.733
-            },
-            "rho_pooled": 0.729,
-            "rank_mae": 14.07,
-            "top24_hit": "13/24"
-          },
-          "system": {
-            "rho_by_pos": {
-              "QB": 0.947,
-              "RB": 0.961,
-              "WR": 0.91,
-              "TE": 0.96
-            },
-            "rho_pooled": 0.945,
-            "rank_mae": 6.04,
-            "top24_hit": "17/24"
-          },
-          "delta_rho_by_pos": {
-            "QB": -0.267,
-            "RB": -0.204,
-            "WR": -0.165,
-            "TE": -0.227
-          },
-          "delta_rho_pooled": -0.216,
-          "delta_rank_mae": 8.03,
-          "disagreement": {
-            "n_high_disagreement": 75,
-            "us": 0.458,
-            "system": 0.878
-          },
-          "coverage_pct": 87.4
-        }
-      }
-    },
-    {
-      "season": 2020,
-      "n_scored_universe": 352,
-      "systems": {
-        "adp": {
-          "n_aligned": 138,
-          "us": {
-            "rho_by_pos": {
-              "QB": 0.504,
-              "RB": 0.537,
-              "WR": 0.561,
-              "TE": 0.0
-            },
-            "rho_pooled": 0.4,
-            "rank_mae": 8.91,
-            "top24_hit": "13/24"
-          },
-          "system": {
-            "rho_by_pos": {
-              "QB": 0.659,
-              "RB": 0.662,
-              "WR": 0.531,
-              "TE": 0.25
-            },
-            "rho_pooled": 0.526,
-            "rank_mae": 7.75,
-            "top24_hit": "9/24"
-          },
-          "delta_rho_by_pos": {
-            "QB": -0.155,
-            "RB": -0.125,
-            "WR": 0.03,
-            "TE": -0.25
-          },
-          "delta_rho_pooled": -0.126,
-          "delta_rank_mae": 1.16,
-          "disagreement": {
-            "n_high_disagreement": 35,
-            "us": 0.571,
-            "system": 0.085
-          },
-          "coverage_pct": 39.2
+          "coverage_pct": 41.4
         },
         "ecr": {
           "n_aligned": 298,
           "us": {
             "rho_by_pos": {
-              "QB": 0.641,
-              "RB": 0.668,
-              "WR": 0.736,
-              "TE": 0.488
+              "QB": 0.651,
+              "RB": 0.757,
+              "WR": 0.694,
+              "TE": 0.586
             },
-            "rho_pooled": 0.633,
-            "rank_mae": 15.13,
+            "rho_pooled": 0.672,
+            "rank_mae": 14.75,
+            "top24_hit": "11/24"
+          },
+          "system": {
+            "rho_by_pos": {
+              "QB": 0.791,
+              "RB": 0.852,
+              "WR": 0.749,
+              "TE": 0.623
+            },
+            "rho_pooled": 0.754,
+            "rank_mae": 12.74,
+            "top24_hit": "7/24"
+          },
+          "delta_rho_by_pos": {
+            "QB": -0.14,
+            "RB": -0.095,
+            "WR": -0.055,
+            "TE": -0.037
+          },
+          "delta_rho_pooled": -0.082,
+          "delta_rank_mae": 2.01,
+          "disagreement": {
+            "n_high_disagreement": 75,
+            "us": 0.638,
+            "system": 0.698
+          },
+          "coverage_pct": 84.4
+        },
+        "sleeper": {
+          "n_aligned": 308,
+          "us": {
+            "rho_by_pos": {
+              "QB": 0.705,
+              "RB": 0.763,
+              "WR": 0.733,
+              "TE": 0.751
+            },
+            "rho_pooled": 0.738,
+            "rank_mae": 14.44,
+            "top24_hit": "12/24"
+          },
+          "system": {
+            "rho_by_pos": {
+              "QB": 0.95,
+              "RB": 0.962,
+              "WR": 0.911,
+              "TE": 0.962
+            },
+            "rho_pooled": 0.946,
+            "rank_mae": 6.24,
+            "top24_hit": "17/24"
+          },
+          "delta_rho_by_pos": {
+            "QB": -0.245,
+            "RB": -0.199,
+            "WR": -0.178,
+            "TE": -0.211
+          },
+          "delta_rho_pooled": -0.208,
+          "delta_rank_mae": 8.2,
+          "disagreement": {
+            "n_high_disagreement": 77,
+            "us": 0.457,
+            "system": 0.881
+          },
+          "coverage_pct": 87.3
+        }
+      }
+    },
+    {
+      "season": 2020,
+      "n_scored_universe": 370,
+      "systems": {
+        "adp": {
+          "n_aligned": 141,
+          "us": {
+            "rho_by_pos": {
+              "QB": 0.504,
+              "RB": 0.529,
+              "WR": 0.558,
+              "TE": 0.029
+            },
+            "rho_pooled": 0.405,
+            "rank_mae": 9.15,
             "top24_hit": "13/24"
           },
           "system": {
             "rho_by_pos": {
-              "QB": 0.774,
-              "RB": 0.668,
-              "WR": 0.725,
-              "TE": 0.66
+              "QB": 0.659,
+              "RB": 0.65,
+              "WR": 0.531,
+              "TE": 0.255
             },
-            "rho_pooled": 0.707,
-            "rank_mae": 14.33,
+            "rho_pooled": 0.524,
+            "rank_mae": 8.01,
+            "top24_hit": "9/24"
+          },
+          "delta_rho_by_pos": {
+            "QB": -0.155,
+            "RB": -0.121,
+            "WR": 0.027,
+            "TE": -0.226
+          },
+          "delta_rho_pooled": -0.119,
+          "delta_rank_mae": 1.14,
+          "disagreement": {
+            "n_high_disagreement": 36,
+            "us": 0.547,
+            "system": 0.089
+          },
+          "coverage_pct": 38.1
+        },
+        "ecr": {
+          "n_aligned": 305,
+          "us": {
+            "rho_by_pos": {
+              "QB": 0.664,
+              "RB": 0.666,
+              "WR": 0.733,
+              "TE": 0.502
+            },
+            "rho_pooled": 0.641,
+            "rank_mae": 15.51,
+            "top24_hit": "13/24"
+          },
+          "system": {
+            "rho_by_pos": {
+              "QB": 0.789,
+              "RB": 0.665,
+              "WR": 0.726,
+              "TE": 0.666
+            },
+            "rho_pooled": 0.712,
+            "rank_mae": 14.65,
             "top24_hit": "8/24"
           },
           "delta_rho_by_pos": {
-            "QB": -0.133,
-            "RB": 0.0,
-            "WR": 0.011,
-            "TE": -0.172
+            "QB": -0.125,
+            "RB": 0.001,
+            "WR": 0.007,
+            "TE": -0.164
           },
-          "delta_rho_pooled": -0.074,
-          "delta_rank_mae": 0.8,
+          "delta_rho_pooled": -0.071,
+          "delta_rank_mae": 0.86,
           "disagreement": {
-            "n_high_disagreement": 75,
-            "us": 0.673,
-            "system": 0.649
+            "n_high_disagreement": 77,
+            "us": 0.655,
+            "system": 0.635
           },
-          "coverage_pct": 84.7
+          "coverage_pct": 82.4
         },
         "sleeper": {
-          "n_aligned": 322,
+          "n_aligned": 338,
           "us": {
             "rho_by_pos": {
-              "QB": 0.662,
-              "RB": 0.713,
-              "WR": 0.8,
-              "TE": 0.645
+              "QB": 0.705,
+              "RB": 0.717,
+              "WR": 0.786,
+              "TE": 0.648
             },
-            "rho_pooled": 0.705,
-            "rank_mae": 14.69,
+            "rho_pooled": 0.714,
+            "rank_mae": 15.64,
             "top24_hit": "13/24"
           },
           "system": {
             "rho_by_pos": {
-              "QB": 0.955,
-              "RB": 0.963,
-              "WR": 0.965,
-              "TE": 0.949
+              "QB": 0.961,
+              "RB": 0.964,
+              "WR": 0.964,
+              "TE": 0.95
             },
-            "rho_pooled": 0.958,
-            "rank_mae": 5.5,
+            "rho_pooled": 0.96,
+            "rank_mae": 5.81,
             "top24_hit": "20/24"
           },
           "delta_rho_by_pos": {
-            "QB": -0.293,
-            "RB": -0.25,
-            "WR": -0.165,
-            "TE": -0.304
+            "QB": -0.256,
+            "RB": -0.247,
+            "WR": -0.178,
+            "TE": -0.302
           },
-          "delta_rho_pooled": -0.253,
-          "delta_rank_mae": 9.19,
+          "delta_rho_pooled": -0.246,
+          "delta_rank_mae": 9.83,
           "disagreement": {
-            "n_high_disagreement": 81,
-            "us": 0.257,
-            "system": 0.94
+            "n_high_disagreement": 85,
+            "us": 0.255,
+            "system": 0.941
           },
-          "coverage_pct": 91.5
+          "coverage_pct": 91.4
         }
       }
     },
     {
       "season": 2021,
-      "n_scored_universe": 386,
+      "n_scored_universe": 397,
       "systems": {
         "adp": {
-          "n_aligned": 148,
+          "n_aligned": 149,
           "us": {
             "rho_by_pos": {
               "QB": 0.493,
-              "RB": 0.543,
-              "WR": 0.504,
-              "TE": 0.639
+              "RB": 0.552,
+              "WR": 0.503,
+              "TE": 0.635
             },
-            "rho_pooled": 0.545,
-            "rank_mae": 9.91,
+            "rho_pooled": 0.546,
+            "rank_mae": 9.95,
             "top24_hit": "14/24"
           },
           "system": {
             "rho_by_pos": {
               "QB": 0.641,
-              "RB": 0.702,
-              "WR": 0.482,
-              "TE": 0.282
+              "RB": 0.712,
+              "WR": 0.48,
+              "TE": 0.284
             },
-            "rho_pooled": 0.527,
+            "rho_pooled": 0.529,
             "rank_mae": 9.27,
             "top24_hit": "9/24"
           },
           "delta_rho_by_pos": {
             "QB": -0.148,
-            "RB": -0.159,
-            "WR": 0.022,
-            "TE": 0.357
+            "RB": -0.16,
+            "WR": 0.023,
+            "TE": 0.351
           },
-          "delta_rho_pooled": 0.018,
-          "delta_rank_mae": 0.64,
+          "delta_rho_pooled": 0.017,
+          "delta_rank_mae": 0.68,
           "disagreement": {
-            "n_high_disagreement": 37,
-            "us": 0.465,
-            "system": 0.162
+            "n_high_disagreement": 38,
+            "us": 0.483,
+            "system": 0.202
           },
-          "coverage_pct": 38.3
+          "coverage_pct": 37.5
         },
         "ecr": {
-          "n_aligned": 355,
+          "n_aligned": 362,
           "us": {
             "rho_by_pos": {
               "QB": 0.786,
-              "RB": 0.709,
-              "WR": 0.759,
-              "TE": 0.772
+              "RB": 0.693,
+              "WR": 0.754,
+              "TE": 0.777
             },
-            "rho_pooled": 0.756,
-            "rank_mae": 16.93,
+            "rho_pooled": 0.753,
+            "rank_mae": 17.49,
             "top24_hit": "13/24"
           },
           "system": {
             "rho_by_pos": {
               "QB": 0.858,
-              "RB": 0.75,
-              "WR": 0.776,
-              "TE": 0.787
+              "RB": 0.731,
+              "WR": 0.775,
+              "TE": 0.792
             },
-            "rho_pooled": 0.793,
-            "rank_mae": 15.66,
+            "rho_pooled": 0.789,
+            "rank_mae": 16.09,
             "top24_hit": "8/24"
           },
           "delta_rho_by_pos": {
             "QB": -0.072,
-            "RB": -0.041,
-            "WR": -0.017,
+            "RB": -0.038,
+            "WR": -0.021,
             "TE": -0.015
           },
-          "delta_rho_pooled": -0.037,
-          "delta_rank_mae": 1.27,
+          "delta_rho_pooled": -0.036,
+          "delta_rank_mae": 1.4,
           "disagreement": {
-            "n_high_disagreement": 89,
-            "us": 0.746,
-            "system": 0.792
+            "n_high_disagreement": 91,
+            "us": 0.715,
+            "system": 0.773
           },
-          "coverage_pct": 92.0
+          "coverage_pct": 91.2
         },
         "sleeper": {
-          "n_aligned": 366,
+          "n_aligned": 377,
           "us": {
             "rho_by_pos": {
-              "QB": 0.82,
-              "RB": 0.695,
-              "WR": 0.755,
-              "TE": 0.769
+              "QB": 0.816,
+              "RB": 0.685,
+              "WR": 0.749,
+              "TE": 0.772
             },
-            "rho_pooled": 0.76,
-            "rank_mae": 17.54,
+            "rho_pooled": 0.756,
+            "rank_mae": 18.31,
             "top24_hit": "13/24"
           },
           "system": {
             "rho_by_pos": {
-              "QB": 0.885,
-              "RB": 0.785,
-              "WR": 0.798,
-              "TE": 0.828
+              "QB": 0.882,
+              "RB": 0.779,
+              "WR": 0.8,
+              "TE": 0.825
             },
-            "rho_pooled": 0.824,
-            "rank_mae": 14.56,
+            "rho_pooled": 0.822,
+            "rank_mae": 15.1,
             "top24_hit": "15/24"
           },
           "delta_rho_by_pos": {
-            "QB": -0.065,
-            "RB": -0.09,
-            "WR": -0.043,
-            "TE": -0.059
+            "QB": -0.066,
+            "RB": -0.094,
+            "WR": -0.051,
+            "TE": -0.053
           },
-          "delta_rho_pooled": -0.064,
-          "delta_rank_mae": 2.98,
+          "delta_rho_pooled": -0.066,
+          "delta_rank_mae": 3.21,
           "disagreement": {
-            "n_high_disagreement": 92,
-            "us": 0.514,
-            "system": 0.732
+            "n_high_disagreement": 95,
+            "us": 0.517,
+            "system": 0.734
           },
-          "coverage_pct": 94.8
+          "coverage_pct": 95.0
         }
       }
     },
     {
       "season": 2022,
-      "n_scored_universe": 366,
+      "n_scored_universe": 377,
       "systems": {
         "adp": {
-          "n_aligned": 122,
+          "n_aligned": 125,
           "us": {
             "rho_by_pos": {
               "QB": 0.135,
-              "RB": 0.504,
+              "RB": 0.527,
               "WR": 0.697,
-              "TE": 0.209
+              "TE": 0.343
             },
-            "rho_pooled": 0.386,
-            "rank_mae": 7.97,
+            "rho_pooled": 0.425,
+            "rank_mae": 8.03,
             "top24_hit": "11/24"
           },
           "system": {
             "rho_by_pos": {
               "QB": 0.381,
-              "RB": 0.616,
+              "RB": 0.602,
               "WR": 0.569,
-              "TE": 0.248
+              "TE": 0.375
             },
-            "rho_pooled": 0.453,
-            "rank_mae": 8.11,
+            "rho_pooled": 0.482,
+            "rank_mae": 8.18,
             "top24_hit": "12/24"
           },
           "delta_rho_by_pos": {
             "QB": -0.246,
-            "RB": -0.112,
+            "RB": -0.075,
             "WR": 0.128,
-            "TE": -0.039
+            "TE": -0.032
           },
-          "delta_rho_pooled": -0.067,
-          "delta_rank_mae": -0.14,
+          "delta_rho_pooled": -0.057,
+          "delta_rank_mae": -0.15,
           "disagreement": {
-            "n_high_disagreement": 31,
-            "us": 0.581,
-            "system": 0.352
+            "n_high_disagreement": 32,
+            "us": 0.589,
+            "system": 0.279
           },
-          "coverage_pct": 33.3
+          "coverage_pct": 33.2
         },
         "ecr": {
-          "n_aligned": 314,
+          "n_aligned": 322,
           "us": {
             "rho_by_pos": {
-              "QB": 0.46,
-              "RB": 0.761,
-              "WR": 0.723,
+              "QB": 0.5,
+              "RB": 0.76,
+              "WR": 0.714,
               "TE": 0.78
             },
-            "rho_pooled": 0.681,
-            "rank_mae": 15.39,
+            "rho_pooled": 0.689,
+            "rank_mae": 15.86,
             "top24_hit": "10/24"
           },
           "system": {
             "rho_by_pos": {
-              "QB": 0.628,
-              "RB": 0.821,
-              "WR": 0.737,
-              "TE": 0.753
+              "QB": 0.644,
+              "RB": 0.817,
+              "WR": 0.721,
+              "TE": 0.747
             },
-            "rho_pooled": 0.735,
-            "rank_mae": 14.43,
+            "rho_pooled": 0.732,
+            "rank_mae": 14.94,
             "top24_hit": "10/24"
           },
           "delta_rho_by_pos": {
-            "QB": -0.168,
-            "RB": -0.06,
-            "WR": -0.014,
-            "TE": 0.027
+            "QB": -0.144,
+            "RB": -0.057,
+            "WR": -0.007,
+            "TE": 0.033
           },
-          "delta_rho_pooled": -0.054,
-          "delta_rank_mae": 0.96,
+          "delta_rho_pooled": -0.043,
+          "delta_rank_mae": 0.92,
           "disagreement": {
-            "n_high_disagreement": 79,
-            "us": 0.735,
-            "system": 0.765
+            "n_high_disagreement": 81,
+            "us": 0.715,
+            "system": 0.732
           },
-          "coverage_pct": 85.8
+          "coverage_pct": 85.4
         },
         "sleeper": {
-          "n_aligned": 355,
+          "n_aligned": 367,
           "us": {
             "rho_by_pos": {
-              "QB": 0.595,
-              "RB": 0.775,
-              "WR": 0.754,
-              "TE": 0.779
+              "QB": 0.645,
+              "RB": 0.774,
+              "WR": 0.746,
+              "TE": 0.778
             },
-            "rho_pooled": 0.726,
-            "rank_mae": 16.27,
+            "rho_pooled": 0.736,
+            "rank_mae": 16.81,
             "top24_hit": "10/24"
           },
           "system": {
             "rho_by_pos": {
-              "QB": 0.866,
-              "RB": 0.855,
-              "WR": 0.831,
-              "TE": 0.829
+              "QB": 0.877,
+              "RB": 0.849,
+              "WR": 0.829,
+              "TE": 0.814
             },
-            "rho_pooled": 0.845,
-            "rank_mae": 12.5,
+            "rho_pooled": 0.842,
+            "rank_mae": 13.06,
             "top24_hit": "17/24"
           },
           "delta_rho_by_pos": {
-            "QB": -0.271,
-            "RB": -0.08,
-            "WR": -0.077,
-            "TE": -0.05
+            "QB": -0.232,
+            "RB": -0.075,
+            "WR": -0.083,
+            "TE": -0.036
           },
-          "delta_rho_pooled": -0.119,
-          "delta_rank_mae": 3.77,
+          "delta_rho_pooled": -0.106,
+          "delta_rank_mae": 3.75,
           "disagreement": {
-            "n_high_disagreement": 89,
-            "us": 0.57,
+            "n_high_disagreement": 92,
+            "us": 0.563,
             "system": 0.808
           },
-          "coverage_pct": 97.0
+          "coverage_pct": 97.3
         }
       }
     },
     {
       "season": 2023,
-      "n_scored_universe": 366,
+      "n_scored_universe": 373,
       "systems": {
         "adp": {
-          "n_aligned": 150,
+          "n_aligned": 153,
           "us": {
             "rho_by_pos": {
               "QB": 0.177,
-              "RB": 0.376,
-              "WR": 0.755,
+              "RB": 0.383,
+              "WR": 0.746,
               "TE": 0.343
             },
-            "rho_pooled": 0.413,
-            "rank_mae": 9.64,
+            "rho_pooled": 0.412,
+            "rank_mae": 9.92,
             "top24_hit": "11/24"
           },
           "system": {
             "rho_by_pos": {
               "QB": 0.286,
-              "RB": 0.435,
-              "WR": 0.716,
+              "RB": 0.446,
+              "WR": 0.719,
               "TE": 0.412
             },
-            "rho_pooled": 0.462,
-            "rank_mae": 9.62,
+            "rho_pooled": 0.466,
+            "rank_mae": 9.73,
             "top24_hit": "9/24"
           },
           "delta_rho_by_pos": {
             "QB": -0.109,
-            "RB": -0.059,
-            "WR": 0.039,
+            "RB": -0.063,
+            "WR": 0.027,
             "TE": -0.069
           },
-          "delta_rho_pooled": -0.049,
-          "delta_rank_mae": 0.02,
+          "delta_rho_pooled": -0.054,
+          "delta_rank_mae": 0.19,
           "disagreement": {
-            "n_high_disagreement": 38,
-            "us": 0.45,
-            "system": 0.335
+            "n_high_disagreement": 39,
+            "us": 0.5,
+            "system": 0.381
           },
           "coverage_pct": 41.0
         },
         "ecr": {
-          "n_aligned": 316,
+          "n_aligned": 321,
           "us": {
             "rho_by_pos": {
               "QB": 0.514,
               "RB": 0.672,
-              "WR": 0.753,
-              "TE": 0.749
+              "WR": 0.76,
+              "TE": 0.741
             },
             "rho_pooled": 0.672,
-            "rank_mae": 15.53,
+            "rank_mae": 15.71,
             "top24_hit": "10/24"
           },
           "system": {
             "rho_by_pos": {
               "QB": 0.61,
-              "RB": 0.782,
-              "WR": 0.806,
-              "TE": 0.84
+              "RB": 0.781,
+              "WR": 0.813,
+              "TE": 0.842
             },
-            "rho_pooled": 0.759,
-            "rank_mae": 13.86,
+            "rho_pooled": 0.761,
+            "rank_mae": 13.93,
             "top24_hit": "9/24"
           },
           "delta_rho_by_pos": {
             "QB": -0.096,
-            "RB": -0.11,
+            "RB": -0.109,
             "WR": -0.053,
-            "TE": -0.091
+            "TE": -0.101
           },
-          "delta_rho_pooled": -0.087,
-          "delta_rank_mae": 1.67,
+          "delta_rho_pooled": -0.089,
+          "delta_rank_mae": 1.78,
           "disagreement": {
-            "n_high_disagreement": 79,
-            "us": 0.661,
-            "system": 0.776
+            "n_high_disagreement": 81,
+            "us": 0.677,
+            "system": 0.781
           },
-          "coverage_pct": 86.3
+          "coverage_pct": 86.1
         },
         "sleeper": {
-          "n_aligned": 351,
+          "n_aligned": 358,
           "us": {
             "rho_by_pos": {
               "QB": 0.641,
-              "RB": 0.697,
-              "WR": 0.768,
-              "TE": 0.748
+              "RB": 0.701,
+              "WR": 0.773,
+              "TE": 0.742
             },
             "rho_pooled": 0.714,
-            "rank_mae": 16.1,
+            "rank_mae": 16.39,
             "top24_hit": "10/24"
           },
           "system": {
             "rho_by_pos": {
               "QB": 0.75,
-              "RB": 0.862,
-              "WR": 0.837,
-              "TE": 0.779
+              "RB": 0.864,
+              "WR": 0.844,
+              "TE": 0.776
             },
-            "rho_pooled": 0.807,
-            "rank_mae": 13.33,
+            "rho_pooled": 0.808,
+            "rank_mae": 13.48,
             "top24_hit": "11/24"
           },
           "delta_rho_by_pos": {
             "QB": -0.109,
-            "RB": -0.165,
-            "WR": -0.069,
-            "TE": -0.031
+            "RB": -0.163,
+            "WR": -0.071,
+            "TE": -0.034
           },
-          "delta_rho_pooled": -0.093,
-          "delta_rank_mae": 2.77,
+          "delta_rho_pooled": -0.094,
+          "delta_rank_mae": 2.91,
           "disagreement": {
-            "n_high_disagreement": 88,
-            "us": 0.412,
-            "system": 0.783
+            "n_high_disagreement": 90,
+            "us": 0.419,
+            "system": 0.784
           },
-          "coverage_pct": 95.9
+          "coverage_pct": 96.0
         },
         "espn": {
-          "n_aligned": 366,
+          "n_aligned": 373,
           "us": {
             "rho_by_pos": {
               "QB": 0.641,
-              "RB": 0.697,
-              "WR": 0.78,
-              "TE": 0.785
+              "RB": 0.707,
+              "WR": 0.785,
+              "TE": 0.781
             },
-            "rho_pooled": 0.726,
-            "rank_mae": 16.17,
+            "rho_pooled": 0.729,
+            "rank_mae": 16.42,
             "top24_hit": "10/24"
           },
           "system": {
             "rho_by_pos": {
               "QB": 0.75,
-              "RB": 0.841,
-              "WR": 0.849,
-              "TE": 0.857
+              "RB": 0.837,
+              "WR": 0.85,
+              "TE": 0.849
             },
-            "rho_pooled": 0.824,
-            "rank_mae": 12.79,
+            "rho_pooled": 0.821,
+            "rank_mae": 13.17,
             "top24_hit": "10/24"
           },
           "delta_rho_by_pos": {
             "QB": -0.109,
-            "RB": -0.144,
-            "WR": -0.069,
-            "TE": -0.072
+            "RB": -0.13,
+            "WR": -0.065,
+            "TE": -0.068
           },
-          "delta_rho_pooled": -0.098,
-          "delta_rank_mae": 3.38,
+          "delta_rho_pooled": -0.092,
+          "delta_rank_mae": 3.25,
           "disagreement": {
-            "n_high_disagreement": 92,
-            "us": 0.431,
-            "system": 0.633
+            "n_high_disagreement": 94,
+            "us": 0.409,
+            "system": 0.606
           },
           "coverage_pct": 100.0
         }
@@ -656,14 +656,14 @@
     },
     {
       "season": 2024,
-      "n_scored_universe": 374,
+      "n_scored_universe": 384,
       "systems": {
         "adp": {
           "n_aligned": 150,
           "us": {
             "rho_by_pos": {
               "QB": 0.449,
-              "RB": 0.559,
+              "RB": 0.558,
               "WR": 0.408,
               "TE": 0.507
             },
@@ -674,7 +674,7 @@
           "system": {
             "rho_by_pos": {
               "QB": 0.477,
-              "RB": 0.629,
+              "RB": 0.628,
               "WR": 0.482,
               "TE": 0.628
             },
@@ -695,124 +695,286 @@
             "us": 0.348,
             "system": 0.195
           },
-          "coverage_pct": 40.1
+          "coverage_pct": 39.1
         },
         "ecr": {
-          "n_aligned": 355,
+          "n_aligned": 362,
           "us": {
             "rho_by_pos": {
-              "QB": 0.72,
-              "RB": 0.792,
-              "WR": 0.73,
-              "TE": 0.742
+              "QB": 0.739,
+              "RB": 0.798,
+              "WR": 0.731,
+              "TE": 0.746
             },
-            "rho_pooled": 0.746,
-            "rank_mae": 16.67,
+            "rho_pooled": 0.753,
+            "rank_mae": 16.74,
             "top24_hit": "10/24"
           },
           "system": {
             "rho_by_pos": {
-              "QB": 0.766,
-              "RB": 0.802,
+              "QB": 0.778,
+              "RB": 0.808,
               "WR": 0.768,
-              "TE": 0.766
+              "TE": 0.774
             },
-            "rho_pooled": 0.776,
-            "rank_mae": 15.22,
+            "rho_pooled": 0.782,
+            "rank_mae": 15.38,
             "top24_hit": "9/24"
           },
           "delta_rho_by_pos": {
-            "QB": -0.046,
+            "QB": -0.039,
             "RB": -0.01,
-            "WR": -0.038,
-            "TE": -0.024
+            "WR": -0.037,
+            "TE": -0.028
           },
-          "delta_rho_pooled": -0.03,
-          "delta_rank_mae": 1.45,
+          "delta_rho_pooled": -0.029,
+          "delta_rank_mae": 1.36,
           "disagreement": {
-            "n_high_disagreement": 89,
-            "us": 0.741,
-            "system": 0.778
+            "n_high_disagreement": 91,
+            "us": 0.74,
+            "system": 0.783
           },
-          "coverage_pct": 94.9
+          "coverage_pct": 94.3
         },
         "sleeper": {
-          "n_aligned": 352,
+          "n_aligned": 357,
           "us": {
             "rho_by_pos": {
-              "QB": 0.752,
-              "RB": 0.786,
-              "WR": 0.731,
+              "QB": 0.767,
+              "RB": 0.788,
+              "WR": 0.732,
               "TE": 0.693
             },
-            "rho_pooled": 0.741,
-            "rank_mae": 16.84,
+            "rho_pooled": 0.745,
+            "rank_mae": 16.91,
             "top24_hit": "10/24"
           },
           "system": {
             "rho_by_pos": {
-              "QB": 0.844,
-              "RB": 0.858,
-              "WR": 0.839,
-              "TE": 0.71
+              "QB": 0.848,
+              "RB": 0.856,
+              "WR": 0.84,
+              "TE": 0.711
             },
-            "rho_pooled": 0.813,
-            "rank_mae": 13.46,
+            "rho_pooled": 0.814,
+            "rank_mae": 13.6,
             "top24_hit": "14/24"
           },
           "delta_rho_by_pos": {
-            "QB": -0.092,
-            "RB": -0.072,
+            "QB": -0.081,
+            "RB": -0.068,
             "WR": -0.108,
-            "TE": -0.017
+            "TE": -0.018
           },
-          "delta_rho_pooled": -0.072,
-          "delta_rank_mae": 3.38,
+          "delta_rho_pooled": -0.069,
+          "delta_rank_mae": 3.31,
           "disagreement": {
-            "n_high_disagreement": 88,
-            "us": 0.329,
-            "system": 0.675
+            "n_high_disagreement": 90,
+            "us": 0.345,
+            "system": 0.678
           },
-          "coverage_pct": 94.1
+          "coverage_pct": 93.0
         },
         "espn": {
-          "n_aligned": 371,
+          "n_aligned": 381,
           "us": {
             "rho_by_pos": {
-              "QB": 0.752,
-              "RB": 0.791,
-              "WR": 0.759,
-              "TE": 0.741
+              "QB": 0.767,
+              "RB": 0.798,
+              "WR": 0.764,
+              "TE": 0.757
             },
-            "rho_pooled": 0.761,
-            "rank_mae": 16.85,
+            "rho_pooled": 0.771,
+            "rank_mae": 16.96,
             "top24_hit": "10/24"
           },
           "system": {
             "rho_by_pos": {
-              "QB": 0.669,
-              "RB": 0.862,
-              "WR": 0.816,
+              "QB": 0.672,
+              "RB": 0.86,
+              "WR": 0.814,
               "TE": 0.776
             },
-            "rho_pooled": 0.781,
-            "rank_mae": 14.45,
+            "rho_pooled": 0.78,
+            "rank_mae": 14.93,
             "top24_hit": "11/24"
           },
           "delta_rho_by_pos": {
-            "QB": 0.083,
-            "RB": -0.071,
-            "WR": -0.057,
-            "TE": -0.035
+            "QB": 0.095,
+            "RB": -0.062,
+            "WR": -0.05,
+            "TE": -0.019
           },
-          "delta_rho_pooled": -0.02,
-          "delta_rank_mae": 2.4,
+          "delta_rho_pooled": -0.009,
+          "delta_rank_mae": 2.03,
           "disagreement": {
-            "n_high_disagreement": 93,
-            "us": 0.723,
-            "system": 0.7
+            "n_high_disagreement": 96,
+            "us": 0.726,
+            "system": 0.691
           },
           "coverage_pct": 99.2
+        }
+      }
+    },
+    {
+      "season": 2025,
+      "n_scored_universe": 397,
+      "systems": {
+        "ecr": {
+          "n_aligned": 319,
+          "us": {
+            "rho_by_pos": {
+              "QB": 0.555,
+              "RB": 0.8,
+              "WR": 0.745,
+              "TE": 0.802
+            },
+            "rho_pooled": 0.726,
+            "rank_mae": 14.71,
+            "top24_hit": "11/24"
+          },
+          "system": {
+            "rho_by_pos": {
+              "QB": 0.594,
+              "RB": 0.799,
+              "WR": 0.792,
+              "TE": 0.778
+            },
+            "rho_pooled": 0.741,
+            "rank_mae": 13.6,
+            "top24_hit": "11/24"
+          },
+          "delta_rho_by_pos": {
+            "QB": -0.039,
+            "RB": 0.001,
+            "WR": -0.047,
+            "TE": 0.024
+          },
+          "delta_rho_pooled": -0.015,
+          "delta_rank_mae": 1.11,
+          "disagreement": {
+            "n_high_disagreement": 80,
+            "us": 0.809,
+            "system": 0.871
+          },
+          "coverage_pct": 80.4
+        },
+        "sleeper": {
+          "n_aligned": 357,
+          "us": {
+            "rho_by_pos": {
+              "QB": 0.555,
+              "RB": 0.818,
+              "WR": 0.777,
+              "TE": 0.788
+            },
+            "rho_pooled": 0.734,
+            "rank_mae": 15.91,
+            "top24_hit": "11/24"
+          },
+          "system": {
+            "rho_by_pos": {
+              "QB": 0.668,
+              "RB": 0.833,
+              "WR": 0.785,
+              "TE": 0.799
+            },
+            "rho_pooled": 0.771,
+            "rank_mae": 15.23,
+            "top24_hit": "14/24"
+          },
+          "delta_rho_by_pos": {
+            "QB": -0.113,
+            "RB": -0.015,
+            "WR": -0.008,
+            "TE": -0.011
+          },
+          "delta_rho_pooled": -0.037,
+          "delta_rank_mae": 0.68,
+          "disagreement": {
+            "n_high_disagreement": 90,
+            "us": 0.702,
+            "system": 0.761
+          },
+          "coverage_pct": 89.9
+        },
+        "espn": {
+          "n_aligned": 397,
+          "us": {
+            "rho_by_pos": {
+              "QB": 0.555,
+              "RB": 0.814,
+              "WR": 0.8,
+              "TE": 0.82
+            },
+            "rho_pooled": 0.747,
+            "rank_mae": 17.16,
+            "top24_hit": "11/24"
+          },
+          "system": {
+            "rho_by_pos": {
+              "QB": 0.6,
+              "RB": 0.794,
+              "WR": 0.804,
+              "TE": 0.821
+            },
+            "rho_pooled": 0.755,
+            "rank_mae": 17.01,
+            "top24_hit": "10/24"
+          },
+          "delta_rho_by_pos": {
+            "QB": -0.045,
+            "RB": 0.02,
+            "WR": -0.004,
+            "TE": -0.001
+          },
+          "delta_rho_pooled": -0.008,
+          "delta_rank_mae": 0.15,
+          "disagreement": {
+            "n_high_disagreement": 100,
+            "us": 0.714,
+            "system": 0.739
+          },
+          "coverage_pct": 100.0
+        },
+        "espn_proj": {
+          "n_aligned": 397,
+          "us": {
+            "rho_by_pos": {
+              "QB": 0.555,
+              "RB": 0.814,
+              "WR": 0.8,
+              "TE": 0.82
+            },
+            "rho_pooled": 0.747,
+            "rank_mae": 17.16,
+            "top24_hit": "11/24"
+          },
+          "system": {
+            "rho_by_pos": {
+              "QB": 0.588,
+              "RB": 0.831,
+              "WR": 0.82,
+              "TE": 0.805
+            },
+            "rho_pooled": 0.761,
+            "rank_mae": 16.15,
+            "top24_hit": "14/24"
+          },
+          "delta_rho_by_pos": {
+            "QB": -0.033,
+            "RB": -0.017,
+            "WR": -0.02,
+            "TE": 0.015
+          },
+          "delta_rho_pooled": -0.014,
+          "delta_rank_mae": 1.01,
+          "disagreement": {
+            "n_high_disagreement": 100,
+            "us": 0.713,
+            "system": 0.82
+          },
+          "coverage_pct": 100.0
         }
       }
     }
@@ -820,62 +982,77 @@
   "aggregate": {
     "adp": {
       "n_seasons": 6,
-      "us_rho_pooled": 0.444,
-      "system_rho_pooled": 0.504,
-      "delta_rho_pooled": -0.06,
-      "delta_rank_mae": 0.593,
+      "us_rho_pooled": 0.45,
+      "system_rho_pooled": 0.51,
+      "delta_rho_pooled": -0.059,
+      "delta_rank_mae": 0.627,
       "disagreement_us": 0.478,
-      "disagreement_system": 0.247,
+      "disagreement_system": 0.243,
       "delta_rho_by_pos": {
         "QB": -0.15,
-        "RB": -0.101,
-        "WR": 0.01,
+        "RB": -0.095,
+        "WR": 0.007,
         "TE": -0.0
       }
     },
     "ecr": {
-      "n_seasons": 6,
-      "us_rho_pooled": 0.692,
+      "n_seasons": 7,
+      "us_rho_pooled": 0.701,
       "system_rho_pooled": 0.753,
-      "delta_rho_pooled": -0.06,
-      "delta_rank_mae": 1.35,
-      "disagreement_us": 0.701,
-      "disagreement_system": 0.746,
+      "delta_rho_pooled": -0.052,
+      "delta_rank_mae": 1.349,
+      "disagreement_us": 0.707,
+      "disagreement_system": 0.753,
       "delta_rho_by_pos": {
-        "QB": -0.109,
-        "RB": -0.053,
-        "WR": -0.026,
-        "TE": -0.053
+        "QB": -0.094,
+        "RB": -0.044,
+        "WR": -0.03,
+        "TE": -0.041
       }
     },
     "espn": {
-      "n_seasons": 2,
-      "us_rho_pooled": 0.744,
-      "system_rho_pooled": 0.802,
-      "delta_rho_pooled": -0.059,
-      "delta_rank_mae": 2.89,
-      "disagreement_us": 0.577,
-      "disagreement_system": 0.666,
+      "n_seasons": 3,
+      "us_rho_pooled": 0.749,
+      "system_rho_pooled": 0.785,
+      "delta_rho_pooled": -0.036,
+      "delta_rank_mae": 1.81,
+      "disagreement_us": 0.616,
+      "disagreement_system": 0.679,
       "delta_rho_by_pos": {
-        "QB": -0.013,
-        "RB": -0.107,
-        "WR": -0.063,
-        "TE": -0.053
+        "QB": -0.02,
+        "RB": -0.057,
+        "WR": -0.04,
+        "TE": -0.029
+      }
+    },
+    "espn_proj": {
+      "n_seasons": 1,
+      "us_rho_pooled": 0.747,
+      "system_rho_pooled": 0.761,
+      "delta_rho_pooled": -0.014,
+      "delta_rank_mae": 1.01,
+      "disagreement_us": 0.713,
+      "disagreement_system": 0.82,
+      "delta_rho_by_pos": {
+        "QB": -0.033,
+        "RB": -0.017,
+        "WR": -0.02,
+        "TE": 0.015
       }
     },
     "sleeper": {
-      "n_seasons": 6,
-      "us_rho_pooled": 0.729,
-      "system_rho_pooled": 0.865,
-      "delta_rho_pooled": -0.136,
-      "delta_rank_mae": 5.02,
-      "disagreement_us": 0.423,
-      "disagreement_system": 0.803,
+      "n_seasons": 7,
+      "us_rho_pooled": 0.734,
+      "system_rho_pooled": 0.852,
+      "delta_rho_pooled": -0.118,
+      "delta_rank_mae": 4.556,
+      "disagreement_us": 0.465,
+      "disagreement_system": 0.798,
       "delta_rho_by_pos": {
-        "QB": -0.183,
-        "RB": -0.143,
-        "WR": -0.104,
-        "TE": -0.115
+        "QB": -0.157,
+        "RB": -0.123,
+        "WR": -0.097,
+        "TE": -0.095
       }
     }
   },
@@ -885,20 +1062,21 @@
     2021,
     2022,
     2023,
-    2024
+    2024,
+    2025
   ],
   "forward": {
     "season": 2026,
     "systems": {
       "adp": {
-        "n_aligned": 164,
+        "n_aligned": 168,
         "agreement_rho_by_pos": {
           "QB": 0.586,
-          "RB": 0.89,
-          "WR": 0.849,
+          "RB": 0.882,
+          "WR": 0.846,
           "TE": 0.658
         },
-        "agreement_rho_pooled": 0.746,
+        "agreement_rho_pooled": 0.743,
         "top_disagreements": [
           {
             "player": "JOE BURROW",
@@ -928,19 +1106,19 @@
             "player": "LUTHER BURDEN III",
             "position": "WR",
             "direction": "we_lower",
-            "gap_z": -1.57
+            "gap_z": -1.59
           },
           {
             "player": "BHAYSHUL TUTEN",
             "position": "RB",
             "direction": "we_lower",
-            "gap_z": -1.46
+            "gap_z": -1.42
           },
           {
-            "player": "COOPER KUPP",
-            "position": "WR",
+            "player": "ALVIN KAMARA",
+            "position": "RB",
             "direction": "we_higher",
-            "gap_z": 1.39
+            "gap_z": 1.37
           },
           {
             "player": "MALIK WILLIS",
@@ -949,8 +1127,8 @@
             "gap_z": -1.35
           },
           {
-            "player": "ALVIN KAMARA",
-            "position": "RB",
+            "player": "COOPER KUPP",
+            "position": "WR",
             "direction": "we_higher",
             "gap_z": 1.33
           },
@@ -964,73 +1142,79 @@
             "player": "JERRY JEUDY",
             "position": "WR",
             "direction": "we_higher",
-            "gap_z": 1.28
-          },
-          {
-            "player": "CHRISTIAN MCCAFFREY",
-            "position": "RB",
-            "direction": "we_higher",
-            "gap_z": 1.19
+            "gap_z": 1.23
           },
           {
             "player": "JA'MARR CHASE",
             "position": "WR",
             "direction": "we_higher",
+            "gap_z": 1.21
+          },
+          {
+            "player": "ZACH CHARBONNET",
+            "position": "RB",
+            "direction": "we_higher",
             "gap_z": 1.19
+          },
+          {
+            "player": "CHRISTIAN MCCAFFREY",
+            "position": "RB",
+            "direction": "we_higher",
+            "gap_z": 1.17
           },
           {
             "player": "ISAIAH LIKELY",
             "position": "TE",
             "direction": "we_lower",
             "gap_z": -1.16
-          },
-          {
-            "player": "ZACH CHARBONNET",
-            "position": "RB",
-            "direction": "we_higher",
-            "gap_z": 1.15
           }
         ]
       },
       "ecr": {
-        "n_aligned": 360,
+        "n_aligned": 368,
         "agreement_rho_by_pos": {
-          "QB": 0.841,
-          "RB": 0.87,
-          "WR": 0.87,
-          "TE": 0.838
+          "QB": 0.848,
+          "RB": 0.855,
+          "WR": 0.868,
+          "TE": 0.837
         },
-        "agreement_rho_pooled": 0.855,
+        "agreement_rho_pooled": 0.852,
         "top_disagreements": [
           {
             "player": "ZACH ERTZ",
             "position": "TE",
             "direction": "we_higher",
-            "gap_z": 1.78
+            "gap_z": 1.79
           },
           {
             "player": "CHRISTIAN MCCAFFREY",
             "position": "RB",
             "direction": "we_higher",
-            "gap_z": 1.67
+            "gap_z": 1.7
           },
           {
             "player": "TRAVIS HUNTER",
             "position": "WR",
             "direction": "we_lower",
-            "gap_z": -1.65
+            "gap_z": -1.67
           },
           {
             "player": "JA'MARR CHASE",
             "position": "WR",
             "direction": "we_higher",
-            "gap_z": 1.63
+            "gap_z": 1.64
+          },
+          {
+            "player": "JONATHON BROOKS",
+            "position": "RB",
+            "direction": "we_lower",
+            "gap_z": -1.52
           },
           {
             "player": "AMON-RA ST. BROWN",
             "position": "WR",
             "direction": "we_higher",
-            "gap_z": 1.42
+            "gap_z": 1.43
           },
           {
             "player": "ISAIAH LIKELY",
@@ -1042,49 +1226,43 @@
             "player": "JONNU SMITH",
             "position": "TE",
             "direction": "we_higher",
-            "gap_z": 1.31
-          },
-          {
-            "player": "BHAYSHUL TUTEN",
-            "position": "RB",
-            "direction": "we_lower",
-            "gap_z": -1.27
+            "gap_z": 1.32
           },
           {
             "player": "MATTHEW GOLDEN",
             "position": "WR",
             "direction": "we_lower",
-            "gap_z": -1.26
+            "gap_z": -1.27
           },
           {
             "player": "LUTHER BURDEN III",
             "position": "WR",
             "direction": "we_lower",
-            "gap_z": -1.25
+            "gap_z": -1.27
           },
           {
             "player": "JAYLIN NOEL",
             "position": "WR",
             "direction": "we_lower",
-            "gap_z": -1.25
+            "gap_z": -1.26
           },
           {
             "player": "PUKA NACUA",
             "position": "WR",
             "direction": "we_higher",
-            "gap_z": 1.25
+            "gap_z": 1.26
           },
           {
-            "player": "MALIK WILLIS",
-            "position": "QB",
+            "player": "BHAYSHUL TUTEN",
+            "position": "RB",
             "direction": "we_lower",
-            "gap_z": -1.24
+            "gap_z": -1.25
           },
           {
             "player": "DARREN WALLER",
             "position": "TE",
             "direction": "we_higher",
-            "gap_z": 1.24
+            "gap_z": 1.25
           },
           {
             "player": "TERRANCE FERGUSON",
@@ -1095,14 +1273,14 @@
         ]
       },
       "sleeper": {
-        "n_aligned": 451,
+        "n_aligned": 464,
         "agreement_rho_by_pos": {
-          "QB": 0.888,
-          "RB": 0.856,
+          "QB": 0.887,
+          "RB": 0.852,
           "WR": 0.88,
-          "TE": 0.9
+          "TE": 0.899
         },
-        "agreement_rho_pooled": 0.881,
+        "agreement_rho_pooled": 0.879,
         "top_disagreements": [
           {
             "player": "ZACH ERTZ",
@@ -1114,19 +1292,19 @@
             "player": "ALVIN KAMARA",
             "position": "RB",
             "direction": "we_higher",
-            "gap_z": 1.31
+            "gap_z": 1.33
           },
           {
             "player": "MATTHEW GOLDEN",
             "position": "WR",
             "direction": "we_lower",
-            "gap_z": -1.24
+            "gap_z": -1.25
           },
           {
             "player": "LUTHER BURDEN III",
             "position": "WR",
             "direction": "we_lower",
-            "gap_z": -1.21
+            "gap_z": -1.22
           },
           {
             "player": "BHAYSHUL TUTEN",
@@ -1138,7 +1316,7 @@
             "player": "TRAVIS HUNTER",
             "position": "WR",
             "direction": "we_lower",
-            "gap_z": -1.14
+            "gap_z": -1.15
           },
           {
             "player": "MALIK WILLIS",
@@ -1174,7 +1352,7 @@
             "player": "PARKER WASHINGTON",
             "position": "WR",
             "direction": "we_lower",
-            "gap_z": -1.03
+            "gap_z": -1.04
           },
           {
             "player": "DEANDRE HOPKINS",
@@ -1189,34 +1367,40 @@
             "gap_z": 0.95
           },
           {
-            "player": "OMARION HAMPTON",
+            "player": "KAREEM HUNT",
             "position": "RB",
-            "direction": "we_lower",
-            "gap_z": -0.94
+            "direction": "we_higher",
+            "gap_z": 0.95
           }
         ]
       },
       "espn": {
-        "n_aligned": 620,
+        "n_aligned": 679,
         "agreement_rho_by_pos": {
-          "QB": 0.872,
-          "RB": 0.756,
-          "WR": 0.737,
-          "TE": 0.792
+          "QB": 0.831,
+          "RB": 0.739,
+          "WR": 0.716,
+          "TE": 0.793
         },
-        "agreement_rho_pooled": 0.789,
+        "agreement_rho_pooled": 0.77,
         "top_disagreements": [
           {
             "player": "ZACH ERTZ",
             "position": "TE",
             "direction": "we_higher",
-            "gap_z": 2.97
+            "gap_z": 2.98
           },
           {
             "player": "KEENAN ALLEN",
             "position": "WR",
             "direction": "we_higher",
-            "gap_z": 2.74
+            "gap_z": 2.79
+          },
+          {
+            "player": "CHRISTIAN MCCAFFREY",
+            "position": "RB",
+            "direction": "we_higher",
+            "gap_z": 2.42
           },
           {
             "player": "JONNU SMITH",
@@ -1228,65 +1412,59 @@
             "player": "DARREN WALLER",
             "position": "TE",
             "direction": "we_higher",
-            "gap_z": 2.35
-          },
-          {
-            "player": "CHRISTIAN MCCAFFREY",
-            "position": "RB",
-            "direction": "we_higher",
-            "gap_z": 2.33
+            "gap_z": 2.36
           },
           {
             "player": "JA'MARR CHASE",
             "position": "WR",
             "direction": "we_higher",
-            "gap_z": 2.22
+            "gap_z": 2.3
           },
           {
             "player": "TREY MCBRIDE",
             "position": "TE",
             "direction": "we_higher",
-            "gap_z": 2.11
+            "gap_z": 2.15
           },
           {
             "player": "TRAVIS HUNTER",
             "position": "WR",
             "direction": "we_lower",
-            "gap_z": -2.08
+            "gap_z": -2.13
           },
           {
             "player": "AMON-RA ST. BROWN",
             "position": "WR",
             "direction": "we_higher",
-            "gap_z": 1.98
-          },
-          {
-            "player": "JAKOBIE KEENEY-JAMES",
-            "position": "WR",
-            "direction": "we_higher",
-            "gap_z": 1.87
+            "gap_z": 2.05
           },
           {
             "player": "BIJAN ROBINSON",
             "position": "RB",
             "direction": "we_higher",
-            "gap_z": 1.85
-          },
-          {
-            "player": "PUKA NACUA",
-            "position": "WR",
-            "direction": "we_higher",
-            "gap_z": 1.82
+            "gap_z": 1.94
           },
           {
             "player": "JONATHAN TAYLOR",
             "position": "RB",
             "direction": "we_higher",
-            "gap_z": 1.8
+            "gap_z": 1.89
           },
           {
-            "player": "SAL CANNELLA",
-            "position": "TE",
+            "player": "PUKA NACUA",
+            "position": "WR",
+            "direction": "we_higher",
+            "gap_z": 1.88
+          },
+          {
+            "player": "JAKOBIE KEENEY-JAMES",
+            "position": "WR",
+            "direction": "we_higher",
+            "gap_z": 1.88
+          },
+          {
+            "player": "JAHMYR GIBBS",
+            "position": "RB",
             "direction": "we_higher",
             "gap_z": 1.8
           },
@@ -1294,49 +1472,145 @@
             "player": "KAREEM HUNT",
             "position": "RB",
             "direction": "we_higher",
-            "gap_z": 1.79
+            "gap_z": 1.8
           }
         ]
       },
-      "fantasy_footballers": {
-        "n_aligned": 259,
+      "espn_proj": {
+        "n_aligned": 425,
         "agreement_rho_by_pos": {
-          "QB": 0.644,
-          "RB": 0.921,
-          "WR": 0.863,
-          "TE": 0.857
+          "QB": 0.833,
+          "RB": 0.872,
+          "WR": 0.865,
+          "TE": 0.925
         },
-        "agreement_rho_pooled": 0.821,
+        "agreement_rho_pooled": 0.874,
         "top_disagreements": [
           {
-            "player": "MALIK WILLIS",
-            "position": "QB",
+            "player": "TERRANCE FERGUSON",
+            "position": "TE",
             "direction": "we_lower",
-            "gap_z": -1.87
+            "gap_z": -1.52
           },
           {
-            "player": "JAYDEN DANIELS",
-            "position": "QB",
+            "player": "MATTHEW GOLDEN",
+            "position": "WR",
             "direction": "we_lower",
-            "gap_z": -1.75
+            "gap_z": -1.39
+          },
+          {
+            "player": "JONATHON BROOKS",
+            "position": "RB",
+            "direction": "we_lower",
+            "gap_z": -1.34
+          },
+          {
+            "player": "JAMES CONNER",
+            "position": "RB",
+            "direction": "we_higher",
+            "gap_z": 1.18
+          },
+          {
+            "player": "TRAVIS HUNTER",
+            "position": "WR",
+            "direction": "we_lower",
+            "gap_z": -1.18
           },
           {
             "player": "BHAYSHUL TUTEN",
             "position": "RB",
             "direction": "we_lower",
-            "gap_z": -1.41
+            "gap_z": -1.14
+          },
+          {
+            "player": "ISAIAH LIKELY",
+            "position": "TE",
+            "direction": "we_lower",
+            "gap_z": -1.09
+          },
+          {
+            "player": "LUTHER BURDEN III",
+            "position": "WR",
+            "direction": "we_lower",
+            "gap_z": -1.07
+          },
+          {
+            "player": "MALIK WILLIS",
+            "position": "QB",
+            "direction": "we_lower",
+            "gap_z": -1.04
+          },
+          {
+            "player": "ELIC AYOMANOR",
+            "position": "WR",
+            "direction": "we_higher",
+            "gap_z": 1.02
+          },
+          {
+            "player": "TUCKER KRAFT",
+            "position": "TE",
+            "direction": "we_lower",
+            "gap_z": -0.91
+          },
+          {
+            "player": "BLAKE CORUM",
+            "position": "RB",
+            "direction": "we_lower",
+            "gap_z": -0.9
+          },
+          {
+            "player": "OMARION HAMPTON",
+            "position": "RB",
+            "direction": "we_lower",
+            "gap_z": -0.89
+          },
+          {
+            "player": "GREG DULCICH",
+            "position": "TE",
+            "direction": "we_lower",
+            "gap_z": -0.87
+          },
+          {
+            "player": "JAYDEN DANIELS",
+            "position": "QB",
+            "direction": "we_lower",
+            "gap_z": -0.86
+          }
+        ]
+      },
+      "fantasy_footballers": {
+        "n_aligned": 264,
+        "agreement_rho_by_pos": {
+          "QB": 0.675,
+          "RB": 0.914,
+          "WR": 0.863,
+          "TE": 0.857
+        },
+        "agreement_rho_pooled": 0.827,
+        "top_disagreements": [
+          {
+            "player": "MALIK WILLIS",
+            "position": "QB",
+            "direction": "we_lower",
+            "gap_z": -1.69
+          },
+          {
+            "player": "JAYDEN DANIELS",
+            "position": "QB",
+            "direction": "we_lower",
+            "gap_z": -1.54
+          },
+          {
+            "player": "BHAYSHUL TUTEN",
+            "position": "RB",
+            "direction": "we_lower",
+            "gap_z": -1.4
           },
           {
             "player": "JA'MARR CHASE",
             "position": "WR",
             "direction": "we_higher",
             "gap_z": 1.36
-          },
-          {
-            "player": "JOE BURROW",
-            "position": "QB",
-            "direction": "we_lower",
-            "gap_z": -1.36
           },
           {
             "player": "HOLLYWOOD BROWN",
@@ -1348,19 +1622,19 @@
             "player": "CHRISTIAN MCCAFFREY",
             "position": "RB",
             "direction": "we_higher",
-            "gap_z": 1.34
+            "gap_z": 1.35
           },
           {
             "player": "LUTHER BURDEN III",
             "position": "WR",
             "direction": "we_lower",
-            "gap_z": -1.33
+            "gap_z": -1.34
           },
           {
             "player": "TRAVIS HUNTER",
             "position": "WR",
             "direction": "we_lower",
-            "gap_z": -1.32
+            "gap_z": -1.33
           },
           {
             "player": "TUCKER KRAFT",
@@ -1369,10 +1643,10 @@
             "gap_z": -1.25
           },
           {
-            "player": "KYLER MURRAY",
+            "player": "JOE BURROW",
             "position": "QB",
             "direction": "we_lower",
-            "gap_z": -1.17
+            "gap_z": -1.19
           },
           {
             "player": "AMON-RA ST. BROWN",
@@ -1390,13 +1664,19 @@
             "player": "PARKER WASHINGTON",
             "position": "WR",
             "direction": "we_lower",
-            "gap_z": -1.14
+            "gap_z": -1.15
           },
           {
-            "player": "MICHAEL PENIX JR.",
+            "player": "MATTHEW GOLDEN",
+            "position": "WR",
+            "direction": "we_lower",
+            "gap_z": -1.12
+          },
+          {
+            "player": "KYLER MURRAY",
             "position": "QB",
-            "direction": "we_higher",
-            "gap_z": 1.12
+            "direction": "we_lower",
+            "gap_z": -1.05
           }
         ]
       }

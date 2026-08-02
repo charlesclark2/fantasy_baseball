@@ -659,6 +659,64 @@ def test_load_file_benchmark_raises_on_missing_columns(tmp_path):
         bs.load_file_benchmark(None, bad, 2025)
 
 
+# ── ESPN raw-export landmines (found 2026-08-01 grading a real ESPN 2025 file: their own accuracy
+# read came out implausibly bad — 0.541 vs the honest 0.761 — because BOTH bugs below were silently
+# corrupting the "system" side of the comparison) ────────────────────────────────────────────────
+def test_load_file_benchmark_keeps_season_total_split_only(tmp_path, monkeypatch):
+    """ESPN's raw export can carry TWO rows per player under `stat_split_type_id` — a season-total
+    (0) and a per-game-average (2). Left alone this fans out the downstream merge (one system row
+    becomes two) and mixes two incompatible scales into one ranking column. Only the season-total
+    row should survive."""
+    def _fake_xw(con, df, season, schema="main_nfl_marts"):
+        out = df.copy()
+        out["player_id"] = ["G" + str(i) for i in range(len(out))]
+        return out
+    monkeypatch.setattr(bs.A, "attach_gsis", _fake_xw)
+    p = tmp_path / "espn_proj_2025.csv"
+    p.write_text(
+        "player_name,position,stat_split_type_id,projected_fantasy_points\n"
+        "A,RB,0,150\nA,RB,2,9\nB,WR,0,120\nB,WR,2,7\n"
+    )
+    out = bs.load_file_benchmark(None, p, 2025)
+    assert len(out) == 2                      # one row per player, not four
+    assert set(out["score"]) == {150, 120}     # the season-total values, never the per-game ones
+
+
+def test_load_file_benchmark_remaps_espn_shifted_position_id(tmp_path, monkeypatch):
+    """ESPN's raw `position` STRING is shifted relative to its own `position_id` (verified against
+    real players: id=1 held a QB labeled "TQB", id=3 held a WR labeled "RB_WR", id=4 held a TE
+    labeled "WR"). `position_id` itself is unshifted — true position must come from it, not the
+    string, or QB/WR rows get silently dropped by the skill-position crosswalk filter."""
+    def _fake_xw(con, df, season, schema="main_nfl_marts"):
+        out = df.copy()
+        out["player_id"] = ["G" + str(i) for i in range(len(out))]
+        return out
+    monkeypatch.setattr(bs.A, "attach_gsis", _fake_xw)
+    p = tmp_path / "espn_proj_2025.csv"
+    p.write_text(
+        "player_name,position_id,position,projected_fantasy_points\n"
+        "QB1,1,TQB,300\nRB1,2,RB,250\nWR1,3,RB_WR,200\nTE1,4,WR,150\n"
+    )
+    out = bs.load_file_benchmark(None, p, 2025)
+    got = dict(zip(out["player_id"].map({"G0": "QB1", "G1": "RB1", "G2": "WR1", "G3": "TE1"}.get),
+                   out["position"]))
+    assert got == {"QB1": "QB", "RB1": "RB", "WR1": "WR", "TE1": "TE"}
+
+
+def test_load_file_benchmark_dedupes_remaining_duplicate_player_ids(tmp_path, monkeypatch):
+    """A defensive backstop independent of the two ESPN-specific fixes above: if ANY file-benchmark
+    shape still produces duplicate player_id rows post-crosswalk, the loader must collapse them
+    (highest score wins) rather than silently fan out the downstream merge."""
+    calls = iter([
+        pd.DataFrame({"player_id": ["G0", "G0"], "position": ["RB", "RB"], "score": [10.0, 99.0]}),
+    ])
+    monkeypatch.setattr(bs.A, "attach_gsis", lambda con, df, season, schema="main_nfl_marts": next(calls))
+    p = tmp_path / "x_2025.csv"
+    p.write_text("player_name,position,points\nA,RB,10\n")
+    out = bs.load_file_benchmark(None, p, 2025)
+    assert len(out) == 1 and out.iloc[0]["score"] == 99.0
+
+
 def test_sleeper_parses_projection_and_filters_to_skill(tmp_path):
     import json
     sl = pytest.importorskip("quant_sports_intel_models.football.nfl.fantasy.sleeper_source")
