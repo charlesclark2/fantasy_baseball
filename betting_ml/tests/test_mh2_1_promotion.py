@@ -1,21 +1,32 @@
-"""Guards for the MH2.1 champion promotion (total_runs / post_lineup, 2026-08-02).
+"""Guards for the MH2.1 champion promotion — PROMOTED AND ROLLED BACK 2026-08-02.
 
 Fast-gate safe: pure stdlib/numpy/sklearn, no Snowflake, no S3, no `pipeline` import.
 
+🔴 READ FIRST — `total_runs` / `post_lineup` serves the **v6 NGBoost**, not the MH2.1 challenger.
+The promotion was argued on conditional calibration; that evidence did not reproduce on the served
+population and reversed in every window measurable, so it was reverted the same day. The defect was
+an UNVALIDATED STRATIFIER — a conditional-calibration result is a property of its stratifier, and
+one that does not demonstrably separate realized dispersion measures nothing. Full record:
+`ablation_results/mh2_1_rollback.md`.
+
 WHAT THIS PROTECTS
 ------------------
-The promoted champion is a POINT learner served through an NGBoost-shaped API, replacing a
-heteroscedastic NGBoost. Three classes of silent breakage are possible and each is pinned here:
+1. **The rollback is COMPLETE** — a half-reverted registry (v6 artifact, 25-col sidecar, or a
+   dangling `serving_wrapper`/`sigma_served`) fails the serve-time width guard inside a HALT-tier
+   op and costs the slate. `TestPromotionScope` pins every serving key together.
+2. **The challenger is RETAINED, not deleted** — `HomoscedasticNormalRegressor`, the fit script,
+   the 25-col sidecar and the artifact stay addressable under the registry's `mh2_1_*` keys so a
+   re-promotion is a registry edit. The API-shape and contract guards therefore still point at the
+   CHALLENGER on purpose: a retained artifact whose guards were deleted is how a rollback rots into
+   unshippable dead code.
+3. **Framing** — the CRPS margin decomposes into two sub-floor components, only 3 of 8 folds test
+   the served contract, and the selection was on PRICING. Those claims survive the rollback and
+   must stay on the record; if they rot out, a future re-promotion starts reading as an edge result.
+4. **The kept improvements** — `daily_model_predictions.totals_model_version` (the bundle
+   `model_version` is home_win-only, so a totals swap was invisible in served rows) and the three
+   pre-existing `backfill_predictions.py` breaks this work fixed. Both are champion-independent.
 
-1. **API shape** — `predict_today` calls `model.pred_dist(X).params["loc"|"scale"]`. A wrapper that
-   loses that surface raises inside a HALT-tier op and costs the whole slate.
-2. **Scope** — the story promotes ONE (target, tier). A registry edit that also moved `pre_lineup`,
-   `home_win`, or `run_differential` would ship three unvalidated swaps.
-3. **Framing** — the margin decomposes into two sub-floor components, only 3 of 8 folds test the
-   served contract, and the selection is on PRICING. Those are the claims a future reader will
-   inherit; if they rot out of the record the promotion starts reading as an edge result.
-
-`best_alpha = 0` throughout — no edge, win-rate, or ROI claim.
+`best_alpha = 0` throughout — no edge, win-rate, or ROI claim was made, and none is retracted.
 """
 from __future__ import annotations
 
