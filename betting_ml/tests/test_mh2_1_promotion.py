@@ -423,3 +423,54 @@ class TestInAppVisibility:
         assert 'new_version="mh2_1"' in src
         assert 'cv_metric_name="crps_margin_vs_incumbent"' in src, \
             "stamping the v6-era MAE would record a metric this promotion was never judged by"
+
+
+# ── 8. the backfill's sidecar reader (a PRE-EXISTING break, surfaced by this promotion) ───────
+
+class TestBackfillSidecarUnwrap:
+    """⚠️ NOT an MH2.1 regression — `backfill_predictions.feat_cols` returned the parsed JSON
+    unconditionally, so once sidecars gained `_provenance` (E13.11, 2026-06-23) it handed back the
+    DICT. `len()` was 2 and `reindex(columns=<dict>)` built a matrix out of the KEY NAMES, so every
+    target raised a feature-count error. It broke home_win and run_differential too — targets this
+    promotion never touched — which is how we know it predates MH2.1. `predict_today._load_cols`
+    has carried the unwrap all along; this script was simply left behind.
+    """
+
+    def test_both_sidecar_shapes_resolve_to_the_column_list(self, tmp_path, monkeypatch):
+        import json as _json
+
+        from betting_ml.scripts import backfill_predictions as b
+
+        src = (PROJECT_ROOT / "betting_ml/scripts/backfill_predictions.py").read_text()
+        assert 'raw["feature_cols"] if isinstance(raw, dict) else raw' in src, (
+            "feat_cols must unwrap the modern {'feature_cols': [...], '_provenance': {...}} shape"
+        )
+        # the two shapes, resolved by the same expression the script uses
+        modern = _json.loads(
+            (PROJECT_ROOT / TOTALS["feature_columns_path"]).read_text())
+        legacy = modern["feature_cols"]
+        for raw, expected_n in ((modern, 25), (legacy, 25)):
+            cols = raw["feature_cols"] if isinstance(raw, dict) else raw
+            assert len(cols) == expected_n
+            assert "_provenance" not in cols, "the provenance KEY must never become a feature"
+        assert b is not None
+
+    def test_a_resolved_width_mismatch_fails_loudly_before_sklearn(self):
+        """The original failure surfaced ~20 frames deep in sklearn's `_check_n_features` as
+        'X has 2 features, but StandardScaler is expecting 21' — which names neither the sidecar nor
+        the target. The script now checks the resolved width against the registry's advertised
+        `features` and says which file drifted."""
+        src = (PROJECT_ROOT / "betting_ml/scripts/backfill_predictions.py").read_text()
+        assert "registry[_tgt].get(\"features\")" in src
+        assert "the sidecar unwrap regressed" in src
+
+    def test_the_imputer_indicators_are_not_silently_dropped(self):
+        """`_AddIndicators` APPENDS has_starter_platoon_data + is_new_venue, both of which are in
+        every served sidecar. Re-wrapping the transform as `pd.DataFrame(t, columns=numeric_cols)`
+        SELECTS rather than renames, dropping them — and the later `fill_value=0.0` reindex then
+        asserted 'no platoon data / not a new venue' for every game in the backfill. A wrong VALUE,
+        not a crash: it would have scored a whole history quietly."""
+        src = (PROJECT_ROOT / "betting_ml/scripts/backfill_predictions.py").read_text()
+        assert "isinstance(_transformed, pd.DataFrame)" in src
+        assert "_transformed.set_index(df.index)" in src
+        assert "imputer indicator" in src, "an absent indicator must warn, not pass silently"
