@@ -198,7 +198,16 @@ export function openStarterSlots(myPositions: string[], req: RosterRequirements)
 
 // Tier numbers (1 = best) for a DESCENDING points list: a new tier starts at an unusually-large gap
 // (> mean + k*std of consecutive gaps). Sample-robust, no magic threshold.
-export function assignTiers(pointsDesc: number[], k = 1.0): number[] {
+//
+// ⭐ NF-D19: a real gap can still cliff off a tier of exactly one player (T1=Bijan, T2=Chase, ...),
+// which reads as broken rather than as a signal — a "tier" of one is not a group. So a MINIMUM TIER
+// SIZE is enforced as a second pass after the gap-based split: any resulting group smaller than
+// `minSize` is merged FORWARD into the tier below it (a trailing undersized group, with nothing
+// below it, merges BACKWARD into the one above). This keeps the "unusually large gap = a real
+// boundary" semantics — a genuine cliff still separates two tiers — it just refuses to let a group
+// stand alone below the floor. Chosen over a fixed target-tier-count: that would abandon gap
+// detection entirely and manufacture boundaries the data doesn't support.
+export function assignTiers(pointsDesc: number[], k = 1.0, minSize = 3): number[] {
   const n = pointsDesc.length
   if (n === 0) return []
   if (n === 1) return [1]
@@ -208,12 +217,30 @@ export function assignTiers(pointsDesc: number[], k = 1.0): number[] {
   const varc = gaps.reduce((a, b) => a + (b - mean) ** 2, 0) / gaps.length
   const std = Math.sqrt(varc)
   const thr = mean + k * std
-  const tiers = [1]
-  let t = 1
-  for (const g of gaps) {
-    if (g > thr && g > 1e-9) t += 1
-    tiers.push(t)
+
+  // Raw gap-based groups — each a contiguous run of indices into `pointsDesc`.
+  const groups: number[][] = [[0]]
+  for (let i = 0; i < gaps.length; i++) {
+    if (gaps[i] > thr && gaps[i] > 1e-9) groups.push([i + 1])
+    else groups[groups.length - 1].push(i + 1)
   }
+
+  // Enforce the size floor: fold any undersized group into its neighbor.
+  const merged: number[][] = []
+  for (const g of groups) {
+    if (merged.length > 0 && merged[merged.length - 1].length < minSize) {
+      merged[merged.length - 1].push(...g)
+    } else {
+      merged.push(g)
+    }
+  }
+  if (merged.length > 1 && merged[merged.length - 1].length < minSize) {
+    const last = merged.pop() as number[]
+    merged[merged.length - 1].push(...last)
+  }
+
+  const tiers = new Array<number>(n)
+  merged.forEach((g, t) => g.forEach((idx) => (tiers[idx] = t + 1)))
   return tiers
 }
 
