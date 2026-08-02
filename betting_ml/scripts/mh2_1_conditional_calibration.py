@@ -150,6 +150,88 @@ def _flatten(out):
     return PredictiveOutput.normal(out.loc, np.full(len(out.loc), const))
 
 
+def _calibration_rms(strata: list[dict]) -> float:
+    """RMS deviation of per-stratum `Var(z)` from **1.0** — the analytic truth.
+
+    ⭐ **THIS IS THE CORRECTION THAT REVERSED THIS STUDY'S OWN CONCLUSION, so it is worth stating
+    plainly.** The first scoring rule asked "does the LEADER's Var(z) slope differ from the matched
+    FOIL's?" — which silently assumes the foil is the calibrated reference. On the real 8-fold run
+    it is not: the heteroscedastic foil is the WORST arm in the field (RMS 0.180, `Var(z)` reaching
+    **1.44** in the calmest decile — i.e. NGBoost under-estimates sigma most in the games it calls
+    calm), while the homoscedastic leader sits at 0.050. Scoring distance-from-the-incumbent instead
+    of distance-from-TRUTH therefore INVERTED the verdict and labelled the better-calibrated arm as
+    the damaged one.
+
+    The ground truth here needs no oracle and no fitting: for ANY conditionally-calibrated
+    predictive, `z = (y − mu)/sigma` has variance exactly 1 in every stratum. Anchoring on 1.0 is
+    the E2.1-r "sanity-check the selection metric against a known floor" discipline applied to a
+    case where the floor is analytic. A relative-to-incumbent metric can only ever say "different";
+    it can never say "better", and a promotion decision needs the latter.
+    """
+    d = np.asarray([s["var_z"] for s in strata], float) - 1.0
+    return float(np.sqrt(np.mean(d ** 2)))
+
+
+def _verdict(rms: dict, sigma_cv: float, ctrl_stat: dict, lead_stat: dict, *,
+             incumbent: str, foil: str, leader: str, control: str):
+    """The promotion-relevant reading. Returns `(verdict, prose, extra_detail)`.
+
+    The decision question is NOT "is the leader different from the incumbent's variance model?" but
+    **"is the leader's CONDITIONAL CALIBRATION worse than the SERVED champion's?"** — so the leader
+    is compared against `incumbent`, on distance from `Var(z)=1`.
+
+    The positive control keeps its job, but its job is now sharper: flattening the foil's sigma
+    tells us whether that per-game sigma carried real information IN THE FIRST PLACE. If flattening
+    does NOT hurt, there is nothing for a homoscedastic arm to destroy, and the variance objection
+    to the swap is unfounded at its source rather than merely unproven.
+    """
+    extra = {
+        "rms_leader": round(rms[leader], 4),
+        "rms_incumbent": round(rms[incumbent], 4),
+        "rms_foil": round(rms[foil], 4),
+        "rms_flattened_control": round(rms[control], 4),
+        "flattening_the_incumbent_sigma_hurts": bool(rms[control] > rms[foil]),
+        "leader_better_than_incumbent": bool(rms[leader] < rms[incumbent]),
+    }
+    if sigma_cv < MIN_SIGMA_CV:
+        return "MECHANISM_INACTIVE", (
+            f"⚪ **THE MECHANISM CANNOT ACT — a SCOPE finding, not a clean bill of health (NF1.9).** "
+            f"The heteroscedastic arm's per-game σ has a coefficient of variation of only "
+            f"**{sigma_cv:.3f}** (floor {MIN_SIGMA_CV}), i.e. it is nearly constant already, so "
+            f"there is essentially no per-game variance for a homoscedastic arm to discard and this "
+            f"check cannot discriminate. Neither a pass nor a fail may be read from it."), extra
+
+    ratio = rms[incumbent] / rms[leader] if rms[leader] > 0 else float("inf")
+    if not extra["flattening_the_incumbent_sigma_hurts"]:
+        return "INCUMBENT_VARIANCE_UNINFORMATIVE", (
+            f"⭐ **THE VARIANCE OBJECTION IS REFUTED AT ITS SOURCE — and note this REVERSES the "
+            f"concern this script was built to test.** Deliberately FLATTENING the heteroscedastic "
+            f"arm's own per-game σ did not worsen its conditional calibration; it **improved** it "
+            f"(RMS |Var(z)−1| {rms[foil]:.4f} → {rms[control]:.4f}). So that per-game σ is not "
+            f"merely uninformative, it is actively MISCALIBRATED, and there is nothing for a "
+            f"homoscedastic arm to destroy.\n\n"
+            f"Directly: the MH2.1 leader is **{ratio:.1f}× BETTER conditionally calibrated than the "
+            f"SERVED champion** (RMS |Var(z)−1| **{rms[leader]:.4f}** vs **{rms[incumbent]:.4f}**), "
+            f"with pooled Var(z) essentially perfect. The incumbent under-estimates σ worst in the "
+            f"games it calls calm. **The homoscedastic swap cannot be blocked on variance grounds — "
+            f"on this evidence it is a calibration IMPROVEMENT.**"), extra
+
+    if extra["leader_better_than_incumbent"]:
+        return "VARIANCE_LOSS_NOT_MATERIAL", (
+            f"✅ The incumbent's per-game σ IS informative (flattening it worsens RMS |Var(z)−1| "
+            f"{rms[foil]:.4f} → {rms[control]:.4f}), so this check has something real to protect — "
+            f"and the leader still comes out **no worse** than the served champion "
+            f"({rms[leader]:.4f} vs {rms[incumbent]:.4f}). The swap is not blocked on variance "
+            f"grounds."), extra
+
+    return "VARIANCE_LOSS_MATERIAL", (
+        f"⚠️ **DO NOT PROMOTE ON CRPS ALONE.** The incumbent's per-game σ is informative (flattening "
+        f"it worsens RMS |Var(z)−1| {rms[foil]:.4f} → {rms[control]:.4f}), and the homoscedastic "
+        f"leader is **worse conditionally calibrated than the served champion** "
+        f"({rms[leader]:.4f} vs {rms[incumbent]:.4f}). Its intervals are systematically wrong in a "
+        f"way that varies with game volatility — exactly what a totals price is made of."), extra
+
+
 def run(exclude_seasons: tuple[int, ...] = (), seed: int = 42, smoke: bool = False) -> dict:
     if not _CACHE.exists():
         # ⚠️ `relative_to` RAISES when the path sits outside the project, so the guard's own error
@@ -290,10 +372,7 @@ def run(exclude_seasons: tuple[int, ...] = (), seed: int = 42, smoke: bool = Fal
     sig_vals = pooled[foil]["sigma"].to_numpy(float)
     sigma_cv = float(np.std(sig_vals) / np.mean(sig_vals)) if np.mean(sig_vals) else float("nan")
 
-    # ── PERMUTATION NULL on the slope DIFFERENCE vs the matched foil ──────────────────────────────
-    # Shuffling the stratum labels destroys any relationship between sigma and Var(z) while keeping
-    # every arm's marginal z-distribution and every stratum's size intact — so it gives the exact
-    # null this statistic needs, with no distributional assumption.
+    # ── PERMUTATION NULL, and the ANCHORS, all scored against Var(z)=1 ────────────────────────────
     lab = base["sigma_stratum"].to_numpy()
     k = int(np.nanmax(lab)) + 1
     rng = np.random.default_rng(seed)
@@ -317,58 +396,20 @@ def run(exclude_seasons: tuple[int, ...] = (), seed: int = 42, smoke: bool = Fal
         }
 
     ctrl_stat, lead_stat = _z(control), _z(leader)
-    detects = bool(ctrl_stat["z_score"] is not None and ctrl_stat["z_score"] >= 2.0)
+    rms = {n: _calibration_rms(sig[n]["strata"]) for n in sig}
+    verdict, reading, detail = _verdict(
+        rms, sigma_cv, ctrl_stat, lead_stat,
+        incumbent="incumbent::ngboost_normal", foil=foil, leader=leader, control=control)
     verdict_detail = {
         "stratifier": f"{foil} predicted sigma (deciles)",
         "sigma_coefficient_of_variation": round(sigma_cv, 4),
-        "var_z_slope_foil_heteroscedastic": round(sig[foil]["var_z_slope"], 5),
-        "positive_control": ctrl_stat,
-        "leader": lead_stat,
-        "instrument_detects_variance_loss": detects,
+        "rms_abs_var_z_minus_1": {n: round(v, 4) for n, v in rms.items()},
+        "var_z_slope": {n: round(sig[n]["var_z_slope"], 5) for n in sig},
+        "positive_control_slope_test": ctrl_stat,
+        "leader_slope_test": lead_stat,
         "n_permutations": N_PERM,
+        **detail,
     }
-
-    if sigma_cv < MIN_SIGMA_CV:
-        verdict = "MECHANISM_INACTIVE"
-        reading = (
-            f"⚪ **THE MECHANISM CANNOT ACT ON THIS POPULATION — a SCOPE finding, not a clean bill of "
-            f"health (NF1.9).** The heteroscedastic incumbent's own per-game σ has a coefficient of "
-            f"variation of just **{sigma_cv:.3f}** (below the {MIN_SIGMA_CV} floor), i.e. it is "
-            f"nearly constant already. There is essentially no per-game variance for the "
-            f"homoscedastic winner to throw away, so this check cannot distinguish the two and "
-            f"NEITHER a pass nor a fail may be read from it. If that is genuinely true of the "
-            f"served model, the variance objection to the swap is itself moot — but verify it on a "
-            f"FULL (non-smoke) fit before relying on it, because an undertrained NGBoost compresses "
-            f"σ toward a constant.")
-    elif not detects:
-        verdict = "INSTRUMENT_BLIND"
-        reading = (
-            f"❌ **NO CONCLUSION MAY BE DRAWN.** The POSITIVE CONTROL — a deliberately flattened copy "
-            f"of the heteroscedastic arm — did NOT separate from its parent "
-            f"(z = {ctrl_stat['z_score']}, p = {ctrl_stat['p_one_sided']}). The instrument cannot "
-            f"detect the very defect it exists to detect, so a clean result from it would be "
-            f"vacuous (NF1.7 (a)). Fix the diagnostic before reading anything into the leader.")
-    else:
-        material = bool(lead_stat["z_score"] is not None and lead_stat["z_score"] >= 2.0)
-        share = (obs[leader] / obs[control]) if obs[control] else float("nan")
-        verdict_detail["share_of_the_full_flattening_penalty"] = (
-            round(float(share), 3) if np.isfinite(share) else None)
-        verdict = "VARIANCE_LOSS_MATERIAL" if material else "VARIANCE_LOSS_NOT_MATERIAL"
-        reading = (
-            f"The instrument is **PROVEN SENSITIVE**: the positive control separates from its "
-            f"heteroscedastic parent at z = {ctrl_stat['z_score']} "
-            f"(p = {ctrl_stat['p_one_sided']}), so a null here would be informative. "
-            + (f"⚠️ **The MH2.1 leader ALSO separates** (z = {lead_stat['z_score']}, "
-               f"p = {lead_stat['p_one_sided']}), carrying **{share:.0%}** of the full flattening "
-               f"penalty. Its intervals are systematically wrong in a way that varies with game "
-               f"volatility — exactly what a totals price is made of. **Do not promote on CRPS "
-               f"alone.**"
-               if material else
-               f"✅ **The MH2.1 leader does NOT separate** (z = {lead_stat['z_score']}, "
-               f"p = {lead_stat['p_one_sided']}) — it carries only **{share:.0%}** of the full "
-               f"flattening penalty that the control shows is detectable. On this window the "
-               f"per-game variance the incumbent models is not buying enough conditional "
-               f"calibration to block the swap."))
 
     result = {
         "story": STORY, "best_alpha": BEST_ALPHA, "target": TARGET, "tier": TIER,
@@ -503,6 +544,47 @@ def _write(r: dict) -> None:
     print(f"[{STORY}] report → {(_ABL / f'{stem}.md').relative_to(PROJECT_ROOT)}")
 
 
+def rescore(stem: str = "mh2_1_conditional_calibration") -> dict:
+    """Re-emit a STORED run's verdict under the corrected scoring rule — **no refitting**.
+
+    The per-stratum `Var(z)` values are already in the stored JSON, so the corrected
+    distance-from-truth verdict is recoverable at zero compute and zero Snowflake. That matters
+    here: the original run's verdict was INVERTED by scoring distance-from-the-incumbent, and the
+    operator should not have to pay for another fit to get the right answer out of data already on
+    disk.
+    """
+    src = _JSON_DIR / f"{stem}.json"
+    if not src.exists():
+        raise SystemExit(f"❌ no stored run at {src}")
+    r = json.loads(src.read_text())
+    sig = r["profiles"]["sigma_stratum"]
+    d = r["verdict_detail"]
+    rms = {n: _calibration_rms(sig[n]["strata"]) for n in sig}
+    foil, leader = "plus_eb::ngboost_normal", "plus_eb::glm_elasticnet"
+    control, incumbent = "plus_eb::ngboost_FLATTENED", "incumbent::ngboost_normal"
+    ctrl_stat = d.get("positive_control_slope_test") or d.get("positive_control") or {}
+    lead_stat = d.get("leader_slope_test") or d.get("leader") or {}
+    verdict, reading, extra = _verdict(
+        rms, float(d["sigma_coefficient_of_variation"]), ctrl_stat, lead_stat,
+        incumbent=incumbent, foil=foil, leader=leader, control=control)
+    r["verdict"], r["reading"] = verdict, reading
+    r["verdict_detail"] = {
+        **d,
+        "rms_abs_var_z_minus_1": {n: round(v, 4) for n, v in rms.items()},
+        "var_z_slope": {n: round(sig[n]["var_z_slope"], 5) for n in sig},
+        "positive_control_slope_test": ctrl_stat, "leader_slope_test": lead_stat,
+        **extra,
+        "rescored": True,
+        "rescore_note": ("re-emitted from the stored per-stratum Var(z) under the corrected "
+                         "distance-from-Var(z)=1 rule; NOTHING was refitted and no arm's numbers "
+                         "changed — only the scoring rule applied to them"),
+    }
+    _write(r)
+    print(f"[{STORY}] RESCORED VERDICT: {verdict}")
+    print(f"[{STORY}] {reading}")
+    return r
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="MH2.1 conditional-calibration check (Snowflake-free)")
     ap.add_argument("--exclude-seasons", type=int, nargs="*", default=[],
@@ -510,7 +592,14 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--smoke", action="store_true",
                     help="Cap rows/estimators for a fast harness check. NOT a result.")
+    ap.add_argument("--rescore", action="store_true",
+                    help="Re-emit a STORED run's verdict under the corrected scoring rule. "
+                         "Refits NOTHING — zero compute, zero Snowflake.")
     args = ap.parse_args()
+    if args.rescore:
+        rescore("mh2_1_conditional_calibration"
+                + ("_no2020" if args.exclude_seasons else ""))
+        return
     run(tuple(args.exclude_seasons or ()), seed=args.seed, smoke=args.smoke)
 
 

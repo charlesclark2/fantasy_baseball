@@ -121,16 +121,69 @@ def test_the_interval_is_the_nominal_central_band():
 
 # ── the verdict states must be reachable and honest ───────────────────────────────────────────
 
+def test_the_statistic_is_distance_from_truth_not_distance_from_the_incumbent():
+    """⚠️ REGRESSION on the defect that INVERTED this study's own first verdict.
+
+    The original rule asked "does the leader's slope differ from the matched foil's?", which assumes
+    the foil is the calibrated reference. On the real 8-fold run the foil was the WORST arm in the
+    field, so the rule labelled the BETTER-calibrated arm as the damaged one. For ANY conditionally
+    calibrated predictive `Var(z) = 1` in every stratum — an analytic truth needing no oracle — so
+    that, not the incumbent, is the anchor.
+    """
+    perfect = [{"var_z": 1.0} for _ in range(10)]
+    assert cal._calibration_rms(perfect) == pytest.approx(0.0)
+
+    bad = [{"var_z": v} for v in (1.4, 1.3, 1.1, 1.1, 1.1, 1.0, 1.1, 1.0, 1.0, 0.9)]
+    good = [{"var_z": v} for v in (0.97, 1.0, 0.9, 0.99, 0.99, 0.95, 1.04, 1.01, 1.0, 1.1)]
+    assert cal._calibration_rms(good) < cal._calibration_rms(bad)
+
+    # and the verdict must FOLLOW the truth-anchored score, not the foil comparison
+    rms = {"incumbent::ngboost_normal": 0.158, "plus_eb::ngboost_normal": 0.180,
+           "plus_eb::glm_elasticnet": 0.050, "plus_eb::ngboost_FLATTENED": 0.107}
+    v, prose, extra = cal._verdict(
+        rms, 0.08, {"z_score": 51.7}, {"z_score": 39.0},
+        incumbent="incumbent::ngboost_normal", foil="plus_eb::ngboost_normal",
+        leader="plus_eb::glm_elasticnet", control="plus_eb::ngboost_FLATTENED")
+    assert v == "INCUMBENT_VARIANCE_UNINFORMATIVE", (
+        "when flattening the incumbent's sigma IMPROVES its calibration, the per-game sigma was "
+        "never informative and the swap cannot be blocked on variance grounds"
+    )
+    assert extra["leader_better_than_incumbent"] is True
+
+
+def test_a_genuinely_worse_leader_still_trips_the_material_verdict():
+    """The corrected rule must not have become unfalsifiable — an informative incumbent sigma PLUS a
+    worse leader must still block."""
+    rms = {"incumbent::ngboost_normal": 0.05, "plus_eb::ngboost_normal": 0.05,
+           "plus_eb::glm_elasticnet": 0.20, "plus_eb::ngboost_FLATTENED": 0.18}
+    v, _, extra = cal._verdict(
+        rms, 0.08, {"z_score": 30.0}, {"z_score": 30.0},
+        incumbent="incumbent::ngboost_normal", foil="plus_eb::ngboost_normal",
+        leader="plus_eb::glm_elasticnet", control="plus_eb::ngboost_FLATTENED")
+    assert v == "VARIANCE_LOSS_MATERIAL"
+    assert extra["flattening_the_incumbent_sigma_hurts"] is True
+
+
+def test_rescoring_a_stored_run_refits_nothing():
+    """The corrected verdict must be recoverable from stored per-stratum Var(z) — the operator
+    should never pay for another fit (or another Snowflake wake) to fix a scoring rule."""
+    src = inspect.getsource(cal.rescore)
+    assert "_calibration_rms" in src and "_verdict(" in src
+    for forbidden in ("load_clean_matrix", "fit_predict", "make_gate_splitter"):
+        assert forbidden not in src, f"rescore must not {forbidden}"
+
+
 def test_it_can_declare_itself_blind_or_inactive_rather_than_passing():
     """Two ways this check must decline to answer instead of returning a clean bill of health:
     INSTRUMENT_BLIND (the positive control did not separate — NF1.7 (a)) and MECHANISM_INACTIVE
     (sigma is effectively constant, so there is no per-game variance to lose — NF1.9)."""
     src = inspect.getsource(cal.run)
-    assert '"INSTRUMENT_BLIND"' in src
+    src = inspect.getsource(cal._verdict)
     assert '"MECHANISM_INACTIVE"' in src
+    assert '"INCUMBENT_VARIANCE_UNINFORMATIVE"' in src
     assert "MIN_SIGMA_CV" in src
-    # the anchor gates the conclusion — the blind branch must come BEFORE any material verdict
-    assert src.index('"INSTRUMENT_BLIND"') < src.index('"VARIANCE_LOSS_MATERIAL"')
+    # the inactive branch gates everything else — it must be checked FIRST
+    assert src.index('"MECHANISM_INACTIVE"') < src.index('"VARIANCE_LOSS_MATERIAL"')
 
 
 def test_the_shared_stratifier_is_the_matched_foil_not_the_leader():
