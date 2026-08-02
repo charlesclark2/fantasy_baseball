@@ -474,3 +474,35 @@ class TestBackfillSidecarUnwrap:
         assert "isinstance(_transformed, pd.DataFrame)" in src
         assert "_transformed.set_index(df.index)" in src
         assert "imputer indicator" in src, "an absent indicator must warn, not pass silently"
+
+    def test_every_model_input_is_built_from_the_IMPUTED_frame(self):
+        """⚠️ Class guard, not a line guard — this was the THIRD pre-existing break found in this
+        script, all three dating to the E13.11 champion swap.
+
+        `X_hw` was built from the RAW frame with `fill_value=np.nan`, under a comment claiming the
+        classifier had its own internal imputer. The previous home_win champion was XGBoost, which
+        consumes NaN natively; E13.11 swapped it for
+        `PlattCalibratedLinearClassifier(Pipeline(StandardScaler, LogisticRegression))`, which
+        rejects NaN outright. The raw-frame path was silently invalidated by that swap.
+
+        Pinning "X_hw uses df_t" would only stop THIS line regressing. Asserting that NO model input
+        is built from the raw frame stops the whole class — including a fourth target added later.
+        `predict_today` builds all three from its imputed matrix; that is the reference.
+        """
+        src = (PROJECT_ROOT / "betting_ml/scripts/backfill_predictions.py").read_text()
+        import re as _re
+
+        inputs = _re.findall(r"^\s*(X_\w+)\s*=\s*(df_t|df)\.reindex", src, _re.M)
+        assert inputs, "expected to find the model-input construction lines"
+        raw = [name for name, frame in inputs if frame == "df"]
+        assert not raw, (
+            f"model input(s) {raw} are built from the RAW frame. Every served estimator now expects "
+            f"the imputed matrix — build from df_t, as predict_today does."
+        )
+        assert {"X_hw", "X_tot", "X_diff"} <= {n for n, _ in inputs}, \
+            "all three target inputs must be present and covered by this guard"
+
+    def test_a_surviving_nan_fails_with_the_offending_column_named(self):
+        src = (PROJECT_ROOT / "betting_ml/scripts/backfill_predictions.py").read_text()
+        assert "np.isfinite(X_hw).all()" in src
+        assert "naming neither the column nor the target" in src
