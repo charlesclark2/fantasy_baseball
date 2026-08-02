@@ -70,6 +70,8 @@ ALL_BLOCKS = tuple(sorted(SAME_DAY_BLOCKS + BUILD_LAGGED_BLOCKS))
 _PAGEABLE = {"BUILD_GAP": "CRITICAL", "PARTIAL": "WARN"}
 
 _EVALUATED_PREFIX = "[METRIC] w11_tail_evaluated="
+_DATE_PREFIX = "[METRIC] w11_tail_date="
+_ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _BLOCK_RE = re.compile(
     r"^\[METRIC\]\s+w11_tail_(?P<block>[a-z_]+)_covered=(?P<n>\d+)/(?P<m>\d+)\s+"
     r"verdict=(?P<verdict>[A-Z_]+)\s*$"
@@ -88,6 +90,22 @@ def parse_evaluated(stdout: str) -> bool | None:
         line = line.strip()
         if line.startswith(_EVALUATED_PREFIX):
             value = line[len(_EVALUATED_PREFIX):].strip() == "1"
+    return value
+
+
+def parse_date(stdout: str) -> str | None:
+    """The slate the script says this output describes, from its `[METRIC] w11_tail_date=` line.
+
+    None when the line never appeared — which means the output did NOT come from the current
+    script (it stamps the date on every exit path). `classify` deliberately treats None as
+    "cannot cross-check" rather than as a mismatch, so this can only ever ADD a refusal on
+    positive evidence of a wrong slate, never manufacture one from a missing line.
+    """
+    value: str | None = None
+    for line in stdout.splitlines():
+        line = line.strip()
+        if line.startswith(_DATE_PREFIX):
+            value = line[len(_DATE_PREFIX):].strip() or None
     return value
 
 
@@ -140,8 +158,22 @@ def classify(
         evaluated = parse_evaluated(stdout)
         verdicts = parse_block_verdicts(stdout)
         coverage = parse_block_coverage(stdout)
+        # INC-39 — the leg must be ABOUT the slate we asked for. The per-block metric lines carry
+        # no date of their own, so replayed / stale / synthetic output parses exactly like a live
+        # read and would page CRITICAL on a slate nobody checked. A reported date that disagrees
+        # with the requested one demotes the whole leg to UNVERIFIED (WARN, never CRITICAL and
+        # never healthy) — the numbers may be perfectly real, they are just not this slate's.
+        # Only cross-checkable when the caller asked for a real date: `today_date`/`prior_date`
+        # default to human labels ("today"), which carry no slate to compare against.
+        reported = parse_date(stdout)
+        wrong_slate = (
+            reported is not None and _ISO_DATE_RE.match(day) is not None and reported != day
+        )
         for block in blocks:
             verdict = verdicts.get(block)
+            if wrong_slate:
+                unverified.append(f"{block} (asked for {day}, output is for {reported})")
+                continue
             if not evaluated or verdict is None:
                 unverified.append(f"{block} ({day})")
                 continue
