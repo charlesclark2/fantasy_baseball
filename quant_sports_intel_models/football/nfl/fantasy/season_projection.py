@@ -714,6 +714,92 @@ def _shrink_pergame(player_pg: np.ndarray, games: np.ndarray, prior: np.ndarray,
     return w * pv + (1.0 - w) * prior
 
 
+def attach_season_interval(df: pd.DataFrame, band_model: "VeteranBandModel | None" = None,
+                           absence_prior: "AbsenceReturnPrior | None" = None,
+                           absence_prior_blend: float = 0.0) -> pd.DataFrame:
+    """Attach the 80% VETERAN season interval to a projected frame — the SHIPPED band, in one place.
+
+    Factored out of `project_veterans` by NF1.5b so a board that RE-LEVELS an already-projected row
+    can re-derive its interval through THE SAME CODE instead of re-deriving one of its own. That is
+    not tidiness: NF1.5's refined board reassigns MVP-1's calibrated point multiset within a position,
+    and its first cut then priced the new level with a hand-rolled `point ± 1.2816·κ·sd` normal —
+    silently reverting 90% of the draft board from the NF1.9 per-player band (`calibrated_per_player`)
+    to the pre-NF1.9 approximation whose MEASURED coverage is ~0.55 of its nominal 0.80. An interval
+    must follow the point it prices; the only safe way to guarantee that is one function.
+
+    ⭐ RE-APPLICABLE BY CONSTRUCTION, and that needs two retained inputs. The season sd is built from
+    the PER-GAME sd — but this function OVERWRITES `fp_ppr_sd` with the SEASON sd, so a naive second
+    call would square the season sd into itself. So the two player-level inputs that are INVARIANT to
+    a re-level are retained on the frame and preferred on any later call:
+      * `fp_ppr_pg_sd`  — the base-season game-to-game PPR sd (a realized property of the player).
+      * `games_sd_raw`  — the expected-games sd, already NF-D11-widened for a returner. Retaining it
+                          also means a re-level does not need the fitted absence prior back.
+    Everything that DOES move with the level (`fp_per_game`, `season_sd`, the bounds) is recomputed.
+
+    Two independent sources of season variance: (a) game-to-game scoring variance accumulated over the
+    played games (sd·√games), and (b) games-played uncertainty (per-game mean × games sd)."""
+    df = df.copy()
+    # the per-game sd: the retained column when this frame has already been through here, else the
+    # base-season column (the first call, where `fp_ppr_sd` is still the per-game quantity).
+    pg_col = "fp_ppr_pg_sd" if "fp_ppr_pg_sd" in df.columns else "fp_ppr_sd"
+    fp_pg_sd = pd.to_numeric(df.get(pg_col), errors="coerce").fillna(0.0).to_numpy()
+    fp_ppr = df["proj_fp_ppr"].to_numpy()
+    eg_arr = np.clip(df["proj_games"].to_numpy(), 1e-6, None)
+    fp_per_game = fp_ppr / eg_arr
+    if "games_sd_raw" in df.columns:
+        gsd = pd.to_numeric(df["games_sd_raw"], errors="coerce").fillna(0.0).to_numpy()
+    else:
+        gsd = _games_sd(df["depth_chart_position_rank"], df["position"]).to_numpy()
+        # NF-D11: a returner's games uncertainty is the EMPIRICAL returner SD (~5 games — 43% of them
+        # play zero), never the tidy role-based one. Widen-only, so the band is honest by construction.
+        gsd = absence_games_sd(gsd, df, absence_prior if absence_prior_blend > 0 else None)
+    season_sd = np.sqrt((fp_pg_sd * np.sqrt(eg_arr)) ** 2 + (fp_per_game * gsd) ** 2)
+    z80 = _Z80_SEASON
+    df["fp_ppr_pg_sd"] = fp_pg_sd
+    df["games_sd_raw"] = gsd
+    df["fp_ppr_sd"] = np.round(season_sd, 2)
+    # ⚠️ THE UNROUNDED SEASON SD, retained OUTSIDE the emitted schema (`OUTPUT_COLS` carries only the
+    #    2-dp display column). NF1.9 needs it: the band model is fed the unrounded `season_sd` at serve
+    #    time, so a historical panel that stored the ROUNDED one would fit the band on a systematically
+    #    different feature than it is served with — and it would make the served-band reproduction proof
+    #    disagree by exactly one rounding step, which is how this was caught.
+    df["fp_ppr_sd_raw"] = season_sd
+
+    # ── the 80% veteran interval. TWO TIERS, best first (NF1.9):
+    #  1. `band_model` — a PER-PLAYER CONDITIONAL-QUANTILE band, selected on a PROPER interval score
+    #     with a PER-POSITION coverage FLOOR (`run_veteran_interval_ablation.py`).
+    #  2. the NORMAL APPROXIMATION below — `point ± 1.2816·season_sd`. Kept as the honest fallback for
+    #     a row the fit cannot speak to, and labelled `empirical` so the tier is never overstated.
+    #     ⚠️ Its MEASURED coverage of its own nominal 80% is ~0.55 (held-out target seasons 2013–2025),
+    #     missing on BOTH tails: a symmetric normal cannot fit a right-skewed season total, and a
+    #     game-to-game sd measured on the games a player DID play cannot price the availability/role
+    #     risk that is the dominant veteran uncertainty. It is a fallback, not a band.
+    lo = np.clip(fp_ppr - z80 * season_sd, 0.0, None)
+    hi = fp_ppr + z80 * season_sd
+    tier = np.full(len(df), "empirical", dtype=object)
+    if band_model is not None:
+        frame = veteran_band_inputs(
+            df["position"], fp_ppr, season_sd, proj_games=df["proj_games"],
+            base_games=df.get("games_played"), snap_share=df.get("snap_share"),
+            seasons_missed=df.get("seasons_missed"))
+        b_lo, b_hi = band_model.band_many(frame)
+        use = np.isfinite(b_lo) & np.isfinite(b_hi) & (b_hi >= b_lo)
+        lo = np.where(use, b_lo, lo)
+        hi = np.where(use, b_hi, hi)
+        tier = np.where(use, "calibrated_per_player", tier).astype(object)
+    # Round the bounds OUTWARD (p10 down, p90 up). Both tiers guarantee lo ≤ point ≤ hi, but
+    # nearest-rounding can push a bound past a point projection it exactly equals and emit a displayed
+    # interval that excludes its own point estimate (the same fix `project_rookies` carries).
+    # ⚠️ …and the min/max clamps are load-bearing: `floor(x*10)/10` is NOT always ≤ x, because `x*10`
+    # can round UP to an integer in float64 (`3.6999999999999997*10 == 37.0`), so the "outward" rounding
+    # would land ~1e-15 INSIDE the bound and re-emit exactly the incoherence it exists to prevent.
+    lo = np.clip(lo, 0.0, None)
+    df["fp_ppr_p10"] = np.minimum(np.floor(lo * 10.0) / 10.0, lo)
+    df["fp_ppr_p90"] = np.maximum(np.ceil(hi * 10.0) / 10.0, hi)
+    df["uncertainty_type"] = tier
+    return df
+
+
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # Veteran projection
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -886,59 +972,8 @@ def project_veterans(
             (df["proj_rush_att"].to_numpy() + df["proj_rec"].to_numpy()) * 0.006, 2)
         df = score_line(df, prefix="proj_")
 
-    # ── 80% interval on the convenience PPR total. Two independent sources of season variance:
-    #    (a) game-to-game scoring variance accumulated over the played games (sd·√games), and
-    #    (b) games-played uncertainty (per-game mean × games sd). Normal approx, floored at 0.
-    fp_pg_sd = pd.to_numeric(df.get("fp_ppr_sd"), errors="coerce").fillna(0.0).to_numpy()
-    fp_ppr = df["proj_fp_ppr"].to_numpy()
-    eg_arr = np.clip(df["proj_games"].to_numpy(), 1e-6, None)
-    fp_per_game = fp_ppr / eg_arr
-    gsd = _games_sd(df["depth_chart_position_rank"], df["position"]).to_numpy()
-    # NF-D11: a returner's games uncertainty is the EMPIRICAL returner SD (~5 games — 43% of them
-    # play zero), never the tidy role-based one. Widen-only, so the band is honest by construction.
-    gsd = absence_games_sd(gsd, df, absence_prior if absence_prior_blend > 0 else None)
-    season_sd = np.sqrt((fp_pg_sd * np.sqrt(eg_arr)) ** 2 + (fp_per_game * gsd) ** 2)
-    z80 = _Z80_SEASON
-    df["fp_ppr_sd"] = np.round(season_sd, 2)
-    # ⚠️ THE UNROUNDED SEASON SD, retained OUTSIDE the emitted schema (`OUTPUT_COLS` carries only the
-    #    2-dp display column). NF1.9 needs it: the band model is fed the unrounded `season_sd` at serve
-    #    time, so a historical panel that stored the ROUNDED one would fit the band on a systematically
-    #    different feature than it is served with — and it would make the served-band reproduction proof
-    #    disagree by exactly one rounding step, which is how this was caught.
-    df["fp_ppr_sd_raw"] = season_sd
-
-    # ── the 80% veteran interval. TWO TIERS, best first (NF1.9):
-    #  1. `band_model` — a PER-PLAYER CONDITIONAL-QUANTILE band, selected on a PROPER interval score
-    #     with a PER-POSITION coverage FLOOR (`run_veteran_interval_ablation.py`).
-    #  2. the NORMAL APPROXIMATION below — `point ± 1.2816·season_sd`. Kept as the honest fallback for
-    #     a row the fit cannot speak to, and labelled `empirical` so the tier is never overstated.
-    #     ⚠️ Its MEASURED coverage of its own nominal 80% is ~0.55 (held-out target seasons 2013–2025),
-    #     missing on BOTH tails: a symmetric normal cannot fit a right-skewed season total, and a
-    #     game-to-game sd measured on the games a player DID play cannot price the availability/role
-    #     risk that is the dominant veteran uncertainty. It is a fallback, not a band.
-    lo = np.clip(fp_ppr - z80 * season_sd, 0.0, None)
-    hi = fp_ppr + z80 * season_sd
-    tier = np.full(len(df), "empirical", dtype=object)
-    if band_model is not None:
-        frame = veteran_band_inputs(
-            df["position"], fp_ppr, season_sd, proj_games=df["proj_games"],
-            base_games=df.get("games_played"), snap_share=df.get("snap_share"),
-            seasons_missed=df.get("seasons_missed"))
-        b_lo, b_hi = band_model.band_many(frame)
-        use = np.isfinite(b_lo) & np.isfinite(b_hi) & (b_hi >= b_lo)
-        lo = np.where(use, b_lo, lo)
-        hi = np.where(use, b_hi, hi)
-        tier = np.where(use, "calibrated_per_player", tier).astype(object)
-    # Round the bounds OUTWARD (p10 down, p90 up). Both tiers guarantee lo ≤ point ≤ hi, but
-    # nearest-rounding can push a bound past a point projection it exactly equals and emit a displayed
-    # interval that excludes its own point estimate (the same fix `project_rookies` carries).
-    # ⚠️ …and the min/max clamps are load-bearing: `floor(x*10)/10` is NOT always ≤ x, because `x*10`
-    # can round UP to an integer in float64 (`3.6999999999999997*10 == 37.0`), so the "outward" rounding
-    # would land ~1e-15 INSIDE the bound and re-emit exactly the incoherence it exists to prevent.
-    lo = np.clip(lo, 0.0, None)
-    df["fp_ppr_p10"] = np.minimum(np.floor(lo * 10.0) / 10.0, lo)
-    df["fp_ppr_p90"] = np.maximum(np.ceil(hi * 10.0) / 10.0, hi)
-    df["uncertainty_type"] = tier
+    df = attach_season_interval(df, band_model=band_model, absence_prior=absence_prior,
+                                absence_prior_blend=absence_prior_blend)
     df["is_rookie"] = False
     df["draft_overall"] = np.nan
     df["source"] = "veteran"

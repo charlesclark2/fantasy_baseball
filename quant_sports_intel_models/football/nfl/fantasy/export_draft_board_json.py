@@ -65,10 +65,19 @@ _BOARDS_DIR = _ARTIFACTS / "league_boards"
 # read by nothing. `mvp1` stays available as the escape hatch / the market-BLIND baseline.
 #
 # 🔒 HONEST FRAME — carried in the payload (`marketLean` below), not only in a doc. The refined board
-# INCORPORATES market consensus at the market-leaning positions, so "beats ADP overall" is a real,
-# measured, public-scrutinizable backtest result but it is ⛔ NEVER "we beat the market we use". It
-# is also a RE-ORDERING claim, not a re-pricing one: the point projections and their 80% bands are
-# MVP-1's calibrated numbers; NF1.5 changes WHICH player gets which level, nothing else.
+# INCORPORATES market consensus at the market-leaning positions, so whatever it beats, it is ⛔ NEVER
+# "we beat the market we use". It is also a RE-ORDERING claim, not a re-pricing one: the point
+# projections and their 80% bands are MVP-1's calibrated numbers; NF1.5 changes WHICH player gets
+# which level, nothing else.
+#
+# ⚠️ THE PAYLOAD NOTE DELIBERATELY MAKES NO "BEATS ADP" CLAIM. NF1.5b's re-grade DID reproduce it
+# (+0.022 pooled Δρ-vs-ADP over 2019–2024, against the served MVP-1 board's −0.059), but a bare
+# superiority claim on a browse surface would sit with no evidence beside it AND would contradict the
+# copy already on those surfaces ("ADP is a reference point, not a scoreboard"). The claim belongs to
+# the receipts surface that can show its working (NF3.2); this note's job is the CAVEAT, which is the
+# part a user cannot look up. See `ablation_results/nf1_5b_serving_reland.md` for the measured result
+# — including that it is NOT positive at every position (RB is a wash) and that ECR/ESPN/Sleeper
+# still order better than we do.
 PROJECTION_SOURCES = ("nf1_5", "mvp1")
 DEFAULT_PROJECTION_SOURCE = "nf1_5"
 _PROJECTION_PARQUET = {
@@ -87,9 +96,10 @@ _PROJECTION_LABEL = {
 MARKET_LEAN_NOTE = (
     "At positions labelled market-led or market-blend, the ranking INCORPORATES market consensus "
     "(ADP/ECR) alongside our own model — so it is not an independent read on the market at those "
-    "positions. The ordering beat consensus ADP across every position on our held-out backtest; the "
-    "point projections and their ranges are unchanged from the market-blind model, so this is a "
-    "re-ORDERING of the same numbers, not a re-pricing."
+    "positions, and a gap between our order and the market's is a smaller, less independent signal "
+    "there than it would be from a model that ignored the market. The point projections and their "
+    "ranges are unchanged from the market-blind model, so this is a re-ORDERING of the same numbers, "
+    "not a re-pricing."
 )
 # E9.45: the draft board is a PAID surface, so it is no longer shipped as public JSON
 # (a public asset URL is bypassable). It is staged locally then uploaded to S3, where

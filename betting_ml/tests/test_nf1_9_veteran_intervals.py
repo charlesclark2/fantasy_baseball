@@ -363,17 +363,27 @@ def test_a_thin_fit_DEGRADES_to_the_served_normal_band_rather_than_fabricating_a
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 @pytest.mark.parametrize("form", ["normal", "knn_norm", "qreg_sqrt", "ratio_q"])
 def test_the_band_configuration_cannot_reach_the_point_projection(panel, frame, form):
-    """Structural, not incidental: `band_model` is referenced ONLY inside the interval block of
-    `project_veterans`, after every point column is final. Verified by source inspection (a runtime
-    assertion could only test the configs it happened to run) plus the board-level `< 1e-9` check the
-    session ran on the real 2026 board (measured 8.5e-13, ULP noise from a warmed cache).
+    """Structural, not incidental: `band_model` is referenced ONLY inside the interval block, after
+    every point column is final. Verified by source inspection (a runtime assertion could only test
+    the configs it happened to run) plus the board-level `< 1e-9` check the session ran on the real
+    2026 board (measured 8.5e-13, ULP noise from a warmed cache).
 
-    ⚠️ `< 1e-9`, NOT byte-equality — the NF1.8 lesson."""
+    ⚠️ `< 1e-9`, NOT byte-equality — the NF1.8 lesson.
+
+    🔁 NF1.5b moved the interval block out of `project_veterans` into `attach_season_interval` so a
+    RE-LEVELLED board (the NF1.5 refined ordering) re-derives its band through the same code instead
+    of rolling its own. The invariant is unchanged and so is this test's job — it now inspects the
+    function's new home, and additionally pins that `project_veterans` only ever FORWARDS the band
+    (a point step that reached for it would be the same defect one call frame up)."""
     src = Path(sp.__file__).read_text()
-    # slice project_veterans precisely — its own section, not "everything up to the next top-level def"
-    # (which swallowed the RookieSlotCurve dataclass and its unrelated `band_model` field; this test
-    # failed on exactly that).
-    body = src.split("def project_veterans(")[1].split("# Rookie projection")[0]
+    # `project_veterans` may only pass the band through — never consult it while building the point.
+    vet_body = src.split("def project_veterans(")[1].split("# Rookie projection")[0]
+    assert vet_body.count("attach_season_interval(") == 1, (
+        "project_veterans must delegate the interval to exactly one attach_season_interval call")
+    # slice attach_season_interval precisely — its own section, not "everything up to the next
+    # top-level def" (which swallowed the RookieSlotCurve dataclass and its unrelated `band_model`
+    # field; an earlier cut of this test failed on exactly that).
+    body = src.split("def attach_season_interval(")[1].split("def project_veterans(")[0]
     head, band_block = body.split("# ── the 80% veteran interval.")
 
     def _code(text: str) -> str:

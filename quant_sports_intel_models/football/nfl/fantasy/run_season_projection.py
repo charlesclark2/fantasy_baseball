@@ -841,7 +841,18 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
                      absence_prior_family: str | None = None,
                      absence_prior_blend: float | None = None,
                      veteran_band: bool | None = None,
-                     band_panel: pd.DataFrame | None = None) -> pd.DataFrame:
+                     band_panel: pd.DataFrame | None = None,
+                     veteran_postprocess=None) -> pd.DataFrame:
+    """Build the shipped season board. `veteran_postprocess(vets_wide, band_model) -> vets_wide` is
+    an optional hook applied to the VETERAN half right after it is assembled and before it is joined
+    to the rookie leg.
+
+    ⭐ NF1.5b added the hook so a DERIVED board (the NF1.5 market-aware re-ordering) is a transform
+    OF THIS board rather than a parallel re-implementation of it. The re-implementation is what went
+    wrong: NF1.5's own build re-derived the rookie leg, the universe and the interval, and drifted on
+    all three — it served 716 players against this board's 784 (it never saw NF-D11's base-anchor
+    rescue) and priced every band with a pre-NF1.9 normal. Anything a derived board does NOT
+    deliberately change should be inherited, not copied."""
     # ── NF1.9: the PER-PLAYER veteran band, fitted IN-FOLD on the realized outcomes of every target
     #    season STRICTLY BEFORE this one. `veteran_band=False` (or an unavailable panel) reverts the
     #    veteran interval to the pre-NF1.9 normal approximation — loudly, never silently.
@@ -857,6 +868,8 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
         injury_override_blend=injury_override_blend, xfp_td_blend=xfp_td_blend,
         rescue_absent=rescue_absent, absence_prior_family=absence_prior_family,
         absence_prior_blend=absence_prior_blend, band_model=band_model)
+    if veteran_postprocess is not None:
+        vets = veteran_postprocess(vets, band_model)
 
     rookies_all = pd.read_parquet(_ROOKIE_PARQUET)
     incoming = rookies_all[pd.to_numeric(rookies_all["draft_year"], errors="coerce") == projection_season]
