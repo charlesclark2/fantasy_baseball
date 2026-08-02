@@ -145,6 +145,21 @@ def _load_best_alpha() -> float:
     return 0.5
 
 
+def _infer_prev_version(artifact_path: str) -> str:
+    """Best-effort version label for a previous champion, from its artifact filename.
+
+    Only used when the registry carries no explicit `prev_model_version`. Deliberately returns a
+    clearly-provisional string rather than guessing a clean 'vN': a WRONG version stamp is worse
+    than an obviously-approximate one, because it would silently merge this backfill's rows with a
+    real champion's in any group-by.
+    """
+    stem = artifact_path.rsplit("/", 1)[-1].removesuffix(".pkl")
+    for token in stem.split("_"):
+        if len(token) > 1 and token[0] == "v" and token[1:].isdigit():
+            return token
+    return f"prev:{stem[:14]}"
+
+
 def _get_existing_game_pks(model_version: str, retrain_tag: str = _RETRAIN_TAG) -> set[int]:
     """Rows already written for this (model_version, retrain_tag).
 
@@ -348,6 +363,28 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--totals-artifact", choices=["prod", "prev"], default="prod",
+        help=(
+            "Which total_runs champion to score with. 'prod' (default) = the current champion. "
+            "'prev' = the registry's `prev_artifact_path` + `prev_feature_columns_path`, i.e. the "
+            "champion this one REPLACED. Exists so an old-vs-new comparison can be made "
+            "apples-to-apples: every row written before 2026-08-02 carries the dropped-imputer-"
+            "indicator defect (present since this script's first commit, 2026-05-12), so the "
+            "pre-existing rows for a previous champion are NOT a valid baseline for a new one. "
+            "Re-score the previous champion under its own --retrain-tag on fixed code instead. "
+            "home_win and run_differential are always scored at 'prod' — they are unchanged by a "
+            "totals-only promotion, so varying them would add a second difference to the contrast."
+        ),
+    )
+    parser.add_argument(
+        "--allow-noop", action="store_true", default=False,
+        help=(
+            "Permit a run where EVERY game is already present (writes nothing) to exit 0. Without "
+            "this the script FAILS on a total no-op, because that is indistinguishable from the "
+            "silent-failure mode of reusing a --retrain-tag after a per-target promotion."
+        ),
+    )
+    parser.add_argument(
         "--dry-run", action="store_true", default=False,
         help="Print row count and sample row without writing to Snowflake",
     )
@@ -399,11 +436,37 @@ def main() -> None:
             df = df[~df["game_pk"].isin(existing_pks)].reset_index(drop=True)
             print(f"  Idempotency: skipped {before - len(df)} existing rows, "
                   f"{len(df):,} remaining")
+            # ⚠️ TOTAL no-op guard. A 100%-skip is AMBIGUOUS: it is either a deliberate re-run
+            # (harmless) or the silent-failure mode this script is most prone to — reusing a
+            # retrain_tag after a PER-TARGET promotion. The idempotency key is
+            # (game_pk, model_version, retrain_tag), and `model_version` is the home_win-derived
+            # BUNDLE stamp, which a totals-only or run_diff-only promotion does NOT move. So the
+            # new champion's backfill matches the OLD champion's rows on both key parts, skips
+            # every game, writes nothing, and — before this guard — exited 0 with a cheerful
+            # "Nothing to backfill." An operator has no way to tell that from success.
+            #
+            # State alone cannot separate the two cases, so the default is to FAIL and make the
+            # operator say which it is. That is the right asymmetry: a needless `--allow-noop` on a
+            # deliberate re-run costs one retry, whereas a silent no-op costs an entire believed-
+            # complete backfill. Safe to exit non-zero — nothing automated invokes this script
+            # (verified: no Dagster op, cron, or workflow references it).
+            if df.empty and not args.allow_noop:
+                raise SystemExit(
+                    f"❌ EVERY game was skipped as already-present for "
+                    f"(model_version={model_version!r}, retrain_tag={args.retrain_tag!r}) — "
+                    f"NOTHING would be written.\n"
+                    f"   If you are backfilling a NEW champion, this is the failure mode to check "
+                    f"first: `model_version` is derived from home_win ALONE, so a per-target "
+                    f"promotion does not change it, and reusing a retrain_tag makes the run a "
+                    f"silent no-op. Pass a DISTINCT --retrain-tag (e.g. '<champion>_backtest').\n"
+                    f"   If this re-run is deliberate and you expect zero new rows, pass "
+                    f"--allow-noop."
+                )
         else:
             print(f"  No existing rows found — inserting all {len(df):,} games")
 
     if df.empty:
-        print("Nothing to backfill.")
+        print("Nothing to backfill." + (" (--allow-noop)" if args.allow_noop else ""))
         return
 
     print("\nFitting imputation pipeline on numeric columns...")
@@ -428,6 +491,26 @@ def main() -> None:
                   f"will be 0.0-filled for every game, which is a VALUE the models were not "
                   f"trained to see uniformly. Investigate before trusting this backfill.")
 
+    # ── which total_runs champion are we scoring with? ────────────────────────────────────────
+    _tot_is_prev = args.totals_artifact == "prev"
+    if _tot_is_prev:
+        _missing = [k for k in ("prev_artifact_path", "prev_feature_columns_path")
+                    if not registry["total_runs"].get(k)]
+        if _missing:
+            raise SystemExit(
+                f"❌ --totals-artifact prev requires {_missing} on the total_runs registry entry; "
+                f"they are absent. There is no recorded previous champion to score."
+            )
+        # The stamp must name the model that actually scored the row, not the current champion —
+        # otherwise the comparison rows are labelled as if the new model produced them.
+        totals_model_version = str(
+            registry["total_runs"].get("prev_model_version")
+            or _infer_prev_version(registry["total_runs"]["prev_artifact_path"])
+        )
+        print(f"  ⚠️  totals scored with the PREVIOUS champion "
+              f"({registry['total_runs']['prev_artifact_path'].split('/')[-1]}), stamped "
+              f"totals_model_version={totals_model_version!r}. home_win/run_diff stay at prod.")
+
     def feat_cols(target: str) -> list[str]:
         """The served column list for a target.
 
@@ -439,7 +522,9 @@ def main() -> None:
         script was left behind when the sidecars gained provenance; `predict_today._load_cols` has
         carried the unwrap since E13.11. Mirrored here.
         """
-        path = PROJECT_ROOT / registry[target]["feature_columns_path"]
+        _key = ("prev_feature_columns_path"
+                if (target == "total_runs" and _tot_is_prev) else "feature_columns_path")
+        path = PROJECT_ROOT / registry[target][_key]
         raw = json.loads(path.read_text())
         return raw["feature_cols"] if isinstance(raw, dict) else raw
 
@@ -455,7 +540,8 @@ def main() -> None:
     # the registry and the sidecar have drifted — either way the scored matrix would be wrong.
     for _tgt, _cols in (("home_win", hw_cols), ("total_runs", tot_cols),
                         ("run_differential", diff_cols)):
-        _advertised = registry[_tgt].get("features")
+        _advertised = (None if (_tgt == "total_runs" and _tot_is_prev)
+                       else registry[_tgt].get("features"))  # registry `features` names the CURRENT champion
         if _advertised is not None and len(_cols) != int(_advertised):
             raise SystemExit(
                 f"❌ {_tgt}: sidecar resolved {len(_cols)} feature(s) but the registry advertises "
@@ -466,7 +552,9 @@ def main() -> None:
 
     print("\nLoading production models from registry...")
     clf_hw = load_model("home_win", "prod")
-    ngb_tot = load_model("total_runs", "prod")
+    # load_model resolves any entry-level registry key as a "variant", so `prev_artifact_path`
+    # needs no change to model_io.
+    ngb_tot = load_model("total_runs", "prev_artifact_path" if _tot_is_prev else "prod")
     ngb_diff = load_model("run_differential", "prod")
     print(f"  home_win:        {type(clf_hw).__name__}")
     print(f"  total_runs:      {type(ngb_tot).__name__}  dist={tot_dist}")
