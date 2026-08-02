@@ -96,6 +96,12 @@ from betting_ml.scripts.evaluation.bayesian_model_eval import (
 
 MODEL_VERSION = "v0"
 
+# MH2.1 (2026-08-02) — PER-TARGET totals champion version, stamped beside the bundle
+# `MODEL_VERSION`. `MODEL_VERSION` reads the home_win registry entry ONLY, so a totals-only
+# champion swap never changed it; this global carries `total_runs.model_version` (plus the tier
+# prefix) so the served row records WHICH totals model priced it. Set in main() from the registry.
+TOTALS_MODEL_VERSION = "v0"
+
 # E13.11 backfill cost optimization — non-None ONLY during a --is-backfill RANGE run.
 # When active, _write_predictions_to_snowflake buffers each date's rows here instead of
 # writing per date; _flush_backfill_predictions() drains the buffer in ONE transaction at
@@ -463,6 +469,14 @@ _PREDICTION_COLUMN_MIGRATIONS = [
     ("h2h_ci_width", "FLOAT"),
     ("sigma_tier", "VARCHAR(20)"),
     ("abstain_reason", "VARCHAR(200)"),
+    # MH2.1 (2026-08-02) — PER-TARGET version stamp for the totals champion.
+    # WHY: `model_version` is derived from the home_win registry entry ONLY (see MODEL_VERSION
+    # below), so it is a *bundle* stamp — a totals-only champion swap was structurally INVISIBLE in
+    # the served rows and in the Admin → Model Freshness panel, which reads this table to show
+    # "what's actually live". MH2.1 is exactly such a swap (total_runs post_lineup: v6 NGBoost →
+    # glm_elasticnet), so the gap became load-bearing. Additive column (E9.41: never remove/rename
+    # a key an older reader depends on) — `model_version` keeps its exact prior meaning.
+    ("totals_model_version", "VARCHAR(20)"),               # MH2.1
 ]
 
 
@@ -516,7 +530,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     qualified_bet,
     pick_explanation,
     is_backfill,
-    totals_ci_width, h2h_ci_width, sigma_tier, abstain_reason
+    totals_ci_width, h2h_ci_width, sigma_tier, abstain_reason,
+    totals_model_version
 ) VALUES (
     %(model_version)s, %(inserted_at)s, %(score_date)s, %(prediction_type)s, %(lineup_confirmed)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
@@ -547,7 +562,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(qualified_bet)s,
     %(pick_explanation)s,
     %(is_backfill)s,
-    %(totals_ci_width)s, %(h2h_ci_width)s, %(sigma_tier)s, %(abstain_reason)s
+    %(totals_ci_width)s, %(h2h_ci_width)s, %(sigma_tier)s, %(abstain_reason)s,
+    %(totals_model_version)s
 )
 """
 
@@ -1432,6 +1448,7 @@ def _write_predictions_to_snowflake(
 
         rows.append(_sanitize({
             "model_version":          MODEL_VERSION,
+            "totals_model_version":   TOTALS_MODEL_VERSION,   # MH2.1 — per-target totals champion
             "inserted_at":            inserted_at,
             "score_date":             score_date,
             "prediction_type":        prediction_type,
@@ -2264,8 +2281,13 @@ def main(target_date: str, args) -> None:
         _registry = yaml.safe_load(_rf)
 
     # Derive MODEL_VERSION from the registry so promotions are reflected automatically.
-    global MODEL_VERSION
+    # ⚠️ This reads home_win ONLY — it is a BUNDLE stamp, not a per-target one (a totals or run_diff
+    # champion swap does not move it). MH2.1 added TOTALS_MODEL_VERSION beside it for exactly that
+    # reason; do not "fix" this line to read a different target without migrating every consumer of
+    # `daily_model_predictions.model_version` (Admin → Model Freshness, the kill-criterion window).
+    global MODEL_VERSION, TOTALS_MODEL_VERSION
     MODEL_VERSION = _registry["home_win"]["model_version"]
+    TOTALS_MODEL_VERSION = str(_registry["total_runs"].get("model_version") or "unknown")
 
     def _load_cols(path: str) -> list[str]:
         with open(PROJECT_ROOT / path) as _f:
@@ -2303,6 +2325,13 @@ def main(target_date: str, args) -> None:
     if _serve_variant["home_win"][0] == "pre_lineup":
         _pre_ver = _registry["home_win"].get("pre_lineup_model_version", "v1")
         MODEL_VERSION = f"pre_lineup_{_pre_ver}"
+    # MH2.1 — the totals stamp follows the TOTALS variant, which is resolved independently. Keying
+    # it off home_win's tier (as MODEL_VERSION does) would mislabel the row whenever the two
+    # targets ever diverge on tier; reading total_runs' own resolution cannot.
+    if _serve_variant["total_runs"][0] == "pre_lineup":
+        TOTALS_MODEL_VERSION = (
+            f"pre_lineup_{_registry['total_runs'].get('pre_lineup_model_version', 'v1')}"
+        )
 
     ngb_tot_dist  = _registry["total_runs"]["dist"]
     ngb_diff_dist = _registry["run_differential"]["dist"]

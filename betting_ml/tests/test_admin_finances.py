@@ -80,17 +80,18 @@ class TestLiveServedVersion:
         rows = [{"MODEL_VERSION": "pre_lineup_v6"}, {"MODEL_VERSION": "v6"},
                 {"MODEL_VERSION": "v5"}, {"MODEL_VERSION": "pre_lineup_v1"}]
         with patch.object(admin, "execute_query", return_value=rows):
-            assert admin._live_served_version() == "v6"
+            assert admin._live_served_versions()["default"] == "v6"
 
     def test_returns_none_on_query_failure(self):
         with patch.object(admin, "execute_query", side_effect=Exception("no table")):
-            assert admin._live_served_version() is None
+            assert admin._live_served_versions()["default"] is None
 
     def test_model_freshness_shows_served_version_and_flags_stale_ledger(self):
         registry_rows = [{"TARGET": "home_win", "MODEL_NAME": "xgb_classifier_market_blind",
                           "MODEL_VERSION": "v5", "PROMOTED_DATE": "2026-06-12", "DAYS_SINCE": 17}]
         with patch.object(admin, "execute_query", return_value=registry_rows), \
-             patch.object(admin, "_live_served_version", return_value="v6"):
+             patch.object(admin, "_live_served_versions",
+                          return_value={"default": "v6", "total_runs": None}):
             out = admin.model_freshness(_="admin")
         row = out[0]
         assert row.version == "v6"            # what's actually serving
@@ -102,7 +103,8 @@ class TestLiveServedVersion:
         registry_rows = [{"TARGET": "home_win", "MODEL_NAME": "m",
                           "MODEL_VERSION": "v6", "PROMOTED_DATE": "2026-06-20", "DAYS_SINCE": 9}]
         with patch.object(admin, "execute_query", return_value=registry_rows), \
-             patch.object(admin, "_live_served_version", return_value="v6"):
+             patch.object(admin, "_live_served_versions",
+                          return_value={"default": "v6", "total_runs": None}):
             out = admin.model_freshness(_="admin")
         assert out[0].ledger_behind is False
         assert out[0].status == "healthy"

@@ -229,33 +229,60 @@ def pipeline_runs(_: str = Depends(get_admin_user)) -> list[PipelineRun]:
 # ---------------------------------------------------------------------------
 
 
-def _live_served_version() -> str | None:
-    """Champion bundle version actually stamped on recent served predictions.
+def _live_served_versions() -> dict[str, str | None]:
+    """What's ACTUALLY serving, per target, from the last ~14 days of predictions.
 
     model_registry is a promotion ledger that can lag a champion swap (E13.11 shipped
-    v6 to S3/serving but the registry still marks v5 current). daily_model_predictions
+    v6 to S3/serving but the registry still marked v5 current). daily_model_predictions
     records the version predict_today actually used, so it's the truthful "what's live"
-    source. Returns the highest vN seen on the last ~14 days of predictions — both
-    tiers ('pre_lineup_v6' and 'v6') normalize to v6 — or None if unavailable.
+    source.
+
+    ⚠️ MH2.1 (2026-08-02) — `model_version` IS A BUNDLE STAMP, NOT A PER-TARGET ONE. It is derived
+    from the **home_win** registry entry alone (scripts/predict_today.py), so a totals-only or
+    run_diff-only champion swap never moves it. Before MH2.1 all three targets were promoted
+    together, so one stamp compared correctly against every ledger row; MH2.1 promoted total_runs
+    ALONE, at which point comparing the bundle stamp to a per-target ledger row would have reported
+    `ledger_behind` on the totals row FOREVER — a permanent false "watch" on a correctly-recorded
+    promotion, i.e. exactly the alarm-fatigue failure the E11.30 audit warns about.
+
+    So the totals row is resolved from its own `totals_model_version` column, which predict_today
+    now stamps. Returns ``{"default": <bundle>, "total_runs": <per-target or None>}``. A target
+    with no per-target column value falls back to the bundle stamp, so this is inert until the
+    column has been populated by at least one served slate.
+
+    The bundle stamp keeps its vN normalisation ('pre_lineup_v6' and 'v6' both → v6); the totals
+    stamp is compared VERBATIM, because a lineage version need not be of the form vN (MH2.1's is
+    literally `mh2_1`) and a regex that silently fails to match would read as "no live version".
     """
+    out: dict[str, str | None] = {"default": None, "total_runs": None}
     try:
         rows = execute_query(
             """
-            SELECT DISTINCT model_version
+            SELECT DISTINCT model_version, totals_model_version
             FROM baseball_data.betting_ml.daily_model_predictions
             WHERE game_date >= DATEADD('day', -14, CURRENT_DATE())
             """
         )
     except Exception:
         logger.warning("daily_model_predictions version lookup failed — falling back to registry")
-        return None
+        return out
+
     best: int | None = None
+    totals_seen: list[str] = []
     for r in rows:
         m = re.search(r"v(\d+)", str(r.get("MODEL_VERSION") or ""))
         if m:
             n = int(m.group(1))
             best = n if best is None else max(best, n)
-    return f"v{best}" if best is not None else None
+        tv = r.get("TOTALS_MODEL_VERSION")
+        if tv:
+            totals_seen.append(str(tv))
+    out["default"] = f"v{best}" if best is not None else None
+    # Prefer a post_lineup stamp over a pre_lineup one when both appear in the window: the
+    # post_lineup champion is the one the freshness panel is about.
+    post = [v for v in totals_seen if not v.startswith("pre_lineup_")]
+    out["total_runs"] = (post or totals_seen or [None])[0]
+    return out
 
 
 @router.get("/model-freshness", response_model=list[ModelFreshness])
@@ -284,12 +311,15 @@ def model_freshness(_: str = Depends(get_admin_user)) -> list[ModelFreshness]:
         logger.exception("model_registry query failed")
         return []
 
-    live_version = _live_served_version()
+    live_versions = _live_served_versions()
 
     results: list[ModelFreshness] = []
     for row in rows:
         days = int(row.get("DAYS_SINCE") or 0)
         registry_version = str(row.get("MODEL_VERSION") or "—")
+        # MH2.1 — per-target where we have it (total_runs), bundle stamp otherwise.
+        target_key = str(row.get("TARGET") or "").strip().lower()
+        live_version = live_versions.get(target_key) or live_versions.get("default")
         served_version = live_version or registry_version
         ledger_behind = bool(live_version and live_version != registry_version)
 
