@@ -267,9 +267,24 @@ but the check counted any `weather_raw` row including the 00:00–02:00 UTC `for
 capture — a permanent false PARTIAL/BUILD_GAP against a table that was never going to contain
 them. **In a two-sided raw-vs-built read the raw predicate must match what the build consumes.**
 
-⚠️ Runtime gate still open: `send_alert` hits SNS and CI mocks all IO, so the decision logic is
-proven by mocked-SNS tests but the page PATH needs one live-box smoke (trip a BUILD_GAP for a
-date; confirm a normal pre-assignment morning is silent).
+**Box smoke, 2026-08-01 — the negative half is done; the positive half has no production date.**
+The current-slate box run reproduced the laptop exactly (umpire 5/15 PARTIAL, weather 14/15,
+public_betting 15/15), and that stdout through `classify` returns severity **None** — the op is
+silent on live production data even though the script itself reports `problem_count=1`. That is
+the anti-alert-fatigue discrimination working, measured rather than asserted.
+
+⭐ **No production date can prove the positive half.** A scan of all 1,039 slate dates
+2021-04-01 → 2026-08-01 found **zero** BUILD_GAPs on any block (`public_betting_raw` present on
+495 dates, features present on the same 495; weather/umpire likewise). The W11 tail is fully
+healed, and the guard has no false-positive surface across five seasons. This is why
+`--date 2026-06-01 --strict` returned OK — that gap was remediated, not a script failure.
+
+⚠️ Runtime gate therefore still open on the page PATH only: `send_alert` hits SNS and CI mocks all
+IO. Prove it post-deploy with a data-free command that feeds a crafted BUILD_GAP stdout through
+the deployed `classify` into the real `send_alert` (throwaway `dedup_key`, and **no**
+`AWS_DEFAULT_REGION=us-east-2` — SNS is us-east-1; that override is lakehouse-bucket-only).
+Note `docker compose exec` runs the **baked image**, so any pre-deploy box run exercises the old
+script.
 
 ## 7. Follow-ups (not done here)
 
