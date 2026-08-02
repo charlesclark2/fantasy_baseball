@@ -73,6 +73,10 @@ from betting_ml.scripts.milb_mle.milb_mle import (  # noqa: E402
     build_target,
 )
 from betting_ml.scripts.milb_mle.park_context import ContextSpec, apply_context  # noqa: E402
+from betting_ml.utils.design_block import (  # noqa: E402
+    design_block_from_ladder_results,
+    insert_design_block,
+)
 from betting_ml.scripts.milb_mle.run_e7_12_slice1 import SIDES, SideConfig, _paired_p, bh_fdr  # noqa: E402
 from betting_ml.scripts.milb_mle.run_e7_12_slice2 import propensity_for_fold  # noqa: E402
 from betting_ml.scripts.milb_mle.run_e7_15_h1 import SHIPPED_CONTEXT  # noqa: E402
@@ -417,7 +421,9 @@ def write_report(results: dict[str, H4Result], fdr: dict, nulls: dict, path: Pat
       "rebuild per window plus a population intersection — a separate slice with its own operator "
       "build.\n")
     A("\n- **`best_alpha = 0`** — a Dynasty/board projection and a betting prior, never a market bet.\n")
-    path.write_text("\n".join(L) + "\n")
+    db = design_block_from_ladder_results(
+        results, fold_rule="leave-one-MLB-debut-cohort-out (n_cohorts)")
+    path.write_text(insert_design_block("\n".join(L) + "\n", db))
     log.info("wrote %s", path)
 
 

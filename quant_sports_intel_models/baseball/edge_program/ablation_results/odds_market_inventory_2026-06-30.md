@@ -1,5 +1,22 @@
 # S3 odds/prop market inventory — ground-truth audit (2026-06-30)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "a read-only S3 market-INVENTORY audit (which Odds-API keys are present/stale) \u2014 a coverage check, not a bake-off.",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "exempt",
+ "verdict": null
+}
+-->
+
+
 **Read-only S3 audit** (no writes, no Snowflake, no feature/serving/dbt changes; parallel-safe).
 Source of truth = the `baseball-betting-ml-artifacts` bucket (`us-east-2`, instance-role
 `credential_chain`), **not** the 2026-06-24 recorded inventory. Globbed the actual prefixes;

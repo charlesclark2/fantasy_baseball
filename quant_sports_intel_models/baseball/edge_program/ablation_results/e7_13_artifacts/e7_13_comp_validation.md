@@ -1,5 +1,35 @@
 # E7.13 Phase 2 — comp-based projection: DISPLAY_ONLY
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": "forward, relaxed maturity",
+ "gates": null,
+ "n_arms": 2,
+ "n_folds": 4,
+ "per_metric": [
+  {
+   "metric": "batter",
+   "n_arms": null,
+   "n_folds": 4,
+   "verdict": "BLEND_ELIGIBLE_NOT_WIRED"
+  },
+  {
+   "metric": "pitcher",
+   "n_arms": null,
+   "n_folds": 4,
+   "verdict": "DISPLAY_ONLY"
+  }
+ ],
+ "primary_contrast": "randomized-PIT max decile deviation <= 0.05",
+ "reason": null,
+ "schema": 1,
+ "source_artifact": "e7_13_artifacts/e7_13_comp_validation.json",
+ "status": "recovered",
+ "verdict": "DISPLAY_ONLY"
+}
+-->
+
+
 **Target** — fantasy_points over the 3 seasons after the board (0 for a prospect who never reached MLB)
 **Primary metric** — CRPS (proper — the target is 47% exact zeros; MAE inverts here)
 **Constraint** — randomized-PIT max decile deviation <= 0.05

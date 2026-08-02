@@ -34,6 +34,10 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from betting_ml.scripts.prospect_board import comp_validation as cv  # noqa: E402
 from betting_ml.scripts.prospect_board.prospect_comps import build_pool, validate_pool  # noqa: E402
+from betting_ml.utils.design_block import (  # noqa: E402
+    design_block_from_comp_validation_report,
+    insert_design_block,
+)
 
 log = logging.getLogger("e7_13.validate")
 
@@ -381,7 +385,13 @@ def run(pool_path: Path, out_dir: Path, *, seed: int = 0, write: bool = True) ->
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "e7_13_comp_validation.json").write_text(
             json.dumps(report, indent=2, default=str))
-        (out_dir / "e7_13_comp_validation.md").write_text(_markdown(report))
+        db = design_block_from_comp_validation_report(
+            report, fold_rule="forward, relaxed maturity (2 strictly-matured folds; the primary "
+            "run relaxes to any strictly-earlier board season — see §Fold ceiling)",
+            primary_contrast=report.get("constraint", "forward-outcome comparison"),
+            use_fold_census=False)
+        (out_dir / "e7_13_comp_validation.md").write_text(
+            insert_design_block(_markdown(report), db))
     return report
 
 

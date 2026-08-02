@@ -1,5 +1,22 @@
 # MLB Edge-E7.9 step 7 — historical prediction backfill: CONDITIONAL procedure
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "explicitly 'Status: NOT TRIGGERED' \u2014 a pre-agreed CONDITIONAL procedure document with no run behind it yet.",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "exempt",
+ "verdict": null
+}
+-->
+
+
 **Status: NOT TRIGGERED.** Step 7 fires only if the E7.9 retrain bake-off PROMOTES a new champion.
 As of 2026-07-27 no retrain has run (the full run is an operator job), so there is no prediction
 change and nothing to backfill. This document is the pre-agreed procedure + the boundary facts,

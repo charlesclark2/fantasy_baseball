@@ -1,5 +1,22 @@
 # E2.6 — Derivative pricing + validation gates: PRE-REGISTRATION
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "explicitly a PRE-REGISTRATION, written before any arm was scored \u2014 by definition carries no verdict yet; the results (when run) land in e2_6_derivative_gates.md, which the header regex already extracts.",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "exempt",
+ "verdict": null
+}
+-->
+
+
 _Markets, strategies, metrics, and pass/fail thresholds fixed BEFORE looking at any real
 outcome (§0.5 discipline). The operator run (`--build-cache` → eval) fills in the numbers; this
 document is the commitment they are scored against, so a null cannot be retrofitted into a survivor._

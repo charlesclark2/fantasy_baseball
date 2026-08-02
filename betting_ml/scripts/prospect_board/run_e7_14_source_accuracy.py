@@ -56,6 +56,10 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from betting_ml.scripts.prospect_board import comp_validation as cv  # noqa: E402
 from betting_ml.scripts.prospect_board import consensus as cons  # noqa: E402
+from betting_ml.utils.design_block import (  # noqa: E402
+    design_block_from_source_accuracy_report,
+    insert_design_block,
+)
 
 log = logging.getLogger("e7_14.run")
 
@@ -548,7 +552,11 @@ def run(pipeline_path: Path, fangraphs_path: Path, out_dir: Path, *, seed: int =
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "e7_14_source_accuracy.json").write_text(
             json.dumps(report, indent=2, default=str))
-        (out_dir / "e7_14_source_accuracy.md").write_text(_markdown(report))
+        db = design_block_from_source_accuracy_report(
+            report, fold_rule="per board season on matched support",
+            primary_contrast="fold-SIGN test (two-sided)")
+        (out_dir / "e7_14_source_accuracy.md").write_text(
+            insert_design_block(_markdown(report), db))
     return report
 
 

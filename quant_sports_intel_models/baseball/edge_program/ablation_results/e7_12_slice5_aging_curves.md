@@ -1,5 +1,22 @@
 # E7.12 slice 5 — prospect aging curves (batters)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "no `*_summary.json` (or any other JSON) exists for slice5. run_e7_12_slice5.py still exists.",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "unrecoverable",
+ "verdict": null
+}
+-->
+
+
 > ⚠️ **A projection, not an edge claim — `best_alpha = 0`.**
 
 ## 🛑 This slice is not "add age"

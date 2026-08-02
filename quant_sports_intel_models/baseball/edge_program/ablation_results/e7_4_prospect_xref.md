@@ -1,5 +1,22 @@
 # E7.4 — Prospect identity & ETA xref (`dim_player_xref`)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "an identity/ETA cross-reference BUILD status report (rows landed, tripwires clear) \u2014 no arms, no fold structure.",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "exempt",
+ "verdict": null
+}
+-->
+
+
 **Status:** ✅✅ **DONE + LANDED + VERIFIED (2026-07-27).** Operator-run; 40,449 rows landed at
 `s3://baseball-betting-ml-artifacts/baseball/milb/derived/dim_player_xref`. Every tripwire clear and
 every AC join verified against the LANDED table (§8).

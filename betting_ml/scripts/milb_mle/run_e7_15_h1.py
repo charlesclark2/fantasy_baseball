@@ -102,6 +102,10 @@ from betting_ml.scripts.milb_mle.milb_mle import (  # noqa: E402
     emit_projections,
 )
 from betting_ml.scripts.milb_mle.park_context import ContextSpec, apply_context  # noqa: E402
+from betting_ml.utils.design_block import (  # noqa: E402
+    design_block_from_ladder_results,
+    insert_design_block,
+)
 from betting_ml.scripts.milb_mle.h_harness import (  # noqa: E402
     FDR_ALPHA,
     MAX_PBO,
@@ -779,7 +783,9 @@ def write_report(results: dict[str, H1Result], fdr: dict, applied: dict, path: P
     A("- **The emission ladder is fitted over the whole substrate** while the evaluation ladder excluded "
       "each held-out player. The gate is therefore the conservative number.\n")
     A("- **`best_alpha = 0`** — a Dynasty/board projection and a betting prior, never a market bet.\n")
-    path.write_text("\n".join(L) + "\n")
+    db = design_block_from_ladder_results(
+        results, fold_rule="leave-one-MLB-debut-cohort-out (n_cohorts)")
+    path.write_text(insert_design_block("\n".join(L) + "\n", db))
     log.info("wrote %s", path)
 
 
