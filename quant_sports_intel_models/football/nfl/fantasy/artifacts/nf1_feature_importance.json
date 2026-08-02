@@ -1,0 +1,185 @@
+{
+  "model_version": "nfl_fantasy_nf1_v1",
+  "method": "LightGBM gain importance (global, pooled across positions); permutation importance vs held-in-sample squared error (per position, evaluated on the fitted model)",
+  "n_pool": 2995,
+  "baseline_pct": 75.1,
+  "global": [
+    {
+      "feature": "pergame_fp",
+      "label": "Recent per-game scoring pace",
+      "pct": 14.0
+    },
+    {
+      "feature": "age",
+      "label": "Player age",
+      "pct": 4.0
+    },
+    {
+      "feature": "carry_share",
+      "label": "Carry share (rushing role)",
+      "pct": 1.3
+    },
+    {
+      "feature": "team_env",
+      "label": "Team offensive environment (Vegas win total)",
+      "pct": 1.2
+    },
+    {
+      "feature": "fp_sd",
+      "label": "Week-to-week scoring volatility",
+      "pct": 1.2
+    },
+    {
+      "feature": "snap_share",
+      "label": "Snap share (playing time)",
+      "pct": 0.8
+    }
+  ],
+  "positions": {
+    "QB": [
+      {
+        "feature": "pergame_fp",
+        "label": "Recent per-game scoring pace",
+        "pct": 21.3
+      },
+      {
+        "feature": "age",
+        "label": "Player age",
+        "pct": 5.2
+      },
+      {
+        "feature": "team_env",
+        "label": "Team offensive environment (Vegas win total)",
+        "pct": 3.4
+      },
+      {
+        "feature": "carry_share",
+        "label": "Carry share (rushing role)",
+        "pct": 2.9
+      },
+      {
+        "feature": "snap_share",
+        "label": "Snap share (playing time)",
+        "pct": 1.6
+      },
+      {
+        "feature": "fp_sd",
+        "label": "Week-to-week scoring volatility",
+        "pct": 1.6
+      }
+    ],
+    "RB": [
+      {
+        "feature": "pergame_fp",
+        "label": "Recent per-game scoring pace",
+        "pct": 11.8
+      },
+      {
+        "feature": "age",
+        "label": "Player age",
+        "pct": 6.9
+      },
+      {
+        "feature": "team_env",
+        "label": "Team offensive environment (Vegas win total)",
+        "pct": 1.6
+      },
+      {
+        "feature": "fp_sd",
+        "label": "Week-to-week scoring volatility",
+        "pct": 1.6
+      },
+      {
+        "feature": "carry_share",
+        "label": "Carry share (rushing role)",
+        "pct": 1.2
+      },
+      {
+        "feature": "depth_rank",
+        "label": "Depth-chart standing",
+        "pct": 1.2
+      }
+    ],
+    "WR": [
+      {
+        "feature": "pergame_fp",
+        "label": "Recent per-game scoring pace",
+        "pct": 14.7
+      },
+      {
+        "feature": "age",
+        "label": "Player age",
+        "pct": 6.6
+      },
+      {
+        "feature": "fp_sd",
+        "label": "Week-to-week scoring volatility",
+        "pct": 1.8
+      },
+      {
+        "feature": "team_env",
+        "label": "Team offensive environment (Vegas win total)",
+        "pct": 1.3
+      },
+      {
+        "feature": "mover_scale",
+        "label": "Team-change opportunity",
+        "pct": 1.2
+      },
+      {
+        "feature": "expected_games",
+        "label": "Expected games this season (health/role)",
+        "pct": 0.6
+      }
+    ],
+    "TE": [
+      {
+        "feature": "pergame_fp",
+        "label": "Recent per-game scoring pace",
+        "pct": 10.0
+      },
+      {
+        "feature": "age",
+        "label": "Player age",
+        "pct": 5.3
+      },
+      {
+        "feature": "fp_sd",
+        "label": "Week-to-week scoring volatility",
+        "pct": 1.2
+      },
+      {
+        "feature": "expected_games",
+        "label": "Expected games this season (health/role)",
+        "pct": 1.1
+      },
+      {
+        "feature": "team_env",
+        "label": "Team offensive environment (Vegas win total)",
+        "pct": 0.9
+      },
+      {
+        "feature": "target_share",
+        "label": "Target share (receiving role)",
+        "pct": 0.5
+      }
+    ]
+  },
+  "positions_baseline_pct": {
+    "QB": 62.5,
+    "RB": 73.4,
+    "WR": 72.1,
+    "TE": 79.7
+  },
+  "generated_at": "2026-08-02T01:53:19.295112+00:00",
+  "base_seasons": [
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+  ]
+}

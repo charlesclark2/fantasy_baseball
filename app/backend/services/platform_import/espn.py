@@ -23,14 +23,19 @@ import json
 import re
 
 from . import canonical
-from .canonical import ImportedLeague, ScoringTranslation
+from .canonical import ImportedLeague, ImportedPlayer, ImportedTeam, ScoringTranslation
 
 # The read host. Present ONLY so the UI can build a copy-link for the user to open themselves —
 # nothing in this module fetches it. ESPN has moved this host once already
 # (`fantasy.espn.com` → `lm-api-reads.fantasy.espn.com`) with no notice.
+#
+# ESPN takes REPEATED `view=` params, so one link still means one paste for the user. `mSettings`
+# carries scoring + roster shape; `mTeam` the team list; `mRoster` the players on them.
+READ_VIEWS: tuple[str, ...] = ("mSettings", "mTeam", "mRoster")
+
 READ_URL_TEMPLATE = (
     "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/{season}"
-    "/segments/0/leagues/{league_id}?view=mSettings"
+    "/segments/0/leagues/{league_id}?{views}"
 )
 
 # SSRF/format guard on the user-supplied id, mirroring `sleeper._ID_RE`. The id only ever reaches a
@@ -60,7 +65,14 @@ class EspnCredentialPasteError(EspnInputError):
 # them. Matching is case-insensitive because header casing is not normalised in any of those copies.
 _CREDENTIAL_SIGNATURES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("your ESPN sign-in cookie", re.compile(r"espn_s2", re.IGNORECASE)),
-    ("your ESPN account identifier", re.compile(r"\bSWID\b", re.IGNORECASE)),
+    # ⚠️ NARROWED TO THE COOKIE-ASSIGNMENT FORM (`SWID=`), deliberately — a bare `\bSWID\b` would
+    # be a FALSE-REFUSAL LANDMINE now that we request `mTeam`, whose `members[].id` is a SWID GUID:
+    # if ESPN ever labels that field with the literal word, every honest import would be rejected
+    # with a message accusing the user of pasting credentials. The asymmetry decides it — narrowing
+    # costs nothing, because a pasted cookie header is caught three times over (`espn_s2`, the
+    # `Cookie:` header patterns, and this), while over-matching breaks the feature for everyone.
+    # A bare SWID GUID is an identifier, not a credential: it cannot authenticate without `espn_s2`.
+    ("your ESPN sign-in cookie", re.compile(r"\bSWID\s*=", re.IGNORECASE)),
     ("a Cookie header", re.compile(r"^\s*-?-?\s*cookie\s*:", re.IGNORECASE | re.MULTILINE)),
     ("a Cookie header", re.compile(r"-H\s+['\"]?cookie\s*:", re.IGNORECASE)),
     ("an Authorization header", re.compile(r"authorization\s*:", re.IGNORECASE)),
@@ -441,6 +453,168 @@ def translate_scoring(flat: dict[str, float]) -> tuple[ScoringTranslation, list[
 
 
 # ---------------------------------------------------------------------------------------------
+# Teams and rosters (the `mTeam` + `mRoster` views)
+# ---------------------------------------------------------------------------------------------
+#
+# ⏳ THE PRE-DRAFT CASE IS THE NORMAL CASE, NOT AN EDGE CASE. Most people import BEFORE their draft
+# — that is when a draft tool is worth having — and an undrafted ESPN league returns its teams with
+# EMPTY rosters. So "no players" must read as an expected state with a next step, never as a failed
+# or partial import. Both real fixtures are undrafted (`draftDetail.drafted == false`), so this is
+# the path the tests actually exercise.
+#
+# 🔒 PRIVACY. `mTeam` carries a `members` array whose `id` is the member's SWID GUID. We map it to a
+# display name to label the team and then DROP it: a GUID identifies a real ESPN account, and we
+# have no use for one. It is not a credential (it cannot authenticate without `espn_s2`), which is
+# why the paste is still safe — but "not a credential" is not a reason to keep it.
+
+# A player's own position, derived from `eligibleSlots` against the ALREADY-VERIFIED slot map rather
+# than from ESPN's separate `defaultPositionId` table. A real position slot admits exactly one
+# position, so the intersection is a singleton for an ordinary player; slot 1 (TQB, a whole-team QB
+# slot) is excluded because it is not an individual's position.
+#
+# 🪤 DO NOT "SIMPLIFY" THIS TO `defaultPositionId`. The two numberings overlap enough to look
+# interchangeable and are NOT: ESPN's `defaultPositionId` 4 means TIGHT END, while lineup SLOT 4
+# means WIDE RECEIVER. Measured against the real 2025 payload, reading the position id against the
+# slot map would have labelled George Kittle and Mark Andrews **WR**, and left Mahomes, Adams and
+# McMillan with **no position at all** — silently, on a roster we display. Reusing evidence the
+# settings work already verified is what avoids importing a second, unchecked numbering.
+# Pinned by `test_espn_position_ids_are_a_DIFFERENT_numbering_from_lineup_slots`.
+_POSITION_BY_SLOT: dict[int, str] = {
+    slot: eligible[0]
+    for slot, (_name, eligible, is_bench) in ROSTER_SLOT_MAP.items()
+    if len(eligible) == 1 and not is_bench and slot != 1
+}
+
+# ESPN's pro-team ids: 1988-era alphabetical-by-city, with relocations applied and expansion teams
+# appended (29 CAR, 30 JAX, 33 BAL, 34 HOU). 0 = free agent.
+#
+# ✅ SEVEN ROWS IDENTITY-CHECKED against the real 2025 payload (GB 9, LAR 14, SF 25, SEA 26, CAR 29,
+# KC 12, BAL 33 — confirmed by the players actually on those teams). The rest remain structural
+# inference from the same 1988-alphabetical ordering, and an id NOT in this table yields `None`
+# rather than a guess.
+#
+# ⚖️ It originally shipped at a LOWER evidence bar than `SCORING_KEY_MAP`, deliberately: a wrong
+# stat id SILENTLY MISPRICES a league — it changes numbers the user acts on — whereas a wrong
+# pro-team abbreviation shows a wrong badge next to a correct player, on a roster we display but do
+# not score. Rigor scaled to blast radius; the bar was then raised as soon as evidence existed.
+_PRO_TEAM_BY_ID: dict[int, str] = {
+    1: "ATL", 2: "BUF", 3: "CHI", 4: "CIN", 5: "CLE", 6: "DAL", 7: "DEN", 8: "DET",
+    9: "GB", 10: "TEN", 11: "IND", 12: "KC", 13: "LV", 14: "LAR", 15: "MIA", 16: "MIN",
+    17: "NE", 18: "NO", 19: "NYG", 20: "NYJ", 21: "PHI", 22: "ARI", 23: "PIT", 24: "LAC",
+    25: "SF", 26: "SEA", 27: "TB", 28: "WSH", 29: "CAR", 30: "JAX", 33: "BAL", 34: "HOU",
+}
+
+# Lineup slots that are NOT a started position.
+_BENCH_SLOTS = frozenset({20, 21})
+
+_PRE_DRAFT_NOTE = (
+    "Your league hasn't drafted yet, so there are no rosters to bring over — we imported your "
+    "scoring and roster shape, which is everything the draft tools need. Import again after your "
+    "draft and we'll pull the rosters too."
+)
+
+_WHOSE_TEAM_NOTE = (
+    "ESPN's response doesn't say which of these teams is yours, so we haven't marked one. Your "
+    "scoring and roster settings are unaffected."
+)
+
+
+def _player_position(player: dict) -> str | None:
+    """A player's real position, from `eligibleSlots` ∩ the verified single-position slots."""
+    slots = player.get("eligibleSlots")
+    if not isinstance(slots, list):
+        return None
+    found = sorted(
+        {_POSITION_BY_SLOT[s] for s in (_as_int(x, default=-1) for x in slots) if s in _POSITION_BY_SLOT}
+    )
+    # A multi-eligible player (rare) is reported as the lowest-id primary slot, which is ESPN's own
+    # ordering; returning one of several true positions beats returning nothing.
+    return found[0] if found else None
+
+
+def translate_teams(payload: dict) -> tuple[list[ImportedTeam], list[str]]:
+    """`teams` (+ `members`) → the shared team/roster shape.
+
+    Absent views are NOT an error: a user with an older single-view link, or a league whose response
+    omits `teams`, still gets a complete settings import. Rosters are additive to that.
+    """
+    raw_teams = payload.get("teams")
+    if not isinstance(raw_teams, list) or not raw_teams:
+        return [], []
+
+    # member id (a SWID GUID) → display name, used to LABEL a team and then discarded.
+    owner_names: dict[str, str] = {}
+    for member in payload.get("members") or []:
+        if not isinstance(member, dict):
+            continue
+        member_id = member.get("id")
+        display = member.get("displayName") or member.get("firstName")
+        if isinstance(member_id, str) and isinstance(display, str) and display.strip():
+            owner_names[member_id] = display.strip()
+
+    teams: list[ImportedTeam] = []
+    for raw in raw_teams:
+        if not isinstance(raw, dict):
+            continue
+        # ESPN moved the team name from `location` + `nickname` to a single `name`; accept either
+        # so an older season's payload still reads.
+        name = str(raw.get("name") or "").strip()
+        if not name:
+            name = " ".join(
+                str(raw.get(k) or "").strip() for k in ("location", "nickname")
+            ).strip()
+        team_key = str(raw.get("id") if raw.get("id") is not None else len(teams))
+
+        owner = None
+        for owner_id in raw.get("owners") or []:
+            if isinstance(owner_id, str) and owner_id in owner_names:
+                owner = owner_names[owner_id]
+                break
+
+        players: list[ImportedPlayer] = []
+        entries = (raw.get("roster") or {}).get("entries") if isinstance(raw.get("roster"), dict) else None
+        for entry in entries or []:
+            if not isinstance(entry, dict):
+                continue
+            pool = entry.get("playerPoolEntry")
+            player = pool.get("player") if isinstance(pool, dict) else None
+            if not isinstance(player, dict):
+                continue
+            full_name = str(player.get("fullName") or "").strip()
+            if not full_name:
+                continue
+            slot = _as_int(entry.get("lineupSlotId"), default=-1)
+            players.append(
+                ImportedPlayer(
+                    player_key=str(player.get("id") if player.get("id") is not None else ""),
+                    name=full_name,
+                    position=_player_position(player),
+                    team=_PRO_TEAM_BY_ID.get(_as_int(player.get("proTeamId"), default=-1)),
+                    starter=slot >= 0 and slot not in _BENCH_SLOTS,
+                )
+            )
+
+        teams.append(
+            ImportedTeam(
+                team_key=team_key,
+                name=name or f"Team {team_key}",
+                owner=owner,
+                # ESPN's response never identifies the requesting account, and we deliberately do
+                # not ask for the credential that would. Nobody is marked rather than guessing.
+                is_owner=False,
+                players=tuple(players),
+            )
+        )
+
+    warnings: list[str] = []
+    if teams and not any(t.players for t in teams):
+        warnings.append(_PRE_DRAFT_NOTE)
+    elif teams:
+        warnings.append(_WHOSE_TEAM_NOTE)
+    return teams, warnings
+
+
+# ---------------------------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------------------------
 
@@ -490,6 +664,9 @@ def parse_settings_payload(pasted: str, *, season: int | None = None) -> Importe
     roster, roster_warnings = translate_roster(_as_dict(settings.get("rosterSettings")))
     warnings.extend(roster_warnings)
 
+    teams, team_warnings = translate_teams(payload)
+    warnings.extend(team_warnings)
+
     scoring_settings = _as_dict(settings.get("scoringSettings"))
     flat, flatten_notes = flatten_scoring_items(scoring_settings.get("scoringItems"))
     warnings.extend(flatten_notes)
@@ -532,6 +709,7 @@ def parse_settings_payload(pasted: str, *, season: int | None = None) -> Importe
         source_league_id=str(league_id) if league_id is not None else "",
         season=str(resolved_season) if resolved_season else None,
         config=config,
+        teams=tuple(teams),
         warnings=tuple(warnings),
         unmapped_scoring_keys=tuple(translation.unmapped),
         # Labels only for what was ACTUALLY captured, so the panel never explains a rule this
@@ -550,7 +728,8 @@ def build_read_url(league_id: str, season: int) -> str:
             "That doesn't look like an ESPN league ID. It's the number in your league's URL, after "
             '"leagueId=".'
         )
-    return READ_URL_TEMPLATE.format(season=int(season), league_id=league_id)
+    views = "&".join(f"view={v}" for v in READ_VIEWS)
+    return READ_URL_TEMPLATE.format(season=int(season), league_id=league_id, views=views)
 
 
 # ---------------------------------------------------------------------------------------------

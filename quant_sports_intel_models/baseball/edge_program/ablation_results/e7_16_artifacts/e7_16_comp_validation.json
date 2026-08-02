@@ -1,0 +1,2561 @@
+{
+  "story": "E7.16 \u2014 E7.13's comp engine on the POINT-IN-TIME MLB Pipeline archive",
+  "generated_at": "2026-08-02T01:58:04+00:00",
+  "cohort_path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/quant_sports_intel_models/baseball/edge_program/ablation_results/e7_16_artifacts/pipeline_comp_cohort.parquet",
+  "cohort_built_at": "2026-08-02T01:55:58+00:00",
+  "target": "fantasy_points over the 3 seasons after the board (0 for a prospect who never reached MLB)",
+  "primary_metric": "CRPS (proper \u2014 the target is ~57% exact zeros; MAE inverts here)",
+  "incumbent": "fv_bucket (the empirical outcome distribution of same-grade, same-position historical prospects \u2014 here the grade is MLB Pipeline's published Overall)",
+  "leakage": {
+    "pipeline_scan": [
+      {
+        "column": "fv",
+        "present": true,
+        "kind": "numeric",
+        "n_observed": 6577,
+        "auc_vs_outcome": 0.6789,
+        "largest_one_sided_bin": null,
+        "one_sided_bin_n": 0,
+        "one_sided_bin_share": 0.0,
+        "one_sided_bin_debut_rate": NaN,
+        "n_bins": 6,
+        "leak_flag": false
+      },
+      {
+        "column": "age",
+        "present": true,
+        "kind": "numeric",
+        "n_observed": 7186,
+        "auc_vs_outcome": 0.6782,
+        "largest_one_sided_bin": null,
+        "one_sided_bin_n": 0,
+        "one_sided_bin_share": 0.0,
+        "one_sided_bin_debut_rate": NaN,
+        "n_bins": 10,
+        "leak_flag": false
+      },
+      {
+        "column": "position",
+        "present": true,
+        "kind": "categorical",
+        "n_observed": 7186,
+        "auc_vs_outcome": NaN,
+        "largest_one_sided_bin": "1B/2B/3B",
+        "one_sided_bin_n": 4,
+        "one_sided_bin_share": 0.0006,
+        "one_sided_bin_debut_rate": 1.0,
+        "n_bins": 69,
+        "leak_flag": false
+      },
+      {
+        "column": "top_level_pre_board",
+        "present": true,
+        "kind": "categorical",
+        "n_observed": 5225,
+        "auc_vs_outcome": NaN,
+        "largest_one_sided_bin": null,
+        "one_sided_bin_n": 0,
+        "one_sided_bin_share": 0.0,
+        "one_sided_bin_debut_rate": NaN,
+        "n_bins": 5,
+        "leak_flag": false
+      },
+      {
+        "column": "pro_experience_years",
+        "present": true,
+        "kind": "numeric",
+        "n_observed": 5225,
+        "auc_vs_outcome": 0.6169,
+        "largest_one_sided_bin": null,
+        "one_sided_bin_n": 0,
+        "one_sided_bin_share": 0.0,
+        "one_sided_bin_debut_rate": NaN,
+        "n_bins": 6,
+        "leak_flag": false
+      },
+      {
+        "column": "minor_k_pct",
+        "present": true,
+        "kind": "numeric",
+        "n_observed": 5218,
+        "auc_vs_outcome": 0.4491,
+        "largest_one_sided_bin": null,
+        "one_sided_bin_n": 0,
+        "one_sided_bin_share": 0.0,
+        "one_sided_bin_debut_rate": NaN,
+        "n_bins": 11,
+        "leak_flag": false
+      },
+      {
+        "column": "minor_bb_pct",
+        "present": true,
+        "kind": "numeric",
+        "n_observed": 5218,
+        "auc_vs_outcome": 0.4892,
+        "largest_one_sided_bin": null,
+        "one_sided_bin_n": 0,
+        "one_sided_bin_share": 0.0,
+        "one_sided_bin_debut_rate": NaN,
+        "n_bins": 11,
+        "leak_flag": false
+      },
+      {
+        "column": "minor_iso",
+        "present": true,
+        "kind": "numeric",
+        "n_observed": 2596,
+        "auc_vs_outcome": 0.6096,
+        "largest_one_sided_bin": null,
+        "one_sided_bin_n": 0,
+        "one_sided_bin_share": 0.0,
+        "one_sided_bin_debut_rate": NaN,
+        "n_bins": 11,
+        "leak_flag": false
+      },
+      {
+        "column": "minor_gb_pct",
+        "present": true,
+        "kind": "numeric",
+        "n_observed": 2622,
+        "auc_vs_outcome": 0.508,
+        "largest_one_sided_bin": null,
+        "one_sided_bin_n": 0,
+        "one_sided_bin_share": 0.0,
+        "one_sided_bin_debut_rate": NaN,
+        "n_bins": 11,
+        "leak_flag": false
+      },
+      {
+        "column": "minor_start_share",
+        "present": true,
+        "kind": "numeric",
+        "n_observed": 2622,
+        "auc_vs_outcome": 0.5476,
+        "largest_one_sided_bin": null,
+        "one_sided_bin_n": 0,
+        "one_sided_bin_share": 0.0,
+        "one_sided_bin_debut_rate": NaN,
+        "n_bins": 8,
+        "leak_flag": false
+      },
+      {
+        "column": "minor_pa",
+        "present": true,
+        "kind": "numeric",
+        "n_observed": 7186,
+        "auc_vs_outcome": 0.727,
+        "largest_one_sided_bin": null,
+        "one_sided_bin_n": 0,
+        "one_sided_bin_share": 0.0,
+        "one_sided_bin_debut_rate": NaN,
+        "n_bins": 9,
+        "leak_flag": false
+      },
+      {
+        "column": "pre_board_mlb_exposure",
+        "present": true,
+        "kind": "numeric",
+        "n_observed": 7186,
+        "auc_vs_outcome": 0.5684,
+        "largest_one_sided_bin": null,
+        "one_sided_bin_n": 0,
+        "one_sided_bin_share": 0.0,
+        "one_sided_bin_debut_rate": NaN,
+        "n_bins": 3,
+        "leak_flag": false
+      },
+      {
+        "column": "overall_rank",
+        "present": true,
+        "kind": "numeric",
+        "n_observed": 798,
+        "auc_vs_outcome": 0.3564,
+        "largest_one_sided_bin": null,
+        "one_sided_bin_n": 0,
+        "one_sided_bin_share": 0.0,
+        "one_sided_bin_debut_rate": NaN,
+        "n_bins": 11,
+        "leak_flag": false
+      },
+      {
+        "column": "org_rank",
+        "present": true,
+        "kind": "numeric",
+        "n_observed": 7183,
+        "auc_vs_outcome": 0.3287,
+        "largest_one_sided_bin": "(missing)",
+        "one_sided_bin_n": 3,
+        "one_sided_bin_share": 0.0004,
+        "one_sided_bin_debut_rate": 1.0,
+        "n_bins": 11,
+        "leak_flag": false
+      },
+      {
+        "column": "eta",
+        "present": true,
+        "kind": "numeric",
+        "n_observed": 3994,
+        "auc_vs_outcome": 0.3203,
+        "largest_one_sided_bin": "(2025.0, 2028.0]",
+        "one_sided_bin_n": 233,
+        "one_sided_bin_share": 0.0324,
+        "one_sided_bin_debut_rate": 0.0172,
+        "n_bins": 8,
+        "leak_flag": false
+      },
+      {
+        "column": "draft_year",
+        "present": true,
+        "kind": "numeric",
+        "n_observed": 4910,
+        "auc_vs_outcome": 0.4084,
+        "largest_one_sided_bin": null,
+        "one_sided_bin_n": 0,
+        "one_sided_bin_share": 0.0,
+        "one_sided_bin_debut_rate": NaN,
+        "n_bins": 10,
+        "leak_flag": false
+      },
+      {
+        "column": "org",
+        "present": true,
+        "kind": "categorical",
+        "n_observed": 7183,
+        "auc_vs_outcome": NaN,
+        "largest_one_sided_bin": "(missing)",
+        "one_sided_bin_n": 3,
+        "one_sided_bin_share": 0.0004,
+        "one_sided_bin_debut_rate": 1.0,
+        "n_bins": 31,
+        "leak_flag": false
+      },
+      {
+        "column": "bio_season",
+        "present": true,
+        "kind": "numeric",
+        "n_observed": 7121,
+        "auc_vs_outcome": 0.4784,
+        "largest_one_sided_bin": null,
+        "one_sided_bin_n": 0,
+        "one_sided_bin_share": 0.0,
+        "one_sided_bin_debut_rate": NaN,
+        "n_bins": 10,
+        "leak_flag": false
+      },
+      {
+        "column": "milb_games",
+        "present": true,
+        "kind": "numeric",
+        "n_observed": 5225,
+        "auc_vs_outcome": 0.6035,
+        "largest_one_sided_bin": null,
+        "one_sided_bin_n": 0,
+        "one_sided_bin_share": 0.0,
+        "one_sided_bin_debut_rate": NaN,
+        "n_bins": 11,
+        "leak_flag": false
+      },
+      {
+        "column": "last_milb_season",
+        "present": true,
+        "kind": "numeric",
+        "n_observed": 5225,
+        "auc_vs_outcome": 0.4799,
+        "largest_one_sided_bin": null,
+        "one_sided_bin_n": 0,
+        "one_sided_bin_share": 0.0,
+        "one_sided_bin_debut_rate": NaN,
+        "n_bins": 8,
+        "leak_flag": false
+      }
+    ],
+    "pipeline_flagged": [],
+    "control": {
+      "ran": true,
+      "scan": [
+        {
+          "column": "level",
+          "present": true,
+          "kind": "categorical",
+          "n_observed": 5245,
+          "auc_vs_outcome": NaN,
+          "largest_one_sided_bin": "AAA",
+          "one_sided_bin_n": 883,
+          "one_sided_bin_share": 0.1684,
+          "one_sided_bin_debut_rate": 0.0,
+          "n_bins": 11,
+          "leak_flag": true
+        },
+        {
+          "column": "fv",
+          "present": true,
+          "kind": "numeric",
+          "n_observed": 5245,
+          "auc_vs_outcome": 0.7005,
+          "largest_one_sided_bin": "(34.999, 37.0]",
+          "one_sided_bin_n": 1,
+          "one_sided_bin_share": 0.0002,
+          "one_sided_bin_debut_rate": 0.0,
+          "n_bins": 7,
+          "leak_flag": false
+        },
+        {
+          "column": "age",
+          "present": true,
+          "kind": "numeric",
+          "n_observed": 5245,
+          "auc_vs_outcome": 0.6778,
+          "largest_one_sided_bin": null,
+          "one_sided_bin_n": 0,
+          "one_sided_bin_share": 0.0,
+          "one_sided_bin_debut_rate": NaN,
+          "n_bins": 10,
+          "leak_flag": false
+        },
+        {
+          "column": "top_level_pre_board",
+          "present": true,
+          "kind": "categorical",
+          "n_observed": 4459,
+          "auc_vs_outcome": NaN,
+          "largest_one_sided_bin": null,
+          "one_sided_bin_n": 0,
+          "one_sided_bin_share": 0.0,
+          "one_sided_bin_debut_rate": NaN,
+          "n_bins": 5,
+          "leak_flag": false
+        },
+        {
+          "column": "position",
+          "present": true,
+          "kind": "categorical",
+          "n_observed": 5245,
+          "auc_vs_outcome": NaN,
+          "largest_one_sided_bin": "LHP/1B",
+          "one_sided_bin_n": 2,
+          "one_sided_bin_share": 0.0004,
+          "one_sided_bin_debut_rate": 0.0,
+          "n_bins": 35,
+          "leak_flag": false
+        }
+      ],
+      "positive_control_fired": true,
+      "positive_control": {
+        "column": "level",
+        "auc_vs_outcome": NaN,
+        "one_sided_bin_n": 883,
+        "one_sided_bin_share": 0.1684,
+        "one_sided_bin_debut_rate": 0.0
+      },
+      "negative_control": {
+        "column": "fv",
+        "auc_vs_outcome": 0.7005,
+        "one_sided_bin_share": 0.0002,
+        "leak_flag": false
+      }
+    }
+  },
+  "fold_census": {
+    "board_seasons": [
+      2015,
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022
+    ],
+    "rows": 7186,
+    "distinct_players": 3202,
+    "horizon_seasons": 3,
+    "by_type": {
+      "batter": {
+        "pool": {
+          "n_pool": 3756,
+          "bust_share": 0.5841,
+          "zero_outcome_share": 0.4736,
+          "board_seasons": [
+            2015,
+            2016,
+            2017,
+            2018,
+            2019,
+            2020,
+            2021,
+            2022
+          ],
+          "position_groups": {
+            "OF": 1523,
+            "IF_MID": 1110,
+            "IF_CORNER": 651,
+            "C": 472
+          }
+        },
+        "strictly_matured_folds": 4,
+        "strict_plan": [
+          {
+            "query_season": 2019,
+            "train_seasons": [
+              2015
+            ],
+            "n_query": 470,
+            "n_train": 447
+          },
+          {
+            "query_season": 2020,
+            "train_seasons": [
+              2015,
+              2016
+            ],
+            "n_query": 475,
+            "n_train": 898
+          },
+          {
+            "query_season": 2021,
+            "train_seasons": [
+              2015,
+              2016,
+              2017
+            ],
+            "n_query": 484,
+            "n_train": 1352
+          },
+          {
+            "query_season": 2022,
+            "train_seasons": [
+              2015,
+              2016,
+              2017,
+              2018
+            ],
+            "n_query": 509,
+            "n_train": 1818
+          }
+        ],
+        "relaxed_folds": 7,
+        "cscv_computable_strict": true
+      },
+      "pitcher": {
+        "pool": {
+          "n_pool": 3430,
+          "bust_share": 0.5554,
+          "zero_outcome_share": 0.3915,
+          "board_seasons": [
+            2015,
+            2016,
+            2017,
+            2018,
+            2019,
+            2020,
+            2021,
+            2022
+          ],
+          "position_groups": {
+            "SP": 2862,
+            "RP": 568
+          }
+        },
+        "strictly_matured_folds": 4,
+        "strict_plan": [
+          {
+            "query_season": 2019,
+            "train_seasons": [
+              2015
+            ],
+            "n_query": 429,
+            "n_train": 451
+          },
+          {
+            "query_season": 2020,
+            "train_seasons": [
+              2015,
+              2016
+            ],
+            "n_query": 423,
+            "n_train": 899
+          },
+          {
+            "query_season": 2021,
+            "train_seasons": [
+              2015,
+              2016,
+              2017
+            ],
+            "n_query": 415,
+            "n_train": 1343
+          },
+          {
+            "query_season": 2022,
+            "train_seasons": [
+              2015,
+              2016,
+              2017,
+              2018
+            ],
+            "n_query": 388,
+            "n_train": 1775
+          }
+        ],
+        "relaxed_folds": 7,
+        "cscv_computable_strict": true
+      }
+    },
+    "label_coverage_bound": {
+      "outcome_source": "mart_batter_rolling_stats / mart_pitcher_rolling_stats (Statcast era)",
+      "earliest_covered_mlb_season": 2015,
+      "note": "The BINDING bound on the fold count is our realized-outcome substrate, not the Pipeline archive (17 seasons) and not the MiLB game logs (2005+). A board season earlier than 2015 opens its 3-season outcome window before the marts begin, so a real player would be scored as a partial bust."
+    }
+  },
+  "primary_fold_rule": "strict",
+  "by_type": {
+    "batter": {
+      "player_type": "batter",
+      "pool": {
+        "n_pool": 3756,
+        "bust_share": 0.5841,
+        "zero_outcome_share": 0.4736,
+        "board_seasons": [
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021,
+          2022
+        ],
+        "position_groups": {
+          "OF": 1523,
+          "IF_MID": 1110,
+          "IF_CORNER": 651,
+          "C": 472
+        }
+      },
+      "strict_maturity": true,
+      "folds": [
+        {
+          "query_season": 2019,
+          "train_seasons": [
+            2015
+          ],
+          "n_query": 470,
+          "n_train": 447
+        },
+        {
+          "query_season": 2020,
+          "train_seasons": [
+            2015,
+            2016
+          ],
+          "n_query": 475,
+          "n_train": 898
+        },
+        {
+          "query_season": 2021,
+          "train_seasons": [
+            2015,
+            2016,
+            2017
+          ],
+          "n_query": 484,
+          "n_train": 1352
+        },
+        {
+          "query_season": 2022,
+          "train_seasons": [
+            2015,
+            2016,
+            2017,
+            2018
+          ],
+          "n_query": 509,
+          "n_train": 1818
+        }
+      ],
+      "n_rows_scored": 1279,
+      "n_rows_total": 1938,
+      "arms": {
+        "comp_gower_k15": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 77.66159117365996,
+          "crps_by_fold": {
+            "2019": 73.904,
+            "2020": 71.645,
+            "2021": 90.808,
+            "2022": 77.697
+          },
+          "pit_max_decile_dev": 0.0515,
+          "coverage_p10_p90": 0.8421
+        },
+        "comp_gower_k10": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 79.52537685691945,
+          "crps_by_fold": {
+            "2019": 74.953,
+            "2020": 73.985,
+            "2021": 93.291,
+            "2022": 79.467
+          },
+          "pit_max_decile_dev": 0.0914,
+          "coverage_p10_p90": 0.8772
+        },
+        "comp_gower_k25": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 77.59571452697429,
+          "crps_by_fold": {
+            "2019": 74.216,
+            "2020": 70.932,
+            "2021": 90.033,
+            "2022": 78.296
+          },
+          "pit_max_decile_dev": 0.032,
+          "coverage_p10_p90": 0.8694
+        },
+        "comp_gower_k15_simweighted": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 82.30150334100493,
+          "crps_by_fold": {
+            "2019": 77.232,
+            "2020": 77.193,
+            "2021": 96.298,
+            "2022": 82.16
+          },
+          "pit_max_decile_dev": 0.0634,
+          "coverage_p10_p90": 0.7545
+        },
+        "comp_mahalanobis_k15": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 80.75277352097991,
+          "crps_by_fold": {
+            "2019": 74.246,
+            "2020": 74.901,
+            "2021": 96.358,
+            "2022": 81.451
+          },
+          "pit_max_decile_dev": 0.039,
+          "coverage_p10_p90": 0.8358
+        },
+        "comp_no_fv_k15": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 86.74849378855005,
+          "crps_by_fold": {
+            "2019": 79.928,
+            "2020": 75.411,
+            "2021": 100.402,
+            "2022": 93.536
+          },
+          "pit_max_decile_dev": 0.0429,
+          "coverage_p10_p90": 0.8491
+        },
+        "comp_components_only_k15": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 92.6784098688211,
+          "crps_by_fold": {
+            "2019": 88.509,
+            "2020": 78.919,
+            "2021": 102.979,
+            "2022": 101.34
+          },
+          "pit_max_decile_dev": 0.0421,
+          "coverage_p10_p90": 0.8554
+        },
+        "fv_bucket": {
+          "kind": "bucket",
+          "selectable": true,
+          "crps": 85.91039091557742,
+          "crps_by_fold": {
+            "2019": 82.697,
+            "2020": 77.541,
+            "2021": 97.944,
+            "2022": 88.152
+          },
+          "pit_max_decile_dev": 0.0314,
+          "coverage_p10_p90": 0.8327
+        },
+        "blend_comp_fv": {
+          "kind": "blend",
+          "selectable": true,
+          "crps": 79.15643265765505,
+          "crps_by_fold": {
+            "2019": 75.718,
+            "2020": 71.983,
+            "2021": 91.747,
+            "2022": 80.238
+          },
+          "pit_max_decile_dev": 0.0203,
+          "coverage_p10_p90": 0.8569
+        },
+        "random_k15": {
+          "kind": "placebo",
+          "selectable": false,
+          "crps": 98.61548188689078,
+          "crps_by_fold": {
+            "2019": 88.937,
+            "2020": 90.622,
+            "2021": 111.933,
+            "2022": 105.234
+          },
+          "pit_max_decile_dev": 0.0468,
+          "coverage_p10_p90": 0.835
+        },
+        "marginal": {
+          "kind": "degenerate",
+          "selectable": false,
+          "crps": 93.04660105448724,
+          "crps_by_fold": {
+            "2019": 84.697,
+            "2020": 79.588,
+            "2021": 107.018,
+            "2022": 102.716
+          },
+          "pit_max_decile_dev": 0.0304,
+          "coverage_p10_p90": 0.846
+        },
+        "all_zero": {
+          "kind": "degenerate",
+          "selectable": false,
+          "crps": 129.6670836591087,
+          "crps_by_fold": {
+            "2019": 118.006,
+            "2020": 113.63,
+            "2021": 152.347,
+            "2022": 138.877
+          },
+          "pit_max_decile_dev": 0.5818,
+          "coverage_p10_p90": 0.3174
+        },
+        "oracle_k15": {
+          "kind": "anchor",
+          "selectable": false,
+          "crps": 10.531766831726173,
+          "crps_by_fold": {
+            "2019": 14.96,
+            "2020": 8.387,
+            "2021": 11.507,
+            "2022": 7.96
+          },
+          "pit_max_decile_dev": 0.1439,
+          "coverage_p10_p90": 0.9343
+        }
+      },
+      "best_contender": "comp_gower_k25",
+      "anchors": {
+        "oracle_is_the_floor": true,
+        "oracle_crps": 10.532,
+        "all_zero_loses": true,
+        "all_zero_crps": 129.667,
+        "marginal_loses": true,
+        "marginal_crps": 93.047,
+        "placebo_loses": true,
+        "placebo_crps": 98.615,
+        "all_pass": true
+      },
+      "paired": {
+        "selected_vs_incumbent": {
+          "arm": "comp_gower_k25",
+          "foil": "fv_bucket",
+          "mean_crps_delta": -8.315,
+          "p_value": 0.0,
+          "ci95": [
+            -11.26,
+            -5.568
+          ],
+          "n_clusters": 734,
+          "arm_better": true
+        },
+        "comp_vs_incumbent": {
+          "arm": "comp_gower_k15",
+          "foil": "fv_bucket",
+          "mean_crps_delta": -8.249,
+          "p_value": 0.0,
+          "ci95": [
+            -11.502,
+            -5.12
+          ],
+          "n_clusters": 734,
+          "arm_better": true
+        },
+        "blend_vs_incumbent": {
+          "arm": "blend_comp_fv",
+          "foil": "fv_bucket",
+          "mean_crps_delta": -6.754,
+          "p_value": 0.0,
+          "ci95": [
+            -8.554,
+            -5.08
+          ],
+          "n_clusters": 734,
+          "arm_better": true
+        },
+        "blend_vs_comp": {
+          "arm": "blend_comp_fv",
+          "foil": "comp_gower_k15",
+          "mean_crps_delta": 1.495,
+          "p_value": 0.053,
+          "ci95": [
+            -0.002,
+            3.012
+          ],
+          "n_clusters": 734,
+          "arm_better": false
+        },
+        "fv_channel": {
+          "arm": "comp_gower_k15",
+          "foil": "comp_no_fv_k15",
+          "mean_crps_delta": -9.087,
+          "p_value": 0.0,
+          "ci95": [
+            -12.517,
+            -5.93
+          ],
+          "n_clusters": 734,
+          "arm_better": true
+        },
+        "structural_channel": {
+          "arm": "comp_gower_k15",
+          "foil": "comp_components_only_k15",
+          "mean_crps_delta": -15.017,
+          "p_value": 0.0,
+          "ci95": [
+            -18.749,
+            -11.543
+          ],
+          "n_clusters": 734,
+          "arm_better": true
+        },
+        "similarity_channel": {
+          "arm": "comp_gower_k15",
+          "foil": "random_k15",
+          "mean_crps_delta": -20.954,
+          "p_value": 0.0,
+          "ci95": [
+            -25.05,
+            -16.959
+          ],
+          "n_clusters": 734,
+          "arm_better": true
+        },
+        "kernel_channel": {
+          "arm": "comp_gower_k15",
+          "foil": "comp_gower_k15_simweighted",
+          "mean_crps_delta": -4.64,
+          "p_value": 0.0,
+          "ci95": [
+            -7.044,
+            -2.328
+          ],
+          "n_clusters": 734,
+          "arm_better": true
+        }
+      },
+      "deflation": {
+        "pbo_whole_field": {
+          "pbo": 0.0,
+          "n_splits": 6,
+          "computable": true,
+          "median_oos_rank_of_is_winner": 0.0,
+          "performance_degradation": 0.0,
+          "flip_distribution": {
+            "oracle_k15": 6
+          }
+        },
+        "pbo_contender_set": {
+          "pbo": 0.0,
+          "n_splits": 6,
+          "computable": true,
+          "median_oos_rank_of_is_winner": 0.0,
+          "performance_degradation": 0.0,
+          "flip_distribution": {
+            "comp_gower_k15": 1,
+            "comp_gower_k25": 5
+          }
+        },
+        "dsr_n_obs_used": 734,
+        "dsr_n_rows": 1279,
+        "dsr_whole_field": 1.0,
+        "dsr_contender_set": 1.0,
+        "contender_spread_pct": 19.44,
+        "whole_field_spread_pct": 1131.2,
+        "bh_fdr": {
+          "cutoff": 0.05,
+          "reject": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "alpha": 0.05,
+          "n_tests": 7,
+          "family": [
+            "selected_vs_incumbent",
+            "comp_vs_incumbent",
+            "blend_vs_incumbent",
+            "fv_channel",
+            "structural_channel",
+            "similarity_channel",
+            "kernel_channel"
+          ]
+        }
+      },
+      "gates": {
+        "anchors_pass": true,
+        "beats_incumbent": true,
+        "pbo_lt_0_2": true,
+        "dsr_contender_ge_0_95": true,
+        "pit_flat": true,
+        "fdr_survives": true
+      },
+      "verdict": "BLEND_WIRE",
+      "blend_gates_all_pass": true,
+      "revalidation_trigger": "re-run when >=4 strictly-matured folds exist (2029; 2 in 2027)"
+    },
+    "pitcher": {
+      "player_type": "pitcher",
+      "pool": {
+        "n_pool": 3430,
+        "bust_share": 0.5554,
+        "zero_outcome_share": 0.3915,
+        "board_seasons": [
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021,
+          2022
+        ],
+        "position_groups": {
+          "SP": 2862,
+          "RP": 568
+        }
+      },
+      "strict_maturity": true,
+      "folds": [
+        {
+          "query_season": 2019,
+          "train_seasons": [
+            2015
+          ],
+          "n_query": 429,
+          "n_train": 451
+        },
+        {
+          "query_season": 2020,
+          "train_seasons": [
+            2015,
+            2016
+          ],
+          "n_query": 423,
+          "n_train": 899
+        },
+        {
+          "query_season": 2021,
+          "train_seasons": [
+            2015,
+            2016,
+            2017
+          ],
+          "n_query": 415,
+          "n_train": 1343
+        },
+        {
+          "query_season": 2022,
+          "train_seasons": [
+            2015,
+            2016,
+            2017,
+            2018
+          ],
+          "n_query": 388,
+          "n_train": 1775
+        }
+      ],
+      "n_rows_scored": 1021,
+      "n_rows_total": 1655,
+      "arms": {
+        "comp_gower_k15": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 118.311607356622,
+          "crps_by_fold": {
+            "2019": 114.078,
+            "2020": 114.088,
+            "2021": 107.158,
+            "2022": 131.306
+          },
+          "pit_max_decile_dev": 0.0491,
+          "coverage_p10_p90": 0.8394
+        },
+        "comp_gower_k10": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 123.05885406464249,
+          "crps_by_fold": {
+            "2019": 118.335,
+            "2020": 120.334,
+            "2021": 111.418,
+            "2022": 135.649
+          },
+          "pit_max_decile_dev": 0.098,
+          "coverage_p10_p90": 0.8825
+        },
+        "comp_gower_k25": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 114.56042624877584,
+          "crps_by_fold": {
+            "2019": 110.448,
+            "2020": 110.535,
+            "2021": 102.369,
+            "2022": 127.76
+          },
+          "pit_max_decile_dev": 0.0334,
+          "coverage_p10_p90": 0.859
+        },
+        "comp_gower_k15_simweighted": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 133.3357029445707,
+          "crps_by_fold": {
+            "2019": 124.08,
+            "2020": 137.663,
+            "2021": 119.188,
+            "2022": 146.496
+          },
+          "pit_max_decile_dev": 0.0714,
+          "coverage_p10_p90": 0.7453
+        },
+        "comp_mahalanobis_k15": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 114.2823767548155,
+          "crps_by_fold": {
+            "2019": 111.412,
+            "2020": 106.62,
+            "2021": 104.682,
+            "2022": 127.745
+          },
+          "pit_max_decile_dev": 0.0373,
+          "coverage_p10_p90": 0.8452
+        },
+        "comp_no_fv_k15": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 128.86148220698658,
+          "crps_by_fold": {
+            "2019": 119.68,
+            "2020": 122.449,
+            "2021": 124.192,
+            "2022": 145.767
+          },
+          "pit_max_decile_dev": 0.0499,
+          "coverage_p10_p90": 0.8668
+        },
+        "comp_components_only_k15": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 134.20358689737725,
+          "crps_by_fold": {
+            "2019": 122.903,
+            "2020": 127.36,
+            "2021": 125.285,
+            "2022": 155.692
+          },
+          "pit_max_decile_dev": 0.0461,
+          "coverage_p10_p90": 0.8697
+        },
+        "fv_bucket": {
+          "kind": "bucket",
+          "selectable": true,
+          "crps": 117.10479714390279,
+          "crps_by_fold": {
+            "2019": 114.962,
+            "2020": 109.569,
+            "2021": 100.617,
+            "2022": 132.928
+          },
+          "pit_max_decile_dev": 0.0518,
+          "coverage_p10_p90": 0.8688
+        },
+        "blend_comp_fv": {
+          "kind": "blend",
+          "selectable": true,
+          "crps": 114.37494325562686,
+          "crps_by_fold": {
+            "2019": 111.23,
+            "2020": 107.787,
+            "2021": 100.574,
+            "2022": 129.273
+          },
+          "pit_max_decile_dev": 0.0187,
+          "coverage_p10_p90": 0.8707
+        },
+        "random_k15": {
+          "kind": "placebo",
+          "selectable": false,
+          "crps": 133.07002720644243,
+          "crps_by_fold": {
+            "2019": 124.628,
+            "2020": 122.796,
+            "2021": 125.167,
+            "2022": 153.681
+          },
+          "pit_max_decile_dev": 0.0461,
+          "coverage_p10_p90": 0.8697
+        },
+        "marginal": {
+          "kind": "degenerate",
+          "selectable": false,
+          "crps": 123.81458354742061,
+          "crps_by_fold": {
+            "2019": 116.136,
+            "2020": 110.138,
+            "2021": 112.488,
+            "2022": 147.839
+          },
+          "pit_max_decile_dev": 0.0371,
+          "coverage_p10_p90": 0.8825
+        },
+        "all_zero": {
+          "kind": "degenerate",
+          "selectable": false,
+          "crps": 179.45053868756122,
+          "crps_by_fold": {
+            "2019": 175.854,
+            "2020": 156.118,
+            "2021": 163.91,
+            "2022": 208.544
+          },
+          "pit_max_decile_dev": 0.6287,
+          "coverage_p10_p90": 0.2772
+        },
+        "oracle_k15": {
+          "kind": "anchor",
+          "selectable": false,
+          "crps": 5.3988029165306335,
+          "crps_by_fold": {
+            "2019": 9.497,
+            "2020": 3.516,
+            "2021": 3.146,
+            "2022": 3.542
+          },
+          "pit_max_decile_dev": 0.1693,
+          "coverage_p10_p90": 0.9706
+        }
+      },
+      "best_contender": "comp_mahalanobis_k15",
+      "anchors": {
+        "oracle_is_the_floor": true,
+        "oracle_crps": 5.399,
+        "all_zero_loses": true,
+        "all_zero_crps": 179.451,
+        "marginal_loses": true,
+        "marginal_crps": 123.815,
+        "placebo_loses": true,
+        "placebo_crps": 133.07,
+        "all_pass": true
+      },
+      "paired": {
+        "selected_vs_incumbent": {
+          "arm": "comp_mahalanobis_k15",
+          "foil": "fv_bucket",
+          "mean_crps_delta": -2.822,
+          "p_value": 0.1855,
+          "ci95": [
+            -7.191,
+            1.403
+          ],
+          "n_clusters": 663,
+          "arm_better": true
+        },
+        "comp_vs_incumbent": {
+          "arm": "comp_gower_k15",
+          "foil": "fv_bucket",
+          "mean_crps_delta": 1.207,
+          "p_value": 0.5265,
+          "ci95": [
+            -2.661,
+            5.067
+          ],
+          "n_clusters": 663,
+          "arm_better": false
+        },
+        "blend_vs_incumbent": {
+          "arm": "blend_comp_fv",
+          "foil": "fv_bucket",
+          "mean_crps_delta": -2.73,
+          "p_value": 0.0045,
+          "ci95": [
+            -4.711,
+            -0.806
+          ],
+          "n_clusters": 663,
+          "arm_better": true
+        },
+        "blend_vs_comp": {
+          "arm": "blend_comp_fv",
+          "foil": "comp_gower_k15",
+          "mean_crps_delta": -3.937,
+          "p_value": 0.0,
+          "ci95": [
+            -5.921,
+            -1.98
+          ],
+          "n_clusters": 663,
+          "arm_better": true
+        },
+        "fv_channel": {
+          "arm": "comp_gower_k15",
+          "foil": "comp_no_fv_k15",
+          "mean_crps_delta": -10.55,
+          "p_value": 0.0,
+          "ci95": [
+            -15.934,
+            -4.584
+          ],
+          "n_clusters": 663,
+          "arm_better": true
+        },
+        "structural_channel": {
+          "arm": "comp_gower_k15",
+          "foil": "comp_components_only_k15",
+          "mean_crps_delta": -15.892,
+          "p_value": 0.0,
+          "ci95": [
+            -21.814,
+            -9.334
+          ],
+          "n_clusters": 663,
+          "arm_better": true
+        },
+        "similarity_channel": {
+          "arm": "comp_gower_k15",
+          "foil": "random_k15",
+          "mean_crps_delta": -14.758,
+          "p_value": 0.0,
+          "ci95": [
+            -20.93,
+            -8.223
+          ],
+          "n_clusters": 663,
+          "arm_better": true
+        },
+        "kernel_channel": {
+          "arm": "comp_gower_k15",
+          "foil": "comp_gower_k15_simweighted",
+          "mean_crps_delta": -15.024,
+          "p_value": 0.0,
+          "ci95": [
+            -19.34,
+            -10.764
+          ],
+          "n_clusters": 663,
+          "arm_better": true
+        }
+      },
+      "deflation": {
+        "pbo_whole_field": {
+          "pbo": 0.0,
+          "n_splits": 6,
+          "computable": true,
+          "median_oos_rank_of_is_winner": 0.0,
+          "performance_degradation": 0.0,
+          "flip_distribution": {
+            "oracle_k15": 6
+          }
+        },
+        "pbo_contender_set": {
+          "pbo": 0.0,
+          "n_splits": 6,
+          "computable": true,
+          "median_oos_rank_of_is_winner": 0.25,
+          "performance_degradation": 1.3188392503135304,
+          "flip_distribution": {
+            "comp_gower_k25": 1,
+            "comp_mahalanobis_k15": 2,
+            "blend_comp_fv": 3
+          }
+        },
+        "dsr_n_obs_used": 663,
+        "dsr_n_rows": 1021,
+        "dsr_whole_field": 0.3091,
+        "dsr_contender_set": 0.3789,
+        "contender_spread_pct": 17.43,
+        "whole_field_spread_pct": 3223.89,
+        "bh_fdr": {
+          "cutoff": 0.03571428571428572,
+          "reject": [
+            false,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "alpha": 0.05,
+          "n_tests": 7,
+          "family": [
+            "selected_vs_incumbent",
+            "comp_vs_incumbent",
+            "blend_vs_incumbent",
+            "fv_channel",
+            "structural_channel",
+            "similarity_channel",
+            "kernel_channel"
+          ]
+        }
+      },
+      "gates": {
+        "anchors_pass": true,
+        "beats_incumbent": true,
+        "pbo_lt_0_2": true,
+        "dsr_contender_ge_0_95": false,
+        "pit_flat": true,
+        "fdr_survives": false
+      },
+      "verdict": "DISPLAY_ONLY",
+      "blend_gates_all_pass": false,
+      "revalidation_trigger": "re-run when >=4 strictly-matured folds exist (2029; 2 in 2027)",
+      "gate_sensitivity": {
+        "failing_gates": [
+          "dsr_contender_ge_0_95",
+          "fdr_survives"
+        ],
+        "would_pass_without_the_dsr_gate": false,
+        "binding_constraint": "not_dsr_alone",
+        "selected": "comp_mahalanobis_k15",
+        "runner_up": "blend_comp_fv",
+        "selection_margin_pct": 0.081,
+        "runner_up_beats_incumbent_p": 0.0045,
+        "note": "The pre-registered selection (min CRPS over the contender set) is reported as-run and NOT revisited; this block exists so the null is attributable, not so the pick can be changed after seeing the p-values."
+      }
+    }
+  },
+  "relaxed_context": {
+    "batter": {
+      "folds": [
+        {
+          "query_season": 2016,
+          "train_seasons": [
+            2015
+          ],
+          "n_query": 451,
+          "n_train": 447
+        },
+        {
+          "query_season": 2017,
+          "train_seasons": [
+            2015,
+            2016
+          ],
+          "n_query": 454,
+          "n_train": 898
+        },
+        {
+          "query_season": 2018,
+          "train_seasons": [
+            2015,
+            2016,
+            2017
+          ],
+          "n_query": 466,
+          "n_train": 1352
+        },
+        {
+          "query_season": 2019,
+          "train_seasons": [
+            2015,
+            2016,
+            2017,
+            2018
+          ],
+          "n_query": 470,
+          "n_train": 1818
+        },
+        {
+          "query_season": 2020,
+          "train_seasons": [
+            2015,
+            2016,
+            2017,
+            2018,
+            2019
+          ],
+          "n_query": 475,
+          "n_train": 2288
+        },
+        {
+          "query_season": 2021,
+          "train_seasons": [
+            2015,
+            2016,
+            2017,
+            2018,
+            2019,
+            2020
+          ],
+          "n_query": 484,
+          "n_train": 2763
+        },
+        {
+          "query_season": 2022,
+          "train_seasons": [
+            2015,
+            2016,
+            2017,
+            2018,
+            2019,
+            2020,
+            2021
+          ],
+          "n_query": 509,
+          "n_train": 3247
+        }
+      ],
+      "arms": {
+        "comp_gower_k15": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 75.66838672182817,
+          "crps_by_fold": {
+            "2016": 86.306,
+            "2017": 71.109,
+            "2018": 69.612,
+            "2019": 68.228,
+            "2020": 71.778,
+            "2021": 87.023,
+            "2022": 77.925
+          },
+          "pit_max_decile_dev": 0.0384,
+          "coverage_p10_p90": 0.8506
+        },
+        "comp_gower_k10": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 76.97937189716312,
+          "crps_by_fold": {
+            "2016": 86.294,
+            "2017": 71.874,
+            "2018": 69.685,
+            "2019": 69.854,
+            "2020": 72.569,
+            "2021": 90.811,
+            "2022": 80.501
+          },
+          "pit_max_decile_dev": 0.0934,
+          "coverage_p10_p90": 0.8843
+        },
+        "comp_gower_k25": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 74.83807971631214,
+          "crps_by_fold": {
+            "2016": 85.761,
+            "2017": 70.947,
+            "2018": 69.243,
+            "2019": 67.416,
+            "2020": 69.481,
+            "2021": 87.023,
+            "2022": 76.607
+          },
+          "pit_max_decile_dev": 0.0352,
+          "coverage_p10_p90": 0.8582
+        },
+        "comp_gower_k15_simweighted": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 79.23926338082387,
+          "crps_by_fold": {
+            "2016": 89.781,
+            "2017": 74.588,
+            "2018": 70.09,
+            "2019": 70.365,
+            "2020": 74.628,
+            "2021": 94.33,
+            "2022": 83.801
+          },
+          "pit_max_decile_dev": 0.0454,
+          "coverage_p10_p90": 0.7757
+        },
+        "comp_mahalanobis_k15": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 77.68621217494088,
+          "crps_by_fold": {
+            "2016": 87.804,
+            "2017": 71.071,
+            "2018": 69.994,
+            "2019": 69.711,
+            "2020": 75.697,
+            "2021": 93.286,
+            "2022": 79.671
+          },
+          "pit_max_decile_dev": 0.045,
+          "coverage_p10_p90": 0.8413
+        },
+        "comp_no_fv_k15": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 84.35541410559493,
+          "crps_by_fold": {
+            "2016": 98.433,
+            "2017": 80.403,
+            "2018": 76.175,
+            "2019": 74.068,
+            "2020": 71.412,
+            "2021": 98.89,
+            "2022": 93.019
+          },
+          "pit_max_decile_dev": 0.0366,
+          "coverage_p10_p90": 0.8586
+        },
+        "comp_components_only_k15": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 90.36001654846334,
+          "crps_by_fold": {
+            "2016": 101.081,
+            "2017": 89.643,
+            "2018": 84.837,
+            "2019": 81.24,
+            "2020": 73.532,
+            "2021": 101.293,
+            "2022": 101.519
+          },
+          "pit_max_decile_dev": 0.0419,
+          "coverage_p10_p90": 0.8559
+        },
+        "fv_bucket": {
+          "kind": "bucket",
+          "selectable": true,
+          "crps": 84.00372183440955,
+          "crps_by_fold": {
+            "2016": 96.181,
+            "2017": 78.226,
+            "2018": 77.31,
+            "2019": 77.326,
+            "2020": 75.896,
+            "2021": 97.825,
+            "2022": 87.824
+          },
+          "pit_max_decile_dev": 0.0507,
+          "coverage_p10_p90": 0.8174
+        },
+        "blend_comp_fv": {
+          "kind": "blend",
+          "selectable": true,
+          "crps": 77.25145729407883,
+          "crps_by_fold": {
+            "2016": 88.703,
+            "2017": 72.127,
+            "2018": 70.831,
+            "2019": 70.252,
+            "2020": 71.423,
+            "2021": 89.72,
+            "2022": 80.135
+          },
+          "pit_max_decile_dev": 0.0246,
+          "coverage_p10_p90": 0.8568
+        },
+        "random_k15": {
+          "kind": "placebo",
+          "selectable": false,
+          "crps": 97.707189322301,
+          "crps_by_fold": {
+            "2016": 104.95,
+            "2017": 92.201,
+            "2018": 90.899,
+            "2019": 88.854,
+            "2020": 86.937,
+            "2021": 116.79,
+            "2022": 106.447
+          },
+          "pit_max_decile_dev": 0.0415,
+          "coverage_p10_p90": 0.8471
+        },
+        "marginal": {
+          "kind": "degenerate",
+          "selectable": false,
+          "crps": 93.21499125595814,
+          "crps_by_fold": {
+            "2016": 102.453,
+            "2017": 89.478,
+            "2018": 85.41,
+            "2019": 85.131,
+            "2020": 80.098,
+            "2021": 108.526,
+            "2022": 103.333
+          },
+          "pit_max_decile_dev": 0.0353,
+          "coverage_p10_p90": 0.8466
+        },
+        "all_zero": {
+          "kind": "degenerate",
+          "selectable": false,
+          "crps": 130.22916666666666,
+          "crps_by_fold": {
+            "2016": 145.371,
+            "2017": 126.468,
+            "2018": 120.798,
+            "2019": 118.006,
+            "2020": 113.63,
+            "2021": 152.347,
+            "2022": 138.877
+          },
+          "pit_max_decile_dev": 0.5906,
+          "coverage_p10_p90": 0.3143
+        },
+        "oracle_k15": {
+          "kind": "anchor",
+          "selectable": false,
+          "crps": 7.785649527186761,
+          "crps_by_fold": {
+            "2016": 20.104,
+            "2017": 8.396,
+            "2018": 6.606,
+            "2019": 5.217,
+            "2020": 3.754,
+            "2021": 5.295,
+            "2022": 4.832
+          },
+          "pit_max_decile_dev": 0.1664,
+          "coverage_p10_p90": 0.9583
+        }
+      },
+      "best_contender": "comp_gower_k25",
+      "anchors": {
+        "oracle_is_the_floor": true,
+        "oracle_crps": 7.786,
+        "all_zero_loses": true,
+        "all_zero_crps": 130.229,
+        "marginal_loses": true,
+        "marginal_crps": 93.215,
+        "placebo_loses": true,
+        "placebo_crps": 97.707,
+        "all_pass": true
+      },
+      "deflation": {
+        "pbo_whole_field": {
+          "pbo": 0.0,
+          "n_splits": 35,
+          "computable": true,
+          "median_oos_rank_of_is_winner": 0.0,
+          "performance_degradation": 0.0,
+          "flip_distribution": {
+            "oracle_k15": 35
+          }
+        },
+        "pbo_contender_set": {
+          "pbo": 0.0,
+          "n_splits": 35,
+          "computable": true,
+          "median_oos_rank_of_is_winner": 0.0,
+          "performance_degradation": 0.0,
+          "flip_distribution": {
+            "comp_gower_k25": 35
+          }
+        },
+        "dsr_n_obs_used": 1134,
+        "dsr_n_rows": 2256,
+        "dsr_whole_field": 1.0,
+        "dsr_contender_set": 1.0,
+        "contender_spread_pct": 20.74,
+        "whole_field_spread_pct": 1572.68,
+        "bh_fdr": {
+          "cutoff": 0.05,
+          "reject": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "alpha": 0.05,
+          "n_tests": 7,
+          "family": [
+            "selected_vs_incumbent",
+            "comp_vs_incumbent",
+            "blend_vs_incumbent",
+            "fv_channel",
+            "structural_channel",
+            "similarity_channel",
+            "kernel_channel"
+          ]
+        }
+      },
+      "gates": {
+        "anchors_pass": true,
+        "beats_incumbent": true,
+        "pbo_lt_0_2": true,
+        "dsr_contender_ge_0_95": true,
+        "pit_flat": true,
+        "fdr_survives": true
+      }
+    },
+    "pitcher": {
+      "folds": [
+        {
+          "query_season": 2016,
+          "train_seasons": [
+            2015
+          ],
+          "n_query": 448,
+          "n_train": 451
+        },
+        {
+          "query_season": 2017,
+          "train_seasons": [
+            2015,
+            2016
+          ],
+          "n_query": 444,
+          "n_train": 899
+        },
+        {
+          "query_season": 2018,
+          "train_seasons": [
+            2015,
+            2016,
+            2017
+          ],
+          "n_query": 432,
+          "n_train": 1343
+        },
+        {
+          "query_season": 2019,
+          "train_seasons": [
+            2015,
+            2016,
+            2017,
+            2018
+          ],
+          "n_query": 429,
+          "n_train": 1775
+        },
+        {
+          "query_season": 2020,
+          "train_seasons": [
+            2015,
+            2016,
+            2017,
+            2018,
+            2019
+          ],
+          "n_query": 423,
+          "n_train": 2204
+        },
+        {
+          "query_season": 2021,
+          "train_seasons": [
+            2015,
+            2016,
+            2017,
+            2018,
+            2019,
+            2020
+          ],
+          "n_query": 415,
+          "n_train": 2627
+        },
+        {
+          "query_season": 2022,
+          "train_seasons": [
+            2015,
+            2016,
+            2017,
+            2018,
+            2019,
+            2020,
+            2021
+          ],
+          "n_query": 388,
+          "n_train": 3042
+        }
+      ],
+      "arms": {
+        "comp_gower_k15": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 117.64521739130431,
+          "crps_by_fold": {
+            "2016": 137.028,
+            "2017": 113.445,
+            "2018": 113.932,
+            "2019": 109.268,
+            "2020": 110.347,
+            "2021": 103.54,
+            "2022": 126.057
+          },
+          "pit_max_decile_dev": 0.0471,
+          "coverage_p10_p90": 0.8409
+        },
+        "comp_gower_k10": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 120.79822134387351,
+          "crps_by_fold": {
+            "2016": 139.602,
+            "2017": 118.494,
+            "2018": 117.522,
+            "2019": 113.191,
+            "2020": 110.863,
+            "2021": 107.561,
+            "2022": 128.1
+          },
+          "pit_max_decile_dev": 0.0985,
+          "coverage_p10_p90": 0.8804
+        },
+        "comp_gower_k25": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 114.78884189723331,
+          "crps_by_fold": {
+            "2016": 134.517,
+            "2017": 111.848,
+            "2018": 108.72,
+            "2019": 106.205,
+            "2020": 107.124,
+            "2021": 100.11,
+            "2022": 124.666
+          },
+          "pit_max_decile_dev": 0.0284,
+          "coverage_p10_p90": 0.8592
+        },
+        "comp_gower_k15_simweighted": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 127.49853221056883,
+          "crps_by_fold": {
+            "2016": 141.223,
+            "2017": 128.537,
+            "2018": 123.258,
+            "2019": 120.956,
+            "2020": 118.702,
+            "2021": 117.404,
+            "2022": 134.207
+          },
+          "pit_max_decile_dev": 0.0571,
+          "coverage_p10_p90": 0.7599
+        },
+        "comp_mahalanobis_k15": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 116.1878590250329,
+          "crps_by_fold": {
+            "2016": 133.429,
+            "2017": 115.413,
+            "2018": 113.278,
+            "2019": 107.474,
+            "2020": 105.982,
+            "2021": 102.513,
+            "2022": 124.725
+          },
+          "pit_max_decile_dev": 0.0461,
+          "coverage_p10_p90": 0.8399
+        },
+        "comp_no_fv_k15": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 124.98570048309176,
+          "crps_by_fold": {
+            "2016": 143.724,
+            "2017": 118.417,
+            "2018": 118.349,
+            "2019": 116.424,
+            "2020": 112.63,
+            "2021": 122.485,
+            "2022": 138.421
+          },
+          "pit_max_decile_dev": 0.0432,
+          "coverage_p10_p90": 0.8597
+        },
+        "comp_components_only_k15": {
+          "kind": "comp",
+          "selectable": true,
+          "crps": 129.3242973210364,
+          "crps_by_fold": {
+            "2016": 147.441,
+            "2017": 122.288,
+            "2018": 120.628,
+            "2019": 123.839,
+            "2020": 117.646,
+            "2021": 117.895,
+            "2022": 146.503
+          },
+          "pit_max_decile_dev": 0.0353,
+          "coverage_p10_p90": 0.8735
+        },
+        "fv_bucket": {
+          "kind": "bucket",
+          "selectable": true,
+          "crps": 117.31372265750801,
+          "crps_by_fold": {
+            "2016": 133.554,
+            "2017": 114.238,
+            "2018": 112.559,
+            "2019": 113.441,
+            "2020": 103.114,
+            "2021": 99.714,
+            "2022": 131.181
+          },
+          "pit_max_decile_dev": 0.0324,
+          "coverage_p10_p90": 0.8577
+        },
+        "blend_comp_fv": {
+          "kind": "blend",
+          "selectable": true,
+          "crps": 114.40110432762427,
+          "crps_by_fold": {
+            "2016": 132.284,
+            "2017": 110.366,
+            "2018": 110.08,
+            "2019": 107.846,
+            "2020": 103.547,
+            "2021": 99.273,
+            "2022": 126.19
+          },
+          "pit_max_decile_dev": 0.0156,
+          "coverage_p10_p90": 0.8676
+        },
+        "random_k15": {
+          "kind": "placebo",
+          "selectable": false,
+          "crps": 131.36955423803246,
+          "crps_by_fold": {
+            "2016": 149.368,
+            "2017": 127.636,
+            "2018": 123.426,
+            "2019": 121.834,
+            "2020": 118.705,
+            "2021": 123.473,
+            "2022": 147.66
+          },
+          "pit_max_decile_dev": 0.0387,
+          "coverage_p10_p90": 0.8671
+        },
+        "marginal": {
+          "kind": "degenerate",
+          "selectable": false,
+          "crps": 125.16332031616136,
+          "crps_by_fold": {
+            "2016": 144.931,
+            "2017": 115.977,
+            "2018": 118.4,
+            "2019": 116.433,
+            "2020": 109.857,
+            "2021": 112.408,
+            "2022": 147.754
+          },
+          "pit_max_decile_dev": 0.0324,
+          "coverage_p10_p90": 0.8819
+        },
+        "all_zero": {
+          "kind": "degenerate",
+          "selectable": false,
+          "crps": 181.6763833992095,
+          "crps_by_fold": {
+            "2016": 209.962,
+            "2017": 166.129,
+            "2018": 175.44,
+            "2019": 175.854,
+            "2020": 156.118,
+            "2021": 163.91,
+            "2022": 208.544
+          },
+          "pit_max_decile_dev": 0.6337,
+          "coverage_p10_p90": 0.2767
+        },
+        "oracle_k15": {
+          "kind": "anchor",
+          "selectable": false,
+          "crps": 5.271115502854633,
+          "crps_by_fold": {
+            "2016": 13.47,
+            "2017": 6.835,
+            "2018": 3.576,
+            "2019": 3.432,
+            "2020": 1.584,
+            "2021": 1.88,
+            "2022": 2.711
+          },
+          "pit_max_decile_dev": 0.1495,
+          "coverage_p10_p90": 0.9827
+        }
+      },
+      "best_contender": "blend_comp_fv",
+      "anchors": {
+        "oracle_is_the_floor": true,
+        "oracle_crps": 5.271,
+        "all_zero_loses": true,
+        "all_zero_crps": 181.676,
+        "marginal_loses": true,
+        "marginal_crps": 125.163,
+        "placebo_loses": true,
+        "placebo_crps": 131.37,
+        "all_pass": true
+      },
+      "deflation": {
+        "pbo_whole_field": {
+          "pbo": 0.0,
+          "n_splits": 35,
+          "computable": true,
+          "median_oos_rank_of_is_winner": 0.0,
+          "performance_degradation": 0.0,
+          "flip_distribution": {
+            "oracle_k15": 35
+          }
+        },
+        "pbo_contender_set": {
+          "pbo": 0.0,
+          "n_splits": 35,
+          "computable": true,
+          "median_oos_rank_of_is_winner": 0.125,
+          "performance_degradation": 0.0241257343954544,
+          "flip_distribution": {
+            "comp_gower_k25": 10,
+            "blend_comp_fv": 25
+          }
+        },
+        "dsr_n_obs_used": 1116,
+        "dsr_n_rows": 2024,
+        "dsr_whole_field": 0.9734,
+        "dsr_contender_set": 0.9835,
+        "contender_spread_pct": 13.04,
+        "whole_field_spread_pct": 3346.64,
+        "bh_fdr": {
+          "cutoff": 0.04285714285714286,
+          "reject": [
+            true,
+            false,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "alpha": 0.05,
+          "n_tests": 7,
+          "family": [
+            "selected_vs_incumbent",
+            "comp_vs_incumbent",
+            "blend_vs_incumbent",
+            "fv_channel",
+            "structural_channel",
+            "similarity_channel",
+            "kernel_channel"
+          ]
+        }
+      },
+      "gates": {
+        "anchors_pass": true,
+        "beats_incumbent": true,
+        "pbo_lt_0_2": true,
+        "dsr_contender_ge_0_95": true,
+        "pit_flat": true,
+        "fdr_survives": true
+      }
+    }
+  },
+  "ordering": {
+    "batter": {
+      "player_type": "batter",
+      "comp_arm": "comp_gower_k25",
+      "by_form": {
+        "comp_mean_fp": {
+          "rank_ic": {
+            "fv_only": 0.4938,
+            "board_proxy": 0.5213,
+            "comp_only": 0.5507,
+            "board_plus_comp_w10": 0.5446,
+            "board_plus_comp_w20": 0.5595,
+            "board_plus_comp_w30": 0.5688,
+            "board_plus_comp_w40": 0.5732,
+            "oracle_order": 1.0,
+            "random_order": 0.0058
+          },
+          "rank_ic_unmatched_support": {
+            "fv_only": 0.445,
+            "board_proxy": 0.4385,
+            "comp_only": 0.5458,
+            "board_plus_comp_w10": 0.4561,
+            "board_plus_comp_w20": 0.4668,
+            "board_plus_comp_w30": 0.4753,
+            "board_plus_comp_w40": 0.4752,
+            "oracle_order": 1.0,
+            "random_order": -0.0129
+          },
+          "best_contender": "board_plus_comp_w40",
+          "delta_vs_board_proxy": 0.0518,
+          "delta_by_fold": [
+            0.0432,
+            0.0354,
+            0.0514,
+            0.0773
+          ],
+          "folds_improved": 4,
+          "n_folds": 4,
+          "pbo_contender_set": {
+            "pbo": 0.0,
+            "n_splits": 6,
+            "computable": true,
+            "median_oos_rank_of_is_winner": 0.0,
+            "performance_degradation": 0.0,
+            "flip_distribution": {
+              "board_plus_comp_w40": 6
+            }
+          },
+          "anchors": {
+            "oracle_is_the_ceiling": true,
+            "oracle_ic": 1.0,
+            "placebo_loses": true,
+            "placebo_ic": 0.0058
+          },
+          "rows_with_comp": 0.6865271068169619,
+          "n_rows": 1863,
+          "n_rows_matched_support": 1052,
+          "matched_support_share": 0.5647
+        },
+        "comp_median_fp": {
+          "rank_ic": {
+            "fv_only": 0.4926,
+            "board_proxy": 0.5158,
+            "comp_only": 0.5269,
+            "board_plus_comp_w10": 0.5362,
+            "board_plus_comp_w20": 0.5489,
+            "board_plus_comp_w30": 0.5521,
+            "board_plus_comp_w40": 0.5516,
+            "oracle_order": 1.0,
+            "random_order": 0.0053
+          },
+          "rank_ic_unmatched_support": {
+            "fv_only": 0.445,
+            "board_proxy": 0.4385,
+            "comp_only": 0.5241,
+            "board_plus_comp_w10": 0.4501,
+            "board_plus_comp_w20": 0.4615,
+            "board_plus_comp_w30": 0.4622,
+            "board_plus_comp_w40": 0.4643,
+            "oracle_order": 1.0,
+            "random_order": -0.0111
+          },
+          "best_contender": "board_plus_comp_w30",
+          "delta_vs_board_proxy": 0.0363,
+          "delta_by_fold": [
+            0.0011,
+            0.0308,
+            0.0567,
+            0.0565
+          ],
+          "folds_improved": 4,
+          "n_folds": 4,
+          "pbo_contender_set": {
+            "pbo": 0.0,
+            "n_splits": 6,
+            "computable": true,
+            "median_oos_rank_of_is_winner": 0.41666666666666663,
+            "performance_degradation": 0.00866864967116282,
+            "flip_distribution": {
+              "board_plus_comp_w20": 2,
+              "board_plus_comp_w30": 1,
+              "board_plus_comp_w40": 3
+            }
+          },
+          "anchors": {
+            "oracle_is_the_ceiling": true,
+            "oracle_ic": 1.0,
+            "placebo_loses": true,
+            "placebo_ic": 0.0053
+          },
+          "rows_with_comp": 0.6865271068169619,
+          "n_rows": 1863,
+          "n_rows_matched_support": 1056,
+          "matched_support_share": 0.5668
+        }
+      }
+    },
+    "pitcher": {
+      "player_type": "pitcher",
+      "comp_arm": "comp_gower_k25",
+      "by_form": {
+        "comp_mean_fp": {
+          "rank_ic": {
+            "fv_only": 0.3899,
+            "board_proxy": 0.3553,
+            "comp_only": 0.4081,
+            "board_plus_comp_w10": 0.3812,
+            "board_plus_comp_w20": 0.4017,
+            "board_plus_comp_w30": 0.4092,
+            "board_plus_comp_w40": 0.4146,
+            "oracle_order": 1.0,
+            "random_order": 0.0026
+          },
+          "rank_ic_unmatched_support": {
+            "fv_only": 0.3427,
+            "board_proxy": 0.2933,
+            "comp_only": 0.3924,
+            "board_plus_comp_w10": 0.3055,
+            "board_plus_comp_w20": 0.3143,
+            "board_plus_comp_w30": 0.3213,
+            "board_plus_comp_w40": 0.3246,
+            "oracle_order": 1.0,
+            "random_order": -0.0144
+          },
+          "best_contender": "board_plus_comp_w40",
+          "delta_vs_board_proxy": 0.0593,
+          "delta_by_fold": [
+            0.0526,
+            0.054,
+            0.0815,
+            0.0491
+          ],
+          "folds_improved": 4,
+          "n_folds": 4,
+          "pbo_contender_set": {
+            "pbo": 0.16666666666666666,
+            "n_splits": 6,
+            "computable": true,
+            "median_oos_rank_of_is_winner": 0.16666666666666666,
+            "performance_degradation": 0.004615162065789491,
+            "flip_distribution": {
+              "comp_only": 2,
+              "board_plus_comp_w40": 4
+            }
+          },
+          "anchors": {
+            "oracle_is_the_ceiling": true,
+            "oracle_ic": 1.0,
+            "placebo_loses": true,
+            "placebo_ic": 0.0026
+          },
+          "rows_with_comp": 0.6353453640323584,
+          "n_rows": 1607,
+          "n_rows_matched_support": 1001,
+          "matched_support_share": 0.6229
+        },
+        "comp_median_fp": {
+          "rank_ic": {
+            "fv_only": 0.3615,
+            "board_proxy": 0.3311,
+            "comp_only": 0.3658,
+            "board_plus_comp_w10": 0.3554,
+            "board_plus_comp_w20": 0.3751,
+            "board_plus_comp_w30": 0.3816,
+            "board_plus_comp_w40": 0.3821,
+            "oracle_order": 1.0,
+            "random_order": 0.0047
+          },
+          "rank_ic_unmatched_support": {
+            "fv_only": 0.3427,
+            "board_proxy": 0.2933,
+            "comp_only": 0.3735,
+            "board_plus_comp_w10": 0.3044,
+            "board_plus_comp_w20": 0.3133,
+            "board_plus_comp_w30": 0.3196,
+            "board_plus_comp_w40": 0.3236,
+            "oracle_order": 1.0,
+            "random_order": 0.0197
+          },
+          "best_contender": "board_plus_comp_w40",
+          "delta_vs_board_proxy": 0.051,
+          "delta_by_fold": [
+            0.0718,
+            0.034,
+            0.0682,
+            0.0302
+          ],
+          "folds_improved": 4,
+          "n_folds": 4,
+          "pbo_contender_set": {
+            "pbo": 0.16666666666666666,
+            "n_splits": 6,
+            "computable": true,
+            "median_oos_rank_of_is_winner": 0.16666666666666666,
+            "performance_degradation": 0.0005800401150580781,
+            "flip_distribution": {
+              "comp_only": 1,
+              "board_plus_comp_w30": 2,
+              "board_plus_comp_w40": 3
+            }
+          },
+          "anchors": {
+            "oracle_is_the_ceiling": true,
+            "oracle_ic": 1.0,
+            "placebo_loses": true,
+            "placebo_ic": 0.0047
+          },
+          "rows_with_comp": 0.6353453640323584,
+          "n_rows": 1607,
+          "n_rows_matched_support": 999,
+          "matched_support_share": 0.6217
+        }
+      }
+    }
+  },
+  "ordering_relaxed_context": {
+    "batter": {
+      "player_type": "batter",
+      "comp_arm": "comp_gower_k25",
+      "by_form": {
+        "comp_mean_fp": {
+          "rank_ic": {
+            "fv_only": 0.5024,
+            "board_proxy": 0.5308,
+            "comp_only": 0.5703,
+            "board_plus_comp_w10": 0.5562,
+            "board_plus_comp_w20": 0.5735,
+            "board_plus_comp_w30": 0.5817,
+            "board_plus_comp_w40": 0.5845,
+            "oracle_order": 1.0,
+            "random_order": -0.0197
+          },
+          "rank_ic_unmatched_support": {
+            "fv_only": 0.4526,
+            "board_proxy": 0.4606,
+            "comp_only": 0.5752,
+            "board_plus_comp_w10": 0.4799,
+            "board_plus_comp_w20": 0.4941,
+            "board_plus_comp_w30": 0.5005,
+            "board_plus_comp_w40": 0.503,
+            "oracle_order": 1.0,
+            "random_order": -0.0062
+          },
+          "best_contender": "board_plus_comp_w40",
+          "delta_vs_board_proxy": 0.0537,
+          "delta_by_fold": [
+            0.0401,
+            0.0771,
+            0.0833,
+            0.0662,
+            0.027,
+            0.0185,
+            0.0637
+          ],
+          "folds_improved": 7,
+          "n_folds": 7,
+          "pbo_contender_set": {
+            "pbo": 0.0,
+            "n_splits": 35,
+            "computable": true,
+            "median_oos_rank_of_is_winner": 0.0,
+            "performance_degradation": 0.0,
+            "flip_distribution": {
+              "board_plus_comp_w30": 1,
+              "board_plus_comp_w40": 34
+            }
+          },
+          "anchors": {
+            "oracle_is_the_ceiling": true,
+            "oracle_ic": 1.0,
+            "placebo_loses": true,
+            "placebo_ic": -0.0197
+          },
+          "rows_with_comp": 0.7010565568676196,
+          "n_rows": 3218,
+          "n_rows_matched_support": 2017,
+          "matched_support_share": 0.6268
+        },
+        "comp_median_fp": {
+          "rank_ic": {
+            "fv_only": 0.5103,
+            "board_proxy": 0.5367,
+            "comp_only": 0.5672,
+            "board_plus_comp_w10": 0.5598,
+            "board_plus_comp_w20": 0.5743,
+            "board_plus_comp_w30": 0.5836,
+            "board_plus_comp_w40": 0.5852,
+            "oracle_order": 1.0,
+            "random_order": -0.0038
+          },
+          "rank_ic_unmatched_support": {
+            "fv_only": 0.4526,
+            "board_proxy": 0.4606,
+            "comp_only": 0.5645,
+            "board_plus_comp_w10": 0.478,
+            "board_plus_comp_w20": 0.4883,
+            "board_plus_comp_w30": 0.4956,
+            "board_plus_comp_w40": 0.4972,
+            "oracle_order": 1.0,
+            "random_order": 0.014
+          },
+          "best_contender": "board_plus_comp_w40",
+          "delta_vs_board_proxy": 0.0485,
+          "delta_by_fold": [
+            -0.0004,
+            0.0652,
+            0.0517,
+            0.0755,
+            0.0366,
+            0.0524,
+            0.0582
+          ],
+          "folds_improved": 6,
+          "n_folds": 7,
+          "pbo_contender_set": {
+            "pbo": 0.0,
+            "n_splits": 35,
+            "computable": true,
+            "median_oos_rank_of_is_winner": 0.16666666666666666,
+            "performance_degradation": 8.946883339611134e-05,
+            "flip_distribution": {
+              "board_plus_comp_w30": 9,
+              "board_plus_comp_w40": 26
+            }
+          },
+          "anchors": {
+            "oracle_is_the_ceiling": true,
+            "oracle_ic": 1.0,
+            "placebo_loses": true,
+            "placebo_ic": -0.0038
+          },
+          "rows_with_comp": 0.7010565568676196,
+          "n_rows": 3218,
+          "n_rows_matched_support": 2011,
+          "matched_support_share": 0.6249
+        }
+      }
+    },
+    "pitcher": {
+      "player_type": "pitcher",
+      "comp_arm": "comp_gower_k25",
+      "by_form": {
+        "comp_mean_fp": {
+          "rank_ic": {
+            "fv_only": 0.3479,
+            "board_proxy": 0.3161,
+            "comp_only": 0.3708,
+            "board_plus_comp_w10": 0.3423,
+            "board_plus_comp_w20": 0.3573,
+            "board_plus_comp_w30": 0.3662,
+            "board_plus_comp_w40": 0.3725,
+            "oracle_order": 1.0,
+            "random_order": 0.0072
+          },
+          "rank_ic_unmatched_support": {
+            "fv_only": 0.3203,
+            "board_proxy": 0.3062,
+            "comp_only": 0.3682,
+            "board_plus_comp_w10": 0.3197,
+            "board_plus_comp_w20": 0.3209,
+            "board_plus_comp_w30": 0.3206,
+            "board_plus_comp_w40": 0.3185,
+            "oracle_order": 1.0,
+            "random_order": -0.005
+          },
+          "best_contender": "board_plus_comp_w40",
+          "delta_vs_board_proxy": 0.0564,
+          "delta_by_fold": [
+            0.0226,
+            0.0788,
+            0.0746,
+            0.0852,
+            0.0239,
+            0.0725,
+            0.0372
+          ],
+          "folds_improved": 7,
+          "n_folds": 7,
+          "pbo_contender_set": {
+            "pbo": 0.0,
+            "n_splits": 35,
+            "computable": true,
+            "median_oos_rank_of_is_winner": 0.16666666666666666,
+            "performance_degradation": 0.004527082724311515,
+            "flip_distribution": {
+              "comp_only": 14,
+              "board_plus_comp_w40": 21
+            }
+          },
+          "anchors": {
+            "oracle_is_the_ceiling": true,
+            "oracle_ic": 1.0,
+            "placebo_loses": true,
+            "placebo_ic": 0.0072
+          },
+          "rows_with_comp": 0.6926762491444216,
+          "n_rows": 2922,
+          "n_rows_matched_support": 1997,
+          "matched_support_share": 0.6834
+        },
+        "comp_median_fp": {
+          "rank_ic": {
+            "fv_only": 0.3414,
+            "board_proxy": 0.3105,
+            "comp_only": 0.359,
+            "board_plus_comp_w10": 0.3404,
+            "board_plus_comp_w20": 0.3563,
+            "board_plus_comp_w30": 0.3632,
+            "board_plus_comp_w40": 0.3679,
+            "oracle_order": 1.0,
+            "random_order": -0.003
+          },
+          "rank_ic_unmatched_support": {
+            "fv_only": 0.3203,
+            "board_proxy": 0.3062,
+            "comp_only": 0.3624,
+            "board_plus_comp_w10": 0.3212,
+            "board_plus_comp_w20": 0.3271,
+            "board_plus_comp_w30": 0.3255,
+            "board_plus_comp_w40": 0.3257,
+            "oracle_order": 1.0,
+            "random_order": -0.0065
+          },
+          "best_contender": "board_plus_comp_w40",
+          "delta_vs_board_proxy": 0.0574,
+          "delta_by_fold": [
+            0.0391,
+            0.0914,
+            0.06,
+            0.0944,
+            0.0104,
+            0.0454,
+            0.0611
+          ],
+          "folds_improved": 7,
+          "n_folds": 7,
+          "pbo_contender_set": {
+            "pbo": 0.02857142857142857,
+            "n_splits": 35,
+            "computable": true,
+            "median_oos_rank_of_is_winner": 0.0,
+            "performance_degradation": 0.0,
+            "flip_distribution": {
+              "comp_only": 4,
+              "board_plus_comp_w30": 6,
+              "board_plus_comp_w40": 25
+            }
+          },
+          "anchors": {
+            "oracle_is_the_ceiling": true,
+            "oracle_ic": 1.0,
+            "placebo_loses": true,
+            "placebo_ic": -0.003
+          },
+          "rows_with_comp": 0.6926762491444216,
+          "n_rows": 2922,
+          "n_rows_matched_support": 2005,
+          "matched_support_share": 0.6862
+        }
+      }
+    }
+  },
+  "verdict_by_type": {
+    "batter": "BLEND_WIRE",
+    "pitcher": "DISPLAY_ONLY"
+  },
+  "verdict": "SPLIT"
+}

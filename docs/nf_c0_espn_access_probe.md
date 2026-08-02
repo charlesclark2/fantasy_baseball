@@ -221,6 +221,88 @@ Two consequences, both now shipped:
    points and a fabricated boundary shown to a user is the same "it looked right in a table" guess
    the map's own header forbids — one layer over, in the display layer.
 
+### 4b. Rosters (2026-08-01) — and the one thing still unvalidated
+
+The read link now requests `mSettings` + `mTeam` + `mRoster` in one URL (ESPN takes repeated
+`view=` params), so importing rosters costs the user no extra paste. Teams, owner display names and
+rostered players all come across; a settings-only paste from an older link still imports completely,
+because rosters are additive rather than a new precondition.
+
+**The pre-draft case is the normal case, not an edge case.** People import *before* drafting — that
+is when a draft tool is worth having — and an undrafted ESPN league returns its teams with empty
+rosters. That reads as a successful import with a next step ("import again after your draft"), never
+as a partial failure. Both real leagues are undrafted, so this is the path with real-payload backing.
+
+Two deliberate limitations, both disclosed in the preview rather than papered over:
+
+* **We do not mark which team is yours.** ESPN's response never identifies the requesting account,
+  and the credential that would is exactly the one we refuse to hold. Guessing would be worse than
+  saying so.
+* **Member SWID GUIDs are used to label a team and then dropped.** A GUID is an identifier, not a
+  credential — it cannot authenticate without `espn_s2` — but "not a credential" is not a reason to
+  keep one.
+
+⚠️ **THE CREDENTIAL SCRUBBER WAS NARROWED, ON PURPOSE.** `mTeam` returns `members[].id` as a SWID
+GUID, so the original bare `\bSWID\b` pattern was a **false-refusal landmine**: had ESPN labelled
+that field with the literal word, every honest import would have been rejected with a message
+accusing the user of pasting credentials. It now matches the cookie-assignment form (`SWID=`). The
+asymmetry decides it — narrowing costs nothing, because a pasted cookie header is caught three times
+over (`espn_s2` anywhere, the `Cookie:`/`-H cookie:` patterns, and this), while over-matching breaks
+the feature for everyone. A dedicated test class re-proves the guard against real DevTools copies.
+
+### 4c. ✅ The rostered path, validated by a PRIOR SEASON (2026-08-01)
+
+Both current-season leagues are `drafted: false`, so no obtainable payload contained a roster. A
+**prior season does** — swapping `seasons/2026` for `seasons/2025` on the same link returned a fully
+drafted league, which is the general trick: **a historical read supplies a payload state the current
+season cannot produce.** Results:
+
+* **All four guessed field names are correct** — `playerPoolEntry.player.fullName`, `eligibleSlots`,
+  `proTeamId`, `lineupSlotId`.
+* **`_PRO_TEAM_BY_ID` is now identity-checked on seven rows** (GB 9, LAR 14, SF 25, SEA 26, CAR 29,
+  KC 12, BAL 33), confirmed by the players actually on those teams in 2025. The lower evidence bar
+  was raised the moment evidence existed.
+* All seven players read with the correct position, pro team and starter flag — including Mahomes
+  on IR (`lineupSlotId` 21) correctly counted as a non-starter.
+
+🪤 **THE NEAR-MISS, and the best argument in this memo for reusing verified evidence.** ESPN's
+`defaultPositionId` is a **different numbering from lineup slots**, and they overlap enough to look
+interchangeable: `defaultPositionId` 4 means **TE**, while lineup **slot** 4 means **WR**. Had
+position been read from ESPN's position id against the slot map — the obvious "simplification" — 
+**George Kittle and Mark Andrews would have imported as WR, and Mahomes, Adams and McMillan would
+have had no position at all**, silently, on a roster we display. Deriving from `eligibleSlots`
+against the map the scoring work had already verified avoided it. There is now a test asserting the
+collision so the simplification cannot be re-proposed from memory.
+
+Two smaller findings: the payload carries eligibility slot **25**, absent from `ROSTER_SLOT_MAP`
+(ignored, and proven not to blank a known position); and `mTeam` really does return member ids in
+**SWID GUID form on every league**, which is the concrete justification for narrowing the scrubber.
+
+### 4d. 📦 The size wall the full file exposed — and it was a ship-blocker
+
+The complete drafted response is **3.29 MB for a TEN-team league**, and the server's paste cap is
+4 MB. Scaled by team count that is **~99% of the cap at 12 teams and OVER it at 14** — so the most
+common league sizes would have failed on payload size alone, with a message about the paste being
+too large and no way for the user to act on it. Only the full file showed this; the truncated paste
+never could.
+
+**~96% of those bytes are fields the import never reads** — per-player season/projection `stats`
+blocks, `draftRanksByRankType`, `ownership`, `ratings`, and per-member `notificationSettings`. The
+client now drops them before upload (`pruneEspnPayload`): **3.29 MB → 147 KB (4.5%)**, which puts a
+16-team league at ~235 KB.
+
+Two deliberate choices: it is a **DENYLIST, not an allowlist** — the API and the frontend deploy
+independently, so a client keeping only today's known fields would silently starve a newer server
+of a field it had begun to read, whereas removing only verified-unread fields is safe in both skew
+directions; and a paste that fails to parse is **passed through untouched**, so a pruning bug can
+never turn a good paste into a rejected one and a cURL paste still reaches the credential scrubber.
+The invariant — pruning does not change the imported league — is asserted in the tests.
+
+🔒 **The committed fixture is anonymised.** The real payload carries the operator's leaguemates'
+first and last names, their ESPN account GUIDs, and per-member notification settings. The GUID
+*shape* is preserved because the parser and scrubber must handle it; the identities are not ours to
+commit, and the multi-KB per-player `stats` arrays are trimmed since we never read them.
+
 ⭐ This is the second time the rule has paid on this story (the first was Sleeper's coarse `fgm_50p`
 vs fine `fgm_50_59`/`fgm_60p`, which survived 56 tests and a live-verified league). **Both fixtures
 are kept, and a test asserts they exercise disjoint scoring families** — if they ever converge, the

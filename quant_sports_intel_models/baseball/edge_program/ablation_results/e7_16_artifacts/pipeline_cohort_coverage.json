@@ -1,0 +1,55 @@
+{
+  "board_rows": 7186,
+  "player_type_source": {
+    "position": 7175,
+    "default": 6,
+    "milb_game_logs": 5
+  },
+  "unknown_position_tokens": [
+    "TWP"
+  ],
+  "player_type_mismatch_by_season": {
+    "2015": 0.0022,
+    "2016": 0.0022,
+    "2017": 0.0,
+    "2018": 0.0,
+    "2019": 0.0,
+    "2020": 0.0,
+    "2021": 0.0,
+    "2022": 0.0
+  },
+  "study_rows": 7186,
+  "distinct_players": 3202,
+  "board_seasons": [
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022
+  ],
+  "by_type": {
+    "batter": 3756,
+    "pitcher": 3430
+  },
+  "debut_rate": {
+    "batter": 0.4159,
+    "pitcher": 0.4446
+  },
+  "fv_populated": 0.9153,
+  "age_populated": 1.0,
+  "minor_line_populated": 0.7261,
+  "rows_by_season": {
+    "2015": 898,
+    "2016": 899,
+    "2017": 898,
+    "2018": 898,
+    "2019": 899,
+    "2020": 898,
+    "2021": 899,
+    "2022": 897
+  },
+  "bio_never_from_the_future": true
+}

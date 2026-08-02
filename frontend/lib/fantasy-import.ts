@@ -150,6 +150,44 @@ export function espnReadUrl(
   )
 }
 
+/** Fields ESPN ships that the import NEVER reads. Measured on a real drafted 10-team league:
+ *  the response is **3.3 MB, of which 96% is these** — per-player season/projection stat blocks,
+ *  draft ranks, ownership percentages, and per-member notification preferences.
+ *
+ *  ⚠️ WHY THIS EXISTS: without it a real payload is 82% of the server's 4 MB paste cap, a **12-team
+ *  league lands at ~99%, and a 14-team league is REFUSED outright** — the most common league sizes,
+ *  failing on payload size alone. Pruning takes the same league to ~147 KB (4.5%).
+ *
+ *  🚫 DENYLIST, NOT AN ALLOWLIST, DELIBERATELY. Keeping only the fields today's parser reads would
+ *  shrink it further, but the API and this app deploy INDEPENDENTLY (see the `leagues` note above),
+ *  so an older client would silently starve a newer server of a field it had begun to read. Removing
+ *  only what we have verified is unread is safe in both skew directions. */
+const ESPN_UNREAD_PLAYER_FIELDS = ["stats", "draftRanksByRankType", "ownership", "outlooks"] as const
+
+/** Drop the unread bulk before upload. Returns the ORIGINAL text unchanged if anything is
+ *  unexpected — the server owns validation, and a pruning bug must never turn a good paste into a
+ *  rejected one. */
+export function pruneEspnPayload(text: string): string {
+  try {
+    const doc = JSON.parse(text)
+    if (!doc || typeof doc !== "object") return text
+    for (const m of doc.members ?? []) delete m?.notificationSettings
+    for (const t of doc.teams ?? []) {
+      for (const e of t?.roster?.entries ?? []) {
+        const pool = e?.playerPoolEntry
+        if (!pool) continue
+        delete pool.ratings
+        for (const f of ESPN_UNREAD_PLAYER_FIELDS) delete pool.player?.[f]
+      }
+    }
+    return JSON.stringify(doc)
+  } catch {
+    // Not JSON, or an unexpected shape. Send it as-is so the server returns its own clear message
+    // rather than us failing here with a worse one.
+    return text
+  }
+}
+
 /** Parse a pasted ESPN settings response. The server refuses a paste containing credential
  *  material (a "Copy as cURL" carries the whole Cookie header) and never logs the body. */
 export function espnPreview(
@@ -159,7 +197,7 @@ export function espnPreview(
 ): Promise<ImportPreview> {
   return apiFetch(
     `/fantasy/import/espn/preview`,
-    { method: "POST", body: JSON.stringify({ payload, season }) },
+    { method: "POST", body: JSON.stringify({ payload: pruneEspnPayload(payload), season }) },
     token,
   )
 }

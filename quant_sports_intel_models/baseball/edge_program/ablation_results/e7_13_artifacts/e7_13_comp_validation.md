@@ -147,64 +147,64 @@ CRPS grades a distribution; a draft board is purely ordinal. This is the statist
 
 ### Batters — `comp_mean_fp` (comp arm `comp_gower_k25`)
 
-Best contender `comp_only`, ΔIC vs the board's own formula **+0.0934**, improved in 4/4 folds (per fold [0.0176, 0.1512, 0.1232, 0.0815]). PBO `0.0`. Anchors: oracle-is-ceiling `True`, placebo IC `0.0047`.
+Best contender `board_plus_comp_w40`, ΔIC vs the board's own formula **+0.0817**, improved in 4/4 folds (per fold [0.049, 0.1074, 0.0948, 0.0754]). PBO `0.0`. Anchors: oracle-is-ceiling `True`, placebo IC `0.0155`.
 
 | arm | rank-IC |
 |---|---|
 | `oracle_order` | +1.0000 |
+| `board_plus_comp_w40` | +0.5699 |
 | `comp_only` | +0.5661 |
-| `board_plus_comp_w40` | +0.5363 |
-| `board_plus_comp_w30` | +0.5295 |
-| `board_plus_comp_w20` | +0.5174 |
-| `board_plus_comp_w10` | +0.4980 |
-| `board_proxy` | +0.4728 |
-| `fv_only` | +0.4161 |
-| `random_order` | +0.0047 |
+| `board_plus_comp_w30` | +0.5603 |
+| `board_plus_comp_w20` | +0.5446 |
+| `board_plus_comp_w10` | +0.5205 |
+| `board_proxy` | +0.4883 |
+| `fv_only` | +0.4050 |
+| `random_order` | +0.0155 |
 
 ### Batters — `comp_median_fp` (comp arm `comp_gower_k25`)
 
-Best contender `comp_only`, ΔIC vs the board's own formula **+0.0903**, improved in 4/4 folds (per fold [0.002, 0.1445, 0.1322, 0.0827]). PBO `0.0`. Anchors: oracle-is-ceiling `True`, placebo IC `-0.0062`.
+Best contender `board_plus_comp_w40`, ΔIC vs the board's own formula **+0.0833**, improved in 4/4 folds (per fold [0.044, 0.1087, 0.1023, 0.0781]). PBO `0.0`. Anchors: oracle-is-ceiling `True`, placebo IC `-0.0186`.
 
 | arm | rank-IC |
 |---|---|
 | `oracle_order` | +1.0000 |
+| `board_plus_comp_w40` | +0.5715 |
+| `board_plus_comp_w30` | +0.5639 |
 | `comp_only` | +0.5631 |
-| `board_plus_comp_w40` | +0.5361 |
-| `board_plus_comp_w30` | +0.5311 |
-| `board_plus_comp_w20` | +0.5190 |
-| `board_plus_comp_w10` | +0.4988 |
-| `board_proxy` | +0.4728 |
-| `fv_only` | +0.4161 |
-| `random_order` | -0.0062 |
+| `board_plus_comp_w20` | +0.5481 |
+| `board_plus_comp_w10` | +0.5218 |
+| `board_proxy` | +0.4883 |
+| `fv_only` | +0.4050 |
+| `random_order` | -0.0186 |
 
 ### Pitchers — `comp_mean_fp` (comp arm `comp_gower_k25`)
 
-Best contender `board_plus_comp_w40`, ΔIC vs the board's own formula **+0.0322**, improved in 3/4 folds (per fold [0.0232, -0.0049, 0.0623, 0.0483]). PBO `0.16666666666666666`. Anchors: oracle-is-ceiling `True`, placebo IC `-0.0002`.
+Best contender `board_plus_comp_w40`, ΔIC vs the board's own formula **+0.0410**, improved in 4/4 folds (per fold [0.036, 0.0026, 0.0715, 0.0538]). PBO `0.16666666666666666`. Anchors: oracle-is-ceiling `True`, placebo IC `-0.0017`.
 
 | arm | rank-IC |
 |---|---|
 | `oracle_order` | +1.0000 |
-| `board_plus_comp_w40` | +0.4091 |
-| `board_plus_comp_w30` | +0.4078 |
-| `board_plus_comp_w20` | +0.4038 |
+| `board_plus_comp_w40` | +0.4086 |
+| `board_plus_comp_w30` | +0.4050 |
 | `comp_only` | +0.3993 |
-| `board_plus_comp_w10` | +0.3954 |
-| `board_proxy` | +0.3769 |
-| `fv_only` | +0.3733 |
-| `random_order` | -0.0002 |
+| `board_plus_comp_w20` | +0.3989 |
+| `board_plus_comp_w10` | +0.3884 |
+| `board_proxy` | +0.3676 |
+| `fv_only` | +0.3671 |
+| `random_order` | -0.0017 |
 
 ### Pitchers — `comp_median_fp` (comp arm `comp_gower_k25`)
 
-Best contender `board_plus_comp_w40`, ΔIC vs the board's own formula **+0.0395**, improved in 4/4 folds (per fold [0.0261, 0.0149, 0.0669, 0.05]). PBO `0.16666666666666666`. Anchors: oracle-is-ceiling `True`, placebo IC `0.0086`.
+Best contender `board_plus_comp_w40`, ΔIC vs the board's own formula **+0.0448**, improved in 4/4 folds (per fold [0.0395, 0.0149, 0.0732, 0.0517]). PBO `0.5`. Anchors: oracle-is-ceiling `True`, placebo IC `0.0197`.
 
 | arm | rank-IC |
 |---|---|
 | `oracle_order` | +1.0000 |
-| `board_plus_comp_w40` | +0.4164 |
-| `board_plus_comp_w30` | +0.4120 |
-| `board_plus_comp_w20` | +0.4085 |
+| `board_plus_comp_w40` | +0.4124 |
+| `board_plus_comp_w30` | +0.4080 |
+| `board_plus_comp_w20` | +0.4028 |
 | `comp_only` | +0.4002 |
-| `board_plus_comp_w10` | +0.3985 |
-| `board_proxy` | +0.3769 |
-| `fv_only` | +0.3733 |
-| `random_order` | +0.0086 |
+| `board_plus_comp_w10` | +0.3914 |
+| `board_proxy` | +0.3676 |
+| `fv_only` | +0.3671 |
+| `random_order` | +0.0197 |
