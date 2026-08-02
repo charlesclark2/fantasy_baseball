@@ -39,6 +39,7 @@ import { useAllTrackRecordSeasons, useTrackRecordManifest } from "@/lib/fantasy-
 import { positionTierMap, type Player } from "@/lib/draft-optimizer"
 import { initials, nflTeamLogoUrl } from "@/lib/nfl-teams"
 import type { ProjectedPlayer } from "@/lib/fantasy"
+import { PlayerHistoryPanel } from "@/components/fantasy/player-history-panel"
 import {
   ADP_DELTA_LABEL,
   AdpDelta,
@@ -562,6 +563,12 @@ function EntitledPlayerView({ playerId }: { playerId: string }) {
               </div>
             </section>
           )}
+
+          {/* NF3.3 — past-season actual finish + past ADP + injury-report log. Absent (renders
+              nothing) for a rookie with no past season and no report, or a DST (a team, not a
+              person — never carries an injury log), same graceful-absence convention as the Bio
+              section above. */}
+          <PlayerHistoryPanel history={proj.history} />
 
           <UncertaintyNote>
             <p className="mt-2">{UNCERTAINTY_HELP.empirical} {UNCERTAINTY_HELP.calibrated_per_player}</p>

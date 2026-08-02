@@ -125,6 +125,10 @@
       {
         "tag": "new",
         "text": "The NFL fantasy player page now shows what pushes each player's number up or down, player by player \u2014 recent scoring pace, age, team offensive environment, and a handful of other signals, each shown in actual points, positive or negative, specific to that player. This comes from a separate research model of ours (not the one behind the projection shown above it), so its own total for a player is not always the exact same number \u2014 think of it as a second, independent read on what makes him him, not a receipt for the projection above. Covers QB, RB, WR and TE; kickers and defenses aren't covered by this model. Look for it under a player's draft value on their page."
+      },
+      {
+        "tag": "new",
+        "text": "Subscriber player pages now show a History panel: how that player actually finished in each past season back to 2019, what the market's average draft position said about him that season, and a weekly injury-report log with a games-missed count. This is the same past-season computation already powering the free Track Record page, now attached directly to a player's own page so you don't have to cross-reference the two, plus a genuinely new injury history \u2014 every weekly game-report and practice-participation status on file, most recent first. Framed honestly on purpose: the games-missed count is how many of his team's games he didn't play in for any reason (injury, a healthy scratch, a roster move), not a claim that every absence was injury-caused \u2014 the weekly report next to it is where a specific injury is actually named, only when one was reported. None of this is a claim about this season; it's a straight recompute of realized history, wins and losses both. A rookie with no past season, or a team defense (a team, not a person), simply has no panel to show."
       }
     ]
   },
