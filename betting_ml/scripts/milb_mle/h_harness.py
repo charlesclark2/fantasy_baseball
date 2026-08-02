@@ -378,6 +378,18 @@ def null_analysis(results: dict, pvals: dict, foil: str = "L0_foil") -> dict:
     ⚠️ And the distinction the same lesson insists on: a best arm that does NOT beat the foil on average
     is a **GENUINE ABSENCE** — no sample size rescues a negative point estimate — not an underpowered
     effect. The two must not be recorded as the same kind of null.
+
+    🪤 **THE EXTRAPOLATION MUST BE COMPUTED AGAINST THE GATE IT CLAIMS TO EXTRAPOLATE (E7.15 H3, found
+    2026-08-01 while reading a live result).** `folds_needed_DSR` originally called `deflated_sharpe`
+    WITHOUT `trial_sharpes`, while the gate (`dsr_report`) passes the real per-arm Sharpe series. Those
+    are two different benchmarks: `sr0` scales with the cross-trial Sharpe DISPERSION, so omitting it
+    silently substitutes an easier bar. Live consequence — batter `bb_pct` reported "needs 11 folds,
+    already has 11, **0 extra seasons**" against a gate reading **DSR 0.607 vs the 0.95 floor**, i.e.
+    the null analysis said an arm was on the doorstep when it was not close. A diagnostic that reports
+    on a quantity it is not actually measuring is the session's recurring shape, one instrument over.
+    **The dispersion is a property of the FIELD, not of n**, so it is held fixed while only the winner's
+    series is resized — which is exactly the "holding the effect size fixed" logic already stated above.
+    Pinned by `test_null_analysis_extrapolation_matches_its_own_gate`.
     """
     from scipy import stats
 
@@ -398,6 +410,15 @@ def null_analysis(results: dict, pvals: dict, foil: str = "L0_foil") -> dict:
         mae = r.mae_by_fold
         skill = (mae[foil] - mae[str(cand["arm"])]).dropna().to_numpy(float)
         n = len(skill)
+        # ⭐ the SAME trial field the DSR gate used, so the extrapolation extrapolates THAT gate and not
+        # an easier one (see the docstring). The dispersion is a property of the field, not of n.
+        eligible_arms = [str(a) for a in r.leaderboard.loc[r.leaderboard["selectable"], "arm"]
+                         if str(a) in mae.columns and str(a) != foil]
+        trial_sharpes = []
+        for c in eligible_arms:
+            s = (mae[foil] - mae[c]).dropna().to_numpy(float)
+            sd = float(np.std(s, ddof=1)) if len(s) > 2 else 0.0
+            trial_sharpes.append(float(np.mean(s) / sd) if sd > 0 else 0.0)
         beats = bool(cand["oos_mae"] < float(mae[foil].mean()) - 1e-12)
         consistent = bool(cand["fold_win_rate"] >= MIN_FOLD_WIN_RATE)
         fdr_ok = bool(pvals.get(m) is not None and pvals[m] <= strictest_bh)
@@ -413,8 +434,10 @@ def null_analysis(results: dict, pvals: dict, foil: str = "L0_foil") -> dict:
                              if float(stats.t.sf(t_obs * np.sqrt(k / n), df=k - 1)) <= strictest_bh),
                             None)
             need_dsr = next((k for k in range(n, 4001)
-                             if float(deflated_sharpe(np.resize(skill, k),
-                                                      n_trials=max(2, len(sel))).dsr) >= MIN_DSR), None)
+                             if float(deflated_sharpe(
+                                 np.resize(skill, k),
+                                 n_trials=max(2, len(eligible_arms) or len(sel)),
+                                 trial_sharpes=trial_sharpes or None).dsr) >= MIN_DSR), None)
         rows.append({
             "metric": m, "arm": str(cand["arm"]),
             "pct_lift_vs_foil": round(float(cand["pct_lift_vs_foil"]), 4),

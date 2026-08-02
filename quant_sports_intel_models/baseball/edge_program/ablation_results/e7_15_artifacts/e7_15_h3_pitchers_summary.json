@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-02T04:43:43.795357+00:00",
+  "generated_at": "2026-08-02T05:00:13.981422+00:00",
   "player_type": "pitcher",
   "foil": "the SHIPPED E7.12-slice-1 configuration per metric (learner + weight_col held fixed)",
   "pseudo_replication_census": {
@@ -46,8 +46,8 @@
         "kind": "underpowered",
         "folds_have": 11,
         "folds_needed_BH": 17,
-        "folds_needed_DSR": 30,
-        "extra_seasons_needed": 19
+        "folds_needed_DSR": 2010,
+        "extra_seasons_needed": 1999
       },
       {
         "metric": "bb_pct",
@@ -63,8 +63,8 @@
         "kind": "underpowered",
         "folds_have": 11,
         "folds_needed_BH": 223,
-        "folds_needed_DSR": 409,
-        "extra_seasons_needed": 398
+        "folds_needed_DSR": null,
+        "extra_seasons_needed": 212
       },
       {
         "metric": "hr_rate",
@@ -80,8 +80,8 @@
         "kind": "underpowered",
         "folds_have": 11,
         "folds_needed_BH": 350,
-        "folds_needed_DSR": 680,
-        "extra_seasons_needed": 669
+        "folds_needed_DSR": null,
+        "extra_seasons_needed": 339
       },
       {
         "metric": "gb_pct",
@@ -97,8 +97,8 @@
         "kind": "underpowered",
         "folds_have": 11,
         "folds_needed_BH": 27,
-        "folds_needed_DSR": 55,
-        "extra_seasons_needed": 44
+        "folds_needed_DSR": null,
+        "extra_seasons_needed": 16
       },
       {
         "metric": "xwoba_against",
@@ -114,7 +114,7 @@
         "kind": "underpowered",
         "folds_have": 4,
         "folds_needed_BH": 30,
-        "folds_needed_DSR": 25,
+        "folds_needed_DSR": null,
         "extra_seasons_needed": 26
       }
     ]
@@ -3056,13 +3056,13 @@
           "stratum": 1,
           "n": 725,
           "mae": 0.010453269516819517,
-          "pct_lift_vs_foil": -4.367760742621745
+          "pct_lift_vs_foil": -4.367760742621747
         },
         {
           "arm": "A_re_shuffled",
           "stratum": 2,
           "n": 855,
-          "mae": 0.00998683973257371,
+          "mae": 0.009986839732573713,
           "pct_lift_vs_foil": -6.275716741494158
         },
         {
@@ -3310,13 +3310,13 @@
           "stratum": 1,
           "n": 725,
           "mae": 0.010453269516819517,
-          "pct_lift_vs_foil": -4.367760742621745
+          "pct_lift_vs_foil": -4.367760742621747
         },
         {
           "arm": "A_re_shuffled",
           "stratum": 2,
           "n": 855,
-          "mae": 0.00998683973257371,
+          "mae": 0.009986839732573713,
           "pct_lift_vs_foil": -6.275716741494158
         },
         {
