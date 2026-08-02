@@ -99,6 +99,13 @@ export function RankingsBoard() {
   // pool (~84 here) the same k=1.0 yields ~10 genuine tiers. It is also the right definition:
   // below replacement there is no value to group. Sub-replacement players get no tier.
   //
+  // ⭐ NF-D19: `assignTiers` also enforces MIN/MAX TIER SIZE bounds, scaled to the pool size rather
+  // than a fixed count — a lone player at the top (T1=Bijan alone) merges into its neighbor, and a
+  // long flat stretch that never clears the gap threshold (which, at a flat min-size-only floor, was
+  // swallowing nearly a whole full-PPR WR pool into one or two tiers) gets split at its own largest
+  // internal gaps instead of staying one giant undifferentiated tier. See the bounds note on
+  // `assignTiers` itself.
+  //
   // Overall tiers on VOR (the cross-position value axis the tab is ordered by); a position tab
   // tiers on league points, which is that tab's own ordering.
   //
@@ -129,6 +136,22 @@ export function RankingsBoard() {
     () => (pageSize === ALL_ROWS ? rows : rows.slice(page * pageSize, page * pageSize + pageSize)),
     [rows, page, pageSize],
   )
+
+  // Which rows start a NEW tier badge. DST/K rows carry no tier ("—"), so the boundary must compare
+  // against the last TIERED row seen, not the immediately-preceding row — otherwise every DST/K
+  // interruption makes the next skill player re-show the badge, and one tier reads as several
+  // same-numbered tiers (NF-D19). A tier is one contiguous badge regardless of what untiered rows
+  // are interleaved.
+  const startsTierAt = useMemo(() => {
+    let lastTier: number | null = null
+    return paged.map((p) => {
+      const t = tierOf.get(p.id) ?? null
+      if (t == null) return false
+      const starts = lastTier !== t
+      lastTier = t
+      return starts
+    })
+  }, [paged, tierOf])
 
   // Shared interval domain over the PAGED rows, so the bars are comparable down the visible column.
   const domain = useMemo(() => {
@@ -292,10 +315,7 @@ export function RankingsBoard() {
                       const tier = tierOf.get(p.id) ?? null
                       // a tier boundary is only meaningful between CONSECUTIVE board rows, so it is
                       // suppressed while searching (which removes the rows in between)
-                      const startsTier =
-                        tier != null &&
-                        !q.trim() &&
-                        (i === 0 || (tierOf.get(paged[i - 1].id) ?? null) !== tier)
+                      const startsTier = tier != null && !q.trim() && startsTierAt[i]
                       return (
                         <tr
                           key={p.id}

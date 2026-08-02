@@ -55,28 +55,38 @@ shape (cf. INC-30 crontab, INC-36 concurrency) wearing a retention-policy costum
 
 ### …and the caller set is four, not two
 
-INC-37 shipped `--lookahead-days` to the two Dagster ops and **missed the one that actually
-writes**: `services/schedule_capture/entrypoint.sh`, the live 30-min host-cron capture.
-`sensor_ops.lineup_ingest_schedule` says so in its own docstring — *"the schedule_capture cron
-handles statsapi schedule ingestion every 30 min off Dagster's bill"* — the Dagster intraday op is
-the retained alternative path.
+INC-37 shipped `--lookahead-days` to the two Dagster ops, leaving
+`services/schedule_capture/entrypoint.sh` and `sensor_ops.lineup_ingest_schedule` with **no
+month-boundary flags at all**.
 
-So INC-37's forward cure was never on the writer that produces the last snapshot of every month,
-and the daily op's flagged fetch was being clobbered by an unflagged one.
+> ⚠️ **Establish which caller is live from the deployed config, not from a docstring.**
+> `sensor_ops.lineup_ingest_schedule` still says *"the schedule_capture cron handles statsapi
+> schedule ingestion every 30 min off Dagster's bill"* — that describes the **pre-AWS Railway**
+> arrangement. On the AWS box `schedule-capture` **is** defined in
+> `services/dagster/aws/docker-compose.yml` but is **not in `capture.crontab`**. The live 30-min
+> capture is the Dagster `intraday_schedule_capture_{daytime,overnight}` schedule
+> (`*/30 14-23` and `0,30 0-3` UTC), which matches the observed `23:30:15Z` and `03:30:13Z` fires
+> exactly. A session that trusts the docstring fixes the **dormant** image and calls it done.
+>
+> This first draft made exactly that error. The cure is to flag **every** caller regardless of
+> which is live today: which one is live is a deploy-config fact that drifts underneath the code —
+> the same class as `W7B_LAKEHOUSE_S3` being documented as cut over while never actually set.
 
 Full caller set, all now flagged and pinned:
 
 | caller | state before |
 |---|---|
 | `pipeline/ops/daily_ingestion_ops.py` | daily; `--start-date <yesterday>` + lookahead |
-| `pipeline/ops/intraday_ops.py` | Dagster intraday (retained alternative); lookahead |
+| `pipeline/ops/intraday_ops.py` | **the live 30-min capture on AWS** (`intraday_schedule_capture_{daytime,overnight}`); had lookahead |
 | `pipeline/ops/sensor_ops.py` | manual/emergency; **no flags at all** |
-| `services/schedule_capture/entrypoint.sh` | **the live 30-min cron**; **no flags at all** |
+| `services/schedule_capture/entrypoint.sh` | lean image — built in the AWS compose but **dormant** (not in `capture.crontab`); **no flags at all** |
 | `pipeline/sensors/schedule_freshness_alert_sensor.py` | not an invocation — the remediation it **prescribes** to a human, which was a bare `schedule` |
 
 ⇒ When a fix is a **per-caller flag**, enumerate callers by grepping the script name across
-`.sh`/`Dockerfile`/crontab as well as `.py` — a Dagster-op-only sweep systematically misses the
-lean capture images, which are usually the live writers — and pin the registry itself in a test.
+`.sh`/`Dockerfile`/crontab as well as `.py`, and pin the registry itself in a test. Do **not** try
+to fix "only the live one": which caller is live is a deploy-config fact (compose + crontab +
+Dagster schedule status) that drifts underneath the code, and the in-repo comments describing it
+were two platform migrations out of date. Flagging all of them makes the question moot.
 Include human-facing remediation strings: the likeliest moment someone runs the sensor's
 prescribed command is a boundary morning, i.e. the prescription re-opened the hole it paged about.
 
@@ -133,7 +143,23 @@ closes; the flatten then reverts to the stale `dt=2026-07-31` snapshot, which is
 still holds 1/15 final.
 
 **So the lookback heals the live window every daily consumer reads, but does not permanently heal
-history.** A durable fix needs content-aware retention — keep the latest partition per *content*
+history.** Concretely, the lookback window closes on the 4th of each month, so 07-31 reverts to
+1/15 in `stg_statsapi_games` from 2026-08-05.
+
+### Blast radius of the residual (measured, 2026-08-02)
+
+Smaller than the paragraph above implies, and worth stating so nobody redesigns raw retention for
+a non-problem:
+
+- `mart_game_results` — Statcast-derived, an **independent** pipeline — carries **15/15 scored**
+  for 2026-07-31. The results substrate was never affected by any of this.
+- The reversion costs only `stg_statsapi_games.status_code` on 14 games (07-31) and 4 (06-30).
+- Nothing serving-critical reads finality there after the fact: the floor signal generators use
+  the table for the game **universe**, not the status; `run_env` reads `mart_game_results` (the
+  INC-34 correction); and settlement no longer reads it for finality at all.
+
+⇒ A historical status inconsistency in one staging table, not a serving defect. Schedule the
+content-aware retention fix; do not scramble for it. A durable fix needs content-aware retention — keep the latest partition per *content*
 month, which requires a month column on the raw mirror. That is a change to a serving-critical raw
 table's retention and was deliberately left out of an incident fix.
 

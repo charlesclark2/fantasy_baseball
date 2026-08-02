@@ -60,6 +60,7 @@ def send_alert(
     severity: str = "ERROR",
     dedup_key: str | None = None,
     dedup_ttl_s: int = _DEFAULT_DEDUP_TTL_S,
+    smoke: bool = False,
 ) -> bool:
     """Publish an ops alert to the shared SNS topic. Never raises.
 
@@ -70,11 +71,39 @@ def send_alert(
         dedup_key: rate-limit key; repeats within `dedup_ttl_s` are dropped.
                    Defaults to the (severity, subject) pair.
         dedup_ttl_s: rate-limit window in seconds.
+        smoke: this is a deliberately-tripped SELF-TEST of the page path, not a real
+               incident. See below — this MUST be set by every smoke/verification caller.
 
     Returns:
         True if published, False if suppressed (rate-limited) or on any error.
+
+    INC-39 — WHY `smoke` EXISTS, and why it is not cosmetic.
+        E11.30 requires a live-box smoke for every ALERT-tier monitor (CI mocks all IO, so only
+        a real box run proves the page path works). Before this flag, such a smoke went out
+        through the ordinary path and was **indistinguishable from a real production page**: the
+        same `[Credence PROD]` subject, the same severity, the same body. A synthetic
+        `public_betting BUILD_GAP 0/15` smoke on 2026-08-02 was therefore read as a genuine
+        serving defect and opened a P2 incident, on a slate whose built table actually held 15/15.
+
+        The second harm is the serious one. Rate-limiting is keyed on `dedup_key` with a 1-hour
+        TTL, so a smoke firing the PRODUCTION key **silently suppresses the real page for the
+        next hour** — smoke-testing a monitor could blind it precisely while an operator is
+        poking at the box. A smoke is therefore namespaced onto its own key: it can never occupy
+        a real alert's dedup slot, and a real page fires immediately after one.
+
+        Deliberately a keyword argument, NOT an env var: an `ALERT_SMOKE_TEST=1` left set on the
+        box would label every REAL page a smoke — the mirror-image failure, and strictly worse
+        (this repo's documented-but-never-set flag class, cf. `W7B_LAKEHOUSE_S3`). A flag that
+        can only ever be passed explicitly by a smoke caller cannot drift.
     """
     key = dedup_key or f"{severity}:{subject}"
+    if smoke:
+        # Namespaced so a self-test can never consume — or be consumed by — the real key.
+        key = f"smoke:{key}"
+        message = (
+            "*** SMOKE TEST — this is a deliberately-tripped self-test of the alerting path, "
+            "NOT a real incident. No action is required. ***\n\n" + message
+        )
     now = time.time()
     last = _LAST_SENT.get(key)
     if last is not None and (now - last) < dedup_ttl_s:
@@ -89,7 +118,9 @@ def send_alert(
         )
         return False
 
-    full_subject = _clamp_subject(f"{severity}: {subject}")
+    # "[SMOKE TEST]" leads the severity so it is the first thing visible in an inbox list,
+    # before the subject can be clamped to SNS's 100-char ceiling.
+    full_subject = _clamp_subject(f"{'[SMOKE TEST] ' if smoke else ''}{severity}: {subject}")
     body = f"severity: {severity}\n\n{message}\n"
     try:
         import boto3
