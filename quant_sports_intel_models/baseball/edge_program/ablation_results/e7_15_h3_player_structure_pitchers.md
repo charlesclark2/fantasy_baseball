@@ -1,5 +1,68 @@
 # E7.15 H3 — player-level structure (pitcher side)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": "leave-one-MLB-debut-cohort-out (n_cohorts)",
+ "gates": null,
+ "n_arms": 7,
+ "n_folds": null,
+ "per_metric": [
+  {
+   "dsr": 0.5176161797097801,
+   "fold_win_rate": 0.8181818181818182,
+   "metric": "k_pct",
+   "n_arms": 7,
+   "n_folds": 11,
+   "pbo": 0.05714285714285714,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": 0.15865095917033117,
+   "fold_win_rate": 0.5454545454545454,
+   "metric": "bb_pct",
+   "n_arms": 7,
+   "n_folds": 11,
+   "pbo": 0.9142857142857143,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": 0.07881918287165096,
+   "fold_win_rate": 0.5454545454545454,
+   "metric": "hr_rate",
+   "n_arms": 7,
+   "n_folds": 11,
+   "pbo": 0.7714285714285715,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": 0.07835309086051126,
+   "fold_win_rate": 0.8181818181818182,
+   "metric": "gb_pct",
+   "n_arms": 7,
+   "n_folds": 11,
+   "pbo": 0.0,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": 0.4136991189878391,
+   "fold_win_rate": 0.75,
+   "metric": "xwoba_against",
+   "n_arms": 7,
+   "n_folds": 4,
+   "pbo": 0.8333333333333334,
+   "verdict": "BLOCKED"
+  }
+ ],
+ "primary_contrast": "paired-t",
+ "reason": null,
+ "schema": 1,
+ "source_artifact": "quant_sports_intel_models/baseball/edge_program/ablation_results/e7_15_artifacts/e7_15_h3_pitchers_summary.json",
+ "status": "recovered",
+ "verdict": "k_pct=DROP, bb_pct=DROP, hr_rate=DROP, gb_pct=DROP, xwoba_against=BLOCKED"
+}
+-->
+
+
 _generated 2026-08-02T05:12:30.528285+00:00 · foil = the SHIPPED E7.12-slice-1 configuration · `best_alpha = 0`_
 
 > Pre-registration (written before any arm was scored): `e7_15_h3_preregistration.md`.

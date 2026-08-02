@@ -59,6 +59,7 @@ from betting_ml.utils.cv_power import (
     seasons_for_folds,
     sign_test_floor,
 )
+from betting_ml.utils.design_block import parse_design_block
 
 log = logging.getLogger("mh2")
 
@@ -436,11 +437,55 @@ def scan_markdown() -> tuple[list[NullRow], dict]:
     convention and simply do not state a fold count. Those are COUNTED as unextractable and named,
     never dropped quietly, because an inventory that reports only what it could parse looks like
     full coverage of a smaller corpus.
+
+    ⭐ **MH2.3 — the MH-DESIGN-BLOCK (`design_block.parse_design_block`) takes priority over the
+    legacy regex.** A report carrying the machine-readable block is read from it directly, no
+    guessing at prose. `status="exempt"` (never a bake-off/verdict document — a pre-registration, a
+    research spike, a data audit) and `status="unrecoverable"` (WAS one, but its stored per-fold
+    data no longer exists) are surfaced as their OWN NAMED buckets rather than folded into either
+    the classified rows or "unextractable": an exempt report was never classifiable-as-a-bakeoff to
+    begin with, and an unrecoverable report IS named — satisfying the "whatever remains named as
+    un-recoverable" requirement — even though it carries no gate data to classify.
     """
     rows: list[NullRow] = []
     unextractable: list[str] = []
+    exempt: list[dict] = []
+    unrecoverable: list[dict] = []
     for f in sorted(list(ABL.glob("*.md")) + list(ABL.glob("*/*.md"))):
         txt = f.read_text(errors="ignore")
+        db = parse_design_block(txt)
+        if db is not None:
+            rel = str(f.relative_to(ABL))
+            if db.status == "exempt":
+                exempt.append({"file": rel, "reason": db.reason})
+                continue
+            if db.status == "unrecoverable":
+                unrecoverable.append({"file": rel, "reason": db.reason})
+                continue
+            # status in ("recorded", "recovered") — one row per `per_metric` entry when the block
+            # carries per-metric detail (matching the rich tier's granularity), else one
+            # report-level aggregate row.
+            entries = db.per_metric or [{
+                "metric": "(report-level)", "verdict": db.verdict, "n_folds": db.n_folds,
+                "n_arms": db.n_arms, "pbo": (db.gates or {}).get("pbo"),
+                "dsr": (db.gates or {}).get("dsr"),
+                "fold_win_rate": (db.gates or {}).get("fold_win_rate")}]
+            for e in entries:
+                row = NullRow(
+                    source_file=str(f.relative_to(REPO)), study=f.stem,
+                    tier=db.fold_rule or "(from design block)", window="(see report)",
+                    metric=str(e.get("metric", "(report-level)")),
+                    verdict=str(e.get("verdict") or db.verdict or "?"),
+                    n_folds=e.get("n_folds", db.n_folds), n_arms=e.get("n_arms", db.n_arms),
+                    fold_win_rate=e.get("fold_win_rate"),
+                    pbo=e.get("pbo"), dsr=e.get("dsr"),
+                    extraction=f"design_block:{db.status}")
+                row.bound_by = _which_stat_bound(row)
+                row.null_state = ("UNDEFINED" if (row.n_folds or 99) < MIN_FOLDS_FOR_PBO else
+                                  "POWER_LIMITED" if (row.dsr is not None and row.dsr < 0.95) else
+                                  "not-classifiable-from-header")
+                rows.append(row)
+            continue
         head = txt[:4000]
         m_arms = _MD_ARMS.search(head)
         n_folds = int(m_arms.group(2)) if m_arms else (
@@ -465,7 +510,9 @@ def scan_markdown() -> tuple[list[NullRow], dict]:
                           "not-classifiable-from-header")
         rows.append(row)
     return rows, {"unextractable_reports": unextractable,
-                  "n_unextractable": len(unextractable)}
+                  "n_unextractable": len(unextractable),
+                  "exempt_reports": exempt, "n_exempt": len(exempt),
+                  "unrecoverable_reports": unrecoverable, "n_unrecoverable": len(unrecoverable)}
 
 
 def corpus_census() -> dict:
@@ -888,6 +935,28 @@ def render(inv: pd.DataFrame, census: dict, md_meta: dict, cases: list[dict],
       f"convention. Naming them is itself a finding: a report without its design line cannot have "
       f"its null read by anyone, now or later.")
     w("")
+    n_ex, n_un = md_meta.get("n_exempt", 0), md_meta.get("n_unrecoverable", 0)
+    if n_ex or n_un:
+        w(f"**MH2.3 — the `MH2-DESIGN-BLOCK` backfill (`mh2_backfill_design_blocks.py`).** Of the "
+          f"reports that predate the header convention, **{n_ex} are marked `exempt`** (never a "
+          f"bake-off/verdict document — a pre-registration, a research spike, a data audit; forcing "
+          f"a fold count onto one of these would be the LOCK-2 fabrication the block format exists "
+          f"to prevent) and **{n_un} are marked `unrecoverable`** (a genuine bake-off report whose "
+          f"stored per-fold/per-arm artifact no longer exists in the repo). Both are NAMED here "
+          f"rather than silently absorbed into \"unextractable\" — an exempt report was never "
+          f"classifiable as a bake-off to begin with, and an unrecoverable one is a documented gap, "
+          f"not an unknown one.")
+        w("")
+        if md_meta.get("unrecoverable_reports"):
+            w(_md(pd.DataFrame(md_meta["unrecoverable_reports"])))
+            w("")
+        if md_meta.get("exempt_reports"):
+            w("<details><summary>Exempt reports (never a bake-off/verdict document)</summary>")
+            w("")
+            w(_md(pd.DataFrame(md_meta["exempt_reports"])))
+            w("")
+            w("</details>")
+            w("")
     if skipped:
         w(f"Also EXCLUDED and named, {len(skipped)} `*_summary.json` files that carry a "
           f"`per_metric` block but no arm leaderboard — model-FIT summaries rather than bake-offs: "

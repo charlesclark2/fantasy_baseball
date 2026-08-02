@@ -1,5 +1,22 @@
 # MLB Edge-E8.2a — CBS Fantasy Baseball ACCESS PROBE (spike)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "a feasibility SPIKE with a GO/NO-GO recommendation (four access paths tried live) \u2014 not a statistical gate; explicitly 'research spike only'.",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "exempt",
+ "verdict": null
+}
+-->
+
+
 **Run:** 2026-07-31 · **Target:** `https://friction.baseball.cbssports.com/teams` (operator's own
 league) · **Type:** research spike only — no production code, no committed integration, nothing
 persisted beyond this memo · **Gates:** E8.2 Path B (CBS auto-import)

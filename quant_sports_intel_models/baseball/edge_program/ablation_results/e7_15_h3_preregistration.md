@@ -1,5 +1,22 @@
 # E7.15 H3 — pre-registration: the PLAYER is the unit, not the row
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "same as h1: a pre-registration, cited by run_e7_15_h3.py as 'written before any arm was scored'; results land in e7_15_h3_player_structure(_pitchers).md.",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "exempt",
+ "verdict": null
+}
+-->
+
+
 _written **2026-08-01, before any arm was scored**. Every number in §1 and §2 is a property of the
 substrate, measured before a leaderboard existed to rationalise against (the H1 readiness lock-2
 discipline). `best_alpha = 0` — a Dynasty/board projection and a betting prior, never a market bet._

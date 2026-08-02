@@ -1,5 +1,22 @@
 # E7.15 H1 — pre-registration: the within-player level-translation ladder
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "a pre-registration ('written before any arm was scored', per run_e7_15_h1.py's own citation) \u2014 the results land in e7_15_h1_level_ladder.md, covered above.",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "exempt",
+ "verdict": null
+}
+-->
+
+
 _written 2026-08-01, **BEFORE any arm was scored**. The transition census in §2 is the only measured
 content here; it was produced by `run_e7_15_h1.py --transitions-only`, which computes no MAE and fits no
 model. `best_alpha = 0` — a Dynasty/board projection and a betting prior, never a market bet._

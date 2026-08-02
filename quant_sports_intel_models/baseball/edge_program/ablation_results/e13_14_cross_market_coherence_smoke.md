@@ -2,6 +2,32 @@
 
 # E13.14 — Cross-Market Constellation Coherence
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": "per-relation control-break slices over the seasons in `meta.seasons` (see gates.dsr_n_obs \u2014 an observation count for the DSR calc, not a walk-forward fold count)",
+ "gates": {
+  "control_consistent": true,
+  "dsr": 0.13462517593276885,
+  "dsr_n_obs": 374,
+  "fdr_q": 0.1,
+  "n_fragile": 0,
+  "n_survive": 20,
+  "n_tested": 36,
+  "pbo": 0.0
+ },
+ "n_arms": 36,
+ "n_folds": null,
+ "per_metric": [],
+ "primary_contrast": "deflated Sharpe over relation\u00d7config trials",
+ "reason": null,
+ "schema": 1,
+ "source_artifact": "e13_14_cross_market_coherence_smoke.json",
+ "status": "recovered",
+ "verdict": "CROSS-MARKET CANDIDATE(S) \u2014 5 robust + 0 fragile"
+}
+-->
+
+
 **Verdict: CROSS-MARKET CANDIDATE(S) — 5 robust + 0 fragile**
 
 Pure cached-data RELATIVE-VALUE probe (NO predictive model). Pre-registration: `e13_14_preregistration.md`. The question is internal-market COHERENCE, not prediction accuracy: where two of a game's markets contradict each other, does the side the implied market favors win NET OF the bet-market's own vig? **Honest bar:** game-level collapse before any t-test/DSR/PBO; leave-one-season-out affine calibration; FORCED side; deflation over every relation × credence-τ × book-group. Cashability proxy = realized-outcome ROI net of vig (true beat-the-close forward CLV is the forward leg).

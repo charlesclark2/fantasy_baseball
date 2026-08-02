@@ -1,5 +1,62 @@
 # E13.14 — Cross-Market Constellation Coherence
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": "per-relation control-break slices over the seasons in `meta.seasons` (see gates.dsr_n_obs \u2014 an observation count for the DSR calc, not a walk-forward fold count)",
+ "gates": {
+  "control_consistent": true,
+  "dsr": 0.8479036378296732,
+  "dsr_n_obs": 55,
+  "fdr_q": 0.1,
+  "n_fragile": 0,
+  "n_survive": 22,
+  "n_tested": 53,
+  "pbo": 0.487
+ },
+ "n_arms": 53,
+ "n_folds": null,
+ "per_metric": [
+  {
+   "metric": "team_total_to_game_total",
+   "n_arms": null,
+   "n_folds": null,
+   "verdict": "RAN (4672 games)"
+  },
+  {
+   "metric": "f5_to_full_control",
+   "n_arms": null,
+   "n_folds": null,
+   "verdict": "RAN (5289 games)"
+  },
+  {
+   "metric": "props_to_team_total",
+   "n_arms": null,
+   "n_folds": null,
+   "verdict": "RAN (4472 games)"
+  },
+  {
+   "metric": "kprop_to_opp_team_total",
+   "n_arms": null,
+   "n_folds": null,
+   "verdict": "DEFERRED (pre-registered; engine-ready; assembly is a follow-up)"
+  },
+  {
+   "metric": "sides_to_totals",
+   "n_arms": null,
+   "n_folds": null,
+   "verdict": "DEFERRED (pre-registered; engine-ready; assembly is a follow-up)"
+  }
+ ],
+ "primary_contrast": "deflated Sharpe over relation\u00d7config trials",
+ "reason": null,
+ "schema": 1,
+ "source_artifact": "e13_14_cross_market_coherence.json",
+ "status": "recovered",
+ "verdict": "CLEAN NULL \u2014 the market constellation is internally coherent (no cross-market edge)"
+}
+-->
+
+
 **Verdict: CLEAN NULL — the market constellation is internally coherent (no cross-market edge)**
 
 Pure cached-data RELATIVE-VALUE probe (NO predictive model). Pre-registration: `e13_14_preregistration.md`. The question is internal-market COHERENCE, not prediction accuracy: where two of a game's markets contradict each other, does the side the implied market favors win NET OF the bet-market's own vig? **Honest bar:** game-level collapse before any t-test/DSR/PBO; leave-one-season-out affine calibration; FORCED side; deflation over every relation × credence-τ × book-group. Cashability proxy = realized-outcome ROI net of vig (true beat-the-close forward CLV is the forward leg).

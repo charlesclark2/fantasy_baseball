@@ -1,5 +1,41 @@
 # MLB Edge-E7.5 — MiLB MLE → recalibrated rookie prior (wired into `eb_batter_posteriors_raw`)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": "leave-one-MLB-debut-cohort-out (n_cohorts)",
+ "gates": null,
+ "n_arms": 2,
+ "n_folds": 10,
+ "per_metric": [
+  {
+   "metric": "k_pct",
+   "n_arms": 2,
+   "n_folds": 10,
+   "verdict": "ADD"
+  },
+  {
+   "metric": "bb_pct",
+   "n_arms": 2,
+   "n_folds": 10,
+   "verdict": "ADD"
+  },
+  {
+   "metric": "iso",
+   "n_arms": 2,
+   "n_folds": 10,
+   "verdict": "ADD"
+  }
+ ],
+ "primary_contrast": "MLE-recalibrated prior vs generic experience-band prior",
+ "reason": null,
+ "schema": 1,
+ "source_artifact": "e7_5_artifacts/e7_5_calibration_summary.json",
+ "status": "recovered",
+ "verdict": "k_pct=ADD, bb_pct=ADD, iso=ADD"
+}
+-->
+
+
 **Model:** `milb_mle_prior_v1` · **generated:** 2026-08-01T23:34:37.582225+00:00
 
 > ⚠️ **This run was gated by E7.5b and the served parquet is MIXED.** The recalibration and ablation tables below are the CHALLENGER's, for all metrics. What actually ships: **bb_pct, iso** from the challenger MLE; **k_pct** did NOT clear the head-to-head gate and keeps the previously-served `milb_mle_v1` values VERBATIM. Read [`e7_5b_mle_prior_head_to_head.md`](e7_5b_mle_prior_head_to_head.md) for the per-metric verdict and the numbers that are actually serving for the held-back metric(s).

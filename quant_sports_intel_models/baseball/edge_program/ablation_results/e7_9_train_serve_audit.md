@@ -1,5 +1,22 @@
 # MLB Edge-E7.9 — train/serve exposure audit (BATTER + STARTER MiLB-MLE priors)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "a train/serve feature-EXPOSURE scoping table (which served contracts touch the MLE columns) \u2014 an audit, not a bake-off; no fold/PBO/DSR anywhere in its own artifact either.",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "exempt",
+ "verdict": null
+}
+-->
+
+
 > ⚠️ **Not an edge result.** This scopes a retrain; `best_alpha = 0`.
 
 ## Which SERVED contracts does the MLE actually touch?

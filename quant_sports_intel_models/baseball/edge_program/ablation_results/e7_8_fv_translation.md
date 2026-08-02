@@ -1,5 +1,75 @@
 # MLB Edge-E7.8 — do FanGraphs prospect rankings translate to MLB projection?
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": "leave-one-MLB-debut-cohort-out over `fold_cohorts`",
+ "gates": {
+  "dsr_min": 0.95,
+  "fdr_q": 0.1,
+  "pbo_max": 0.2
+ },
+ "n_arms": 36,
+ "n_folds": 4,
+ "per_metric": [
+  {
+   "dsr": 0.882744496438857,
+   "metric": "batter/debut",
+   "n_arms": 36,
+   "n_folds": 4,
+   "pbo": 0.0,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": 0.11165734282290174,
+   "metric": "batter/conditional",
+   "n_arms": 36,
+   "n_folds": 4,
+   "pbo": 0.5,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": 0.7989440670821045,
+   "metric": "batter/unconditional",
+   "n_arms": 36,
+   "n_folds": 4,
+   "pbo": 0.6666666666666666,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": 0.9983693571330434,
+   "metric": "pitcher/debut",
+   "n_arms": 36,
+   "n_folds": 4,
+   "pbo": 0.0,
+   "verdict": "ADD"
+  },
+  {
+   "dsr": 0.8249767289411034,
+   "metric": "pitcher/conditional",
+   "n_arms": 36,
+   "n_folds": 4,
+   "pbo": 0.16666666666666666,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": 0.997985702077806,
+   "metric": "pitcher/unconditional",
+   "n_arms": 36,
+   "n_folds": 4,
+   "pbo": 0.0,
+   "verdict": "ADD"
+  }
+ ],
+ "primary_contrast": "paired-t (BH-FDR corrected)",
+ "reason": null,
+ "schema": 1,
+ "source_artifact": "e7_8_fv_translation.json",
+ "status": "recovered",
+ "verdict": "batter/debut=DROP, batter/conditional=DROP, batter/unconditional=DROP, pitcher/debut=ADD, pitcher/conditional=DROP, pitcher/unconditional=ADD"
+}
+-->
+
+
 **Study:** `e7.8-v1` · **generated:** 2026-07-27T22:47:02.865052+00:00 · **outcome window:** 3 MLB seasons · **learner for the headline contrast:** `linear`
 
 > ⚠️ **This is a projection-VALIDATION study, not an edge claim — `best_alpha = 0`.** It asks one question: does The Board's as-of FV/rank add incremental projection lift on realized dynasty-FANTASY value **over an age-relative-to-level + level + pedigree null**, once the survivorship and level confounds are controlled? A CLEAN NULL is a valid, high-value answer (it says: lean on our own MLE + age-relative-to-level, do not pay up for FV hype) and is NOT forced into a survivor.

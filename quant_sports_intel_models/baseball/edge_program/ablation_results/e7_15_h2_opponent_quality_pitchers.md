@@ -1,5 +1,59 @@
 # E7.15 H2 — the opponent / competition-quality adjustment (pitcher side)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": "leave-one-MLB-debut-cohort-out (n_cohorts)",
+ "gates": null,
+ "n_arms": 4,
+ "n_folds": 11,
+ "per_metric": [
+  {
+   "dsr": 0.38483354906946476,
+   "fold_win_rate": 0.5454545454545454,
+   "metric": "k_pct",
+   "n_arms": 4,
+   "n_folds": 11,
+   "pbo": 0.9857142857142858,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": 0.18975639929748594,
+   "fold_win_rate": 0.2727272727272727,
+   "metric": "bb_pct",
+   "n_arms": 4,
+   "n_folds": 11,
+   "pbo": 0.5857142857142857,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": 0.8000743709905515,
+   "fold_win_rate": 0.7272727272727273,
+   "metric": "hr_rate",
+   "n_arms": 4,
+   "n_folds": 11,
+   "pbo": 0.6285714285714286,
+   "verdict": "DROP"
+  },
+  {
+   "dsr": 0.33498944274814685,
+   "fold_win_rate": 0.45454545454545453,
+   "metric": "gb_pct",
+   "n_arms": 4,
+   "n_folds": 11,
+   "pbo": 0.4142857142857143,
+   "verdict": "DROP"
+  }
+ ],
+ "primary_contrast": "paired-t",
+ "reason": null,
+ "schema": 1,
+ "source_artifact": "quant_sports_intel_models/baseball/edge_program/ablation_results/e7_15_artifacts/e7_15_h2_pitchers_summary.json",
+ "status": "recovered",
+ "verdict": "k_pct=DROP, bb_pct=DROP, hr_rate=DROP, gb_pct=DROP"
+}
+-->
+
+
 _generated 2026-08-02T04:06:05.831348+00:00 · foil = the SHIPPED E7.12-slice-1 configuration · `best_alpha = 0`_
 
 > ⚠️ **A projection, not an edge claim.** H2 tests an assertion that has been sitting untested under a shipped feature: `build_park_context.py` says the park factor's residual is "the park (plus the opponent mix, **which averages out** over a 3-season window)". This slice measures the player-level version of that claim and only then asks whether correcting for it helps.

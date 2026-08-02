@@ -1,5 +1,35 @@
 # E7.16 — comps on the point-in-time Pipeline archive: SPLIT
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": "forward, 3-season outcome horizon matured",
+ "gates": null,
+ "n_arms": 2,
+ "n_folds": 4,
+ "per_metric": [
+  {
+   "metric": "batter",
+   "n_arms": null,
+   "n_folds": 4,
+   "verdict": "BLEND_WIRE"
+  },
+  {
+   "metric": "pitcher",
+   "n_arms": null,
+   "n_folds": 4,
+   "verdict": "DISPLAY_ONLY"
+  }
+ ],
+ "primary_contrast": "forward-outcome comparison",
+ "reason": null,
+ "schema": 1,
+ "source_artifact": "e7_16_artifacts/e7_16_comp_validation.json",
+ "status": "recovered",
+ "verdict": "SPLIT"
+}
+-->
+
+
 **Cohort** — `/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/quant_sports_intel_models/baseball/edge_program/ablation_results/e7_16_artifacts/pipeline_comp_cohort.parquet` built 2026-08-02T01:55:58+00:00
 **Target** — fantasy_points over the 3 seasons after the board (0 for a prospect who never reached MLB)
 **Primary metric** — CRPS (proper — the target is ~57% exact zeros; MAE inverts here)

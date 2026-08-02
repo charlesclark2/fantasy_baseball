@@ -1,5 +1,22 @@
 # E2.3 — Convolution → predictive distributions: calibration record
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "a calibration record for one convolution pipeline (per-side dispersion fit) \u2014 no competing arms.",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "exempt",
+ "verdict": null
+}
+-->
+
+
 _Fit 2026-06-24 · 11,662 games · marginals = oos_purged_cv · 10,000 draws/game · independent (ρ=0) · per-side dispersion · market-blind._
 
 ## What E2.3 does

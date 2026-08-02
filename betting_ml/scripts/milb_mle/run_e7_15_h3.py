@@ -70,6 +70,10 @@ from betting_ml.scripts.milb_mle.milb_mle import (  # noqa: E402
     build_target,
 )
 from betting_ml.scripts.milb_mle.park_context import ContextSpec, apply_context  # noqa: E402
+from betting_ml.utils.design_block import (  # noqa: E402
+    design_block_from_ladder_results,
+    insert_design_block,
+)
 from betting_ml.scripts.milb_mle.player_structure import (  # noqa: E402
     TRAJ_PRESENT,
     PlayerSpec,
@@ -535,7 +539,9 @@ def write_report(results: dict[str, H3Result], fdr: dict, nulls: dict, path: Pat
       "which `clone_projector` already carries field-by-field. A subclass would be silently downgraded "
       "on every refit and would score AS THE FOIL under its own name (the E7.12-S5 landmine).\n")
     A("- **`best_alpha = 0`** — a Dynasty/board projection and a betting prior, never a market bet.\n")
-    path.write_text("\n".join(L) + "\n")
+    db = design_block_from_ladder_results(
+        results, fold_rule="leave-one-MLB-debut-cohort-out (n_cohorts)")
+    path.write_text(insert_design_block("\n".join(L) + "\n", db))
     log.info("wrote %s", path)
 
 

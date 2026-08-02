@@ -1,5 +1,22 @@
 # E2.2 — Dependence structure (Gaussian copula): decision record
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "a single-fit dependence-structure DECISION record (rho estimate + a conditioning choice) \u2014 one fit, not a multi-arm bake-off with folds/PBO/DSR.",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "exempt",
+ "verdict": null
+}
+-->
+
+
 _Fit 2026-06-22 · 11,659 games · marginals = oos_purged_cv · market-blind._
 
 ## ρ estimate

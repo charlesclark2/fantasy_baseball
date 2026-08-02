@@ -1,5 +1,55 @@
 # E13.2b — Feature-augmented PA-model re-test (zone-matchup PROFILES + miss_distance)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": "CSCV combinatorial slices (not a walk-forward fold count \u2014 see gates.n_slices per metric; n_folds intentionally left null rather than conflated with it)",
+ "gates": null,
+ "n_arms": 2,
+ "n_folds": null,
+ "per_metric": [
+  {
+   "dsr": null,
+   "metric": "home_win/nll (miss_distance)",
+   "n_arms": 2,
+   "n_folds": null,
+   "pbo": 1.0,
+   "verdict": "NULL"
+  },
+  {
+   "dsr": null,
+   "metric": "perside_runs/crps (miss_distance)",
+   "n_arms": 2,
+   "n_folds": null,
+   "pbo": 1.0,
+   "verdict": "NULL"
+  },
+  {
+   "dsr": 0.07261055280056992,
+   "metric": "home_win/nll (zone_profile)",
+   "n_arms": 2,
+   "n_folds": null,
+   "pbo": 0.142,
+   "verdict": "NULL"
+  },
+  {
+   "dsr": 0.8370585015281413,
+   "metric": "perside_runs/crps (zone_profile)",
+   "n_arms": 2,
+   "n_folds": null,
+   "pbo": 0.427,
+   "verdict": "NULL"
+  }
+ ],
+ "primary_contrast": "CSCV/PBO on held-out slices",
+ "reason": null,
+ "schema": 1,
+ "source_artifact": "e13_2b_{miss_distance,zone_profile}_{home_win,perside_runs}_lift.json",
+ "status": "recovered",
+ "verdict": "zone_profile CONCLUSIVE (2015-2025 history); miss_distance EXPLORATORY/degenerate (2026-only, n_eval=0 on perside_runs \u2014 see report's own \u00a7Half-2 caveat)"
+}
+-->
+
+
 **Model-A · the "test everything we built" closure · harness-first, sim only on lift · 2026-06-24**
 
 ## Why this story exists

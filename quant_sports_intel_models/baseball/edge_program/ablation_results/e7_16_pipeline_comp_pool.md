@@ -1,4 +1,34 @@
 # E7.16 — the comp pool rebuilt on the point-in-time MLB Pipeline archive
+
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": "forward, 3-season outcome horizon matured",
+ "gates": null,
+ "n_arms": 2,
+ "n_folds": 4,
+ "per_metric": [
+  {
+   "metric": "batter",
+   "n_arms": null,
+   "n_folds": 4,
+   "verdict": "BLEND_WIRE"
+  },
+  {
+   "metric": "pitcher",
+   "n_arms": null,
+   "n_folds": 4,
+   "verdict": "DISPLAY_ONLY"
+  }
+ ],
+ "primary_contrast": "forward-outcome comparison",
+ "reason": null,
+ "schema": 1,
+ "source_artifact": "e7_16_artifacts/e7_16_comp_validation.json",
+ "status": "recovered",
+ "verdict": "SPLIT"
+}
+-->
+
 ### (+ E7.14, run as phase 2 of the same session on the same cached cohort)
 
 **Status (2026-08-01):** **DONE.** E7.13's deferred verdict is RESOLVED for batters and recorded as

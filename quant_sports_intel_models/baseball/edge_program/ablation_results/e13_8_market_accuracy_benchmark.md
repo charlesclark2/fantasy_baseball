@@ -1,5 +1,22 @@
 # E13.8 — Market-Accuracy Benchmark: year × book line quality (H2H + totals)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "a market-accuracy BENCHMARK ('what are we targeting'), not a model bake-off \u2014 no arms, no candidate being selected against a foil.",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "exempt",
+ "verdict": null
+}
+-->
+
+
 **Story:** E13.8 (Model-A · situational awareness · advisory/transparency only)
 **Date:** 2026-06-23
 **Frame:** *"What are we targeting?"* — how accurate is the **market itself** at setting lines, per book, per year, so we know the bar before re-opening MLB totals/H2H. **No +EV claim. This is a benchmark, not a signal.**

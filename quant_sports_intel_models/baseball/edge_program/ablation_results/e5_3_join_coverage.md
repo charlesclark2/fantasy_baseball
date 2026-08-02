@@ -1,5 +1,22 @@
 # E5.3 — Name→ID join coverage (S3 K closing lines → E5.2 predictions)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "a name-to-ID join-coverage AUDIT (resolution rate table) \u2014 a data-quality check, not a model comparison.",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "exempt",
+ "verdict": null
+}
+-->
+
+
 _Bridge: `ref_players` name dimension → modelled pitcher_id, via `prop_edge.normalize_name` (accents / punctuation / Jr.–Sr. folded), restricted to the 26,062 modelled pitcher×date predictions._
 
 | metric | value |

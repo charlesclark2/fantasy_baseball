@@ -2,7 +2,7 @@
 
 > 🔒 **DIAGNOSTIC OF THE EVAL, NOT A MODEL.** `best_alpha = 0`. Nothing here re-fits an arm, re-scores a metric or changes a recorded verdict — every ADD and DROP in the record stands exactly as scored. What changes is how a null may be READ.
 
-_Generated 2026-08-02T06:28:14+00:00 from stored artifacts only (no Snowflake, no re-fit)._
+_Generated 2026-08-02T18:38:03+00:00 from stored artifacts only (no Snowflake, no re-fit)._
 
 ## 0. The finding, in one paragraph
 
@@ -144,18 +144,55 @@ These are **registered by MH2 now and are forward-effective**. Applied to the ex
 
 ## 4. The mechanical null inventory
 
-Corpus census: **75 markdown reports**, **270 JSON artifacts**, **251 story-prompt entries**. the JSON count includes per-Optuna-trial artifacts, which are trial records rather than verdicts and carry no gate to classify.
+Corpus census: **74 markdown reports**, **265 JSON artifacts**, **255 story-prompt entries**. the JSON count includes per-Optuna-trial artifacts, which are trial records rather than verdicts and carry no gate to classify.
 
-⚠️ **No silent caps.** 46 markdown reports state no fold count, PBO or DSR in their header and are therefore **not classifiable from the corpus at all** — they are counted here rather than dropped, because an inventory that reports only what it could parse looks like full coverage of a smaller corpus. Most predate the current header convention. Naming them is itself a finding: a report without its design line cannot have its null read by anyone, now or later.
+⚠️ **No silent caps.** 0 markdown reports state no fold count, PBO or DSR in their header and are therefore **not classifiable from the corpus at all** — they are counted here rather than dropped, because an inventory that reports only what it could parse looks like full coverage of a smaller corpus. Most predate the current header convention. Naming them is itself a finding: a report without its design line cannot have its null read by anyone, now or later.
 
-**53 metric-level rows** carry enough stored per-fold detail to be classified fully; **29** more are classified at report-header resolution.
+**MH2.3 — the `MH2-DESIGN-BLOCK` backfill (`mh2_backfill_design_blocks.py`).** Of the reports that predate the header convention, **17 are marked `exempt`** (never a bake-off/verdict document — a pre-registration, a research spike, a data audit; forcing a fold count onto one of these would be the LOCK-2 fabrication the block format exists to prevent) and **8 are marked `unrecoverable`** (a genuine bake-off report whose stored per-fold/per-arm artifact no longer exists in the repo). Both are NAMED here rather than silently absorbed into "unextractable" — an exempt report was never classifiable as a bake-off to begin with, and an unrecoverable one is a documented gap, not an unknown one.
+
+| file                                  | reason                                                                                                                                                                                                                                                                                             |
+|:--------------------------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| e7_12_slice2_survivorship.md          | no `*_summary.json` (or any other JSON) exists anywhere under ablation_results for slice2 — `find … -iname '*slice2*'` returns only the two .md files. run_e7_12_slice2.py still exists and could re-emit a summary artifact on a future run (LOCK 1: that re-run is not this story's to trigger). |
+| e7_12_slice2_survivorship_pitchers.md | same as the batter report — no stored artifact survives for slice2 (pitcher side).                                                                                                                                                                                                                 |
+| e7_12_slice4_tool_grades.md           | no `*_summary.json` (or any other JSON) exists for slice4 — same gap as slice2. run_e7_12_slice4.py still exists.                                                                                                                                                                                  |
+| e7_12_slice4_tool_grades_pitchers.md  | same as the batter report — no stored artifact survives for slice4 (pitcher side).                                                                                                                                                                                                                 |
+| e7_12_slice5_aging_curves.md          | no `*_summary.json` (or any other JSON) exists for slice5. run_e7_12_slice5.py still exists.                                                                                                                                                                                                       |
+| e7_12_slice5_aging_curves_pitchers.md | same as the batter report — no stored artifact survives for slice5 (pitcher side).                                                                                                                                                                                                                 |
+| e7_12_slice6_feasibility.md           | no `*_summary.json` (or any other JSON) exists for slice6 (a feasibility ceiling-probe, not a leaderboard bake-off — s6_feasibility.py still exists).                                                                                                                                              |
+| e7_12_slice6_feasibility_pitchers.md  | same as the batter report — no stored artifact survives for slice6 (pitcher side).                                                                                                                                                                                                                 |
+
+<details><summary>Exempt reports (never a bake-off/verdict document)</summary>
+
+| file                                  | reason                                                                                                                                                                                                     |
+|:--------------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| E13_2_phase0_report.md                | Phase-0 completion report (cost-hygiene guard + W1 parity check) — a plumbing/parity gate, not an arm bake-off; no fold/arm/verdict concept in the document.                                               |
+| e13_8_market_accuracy_benchmark.md    | a market-accuracy BENCHMARK ('what are we targeting'), not a model bake-off — no arms, no candidate being selected against a foil.                                                                         |
+| e2_2_copula_decision.md               | a single-fit dependence-structure DECISION record (rho estimate + a conditioning choice) — one fit, not a multi-arm bake-off with folds/PBO/DSR.                                                           |
+| e2_3_convolution_calibration.md       | a calibration record for one convolution pipeline (per-side dispersion fit) — no competing arms.                                                                                                           |
+| e2_5_signal_registration.md           | a serving-registration write-up for the E2.1-r winner (already gated elsewhere) — registers a decision already made, runs no bake-off of its own.                                                          |
+| e2_6_preregistration.md               | explicitly a PRE-REGISTRATION, written before any arm was scored — by definition carries no verdict yet; the results (when run) land in e2_6_derivative_gates.md, which the header regex already extracts. |
+| e5_3_join_coverage.md                 | a name-to-ID join-coverage AUDIT (resolution rate table) — a data-quality check, not a model comparison.                                                                                                   |
+| e7_11_prospect_consensus.md           | states its own standing explicitly: 'A consensus is a DESCRIPTION, not a claim ... no accuracy test against realized outcomes was run and none is implied.'                                                |
+| e7_15_h1_preregistration.md           | a pre-registration ('written before any arm was scored', per run_e7_15_h1.py's own citation) — the results land in e7_15_h1_level_ladder.md, covered above.                                                |
+| e7_15_h3_preregistration.md           | same as h1: a pre-registration, cited by run_e7_15_h3.py as 'written before any arm was scored'; results land in e7_15_h3_player_structure(_pitchers).md.                                                  |
+| e7_4_prospect_xref.md                 | an identity/ETA cross-reference BUILD status report (rows landed, tripwires clear) — no arms, no fold structure.                                                                                           |
+| e7_9_historical_backfill_procedure.md | explicitly 'Status: NOT TRIGGERED' — a pre-agreed CONDITIONAL procedure document with no run behind it yet.                                                                                                |
+| e7_9_train_serve_audit.md             | a train/serve feature-EXPOSURE scoping table (which served contracts touch the MLE columns) — an audit, not a bake-off; no fold/PBO/DSR anywhere in its own artifact either.                               |
+| e8_0_prospect_board.md                | states its own standing explicitly: 'best_alpha = 0 ... not a ranking that claims to beat FanGraphs ... nothing here has been validated as a ranking.'                                                     |
+| e8_2a_cbs_access_probe.md             | a feasibility SPIKE with a GO/NO-GO recommendation (four access paths tried live) — not a statistical gate; explicitly 'research spike only'.                                                              |
+| odds_market_grab_2026-06-30.md        | an operational data-GRAB log (credits spent, probe results, a value-ranked queue handed to the operator) — no model, no arms.                                                                              |
+| odds_market_inventory_2026-06-30.md   | a read-only S3 market-INVENTORY audit (which Odds-API keys are present/stale) — a coverage check, not a bake-off.                                                                                          |
+
+</details>
+
+**53 metric-level rows** carry enough stored per-fold detail to be classified fully; **93** more are classified at report-header resolution.
 
 ### 4a. State distribution
 
 | null_state                   |   rows |
 |:-----------------------------|-------:|
-| POWER_LIMITED                |     29 |
-| not-classifiable-from-header |     23 |
+| not-classifiable-from-header |     59 |
+| POWER_LIMITED                |     57 |
 | GENUINE_ABSENCE              |      9 |
 | UNKNOWN                      |      9 |
 | SHIPPED (not a null)         |      6 |
@@ -169,16 +206,16 @@ The column the record was missing. A report says "DROP" and a reader infers the 
 
 | bound_by                                                           |   rows |
 |:-------------------------------------------------------------------|-------:|
-| unknown — the artifact records no fold structure                   |     32 |
-| fold-consistency clause                                            |     11 |
-| PBO                                                                |     10 |
+| unknown — the artifact records no fold structure                   |     43 |
+| fold-consistency clause                                            |     23 |
+| nothing — this arm SHIPPED under its own study's gate              |     22 |
+| PBO                                                                |     20 |
+| unattributed (the recorded stats do not identify a binding clause) |     12 |
+| DSR                                                                |     11 |
 | point estimate (best arm loses on average)                         |      9 |
-| nothing — this arm SHIPPED under its own study's gate              |      6 |
-| DSR                                                                |      6 |
-| unattributed (the recorded stats do not identify a binding clause) |      3 |
 | PBO UNDEFINED (<4 folds)                                           |      3 |
+| anchor/plumbing (BLOCKED — no verdict was reached)                 |      2 |
 | n/a — the mechanism cannot act on this population                  |      1 |
-| anchor/plumbing (BLOCKED — no verdict was reached)                 |      1 |
 
 ### 4c. The fully-classified rows
 

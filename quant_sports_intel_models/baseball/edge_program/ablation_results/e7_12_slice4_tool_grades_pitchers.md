@@ -1,5 +1,22 @@
 # E7.12 slice 4 — 20-80 scouting grades as component priors (pitchers)
 
+<!-- MH2-DESIGN-BLOCK
+{
+ "fold_rule": null,
+ "gates": null,
+ "n_arms": null,
+ "n_folds": null,
+ "per_metric": null,
+ "primary_contrast": null,
+ "reason": "same as the batter report \u2014 no stored artifact survives for slice4 (pitcher side).",
+ "schema": 1,
+ "source_artifact": null,
+ "status": "unrecoverable",
+ "verdict": null
+}
+-->
+
+
 > ⚠️ **A projection, not an edge claim — `best_alpha = 0`.**
 
 The 20-80 grade is the only input this program carries that is **not derived from the minor-league line** — every mechanism tried so far (park, run environment, reliability, label weights) has been a re-expression of the same box score.
