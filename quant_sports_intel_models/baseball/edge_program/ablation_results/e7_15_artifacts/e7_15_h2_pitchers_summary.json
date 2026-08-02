@@ -1,0 +1,3462 @@
+{
+  "generated_at": "2026-08-02T04:06:05.817366+00:00",
+  "player_type": "pitcher",
+  "foil": "the SHIPPED E7.12-slice-1 configuration per metric (learner + weight_col held fixed)",
+  "bh_fdr_alpha": 0.1,
+  "bh_fdr": {
+    "hr_rate": false,
+    "k_pct": false,
+    "gb_pct": false,
+    "bb_pct": false
+  },
+  "null_analysis": {
+    "family_size": 4,
+    "strictest_bh_cutoff": 0.025,
+    "survivors_with_PBO_and_DSR_gates_REMOVED": [],
+    "binding_constraint": "BH-FDR multiplicity \u2014 no arm's p clears the strictest rung, so removing the deflation gates changes nothing",
+    "per_metric": [
+      {
+        "metric": "k_pct",
+        "arm": "O1_opp_leaguenorm",
+        "pct_lift_vs_foil": 0.0775,
+        "fold_win_rate": 0.5454545454545454,
+        "p_one_sided": 0.3183079028706186,
+        "beats_foil": true,
+        "clears_fold_bar": false,
+        "clears_PBO": false,
+        "clears_DSR": false,
+        "clears_BH_rank1": false,
+        "kind": "underpowered",
+        "folds_have": 11,
+        "folds_needed_BH": 181,
+        "folds_needed_DSR": 247,
+        "extra_seasons_needed": 236
+      },
+      {
+        "metric": "bb_pct",
+        "arm": "O1_opp_leaguenorm",
+        "pct_lift_vs_foil": -0.1064,
+        "fold_win_rate": 0.2727272727272727,
+        "p_one_sided": 0.753494077900753,
+        "beats_foil": false,
+        "clears_fold_bar": false,
+        "clears_PBO": false,
+        "clears_DSR": false,
+        "clears_BH_rank1": false,
+        "kind": "genuine absence \u2014 the best arm does not beat the foil on average",
+        "folds_have": 11,
+        "folds_needed_BH": null,
+        "folds_needed_DSR": null,
+        "extra_seasons_needed": null
+      },
+      {
+        "metric": "hr_rate",
+        "arm": "O3_opp_window3",
+        "pct_lift_vs_foil": 0.147,
+        "fold_win_rate": 0.7272727272727273,
+        "p_one_sided": 0.08825732454890997,
+        "beats_foil": true,
+        "clears_fold_bar": true,
+        "clears_PBO": false,
+        "clears_DSR": false,
+        "clears_BH_rank1": false,
+        "kind": "underpowered",
+        "folds_have": 11,
+        "folds_needed_BH": 23,
+        "folds_needed_DSR": 42,
+        "extra_seasons_needed": 31
+      },
+      {
+        "metric": "gb_pct",
+        "arm": "O2_opp_levelnorm",
+        "pct_lift_vs_foil": 0.049,
+        "fold_win_rate": 0.45454545454545453,
+        "p_one_sided": 0.35889218074868096,
+        "beats_foil": true,
+        "clears_fold_bar": false,
+        "clears_PBO": false,
+        "clears_DSR": false,
+        "clears_BH_rank1": false,
+        "kind": "underpowered",
+        "folds_have": 11,
+        "folds_needed_BH": 309,
+        "folds_needed_DSR": 496,
+        "extra_seasons_needed": 485
+      }
+    ]
+  },
+  "per_metric": {
+    "k_pct": {
+      "verdict": "DROP",
+      "winner": "L0_foil",
+      "leaderboard": [
+        {
+          "arm": "O1_opp_leaguenorm",
+          "kind": "opponent",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.035593215439358464,
+          "pct_lift_vs_foil": 0.07752042514674723,
+          "fold_win_rate": 0.5454545454545454,
+          "p_one_sided": 0.3183079028706186,
+          "pct_rows_moved": 94.61,
+          "factor_p05": 0.96079,
+          "factor_p95": 1.0349,
+          "note": "\u2b50 HEADLINE \u2014 WITHIN-league strength of schedule. League-normalised because 19\u201341% of the level-normalised factor is between-league variance E7.3's league intercepts already carry."
+        },
+        {
+          "arm": "O3_opp_window3",
+          "kind": "opponent",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.03559390359343032,
+          "pct_lift_vs_foil": 0.07558853839978256,
+          "fold_win_rate": 0.45454545454545453,
+          "p_one_sided": 0.32013238950402,
+          "pct_rows_moved": 94.61,
+          "factor_p05": 0.9603,
+          "factor_p95": 1.03525,
+          "note": "a 3-season opponent bucket \u2014 the window the park slice's assertion assumed"
+        },
+        {
+          "arm": "A_opp_noloo",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.03559607135156578,
+          "pct_lift_vs_foil": 0.06950289074643161,
+          "fold_win_rate": 0.5454545454545454,
+          "p_one_sided": 0.34010119474774836,
+          "pct_rows_moved": 94.61,
+          "factor_p05": 0.96049,
+          "factor_p95": 1.03465,
+          "note": "\u2b50 SELF-INFLATION DIAGNOSTIC \u2014 the factor WITHOUT removing the player's own games. His hits are in his opponents' allowed-rate bucket, so dividing by a weakness he created shrinks HIM toward the mean and lowers MAE whether or not opponent quality exists."
+        },
+        {
+          "arm": "A_opp_placebo",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.03560465946928797,
+          "pct_lift_vs_foil": 0.04539307074030333,
+          "fold_win_rate": 0.5454545454545454,
+          "p_one_sided": 0.40989625243773437,
+          "pct_rows_moved": 94.27,
+          "factor_p05": 0.96079,
+          "factor_p95": 1.0349,
+          "note": "DEGENERATE \u2014 the same opponent factors permuted across players within a level. Catches 'dividing by any dispersed number helps'."
+        },
+        {
+          "arm": "L0_foil",
+          "kind": "foil",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.035620828857329465,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "factor_p05": 1.0,
+          "factor_p95": 1.0,
+          "note": "\u2b50 THE DIRECT-LEARNED FOIL \u2014 the shipped E7.12-slice-1 configuration, no opponent adjustment"
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "kind": "opponent",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.03563320360423369,
+          "pct_lift_vs_foil": -0.034740199207000264,
+          "fold_win_rate": 0.6363636363636364,
+          "p_one_sided": 0.5407828235684704,
+          "pct_rows_moved": 94.61,
+          "factor_p05": 0.93594,
+          "factor_p95": 1.06125,
+          "note": "the NAIVE level-normalised factor \u2014 kept so the league re-encoding is visible in the leaderboard rather than asserted"
+        },
+        {
+          "arm": "O4_opp_extra",
+          "kind": "opponent",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.035733827871450755,
+          "pct_lift_vs_foil": -0.31722735754938497,
+          "fold_win_rate": 0.36363636363636365,
+          "p_one_sided": 0.8501163157528946,
+          "pct_rows_moved": 94.61,
+          "factor_p05": 0.96079,
+          "factor_p95": 1.0349,
+          "note": "\u2b50 NESTS THE FOIL \u2014 the raw rate is kept and the opponent DELTA enters as a fixed regressor, so a win is unambiguously 'opponent quality adds information'"
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.037359439524967314,
+          "pct_lift_vs_foil": -4.880882122651967,
+          "fold_win_rate": 0.18181818181818182,
+          "p_one_sided": 0.977394831072707,
+          "pct_rows_moved": 0.0,
+          "factor_p05": 1.0,
+          "factor_p95": 1.0,
+          "note": "DEGENERATE CEILING (NF-D11/NF-D14) \u2014 predict the population mean of the target."
+        }
+      ],
+      "mae_by_fold": {
+        "L0_foil": {
+          "2016": 0.03278614000201848,
+          "2017": 0.0400589865541254,
+          "2018": 0.03740706437329993,
+          "2019": 0.035514108083497184,
+          "2020": 0.03219335911744532,
+          "2021": 0.03840190063208077,
+          "2022": 0.037347914008899884,
+          "2023": 0.03241519086924503,
+          "2024": 0.038053795826254004,
+          "2025": 0.03265061312714386,
+          "2026": 0.035000044836614244
+        },
+        "O1_opp_leaguenorm": {
+          "2016": 0.03235987538974639,
+          "2017": 0.03986044314827429,
+          "2018": 0.03735441654050958,
+          "2019": 0.035499634308055056,
+          "2020": 0.03203910348175042,
+          "2021": 0.03841717462544355,
+          "2022": 0.03746929176145865,
+          "2023": 0.03235332224876269,
+          "2024": 0.03814128036685773,
+          "2025": 0.03275371611135903,
+          "2026": 0.03527711185072576
+        },
+        "O2_opp_levelnorm": {
+          "2016": 0.031955940201382295,
+          "2017": 0.03999617753518998,
+          "2018": 0.037314579417631694,
+          "2019": 0.035442247955135675,
+          "2020": 0.03206243730746697,
+          "2021": 0.038581709202950974,
+          "2022": 0.037470601429343074,
+          "2023": 0.03315836568817697,
+          "2024": 0.037937965496633454,
+          "2025": 0.03308654329065831,
+          "2026": 0.03495867212200114
+        },
+        "O3_opp_window3": {
+          "2016": 0.0323480328747836,
+          "2017": 0.03984488940067979,
+          "2018": 0.037378740806837785,
+          "2019": 0.035530247836162474,
+          "2020": 0.032111786228647805,
+          "2021": 0.0384047215435658,
+          "2022": 0.03746199142092252,
+          "2023": 0.03233779927957013,
+          "2024": 0.03812935482196395,
+          "2025": 0.032705779483333405,
+          "2026": 0.035279595831266275
+        },
+        "O4_opp_extra": {
+          "2016": 0.03370824709096488,
+          "2017": 0.03996175071307435,
+          "2018": 0.03736059478216433,
+          "2019": 0.03531296262769601,
+          "2020": 0.031810208946874474,
+          "2021": 0.038518044477539724,
+          "2022": 0.03757926928436957,
+          "2023": 0.03243626986744516,
+          "2024": 0.03811346967037994,
+          "2025": 0.03299317168192569,
+          "2026": 0.03527811744352423
+        },
+        "A_opp_placebo": {
+          "2016": 0.03256913040104417,
+          "2017": 0.040445206113389795,
+          "2018": 0.037496801515093145,
+          "2019": 0.03538206212858174,
+          "2020": 0.03195324108087587,
+          "2021": 0.03804132315616523,
+          "2022": 0.03725950254017221,
+          "2023": 0.0327088494506516,
+          "2024": 0.0379682691842065,
+          "2025": 0.0327726786499846,
+          "2026": 0.03505418994200286
+        },
+        "A_opp_noloo": {
+          "2016": 0.03235789662636573,
+          "2017": 0.039854526412753485,
+          "2018": 0.03736025427228677,
+          "2019": 0.03548938235976337,
+          "2020": 0.03202738350793156,
+          "2021": 0.038434085954323675,
+          "2022": 0.03749160624982972,
+          "2023": 0.03236657803887943,
+          "2024": 0.038139870957908155,
+          "2025": 0.03274290698652257,
+          "2026": 0.035292293500659135
+        },
+        "A_degenerate_mean": {
+          "2016": 0.03731736294953542,
+          "2017": 0.04398518835850329,
+          "2018": 0.03905803059759345,
+          "2019": 0.0372926518224597,
+          "2020": 0.03506813319460613,
+          "2021": 0.038893708002663355,
+          "2022": 0.03814362866508805,
+          "2023": 0.0315262016483495,
+          "2024": 0.043935293087548476,
+          "2025": 0.0337660976908074,
+          "2026": 0.03196753875748565
+        }
+      },
+      "coverage": {
+        "L0_foil": {
+          "n_rows": 23949,
+          "pct_rows_moved": 0.0,
+          "mean_abs_delta": 0.0,
+          "max_abs_delta": 0.0,
+          "factor_p05": 1.0,
+          "factor_p95": 1.0,
+          "pct_rows_with_context": 0.0
+        },
+        "O1_opp_leaguenorm": {
+          "n_rows": 23949,
+          "pct_rows_moved": 94.61,
+          "mean_abs_delta": 0.0034945924727773606,
+          "max_abs_delta": 0.09563694305142939,
+          "factor_p05": 0.96079,
+          "factor_p95": 1.0349,
+          "pct_rows_with_context": 99.62
+        },
+        "O2_opp_levelnorm": {
+          "n_rows": 23949,
+          "pct_rows_moved": 94.61,
+          "mean_abs_delta": 0.005834975428075442,
+          "max_abs_delta": 0.09530832726972804,
+          "factor_p05": 0.93594,
+          "factor_p95": 1.06125,
+          "pct_rows_with_context": 99.62
+        },
+        "O3_opp_window3": {
+          "n_rows": 23949,
+          "pct_rows_moved": 94.61,
+          "mean_abs_delta": 0.003580155806189488,
+          "max_abs_delta": 0.09563694305142939,
+          "factor_p05": 0.9603,
+          "factor_p95": 1.03525,
+          "pct_rows_with_context": 99.62
+        },
+        "O4_opp_extra": {
+          "n_rows": 23949,
+          "pct_rows_moved": 94.61,
+          "mean_abs_delta": 0.0034945924727773606,
+          "max_abs_delta": 0.09563694305142939,
+          "factor_p05": 0.96079,
+          "factor_p95": 1.0349,
+          "pct_rows_with_context": 99.62
+        },
+        "A_opp_placebo": {
+          "n_rows": 23949,
+          "pct_rows_moved": 94.27,
+          "mean_abs_delta": 0.0037514341728139646,
+          "max_abs_delta": 0.06868212206024105,
+          "factor_p05": 0.96079,
+          "factor_p95": 1.0349,
+          "pct_rows_with_context": 99.62
+        },
+        "A_opp_noloo": {
+          "n_rows": 23949,
+          "pct_rows_moved": 94.61,
+          "mean_abs_delta": 0.0034871566178085412,
+          "max_abs_delta": 0.09479508262084424,
+          "factor_p05": 0.96049,
+          "factor_p95": 1.03465,
+          "pct_rows_with_context": 99.62
+        },
+        "A_degenerate_mean": {
+          "n_rows": 23949,
+          "pct_rows_moved": 0.0,
+          "mean_abs_delta": 0.0,
+          "max_abs_delta": 0.0,
+          "factor_p05": 1.0,
+          "factor_p95": 1.0,
+          "pct_rows_with_context": 0.0
+        }
+      },
+      "deflation": {
+        "n_configs": 5,
+        "n_folds": 11,
+        "pbo": 0.9857142857142858,
+        "os_gap_pct": 0.3418,
+        "os_gap_p90_pct": 0.7712,
+        "contender_spread_pct": 0.078,
+        "full_spread_pct": 0.395,
+        "flips": [
+          {
+            "config": "O2_opp_levelnorm",
+            "IS_half_wins": 140,
+            "share": 0.303,
+            "mean_oos_mae": 0.03563,
+            "pct_vs_best": 0.112
+          },
+          {
+            "config": "L0_foil",
+            "IS_half_wins": 114,
+            "share": 0.247,
+            "mean_oos_mae": 0.03562,
+            "pct_vs_best": 0.078
+          },
+          {
+            "config": "O3_opp_window3",
+            "IS_half_wins": 101,
+            "share": 0.219,
+            "mean_oos_mae": 0.03559,
+            "pct_vs_best": 0.002
+          },
+          {
+            "config": "O1_opp_leaguenorm",
+            "IS_half_wins": 58,
+            "share": 0.126,
+            "mean_oos_mae": 0.03559,
+            "pct_vs_best": 0.0
+          },
+          {
+            "config": "O4_opp_extra",
+            "IS_half_wins": 49,
+            "share": 0.106,
+            "mean_oos_mae": 0.03573,
+            "pct_vs_best": 0.395
+          }
+        ],
+        "whole_field": {
+          "n_configs": 8,
+          "n_folds": 11,
+          "pbo": 0.9428571428571428,
+          "os_gap_pct": 0.3702,
+          "os_gap_p90_pct": 0.6704,
+          "contender_spread_pct": 0.008,
+          "full_spread_pct": 4.962,
+          "flips": [
+            {
+              "config": "A_opp_placebo",
+              "IS_half_wins": 129,
+              "share": 0.279,
+              "mean_oos_mae": 0.0356,
+              "pct_vs_best": 0.032
+            },
+            {
+              "config": "O2_opp_levelnorm",
+              "IS_half_wins": 112,
+              "share": 0.242,
+              "mean_oos_mae": 0.03563,
+              "pct_vs_best": 0.112
+            },
+            {
+              "config": "O3_opp_window3",
+              "IS_half_wins": 83,
+              "share": 0.18,
+              "mean_oos_mae": 0.03559,
+              "pct_vs_best": 0.002
+            },
+            {
+              "config": "L0_foil",
+              "IS_half_wins": 53,
+              "share": 0.115,
+              "mean_oos_mae": 0.03562,
+              "pct_vs_best": 0.078
+            },
+            {
+              "config": "O4_opp_extra",
+              "IS_half_wins": 30,
+              "share": 0.065,
+              "mean_oos_mae": 0.03573,
+              "pct_vs_best": 0.395
+            },
+            {
+              "config": "O1_opp_leaguenorm",
+              "IS_half_wins": 29,
+              "share": 0.063,
+              "mean_oos_mae": 0.03559,
+              "pct_vs_best": 0.0
+            },
+            {
+              "config": "A_opp_noloo",
+              "IS_half_wins": 19,
+              "share": 0.041,
+              "mean_oos_mae": 0.0356,
+              "pct_vs_best": 0.008
+            },
+            {
+              "config": "A_degenerate_mean",
+              "IS_half_wins": 7,
+              "share": 0.015,
+              "mean_oos_mae": 0.03736,
+              "pct_vs_best": 4.962
+            }
+          ]
+        }
+      },
+      "dsr": {
+        "available": true,
+        "eligible": {
+          "arm": "O1_opp_leaguenorm",
+          "n_trials": 4,
+          "dsr": 0.38483354906946476,
+          "observed_sr": 0.14689795101954398,
+          "sr0": 0.2362168961343171,
+          "passes": false
+        },
+        "whole_field": {
+          "arm": "O1_opp_leaguenorm",
+          "n_trials": 7,
+          "dsr": 0.16814035708561126,
+          "observed_sr": 0.14689795101954398,
+          "sr0": 0.44020634329290337,
+          "passes": false
+        },
+        "binds": "eligible"
+      },
+      "anchors": {
+        "required_anchors_present": true,
+        "missing_anchors": [],
+        "best_arm": "O1_opp_leaguenorm",
+        "foil": "L0_foil",
+        "A_degenerate_mean__vs_best": {
+          "available": true,
+          "challenger": "A_degenerate_mean",
+          "defender": "O1_opp_leaguenorm",
+          "mean_gap": 0.0017662240856088438,
+          "challenger_fold_wins": 2,
+          "n_folds": 11,
+          "p_challenger_better": 0.974751965546441,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_degenerate_mean__mae": 0.037359439524967314,
+        "A_opp_placebo__vs_best": {
+          "available": true,
+          "challenger": "A_opp_placebo",
+          "defender": "O1_opp_leaguenorm",
+          "mean_gap": 1.144402992950708e-05,
+          "challenger_fold_wins": 6,
+          "n_folds": 11,
+          "p_challenger_better": 0.5514897816567262,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_opp_placebo__mae": 0.03560465946928797,
+        "A_opp_noloo__vs_best": {
+          "available": true,
+          "challenger": "A_opp_noloo",
+          "defender": "O1_opp_leaguenorm",
+          "mean_gap": 2.8559122073139447e-06,
+          "challenger_fold_wins": 6,
+          "n_folds": 11,
+          "p_challenger_better": 0.7689122945417644,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_opp_noloo__mae": 0.03559607135156578,
+        "inert_anchors": [],
+        "oracle_floor_ok": true,
+        "best_arm_mae": 0.035593215439358464,
+        "low_propensity_tercile_lift_pct": 0.370197182170157,
+        "low_propensity_tercile_lift_pct_all_rows": 0.370197182170157
+      },
+      "stratified": [
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.04042433648929838,
+          "pct_lift_vs_foil": -4.933939896738258
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.03744408812823143,
+          "pct_lift_vs_foil": -3.5177034831324487
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.03736132679370379,
+          "pct_lift_vs_foil": -8.247660834436768
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.03838421493860038,
+          "pct_lift_vs_foil": 0.3618301956084061
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.03609920651803443,
+          "pct_lift_vs_foil": 0.2003482228543429
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.03454312171158206,
+          "pct_lift_vs_foil": -0.08242329948903689
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.03851866901015796,
+          "pct_lift_vs_foil": 0.012812829116065847
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.03613902971802521,
+          "pct_lift_vs_foil": 0.09025324085670149
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.03451401717289961,
+          "pct_lift_vs_foil": 0.0019018169458267398
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.03852360497383261,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.036171675827731925,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.03451467357881054,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.038380991673749115,
+          "pct_lift_vs_foil": 0.370197182170157
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.03609553521107293,
+          "pct_lift_vs_foil": 0.2104978962589985
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.03454172779633041,
+          "pct_lift_vs_foil": -0.07838468313514016
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.038454772475781225,
+          "pct_lift_vs_foil": 0.17867615997552666
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.03612334186146102,
+          "pct_lift_vs_foil": 0.13362379587028558
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.0346518142229403,
+          "pct_lift_vs_foil": -0.3973401162743641
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.03839244733071416,
+          "pct_lift_vs_foil": 0.3404604610797325
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.03609241628628131,
+          "pct_lift_vs_foil": 0.21912045719994633
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.03454131977006213,
+          "pct_lift_vs_foil": -0.07720250110652581
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.03866131258422799,
+          "pct_lift_vs_foil": -0.35746293860329587
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.03622127666880909,
+          "pct_lift_vs_foil": -0.13712619042973753
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.03459570255263066,
+          "pct_lift_vs_foil": -0.23476673952921304
+        }
+      ],
+      "stratified_moved_rows_only": [
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.04042433648929838,
+          "pct_lift_vs_foil": -4.933939896738258
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.03744408812823143,
+          "pct_lift_vs_foil": -3.5177034831324487
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.03736132679370379,
+          "pct_lift_vs_foil": -8.247660834436768
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.03838421493860038,
+          "pct_lift_vs_foil": 0.3618301956084061
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.03609920651803443,
+          "pct_lift_vs_foil": 0.2003482228543429
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.03454312171158206,
+          "pct_lift_vs_foil": -0.08242329948903689
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.03851866901015796,
+          "pct_lift_vs_foil": 0.012812829116065847
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.03613902971802521,
+          "pct_lift_vs_foil": 0.09025324085670149
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.03451401717289961,
+          "pct_lift_vs_foil": 0.0019018169458267398
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.03852360497383261,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.036171675827731925,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.03451467357881054,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.038380991673749115,
+          "pct_lift_vs_foil": 0.370197182170157
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.03609553521107293,
+          "pct_lift_vs_foil": 0.2104978962589985
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.03454172779633041,
+          "pct_lift_vs_foil": -0.07838468313514016
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.038454772475781225,
+          "pct_lift_vs_foil": 0.17867615997552666
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.03612334186146102,
+          "pct_lift_vs_foil": 0.13362379587028558
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.0346518142229403,
+          "pct_lift_vs_foil": -0.3973401162743641
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.03839244733071416,
+          "pct_lift_vs_foil": 0.3404604610797325
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.03609241628628131,
+          "pct_lift_vs_foil": 0.21912045719994633
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.03454131977006213,
+          "pct_lift_vs_foil": -0.07720250110652581
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.03866131258422799,
+          "pct_lift_vs_foil": -0.35746293860329587
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.03622127666880909,
+          "pct_lift_vs_foil": -0.13712619042973753
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.03459570255263066,
+          "pct_lift_vs_foil": -0.23476673952921304
+        }
+      ],
+      "propensity_tercile_composition": [
+        {
+          "stratum": 0,
+          "n_rows": 394,
+          "pct_rows_the_mechanism_can_move": 85.7,
+          "Double-A": 32.2,
+          "High-A": 17.0,
+          "Single-A": 10.4,
+          "Triple-A": 40.4
+        },
+        {
+          "stratum": 1,
+          "n_rows": 725,
+          "pct_rows_the_mechanism_can_move": 85.7,
+          "Double-A": 37.0,
+          "High-A": 29.1,
+          "Single-A": 14.2,
+          "Triple-A": 19.7
+        },
+        {
+          "stratum": 2,
+          "n_rows": 855,
+          "pct_rows_the_mechanism_can_move": 85.7,
+          "Double-A": 29.6,
+          "High-A": 28.7,
+          "Single-A": 24.8,
+          "Triple-A": 17.0
+        }
+      ],
+      "reasons": [
+        "\ud83d\udfe1 no arm clears: best eligible `O1_opp_leaguenorm` MAE 0.03559 vs foil 0.03562 (0.08%, fold win rate 55%; the pre-registered bar is a strict OOS improvement in \u226560% of folds). DROPPED."
+      ]
+    },
+    "bb_pct": {
+      "verdict": "DROP",
+      "winner": "L0_foil",
+      "leaderboard": [
+        {
+          "arm": "L0_foil",
+          "kind": "foil",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.01907110163146404,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "factor_p05": 1.0,
+          "factor_p95": 1.0,
+          "note": "\u2b50 THE DIRECT-LEARNED FOIL \u2014 the shipped E7.12-slice-1 configuration, no opponent adjustment"
+        },
+        {
+          "arm": "A_opp_noloo",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.01908843616500774,
+          "pct_lift_vs_foil": -0.09089424344055207,
+          "fold_win_rate": 0.36363636363636365,
+          "p_one_sided": 0.7201781430114331,
+          "pct_rows_moved": 99.62,
+          "factor_p05": 0.95211,
+          "factor_p95": 1.05029,
+          "note": "\u2b50 SELF-INFLATION DIAGNOSTIC \u2014 the factor WITHOUT removing the player's own games. His hits are in his opponents' allowed-rate bucket, so dividing by a weakness he created shrinks HIM toward the mean and lowers MAE whether or not opponent quality exists."
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "kind": "opponent",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.019091396458176556,
+          "pct_lift_vs_foil": -0.10641664600556136,
+          "fold_win_rate": 0.2727272727272727,
+          "p_one_sided": 0.753494077900753,
+          "pct_rows_moved": 99.62,
+          "factor_p05": 0.95144,
+          "factor_p95": 1.04873,
+          "note": "\u2b50 HEADLINE \u2014 WITHIN-league strength of schedule. League-normalised because 19\u201341% of the level-normalised factor is between-league variance E7.3's league intercepts already carry."
+        },
+        {
+          "arm": "O3_opp_window3",
+          "kind": "opponent",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.01909379749869042,
+          "pct_lift_vs_foil": -0.11900658737478127,
+          "fold_win_rate": 0.45454545454545453,
+          "p_one_sided": 0.7549179083059656,
+          "pct_rows_moved": 99.62,
+          "factor_p05": 0.95094,
+          "factor_p95": 1.04918,
+          "note": "a 3-season opponent bucket \u2014 the window the park slice's assertion assumed"
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "kind": "opponent",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.019113954675062817,
+          "pct_lift_vs_foil": -0.22470145892399368,
+          "fold_win_rate": 0.18181818181818182,
+          "p_one_sided": 0.8020379835458121,
+          "pct_rows_moved": 99.62,
+          "factor_p05": 0.93011,
+          "factor_p95": 1.06707,
+          "note": "the NAIVE level-normalised factor \u2014 kept so the league re-encoding is visible in the leaderboard rather than asserted"
+        },
+        {
+          "arm": "O4_opp_extra",
+          "kind": "opponent",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.019125421091128723,
+          "pct_lift_vs_foil": -0.2848260195680851,
+          "fold_win_rate": 0.2727272727272727,
+          "p_one_sided": 0.8640264840809295,
+          "pct_rows_moved": 99.62,
+          "factor_p05": 0.95144,
+          "factor_p95": 1.04873,
+          "note": "\u2b50 NESTS THE FOIL \u2014 the raw rate is kept and the opponent DELTA enters as a fixed regressor, so a win is unambiguously 'opponent quality adds information'"
+        },
+        {
+          "arm": "A_opp_placebo",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.019251779004010372,
+          "pct_lift_vs_foil": -0.9473882318798277,
+          "fold_win_rate": 0.09090909090909091,
+          "p_one_sided": 0.9972720096178902,
+          "pct_rows_moved": 99.24,
+          "factor_p05": 0.95144,
+          "factor_p95": 1.04873,
+          "note": "DEGENERATE \u2014 the same opponent factors permuted across players within a level. Catches 'dividing by any dispersed number helps'."
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.02124786782199983,
+          "pct_lift_vs_foil": -11.413950974622765,
+          "fold_win_rate": 0.09090909090909091,
+          "p_one_sided": 0.9993824970373943,
+          "pct_rows_moved": 0.0,
+          "factor_p05": 1.0,
+          "factor_p95": 1.0,
+          "note": "DEGENERATE CEILING (NF-D11/NF-D14) \u2014 predict the population mean of the target."
+        }
+      ],
+      "mae_by_fold": {
+        "L0_foil": {
+          "2016": 0.0175726978294594,
+          "2017": 0.018437320257609014,
+          "2018": 0.021080819623633,
+          "2019": 0.019477133269519668,
+          "2020": 0.02124761679217445,
+          "2021": 0.01762373710720563,
+          "2022": 0.017521363260011535,
+          "2023": 0.017284516117858025,
+          "2024": 0.019088704623319713,
+          "2025": 0.01704785199155317,
+          "2026": 0.023400357073760848
+        },
+        "O1_opp_leaguenorm": {
+          "2016": 0.017718588176601286,
+          "2017": 0.018317650710741033,
+          "2018": 0.021084813459764744,
+          "2019": 0.01944413859744239,
+          "2020": 0.021282954069343604,
+          "2021": 0.017677039287590703,
+          "2022": 0.017525558945373804,
+          "2023": 0.017362344263460176,
+          "2024": 0.0191001810962282,
+          "2025": 0.017221532240258762,
+          "2026": 0.023270560193137425
+        },
+        "O2_opp_levelnorm": {
+          "2016": 0.01768222721673516,
+          "2017": 0.01844158558564187,
+          "2018": 0.021096225474709136,
+          "2019": 0.019541242581785717,
+          "2020": 0.021422475480922503,
+          "2021": 0.017794340855101568,
+          "2022": 0.01755006751123135,
+          "2023": 0.017333622211918125,
+          "2024": 0.019073200485347587,
+          "2025": 0.017290441628011605,
+          "2026": 0.023028072394286378
+        },
+        "O3_opp_window3": {
+          "2016": 0.017735970657782835,
+          "2017": 0.01833142036174852,
+          "2018": 0.02105859968464858,
+          "2019": 0.019440575797266147,
+          "2020": 0.021281832729986863,
+          "2021": 0.017688368814734786,
+          "2022": 0.01753915347378166,
+          "2023": 0.017364744283602056,
+          "2024": 0.019078549946832574,
+          "2025": 0.01725624247844879,
+          "2026": 0.023256314256761834
+        },
+        "O4_opp_extra": {
+          "2016": 0.01756800708395218,
+          "2017": 0.018952321579084653,
+          "2018": 0.021087967494747846,
+          "2019": 0.019488026774356425,
+          "2020": 0.0212495059330681,
+          "2021": 0.01763639230034929,
+          "2022": 0.017527399387538466,
+          "2023": 0.017266363249107956,
+          "2024": 0.019097420850398908,
+          "2025": 0.017027683843712844,
+          "2026": 0.0234785435060993
+        },
+        "A_opp_placebo": {
+          "2016": 0.017989961830709833,
+          "2017": 0.01847481880039993,
+          "2018": 0.0212591322665087,
+          "2019": 0.019604162095933284,
+          "2020": 0.02151206920802024,
+          "2021": 0.01772051510395799,
+          "2022": 0.017796650078730044,
+          "2023": 0.017575165561463692,
+          "2024": 0.0194554635979663,
+          "2025": 0.01686014933881355,
+          "2026": 0.023521481161610538
+        },
+        "A_opp_noloo": {
+          "2016": 0.017747257815202824,
+          "2017": 0.018316681339648876,
+          "2018": 0.02108922902863348,
+          "2019": 0.019426564839008183,
+          "2020": 0.021259940771686248,
+          "2021": 0.01766795462989467,
+          "2022": 0.017516434328254032,
+          "2023": 0.017358493788330848,
+          "2024": 0.019093937219663067,
+          "2025": 0.017209069360467573,
+          "2026": 0.02328723469429533
+        },
+        "A_degenerate_mean": {
+          "2016": 0.020721088225940962,
+          "2017": 0.018068382809598504,
+          "2018": 0.02350415692029495,
+          "2019": 0.02337952222253391,
+          "2020": 0.024257452257191964,
+          "2021": 0.018470148452296133,
+          "2022": 0.017664263359842506,
+          "2023": 0.02100572562896403,
+          "2024": 0.022161299012417233,
+          "2025": 0.017335914915540433,
+          "2026": 0.02715859223737749
+        }
+      },
+      "coverage": {
+        "L0_foil": {
+          "n_rows": 23949,
+          "pct_rows_moved": 0.0,
+          "mean_abs_delta": 0.0,
+          "max_abs_delta": 0.0,
+          "factor_p05": 1.0,
+          "factor_p95": 1.0,
+          "pct_rows_with_context": 0.0
+        },
+        "O1_opp_leaguenorm": {
+          "n_rows": 23949,
+          "pct_rows_moved": 99.62,
+          "mean_abs_delta": 0.002156074422643082,
+          "max_abs_delta": 0.02968163855676023,
+          "factor_p05": 0.95144,
+          "factor_p95": 1.04873,
+          "pct_rows_with_context": 99.62
+        },
+        "O2_opp_levelnorm": {
+          "n_rows": 23949,
+          "pct_rows_moved": 99.62,
+          "mean_abs_delta": 0.003163265801446665,
+          "max_abs_delta": 0.033381082547804225,
+          "factor_p05": 0.93011,
+          "factor_p95": 1.06707,
+          "pct_rows_with_context": 99.62
+        },
+        "O3_opp_window3": {
+          "n_rows": 23949,
+          "pct_rows_moved": 99.62,
+          "mean_abs_delta": 0.0022026094759111567,
+          "max_abs_delta": 0.02968163855676023,
+          "factor_p05": 0.95094,
+          "factor_p95": 1.04918,
+          "pct_rows_with_context": 99.62
+        },
+        "O4_opp_extra": {
+          "n_rows": 23949,
+          "pct_rows_moved": 99.62,
+          "mean_abs_delta": 0.002156074422643082,
+          "max_abs_delta": 0.02968163855676023,
+          "factor_p05": 0.95144,
+          "factor_p95": 1.04873,
+          "pct_rows_with_context": 99.62
+        },
+        "A_opp_placebo": {
+          "n_rows": 23949,
+          "pct_rows_moved": 99.24,
+          "mean_abs_delta": 0.0021381316619338924,
+          "max_abs_delta": 0.03331444440907805,
+          "factor_p05": 0.95144,
+          "factor_p95": 1.04873,
+          "pct_rows_with_context": 99.62
+        },
+        "A_opp_noloo": {
+          "n_rows": 23949,
+          "pct_rows_moved": 99.62,
+          "mean_abs_delta": 0.0021449022318093896,
+          "max_abs_delta": 0.028190833238005836,
+          "factor_p05": 0.95211,
+          "factor_p95": 1.05029,
+          "pct_rows_with_context": 99.62
+        },
+        "A_degenerate_mean": {
+          "n_rows": 23949,
+          "pct_rows_moved": 0.0,
+          "mean_abs_delta": 0.0,
+          "max_abs_delta": 0.0,
+          "factor_p05": 1.0,
+          "factor_p95": 1.0,
+          "pct_rows_with_context": 0.0
+        }
+      },
+      "deflation": {
+        "n_configs": 5,
+        "n_folds": 11,
+        "pbo": 0.5857142857142857,
+        "os_gap_pct": 0.1765,
+        "os_gap_p90_pct": 0.6139,
+        "contender_spread_pct": 0.119,
+        "full_spread_pct": 0.285,
+        "flips": [
+          {
+            "config": "L0_foil",
+            "IS_half_wins": 234,
+            "share": 0.506,
+            "mean_oos_mae": 0.01907,
+            "pct_vs_best": 0.0
+          },
+          {
+            "config": "O2_opp_levelnorm",
+            "IS_half_wins": 93,
+            "share": 0.201,
+            "mean_oos_mae": 0.01911,
+            "pct_vs_best": 0.225
+          },
+          {
+            "config": "O4_opp_extra",
+            "IS_half_wins": 55,
+            "share": 0.119,
+            "mean_oos_mae": 0.01913,
+            "pct_vs_best": 0.285
+          },
+          {
+            "config": "O3_opp_window3",
+            "IS_half_wins": 46,
+            "share": 0.1,
+            "mean_oos_mae": 0.01909,
+            "pct_vs_best": 0.119
+          },
+          {
+            "config": "O1_opp_leaguenorm",
+            "IS_half_wins": 34,
+            "share": 0.074,
+            "mean_oos_mae": 0.01909,
+            "pct_vs_best": 0.106
+          }
+        ],
+        "whole_field": {
+          "n_configs": 8,
+          "n_folds": 11,
+          "pbo": 0.44285714285714284,
+          "os_gap_pct": 0.1934,
+          "os_gap_p90_pct": 0.6171,
+          "contender_spread_pct": 0.106,
+          "full_spread_pct": 11.414,
+          "flips": [
+            {
+              "config": "L0_foil",
+              "IS_half_wins": 226,
+              "share": 0.489,
+              "mean_oos_mae": 0.01907,
+              "pct_vs_best": 0.0
+            },
+            {
+              "config": "O2_opp_levelnorm",
+              "IS_half_wins": 90,
+              "share": 0.195,
+              "mean_oos_mae": 0.01911,
+              "pct_vs_best": 0.225
+            },
+            {
+              "config": "A_opp_noloo",
+              "IS_half_wins": 65,
+              "share": 0.141,
+              "mean_oos_mae": 0.01909,
+              "pct_vs_best": 0.091
+            },
+            {
+              "config": "O4_opp_extra",
+              "IS_half_wins": 55,
+              "share": 0.119,
+              "mean_oos_mae": 0.01913,
+              "pct_vs_best": 0.285
+            },
+            {
+              "config": "O3_opp_window3",
+              "IS_half_wins": 22,
+              "share": 0.048,
+              "mean_oos_mae": 0.01909,
+              "pct_vs_best": 0.119
+            },
+            {
+              "config": "O1_opp_leaguenorm",
+              "IS_half_wins": 4,
+              "share": 0.009,
+              "mean_oos_mae": 0.01909,
+              "pct_vs_best": 0.106
+            }
+          ]
+        }
+      },
+      "dsr": {
+        "available": true,
+        "eligible": {
+          "arm": "O1_opp_leaguenorm",
+          "n_trials": 4,
+          "dsr": 0.18975639929748594,
+          "observed_sr": -0.21453838467317543,
+          "sr0": 0.06721304819131994,
+          "passes": false
+        },
+        "whole_field": {
+          "arm": "A_opp_noloo",
+          "n_trials": 7,
+          "dsr": 0.003380398451591334,
+          "observed_sr": -0.18194874316095533,
+          "sr0": 0.6611447231648938,
+          "passes": false
+        },
+        "binds": "eligible"
+      },
+      "anchors": {
+        "required_anchors_present": true,
+        "missing_anchors": [],
+        "best_arm": "O1_opp_leaguenorm",
+        "foil": "L0_foil",
+        "A_degenerate_mean__vs_best": {
+          "available": true,
+          "challenger": "A_degenerate_mean",
+          "defender": "O1_opp_leaguenorm",
+          "mean_gap": 0.002156471363823272,
+          "challenger_fold_wins": 1,
+          "n_folds": 11,
+          "p_challenger_better": 0.9993227626945993,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_degenerate_mean__mae": 0.02124786782199983,
+        "A_opp_placebo__vs_best": {
+          "available": true,
+          "challenger": "A_opp_placebo",
+          "defender": "O1_opp_leaguenorm",
+          "mean_gap": 0.00016038254583381623,
+          "challenger_fold_wins": 1,
+          "n_folds": 11,
+          "p_challenger_better": 0.9903866397748798,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_opp_placebo__mae": 0.019251779004010372,
+        "A_opp_noloo__vs_best": {
+          "available": true,
+          "challenger": "A_opp_noloo",
+          "defender": "O1_opp_leaguenorm",
+          "mean_gap": -2.9602931688179044e-06,
+          "challenger_fold_wins": 8,
+          "n_folds": 11,
+          "p_challenger_better": 0.26319550262179936,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_opp_noloo__mae": 0.01908843616500774,
+        "inert_anchors": [],
+        "oracle_floor_ok": true,
+        "best_arm_mae": 0.019091396458176556,
+        "low_propensity_tercile_lift_pct": -0.6143998606964313,
+        "low_propensity_tercile_lift_pct_all_rows": -0.6143998606964313
+      },
+      "stratified": [
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.021734157582181547,
+          "pct_lift_vs_foil": -16.558976474720485
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.021142013576227067,
+          "pct_lift_vs_foil": -13.07279561065377
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.020276186662358312,
+          "pct_lift_vs_foil": -6.825728766399338
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.01875965697034627,
+          "pct_lift_vs_foil": -0.6069090652529793
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.018653733094707494,
+          "pct_lift_vs_foil": 0.23515300523450605
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.019016547438891425,
+          "pct_lift_vs_foil": -0.18927979942477677
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.018848023496374877,
+          "pct_lift_vs_foil": -1.0808134155630689
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.018902916242490356,
+          "pct_lift_vs_foil": -1.097541018316447
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.01914706343850401,
+          "pct_lift_vs_foil": -0.876907458730819
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.01864648973380037,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.018697701301227096,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.018980620957613277,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.018761053740749614,
+          "pct_lift_vs_foil": -0.6143998606964313
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.018656768782646074,
+          "pct_lift_vs_foil": 0.21891738412968018
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.01902356246704601,
+          "pct_lift_vs_foil": -0.2262386964505923
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.0187781237305038,
+          "pct_lift_vs_foil": -0.7059451863736985
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.0187106701394139,
+          "pct_lift_vs_foil": -0.06936060202196492
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.0190658027842055,
+          "pct_lift_vs_foil": -0.44878313930007346
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.018796238319153624,
+          "pct_lift_vs_foil": -0.8030926329356441
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.018657978959968142,
+          "pct_lift_vs_foil": 0.21244505203616235
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.019010256005014523,
+          "pct_lift_vs_foil": -0.15613318166683804
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.018592975523098555,
+          "pct_lift_vs_foil": 0.28699348491748233
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.018819366232941153,
+          "pct_lift_vs_foil": -0.6506945947738968
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.0190267895006004,
+          "pct_lift_vs_foil": -0.24324042448466227
+        }
+      ],
+      "stratified_moved_rows_only": [
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.021734157582181547,
+          "pct_lift_vs_foil": -16.558976474720485
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.021142013576227067,
+          "pct_lift_vs_foil": -13.07279561065377
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.020276186662358312,
+          "pct_lift_vs_foil": -6.825728766399338
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.01875965697034627,
+          "pct_lift_vs_foil": -0.6069090652529793
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.018653733094707494,
+          "pct_lift_vs_foil": 0.23515300523450605
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.019016547438891425,
+          "pct_lift_vs_foil": -0.18927979942477677
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.018848023496374877,
+          "pct_lift_vs_foil": -1.0808134155630689
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.018902916242490356,
+          "pct_lift_vs_foil": -1.097541018316447
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.01914706343850401,
+          "pct_lift_vs_foil": -0.876907458730819
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.01864648973380037,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.018697701301227096,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.018980620957613277,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.018761053740749614,
+          "pct_lift_vs_foil": -0.6143998606964313
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.018656768782646074,
+          "pct_lift_vs_foil": 0.21891738412968018
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.01902356246704601,
+          "pct_lift_vs_foil": -0.2262386964505923
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.0187781237305038,
+          "pct_lift_vs_foil": -0.7059451863736985
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.0187106701394139,
+          "pct_lift_vs_foil": -0.06936060202196492
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.0190658027842055,
+          "pct_lift_vs_foil": -0.44878313930007346
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.018796238319153624,
+          "pct_lift_vs_foil": -0.8030926329356441
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.018657978959968142,
+          "pct_lift_vs_foil": 0.21244505203616235
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.019010256005014523,
+          "pct_lift_vs_foil": -0.15613318166683804
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.018592975523098555,
+          "pct_lift_vs_foil": 0.28699348491748233
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.018819366232941153,
+          "pct_lift_vs_foil": -0.6506945947738968
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.0190267895006004,
+          "pct_lift_vs_foil": -0.24324042448466227
+        }
+      ],
+      "propensity_tercile_composition": [
+        {
+          "stratum": 0,
+          "n_rows": 394,
+          "pct_rows_the_mechanism_can_move": 85.7,
+          "Double-A": 32.2,
+          "High-A": 17.0,
+          "Single-A": 10.4,
+          "Triple-A": 40.4
+        },
+        {
+          "stratum": 1,
+          "n_rows": 725,
+          "pct_rows_the_mechanism_can_move": 85.7,
+          "Double-A": 37.0,
+          "High-A": 29.1,
+          "Single-A": 14.2,
+          "Triple-A": 19.7
+        },
+        {
+          "stratum": 2,
+          "n_rows": 855,
+          "pct_rows_the_mechanism_can_move": 85.7,
+          "Double-A": 29.6,
+          "High-A": 28.7,
+          "Single-A": 24.8,
+          "Triple-A": 17.0
+        }
+      ],
+      "reasons": [
+        "\ud83d\udfe1 no arm clears: best eligible `O1_opp_leaguenorm` MAE 0.01909 vs foil 0.01907 (-0.11%, fold win rate 27%; the pre-registered bar is a strict OOS improvement in \u226560% of folds). DROPPED."
+      ]
+    },
+    "hr_rate": {
+      "verdict": "DROP",
+      "winner": "L0_foil",
+      "leaderboard": [
+        {
+          "arm": "O3_opp_window3",
+          "kind": "opponent",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.009759994557702682,
+          "pct_lift_vs_foil": 0.14704630226586793,
+          "fold_win_rate": 0.7272727272727273,
+          "p_one_sided": 0.08825732454890997,
+          "pct_rows_moved": 99.62,
+          "factor_p05": 0.88525,
+          "factor_p95": 1.09339,
+          "note": "a 3-season opponent bucket \u2014 the window the park slice's assertion assumed"
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "kind": "opponent",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.00976044514852714,
+          "pct_lift_vs_foil": 0.14243637912857046,
+          "fold_win_rate": 0.6363636363636364,
+          "p_one_sided": 0.21783892195969756,
+          "pct_rows_moved": 99.62,
+          "factor_p05": 0.83996,
+          "factor_p95": 1.15441,
+          "note": "the NAIVE level-normalised factor \u2014 kept so the league re-encoding is visible in the leaderboard rather than asserted"
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "kind": "opponent",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.00976243556501914,
+          "pct_lift_vs_foil": 0.1220727442269478,
+          "fold_win_rate": 0.7272727272727273,
+          "p_one_sided": 0.11993524911804032,
+          "pct_rows_moved": 99.62,
+          "factor_p05": 0.88641,
+          "factor_p95": 1.09164,
+          "note": "\u2b50 HEADLINE \u2014 WITHIN-league strength of schedule. League-normalised because 19\u201341% of the level-normalised factor is between-league variance E7.3's league intercepts already carry."
+        },
+        {
+          "arm": "A_opp_noloo",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.00976286087493934,
+          "pct_lift_vs_foil": 0.11772146600463115,
+          "fold_win_rate": 0.7272727272727273,
+          "p_one_sided": 0.1261281905041227,
+          "pct_rows_moved": 99.62,
+          "factor_p05": 0.88613,
+          "factor_p95": 1.09351,
+          "note": "\u2b50 SELF-INFLATION DIAGNOSTIC \u2014 the factor WITHOUT removing the player's own games. His hits are in his opponents' allowed-rate bucket, so dividing by a weakness he created shrinks HIM toward the mean and lowers MAE whether or not opponent quality exists."
+        },
+        {
+          "arm": "O4_opp_extra",
+          "kind": "opponent",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.009771064149803077,
+          "pct_lift_vs_foil": 0.033795064171544646,
+          "fold_win_rate": 0.7272727272727273,
+          "p_one_sided": 0.3401029880638229,
+          "pct_rows_moved": 99.62,
+          "factor_p05": 0.88641,
+          "factor_p95": 1.09164,
+          "note": "\u2b50 NESTS THE FOIL \u2014 the raw rate is kept and the opponent DELTA enters as a fixed regressor, so a win is unambiguously 'opponent quality adds information'"
+        },
+        {
+          "arm": "L0_foil",
+          "kind": "foil",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.009774367403539465,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "factor_p05": 1.0,
+          "factor_p95": 1.0,
+          "note": "\u2b50 THE DIRECT-LEARNED FOIL \u2014 the shipped E7.12-slice-1 configuration, no opponent adjustment"
+        },
+        {
+          "arm": "A_opp_placebo",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.00981138796271355,
+          "pct_lift_vs_foil": -0.3787514592573868,
+          "fold_win_rate": 0.36363636363636365,
+          "p_one_sided": 0.855895364935899,
+          "pct_rows_moved": 99.24,
+          "factor_p05": 0.88641,
+          "factor_p95": 1.09164,
+          "note": "DEGENERATE \u2014 the same opponent factors permuted across players within a level. Catches 'dividing by any dispersed number helps'."
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.009921280039840831,
+          "pct_lift_vs_foil": -1.5030398412092163,
+          "fold_win_rate": 0.18181818181818182,
+          "p_one_sided": 0.9751516106109147,
+          "pct_rows_moved": 0.0,
+          "factor_p05": 1.0,
+          "factor_p95": 1.0,
+          "note": "DEGENERATE CEILING (NF-D11/NF-D14) \u2014 predict the population mean of the target."
+        }
+      ],
+      "mae_by_fold": {
+        "L0_foil": {
+          "2016": 0.01051187951419935,
+          "2017": 0.009407254512694108,
+          "2018": 0.00952488250854702,
+          "2019": 0.011180157800398587,
+          "2020": 0.009524232966422803,
+          "2021": 0.009312199152115013,
+          "2022": 0.01079711842530025,
+          "2023": 0.009075030284950499,
+          "2024": 0.00838403772130595,
+          "2025": 0.00950065459462738,
+          "2026": 0.01030059395837317
+        },
+        "O1_opp_leaguenorm": {
+          "2016": 0.010547870345795459,
+          "2017": 0.00934411702417113,
+          "2018": 0.009549115334745017,
+          "2019": 0.011154749233547801,
+          "2020": 0.009517320601631412,
+          "2021": 0.00928612918323908,
+          "2022": 0.010825455322816245,
+          "2023": 0.009036412382139689,
+          "2024": 0.008340373287644542,
+          "2025": 0.00948926241021235,
+          "2026": 0.01029598608926783
+        },
+        "O2_opp_levelnorm": {
+          "2016": 0.010547681808920899,
+          "2017": 0.009341853543487265,
+          "2018": 0.00958259643773849,
+          "2019": 0.011151570589391705,
+          "2020": 0.009503510450734394,
+          "2021": 0.00929105709305028,
+          "2022": 0.010835711213552963,
+          "2023": 0.008983787420048754,
+          "2024": 0.008309887903108486,
+          "2025": 0.009443679767260495,
+          "2026": 0.010373560406504825
+        },
+        "O3_opp_window3": {
+          "2016": 0.010553705894377218,
+          "2017": 0.009344528779384548,
+          "2018": 0.0095515188468159,
+          "2019": 0.011141538096785059,
+          "2020": 0.009513897897333885,
+          "2021": 0.009276871983998044,
+          "2022": 0.010817856511339395,
+          "2023": 0.009034057929429793,
+          "2024": 0.008346327123578546,
+          "2025": 0.009492301733901629,
+          "2026": 0.010287335337785477
+        },
+        "O4_opp_extra": {
+          "2016": 0.01057392666410057,
+          "2017": 0.00940228399911973,
+          "2018": 0.009526598110247631,
+          "2019": 0.01117907981113422,
+          "2020": 0.00952144658620809,
+          "2021": 0.009306421837676415,
+          "2022": 0.01080110374409677,
+          "2023": 0.00905101796016795,
+          "2024": 0.008340853153941055,
+          "2025": 0.009498355338841974,
+          "2026": 0.010280618442299447
+        },
+        "A_opp_placebo": {
+          "2016": 0.010861359719241124,
+          "2017": 0.009426385105257186,
+          "2018": 0.009555425826877517,
+          "2019": 0.011191643011507319,
+          "2020": 0.009579378256236004,
+          "2021": 0.00934591250380625,
+          "2022": 0.010773703300302896,
+          "2023": 0.009021690750577268,
+          "2024": 0.008356635775823278,
+          "2025": 0.009544929731511864,
+          "2026": 0.010268203608708348
+        },
+        "A_opp_noloo": {
+          "2016": 0.010549854365799785,
+          "2017": 0.009347632905555245,
+          "2018": 0.00954548942818984,
+          "2019": 0.011160148666146404,
+          "2020": 0.009520737850002205,
+          "2021": 0.00928731972647166,
+          "2022": 0.01082714103525684,
+          "2023": 0.00903534354496446,
+          "2024": 0.008337818422232557,
+          "2025": 0.009486177392908622,
+          "2026": 0.01029380628680513
+        },
+        "A_degenerate_mean": {
+          "2016": 0.010518862259408322,
+          "2017": 0.009314668885204616,
+          "2018": 0.009638984368566828,
+          "2019": 0.010961413688711242,
+          "2020": 0.009762965618961483,
+          "2021": 0.009761627850183857,
+          "2022": 0.010996145420005637,
+          "2023": 0.009105717038108233,
+          "2024": 0.008536824288400559,
+          "2025": 0.009708523561618216,
+          "2026": 0.010828347459080151
+        }
+      },
+      "coverage": {
+        "L0_foil": {
+          "n_rows": 23949,
+          "pct_rows_moved": 0.0,
+          "mean_abs_delta": 0.0,
+          "max_abs_delta": 0.0,
+          "factor_p05": 1.0,
+          "factor_p95": 1.0,
+          "pct_rows_with_context": 0.0
+        },
+        "O1_opp_leaguenorm": {
+          "n_rows": 23949,
+          "pct_rows_moved": 99.62,
+          "mean_abs_delta": 0.0010449092331020907,
+          "max_abs_delta": 0.016319701905334882,
+          "factor_p05": 0.88641,
+          "factor_p95": 1.09164,
+          "pct_rows_with_context": 99.62
+        },
+        "O2_opp_levelnorm": {
+          "n_rows": 23949,
+          "pct_rows_moved": 99.62,
+          "mean_abs_delta": 0.0016294615633424237,
+          "max_abs_delta": 0.017234212958184114,
+          "factor_p05": 0.83996,
+          "factor_p95": 1.15441,
+          "pct_rows_with_context": 99.62
+        },
+        "O3_opp_window3": {
+          "n_rows": 23949,
+          "pct_rows_moved": 99.62,
+          "mean_abs_delta": 0.0010660377423169268,
+          "max_abs_delta": 0.016319701905334882,
+          "factor_p05": 0.88525,
+          "factor_p95": 1.09339,
+          "pct_rows_with_context": 99.62
+        },
+        "O4_opp_extra": {
+          "n_rows": 23949,
+          "pct_rows_moved": 99.62,
+          "mean_abs_delta": 0.0010449092331020907,
+          "max_abs_delta": 0.016319701905334882,
+          "factor_p05": 0.88641,
+          "factor_p95": 1.09164,
+          "pct_rows_with_context": 99.62
+        },
+        "A_opp_placebo": {
+          "n_rows": 23949,
+          "pct_rows_moved": 99.24,
+          "mean_abs_delta": 0.0010415215482499993,
+          "max_abs_delta": 0.016674545902225623,
+          "factor_p05": 0.88641,
+          "factor_p95": 1.09164,
+          "pct_rows_with_context": 99.62
+        },
+        "A_opp_noloo": {
+          "n_rows": 23949,
+          "pct_rows_moved": 99.62,
+          "mean_abs_delta": 0.0010393941124232297,
+          "max_abs_delta": 0.015902394788912623,
+          "factor_p05": 0.88613,
+          "factor_p95": 1.09351,
+          "pct_rows_with_context": 99.62
+        },
+        "A_degenerate_mean": {
+          "n_rows": 23949,
+          "pct_rows_moved": 0.0,
+          "mean_abs_delta": 0.0,
+          "max_abs_delta": 0.0,
+          "factor_p05": 1.0,
+          "factor_p95": 1.0,
+          "pct_rows_with_context": 0.0
+        }
+      },
+      "deflation": {
+        "n_configs": 5,
+        "n_folds": 11,
+        "pbo": 0.6285714285714286,
+        "os_gap_pct": 0.1009,
+        "os_gap_p90_pct": 0.3052,
+        "contender_spread_pct": 0.025,
+        "full_spread_pct": 0.147,
+        "flips": [
+          {
+            "config": "O2_opp_levelnorm",
+            "IS_half_wins": 223,
+            "share": 0.483,
+            "mean_oos_mae": 0.00976,
+            "pct_vs_best": 0.005
+          },
+          {
+            "config": "O3_opp_window3",
+            "IS_half_wins": 172,
+            "share": 0.372,
+            "mean_oos_mae": 0.00976,
+            "pct_vs_best": 0.0
+          },
+          {
+            "config": "L0_foil",
+            "IS_half_wins": 36,
+            "share": 0.078,
+            "mean_oos_mae": 0.00977,
+            "pct_vs_best": 0.147
+          },
+          {
+            "config": "O4_opp_extra",
+            "IS_half_wins": 24,
+            "share": 0.052,
+            "mean_oos_mae": 0.00977,
+            "pct_vs_best": 0.113
+          },
+          {
+            "config": "O1_opp_leaguenorm",
+            "IS_half_wins": 7,
+            "share": 0.015,
+            "mean_oos_mae": 0.00976,
+            "pct_vs_best": 0.025
+          }
+        ],
+        "whole_field": {
+          "n_configs": 8,
+          "n_folds": 11,
+          "pbo": 0.38571428571428573,
+          "os_gap_pct": 0.1017,
+          "os_gap_p90_pct": 0.3226,
+          "contender_spread_pct": 0.025,
+          "full_spread_pct": 1.653,
+          "flips": [
+            {
+              "config": "O2_opp_levelnorm",
+              "IS_half_wins": 221,
+              "share": 0.478,
+              "mean_oos_mae": 0.00976,
+              "pct_vs_best": 0.005
+            },
+            {
+              "config": "O3_opp_window3",
+              "IS_half_wins": 166,
+              "share": 0.359,
+              "mean_oos_mae": 0.00976,
+              "pct_vs_best": 0.0
+            },
+            {
+              "config": "L0_foil",
+              "IS_half_wins": 35,
+              "share": 0.076,
+              "mean_oos_mae": 0.00977,
+              "pct_vs_best": 0.147
+            },
+            {
+              "config": "O4_opp_extra",
+              "IS_half_wins": 20,
+              "share": 0.043,
+              "mean_oos_mae": 0.00977,
+              "pct_vs_best": 0.113
+            },
+            {
+              "config": "A_opp_noloo",
+              "IS_half_wins": 12,
+              "share": 0.026,
+              "mean_oos_mae": 0.00976,
+              "pct_vs_best": 0.029
+            },
+            {
+              "config": "A_opp_placebo",
+              "IS_half_wins": 4,
+              "share": 0.009,
+              "mean_oos_mae": 0.00981,
+              "pct_vs_best": 0.527
+            },
+            {
+              "config": "O1_opp_leaguenorm",
+              "IS_half_wins": 3,
+              "share": 0.006,
+              "mean_oos_mae": 0.00976,
+              "pct_vs_best": 0.025
+            },
+            {
+              "config": "A_degenerate_mean",
+              "IS_half_wins": 1,
+              "share": 0.002,
+              "mean_oos_mae": 0.00992,
+              "pct_vs_best": 1.653
+            }
+          ]
+        }
+      },
+      "dsr": {
+        "available": true,
+        "eligible": {
+          "arm": "O3_opp_window3",
+          "n_trials": 4,
+          "dsr": 0.8000743709905515,
+          "observed_sr": 0.43849315362694374,
+          "sr0": 0.14588104864915147,
+          "passes": false
+        },
+        "whole_field": {
+          "arm": "O3_opp_window3",
+          "n_trials": 7,
+          "dsr": 0.3360933516648562,
+          "observed_sr": 0.43849315362694374,
+          "sr0": 0.5855657094966003,
+          "passes": false
+        },
+        "binds": "eligible"
+      },
+      "anchors": {
+        "required_anchors_present": true,
+        "missing_anchors": [],
+        "best_arm": "O3_opp_window3",
+        "foil": "L0_foil",
+        "A_degenerate_mean__vs_best": {
+          "available": true,
+          "challenger": "A_degenerate_mean",
+          "defender": "O3_opp_window3",
+          "mean_gap": 0.00016128548213815007,
+          "challenger_fold_wins": 3,
+          "n_folds": 11,
+          "p_challenger_better": 0.9836918345326562,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_degenerate_mean__mae": 0.009921280039840831,
+        "A_opp_placebo__vs_best": {
+          "available": true,
+          "challenger": "A_opp_placebo",
+          "defender": "O3_opp_window3",
+          "mean_gap": 5.139340501086918e-05,
+          "challenger_fold_wins": 3,
+          "n_folds": 11,
+          "p_challenger_better": 0.9493506092248977,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_opp_placebo__mae": 0.00981138796271355,
+        "A_opp_noloo__vs_best": {
+          "available": true,
+          "challenger": "A_opp_noloo",
+          "defender": "O3_opp_window3",
+          "mean_gap": 2.8663172366596483e-06,
+          "challenger_fold_wins": 4,
+          "n_folds": 11,
+          "p_challenger_better": 0.856835316839559,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_opp_noloo__mae": 0.00976286087493934,
+        "inert_anchors": [],
+        "oracle_floor_ok": true,
+        "best_arm_mae": 0.009759994557702682,
+        "low_propensity_tercile_lift_pct": 0.14535197946172582,
+        "low_propensity_tercile_lift_pct_all_rows": 0.14535197946172582
+      },
+      "stratified": [
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.010081228559097807,
+          "pct_lift_vs_foil": -3.5760061023733685
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.010117320719369273,
+          "pct_lift_vs_foil": -1.013573456276303
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.009419766186307991,
+          "pct_lift_vs_foil": -0.2411603464453441
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.009728600198798011,
+          "pct_lift_vs_foil": 0.04694887619623891
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.00998717559875453,
+          "pct_lift_vs_foil": 0.285824286055325
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.009394094607829704,
+          "pct_lift_vs_foil": 0.03202571398242956
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.009827419432590136,
+          "pct_lift_vs_foil": -0.9683342812367921
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.010036111484356222,
+          "pct_lift_vs_foil": -0.20276244673559427
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.00941653502341176,
+          "pct_lift_vs_foil": -0.20677568003427643
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.009733169812643319,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.010015803196734301,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.009397104097510604,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.009726594040302497,
+          "pct_lift_vs_foil": 0.06756043989163572
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.00998722118824281,
+          "pct_lift_vs_foil": 0.28536911049540853
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.009393956809614955,
+          "pct_lift_vs_foil": 0.03349210419498737
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.009708074862870609,
+          "pct_lift_vs_foil": 0.2578291579801015
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.009971517620010995,
+          "pct_lift_vs_foil": 0.44215701779909505
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.009400180243607937,
+          "pct_lift_vs_foil": -0.03273504332200363
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.009719022457656271,
+          "pct_lift_vs_foil": 0.14535197946172582
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.00998949070702693,
+          "pct_lift_vs_foil": 0.26270973171628714
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.00939099782821965,
+          "pct_lift_vs_foil": 0.06498033040382133
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.009730775969713322,
+          "pct_lift_vs_foil": 0.02459468987059204
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.010013034101982357,
+          "pct_lift_vs_foil": 0.027647256016841055
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.00939194895041745,
+          "pct_lift_vs_foil": 0.05485889099089711
+        }
+      ],
+      "stratified_moved_rows_only": [
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.010081228559097807,
+          "pct_lift_vs_foil": -3.5760061023733685
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.010117320719369273,
+          "pct_lift_vs_foil": -1.013573456276303
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.009419766186307991,
+          "pct_lift_vs_foil": -0.2411603464453441
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.009728600198798011,
+          "pct_lift_vs_foil": 0.04694887619623891
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.00998717559875453,
+          "pct_lift_vs_foil": 0.285824286055325
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.009394094607829704,
+          "pct_lift_vs_foil": 0.03202571398242956
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.009827419432590136,
+          "pct_lift_vs_foil": -0.9683342812367921
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.010036111484356222,
+          "pct_lift_vs_foil": -0.20276244673559427
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.00941653502341176,
+          "pct_lift_vs_foil": -0.20677568003427643
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.009733169812643319,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.010015803196734301,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.009397104097510604,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.009726594040302497,
+          "pct_lift_vs_foil": 0.06756043989163572
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.00998722118824281,
+          "pct_lift_vs_foil": 0.28536911049540853
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.009393956809614955,
+          "pct_lift_vs_foil": 0.03349210419498737
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.009708074862870609,
+          "pct_lift_vs_foil": 0.2578291579801015
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.009971517620010995,
+          "pct_lift_vs_foil": 0.44215701779909505
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.009400180243607937,
+          "pct_lift_vs_foil": -0.03273504332200363
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.009719022457656271,
+          "pct_lift_vs_foil": 0.14535197946172582
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.00998949070702693,
+          "pct_lift_vs_foil": 0.26270973171628714
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.00939099782821965,
+          "pct_lift_vs_foil": 0.06498033040382133
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.009730775969713322,
+          "pct_lift_vs_foil": 0.02459468987059204
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.010013034101982357,
+          "pct_lift_vs_foil": 0.027647256016841055
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.00939194895041745,
+          "pct_lift_vs_foil": 0.05485889099089711
+        }
+      ],
+      "propensity_tercile_composition": [
+        {
+          "stratum": 0,
+          "n_rows": 394,
+          "pct_rows_the_mechanism_can_move": 85.7,
+          "Double-A": 32.2,
+          "High-A": 17.0,
+          "Single-A": 10.4,
+          "Triple-A": 40.4
+        },
+        {
+          "stratum": 1,
+          "n_rows": 725,
+          "pct_rows_the_mechanism_can_move": 85.7,
+          "Double-A": 37.0,
+          "High-A": 29.1,
+          "Single-A": 14.2,
+          "Triple-A": 19.7
+        },
+        {
+          "stratum": 2,
+          "n_rows": 855,
+          "pct_rows_the_mechanism_can_move": 85.7,
+          "Double-A": 29.6,
+          "High-A": 28.7,
+          "Single-A": 24.8,
+          "Triple-A": 17.0
+        }
+      ],
+      "reasons": [
+        "\u26d4 DEFLATION \u2014 PBO over the ELIGIBLE set is 0.629 \u2265 0.2. \u2b50 READ IT AS A **TIE**, NOT AS OVERFITTING: the contender spread is 0.025% and the in-sample halves split across arms a fraction of a percent apart (O2_opp_levelnorm 48% (+0.005%), O3_opp_window3 37% (+0.000%), L0_foil 8% (+0.147%)). Which tied arm wins is noise \u2014 exactly what a trustworthy learner-null looks like (E2.1-r). The honest record is 'no candidate robustly beats the shipped configuration', so the shipped configuration is now PROVEN rather than assumed. Either way it does not ship."
+      ]
+    },
+    "gb_pct": {
+      "verdict": "DROP",
+      "winner": "L0_foil",
+      "leaderboard": [
+        {
+          "arm": "O2_opp_levelnorm",
+          "kind": "opponent",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.04781160719917498,
+          "pct_lift_vs_foil": 0.04901957802492111,
+          "fold_win_rate": 0.45454545454545453,
+          "p_one_sided": 0.35889218074868096,
+          "pct_rows_moved": 96.23,
+          "factor_p05": 0.97147,
+          "factor_p95": 1.0283,
+          "note": "the NAIVE level-normalised factor \u2014 kept so the league re-encoding is visible in the leaderboard rather than asserted"
+        },
+        {
+          "arm": "L0_foil",
+          "kind": "foil",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.04783505574164752,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "factor_p05": 1.0,
+          "factor_p95": 1.0,
+          "note": "\u2b50 THE DIRECT-LEARNED FOIL \u2014 the shipped E7.12-slice-1 configuration, no opponent adjustment"
+        },
+        {
+          "arm": "A_opp_placebo",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.047844400254019454,
+          "pct_lift_vs_foil": -0.019534862512538984,
+          "fold_win_rate": 0.45454545454545453,
+          "p_one_sided": 0.5489604502217045,
+          "pct_rows_moved": 95.82,
+          "factor_p05": 0.97801,
+          "factor_p95": 1.01933,
+          "note": "DEGENERATE \u2014 the same opponent factors permuted across players within a level. Catches 'dividing by any dispersed number helps'."
+        },
+        {
+          "arm": "A_opp_noloo",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.04784820560537744,
+          "pct_lift_vs_foil": -0.027490014438237675,
+          "fold_win_rate": 0.5454545454545454,
+          "p_one_sided": 0.5775848604733584,
+          "pct_rows_moved": 96.27,
+          "factor_p05": 0.97787,
+          "factor_p95": 1.01913,
+          "note": "\u2b50 SELF-INFLATION DIAGNOSTIC \u2014 the factor WITHOUT removing the player's own games. His hits are in his opponents' allowed-rate bucket, so dividing by a weakness he created shrinks HIM toward the mean and lowers MAE whether or not opponent quality exists."
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "kind": "opponent",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.04785457933376436,
+          "pct_lift_vs_foil": -0.04081440235437681,
+          "fold_win_rate": 0.6363636363636364,
+          "p_one_sided": 0.6179707452694712,
+          "pct_rows_moved": 96.26,
+          "factor_p05": 0.97801,
+          "factor_p95": 1.01933,
+          "note": "\u2b50 HEADLINE \u2014 WITHIN-league strength of schedule. League-normalised because 19\u201341% of the level-normalised factor is between-league variance E7.3's league intercepts already carry."
+        },
+        {
+          "arm": "O3_opp_window3",
+          "kind": "opponent",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.04787087402114969,
+          "pct_lift_vs_foil": -0.07487872428874735,
+          "fold_win_rate": 0.45454545454545453,
+          "p_one_sided": 0.7440346591659411,
+          "pct_rows_moved": 96.26,
+          "factor_p05": 0.97773,
+          "factor_p95": 1.0197,
+          "note": "a 3-season opponent bucket \u2014 the window the park slice's assertion assumed"
+        },
+        {
+          "arm": "O4_opp_extra",
+          "kind": "opponent",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.04799223654530451,
+          "pct_lift_vs_foil": -0.32858915124069,
+          "fold_win_rate": 0.5454545454545454,
+          "p_one_sided": 0.9134058031325769,
+          "pct_rows_moved": 96.26,
+          "factor_p05": 0.97801,
+          "factor_p95": 1.01933,
+          "note": "\u2b50 NESTS THE FOIL \u2014 the raw rate is kept and the opponent DELTA enters as a fixed regressor, so a win is unambiguously 'opponent quality adds information'"
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.05731237220048184,
+          "pct_lift_vs_foil": -19.812491721595087,
+          "fold_win_rate": 0.0,
+          "p_one_sided": 0.9999832516252544,
+          "pct_rows_moved": 0.0,
+          "factor_p05": 1.0,
+          "factor_p95": 1.0,
+          "note": "DEGENERATE CEILING (NF-D11/NF-D14) \u2014 predict the population mean of the target."
+        }
+      ],
+      "mae_by_fold": {
+        "L0_foil": {
+          "2016": 0.046194543637920055,
+          "2017": 0.04817429984045402,
+          "2018": 0.05098197234796894,
+          "2019": 0.05083290436446186,
+          "2020": 0.05185183756157018,
+          "2021": 0.05422841858525952,
+          "2022": 0.04700641471536245,
+          "2023": 0.044005154686710374,
+          "2024": 0.04564866048537444,
+          "2025": 0.047888191405557966,
+          "2026": 0.039373215527482956
+        },
+        "O1_opp_leaguenorm": {
+          "2016": 0.04600900052800528,
+          "2017": 0.04827958080509998,
+          "2018": 0.05094202952859698,
+          "2019": 0.051185383347762965,
+          "2020": 0.0518206518595734,
+          "2021": 0.05415146550411141,
+          "2022": 0.04713130683677547,
+          "2023": 0.04375297442844911,
+          "2024": 0.04548403101991301,
+          "2025": 0.0482882003214403,
+          "2026": 0.03935574849168006
+        },
+        "O2_opp_levelnorm": {
+          "2016": 0.04588412582532247,
+          "2017": 0.04833337426763891,
+          "2018": 0.05105229176536285,
+          "2019": 0.05108673652301456,
+          "2020": 0.05191682258994709,
+          "2021": 0.05420580848255931,
+          "2022": 0.04711097361115215,
+          "2023": 0.0438446284642017,
+          "2024": 0.04525091289612759,
+          "2025": 0.048040758803693254,
+          "2026": 0.03920124596190492
+        },
+        "O3_opp_window3": {
+          "2016": 0.04603444331473411,
+          "2017": 0.04827620844106263,
+          "2018": 0.0509355354170151,
+          "2019": 0.05109305188755829,
+          "2020": 0.05185239660495307,
+          "2021": 0.054179603955994526,
+          "2022": 0.04716455204480473,
+          "2023": 0.04379990229182107,
+          "2024": 0.04557317383927034,
+          "2025": 0.04825786564745059,
+          "2026": 0.03941288078798204
+        },
+        "O4_opp_extra": {
+          "2016": 0.04711968048037482,
+          "2017": 0.04823713301702853,
+          "2018": 0.05093487004808273,
+          "2019": 0.05149022738068221,
+          "2020": 0.0518413782713675,
+          "2021": 0.05416937999725889,
+          "2022": 0.04707345144404988,
+          "2023": 0.04387803072556639,
+          "2024": 0.045520054550956174,
+          "2025": 0.04833219955532197,
+          "2026": 0.03931819652766057
+        },
+        "A_opp_placebo": {
+          "2016": 0.04584690123534885,
+          "2017": 0.048225094212590115,
+          "2018": 0.05093396105475772,
+          "2019": 0.05118566322545039,
+          "2020": 0.05206272537495764,
+          "2021": 0.05436446042717859,
+          "2022": 0.04734188505616834,
+          "2023": 0.04411202776384243,
+          "2024": 0.045404515078919294,
+          "2025": 0.04771795020585421,
+          "2026": 0.039093219159146396
+        },
+        "A_opp_noloo": {
+          "2016": 0.04597732902344631,
+          "2017": 0.04828817619634627,
+          "2018": 0.05092757488650228,
+          "2019": 0.051182327738949394,
+          "2020": 0.05179304603760449,
+          "2021": 0.05410741937095395,
+          "2022": 0.04713732767248389,
+          "2023": 0.04370380885680837,
+          "2024": 0.04552171267998092,
+          "2025": 0.04826676056063637,
+          "2026": 0.039424778635439625
+        },
+        "A_degenerate_mean": {
+          "2016": 0.05056986873866114,
+          "2017": 0.05898508374012151,
+          "2018": 0.062251334799022826,
+          "2019": 0.0579483721801463,
+          "2020": 0.062358566542246405,
+          "2021": 0.0620805296958386,
+          "2022": 0.06740919383703384,
+          "2023": 0.051603430617785696,
+          "2024": 0.05765994293871151,
+          "2025": 0.055631368481923585,
+          "2026": 0.04393840263380877
+        }
+      },
+      "coverage": {
+        "L0_foil": {
+          "n_rows": 23949,
+          "pct_rows_moved": 0.0,
+          "mean_abs_delta": 0.0,
+          "max_abs_delta": 0.0,
+          "factor_p05": 1.0,
+          "factor_p95": 1.0,
+          "pct_rows_with_context": 0.0
+        },
+        "O1_opp_leaguenorm": {
+          "n_rows": 23949,
+          "pct_rows_moved": 96.26,
+          "mean_abs_delta": 0.004290733465732593,
+          "max_abs_delta": 0.08248216551267551,
+          "factor_p05": 0.97801,
+          "factor_p95": 1.01933,
+          "pct_rows_with_context": 99.62
+        },
+        "O2_opp_levelnorm": {
+          "n_rows": 23949,
+          "pct_rows_moved": 96.23,
+          "mean_abs_delta": 0.0063574577738851395,
+          "max_abs_delta": 0.08528606178307108,
+          "factor_p05": 0.97147,
+          "factor_p95": 1.0283,
+          "pct_rows_with_context": 99.62
+        },
+        "O3_opp_window3": {
+          "n_rows": 23949,
+          "pct_rows_moved": 96.26,
+          "mean_abs_delta": 0.004382930588109976,
+          "max_abs_delta": 0.08248216551267551,
+          "factor_p05": 0.97773,
+          "factor_p95": 1.0197,
+          "pct_rows_with_context": 99.62
+        },
+        "O4_opp_extra": {
+          "n_rows": 23949,
+          "pct_rows_moved": 96.26,
+          "mean_abs_delta": 0.004290733465732593,
+          "max_abs_delta": 0.08248216551267551,
+          "factor_p05": 0.97801,
+          "factor_p95": 1.01933,
+          "pct_rows_with_context": 99.62
+        },
+        "A_opp_placebo": {
+          "n_rows": 23949,
+          "pct_rows_moved": 95.82,
+          "mean_abs_delta": 0.004513453394135126,
+          "max_abs_delta": 0.06240946781043066,
+          "factor_p05": 0.97801,
+          "factor_p95": 1.01933,
+          "pct_rows_with_context": 99.62
+        },
+        "A_opp_noloo": {
+          "n_rows": 23949,
+          "pct_rows_moved": 96.27,
+          "mean_abs_delta": 0.004283903491255585,
+          "max_abs_delta": 0.08412040166803803,
+          "factor_p05": 0.97787,
+          "factor_p95": 1.01913,
+          "pct_rows_with_context": 99.62
+        },
+        "A_degenerate_mean": {
+          "n_rows": 23949,
+          "pct_rows_moved": 0.0,
+          "mean_abs_delta": 0.0,
+          "max_abs_delta": 0.0,
+          "factor_p05": 1.0,
+          "factor_p95": 1.0,
+          "pct_rows_with_context": 0.0
+        }
+      },
+      "deflation": {
+        "n_configs": 5,
+        "n_folds": 11,
+        "pbo": 0.4142857142857143,
+        "os_gap_pct": 0.1156,
+        "os_gap_p90_pct": 0.2396,
+        "contender_spread_pct": 0.09,
+        "full_spread_pct": 0.378,
+        "flips": [
+          {
+            "config": "O2_opp_levelnorm",
+            "IS_half_wins": 253,
+            "share": 0.548,
+            "mean_oos_mae": 0.04781,
+            "pct_vs_best": 0.0
+          },
+          {
+            "config": "L0_foil",
+            "IS_half_wins": 156,
+            "share": 0.338,
+            "mean_oos_mae": 0.04784,
+            "pct_vs_best": 0.049
+          },
+          {
+            "config": "O1_opp_leaguenorm",
+            "IS_half_wins": 46,
+            "share": 0.1,
+            "mean_oos_mae": 0.04785,
+            "pct_vs_best": 0.09
+          },
+          {
+            "config": "O4_opp_extra",
+            "IS_half_wins": 6,
+            "share": 0.013,
+            "mean_oos_mae": 0.04799,
+            "pct_vs_best": 0.378
+          },
+          {
+            "config": "O3_opp_window3",
+            "IS_half_wins": 1,
+            "share": 0.002,
+            "mean_oos_mae": 0.04787,
+            "pct_vs_best": 0.124
+          }
+        ],
+        "whole_field": {
+          "n_configs": 8,
+          "n_folds": 11,
+          "pbo": 0.5428571428571428,
+          "os_gap_pct": 0.1818,
+          "os_gap_p90_pct": 0.3039,
+          "contender_spread_pct": 0.069,
+          "full_spread_pct": 19.871,
+          "flips": [
+            {
+              "config": "O2_opp_levelnorm",
+              "IS_half_wins": 164,
+              "share": 0.355,
+              "mean_oos_mae": 0.04781,
+              "pct_vs_best": 0.0
+            },
+            {
+              "config": "L0_foil",
+              "IS_half_wins": 124,
+              "share": 0.268,
+              "mean_oos_mae": 0.04784,
+              "pct_vs_best": 0.049
+            },
+            {
+              "config": "A_opp_placebo",
+              "IS_half_wins": 102,
+              "share": 0.221,
+              "mean_oos_mae": 0.04784,
+              "pct_vs_best": 0.069
+            },
+            {
+              "config": "A_opp_noloo",
+              "IS_half_wins": 65,
+              "share": 0.141,
+              "mean_oos_mae": 0.04785,
+              "pct_vs_best": 0.077
+            },
+            {
+              "config": "O4_opp_extra",
+              "IS_half_wins": 6,
+              "share": 0.013,
+              "mean_oos_mae": 0.04799,
+              "pct_vs_best": 0.378
+            },
+            {
+              "config": "O1_opp_leaguenorm",
+              "IS_half_wins": 1,
+              "share": 0.002,
+              "mean_oos_mae": 0.04785,
+              "pct_vs_best": 0.09
+            }
+          ]
+        }
+      },
+      "dsr": {
+        "available": true,
+        "eligible": {
+          "arm": "O2_opp_levelnorm",
+          "n_trials": 4,
+          "dsr": 0.33498944274814685,
+          "observed_sr": 0.11210800057955998,
+          "sr0": 0.24311026335869323,
+          "passes": false
+        },
+        "whole_field": {
+          "arm": "O2_opp_levelnorm",
+          "n_trials": 7,
+          "dsr": 0.0007949032488203214,
+          "observed_sr": 0.11210800057955998,
+          "sr0": 1.0827729998489628,
+          "passes": false
+        },
+        "binds": "eligible"
+      },
+      "anchors": {
+        "required_anchors_present": true,
+        "missing_anchors": [],
+        "best_arm": "O2_opp_levelnorm",
+        "foil": "L0_foil",
+        "A_degenerate_mean__vs_best": {
+          "available": true,
+          "challenger": "A_degenerate_mean",
+          "defender": "O2_opp_levelnorm",
+          "mean_gap": 0.009500765001306853,
+          "challenger_fold_wins": 0,
+          "n_folds": 11,
+          "p_challenger_better": 0.9999851165994074,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_degenerate_mean__mae": 0.05731237220048184,
+        "A_opp_placebo__vs_best": {
+          "available": true,
+          "challenger": "A_opp_placebo",
+          "defender": "O2_opp_levelnorm",
+          "mean_gap": 3.279305484446864e-05,
+          "challenger_fold_wins": 5,
+          "n_folds": 11,
+          "p_challenger_better": 0.716988121820789,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_opp_placebo__mae": 0.047844400254019454,
+        "A_opp_noloo__vs_best": {
+          "available": true,
+          "challenger": "A_opp_noloo",
+          "defender": "O2_opp_levelnorm",
+          "mean_gap": 3.6598406202459355e-05,
+          "challenger_fold_wins": 5,
+          "n_folds": 11,
+          "p_challenger_better": 0.7739918895023109,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_opp_noloo__mae": 0.04784820560537744,
+        "inert_anchors": [],
+        "oracle_floor_ok": true,
+        "best_arm_mae": 0.04781160719917498,
+        "low_propensity_tercile_lift_pct": 0.12255362905073312,
+        "low_propensity_tercile_lift_pct_all_rows": 0.12255362905073312
+      },
+      "stratified": [
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.058164323429399645,
+          "pct_lift_vs_foil": -19.901767866341295
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.05733553725637366,
+          "pct_lift_vs_foil": -20.779125234366873
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.05983428677191173,
+          "pct_lift_vs_foil": -20.77529679501797
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.0485604328455002,
+          "pct_lift_vs_foil": -0.10400539770053117
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.04756410417926104,
+          "pct_lift_vs_foil": -0.19529196421424544
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.04944449075963073,
+          "pct_lift_vs_foil": 0.19646980773851747
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.04856063359016939,
+          "pct_lift_vs_foil": -0.10441921908287019
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.047661682356868226,
+          "pct_lift_vs_foil": -0.4008434859634951
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.0494374447387371,
+          "pct_lift_vs_foil": 0.21069217605877635
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.04850997984803481,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.04747139635687577,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.04954182548891896,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.048577335035785374,
+          "pct_lift_vs_foil": -0.138848104991106
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.04757058191892009,
+          "pct_lift_vs_foil": -0.20893752797719173
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.04945792771376047,
+          "pct_lift_vs_foil": 0.1693473632239317
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.04845052910727926,
+          "pct_lift_vs_foil": 0.12255362905073312
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.0474898037951088,
+          "pct_lift_vs_foil": -0.03877585166158927
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.04952405950347713,
+          "pct_lift_vs_foil": 0.03586057894817814
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.048555094062137566,
+          "pct_lift_vs_foil": -0.09299986156266778
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.047577274590887106,
+          "pct_lift_vs_foil": -0.22303585345449223
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.049494167434509684,
+          "pct_lift_vs_foil": 0.09619761472035834
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.04899092172569137,
+          "pct_lift_vs_foil": -0.9914287310841459
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.04752235670928605,
+          "pct_lift_vs_foil": -0.10734959643311628
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.04960773589588116,
+          "pct_lift_vs_foil": -0.13303992396676664
+        }
+      ],
+      "stratified_moved_rows_only": [
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.058164323429399645,
+          "pct_lift_vs_foil": -19.901767866341295
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.05733553725637366,
+          "pct_lift_vs_foil": -20.779125234366873
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.05983428677191173,
+          "pct_lift_vs_foil": -20.77529679501797
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.0485604328455002,
+          "pct_lift_vs_foil": -0.10400539770053117
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.04756410417926104,
+          "pct_lift_vs_foil": -0.19529196421424544
+        },
+        {
+          "arm": "A_opp_noloo",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.04944449075963073,
+          "pct_lift_vs_foil": 0.19646980773851747
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.04856063359016939,
+          "pct_lift_vs_foil": -0.10441921908287019
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.047661682356868226,
+          "pct_lift_vs_foil": -0.4008434859634951
+        },
+        {
+          "arm": "A_opp_placebo",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.0494374447387371,
+          "pct_lift_vs_foil": 0.21069217605877635
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.04850997984803481,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.04747139635687577,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "L0_foil",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.04954182548891896,
+          "pct_lift_vs_foil": 0.0
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.048577335035785374,
+          "pct_lift_vs_foil": -0.138848104991106
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.04757058191892009,
+          "pct_lift_vs_foil": -0.20893752797719173
+        },
+        {
+          "arm": "O1_opp_leaguenorm",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.04945792771376047,
+          "pct_lift_vs_foil": 0.1693473632239317
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.04845052910727926,
+          "pct_lift_vs_foil": 0.12255362905073312
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.0474898037951088,
+          "pct_lift_vs_foil": -0.03877585166158927
+        },
+        {
+          "arm": "O2_opp_levelnorm",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.04952405950347713,
+          "pct_lift_vs_foil": 0.03586057894817814
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.048555094062137566,
+          "pct_lift_vs_foil": -0.09299986156266778
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.047577274590887106,
+          "pct_lift_vs_foil": -0.22303585345449223
+        },
+        {
+          "arm": "O3_opp_window3",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.049494167434509684,
+          "pct_lift_vs_foil": 0.09619761472035834
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 0,
+          "n": 394,
+          "mae": 0.04899092172569137,
+          "pct_lift_vs_foil": -0.9914287310841459
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 1,
+          "n": 725,
+          "mae": 0.04752235670928605,
+          "pct_lift_vs_foil": -0.10734959643311628
+        },
+        {
+          "arm": "O4_opp_extra",
+          "stratum": 2,
+          "n": 855,
+          "mae": 0.04960773589588116,
+          "pct_lift_vs_foil": -0.13303992396676664
+        }
+      ],
+      "propensity_tercile_composition": [
+        {
+          "stratum": 0,
+          "n_rows": 394,
+          "pct_rows_the_mechanism_can_move": 85.7,
+          "Double-A": 32.2,
+          "High-A": 17.0,
+          "Single-A": 10.4,
+          "Triple-A": 40.4
+        },
+        {
+          "stratum": 1,
+          "n_rows": 725,
+          "pct_rows_the_mechanism_can_move": 85.7,
+          "Double-A": 37.0,
+          "High-A": 29.1,
+          "Single-A": 14.2,
+          "Triple-A": 19.7
+        },
+        {
+          "stratum": 2,
+          "n_rows": 855,
+          "pct_rows_the_mechanism_can_move": 85.7,
+          "Double-A": 29.6,
+          "High-A": 28.7,
+          "Single-A": 24.8,
+          "Triple-A": 17.0
+        }
+      ],
+      "reasons": [
+        "\ud83d\udfe1 no arm clears: best eligible `O2_opp_levelnorm` MAE 0.04781 vs foil 0.04784 (0.05%, fold win rate 45%; the pre-registered bar is a strict OOS improvement in \u226560% of folds). DROPPED."
+      ]
+    }
+  }
+}

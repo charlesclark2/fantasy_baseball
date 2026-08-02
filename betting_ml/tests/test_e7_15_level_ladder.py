@@ -644,7 +644,7 @@ class TestTheTercileReadIsNotDilutedByRowsTheLadderCannotMove:
         comp = propensity_composition(self._rows(movable_lift=1.0, n_unmovable=60))
         row = comp[comp["stratum"] == 0].iloc[0]
         assert row["Triple-A"] == pytest.approx(75.0, abs=0.1)
-        assert row["pct_rows_the_ladder_can_move"] == pytest.approx(25.0, abs=0.1)
+        assert row["pct_rows_the_mechanism_can_move"] == pytest.approx(25.0, abs=0.1)
 
 
 class TestTheNullAnalysis:

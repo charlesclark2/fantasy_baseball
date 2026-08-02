@@ -1,0 +1,33 @@
+metric,n_players,half_corr,reliability_spearman_brown,signal_share_of_sd,level,variant,player_type,window
+woba,3981,-0.0002,-0.0004,0.0,Triple-A,league_normalised (headline),batter,1
+k_pct,3981,-0.0295,-0.0609,0.0,Triple-A,league_normalised (headline),batter,1
+bb_pct,3981,-0.0657,-0.1407,0.0,Triple-A,league_normalised (headline),batter,1
+iso,3981,0.0192,0.0376,0.194,Triple-A,league_normalised (headline),batter,1
+woba,3981,0.5035,0.6697,0.8184,Triple-A,level_normalised (POSITIVE CONTROL),batter,1
+k_pct,3981,0.7385,0.8496,0.9217,Triple-A,level_normalised (POSITIVE CONTROL),batter,1
+bb_pct,3981,0.0866,0.1594,0.3992,Triple-A,level_normalised (POSITIVE CONTROL),batter,1
+iso,3981,0.5557,0.7144,0.8452,Triple-A,level_normalised (POSITIVE CONTROL),batter,1
+woba,4569,-0.1528,-0.3606,0.0,Double-A,league_normalised (headline),batter,1
+k_pct,4569,-0.1565,-0.3712,0.0,Double-A,league_normalised (headline),batter,1
+bb_pct,4569,-0.2088,-0.5277,0.0,Double-A,league_normalised (headline),batter,1
+iso,4569,-0.1315,-0.3028,0.0,Double-A,league_normalised (headline),batter,1
+woba,4569,0.2438,0.3921,0.6261,Double-A,level_normalised (POSITIVE CONTROL),batter,1
+k_pct,4569,0.2168,0.3564,0.597,Double-A,level_normalised (POSITIVE CONTROL),batter,1
+bb_pct,4569,0.2325,0.3773,0.6143,Double-A,level_normalised (POSITIVE CONTROL),batter,1
+iso,4569,0.2282,0.3717,0.6096,Double-A,level_normalised (POSITIVE CONTROL),batter,1
+woba,4898,-0.1315,-0.3028,0.0,High-A,league_normalised (headline),batter,1
+k_pct,4898,-0.1923,-0.4763,0.0,High-A,league_normalised (headline),batter,1
+bb_pct,4898,-0.2782,-0.7708,0.0,High-A,league_normalised (headline),batter,1
+iso,4898,-0.1026,-0.2288,0.0,High-A,league_normalised (headline),batter,1
+woba,4898,0.4122,0.5838,0.7641,High-A,level_normalised (POSITIVE CONTROL),batter,1
+k_pct,4898,0.4472,0.6181,0.7862,High-A,level_normalised (POSITIVE CONTROL),batter,1
+bb_pct,4898,0.0502,0.0957,0.3093,High-A,level_normalised (POSITIVE CONTROL),batter,1
+iso,4898,0.6674,0.8006,0.8947,High-A,level_normalised (POSITIVE CONTROL),batter,1
+woba,5581,-0.2685,-0.734,0.0,Single-A,league_normalised (headline),batter,1
+k_pct,5581,-0.2424,-0.64,0.0,Single-A,league_normalised (headline),batter,1
+bb_pct,5581,-0.2355,-0.6161,0.0,Single-A,league_normalised (headline),batter,1
+iso,5581,-0.2505,-0.6684,0.0,Single-A,league_normalised (headline),batter,1
+woba,5581,0.2795,0.4369,0.661,Single-A,level_normalised (POSITIVE CONTROL),batter,1
+k_pct,5581,-0.0272,-0.0559,0.0,Single-A,level_normalised (POSITIVE CONTROL),batter,1
+bb_pct,5581,0.2215,0.3627,0.6022,Single-A,level_normalised (POSITIVE CONTROL),batter,1
+iso,5581,0.3193,0.4841,0.6958,Single-A,level_normalised (POSITIVE CONTROL),batter,1

@@ -1,0 +1,9 @@
+metric,variant,total_sd_pct,between_league_sd_pct,within_league_sd_pct,between_league_share_pct,player_type
+k_pct,level_normalised,3.951,2.359,3.17,35.6,pitcher
+k_pct,league_normalised (headline),2.502,0.104,2.5,0.2,pitcher
+bb_pct,level_normalised,4.267,1.795,3.871,17.7,pitcher
+bb_pct,league_normalised (headline),3.205,0.127,3.202,0.2,pitcher
+hr_rate,level_normalised,10.139,5.248,8.675,26.8,pitcher
+hr_rate,league_normalised (headline),6.934,0.463,6.918,0.4,pitcher
+gb_pct,level_normalised,1.803,0.785,1.623,19.0,pitcher
+gb_pct,league_normalised (headline),1.408,0.052,1.407,0.1,pitcher
