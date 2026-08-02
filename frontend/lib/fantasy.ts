@@ -53,6 +53,23 @@ export interface ProjectedPlayer {
    *  A reference column; null means undrafted in that sample. */
   adp?: number | null
 
+  // ── NF3.4: PER-PLAYER feature contributions — genuine per-player attribution (LightGBM TreeSHAP),
+  // NOT a position-level description. Null for a rookie or K/DST (NF1 has no base-season feature row
+  // to attribute for either). 🚨 `totalPts` is NF1's OWN separate research-model prediction for this
+  // player — it is NOT guaranteed to equal `fpPpr` above (the served MVP-1 number); see
+  // `nf1_model.player_feature_contributions`'s docstring. Feature labels/descriptions live in the
+  // manifest's `featureLegend`, not repeated here. ──────────────────────────────────────────────
+  contrib?: {
+    /** NF1's own starting estimate for him (its incumbent-prior feature + its model-wide bias term) —
+     *  shown as "starting point", not as one of `drivers` (a driver a model can't act on isn't a
+     *  useful lever to show a drafter). */
+    baselinePts: number
+    /** `baselinePts` + every driver's `pts` (not just the ones shown) — NF1's full own prediction. */
+    totalPts: number
+    /** Ranked by |pts| descending; a positive value pushes his number up, negative pushes it down. */
+    drivers: { feature: string; pts: number }[]
+  } | null
+
   // ── NF3.1: BIO — passed through from nflverse's identity table (`player_bio_map`), never
   // derived/projected. Optional: absent for a DST (a team, not a person), for the ~0.2-1% of
   // players the source has nothing for, and on any payload exported before NF3.1. ──────────────

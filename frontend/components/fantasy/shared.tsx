@@ -334,56 +334,78 @@ export function UncertaintyNote({ children }: { children?: React.ReactNode }) {
  *  aggregate) — it never claims to explain why THIS player's number is what it is. Renders nothing
  *  for a position NF1 wasn't fitted on (K/DST) or if the manifest carries no featureImportance yet
  *  (an older export) — see `FeatureImportancePayload` in draft-optimizer.ts. */
-export function FeatureDriversPanel({
-  pos,
-  importance,
+/** NF3.4 — "what pushes {player}'s number up or down", the PER-PLAYER transparency panel.
+ *
+ *  🚨 HONEST LABELLING is the whole point of this component: every point value comes from our NF1
+ *  research model's OWN separate prediction for this player (LightGBM TreeSHAP, exact — the
+ *  contributions always sum to `contrib.totalPts`), which is NOT guaranteed to equal the served
+ *  projection shown elsewhere on this page. The panel says so plainly rather than implying the two
+ *  numbers are the same thing. Renders nothing for a rookie or K/DST (NF1 doesn't cover them) or if
+ *  the manifest carries no legend yet (an older export) — see `ProjectedPlayer.contrib` / `Manifest.
+ *  featureLegend`. */
+export function PlayerContributionsPanel({
+  playerName,
+  contrib,
+  legend,
 }: {
-  pos: string
-  importance: import("@/lib/draft-optimizer").FeatureImportancePayload | null | undefined
+  playerName: string
+  contrib: import("@/lib/fantasy").ProjectedPlayer["contrib"]
+  legend: Record<string, { label: string; description: string }> | null | undefined
 }) {
-  const drivers = importance?.positions?.[pos]
-  if (!importance || !drivers || drivers.length === 0) return null
-  const basePct = importance.positions_baseline_pct?.[pos]
-  const maxPct = Math.max(...drivers.map((d) => d.pct), 1)
+  if (!contrib || !legend || contrib.drivers.length === 0) return null
+  const maxAbs = Math.max(...contrib.drivers.map((d) => Math.abs(d.pts)), 0.1)
   return (
     <section className="mb-6 rounded-lg border border-[#262626] bg-[#0f0f0f] p-4">
-      <div className="mb-1 flex items-center gap-1.5">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-          What our {pos} model weights most
-        </h2>
-        <InfoTip label="What our model weights most">
-          These weights come from our validated research model (NF1) — a learned re-weighting of the
-          same underlying signals every {pos} projection is built from. They describe the MODEL, in
-          aggregate for every {pos} we project, not why any one player&apos;s number is what it is
-          — that would take a different, per-player method we don&apos;t compute. They also aren&apos;t
-          necessarily the literal formula behind the specific projection above; think of this as &ldquo;what
-          moves a {pos} projection in general,&rdquo; not a receipt for this one.
+      <h2 className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
+        <InfoTip label={`What pushes ${playerName}'s number up or down`}>
+          These points come from our separate research model (NF1) — it re-weights the same
+          underlying signals your projection above is built from, but LEARNS how much each one
+          matters instead of using a fixed formula. Its own total for {playerName} is{" "}
+          {contrib.totalPts.toFixed(1)} points, which is <strong>not necessarily the same number</strong>{" "}
+          as the projection shown above (that one comes from our served model, not this research
+          one) — think of this as &ldquo;what our research model sees in him specifically,&rdquo; a second,
+          independent read, not a receipt for the number above it.
         </InfoTip>
-      </div>
+      </h2>
       <p className="mb-3 text-[11px] leading-relaxed text-gray-600">
-        Model-level, not player-specific — ranked by how much each signal shifts our {pos} model&apos;s
-        output overall.
-        {basePct != null && (
-          <> The model keeps most of its weight (~{Math.round(basePct)}%) on its own starting estimate; below is what moves it from there.</>
-        )}
+        Player-specific — our research model starts at {contrib.baselinePts.toFixed(1)} points for a
+        typical player at his level, then these signals move it, based on what makes {playerName}{" "}
+        himself different.
       </p>
       <div className="space-y-2">
-        {drivers.map((d) => (
-          <div key={d.feature} className="flex items-center gap-3">
-            <span className="w-40 flex-shrink-0 truncate text-xs text-gray-300" title={d.label}>
-              {d.label}
-            </span>
-            <div className="h-1.5 flex-1 rounded-full bg-[#1a1a1a]">
-              <div
-                className="h-1.5 rounded-full bg-sky-500/50"
-                style={{ width: `${Math.max((d.pct / maxPct) * 100, 3)}%` }}
-              />
+        {contrib.drivers.map((d) => {
+          const entry = legend[d.feature]
+          const positive = d.pts >= 0
+          return (
+            <div key={d.feature} className="flex items-center gap-3">
+              <span className="w-40 flex-shrink-0 truncate text-xs text-gray-300">
+                {entry ? (
+                  <InfoTip label={entry.label}>{entry.description}</InfoTip>
+                ) : (
+                  d.feature
+                )}
+              </span>
+              <div className="relative h-1.5 flex-1 rounded-full bg-[#1a1a1a]">
+                <div
+                  className={`absolute top-0 h-1.5 rounded-full ${positive ? "bg-emerald-500/60" : "bg-rose-500/60"}`}
+                  style={{
+                    left: positive ? "50%" : `${50 - (Math.abs(d.pts) / maxAbs) * 50}%`,
+                    width: `${Math.max((Math.abs(d.pts) / maxAbs) * 50, 2)}%`,
+                  }}
+                />
+                <div className="absolute left-1/2 top-0 h-1.5 w-px bg-gray-700" />
+              </div>
+              <span
+                className={`w-14 flex-shrink-0 text-right text-[11px] tabular-nums ${
+                  positive ? "text-emerald-400" : "text-rose-400"
+                }`}
+              >
+                {positive ? "+" : ""}
+                {d.pts.toFixed(1)}
+              </span>
             </div>
-            <span className="w-10 flex-shrink-0 text-right text-[11px] tabular-nums text-gray-500">
-              {d.pct}%
-            </span>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </section>
   )

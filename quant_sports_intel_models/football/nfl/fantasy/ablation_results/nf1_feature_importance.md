@@ -1,8 +1,8 @@
-# NF3.4 — NF1 feature-importance transparency
+# NF3.4 — NF1 position-level feature importance (research artifact, NOT the app panel)
 
-Generated: 2026-08-02T01:53:19.295112+00:00  ·  model: `nfl_fantasy_nf1_v1`  ·  pool: 2995 rows over base seasons [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]
+⚠️ The player page surfaces PER-PLAYER contributions (`nf1_player_contributions.json`), not this report — see `run_nf1_feature_importance.py`'s module docstring for why both exist.
 
-🚨 MODEL-LEVEL, NOT PER-PLAYER — see `nf1_model.feature_importance_report`'s docstring. This describes NF1 (the validated, market-blind research model over the same signal set MVP-1's served heuristic pipeline is built from), not a per-player attribution of the SERVED MVP-1 projection. `mvp1_fp` (NF1's own incumbent-prior feature) is excluded from the tables below as circular — its true share is disclosed as `baseline_pct` instead.
+Generated: 2026-08-02T02:52:29.665408+00:00  ·  model: `nfl_fantasy_nf1_v1`  ·  pool: 2995 rows over base seasons [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]
 
 ## Global (pooled across positions, LightGBM gain importance) — baseline (`mvp1_fp`) share: 75.1%
 

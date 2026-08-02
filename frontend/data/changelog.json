@@ -100,7 +100,7 @@
       },
       {
         "tag": "new",
-        "text": "The NFL fantasy player page now shows what our projection research model weights most for that position — recent per-game scoring pace, age, team offensive environment, and a handful of other signals, ranked by how much each moves the model. It's model-level, not a breakdown of any one player's specific number: it describes what our validated research model leans on for the position overall (QB, RB, WR or TE — kickers and defenses aren't covered by this model), not why a given player's projection is what it is. Look for it under a player's draft value on their page."
+        "text": "The NFL fantasy player page now shows what pushes each player's number up or down, player by player — recent scoring pace, age, team offensive environment, and a handful of other signals, each shown in actual points, positive or negative, specific to that player. This comes from a separate research model of ours (not the one behind the projection shown above it), so its own total for a player is not always the exact same number — think of it as a second, independent read on what makes him him, not a receipt for the projection above. Covers QB, RB, WR and TE; kickers and defenses aren't covered by this model. Look for it under a player's draft value on their page."
       }
     ]
   },

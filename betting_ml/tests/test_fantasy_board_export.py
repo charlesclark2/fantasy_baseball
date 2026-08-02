@@ -131,6 +131,9 @@ _PROJECTION_KEYS = {
     # NF1.6 — the honest low-predictability marker, declared on EVERY record (false for the skill
     # positions) so the client never has to know which positions are soft.
     "lowPred", "predNote",
+    # NF3.4 — the NF1 per-player contribution breakdown; null for rookies/K/DST (NF1 doesn't cover
+    # them), never omitted, so the client's shape never depends on whether this player matched.
+    "contrib",
     # NF1.6 — the K/DST raw components. Present on every record in the SAME `_STAT_KEYS` idiom (a WR
     # simply has no `fgMade`), so the browse table needs no per-position branching.
     "fgAtt", "fgMade", "fg039", "fg4049", "fg50", "fgMiss", "patAtt", "patMade",
@@ -298,29 +301,53 @@ def test_projection_veteran_draft_slot_stays_null():
     assert allen["team"] == "BUF"
 
 
-# ── NF3.4: feature-importance transparency, folded into the manifest ──────────────────────────
+# ── NF3.4: per-player feature contributions, folded into projections.json + the manifest legend ──
 
 
-def test_load_feature_importance_missing_artifact_is_best_effort(tmp_path, monkeypatch):
+def test_load_player_contributions_missing_artifact_is_best_effort(tmp_path, monkeypatch):
     # No artifact yet (run_nf1_feature_importance.py hasn't been run) must degrade to None, never
     # raise — the boards + projections are the draft-critical output and must ship regardless.
     monkeypatch.setattr(ex, "_ARTIFACTS", tmp_path)
-    assert ex.load_feature_importance() is None
+    assert ex.load_player_contributions() is None
 
 
-def test_load_feature_importance_reads_the_artifact(tmp_path, monkeypatch):
+def test_load_player_contributions_reads_the_artifact(tmp_path, monkeypatch):
     monkeypatch.setattr(ex, "_ARTIFACTS", tmp_path)
     payload = {
-        "model_version": "nfl_fantasy_nf1_v1", "baseline_pct": 75.1,
-        "global": [{"feature": "pergame_fp", "label": "Recent per-game scoring pace", "pct": 14.0}],
-        "positions": {"RB": [{"feature": "age", "label": "Player age", "pct": 6.9}]},
-        "positions_baseline_pct": {"RB": 73.4},
+        "model_version": "nfl_fantasy_nf1_v1", "generated_at": "2026-08-02T00:00:00+00:00",
+        "base_season": 2025, "projection_season": 2026, "n_players": 1,
+        "legend": {"age": {"label": "Player age", "description": "The player's age."}},
+        "players": {"00-1": {"baseline_pts": 100.0, "total_pts": 110.0,
+                              "drivers": [{"feature": "age", "pts": -5.0}]}},
     }
-    (tmp_path / "nf1_feature_importance.json").write_text(json.dumps(payload))
-    assert ex.load_feature_importance() == payload
+    (tmp_path / "nf1_player_contributions.json").write_text(json.dumps(payload))
+    assert ex.load_player_contributions() == payload
 
 
-def test_load_feature_importance_corrupt_json_is_best_effort(tmp_path, monkeypatch):
+def test_load_player_contributions_corrupt_json_is_best_effort(tmp_path, monkeypatch):
     monkeypatch.setattr(ex, "_ARTIFACTS", tmp_path)
-    (tmp_path / "nf1_feature_importance.json").write_text("{not valid json")
-    assert ex.load_feature_importance() is None
+    (tmp_path / "nf1_player_contributions.json").write_text("{not valid json")
+    assert ex.load_player_contributions() is None
+
+
+def test_projection_records_attaches_contrib_when_present():
+    # "00-1" = Josh Allen (veteran, NF1-covered); "R-1" = the rookie (NF1 doesn't cover rookies)
+    contrib_map = {
+        "00-1": {"baseline_pts": 150.2, "total_pts": 160.9,
+                 "drivers": [{"feature": "age", "pts": -4.1}, {"feature": "team_env", "pts": 3.0}]},
+    }
+    allen, mendoza = ex.projection_records(_projection_frame(), contributions=contrib_map)
+    assert allen["id"] == "00-1" and mendoza["id"] == "R-1"
+    assert allen["contrib"] == {
+        "baselinePts": 150.2, "totalPts": 160.9,
+        "drivers": [{"feature": "age", "pts": -4.1}, {"feature": "team_env", "pts": 3.0}],
+    }
+    assert mendoza["contrib"] is None
+
+
+def test_projection_records_declares_contrib_null_when_unmatched():
+    # rookies/K/DST — NF1 doesn't cover them — must ship `contrib: null`, not omit the key, so the
+    # client's shape never depends on whether THIS player happened to match.
+    recs = ex.projection_records(_projection_frame())
+    assert all("contrib" in r for r in recs)
+    assert all(r["contrib"] is None for r in recs)

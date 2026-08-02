@@ -294,6 +294,7 @@ def projection_records(
     rookie_teams: dict[str, str] | None = None,
     byes: dict[str, int] | None = None,
     bio: dict[str, dict] | None = None,
+    contributions: dict[str, dict] | None = None,
 ) -> list[dict]:
     """MVP-1's season projection → display-ready records for the NF3 browse "Projections" surface.
 
@@ -305,10 +306,16 @@ def projection_records(
 
     NF3.1 — `bio` (see `player_bio_map`) adds birth date / height / weight / college / years of
     experience / headshot, best-effort and format-independent (identity, not a projection), so it
-    lives here rather than on the per-league board records."""
+    lives here rather than on the per-league board records.
+
+    NF3.4 — `contributions` (the `players` map from `load_player_contributions`) adds `contrib`: our
+    NF1 research model's own per-player point breakdown (`nf1_model.player_feature_contributions`).
+    Absent for rookies/K/DST (NF1 doesn't cover them) — declared as `None` so the shape is
+    fetch-independent, same convention as `adp`."""
     rookie_teams = rookie_teams or {}
     byes = byes or {}
     bio = bio or {}
+    contributions = contributions or {}
     recs: list[dict] = []
     seen: set[str] = set()
     for _, r in df.sort_values("proj_fp_ppr", ascending=False).iterrows():
@@ -343,7 +350,15 @@ def projection_records(
             "adp": None,   # filled by _attach_adp; declared so the shape is fetch-independent
             "lowPred": pos in LOW_PREDICTABILITY,     # NF1.6 — see LOW_PREDICTABILITY
             "predNote": LOW_PREDICTABILITY_NOTE if pos in LOW_PREDICTABILITY else None,
+            "contrib": None,   # filled below when NF1 covers this player; None for rookies/K/DST
         }
+        c = contributions.get(pid)
+        if c:
+            rec["contrib"] = {
+                "baselinePts": c.get("baseline_pts"),
+                "totalPts": c.get("total_pts"),
+                "drivers": [{"feature": d["feature"], "pts": d["pts"]} for d in c.get("drivers", [])],
+            }
         b = bio.get(pid)
         if b:
             rec["birthDate"] = b.get("birthDate")
@@ -580,27 +595,31 @@ def rookie_team_map() -> dict[str, str]:
     return out
 
 
-def load_feature_importance() -> dict | None:
-    """NF3.4 — the NF1 GBM's own per-position feature importances (`run_nf1_feature_importance.py`'s
-    output), folded into the manifest so the player page's transparency panel needs no extra fetch.
+def load_player_contributions() -> dict | None:
+    """NF3.4 — the NF1 GBM's per-PLAYER feature contributions (`run_nf1_feature_importance.py`'s
+    output): for every currently-projected veteran, how many fantasy points each signal is estimated
+    to add/subtract for HIM specifically (LightGBM TreeSHAP — see `nf1_model.player_feature_contributions`).
 
     Best-effort like `rookie_team_map`/`player_bio_map`: a missing/stale artifact costs the transparency
     panel only, never the boards (the draft-critical output) or the projections surface. It is a LOCAL
-    artifact (no S3/lake read) — re-run `run_nf1_feature_importance.py` to refresh it.
+    artifact (no S3/lake read at export time — the DuckDB read already happened when
+    `run_nf1_feature_importance.py` was run) — re-run that script to refresh it.
 
-    🚨 HONEST LABELLING lives with the DATA here, not just the UI: every record already carries
-    `model_version` (NF1's, not MVP-1's) so a caller can never present these as describing the SERVED
-    MVP-1 projection without the model identity travelling with them."""
-    path = _ARTIFACTS / "nf1_feature_importance.json"
+    🚨 HONEST LABELLING lives with the DATA here, not just the UI: the payload carries `model_version`
+    (NF1's, not MVP-1's) and every player's `total_pts` is NF1's OWN prediction — never silently equal
+    to the served MVP-1 projection (see the model function's docstring). A caller must never drop the
+    model identity while presenting these numbers. Rookies and K/DST are absent by design — NF1 has no
+    base-season feature row to attribute for them (see the module docstring)."""
+    path = _ARTIFACTS / "nf1_player_contributions.json"
     if not path.is_file():
-        log.warning("nf1_feature_importance.json not found at %s — the player-page transparency panel "
-                    "will be empty until run_nf1_feature_importance.py is (re-)run", path)
+        log.warning("nf1_player_contributions.json not found at %s — the player-page transparency "
+                    "panel will be empty until run_nf1_feature_importance.py is (re-)run", path)
         return None
     try:
         return json.loads(path.read_text())
     except Exception as e:  # noqa: BLE001 — best-effort enrichment, never fatal
-        log.warning("nf1_feature_importance.json failed to parse (%s: %s) — transparency panel skipped",
-                    type(e).__name__, e)
+        log.warning("nf1_player_contributions.json failed to parse (%s: %s) — transparency panel "
+                    "skipped", type(e).__name__, e)
         return None
 
 
@@ -939,6 +958,15 @@ def main(argv: list[str] | None = None) -> int:
             configs_present.append(config_name)
         log.info("wrote %s (%d players)", path.name, len(recs))
 
+    # NF3.4 — the NF1 per-player point contributions (`nf1_player_contributions.json`), folded into
+    # each projection record below + the manifest's legend. Best-effort: a missing artifact costs the
+    # transparency panel only, never the boards/projections themselves.
+    contributions_payload = load_player_contributions()
+    contrib_map = (contributions_payload or {}).get("players", {})
+    if contributions_payload is None:
+        log.warning("[ALERT] projections.json will ship with no player 'contrib' — the player-page "
+                    "transparency panel renders nothing until run_nf1_feature_importance.py is run")
+
     # NF3 — the format-INDEPENDENT season projection blob (the browse "Projections" surface).
     # Best-effort: a missing projection artifact must not cost the operator the boards, which are
     # the draft-critical output. The endpoint 404s until it lands (the UI shows an honest empty state).
@@ -957,7 +985,10 @@ def main(argv: list[str] | None = None) -> int:
         if len(kdf):
             pdf = pd.concat([pdf, kdf], ignore_index=True, sort=False)
             log.info("  projections: folded in %d NF1.6 K/DST rows", len(kdf))
-        projections = projection_records(pdf, rookie_teams, byes, bio)
+        projections = projection_records(pdf, rookie_teams, byes, bio, contrib_map)
+        n_with_contrib = sum(1 for p in projections if p.get("contrib"))
+        log.info("  projections: %d/%d players carry an NF1 per-player contribution breakdown",
+                 n_with_contrib, len(projections))
         # The projections surface is format-independent, so its ADP reference is pinned + labelled.
         proj_adp_matched = _attach_adp(
             projections, adp_cache_for(args.season, PROJECTION_ADP_FORMAT, PROJECTION_ADP_TEAMS)
@@ -992,13 +1023,6 @@ def main(argv: list[str] | None = None) -> int:
         log.warning("projections.json SKIPPED (%s: %s) — the browse Projections surface will 404 "
                     "until the season projection is exported", type(e).__name__, e)
 
-    # NF3.4 — the transparency panel's data, folded into the manifest (already fetched by the player
-    # page) so no extra round trip is needed. None when the artifact hasn't been (re-)exported yet.
-    feature_importance = load_feature_importance()
-    if feature_importance is None:
-        log.warning("[ALERT] manifest will ship with no featureImportance — the player-page "
-                    "transparency panel renders nothing until run_nf1_feature_importance.py is run")
-
     # manifest — meta + per-config roster shapes + available combos
     manifest = {
         "season": args.season,
@@ -1010,8 +1034,16 @@ def main(argv: list[str] | None = None) -> int:
         # NF3: the browse surfaces read this to know whether the projections blob is available
         # (and to show its provenance) without a speculative fetch.
         "projections": {"players": len(projections), **proj_meta} if projections else None,
-        # NF3.4: per-position feature-importance transparency (MODEL-level, see load_feature_importance).
-        "featureImportance": feature_importance,
+        # NF3.4 — the small per-FEATURE legend (label + plain-language description) each projection
+        # record's `contrib.drivers[].feature` keys into; None until run_nf1_feature_importance.py
+        # has been run at least once. Kept tiny (~12 entries) and separate from the per-player payload
+        # so the (label, description) text isn't duplicated across hundreds of player records.
+        "featureLegend": contributions_payload.get("legend") if contributions_payload else None,
+        "featureContributionsMeta": (
+            {k: contributions_payload.get(k) for k in
+             ("model_version", "generated_at", "base_season", "projection_season", "n_players")}
+            if contributions_payload else None
+        ),
     }
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     log.info("wrote manifest.json — %d configs, sizes %s, %d combos, %d player-rows total",

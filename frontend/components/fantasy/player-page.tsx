@@ -30,13 +30,13 @@ import {
   ALL_POSITIONS,
   ConfidenceBadge,
   EmptyBlock,
-  FeatureDriversPanel,
   FormatSelector,
   GLOSSARY,
   InfoTip,
   IntervalBar,
   LoadingBlock,
   LOW_PREDICTABILITY_POSITIONS,
+  PlayerContributionsPanel,
   PosBadge,
   ProvenanceLine,
   RangeCell,
@@ -510,8 +510,12 @@ export function FantasyPlayerPage() {
             )}
           </section>
 
-          {/* NF3.4 — what our model weights most for this position (model-level, not per-player) */}
-          <FeatureDriversPanel pos={proj.pos} importance={manifest?.featureImportance} />
+          {/* NF3.4 — what pushes THIS player's number up or down (a separate research-model read) */}
+          <PlayerContributionsPanel
+            playerName={proj.name}
+            contrib={proj.contrib}
+            legend={manifest?.featureLegend}
+          />
 
           {/* Raw season stat line */}
           {statCols.length > 0 && (
