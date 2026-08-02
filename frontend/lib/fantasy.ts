@@ -147,6 +147,62 @@ export interface ProjectedPlayer {
   paG28_34?: number | null
   paG35_45?: number | null
   paG46p?: number | null
+
+  // ── NF3.3: PLAYER HISTORY — past-season actual finish + past ADP + a weekly injury-report log +
+  // games-missed participation. Lands inside THIS gated payload (never the public track-record
+  // blob), so it is gated AT THE DATA LAYER with no extra UI logic: `null`/absent for a player with
+  // nothing (a rookie with no past season, or a DST — a team, not a person, never carries an injury
+  // log) and for any payload exported before NF3.3. 🔒 HONEST: descriptive realized history, never a
+  // forward-looking claim (best_alpha=0) — `gamesMissedBySeason` counts a game NOT played for ANY
+  // reason (injury, healthy scratch, roster move), never asserted to be injury-caused; the weekly
+  // `injuries` report is the only place a specific injury is named. */
+  history?: PlayerHistory | null
+}
+
+/** NF3.3 — one past season's actual finish vs that season's ADP, reusing the SAME per-player join
+ *  (`benchmark_scorecard.player_track_record_frame`) NF3.2's public track-record page is built from
+ *  — never a parallel re-derivation. See `TrackRecordRow` in `lib/fantasy-track-record.ts` for the
+ *  public sibling shape (deliberately similar field names; this one adds `gamesPlayed`). */
+export interface PastSeasonRecord {
+  season: number
+  ourRank: number
+  /** Market ADP for that season — null when neither FFC nor its MFL fallback had an archive. */
+  adp: number | null
+  adpRank: number | null
+  /** "ffc" | "mfl" | null — which real-draft population backed `adp` (see NF3.2). */
+  adpSource: string | null
+  actualPoints: number
+  actualRank: number
+  gamesPlayed: number | null
+  isFade: boolean
+  fadeResult: "hit" | "miss" | "push" | null
+}
+
+/** NF3.3 — one weekly nflverse injury-report entry (game-report + practice-participation status).
+ *  Distinct from the roster-status availability prior the projection itself uses — this is pure
+ *  DISPLAY history, never a model input. */
+export interface InjuryReportEntry {
+  season: number
+  week: number
+  reportStatus: string | null
+  reportPrimaryInjury: string | null
+  practiceStatus: string | null
+  dateModified: string | null
+}
+
+/** NF3.3 — a season's participation count: how many of his team's non-bye games he did NOT record a
+ *  snap/box-score line for, for ANY reason. Never merged with `injuries` into one "games missed to
+ *  injury" number — read the weekly report for causation where one exists. */
+export interface GamesMissedRecord {
+  season: number
+  gamesOnRoster: number
+  gamesMissed: number
+}
+
+export interface PlayerHistory {
+  pastSeasons: PastSeasonRecord[]
+  injuries: InjuryReportEntry[]
+  gamesMissedBySeason: GamesMissedRecord[]
 }
 
 export interface ProjectionPayload {
