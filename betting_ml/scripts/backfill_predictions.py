@@ -57,6 +57,12 @@ ADD COLUMN IF NOT EXISTS retrain_tag VARCHAR(50)
 """
 
 # Story 30.7: explicit, non-overloaded provenance flag (TRUE for backfilled rows).
+# MH2.1 — per-target totals champion stamp (additive; `model_version` keeps its prior meaning).
+_ALTER_TOTALS_MODEL_VERSION = f"""
+ALTER TABLE {_ML_SCHEMA}.daily_model_predictions
+ADD COLUMN IF NOT EXISTS totals_model_version VARCHAR(20)
+"""
+
 _ALTER_IS_BACKFILL = f"""
 ALTER TABLE {_ML_SCHEMA}.daily_model_predictions
 ADD COLUMN IF NOT EXISTS is_backfill BOOLEAN DEFAULT FALSE
@@ -75,7 +81,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     alpha,
     h2h_market_implied_prob, h2h_posterior_prob, h2h_edge, h2h_kelly_fraction,
     total_line_consensus, over_prob_consensus,
-    totals_model_prob, totals_posterior_prob, totals_edge, totals_kelly_fraction
+    totals_model_prob, totals_posterior_prob, totals_edge, totals_kelly_fraction,
+    totals_model_version
 ) VALUES (
     %(model_version)s, %(inserted_at)s, %(score_date)s, %(prediction_type)s, %(retrain_tag)s, %(is_backfill)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
@@ -89,7 +96,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(alpha)s,
     %(h2h_market_implied_prob)s, %(h2h_posterior_prob)s, %(h2h_edge)s, %(h2h_kelly_fraction)s,
     %(total_line_consensus)s, %(over_prob_consensus)s,
-    %(totals_model_prob)s, %(totals_posterior_prob)s, %(totals_edge)s, %(totals_kelly_fraction)s
+    %(totals_model_prob)s, %(totals_posterior_prob)s, %(totals_edge)s, %(totals_kelly_fraction)s,
+    %(totals_model_version)s
 )
 """
 
@@ -137,7 +145,15 @@ def _load_best_alpha() -> float:
     return 0.5
 
 
-def _get_existing_game_pks(model_version: str) -> set[int]:
+def _get_existing_game_pks(model_version: str, retrain_tag: str = _RETRAIN_TAG) -> set[int]:
+    """Rows already written for this (model_version, retrain_tag).
+
+    ⚠️ MH2.1 — `retrain_tag` MUST be parameterised. The idempotency key is
+    (game_pk, model_version, retrain_tag), and `model_version` is the home_win-derived BUNDLE
+    stamp, which a totals-only champion swap does NOT move. With the tag hardcoded, an MH2.1
+    backtest would match the E13.11-era rows on BOTH key parts and be skipped as "already
+    backfilled" — writing nothing, silently, and reporting success.
+    """
     try:
         conn = get_snowflake_connection()
         try:
@@ -145,7 +161,7 @@ def _get_existing_game_pks(model_version: str) -> set[int]:
             cur.execute(
                 f"SELECT DISTINCT game_pk FROM {_ML_SCHEMA}.daily_model_predictions "
                 "WHERE model_version = %s AND retrain_tag = %s",
-                (model_version, _RETRAIN_TAG),
+                (model_version, retrain_tag),
             )
             return {int(row[0]) for row in cur.fetchall() if row[0] is not None}
         finally:
@@ -186,6 +202,8 @@ def _to_date(val) -> date | None:
 def _build_rows(
     df: pd.DataFrame,
     model_version: str,
+    totals_model_version: str,
+    retrain_tag: str,
     p_hw_ngb: np.ndarray,
     p_hw_clf: np.ndarray,
     loc_tot: np.ndarray,
@@ -249,10 +267,11 @@ def _build_rows(
 
         rows.append(_sanitize({
             "model_version":          model_version,
+            "totals_model_version":   totals_model_version,   # MH2.1 — per-target totals champion
             "inserted_at":            inserted_at,
             "score_date":             game_date_val,
             "prediction_type":        _PREDICTION_TYPE,
-            "retrain_tag":            _RETRAIN_TAG,
+            "retrain_tag":            retrain_tag,
             "is_backfill":            True,  # Story 30.7: explicit provenance flag
             "game_pk":                _col(df, "game_pk", i),
             "game_date":              game_date_val,
@@ -287,7 +306,7 @@ def _build_rows(
     return rows
 
 
-def _write_rows(rows: list[dict], model_version: str) -> None:
+def _write_rows(rows: list[dict], model_version: str, retrain_tag: str) -> None:
     conn = get_snowflake_connection()
     try:
         cur = conn.cursor()
@@ -304,7 +323,7 @@ def _write_rows(rows: list[dict], model_version: str) -> None:
             print(f"  Inserted {total}/{len(rows)} rows...")
         conn.commit()
         print(f"\nWrote {len(rows)} rows to {_ML_SCHEMA}.daily_model_predictions "
-              f"(model_version={model_version}, retrain_tag={_RETRAIN_TAG})")
+              f"(model_version={model_version}, retrain_tag={retrain_tag})")
     finally:
         conn.close()
 
@@ -318,6 +337,17 @@ def main() -> None:
         help="First season to include (default: 2024)",
     )
     parser.add_argument(
+        "--retrain-tag", default=_RETRAIN_TAG,
+        help=(
+            "Idempotency/label tag written to retrain_tag. Defaults to the historical "
+            f"'{_RETRAIN_TAG}' so existing behaviour is unchanged. Pass a DISTINCT tag for a new "
+            "champion's backtest (MH2.1 uses 'mh2_1_backtest') — otherwise the run collides with "
+            "the previous champion's rows on the (model_version, retrain_tag) key and silently "
+            "writes nothing. These rows are a BACKTEST, never a real-time record: they are also "
+            "stamped prediction_type='backfill' and is_backfill=TRUE."
+        ),
+    )
+    parser.add_argument(
         "--dry-run", action="store_true", default=False,
         help="Print row count and sample row without writing to Snowflake",
     )
@@ -325,6 +355,9 @@ def main() -> None:
 
     registry = yaml.safe_load(_REGISTRY_PATH.read_text())
     model_version = registry["home_win"]["model_version"]
+    # MH2.1 — per-target totals stamp; `model_version` is a home_win-derived BUNDLE stamp and
+    # does not move on a totals-only champion swap. Same column predict_today writes.
+    totals_model_version = str(registry["total_runs"].get("model_version") or "unknown")
     tot_dist = registry["total_runs"]["dist"]
     diff_dist = registry["run_differential"]["dist"]
 
@@ -352,6 +385,7 @@ def main() -> None:
             try:
                 conn.cursor().execute(_ALTER_RETRAIN_TAG)
                 conn.cursor().execute(_ALTER_IS_BACKFILL)
+                conn.cursor().execute(_ALTER_TOTALS_MODEL_VERSION)   # MH2.1
                 conn.commit()
             finally:
                 conn.close()
@@ -359,7 +393,7 @@ def main() -> None:
             print(f"[WARN] Could not add retrain_tag/is_backfill column ({exc})")
 
         print("\nChecking for existing backfill rows in Snowflake...")
-        existing_pks = _get_existing_game_pks(model_version)
+        existing_pks = _get_existing_game_pks(model_version, args.retrain_tag)
         if existing_pks and "game_pk" in df.columns:
             before = len(df)
             df = df[~df["game_pk"].isin(existing_pks)].reset_index(drop=True)
@@ -435,7 +469,7 @@ def main() -> None:
 
     inserted_at = datetime.now(timezone.utc).replace(tzinfo=None)
     rows = _build_rows(
-        df, model_version,
+        df, model_version, totals_model_version, args.retrain_tag,
         p_hw_ngb, p_hw_clf,
         loc_tot, scale_tot,
         loc_diff, scale_diff,
@@ -462,7 +496,7 @@ def main() -> None:
         return
 
     print("\nWriting to Snowflake...")
-    _write_rows(rows, model_version)
+    _write_rows(rows, model_version, args.retrain_tag)
 
 
 if __name__ == "__main__":
