@@ -27,6 +27,10 @@ exactly one ▶ Story prompt. Do THAT story only — do not start, scope, or "wh
        `nf3.2-receipts`). Work + commit + push on THIS branch ONLY — ⛔ NEVER `dev`/`main` directly. The closeout
        hands the operator a PR (branch → `dev`) to merge. If another LIVE session shares files you'll touch,
        say so in the handoff so the operator rebases/merges in order.
+       ⚠️ A BRANCH ISOLATES COMMITS, NOT THE WORKING TREE — concurrent sessions share ONE checkout: re-check
+       `git branch --show-current` right before EVERY commit, stage only your explicit paths (⛔ never `git add -A`),
+       treat a failure in an unfamiliar file as another session's mid-edit (re-run before chasing), and prefer
+       `git worktree add ../<dir> -b <branch>` off `dev` when another session is live (INC-39/NF-D19, 2026-08-02).
     2. Read the repo-root `CLAUDE.md` (esp. the 🌿 per-session-branches + publish-discipline section).
     3. Run `cat frontend/package.json` and confirm Next.js ("next" in deps, "dev": "next dev").
 - 🚨 PUBLISH/DEPLOY ONLY FROM MERGED `dev`, NEVER FROM YOUR BRANCH. There is ONE prod S3 api-cache bucket + ONE
