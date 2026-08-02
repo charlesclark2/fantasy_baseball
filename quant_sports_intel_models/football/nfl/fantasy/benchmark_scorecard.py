@@ -52,7 +52,15 @@ _NAME_COLS = ("player_name", "player", "name", "fullname", "full_name")
 _POS_COLS = ("position", "pos", "player_position", "fantasy_position")
 _RANK_COLS = ("rank", "overall_rank", "overall", "ecr", "consensus_rank", "adp", "ovr_rank")
 _POINTS_COLS = ("proj_fp_ppr", "points", "projection", "fpts", "proj_points", "fantasy_points",
-                "ppr", "ppr_points", "proj")
+                "ppr", "ppr_points", "proj", "projected_fantasy_points")
+
+# ESPN's raw fantasy-export `position` STRING column is shifted relative to its own `position_id`
+# (verified 2026-08-01 against known players in a real ESPN export: position_id=1 held Mahomes/Allen
+# labeled "TQB", 2 held McCaffrey/Barkley labeled "RB", 3 held Jefferson labeled "RB_WR", 4 held Kelce
+# labeled "WR", 5 held Tucker labeled "WR_TE"). `position_id` itself is the standard, UNSHIFTED ESPN
+# slot id — derive true position from it whenever a file carries this column, rather than trusting the
+# string label.
+_ESPN_POSITION_ID_MAP = {1: "QB", 2: "RB", 3: "WR", 4: "TE", 5: "K", 16: "DST"}
 
 FILE_BENCHMARK_README = """\
 FILE-BENCHMARK DROP-IN (Fantasy Footballers / PFF / ESPN / 4for4 / any competitor)
@@ -110,6 +118,18 @@ def load_file_benchmark(con, path: str | Path, season: int, schema: str = "main_
     to gsis via the shared `adp_source` crosswalk. Raises a clear error if a required column is absent
     (so a malformed drop-in fails loudly, never silently produces a wrong scorecard)."""
     df = pd.read_csv(path)
+    # ESPN's raw export can carry TWO rows per player under one `stat_split_type_id` column — a
+    # season-total projection (0) AND a per-game-average projection (2). Left alone, both feed the
+    # same `score` column: the merge fans out per player (one "system" row becomes two), and a
+    # season-total (~100-180) sits next to a per-game average (~5-9) in the same ranking — corrupting
+    # both the ordering metric and the system's own accuracy read. Keep the season-total row only,
+    # matching the season-total scale of `real_fp_ppr`/`proj_fp_ppr`.
+    split_c = _find_col(df.columns, ("stat_split_type_id",))
+    if split_c is not None and df[split_c].nunique() > 1 and (df[split_c] == 0).any():
+        before = len(df)
+        df = df[df[split_c] == 0].copy()
+        log.info("  %s: multiple stat_split_type_id values — kept season-total (0): %d -> %d rows",
+                 Path(path).name, before, len(df))
     name_c = _find_col(df.columns, _NAME_COLS)
     pos_c = _find_col(df.columns, _POS_COLS)
     if name_c is None or pos_c is None:
@@ -121,9 +141,20 @@ def load_file_benchmark(con, path: str | Path, season: int, schema: str = "main_
         raise ValueError(f"{Path(path).name}: need a points column {_POINTS_COLS} OR a rank column "
                          f"{_RANK_COLS}; found {list(df.columns)}")
 
+    position = df[pos_c].astype(str).str.upper().str.strip()
+    posid_c = _find_col(df.columns, ("position_id",))
+    if posid_c is not None:
+        posid = pd.to_numeric(df[posid_c], errors="coerce")
+        mapped = posid.map(_ESPN_POSITION_ID_MAP)
+        n_remapped = int((mapped.notna() & (mapped != position)).sum())
+        if n_remapped:
+            log.info("  %s: position_id present — remapped %d row(s) off the shifted `position` "
+                     "string (e.g. TQB->QB, RB_WR->WR, WR->TE)", Path(path).name, n_remapped)
+            position = mapped.fillna(position)
+
     norm = pd.DataFrame({
         "player_name": df[name_c].astype(str),
-        "position": df[pos_c].astype(str).str.upper().str.strip(),
+        "position": position,
     })
     if pts_c is not None:
         norm["score"] = pd.to_numeric(df[pts_c], errors="coerce")
@@ -135,6 +166,14 @@ def load_file_benchmark(con, path: str | Path, season: int, schema: str = "main_
     xw = A.attach_gsis(con, norm, season, schema=schema)
     xw = xw[xw["player_id"].notna()][["player_id", "position", "score"]].copy()
     xw["player_id"] = xw["player_id"].astype(str)
+    dup_ct = int(xw["player_id"].duplicated().sum())
+    if dup_ct:
+        # A duplicate player_id here fans out the downstream merge (one system row becomes N) —
+        # never let that happen silently. Keep the highest score per player (higher-is-better,
+        # already normalized above) and say so loudly.
+        log.warning("  %s: %d duplicate player_id row(s) post-crosswalk — keeping the highest score "
+                    "per player", Path(path).name, dup_ct)
+        xw = xw.sort_values("score", ascending=False).drop_duplicates("player_id", keep="first")
     log.info("  file benchmark %s (%s): %d rows, %d gsis-matched", Path(path).name, kind,
              len(norm), len(xw))
     return xw
@@ -285,7 +324,20 @@ def _score_pair(m: pd.DataFrame, us_col: str, sys_col: str) -> dict:
 
 def _disagreement(m: pd.DataFrame, us_col: str, sys_col: str, q: float = 0.75) -> dict:
     """Where OUR model most disagrees with the system (top-quartile |z_us − z_sys| within position),
-    who predicts the realized finish better? The edge of a NON-MARKET product lives in the fades."""
+    who predicts the realized finish better? The edge of a NON-MARKET product lives in the fades.
+
+    ⭐ NF-D13 AUDIT (2026-08-01) — checked this scorer against E7.11's baseball-side finding that a
+    source can't "disagree" with a consensus it alone constitutes (aggregate-vs-member, defect #4;
+    1-source rows + mismatched percentile denominators produced a lopsided false flag split there).
+    CLEAN here: `build_scorecard` never builds an N-source consensus — every system is graded
+    against us independently (one system per `m`, always both sides present via inner join), and
+    `zf`/`zs` below are z-scored over the IDENTICAL population `d` for both sides, so a
+    mismatched-denominator split cannot occur. If a future change ever folds multiple competitor
+    systems into one blended "consensus" entrant, re-apply the E7.11 discipline (n_sources≥2,
+    exclude-self, shared residual — see `betting_ml/scripts/prospect_board/consensus.py`) before
+    wiring it in here. Pinned by
+    `test_scorecard_systems_score_independently_of_each_other` in
+    `betting_ml/tests/test_nfl_fantasy_projection.py`."""
     pool = []
     for p in _POSITIONS:
         d = m[m["position"] == p]

@@ -32,6 +32,8 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { useFantasyProjections, useSaveLeague, useSavedLeagues } from "@/lib/fantasy-queries"
 import {
+  espnPreview,
+  espnReadUrl,
   listImportPlatforms,
   sleeperLeagues,
   sleeperPreview,
@@ -62,16 +64,20 @@ const VERDICT_COPY: Record<string, string> = {
   captured: "Saved with your league, but NOT applied — we do not project this stat.",
 }
 
-/** Turn any thrown API error into something a person can act on. An unexplained failure on an
- *  import screen is indistinguishable from "this product is broken", so the backend's own
- *  status-specific detail is preferred over a generic message wherever it exists. */
+/** Turn a thrown API error into something a person can act on.
+ *
+ *  ⚠️ THE SERVER'S MESSAGE WINS. `apiFetch` now surfaces the API's own `detail`, which is written to
+ *  be read by a user ("Sleeper has no user called 'X' — check the spelling, or paste your league ID
+ *  instead"). Substituting a generic string keyed off the status code would throw away the only
+ *  message that actually says what to DO — so the fallbacks below fire only for a bare
+ *  `API error <status>`, i.e. when the server sent no detail at all. */
 function errorText(e: unknown): string {
   const message = e instanceof Error ? e.message : String(e)
+  if (!/^API error \d+$/.test(message)) return message || "Something went wrong."
   if (/40[13]/.test(message)) return "You do not have access to league import yet."
-  if (/422/.test(message)) return "That username or league ID was not recognised."
   if (/429/.test(message)) return "The platform is rate-limiting us. Try again in a moment."
   if (/503/.test(message)) return "That platform is not connected yet."
-  return message || "Something went wrong."
+  return "Something went wrong. Please try again."
 }
 
 export function LeagueImport() {
@@ -89,6 +95,14 @@ export function LeagueImport() {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
+
+  // ESPN: the league id the user reads off their own URL, the link we build for them to open, and
+  // the response body they bring back. `espnPaste` holds a credential-free settings blob — it is
+  // sent once and never persisted here.
+  const [espnLeagueId, setEspnLeagueId] = useState("")
+  const [espnLink, setEspnLink] = useState<string | null>(null)
+  const [espnPaste, setEspnPaste] = useState("")
+  const [espnCopied, setEspnCopied] = useState(false)
 
   // The Yahoo callback returns the browser here with a status flag rather than a JSON body — the
   // user is mid-flow in a browser, so the outcome has to be visible on the page they land on.
@@ -150,7 +164,39 @@ export function LeagueImport() {
     const res = await run("sleeper-leagues", () =>
       sleeperLeagues(accessToken, username.trim(), SEASON),
     )
-    if (res) setLeagues(res.leagues)
+    if (!res) return
+    if (res.kind === "league") {
+      // They pasted a league ID — there is nothing to pick from, so go straight to the preview
+      // rather than making them choose their league out of a list of one.
+      setLeagues([res.league])
+      await loadPreview(res.league.league_id)
+      return
+    }
+    // `?? []` is the client half of the additive-response rule: if a response ever arrives WITHOUT
+    // the key we read, fall through to the visible "no leagues found" empty state rather than
+    // leaving `leagues` undefined, which renders nothing at all and looks like a dead button.
+    setLeagues(res.leagues ?? [])
+  }
+
+  async function buildEspnLink() {
+    setPreview(null)
+    setEspnCopied(false)
+    const res = await run("espn-link", () =>
+      espnReadUrl(accessToken, espnLeagueId.trim(), SEASON),
+    )
+    if (res?.url) setEspnLink(res.url)
+  }
+
+  async function submitEspnPaste() {
+    const res = await run("espn-preview", () =>
+      espnPreview(accessToken, espnPaste, SEASON),
+    )
+    if (res) {
+      setPreview(res)
+      // Drop the pasted blob as soon as it has been parsed. It holds no credential by construction,
+      // but there is no reason to keep a user's league dump sitting in component state either.
+      setEspnPaste("")
+    }
   }
 
   async function connectYahoo() {
@@ -263,14 +309,11 @@ export function LeagueImport() {
         ))}
       </div>
 
-      {/* ⛔ ESPN. Stated plainly rather than omitted: ESPN is the biggest platform, so a user who
-          does not see it will assume the feature is broken. Naming the reason — and pointing at the
-          floor that already works — is the honest version. */}
+      {/* The remaining platforms. Named rather than omitted: a user who doesn't see their platform
+          assumes the feature is broken, so point at the floor that already works. */}
       <p className="mt-3 text-xs text-gray-500">
-        <span className="text-gray-400">ESPN is not listed.</span> ESPN publishes no approved way for
-        another app to read a private league — the only route would be handling your ESPN login
-        session, and we will not do that. If your league is on ESPN (or CBS, MFL or Fantrax), enter it
-        once under{" "}
+        On <span className="text-gray-400">CBS, MyFantasyLeague or Fantrax?</span> Those have no
+        import yet — enter your league once under{" "}
         <a href="/fantasy/league-settings" className="text-emerald-400 hover:underline">
           My League Settings
         </a>{" "}
@@ -284,30 +327,199 @@ export function LeagueImport() {
         </h2>
 
         {platformId === "sleeper" && (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {/* text-base on phones (iOS auto-zooms on focus below 16px), text-sm from sm: up. */}
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && username.trim() && void findSleeperLeagues()}
-              placeholder="Sleeper username"
-              className="w-56 rounded border border-white/10 bg-white/[0.03] px-3 py-2 text-base sm:text-sm text-gray-100 placeholder:text-gray-600 focus:border-emerald-500/50 focus:outline-none"
-            />
-            <button
-              onClick={() => void findSleeperLeagues()}
-              disabled={!username.trim() || busy === "sleeper-leagues"}
-              className="flex items-center gap-1.5 rounded bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
-            >
-              {busy === "sleeper-leagues" ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <ArrowRight className="h-3.5 w-3.5" />
-              )}
-              Find leagues
-            </button>
-            <span className="text-xs text-gray-500">
-              Sleeper&apos;s league data is public — no password or sign-in needed.
-            </span>
+          <div className="mt-3">
+            {/* ⭐ Lead with the LEAGUE ID, not the username. The ID is the identifier a user can
+                actually obtain (it is sitting in the league's URL); a username has to be recalled
+                and is the thing people get wrong. The username is offered second, as the fallback
+                for "I don't know my league ID." */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* text-base on phones (iOS auto-zooms on focus below 16px), text-sm from sm: up. */}
+              <input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && username.trim() && void findSleeperLeagues()}
+                placeholder="Paste your Sleeper league ID"
+                className="w-72 rounded border border-white/10 bg-white/[0.03] px-3 py-2 text-base sm:text-sm text-gray-100 placeholder:text-gray-600 focus:border-emerald-500/50 focus:outline-none"
+              />
+              <button
+                onClick={() => void findSleeperLeagues()}
+                disabled={!username.trim() || busy === "sleeper-leagues"}
+                className="flex items-center gap-1.5 rounded bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
+              >
+                {busy === "sleeper-leagues" ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <ArrowRight className="h-3.5 w-3.5" />
+                )}
+                Import
+              </button>
+            </div>
+
+            <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.02] p-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                Where to find your league ID
+              </div>
+              <ol className="mt-2 space-y-1 text-xs text-gray-400">
+                <li>
+                  <span className="text-gray-500">1.</span> Open your league at{" "}
+                  <a
+                    href="https://sleeper.app"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-emerald-400 hover:underline"
+                  >
+                    sleeper.app
+                  </a>{" "}
+                  in a browser (the mobile app does not show the ID).
+                </li>
+                <li>
+                  <span className="text-gray-500">2.</span> Look at the address bar — the league ID
+                  is the long number after <span className="text-gray-500">/leagues/</span>:
+                </li>
+              </ol>
+              <div className="mt-2 overflow-x-auto rounded bg-black/40 px-2.5 py-1.5 font-mono text-[11px] text-gray-500">
+                sleeper.app/leagues/
+                <span className="rounded bg-emerald-500/15 px-1 text-emerald-300">
+                  1234567890123456789
+                </span>
+                /team
+              </div>
+              <p className="mt-2 text-xs text-gray-500">
+                Don&apos;t have it handy? Enter your{" "}
+                <span className="text-gray-400">Sleeper username</span> in the box above instead and
+                we&apos;ll list your leagues to pick from.
+              </p>
+              <p className="mt-1 text-[11px] text-gray-600">
+                Sleeper league data is public, so this needs no sign-in and no password.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {platformId === "espn" && (
+          <div className="mt-3">
+            {/* Step A — the league ID, exactly as Sleeper asks for it. */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* text-base on phones (iOS auto-zooms on focus below 16px), text-sm from sm: up. */}
+              <input
+                value={espnLeagueId}
+                onChange={(e) => setEspnLeagueId(e.target.value)}
+                onKeyDown={(e) =>
+                  e.key === "Enter" && espnLeagueId.trim() && void buildEspnLink()
+                }
+                placeholder="Paste your ESPN league ID"
+                className="w-72 rounded border border-white/10 bg-white/[0.03] px-3 py-2 text-base sm:text-sm text-gray-100 placeholder:text-gray-600 focus:border-emerald-500/50 focus:outline-none"
+              />
+              <button
+                onClick={() => void buildEspnLink()}
+                disabled={!espnLeagueId.trim() || busy === "espn-link"}
+                className="flex items-center gap-1.5 rounded bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
+              >
+                {busy === "espn-link" ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Link2 className="h-3.5 w-3.5" />
+                )}
+                Get my link
+              </button>
+            </div>
+
+            <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.02] p-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                Where to find your league ID
+              </div>
+              <p className="mt-2 text-xs text-gray-400">
+                Open your league on{" "}
+                <a
+                  href="https://fantasy.espn.com/football/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-emerald-400 hover:underline"
+                >
+                  fantasy.espn.com
+                </a>{" "}
+                and look at the address bar — the ID is the number after{" "}
+                <span className="text-gray-500">leagueId=</span>:
+              </p>
+              <div className="mt-2 overflow-x-auto rounded bg-black/40 px-2.5 py-1.5 font-mono text-[11px] text-gray-500">
+                fantasy.espn.com/football/league?leagueId=
+                <span className="rounded bg-emerald-500/15 px-1 text-emerald-300">998005</span>
+              </div>
+            </div>
+
+            {/* Step B — the link, and the paste box. Only shown once we have a link, so the flow
+                reads as two steps instead of one intimidating wall. */}
+            {espnLink && (
+              <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-3">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-400">
+                  Open this link, then copy what you see
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <a
+                    href={espnLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1.5 rounded bg-emerald-600 px-3 py-2 text-sm font-medium text-white"
+                  >
+                    <ArrowRight className="h-3.5 w-3.5" />
+                    Open my league settings
+                  </a>
+                  <button
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(espnLink)
+                      setEspnCopied(true)
+                    }}
+                    className="rounded border border-white/10 px-3 py-2 text-sm text-gray-300 hover:bg-white/5"
+                  >
+                    {espnCopied ? "Copied" : "Copy link"}
+                  </button>
+                </div>
+                <ol className="mt-3 space-y-1 text-xs text-gray-400">
+                  <li>
+                    <span className="text-gray-500">1.</span> The link opens a page of text starting
+                    with <span className="font-mono text-gray-500">{"{"}</span>. You must be signed
+                    in to ESPN — it&apos;s your league, so your browser handles that.
+                  </li>
+                  <li>
+                    <span className="text-gray-500">2.</span> Select all of it and copy
+                    (<span className="text-gray-500">Ctrl/⌘ + A</span>, then{" "}
+                    <span className="text-gray-500">Ctrl/⌘ + C</span>).
+                  </li>
+                  <li>
+                    <span className="text-gray-500">3.</span> Paste it below.
+                  </li>
+                </ol>
+                <textarea
+                  value={espnPaste}
+                  onChange={(e) => setEspnPaste(e.target.value)}
+                  rows={5}
+                  placeholder='Paste the text here — it starts with {"draftDetail":…'
+                  className="mt-3 w-full rounded border border-white/10 bg-black/30 px-3 py-2 font-mono text-base sm:text-xs text-gray-300 placeholder:text-gray-600 focus:border-emerald-500/50 focus:outline-none"
+                />
+                <button
+                  onClick={() => void submitEspnPaste()}
+                  disabled={!espnPaste.trim() || busy === "espn-preview"}
+                  className="mt-2 flex items-center gap-1.5 rounded bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
+                >
+                  {busy === "espn-preview" ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
+                  Read my league settings
+                </button>
+                {/* ⭐ The reason this flow is a copy-paste at all. Users will wonder why ESPN is
+                    harder than Sleeper; saying it plainly turns friction into a reason to trust us,
+                    and pre-empts "why don't you just ask for my ESPN login?" */}
+                <p className="mt-3 border-t border-white/5 pt-2 text-[11px] leading-relaxed text-gray-500">
+                  <span className="text-gray-400">Why the copy-paste?</span> ESPN publishes no way
+                  for another app to read a private league. The only automated route would be
+                  handling your ESPN sign-in — which isn&apos;t read-only, isn&apos;t limited to
+                  fantasy, and you couldn&apos;t revoke it for us alone — so we don&apos;t ask for
+                  it. This way your browser makes the request and we only ever see the settings.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -521,7 +733,12 @@ export function LeagueImport() {
                       <div className="mt-2 max-h-40 overflow-y-auto text-[11px] opacity-90">
                         {terms.map((t) => (
                           <div key={t.key} className="flex justify-between gap-2 py-0.5">
-                            <span className="truncate">{t.key}</span>
+                            {/* ESPN numbers its scoring rules, so a captured key renders as
+                                "129@dst" unless the server sends a label. `?? t.key` keeps a
+                                missing label a cosmetic fallback rather than a blank row. */}
+                            <span className="truncate" title={t.key}>
+                              {preview.unmapped_labels?.[t.key] ?? t.key}
+                            </span>
                             <span className="shrink-0 tabular-nums">{num(t.weight, 2)}</span>
                           </div>
                         ))}

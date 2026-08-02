@@ -7,9 +7,13 @@ blocked when a platform cannot be reached (they fall back to the floor, which al
 
 🚨 THE HARD RED LINE. No endpoint here accepts, stores, or replays a platform PASSWORD. Sleeper
 needs no credential at all (public read API); Yahoo goes through Yahoo's own OAuth consent screen
-and we keep only an encrypted, revocable, read-scoped grant. ESPN is deliberately absent — its only
-private-league path is replaying full-account session cookies, which is the same line CBS was
-refused on at E8.2a (`docs/nf_c0_espn_access_probe.md`).
+and we keep only an encrypted, revocable, read-scoped grant. ESPN is USER-MEDIATED: the user makes
+the request in their own signed-in browser and pastes the RESPONSE BODY — the server never calls
+ESPN and never sees a cookie (a body structurally cannot carry `espn_s2`, which is an HTTP cookie).
+We still refuse a paste that contains credential material, because a user can paste the wrong
+artifact — DevTools' "Copy as cURL" embeds the whole `Cookie:` header. ESPN's automated
+private-league path remains refused: it is the same line CBS was declined on at E8.2a. Full
+reasoning, including why the paste flow is categorically different: `docs/nf_c0_espn_access_probe.md`.
 
 🔒 ENTITLEMENT. Every route requires `require_fantasy_beta_access` (admin + fantasy_comp), matching
 NF-C0b's editor rather than the wider board surface — these WRITE a user's league configuration, so
@@ -37,7 +41,7 @@ from pydantic import BaseModel, Field
 
 from app.backend.dependencies import require_fantasy_beta_access
 from app.backend.services import dynamo
-from app.backend.services.platform_import import PLATFORMS, sleeper, yahoo, yahoo_oauth
+from app.backend.services.platform_import import PLATFORMS, espn, sleeper, yahoo, yahoo_oauth
 from app.backend.services.platform_import.http import PlatformHTTPError
 
 logger = logging.getLogger(__name__)
@@ -56,6 +60,9 @@ _DEFAULT_SEASON = os.getenv("NFL_FANTASY_SEASON", "2026")
 
 
 class SleeperUserRequest(BaseModel):
+    # Named `username` for backwards compatibility, but it accepts a username, a league ID or a
+    # user ID — see `sleeper.resolve_target`. The league ID is the one people actually have to
+    # hand (it is in the league's URL), so requiring a username was a self-inflicted dead end.
     username: str = Field(min_length=1, max_length=64)
     season: str = Field(default=_DEFAULT_SEASON, min_length=4, max_length=4)
 
@@ -73,7 +80,10 @@ def _handle_platform_error(e: Exception) -> HTTPException:
     actually mistyped their username — the E9.26b "a swallowed error reads as an outage" lesson,
     facing outward.
     """
-    if isinstance(e, (sleeper.SleeperInputError, yahoo.YahooInputError)):
+    if isinstance(e, (sleeper.SleeperInputError, yahoo.YahooInputError, espn.EspnInputError)):
+        # `EspnCredentialPasteError` is a subclass and lands here too: a 422 with an actionable
+        # message. It must NOT reach the `logger.exception` fallback below — that would write the
+        # offending paste into CloudWatch, which is the one place a stray cookie must never go.
         return HTTPException(status_code=422, detail=str(e))
     if isinstance(e, yahoo_oauth.YahooNotConfigured):
         return HTTPException(status_code=503, detail=str(e))
@@ -111,10 +121,16 @@ def list_platforms(user_id: str = Depends(require_fantasy_beta_access)):
     for platform in PLATFORMS.values():
         entry = dict(platform)
         if platform["auth"] == "oauth":
-            configured = yahoo_oauth.is_configured()
-            entry["configured"] = configured
+            # `configured` is the gate the UI reads: OFFER this platform or say "coming soon".
+            # `credentials_present` is a DIAGNOSTIC — it distinguishes "the operator hasn't written
+            # the SSM parameters" from "the parameters are there but the platform hasn't approved
+            # us yet", which otherwise look identical from outside and would send someone
+            # re-running a provisioning step that already succeeded. Boolean only, no secret.
+            enabled = yahoo_oauth.is_enabled()
+            entry["configured"] = enabled
+            entry["credentials_present"] = yahoo_oauth.is_configured()
             entry["connected"] = bool(
-                configured and dynamo.get_platform_token(user_id, platform["id"])
+                enabled and dynamo.get_platform_token(user_id, platform["id"])
             )
             entry["attribution"] = yahoo.ATTRIBUTION
             entry["attribution_url"] = yahoo.ATTRIBUTION_URL
@@ -130,13 +146,16 @@ def list_platforms(user_id: str = Depends(require_fantasy_beta_access)):
 
 @router.post("/sleeper/leagues")
 def sleeper_leagues(payload: SleeperUserRequest, user_id: str = Depends(require_fantasy_beta_access)):
-    """Resolve a Sleeper username → their leagues for the season (the picker's data)."""
+    """Resolve whatever identifier the user has — username, league ID or user ID.
+
+    Returns `{"kind": "league", "league": {...}}` when the value WAS a league (the caller skips the
+    picker and previews it directly), or `{"kind": "user", "user": ..., "leagues": [...]}`.
+    """
     try:
-        user = sleeper.resolve_user(payload.username)
-        leagues = sleeper.list_leagues(user["user_id"], payload.season)
+        resolved = sleeper.resolve_target(payload.username, payload.season)
     except Exception as e:  # noqa: BLE001 - mapped to an honest status below
         raise _handle_platform_error(e) from e
-    return {"user": user, "season": payload.season, "leagues": leagues}
+    return {"season": payload.season, **resolved}
 
 
 @router.post("/sleeper/preview")
@@ -154,7 +173,68 @@ def sleeper_preview(payload: PreviewRequest, user_id: str = Depends(require_fant
         raise _handle_platform_error(e) from e
 
 
+# ── ESPN (user-mediated paste — this server never calls ESPN) ────────────────────────────────────
+
+
+class EspnReadUrlRequest(BaseModel):
+    league_id: str = Field(min_length=1, max_length=24)
+    season: str = Field(default=_DEFAULT_SEASON, min_length=4, max_length=4)
+
+
+class EspnPasteRequest(BaseModel):
+    # ⚠️ Deliberately NOT `Field(max_length=...)`: pydantic would reject an oversized paste with its
+    # own validation error, whose `detail` is a LIST of objects that `apiFetch` cannot surface (see
+    # frontend/lib/api.ts). The adapter's own size check returns a plain, actionable string instead.
+    payload: str = Field(min_length=1)
+    season: str | None = None
+
+
+@router.post("/espn/read-url")
+def espn_read_url(payload: EspnReadUrlRequest, user_id: str = Depends(require_fantasy_beta_access)):
+    """Build the link the USER opens themselves. Nothing here fetches it.
+
+    We construct it server-side so the user never has to assemble a URL by hand, and so the league
+    id is format-checked before it is rendered into a link.
+    """
+    try:
+        return {"url": espn.build_read_url(payload.league_id, int(payload.season))}
+    except Exception as e:  # noqa: BLE001
+        raise _handle_platform_error(e) from e
+
+
+@router.post("/espn/preview")
+def espn_preview(payload: EspnPasteRequest, user_id: str = Depends(require_fantasy_beta_access)):
+    """Parse a pasted ESPN settings response WITHOUT saving it.
+
+    🔒 The pasted body is treated as hostile input and is NEVER logged — not on the happy path and
+    not on failure. `_handle_platform_error` maps the adapter's own errors before the
+    `logger.exception` fallback can see them, and nothing here interpolates `payload.payload` into
+    a log line or an error message.
+    """
+    try:
+        league = espn.parse_settings_payload(
+            payload.payload, season=int(payload.season) if payload.season else None
+        )
+    except Exception as e:  # noqa: BLE001
+        raise _handle_platform_error(e) from e
+    return league.to_dict()
+
+
 # ── Yahoo (official OAuth2, read scope) ──────────────────────────────────────────────────────────
+
+
+def _require_yahoo_enabled() -> None:
+    """Server-side enforcement of the availability gate.
+
+    Hiding the button is not a gate — an entitled caller can POST straight to the API, complete a
+    consent round-trip, and be left holding a Yahoo grant that buys them nothing until approval
+    lands. Every Yahoo route calls this so "coming soon" is true of the API, not just of the UI.
+    """
+    if not yahoo_oauth.is_enabled():
+        raise yahoo_oauth.YahooNotConfigured(
+            "Yahoo import is not available yet — we are waiting on Yahoo to approve our "
+            "application for access to their fantasy data."
+        )
 
 
 def _access_token(user_id: str) -> str:
@@ -165,6 +245,7 @@ def _access_token(user_id: str) -> str:
     refresh token and revokes the previous one when it does, so the write-back is required for
     correctness, not just for speed.
     """
+    _require_yahoo_enabled()
     record = dynamo.get_platform_token(user_id, yahoo.PLATFORM)
     if not record or not record.get("refresh_token"):
         raise yahoo_oauth.YahooAuthError("Connect your Yahoo account to import a Yahoo league.")
@@ -194,6 +275,7 @@ def _access_token(user_id: str) -> str:
 def yahoo_authorize(user_id: str = Depends(require_fantasy_beta_access)):
     """Where to send the user to grant read access (Yahoo's OWN consent screen)."""
     try:
+        _require_yahoo_enabled()
         return {"authorize_url": yahoo_oauth.authorize_url(user_id)}
     except Exception as e:  # noqa: BLE001
         raise _handle_platform_error(e) from e

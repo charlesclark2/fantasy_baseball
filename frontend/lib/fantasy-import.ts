@@ -13,7 +13,9 @@ import type { LeagueConfig } from "@/lib/league-config"
 export interface ImportPlatform {
   id: string
   label: string
-  auth: "public" | "oauth"
+  /** `paste` = ESPN: the USER makes the request in their own browser and gives us the response
+   *  body. We never call ESPN, and we never hold a credential — see the ESPN block below. */
+  auth: "public" | "oauth" | "paste"
   /** We built an adapter for it. */
   available: boolean
   /** It is usable RIGHT NOW — false for an OAuth platform whose app registration is still pending.
@@ -83,20 +85,39 @@ export interface ImportPreview {
    *  They are STORED (so the league stays a faithful record) and contribute nothing to the board;
    *  the coverage panel reports them as "captured". */
   unmapped_scoring_keys: string[]
+  /** Display labels for captured keys whose platform key is not self-describing — ESPN numbers its
+   *  rules, so "129@dst" needs to read "Yards allowed tier (D/ST)". Optional: the field is additive
+   *  and older API builds omit it, in which case the raw key is rendered (never a blank row). */
+  unmapped_labels?: Record<string, string>
 }
 
 export function listImportPlatforms(token: string | null): Promise<ImportPlatform[]> {
   return apiFetch(`/fantasy/import/platforms`, {}, token)
 }
 
+/** What `resolve_target` came back with. A bare number is ambiguous between a Sleeper league id and
+ *  a user id, so the server tells us which it turned out to be rather than making us guess. */
+export type SleeperResolved =
+  // `leagues` is present in BOTH branches by design — the API and this app deploy independently, so
+  // a response-shape change has to be additive or the older side renders a blank screen on a 200.
+  | { kind: "league"; season: string; league: PlatformLeagueSummary; leagues: PlatformLeagueSummary[] }
+  | {
+      kind?: "user"
+      season: string
+      user: { user_id: string; display_name: string }
+      leagues: PlatformLeagueSummary[]
+    }
+
+/** Accepts a Sleeper **username, league ID, or user ID** — whichever the user actually has. The
+ *  league ID is the common case: it is the long number in the league's own URL. */
 export function sleeperLeagues(
   token: string | null,
-  username: string,
+  identifier: string,
   season: string,
-): Promise<{ user: { user_id: string; display_name: string }; season: string; leagues: PlatformLeagueSummary[] }> {
+): Promise<SleeperResolved> {
   return apiFetch(
     `/fantasy/import/sleeper/leagues`,
-    { method: "POST", body: JSON.stringify({ username, season }) },
+    { method: "POST", body: JSON.stringify({ username: identifier, season }) },
     token,
   )
 }
@@ -105,6 +126,40 @@ export function sleeperPreview(token: string | null, leagueId: string): Promise<
   return apiFetch(
     `/fantasy/import/sleeper/preview`,
     { method: "POST", body: JSON.stringify({ league_id: leagueId }) },
+    token,
+  )
+}
+
+// ── ESPN — user-mediated paste ──────────────────────────────────────────────────────────────────
+//
+// ESPN publishes no delegated grant, and the only automated way into a private league is replaying
+// a full-account session cookie, which we refuse. So the user opens the link in their OWN browser
+// and pastes the response. `espn_s2` is an HTTP cookie and is never echoed into a response body,
+// so what they paste structurally cannot contain their sign-in.
+
+/** Build the settings link for the user to open THEMSELVES. Nothing fetches it. */
+export function espnReadUrl(
+  token: string | null,
+  leagueId: string,
+  season: string,
+): Promise<{ url: string }> {
+  return apiFetch(
+    `/fantasy/import/espn/read-url`,
+    { method: "POST", body: JSON.stringify({ league_id: leagueId, season }) },
+    token,
+  )
+}
+
+/** Parse a pasted ESPN settings response. The server refuses a paste containing credential
+ *  material (a "Copy as cURL" carries the whole Cookie header) and never logs the body. */
+export function espnPreview(
+  token: string | null,
+  payload: string,
+  season: string,
+): Promise<ImportPreview> {
+  return apiFetch(
+    `/fantasy/import/espn/preview`,
+    { method: "POST", body: JSON.stringify({ payload, season }) },
     token,
   )
 }

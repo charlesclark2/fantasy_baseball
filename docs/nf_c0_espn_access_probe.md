@@ -130,6 +130,98 @@ A *partial* improvement worth revisiting sooner: if ESPN's **public-league** rea
 an official share/read-only-link mechanism for private leagues, path (b) becomes viable on its own
 terms.
 
+### ⚠️ Correction (2026-08-01, operator push-back) — path (b) was rejected on a premise that is weaker
+### than this memo stated
+
+§3(b) dismissed the public-league read because it "covers only public leagues [and] the overwhelming
+majority of real leagues are private." That reasoning treats **visibility as a fixed property of a
+league**. It is not — it is a commissioner-controlled toggle (*League Settings → Basic Settings →
+"Make League Viewable to Public"*). So the addressable set is not "leagues that happen to be public",
+it is "leagues whose commissioner will flip a switch for two minutes", which is a materially larger
+and differently-shaped population than the one this memo scored.
+
+The operator reached the same endpoint successfully from a signed-in browser and read it as evidence
+that no credential is required. That specific inference is **refuted** — the browser attached
+`espn_s2`/`SWID` automatically; the identical URL returns `401 AUTH_LEAGUE_NOT_VISIBLE` with no
+cookies (verified 2026-08-01 against league 998005, seasons 2025 and 2026). The API does discriminate
+per league: a nonexistent id returns `404 GENERAL_NOT_FOUND`, an existing-but-hidden one returns the
+401 above, which is what makes **visibility** — not authentication — the gate.
+
+What that leaves:
+- The §3(c) red line **stands unchanged**. Us *making an authenticated request on the user's behalf*
+  still requires holding a session cookie, and is still refused.
+- Path (b) (the public-visibility toggle) is re-opened as a minor convenience, but it is **dominated**
+  by path (d) below and is not worth building first.
+
+**Unverified precondition for (b):** a bounded unauthenticated probe found no public league to
+confirm a 200 against, so "a public league returns data" is inferred from the error taxonomy, not
+observed.
+
+### (d) ⭐ USER-MEDIATED PASTE — the path this memo missed entirely → **NF-C0f**
+The user opens the read URL in **their own** signed-in browser, copies the **JSON response body**,
+and pastes it into our import page. We parse it and never make an ESPN request at all.
+
+**Why this is categorically not §3(c), and is not a loophole:** `espn_s2` is an HTTP **cookie**. The
+browser holds it and attaches it to the request; **it is never echoed into the response body**. A
+paste of the body is therefore *structurally incapable* of carrying the session credential — not
+"unlikely to", incapable. Every one of the four counts on which §3(c) fails the rule's substance is
+absent here:
+
+| §3(c) failure | Paste flow |
+|---|---|
+| We hold a live credential | We hold data. Nothing is re-fetchable. |
+| Grant is not read-only (confers writes) | We cannot act on the league at all. |
+| Not revocable for us specifically | Access ends when the tab closes. Nothing to revoke. |
+| Not scoped to fantasy | Scoped to one league's settings blob. |
+
+It also reaches **private** leagues, which (b) cannot — so it addresses the population the feature
+exists to serve, which is the exact ground §3(b) was rejected on.
+
+**Two guardrails are mandatory, and they are what keeps (d) from decaying into (c):**
+1. **Runtime credential scrubber.** The body cannot contain `espn_s2` — but the *user* can paste the
+   wrong artifact (DevTools "Copy as cURL" embeds the full `Cookie:` header). The endpoint MUST
+   reject input matching `espn_s2` / `SWID=` / `Cookie:`, say plainly why, and never log the raw
+   paste. The existing red-line lint is a SOURCE scan; this is its runtime twin and does not exist
+   yet.
+2. **Member GUIDs.** ESPN's payload carries member `id`s in SWID GUID form. That is an *identifier*,
+   not a secret (it cannot authenticate without `espn_s2`), but it identifies a real ESPN account:
+   drop it unless needed to map a team to the importing user, and never log it.
+
+⛔ **The thing NF-C0f must NEVER do** is offer "paste your cookie instead" as a fallback for a user
+who finds the JSON copy awkward. That is §3(c) wearing a different hat, and the convenience gap is
+exactly the pressure that would produce it.
+
 **Re-check trigger: next off-season (2027-02), or sooner if ESPN announces a developer program.**
 Nothing here is a permanent judgement about ESPN — it is a statement about what ESPN offered on
 2026-08-01.
+
+---
+
+## 4. What the SECOND real league found (2026-08-01, after ship)
+
+The map was built and 112 tests were green against one real league (998005, 12-team, full PPR). A
+second league from a different account (642070, 10-team, half-PPR) was then run through it. The
+adapter handled it — no crash, correct roster, correct scoring — but it contained **an entire
+scoring family the first payload does not have**: the nine-rung **yards-allowed ladder**
+(statIds 128–136, scored here from **+5 down to −7**). League 998005 sets none of it. No amount of
+testing against the first payload could have surfaced it.
+
+Two consequences, both now shipped:
+
+1. **The gap is disclosed, not hidden.** We project no yards-allowed column, so those tiers are
+   honestly CAPTURED — but the coverage panel rendered them as `129@dst · 3.00`, which discloses
+   nothing. ESPN numbers its rules where Sleeper and Yahoo name them, so captured ESPN keys now
+   carry a human label, and a league that scores the ladder is told plainly that a yardage-suppressing
+   defence will be under-rated on its board.
+2. **A verification claim of ours was overstated.** The stat-id map's header cited "the eight
+   yards-allowed buckets (129..136) sum to exactly 17.000000 games." That sum holds only because
+   ESPN projects no sub-100-yard game — statId **128 is a real ninth rung**, which league 642070
+   scores. The identity establishes the ladder's ORDER, not its EXTENT, and the comment now says so.
+   The labels deliberately carry **no yard thresholds**, because the evidence does not fix the cut
+   points and a fabricated boundary shown to a user is the same "it looked right in a table" guess
+   the map's own header forbids — one layer over, in the display layer.
+
+⭐ This is the second time the rule has paid on this story (the first was Sleeper's coarse `fgm_50p`
+vs fine `fgm_50_59`/`fgm_60p`, which survived 56 tests and a live-verified league). **Both fixtures
+are kept, and a test asserts they exercise disjoint scoring families** — if they ever converge, the
+second has stopped buying coverage and a genuinely different third league should replace it.

@@ -1079,7 +1079,12 @@ milb_mle_pitcher_v1:
 # minor line for the metrics that TRANSLATE (K%/BB%/ISO), recalibrated (E13.6) so the prior sd is honest.
 milb_mle_prior_v1:
   artifact_type: served_rookie_prior         # feeds eb_batter_posteriors_raw → avg_eb_{k_pct,bb_pct,iso}
-  source_model: milb_mle_v1                   # the E7.3 projections it recalibrates
+  # ⚠️ MIXED PROVENANCE since E7.5b (2026-08-01) — read `source_model_by_metric`, not `source_model`.
+  source_model: mixed                        # per-metric; see source_model_by_metric
+  source_model_by_metric:
+    bb_pct: milb_mle_v2_parkctx              # E7.5b: cleared the head-to-head gate vs the served prior
+    iso:    milb_mle_v2_parkctx              # E7.5b: cleared
+    k_pct:  milb_mle_v1                      # E7.5b: did NOT clear → served v1 columns kept VERBATIM
   model_module: betting_ml/scripts/milb_mle/mle_prior.py
   runner: betting_ml/scripts/milb_mle/run_mle_prior_recalibration.py
   metrics: [k_pct, bb_pct, iso]              # wOBA DELIBERATELY excluded (E7.3: no translatable signal)
@@ -1089,19 +1094,40 @@ milb_mle_prior_v1:
   recalibration:                             # E13.6 — parameter sd → held-out predictive spread
     method: held_out_residual_sd            # σ_resid = std(realized MLB − MLE), highest-level, mlb_pa≥150 floor
     prior_strength: beta_pseudocount        # κ = m(1−m)/σ_resid² − 1, clip [20, 400]; ISO = Normal prior sd
-    k_pct:  {resid_sd: 0.0443, param_sd_x: 7.2, cov68: 0.68, cov90: 0.90}
-    bb_pct: {resid_sd: 0.0222, param_sd_x: 5.1, cov68: 0.67, cov90: 0.91}
-    iso:    {resid_sd: 0.0475, param_sd_x: 7.0, cov68: 0.66, cov90: 0.89}
+    k_pct:  {resid_sd: 0.0443, param_sd_x: 7.2, cov68: 0.68, cov90: 0.90}   # v1 (held back by E7.5b)
+    bb_pct: {resid_sd: 0.0215, param_sd_x: 5.2, cov68: 0.69, cov90: 0.92}   # v2_parkctx (E7.5b)
+    iso:    {resid_sd: 0.0466, param_sd_x: 7.2, cov68: 0.69, cov90: 0.90}   # v2_parkctx (E7.5b)
   ablation:                                  # purged leave-one-debut-cohort-out; MLE prior vs generic prior
     cv_strategy: leave_one_debut_cohort_out
     metric: predictive_nll_crps_mae_coverage
     k_pct:  {mle_nll: -1.699, generic_nll: -1.365, mle_mae: 0.0358, generic_mae: 0.0493, wins: true}
     bb_pct: {mle_nll: -2.376, generic_nll: -2.245, mle_mae: 0.0181, generic_mae: 0.0206, wins: true}
     iso:    {mle_nll: -1.592, generic_nll: -1.524, mle_mae: 0.0398, generic_mae: 0.0423, wins: true}
+  # E7.5b (2026-08-01) — the HEAD-TO-HEAD gate: re-derived prior vs the CURRENTLY-SERVED one, purged
+  # leave-one-debut-cohort-out, matched population (n=538 over 10 cohorts), two-sided anchors, BH-FDR@0.10.
+  # Decided PER METRIC; a metric that did not clear keeps the served v1 columns byte-identical.
+  head_to_head_vs_served:
+    report: quant_sports_intel_models/baseball/edge_program/ablation_results/e7_5b_mle_prior_head_to_head.md
+    challenger: milb_mle_v2_parkctx
+    n_scored: 538
+    n_cohorts: 10
+    k_pct:  {chal_nll: -1.6732, inc_nll: -1.6864, chal_crps: 0.02549, inc_crps: 0.02532, fold_win_rate: 0.30, p_one_sided: 0.7263, bh_fdr: false, ships: false}
+    bb_pct: {chal_nll: -2.4403, inc_nll: -2.3766, chal_crps: 0.01181, inc_crps: 0.01263, fold_win_rate: 0.90, p_one_sided: 0.0138, bh_fdr: true,  ships: true}
+    iso:    {chal_nll: -1.6458, inc_nll: -1.5737, chal_crps: 0.02600, inc_crps: 0.02816, fold_win_rate: 0.90, p_one_sided: 0.0043, bh_fdr: true,  ships: true}
   uncertainty: recalibrated_predictive       # σ_resid is honest (cov ≈ 0.68/0.90) — was parameter-only
   best_alpha: 0                              # a rookie prior, never a market bet
-  promotion_status: pending                  # harness code-complete + fast gate + SQL smoke green; awaiting operator W8a run + serving parity
-  promoted_at: null
+  promotion_status: promoted                 # E7.5b 2026-08-01: landed + serving-verified on a live slate
+  promoted_at: '2026-08-01'
+  serving_verification:                      # the gate that counts — CI mocks IO and cannot see this
+    verifier: betting_ml/scripts/milb_mle/verify_mle_prior_serving.py
+    result: |
+      2026-08-01 (post W8a+W8b rebuild). The check is the model's own PA=0 identity — a cold-start
+      batter WITH an MLE must serve eb_<m> == round(mle_<m>, 4), else he silently got the ZiPS/generic
+      prior. A non-null count CANNOT see that failure; a fully-degraded build passes it.
+      434/434 cold-start rows on all three metrics; avg_eb_{k_pct,bb_pct,iso} populated on all 30
+      lineup rows of the live slate (k 0.2236 / bb 0.0858 / iso 0.1612).
+      ⭐ k_pct held at 434/434 THROUGH the rebuild — it was held back byte-identical, so it doubles as
+      a free control: if it ever drops, the fault is the join, not the E7.5b swap.
   ablation_report: quant_sports_intel_models/baseball/edge_program/ablation_results/e7_5_milb_prior_ablation.md
   tests: betting_ml/tests/test_milb_mle_prior.py
   notes: |
@@ -1117,6 +1143,18 @@ milb_mle_prior_v1:
     static W8a precursor view (fail-safe → empty view → generic prior if the parquet is absent, so a
     missing artifact never HALTs the serving-critical build). Reaches served total_runs / run_diff
     models via feature_pregame_lineup_features avg_eb_{k_pct,bb_pct,iso}. best_alpha = 0.
+
+    E7.5b (2026-08-01) — the served parquet now has MIXED provenance. E7.12 slice 1 improved the batter
+    MLE and published milb_mle_v2_parkctx, which moved the DRAFT BOARD immediately and this BETTING prior
+    not at all (the served path reads a separately-recalibrated parquet). E7.5b re-derived the prior from
+    v2 and put it through E7.5's OWN held-out gate — a purged leave-one-debut-cohort-out HEAD-TO-HEAD
+    against the prior that was actually SERVING (not against the generic prior, which the incumbent
+    already beat). bb_pct and iso cleared every condition and SHIP; k_pct did NOT (worse on NLL and CRPS,
+    3/10 cohorts, p=0.73) and its served columns are kept BYTE-IDENTICAL. The k_pct hold is the story's
+    premise measured: v2's translation-MAE gain is directionally present there (0.03599 vs 0.03614) but
+    does not convert into better PRICING — a translation objective is not a calibration objective.
+    Provenance is carried per row in the `<metric>_source` columns (inert to the dbt consumer).
+    ⛔ The PITCHER sibling (milb_mle_pitcher_prior_v1) is deliberately NOT re-run — see its own notes.
 
 # =============================================================================
 # E7.5p — recalibrated PITCHER MiLB prior, WIRED into eb_starter_posteriors
@@ -1190,7 +1228,16 @@ milb_mle_pitcher_prior_v1:
     eb_k_pct/eb_bb_pct, so the cold-start rows they now see are drawn from a slightly different
     distribution — the fix is a retrain, tracked as follow-up, and it is also why eb_gb_pct is NOT yet
     joined into feature_pregame_starter_features. best_alpha = 0.
-  e7_9_followup:                             # ── E7.9 (2026-07-27) resolved this entry's open items ──
+
+    ⛔ DO NOT RE-RUN THIS RECALIBRATION AGAINST milb_mle_pitcher_v2_parkctx (standing, 2026-08-01).
+    E7.5b re-derived the BATTER prior behind a head-to-head gate and resolved that divergence; the
+    PITCHER arm is EXCLUDED BY DECISION, not by oversight. E7.5p's value is concentrated in GB%, and
+    E7.12 slice 1p moved exactly one pitcher metric — bb_pct (ADD); gb_pct DROPPED and k_pct was
+    FDR-downgraded, so both are byte-identical to the incumbent. Near-zero content, non-zero risk to a
+    served contract. Revisit ONLY if a future slice actually moves pitcher GB%, and then only through
+    the same head-to-head gate (`run_mle_prior_recalibration.py --incumbent-projections`, which the
+    pitcher runner does NOT yet implement — building it is part of that future story).
+  e7_9_followup:                           # ── E7.9 (2026-07-27) resolved this entry's open items ──
     eb_gb_pct_consumer: |
       JOINED. feature_pregame_starter_features → home_/away_starter_eb_gb_pct on
       feature_pregame_game_features_raw (::double type-pinned, contract manifest updated). The column is

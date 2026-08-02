@@ -405,3 +405,319 @@ def ablate_metric(proj: pd.DataFrame, metric: str, highest_level_only: bool = Tr
 def ablate(proj: pd.DataFrame, metrics=PRIOR_METRICS,
            highest_level_only: bool = True) -> dict[str, MetricAblation]:
     return {m: ablate_metric(proj, m, highest_level_only) for m in metrics}
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════
+# E7.5b — the HEAD-TO-HEAD gate: a re-derived prior vs the CURRENTLY-SERVED one
+# ══════════════════════════════════════════════════════════════════════════════════════
+#
+# WHY THE `ablate()` ABOVE IS NOT THE E7.5b GATE
+# ----------------------------------------------
+# `ablate()` asks "does an MLE prior beat the GENERIC population prior?" — the E7.5 shipping question,
+# already answered ✅ for all three metrics. E7.5b asks a strictly harder one: does a prior re-derived
+# from a NEW MLE beat the prior that is ALREADY SERVING on the live run_diff / pre_lineup contract? The
+# incumbent already beats generic, so beating generic is not evidence for a swap. This head-to-head is
+# the comparison the story turns on.
+#
+# THE FOUR DISCIPLINES THAT MAKE IT A REAL GATE (repo lessons, applied)
+# --------------------------------------------------------------------
+# 1. MATCHED POPULATION (NF1.9 (f) / E7.12 `cache_is_current`). The two projection sets do NOT have the
+#    same rows — a re-fit can add players. Scoring each on its own labelled rows compares two different
+#    populations and calls the difference a model effect. So both arms are scored on the INTERSECTION of
+#    their labelled highest-level rows, and `n_challenger_only`/`n_incumbent_only` are reported so a
+#    silently-shrunk eval set is visible rather than absorbed.
+# 2. SELF-CALIBRATED SD PER ARM. Each arm's predictive sd is the std of ITS OWN residuals on the strictly
+#    prior cohorts. Neither arm is handicapped by the other's spread — the contest is calibration ×
+#    sharpness, exactly as in `ablate_metric`.
+# 3. TWO-SIDED ANCHORS (NF-D11 / NF-D16 (g‴)). A DEGENERATE CEILING that must LOSE (the generic
+#    population prior, and a within-cohort PERMUTATION of the challenger's own means — which destroys the
+#    per-player pairing while preserving the marginal distribution exactly), and a PEEKING FLOOR that must
+#    WIN. The floor is computed PER FORM — each arm is floored by the peeking version of ITSELF (its own
+#    means shifted by the held-out cohort's mean residual) — because a single shared ceiling would veto a
+#    legitimately-better arm as a false metric inversion.
+#    ⚠️ The permutation anchor is deliberately chosen over a fitted oracle: it is well-posed at ANY n
+#    (NF1.7 (b)), and a MISSING/undecidable anchor is reported as unavailable, never as a pass (NF1.7 (a)).
+# 4. A PAIRED PER-COHORT READ, not a comparison of two pooled means (E7.12 slice 1's own hard-won lesson):
+#    the per-cohort NLL deltas give a fold win rate and a one-sided p, which separates "systematically
+#    better" from "won the pooled average by a hair".
+#
+# COVERAGE IS A FLOOR, NEVER A TARGET (E2.1-r / NF1.8). The named failure mode for this story is a prior
+# that gets SHARPER without getting better CALIBRATED. NLL already punishes over-sharpness, but the
+# explicit instrument is a one-sided coverage FLOOR on the challenger (`cov68 ≥ 0.68 − tol`,
+# `cov90 ≥ 0.90 − tol`). The upper side is REPORTED and never gated — gating it would make coverage a
+# target, which is the inversion this repo has already paid for twice.
+
+# One-sided slack on the challenger's coverage floors. 0.07 at n≈540 is ~3.5 binomial SE, deliberately
+# generous: the floor exists to catch a prior that is sharp AND mis-calibrated, not to referee noise.
+COVERAGE_FLOOR_TOL = 0.07
+# α for the paired per-cohort NLL test, and the fold-win-rate bar. Both are the E7.12 slice-1 house
+# values, transplanted verbatim rather than tuned for this story.
+H2H_ALPHA = 0.10
+H2H_MIN_FOLD_WIN_RATE = 0.60
+
+
+@dataclass
+class ArmScores:
+    """Pooled held-out scores for one arm over the matched eval rows."""
+    name: str
+    nll: float
+    crps: float
+    mae: float
+    cov68: float
+    cov90: float
+
+    def to_dict(self) -> dict:
+        return {"arm": self.name, "nll": round(self.nll, 5), "crps": round(self.crps, 6),
+                "mae": round(self.mae, 6), "cov68": round(self.cov68, 4), "cov90": round(self.cov90, 4)}
+
+
+@dataclass
+class HeadToHead:
+    """Challenger (a prior re-derived from a new MLE) vs the CURRENTLY-SERVED incumbent prior."""
+    metric: str
+    n_scored: int
+    n_cohorts: int
+    n_challenger_only: int      # labelled rows the challenger has and the incumbent does not (dropped)
+    n_incumbent_only: int       # …and vice-versa (dropped) — a silently-shrunk eval set must be visible
+    challenger: ArmScores
+    incumbent: ArmScores
+    generic: ArmScores                  # degenerate ceiling — must LOSE
+    permuted: ArmScores                 # degenerate ceiling — must LOSE
+    oracle_challenger: ArmScores        # per-form peeking floor for the challenger — must WIN
+    oracle_incumbent: ArmScores         # per-form peeking floor for the incumbent  — must WIN
+    cohort_nll_delta: list[float]       # incumbent − challenger per cohort (>0 ⇒ challenger better)
+    fold_win_rate: float
+    p_one_sided: float | None           # H1: the challenger is systematically better on NLL
+    challenger_sigma: float             # final-fold self-calibrated sd (the sd that would be SERVED)
+    incumbent_sigma: float
+    notes: list[str] = field(default_factory=list)
+
+    # ── the pre-registered per-metric conditions ─────────────────────────────────────────
+    @property
+    def beats_on_nll(self) -> bool:
+        return self.challenger.nll < self.incumbent.nll
+
+    @property
+    def beats_on_crps(self) -> bool:
+        return self.challenger.crps <= self.incumbent.crps + 1e-9
+
+    @property
+    def folds_clear(self) -> bool:
+        return self.fold_win_rate >= H2H_MIN_FOLD_WIN_RATE
+
+    @property
+    def p_clears(self) -> bool:
+        return self.p_one_sided is not None and self.p_one_sided < H2H_ALPHA
+
+    @property
+    def coverage_floor_holds(self) -> bool:
+        return (self.challenger.cov68 >= 0.68 - COVERAGE_FLOOR_TOL
+                and self.challenger.cov90 >= 0.90 - COVERAGE_FLOOR_TOL)
+
+    @property
+    def degenerates_lose(self) -> bool:
+        """Both degenerate ceilings must lose to the challenger on the primary score."""
+        return (self.challenger.nll < self.generic.nll
+                and self.challenger.nll < self.permuted.nll)
+
+    @property
+    def oracle_floor_holds(self) -> bool:
+        """Each arm is floored by the PEEKING version of ITS OWN form (NF-D16 (g‴)). An arm beating its
+        own oracle is mathematically impossible ⇒ the tell that the score is inverted, not a win."""
+        return (self.challenger.nll >= self.oracle_challenger.nll - 1e-9
+                and self.incumbent.nll >= self.oracle_incumbent.nll - 1e-9)
+
+    def gate_detail(self, fdr_survives: bool | None = None) -> dict:
+        d = {
+            "beats_on_nll": self.beats_on_nll,
+            "beats_on_crps": self.beats_on_crps,
+            "fold_win_rate>=0.60": self.folds_clear,
+            f"p_one_sided<{H2H_ALPHA}": self.p_clears,
+            "coverage_floor_holds": self.coverage_floor_holds,
+            "degenerate_ceilings_lose": self.degenerates_lose,
+            "oracle_floor_holds": self.oracle_floor_holds,
+        }
+        if fdr_survives is not None:
+            d["BH-FDR@0.10"] = bool(fdr_survives)
+        return d
+
+    def ships(self, fdr_survives: bool | None = None) -> bool:
+        """SHIP iff every pre-registered condition holds. A metric that does not ship keeps the SERVED
+        incumbent VERBATIM (per-metric, not all-or-nothing — the E7.12 emission precedent)."""
+        return all(self.gate_detail(fdr_survives).values())
+
+    def to_dict(self, fdr_survives: bool | None = None) -> dict:
+        return {
+            "metric": self.metric, "n_scored": self.n_scored, "n_cohorts": self.n_cohorts,
+            "n_challenger_only": self.n_challenger_only, "n_incumbent_only": self.n_incumbent_only,
+            "challenger": self.challenger.to_dict(), "incumbent": self.incumbent.to_dict(),
+            "generic": self.generic.to_dict(), "permuted": self.permuted.to_dict(),
+            "oracle_challenger": self.oracle_challenger.to_dict(),
+            "oracle_incumbent": self.oracle_incumbent.to_dict(),
+            "cohort_nll_delta": [round(float(x), 6) for x in self.cohort_nll_delta],
+            "fold_win_rate": round(self.fold_win_rate, 4),
+            "p_one_sided": None if self.p_one_sided is None else round(self.p_one_sided, 6),
+            "challenger_sigma": round(self.challenger_sigma, 6),
+            "incumbent_sigma": round(self.incumbent_sigma, 6),
+            "gate": self.gate_detail(fdr_survives),
+            "ships": self.ships(fdr_survives),
+            "notes": self.notes,
+        }
+
+
+def _one_sided_paired_p(delta: np.ndarray) -> float | None:
+    """One-sided paired t on the per-cohort deltas. H1: delta > 0 (the challenger is better).
+
+    A zero-variance delta is NOT untestable — a constant advantage is the MOST systematic case there is
+    (the NF1.7 (a) hole, facing the other way), so it is decided on the sign."""
+    d = np.asarray(delta, float)
+    d = d[np.isfinite(d)]
+    if len(d) < 3:
+        return None
+    if np.std(d, ddof=1) == 0:
+        return 0.0 if float(np.mean(d)) > 0 else 1.0
+    from scipy import stats
+    t = float(np.mean(d) / (np.std(d, ddof=1) / np.sqrt(len(d))))
+    return float(stats.t.sf(t, df=len(d) - 1))
+
+
+def _score(y: np.ndarray, mu: np.ndarray, sd: np.ndarray, name: str) -> ArmScores:
+    nll = float(np.mean([_norm_nll(np.array([a]), np.array([b]), c)[0] for a, b, c in zip(y, mu, sd)]))
+    crps = float(np.mean([_norm_crps(np.array([a]), np.array([b]), c)[0] for a, b, c in zip(y, mu, sd)]))
+    r = np.abs(y - mu)
+    return ArmScores(name=name, nll=nll, crps=crps, mae=float(np.mean(r)),
+                     cov68=float(np.mean(r <= sd)), cov90=float(np.mean(r <= 1.645 * sd)))
+
+
+def head_to_head_metric(challenger_proj: pd.DataFrame, incumbent_proj: pd.DataFrame, metric: str,
+                        highest_level_only: bool = True, seed: int = 7) -> HeadToHead:
+    """Purged leave-one-debut-cohort-out head-to-head for one metric, on the MATCHED eval rows.
+
+    Both frames are `mle_projections`-shaped (a `mle_<metric>` emission + the realized `mlb_<metric>`
+    label + `debut_cohort`, with `has_mlb_label` merged in). The realized label is taken from the
+    INCUMBENT frame so the two arms are scored against a byte-identical target."""
+    ch = _labelled(challenger_proj, metric, highest_level_only)
+    inc = _labelled(incumbent_proj, metric, highest_level_only)
+    for d, who in ((ch, "challenger"), (inc, "incumbent")):
+        if "debut_cohort" not in d:
+            raise ValueError(f"[{metric}] {who} projections carry no debut_cohort — cannot purge by cohort")
+
+    ch = ch[ch["debut_cohort"].notna()].copy()
+    inc = inc[inc["debut_cohort"].notna()].copy()
+    ch_ids, inc_ids = set(ch["player_id"]), set(inc["player_id"])
+    n_ch_only, n_inc_only = len(ch_ids - inc_ids), len(inc_ids - ch_ids)
+
+    # MATCHED population: score both arms on exactly the same rows (NF1.9 (f)).
+    merged = inc[["player_id", "level", "debut_cohort", "_mlb", "_mle"]].rename(
+        columns={"_mle": "_inc", "level": "_inc_level"}
+    ).merge(
+        ch[["player_id", "_mle", "level"]].rename(columns={"_mle": "_ch", "level": "_ch_level"}),
+        on="player_id", how="inner",
+    )
+    if merged.empty:
+        raise ValueError(f"[{metric}] the challenger and incumbent share no labelled players")
+    merged["debut_cohort"] = merged["debut_cohort"].astype(int)
+
+    notes: list[str] = []
+    lvl_mismatch = int((merged["_inc_level"].astype(str) != merged["_ch_level"].astype(str)).sum())
+    if lvl_mismatch:
+        notes.append(f"{lvl_mismatch} matched players resolve to a DIFFERENT highest level across the two "
+                     "projection sets — their translations are not like-for-like")
+    if n_ch_only or n_inc_only:
+        notes.append(f"eval set matched to the intersection: dropped {n_ch_only} challenger-only and "
+                     f"{n_inc_only} incumbent-only labelled players")
+
+    cohorts = sorted(merged["debut_cohort"].unique())
+    eval_cohorts = [y for y in cohorts if any(c < y for c in cohorts)]
+    if len(eval_cohorts) < 2:
+        raise ValueError(f"[{metric}] need ≥2 evaluable cohorts; got {eval_cohorts}")
+
+    rng = np.random.default_rng(seed)
+    parts: dict[str, list[np.ndarray]] = {k: [] for k in
+                                          ("y", "ch_mu", "inc_mu", "gen_mu", "perm_mu",
+                                           "orc_ch_mu", "orc_inc_mu", "ch_sd", "inc_sd", "gen_sd")}
+    per_cohort_delta: list[float] = []
+    ch_sigma = inc_sigma = float("nan")
+
+    for y_ in eval_cohorts:
+        prior = merged[merged["debut_cohort"] < y_]
+        test = merged[merged["debut_cohort"] == y_]
+        if prior.empty or test.empty:
+            continue
+        # each arm self-calibrated on ITS OWN prior-cohort residuals (no sd handicap)
+        ch_sd = float(np.std((prior["_mlb"] - prior["_ch"]).to_numpy(float), ddof=1)) or 1e-6
+        inc_sd = float(np.std((prior["_mlb"] - prior["_inc"]).to_numpy(float), ddof=1)) or 1e-6
+        gen_sd = float(np.std(prior["_mlb"].to_numpy(float), ddof=1)) or 1e-6
+        gen_mean = float(prior["_mlb"].mean())
+        ch_sigma, inc_sigma = ch_sd, inc_sd      # the last fold's sd ≈ what would be SERVED
+
+        yv = test["_mlb"].to_numpy(float)
+        chv = test["_ch"].to_numpy(float)
+        incv = test["_inc"].to_numpy(float)
+        # degenerate ceiling #2: the challenger's OWN means permuted within the held-out cohort — the
+        # marginal distribution is preserved EXACTLY, only the per-player pairing is destroyed.
+        permv = chv.copy()
+        rng.shuffle(permv)
+        # per-FORM peeking floors: each arm shifted by the held-out cohort's own mean residual
+        orc_chv = chv + float(np.mean(yv - chv))
+        orc_incv = incv + float(np.mean(yv - incv))
+
+        n = len(test)
+        parts["y"].append(yv)
+        parts["ch_mu"].append(chv)
+        parts["inc_mu"].append(incv)
+        parts["gen_mu"].append(np.full(n, gen_mean))
+        parts["perm_mu"].append(permv)
+        parts["orc_ch_mu"].append(orc_chv)
+        parts["orc_inc_mu"].append(orc_incv)
+        parts["ch_sd"].append(np.full(n, ch_sd))
+        parts["inc_sd"].append(np.full(n, inc_sd))
+        parts["gen_sd"].append(np.full(n, gen_sd))
+
+        # paired per-cohort NLL delta (incumbent − challenger; >0 ⇒ the challenger is better)
+        ch_nll = float(np.mean(_norm_nll(yv, chv, ch_sd)))
+        inc_nll = float(np.mean(_norm_nll(yv, incv, inc_sd)))
+        per_cohort_delta.append(inc_nll - ch_nll)
+
+    cat = {k: np.concatenate(v) for k, v in parts.items()}
+    d = np.asarray(per_cohort_delta, float)
+    return HeadToHead(
+        metric=metric, n_scored=int(len(cat["y"])), n_cohorts=len(per_cohort_delta),
+        n_challenger_only=n_ch_only, n_incumbent_only=n_inc_only,
+        challenger=_score(cat["y"], cat["ch_mu"], cat["ch_sd"], "challenger"),
+        incumbent=_score(cat["y"], cat["inc_mu"], cat["inc_sd"], "incumbent"),
+        generic=_score(cat["y"], cat["gen_mu"], cat["gen_sd"], "generic_degenerate"),
+        permuted=_score(cat["y"], cat["perm_mu"], cat["ch_sd"], "permuted_challenger_degenerate"),
+        oracle_challenger=_score(cat["y"], cat["orc_ch_mu"], cat["ch_sd"], "oracle_challenger"),
+        oracle_incumbent=_score(cat["y"], cat["orc_inc_mu"], cat["inc_sd"], "oracle_incumbent"),
+        cohort_nll_delta=[float(x) for x in d],
+        fold_win_rate=float(np.mean(d > 0)) if len(d) else 0.0,
+        p_one_sided=_one_sided_paired_p(d),
+        challenger_sigma=ch_sigma, incumbent_sigma=inc_sigma, notes=notes,
+    )
+
+
+def head_to_head(challenger_proj: pd.DataFrame, incumbent_proj: pd.DataFrame,
+                 metrics=PRIOR_METRICS, highest_level_only: bool = True,
+                 seed: int = 7) -> dict[str, HeadToHead]:
+    return {m: head_to_head_metric(challenger_proj, incumbent_proj, m, highest_level_only, seed)
+            for m in metrics}
+
+
+def bh_fdr(pvals: dict[str, float | None], alpha: float = H2H_ALPHA) -> dict[str, bool]:
+    """Benjamini-Hochberg over the per-metric primary contrasts. Three metrics is a three-test family,
+    and shipping off three uncorrected p-values is how a family becomes a fishing expedition (NF-D15).
+    A metric with no computable p never survives — an unevaluable test is not a passed one."""
+    items = [(k, v) for k, v in pvals.items() if v is not None and np.isfinite(v)]
+    survive: dict[str, bool] = {k: False for k in pvals}
+    if not items:
+        return survive
+    items.sort(key=lambda kv: kv[1])
+    m = len(items)
+    kmax = 0
+    for i, (_, p) in enumerate(items, start=1):
+        if p <= alpha * i / m:
+            kmax = i
+    for i, (k, _) in enumerate(items, start=1):
+        survive[k] = i <= kmax
+    return survive

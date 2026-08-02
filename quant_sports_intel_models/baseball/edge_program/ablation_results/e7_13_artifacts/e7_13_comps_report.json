@@ -1,0 +1,139 @@
+{
+  "as_of_season": 2026,
+  "board_rows": 1451,
+  "cohort_rows": 5245,
+  "k": 25,
+  "metric": "gower",
+  "by_type": {
+    "batter": {
+      "n_pool": 2597,
+      "bust_share": 0.6088,
+      "zero_outcome_share": 0.4952,
+      "board_seasons": [
+        2018,
+        2019,
+        2020,
+        2021,
+        2022
+      ],
+      "position_groups": {
+        "OF": 974,
+        "IF_MID": 788,
+        "IF_CORNER": 514,
+        "C": 321
+      },
+      "player_type": "batter",
+      "as_of_season": 2026,
+      "config": "comp_gower_k25",
+      "k": 25,
+      "metric": "gower",
+      "quality_cuts": [
+        0.0662,
+        0.1002
+      ],
+      "tier_cuts_debuted_p50_p85": [
+        168.5,
+        436.4
+      ],
+      "feature_weights": {
+        "minor_k_pct": 0.1994,
+        "minor_bb_pct": 0.1537,
+        "minor_iso": 0.1343,
+        "age_vs_level": 0.0542,
+        "level_rank": 0.0542,
+        "pro_experience_years": 0.0542,
+        "fv": 0.35
+      },
+      "scouting_only_rows": 123,
+      "scouting_only_comped": 104,
+      "comp_quality": {
+        "fair": 309,
+        "strong": 198,
+        "thin": 189,
+        "none": 19
+      },
+      "comp_basis": {
+        "full": 592,
+        "scouting_only": 123
+      },
+      "rows_scored": 715,
+      "profile_coverage": {
+        "with_minor_line": 0.827972027972028,
+        "with_fv": 0.8615384615384616,
+        "with_level": 0.972027972027972
+      }
+    },
+    "pitcher": {
+      "n_pool": 2648,
+      "bust_share": 0.6148,
+      "zero_outcome_share": 0.4581,
+      "board_seasons": [
+        2018,
+        2019,
+        2020,
+        2021,
+        2022
+      ],
+      "position_groups": {
+        "SP": 2160,
+        "RP": 488
+      },
+      "player_type": "pitcher",
+      "as_of_season": 2026,
+      "config": "comp_gower_k25",
+      "k": 25,
+      "metric": "gower",
+      "quality_cuts": [
+        0.0248,
+        0.0416
+      ],
+      "tier_cuts_debuted_p50_p85": [
+        248.5,
+        596.4
+      ],
+      "feature_weights": {
+        "minor_gb_pct": 0.0966,
+        "minor_bb_pct": 0.0643,
+        "minor_k_pct": 0.0641,
+        "age_vs_level": 0.025,
+        "level_rank": 0.025,
+        "pro_experience_years": 0.025,
+        "fv": 0.7
+      },
+      "scouting_only_rows": 115,
+      "scouting_only_comped": 49,
+      "comp_quality": {
+        "strong": 306,
+        "fair": 273,
+        "thin": 91,
+        "none": 66
+      },
+      "comp_basis": {
+        "full": 621,
+        "scouting_only": 115
+      },
+      "rows_scored": 736,
+      "profile_coverage": {
+        "with_minor_line": 0.9144021739130435,
+        "with_fv": 0.9103260869565217,
+        "with_level": 0.967391304347826
+      }
+    }
+  },
+  "ranking": {
+    "comp_rank_weight": 0.3,
+    "rows_with_comp_score": 1366,
+    "rows_moved": 1392,
+    "median_abs_move": 24.0,
+    "max_move_up": 176,
+    "max_move_down": -122
+  },
+  "comp_column_count": 27,
+  "detail_rows": 34150,
+  "comp_quality_overall": {
+    "fair": 582,
+    "strong": 504,
+    "thin": 280,
+    "none": 85
+  }
+}

@@ -21,7 +21,7 @@ import {
   listSavedLeagues,
   updateSavedLeague,
 } from "@/lib/fantasy"
-import type { ProjectionPayload, SavedLeague } from "@/lib/fantasy"
+import type { LeagueSaveInput, ProjectionPayload, SavedLeague } from "@/lib/fantasy"
 import type { LeagueConfig } from "@/lib/league-config"
 import { buildBoard } from "@/lib/league-scoring"
 import type { BuiltBoard } from "@/lib/league-scoring"
@@ -101,7 +101,10 @@ export function useSaveLeague() {
   const { accessToken } = useAuth()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ leagueId, config }: { leagueId: string | null; config: LeagueConfig }) =>
+    // Accepts a config optionally stamped with NF-C0 import provenance, so the manual editor and
+    // the import surface share ONE save path — the alternative (a second mutation for imports)
+    // would be a second place for the save semantics to drift.
+    mutationFn: ({ leagueId, config }: { leagueId: string | null; config: LeagueSaveInput }) =>
       leagueId
         ? updateSavedLeague(accessToken, leagueId, config)
         : createSavedLeague(accessToken, config),

@@ -35,6 +35,7 @@ league 1182033380414181376; Yahoo's from its published resource documentation).
 """
 from __future__ import annotations
 
+import json
 import re
 import time
 from pathlib import Path
@@ -312,6 +313,60 @@ class TestSleeperTranslation:
         assert folded and all(t.verdict == DERIVED and t.exact for t in folded)
         assert not report.has_approximation
 
+    def test_the_fine_fg_buckets_map_one_to_one_and_beat_the_coarse_key(self, monkeypatch):
+        """Sleeper offers a coarse `fgm_50p` AND a fine `fgm_50_59`/`fgm_60p` pair; leagues use both.
+
+        Regression: the first cut mapped only the coarse key, so a real league paying 5 for 50-59
+        and 6 for 60+ had BOTH rules silently dropped to "captured" — despite the catalog having an
+        exact column for each. Values here are that league's actual settings.
+        """
+        league = {
+            **SLEEPER_LEAGUE,
+            "scoring_settings": {
+                **{k: v for k, v in SLEEPER_LEAGUE["scoring_settings"].items() if k != "fgm_50p"},
+                "fgm_50_59": 5.0,
+                "fgm_60p": 6.0,
+            },
+        }
+        result = _import_sleeper(monkeypatch, league)
+        per_stat = result.config["scoring"]["per_stat"]
+        assert per_stat["fg_made_50_59"] == 5.0
+        assert per_stat["fg_made_60p"] == 6.0
+        assert "fgm_60p" not in result.unmapped_scoring_keys
+
+    def test_a_league_setting_both_fg_schemes_lets_the_FINER_one_win(self, monkeypatch):
+        """The fine buckets are the more specific statement of the same rule, so the coarse key is
+        redundant — and which one lands must not be decided by alphabetical dict ordering."""
+        league = {
+            **SLEEPER_LEAGUE,
+            "scoring_settings": {
+                **SLEEPER_LEAGUE["scoring_settings"],  # carries fgm_50p = 5.0
+                "fgm_50_59": 5.0,
+                "fgm_60p": 6.0,
+            },
+        }
+        per_stat = _import_sleeper(monkeypatch, league).config["scoring"]["per_stat"]
+        assert per_stat["fg_made_60p"] == 6.0  # NOT 5.0 from the coarse key
+
+    def test_genuinely_differing_fine_buckets_are_reported_as_an_APPROXIMATION(self, monkeypatch):
+        """The other half of the fold. When the fine values AGREE the fold is exact; when they
+        genuinely differ our projection cannot express it, and `resolve_scoring` must say
+        `exact=False` rather than quietly averaging behind an 'applied' label."""
+        league = {
+            **SLEEPER_LEAGUE,
+            "scoring_settings": {
+                **{k: v for k, v in SLEEPER_LEAGUE["scoring_settings"].items() if k != "fgm_50p"},
+                "fgm_50_59": 5.0,
+                "fgm_60p": 6.0,
+            },
+        }
+        result = _import_sleeper(monkeypatch, league)
+        _, report = presets.resolve_config(lc.LeagueConfig.from_dict(result.config))
+        folded = [t for t in report.terms if t.projected_key == "fg_made_50_plus"]
+        assert folded and all(not t.exact for t in folded)
+        assert report.has_approximation
+        assert all(t.note for t in folded)  # and it explains itself
+
     def test_offensive_and_defensive_stats_are_not_conflated(self, monkeypatch):
         """The pair a careless map merges: a player's return TD vs the DEF/ST unit's.
 
@@ -471,6 +526,81 @@ class TestYahooTranslation:
         assert result.config["ppr"] == "ppr"
 
 
+class TestIdentifierResolution:
+    """The identifier a user HAS is the league ID, not their username.
+
+    The first cut asked for a username, and the very first real attempt pasted a league ID and got a
+    422 — a dead end created entirely by demanding the one identifier Sleeper's UI never shows you.
+    A bare number is genuinely ambiguous (league ids and user ids are both snowflakes), so these pin
+    the disambiguation ORDER and, more importantly, that a total miss names BOTH possibilities
+    instead of blaming whichever we happened to try first.
+    """
+
+    def _resolve(self, monkeypatch, *, league=None, user=None, leagues=()):
+        def fake_get_json(url, **_):
+            if "/league/" in url and url.endswith(tuple("0123456789")):
+                return league
+            if "/user/" in url and "/leagues/" not in url:
+                return user
+            if "/leagues/" in url:
+                return list(leagues)
+            return None
+
+        monkeypatch.setattr(sleeper, "get_json", fake_get_json)
+        return sleeper.resolve_target("1268257036043292672", "2026")
+
+    def test_a_numeric_id_is_tried_as_a_league_first(self, monkeypatch):
+        """League-first because that is where a user gets a number from — the league's own URL."""
+        out = self._resolve(monkeypatch, league={"league_id": "1268257036043292672", "name": "The Megalabowl", "total_rosters": 12})
+        assert out["kind"] == "league"
+        assert out["league"]["name"] == "The Megalabowl"
+
+    def test_every_branch_carries_leagues_so_an_older_client_still_renders(self, monkeypatch):
+        """🚨 The API Lambda and the frontend deploy INDEPENDENTLY (the Lambda has no CI/CD), so a
+        response-shape change must be ADDITIVE. The first cut returned the league branch WITHOUT a
+        `leagues` key; a frontend one deploy behind read `res.leagues`, got undefined, and rendered
+        a blank screen on a 200 — no error anywhere. Pin the key in BOTH branches."""
+        as_league = self._resolve(monkeypatch, league={"league_id": "1268257036043292672", "name": "L", "total_rosters": 12})
+        assert as_league["leagues"] == [as_league["league"]]
+
+        as_user = self._resolve(
+            monkeypatch,
+            league=None,
+            user={"user_id": "1268257036043292672", "display_name": "Someone"},
+            leagues=[{"league_id": "9", "name": "L", "season": "2026"}],
+        )
+        assert isinstance(as_user["leagues"], list)
+
+    def test_a_numeric_id_falls_back_to_a_user_lookup(self, monkeypatch):
+        out = self._resolve(
+            monkeypatch,
+            league=None,
+            user={"user_id": "1268257036043292672", "display_name": "Someone"},
+            leagues=[{"league_id": "9", "name": "L", "season": "2026"}],
+        )
+        assert out["kind"] == "user"
+        assert out["leagues"][0]["league_id"] == "9"
+
+    def test_a_number_that_is_neither_names_both_possibilities(self, monkeypatch):
+        """The failure mode this replaced said 'Sleeper has no user called X' for what was, in fact,
+        a perfectly valid league ID — blaming the branch we guessed rather than the ambiguity."""
+        with pytest.raises(sleeper.SleeperInputError) as exc:
+            self._resolve(monkeypatch, league=None, user=None)
+        assert "league ID" in str(exc.value) and "username" in str(exc.value)
+
+    def test_a_username_miss_points_at_the_league_id_escape_hatch(self, monkeypatch):
+        monkeypatch.setattr(sleeper, "get_json", lambda url, **_: None)
+        with pytest.raises(sleeper.SleeperInputError, match="league ID"):
+            sleeper.resolve_user("nosuchuser")
+
+    def test_an_empty_identifier_is_refused_before_any_request(self, monkeypatch):
+        called = []
+        monkeypatch.setattr(sleeper, "get_json", lambda url, **_: called.append(url))
+        with pytest.raises(sleeper.SleeperInputError):
+            sleeper.resolve_target("   ", "2026")
+        assert not called
+
+
 class TestCanonicalHelpers:
     def test_collapse_preserves_first_seen_order_and_merges_interleaved_seats(self):
         slots = C.collapse_slots(
@@ -531,8 +661,25 @@ class TestNoCredentialHandling:
             for tok in tokenize.generate_tokens(io.StringIO(source).readline):
                 if tok.type == tokenize.COMMENT:
                     skip.update(range(tok.start[0], tok.end[0] + 1))
+            # ⭐ THE ONE EXEMPTION, AND WHY IT IS NARROW.
+            # `espn.py` must NAME these tokens in order to REFUSE them: its scrubber rejects a
+            # paste containing a session cookie. Naming a credential to reject it is the opposite
+            # of handling one, but a blanket file-level exemption would gut the lint for the whole
+            # ESPN adapter. So the exemption is scoped to the `_CREDENTIAL_SIGNATURES` assignment
+            # ONLY, and `TestEspnCredentialScrubber` below pins that the tokens appear nowhere else
+            # in that module and that the scrubber genuinely fires.
+            exempt: set[int] = set()
+            if path.name == "espn.py":
+                tree = ast.parse(source)
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.AnnAssign | ast.Assign):
+                        targets = [node.target] if isinstance(node, ast.AnnAssign) else node.targets
+                        names = {t.id for t in targets if isinstance(t, ast.Name)}
+                        if "_CREDENTIAL_SIGNATURES" in names:
+                            exempt.update(range(node.lineno, (node.end_lineno or node.lineno) + 1))
+
             for lineno, line in enumerate(source.splitlines(), 1):
-                if lineno in skip:
+                if lineno in skip or lineno in exempt:
                     continue
                 if re.search(r"\bpassword\b|\bespn_s2\b|\bSWID\b", line, re.IGNORECASE):
                     offenders.append(f"{path.name}:{lineno}")
@@ -566,17 +713,26 @@ class TestNoCredentialHandling:
         assert scan('COOKIES = {"espn_s2": token}\n')
         assert not scan('"""We never store a password."""\n# nor an espn_s2 cookie\nX = 1\n')
 
-    def test_espn_is_not_an_offered_platform(self):
+    def test_espn_is_offered_ONLY_as_a_paste_never_as_a_credential_flow(self):
+        """ESPN was originally refused outright. NF-C0f re-opened it via user-mediated paste, which
+        is categorically different: the user makes the request in their own browser and hands us the
+        RESPONSE BODY, which structurally cannot carry `espn_s2` (an HTTP cookie is never echoed
+        into a body). What must never come back is a credential-accepting ESPN path — so this pins
+        the auth KIND rather than merely the platform's presence."""
         from app.backend.services.platform_import import PLATFORMS
 
-        assert "espn" not in PLATFORMS
+        assert PLATFORMS["espn"]["auth"] == "paste"
+        assert PLATFORMS["espn"]["auth"] not in ("password", "cookie", "session")
 
-    def test_the_espn_probe_memo_exists_and_records_a_no_go(self):
-        """The NO-GO has to be an EARNED, written finding — not an undocumented omission a later
-        session re-litigates from scratch."""
+    def test_the_espn_memo_records_BOTH_the_refusal_and_the_reopening(self):
+        """The refusal has to stay an EARNED, written finding — and the correction that re-opened a
+        narrower path has to sit beside it, or a later session re-litigates one or the other from
+        scratch."""
         memo = (REPO / "docs" / "nf_c0_espn_access_probe.md").read_text()
         assert "NO-GO" in memo
-        assert "espn_s2" in memo  # names the specific mechanism it refuses
+        assert "espn_s2" in memo          # names the specific mechanism it refuses
+        assert "NF-C0f" in memo           # names the path that WAS opened
+        assert "USER-MEDIATED PASTE" in memo
 
     def test_user_supplied_ids_are_validated_before_a_url_is_built(self):
         """SSRF guard: these values come from a form field and are interpolated into a URL."""
@@ -653,6 +809,31 @@ class TestYahooOAuth:
         with pytest.raises(yahoo_oauth.YahooAuthError):
             yahoo_oauth.decrypt_token(blob)
 
+    def test_credentials_present_does_not_mean_the_feature_is_available(self, keyed, monkeypatch):
+        """⚠️ Creating the Yahoo app yields a client id/secret IMMEDIATELY, but fantasy DATA access
+        is granted separately on approval (1–2 weeks). In between, the OAuth handshake would
+        succeed and every Fantasy endpoint would 401 — the user grants a permission that buys them
+        nothing and the failure looks like our bug. So provisioning and availability are separate,
+        and the flag must default CLOSED (an unset env var means not available)."""
+        monkeypatch.delenv("YAHOO_IMPORT_ENABLED", raising=False)
+        assert yahoo_oauth.is_configured() is True  # credentials ARE in SSM
+        assert yahoo_oauth.is_enabled() is False  # …and the feature is still not offered
+
+        monkeypatch.setenv("YAHOO_IMPORT_ENABLED", "1")
+        assert yahoo_oauth.is_enabled() is True
+
+    def test_the_availability_flag_only_opens_on_an_exact_1(self, keyed, monkeypatch):
+        """A flag that opens on any truthy-looking string opens by accident."""
+        for value in ("0", "", "true", "yes", "enabled", " "):
+            monkeypatch.setenv("YAHOO_IMPORT_ENABLED", value)
+            assert yahoo_oauth.is_enabled() is False, value
+
+    def test_the_flag_cannot_open_without_credentials(self, monkeypatch):
+        """Setting the flag must not make an unprovisioned platform look available."""
+        monkeypatch.setattr(yahoo_oauth, "_get_parameter", lambda name: None)
+        monkeypatch.setenv("YAHOO_IMPORT_ENABLED", "1")
+        assert yahoo_oauth.is_enabled() is False
+
     def test_missing_ssm_config_degrades_honestly(self, monkeypatch):
         """Unprovisioned is an EXPECTED state (the operator's Yahoo approval is pending), so it must
         raise a distinct type the router turns into a 503 with an explanation — never a 500."""
@@ -716,6 +897,12 @@ class TestRouteGating:
             re.findall(r"@router\.(get|post|put|delete)\(", self.SOURCE)
         )
 
+    def test_every_yahoo_route_enforces_the_availability_gate_server_side(self):
+        """Hiding the button is not a gate — an entitled caller can POST straight to the API."""
+        assert "_require_yahoo_enabled()" in self.SOURCE
+        # authorize + the shared token path (which every league/preview route goes through)
+        assert self.SOURCE.count("_require_yahoo_enabled()") >= 3  # def + authorize + _access_token
+
     def test_the_callback_verifies_the_signed_state(self):
         assert "verify_state(state)" in self.SOURCE
 
@@ -733,3 +920,611 @@ class TestRouteGating:
         it looks identical to a correct one — so state is always re-read, never saved."""
         assert "fetch_draft_state" in self.SOURCE
         assert "put_fantasy_league" not in self.SOURCE  # the import router never writes a config
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# 6. ESPN — user-mediated paste (NF-C0f). No network client exists in that module BY DESIGN.
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+
+ESPN_FIXTURE = Path(__file__).parent / "fixtures" / "espn_league_mSettings_real.json"
+
+
+@pytest.fixture
+def espn_payload() -> str:
+    """A REAL `?view=mSettings` response from a live 12-team private league (financeSettings
+    removed). Real, because a hand-written fixture inherits the author's assumptions about the
+    shape — the NF-C0 lesson that cost a mapping bug."""
+    return ESPN_FIXTURE.read_text()
+
+
+class TestEspnCredentialScrubber:
+    """The guard that keeps the paste flow from decaying into the cookie flow it replaced."""
+
+    def test_a_copy_as_curl_paste_is_refused(self):
+        from app.backend.services.platform_import import espn
+
+        curl = (
+            "curl 'https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/2026/"
+            "segments/0/leagues/998005?view=mSettings' "
+            "-H 'Cookie: SWID={ABC-123}; espn_s2=AEBxyz%2Fdeadbeef'"
+        )
+        with pytest.raises(espn.EspnCredentialPasteError) as exc:
+            espn.parse_settings_payload(curl)
+        # THE invariant: the refusal must never echo the pasted VALUE back. An error string is a
+        # log line waiting to happen, and the cookie's value is the actual secret (its NAME is not).
+        msg = str(exc.value)
+        assert "AEBxyz" not in msg and "deadbeef" not in msg and "ABC-123" not in msg
+        # ...and it must still tell the user what to do instead of just refusing.
+        assert "JSON" in msg
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            "Cookie: espn_s2=abc",
+            "-H 'cookie: SWID={x}'",
+            "authorization: Bearer abc",
+            '{"SWID": "{ABC}"}',
+            "set-cookie: espn_s2=zzz",
+        ],
+    )
+    def test_every_credential_shape_is_refused(self, bad):
+        from app.backend.services.platform_import import espn
+
+        with pytest.raises(espn.EspnCredentialPasteError):
+            espn.parse_settings_payload(bad)
+
+    def test_the_scrubber_runs_before_the_parser(self):
+        """Order matters: a cURL paste is not valid JSON, so if parsing ran first the user would get
+        a confusing 'not JSON' message and we'd have no idea a credential had been pasted."""
+        from app.backend.services.platform_import import espn
+
+        with pytest.raises(espn.EspnCredentialPasteError):
+            espn.parse_settings_payload("not json at all, but has espn_s2=abc in it")
+
+    def test_espn_module_names_credentials_ONLY_in_the_refusal_constant(self):
+        """Compensating control for the narrow lint exemption above."""
+        import ast
+        import io
+        import tokenize
+
+        source = (IMPORT_PKG / "espn.py").read_text()
+        tree = ast.parse(source)
+        allowed: set[int] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.AnnAssign | ast.Assign):
+                targets = [node.target] if isinstance(node, ast.AnnAssign) else node.targets
+                if any(isinstance(t, ast.Name) and t.id == "_CREDENTIAL_SIGNATURES" for t in targets):
+                    allowed.update(range(node.lineno, (node.end_lineno or node.lineno) + 1))
+        assert allowed, "_CREDENTIAL_SIGNATURES not found — the exemption is pointing at nothing"
+
+        skip: set[int] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+                doc = ast.get_docstring(node, clean=False)
+                if doc is not None:
+                    expr = node.body[0]
+                    skip.update(range(expr.lineno, (expr.end_lineno or expr.lineno) + 1))
+        for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+            if tok.type == tokenize.COMMENT:
+                skip.update(range(tok.start[0], tok.end[0] + 1))
+
+        strays = [
+            n for n, line in enumerate(source.splitlines(), 1)
+            if n not in skip and n not in allowed
+            and re.search(r"\bespn_s2\b|\bSWID\b|\bpassword\b", line, re.IGNORECASE)
+        ]
+        assert not strays, f"credential tokens outside the refusal constant: {strays}"
+
+    def test_the_espn_module_makes_no_network_call_at_all(self):
+        """§3(d) rests on us never REQUESTING anything from ESPN. Enforce it structurally: if a
+        future edit imports an HTTP client here, the paste flow has quietly become the cookie flow."""
+        source = (IMPORT_PKG / "espn.py").read_text()
+        for banned in ("import requests", "import httpx", "urllib.request", "from .http", "http.client"):
+            assert banned not in source, f"espn.py must make no network call, found: {banned}"
+
+
+class TestEspnPositionOverrides:
+    """🚨 The trap: 16 of 43 real rules have `points: 0.0` with their true value ONLY in
+    `pointsOverrides['16']` (slot 16 = D/ST). Reading `points` alone silently zeroes the entire
+    team-defense sheet AND reports it APPLIED — indistinguishable from working."""
+
+    def test_the_real_payload_actually_contains_the_trap(self, espn_payload):
+        """Guard the guard: if ESPN ever stops using overrides this test tells us the fixture no
+        longer exercises the thing the parser exists to handle."""
+        items = json.loads(espn_payload)["settings"]["scoringSettings"]["scoringItems"]
+        zero_base_with_override = [
+            i for i in items if i.get("pointsOverrides", {}).get("16") and i["points"] == 0.0
+        ]
+        assert len(zero_base_with_override) >= 10, "fixture no longer exercises the override trap"
+
+    def test_dst_values_survive_flattening(self, espn_payload):
+        from app.backend.services.platform_import import espn
+
+        items = json.loads(espn_payload)["settings"]["scoringSettings"]["scoringItems"]
+        flat, _ = espn.flatten_scoring_items(items)
+        # statId 89 is points=0.0 / D/ST=12.0 in the real payload.
+        assert flat.get("89@dst") == 12.0
+        assert "89" not in flat, "a 0.0 base must not be emitted as a real rule"
+        # statId 102 scores 6.0 for a player and 0.0 for a D/ST — both facts must be preserved
+        # distinctly, the same player-vs-unit split Sleeper draws between st_td and def_st_td.
+        assert flat.get("102") == 6.0
+        assert "102@dst" not in flat
+
+    def test_a_naive_points_only_parser_would_lose_these(self, espn_payload):
+        """Quantifies the bug this module exists to prevent, so the cost is on record."""
+        from app.backend.services.platform_import import espn
+
+        items = json.loads(espn_payload)["settings"]["scoringSettings"]["scoringItems"]
+        naive = {str(i["statId"]): i["points"] for i in items if i["points"]}
+        flat, _ = espn.flatten_scoring_items(items)
+        recovered = [k for k in flat if k.endswith("@dst")]
+        assert len(recovered) >= 15
+        assert not any(k in naive for k in recovered)
+
+
+class TestEspnImport:
+    def test_a_real_private_league_imports(self, espn_payload):
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload)
+        assert league.platform == "espn"
+        assert league.config["name"] == "Sundays Best"
+        assert league.config["n_teams"] == 12
+        assert league.season == "2026"
+
+    def test_the_paste_reaches_a_PRIVATE_league(self, espn_payload):
+        """The whole reason §3(d) beats the public-visibility toggle: it works on a league that is
+        NOT public, which is the population the feature exists to serve."""
+        assert json.loads(espn_payload)["settings"]["isPublic"] is False
+
+    def test_roster_matches_the_real_league(self, espn_payload):
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload)
+        counts = {s["name"]: s["count"] for s in league.config["roster"]}
+        assert counts == {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1, "DST": 1, "K": 1,
+                          "BN": 6, "IR": 3}
+        starters = sum(s["count"] for s in league.config["roster"] if not s["bench"])
+        assert starters == 9
+
+    def test_superflex_is_false_for_this_league(self, espn_payload):
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload)
+        assert C.detect_superflex(league.config["roster"]) is False
+
+    def test_core_scoring_is_applied(self, espn_payload):
+        from app.backend.services.platform_import import espn
+
+        per_stat = espn.parse_settings_payload(espn_payload).config["scoring"]["per_stat"]
+        assert per_stat["pass_yd"] == 0.04
+        assert per_stat["pass_td"] == 4.0
+        assert per_stat["pass_int"] == -1.0
+        assert per_stat["rush_yd"] == 0.1
+        assert per_stat["rush_td"] == 6.0
+        assert per_stat["rec"] == 1.0          # the league's own playerRankType reads "PPR"
+        assert per_stat["rec_yd"] == 0.1
+        assert per_stat["rec_td"] == 6.0
+        assert per_stat["fum_lost"] == -1.0
+
+    def test_unmapped_ids_are_CAPTURED_not_dropped(self, espn_payload):
+        """ESPN publishes no stat-id dictionary, so the map is deliberately partial. The contract is
+        that everything unmapped is stored faithfully and reported, never silently discarded —
+        an unmapped id tells the truth; a guessed id silently misprices the league."""
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload)
+        assert league.unmapped_scoring_keys, "expected captured terms from a 43-rule league"
+        stored = league.config["scoring"]["per_stat"]
+        for key in league.unmapped_scoring_keys:
+            assert key in stored, f"{key} reported unmapped but not stored"
+
+    def test_config_round_trips_through_the_real_engine(self, espn_payload):
+        """Same shared-contract proof the Sleeper and Yahoo adapters carry — no forked schema."""
+        from app.backend.services.platform_import import espn
+
+        config = espn.parse_settings_payload(espn_payload).config
+        assert lc.LeagueConfig.from_dict(config).to_dict() == config
+
+    def test_an_unauthorized_espn_response_gets_an_actionable_message(self):
+        from app.backend.services.platform_import import espn
+
+        body = json.dumps({"messages": ["You are not authorized to view this League."]})
+        with pytest.raises(espn.EspnInputError) as exc:
+            espn.parse_settings_payload(body)
+        assert "signed in" in str(exc.value).lower()
+
+    def test_the_read_url_rejects_a_non_numeric_league_id(self):
+        from app.backend.services.platform_import import espn
+
+        assert espn.build_read_url("998005", 2026).endswith("leagues/998005?view=mSettings")
+        for bad in ("../../etc", "998005; rm -rf /", "http://evil", ""):
+            with pytest.raises(espn.EspnInputError):
+                espn.build_read_url(bad, 2026)
+
+    def test_an_oversized_paste_is_refused_before_parsing(self):
+        from app.backend.services.platform_import import espn
+
+        with pytest.raises(espn.EspnInputError):
+            espn.parse_settings_payload("x" * (espn.MAX_PASTE_BYTES + 1))
+
+
+class TestEspnStatIdMapIsVerifiedNotTrusted:
+    """The stat-ID map was established by IDENTITIES a wrong map fails, not by a published table
+    (ESPN has none). These pin the identities so a future edit can't quietly re-guess an id.
+
+    Values are from a real `kona_player_info` season-projection export (2026, league 998005).
+    """
+
+    # Denver D/ST, 2026 season projection: the nine claimed points-allowed buckets in ESPN's order.
+    BRONCOS_PA = (0.310716074, 1.40460691, 4.596895343, 3.745618428, 2.468703055,
+                  2.851777666, 1.40460691, 0.212819229, 0.004256385)
+    BRONCOS_YDS = (0.809320972, 6.304184415, 4.557754949, 3.492858933,
+                   1.490854422, 0.255575044, 0.085191681, 0.004259584)
+
+    def test_points_allowed_buckets_partition_the_season(self):
+        """THE decisive check: nine buckets that partition 17 games fixes both their IDENTITY and
+        their ORDER. A map that mislabels or reorders them cannot sum to 17."""
+        assert abs(sum(self.BRONCOS_PA) - 17.0) < 1e-6
+
+    def test_yards_allowed_buckets_partition_the_season(self):
+        assert abs(sum(self.BRONCOS_YDS) - 17.0) < 1e-6
+
+    def test_per_game_stats_are_the_season_totals_over_seventeen(self):
+        assert abs(317.7855711 / 17 - 18.69326889) < 1e-6   # stat 126 = points allowed per game
+        assert abs(5447.733929 / 17 - 320.454937) < 1e-6    # stat 137 = yards allowed per game
+
+    def test_field_goal_buckets_partition_total_made(self):
+        """80 (<40) + 77 (40-49) + 74 (50+) == 83 (total FGM), for Brandon Aubrey."""
+        assert abs((19.2313044 + 9.2261031 + 7.02552502) - 35.48293252) < 1e-6
+
+    def test_stat_53_is_receptions_despite_its_common_label(self):
+        """`receiving_yards / stat_53 == stat_60` (yards per reception) ⇒ 53 IS receptions. It is
+        widely labelled "receptions_alternate", and ESPN emits no stat 41 at all — so trusting that
+        label would drop PPR scoring, which is exactly what this league sets on 53."""
+        assert abs(1589.937424 / 122.9659744 - 12.92989733) < 1e-6
+        assert espn_mod().SCORING_KEY_MAP["53"] == ("rec",)
+
+    def test_completions_plus_incompletions_equals_attempts(self):
+        assert abs((340.1123125 + 168.7780519) - 508.8903644) < 1e-6
+
+
+class TestEspnLossyEdgesAreDisclosed:
+    """Both edges below change a user's scoring. Neither may be silent."""
+
+    def test_the_points_allowed_boundary_mismatch_is_disclosed(self, espn_payload):
+        """🚨 ESPN splits points-allowed at 18-21 / 22-27; our canonical buckets split at
+        18-20 / 21-27. (The comment in `sleeper.py` calling these "the common refinement of the
+        ESPN and Yahoo schemes" is wrong — they are the YAHOO refinement; a true common refinement
+        needs 21 as its own bucket.) Exactly one point value is misplaced, and the user is told."""
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload)
+        assert any("exactly 21 points" in w for w in league.warnings)
+
+    def test_the_boundary_note_is_SILENT_when_the_two_tiers_pay_the_same(self):
+        """A warning that cannot affect the board is noise. If 18-21 and 22-27 carry equal weight
+        the misplacement is a no-op and must not be reported."""
+        from app.backend.services.platform_import import espn
+
+        translation, warnings = espn.translate_scoring({"121@dst": 2.0, "122@dst": 2.0})
+        assert not any("exactly 21 points" in w for w in warnings)
+        translation, warnings = espn.translate_scoring({"121@dst": 3.0, "122@dst": 1.0})
+        assert any("exactly 21 points" in w for w in warnings)
+
+    def test_disagreeing_two_point_values_are_collapsed_AND_disclosed(self, espn_payload):
+        """This real league pays 1.0 for a passing 2-pt but 2.0 for rushing/receiving."""
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload)
+        assert league.config["scoring"]["per_stat"]["two_pt"] == 2.0
+        assert any("two-point conversions" in w for w in league.warnings)
+
+    def test_a_player_return_td_is_never_conflated_with_the_defence_unit(self):
+        """Mapping both onto one canonical key double-counts a single return touchdown."""
+        from app.backend.services.platform_import import espn
+
+        assert espn.SCORING_KEY_MAP["101"] == ("st_player_td",)
+        assert espn.SCORING_KEY_MAP["101@dst"] == ("st_td",)
+
+    def test_the_fine_field_goal_keys_beat_the_coarse_one(self):
+        """74 is the coarse 50+ bucket; 198/201 are the fine 50-59 / 60+ pair. A league setting the
+        fine keys means them — and which won must not depend on dict ordering."""
+        from app.backend.services.platform_import import espn
+
+        flat = {"74": 5.0, "198": 4.0, "201": 6.0}
+        translation, _ = espn.translate_scoring(flat)
+        assert translation.per_stat["fg_made_50_59"] == 4.0
+        assert translation.per_stat["fg_made_60p"] == 6.0
+
+    def test_every_collapse_group_member_is_actually_mapped(self):
+        """A group member missing from SCORING_KEY_MAP collapses to an agreed value and is then
+        reported CAPTURED anyway — silently inert. The map derives them, so this pins the wiring."""
+        from app.backend.services.platform_import import espn
+
+        for target, keys, _label in espn._COLLAPSE_GROUPS:
+            for key in keys:
+                assert espn.SCORING_KEY_MAP.get(key) == (target,), f"{key} not mapped to {target}"
+
+    def test_a_real_league_applies_most_of_its_rules(self, espn_payload):
+        """Regression floor: the first cut applied 12 of 43 rules. Long-TD bonuses stay CAPTURED
+        because no projection column exists for them — that is honest, not a gap to paper over."""
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload)
+        per_stat = league.config["scoring"]["per_stat"]
+        applied = [k for k in per_stat if not k.split("@")[0].isdigit()]
+        assert len(applied) >= 34
+        assert set(league.unmapped_scoring_keys) == {"15", "16", "35", "36", "45", "46"}
+
+
+def espn_mod():
+    from app.backend.services.platform_import import espn
+
+    return espn
+
+
+class TestEspnRouteAndUi:
+    """The serving surface for the paste flow (NF-C0f)."""
+
+    ROUTER_SRC = ROUTER.read_text()
+    UI = REPO / "frontend" / "components" / "fantasy" / "league-import.tsx"
+    CLIENT = REPO / "frontend" / "lib" / "fantasy-import.ts"
+
+    def test_both_espn_routes_exist_and_are_gated(self):
+        from app.backend.routers import fantasy_import as fi
+
+        paths = {r.path for r in fi.router.routes}
+        assert "/fantasy/import/espn/read-url" in paths
+        assert "/fantasy/import/espn/preview" in paths
+        # The callback stays the ONLY ungated route — ESPN adds no exemption.
+        public = {r.path for r in fi.public_router.routes}
+        assert public == {"/fantasy/import/yahoo/callback"}
+
+    def test_a_credential_paste_is_a_422_and_never_reaches_the_logging_fallback(self):
+        """🔒 THE ONE THAT MATTERS. `_handle_platform_error`'s fallback calls `logger.exception`,
+        which would write the offending paste into CloudWatch — the single place a stray cookie must
+        never land. `EspnCredentialPasteError` must be matched BEFORE that fallback."""
+        from app.backend.routers import fantasy_import as fi
+        from app.backend.services.platform_import import espn
+
+        err = espn.EspnCredentialPasteError("that paste includes your ESPN sign-in cookie")
+        mapped = fi._handle_platform_error(err)
+        assert mapped.status_code == 422
+        assert "sign-in" in str(mapped.detail)
+
+    def test_the_router_never_interpolates_the_pasted_body(self):
+        """Source check: no log line or error message may carry the paste."""
+        src = self.ROUTER_SRC
+        for forbidden in ("payload.payload}", "{payload.payload", "logger.info(payload"):
+            assert forbidden not in src
+
+    def test_the_paste_field_has_no_pydantic_max_length(self):
+        """A pydantic length rejection produces a `detail` that is a LIST of objects, which
+        `apiFetch` deliberately will not surface (see frontend/lib/api.ts) — the user would get a
+        bare "API error 422". The adapter's own size check returns an actionable string instead."""
+        from app.backend.routers.fantasy_import import EspnPasteRequest
+
+        field = EspnPasteRequest.model_fields["payload"]
+        assert all(getattr(m, "max_length", None) is None for m in field.metadata)
+
+    def test_the_ui_no_longer_says_espn_is_unavailable(self):
+        """The old copy told users ESPN can't be imported. Leaving it beside a working ESPN option
+        would be worse than either state alone."""
+        ui = self.UI.read_text()
+        assert "ESPN is not listed" not in ui
+        assert "espn" in ui.lower()
+
+    def test_the_ui_explains_WHY_the_paste_is_needed(self):
+        """Users will ask why ESPN is harder than Sleeper. Saying it plainly is what stops the
+        obvious 'just ask for my ESPN login' suggestion — which is the red line."""
+        ui = self.UI.read_text()
+        assert "Why the copy-paste?" in ui
+        assert "read-only" in ui
+
+    def test_the_paste_textarea_is_16px_on_phones(self):
+        """iOS auto-zooms any focused input under 16px — the repo's mobile-form guard rule."""
+        ui = self.UI.read_text()
+        assert "text-base sm:text-xs" in ui or "text-base sm:text-sm" in ui
+
+    def test_the_client_sends_the_season_with_the_paste(self):
+        client = self.CLIENT.read_text()
+        assert "espn/preview" in client and "espn/read-url" in client
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# 7. ESPN — the SECOND real league (NF-C0f follow-up).
+#
+# The NF-C0 rule that earned this section: "for any third-party-payload adapter, validate against
+# ≥2 INDEPENDENTLY-SOURCED real payloads before trusting the field map — a fixture derived from the
+# first payload cannot disconfirm it." Sleeper proved that once (the coarse `fgm_50p` vs fine
+# `fgm_50_59`/`fgm_60p` bug survived 56 tests and a live-verified league). ESPN proved it again:
+# league 642070 scores a whole family — the nine-rung yards-allowed ladder — that league 998005 does
+# not contain at all, so no amount of testing against the first payload could have surfaced it.
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+
+ESPN_FIXTURE_2 = Path(__file__).parent / "fixtures" / "espn_league_642070_mSettings_real.json"
+
+
+@pytest.fixture
+def espn_payload_2() -> str:
+    """A SECOND real `?view=mSettings` response, from a different 10-team league on a different
+    account (financeSettings removed)."""
+    return ESPN_FIXTURE_2.read_text()
+
+
+class TestEspnSecondRealLeague:
+    """What the second payload found that the first structurally could not."""
+
+    def test_the_two_real_leagues_exercise_disjoint_scoring_families(
+        self, espn_payload, espn_payload_2
+    ):
+        """The justification for keeping BOTH fixtures, asserted rather than claimed.
+
+        If this ever fails because the two payloads have converged, the second fixture has stopped
+        buying coverage and a genuinely different third league should replace it.
+        """
+        def ids(raw: str) -> set[int]:
+            items = json.loads(raw)["settings"]["scoringSettings"]["scoringItems"]
+            return {int(i["statId"]) for i in items}
+
+        one, two = ids(espn_payload), ids(espn_payload_2)
+        # Each league scores rules the other does not have at all.
+        assert one - two, "league 1 no longer contributes any unique scoring rule"
+        assert two - one, "league 2 no longer contributes any unique scoring rule"
+        # Specifically: the yards-allowed ladder exists ONLY in league 2, and the points-allowed
+        # 18-21 / 22-27 tiers ONLY in league 1. Those are the two findings this section pins.
+        assert {128, 129, 130, 132, 133, 134, 135, 136} <= two - one
+        assert {121, 122} <= one - two
+
+    def test_the_second_league_imports(self, espn_payload_2):
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload_2)
+        assert league.platform == "espn"
+        assert league.source_league_id == "642070"
+        assert league.season == "2026"
+        assert league.config["n_teams"] == 10
+        starters = {s["name"]: s["count"] for s in league.config["roster"] if not s["bench"]}
+        assert starters == {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1, "K": 1, "DST": 1}
+        # Half-PPR — a different setting from league 1, so the reception weight is read and not
+        # defaulted.
+        assert league.config["scoring"]["per_stat"]["rec"] == 0.5
+
+    def test_the_position_override_trap_is_avoided_on_a_second_league(self, espn_payload_2):
+        """The single highest-consequence behaviour, re-proven on an independent payload.
+
+        Seven points-allowed rules in this league carry `points: 0.0` with their real value only in
+        `pointsOverrides["16"]`. A parser reading `points` scores the whole tier table as zero while
+        reporting it APPLIED — indistinguishable from working.
+        """
+        from app.backend.services.platform_import import espn
+
+        per_stat = espn.parse_settings_payload(espn_payload_2).config["scoring"]["per_stat"]
+        assert per_stat["dst_pa_g_0"] == 5.0
+        assert per_stat["dst_pa_g_1_6"] == 4.0
+        assert per_stat["dst_pa_g_7_13"] == 3.0
+        assert per_stat["dst_pa_g_14_17"] == 1.0
+        assert per_stat["dst_pa_g_28_34"] == -1.0
+        assert per_stat["dst_pa_g_35_45"] == -3.0
+        assert per_stat["dst_pa_g_46p"] == -5.0
+        # …and the sacks/int/safety block, likewise override-only.
+        assert per_stat["def_sacks"] == 1.0
+        assert per_stat["def_int"] == 2.0
+        assert per_stat["def_safety"] == 2.0
+
+    def test_the_fine_field_goal_pair_is_read_without_the_coarse_bucket(self, espn_payload_2):
+        """This league sets 198/201 and no 74 — the mirror of the case `_drop_coarse_when_fine_
+        present` exists for, so it proves the fine keys stand on their own."""
+        from app.backend.services.platform_import import espn
+
+        per_stat = espn.parse_settings_payload(espn_payload_2).config["scoring"]["per_stat"]
+        assert per_stat["fg_made_50_59"] == 5.0
+        assert per_stat["fg_made_60p"] == 5.0
+        assert per_stat["fg_made_40_49"] == 4.0
+        # The coarse sub-40 bucket fans out across all three of ours — an exact restatement.
+        assert per_stat["fg_made_0_19"] == per_stat["fg_made_20_29"] == 3.0
+        assert per_stat["fg_made_30_39"] == 3.0
+
+    def test_yards_allowed_is_captured_and_never_silently_applied(self, espn_payload_2):
+        """We project no yards-allowed column, so the honest verdict is CAPTURED.
+
+        The failure this guards is the opposite one: mapping the ladder onto a canonical key with no
+        projection behind it would report it APPLIED at weight 5.0 and contribute nothing — the
+        silent-zero shape, one layer up from the `pointsOverrides` trap.
+        """
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload_2)
+        captured = set(league.unmapped_scoring_keys)
+        assert {f"{i}@dst" for i in (128, 129, 130, 132, 133, 134, 135, 136)} <= captured
+        # Stored faithfully under the platform's own key, so nothing is lost…
+        per_stat = league.config["scoring"]["per_stat"]
+        assert per_stat["128@dst"] == 5.0 and per_stat["136@dst"] == -7.0
+        # …and NOT masquerading as one of our canonical D/ST terms.
+        assert not any(k.startswith("dst_ya") for k in per_stat)
+
+    def test_the_yards_allowed_gap_is_stated_in_plain_language(self, espn_payload_2):
+        from app.backend.services.platform_import import espn
+
+        warnings = espn.parse_settings_payload(espn_payload_2).warnings
+        note = [w for w in warnings if "yards allowed" in w.lower()]
+        assert len(note) == 1, warnings
+        # It has to say what it COSTS the user, not merely that a field was skipped.
+        assert "under-rated" in note[0]
+
+    def test_the_yards_allowed_warning_stays_silent_for_a_league_without_it(self, espn_payload):
+        """Conditional disclosure: league 1 sets no yards-allowed tier, so warning it about one
+        would be noise. A caveat that always fires is a caveat nobody reads."""
+        from app.backend.services.platform_import import espn
+
+        warnings = espn.parse_settings_payload(espn_payload).warnings
+        assert not [w for w in warnings if "yards allowed" in w.lower()]
+
+    def test_the_points_allowed_boundary_note_is_likewise_conditional(self, espn_payload_2):
+        """League 2 scores neither the 18-21 nor the 22-27 tier, so the 21-point misplacement
+        cannot affect it and is not raised."""
+        from app.backend.services.platform_import import espn
+
+        warnings = espn.parse_settings_payload(espn_payload_2).warnings
+        assert not [w for w in warnings if "exactly 21 points" in w]
+
+
+class TestEspnCapturedKeysAreLegible:
+    """A captured rule is only honest if the user can tell WHAT was captured.
+
+    Sleeper and Yahoo name their rules in words; ESPN numbers them, so an unlabelled panel reports
+    "129@dst · 3.00" — which discloses nothing and reads as noise rather than as the disclosure it
+    is meant to be.
+    """
+
+    @pytest.mark.parametrize("fixture_name", ["espn_payload", "espn_payload_2"])
+    def test_every_captured_key_in_a_real_league_has_a_label(self, fixture_name, request):
+        """The invariant that keeps the panel legible as the map grows: if a future ESPN id starts
+        appearing as CAPTURED, it must arrive with a human label in the same change."""
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(request.getfixturevalue(fixture_name))
+        labels = league.to_dict()["unmapped_labels"]
+        missing = [k for k in league.unmapped_scoring_keys if not labels.get(k)]
+        assert not missing, f"captured ESPN keys with no human label: {missing}"
+
+    def test_labels_are_sent_only_for_keys_this_league_actually_captured(self, espn_payload_2):
+        """Never explain a rule the user does not have."""
+        from app.backend.services.platform_import import espn
+
+        league = espn.parse_settings_payload(espn_payload_2)
+        assert set(league.to_dict()["unmapped_labels"]) == set(league.unmapped_scoring_keys)
+
+    def test_labels_do_not_invent_a_boundary_we_never_verified(self):
+        """⭐ The display-layer form of this map's "verified, not trusted" rule.
+
+        The identity evidence fixes the yards-allowed ladder's ORDER but not its cut points, so a
+        label reading "Yards allowed 100-199" would be a guess shown to a user as fact — the same
+        mistake as a guessed stat id, one layer over. Numbers in these labels are the smell.
+        """
+        from app.backend.services.platform_import import espn
+
+        for key in espn._YARDS_ALLOWED_KEYS:
+            label = espn.CAPTURED_LABELS[key]
+            assert not re.search(r"\d", label), f"{key} label asserts a boundary: {label!r}"
+
+    def test_the_label_field_is_additive_so_an_older_client_still_renders(self):
+        """NF-C0's deploy-skew rule: the API and the frontend ship independently. A client that
+        has never heard of `unmapped_labels` must fall back to the raw key, not a blank row."""
+        ui = (
+            Path(__file__).resolve().parents[2]
+            / "frontend"
+            / "components"
+            / "fantasy"
+            / "league-import.tsx"
+        ).read_text()
+        assert "preview.unmapped_labels?.[t.key] ?? t.key" in ui
+
+    def test_the_other_adapters_are_unaffected(self):
+        """Sleeper and Yahoo keys are already words, so they send no labels — and the field must
+        default rather than force every adapter to opt in."""
+        league = C.ImportedLeague(
+            platform="sleeper", source_league_id="1", season="2026", config={}
+        )
+        assert league.to_dict()["unmapped_labels"] == {}
