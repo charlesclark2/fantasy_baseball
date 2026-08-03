@@ -184,10 +184,39 @@ model's 3-fold ceiling is a **window choice** (E7.9 used 2021–2026) while the 
 `n`, declares itself UNDEFINED rather than passed when unattainable, and is weakly stricter than the
 legacy rate everywhere (so it can only prevent a false ADD).
 
+**5. ⚠️ `classify_null`'s `max_field_size` trigger is UNSAFE ADVICE against an ALREADY-pre-registered
+field — the CALLER must scope it, because the instrument cannot** (MH2.2, 2026-08-03). On a
+`POWER_LIMITED` verdict `classify_null` offers *"…OR a field of ≤N arms at the CURRENT fold count"*.
+That is arithmetically correct and, on MH2.2's `bb_pct`, the ≤2-arm field it prescribes **is the
+retired post-hoc one** — so taken literally the trigger re-commits the selection bias of rule 2
+inside a badge that reads like a remedy. `classify_null` sees only a trial COUNT; it cannot know
+whether a smaller family would be *declared* or *discovered*. ⇒ **a smaller field is a legitimate
+remedy ONLY when the narrower family is pre-registered on MECHANISTIC grounds; never quote the
+`max_field_size` leg against a field you have already scored.**
+
+**6. Report WHICH CHANNEL a field change paid through, not just that the field changed** (MH2.2).
+`SR0 = √V·z(N)`: trimming a field lowers the trial COUNT `N` *and* the cross-trial Sharpe DISPERSION
+`V`, and the two are not close to equal. Measured on the trajectory family, dropping the single
+losing arm collapsed `V` **19,938×** on `bb_pct` (0.593 → 2.98e-5), and the dispersion channel ALONE
+reproduced the entire 0.849 → 0.998 jump (`if_only_V_shrank` 0.9985 vs `if_only_N_shrank` 0.9634).
+"We ran fewer arms" therefore under-explains a post-hoc gain badly and invites the wrong
+generalisation. Use `cv_power.decompose_field_size`, and **thread the winner's EMPIRICAL skew and
+kurtosis into it** — defaulting them makes the diagnostic answer about a normal-moment world while
+the gate used the real one ("same moments everywhere, or nowhere").
+
+**7. A re-scored field needs a REPRODUCTION ANCHOR** (MH2.2). Re-reading old evidence under a new
+field definition is only legitimate if the evidence is identical — otherwise the comparison is
+between two different runs. Assert the freshly-fitted per-fold matrix against the recorded one
+cell-by-cell (MH2.2: max |Δ| = 0.0 over 308 arm×fold cells) and **count the cells compared**: a
+JSON-round-tripped index is stringified, so an un-coerced reindex silently aligns NOTHING and a
+perfect reproduction reports as a mismatch. A check that cannot succeed is as useless as one that
+cannot fail.
+
 **Every `[Model-*]` prompt whose outcome may be a null carries:** *"🔭 POWER (per §0.5.4): state the
 achievable fold count and field size BEFORE the run; on a null, classify it with
 `cv_power.classify_null` and state the re-test trigger in the unit that grows — or say plainly that
-it is a genuine absence / DSR-unreachable / inactive."*
+it is a genuine absence / DSR-unreachable / inactive. ⛔ Do NOT quote the `max_field_size` leg of that
+trigger unless the narrower family is pre-registered on mechanistic grounds (§0.5.4 rule 5)."*
 
 ---
 
