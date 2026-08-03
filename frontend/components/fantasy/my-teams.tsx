@@ -59,7 +59,12 @@ export function MyTeams() {
 
 function LeagueCard({ entry }: { entry: MyTeamEntry }) {
   const { league, roster } = entry
-  const linked = roster.length > 0
+  // NF-C6 fix: "linked" and "has any rostered players" are DIFFERENT states, and conflating them
+  // produced a genuinely wrong message — a pre-draft league (ESPN/Sleeper both warn about this at
+  // import time) has a real, saved `source_team_key` with a legitimately EMPTY roster, which is not
+  // the same as "you never picked a team." `roster.length` alone can't tell those apart.
+  const linked = !!league.source_team_key
+  const hasPlayers = roster.length > 0
   const matchedCount = roster.filter((r) => r.board).length
   const unmatchedCount = roster.length - matchedCount
   const starters = roster.filter((r) => r.roster.starter)
@@ -93,7 +98,16 @@ function LeagueCard({ entry }: { entry: MyTeamEntry }) {
         </p>
       )}
 
-      {linked && (
+      {linked && !hasPlayers && (
+        <p className="mt-3 text-xs text-gray-500">
+          {league.source_team_name ? `${league.source_team_name} is` : "Your team is"}{" "}
+          linked, but the platform reported no rostered players for it — the usual reason is your
+          league hasn&rsquo;t drafted yet. Re-import after your draft and the roster will show up
+          here.
+        </p>
+      )}
+
+      {linked && hasPlayers && (
         <>
           <RosterTable label="Starters" rows={starters} />
           <RosterTable label="Bench" rows={bench} />
