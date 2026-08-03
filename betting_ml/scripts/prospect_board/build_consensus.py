@@ -131,9 +131,10 @@ def load_manual_sources(specs: list[str], universe: pd.DataFrame) -> tuple[list[
 
 def build(board: pd.DataFrame, xref: pd.DataFrame, mle_bat: pd.DataFrame, mle_pit: pd.DataFrame,
           pipeline: pd.DataFrame, manual_frames: list[pd.DataFrame], manual_names: list[str], *,
+          mle_sb: pd.DataFrame | None = None,
           min_pa: float = 100.0, strict_league: bool = True) -> tuple[pd.DataFrame, dict]:
     """E8.0 board + every extra source → the consensus universe + the report."""
-    e80, join_report = assemble_board(board, xref, mle_bat, mle_pit, None,
+    e80, join_report = assemble_board(board, xref, mle_bat, mle_pit, None, mle_sb=mle_sb,
                                       min_pa=min_pa, strict_league=strict_league)
     e80["on_fangraphs_board"] = True
     e80["mlbam_id"] = e80["mlbam_id"].astype("string")
@@ -291,7 +292,7 @@ def main(argv=None) -> int:
     )
 
     conn = _connect()
-    board, xref, mle_bat, mle_pit = load_inputs(conn, board_season=args.board_season)
+    board, xref, mle_bat, mle_pit, mle_sb = load_inputs(conn, board_season=args.board_season)
     if board.empty:
         raise ProspectBoardError(
             "the board snapshot is EMPTY — re-run the E7.7 ingest "
@@ -322,6 +323,7 @@ def main(argv=None) -> int:
     manual_names = [spec.split("=", 1)[0].strip() for spec in args.manual]
 
     final, report = build(board, xref, mle_bat, mle_pit, pipeline, manual_frames, manual_names,
+                          mle_sb=mle_sb,
                           min_pa=args.min_mle_pa, strict_league=not args.allow_unmapped_orgs)
     report["manual_sources"] = manual_reports
     report["board_season"] = int(board["season"].max())

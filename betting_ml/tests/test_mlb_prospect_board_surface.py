@@ -178,10 +178,33 @@ class TestHonestFrame:
         assert not any(key.lower().startswith("mlewoba") for _, key, _ in exporter._COLUMNS)
         assert any("wOBA" in a for a in exporter.FRAMING["absences"])
 
-    def test_the_stolen_base_blind_spot_is_stated(self):
-        """SB is structurally invisible to every metric we translate, so a speed-first prospect is
-        systematically under-served by our score. Saying so is the only honest option."""
-        assert any("STOLEN BASES" in a for a in exporter.FRAMING["absences"])
+    def test_the_stolen_base_blind_spot_is_CLOSED_and_the_stale_caveat_is_gone(self):
+        """🚨 THE CAVEAT THAT WENT STALE, now pinned the other way (E8.3, 2026-08-02).
+
+        Until E8.3 the board said "STOLEN BASES ARE INVISIBLE TO US" — true then, FALSE now that
+        `mle_sb_rate` (OOS corr 0.702) is a weighted term in `mle_score`. A caveat that under-sells
+        a shipped capability is its own defect, so the old sentence must be GONE, not softened, and
+        the capability must be stated as plainly as the absence it replaced."""
+        blob = json.dumps(exporter.FRAMING)
+        assert "STOLEN BASES ARE INVISIBLE" not in blob
+        assert "SB is not in the substrate" not in blob
+        assert any("STOLEN BASES ARE NOW IN OUR SCORE" in c
+                   for c in exporter.FRAMING["capabilities"])
+        # the value must actually reach the client, or the framing is a promise the payload breaks
+        assert any(key == "mleSbRate" for _, key, _ in exporter._COLUMNS)
+        assert exporter.FRAMING["metricConfidence"]["mleSbRate"] == "strong"
+
+    def test_the_sb_SUCCESS_rate_null_is_stated_and_never_shipped(self):
+        """E8.3 measured TWO things, and only one of them translates. Attempt propensity does
+        (0.702); SUCCESS rate does not (0.230, fails PBO at 0.214). Shipping the success half at
+        any weight would launder a measured null into a ranking — the exact wOBA rule, one metric
+        over — so it must be absent from the payload AND stated as an absence."""
+        assert not any("succ" in key.lower() for _, key, _ in exporter._COLUMNS)
+        assert any("SUCCESS RATE" in a.upper() for a in exporter.FRAMING["absences"])
+
+    def test_the_speed_flag_survives_with_its_narrower_meaning(self):
+        """The flag is not deleted — it still marks the players the scouts call fast and we have NO
+        line for. But it must no longer claim SB is invisible everywhere."""
         assert any(key == "speedFlag" for _, key, _ in exporter._COLUMNS)
 
     def test_a_missing_line_is_explained_by_its_two_real_causes(self):

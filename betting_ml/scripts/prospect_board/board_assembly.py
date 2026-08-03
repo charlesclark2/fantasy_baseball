@@ -38,11 +38,21 @@ age-relative-to-level + level + pedigree null, and the answer split by position:
 So the honest claim is *"we know WHEN to trust the scouts"* — not "we use FV" and not "we ignore
 it". `FV_WEIGHT_BY_TYPE` is that verdict, and only that verdict, in numbers.
 
-⚠️ KNOWN GAP — SB IS INVISIBLE TO US. Every E7.3/E7.3p target is a per-PA/per-TBF rate; stolen
-bases are not in the substrate (the same limitation E7.8 states for its fantasy target). A
-speed-first prospect is therefore SYSTEMATICALLY under-served by `mle_score`. Rather than bury
-that, `speed_flag` surfaces it from the scouts' own future-speed grade — the one place the board
-knows something we structurally cannot.
+✅ CLOSED 2026-08-02 (E8.3) — SB IS NO LONGER INVISIBLE. This module used to carry a standing gap:
+every E7.3/E7.3p target was a per-PA/per-TBF rate, stolen bases were not in the substrate, and a
+speed-first prospect was SYSTEMATICALLY under-served by `mle_score` — roughly a fifth of roto
+offensive value silently deferred to FanGraphs' future-speed grade. E8.3 built the missing MLB-side
+label (`baseball/mlb/season_hitting`), translated SB-per-opportunity through the same MiLB→MLB
+ladder, and measured an OOS translation correlation of **0.702** — the strongest metric on this
+board. `mle_sb_rate` is now a first-class term in `MLE_METRIC_WEIGHTS`.
+
+⚠️ TWO LIMITS SURVIVE, and both are stated on the surface rather than buried:
+  * it is a RATE (SB per stolen-base opportunity), not a projected SB TOTAL — turning it into a
+    count needs a playing-time projection this board does not make;
+  * SUCCESS rate does NOT translate (0.230, fails PBO) — we can say how often a prospect will RUN,
+    never how often he will make it, so the 30/10-vs-30/2 distinction stays beyond us.
+`speed_flag` survives with a narrower job: it now marks only players the scouts call plus-speed for
+whom we have NO translated SB line (complex/DSL, or too few opportunities to translate).
 """
 from __future__ import annotations
 
@@ -271,15 +281,31 @@ def select_mle_row_per_player(mle: pd.DataFrame, *, min_pa: float = 100.0,
 #
 #   batters (E7.3, `e7_3_milb_mle.md`):  k_pct 0.637 ✅ · bb_pct 0.491 ✅ · iso 0.429 🟡
 #                                        woba 0.220 ❌ no-signal → EXCLUDED (never resurrect it)
+#   batters (E8.3, `e8_3_sb_translation.md`):
+#                                        sb_rate 0.702 ✅ — the STRONGEST metric on this board
 #   pitchers (E7.3p, `e7_3p_milb_mle_pitchers.md`):
 #                                        gb_pct 0.551 ✅ · bb_pct 0.367 🟡 · k_pct 0.366 🟡
 #                                        hr_rate 0.094 (DSR 0.130) + xwoba_against 0.147 ❌ → EXCLUDED
+#
+# ⭐ **E8.3 — `mle_sb_rate` CLOSES THE STOLEN-BASE BLIND SPOT.** Until 2026-08-02 every translated
+# metric was a per-PA/per-TBF RATE and stolen bases were not in the substrate at all, so a speed-first
+# prospect was systematically under-rated and ~20% of roto offensive value was silently deferred to
+# FanGraphs' future-speed grade. E8.3's bake-off (CRPS-selected, 11 folds, 12 arms) measured an OOS
+# translation correlation of **0.702** — higher than any metric already here — with PBO 0.043 and
+# DSR 1.000 over the binding field. It enters at its measured correlation like everything else.
+#
+# ⚠️ WHAT IT IS NOT: `sb_rate` is SB per stolen-base OPPORTUNITY (singles + walks + HBP) — an ABILITY
+# rate, not a projected SB TOTAL. It cannot become a count without a playing-time projection this
+# board does not make. E8.3 also measured that SUCCESS rate does NOT translate (0.230, fails PBO at
+# 0.214), so the board can say how often a prospect will RUN and must not claim how often he will
+# make it — the 30/10-vs-30/2 distinction is beyond us and is stated as such in the framing.
 #
 # `higher_is_better` is the fantasy-value direction, which INVERTS between the two sides: a batter
 # wants a LOW K%, a pitcher wants a HIGH one.
 MLE_METRIC_WEIGHTS: dict[str, dict[str, tuple[float, bool]]] = {
     # metric column suffix -> (oos translation corr = the weight, higher_is_better)
-    "batter": {"mle_k_pct": (0.637, False), "mle_bb_pct": (0.491, True), "mle_iso": (0.429, True)},
+    "batter": {"mle_k_pct": (0.637, False), "mle_bb_pct": (0.491, True), "mle_iso": (0.429, True),
+               "mle_sb_rate": (0.702, True)},
     "pitcher": {"mle_p_gb_pct": (0.551, True), "mle_p_bb_pct": (0.367, False),
                 "mle_p_k_pct": (0.366, True)},
 }
@@ -452,9 +478,19 @@ def attach_scores(board: pd.DataFrame) -> pd.DataFrame:
     df["in_majors"] = np.where(df["level"].map(normalize_level) == "MLB", "MLB — check eligibility",
                                "")
 
-    df["speed_flag"] = np.where(
-        df["grade_spd"].fillna(0) >= SPEED_FLAG_GRADE,
-        "SPEED — SB not in our MLE", "")
+    # ⭐ E8.3 CHANGED WHAT THIS FLAG MEANS. It used to read "SPEED — SB not in our MLE": a caveat
+    # that our score was BLIND to running. Since E8.3 the board carries `mle_sb_rate` (OOS
+    # translation corr 0.702) inside `mle_score`, so that sentence is now FALSE — and a stale caveat
+    # that under-sells a shipped capability is its own defect.
+    #
+    # The flag survives with a NARROWER, still-true job: mark where the SCOUTS see plus speed but we
+    # have NO translated SB line to check it against (complex/DSL, or too few stolen-base
+    # opportunities to translate). That is the only case left where a reader should fall back to the
+    # scouting grade. Where we DO have a line, there is nothing to caveat — the number is on the row.
+    has_sb = df.get("mle_sb_rate", pd.Series(np.nan, index=df.index)).notna()
+    plus_speed = df["grade_spd"].fillna(0) >= SPEED_FLAG_GRADE
+    df["speed_flag"] = np.where(plus_speed & ~has_sb,
+                                "SPEED — no SB line from us; scouts' grade only", "")
     return df
 
 
@@ -543,6 +579,7 @@ def apply_comp_term(board: pd.DataFrame, *, weight: float | None = None) -> pd.D
 
 def assemble_board(board: pd.DataFrame, xref: pd.DataFrame, mle_bat: pd.DataFrame,
                    mle_pit: pd.DataFrame, savant: pd.DataFrame | None = None, *,
+                   mle_sb: pd.DataFrame | None = None,
                    min_pa: float = 100.0, strict_league: bool = True) -> tuple[pd.DataFrame, dict]:
     """Join the three views into the board + return the match-rate report the AC requires.
 
@@ -618,7 +655,24 @@ def assemble_board(board: pd.DataFrame, xref: pd.DataFrame, mle_bat: pd.DataFram
     b = b.merge(pit, left_on="mlbam_id", right_on="player_id", how="left") \
          .drop(columns=["player_id"], errors="ignore")
 
+    # ── E8.3: the stolen-base line ───────────────────────────────────────────────────────────
+    # A SEPARATE projections table because it has its own eligibility floor: the SB rate needs a
+    # minimum number of stolen-base OPPORTUNITIES, not just PA, so a player can carry a k_pct line
+    # and no SB line. Selected with the SAME `select_mle_row_per_player` so it picks the same level
+    # in almost every case; `mle_sb_level` is carried so a mismatch is visible rather than implicit.
+    if mle_sb is not None and not mle_sb.empty:
+        sb = select_mle_row_per_player(mle_sb, min_pa=min_pa)
+        sb_rename = {"mle_level": "mle_sb_level", "mle_pa": "mle_sb_pa",
+                     "mle_sb_rate": "mle_sb_rate", "mle_sb_rate_sd": "mle_sb_rate_sd",
+                     "minor_sbo": "minor_sbo", "minor_sb": "minor_sb"}
+        sb = (sb[[c for c in ["player_id", *sb_rename] if c in sb.columns]]
+              .rename(columns={k: v for k, v in sb_rename.items() if k != v}))
+        b = b.merge(sb, left_on="mlbam_id", right_on="player_id", how="left") \
+             .drop(columns=["player_id"], errors="ignore")
+
     is_bat = b["player_type"].isin(("batter", "two_way"))
+    rep["with_sb_line"] = int((is_bat & b.get("mle_sb_rate", pd.Series(np.nan, index=b.index))
+                               .notna()).sum())
     rep["with_batter_mle"] = int((is_bat & b.get("mle_k_pct", pd.Series(np.nan, index=b.index))
                                   .notna()).sum())
     rep["with_pitcher_mle"] = int(((~is_bat) & b.get("mle_p_k_pct", pd.Series(np.nan, index=b.index))
