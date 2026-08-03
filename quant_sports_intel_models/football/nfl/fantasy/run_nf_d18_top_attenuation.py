@@ -112,11 +112,12 @@ def fold_fits(fold: NF17.Fold, *, seed: int = 20260802) -> dict:
     fits: dict = {"_te_pos": te_pos, "_tr_pos": tr_pos}
     for form in TA.FORMS:
         fits[form] = TA.fit_form(form, p_tr, y_tr, tr_pos)
-    # the peeking ceiling of each form, at RELAXED row floors because a single held-out draft class is
-    # ~80 rows: a ceiling that fails to fit would make its own check pass on NOTHING (NF1.7 (a)).
-    for tag, (form, key) in _CEILING_ANCHORS.items():
-        kw = {"min_n": 5} if form in ("ols_slope", "power", "huber", "isotonic") else {"min_n": 5}
-        fits[key] = TA.fit_form(form, fold.test_pred, fold.test_real, te_pos, **kw)
+    # the peeking ceiling of each form, at a RELAXED row floor because a single held-out draft class is
+    # ~80 rows across three positions: a ceiling that fails to fit would make its own check pass on
+    # NOTHING (NF1.7 (a)), so the floor that protects a CANDIDATE from a thin cell must not be allowed
+    # to delete the anchor that polices it.
+    for _tag, (form, key) in _CEILING_ANCHORS.items():
+        fits[key] = TA.fit_form(form, fold.test_pred, fold.test_real, te_pos, min_n=5)
     fits["_perm_across"] = TA.fit_form(TA.REFERENCE_FORM, p_tr, y_across, tr_pos)
     fits["_perm_within"] = TA.fit_form(TA.REFERENCE_FORM, p_tr, y_within, tr_pos)
     return fits
@@ -324,12 +325,25 @@ def board_verdicts(board: pd.DataFrame, sfits: dict, cfgs: list[dict],
     rk_mask = board["is_rookie"].fillna(False).astype(bool).to_numpy()
     point = pd.to_numeric(board.loc[rk_mask, "proj_fp_ppr"], errors="coerce").to_numpy(dtype=float)
     pos = board.loc[rk_mask, "position"].astype(str).str.upper().to_numpy()
+    ref_adj = TA.predict_form(TA.REFERENCE_FORM, sfits[TA.REFERENCE_FORM], point, pos)
     for cfg in cfgs:
         fp = board_arm(board, sfits, cfg)
         place = TA.board_placement(board, fp)
+        lam = None
+        if cfg.get("matched_foil"):
+            lam = TA.matched_global_lambda(
+                point, pos,
+                TA.predict_form(cfg["matches"], sfits[cfg["matches"]], point, pos), ref_adj)
         out[cfg["label"]] = {
             **place, "placement": TA.placement_clearance(place["best_rookie_overall_rank"]),
             "profile": TA.attenuation_profile(point, pos, fp),
+            "matched_lambda": None if lam is None else round(float(lam), 4),
+            # ⚠️ a foil pinned at its physical bound is NOT a matched foil — it is a different
+            #    magnitude wearing the label, and saying so is what stops the pairing from being read
+            #    as a control it did not perform.
+            "matched_lambda_pinned": (None if lam is None
+                                      else bool(abs(lam - TA.MATCHED_FOIL_LAMBDA_CLIP[1]) < 1e-9
+                                                or abs(lam - TA.MATCHED_FOIL_LAMBDA_CLIP[0]) < 1e-9)),
         }
     for tag in anchors:
         adj = (np.zeros(len(point)) if tag == "zero_scale"
@@ -538,6 +552,8 @@ def matched_foil_attribution(arms: list[dict], boards: dict, cohorts: list[int])
         pf = ((boards.get(r["label"], {}) or {}).get("placement", {}) or {})
         rows.append({
             "arm": target["label"], "foil": r["label"],
+            "matched λ (board)": (boards.get(r["label"], {}) or {}).get("matched_lambda"),
+            "λ pinned at bound": (boards.get(r["label"], {}) or {}).get("matched_lambda_pinned"),
             "arm_tier_mae": target["pooled_tier_mae"], "foil_tier_mae": r["pooled_tier_mae"],
             "paired_delta": round(float(d.mean()), 4) if len(d) else None,
             "arm_rank": (boards.get(target["label"], {}) or {}).get("best_rookie_overall_rank"),
@@ -555,6 +571,128 @@ def matched_foil_attribution(arms: list[dict], boards: dict, cohorts: list[int])
                         else "magnitude" if any_magnitude and not any_shape
                         else "mixed" if any_shape and any_magnitude
                         else "no_clearance_to_attribute")}
+
+
+def admissible_frontier(folds: list[NF17.Fold], fits: dict[int, dict], pos_scale: dict[int, dict],
+                        board: pd.DataFrame, sfits: dict, *,
+                        grid: tuple = tuple(round(0.05 * i, 2) for i in range(21))) -> dict:
+    """⭐ HOW MUCH CORRECTION DOES THE PLACEMENT CAP ACTUALLY ADMIT? — the frontier, measured.
+
+    ⛔ **THIS IS A DIAGNOSTIC AND IT IS EXPLICITLY THE FORBIDDEN MOVE, MEASURED RATHER THAN TAKEN.**
+    Sweeping the REFERENCE affine's global λ and reading off the largest value that still clears the
+    placement cap IS a λ re-pick, which §6 forbids as the E2.1-r inversion — so nothing here is
+    selected, shipped, scored against a gate, or entered into PBO or DSR. It exists for one reason: a
+    null that says 'no top-attenuating shape works' is far more useful when it also says how much room
+    the constraint left in the first place.
+
+    Two readings, and they are opposite in what they imply:
+      · the cap admits a SUBSTANTIAL λ ⇒ the binding problem really is the SHAPE, and the null is
+        about this field of shapes rather than about the constraint;
+      · the cap admits ~NOTHING ⇒ the two objectives are directly opposed along the magnitude axis and
+        no re-shaping could have squared them, which makes the null structural rather than a failure
+        to find the right curve.
+
+    Both the board rank and the in-fold pooled tier MAE are computed at every λ, so the trade-off is
+    reported as a curve rather than as a claim."""
+    rk = board["is_rookie"].fillna(False).astype(bool).to_numpy()
+    b_point = pd.to_numeric(board.loc[rk, "proj_fp_ppr"], errors="coerce").to_numpy(dtype=float)
+    b_pos = board.loc[rk, "position"].astype(str).str.upper().to_numpy()
+    b_ref = TA.predict_form(TA.REFERENCE_FORM, sfits[TA.REFERENCE_FORM], b_point, b_pos)
+
+    rows = []
+    for lam in grid:
+        fp = TA.apply_position_adjustment(
+            b_point, b_pos, TA.blend_toward_incumbent(b_point, b_ref, float(lam)))
+        place = TA.board_placement(board, fp)
+        clear = TA.placement_clearance(place["best_rookie_overall_rank"])
+        scored = _score(folds, fits, pos_scale,
+                        lambda f, fi, L=lam: TA.apply_position_adjustment(
+                            f.test_pred, fi["_te_pos"],
+                            TA.blend_toward_incumbent(
+                                f.test_pred,
+                                TA.predict_form(TA.REFERENCE_FORM, fi[TA.REFERENCE_FORM],
+                                                f.test_pred, fi["_te_pos"]), float(L))),
+                        f"reference@λ{lam:g}")
+        rows.append({"λ": float(lam), "pooled tier MAE": scored["pooled_tier_mae"],
+                     "top rookie PPR": place.get("best_rookie_fp"),
+                     "overall rank": place.get("best_rookie_overall_rank"),
+                     "clears cap": bool(clear.get("clears"))})
+    clearing = [r for r in rows if r["clears cap"]]
+    best = max(clearing, key=lambda r: r["λ"]) if clearing else None
+    inc = next((r for r in rows if r["λ"] == 0.0), None)
+    full = next((r for r in rows if r["λ"] == 1.0), None)
+    gain_full = (None if not (inc and full) else round(inc["pooled tier MAE"]
+                                                       - full["pooled tier MAE"], 4))
+    gain_adm = (None if not (inc and best) else round(inc["pooled tier MAE"]
+                                                      - best["pooled tier MAE"], 4))
+    return {
+        "rows": rows, "max_admissible_lambda": None if best is None else best["λ"],
+        "metric_at_max_admissible": None if best is None else best["pooled tier MAE"],
+        "full_correction_gain": gain_full, "admissible_gain": gain_adm,
+        "share_of_gain_admissible": (None if not gain_full or gain_adm is None or abs(gain_full) < 1e-9
+                                     else round(gain_adm / gain_full, 4)),
+    }
+
+
+def classify_this_null(arms: list[dict], inc: dict, cohorts: list[int], boards: dict) -> dict:
+    """⭐ WHICH KIND OF NULL IS THIS? — and the answer is one MH2's seven-state taxonomy does not have.
+
+    CLAUDE.md's MH2 rule is that a recorded null must NAME its state (INACTIVE / UNKNOWN / UNDEFINED /
+    GENUINE ABSENCE / DSR-UNREACHABLE / POWER-LIMITED / TRUSTWORTHY DEAD), because a null read as the
+    wrong kind emits the wrong next step. So the classification is run here — and running it is what
+    exposes that it does not fit:
+
+    ⚠️⭐ **`cv_power.classify_null` RETURNS `POWER_LIMITED`, AND THAT WOULD BE AN ACTIVELY MISLEADING
+    RE-TEST TRIGGER.** Its seven states classify STATISTICAL nulls — an effect that lost, or could not
+    be certified, on a metric. NF-D18's arms did not lose on the metric: the best attenuating arm BEATS
+    the incumbent, and it is refused by a DETERMINISTIC CONSTRAINT (a board rank against a fixed cap)
+    in which there is no sampling error to accumulate. **No number of additional draft classes can
+    change a board rank**, so 'power-limited' would send a future reader to wait for data that cannot
+    help — precisely the fabricated-trigger failure mode the taxonomy's own INACTIVE and UNKNOWN
+    branches exist to prevent, one level further out.
+
+    ⇒ this null is recorded as **CONSTRAINT-REFUSED**: the arms were eligible-to-be-tested and were
+    removed by a validated product constraint before the statistics ever bound. Its remedy is neither
+    more seasons nor a smaller field — it is a different MECHANISM, or a PM decision to revisit the
+    constraint, and both are stated rather than implied.
+
+    The ACCURACY sub-question is reported beside it so 'refused by the constraint, not by the metric'
+    is a number: how the best attenuating arm would have scored had the constraint not existed."""
+    from betting_ml.utils import cv_power as CP
+
+    inc_row = _pooled_row(inc, cohorts)
+    att = [r for r in arms if r.get("attenuates") and not r.get("is_foil")
+           and r["pooled_tier_mae"] is not None]
+    if not att:
+        return {"state": "UNDEFINED", "reason": "no attenuating arm scored"}
+    best = min(att, key=lambda r: r["pooled_tier_mae"])
+    d = inc_row - _pooled_row(best, cohorts)
+    d = d[np.isfinite(d)]
+    sr = float(d.mean() / d.std(ddof=1)) if len(d) >= 3 and d.std(ddof=1) > 1e-12 else None
+    v = CP.classify_null(metric=TA.SELECTION_METRIC, n_folds=len(cohorts),
+                         n_arms=len([r for r in arms if not r.get("is_foil")]),
+                         beats_foil=bool(d.mean() > 0), observed_sr=sr,
+                         fold_wins=int((d > 0).sum()))
+    n_beat = [r["label"] for r in att if r["pooled_tier_mae"] < (inc["pooled_tier_mae"] or np.inf)]
+    return {
+        "state": "CONSTRAINT_REFUSED",
+        "taxonomy_would_say": v.state,
+        "why_the_taxonomy_does_not_fit":
+            "the seven states classify STATISTICAL nulls; these arms were removed by a DETERMINISTIC "
+            "constraint (a board rank against a fixed cap) with no sampling error to accumulate, so "
+            f"'{v.state}' would emit a re-test trigger that more draft classes cannot satisfy",
+        "best_attenuating_arm": best["label"], "best_attenuating_metric": best["pooled_tier_mae"],
+        "incumbent_metric": inc["pooled_tier_mae"],
+        "beats_incumbent_on_accuracy": bool(d.mean() > 0),
+        "fold_wins": int((d > 0).sum()), "n_folds": len(d),
+        "observed_sr": None if sr is None else round(sr, 4),
+        "attenuating_arms_that_beat_the_incumbent": n_beat,
+        "all_refused_on_placement": all(
+            not ((boards.get(r["label"], {}) or {}).get("placement", {}) or {}).get("clears")
+            for r in att),
+        "remedy": "a different MECHANISM, or a PM decision to revisit the constraint — never more "
+                  "draft classes, which cannot move a board rank",
+    }
 
 
 def fitted_parameters(folds: list[NF17.Fold], fits: dict[int, dict]) -> dict:
@@ -652,8 +790,12 @@ def _verdict_prose(out: dict) -> str:
             f"{round(w['metric'] - inc, 4) if inc is not None else None}) over "
             f"{len(out['cohorts'])} held-out draft classes, with PBO {sel['deflation'].get('pbo')}, "
             f"whole-field DSR {sel['deflation'].get('dsr')} (the pre-registered gate, ≥ {TA.DSR_MIN}) "
-            f"and a one-sided paired p of {sel['pvalue']} against α = {TA.ALPHA}. **Failing gate(s): "
-            f"`{[k for k, v in out['ship_gate'].items() if k not in ('ship', 'framing') and not v]}`.**")
+            f"and a one-sided paired p of {sel['pvalue']} against α = {TA.ALPHA}. **The BINDING "
+            f"failures are `{[k for k, v in out['ship_gate'].items() if k in ('recalibrates', 'beats_incumbent', 'ordering_ok_every_position', 'placement_clears_threshold_invariant') and not v]}`** "
+            "— the deflation gates are reported as failed only because they are **UNDEFINED**: with "
+            "the incumbent the single eligible arm there is no search to deflate and no non-zero "
+            "delta to score, and a statistic that was not COMPUTABLE must never be read as a "
+            "mechanism that lost (MH2's UNDEFINED-vs-failed rule).")
     a.append("")
     att = out["attribution"]
     if att["reading"] == "shape":
@@ -691,12 +833,29 @@ def _verdict_prose(out: dict) -> str:
             "re-confirmed before this reaches the board, and the `--publish` is a POST-MERGE operator "
             "step. QB stays exactly where NF-D14 left it.")
     else:
+        fr = out["frontier"]
         a.append(
-            "⇒ **RECORDED NULL — and NF-D16's correction is now shelved PERMANENTLY rather than "
-            "pending.** The only publish path NF-D17 left open was a top-attenuating re-shaping that "
-            "clears the validated placement cap while keeping the gain; the pre-registered field does "
-            "not contain one. NF-D16 stays ratified-but-unserved, the shipped rookie point STANDS, "
-            "the interval is untouched, and the QB exclusion was never re-opened.")
+            "⇒ **RECORDED NULL ON THE PRE-REGISTERED QUESTION.** The only publish path NF-D17 left "
+            "open was a top-attenuating re-shaping that clears the validated placement cap while "
+            "keeping the gain, and the pre-registered field does not contain one: every attenuating "
+            "arm is refused, three of the four place the top rookie WORSE than the un-attenuated "
+            "reference, and the freely-learned monotone foil — free to discover ANY monotone "
+            "attenuation — chose almost none. NF-D16 stays ratified-but-unserved, the shipped rookie "
+            "point STANDS, the interval is untouched, and the QB exclusion was never re-opened.")
+        a.append("")
+        if fr.get("max_admissible_lambda"):
+            a.append(
+                "⚠️⚠️ **BUT THE NULL IS NARROWER THAN 'THE CORRECTION CANNOT BE SERVED', AND SAYING SO "
+                "PRECISELY IS THIS STORY'S REAL CONTRIBUTION.** The frontier (§6b) measures that the "
+                f"placement cap admits the reference affine up to λ = **{fr['max_admissible_lambda']}**, "
+                f"retaining **{fr.get('share_of_gain_admissible')}** of the correction's tier-MAE gain. "
+                "So the constraint was never the binding problem — the SHAPES were. What the data "
+                "supports is LESS CORRECTION EVERYWHERE, not a differently-shaped one. ⛔ That is "
+                "exactly the λ re-pick §6 forbids and it is measured rather than taken; it also cannot "
+                "be pre-registered as-is by a successor, because the number is now known and was "
+                "fitted to one board. A legitimate successor must select the shrink IN-FOLD under a "
+                "PER-FOLD placement constraint, which requires rebuilding the merged veteran+rookie "
+                "board for each held-out season. **That is an operator/PM call, not a session one.**")
     return "\n".join(a)
 
 
@@ -1017,6 +1176,43 @@ def write_report(out: dict, path: Path) -> None:          # noqa: C901 — a rep
       "constraint into a selection criterion.")
     p("")
 
+    p("### 6b. ⭐ HOW MUCH CORRECTION DOES THE CAP ADMIT AT ALL? — the frontier, measured")
+    p("")
+    p("⛔ **A DIAGNOSTIC, AND EXPLICITLY THE FORBIDDEN MOVE MEASURED RATHER THAN TAKEN.** Sweeping the "
+      "REFERENCE affine's GLOBAL λ and reading the largest value that still clears the cap IS the λ "
+      "re-pick §6 forbids — so nothing here is selected, shipped, gated, or entered into PBO or DSR. "
+      "It is computed because a null that says 'no top-attenuating shape works' is far more useful "
+      "when it also says how much room the constraint left in the first place.")
+    p("")
+    fr = out["frontier"]
+    p(_md(pd.DataFrame(fr["rows"])))
+    p("")
+    p(out["frontier_prose"])
+    p("")
+
+    p("## 6c. ⭐ WHICH KIND OF NULL IS THIS? — and why the program's own taxonomy does not fit")
+    p("")
+    ns = out["null_state"]
+    p(_md(pd.DataFrame([{k: v for k, v in ns.items()
+                         if k not in ("why_the_taxonomy_does_not_fit", "remedy")}])))
+    p("")
+    p(f"⚠️⭐ **RECORDED AS `{ns['state']}` — A STATE MH2's SEVEN DOES NOT CONTAIN, AND FORCING IT INTO "
+      f"THEM WOULD FABRICATE A RE-TEST TRIGGER.** CLAUDE.md requires a recorded null to NAME its state, "
+      f"so `cv_power.classify_null` was run: it returns **`{ns['taxonomy_would_say']}`**. That reading "
+      f"is wrong here, and the reason generalises — the seven states classify STATISTICAL nulls, "
+      f"whereas these arms **did not lose on the metric at all**. The best attenuating arm "
+      f"(`{ns['best_attenuating_arm']}`, {ns['best_attenuating_metric']}) BEATS the incumbent "
+      f"({ns['incumbent_metric']}) in {ns['fold_wins']} of {ns['n_folds']} held-out classes, and "
+      f"{len(ns['attenuating_arms_that_beat_the_incumbent'])} of the attenuating arms beat it overall. "
+      "Every one of them is removed by a DETERMINISTIC constraint — a board rank against a fixed cap — "
+      "in which there is no sampling error to accumulate. **No number of additional draft classes can "
+      "change a board rank**, so a `POWER_LIMITED` label would send a future reader to wait for data "
+      "that cannot help: exactly the fabricated-trigger failure the taxonomy's own INACTIVE and "
+      "UNKNOWN branches exist to prevent, one level further out.")
+    p("")
+    p(f"⇒ **the remedy is {ns['remedy']}.**")
+    p("")
+
     p("## 7. Honest limitations")
     p("")
     for line in out["limitations"]:
@@ -1093,8 +1289,14 @@ def main(argv: list[str] | None = None) -> int:            # noqa: C901 — orch
     best_recal = min(recal, key=lambda r: r["pooled_tier_mae"]) if recal else None
     ref = best_recal or incumbent
 
+    # ⭐ `family_ceiling=TA.FAMILY_CEILING` is LOAD-BEARING: the shared check defaults to NF-D16's
+    #    form → anchor map, which does not contain NF-D18's forms. Without it every attenuating arm
+    #    resolves to a `None` ceiling and the check reports a hard failure on anchors that were in fact
+    #    computed and scored. The first run did exactly that, and it failed LOUDLY rather than
+    #    silently, which is the NF1.7 (a) rule earning its keep.
     ceiling_check = TA.family_ceiling_check(
-        [r for r in arms if not r.get("is_foil")], anchors, metric="pooled_tier_mae")
+        [r for r in arms if not r.get("is_foil")], anchors, metric="pooled_tier_mae",
+        family_ceiling=TA.FAMILY_CEILING)
 
     checks = {
         "degenerates_lose": all(ref["pooled_tier_mae"] < anchors[t]["pooled_tier_mae"]
@@ -1134,6 +1336,8 @@ def main(argv: list[str] | None = None) -> int:            # noqa: C901 — orch
     verdict_gate = TA.attenuation_verdict(pooled_ships=bool(ship_gate["ship"]), **checks)
 
     attribution = matched_foil_attribution(arms, boards, cohorts)
+    frontier = admissible_frontier(folds, fits, pos_scale, board, sfits)
+    null_state = classify_this_null(arms, incumbent, cohorts, boards)
     cap_ref = TA.placement_clearance(12)                    # any rank: the band itself is what we want
 
     n_scaled = int(sum(len(TA.scaled_positions_only(f.test)) for f in folds))
@@ -1211,11 +1415,46 @@ def main(argv: list[str] | None = None) -> int:            # noqa: C901 — orch
              f"`{(pw or {}).get('label', '— none —')}`. The pre-registered rule GOVERNS. Reporting "
              "both is what makes 'the eligibility choice is disclosed, not hidden' a number.")
 
+    share = frontier.get("share_of_gain_admissible")
+    if frontier.get("max_admissible_lambda") in (None, 0.0):
+        frontier_prose = (
+            "⭐⭐ **THE CAP ADMITS ESSENTIALLY NO CORRECTION AT ALL, WHICH MAKES THIS NULL STRUCTURAL "
+            "RATHER THAN A FAILURE TO FIND THE RIGHT CURVE.** The largest global λ at which the "
+            f"reference affine still clears the placement cap is **{frontier.get('max_admissible_lambda')}** "
+            f"— i.e. the constraint admits {('none of the correction' if not share else str(share))} of "
+            f"the {frontier.get('full_correction_gain')} pooled tier-MAE gain that the full correction "
+            "buys. The accuracy objective and the placement constraint are directly opposed along the "
+            "magnitude axis, so re-shaping was never going to square them: any correction large enough "
+            "to move the metric is large enough to move the top rookie past the bar.")
+    else:
+        frontier_prose = (
+            f"⭐⭐ **THE CONSTRAINT IS NOT THE BINDING PROBLEM — THE SHAPES ARE, AND THIS IS THE MOST "
+            f"USEFUL NUMBER IN THE STORY.** The cap admits the reference affine all the way up to "
+            f"λ = **{frontier['max_admissible_lambda']}**, which is worth "
+            f"**{frontier.get('admissible_gain')}** of the {frontier.get('full_correction_gain')} "
+            f"pooled tier-MAE gain the full correction buys — **{share} of it**. So there was ample "
+            "room inside the placement clause, and not one pre-registered top-attenuating SHAPE used "
+            "it: three of the four place the top rookie WORSE than the un-attenuated reference does, "
+            "and the freely-learned monotone foil moves him by a fraction of what the bar requires. "
+            "The premise 'the correction is right on average and over-lifts the very top, so re-shape "
+            "the top' is REFUTED as a mechanism — what the data supports is less correction "
+            "EVERYWHERE, not a different curve.\n\n"
+            "⛔ **AND THAT IS PRECISELY THE MOVE THIS STORY IS FORBIDDEN TO MAKE.** A global λ is the "
+            "shrink NF-D16 pre-registered and selected at 1.0; re-picking it now that a constraint "
+            "result is known is the E2.1-r inversion, so nothing on this curve is selected, shipped or "
+            "gated. ⚠️ It also cannot simply be pre-registered by a successor story as-is: "
+            f"λ = {frontier['max_admissible_lambda']} is now a KNOWN number fitted to ONE board, so "
+            "registering it would be reverse-engineering wearing a pre-registration's clothes. A "
+            "legitimate successor has to select the shrink IN-FOLD under a per-fold placement "
+            "constraint — which needs the merged veteran+rookie board rebuilt for each held-out "
+            "season, a real piece of work this harness does not have.")
+
     headline = ("✅ SHIP — an attenuated rookie-point recalibration clears BOTH the ordering "
                 "constraint and the validated placement cap"
                 if verdict_gate["ship"] else
-                "🟡 RECORDED NULL — no pre-registered top-attenuation clears both constraints; "
-                "NF-D16's correction cannot be served")
+                "🟡 RECORDED NULL — not one pre-registered top-attenuating SHAPE clears both "
+                "constraints, and three of four place the top rookie WORSE than the un-attenuated "
+                "reference; the binding problem is the SHAPE, not the constraint")
 
     out = {
         "story": "NF-D18", "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -1235,7 +1474,8 @@ def main(argv: list[str] | None = None) -> int:            # noqa: C901 — orch
         "best_recal": best_recal, "best_real_arm_metric": round(float(best_real), 4),
         "family_ceiling_check": ceiling_check, "checks": checks,
         "selection": sel, "ordering_only": ordering_only, "ship_gate": ship_gate,
-        "verdict": verdict_gate, "attribution": attribution,
+        "verdict": verdict_gate, "attribution": attribution, "frontier": frontier,
+        "null_state": null_state,
         "per_position": per_position_disclosure(arms, incumbent, cohorts, boards),
         "ordering": ordering_measurements(folds, fits), "fitted": fitted_parameters(folds, fits),
         "flips": sel["deflation"].get("flips"),
@@ -1245,7 +1485,7 @@ def main(argv: list[str] | None = None) -> int:            # noqa: C901 — orch
         "qb_max_drift": qb_drift, "headline": headline,
         "serving_fidelity": {"max_abs_diff": fidelity, "n_checked": int(len(_pt))},
         "sensitivity": sensitivity, "sensitivity_prose": sens_prose,
-        "framing_agreement_prose": framing_prose,
+        "framing_agreement_prose": framing_prose, "frontier_prose": frontier_prose,
         "limitations": [
             "⚠️ **THE PLACEMENT CONSTRAINT IS EVALUATED ON ONE BOARD.** It is a serving-time property "
             "of the 2026 draft board, not a held-out statistical criterion, so it contributes no "
@@ -1253,11 +1493,25 @@ def main(argv: list[str] | None = None) -> int:            # noqa: C901 — orch
             "that: no arm's PARAMETERS are ever tuned to the board (every form is fitted in-fold and "
             "has no strength dial), the clearance is required to be THRESHOLD-INVARIANT so no cutoff "
             "was chosen, and the ordering-only reading is reported beside it (§3c).",
-            "⚠️ **λ WAS DELIBERATELY NOT RE-OPENED, AND THAT BOUNDS WHAT A NULL HERE MEANS.** A global "
-            "shrink of NF-D16's affine might well clear the placement cap — the matched foils measure "
-            "exactly that — but re-picking a selection parameter after seeing a constraint result is "
-            "the E2.1-r inversion. So a null here is 'no top-attenuating SHAPE works', never 'nothing "
-            "could ever work'; the forbidden move is measured and reported rather than taken.",
+            "⚠️ **λ WAS DELIBERATELY NOT RE-OPENED, AND THAT BOUNDS WHAT A NULL HERE MEANS — "
+            "MEASURABLY.** §6b shows a global shrink of NF-D16's affine DOES clear the placement cap "
+            f"(up to λ = {frontier.get('max_admissible_lambda')}, retaining "
+            f"{frontier.get('share_of_gain_admissible')} of the gain), but re-picking a selection "
+            "parameter after seeing a constraint result is the E2.1-r inversion. So this null is 'no "
+            "top-attenuating SHAPE works', never 'nothing could ever work'. The forbidden move is "
+            "measured and reported rather than taken — and it cannot be laundered into a successor "
+            "story by pre-registering the number now that it is known: a legitimate successor selects "
+            "the shrink IN-FOLD under a PER-FOLD placement constraint, which needs the merged "
+            "veteran+rookie board rebuilt per held-out season and is real work this harness lacks.",
+            "⚠️ **THREE DEFECTS WERE FIXED AFTER THE FIRST RUN AND ARE DISCLOSED RATHER THAN QUIETLY "
+            "PATCHED.** (1) the shared per-form ceiling check was reading NF-D16's form → anchor map, "
+            "so every NF-D18 form resolved to a `None` ceiling — it failed LOUDLY (NF1.7 (a) working) "
+            "and the cure was to let the check be told which map to use; (2) the matched foil's λ was "
+            "clipped to [0, 1], so an arm applying MORE correction than the reference pinned at 1.0 "
+            "and its 'matched foil' silently became the reference arm itself — a control that examined "
+            "nothing; (3) a redundant branch in the ceiling-fit row floor. None of the three can "
+            "manufacture a ship: (1) is a check that can only veto, (2) touches only a non-shippable "
+            "diagnostic excluded from selection, PBO and DSR, and (3) is dead code.",
             "**`tier_mae` grades the DRAFTABLE TIER — ~6 RB / 8 WR / 3 TE per class.** A claim here is "
             "a claim about a few dozen rookie-seasons across seven draft classes; the paired per-class "
             "deltas are reported so a reader sees the spread rather than only the mean.",

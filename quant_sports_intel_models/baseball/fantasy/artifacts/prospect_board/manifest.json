@@ -1,0 +1,147 @@
+{
+ "season": 2026,
+ "generated_at": "2026-08-02T20:20:16+00:00",
+ "as_of_date": "2026-07-27",
+ "source": "e7_13_prospect_board_comps.csv",
+ "players": 1451,
+ "hasComps": true,
+ "counts": {
+  "byLeague": {
+   "NL": 738,
+   "AL": 713
+  },
+  "byType": {
+   "pitcher": 736,
+   "batter": 712,
+   "two_way": 3
+  },
+  "disagreements": 280
+ },
+ "filters": {
+  "leagues": [
+   "AL",
+   "NL"
+  ],
+  "orgs": [
+   "ARI",
+   "ATH",
+   "ATL",
+   "BAL",
+   "BOS",
+   "CHC",
+   "CHW",
+   "CIN",
+   "CLE",
+   "COL",
+   "DET",
+   "HOU",
+   "KCR",
+   "LAA",
+   "LAD",
+   "MIA",
+   "MIL",
+   "MIN",
+   "NYM",
+   "NYY",
+   "PHI",
+   "PIT",
+   "SDP",
+   "SEA",
+   "SFG",
+   "STL",
+   "TBR",
+   "TEX",
+   "TOR",
+   "WSN"
+  ],
+  "levels": [
+   "A",
+   "A+",
+   "AA",
+   "AAA",
+   "CPX",
+   "DSL",
+   "MLB"
+  ],
+  "positions": [
+   "1B",
+   "1B/3B",
+   "2B",
+   "2B/3B",
+   "2B/OF",
+   "3B",
+   "3B/1B",
+   "3B/2B",
+   "3B/2B/SS",
+   "3B/SS",
+   "3B/SS/OF",
+   "C",
+   "C/1B",
+   "C/INF",
+   "C/OF",
+   "CF",
+   "INF",
+   "INF/OF",
+   "LF",
+   "LHP",
+   "MIRP",
+   "OF",
+   "OF/2B",
+   "RF",
+   "RHP",
+   "RHP/DH",
+   "SIRP",
+   "SP",
+   "SS",
+   "SS/2B",
+   "SS/2B/OF",
+   "SS/3B",
+   "TWP"
+  ],
+  "etas": [
+   2023,
+   2024,
+   2025,
+   2026,
+   2027,
+   2028,
+   2029,
+   2030,
+   2031,
+   2032
+  ]
+ },
+ "framing": {
+  "headline": "FanGraphs + MLB Pipeline consensus, our independent MLE-translated line, and where they disagree.",
+  "claim": "This board makes no edge or win-rate claim and does not claim to beat FanGraphs. The blend is a display heuristic for ordering a draft board.",
+  "byPosition": {
+   "pitcher": "LEAD WITH FV for arms. Scouting grades add real, gate-clearing lift on top of our translated line for pitchers (E7.8) \u2014 and pitcher stats translate materially worse than batter stats (K% out-of-sample corr 0.37 vs 0.64), which is exactly the room a scouting grade fills. Our line is the secondary read.",
+   "batter": "LEAD WITH OUR LINE for bats. Our translated line plus age-relative-to-level carries most of the signal for hitters; FV adds little on top of it (E7.8, no batter stage cleared the deflated gates). Read FV as confirmation."
+  },
+  "metricConfidence": {
+   "mleK": "strong",
+   "mleBb": "strong",
+   "mleIso": "weak",
+   "mlePGb": "strong",
+   "mlePK": "weak",
+   "mlePBb": "weak"
+  },
+  "metricNotes": {
+   "mleK": "MLB-equivalent strikeout rate. Out-of-sample translation corr 0.64 \u2014 the strongest thing we translate. Read it with confidence.",
+   "mleBb": "MLB-equivalent walk rate. Translation corr 0.49. Read it with confidence.",
+   "mleIso": "MLB-equivalent isolated power. Translation corr 0.43 \u2014 WEAK BUT REAL, and park- and pitching-quality dependent. Read it as a direction, not a number.",
+   "mlePGb": "MLB-equivalent ground-ball rate. Translation corr 0.55 \u2014 the strong one on the mound.",
+   "mlePK": "MLB-equivalent strikeout rate for a pitcher. Translation corr 0.37 \u2014 weak but real. Pitcher stats translate materially worse than batter stats.",
+   "mlePBb": "MLB-equivalent walk rate for a pitcher. Translation corr 0.37 \u2014 weak but real."
+  },
+  "absences": [
+   "wOBA is deliberately absent from our hitter line: it carries no translatable signal (corr 0.22, no better than knowing the player's level). It is a measured null, not an oversight.",
+   "STOLEN BASES ARE INVISIBLE TO US. Every metric we translate is a per-PA or per-TBF rate and SB is not in the substrate, so a speed-first prospect is systematically under-served by our score. Rows carrying a plus future-speed grade are flagged \u2014 if your league scores SB, we are under-rating them."
+  ],
+  "uncertainty": "The *Sd columns are PARAMETER uncertainty on our projection. They rank confidence correctly but are TOO TIGHT to read as a calibrated interval. Treat a wide band as 'we don't know', never as a priced range.",
+  "scoresAreWithinType": "fvPctile, mleScore, ageScore, modelScore, blendScore and compScore are percentiles among players of the SAME type. A hitter's 90 and a pitcher's 90 each mean 'elite among his own kind', NOT 'equally valuable' \u2014 cross-type ordering carries no positional-value claim.",
+  "disagreement": "How much HIGHER our score is than it usually is for a player with THAT FV, in percentile points \u2014 a residual fitted within player type, NOT modelScore minus fvPctile (that raw gap flags the whole top of the board purely because two imperfectly-correlated rankings regress toward each other at the extremes). A conversation starter, not a verdict.",
+  "comps": "The most similar HISTORICAL prospects and what they ACTUALLY produced in their first 3 seasons \u2014 the pool deliberately includes the players who busted, which is why the bust share is usually the majority. Matched on what each comp looked like THEN; every comp's outcome window closed before this board's season. The comp read enters the ordering at 30% of our score (E7.13's measured weight). It is NOT a projection: the comp distribution is honest about DIFFERENCES between players and optimistic about absolute LEVELS, so no comp number is quoted as an accuracy figure.",
+  "inMajors": "Some players carry a prospect grade while already listed at MLB. Most minor-league dynasty drafts do not make them draftable \u2014 check your league's rules."
+ }
+}

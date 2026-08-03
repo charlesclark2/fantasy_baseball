@@ -1,0 +1,6314 @@
+{
+  "story": "NF-D18",
+  "generated_at": "2026-08-03T01:43:11.463808+00:00",
+  "cohorts": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "n_scaled_rows": 472,
+  "n_candidate_arms": 4,
+  "n_foils": 2,
+  "preregistration": {
+    "framing": "pooled",
+    "framing_reason": "INHERITED FROM NF-D16 VERBATIM, and inheriting rather than re-deciding is itself the point: this is the third pre-registered change asked of ONE product, and a framing re-chosen per story is a framing chosen for its answer. The ship UNIT is one change to `project_rookies` that applies at RB/TE/WR together or not at all, so the hypothesis is ONE claim and gets ONE test. The per-position reading is computed as a DISCLOSURE and does not gate.",
+    "eligibility_reason": "The PLACEMENT cap acts on ELIGIBILITY, not as a post-hoc veto on an already-selected arm. As a veto the story would be vacuous \u2014 the least-attenuated arm wins the tier metric by construction and is precisely the arm the cap refuses, so the answer would be fixed before any data was read. The question asked was whether an arm exists that clears BOTH constraints, which requires the constraint to act on the eligible SET exactly as do-no-ordering-harm already does. No arm's PARAMETERS are tuned to the board; only the discrete FORM choice is filtered, deflation is computed over that eligible set, and the ordering-only reading is reported beside it.",
+    "dsr_reading": "whole_field",
+    "dsr_min": 0.95,
+    "alpha": 0.1,
+    "pbo_max": 0.2,
+    "metric": "tier_mae",
+    "forms": [
+      "incumbent (NULL)",
+      "ols_slope",
+      "power",
+      "huber",
+      "qmap",
+      "isotonic"
+    ],
+    "fixed_lambda": 1.0,
+    "monotone_forms": [
+      "qmap"
+    ],
+    "ordering_binding_forms": [
+      "ols_slope",
+      "power",
+      "huber",
+      "isotonic"
+    ]
+  },
+  "incumbent": {
+    "label": "incumbent (NULL)",
+    "per_cohort": {
+      "2019": {
+        "n": 80,
+        "tier_mae": 0.9067,
+        "tier_bias": -0.6306,
+        "tier_mae_by_pos": {
+          "QB": 76.15,
+          "RB": 89.43,
+          "TE": 19.53,
+          "WR": 74.81
+        },
+        "tier_bias_by_pos": {
+          "QB": -76.15,
+          "RB": -56.02,
+          "TE": 2.7,
+          "WR": -60.88
+        },
+        "mae": 45.76,
+        "rmse": 65.178,
+        "bias": -18.725,
+        "slope": 1.38,
+        "rho": 0.5575,
+        "rho_by_pos": {
+          "QB": 0.8246,
+          "RB": 0.5816,
+          "WR": 0.3436,
+          "TE": 0.4804
+        },
+        "bias_by_pos": {
+          "QB": -24.28,
+          "RB": -5.68,
+          "TE": 3.76,
+          "WR": -41.04
+        }
+      },
+      "2020": {
+        "n": 77,
+        "tier_mae": 1.0422,
+        "tier_bias": -0.8416,
+        "tier_mae_by_pos": {
+          "QB": 112.02,
+          "RB": 84.15,
+          "TE": 23.66,
+          "WR": 85.72
+        },
+        "tier_bias_by_pos": {
+          "QB": -70.18,
+          "RB": -75.72,
+          "TE": -13.71,
+          "WR": -85.5
+        },
+        "mae": 44.906,
+        "rmse": 67.283,
+        "bias": -24.94,
+        "slope": 1.556,
+        "rho": 0.6686,
+        "rho_by_pos": {
+          "QB": 0.5656,
+          "RB": 0.7506,
+          "WR": 0.7103,
+          "TE": 0.6479
+        },
+        "bias_by_pos": {
+          "QB": -6.67,
+          "RB": -32.73,
+          "TE": 4.58,
+          "WR": -37.32
+        }
+      },
+      "2021": {
+        "n": 75,
+        "tier_mae": 1.084,
+        "tier_bias": -0.4711,
+        "tier_mae_by_pos": {
+          "QB": 59.85,
+          "RB": 102.66,
+          "TE": 69.68,
+          "WR": 50.5
+        },
+        "tier_bias_by_pos": {
+          "QB": 59.85,
+          "RB": -51.4,
+          "TE": -53.62,
+          "WR": -41.7
+        },
+        "mae": 43.798,
+        "rmse": 61.869,
+        "bias": -14.42,
+        "slope": 1.053,
+        "rho": 0.5797,
+        "rho_by_pos": {
+          "QB": 0.4788,
+          "RB": 0.625,
+          "WR": 0.7,
+          "TE": 0.5152
+        },
+        "bias_by_pos": {
+          "QB": -3.22,
+          "RB": -28.3,
+          "TE": -26.28,
+          "WR": -6.3
+        }
+      },
+      "2022": {
+        "n": 79,
+        "tier_mae": 0.7517,
+        "tier_bias": -0.5409,
+        "tier_mae_by_pos": {
+          "QB": 45.88,
+          "RB": 72.32,
+          "TE": 44.12,
+          "WR": 43.7
+        },
+        "tier_bias_by_pos": {
+          "QB": -25.11,
+          "RB": -70.53,
+          "TE": -44.12,
+          "WR": -2.87
+        },
+        "mae": 34.997,
+        "rmse": 49.073,
+        "bias": -13.176,
+        "slope": 0.957,
+        "rho": 0.5498,
+        "rho_by_pos": {
+          "QB": 0.5188,
+          "RB": 0.5494,
+          "WR": 0.6479,
+          "TE": 0.4833
+        },
+        "bias_by_pos": {
+          "QB": -13.61,
+          "RB": -15.26,
+          "TE": -22.45,
+          "WR": -5.03
+        }
+      },
+      "2023": {
+        "n": 80,
+        "tier_mae": 1.2094,
+        "tier_bias": -1.0087,
+        "tier_mae_by_pos": {
+          "QB": 57.45,
+          "RB": 61.0,
+          "TE": 84.41,
+          "WR": 99.72
+        },
+        "tier_bias_by_pos": {
+          "QB": 9.05,
+          "RB": -57.51,
+          "TE": -84.41,
+          "WR": -99.72
+        },
+        "mae": 44.621,
+        "rmse": 66.504,
+        "bias": -26.774,
+        "slope": 1.147,
+        "rho": 0.7473,
+        "rho_by_pos": {
+          "QB": 0.6946,
+          "RB": 0.8449,
+          "WR": 0.7471,
+          "TE": 0.7025
+        },
+        "bias_by_pos": {
+          "QB": 6.73,
+          "RB": -14.2,
+          "TE": -19.12,
+          "WR": -51.33
+        }
+      },
+      "2024": {
+        "n": 77,
+        "tier_mae": 1.0935,
+        "tier_bias": -0.7605,
+        "tier_mae_by_pos": {
+          "QB": 76.64,
+          "RB": 72.28,
+          "TE": 75.04,
+          "WR": 68.95
+        },
+        "tier_bias_by_pos": {
+          "QB": -76.64,
+          "RB": -22.04,
+          "TE": -57.0,
+          "WR": -46.42
+        },
+        "mae": 44.895,
+        "rmse": 67.884,
+        "bias": -17.861,
+        "slope": 1.299,
+        "rho": 0.5719,
+        "rho_by_pos": {
+          "QB": 0.7304,
+          "RB": 0.2642,
+          "WR": 0.7057,
+          "TE": 0.5874
+        },
+        "bias_by_pos": {
+          "QB": -29.1,
+          "RB": -14.34,
+          "TE": -20.36,
+          "WR": -15.38
+        }
+      },
+      "2025": {
+        "n": 85,
+        "tier_mae": 1.0218,
+        "tier_bias": -0.6746,
+        "tier_mae_by_pos": {
+          "QB": 95.29,
+          "RB": 81.17,
+          "TE": 60.99,
+          "WR": 58.45
+        },
+        "tier_bias_by_pos": {
+          "QB": -47.68,
+          "RB": -70.58,
+          "TE": -60.99,
+          "WR": -4.6
+        },
+        "mae": 43.73,
+        "rmse": 60.722,
+        "bias": -19.483,
+        "slope": 0.844,
+        "rho": 0.6178,
+        "rho_by_pos": {
+          "QB": 0.6314,
+          "RB": 0.5127,
+          "WR": 0.491,
+          "TE": 0.8359
+        },
+        "bias_by_pos": {
+          "QB": -9.71,
+          "RB": -29.49,
+          "TE": -30.98,
+          "WR": -9.57
+        }
+      }
+    },
+    "per_cohort_pooled": {
+      "2019": 0.9051,
+      "2020": 0.97,
+      "2021": 1.2268,
+      "2022": 0.8342,
+      "2023": 1.3939,
+      "2024": 1.1631,
+      "2025": 1.0233
+    },
+    "pooled_tier_mae": 1.0738,
+    "tier_mae": 1.0738,
+    "universe_mae": 42.054,
+    "universe_bias": -20.869,
+    "key": "incumbent@0",
+    "form": "incumbent",
+    "lam": 0.0,
+    "recalibrates": false,
+    "shippable": true,
+    "attenuates": false,
+    "is_foil": false,
+    "matches": null,
+    "monotone": false,
+    "learned": false,
+    "universe_mae_QB": 50.15,
+    "tier_mae_QB": 74.754,
+    "tier_bias_QB": -32.409,
+    "rho_QB": 0.6349,
+    "universe_mae_RB": 46.4,
+    "tier_mae_RB": 80.43,
+    "tier_bias_RB": -57.686,
+    "rho_RB": 0.5898,
+    "universe_mae_TE": 31.24,
+    "tier_mae_TE": 53.919,
+    "tier_bias_TE": -44.45,
+    "rho_TE": 0.6075,
+    "universe_mae_WR": 44.01,
+    "tier_mae_WR": 68.836,
+    "tier_bias_WR": -48.813,
+    "rho_WR": 0.6208
+  },
+  "arms": [
+    {
+      "label": "incumbent (NULL)",
+      "per_cohort": {
+        "2019": {
+          "n": 80,
+          "tier_mae": 0.9067,
+          "tier_bias": -0.6306,
+          "tier_mae_by_pos": {
+            "QB": 76.15,
+            "RB": 89.43,
+            "TE": 19.53,
+            "WR": 74.81
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.15,
+            "RB": -56.02,
+            "TE": 2.7,
+            "WR": -60.88
+          },
+          "mae": 45.76,
+          "rmse": 65.178,
+          "bias": -18.725,
+          "slope": 1.38,
+          "rho": 0.5575,
+          "rho_by_pos": {
+            "QB": 0.8246,
+            "RB": 0.5816,
+            "WR": 0.3436,
+            "TE": 0.4804
+          },
+          "bias_by_pos": {
+            "QB": -24.28,
+            "RB": -5.68,
+            "TE": 3.76,
+            "WR": -41.04
+          }
+        },
+        "2020": {
+          "n": 77,
+          "tier_mae": 1.0422,
+          "tier_bias": -0.8416,
+          "tier_mae_by_pos": {
+            "QB": 112.02,
+            "RB": 84.15,
+            "TE": 23.66,
+            "WR": 85.72
+          },
+          "tier_bias_by_pos": {
+            "QB": -70.18,
+            "RB": -75.72,
+            "TE": -13.71,
+            "WR": -85.5
+          },
+          "mae": 44.906,
+          "rmse": 67.283,
+          "bias": -24.94,
+          "slope": 1.556,
+          "rho": 0.6686,
+          "rho_by_pos": {
+            "QB": 0.5656,
+            "RB": 0.7506,
+            "WR": 0.7103,
+            "TE": 0.6479
+          },
+          "bias_by_pos": {
+            "QB": -6.67,
+            "RB": -32.73,
+            "TE": 4.58,
+            "WR": -37.32
+          }
+        },
+        "2021": {
+          "n": 75,
+          "tier_mae": 1.084,
+          "tier_bias": -0.4711,
+          "tier_mae_by_pos": {
+            "QB": 59.85,
+            "RB": 102.66,
+            "TE": 69.68,
+            "WR": 50.5
+          },
+          "tier_bias_by_pos": {
+            "QB": 59.85,
+            "RB": -51.4,
+            "TE": -53.62,
+            "WR": -41.7
+          },
+          "mae": 43.798,
+          "rmse": 61.869,
+          "bias": -14.42,
+          "slope": 1.053,
+          "rho": 0.5797,
+          "rho_by_pos": {
+            "QB": 0.4788,
+            "RB": 0.625,
+            "WR": 0.7,
+            "TE": 0.5152
+          },
+          "bias_by_pos": {
+            "QB": -3.22,
+            "RB": -28.3,
+            "TE": -26.28,
+            "WR": -6.3
+          }
+        },
+        "2022": {
+          "n": 79,
+          "tier_mae": 0.7517,
+          "tier_bias": -0.5409,
+          "tier_mae_by_pos": {
+            "QB": 45.88,
+            "RB": 72.32,
+            "TE": 44.12,
+            "WR": 43.7
+          },
+          "tier_bias_by_pos": {
+            "QB": -25.11,
+            "RB": -70.53,
+            "TE": -44.12,
+            "WR": -2.87
+          },
+          "mae": 34.997,
+          "rmse": 49.073,
+          "bias": -13.176,
+          "slope": 0.957,
+          "rho": 0.5498,
+          "rho_by_pos": {
+            "QB": 0.5188,
+            "RB": 0.5494,
+            "WR": 0.6479,
+            "TE": 0.4833
+          },
+          "bias_by_pos": {
+            "QB": -13.61,
+            "RB": -15.26,
+            "TE": -22.45,
+            "WR": -5.03
+          }
+        },
+        "2023": {
+          "n": 80,
+          "tier_mae": 1.2094,
+          "tier_bias": -1.0087,
+          "tier_mae_by_pos": {
+            "QB": 57.45,
+            "RB": 61.0,
+            "TE": 84.41,
+            "WR": 99.72
+          },
+          "tier_bias_by_pos": {
+            "QB": 9.05,
+            "RB": -57.51,
+            "TE": -84.41,
+            "WR": -99.72
+          },
+          "mae": 44.621,
+          "rmse": 66.504,
+          "bias": -26.774,
+          "slope": 1.147,
+          "rho": 0.7473,
+          "rho_by_pos": {
+            "QB": 0.6946,
+            "RB": 0.8449,
+            "WR": 0.7471,
+            "TE": 0.7025
+          },
+          "bias_by_pos": {
+            "QB": 6.73,
+            "RB": -14.2,
+            "TE": -19.12,
+            "WR": -51.33
+          }
+        },
+        "2024": {
+          "n": 77,
+          "tier_mae": 1.0935,
+          "tier_bias": -0.7605,
+          "tier_mae_by_pos": {
+            "QB": 76.64,
+            "RB": 72.28,
+            "TE": 75.04,
+            "WR": 68.95
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.64,
+            "RB": -22.04,
+            "TE": -57.0,
+            "WR": -46.42
+          },
+          "mae": 44.895,
+          "rmse": 67.884,
+          "bias": -17.861,
+          "slope": 1.299,
+          "rho": 0.5719,
+          "rho_by_pos": {
+            "QB": 0.7304,
+            "RB": 0.2642,
+            "WR": 0.7057,
+            "TE": 0.5874
+          },
+          "bias_by_pos": {
+            "QB": -29.1,
+            "RB": -14.34,
+            "TE": -20.36,
+            "WR": -15.38
+          }
+        },
+        "2025": {
+          "n": 85,
+          "tier_mae": 1.0218,
+          "tier_bias": -0.6746,
+          "tier_mae_by_pos": {
+            "QB": 95.29,
+            "RB": 81.17,
+            "TE": 60.99,
+            "WR": 58.45
+          },
+          "tier_bias_by_pos": {
+            "QB": -47.68,
+            "RB": -70.58,
+            "TE": -60.99,
+            "WR": -4.6
+          },
+          "mae": 43.73,
+          "rmse": 60.722,
+          "bias": -19.483,
+          "slope": 0.844,
+          "rho": 0.6178,
+          "rho_by_pos": {
+            "QB": 0.6314,
+            "RB": 0.5127,
+            "WR": 0.491,
+            "TE": 0.8359
+          },
+          "bias_by_pos": {
+            "QB": -9.71,
+            "RB": -29.49,
+            "TE": -30.98,
+            "WR": -9.57
+          }
+        }
+      },
+      "per_cohort_pooled": {
+        "2019": 0.9051,
+        "2020": 0.97,
+        "2021": 1.2268,
+        "2022": 0.8342,
+        "2023": 1.3939,
+        "2024": 1.1631,
+        "2025": 1.0233
+      },
+      "pooled_tier_mae": 1.0738,
+      "tier_mae": 1.0738,
+      "universe_mae": 42.054,
+      "universe_bias": -20.869,
+      "key": "incumbent@0",
+      "form": "incumbent",
+      "lam": 0.0,
+      "recalibrates": false,
+      "shippable": true,
+      "attenuates": false,
+      "is_foil": false,
+      "matches": null,
+      "monotone": false,
+      "learned": false,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 46.4,
+      "tier_mae_RB": 80.43,
+      "tier_bias_RB": -57.686,
+      "rho_RB": 0.5898,
+      "universe_mae_TE": 31.24,
+      "tier_mae_TE": 53.919,
+      "tier_bias_TE": -44.45,
+      "rho_TE": 0.6075,
+      "universe_mae_WR": 44.01,
+      "tier_mae_WR": 68.836,
+      "tier_bias_WR": -48.813,
+      "rho_WR": 0.6208
+    },
+    {
+      "label": "ols_slope",
+      "per_cohort": {
+        "2019": {
+          "n": 80,
+          "tier_mae": 0.887,
+          "tier_bias": -0.4824,
+          "tier_mae_by_pos": {
+            "QB": 76.15,
+            "RB": 80.11,
+            "TE": 20.63,
+            "WR": 74.97
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.15,
+            "RB": -34.21,
+            "TE": 7.77,
+            "WR": -47.14
+          },
+          "mae": 46.33,
+          "rmse": 61.792,
+          "bias": -8.291,
+          "slope": 1.458,
+          "rho": 0.5575,
+          "rho_by_pos": {
+            "QB": 0.8246,
+            "RB": 0.5816,
+            "WR": 0.3436,
+            "TE": 0.4804
+          },
+          "bias_by_pos": {
+            "QB": -24.28,
+            "RB": 6.65,
+            "TE": 10.1,
+            "WR": -25.85
+          }
+        },
+        "2020": {
+          "n": 77,
+          "tier_mae": 0.9348,
+          "tier_bias": -0.6761,
+          "tier_mae_by_pos": {
+            "QB": 112.02,
+            "RB": 60.86,
+            "TE": 19.9,
+            "WR": 81.74
+          },
+          "tier_bias_by_pos": {
+            "QB": -70.18,
+            "RB": -43.63,
+            "TE": -4.36,
+            "WR": -81.62
+          },
+          "mae": 43.613,
+          "rmse": 63.052,
+          "bias": -12.135,
+          "slope": 1.541,
+          "rho": 0.6686,
+          "rho_by_pos": {
+            "QB": 0.5656,
+            "RB": 0.7506,
+            "WR": 0.7103,
+            "TE": 0.6479
+          },
+          "bias_by_pos": {
+            "QB": -6.67,
+            "RB": -12.28,
+            "TE": 12.17,
+            "WR": -22.27
+          }
+        },
+        "2021": {
+          "n": 75,
+          "tier_mae": 1.0051,
+          "tier_bias": -0.2575,
+          "tier_mae_by_pos": {
+            "QB": 59.85,
+            "RB": 91.85,
+            "TE": 62.2,
+            "WR": 50.2
+          },
+          "tier_bias_by_pos": {
+            "QB": 59.85,
+            "RB": -14.58,
+            "TE": -39.76,
+            "WR": -36.75
+          },
+          "mae": 47.719,
+          "rmse": 61.435,
+          "bias": -0.893,
+          "slope": 1.01,
+          "rho": 0.5797,
+          "rho_by_pos": {
+            "QB": 0.4788,
+            "RB": 0.625,
+            "WR": 0.7,
+            "TE": 0.5152
+          },
+          "bias_by_pos": {
+            "QB": -3.22,
+            "RB": -10.1,
+            "TE": -16.29,
+            "WR": 9.43
+          }
+        },
+        "2022": {
+          "n": 79,
+          "tier_mae": 0.6502,
+          "tier_bias": -0.3419,
+          "tier_mae_by_pos": {
+            "QB": 45.88,
+            "RB": 61.69,
+            "TE": 31.4,
+            "WR": 44.27
+          },
+          "tier_bias_by_pos": {
+            "QB": -25.11,
+            "RB": -44.63,
+            "TE": -31.4,
+            "WR": 10.66
+          },
+          "mae": 37.386,
+          "rmse": 47.372,
+          "bias": -0.729,
+          "slope": 0.891,
+          "rho": 0.5498,
+          "rho_by_pos": {
+            "QB": 0.5188,
+            "RB": 0.5494,
+            "WR": 0.6479,
+            "TE": 0.4833
+          },
+          "bias_by_pos": {
+            "QB": -13.61,
+            "RB": 0.37,
+            "TE": -13.93,
+            "WR": 11.47
+          }
+        },
+        "2023": {
+          "n": 80,
+          "tier_mae": 1.0906,
+          "tier_bias": -0.6624,
+          "tier_mae_by_pos": {
+            "QB": 57.45,
+            "RB": 52.93,
+            "TE": 76.13,
+            "WR": 87.24
+          },
+          "tier_bias_by_pos": {
+            "QB": 9.05,
+            "RB": -12.37,
+            "TE": -58.29,
+            "WR": -85.1
+          },
+          "mae": 42.279,
+          "rmse": 60.466,
+          "bias": -12.219,
+          "slope": 1.011,
+          "rho": 0.7473,
+          "rho_by_pos": {
+            "QB": 0.6946,
+            "RB": 0.8449,
+            "WR": 0.7471,
+            "TE": 0.7025
+          },
+          "bias_by_pos": {
+            "QB": 6.73,
+            "RB": 9.3,
+            "TE": -5.75,
+            "WR": -34.94
+          }
+        },
+        "2024": {
+          "n": 77,
+          "tier_mae": 1.0455,
+          "tier_bias": -0.5309,
+          "tier_mae_by_pos": {
+            "QB": 76.64,
+            "RB": 82.83,
+            "TE": 63.13,
+            "WR": 64.21
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.64,
+            "RB": -0.35,
+            "TE": -34.73,
+            "WR": -34.42
+          },
+          "mae": 48.05,
+          "rmse": 66.282,
+          "bias": -4.596,
+          "slope": 1.32,
+          "rho": 0.5719,
+          "rho_by_pos": {
+            "QB": 0.7304,
+            "RB": 0.2642,
+            "WR": 0.7057,
+            "TE": 0.5874
+          },
+          "bias_by_pos": {
+            "QB": -29.1,
+            "RB": 2.0,
+            "TE": -9.0,
+            "WR": 1.04
+          }
+        },
+        "2025": {
+          "n": 85,
+          "tier_mae": 0.7978,
+          "tier_bias": -0.2898,
+          "tier_mae_by_pos": {
+            "QB": 95.29,
+            "RB": 75.84,
+            "TE": 22.61,
+            "WR": 54.7
+          },
+          "tier_bias_by_pos": {
+            "QB": -47.68,
+            "RB": -26.77,
+            "TE": -22.61,
+            "WR": 10.5
+          },
+          "mae": 43.08,
+          "rmse": 57.015,
+          "bias": -4.25,
+          "slope": 0.771,
+          "rho": 0.6178,
+          "rho_by_pos": {
+            "QB": 0.6314,
+            "RB": 0.5127,
+            "WR": 0.491,
+            "TE": 0.8359
+          },
+          "bias_by_pos": {
+            "QB": -9.71,
+            "RB": -7.39,
+            "TE": -16.61,
+            "WR": 7.51
+          }
+        }
+      },
+      "per_cohort_pooled": {
+        "2019": 0.8787,
+        "2020": 0.8268,
+        "2021": 1.1216,
+        "2022": 0.6988,
+        "2023": 1.2354,
+        "2024": 1.0991,
+        "2025": 0.7245
+      },
+      "pooled_tier_mae": 0.9407,
+      "tier_mae": 0.9407,
+      "universe_mae": 42.963,
+      "universe_bias": -5.405,
+      "key": "ols_slope@1",
+      "form": "ols_slope",
+      "lam": 1.0,
+      "recalibrates": true,
+      "shippable": true,
+      "attenuates": false,
+      "is_foil": false,
+      "matches": null,
+      "monotone": false,
+      "learned": false,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 46.9,
+      "tier_mae_RB": 72.301,
+      "tier_bias_RB": -25.22,
+      "rho_RB": 0.5898,
+      "universe_mae_TE": 29.54,
+      "tier_mae_TE": 42.286,
+      "tier_bias_TE": -26.197,
+      "rho_TE": 0.6075,
+      "universe_mae_WR": 46.35,
+      "tier_mae_WR": 65.333,
+      "tier_bias_WR": -37.696,
+      "rho_WR": 0.6208
+    },
+    {
+      "label": "power",
+      "per_cohort": {
+        "2019": {
+          "n": 80,
+          "tier_mae": 2.0178,
+          "tier_bias": 0.2803,
+          "tier_mae_by_pos": {
+            "QB": 76.15,
+            "RB": 105.99,
+            "TE": 206.38,
+            "WR": 83.62
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.15,
+            "RB": -101.26,
+            "TE": 206.38,
+            "WR": -79.68
+          },
+          "mae": 56.874,
+          "rmse": 88.574,
+          "bias": -27.752,
+          "slope": 0.273,
+          "rho": 0.5575,
+          "rho_by_pos": {
+            "QB": 0.8246,
+            "RB": 0.5816,
+            "WR": 0.3436,
+            "TE": 0.4804
+          },
+          "bias_by_pos": {
+            "QB": -24.28,
+            "RB": -40.06,
+            "TE": 42.75,
+            "WR": -58.41
+          }
+        },
+        "2020": {
+          "n": 77,
+          "tier_mae": 0.9602,
+          "tier_bias": -0.6823,
+          "tier_mae_by_pos": {
+            "QB": 112.02,
+            "RB": 92.46,
+            "TE": 16.49,
+            "WR": 68.98
+          },
+          "tier_bias_by_pos": {
+            "QB": -70.18,
+            "RB": -91.95,
+            "TE": -5.84,
+            "WR": -44.18
+          },
+          "mae": 44.206,
+          "rmse": 67.265,
+          "bias": -29.079,
+          "slope": 1.146,
+          "rho": 0.6686,
+          "rho_by_pos": {
+            "QB": 0.5656,
+            "RB": 0.7506,
+            "WR": 0.7103,
+            "TE": 0.6479
+          },
+          "bias_by_pos": {
+            "QB": -6.67,
+            "RB": -53.62,
+            "TE": 3.9,
+            "WR": -35.45
+          }
+        },
+        "2021": {
+          "n": 75,
+          "tier_mae": 2.2436,
+          "tier_bias": 1.3833,
+          "tier_mae_by_pos": {
+            "QB": 59.85,
+            "RB": 109.51,
+            "TE": 116.45,
+            "WR": 278.91
+          },
+          "tier_bias_by_pos": {
+            "QB": 59.85,
+            "RB": -46.82,
+            "TE": 54.68,
+            "WR": 274.99
+          },
+          "mae": 71.35,
+          "rmse": 149.235,
+          "bias": 19.749,
+          "slope": 0.259,
+          "rho": 0.5797,
+          "rho_by_pos": {
+            "QB": 0.4788,
+            "RB": 0.625,
+            "WR": 0.7,
+            "TE": 0.5152
+          },
+          "bias_by_pos": {
+            "QB": -3.22,
+            "RB": -41.61,
+            "TE": 5.75,
+            "WR": 65.37
+          }
+        },
+        "2022": {
+          "n": 79,
+          "tier_mae": 1.9615,
+          "tier_bias": 1.0296,
+          "tier_mae_by_pos": {
+            "QB": 45.88,
+            "RB": 84.85,
+            "TE": 34.74,
+            "WR": 380.96
+          },
+          "tier_bias_by_pos": {
+            "QB": -25.11,
+            "RB": -26.31,
+            "TE": -27.23,
+            "WR": 366.66
+          },
+          "mae": 68.458,
+          "rmse": 152.835,
+          "bias": 26.833,
+          "slope": 0.183,
+          "rho": 0.5498,
+          "rho_by_pos": {
+            "QB": 0.5188,
+            "RB": 0.5494,
+            "WR": 0.6479,
+            "TE": 0.4833
+          },
+          "bias_by_pos": {
+            "QB": -13.61,
+            "RB": -11.5,
+            "TE": -21.03,
+            "WR": 103.8
+          }
+        },
+        "2023": {
+          "n": 80,
+          "tier_mae": 2.1072,
+          "tier_bias": 1.0269,
+          "tier_mae_by_pos": {
+            "QB": 57.45,
+            "RB": 304.98,
+            "TE": 117.54,
+            "WR": 84.45
+          },
+          "tier_bias_by_pos": {
+            "QB": 9.05,
+            "RB": 238.99,
+            "TE": 59.95,
+            "WR": -25.64
+          },
+          "mae": 62.212,
+          "rmse": 136.958,
+          "bias": 8.144,
+          "slope": 0.261,
+          "rho": 0.7473,
+          "rho_by_pos": {
+            "QB": 0.6946,
+            "RB": 0.8449,
+            "WR": 0.7471,
+            "TE": 0.7025
+          },
+          "bias_by_pos": {
+            "QB": 6.73,
+            "RB": 81.49,
+            "TE": 15.18,
+            "WR": -34.46
+          }
+        },
+        "2024": {
+          "n": 77,
+          "tier_mae": 1.979,
+          "tier_bias": 0.976,
+          "tier_mae_by_pos": {
+            "QB": 76.64,
+            "RB": 99.94,
+            "TE": 98.83,
+            "WR": 258.49
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.64,
+            "RB": 7.62,
+            "TE": 72.41,
+            "WR": 221.29
+          },
+          "mae": 66.539,
+          "rmse": 136.97,
+          "bias": 18.217,
+          "slope": 0.291,
+          "rho": 0.5719,
+          "rho_by_pos": {
+            "QB": 0.7304,
+            "RB": 0.2642,
+            "WR": 0.7057,
+            "TE": 0.5874
+          },
+          "bias_by_pos": {
+            "QB": -29.1,
+            "RB": -7.52,
+            "TE": 11.92,
+            "WR": 49.22
+          }
+        },
+        "2025": {
+          "n": 85,
+          "tier_mae": 2.64,
+          "tier_bias": 2.091,
+          "tier_mae_by_pos": {
+            "QB": 95.29,
+            "RB": 280.9,
+            "TE": 153.32,
+            "WR": 208.6
+          },
+          "tier_bias_by_pos": {
+            "QB": -47.68,
+            "RB": 232.03,
+            "TE": 153.32,
+            "WR": 204.8
+          },
+          "mae": 75.419,
+          "rmse": 176.84,
+          "bias": 30.188,
+          "slope": 0.169,
+          "rho": 0.6178,
+          "rho_by_pos": {
+            "QB": 0.6314,
+            "RB": 0.5127,
+            "WR": 0.491,
+            "TE": 0.8359
+          },
+          "bias_by_pos": {
+            "QB": -9.71,
+            "RB": 42.03,
+            "TE": 16.15,
+            "WR": 46.42
+          }
+        }
+      },
+      "per_cohort_pooled": {
+        "2019": 2.3865,
+        "2020": 0.8606,
+        "2021": 2.7729,
+        "2022": 2.4473,
+        "2023": 2.5909,
+        "2024": 2.3439,
+        "2025": 3.1808
+      },
+      "pooled_tier_mae": 2.369,
+      "tier_mae": 2.369,
+      "universe_mae": 66.021,
+      "universe_bias": 9.8,
+      "key": "power@1",
+      "form": "power",
+      "lam": 1.0,
+      "recalibrates": true,
+      "shippable": true,
+      "attenuates": true,
+      "is_foil": false,
+      "matches": null,
+      "monotone": false,
+      "learned": false,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 67.14,
+      "tier_mae_RB": 154.09,
+      "tier_bias_RB": 30.329,
+      "rho_RB": 0.5898,
+      "universe_mae_TE": 42.71,
+      "tier_mae_TE": 106.25,
+      "tier_bias_TE": 73.381,
+      "rho_TE": 0.6075,
+      "universe_mae_WR": 75.69,
+      "tier_mae_WR": 194.859,
+      "tier_bias_WR": 131.177,
+      "rho_WR": 0.6208
+    },
+    {
+      "label": "isotonic",
+      "per_cohort": {
+        "2019": {
+          "n": 80,
+          "tier_mae": 1.0338,
+          "tier_bias": 0.0254,
+          "tier_mae_by_pos": {
+            "QB": 76.15,
+            "RB": 65.21,
+            "TE": 54.08,
+            "WR": 76.25
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.15,
+            "RB": -4.21,
+            "TE": 49.59,
+            "WR": -1.71
+          },
+          "mae": 46.52,
+          "rmse": 61.581,
+          "bias": -3.664,
+          "slope": 0.862,
+          "rho": 0.5496,
+          "rho_by_pos": {
+            "QB": 0.8246,
+            "RB": 0.6085,
+            "WR": 0.3135,
+            "TE": 0.4519
+          },
+          "bias_by_pos": {
+            "QB": -24.28,
+            "RB": 7.4,
+            "TE": 20.32,
+            "WR": -19.15
+          }
+        },
+        "2020": {
+          "n": 77,
+          "tier_mae": 0.8514,
+          "tier_bias": -0.386,
+          "tier_mae_by_pos": {
+            "QB": 112.02,
+            "RB": 61.53,
+            "TE": 17.75,
+            "WR": 63.23
+          },
+          "tier_bias_by_pos": {
+            "QB": -70.18,
+            "RB": -16.96,
+            "TE": 10.58,
+            "WR": -50.13
+          },
+          "mae": 41.518,
+          "rmse": 59.159,
+          "bias": -4.759,
+          "slope": 1.118,
+          "rho": 0.6472,
+          "rho_by_pos": {
+            "QB": 0.5656,
+            "RB": 0.6725,
+            "WR": 0.7305,
+            "TE": 0.6204
+          },
+          "bias_by_pos": {
+            "QB": -6.67,
+            "RB": 2.07,
+            "TE": 19.34,
+            "WR": -15.88
+          }
+        },
+        "2021": {
+          "n": 75,
+          "tier_mae": 1.0494,
+          "tier_bias": -0.2237,
+          "tier_mae_by_pos": {
+            "QB": 59.85,
+            "RB": 89.46,
+            "TE": 61.5,
+            "WR": 65.06
+          },
+          "tier_bias_by_pos": {
+            "QB": 59.85,
+            "RB": -18.58,
+            "TE": -35.41,
+            "WR": -31.5
+          },
+          "mae": 44.934,
+          "rmse": 62.755,
+          "bias": -5.58,
+          "slope": 0.945,
+          "rho": 0.5595,
+          "rho_by_pos": {
+            "QB": 0.4788,
+            "RB": 0.6372,
+            "WR": 0.6974,
+            "TE": 0.4245
+          },
+          "bias_by_pos": {
+            "QB": -3.22,
+            "RB": -20.0,
+            "TE": -10.61,
+            "WR": 3.43
+          }
+        },
+        "2022": {
+          "n": 79,
+          "tier_mae": 0.6496,
+          "tier_bias": -0.2473,
+          "tier_mae_by_pos": {
+            "QB": 45.88,
+            "RB": 44.01,
+            "TE": 33.46,
+            "WR": 55.71
+          },
+          "tier_bias_by_pos": {
+            "QB": -25.11,
+            "RB": -25.49,
+            "TE": -21.67,
+            "WR": 5.67
+          },
+          "mae": 36.575,
+          "rmse": 46.82,
+          "bias": 0.399,
+          "slope": 0.872,
+          "rho": 0.5391,
+          "rho_by_pos": {
+            "QB": 0.5188,
+            "RB": 0.569,
+            "WR": 0.6729,
+            "TE": 0.3955
+          },
+          "bias_by_pos": {
+            "QB": -13.61,
+            "RB": 3.84,
+            "TE": -15.57,
+            "WR": 12.91
+          }
+        },
+        "2023": {
+          "n": 80,
+          "tier_mae": 0.995,
+          "tier_bias": -0.4966,
+          "tier_mae_by_pos": {
+            "QB": 57.45,
+            "RB": 48.17,
+            "TE": 72.25,
+            "WR": 71.28
+          },
+          "tier_bias_by_pos": {
+            "QB": 9.05,
+            "RB": 21.88,
+            "TE": -62.12,
+            "WR": -62.71
+          },
+          "mae": 39.429,
+          "rmse": 57.271,
+          "bias": -11.545,
+          "slope": 0.935,
+          "rho": 0.7502,
+          "rho_by_pos": {
+            "QB": 0.6946,
+            "RB": 0.8707,
+            "WR": 0.7179,
+            "TE": 0.7176
+          },
+          "bias_by_pos": {
+            "QB": 6.73,
+            "RB": 14.63,
+            "TE": -4.92,
+            "WR": -36.59
+          }
+        },
+        "2024": {
+          "n": 77,
+          "tier_mae": 1.1632,
+          "tier_bias": -0.3975,
+          "tier_mae_by_pos": {
+            "QB": 76.64,
+            "RB": 98.91,
+            "TE": 74.44,
+            "WR": 66.19
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.64,
+            "RB": 26.7,
+            "TE": -34.19,
+            "WR": -21.31
+          },
+          "mae": 49.349,
+          "rmse": 67.977,
+          "bias": -1.567,
+          "slope": 1.138,
+          "rho": 0.528,
+          "rho_by_pos": {
+            "QB": 0.7304,
+            "RB": 0.2012,
+            "WR": 0.7145,
+            "TE": 0.4657
+          },
+          "bias_by_pos": {
+            "QB": -29.1,
+            "RB": 9.26,
+            "TE": -8.88,
+            "WR": 3.72
+          }
+        },
+        "2025": {
+          "n": 85,
+          "tier_mae": 0.7653,
+          "tier_bias": -0.1802,
+          "tier_mae_by_pos": {
+            "QB": 95.29,
+            "RB": 75.03,
+            "TE": 18.75,
+            "WR": 51.71
+          },
+          "tier_bias_by_pos": {
+            "QB": -47.68,
+            "RB": -17.24,
+            "TE": -18.75,
+            "WR": 27.81
+          },
+          "mae": 41.28,
+          "rmse": 55.714,
+          "bias": -4.409,
+          "slope": 0.753,
+          "rho": 0.6265,
+          "rho_by_pos": {
+            "QB": 0.6314,
+            "RB": 0.5136,
+            "WR": 0.5212,
+            "TE": 0.8399
+          },
+          "bias_by_pos": {
+            "QB": -9.71,
+            "RB": -8.94,
+            "TE": -16.78,
+            "WR": 8.44
+          }
+        }
+      },
+      "per_cohort_pooled": {
+        "2019": 1.0746,
+        "2020": 0.7156,
+        "2021": 1.1806,
+        "2022": 0.6981,
+        "2023": 1.108,
+        "2024": 1.2561,
+        "2025": 0.6812
+      },
+      "pooled_tier_mae": 0.9592,
+      "tier_mae": 0.9592,
+      "universe_mae": 41.48,
+      "universe_bias": -3.394,
+      "key": "isotonic@1",
+      "form": "isotonic",
+      "lam": 1.0,
+      "recalibrates": true,
+      "shippable": true,
+      "attenuates": true,
+      "is_foil": false,
+      "matches": null,
+      "monotone": false,
+      "learned": true,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 44.27,
+      "tier_mae_RB": 68.903,
+      "tier_bias_RB": -4.843,
+      "rho_RB": 0.5818,
+      "universe_mae_TE": 31.23,
+      "tier_mae_TE": 47.461,
+      "tier_bias_TE": -15.996,
+      "rho_TE": 0.5594,
+      "universe_mae_WR": 44.21,
+      "tier_mae_WR": 64.204,
+      "tier_bias_WR": -19.126,
+      "rho_WR": 0.624
+    },
+    {
+      "label": "global_match(power)",
+      "per_cohort": {
+        "2019": {
+          "n": 80,
+          "tier_mae": 0.887,
+          "tier_bias": -0.4824,
+          "tier_mae_by_pos": {
+            "QB": 76.15,
+            "RB": 80.11,
+            "TE": 20.63,
+            "WR": 74.97
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.15,
+            "RB": -34.21,
+            "TE": 7.77,
+            "WR": -47.14
+          },
+          "mae": 46.33,
+          "rmse": 61.792,
+          "bias": -8.291,
+          "slope": 1.458,
+          "rho": 0.5575,
+          "rho_by_pos": {
+            "QB": 0.8246,
+            "RB": 0.5816,
+            "WR": 0.3436,
+            "TE": 0.4804
+          },
+          "bias_by_pos": {
+            "QB": -24.28,
+            "RB": 6.65,
+            "TE": 10.1,
+            "WR": -25.85
+          }
+        },
+        "2020": {
+          "n": 77,
+          "tier_mae": 0.9348,
+          "tier_bias": -0.6761,
+          "tier_mae_by_pos": {
+            "QB": 112.02,
+            "RB": 60.86,
+            "TE": 19.9,
+            "WR": 81.74
+          },
+          "tier_bias_by_pos": {
+            "QB": -70.18,
+            "RB": -43.63,
+            "TE": -4.36,
+            "WR": -81.62
+          },
+          "mae": 43.613,
+          "rmse": 63.052,
+          "bias": -12.135,
+          "slope": 1.541,
+          "rho": 0.6686,
+          "rho_by_pos": {
+            "QB": 0.5656,
+            "RB": 0.7506,
+            "WR": 0.7103,
+            "TE": 0.6479
+          },
+          "bias_by_pos": {
+            "QB": -6.67,
+            "RB": -12.28,
+            "TE": 12.17,
+            "WR": -22.27
+          }
+        },
+        "2021": {
+          "n": 75,
+          "tier_mae": 1.0051,
+          "tier_bias": -0.2575,
+          "tier_mae_by_pos": {
+            "QB": 59.85,
+            "RB": 91.85,
+            "TE": 62.2,
+            "WR": 50.2
+          },
+          "tier_bias_by_pos": {
+            "QB": 59.85,
+            "RB": -14.58,
+            "TE": -39.76,
+            "WR": -36.75
+          },
+          "mae": 47.719,
+          "rmse": 61.435,
+          "bias": -0.893,
+          "slope": 1.01,
+          "rho": 0.5797,
+          "rho_by_pos": {
+            "QB": 0.4788,
+            "RB": 0.625,
+            "WR": 0.7,
+            "TE": 0.5152
+          },
+          "bias_by_pos": {
+            "QB": -3.22,
+            "RB": -10.1,
+            "TE": -16.29,
+            "WR": 9.43
+          }
+        },
+        "2022": {
+          "n": 79,
+          "tier_mae": 0.6502,
+          "tier_bias": -0.3419,
+          "tier_mae_by_pos": {
+            "QB": 45.88,
+            "RB": 61.69,
+            "TE": 31.4,
+            "WR": 44.27
+          },
+          "tier_bias_by_pos": {
+            "QB": -25.11,
+            "RB": -44.63,
+            "TE": -31.4,
+            "WR": 10.66
+          },
+          "mae": 37.386,
+          "rmse": 47.372,
+          "bias": -0.729,
+          "slope": 0.891,
+          "rho": 0.5498,
+          "rho_by_pos": {
+            "QB": 0.5188,
+            "RB": 0.5494,
+            "WR": 0.6479,
+            "TE": 0.4833
+          },
+          "bias_by_pos": {
+            "QB": -13.61,
+            "RB": 0.37,
+            "TE": -13.93,
+            "WR": 11.47
+          }
+        },
+        "2023": {
+          "n": 80,
+          "tier_mae": 1.0906,
+          "tier_bias": -0.6624,
+          "tier_mae_by_pos": {
+            "QB": 57.45,
+            "RB": 52.93,
+            "TE": 76.13,
+            "WR": 87.24
+          },
+          "tier_bias_by_pos": {
+            "QB": 9.05,
+            "RB": -12.37,
+            "TE": -58.29,
+            "WR": -85.1
+          },
+          "mae": 42.279,
+          "rmse": 60.466,
+          "bias": -12.219,
+          "slope": 1.011,
+          "rho": 0.7473,
+          "rho_by_pos": {
+            "QB": 0.6946,
+            "RB": 0.8449,
+            "WR": 0.7471,
+            "TE": 0.7025
+          },
+          "bias_by_pos": {
+            "QB": 6.73,
+            "RB": 9.3,
+            "TE": -5.75,
+            "WR": -34.94
+          }
+        },
+        "2024": {
+          "n": 77,
+          "tier_mae": 1.0455,
+          "tier_bias": -0.5309,
+          "tier_mae_by_pos": {
+            "QB": 76.64,
+            "RB": 82.83,
+            "TE": 63.13,
+            "WR": 64.21
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.64,
+            "RB": -0.35,
+            "TE": -34.73,
+            "WR": -34.42
+          },
+          "mae": 48.05,
+          "rmse": 66.282,
+          "bias": -4.596,
+          "slope": 1.32,
+          "rho": 0.5719,
+          "rho_by_pos": {
+            "QB": 0.7304,
+            "RB": 0.2642,
+            "WR": 0.7057,
+            "TE": 0.5874
+          },
+          "bias_by_pos": {
+            "QB": -29.1,
+            "RB": 2.0,
+            "TE": -9.0,
+            "WR": 1.04
+          }
+        },
+        "2025": {
+          "n": 85,
+          "tier_mae": 0.7978,
+          "tier_bias": -0.2898,
+          "tier_mae_by_pos": {
+            "QB": 95.29,
+            "RB": 75.84,
+            "TE": 22.61,
+            "WR": 54.7
+          },
+          "tier_bias_by_pos": {
+            "QB": -47.68,
+            "RB": -26.77,
+            "TE": -22.61,
+            "WR": 10.5
+          },
+          "mae": 43.08,
+          "rmse": 57.015,
+          "bias": -4.25,
+          "slope": 0.771,
+          "rho": 0.6178,
+          "rho_by_pos": {
+            "QB": 0.6314,
+            "RB": 0.5127,
+            "WR": 0.491,
+            "TE": 0.8359
+          },
+          "bias_by_pos": {
+            "QB": -9.71,
+            "RB": -7.39,
+            "TE": -16.61,
+            "WR": 7.51
+          }
+        }
+      },
+      "per_cohort_pooled": {
+        "2019": 0.8787,
+        "2020": 0.8268,
+        "2021": 1.1216,
+        "2022": 0.6988,
+        "2023": 1.2354,
+        "2024": 1.0991,
+        "2025": 0.7245
+      },
+      "pooled_tier_mae": 0.9407,
+      "tier_mae": 0.9407,
+      "universe_mae": 42.963,
+      "universe_bias": -5.405,
+      "key": "global_match(power)",
+      "form": "ols_slope",
+      "lam": null,
+      "recalibrates": true,
+      "shippable": false,
+      "attenuates": false,
+      "is_foil": true,
+      "matches": "power",
+      "monotone": false,
+      "learned": false,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 46.9,
+      "tier_mae_RB": 72.301,
+      "tier_bias_RB": -25.22,
+      "rho_RB": 0.5898,
+      "universe_mae_TE": 29.54,
+      "tier_mae_TE": 42.286,
+      "tier_bias_TE": -26.197,
+      "rho_TE": 0.6075,
+      "universe_mae_WR": 46.35,
+      "tier_mae_WR": 65.333,
+      "tier_bias_WR": -37.696,
+      "rho_WR": 0.6208
+    },
+    {
+      "label": "global_match(isotonic)",
+      "per_cohort": {
+        "2019": {
+          "n": 80,
+          "tier_mae": 0.887,
+          "tier_bias": -0.4824,
+          "tier_mae_by_pos": {
+            "QB": 76.15,
+            "RB": 80.11,
+            "TE": 20.63,
+            "WR": 74.97
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.15,
+            "RB": -34.21,
+            "TE": 7.77,
+            "WR": -47.14
+          },
+          "mae": 46.33,
+          "rmse": 61.792,
+          "bias": -8.291,
+          "slope": 1.458,
+          "rho": 0.5575,
+          "rho_by_pos": {
+            "QB": 0.8246,
+            "RB": 0.5816,
+            "WR": 0.3436,
+            "TE": 0.4804
+          },
+          "bias_by_pos": {
+            "QB": -24.28,
+            "RB": 6.65,
+            "TE": 10.1,
+            "WR": -25.85
+          }
+        },
+        "2020": {
+          "n": 77,
+          "tier_mae": 0.9348,
+          "tier_bias": -0.6761,
+          "tier_mae_by_pos": {
+            "QB": 112.02,
+            "RB": 60.86,
+            "TE": 19.9,
+            "WR": 81.74
+          },
+          "tier_bias_by_pos": {
+            "QB": -70.18,
+            "RB": -43.63,
+            "TE": -4.36,
+            "WR": -81.62
+          },
+          "mae": 43.613,
+          "rmse": 63.052,
+          "bias": -12.135,
+          "slope": 1.541,
+          "rho": 0.6686,
+          "rho_by_pos": {
+            "QB": 0.5656,
+            "RB": 0.7506,
+            "WR": 0.7103,
+            "TE": 0.6479
+          },
+          "bias_by_pos": {
+            "QB": -6.67,
+            "RB": -12.28,
+            "TE": 12.17,
+            "WR": -22.27
+          }
+        },
+        "2021": {
+          "n": 75,
+          "tier_mae": 1.0051,
+          "tier_bias": -0.2575,
+          "tier_mae_by_pos": {
+            "QB": 59.85,
+            "RB": 91.85,
+            "TE": 62.2,
+            "WR": 50.2
+          },
+          "tier_bias_by_pos": {
+            "QB": 59.85,
+            "RB": -14.58,
+            "TE": -39.76,
+            "WR": -36.75
+          },
+          "mae": 47.719,
+          "rmse": 61.435,
+          "bias": -0.893,
+          "slope": 1.01,
+          "rho": 0.5797,
+          "rho_by_pos": {
+            "QB": 0.4788,
+            "RB": 0.625,
+            "WR": 0.7,
+            "TE": 0.5152
+          },
+          "bias_by_pos": {
+            "QB": -3.22,
+            "RB": -10.1,
+            "TE": -16.29,
+            "WR": 9.43
+          }
+        },
+        "2022": {
+          "n": 79,
+          "tier_mae": 0.6502,
+          "tier_bias": -0.3419,
+          "tier_mae_by_pos": {
+            "QB": 45.88,
+            "RB": 61.69,
+            "TE": 31.4,
+            "WR": 44.27
+          },
+          "tier_bias_by_pos": {
+            "QB": -25.11,
+            "RB": -44.63,
+            "TE": -31.4,
+            "WR": 10.66
+          },
+          "mae": 37.386,
+          "rmse": 47.372,
+          "bias": -0.729,
+          "slope": 0.891,
+          "rho": 0.5498,
+          "rho_by_pos": {
+            "QB": 0.5188,
+            "RB": 0.5494,
+            "WR": 0.6479,
+            "TE": 0.4833
+          },
+          "bias_by_pos": {
+            "QB": -13.61,
+            "RB": 0.37,
+            "TE": -13.93,
+            "WR": 11.47
+          }
+        },
+        "2023": {
+          "n": 80,
+          "tier_mae": 1.0906,
+          "tier_bias": -0.6624,
+          "tier_mae_by_pos": {
+            "QB": 57.45,
+            "RB": 52.93,
+            "TE": 76.13,
+            "WR": 87.24
+          },
+          "tier_bias_by_pos": {
+            "QB": 9.05,
+            "RB": -12.37,
+            "TE": -58.29,
+            "WR": -85.1
+          },
+          "mae": 42.279,
+          "rmse": 60.466,
+          "bias": -12.219,
+          "slope": 1.011,
+          "rho": 0.7473,
+          "rho_by_pos": {
+            "QB": 0.6946,
+            "RB": 0.8449,
+            "WR": 0.7471,
+            "TE": 0.7025
+          },
+          "bias_by_pos": {
+            "QB": 6.73,
+            "RB": 9.3,
+            "TE": -5.75,
+            "WR": -34.94
+          }
+        },
+        "2024": {
+          "n": 77,
+          "tier_mae": 1.0455,
+          "tier_bias": -0.5309,
+          "tier_mae_by_pos": {
+            "QB": 76.64,
+            "RB": 82.83,
+            "TE": 63.13,
+            "WR": 64.21
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.64,
+            "RB": -0.35,
+            "TE": -34.73,
+            "WR": -34.42
+          },
+          "mae": 48.05,
+          "rmse": 66.282,
+          "bias": -4.596,
+          "slope": 1.32,
+          "rho": 0.5719,
+          "rho_by_pos": {
+            "QB": 0.7304,
+            "RB": 0.2642,
+            "WR": 0.7057,
+            "TE": 0.5874
+          },
+          "bias_by_pos": {
+            "QB": -29.1,
+            "RB": 2.0,
+            "TE": -9.0,
+            "WR": 1.04
+          }
+        },
+        "2025": {
+          "n": 85,
+          "tier_mae": 0.7978,
+          "tier_bias": -0.2898,
+          "tier_mae_by_pos": {
+            "QB": 95.29,
+            "RB": 75.84,
+            "TE": 22.61,
+            "WR": 54.7
+          },
+          "tier_bias_by_pos": {
+            "QB": -47.68,
+            "RB": -26.77,
+            "TE": -22.61,
+            "WR": 10.5
+          },
+          "mae": 43.08,
+          "rmse": 57.015,
+          "bias": -4.25,
+          "slope": 0.771,
+          "rho": 0.6178,
+          "rho_by_pos": {
+            "QB": 0.6314,
+            "RB": 0.5127,
+            "WR": 0.491,
+            "TE": 0.8359
+          },
+          "bias_by_pos": {
+            "QB": -9.71,
+            "RB": -7.39,
+            "TE": -16.61,
+            "WR": 7.51
+          }
+        }
+      },
+      "per_cohort_pooled": {
+        "2019": 0.8787,
+        "2020": 0.8268,
+        "2021": 1.1216,
+        "2022": 0.6988,
+        "2023": 1.2354,
+        "2024": 1.0991,
+        "2025": 0.7245
+      },
+      "pooled_tier_mae": 0.9407,
+      "tier_mae": 0.9407,
+      "universe_mae": 42.963,
+      "universe_bias": -5.405,
+      "key": "global_match(isotonic)",
+      "form": "ols_slope",
+      "lam": null,
+      "recalibrates": true,
+      "shippable": false,
+      "attenuates": false,
+      "is_foil": true,
+      "matches": "isotonic",
+      "monotone": false,
+      "learned": false,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 46.9,
+      "tier_mae_RB": 72.301,
+      "tier_bias_RB": -25.22,
+      "rho_RB": 0.5898,
+      "universe_mae_TE": 29.54,
+      "tier_mae_TE": 42.286,
+      "tier_bias_TE": -26.197,
+      "rho_TE": 0.6075,
+      "universe_mae_WR": 46.35,
+      "tier_mae_WR": 65.333,
+      "tier_bias_WR": -37.696,
+      "rho_WR": 0.6208
+    }
+  ],
+  "anchors": {
+    "oracle_perplayer": {
+      "label": "oracle_perplayer",
+      "per_cohort": {
+        "2019": {
+          "n": 80,
+          "tier_mae": 0.2279,
+          "tier_bias": -0.2279,
+          "tier_mae_by_pos": {
+            "QB": 76.15,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.15,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          },
+          "mae": 7.704,
+          "rmse": 29.149,
+          "bias": -3.338,
+          "slope": 1.051,
+          "rho": 0.9562,
+          "rho_by_pos": {
+            "QB": 0.8246,
+            "RB": 1.0,
+            "WR": 1.0,
+            "TE": 1.0
+          },
+          "bias_by_pos": {
+            "QB": -24.28,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          }
+        },
+        "2020": {
+          "n": 77,
+          "tier_mae": 0.3147,
+          "tier_bias": -0.1972,
+          "tier_mae_by_pos": {
+            "QB": 112.02,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          },
+          "tier_bias_by_pos": {
+            "QB": -70.18,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          },
+          "mae": 7.872,
+          "rmse": 31.689,
+          "bias": -1.04,
+          "slope": 0.999,
+          "rho": 0.8914,
+          "rho_by_pos": {
+            "QB": 0.5656,
+            "RB": 1.0,
+            "WR": 1.0,
+            "TE": 1.0
+          },
+          "bias_by_pos": {
+            "QB": -6.67,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          }
+        },
+        "2021": {
+          "n": 75,
+          "tier_mae": 0.1639,
+          "tier_bias": 0.1639,
+          "tier_mae_by_pos": {
+            "QB": 59.85,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          },
+          "tier_bias_by_pos": {
+            "QB": 59.85,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          },
+          "mae": 8.65,
+          "rmse": 28.765,
+          "bias": -0.429,
+          "slope": 0.946,
+          "rho": 0.8697,
+          "rho_by_pos": {
+            "QB": 0.4788,
+            "RB": 1.0,
+            "WR": 1.0,
+            "TE": 1.0
+          },
+          "bias_by_pos": {
+            "QB": -3.22,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          }
+        },
+        "2022": {
+          "n": 79,
+          "tier_mae": 0.126,
+          "tier_bias": -0.069,
+          "tier_mae_by_pos": {
+            "QB": 45.88,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          },
+          "tier_bias_by_pos": {
+            "QB": -25.11,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          },
+          "mae": 3.448,
+          "rmse": 15.308,
+          "bias": -1.55,
+          "slope": 0.996,
+          "rho": 0.8797,
+          "rho_by_pos": {
+            "QB": 0.5188,
+            "RB": 1.0,
+            "WR": 1.0,
+            "TE": 1.0
+          },
+          "bias_by_pos": {
+            "QB": -13.61,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          }
+        },
+        "2023": {
+          "n": 80,
+          "tier_mae": 0.164,
+          "tier_bias": 0.0258,
+          "tier_mae_by_pos": {
+            "QB": 57.45,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          },
+          "tier_bias_by_pos": {
+            "QB": 9.05,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          },
+          "mae": 6.964,
+          "rmse": 19.67,
+          "bias": 1.177,
+          "slope": 1.001,
+          "rho": 0.9236,
+          "rho_by_pos": {
+            "QB": 0.6946,
+            "RB": 1.0,
+            "WR": 1.0,
+            "TE": 1.0
+          },
+          "bias_by_pos": {
+            "QB": 6.73,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          }
+        },
+        "2024": {
+          "n": 77,
+          "tier_mae": 0.2211,
+          "tier_bias": -0.2211,
+          "tier_mae_by_pos": {
+            "QB": 76.64,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.64,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          },
+          "mae": 9.069,
+          "rmse": 35.86,
+          "bias": -4.132,
+          "slope": 1.071,
+          "rho": 0.9323,
+          "rho_by_pos": {
+            "QB": 0.7304,
+            "RB": 0.9987,
+            "WR": 1.0,
+            "TE": 1.0
+          },
+          "bias_by_pos": {
+            "QB": -29.1,
+            "RB": 0.11,
+            "TE": 0.0,
+            "WR": 0.0
+          }
+        },
+        "2025": {
+          "n": 85,
+          "tier_mae": 0.2544,
+          "tier_bias": -0.1273,
+          "tier_mae_by_pos": {
+            "QB": 95.29,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          },
+          "tier_bias_by_pos": {
+            "QB": -47.68,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          },
+          "mae": 7.829,
+          "rmse": 27.043,
+          "bias": -1.599,
+          "slope": 0.963,
+          "rho": 0.9079,
+          "rho_by_pos": {
+            "QB": 0.6314,
+            "RB": 1.0,
+            "WR": 1.0,
+            "TE": 1.0
+          },
+          "bias_by_pos": {
+            "QB": -9.71,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          }
+        }
+      },
+      "per_cohort_pooled": {
+        "2019": 0.0,
+        "2020": 0.0,
+        "2021": 0.0,
+        "2022": 0.0,
+        "2023": 0.0,
+        "2024": 0.0,
+        "2025": 0.0
+      },
+      "pooled_tier_mae": 0.0,
+      "tier_mae": 0.0,
+      "universe_mae": 0.004,
+      "universe_bias": 0.004,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 0.01,
+      "tier_mae_RB": 0.0,
+      "tier_bias_RB": 0.0,
+      "rho_RB": 0.9998,
+      "universe_mae_TE": 0.0,
+      "tier_mae_TE": 0.0,
+      "tier_bias_TE": 0.0,
+      "rho_TE": 1.0,
+      "universe_mae_WR": 0.0,
+      "tier_mae_WR": 0.0,
+      "tier_bias_WR": 0.0,
+      "rho_WR": 1.0
+    },
+    "oracle_ols": {
+      "label": "oracle_ols",
+      "per_cohort": {
+        "2019": {
+          "n": 80,
+          "tier_mae": 0.84,
+          "tier_bias": -0.3211,
+          "tier_mae_by_pos": {
+            "QB": 76.15,
+            "RB": 66.54,
+            "TE": 21.14,
+            "WR": 72.33
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.15,
+            "RB": -8.07,
+            "TE": -14.9,
+            "WR": 2.73
+          },
+          "mae": 43.141,
+          "rmse": 57.178,
+          "bias": -3.222,
+          "slope": 1.138,
+          "rho": 0.5576,
+          "rho_by_pos": {
+            "QB": 0.8246,
+            "RB": 0.5817,
+            "WR": 0.3436,
+            "TE": 0.4804
+          },
+          "bias_by_pos": {
+            "QB": -24.28,
+            "RB": 0.37,
+            "TE": 0.0,
+            "WR": 0.0
+          }
+        },
+        "2020": {
+          "n": 77,
+          "tier_mae": 0.7458,
+          "tier_bias": -0.21,
+          "tier_mae_by_pos": {
+            "QB": 112.02,
+            "RB": 32.0,
+            "TE": 17.42,
+            "WR": 59.51
+          },
+          "tier_bias_by_pos": {
+            "QB": -70.18,
+            "RB": 7.19,
+            "TE": -7.16,
+            "WR": 1.62
+          },
+          "mae": 36.493,
+          "rmse": 52.919,
+          "bias": -0.922,
+          "slope": 1.002,
+          "rho": 0.6697,
+          "rho_by_pos": {
+            "QB": 0.5656,
+            "RB": 0.7506,
+            "WR": 0.7103,
+            "TE": 0.6525
+          },
+          "bias_by_pos": {
+            "QB": -6.67,
+            "RB": 0.0,
+            "TE": 0.76,
+            "WR": -0.0
+          }
+        },
+        "2021": {
+          "n": 75,
+          "tier_mae": 0.8916,
+          "tier_bias": 0.055,
+          "tier_mae_by_pos": {
+            "QB": 59.85,
+            "RB": 91.24,
+            "TE": 48.8,
+            "WR": 41.94
+          },
+          "tier_bias_by_pos": {
+            "QB": 59.85,
+            "RB": -15.29,
+            "TE": -7.63,
+            "WR": -4.43
+          },
+          "mae": 41.223,
+          "rmse": 56.833,
+          "bias": -0.429,
+          "slope": 0.911,
+          "rho": 0.5797,
+          "rho_by_pos": {
+            "QB": 0.4788,
+            "RB": 0.625,
+            "WR": 0.7,
+            "TE": 0.5152
+          },
+          "bias_by_pos": {
+            "QB": -3.22,
+            "RB": -0.0,
+            "TE": -0.0,
+            "WR": -0.0
+          }
+        },
+        "2022": {
+          "n": 79,
+          "tier_mae": 0.6085,
+          "tier_bias": -0.2343,
+          "tier_mae_by_pos": {
+            "QB": 45.88,
+            "RB": 61.83,
+            "TE": 24.1,
+            "WR": 43.98
+          },
+          "tier_bias_by_pos": {
+            "QB": -25.11,
+            "RB": -39.38,
+            "TE": -5.69,
+            "WR": -3.86
+          },
+          "mae": 35.399,
+          "rmse": 46.181,
+          "bias": -1.55,
+          "slope": 0.991,
+          "rho": 0.5498,
+          "rho_by_pos": {
+            "QB": 0.5188,
+            "RB": 0.5494,
+            "WR": 0.6479,
+            "TE": 0.4833
+          },
+          "bias_by_pos": {
+            "QB": -13.61,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          }
+        },
+        "2023": {
+          "n": 80,
+          "tier_mae": 0.9432,
+          "tier_bias": -0.2119,
+          "tier_mae_by_pos": {
+            "QB": 57.45,
+            "RB": 43.68,
+            "TE": 70.11,
+            "WR": 64.33
+          },
+          "tier_bias_by_pos": {
+            "QB": 9.05,
+            "RB": -27.58,
+            "TE": -13.78,
+            "WR": -19.62
+          },
+          "mae": 39.837,
+          "rmse": 53.434,
+          "bias": 1.177,
+          "slope": 1.001,
+          "rho": 0.7473,
+          "rho_by_pos": {
+            "QB": 0.6946,
+            "RB": 0.8449,
+            "WR": 0.7471,
+            "TE": 0.7025
+          },
+          "bias_by_pos": {
+            "QB": 6.73,
+            "RB": -0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          }
+        },
+        "2024": {
+          "n": 77,
+          "tier_mae": 0.8272,
+          "tier_bias": -0.3428,
+          "tier_mae_by_pos": {
+            "QB": 76.64,
+            "RB": 56.75,
+            "TE": 35.81,
+            "WR": 66.94
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.64,
+            "RB": -30.19,
+            "TE": 6.92,
+            "WR": -18.36
+          },
+          "mae": 44.788,
+          "rmse": 63.486,
+          "bias": -4.158,
+          "slope": 1.137,
+          "rho": 0.4398,
+          "rho_by_pos": {
+            "QB": 0.7304,
+            "RB": -0.2642,
+            "WR": 0.7057,
+            "TE": 0.5874
+          },
+          "bias_by_pos": {
+            "QB": -29.1,
+            "RB": -0.0,
+            "TE": -0.0,
+            "WR": 0.0
+          }
+        },
+        "2025": {
+          "n": 85,
+          "tier_mae": 0.7026,
+          "tier_bias": -0.2764,
+          "tier_mae_by_pos": {
+            "QB": 95.29,
+            "RB": 64.24,
+            "TE": 8.5,
+            "WR": 58.4
+          },
+          "tier_bias_by_pos": {
+            "QB": -47.68,
+            "RB": -36.44,
+            "TE": 6.94,
+            "WR": -19.97
+          },
+          "mae": 43.337,
+          "rmse": 54.528,
+          "bias": -1.599,
+          "slope": 0.924,
+          "rho": 0.6178,
+          "rho_by_pos": {
+            "QB": 0.6314,
+            "RB": 0.5127,
+            "WR": 0.491,
+            "TE": 0.8359
+          },
+          "bias_by_pos": {
+            "QB": -9.71,
+            "RB": -0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          }
+        }
+      },
+      "per_cohort_pooled": {
+        "2019": 0.8162,
+        "2020": 0.5748,
+        "2021": 0.9702,
+        "2022": 0.6433,
+        "2023": 1.0389,
+        "2024": 0.8081,
+        "2025": 0.5976
+      },
+      "pooled_tier_mae": 0.7784,
+      "tier_mae": 0.7784,
+      "universe_mae": 38.996,
+      "universe_bias": 0.039,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 42.43,
+      "tier_mae_RB": 59.469,
+      "tier_bias_RB": -21.394,
+      "rho_RB": 0.5143,
+      "universe_mae_TE": 26.39,
+      "tier_mae_TE": 32.269,
+      "tier_bias_TE": -5.043,
+      "rho_TE": 0.6082,
+      "universe_mae_WR": 42.36,
+      "tier_mae_WR": 58.204,
+      "tier_bias_WR": -8.841,
+      "rho_WR": 0.6208
+    },
+    "oracle_power": {
+      "label": "oracle_power",
+      "per_cohort": {
+        "2019": {
+          "n": 80,
+          "tier_mae": 1.123,
+          "tier_bias": -1.0681,
+          "tier_mae_by_pos": {
+            "QB": 76.15,
+            "RB": 125.17,
+            "TE": 22.85,
+            "WR": 97.56
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.15,
+            "RB": -125.17,
+            "TE": -13.69,
+            "WR": -96.5
+          },
+          "mae": 52.482,
+          "rmse": 80.728,
+          "bias": -43.827,
+          "slope": 0.829,
+          "rho": 0.4122,
+          "rho_by_pos": {
+            "QB": 0.8246,
+            "RB": 0.0,
+            "WR": 0.3436,
+            "TE": 0.4804
+          },
+          "bias_by_pos": {
+            "QB": -24.28,
+            "RB": -50.68,
+            "TE": -5.58,
+            "WR": -67.25
+          }
+        },
+        "2020": {
+          "n": 77,
+          "tier_mae": 1.299,
+          "tier_bias": -1.1273,
+          "tier_mae_by_pos": {
+            "QB": 112.02,
+            "RB": 149.34,
+            "TE": 45.23,
+            "WR": 69.8
+          },
+          "tier_bias_by_pos": {
+            "QB": -70.18,
+            "RB": -149.34,
+            "TE": -45.23,
+            "WR": -56.12
+          },
+          "mae": 51.368,
+          "rmse": 78.951,
+          "bias": -41.103,
+          "slope": 0.921,
+          "rho": 0.5057,
+          "rho_by_pos": {
+            "QB": 0.5656,
+            "RB": 0.7468,
+            "WR": 0.7103,
+            "TE": 0.0
+          },
+          "bias_by_pos": {
+            "QB": -6.67,
+            "RB": -81.81,
+            "TE": -18.32,
+            "WR": -39.78
+          }
+        },
+        "2021": {
+          "n": 75,
+          "tier_mae": 1.0811,
+          "tier_bias": 0.2067,
+          "tier_mae_by_pos": {
+            "QB": 59.85,
+            "RB": 96.15,
+            "TE": 62.24,
+            "WR": 66.91
+          },
+          "tier_bias_by_pos": {
+            "QB": 59.85,
+            "RB": -29.46,
+            "TE": 7.51,
+            "WR": 23.14
+          },
+          "mae": 42.325,
+          "rmse": 65.32,
+          "bias": -7.163,
+          "slope": 0.652,
+          "rho": 0.5797,
+          "rho_by_pos": {
+            "QB": 0.4788,
+            "RB": 0.625,
+            "WR": 0.7,
+            "TE": 0.5152
+          },
+          "bias_by_pos": {
+            "QB": -3.22,
+            "RB": -16.57,
+            "TE": 1.81,
+            "WR": -5.48
+          }
+        },
+        "2022": {
+          "n": 79,
+          "tier_mae": 1.0266,
+          "tier_bias": -0.1925,
+          "tier_mae_by_pos": {
+            "QB": 45.88,
+            "RB": 86.24,
+            "TE": 50.76,
+            "WR": 97.54
+          },
+          "tier_bias_by_pos": {
+            "QB": -25.11,
+            "RB": -35.73,
+            "TE": -50.76,
+            "WR": 74.3
+          },
+          "mae": 40.515,
+          "rmse": 60.515,
+          "bias": -7.436,
+          "slope": 0.487,
+          "rho": 0.5498,
+          "rho_by_pos": {
+            "QB": 0.5188,
+            "RB": 0.5494,
+            "WR": 0.6479,
+            "TE": 0.4833
+          },
+          "bias_by_pos": {
+            "QB": -13.61,
+            "RB": -15.38,
+            "TE": -31.67,
+            "WR": 17.52
+          }
+        },
+        "2023": {
+          "n": 80,
+          "tier_mae": 1.7806,
+          "tier_bias": 0.6389,
+          "tier_mae_by_pos": {
+            "QB": 57.45,
+            "RB": 145.72,
+            "TE": 73.38,
+            "WR": 201.84
+          },
+          "tier_bias_by_pos": {
+            "QB": 9.05,
+            "RB": 51.72,
+            "TE": -27.48,
+            "WR": 168.25
+          },
+          "mae": 57.816,
+          "rmse": 107.277,
+          "bias": 16.184,
+          "slope": 0.359,
+          "rho": 0.7473,
+          "rho_by_pos": {
+            "QB": 0.6946,
+            "RB": 0.8449,
+            "WR": 0.7471,
+            "TE": 0.7025
+          },
+          "bias_by_pos": {
+            "QB": 6.73,
+            "RB": 10.59,
+            "TE": -13.93,
+            "WR": 36.93
+          }
+        },
+        "2024": {
+          "n": 77,
+          "tier_mae": 1.9442,
+          "tier_bias": 0.9667,
+          "tier_mae_by_pos": {
+            "QB": 76.64,
+            "RB": 73.83,
+            "TE": 81.97,
+            "WR": 297.12
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.64,
+            "RB": -15.92,
+            "TE": 61.33,
+            "WR": 256.1
+          },
+          "mae": 67.546,
+          "rmse": 152.759,
+          "bias": 20.388,
+          "slope": 0.255,
+          "rho": 0.5719,
+          "rho_by_pos": {
+            "QB": 0.7304,
+            "RB": 0.2642,
+            "WR": 0.7057,
+            "TE": 0.5874
+          },
+          "bias_by_pos": {
+            "QB": -29.1,
+            "RB": -7.82,
+            "TE": 14.23,
+            "WR": 53.37
+          }
+        },
+        "2025": {
+          "n": 85,
+          "tier_mae": 1.3575,
+          "tier_bias": 0.4991,
+          "tier_mae_by_pos": {
+            "QB": 95.29,
+            "RB": 186.63,
+            "TE": 63.5,
+            "WR": 55.66
+          },
+          "tier_bias_by_pos": {
+            "QB": -47.68,
+            "RB": 145.97,
+            "TE": 36.87,
+            "WR": -5.96
+          },
+          "mae": 51.491,
+          "rmse": 93.752,
+          "bias": 2.993,
+          "slope": 0.337,
+          "rho": 0.6178,
+          "rho_by_pos": {
+            "QB": 0.6314,
+            "RB": 0.5127,
+            "WR": 0.491,
+            "TE": 0.8359
+          },
+          "bias_by_pos": {
+            "QB": -9.71,
+            "RB": 31.33,
+            "TE": -19.06,
+            "WR": -2.93
+          }
+        }
+      },
+      "per_cohort_pooled": {
+        "2019": 1.1935,
+        "2020": 1.3123,
+        "2021": 1.2229,
+        "2022": 1.2008,
+        "2023": 2.1555,
+        "2024": 2.2974,
+        "2025": 1.4709
+      },
+      "pooled_tier_mae": 1.5505,
+      "tier_mae": 1.5505,
+      "universe_mae": 52.266,
+      "universe_bias": -8.079,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 59.03,
+      "tier_mae_RB": 123.297,
+      "tier_bias_RB": -22.561,
+      "rho_RB": 0.5061,
+      "universe_mae_TE": 30.82,
+      "tier_mae_TE": 57.133,
+      "tier_bias_TE": -4.493,
+      "rho_TE": 0.515,
+      "universe_mae_WR": 57.37,
+      "tier_mae_WR": 126.633,
+      "tier_bias_WR": 51.887,
+      "rho_WR": 0.6208
+    },
+    "oracle_huber": {
+      "label": "oracle_huber",
+      "per_cohort": {
+        "2019": {
+          "n": 80,
+          "tier_mae": 0.8507,
+          "tier_bias": -0.3909,
+          "tier_mae_by_pos": {
+            "QB": 76.15,
+            "RB": 66.42,
+            "TE": 23.0,
+            "WR": 72.52
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.15,
+            "RB": -10.55,
+            "TE": -16.37,
+            "WR": -10.15
+          },
+          "mae": 41.977,
+          "rmse": 57.685,
+          "bias": -9.156,
+          "slope": 1.159,
+          "rho": 0.5576,
+          "rho_by_pos": {
+            "QB": 0.8246,
+            "RB": 0.5817,
+            "WR": 0.3436,
+            "TE": 0.4804
+          },
+          "bias_by_pos": {
+            "QB": -24.28,
+            "RB": -1.36,
+            "TE": -7.32,
+            "WR": -11.23
+          }
+        },
+        "2020": {
+          "n": 77,
+          "tier_mae": 0.7513,
+          "tier_bias": -0.2391,
+          "tier_mae_by_pos": {
+            "QB": 112.02,
+            "RB": 31.12,
+            "TE": 18.7,
+            "WR": 59.72
+          },
+          "tier_bias_by_pos": {
+            "QB": -70.18,
+            "RB": 11.38,
+            "TE": -9.73,
+            "WR": -5.24
+          },
+          "mae": 35.506,
+          "rmse": 53.291,
+          "bias": -5.111,
+          "slope": 0.982,
+          "rho": 0.6697,
+          "rho_by_pos": {
+            "QB": 0.5656,
+            "RB": 0.7506,
+            "WR": 0.7103,
+            "TE": 0.6525
+          },
+          "bias_by_pos": {
+            "QB": -6.67,
+            "RB": 0.27,
+            "TE": -0.61,
+            "WR": -8.88
+          }
+        },
+        "2021": {
+          "n": 75,
+          "tier_mae": 0.8342,
+          "tier_bias": 0.1811,
+          "tier_mae_by_pos": {
+            "QB": 59.85,
+            "RB": 81.23,
+            "TE": 45.68,
+            "WR": 39.73
+          },
+          "tier_bias_by_pos": {
+            "QB": 59.85,
+            "RB": 22.83,
+            "TE": -14.12,
+            "WR": 8.78
+          },
+          "mae": 37.948,
+          "rmse": 59.771,
+          "bias": -2.213,
+          "slope": 0.744,
+          "rho": 0.5794,
+          "rho_by_pos": {
+            "QB": 0.4788,
+            "RB": 0.625,
+            "WR": 0.6985,
+            "TE": 0.5152
+          },
+          "bias_by_pos": {
+            "QB": -3.22,
+            "RB": 3.85,
+            "TE": -4.58,
+            "WR": -4.71
+          }
+        },
+        "2022": {
+          "n": 79,
+          "tier_mae": 0.6371,
+          "tier_bias": -0.2049,
+          "tier_mae_by_pos": {
+            "QB": 45.88,
+            "RB": 69.48,
+            "TE": 25.4,
+            "WR": 43.46
+          },
+          "tier_bias_by_pos": {
+            "QB": -25.11,
+            "RB": -32.03,
+            "TE": -8.25,
+            "WR": 2.08
+          },
+          "mae": 32.854,
+          "rmse": 47.888,
+          "bias": -7.853,
+          "slope": 0.801,
+          "rho": 0.5498,
+          "rho_by_pos": {
+            "QB": 0.5188,
+            "RB": 0.5494,
+            "WR": 0.6479,
+            "TE": 0.4833
+          },
+          "bias_by_pos": {
+            "QB": -13.61,
+            "RB": -12.07,
+            "TE": -3.44,
+            "WR": -5.53
+          }
+        },
+        "2023": {
+          "n": 80,
+          "tier_mae": 0.9551,
+          "tier_bias": -0.3528,
+          "tier_mae_by_pos": {
+            "QB": 57.45,
+            "RB": 48.55,
+            "TE": 67.92,
+            "WR": 66.96
+          },
+          "tier_bias_by_pos": {
+            "QB": 9.05,
+            "RB": -40.38,
+            "TE": -30.41,
+            "WR": -20.72
+          },
+          "mae": 37.223,
+          "rmse": 54.705,
+          "bias": -8.089,
+          "slope": 0.96,
+          "rho": 0.7473,
+          "rho_by_pos": {
+            "QB": 0.6946,
+            "RB": 0.8449,
+            "WR": 0.7471,
+            "TE": 0.7025
+          },
+          "bias_by_pos": {
+            "QB": 6.73,
+            "RB": -15.29,
+            "TE": -6.77,
+            "WR": -11.04
+          }
+        },
+        "2024": {
+          "n": 77,
+          "tier_mae": 0.84,
+          "tier_bias": -0.4055,
+          "tier_mae_by_pos": {
+            "QB": 76.64,
+            "RB": 60.86,
+            "TE": 33.46,
+            "WR": 70.5
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.64,
+            "RB": -43.93,
+            "TE": 9.48,
+            "WR": -27.88
+          },
+          "mae": 42.157,
+          "rmse": 64.88,
+          "bias": -14.895,
+          "slope": 1.085,
+          "rho": 0.4398,
+          "rho_by_pos": {
+            "QB": 0.7304,
+            "RB": -0.2642,
+            "WR": 0.7057,
+            "TE": 0.5874
+          },
+          "bias_by_pos": {
+            "QB": -29.1,
+            "RB": -19.78,
+            "TE": -1.09,
+            "WR": -12.51
+          }
+        },
+        "2025": {
+          "n": 85,
+          "tier_mae": 0.6891,
+          "tier_bias": -0.2785,
+          "tier_mae_by_pos": {
+            "QB": 95.29,
+            "RB": 66.58,
+            "TE": 6.37,
+            "WR": 55.48
+          },
+          "tier_bias_by_pos": {
+            "QB": -47.68,
+            "RB": -44.0,
+            "TE": -2.94,
+            "WR": 0.72
+          },
+          "mae": 41.535,
+          "rmse": 56.035,
+          "bias": -6.536,
+          "slope": 0.829,
+          "rho": 0.6178,
+          "rho_by_pos": {
+            "QB": 0.6314,
+            "RB": 0.5127,
+            "WR": 0.491,
+            "TE": 0.8359
+          },
+          "bias_by_pos": {
+            "QB": -9.71,
+            "RB": -7.36,
+            "TE": -12.18,
+            "WR": -1.36
+          }
+        }
+      },
+      "per_cohort_pooled": {
+        "2019": 0.8304,
+        "2020": 0.5821,
+        "2021": 0.8937,
+        "2022": 0.6814,
+        "2023": 1.0548,
+        "2024": 0.8251,
+        "2025": 0.5796
+      },
+      "pooled_tier_mae": 0.7782,
+      "tier_mae": 0.7782,
+      "universe_mae": 36.495,
+      "universe_bias": -7.2,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 39.49,
+      "tier_mae_RB": 60.606,
+      "tier_bias_RB": -19.526,
+      "rho_RB": 0.5143,
+      "universe_mae_TE": 25.27,
+      "tier_mae_TE": 31.504,
+      "tier_bias_TE": -10.334,
+      "rho_TE": 0.6082,
+      "universe_mae_WR": 39.53,
+      "tier_mae_WR": 58.339,
+      "tier_bias_WR": -7.487,
+      "rho_WR": 0.6206
+    },
+    "oracle_qmap": {
+      "label": "oracle_qmap",
+      "per_cohort": {
+        "2019": {
+          "n": 80,
+          "tier_mae": 0.8627,
+          "tier_bias": 0.1977,
+          "tier_mae_by_pos": {
+            "QB": 76.15,
+            "RB": 73.2,
+            "TE": 10.3,
+            "WR": 87.25
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.15,
+            "RB": 22.53,
+            "TE": 10.3,
+            "WR": 71.85
+          },
+          "mae": 45.282,
+          "rmse": 66.324,
+          "bias": -2.959,
+          "slope": 0.598,
+          "rho": 0.5492,
+          "rho_by_pos": {
+            "QB": 0.8246,
+            "RB": 0.5534,
+            "WR": 0.3406,
+            "TE": 0.478
+          },
+          "bias_by_pos": {
+            "QB": -24.28,
+            "RB": 0.0,
+            "TE": 1.89,
+            "WR": 0.0
+          }
+        },
+        "2020": {
+          "n": 77,
+          "tier_mae": 0.7,
+          "tier_bias": 0.078,
+          "tier_mae_by_pos": {
+            "QB": 112.02,
+            "RB": 26.98,
+            "TE": 8.73,
+            "WR": 64.3
+          },
+          "tier_bias_by_pos": {
+            "QB": -70.18,
+            "RB": 26.98,
+            "TE": 8.73,
+            "WR": 36.43
+          },
+          "mae": 35.896,
+          "rmse": 56.439,
+          "bias": -1.04,
+          "slope": 0.783,
+          "rho": 0.6689,
+          "rho_by_pos": {
+            "QB": 0.5656,
+            "RB": 0.7454,
+            "WR": 0.7123,
+            "TE": 0.6525
+          },
+          "bias_by_pos": {
+            "QB": -6.67,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          }
+        },
+        "2021": {
+          "n": 75,
+          "tier_mae": 0.6644,
+          "tier_bias": 0.502,
+          "tier_mae_by_pos": {
+            "QB": 59.85,
+            "RB": 62.25,
+            "TE": 18.0,
+            "WR": 54.19
+          },
+          "tier_bias_by_pos": {
+            "QB": 59.85,
+            "RB": 43.35,
+            "TE": 18.0,
+            "WR": 26.19
+          },
+          "mae": 35.09,
+          "rmse": 56.95,
+          "bias": -0.429,
+          "slope": 0.748,
+          "rho": 0.5798,
+          "rho_by_pos": {
+            "QB": 0.4788,
+            "RB": 0.6124,
+            "WR": 0.7128,
+            "TE": 0.5152
+          },
+          "bias_by_pos": {
+            "QB": -3.22,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": -0.0
+          }
+        },
+        "2022": {
+          "n": 79,
+          "tier_mae": 0.5241,
+          "tier_bias": 0.1873,
+          "tier_mae_by_pos": {
+            "QB": 45.88,
+            "RB": 34.0,
+            "TE": 19.93,
+            "WR": 50.43
+          },
+          "tier_bias_by_pos": {
+            "QB": -25.11,
+            "RB": 13.83,
+            "TE": 19.93,
+            "WR": 28.2
+          },
+          "mae": 31.99,
+          "rmse": 48.619,
+          "bias": -1.55,
+          "slope": 0.671,
+          "rho": 0.5511,
+          "rho_by_pos": {
+            "QB": 0.5188,
+            "RB": 0.5494,
+            "WR": 0.6521,
+            "TE": 0.4842
+          },
+          "bias_by_pos": {
+            "QB": -13.61,
+            "RB": -0.0,
+            "TE": 0.0,
+            "WR": -0.0
+          }
+        },
+        "2023": {
+          "n": 80,
+          "tier_mae": 1.2129,
+          "tier_bias": 0.1961,
+          "tier_mae_by_pos": {
+            "QB": 57.45,
+            "RB": 55.23,
+            "TE": 109.57,
+            "WR": 65.3
+          },
+          "tier_bias_by_pos": {
+            "QB": 9.05,
+            "RB": 9.8,
+            "TE": 2.37,
+            "WR": 34.6
+          },
+          "mae": 39.329,
+          "rmse": 57.082,
+          "bias": 1.177,
+          "slope": 0.749,
+          "rho": 0.7461,
+          "rho_by_pos": {
+            "QB": 0.6946,
+            "RB": 0.8383,
+            "WR": 0.7466,
+            "TE": 0.705
+          },
+          "bias_by_pos": {
+            "QB": 6.73,
+            "RB": -0.0,
+            "TE": 0.0,
+            "WR": -0.0
+          }
+        },
+        "2024": {
+          "n": 77,
+          "tier_mae": 0.9564,
+          "tier_bias": 0.2019,
+          "tier_mae_by_pos": {
+            "QB": 76.64,
+            "RB": 129.13,
+            "TE": 21.57,
+            "WR": 61.53
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.64,
+            "RB": 53.6,
+            "TE": 21.57,
+            "WR": 39.65
+          },
+          "mae": 43.671,
+          "rmse": 70.657,
+          "bias": -3.437,
+          "slope": 0.734,
+          "rho": 0.57,
+          "rho_by_pos": {
+            "QB": 0.7304,
+            "RB": 0.2585,
+            "WR": 0.7036,
+            "TE": 0.5874
+          },
+          "bias_by_pos": {
+            "QB": -29.1,
+            "RB": 0.11,
+            "TE": 0.0,
+            "WR": 1.53
+          }
+        },
+        "2025": {
+          "n": 85,
+          "tier_mae": 0.7087,
+          "tier_bias": 0.1571,
+          "tier_mae_by_pos": {
+            "QB": 95.29,
+            "RB": 36.83,
+            "TE": 32.5,
+            "WR": 50.05
+          },
+          "tier_bias_by_pos": {
+            "QB": -47.68,
+            "RB": 4.73,
+            "TE": 32.5,
+            "WR": 30.25
+          },
+          "mae": 39.953,
+          "rmse": 57.839,
+          "bias": -1.391,
+          "slope": 0.662,
+          "rho": 0.617,
+          "rho_by_pos": {
+            "QB": 0.6314,
+            "RB": 0.51,
+            "WR": 0.4783,
+            "TE": 0.8485
+          },
+          "bias_by_pos": {
+            "QB": -9.71,
+            "RB": 0.0,
+            "TE": -0.0,
+            "WR": 0.59
+          }
+        }
+      },
+      "per_cohort_pooled": {
+        "2019": 0.8464,
+        "2020": 0.5138,
+        "2021": 0.6673,
+        "2022": 0.5308,
+        "2023": 1.3986,
+        "2024": 0.9804,
+        "2025": 0.6057
+      },
+      "pooled_tier_mae": 0.7919,
+      "tier_mae": 0.7919,
+      "universe_mae": 36.839,
+      "universe_bias": 0.219,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 39.32,
+      "tier_mae_RB": 59.66,
+      "tier_bias_RB": 24.974,
+      "rho_RB": 0.5811,
+      "universe_mae_TE": 25.28,
+      "tier_mae_TE": 31.514,
+      "tier_bias_TE": 16.2,
+      "rho_TE": 0.6101,
+      "universe_mae_WR": 40.36,
+      "tier_mae_WR": 61.864,
+      "tier_bias_WR": 38.167,
+      "rho_WR": 0.6209
+    },
+    "oracle_isotonic": {
+      "label": "oracle_isotonic",
+      "per_cohort": {
+        "2019": {
+          "n": 80,
+          "tier_mae": 0.6756,
+          "tier_bias": -0.1478,
+          "tier_mae_by_pos": {
+            "QB": 76.15,
+            "RB": 46.71,
+            "TE": 10.1,
+            "WR": 61.15
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.15,
+            "RB": 7.56,
+            "TE": 0.0,
+            "WR": 13.82
+          },
+          "mae": 37.296,
+          "rmse": 52.217,
+          "bias": -3.338,
+          "slope": 1.098,
+          "rho": 0.6599,
+          "rho_by_pos": {
+            "QB": 0.8246,
+            "RB": 0.6972,
+            "WR": 0.4514,
+            "TE": 0.6665
+          },
+          "bias_by_pos": {
+            "QB": -24.28,
+            "RB": -0.0,
+            "TE": -0.0,
+            "WR": -0.0
+          }
+        },
+        "2020": {
+          "n": 77,
+          "tier_mae": 0.5613,
+          "tier_bias": -0.1367,
+          "tier_mae_by_pos": {
+            "QB": 112.02,
+            "RB": 12.55,
+            "TE": 1.45,
+            "WR": 50.71
+          },
+          "tier_bias_by_pos": {
+            "QB": -70.18,
+            "RB": 7.6,
+            "TE": 1.45,
+            "WR": 7.42
+          },
+          "mae": 29.511,
+          "rmse": 47.218,
+          "bias": -1.04,
+          "slope": 0.999,
+          "rho": 0.7191,
+          "rho_by_pos": {
+            "QB": 0.5656,
+            "RB": 0.824,
+            "WR": 0.7809,
+            "TE": 0.706
+          },
+          "bias_by_pos": {
+            "QB": -6.67,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          }
+        },
+        "2021": {
+          "n": 75,
+          "tier_mae": 0.4816,
+          "tier_bias": 0.2696,
+          "tier_mae_by_pos": {
+            "QB": 59.85,
+            "RB": 51.51,
+            "TE": 10.43,
+            "WR": 26.32
+          },
+          "tier_bias_by_pos": {
+            "QB": 59.85,
+            "RB": 10.1,
+            "TE": 10.43,
+            "WR": 3.29
+          },
+          "mae": 29.359,
+          "rmse": 46.055,
+          "bias": -0.429,
+          "slope": 0.932,
+          "rho": 0.6573,
+          "rho_by_pos": {
+            "QB": 0.4788,
+            "RB": 0.712,
+            "WR": 0.7609,
+            "TE": 0.6775
+          },
+          "bias_by_pos": {
+            "QB": -3.22,
+            "RB": 0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          }
+        },
+        "2022": {
+          "n": 79,
+          "tier_mae": 0.3617,
+          "tier_bias": -0.038,
+          "tier_mae_by_pos": {
+            "QB": 45.88,
+            "RB": 23.52,
+            "TE": 9.56,
+            "WR": 30.49
+          },
+          "tier_bias_by_pos": {
+            "QB": -25.11,
+            "RB": 0.0,
+            "TE": 4.34,
+            "WR": 1.83
+          },
+          "mae": 24.645,
+          "rmse": 36.687,
+          "bias": -1.55,
+          "slope": 0.994,
+          "rho": 0.6603,
+          "rho_by_pos": {
+            "QB": 0.5188,
+            "RB": 0.7265,
+            "WR": 0.743,
+            "TE": 0.6529
+          },
+          "bias_by_pos": {
+            "QB": -13.61,
+            "RB": -0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          }
+        },
+        "2023": {
+          "n": 80,
+          "tier_mae": 0.7654,
+          "tier_bias": 0.0258,
+          "tier_mae_by_pos": {
+            "QB": 57.45,
+            "RB": 32.52,
+            "TE": 57.09,
+            "WR": 45.9
+          },
+          "tier_bias_by_pos": {
+            "QB": 9.05,
+            "RB": 0.0,
+            "TE": -0.0,
+            "WR": 0.0
+          },
+          "mae": 30.227,
+          "rmse": 42.857,
+          "bias": 1.177,
+          "slope": 1.001,
+          "rho": 0.8063,
+          "rho_by_pos": {
+            "QB": 0.6946,
+            "RB": 0.8985,
+            "WR": 0.8261,
+            "TE": 0.8061
+          },
+          "bias_by_pos": {
+            "QB": 6.73,
+            "RB": 0.0,
+            "TE": -0.0,
+            "WR": 0.0
+          }
+        },
+        "2024": {
+          "n": 77,
+          "tier_mae": 0.6976,
+          "tier_bias": -0.1322,
+          "tier_mae_by_pos": {
+            "QB": 76.64,
+            "RB": 70.5,
+            "TE": 19.8,
+            "WR": 42.59
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.64,
+            "RB": 1.43,
+            "TE": 5.47,
+            "WR": 15.57
+          },
+          "mae": 35.234,
+          "rmse": 55.446,
+          "bias": -4.158,
+          "slope": 1.103,
+          "rho": 0.6579,
+          "rho_by_pos": {
+            "QB": 0.7304,
+            "RB": 0.381,
+            "WR": 0.8086,
+            "TE": 0.7116
+          },
+          "bias_by_pos": {
+            "QB": -29.1,
+            "RB": -0.0,
+            "TE": 0.0,
+            "WR": 0.0
+          }
+        },
+        "2025": {
+          "n": 85,
+          "tier_mae": 0.5494,
+          "tier_bias": -0.0408,
+          "tier_mae_by_pos": {
+            "QB": 95.29,
+            "RB": 17.88,
+            "TE": 16.25,
+            "WR": 45.08
+          },
+          "tier_bias_by_pos": {
+            "QB": -47.68,
+            "RB": -0.0,
+            "TE": 16.25,
+            "WR": 1.21
+          },
+          "mae": 32.606,
+          "rmse": 45.552,
+          "bias": -1.599,
+          "slope": 0.946,
+          "rho": 0.6889,
+          "rho_by_pos": {
+            "QB": 0.6314,
+            "RB": 0.6505,
+            "WR": 0.5756,
+            "TE": 0.898
+          },
+          "bias_by_pos": {
+            "QB": -9.71,
+            "RB": -0.0,
+            "TE": -0.0,
+            "WR": -0.0
+          }
+        }
+      },
+      "per_cohort_pooled": {
+        "2019": 0.5969,
+        "2020": 0.3287,
+        "2021": 0.4236,
+        "2022": 0.3143,
+        "2023": 0.8018,
+        "2024": 0.6353,
+        "2025": 0.3933
+      },
+      "pooled_tier_mae": 0.4991,
+      "tier_mae": 0.4991,
+      "universe_mae": 28.062,
+      "universe_bias": 0.0,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 29.31,
+      "tier_mae_RB": 36.456,
+      "tier_bias_RB": 3.813,
+      "rho_RB": 0.6985,
+      "universe_mae_TE": 17.36,
+      "tier_mae_TE": 17.811,
+      "tier_bias_TE": 5.42,
+      "rho_TE": 0.7312,
+      "universe_mae_WR": 32.02,
+      "tier_mae_WR": 43.177,
+      "tier_bias_WR": 6.163,
+      "rho_WR": 0.7066
+    },
+    "permuted_across": {
+      "label": "permuted_across",
+      "per_cohort": {
+        "2019": {
+          "n": 80,
+          "tier_mae": 1.1558,
+          "tier_bias": -0.9156,
+          "tier_mae_by_pos": {
+            "QB": 76.15,
+            "RB": 95.35,
+            "TE": 61.18,
+            "WR": 75.61
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.15,
+            "RB": -60.4,
+            "TE": -61.18,
+            "WR": -42.42
+          },
+          "mae": 52.44,
+          "rmse": 65.565,
+          "bias": -4.825,
+          "slope": 1.586,
+          "rho": 0.3174,
+          "rho_by_pos": {
+            "QB": 0.8246,
+            "RB": 0.5816,
+            "WR": 0.3436,
+            "TE": -0.4804
+          },
+          "bias_by_pos": {
+            "QB": -24.28,
+            "RB": 10.56,
+            "TE": 2.88,
+            "WR": -15.33
+          }
+        },
+        "2020": {
+          "n": 77,
+          "tier_mae": 1.0777,
+          "tier_bias": -0.7217,
+          "tier_mae_by_pos": {
+            "QB": 112.02,
+            "RB": 101.22,
+            "TE": 19.68,
+            "WR": 87.43
+          },
+          "tier_bias_by_pos": {
+            "QB": -70.18,
+            "RB": -96.64,
+            "TE": 19.68,
+            "WR": -87.43
+          },
+          "mae": 53.168,
+          "rmse": 72.401,
+          "bias": -9.571,
+          "slope": 1.22,
+          "rho": 0.6686,
+          "rho_by_pos": {
+            "QB": 0.5656,
+            "RB": 0.7506,
+            "WR": 0.7103,
+            "TE": 0.6479
+          },
+          "bias_by_pos": {
+            "QB": -6.67,
+            "RB": -34.44,
+            "TE": 46.29,
+            "WR": -16.92
+          }
+        },
+        "2021": {
+          "n": 75,
+          "tier_mae": 1.4479,
+          "tier_bias": -0.7379,
+          "tier_mae_by_pos": {
+            "QB": 59.85,
+            "RB": 103.42,
+            "TE": 95.88,
+            "WR": 104.84
+          },
+          "tier_bias_by_pos": {
+            "QB": 59.85,
+            "RB": -60.53,
+            "TE": -58.23,
+            "WR": -98.02
+          },
+          "mae": 61.729,
+          "rmse": 77.311,
+          "bias": -0.733,
+          "slope": 0.651,
+          "rho": -0.0278,
+          "rho_by_pos": {
+            "QB": 0.4788,
+            "RB": 0.625,
+            "WR": -0.7,
+            "TE": -0.5152
+          },
+          "bias_by_pos": {
+            "QB": -3.22,
+            "RB": -8.42,
+            "TE": 2.54,
+            "WR": 3.44
+          }
+        },
+        "2022": {
+          "n": 79,
+          "tier_mae": 0.7561,
+          "tier_bias": -0.6419,
+          "tier_mae_by_pos": {
+            "QB": 45.88,
+            "RB": 86.18,
+            "TE": 14.34,
+            "WR": 79.38
+          },
+          "tier_bias_by_pos": {
+            "QB": -25.11,
+            "RB": -86.18,
+            "TE": -14.34,
+            "WR": -63.64
+          },
+          "mae": 49.705,
+          "rmse": 58.965,
+          "bias": 3.772,
+          "slope": 0.569,
+          "rho": 0.0335,
+          "rho_by_pos": {
+            "QB": 0.5188,
+            "RB": -0.5494,
+            "WR": 0.6479,
+            "TE": -0.4833
+          },
+          "bias_by_pos": {
+            "QB": -13.61,
+            "RB": -2.19,
+            "TE": 25.03,
+            "WR": -0.17
+          }
+        },
+        "2023": {
+          "n": 80,
+          "tier_mae": 1.3929,
+          "tier_bias": -1.1872,
+          "tier_mae_by_pos": {
+            "QB": 57.45,
+            "RB": 108.32,
+            "TE": 83.25,
+            "WR": 111.5
+          },
+          "tier_bias_by_pos": {
+            "QB": 9.05,
+            "RB": -103.23,
+            "TE": -83.25,
+            "WR": -111.5
+          },
+          "mae": 56.761,
+          "rmse": 74.225,
+          "bias": -9.442,
+          "slope": 0.919,
+          "rho": 0.0225,
+          "rho_by_pos": {
+            "QB": 0.6946,
+            "RB": 0.8449,
+            "WR": -0.7471,
+            "TE": -0.7025
+          },
+          "bias_by_pos": {
+            "QB": 6.73,
+            "RB": -10.85,
+            "TE": 19.41,
+            "WR": -28.65
+          }
+        },
+        "2024": {
+          "n": 77,
+          "tier_mae": 1.3059,
+          "tier_bias": -1.0013,
+          "tier_mae_by_pos": {
+            "QB": 76.64,
+            "RB": 64.59,
+            "TE": 94.92,
+            "WR": 105.49
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.64,
+            "RB": -15.76,
+            "TE": -71.25,
+            "WR": -98.25
+          },
+          "mae": 57.963,
+          "rmse": 77.979,
+          "bias": -4.716,
+          "slope": 1.603,
+          "rho": 0.1461,
+          "rho_by_pos": {
+            "QB": 0.7304,
+            "RB": -0.2642,
+            "WR": 0.7057,
+            "TE": -0.5874
+          },
+          "bias_by_pos": {
+            "QB": -29.1,
+            "RB": 7.69,
+            "TE": 2.14,
+            "WR": -6.14
+          }
+        },
+        "2025": {
+          "n": 85,
+          "tier_mae": 1.4017,
+          "tier_bias": -1.2152,
+          "tier_mae_by_pos": {
+            "QB": 95.29,
+            "RB": 120.81,
+            "TE": 106.91,
+            "WR": 64.87
+          },
+          "tier_bias_by_pos": {
+            "QB": -47.68,
+            "RB": -120.81,
+            "TE": -106.91,
+            "WR": -47.75
+          },
+          "mae": 54.351,
+          "rmse": 68.683,
+          "bias": -7.722,
+          "slope": 0.598,
+          "rho": -0.3021,
+          "rho_by_pos": {
+            "QB": 0.6314,
+            "RB": -0.5127,
+            "WR": -0.491,
+            "TE": -0.8359
+          },
+          "bias_by_pos": {
+            "QB": -9.71,
+            "RB": -14.23,
+            "TE": -15.4,
+            "WR": 2.73
+          }
+        }
+      },
+      "per_cohort_pooled": {
+        "2019": 1.2371,
+        "2020": 1.0174,
+        "2021": 1.712,
+        "2022": 0.8401,
+        "2023": 1.6386,
+        "2024": 1.4464,
+        "2025": 1.5297
+      },
+      "pooled_tier_mae": 1.3459,
+      "tier_mae": 1.3459,
+      "universe_mae": 55.947,
+      "universe_bias": -3.795,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 59.59,
+      "tier_mae_RB": 97.127,
+      "tier_bias_RB": -77.65,
+      "rho_RB": 0.2108,
+      "universe_mae_TE": 47.57,
+      "tier_mae_TE": 68.023,
+      "tier_bias_TE": -53.64,
+      "rho_TE": -0.4224,
+      "universe_mae_WR": 57.28,
+      "tier_mae_WR": 89.874,
+      "tier_bias_WR": -78.43,
+      "rho_WR": 0.0671
+    },
+    "permuted_within": {
+      "label": "permuted_within",
+      "per_cohort": {
+        "2019": {
+          "n": 80,
+          "tier_mae": 1.1008,
+          "tier_bias": -0.8865,
+          "tier_mae_by_pos": {
+            "QB": 76.15,
+            "RB": 95.12,
+            "TE": 51.41,
+            "WR": 75.47
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.15,
+            "RB": -55.74,
+            "TE": -51.41,
+            "WR": -51.31
+          },
+          "mae": 54.389,
+          "rmse": 68.098,
+          "bias": -4.099,
+          "slope": 1.051,
+          "rho": 0.0266,
+          "rho_by_pos": {
+            "QB": 0.8246,
+            "RB": -0.5816,
+            "WR": 0.3436,
+            "TE": -0.4804
+          },
+          "bias_by_pos": {
+            "QB": -24.28,
+            "RB": 21.33,
+            "TE": 7.49,
+            "WR": -25.5
+          }
+        },
+        "2020": {
+          "n": 77,
+          "tier_mae": 1.2108,
+          "tier_bias": -0.959,
+          "tier_mae_by_pos": {
+            "QB": 112.02,
+            "RB": 92.86,
+            "TE": 24.97,
+            "WR": 119.83
+          },
+          "tier_bias_by_pos": {
+            "QB": -70.18,
+            "RB": -83.24,
+            "TE": -6.54,
+            "WR": -119.83
+          },
+          "mae": 54.869,
+          "rmse": 75.625,
+          "bias": -13.765,
+          "slope": 0.88,
+          "rho": -0.0105,
+          "rho_by_pos": {
+            "QB": 0.5656,
+            "RB": 0.7506,
+            "WR": -0.7103,
+            "TE": -0.6479
+          },
+          "bias_by_pos": {
+            "QB": -6.67,
+            "RB": -17.51,
+            "TE": 21.93,
+            "WR": -26.51
+          }
+        },
+        "2021": {
+          "n": 75,
+          "tier_mae": 1.3488,
+          "tier_bias": -0.7522,
+          "tier_mae_by_pos": {
+            "QB": 59.85,
+            "RB": 105.8,
+            "TE": 86.74,
+            "WR": 91.15
+          },
+          "tier_bias_by_pos": {
+            "QB": 59.85,
+            "RB": -70.88,
+            "TE": -64.41,
+            "WR": -83.57
+          },
+          "mae": 59.283,
+          "rmse": 74.691,
+          "bias": -2.053,
+          "slope": 0.83,
+          "rho": 0.2672,
+          "rho_by_pos": {
+            "QB": 0.4788,
+            "RB": -0.625,
+            "WR": 0.7,
+            "TE": 0.5152
+          },
+          "bias_by_pos": {
+            "QB": -3.22,
+            "RB": -5.17,
+            "TE": -18.83,
+            "WR": 4.85
+          }
+        },
+        "2022": {
+          "n": 79,
+          "tier_mae": 0.9077,
+          "tier_bias": -0.8365,
+          "tier_mae_by_pos": {
+            "QB": 45.88,
+            "RB": 71.46,
+            "TE": 35.8,
+            "WR": 100.26
+          },
+          "tier_bias_by_pos": {
+            "QB": -25.11,
+            "RB": -71.46,
+            "TE": -35.8,
+            "WR": -96.36
+          },
+          "mae": 50.89,
+          "rmse": 63.107,
+          "bias": -2.788,
+          "slope": -0.41,
+          "rho": -0.0488,
+          "rho_by_pos": {
+            "QB": 0.5188,
+            "RB": -0.5494,
+            "WR": -0.6479,
+            "TE": 0.4833
+          },
+          "bias_by_pos": {
+            "QB": -13.61,
+            "RB": 12.51,
+            "TE": -3.4,
+            "WR": -11.46
+          }
+        },
+        "2023": {
+          "n": 80,
+          "tier_mae": 1.6802,
+          "tier_bias": -1.4663,
+          "tier_mae_by_pos": {
+            "QB": 57.45,
+            "RB": 115.25,
+            "TE": 128.23,
+            "WR": 112.41
+          },
+          "tier_bias_by_pos": {
+            "QB": 9.05,
+            "RB": -107.53,
+            "TE": -128.23,
+            "WR": -112.41
+          },
+          "mae": 57.758,
+          "rmse": 77.427,
+          "bias": -14.487,
+          "slope": 0.668,
+          "rho": -0.4,
+          "rho_by_pos": {
+            "QB": 0.6946,
+            "RB": -0.8449,
+            "WR": -0.7471,
+            "TE": -0.7025
+          },
+          "bias_by_pos": {
+            "QB": 6.73,
+            "RB": -3.3,
+            "TE": -14.44,
+            "WR": -29.61
+          }
+        },
+        "2024": {
+          "n": 77,
+          "tier_mae": 1.3654,
+          "tier_bias": -1.0674,
+          "tier_mae_by_pos": {
+            "QB": 76.64,
+            "RB": 67.65,
+            "TE": 98.09,
+            "WR": 114.79
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.64,
+            "RB": -7.31,
+            "TE": -81.97,
+            "WR": -108.04
+          },
+          "mae": 60.02,
+          "rmse": 80.495,
+          "bias": -4.676,
+          "slope": 1.291,
+          "rho": -0.0746,
+          "rho_by_pos": {
+            "QB": 0.7304,
+            "RB": 0.2642,
+            "WR": -0.7057,
+            "TE": -0.5874
+          },
+          "bias_by_pos": {
+            "QB": -29.1,
+            "RB": 15.76,
+            "TE": -9.57,
+            "WR": -6.41
+          }
+        },
+        "2025": {
+          "n": 85,
+          "tier_mae": 1.3515,
+          "tier_bias": -1.1715,
+          "tier_mae_by_pos": {
+            "QB": 95.29,
+            "RB": 105.4,
+            "TE": 106.29,
+            "WR": 65.33
+          },
+          "tier_bias_by_pos": {
+            "QB": -47.68,
+            "RB": -105.4,
+            "TE": -106.29,
+            "WR": -50.06
+          },
+          "mae": 52.91,
+          "rmse": 66.641,
+          "bias": -8.343,
+          "slope": 0.796,
+          "rho": 0.3722,
+          "rho_by_pos": {
+            "QB": 0.6314,
+            "RB": 0.5127,
+            "WR": -0.491,
+            "TE": 0.8359
+          },
+          "bias_by_pos": {
+            "QB": -9.71,
+            "RB": -11.96,
+            "TE": -24.23,
+            "WR": 3.78
+          }
+        }
+      },
+      "per_cohort_pooled": {
+        "2019": 1.1639,
+        "2020": 1.1947,
+        "2021": 1.5798,
+        "2022": 1.0422,
+        "2023": 2.0216,
+        "2024": 1.5257,
+        "2025": 1.4628
+      },
+      "pooled_tier_mae": 1.4272,
+      "tier_mae": 1.4272,
+      "universe_mae": 56.609,
+      "universe_bias": -6.624,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 63.3,
+      "tier_mae_RB": 93.363,
+      "tier_bias_RB": -71.651,
+      "rho_RB": -0.1533,
+      "universe_mae_TE": 41.12,
+      "tier_mae_TE": 75.933,
+      "tier_bias_TE": -67.807,
+      "rho_TE": -0.0834,
+      "universe_mae_WR": 59.1,
+      "tier_mae_WR": 97.034,
+      "tier_bias_WR": -88.797,
+      "rho_WR": -0.3226
+    },
+    "zero_scale": {
+      "label": "zero_scale",
+      "per_cohort": {
+        "2019": {
+          "n": 80,
+          "tier_mae": 1.5172,
+          "tier_bias": -1.5172,
+          "tier_mae_by_pos": {
+            "QB": 76.15,
+            "RB": 125.17,
+            "TE": 90.27,
+            "WR": 103.18
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.15,
+            "RB": -125.17,
+            "TE": -90.27,
+            "WR": -103.18
+          },
+          "mae": 54.865,
+          "rmse": 83.883,
+          "bias": -50.5,
+          "slope": 0.979,
+          "rho": 0.2061,
+          "rho_by_pos": {
+            "QB": 0.8246,
+            "RB": 0.0,
+            "WR": 0.0,
+            "TE": 0.0
+          },
+          "bias_by_pos": {
+            "QB": -24.28,
+            "RB": -50.68,
+            "TE": -33.64,
+            "WR": -70.28
+          }
+        },
+        "2020": {
+          "n": 77,
+          "tier_mae": 1.6629,
+          "tier_bias": -1.5453,
+          "tier_mae_by_pos": {
+            "QB": 112.02,
+            "RB": 154.87,
+            "TE": 45.23,
+            "WR": 157.66
+          },
+          "tier_bias_by_pos": {
+            "QB": -70.18,
+            "RB": -154.87,
+            "TE": -45.23,
+            "WR": -157.66
+          },
+          "mae": 64.934,
+          "rmse": 96.607,
+          "bias": -58.102,
+          "slope": 0.538,
+          "rho": 0.1414,
+          "rho_by_pos": {
+            "QB": 0.5656,
+            "RB": 0.0,
+            "WR": 0.0,
+            "TE": 0.0
+          },
+          "bias_by_pos": {
+            "QB": -6.67,
+            "RB": -84.07,
+            "TE": -18.32,
+            "WR": -76.02
+          }
+        },
+        "2021": {
+          "n": 75,
+          "tier_mae": 1.8071,
+          "tier_bias": -1.4792,
+          "tier_mae_by_pos": {
+            "QB": 59.85,
+            "RB": 137.65,
+            "TE": 110.03,
+            "WR": 150.18
+          },
+          "tier_bias_by_pos": {
+            "QB": 59.85,
+            "RB": -137.65,
+            "TE": -110.03,
+            "WR": -150.18
+          },
+          "mae": 60.276,
+          "rmse": 95.306,
+          "bias": -52.055,
+          "slope": 0.47,
+          "rho": 0.1197,
+          "rho_by_pos": {
+            "QB": 0.4788,
+            "RB": 0.0,
+            "WR": 0.0,
+            "TE": 0.0
+          },
+          "bias_by_pos": {
+            "QB": -3.22,
+            "RB": -73.96,
+            "TE": -55.12,
+            "WR": -52.62
+          }
+        },
+        "2022": {
+          "n": 79,
+          "tier_mae": 1.4368,
+          "tier_bias": -1.3797,
+          "tier_mae_by_pos": {
+            "QB": 45.88,
+            "RB": 139.42,
+            "TE": 73.93,
+            "WR": 130.25
+          },
+          "tier_bias_by_pos": {
+            "QB": -25.11,
+            "RB": -139.42,
+            "TE": -73.93,
+            "WR": -130.25
+          },
+          "mae": 52.127,
+          "rmse": 78.166,
+          "bias": -50.229,
+          "slope": -0.046,
+          "rho": 0.1297,
+          "rho_by_pos": {
+            "QB": 0.5188,
+            "RB": 0.0,
+            "WR": 0.0,
+            "TE": 0.0
+          },
+          "bias_by_pos": {
+            "QB": -13.61,
+            "RB": -57.56,
+            "TE": -40.54,
+            "WR": -62.55
+          }
+        },
+        "2023": {
+          "n": 80,
+          "tier_mae": 2.1851,
+          "tier_bias": -1.9953,
+          "tier_mae_by_pos": {
+            "QB": 57.45,
+            "RB": 163.72,
+            "TE": 153.67,
+            "WR": 168.88
+          },
+          "tier_bias_by_pos": {
+            "QB": 9.05,
+            "RB": -163.72,
+            "TE": -153.67,
+            "WR": -168.88
+          },
+          "mae": 67.788,
+          "rmse": 98.856,
+          "bias": -59.647,
+          "slope": 0.452,
+          "rho": 0.1736,
+          "rho_by_pos": {
+            "QB": 0.6946,
+            "RB": 0.0,
+            "WR": 0.0,
+            "TE": 0.0
+          },
+          "bias_by_pos": {
+            "QB": 6.73,
+            "RB": -69.47,
+            "TE": -51.21,
+            "WR": -86.28
+          }
+        },
+        "2024": {
+          "n": 77,
+          "tier_mae": 1.6679,
+          "tier_bias": -1.6679,
+          "tier_mae_by_pos": {
+            "QB": 76.64,
+            "RB": 75.22,
+            "TE": 116.57,
+            "WR": 165.49
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.64,
+            "RB": -75.22,
+            "TE": -116.57,
+            "WR": -165.49
+          },
+          "mae": 59.938,
+          "rmse": 96.193,
+          "bias": -55.001,
+          "slope": 1.008,
+          "rho": 0.1826,
+          "rho_by_pos": {
+            "QB": 0.7304,
+            "RB": 0.0,
+            "WR": 0.0,
+            "TE": 0.0
+          },
+          "bias_by_pos": {
+            "QB": -29.1,
+            "RB": -52.05,
+            "TE": -49.63,
+            "WR": -66.58
+          }
+        },
+        "2025": {
+          "n": 85,
+          "tier_mae": 1.9454,
+          "tier_bias": -1.8183,
+          "tier_mae_by_pos": {
+            "QB": 95.29,
+            "RB": 181.85,
+            "TE": 147.5,
+            "WR": 106.89
+          },
+          "tier_bias_by_pos": {
+            "QB": -47.68,
+            "RB": -181.85,
+            "TE": -147.5,
+            "WR": -106.89
+          },
+          "mae": 63.499,
+          "rmse": 90.53,
+          "bias": -57.269,
+          "slope": 0.423,
+          "rho": 0.1578,
+          "rho_by_pos": {
+            "QB": 0.6314,
+            "RB": 0.0,
+            "WR": 0.0,
+            "TE": 0.0
+          },
+          "bias_by_pos": {
+            "QB": -9.71,
+            "RB": -78.88,
+            "TE": -65.31,
+            "WR": -57.16
+          }
+        }
+      },
+      "per_cohort_pooled": {
+        "2019": 1.7191,
+        "2020": 1.7976,
+        "2021": 2.1909,
+        "2022": 1.7476,
+        "2023": 2.6948,
+        "2024": 1.9291,
+        "2025": 2.2547
+      },
+      "pooled_tier_mae": 2.0477,
+      "tier_mae": 2.0477,
+      "universe_mae": 62.29,
+      "universe_bias": -62.282,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 66.21,
+      "tier_mae_RB": 139.7,
+      "tier_bias_RB": -139.7,
+      "rho_RB": 0.0,
+      "universe_mae_TE": 44.88,
+      "tier_mae_TE": 105.314,
+      "tier_bias_TE": -105.314,
+      "rho_TE": 0.0,
+      "universe_mae_WR": 67.47,
+      "tier_mae_WR": 140.361,
+      "tier_bias_WR": -140.361,
+      "rho_WR": 0.0
+    },
+    "pos_median": {
+      "label": "pos_median",
+      "per_cohort": {
+        "2019": {
+          "n": 80,
+          "tier_mae": 1.2297,
+          "tier_bias": -1.14,
+          "tier_mae_by_pos": {
+            "QB": 76.15,
+            "RB": 101.47,
+            "TE": 60.42,
+            "WR": 89.94
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.15,
+            "RB": -76.47,
+            "TE": -60.42,
+            "WR": -85.53
+          },
+          "mae": 52.127,
+          "rmse": 72.473,
+          "bias": -23.134,
+          "slope": 0.903,
+          "rho": 0.2061,
+          "rho_by_pos": {
+            "QB": 0.8246,
+            "RB": 0.0,
+            "WR": 0.0,
+            "TE": 0.0
+          },
+          "bias_by_pos": {
+            "QB": -24.28,
+            "RB": -1.98,
+            "TE": -3.79,
+            "WR": -52.63
+          }
+        },
+        "2020": {
+          "n": 77,
+          "tier_mae": 1.3808,
+          "tier_bias": -1.2267,
+          "tier_mae_by_pos": {
+            "QB": 112.02,
+            "RB": 118.07,
+            "TE": 30.13,
+            "WR": 136.16
+          },
+          "tier_bias_by_pos": {
+            "QB": -70.18,
+            "RB": -118.07,
+            "TE": -23.73,
+            "WR": -136.16
+          },
+          "mae": 55.795,
+          "rmse": 82.925,
+          "bias": -36.376,
+          "slope": 0.824,
+          "rho": 0.1414,
+          "rho_by_pos": {
+            "QB": 0.5656,
+            "RB": 0.0,
+            "WR": 0.0,
+            "TE": 0.0
+          },
+          "bias_by_pos": {
+            "QB": -6.67,
+            "RB": -47.27,
+            "TE": 3.17,
+            "WR": -54.52
+          }
+        },
+        "2021": {
+          "n": 75,
+          "tier_mae": 1.5926,
+          "tier_bias": -1.168,
+          "tier_mae_by_pos": {
+            "QB": 59.85,
+            "RB": 114.88,
+            "TE": 104.73,
+            "WR": 119.93
+          },
+          "tier_bias_by_pos": {
+            "QB": 59.85,
+            "RB": -97.65,
+            "TE": -97.73,
+            "WR": -119.28
+          },
+          "mae": 55.563,
+          "rmse": 81.851,
+          "bias": -25.329,
+          "slope": 0.583,
+          "rho": 0.1197,
+          "rho_by_pos": {
+            "QB": 0.4788,
+            "RB": 0.0,
+            "WR": 0.0,
+            "TE": 0.0
+          },
+          "bias_by_pos": {
+            "QB": -3.22,
+            "RB": -33.95,
+            "TE": -42.82,
+            "WR": -21.72
+          }
+        },
+        "2022": {
+          "n": 79,
+          "tier_mae": 1.1252,
+          "tier_bias": -1.0566,
+          "tier_mae_by_pos": {
+            "QB": 45.88,
+            "RB": 99.42,
+            "TE": 55.93,
+            "WR": 105.66
+          },
+          "tier_bias_by_pos": {
+            "QB": -25.11,
+            "RB": -99.42,
+            "TE": -55.93,
+            "WR": -102.5
+          },
+          "mae": 45.732,
+          "rmse": 63.281,
+          "bias": -24.418,
+          "slope": 0.992,
+          "rho": 0.1297,
+          "rho_by_pos": {
+            "QB": 0.5188,
+            "RB": 0.0,
+            "WR": 0.0,
+            "TE": 0.0
+          },
+          "bias_by_pos": {
+            "QB": -13.61,
+            "RB": -17.56,
+            "TE": -22.54,
+            "WR": -34.8
+          }
+        },
+        "2023": {
+          "n": 80,
+          "tier_mae": 1.8556,
+          "tier_bias": -1.6657,
+          "tier_mae_by_pos": {
+            "QB": 57.45,
+            "RB": 131.62,
+            "TE": 132.07,
+            "WR": 140.43
+          },
+          "tier_bias_by_pos": {
+            "QB": 9.05,
+            "RB": -131.62,
+            "TE": -132.07,
+            "WR": -140.43
+          },
+          "mae": 56.57,
+          "rmse": 83.56,
+          "bias": -36.639,
+          "slope": 0.737,
+          "rho": 0.1736,
+          "rho_by_pos": {
+            "QB": 0.6946,
+            "RB": 0.0,
+            "WR": 0.0,
+            "TE": 0.0
+          },
+          "bias_by_pos": {
+            "QB": 6.73,
+            "RB": -37.37,
+            "TE": -29.61,
+            "WR": -57.83
+          }
+        },
+        "2024": {
+          "n": 77,
+          "tier_mae": 1.4151,
+          "tier_bias": -1.3226,
+          "tier_mae_by_pos": {
+            "QB": 76.64,
+            "RB": 61.08,
+            "TE": 99.37,
+            "WR": 132.64
+          },
+          "tier_bias_by_pos": {
+            "QB": -76.64,
+            "RB": -43.12,
+            "TE": -92.57,
+            "WR": -132.59
+          },
+          "mae": 53.834,
+          "rmse": 83.077,
+          "bias": -28.386,
+          "slope": 1.322,
+          "rho": 0.1826,
+          "rho_by_pos": {
+            "QB": 0.7304,
+            "RB": 0.0,
+            "WR": 0.0,
+            "TE": 0.0
+          },
+          "bias_by_pos": {
+            "QB": -29.1,
+            "RB": -19.95,
+            "TE": -25.63,
+            "WR": -33.68
+          }
+        },
+        "2025": {
+          "n": 85,
+          "tier_mae": 1.6361,
+          "tier_bias": -1.4805,
+          "tier_mae_by_pos": {
+            "QB": 95.29,
+            "RB": 149.45,
+            "TE": 123.5,
+            "WR": 82.21
+          },
+          "tier_bias_by_pos": {
+            "QB": -47.68,
+            "RB": -149.45,
+            "TE": -123.5,
+            "WR": -73.99
+          },
+          "mae": 54.727,
+          "rmse": 74.658,
+          "bias": -31.61,
+          "slope": 0.664,
+          "rho": 0.1578,
+          "rho_by_pos": {
+            "QB": 0.6314,
+            "RB": 0.0,
+            "WR": 0.0,
+            "TE": 0.0
+          },
+          "bias_by_pos": {
+            "QB": -9.71,
+            "RB": -46.48,
+            "TE": -41.31,
+            "WR": -24.26
+          }
+        }
+      },
+      "per_cohort_pooled": {
+        "2019": 1.3358,
+        "2020": 1.4214,
+        "2021": 1.9049,
+        "2022": 1.3321,
+        "2023": 2.2554,
+        "2024": 1.592,
+        "2025": 1.8423
+      },
+      "pooled_tier_mae": 1.6691,
+      "tier_mae": 1.6691,
+      "universe_mae": 54.039,
+      "universe_bias": -32.67,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 57.53,
+      "tier_mae_RB": 110.856,
+      "tier_bias_RB": -102.257,
+      "rho_RB": 0.0,
+      "universe_mae_TE": 39.75,
+      "tier_mae_TE": 86.593,
+      "tier_bias_TE": -83.707,
+      "rho_TE": 0.0,
+      "universe_mae_WR": 58.11,
+      "tier_mae_WR": 115.281,
+      "tier_bias_WR": -112.926,
+      "rho_WR": 0.0
+    }
+  },
+  "boards": {
+    "incumbent (NULL)": {
+      "n_rookies": 81,
+      "best_rookie_overall_rank": 12,
+      "best_rookie": "Fernando Mendoza",
+      "best_rookie_position": "QB",
+      "best_rookie_fp": 268.33,
+      "n_rookies_in_top10": 0,
+      "top1_is_rookie": false,
+      "placement": {
+        "clears": true,
+        "evaluable": true,
+        "threshold_invariant": true,
+        "strictest_cap": 11.5,
+        "best_rookie_overall_rank": 12.0,
+        "cap": 8.8,
+        "q": 0.1,
+        "breach": false,
+        "caps_over_q_band": {
+          "Q05": 7.9,
+          "Q10": 8.8,
+          "Q15": 9.7,
+          "Q20": 10.6,
+          "Q25": 11.5
+        },
+        "observed_minimum": 7.0,
+        "breaches_even_the_observed_minimum": false,
+        "verdict_is_threshold_invariant": true,
+        "reality_breach_rate_top10": 0.286
+      },
+      "profile": {
+        "per_position": {
+          "RB": {
+            "top_ratio": 1.0,
+            "tier_mean_ratio": 1.0,
+            "top_delta_ppr": 0.0
+          },
+          "TE": {
+            "top_ratio": 1.0,
+            "tier_mean_ratio": 1.0,
+            "top_delta_ppr": 0.0
+          },
+          "WR": {
+            "top_ratio": 1.0,
+            "tier_mean_ratio": 1.0,
+            "top_delta_ppr": 0.0
+          }
+        },
+        "mean_top_ratio": 1.0,
+        "mean_tier_ratio": 1.0,
+        "attenuates_at_top": false
+      }
+    },
+    "ols_slope": {
+      "n_rookies": 81,
+      "best_rookie_overall_rank": 6,
+      "best_rookie": "Jeremiyah Love",
+      "best_rookie_position": "RB",
+      "best_rookie_fp": 291.63,
+      "n_rookies_in_top10": 1,
+      "top1_is_rookie": false,
+      "placement": {
+        "clears": false,
+        "evaluable": true,
+        "threshold_invariant": true,
+        "strictest_cap": 11.5,
+        "best_rookie_overall_rank": 6.0,
+        "cap": 8.8,
+        "q": 0.1,
+        "breach": true,
+        "caps_over_q_band": {
+          "Q05": 7.9,
+          "Q10": 8.8,
+          "Q15": 9.7,
+          "Q20": 10.6,
+          "Q25": 11.5
+        },
+        "observed_minimum": 7.0,
+        "breaches_even_the_observed_minimum": true,
+        "verdict_is_threshold_invariant": true,
+        "reality_breach_rate_top10": 0.286
+      },
+      "profile": {
+        "per_position": {
+          "RB": {
+            "top_ratio": 1.3991,
+            "tier_mean_ratio": 1.476,
+            "top_delta_ppr": 83.19
+          },
+          "TE": {
+            "top_ratio": 1.2974,
+            "tier_mean_ratio": 1.3264,
+            "top_delta_ppr": 41.92
+          },
+          "WR": {
+            "top_ratio": 1.0984,
+            "tier_mean_ratio": 1.2369,
+            "top_delta_ppr": 18.83
+          }
+        },
+        "mean_top_ratio": 1.265,
+        "mean_tier_ratio": 1.3464,
+        "attenuates_at_top": true
+      }
+    },
+    "power": {
+      "n_rookies": 81,
+      "best_rookie_overall_rank": 1,
+      "best_rookie": "Jeremiyah Love",
+      "best_rookie_position": "RB",
+      "best_rookie_fp": 1141.3,
+      "n_rookies_in_top10": 4,
+      "top1_is_rookie": true,
+      "placement": {
+        "clears": false,
+        "evaluable": true,
+        "threshold_invariant": true,
+        "strictest_cap": 11.5,
+        "best_rookie_overall_rank": 1.0,
+        "cap": 8.8,
+        "q": 0.1,
+        "breach": true,
+        "caps_over_q_band": {
+          "Q05": 7.9,
+          "Q10": 8.8,
+          "Q15": 9.7,
+          "Q20": 10.6,
+          "Q25": 11.5
+        },
+        "observed_minimum": 7.0,
+        "breaches_even_the_observed_minimum": true,
+        "verdict_is_threshold_invariant": true,
+        "reality_breach_rate_top10": 0.286
+      },
+      "profile": {
+        "per_position": {
+          "RB": {
+            "top_ratio": 5.4754,
+            "tier_mean_ratio": 2.0913,
+            "top_delta_ppr": 932.86
+          },
+          "TE": {
+            "top_ratio": 4.3686,
+            "tier_mean_ratio": 2.707,
+            "top_delta_ppr": 474.83
+          },
+          "WR": {
+            "top_ratio": 4.0488,
+            "tier_mean_ratio": 2.426,
+            "top_delta_ppr": 583.62
+          }
+        },
+        "mean_top_ratio": 4.6309,
+        "mean_tier_ratio": 2.4081,
+        "attenuates_at_top": false
+      }
+    },
+    "isotonic": {
+      "n_rookies": 81,
+      "best_rookie_overall_rank": 7,
+      "best_rookie": "Jeremiyah Love",
+      "best_rookie_position": "RB",
+      "best_rookie_fp": 286.24,
+      "n_rookies_in_top10": 1,
+      "top1_is_rookie": false,
+      "placement": {
+        "clears": false,
+        "evaluable": true,
+        "threshold_invariant": false,
+        "strictest_cap": 11.5,
+        "best_rookie_overall_rank": 7.0,
+        "cap": 8.8,
+        "q": 0.1,
+        "breach": true,
+        "caps_over_q_band": {
+          "Q05": 7.9,
+          "Q10": 8.8,
+          "Q15": 9.7,
+          "Q20": 10.6,
+          "Q25": 11.5
+        },
+        "observed_minimum": 7.0,
+        "breaches_even_the_observed_minimum": false,
+        "verdict_is_threshold_invariant": false,
+        "reality_breach_rate_top10": 0.286
+      },
+      "profile": {
+        "per_position": {
+          "RB": {
+            "top_ratio": 1.3732,
+            "tier_mean_ratio": 1.7363,
+            "top_delta_ppr": 77.8
+          },
+          "TE": {
+            "top_ratio": 1.2416,
+            "tier_mean_ratio": 1.3146,
+            "top_delta_ppr": 34.05
+          },
+          "WR": {
+            "top_ratio": 0.8927,
+            "tier_mean_ratio": 1.6517,
+            "top_delta_ppr": -20.53
+          }
+        },
+        "mean_top_ratio": 1.1692,
+        "mean_tier_ratio": 1.5675,
+        "attenuates_at_top": true
+      }
+    },
+    "global_match(power)": {
+      "n_rookies": 81,
+      "best_rookie_overall_rank": 6,
+      "best_rookie": "Jeremiyah Love",
+      "best_rookie_position": "RB",
+      "best_rookie_fp": 291.63,
+      "n_rookies_in_top10": 1,
+      "top1_is_rookie": false,
+      "placement": {
+        "clears": false,
+        "evaluable": true,
+        "threshold_invariant": true,
+        "strictest_cap": 11.5,
+        "best_rookie_overall_rank": 6.0,
+        "cap": 8.8,
+        "q": 0.1,
+        "breach": true,
+        "caps_over_q_band": {
+          "Q05": 7.9,
+          "Q10": 8.8,
+          "Q15": 9.7,
+          "Q20": 10.6,
+          "Q25": 11.5
+        },
+        "observed_minimum": 7.0,
+        "breaches_even_the_observed_minimum": true,
+        "verdict_is_threshold_invariant": true,
+        "reality_breach_rate_top10": 0.286
+      },
+      "profile": {
+        "per_position": {
+          "RB": {
+            "top_ratio": 1.3991,
+            "tier_mean_ratio": 1.476,
+            "top_delta_ppr": 83.19
+          },
+          "TE": {
+            "top_ratio": 1.2974,
+            "tier_mean_ratio": 1.3264,
+            "top_delta_ppr": 41.92
+          },
+          "WR": {
+            "top_ratio": 1.0984,
+            "tier_mean_ratio": 1.2369,
+            "top_delta_ppr": 18.83
+          }
+        },
+        "mean_top_ratio": 1.265,
+        "mean_tier_ratio": 1.3464,
+        "attenuates_at_top": true
+      }
+    },
+    "global_match(isotonic)": {
+      "n_rookies": 81,
+      "best_rookie_overall_rank": 6,
+      "best_rookie": "Jeremiyah Love",
+      "best_rookie_position": "RB",
+      "best_rookie_fp": 291.63,
+      "n_rookies_in_top10": 1,
+      "top1_is_rookie": false,
+      "placement": {
+        "clears": false,
+        "evaluable": true,
+        "threshold_invariant": true,
+        "strictest_cap": 11.5,
+        "best_rookie_overall_rank": 6.0,
+        "cap": 8.8,
+        "q": 0.1,
+        "breach": true,
+        "caps_over_q_band": {
+          "Q05": 7.9,
+          "Q10": 8.8,
+          "Q15": 9.7,
+          "Q20": 10.6,
+          "Q25": 11.5
+        },
+        "observed_minimum": 7.0,
+        "breaches_even_the_observed_minimum": true,
+        "verdict_is_threshold_invariant": true,
+        "reality_breach_rate_top10": 0.286
+      },
+      "profile": {
+        "per_position": {
+          "RB": {
+            "top_ratio": 1.3991,
+            "tier_mean_ratio": 1.476,
+            "top_delta_ppr": 83.19
+          },
+          "TE": {
+            "top_ratio": 1.2974,
+            "tier_mean_ratio": 1.3264,
+            "top_delta_ppr": 41.92
+          },
+          "WR": {
+            "top_ratio": 1.0984,
+            "tier_mean_ratio": 1.2369,
+            "top_delta_ppr": 18.83
+          }
+        },
+        "mean_top_ratio": 1.265,
+        "mean_tier_ratio": 1.3464,
+        "attenuates_at_top": true
+      }
+    },
+    "zero_scale": {
+      "n_rookies": 81,
+      "best_rookie_overall_rank": 12,
+      "best_rookie": "Fernando Mendoza",
+      "best_rookie_position": "QB",
+      "best_rookie_fp": 268.33,
+      "n_rookies_in_top10": 0,
+      "top1_is_rookie": false,
+      "placement": {
+        "clears": true,
+        "evaluable": true,
+        "threshold_invariant": true,
+        "strictest_cap": 11.5,
+        "best_rookie_overall_rank": 12.0,
+        "cap": 8.8,
+        "q": 0.1,
+        "breach": false,
+        "caps_over_q_band": {
+          "Q05": 7.9,
+          "Q10": 8.8,
+          "Q15": 9.7,
+          "Q20": 10.6,
+          "Q25": 11.5
+        },
+        "observed_minimum": 7.0,
+        "breaches_even_the_observed_minimum": false,
+        "verdict_is_threshold_invariant": true,
+        "reality_breach_rate_top10": 0.286
+      },
+      "degenerate": true
+    },
+    "pos_median": {
+      "n_rookies": 81,
+      "best_rookie_overall_rank": 12,
+      "best_rookie": "Fernando Mendoza",
+      "best_rookie_position": "QB",
+      "best_rookie_fp": 268.33,
+      "n_rookies_in_top10": 0,
+      "top1_is_rookie": false,
+      "placement": {
+        "clears": true,
+        "evaluable": true,
+        "threshold_invariant": true,
+        "strictest_cap": 11.5,
+        "best_rookie_overall_rank": 12.0,
+        "cap": 8.8,
+        "q": 0.1,
+        "breach": false,
+        "caps_over_q_band": {
+          "Q05": 7.9,
+          "Q10": 8.8,
+          "Q15": 9.7,
+          "Q20": 10.6,
+          "Q25": 11.5
+        },
+        "observed_minimum": 7.0,
+        "breaches_even_the_observed_minimum": false,
+        "verdict_is_threshold_invariant": true,
+        "reality_breach_rate_top10": 0.286
+      },
+      "degenerate": true
+    }
+  },
+  "best_recal": {
+    "label": "ols_slope",
+    "per_cohort": {
+      "2019": {
+        "n": 80,
+        "tier_mae": 0.887,
+        "tier_bias": -0.4824,
+        "tier_mae_by_pos": {
+          "QB": 76.15,
+          "RB": 80.11,
+          "TE": 20.63,
+          "WR": 74.97
+        },
+        "tier_bias_by_pos": {
+          "QB": -76.15,
+          "RB": -34.21,
+          "TE": 7.77,
+          "WR": -47.14
+        },
+        "mae": 46.33,
+        "rmse": 61.792,
+        "bias": -8.291,
+        "slope": 1.458,
+        "rho": 0.5575,
+        "rho_by_pos": {
+          "QB": 0.8246,
+          "RB": 0.5816,
+          "WR": 0.3436,
+          "TE": 0.4804
+        },
+        "bias_by_pos": {
+          "QB": -24.28,
+          "RB": 6.65,
+          "TE": 10.1,
+          "WR": -25.85
+        }
+      },
+      "2020": {
+        "n": 77,
+        "tier_mae": 0.9348,
+        "tier_bias": -0.6761,
+        "tier_mae_by_pos": {
+          "QB": 112.02,
+          "RB": 60.86,
+          "TE": 19.9,
+          "WR": 81.74
+        },
+        "tier_bias_by_pos": {
+          "QB": -70.18,
+          "RB": -43.63,
+          "TE": -4.36,
+          "WR": -81.62
+        },
+        "mae": 43.613,
+        "rmse": 63.052,
+        "bias": -12.135,
+        "slope": 1.541,
+        "rho": 0.6686,
+        "rho_by_pos": {
+          "QB": 0.5656,
+          "RB": 0.7506,
+          "WR": 0.7103,
+          "TE": 0.6479
+        },
+        "bias_by_pos": {
+          "QB": -6.67,
+          "RB": -12.28,
+          "TE": 12.17,
+          "WR": -22.27
+        }
+      },
+      "2021": {
+        "n": 75,
+        "tier_mae": 1.0051,
+        "tier_bias": -0.2575,
+        "tier_mae_by_pos": {
+          "QB": 59.85,
+          "RB": 91.85,
+          "TE": 62.2,
+          "WR": 50.2
+        },
+        "tier_bias_by_pos": {
+          "QB": 59.85,
+          "RB": -14.58,
+          "TE": -39.76,
+          "WR": -36.75
+        },
+        "mae": 47.719,
+        "rmse": 61.435,
+        "bias": -0.893,
+        "slope": 1.01,
+        "rho": 0.5797,
+        "rho_by_pos": {
+          "QB": 0.4788,
+          "RB": 0.625,
+          "WR": 0.7,
+          "TE": 0.5152
+        },
+        "bias_by_pos": {
+          "QB": -3.22,
+          "RB": -10.1,
+          "TE": -16.29,
+          "WR": 9.43
+        }
+      },
+      "2022": {
+        "n": 79,
+        "tier_mae": 0.6502,
+        "tier_bias": -0.3419,
+        "tier_mae_by_pos": {
+          "QB": 45.88,
+          "RB": 61.69,
+          "TE": 31.4,
+          "WR": 44.27
+        },
+        "tier_bias_by_pos": {
+          "QB": -25.11,
+          "RB": -44.63,
+          "TE": -31.4,
+          "WR": 10.66
+        },
+        "mae": 37.386,
+        "rmse": 47.372,
+        "bias": -0.729,
+        "slope": 0.891,
+        "rho": 0.5498,
+        "rho_by_pos": {
+          "QB": 0.5188,
+          "RB": 0.5494,
+          "WR": 0.6479,
+          "TE": 0.4833
+        },
+        "bias_by_pos": {
+          "QB": -13.61,
+          "RB": 0.37,
+          "TE": -13.93,
+          "WR": 11.47
+        }
+      },
+      "2023": {
+        "n": 80,
+        "tier_mae": 1.0906,
+        "tier_bias": -0.6624,
+        "tier_mae_by_pos": {
+          "QB": 57.45,
+          "RB": 52.93,
+          "TE": 76.13,
+          "WR": 87.24
+        },
+        "tier_bias_by_pos": {
+          "QB": 9.05,
+          "RB": -12.37,
+          "TE": -58.29,
+          "WR": -85.1
+        },
+        "mae": 42.279,
+        "rmse": 60.466,
+        "bias": -12.219,
+        "slope": 1.011,
+        "rho": 0.7473,
+        "rho_by_pos": {
+          "QB": 0.6946,
+          "RB": 0.8449,
+          "WR": 0.7471,
+          "TE": 0.7025
+        },
+        "bias_by_pos": {
+          "QB": 6.73,
+          "RB": 9.3,
+          "TE": -5.75,
+          "WR": -34.94
+        }
+      },
+      "2024": {
+        "n": 77,
+        "tier_mae": 1.0455,
+        "tier_bias": -0.5309,
+        "tier_mae_by_pos": {
+          "QB": 76.64,
+          "RB": 82.83,
+          "TE": 63.13,
+          "WR": 64.21
+        },
+        "tier_bias_by_pos": {
+          "QB": -76.64,
+          "RB": -0.35,
+          "TE": -34.73,
+          "WR": -34.42
+        },
+        "mae": 48.05,
+        "rmse": 66.282,
+        "bias": -4.596,
+        "slope": 1.32,
+        "rho": 0.5719,
+        "rho_by_pos": {
+          "QB": 0.7304,
+          "RB": 0.2642,
+          "WR": 0.7057,
+          "TE": 0.5874
+        },
+        "bias_by_pos": {
+          "QB": -29.1,
+          "RB": 2.0,
+          "TE": -9.0,
+          "WR": 1.04
+        }
+      },
+      "2025": {
+        "n": 85,
+        "tier_mae": 0.7978,
+        "tier_bias": -0.2898,
+        "tier_mae_by_pos": {
+          "QB": 95.29,
+          "RB": 75.84,
+          "TE": 22.61,
+          "WR": 54.7
+        },
+        "tier_bias_by_pos": {
+          "QB": -47.68,
+          "RB": -26.77,
+          "TE": -22.61,
+          "WR": 10.5
+        },
+        "mae": 43.08,
+        "rmse": 57.015,
+        "bias": -4.25,
+        "slope": 0.771,
+        "rho": 0.6178,
+        "rho_by_pos": {
+          "QB": 0.6314,
+          "RB": 0.5127,
+          "WR": 0.491,
+          "TE": 0.8359
+        },
+        "bias_by_pos": {
+          "QB": -9.71,
+          "RB": -7.39,
+          "TE": -16.61,
+          "WR": 7.51
+        }
+      }
+    },
+    "per_cohort_pooled": {
+      "2019": 0.8787,
+      "2020": 0.8268,
+      "2021": 1.1216,
+      "2022": 0.6988,
+      "2023": 1.2354,
+      "2024": 1.0991,
+      "2025": 0.7245
+    },
+    "pooled_tier_mae": 0.9407,
+    "tier_mae": 0.9407,
+    "universe_mae": 42.963,
+    "universe_bias": -5.405,
+    "key": "ols_slope@1",
+    "form": "ols_slope",
+    "lam": 1.0,
+    "recalibrates": true,
+    "shippable": true,
+    "attenuates": false,
+    "is_foil": false,
+    "matches": null,
+    "monotone": false,
+    "learned": false,
+    "universe_mae_QB": 50.15,
+    "tier_mae_QB": 74.754,
+    "tier_bias_QB": -32.409,
+    "rho_QB": 0.6349,
+    "universe_mae_RB": 46.9,
+    "tier_mae_RB": 72.301,
+    "tier_bias_RB": -25.22,
+    "rho_RB": 0.5898,
+    "universe_mae_TE": 29.54,
+    "tier_mae_TE": 42.286,
+    "tier_bias_TE": -26.197,
+    "rho_TE": 0.6075,
+    "universe_mae_WR": 46.35,
+    "tier_mae_WR": 65.333,
+    "tier_bias_WR": -37.696,
+    "rho_WR": 0.6208
+  },
+  "best_real_arm_metric": 0.9407,
+  "family_ceiling_check": {
+    "ok": false,
+    "n_checked": 3,
+    "violations": [
+      {
+        "arm": "power",
+        "form": "power",
+        "ceiling_anchor": null,
+        "ceiling": null,
+        "arm_metric": 2.369,
+        "ok": false,
+        "note": "no scorable matched-family ceiling \u2014 the check would pass on NOTHING"
+      },
+      {
+        "arm": "isotonic",
+        "form": "isotonic",
+        "ceiling_anchor": null,
+        "ceiling": null,
+        "arm_metric": 0.9592,
+        "ok": false,
+        "note": "no scorable matched-family ceiling \u2014 the check would pass on NOTHING"
+      }
+    ],
+    "per_arm": [
+      {
+        "arm": "ols_slope",
+        "form": "ols_slope",
+        "ceiling_anchor": "oracle_ols",
+        "ceiling": 0.7784,
+        "arm_metric": 0.9407,
+        "margin": 0.1623,
+        "ok": true
+      },
+      {
+        "arm": "power",
+        "form": "power",
+        "ceiling_anchor": null,
+        "ceiling": null,
+        "arm_metric": 2.369,
+        "ok": false,
+        "note": "no scorable matched-family ceiling \u2014 the check would pass on NOTHING"
+      },
+      {
+        "arm": "isotonic",
+        "form": "isotonic",
+        "ceiling_anchor": null,
+        "ceiling": null,
+        "arm_metric": 0.9592,
+        "ok": false,
+        "note": "no scorable matched-family ceiling \u2014 the check would pass on NOTHING"
+      }
+    ]
+  },
+  "checks": {
+    "degenerates_lose": true,
+    "permutation_across_beaten": true,
+    "permutation_within_beaten": true,
+    "oracle_respected": true,
+    "family_ceiling_respected": false,
+    "qb_untouched": true
+  },
+  "selection": {
+    "framing": "pooled",
+    "placement_binds": true,
+    "n_candidates": 4,
+    "n_eligible": 1,
+    "incumbent_metric": 1.0738,
+    "incumbent_rho": {
+      "RB": 0.5898,
+      "TE": 0.6075,
+      "WR": 0.6208
+    },
+    "winner": {
+      "label": "incumbent (NULL)",
+      "key": "incumbent@0",
+      "form": "incumbent",
+      "lam": 0.0,
+      "recalibrates": false,
+      "shippable": true,
+      "attenuates": false,
+      "monotone": false,
+      "learned": false,
+      "metric": 1.0738,
+      "rho": {
+        "RB": 0.5898,
+        "TE": 0.6075,
+        "WR": 0.6208
+      }
+    },
+    "best_any": {
+      "label": "ols_slope",
+      "metric": 0.9407,
+      "eligible": false
+    },
+    "ordering": {
+      "ok": true,
+      "strict_ok": true,
+      "per_position": {
+        "RB": {
+          "incumbent": 0.5898,
+          "candidate": 0.5898,
+          "delta": 0.0,
+          "ok": true
+        },
+        "TE": {
+          "incumbent": 0.6075,
+          "candidate": 0.6075,
+          "delta": 0.0,
+          "ok": true
+        },
+        "WR": {
+          "incumbent": 0.6208,
+          "candidate": 0.6208,
+          "delta": 0.0,
+          "ok": true
+        }
+      },
+      "worst_delta": 0.0,
+      "tol": 0.02
+    },
+    "placement": {
+      "clears": true,
+      "evaluable": true,
+      "threshold_invariant": true,
+      "strictest_cap": 11.5,
+      "best_rookie_overall_rank": 12.0,
+      "cap": 8.8,
+      "q": 0.1,
+      "breach": false,
+      "caps_over_q_band": {
+        "Q05": 7.9,
+        "Q10": 8.8,
+        "Q15": 9.7,
+        "Q20": 10.6,
+        "Q25": 11.5
+      },
+      "observed_minimum": 7.0,
+      "breaches_even_the_observed_minimum": false,
+      "verdict_is_threshold_invariant": true,
+      "reality_breach_rate_top10": 0.286
+    },
+    "deflation": {
+      "pbo": null,
+      "n_splits": 0,
+      "note": "too few classes/configs for CSCV",
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "n_configs": 1,
+      "dsr": null,
+      "dsr_contenders": null
+    },
+    "pvalue": 1.0,
+    "per_cohort_delta": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "eligible_labels": [
+      "incumbent (NULL)"
+    ],
+    "ineligible": [
+      {
+        "label": "ols_slope",
+        "ordering_ok": true,
+        "placement_clears": false,
+        "best_rookie_overall_rank": 6
+      },
+      {
+        "label": "power",
+        "ordering_ok": true,
+        "placement_clears": false,
+        "best_rookie_overall_rank": 1
+      },
+      {
+        "label": "isotonic",
+        "ordering_ok": false,
+        "placement_clears": false,
+        "best_rookie_overall_rank": 7
+      }
+    ]
+  },
+  "ordering_only": {
+    "framing": "pooled",
+    "placement_binds": false,
+    "n_candidates": 4,
+    "n_eligible": 3,
+    "incumbent_metric": 1.0738,
+    "incumbent_rho": {
+      "RB": 0.5898,
+      "TE": 0.6075,
+      "WR": 0.6208
+    },
+    "winner": {
+      "label": "ols_slope",
+      "key": "ols_slope@1",
+      "form": "ols_slope",
+      "lam": 1.0,
+      "recalibrates": true,
+      "shippable": true,
+      "attenuates": false,
+      "monotone": false,
+      "learned": false,
+      "metric": 0.9407,
+      "rho": {
+        "RB": 0.5898,
+        "TE": 0.6075,
+        "WR": 0.6208
+      }
+    },
+    "best_any": {
+      "label": "ols_slope",
+      "metric": 0.9407,
+      "eligible": true
+    },
+    "ordering": {
+      "ok": true,
+      "strict_ok": true,
+      "per_position": {
+        "RB": {
+          "incumbent": 0.5898,
+          "candidate": 0.5898,
+          "delta": 0.0,
+          "ok": true
+        },
+        "TE": {
+          "incumbent": 0.6075,
+          "candidate": 0.6075,
+          "delta": 0.0,
+          "ok": true
+        },
+        "WR": {
+          "incumbent": 0.6208,
+          "candidate": 0.6208,
+          "delta": 0.0,
+          "ok": true
+        }
+      },
+      "worst_delta": 0.0,
+      "tol": 0.02
+    },
+    "placement": {
+      "clears": false,
+      "evaluable": true,
+      "threshold_invariant": true,
+      "strictest_cap": 11.5,
+      "best_rookie_overall_rank": 6.0,
+      "cap": 8.8,
+      "q": 0.1,
+      "breach": true,
+      "caps_over_q_band": {
+        "Q05": 7.9,
+        "Q10": 8.8,
+        "Q15": 9.7,
+        "Q20": 10.6,
+        "Q25": 11.5
+      },
+      "observed_minimum": 7.0,
+      "breaches_even_the_observed_minimum": true,
+      "verdict_is_threshold_invariant": true,
+      "reality_breach_rate_top10": 0.286
+    },
+    "deflation": {
+      "pbo": 0.0,
+      "n_splits": 35,
+      "median_logit": 1.099,
+      "os_gap_pct": 0.0,
+      "os_gap_p90_pct": 0.0,
+      "contender_spread_pct": 151.83,
+      "flips": [
+        {
+          "config": "ols_slope",
+          "IS-half wins": 35,
+          "share": 1.0,
+          "full-sample IS80": 0.941,
+          "\u0394 vs best %": 0.0
+        }
+      ],
+      "n_configs": 3,
+      "dsr": 0.5443,
+      "dsr_contenders": 0.9984
+    },
+    "pvalue": 0.0033,
+    "per_cohort_delta": [
+      0.026,
+      0.143,
+      0.105,
+      0.135,
+      0.158,
+      0.064,
+      0.299
+    ],
+    "eligible_labels": [
+      "incumbent (NULL)",
+      "ols_slope",
+      "power"
+    ],
+    "ineligible": [
+      {
+        "label": "isotonic",
+        "ordering_ok": false,
+        "placement_clears": false,
+        "best_rookie_overall_rank": 7
+      }
+    ]
+  },
+  "ship_gate": {
+    "ship": false,
+    "framing": "pooled",
+    "has_eligible_winner": true,
+    "recalibrates": false,
+    "beats_incumbent": false,
+    "ordering_ok_every_position": true,
+    "placement_clears_threshold_invariant": true,
+    "pbo_ok": false,
+    "dsr_ok": false,
+    "significant": false
+  },
+  "verdict": {
+    "ship": false,
+    "pooled_gate_passes": false,
+    "degenerates_lose": true,
+    "permutation_across_beaten": true,
+    "permutation_within_beaten": true,
+    "oracle_respected": true,
+    "family_ceiling_respected": false,
+    "qb_untouched": true
+  },
+  "attribution": {
+    "rows": [
+      {
+        "arm": "power",
+        "foil": "global_match(power)",
+        "arm_tier_mae": 2.369,
+        "foil_tier_mae": 0.9407,
+        "paired_delta": 1.4283,
+        "arm_rank": 1,
+        "foil_rank": 6,
+        "arm_clears": false,
+        "foil_clears": false,
+        "shape_earns_clearance": false,
+        "magnitude_explains_it": false
+      },
+      {
+        "arm": "isotonic",
+        "foil": "global_match(isotonic)",
+        "arm_tier_mae": 0.9592,
+        "foil_tier_mae": 0.9407,
+        "paired_delta": 0.0185,
+        "arm_rank": 7,
+        "foil_rank": 6,
+        "arm_clears": false,
+        "foil_clears": false,
+        "shape_earns_clearance": false,
+        "magnitude_explains_it": false
+      }
+    ],
+    "n_pairs": 2,
+    "shape_earns_a_clearance": false,
+    "magnitude_alone_explains_a_clearance": false,
+    "reading": "no_clearance_to_attribute"
+  },
+  "per_position": {
+    "per_position": [
+      {
+        "position": "RB",
+        "incumbent_metric": 80.43,
+        "winner": "incumbent (NULL)",
+        "metric": 80.43,
+        "delta": 0.0,
+        "pbo": null,
+        "dsr": null,
+        "pvalue": 1.0
+      },
+      {
+        "position": "TE",
+        "incumbent_metric": 53.9186,
+        "winner": "incumbent (NULL)",
+        "metric": 53.9186,
+        "delta": 0.0,
+        "pbo": null,
+        "dsr": null,
+        "pvalue": 1.0
+      },
+      {
+        "position": "WR",
+        "incumbent_metric": 68.8357,
+        "winner": "incumbent (NULL)",
+        "metric": 68.8357,
+        "delta": 0.0,
+        "pbo": null,
+        "dsr": null,
+        "pvalue": 1.0
+      }
+    ],
+    "fdr": {
+      "RB": false,
+      "TE": false,
+      "WR": false
+    },
+    "bh_cutoff_unconditional": 0.0333
+  },
+  "ordering": [
+    {
+      "form": "ols_slope",
+      "ordering_class": "conditionally monotone",
+      "max_rank_move_by_pos": {
+        "RB": 0.0,
+        "TE": 0.0,
+        "WR": 0.0
+      },
+      "worst_rank_move": 0.0,
+      "structural_claim_holds": true
+    },
+    {
+      "form": "power",
+      "ordering_class": "conditionally monotone",
+      "max_rank_move_by_pos": {
+        "RB": 0.0,
+        "TE": 0.0,
+        "WR": 0.0
+      },
+      "worst_rank_move": 0.0,
+      "structural_claim_holds": true
+    },
+    {
+      "form": "huber",
+      "ordering_class": "conditionally monotone",
+      "max_rank_move_by_pos": {
+        "RB": 0.0,
+        "TE": 0.0,
+        "WR": 0.0
+      },
+      "worst_rank_move": 0.0,
+      "structural_claim_holds": true
+    },
+    {
+      "form": "qmap",
+      "ordering_class": "monotone by construction",
+      "max_rank_move_by_pos": {
+        "RB": 1.5,
+        "TE": 3.0,
+        "WR": 4.5
+      },
+      "worst_rank_move": 4.5,
+      "structural_claim_holds": false
+    },
+    {
+      "form": "isotonic",
+      "ordering_class": "reordering",
+      "max_rank_move_by_pos": {
+        "RB": 3.5,
+        "TE": 3.0,
+        "WR": 4.0
+      },
+      "worst_rank_move": 4.0,
+      "structural_claim_holds": true
+    }
+  ],
+  "fitted": {
+    "rows": [
+      {
+        "class": 2019,
+        "position": "RB",
+        "ols a": -5.344,
+        "ols b": 1.3928,
+        "huber a": -19.448,
+        "huber b": 1.4653,
+        "power c": -6.022,
+        "power \u03b3": 2.0,
+        "power smear": 2.0
+      },
+      {
+        "class": 2019,
+        "position": "TE",
+        "ols a": 7.178,
+        "ols b": 0.9773,
+        "huber a": -4.155,
+        "huber b": 1.1356,
+        "power c": -3.775,
+        "power \u03b3": 1.9159,
+        "power smear": 2.0
+      },
+      {
+        "class": 2019,
+        "position": "WR",
+        "ols a": 18.435,
+        "ols b": 0.889,
+        "huber a": -0.318,
+        "huber b": 0.9711,
+        "power c": -5.054,
+        "power \u03b3": 2.0,
+        "power smear": 2.0
+      },
+      {
+        "class": 2020,
+        "position": "RB",
+        "ols a": -1.019,
+        "ols b": 1.4183,
+        "huber a": -16.539,
+        "huber b": 1.5606,
+        "power c": -5.333,
+        "power \u03b3": 2.0,
+        "power smear": 2.0
+      },
+      {
+        "class": 2020,
+        "position": "TE",
+        "ols a": 2.884,
+        "ols b": 1.2052,
+        "huber a": -7.502,
+        "huber b": 1.3266,
+        "power c": -3.82,
+        "power \u03b3": 1.9514,
+        "power smear": 2.0
+      },
+      {
+        "class": 2020,
+        "position": "WR",
+        "ols a": 27.964,
+        "ols b": 0.6663,
+        "huber a": 5.727,
+        "huber b": 0.8196,
+        "power c": -4.57,
+        "power \u03b3": 2.0,
+        "power smear": 2.0
+      },
+      {
+        "class": 2021,
+        "position": "RB",
+        "ols a": -2.722,
+        "ols b": 1.4585,
+        "huber a": -19.569,
+        "huber b": 1.663,
+        "power c": -5.35,
+        "power \u03b3": 2.0,
+        "power smear": 2.0
+      },
+      {
+        "class": 2021,
+        "position": "TE",
+        "ols a": 5.938,
+        "ols b": 1.1404,
+        "huber a": -3.03,
+        "huber b": 1.2133,
+        "power c": -2.94,
+        "power \u03b3": 1.759,
+        "power smear": 2.0
+      },
+      {
+        "class": 2021,
+        "position": "WR",
+        "ols a": 23.761,
+        "ols b": 0.8266,
+        "huber a": -4.179,
+        "huber b": 1.2469,
+        "power c": -4.026,
+        "power \u03b3": 1.9584,
+        "power smear": 2.0
+      },
+      {
+        "class": 2022,
+        "position": "RB",
+        "ols a": -0.713,
+        "ols b": 1.3864,
+        "huber a": -20.612,
+        "huber b": 1.6756,
+        "power c": -4.617,
+        "power \u03b3": 2.0,
+        "power smear": 2.0
+      },
+      {
+        "class": 2022,
+        "position": "TE",
+        "ols a": 2.03,
+        "ols b": 1.3584,
+        "huber a": -8.235,
+        "huber b": 1.5265,
+        "power c": -3.256,
+        "power \u03b3": 1.8653,
+        "power smear": 2.0
+      },
+      {
+        "class": 2022,
+        "position": "WR",
+        "ols a": 18.946,
+        "ols b": 0.9575,
+        "huber a": -6.16,
+        "huber b": 1.3151,
+        "power c": -3.462,
+        "power \u03b3": 1.8279,
+        "power smear": 2.0
+      },
+      {
+        "class": 2023,
+        "position": "RB",
+        "ols a": 0.0,
+        "ols b": 1.4251,
+        "huber a": -20.973,
+        "huber b": 1.7386,
+        "power c": -4.222,
+        "power \u03b3": 1.9724,
+        "power smear": 2.0
+      },
+      {
+        "class": 2023,
+        "position": "TE",
+        "ols a": 2.352,
+        "ols b": 1.3432,
+        "huber a": -6.95,
+        "huber b": 1.4977,
+        "power c": -3.295,
+        "power \u03b3": 1.8717,
+        "power smear": 2.0
+      },
+      {
+        "class": 2023,
+        "position": "WR",
+        "ols a": 18.205,
+        "ols b": 0.9482,
+        "huber a": -3.575,
+        "huber b": 1.1769,
+        "power c": -3.15,
+        "power \u03b3": 1.7312,
+        "power smear": 2.0
+      },
+      {
+        "class": 2024,
+        "position": "RB",
+        "ols a": 3.299,
+        "ols b": 1.3458,
+        "huber a": -13.252,
+        "huber b": 1.5043,
+        "power c": -4.111,
+        "power \u03b3": 1.9477,
+        "power smear": 2.0
+      },
+      {
+        "class": 2024,
+        "position": "TE",
+        "ols a": 0.829,
+        "ols b": 1.3599,
+        "huber a": -6.742,
+        "huber b": 1.4283,
+        "power c": -3.229,
+        "power \u03b3": 1.8356,
+        "power smear": 2.0
+      },
+      {
+        "class": 2024,
+        "position": "WR",
+        "ols a": 19.748,
+        "ols b": 0.9349,
+        "huber a": -2.142,
+        "huber b": 1.1545,
+        "power c": -3.194,
+        "power \u03b3": 1.7335,
+        "power smear": 2.0
+      },
+      {
+        "class": 2025,
+        "position": "RB",
+        "ols a": 4.772,
+        "ols b": 1.3509,
+        "huber a": -11.961,
+        "huber b": 1.4958,
+        "power c": -3.89,
+        "power \u03b3": 1.9076,
+        "power smear": 2.0
+      },
+      {
+        "class": 2025,
+        "position": "TE",
+        "ols a": -1.421,
+        "ols b": 1.46,
+        "huber a": -7.347,
+        "huber b": 1.4737,
+        "power c": -3.021,
+        "power \u03b3": 1.7813,
+        "power smear": 2.0
+      },
+      {
+        "class": 2025,
+        "position": "WR",
+        "ols a": 18.798,
+        "ols b": 0.9639,
+        "huber a": -2.144,
+        "huber b": 1.1596,
+        "power c": -3.183,
+        "power \u03b3": 1.7338,
+        "power smear": 2.0
+      }
+    ],
+    "n_slopes": 42,
+    "n_gammas": 21,
+    "all_slopes_positive": true,
+    "all_gammas_below_one": false,
+    "min_gamma": 1.7312,
+    "max_gamma": 2.0,
+    "min_slope": 0.6663,
+    "max_slope": 1.7386
+  },
+  "flips": [],
+  "field_table": [
+    {
+      "arm": "ols_slope",
+      "kind": "REFERENCE (NF-D16)",
+      "pooled tier MAE": 0.9407,
+      "tier MAE RB": 72.301,
+      "tier MAE TE": 42.286,
+      "tier MAE WR": 65.333,
+      "universe MAE": 42.963,
+      "universe bias": -5.405,
+      "board rank": 6,
+      "placement clears": false
+    },
+    {
+      "arm": "global_match(power)",
+      "kind": "MATCHED FOIL (\u26d4 not shippable)",
+      "pooled tier MAE": 0.9407,
+      "tier MAE RB": 72.301,
+      "tier MAE TE": 42.286,
+      "tier MAE WR": 65.333,
+      "universe MAE": 42.963,
+      "universe bias": -5.405,
+      "board rank": 6,
+      "placement clears": false
+    },
+    {
+      "arm": "global_match(isotonic)",
+      "kind": "MATCHED FOIL (\u26d4 not shippable)",
+      "pooled tier MAE": 0.9407,
+      "tier MAE RB": 72.301,
+      "tier MAE TE": 42.286,
+      "tier MAE WR": 65.333,
+      "universe MAE": 42.963,
+      "universe bias": -5.405,
+      "board rank": 6,
+      "placement clears": false
+    },
+    {
+      "arm": "isotonic",
+      "kind": "attenuating",
+      "pooled tier MAE": 0.9592,
+      "tier MAE RB": 68.903,
+      "tier MAE TE": 47.461,
+      "tier MAE WR": 64.204,
+      "universe MAE": 41.48,
+      "universe bias": -3.394,
+      "board rank": 7,
+      "placement clears": false
+    },
+    {
+      "arm": "incumbent (NULL)",
+      "kind": "NULL",
+      "pooled tier MAE": 1.0738,
+      "tier MAE RB": 80.43,
+      "tier MAE TE": 53.919,
+      "tier MAE WR": 68.836,
+      "universe MAE": 42.054,
+      "universe bias": -20.869,
+      "board rank": 12,
+      "placement clears": true
+    },
+    {
+      "arm": "power",
+      "kind": "attenuating",
+      "pooled tier MAE": 2.369,
+      "tier MAE RB": 154.09,
+      "tier MAE TE": 106.25,
+      "tier MAE WR": 194.859,
+      "universe MAE": 66.021,
+      "universe bias": 9.8,
+      "board rank": 1,
+      "placement clears": false
+    }
+  ],
+  "board_table": [
+    {
+      "arm": "incumbent (NULL)",
+      "best rookie": "Fernando Mendoza",
+      "pos": "QB",
+      "proj PPR": 268.33,
+      "overall rank": 12,
+      "rookies in top 10": 0,
+      "clears cap (threshold-invariant)": true,
+      "top-of-board ratio": 1.0,
+      "tier mean ratio": 1.0,
+      "attenuates at top": false
+    },
+    {
+      "arm": "ols_slope",
+      "best rookie": "Jeremiyah Love",
+      "pos": "RB",
+      "proj PPR": 291.63,
+      "overall rank": 6,
+      "rookies in top 10": 1,
+      "clears cap (threshold-invariant)": false,
+      "top-of-board ratio": 1.265,
+      "tier mean ratio": 1.3464,
+      "attenuates at top": true
+    },
+    {
+      "arm": "power",
+      "best rookie": "Jeremiyah Love",
+      "pos": "RB",
+      "proj PPR": 1141.3,
+      "overall rank": 1,
+      "rookies in top 10": 4,
+      "clears cap (threshold-invariant)": false,
+      "top-of-board ratio": 4.6309,
+      "tier mean ratio": 2.4081,
+      "attenuates at top": false
+    },
+    {
+      "arm": "isotonic",
+      "best rookie": "Jeremiyah Love",
+      "pos": "RB",
+      "proj PPR": 286.24,
+      "overall rank": 7,
+      "rookies in top 10": 1,
+      "clears cap (threshold-invariant)": false,
+      "top-of-board ratio": 1.1692,
+      "tier mean ratio": 1.5675,
+      "attenuates at top": true
+    },
+    {
+      "arm": "global_match(power)",
+      "best rookie": "Jeremiyah Love",
+      "pos": "RB",
+      "proj PPR": 291.63,
+      "overall rank": 6,
+      "rookies in top 10": 1,
+      "clears cap (threshold-invariant)": false,
+      "top-of-board ratio": 1.265,
+      "tier mean ratio": 1.3464,
+      "attenuates at top": true
+    },
+    {
+      "arm": "global_match(isotonic)",
+      "best rookie": "Jeremiyah Love",
+      "pos": "RB",
+      "proj PPR": 291.63,
+      "overall rank": 6,
+      "rookies in top 10": 1,
+      "clears cap (threshold-invariant)": false,
+      "top-of-board ratio": 1.265,
+      "tier mean ratio": 1.3464,
+      "attenuates at top": true
+    },
+    {
+      "arm": "zero_scale",
+      "best rookie": "Fernando Mendoza",
+      "pos": "QB",
+      "proj PPR": 268.33,
+      "overall rank": 12,
+      "rookies in top 10": 0,
+      "clears cap (threshold-invariant)": true,
+      "top-of-board ratio": null,
+      "tier mean ratio": null,
+      "attenuates at top": null
+    },
+    {
+      "arm": "pos_median",
+      "best rookie": "Fernando Mendoza",
+      "pos": "QB",
+      "proj PPR": 268.33,
+      "overall rank": 12,
+      "rookies in top 10": 0,
+      "clears cap (threshold-invariant)": true,
+      "top-of-board ratio": null,
+      "tier mean ratio": null,
+      "attenuates at top": null
+    }
+  ],
+  "cap_band": {
+    "Q05": 7.9,
+    "Q10": 8.8,
+    "Q15": 9.7,
+    "Q20": 10.6,
+    "Q25": 11.5
+  },
+  "observed_minimum": 7.0,
+  "strictest_cap": 11.5,
+  "qb_max_drift": 0.0,
+  "headline": "\ud83d\udfe1 RECORDED NULL \u2014 no pre-registered top-attenuation clears both constraints; NF-D16's correction cannot be served",
+  "serving_fidelity": {
+    "max_abs_diff": 0.0,
+    "n_checked": 81
+  },
+  "sensitivity": {
+    "DSR whole-field (THE GATE)": null,
+    "DSR contender-set (reported)": null,
+    "ships at pre-registered DSR \u2265 0.95": false,
+    "ships at NF1.4's DSR \u2265 0.0": false,
+    "ships with the DSR dropped entirely": false,
+    "ships on the CONTENDER DSR reading": false
+  },
+  "sensitivity_prose": "\u2b50 **THE ANSWER DOES NOT TURN ON THE DISPUTABLE GATE, AND THAT IS THE POINT OF COMPUTING IT.** Nothing ships even with the DSR removed ENTIRELY and even on the kinder contender-set reading, because `['recalibrates', 'beats_incumbent', 'pbo_ok', 'significant']` blocks independently. So the verdict is not an artefact of inheriting NF-D16's stricter DSR bar nor of naming the whole-field reading as binding \u2014 a reader who disagrees with either choice reaches the same verdict.",
+  "framing_agreement_prose": "\u26a0\ufe0f **THE TWO READINGS DISAGREE, AND THAT DISAGREEMENT IS EXACTLY THE STORY.** The ordering-only rule selects `ols_slope`, which the post-hoc placement veto would then REFUSE; the pre-registered rule filters first and selects `incumbent (NULL)`. The pre-registered rule GOVERNS. Reporting both is what makes 'the eligibility choice is disclosed, not hidden' a number.",
+  "limitations": [
+    "\u26a0\ufe0f **THE PLACEMENT CONSTRAINT IS EVALUATED ON ONE BOARD.** It is a serving-time property of the 2026 draft board, not a held-out statistical criterion, so it contributes no power and it does influence WHICH of six discrete forms is selected. Three things bound that: no arm's PARAMETERS are ever tuned to the board (every form is fitted in-fold and has no strength dial), the clearance is required to be THRESHOLD-INVARIANT so no cutoff was chosen, and the ordering-only reading is reported beside it (\u00a73c).",
+    "\u26a0\ufe0f **\u03bb WAS DELIBERATELY NOT RE-OPENED, AND THAT BOUNDS WHAT A NULL HERE MEANS.** A global shrink of NF-D16's affine might well clear the placement cap \u2014 the matched foils measure exactly that \u2014 but re-picking a selection parameter after seeing a constraint result is the E2.1-r inversion. So a null here is 'no top-attenuating SHAPE works', never 'nothing could ever work'; the forbidden move is measured and reported rather than taken.",
+    "**`tier_mae` grades the DRAFTABLE TIER \u2014 ~6 RB / 8 WR / 3 TE per class.** A claim here is a claim about a few dozen rookie-seasons across seven draft classes; the paired per-class deltas are reported so a reader sees the spread rather than only the mean.",
+    "**The in-fold shapes are estimated against IN-SAMPLE point projections** (the training rows' points come from the fold's own slot curve). NF-D16 measured the resulting optimism at \u22120.05 in constant space and the direction is CONSERVATIVE \u2014 it biases a correction toward the identity \u2014 but it is not zero, and it applies to every form here.",
+    "\u26d4 **QB is out of scope by pre-registration, not by result** \u2014 inherited by import through NF-D16 from NF-D15, and proven untouched on both the held-out classes and the served board rather than asserted.",
+    "**No edge claim.** A projection-quality product: `best_alpha = 0`, no CLV/ROI statement."
+  ],
+  "verdict_prose": "**The pre-registered pooled test selects `incumbent (NULL)`**, moving the pooled draftable-tier MAE **1.0738 \u2192 1.0738** (\u0394 0.0) over 7 held-out draft classes, with PBO None, whole-field DSR None (the pre-registered gate, \u2265 0.95) and a one-sided paired p of 1.0 against \u03b1 = 0.1. **Failing gate(s): `['recalibrates', 'beats_incumbent', 'pbo_ok', 'dsr_ok', 'significant']`.**\n\n\u26a0\ufe0f **THERE IS NO CLEARANCE TO ATTRIBUTE.** No attenuating arm clears the placement cap on the emitted board, so the matched-foil control has nothing to separate \u2014 which is itself the cleanest possible reading of the pairing: the shape channel did not produce the outcome the story was built to test.\n\n\u21d2 **RECORDED NULL \u2014 and NF-D16's correction is now shelved PERMANENTLY rather than pending.** The only publish path NF-D17 left open was a top-attenuating re-shaping that clears the validated placement cap while keeping the gain; the pre-registered field does not contain one. NF-D16 stays ratified-but-unserved, the shipped rookie point STANDS, the interval is untouched, and the QB exclusion was never re-opened."
+}

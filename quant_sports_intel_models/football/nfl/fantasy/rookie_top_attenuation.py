@@ -290,6 +290,16 @@ FAMILY_CEILING = {"ols_slope": "oracle_ols", "power": "oracle_power", "huber": "
 
 # The matched global foil's label prefix. One foil per attenuating arm; never shippable, never a trial.
 MATCHED_FOIL_PREFIX = "global_match"
+# ⚠️ WIDENED PAST 1.0 AFTER THE SMOKE RUN, AND THE REASON IS A DEFECT RATHER THAN A RESULT — DISCLOSED.
+# The first cut clipped the foil's λ to [0, 1], i.e. it assumed every attenuating arm applies LESS
+# correction than the reference. Two arms apply MORE, so their λ pinned at 1.0 and the "matched foil"
+# became the REFERENCE ARM ITSELF, byte-identical — a control that examined NOTHING while reporting a
+# clean pairing (the NF1.7 (a) vacuous-check class, in a diagnostic rather than an anchor). The bound
+# is physical, not tuned: a uniform correction 4× the reference's is no longer the same mechanism.
+# ⭐ THE FIX CANNOT MANUFACTURE A SHIP. The matched foils are non-shippable and are excluded from the
+#    eligible set, from PBO's search and from the DSR trial field, so this touches only the ATTRIBUTION
+#    disclosure — and it makes it honest in the direction that can only weaken a mechanism claim.
+MATCHED_FOIL_LAMBDA_CLIP = (0.0, 4.0)
 
 # Physical bounds, not tuning knobs — each one is there to stop a thin in-fold cell from emitting a
 # correction that is a different projection rather than a recalibration.
@@ -311,7 +321,8 @@ __all__ = [
     "PREREGISTERED_DSR_READING", "FRAMING_REASON", "ELIGIBILITY_REASON", "PBO_MAX", "DSR_MIN",
     "ALPHA", "FDR_Q", "FIXED_LAMBDA", "REFERENCE_FORM", "LEARNED_FOIL", "ATTENUATION_FORMS", "FORMS",
     "MONOTONE_FORMS", "CONDITIONALLY_MONOTONE_FORMS", "REORDERING_FORMS", "ORDERING_BINDING_FORMS",
-    "FAMILY_CEILING", "MATCHED_FOIL_PREFIX", "POWER_GAMMA_CLIP", "POWER_SMEAR_CLIP", "HUBER_EPSILON",
+    "FAMILY_CEILING", "MATCHED_FOIL_PREFIX", "MATCHED_FOIL_LAMBDA_CLIP",
+    "POWER_GAMMA_CLIP", "POWER_SMEAR_CLIP", "HUBER_EPSILON",
     "MIN_FIT_ROWS", "MIN_QMAP_ROWS", "MIN_POINT", "NON_SHIPPABLE",
     "SELECTION_METRIC", "ORDERING_DO_NO_HARM", "TIER_K", "SCALED_TIER_K",
     "apply_position_adjustment", "blend_toward_incumbent", "ordering_check", "scaled_positions_only",
@@ -601,7 +612,8 @@ def tier_mask(point, positions, *, tier_k: dict = SCALED_TIER_K) -> np.ndarray:
 
 
 def matched_global_lambda(point, positions, arm_adjusted, reference_adjusted, *,
-                          tier_k: dict = SCALED_TIER_K, clip: tuple = (0.0, 1.0)) -> float | None:
+                          tier_k: dict = SCALED_TIER_K,
+                          clip: tuple = MATCHED_FOIL_LAMBDA_CLIP) -> float | None:
     """The λ at which the REFERENCE AFFINE applies the same MEAN ABSOLUTE CORRECTION over the
     draftable tier as `arm_adjusted` does — the matched foil's only parameter.
 
