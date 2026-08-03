@@ -11,6 +11,28 @@ Delta tables on S3 (SF-FREE, instance-role S3 auth):
 
 Levels (Stats API minor `sportId`s — VERIFIED live 2026-07-22):
     11 Triple-A · 12 Double-A · 13 High-A · 14 Single-A
+    16 "Rookie"  — E8.7: the COMPLEX tier. ⚠️ ONE sportId, SEVERAL distinct rungs.
+
+⭐ E8.7 — WHY sportId 16 CANNOT USE THE `SPORT_LEVELS` ONE-ID-ONE-LEVEL MAPPING (probed live
+   2026-08-03; every number below is measured, not read off a doc):
+  • sportId 16 ("Rookie") contains THREE live leagues — Dominican Summer (130), Florida Complex
+    (124), Arizona Complex (121) — plus, historically, Venezuelan Summer (134), Appalachian (120)
+    and Pioneer (128). The board ranks DSL and CPX as DIFFERENT rungs, so a flat `16: "Rookie"`
+    mapping COLLAPSES two rungs and corrupts the level ladder.
+  • ⚠️ AND THE LEAGUE **NAME** IS NOT A DURABLE KEY — it was RENAMED mid-history for exactly the
+    two leagues that make up CPX: league 124 "Gulf Coast League" → "Florida Complex League" and
+    league 121 "Arizona League" → "Arizona Complex League", both at the 2021 reorganisation. A
+    name-keyed map silently drops every pre-2021 CPX row. The level is therefore derived from the
+    league **ID**, with the name kept only as a last-resort fallback for an unseen id.
+  • ⚠️ AND THE LEVEL IS PER-**TEAM**, NOT PER-GAME: 2 of 10,364 probed sportId-16 games are
+    cross-league, and the stray opponents include league 107 "College Baseball" and league 126
+    "Northwest League". A single game-level `level_name` would mislabel those rows, so each side
+    carries its own `home_level_name` / `away_level_name` and a player row inherits ITS OWN side's.
+  • An UNRECOGNISED league id yields level_name=None (and a counted warning) — never a guess. A
+    NULL level is skipped by every downstream level filter; a WRONG level silently corrupts a rung.
+  • Boxscore field parity confirmed: sportId-16 boxscores carry identical `plateAppearances` /
+    `stolenBases` / `caughtStealing` / `hits` / `doubles` … so BATTING_FIELDS/PITCHING_FIELDS are
+    UNCHANGED. (sportId 17 is Winter Leagues, NOT the DSL — it is deliberately not ingested.)
 
 ⭐ API reality (probed live, not coded-to-docs — the recurring E7/P0.1/N0.x lesson):
   • schedule?sportId=<N>&startDate&endDate&hydrate=team,venue,linescore returns, per
@@ -93,13 +115,76 @@ MILB_S3_PREFIX = "baseball/milb"
 SCHEDULE_TABLE = "schedule"
 LOGS_TABLE = "player_game_logs"
 
-# VERIFIED live 2026-07-22 — the minor sportIds and their level names.
+# VERIFIED live 2026-07-22 — the minor sportIds whose level IS the sportId (one id → one rung).
 SPORT_LEVELS: dict[int, str] = {
     11: "Triple-A",
     12: "Double-A",
     13: "High-A",
     14: "Single-A",
 }
+
+# E8.7 — the one sportId whose level is NOT determined by the sportId (see the module docstring).
+ROOKIE_SPORT_ID = 16
+
+# league_id → rung, VERIFIED live 2026-08-03 across seasons 2008…2026. Keyed on the **ID** because the
+# NAME was renamed in 2021 for both CPX leagues (121 "Arizona League"→"Arizona Complex League";
+# 124 "Gulf Coast League"→"Florida Complex League"), so a name-keyed map loses all pre-2021 CPX rows.
+#
+#   DSL     — foreign summer/complex ball, the lowest affiliated rung (board rank 1).
+#   CPX     — domestic complex ball (board rank 2).
+#   Rookie-Adv — the short-season rookie-ADVANCED leagues, a rung ABOVE complex. Affiliated only
+#               through 2020 (Appalachian went collegiate-summer and Pioneer went independent in
+#               2021), so this rung is HISTORY-ONLY and cannot appear for a current prospect. It is
+#               kept DISTINCT here rather than folded into CPX — the lakehouse preserves the
+#               distinction even where the board's rank vocabulary approximates it.
+ROOKIE_LEAGUE_LEVELS: dict[int, str] = {
+    130: "DSL",          # Dominican Summer League
+    134: "DSL",          # Venezuelan Summer League (through ~2015) — same rung, different league
+    121: "CPX",          # Arizona League → Arizona Complex League (renamed 2021)
+    124: "CPX",          # Gulf Coast League → Florida Complex League (renamed 2021)
+    120: "Rookie-Adv",   # Appalachian League (affiliated ≤2020)
+    128: "Rookie-Adv",   # Pioneer League (affiliated ≤2020)
+}
+
+# Last-resort fallback for a league id never seen in the probe, matched on the NAME. Deliberately
+# narrow: it exists so a NEW complex league (a hypothetical league 1xx) is not silently dropped, not
+# so an arbitrary opponent gets a guessed rung.
+_ROOKIE_LEAGUE_NAME_HINTS: tuple[tuple[str, str], ...] = (
+    ("dominican summer", "DSL"),
+    ("venezuelan summer", "DSL"),
+    ("complex league", "CPX"),
+)
+
+# Every sportId this script knows how to ingest.
+INGESTIBLE_SPORT_IDS: tuple[int, ...] = tuple(SPORT_LEVELS) + (ROOKIE_SPORT_ID,)
+
+
+def sport_label(sport_id: int) -> str:
+    """A human label for logging. sportId 16 spans several rungs, so it logs as the TIER name."""
+    return SPORT_LEVELS.get(sport_id) or ("Rookie/Complex" if sport_id == ROOKIE_SPORT_ID
+                                          else f"sport{sport_id}")
+
+
+def derive_level_name(sport_id: int, league_id: int | None, league_name: str | None) -> str | None:
+    """The rung for ONE TEAM in one game.
+
+    For sportIds 11–14 the sportId IS the rung. For sportId 16 the rung comes from the team's
+    league ID (name only as a fallback) — see the module docstring for why neither the sportId nor
+    the league NAME is a usable key there. Returns None for an unrecognised league: a NULL level is
+    skipped by every downstream level filter, whereas a GUESSED level silently corrupts a rung.
+    """
+    if sport_id != ROOKIE_SPORT_ID:
+        return SPORT_LEVELS.get(sport_id)
+    if league_id is not None:
+        level = ROOKIE_LEAGUE_LEVELS.get(int(league_id))
+        if level:
+            return level
+    if league_name:
+        low = str(league_name).strip().lower()
+        for needle, level in _ROOKIE_LEAGUE_NAME_HINTS:
+            if needle in low:
+                return level
+    return None
 
 # Deepest history the schedule/boxscore endpoints return (probed: 2005 has games,
 # 2004 and earlier return totalGames=0 for every minor sportId).
@@ -248,20 +333,33 @@ def _flatten_schedule_game(g: dict, sport_id: int) -> dict:
     status = g.get("status", {}) or {}
 
     def _team_cols(t: dict, side: str) -> dict:
+        league_id = _int((t.get("league") or {}).get("id"))
+        league_name = (t.get("league") or {}).get("name")
         return {
             f"{side}_team_id": _int(t.get("id")),
             f"{side}_team_name": t.get("name"),
-            f"{side}_league_id": _int((t.get("league") or {}).get("id")),
-            f"{side}_league_name": (t.get("league") or {}).get("name"),
+            f"{side}_league_id": league_id,
+            f"{side}_league_name": league_name,
+            # E8.7: the rung is a property of the TEAM's league, not of the game's sportId — a
+            # sportId-16 game can be cross-league (measured: 2 of 10,364), so each side carries its
+            # own level and a player row inherits ITS OWN side's, never the game's.
+            f"{side}_level_name": derive_level_name(sport_id, league_id, league_name),
             f"{side}_division_name": (t.get("division") or {}).get("name"),
             f"{side}_parent_org_id": _int(t.get("parentOrgId")),
             f"{side}_parent_org_name": t.get("parentOrgName"),
         }
 
+    home_cols, away_cols = _team_cols(home, "home"), _team_cols(away, "away")
+    # Game-level `level_name` is retained for the 11–14 levels (where it is exact) and for cheap
+    # partition-level filtering. On a cross-league sportId-16 game it takes the home side's rung and
+    # is therefore APPROXIMATE — which is precisely why the per-side columns exist and why
+    # flatten_boxscore prefers them.
+    game_level = home_cols["home_level_name"] or away_cols["away_level_name"]
+
     row = {
         "game_pk": _int(g.get("gamePk")),
         "sport_id": sport_id,
-        "level_name": SPORT_LEVELS.get(sport_id),
+        "level_name": game_level,
         "season": _int(g.get("season")),
         "official_date": g.get("officialDate"),
         "game_date": g.get("gameDate"),
@@ -275,8 +373,8 @@ def _flatten_schedule_game(g: dict, sport_id: int) -> dict:
         "venue_name": venue.get("name"),
         "series_description": g.get("seriesDescription"),
     }
-    row.update(_team_cols(home, "home"))
-    row.update(_team_cols(away, "away"))
+    row.update(home_cols)
+    row.update(away_cols)
     return row
 
 
@@ -333,7 +431,9 @@ def flatten_boxscore(
                 "parent_team_id": _int(pl.get("parentTeamId")),
                 # game context (AC: level / league / affiliate / park / date)
                 "sport_id": sched.get("sport_id"),
-                "level_name": sched.get("level_name"),
+                # E8.7: THIS side's rung (see _flatten_schedule_game). Falls back to the game-level
+                # value only for a pre-E8.7 schedule row that predates the per-side columns.
+                "level_name": sched.get(f"{side}_level_name") or sched.get("level_name"),
                 "season": sched.get("season"),
                 "official_date": official,
                 "game_type": sched.get("game_type"),
@@ -494,11 +594,11 @@ def run(
                 already = part in sched_done and part in logs_done
                 if already and not is_current and not force:
                     log.info("[%d %s %04d-%02d] partition present — SKIP (idempotent)",
-                             season, SPORT_LEVELS[sport_id], yr, mo)
+                             season, sport_label(sport_id), yr, mo)
                     continue
 
                 log.info("[%d %s %04d-%02d] fetching schedule…",
-                         season, SPORT_LEVELS[sport_id], yr, mo)
+                         season, sport_label(sport_id), yr, mo)
                 try:
                     sched_rows = fetch_schedule_month(session, sport_id, yr, mo)
                 except Exception as exc:  # noqa: BLE001
@@ -612,7 +712,7 @@ def main() -> None:
         # start/end to the season) stays valid; off-season months just fetch 0 games (cheap).
         include_prior = today.day <= 3 and today.month > 1
         seasons = [today.year]
-        sport_ids = list(SPORT_LEVELS)
+        sport_ids = list(INGESTIBLE_SPORT_IDS)
         start_month = (today.year, today.month - 1) if include_prior else current_month
         end_month = current_month
         force = True  # incremental always re-pulls (absorbs late finals/revisions)
@@ -626,14 +726,14 @@ def main() -> None:
                         EARLIEST_SEASON, dropped)
         if not seasons:
             ap.error(f"No seasons >= {EARLIEST_SEASON} to ingest.")
-        sport_ids = [int(s) for s in args.sport_ids.split(",")] if args.sport_ids else list(SPORT_LEVELS)
+        sport_ids = [int(s) for s in args.sport_ids.split(",")] if args.sport_ids else list(INGESTIBLE_SPORT_IDS)
         start_month = _parse_month(args.start_month)
         end_month = _parse_month(args.end_month)
         force = args.force
 
-    bad = [s for s in sport_ids if s not in SPORT_LEVELS]
+    bad = [s for s in sport_ids if s not in INGESTIBLE_SPORT_IDS]
     if bad:
-        ap.error(f"Unknown sportId(s) {bad}; valid minor sportIds: {sorted(SPORT_LEVELS)}")
+        ap.error(f"Unknown sportId(s) {bad}; valid minor sportIds: {sorted(INGESTIBLE_SPORT_IDS)}")
 
     log.info(
         "MiLB ingest — seasons=%s sport_ids=%s months=%s..%s force=%s dry_run=%s max_games=%s",

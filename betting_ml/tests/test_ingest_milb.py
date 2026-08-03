@@ -177,3 +177,142 @@ def test_iter_months_spans_year_boundary():
 def test_partition_cols_pin_the_three_partition_keys():
     # idempotent partition-skip + O(one month) overwrite hinge on this triple
     assert milb.PARTITION_COLS == ["season", "sport_id", "month"]
+
+
+# ══════════════════════════════════════════════════════════════════════════════════
+# E8.7 — sportId 16 ("Rookie") spans SEVERAL rungs, so the level cannot come from the
+# sportId. These guards pin the three ways that mapping can silently go wrong.
+# Every one was verified to FAIL against a deliberately-broken derive_level_name
+# (a flat `16 -> "Rookie"`, a name-keyed map, and a game-level level_name).
+# ══════════════════════════════════════════════════════════════════════════════════
+
+def test_sport_id_16_is_ingestible_but_not_in_the_one_id_one_level_map():
+    # SPORT_LEVELS is the "sportId IS the rung" map and 16 must NEVER join it — a flat
+    # 16 -> "Rookie" entry is exactly the rung-collapsing bug.
+    assert 16 not in milb.SPORT_LEVELS
+    assert milb.ROOKIE_SPORT_ID == 16
+    assert milb.INGESTIBLE_SPORT_IDS == (11, 12, 13, 14, 16)
+
+
+def test_sport_id_16_resolves_dsl_and_cpx_to_DIFFERENT_rungs():
+    """The headline trap: DSL (board rank 1) and CPX (rank 2) are different rungs.
+
+    Fails on a flat `16: "Rookie"` mapping, which returns one level for both.
+    """
+    dsl = milb.derive_level_name(16, 130, "Dominican Summer League")
+    cpx_fcl = milb.derive_level_name(16, 124, "Florida Complex League")
+    cpx_acl = milb.derive_level_name(16, 121, "Arizona Complex League")
+    assert dsl == "DSL"
+    assert cpx_fcl == cpx_acl == "CPX"
+    assert dsl != cpx_fcl, "DSL and CPX collapsed to one rung — the level ladder is corrupt"
+
+
+def test_level_is_keyed_on_league_ID_so_the_2021_RENAME_does_not_drop_pre_2021_rows():
+    """Leagues 121/124 were RENAMED in 2021 (Arizona League→ACL, Gulf Coast→FCL).
+
+    A name-keyed map returns None for the pre-2021 spellings and silently loses every
+    pre-2021 CPX row — which is most of the ladder's history. Probed live 2026-08-03.
+    """
+    assert milb.derive_level_name(16, 121, "Arizona League") == "CPX"        # ≤2020 spelling
+    assert milb.derive_level_name(16, 124, "Gulf Coast League") == "CPX"     # ≤2020 spelling
+    assert milb.derive_level_name(16, 121, "Arizona Complex League") == "CPX"  # 2021+ spelling
+    assert milb.derive_level_name(16, 124, "Florida Complex League") == "CPX"  # 2021+ spelling
+
+
+def test_historical_rookie_advanced_leagues_stay_distinct_from_complex():
+    # Appalachian/Pioneer were rookie-ADVANCED (a rung above complex), affiliated ≤2020.
+    # Folding them into CPX would put a higher rung's lines into the complex cell.
+    assert milb.derive_level_name(16, 120, "Appalachian League") == "Rookie-Adv"
+    assert milb.derive_level_name(16, 128, "Pioneer League") == "Rookie-Adv"
+    # Venezuelan Summer is the DSL's sibling rung, not a complex league.
+    assert milb.derive_level_name(16, 134, "Venezuelan Summer League") == "DSL"
+
+
+def test_unrecognised_league_yields_None_rather_than_a_guessed_rung():
+    """A NULL level is skipped downstream; a WRONG level silently corrupts a rung.
+
+    Both strays below are REAL sportId-16 opponents found in the live probe.
+    """
+    assert milb.derive_level_name(16, 107, "College Baseball") is None
+    assert milb.derive_level_name(16, 126, "Northwest League") is None
+    assert milb.derive_level_name(16, None, None) is None
+
+
+def test_sport_ids_11_to_14_are_untouched_by_the_league_derivation():
+    # Regression: the E8.7 change must not alter any existing level. The league id is
+    # deliberately ignored for these sportIds.
+    for sid, level in milb.SPORT_LEVELS.items():
+        assert milb.derive_level_name(sid, 117, "International League") == level
+        assert milb.derive_level_name(sid, 130, "Dominican Summer League") == level
+
+
+def _rookie_game(home_league=(130, "Dominican Summer League"),
+                 away_league=(130, "Dominican Summer League")):
+    return {
+        "gamePk": 800001, "season": 2025, "officialDate": "2025-07-08",
+        "gameDate": "2025-07-08T15:00:00Z", "gameType": "R", "gameNumber": 1,
+        "doubleHeader": "N", "scheduledInnings": 9,
+        "status": {"detailedState": "Final", "abstractGameState": "Final"},
+        "venue": {"id": 5000, "name": "Complex Field 2"},
+        "seriesDescription": "Regular Season",
+        "teams": {
+            "home": {"team": {"id": 2001, "name": "DSL Reds",
+                              "sport": {"id": 16, "name": "Rookie"},
+                              "league": {"id": home_league[0], "name": home_league[1]},
+                              "parentOrgId": 113, "parentOrgName": "Cincinnati Reds"}},
+            "away": {"team": {"id": 2002, "name": "DSL Rockies",
+                              "league": {"id": away_league[0], "name": away_league[1]},
+                              "parentOrgId": 115, "parentOrgName": "Colorado Rockies"}},
+        },
+    }
+
+
+def test_schedule_row_carries_a_PER_SIDE_level():
+    row = milb._flatten_schedule_game(_rookie_game(), sport_id=16)
+    assert row["sport_id"] == 16
+    assert row["home_level_name"] == "DSL" and row["away_level_name"] == "DSL"
+    assert row["level_name"] == "DSL"
+
+
+def test_a_CROSS_LEAGUE_rookie_game_labels_each_side_with_its_OWN_rung():
+    """Measured: 2 of 10,364 probed sportId-16 games are cross-league.
+
+    A single game-level level_name necessarily mislabels one side of these.
+    """
+    g = _rookie_game(home_league=(121, "Arizona Complex League"),
+                     away_league=(107, "College Baseball"))
+    row = milb._flatten_schedule_game(g, sport_id=16)
+    assert row["home_level_name"] == "CPX"
+    assert row["away_level_name"] is None, "a College Baseball opponent must not inherit a rung"
+
+
+def test_player_rows_inherit_THEIR_OWN_SIDE_rung_not_the_games():
+    """The load-bearing one: a player's level must follow the player's team.
+
+    Fixture is built so ONLY the per-side lookup can produce the right answer — the
+    game-level `level_name` is CPX, so an away player reading it would be given CPX.
+    """
+    g = _rookie_game(home_league=(121, "Arizona Complex League"),
+                     away_league=(130, "Dominican Summer League"))
+    sched = milb._flatten_schedule_game(g, sport_id=16)
+    assert sched["level_name"] == "CPX"  # game-level value = the home side's
+    box = {"teams": {
+        "home": {"players": {"ID9001": {
+            "person": {"id": 9001, "fullName": "Home Complex Bat"},
+            "position": {"code": "6", "abbreviation": "SS"},
+            "stats": {"batting": {"plateAppearances": 4, "atBats": 4, "hits": 1,
+                                  "stolenBases": 1, "caughtStealing": 0}, "pitching": {}}}}},
+        "away": {"players": {"ID9002": {
+            "person": {"id": 9002, "fullName": "Away DSL Bat"},
+            "position": {"code": "4", "abbreviation": "2B"},
+            "stats": {"batting": {"plateAppearances": 3, "atBats": 3, "hits": 2,
+                                  "stolenBases": 2, "caughtStealing": 1}, "pitching": {}}}}},
+    }}
+    rows = milb.flatten_boxscore(box, sched, {}, "2026-08-03T00:00:00+00:00")
+    by_id = {r["player_id"]: r for r in rows}
+    assert by_id[9001]["level_name"] == "CPX"
+    assert by_id[9002]["level_name"] == "DSL", \
+        "away player inherited the GAME's rung instead of its own team's"
+    # E8.7's whole point: the SB inputs the board needs are present on a complex line.
+    assert by_id[9002]["bat_stolen_bases"] == 2 and by_id[9002]["bat_caught_stealing"] == 1
+    assert by_id[9002]["bat_plate_appearances"] == 3
