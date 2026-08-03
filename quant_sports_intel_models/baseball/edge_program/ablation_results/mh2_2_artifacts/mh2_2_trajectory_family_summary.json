@@ -1,0 +1,1890 @@
+{
+  "generated_at": "2026-08-03T21:53:37.723833+00:00",
+  "player_type": "batter",
+  "declared_field": [
+    "T1_traj_ladder",
+    "T2_traj_raw",
+    "T3_tenure"
+  ],
+  "retired_posthoc_field": [
+    "T1_traj_ladder",
+    "T2_traj_raw"
+  ],
+  "anchors": [
+    "A_degenerate_mean",
+    "A_weight_identity",
+    "A_traj_shuffled"
+  ],
+  "anchor_excluded_on_mechanistic_grounds": {
+    "A_re_shuffled": "a matched foil for `P3_player_re`, which lock 2 removed from the field \u2014 an anchor without its defender is vacuous (NF1.7 (a)) and re-pointing it would mis-scope a refutation (NF-D16 g\u2034)."
+  },
+  "inactive_metrics": {},
+  "reproduction_vs_e7_15_h3": {
+    "status": "OK",
+    "tolerance": 1e-09,
+    "worst_abs_gap": 0.0,
+    "per_metric": [
+      {
+        "metric": "woba",
+        "n_shared_arms": 7,
+        "n_cells_compared": 77,
+        "max_abs_mae_gap_vs_h3": 0.0,
+        "status": "OK"
+      },
+      {
+        "metric": "k_pct",
+        "n_shared_arms": 7,
+        "n_cells_compared": 77,
+        "max_abs_mae_gap_vs_h3": 0.0,
+        "status": "OK"
+      },
+      {
+        "metric": "bb_pct",
+        "n_shared_arms": 7,
+        "n_cells_compared": 77,
+        "max_abs_mae_gap_vs_h3": 0.0,
+        "status": "OK"
+      },
+      {
+        "metric": "iso",
+        "n_shared_arms": 7,
+        "n_cells_compared": 77,
+        "max_abs_mae_gap_vs_h3": 0.0,
+        "status": "OK"
+      }
+    ],
+    "note": "every shared arm reproduces E7.15-H3's recorded per-fold MAE \u2014 the two runs are the SAME evidence, so the field-definition comparison is valid."
+  },
+  "bh_fdr_alpha": 0.1,
+  "bh_fdr": {
+    "bb_pct": true,
+    "iso": true,
+    "k_pct": false,
+    "woba": false
+  },
+  "preregistered_bar": {
+    "woba": {
+      "arm": "T2_traj_raw",
+      "n_folds": 11,
+      "observed_sr": -0.1574,
+      "required_sr_for_dsr_gate": 0.9534,
+      "sr_shortfall": 1.1108,
+      "folds_needed_for_dsr": null,
+      "extra_debut_cohorts_needed": null,
+      "dsr_ceiling_at_this_n_obs": 0.9989,
+      "var_trials_sr": 1.7e-05,
+      "trial_sharpes": {
+        "T1_traj_ladder": -0.1606,
+        "T2_traj_raw": -0.1574,
+        "T3_tenure": -0.1656
+      }
+    },
+    "k_pct": {
+      "arm": "T1_traj_ladder",
+      "n_folds": 11,
+      "observed_sr": 0.4236,
+      "required_sr_for_dsr_gate": 1.0793,
+      "sr_shortfall": 0.6558,
+      "folds_needed_for_dsr": 62,
+      "extra_debut_cohorts_needed": 51,
+      "dsr_ceiling_at_this_n_obs": 0.9998,
+      "var_trials_sr": 0.032822,
+      "trial_sharpes": {
+        "T1_traj_ladder": 0.4236,
+        "T2_traj_raw": 0.3619,
+        "T3_tenure": 0.0835
+      }
+    },
+    "bb_pct": {
+      "arm": "T2_traj_raw",
+      "n_folds": 11,
+      "observed_sr": 1.0061,
+      "required_sr_for_dsr_gate": 1.2335,
+      "sr_shortfall": 0.2274,
+      "folds_needed_for_dsr": 27,
+      "extra_debut_cohorts_needed": 16,
+      "dsr_ceiling_at_this_n_obs": 1.0,
+      "var_trials_sr": 0.593058,
+      "trial_sharpes": {
+        "T1_traj_ladder": 0.9984,
+        "T2_traj_raw": 1.0061,
+        "T3_tenure": -0.3316
+      }
+    },
+    "iso": {
+      "arm": "T1_traj_ladder",
+      "n_folds": 11,
+      "observed_sr": 0.9098,
+      "required_sr_for_dsr_gate": 1.4368,
+      "sr_shortfall": 0.527,
+      "folds_needed_for_dsr": 56,
+      "extra_debut_cohorts_needed": 45,
+      "dsr_ceiling_at_this_n_obs": 1.0,
+      "var_trials_sr": 0.523172,
+      "trial_sharpes": {
+        "T1_traj_ladder": 0.9098,
+        "T2_traj_raw": 0.7951,
+        "T3_tenure": -0.3964
+      }
+    }
+  },
+  "retired_posthoc_sensitivity": {
+    "woba": {
+      "dsr_wide_field": 0.285,
+      "dsr_narrow_field": 0.2878,
+      "dsr_if_only_trial_count_shrank": 0.2866,
+      "dsr_if_only_dispersion_shrank": 0.2869,
+      "dsr_ceiling_at_this_n_obs": 0.9989,
+      "sr0_wide": 0.0036,
+      "sr0_narrow": 0.0012,
+      "share_from_trial_count": 0.584,
+      "share_from_dispersion": 0.682,
+      "passes_wide": false,
+      "passes_narrow": false,
+      "declared_field": [
+        "T1_traj_ladder",
+        "T2_traj_raw",
+        "T3_tenure"
+      ],
+      "retired_posthoc_field": [
+        "T1_traj_ladder",
+        "T2_traj_raw"
+      ],
+      "dropped_arm": [
+        "T3_tenure"
+      ],
+      "var_declared": 1.74e-05,
+      "var_posthoc": 5.15e-06,
+      "dispersion_collapse_ratio": 3.4
+    },
+    "k_pct": {
+      "dsr_wide_field": 0.7481,
+      "dsr_narrow_field": 0.8404,
+      "dsr_if_only_trial_count_shrank": 0.7935,
+      "dsr_if_only_dispersion_shrank": 0.8315,
+      "dsr_ceiling_at_this_n_obs": 0.9998,
+      "sr0_wide": 0.1545,
+      "sr0_narrow": 0.0226,
+      "share_from_trial_count": 0.491,
+      "share_from_dispersion": 0.903,
+      "passes_wide": false,
+      "passes_narrow": false,
+      "declared_field": [
+        "T1_traj_ladder",
+        "T2_traj_raw",
+        "T3_tenure"
+      ],
+      "retired_posthoc_field": [
+        "T1_traj_ladder",
+        "T2_traj_raw"
+      ],
+      "dropped_arm": [
+        "T3_tenure"
+      ],
+      "var_declared": 0.03282204,
+      "var_posthoc": 0.0018983,
+      "dispersion_collapse_ratio": 17.3
+    },
+    "bb_pct": {
+      "dsr_wide_field": 0.8493,
+      "dsr_narrow_field": 0.9985,
+      "dsr_if_only_trial_count_shrank": 0.9634,
+      "dsr_if_only_dispersion_shrank": 0.9985,
+      "dsr_ceiling_at_this_n_obs": 1.0,
+      "sr0_wide": 0.6567,
+      "sr0_narrow": 0.0028,
+      "share_from_trial_count": 0.765,
+      "share_from_dispersion": 1.0,
+      "passes_wide": false,
+      "passes_narrow": true,
+      "declared_field": [
+        "T1_traj_ladder",
+        "T2_traj_raw",
+        "T3_tenure"
+      ],
+      "retired_posthoc_field": [
+        "T1_traj_ladder",
+        "T2_traj_raw"
+      ],
+      "dropped_arm": [
+        "T3_tenure"
+      ],
+      "var_declared": 0.59305826,
+      "var_posthoc": 2.975e-05,
+      "dispersion_collapse_ratio": 19938.0
+    },
+    "iso": {
+      "dsr_wide_field": 0.7587,
+      "dsr_narrow_field": 0.9812,
+      "dsr_if_only_trial_count_shrank": 0.8997,
+      "dsr_if_only_dispersion_shrank": 0.978,
+      "dsr_ceiling_at_this_n_obs": 1.0,
+      "sr0_wide": 0.6168,
+      "sr0_narrow": 0.0422,
+      "share_from_trial_count": 0.633,
+      "share_from_dispersion": 0.986,
+      "passes_wide": false,
+      "passes_narrow": true,
+      "declared_field": [
+        "T1_traj_ladder",
+        "T2_traj_raw",
+        "T3_tenure"
+      ],
+      "retired_posthoc_field": [
+        "T1_traj_ladder",
+        "T2_traj_raw"
+      ],
+      "dropped_arm": [
+        "T3_tenure"
+      ],
+      "var_declared": 0.52317239,
+      "var_posthoc": 0.00657763,
+      "dispersion_collapse_ratio": 79.5
+    }
+  },
+  "null_classification": {
+    "woba": {
+      "metric": "woba",
+      "state": "GENUINE_ABSENCE",
+      "reason": "`woba`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
+      "retest_trigger": null,
+      "folds_have": 11,
+      "folds_needed": null,
+      "extra_cohorts": null,
+      "max_field_size": null,
+      "detail": {
+        "n_folds": 11,
+        "n_arms": 3
+      }
+    },
+    "k_pct": {
+      "metric": "k_pct",
+      "state": "POWER_LIMITED",
+      "reason": "`k_pct`: the effect is positive and every gate is REACHABLE, but this design cannot resolve it \u2014 DSR alone needs 62 folds against 11 (the BH-FDR requirement is separate and may be larger).",
+      "retest_trigger": "+51 folds for the DSR gate \u2014 field size alone cannot rescue it at this dispersion",
+      "folds_have": 11,
+      "folds_needed": 62,
+      "extra_cohorts": 51,
+      "max_field_size": 0,
+      "detail": {
+        "n_folds": 11,
+        "n_arms": 3,
+        "observed_sr": 0.4236,
+        "sr0": 0.1545
+      }
+    },
+    "bb_pct": {
+      "metric": "bb_pct",
+      "state": "POWER_LIMITED",
+      "reason": "`bb_pct`: the effect is positive and every gate is REACHABLE, but this design cannot resolve it \u2014 DSR alone needs 27 folds against 11 (the BH-FDR requirement is separate and may be larger).",
+      "retest_trigger": "+16 folds for the DSR gate, OR a field of \u22642 arms at the CURRENT fold count",
+      "folds_have": 11,
+      "folds_needed": 27,
+      "extra_cohorts": 16,
+      "max_field_size": 2,
+      "detail": {
+        "n_folds": 11,
+        "n_arms": 3,
+        "observed_sr": 1.0061,
+        "sr0": 0.6567
+      }
+    },
+    "iso": {
+      "metric": "iso",
+      "state": "POWER_LIMITED",
+      "reason": "`iso`: the effect is positive and every gate is REACHABLE, but this design cannot resolve it \u2014 DSR alone needs 56 folds against 11 (the BH-FDR requirement is separate and may be larger).",
+      "retest_trigger": "+45 folds for the DSR gate \u2014 field size alone cannot rescue it at this dispersion",
+      "folds_have": 11,
+      "folds_needed": 56,
+      "extra_cohorts": 45,
+      "max_field_size": 0,
+      "detail": {
+        "n_folds": 11,
+        "n_arms": 3,
+        "observed_sr": 0.9098,
+        "sr0": 0.6168
+      }
+    }
+  },
+  "null_analysis": {
+    "family_size": 4,
+    "strictest_bh_cutoff": 0.025,
+    "survivors_with_PBO_and_DSR_gates_REMOVED": [
+      "bb_pct",
+      "iso"
+    ],
+    "binding_constraint": "the deflation gates \u2014 at least one arm would ship without them",
+    "per_metric": [
+      {
+        "metric": "woba",
+        "arm": "T2_traj_raw",
+        "pct_lift_vs_foil": -0.2553,
+        "fold_win_rate": 0.45454545454545453,
+        "p_one_sided": 0.6934616505922877,
+        "beats_foil": false,
+        "clears_fold_bar": false,
+        "clears_PBO": false,
+        "clears_DSR": false,
+        "clears_BH_rank1": false,
+        "kind": "genuine absence \u2014 the best arm does not beat the foil on average",
+        "folds_have": 11,
+        "folds_needed_BH": null,
+        "folds_needed_DSR": null,
+        "unreachable_gates": [],
+        "extra_seasons_needed": null
+      },
+      {
+        "metric": "k_pct",
+        "arm": "T1_traj_ladder",
+        "pct_lift_vs_foil": 1.1828,
+        "fold_win_rate": 0.8181818181818182,
+        "p_one_sided": 0.09519293150759507,
+        "beats_foil": true,
+        "clears_fold_bar": true,
+        "clears_PBO": false,
+        "clears_DSR": false,
+        "clears_BH_rank1": false,
+        "kind": "underpowered",
+        "folds_have": 11,
+        "folds_needed_BH": 24,
+        "folds_needed_DSR": 62,
+        "unreachable_gates": [],
+        "extra_seasons_needed": 51
+      },
+      {
+        "metric": "bb_pct",
+        "arm": "T2_traj_raw",
+        "pct_lift_vs_foil": 1.4038,
+        "fold_win_rate": 0.8181818181818182,
+        "p_one_sided": 0.0037652829767470695,
+        "beats_foil": true,
+        "clears_fold_bar": true,
+        "clears_PBO": true,
+        "clears_DSR": false,
+        "clears_BH_rank1": true,
+        "kind": "underpowered",
+        "folds_have": 11,
+        "folds_needed_BH": 11,
+        "folds_needed_DSR": 27,
+        "unreachable_gates": [],
+        "extra_seasons_needed": 16
+      },
+      {
+        "metric": "iso",
+        "arm": "T1_traj_ladder",
+        "pct_lift_vs_foil": 1.4183,
+        "fold_win_rate": 0.8181818181818182,
+        "p_one_sided": 0.0064765753162672034,
+        "beats_foil": true,
+        "clears_fold_bar": true,
+        "clears_PBO": true,
+        "clears_DSR": false,
+        "clears_BH_rank1": true,
+        "kind": "underpowered",
+        "folds_have": 11,
+        "folds_needed_BH": 11,
+        "folds_needed_DSR": 56,
+        "unreachable_gates": [],
+        "extra_seasons_needed": 45
+      }
+    ]
+  },
+  "per_metric": {
+    "woba": {
+      "verdict": "DROP",
+      "winner": "L0_foil",
+      "leaderboard": [
+        {
+          "arm": "L0_foil",
+          "kind": "foil",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.02879051625068698,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "\u2b50 THE DIRECT-LEARNED FOIL \u2014 the shipped E7.12-slice-1 configuration; each row an independent observation, the arm's own shipped weight_col retained"
+        },
+        {
+          "arm": "A_weight_identity",
+          "kind": "anchor",
+          "selectable": false,
+          "active": false,
+          "oos_mae": 0.02879051625068698,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "n_player_blocks": null,
+          "weight_ratio_p05": 1.0,
+          "weight_ratio_p95": 1.0,
+          "note": "BYTE NO-OP \u2014 a constant weight column. Its MAE gap to the foil must be EXACTLY 0; anything else means the harness changed something it did not declare."
+        },
+        {
+          "arm": "A_traj_shuffled",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.02885754535079187,
+          "pct_lift_vs_foil": -0.2328165966919433,
+          "fold_win_rate": 0.7272727272727273,
+          "p_one_sided": 0.6488057984884181,
+          "pct_rows_moved": 69.58,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "the trajectory delta permuted across players within a level \u2014 catches 'any dispersed extra regressor helps' rather than the ordering carrying information."
+        },
+        {
+          "arm": "T2_traj_raw",
+          "kind": "player",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.028864029397245475,
+          "pct_lift_vs_foil": -0.25533806312604496,
+          "fold_win_rate": 0.45454545454545453,
+          "p_one_sided": 0.6934616505922877,
+          "pct_rows_moved": 69.58,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "MATCHED FOIL FOR THE LADDER'S CONTRIBUTION \u2014 the same delta computed on RAW rates, which confounds 'the player improved' with 'the level got harder'. If it ties T1, the ladder adds nothing here either."
+        },
+        {
+          "arm": "T1_traj_ladder",
+          "kind": "player",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.02893151423986406,
+          "pct_lift_vs_foil": -0.4897376203655697,
+          "fold_win_rate": 0.5454545454545454,
+          "p_one_sided": 0.6970220993887932,
+          "pct_rows_moved": 69.58,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "\u2b50 GENUINELY NEW INFORMATION \u2014 the ladder-adjusted rate change from the player's previous level, as a fixed regressor (+ an impute flag). NESTS THE FOIL at coefficient 0."
+        },
+        {
+          "arm": "T3_tenure",
+          "kind": "player",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.028965914678618677,
+          "pct_lift_vs_foil": -0.6092229344012299,
+          "fold_win_rate": 0.45454545454545453,
+          "p_one_sided": 0.7026001113603461,
+          "pct_rows_moved": 41.2,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "years-at-level + levels-logged \u2014 repeating a level is a scouting-legible negative signal the aggregated box line erases (two identical Double-A lines, one taking three seasons)."
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.029034853034293196,
+          "pct_lift_vs_foil": -0.8486710744562619,
+          "fold_win_rate": 0.36363636363636365,
+          "p_one_sided": 0.7533290547792559,
+          "pct_rows_moved": 0.0,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "DEGENERATE CEILING (NF-D11/NF-D14) \u2014 predict the population mean of the target."
+        }
+      ],
+      "mae_by_fold": {
+        "L0_foil": {
+          "2016": 0.027647974818002262,
+          "2017": 0.03399323325254379,
+          "2018": 0.02744993744127829,
+          "2019": 0.030084365134358255,
+          "2020": 0.03064857810878026,
+          "2021": 0.03449201983509803,
+          "2022": 0.03053796121041519,
+          "2023": 0.02405757377550626,
+          "2024": 0.02521978706912114,
+          "2025": 0.0244495496282355,
+          "2026": 0.02811469848421784
+        },
+        "T1_traj_ladder": {
+          "2016": 0.030344952801747906,
+          "2017": 0.034077180238202595,
+          "2018": 0.027396837738515496,
+          "2019": 0.03024979759015206,
+          "2020": 0.030628737092015464,
+          "2021": 0.03423242888192893,
+          "2022": 0.029928435956605732,
+          "2023": 0.02407315663033982,
+          "2024": 0.02483114073787863,
+          "2025": 0.024300175809497677,
+          "2026": 0.02818381316162035
+        },
+        "T2_traj_raw": {
+          "2016": 0.02892304026575756,
+          "2017": 0.03426014454658003,
+          "2018": 0.02755399316087841,
+          "2019": 0.03029336002620005,
+          "2020": 0.0305614520587081,
+          "2021": 0.03438370435179026,
+          "2022": 0.02997459920331495,
+          "2023": 0.02411145846355543,
+          "2024": 0.02484793017651977,
+          "2025": 0.024388255542496986,
+          "2026": 0.028206385573898696
+        },
+        "T3_tenure": {
+          "2016": 0.030763429006256872,
+          "2017": 0.03404591316229441,
+          "2018": 0.027459507597869134,
+          "2019": 0.030512428934911358,
+          "2020": 0.03108964821956457,
+          "2021": 0.034409369872469175,
+          "2022": 0.030314276086437785,
+          "2023": 0.02364408006121904,
+          "2024": 0.02440523340560815,
+          "2025": 0.02370924013416872,
+          "2026": 0.028271934984006278
+        },
+        "A_traj_shuffled": {
+          "2016": 0.0292489119796569,
+          "2017": 0.03384530912071796,
+          "2018": 0.027127640495799594,
+          "2019": 0.030579041053227698,
+          "2020": 0.03059744446866629,
+          "2021": 0.03426936642953788,
+          "2022": 0.030508126473648558,
+          "2023": 0.023893875581724195,
+          "2024": 0.0249024924573605,
+          "2025": 0.024146943733047616,
+          "2026": 0.028313847065323416
+        },
+        "A_weight_identity": {
+          "2016": 0.027647974818002262,
+          "2017": 0.03399323325254379,
+          "2018": 0.02744993744127829,
+          "2019": 0.030084365134358255,
+          "2020": 0.03064857810878026,
+          "2021": 0.03449201983509803,
+          "2022": 0.03053796121041519,
+          "2023": 0.02405757377550626,
+          "2024": 0.02521978706912114,
+          "2025": 0.0244495496282355,
+          "2026": 0.02811469848421784
+        },
+        "A_degenerate_mean": {
+          "2016": 0.028724915162815997,
+          "2017": 0.031470537769101914,
+          "2018": 0.02836684709640295,
+          "2019": 0.030579584543872728,
+          "2020": 0.03243919962405791,
+          "2021": 0.034397940152132704,
+          "2022": 0.030885431533439936,
+          "2023": 0.023697832179366704,
+          "2024": 0.025993818322267322,
+          "2025": 0.023895848937237046,
+          "2026": 0.02893142805652991
+        }
+      },
+      "coverage": {
+        "L0_foil": {
+          "n_rows": 1762,
+          "pct_rows_moved": 0.0
+        },
+        "T1_traj_ladder": {
+          "traj_p05": -0.025206007512587388,
+          "traj_p95": 0.05043358491390914,
+          "n_rows": 1762,
+          "pct_rows_moved": 69.58
+        },
+        "T2_traj_raw": {
+          "traj_p05": -0.06945377805959647,
+          "traj_p95": 0.07914629356153746,
+          "n_rows": 1762,
+          "pct_rows_moved": 69.58
+        },
+        "T3_tenure": {
+          "pct_repeated_a_level": 41.2,
+          "n_rows": 1762,
+          "pct_rows_moved": 41.2
+        },
+        "A_traj_shuffled": {
+          "traj_p05": -0.08520783886519562,
+          "traj_p95": 0.041892019120710694,
+          "n_rows": 1762,
+          "pct_rows_moved": 69.58
+        },
+        "A_weight_identity": {
+          "weight_ratio_p05": 1.0,
+          "weight_ratio_p95": 1.0,
+          "n_rows": 1762,
+          "pct_rows_moved": 0.0
+        },
+        "A_degenerate_mean": {
+          "n_rows": 1762,
+          "pct_rows_moved": 0.0
+        }
+      },
+      "deflation": {
+        "n_configs": 4,
+        "n_folds": 11,
+        "pbo": 0.9571428571428572,
+        "os_gap_pct": 1.0987,
+        "os_gap_p90_pct": 1.7926,
+        "contender_spread_pct": 0.49,
+        "full_spread_pct": 0.609,
+        "flips": [
+          {
+            "config": "L0_foil",
+            "IS_half_wins": 222,
+            "share": 0.481,
+            "mean_oos_mae": 0.02879,
+            "pct_vs_best": 0.0
+          },
+          {
+            "config": "T3_tenure",
+            "IS_half_wins": 127,
+            "share": 0.275,
+            "mean_oos_mae": 0.02897,
+            "pct_vs_best": 0.609
+          },
+          {
+            "config": "T1_traj_ladder",
+            "IS_half_wins": 113,
+            "share": 0.245,
+            "mean_oos_mae": 0.02893,
+            "pct_vs_best": 0.49
+          }
+        ],
+        "whole_field": {
+          "n_configs": 7,
+          "n_folds": 11,
+          "pbo": 0.9857142857142858,
+          "os_gap_pct": 1.385,
+          "os_gap_p90_pct": 2.6104,
+          "contender_spread_pct": 0.233,
+          "full_spread_pct": 0.849,
+          "flips": [
+            {
+              "config": "L0_foil",
+              "IS_half_wins": 170,
+              "share": 0.368,
+              "mean_oos_mae": 0.02879,
+              "pct_vs_best": 0.0
+            },
+            {
+              "config": "A_degenerate_mean",
+              "IS_half_wins": 104,
+              "share": 0.225,
+              "mean_oos_mae": 0.02903,
+              "pct_vs_best": 0.849
+            },
+            {
+              "config": "T3_tenure",
+              "IS_half_wins": 79,
+              "share": 0.171,
+              "mean_oos_mae": 0.02897,
+              "pct_vs_best": 0.609
+            },
+            {
+              "config": "T1_traj_ladder",
+              "IS_half_wins": 76,
+              "share": 0.165,
+              "mean_oos_mae": 0.02893,
+              "pct_vs_best": 0.49
+            },
+            {
+              "config": "A_traj_shuffled",
+              "IS_half_wins": 33,
+              "share": 0.071,
+              "mean_oos_mae": 0.02886,
+              "pct_vs_best": 0.233
+            }
+          ]
+        }
+      },
+      "dsr": {
+        "available": true,
+        "eligible": {
+          "arm": "T2_traj_raw",
+          "n_trials": 3,
+          "dsr": 0.2849667461052918,
+          "observed_sr": -0.1573706918355886,
+          "sr0": 0.003557335915313665,
+          "passes": false
+        },
+        "whole_field": {
+          "arm": "A_weight_identity",
+          "dsr": null,
+          "note": "too few folds / zero variance"
+        },
+        "binds": "eligible"
+      },
+      "anchors": {
+        "required_anchors_present": true,
+        "missing_anchors": [],
+        "best_arm": "T2_traj_raw",
+        "foil": "L0_foil",
+        "A_degenerate_mean__vs_best": {
+          "available": true,
+          "challenger": "A_degenerate_mean",
+          "defender": "T2_traj_raw",
+          "mean_gap": 0.00017082363704771654,
+          "challenger_fold_wins": 4,
+          "n_folds": 11,
+          "p_challenger_better": 0.6740226626707798,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_degenerate_mean__mae": 0.029034853034293196,
+        "A_weight_identity__max_abs_gap": 0.0,
+        "A_weight_identity__is_a_noop": true,
+        "A_weight_identity__mae": 0.02879051625068698,
+        "A_traj_shuffled__vs_T1_traj_ladder": {
+          "available": true,
+          "challenger": "A_traj_shuffled",
+          "defender": "T1_traj_ladder",
+          "mean_gap": -7.396888907218678e-05,
+          "challenger_fold_wins": 6,
+          "n_folds": 11,
+          "p_challenger_better": 0.28751428148954833,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_traj_shuffled__mae": 0.02885754535079187,
+        "inert_anchors": [],
+        "refuted_arms": {},
+        "oracle_floor_ok": true,
+        "best_arm_mae": 0.028864029397245475,
+        "low_propensity_tercile_lift_pct": -1.0899661040978261,
+        "low_propensity_tercile_lift_pct_all_rows": -1.0899661040978261,
+        "between_vs_within_player_decomposition_pct": NaN,
+        "re_shuffled_minus_re_true_pct": NaN,
+        "ladder_contribution_to_trajectory_pct": -0.23439955723952477,
+        "ladder_identity_fallback_folds": []
+      },
+      "reasons": [
+        "\ud83d\udfe1 no arm clears: best eligible `T2_traj_raw` MAE 0.02886 vs foil 0.02879 (-0.26%, fold win rate 45%; the pre-registered bar is a strict OOS improvement in \u226560% of folds). DROPPED."
+      ]
+    },
+    "k_pct": {
+      "verdict": "DROP",
+      "winner": "L0_foil",
+      "leaderboard": [
+        {
+          "arm": "T1_traj_ladder",
+          "kind": "player",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.037979980499541564,
+          "pct_lift_vs_foil": 1.182784359798465,
+          "fold_win_rate": 0.8181818181818182,
+          "p_one_sided": 0.09519293150759507,
+          "pct_rows_moved": 69.58,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "\u2b50 GENUINELY NEW INFORMATION \u2014 the ladder-adjusted rate change from the player's previous level, as a fixed regressor (+ an impute flag). NESTS THE FOIL at coefficient 0."
+        },
+        {
+          "arm": "T2_traj_raw",
+          "kind": "player",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.03800665726061743,
+          "pct_lift_vs_foil": 1.113376129010995,
+          "fold_win_rate": 0.8181818181818182,
+          "p_one_sided": 0.1288239983307172,
+          "pct_rows_moved": 69.58,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "MATCHED FOIL FOR THE LADDER'S CONTRIBUTION \u2014 the same delta computed on RAW rates, which confounds 'the player improved' with 'the level got harder'. If it ties T1, the ladder adds nothing here either."
+        },
+        {
+          "arm": "T3_tenure",
+          "kind": "player",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.03837187234189587,
+          "pct_lift_vs_foil": 0.1631508532981786,
+          "fold_win_rate": 0.6363636363636364,
+          "p_one_sided": 0.3937094995562482,
+          "pct_rows_moved": 41.2,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "years-at-level + levels-logged \u2014 repeating a level is a scouting-legible negative signal the aggregated box line erases (two identical Double-A lines, one taking three seasons)."
+        },
+        {
+          "arm": "A_traj_shuffled",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.03842941780501961,
+          "pct_lift_vs_foil": 0.013427700104808074,
+          "fold_win_rate": 0.6363636363636364,
+          "p_one_sided": 0.4884385775274946,
+          "pct_rows_moved": 69.58,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "the trajectory delta permuted across players within a level \u2014 catches 'any dispersed extra regressor helps' rather than the ordering carrying information."
+        },
+        {
+          "arm": "L0_foil",
+          "kind": "foil",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.038434578684981964,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "\u2b50 THE DIRECT-LEARNED FOIL \u2014 the shipped E7.12-slice-1 configuration; each row an independent observation, the arm's own shipped weight_col retained"
+        },
+        {
+          "arm": "A_weight_identity",
+          "kind": "anchor",
+          "selectable": false,
+          "active": false,
+          "oos_mae": 0.038434578684981964,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "n_player_blocks": null,
+          "weight_ratio_p05": 1.0,
+          "weight_ratio_p95": 1.0,
+          "note": "BYTE NO-OP \u2014 a constant weight column. Its MAE gap to the foil must be EXACTLY 0; anything else means the harness changed something it did not declare."
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.04994876646914512,
+          "pct_lift_vs_foil": -29.957887345496612,
+          "fold_win_rate": 0.0,
+          "p_one_sided": 0.9999985655715755,
+          "pct_rows_moved": 0.0,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "DEGENERATE CEILING (NF-D11/NF-D14) \u2014 predict the population mean of the target."
+        }
+      ],
+      "mae_by_fold": {
+        "L0_foil": {
+          "2016": 0.0344001058640404,
+          "2017": 0.04595430701995689,
+          "2018": 0.037615990005237285,
+          "2019": 0.0353168292108571,
+          "2020": 0.0379997171840941,
+          "2021": 0.040521864011757586,
+          "2022": 0.038128544923246924,
+          "2023": 0.030974208053392516,
+          "2024": 0.040183030606081596,
+          "2025": 0.038984502298133265,
+          "2026": 0.042701266358004
+        },
+        "T1_traj_ladder": {
+          "2016": 0.036532442761226185,
+          "2017": 0.0456191906034779,
+          "2018": 0.037273943499946054,
+          "2019": 0.03395544414482873,
+          "2020": 0.03750799807888659,
+          "2021": 0.03928090188725515,
+          "2022": 0.037218625262114315,
+          "2023": 0.029000224145643325,
+          "2024": 0.039954049176052726,
+          "2025": 0.0383244724075126,
+          "2026": 0.04311249352801368
+        },
+        "T2_traj_raw": {
+          "2016": 0.03706257242614227,
+          "2017": 0.04541337619888917,
+          "2018": 0.03721924911334018,
+          "2019": 0.03402732595646216,
+          "2020": 0.037501931316178315,
+          "2021": 0.03930741289294621,
+          "2022": 0.0371998563249185,
+          "2023": 0.029070924146197306,
+          "2024": 0.04001586966952717,
+          "2025": 0.0382878181102248,
+          "2026": 0.04296689371196568
+        },
+        "T3_tenure": {
+          "2016": 0.03439929729694776,
+          "2017": 0.04560817967526852,
+          "2018": 0.03935131435041107,
+          "2019": 0.03485646236286605,
+          "2020": 0.03825893450822294,
+          "2021": 0.03955489797070152,
+          "2022": 0.03827021468253776,
+          "2023": 0.03016923095292483,
+          "2024": 0.04005445211327056,
+          "2025": 0.03835826589155947,
+          "2026": 0.043209345956144014
+        },
+        "A_traj_shuffled": {
+          "2016": 0.03338604861324759,
+          "2017": 0.04583457117756839,
+          "2018": 0.038291258518598555,
+          "2019": 0.035040616214651474,
+          "2020": 0.0378779767765203,
+          "2021": 0.03976213977213486,
+          "2022": 0.03895686534953186,
+          "2023": 0.03088887328559578,
+          "2024": 0.040400801431176636,
+          "2025": 0.03894406861334453,
+          "2026": 0.04334037610284566
+        },
+        "A_weight_identity": {
+          "2016": 0.0344001058640404,
+          "2017": 0.04595430701995689,
+          "2018": 0.037615990005237285,
+          "2019": 0.0353168292108571,
+          "2020": 0.0379997171840941,
+          "2021": 0.040521864011757586,
+          "2022": 0.038128544923246924,
+          "2023": 0.030974208053392516,
+          "2024": 0.040183030606081596,
+          "2025": 0.038984502298133265,
+          "2026": 0.042701266358004
+        },
+        "A_degenerate_mean": {
+          "2016": 0.05168809624581647,
+          "2017": 0.058210432414065504,
+          "2018": 0.04817042711074144,
+          "2019": 0.044485801191695144,
+          "2020": 0.0537022663274527,
+          "2021": 0.05245000312642686,
+          "2022": 0.04877641765394011,
+          "2023": 0.03683351154576019,
+          "2024": 0.048369825696241944,
+          "2025": 0.057089314217146435,
+          "2026": 0.04966033563130951
+        }
+      },
+      "coverage": {
+        "L0_foil": {
+          "n_rows": 1762,
+          "pct_rows_moved": 0.0
+        },
+        "T1_traj_ladder": {
+          "traj_p05": -0.04700949562771686,
+          "traj_p95": 0.043312966644280165,
+          "n_rows": 1762,
+          "pct_rows_moved": 69.58
+        },
+        "T2_traj_raw": {
+          "traj_p05": -0.05746588897825563,
+          "traj_p95": 0.0585139784921803,
+          "n_rows": 1762,
+          "pct_rows_moved": 69.58
+        },
+        "T3_tenure": {
+          "pct_repeated_a_level": 41.2,
+          "n_rows": 1762,
+          "pct_rows_moved": 41.2
+        },
+        "A_traj_shuffled": {
+          "traj_p05": -0.045690899411591566,
+          "traj_p95": 0.05482127094965091,
+          "n_rows": 1762,
+          "pct_rows_moved": 69.58
+        },
+        "A_weight_identity": {
+          "weight_ratio_p05": 1.0,
+          "weight_ratio_p95": 1.0,
+          "n_rows": 1762,
+          "pct_rows_moved": 0.0
+        },
+        "A_degenerate_mean": {
+          "n_rows": 1762,
+          "pct_rows_moved": 0.0
+        }
+      },
+      "deflation": {
+        "n_configs": 4,
+        "n_folds": 11,
+        "pbo": 0.35714285714285715,
+        "os_gap_pct": 0.2047,
+        "os_gap_p90_pct": 2.3947,
+        "contender_spread_pct": 1.032,
+        "full_spread_pct": 1.197,
+        "flips": [
+          {
+            "config": "T2_traj_raw",
+            "IS_half_wins": 195,
+            "share": 0.422,
+            "mean_oos_mae": 0.03801,
+            "pct_vs_best": 0.07
+          },
+          {
+            "config": "T1_traj_ladder",
+            "IS_half_wins": 165,
+            "share": 0.357,
+            "mean_oos_mae": 0.03798,
+            "pct_vs_best": 0.0
+          },
+          {
+            "config": "T3_tenure",
+            "IS_half_wins": 68,
+            "share": 0.147,
+            "mean_oos_mae": 0.03837,
+            "pct_vs_best": 1.032
+          },
+          {
+            "config": "L0_foil",
+            "IS_half_wins": 34,
+            "share": 0.074,
+            "mean_oos_mae": 0.03843,
+            "pct_vs_best": 1.197
+          }
+        ],
+        "whole_field": {
+          "n_configs": 7,
+          "n_folds": 11,
+          "pbo": 0.3142857142857143,
+          "os_gap_pct": 0.233,
+          "os_gap_p90_pct": 2.5948,
+          "contender_spread_pct": 1.032,
+          "full_spread_pct": 31.513,
+          "flips": [
+            {
+              "config": "T2_traj_raw",
+              "IS_half_wins": 195,
+              "share": 0.422,
+              "mean_oos_mae": 0.03801,
+              "pct_vs_best": 0.07
+            },
+            {
+              "config": "T1_traj_ladder",
+              "IS_half_wins": 146,
+              "share": 0.316,
+              "mean_oos_mae": 0.03798,
+              "pct_vs_best": 0.0
+            },
+            {
+              "config": "A_traj_shuffled",
+              "IS_half_wins": 60,
+              "share": 0.13,
+              "mean_oos_mae": 0.03843,
+              "pct_vs_best": 1.183
+            },
+            {
+              "config": "T3_tenure",
+              "IS_half_wins": 41,
+              "share": 0.089,
+              "mean_oos_mae": 0.03837,
+              "pct_vs_best": 1.032
+            },
+            {
+              "config": "L0_foil",
+              "IS_half_wins": 20,
+              "share": 0.043,
+              "mean_oos_mae": 0.03843,
+              "pct_vs_best": 1.197
+            }
+          ]
+        }
+      },
+      "dsr": {
+        "available": true,
+        "eligible": {
+          "arm": "T1_traj_ladder",
+          "n_trials": 3,
+          "dsr": 0.7481110654767215,
+          "observed_sr": 0.42355062399999255,
+          "sr0": 0.15450133541107558,
+          "passes": false
+        },
+        "whole_field": {
+          "arm": "T1_traj_ladder",
+          "n_trials": 6,
+          "dsr": 0.0015929384726513158,
+          "observed_sr": 0.42355062399999255,
+          "sr0": 1.6104087840886205,
+          "passes": false
+        },
+        "binds": "eligible"
+      },
+      "anchors": {
+        "required_anchors_present": true,
+        "missing_anchors": [],
+        "best_arm": "T1_traj_ladder",
+        "foil": "L0_foil",
+        "A_degenerate_mean__vs_best": {
+          "available": true,
+          "challenger": "A_degenerate_mean",
+          "defender": "T1_traj_ladder",
+          "mean_gap": 0.011968785969603551,
+          "challenger_fold_wins": 0,
+          "n_folds": 11,
+          "p_challenger_better": 0.9999995610035338,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_degenerate_mean__mae": 0.04994876646914512,
+        "A_weight_identity__max_abs_gap": 0.0,
+        "A_weight_identity__is_a_noop": true,
+        "A_weight_identity__mae": 0.038434578684981964,
+        "A_traj_shuffled__vs_T1_traj_ladder": {
+          "available": true,
+          "challenger": "A_traj_shuffled",
+          "defender": "T1_traj_ladder",
+          "mean_gap": 0.00044943730547803535,
+          "challenger_fold_wins": 1,
+          "n_folds": 11,
+          "p_challenger_better": 0.8567409535551899,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_traj_shuffled__mae": 0.03842941780501961,
+        "inert_anchors": [],
+        "refuted_arms": {},
+        "oracle_floor_ok": true,
+        "best_arm_mae": 0.037979980499541564,
+        "low_propensity_tercile_lift_pct": 0.1679818024609168,
+        "low_propensity_tercile_lift_pct_all_rows": 0.1679818024609168,
+        "between_vs_within_player_decomposition_pct": NaN,
+        "re_shuffled_minus_re_true_pct": NaN,
+        "ladder_contribution_to_trajectory_pct": 0.06940823078747016,
+        "ladder_identity_fallback_folds": []
+      },
+      "reasons": [
+        "\u26d4 DEFLATION \u2014 PBO over the ELIGIBLE set is 0.357 \u2265 0.2. The contender spread is 1.032%, WIDE relative to the margin, and the in-sample winners are spread thinly (T2_traj_raw 42% (+0.070%), T1_traj_ladder 36% (+0.000%), T3_tenure 15% (+1.032%)) \u2014 this is genuine instability, a search that learnt nothing, not a tie (NF1.8). Either way it does not ship."
+      ]
+    },
+    "bb_pct": {
+      "verdict": "DROP",
+      "winner": "L0_foil",
+      "leaderboard": [
+        {
+          "arm": "T2_traj_raw",
+          "kind": "player",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.01770522246206183,
+          "pct_lift_vs_foil": 1.4038364375490355,
+          "fold_win_rate": 0.8181818181818182,
+          "p_one_sided": 0.0037652829767470695,
+          "pct_rows_moved": 69.58,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "MATCHED FOIL FOR THE LADDER'S CONTRIBUTION \u2014 the same delta computed on RAW rates, which confounds 'the player improved' with 'the level got harder'. If it ties T1, the ladder adds nothing here either."
+        },
+        {
+          "arm": "T1_traj_ladder",
+          "kind": "player",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.017737077490677843,
+          "pct_lift_vs_foil": 1.2264433763524847,
+          "fold_win_rate": 0.9090909090909091,
+          "p_one_sided": 0.003931326374453281,
+          "pct_rows_moved": 69.58,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "\u2b50 GENUINELY NEW INFORMATION \u2014 the ladder-adjusted rate change from the player's previous level, as a fixed regressor (+ an impute flag). NESTS THE FOIL at coefficient 0."
+        },
+        {
+          "arm": "A_traj_shuffled",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.017953945932527204,
+          "pct_lift_vs_foil": 0.01875471782641017,
+          "fold_win_rate": 0.45454545454545453,
+          "p_one_sided": 0.42245550965496503,
+          "pct_rows_moved": 69.58,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "the trajectory delta permuted across players within a level \u2014 catches 'any dispersed extra regressor helps' rather than the ordering carrying information."
+        },
+        {
+          "arm": "L0_foil",
+          "kind": "foil",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.017957313776055105,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "\u2b50 THE DIRECT-LEARNED FOIL \u2014 the shipped E7.12-slice-1 configuration; each row an independent observation, the arm's own shipped weight_col retained"
+        },
+        {
+          "arm": "A_weight_identity",
+          "kind": "anchor",
+          "selectable": false,
+          "active": false,
+          "oos_mae": 0.017957313776055105,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "n_player_blocks": null,
+          "weight_ratio_p05": 1.0,
+          "weight_ratio_p95": 1.0,
+          "note": "BYTE NO-OP \u2014 a constant weight column. Its MAE gap to the foil must be EXACTLY 0; anything else means the harness changed something it did not declare."
+        },
+        {
+          "arm": "T3_tenure",
+          "kind": "player",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.018061323644323644,
+          "pct_lift_vs_foil": -0.579206163937677,
+          "fold_win_rate": 0.45454545454545453,
+          "p_one_sided": 0.8514056556247771,
+          "pct_rows_moved": 41.2,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "years-at-level + levels-logged \u2014 repeating a level is a scouting-legible negative signal the aggregated box line erases (two identical Double-A lines, one taking three seasons)."
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.020766733277752088,
+          "pct_lift_vs_foil": -15.644987533954893,
+          "fold_win_rate": 0.09090909090909091,
+          "p_one_sided": 0.9998264866386645,
+          "pct_rows_moved": 0.0,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "DEGENERATE CEILING (NF-D11/NF-D14) \u2014 predict the population mean of the target."
+        }
+      ],
+      "mae_by_fold": {
+        "L0_foil": {
+          "2016": 0.019589358950053735,
+          "2017": 0.021966655302667493,
+          "2018": 0.01651872415591209,
+          "2019": 0.018110516591596855,
+          "2020": 0.014625920512895524,
+          "2021": 0.014352293636877992,
+          "2022": 0.018748966033771526,
+          "2023": 0.015929237006155537,
+          "2024": 0.01794518841962344,
+          "2025": 0.018756220702433882,
+          "2026": 0.02098737022461805
+        },
+        "T1_traj_ladder": {
+          "2016": 0.019542040818466735,
+          "2017": 0.021783331107878463,
+          "2018": 0.01647074037339344,
+          "2019": 0.017657375730549284,
+          "2020": 0.014399126498113663,
+          "2021": 0.013952011076797086,
+          "2022": 0.01828036568998271,
+          "2023": 0.015435170983942625,
+          "2024": 0.01788739078317436,
+          "2025": 0.01851429517932747,
+          "2026": 0.02118600415583043
+        },
+        "T2_traj_raw": {
+          "2016": 0.019656534575449226,
+          "2017": 0.021733533086660362,
+          "2018": 0.01641152618532322,
+          "2019": 0.017545742018120945,
+          "2020": 0.014432538672816485,
+          "2021": 0.013885642798006921,
+          "2022": 0.018252936717626695,
+          "2023": 0.01531837895277841,
+          "2024": 0.017844875504738497,
+          "2025": 0.018562860368312947,
+          "2026": 0.0211128782028464
+        },
+        "T3_tenure": {
+          "2016": 0.02051834364192893,
+          "2017": 0.021945386153440778,
+          "2018": 0.016665513709715307,
+          "2019": 0.017885216776217825,
+          "2020": 0.014479962874193456,
+          "2021": 0.014485421659190716,
+          "2022": 0.019093200652384238,
+          "2023": 0.015993624741638623,
+          "2024": 0.017898712962809194,
+          "2025": 0.01877518226955574,
+          "2026": 0.020933994646485266
+        },
+        "A_traj_shuffled": {
+          "2016": 0.019593813985339197,
+          "2017": 0.021863069213998935,
+          "2018": 0.016626617656464907,
+          "2019": 0.018031350394435326,
+          "2020": 0.014636881383336056,
+          "2021": 0.01433009906366219,
+          "2022": 0.0187590005009053,
+          "2023": 0.015969113231316136,
+          "2024": 0.017938490452275253,
+          "2025": 0.01876295768399252,
+          "2026": 0.02098201169207338
+        },
+        "A_weight_identity": {
+          "2016": 0.019589358950053735,
+          "2017": 0.021966655302667493,
+          "2018": 0.01651872415591209,
+          "2019": 0.018110516591596855,
+          "2020": 0.014625920512895524,
+          "2021": 0.014352293636877992,
+          "2022": 0.018748966033771526,
+          "2023": 0.015929237006155537,
+          "2024": 0.01794518841962344,
+          "2025": 0.018756220702433882,
+          "2026": 0.02098737022461805
+        },
+        "A_degenerate_mean": {
+          "2016": 0.023755538553991193,
+          "2017": 0.02123355376779347,
+          "2018": 0.019356449436828606,
+          "2019": 0.021536563073091222,
+          "2020": 0.01503580964871052,
+          "2021": 0.018235723266011854,
+          "2022": 0.023748715580794694,
+          "2023": 0.020136315685037095,
+          "2024": 0.01948489173439184,
+          "2025": 0.02243137425410691,
+          "2026": 0.023479131054515566
+        }
+      },
+      "coverage": {
+        "L0_foil": {
+          "n_rows": 1762,
+          "pct_rows_moved": 0.0
+        },
+        "T1_traj_ladder": {
+          "traj_p05": -0.014298912940636012,
+          "traj_p95": 0.01833434182156876,
+          "n_rows": 1762,
+          "pct_rows_moved": 69.58
+        },
+        "T2_traj_raw": {
+          "traj_p05": -0.027722784294269262,
+          "traj_p95": 0.024655420088300635,
+          "n_rows": 1762,
+          "pct_rows_moved": 69.58
+        },
+        "T3_tenure": {
+          "pct_repeated_a_level": 41.2,
+          "n_rows": 1762,
+          "pct_rows_moved": 41.2
+        },
+        "A_traj_shuffled": {
+          "traj_p05": -0.011952486809500684,
+          "traj_p95": 0.012527313216880415,
+          "n_rows": 1762,
+          "pct_rows_moved": 69.58
+        },
+        "A_weight_identity": {
+          "weight_ratio_p05": 1.0,
+          "weight_ratio_p95": 1.0,
+          "n_rows": 1762,
+          "pct_rows_moved": 0.0
+        },
+        "A_degenerate_mean": {
+          "n_rows": 1762,
+          "pct_rows_moved": 0.0
+        }
+      },
+      "deflation": {
+        "n_configs": 4,
+        "n_folds": 11,
+        "pbo": 0.0,
+        "os_gap_pct": 0.0,
+        "os_gap_p90_pct": 0.0583,
+        "contender_spread_pct": 1.424,
+        "full_spread_pct": 2.011,
+        "flips": [
+          {
+            "config": "T2_traj_raw",
+            "IS_half_wins": 418,
+            "share": 0.905,
+            "mean_oos_mae": 0.01771,
+            "pct_vs_best": 0.0
+          },
+          {
+            "config": "T1_traj_ladder",
+            "IS_half_wins": 44,
+            "share": 0.095,
+            "mean_oos_mae": 0.01774,
+            "pct_vs_best": 0.18
+          }
+        ],
+        "whole_field": {
+          "n_configs": 7,
+          "n_folds": 11,
+          "pbo": 0.0,
+          "os_gap_pct": 0.0,
+          "os_gap_p90_pct": 0.0583,
+          "contender_spread_pct": 1.405,
+          "full_spread_pct": 17.292,
+          "flips": [
+            {
+              "config": "T2_traj_raw",
+              "IS_half_wins": 418,
+              "share": 0.905,
+              "mean_oos_mae": 0.01771,
+              "pct_vs_best": 0.0
+            },
+            {
+              "config": "T1_traj_ladder",
+              "IS_half_wins": 44,
+              "share": 0.095,
+              "mean_oos_mae": 0.01774,
+              "pct_vs_best": 0.18
+            }
+          ]
+        }
+      },
+      "dsr": {
+        "available": true,
+        "eligible": {
+          "arm": "T2_traj_raw",
+          "n_trials": 3,
+          "dsr": 0.8492718634120231,
+          "observed_sr": 1.0060938409711933,
+          "sr0": 0.6567470950584392,
+          "passes": false
+        },
+        "whole_field": {
+          "arm": "T2_traj_raw",
+          "n_trials": 6,
+          "dsr": 0.22893744262466115,
+          "observed_sr": 1.0060938409711933,
+          "sr0": 1.2570702344492768,
+          "passes": false
+        },
+        "binds": "eligible"
+      },
+      "anchors": {
+        "required_anchors_present": true,
+        "missing_anchors": [],
+        "best_arm": "T2_traj_raw",
+        "foil": "L0_foil",
+        "A_degenerate_mean__vs_best": {
+          "available": true,
+          "challenger": "A_degenerate_mean",
+          "defender": "T2_traj_raw",
+          "mean_gap": 0.00306151081569026,
+          "challenger_fold_wins": 1,
+          "n_folds": 11,
+          "p_challenger_better": 0.9998627206215168,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_degenerate_mean__mae": 0.020766733277752088,
+        "A_weight_identity__max_abs_gap": 0.0,
+        "A_weight_identity__is_a_noop": true,
+        "A_weight_identity__mae": 0.017957313776055105,
+        "A_traj_shuffled__vs_T1_traj_ladder": {
+          "available": true,
+          "challenger": "A_traj_shuffled",
+          "defender": "T1_traj_ladder",
+          "mean_gap": 0.00021686844184935788,
+          "challenger_fold_wins": 1,
+          "n_folds": 11,
+          "p_challenger_better": 0.9959816549215503,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_traj_shuffled__mae": 0.017953945932527204,
+        "inert_anchors": [],
+        "refuted_arms": {},
+        "oracle_floor_ok": true,
+        "best_arm_mae": 0.01770522246206183,
+        "low_propensity_tercile_lift_pct": 1.2642544407240681,
+        "low_propensity_tercile_lift_pct_all_rows": 1.2642544407240681,
+        "between_vs_within_player_decomposition_pct": NaN,
+        "re_shuffled_minus_re_true_pct": NaN,
+        "ladder_contribution_to_trajectory_pct": -0.17739306119655085,
+        "ladder_identity_fallback_folds": []
+      },
+      "reasons": [
+        "\u26d4 DEFLATION \u2014 DSR over the eligible trial set is 0.849 < 0.95 (n_trials=3). State the shortfall in the unit that GROWS \u2014 folds and seasons, not p-decimals \u2014 before recording this as an absence (NF-D15 g\u2033)."
+      ]
+    },
+    "iso": {
+      "verdict": "DROP",
+      "winner": "L0_foil",
+      "leaderboard": [
+        {
+          "arm": "T1_traj_ladder",
+          "kind": "player",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.03792405905671456,
+          "pct_lift_vs_foil": 1.4183224828597722,
+          "fold_win_rate": 0.8181818181818182,
+          "p_one_sided": 0.0064765753162672034,
+          "pct_rows_moved": 69.58,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "\u2b50 GENUINELY NEW INFORMATION \u2014 the ladder-adjusted rate change from the player's previous level, as a fixed regressor (+ an impute flag). NESTS THE FOIL at coefficient 0."
+        },
+        {
+          "arm": "T2_traj_raw",
+          "kind": "player",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.037951490947564843,
+          "pct_lift_vs_foil": 1.347014667062821,
+          "fold_win_rate": 0.8181818181818182,
+          "p_one_sided": 0.012431218812079751,
+          "pct_rows_moved": 69.58,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "MATCHED FOIL FOR THE LADDER'S CONTRIBUTION \u2014 the same delta computed on RAW rates, which confounds 'the player improved' with 'the level got harder'. If it ties T1, the ladder adds nothing here either."
+        },
+        {
+          "arm": "L0_foil",
+          "kind": "foil",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.0384696832229506,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "\u2b50 THE DIRECT-LEARNED FOIL \u2014 the shipped E7.12-slice-1 configuration; each row an independent observation, the arm's own shipped weight_col retained"
+        },
+        {
+          "arm": "A_weight_identity",
+          "kind": "anchor",
+          "selectable": false,
+          "active": false,
+          "oos_mae": 0.0384696832229506,
+          "pct_lift_vs_foil": 0.0,
+          "fold_win_rate": 0.0,
+          "p_one_sided": NaN,
+          "pct_rows_moved": 0.0,
+          "n_player_blocks": null,
+          "weight_ratio_p05": 1.0,
+          "weight_ratio_p95": 1.0,
+          "note": "BYTE NO-OP \u2014 a constant weight column. Its MAE gap to the foil must be EXACTLY 0; anything else means the harness changed something it did not declare."
+        },
+        {
+          "arm": "A_traj_shuffled",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.038567114412405616,
+          "pct_lift_vs_foil": -0.2532674597042004,
+          "fold_win_rate": 0.2727272727272727,
+          "p_one_sided": 0.8285031981519727,
+          "pct_rows_moved": 69.58,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "the trajectory delta permuted across players within a level \u2014 catches 'any dispersed extra regressor helps' rather than the ordering carrying information."
+        },
+        {
+          "arm": "T3_tenure",
+          "kind": "player",
+          "selectable": true,
+          "active": true,
+          "oos_mae": 0.039188348162629505,
+          "pct_lift_vs_foil": -1.8681332401774495,
+          "fold_win_rate": 0.36363636363636365,
+          "p_one_sided": 0.8910373299163735,
+          "pct_rows_moved": 41.2,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "years-at-level + levels-logged \u2014 repeating a level is a scouting-legible negative signal the aggregated box line erases (two identical Double-A lines, one taking three seasons)."
+        },
+        {
+          "arm": "A_degenerate_mean",
+          "kind": "anchor",
+          "selectable": false,
+          "active": true,
+          "oos_mae": 0.043138423513522754,
+          "pct_lift_vs_foil": -12.13615475727866,
+          "fold_win_rate": 0.09090909090909091,
+          "p_one_sided": 0.9992712370961743,
+          "pct_rows_moved": 0.0,
+          "n_player_blocks": null,
+          "weight_ratio_p05": NaN,
+          "weight_ratio_p95": NaN,
+          "note": "DEGENERATE CEILING (NF-D11/NF-D14) \u2014 predict the population mean of the target."
+        }
+      ],
+      "mae_by_fold": {
+        "L0_foil": {
+          "2016": 0.04165237823018756,
+          "2017": 0.04201950491506042,
+          "2018": 0.037607101883396984,
+          "2019": 0.04674610708449418,
+          "2020": 0.03158554695241676,
+          "2021": 0.0397931600733812,
+          "2022": 0.039484808486978266,
+          "2023": 0.036010641126333016,
+          "2024": 0.031211435108134875,
+          "2025": 0.03366766332422041,
+          "2026": 0.0433881682678529
+        },
+        "T1_traj_ladder": {
+          "2016": 0.042315126779469386,
+          "2017": 0.04161750659334862,
+          "2018": 0.03686207982194759,
+          "2019": 0.04650740015291995,
+          "2020": 0.03129896019145242,
+          "2021": 0.03853281035630381,
+          "2022": 0.0384360479925117,
+          "2023": 0.03606600052293235,
+          "2024": 0.030666972932651946,
+          "2025": 0.032872012106038094,
+          "2026": 0.04198973217428424
+        },
+        "T2_traj_raw": {
+          "2016": 0.041109047667673995,
+          "2017": 0.04288611820894074,
+          "2018": 0.03707470034863089,
+          "2019": 0.0466216767395819,
+          "2020": 0.03138920024650835,
+          "2021": 0.0385299466623327,
+          "2022": 0.03836666694655523,
+          "2023": 0.036051349849305664,
+          "2024": 0.03053103985787739,
+          "2025": 0.03290754227843526,
+          "2026": 0.0419991116173712
+        },
+        "T3_tenure": {
+          "2016": 0.04770922730120008,
+          "2017": 0.04187511945767968,
+          "2018": 0.038742336409467164,
+          "2019": 0.04678303851344342,
+          "2020": 0.031292323004948684,
+          "2021": 0.04021012208090218,
+          "2022": 0.03976803229622579,
+          "2023": 0.0364645749922769,
+          "2024": 0.031197244985868497,
+          "2025": 0.03362373068607481,
+          "2026": 0.04340608006083735
+        },
+        "A_traj_shuffled": {
+          "2016": 0.0425329032125205,
+          "2017": 0.041675752661429796,
+          "2018": 0.038028065330799915,
+          "2019": 0.04678621557160089,
+          "2020": 0.03159117720293784,
+          "2021": 0.03999012307281671,
+          "2022": 0.039501428562646365,
+          "2023": 0.036118026142747756,
+          "2024": 0.031087901592890512,
+          "2025": 0.033679411410210254,
+          "2026": 0.04324725377586125
+        },
+        "A_weight_identity": {
+          "2016": 0.04165237823018756,
+          "2017": 0.04201950491506042,
+          "2018": 0.037607101883396984,
+          "2019": 0.04674610708449418,
+          "2020": 0.03158554695241676,
+          "2021": 0.0397931600733812,
+          "2022": 0.039484808486978266,
+          "2023": 0.036010641126333016,
+          "2024": 0.031211435108134875,
+          "2025": 0.03366766332422041,
+          "2026": 0.0433881682678529
+        },
+        "A_degenerate_mean": {
+          "2016": 0.052277417108088635,
+          "2017": 0.044450901851773486,
+          "2018": 0.045497198240332125,
+          "2019": 0.049763623546942484,
+          "2020": 0.0341027598997781,
+          "2021": 0.04225461443578294,
+          "2022": 0.04634151677246047,
+          "2023": 0.04176721494725222,
+          "2024": 0.039077106565417935,
+          "2025": 0.03782769653208948,
+          "2026": 0.04116260874883235
+        }
+      },
+      "coverage": {
+        "L0_foil": {
+          "n_rows": 1762,
+          "pct_rows_moved": 0.0
+        },
+        "T1_traj_ladder": {
+          "traj_p05": -0.021611745602428893,
+          "traj_p95": 0.035171654414088684,
+          "n_rows": 1762,
+          "pct_rows_moved": 69.58
+        },
+        "T2_traj_raw": {
+          "traj_p05": -0.028706384214492574,
+          "traj_p95": 0.05622621444487493,
+          "n_rows": 1762,
+          "pct_rows_moved": 69.58
+        },
+        "T3_tenure": {
+          "pct_repeated_a_level": 41.2,
+          "n_rows": 1762,
+          "pct_rows_moved": 41.2
+        },
+        "A_traj_shuffled": {
+          "traj_p05": -0.021053843026691537,
+          "traj_p95": 0.01927447519218634,
+          "n_rows": 1762,
+          "pct_rows_moved": 69.58
+        },
+        "A_weight_identity": {
+          "weight_ratio_p05": 1.0,
+          "weight_ratio_p95": 1.0,
+          "n_rows": 1762,
+          "pct_rows_moved": 0.0
+        },
+        "A_degenerate_mean": {
+          "n_rows": 1762,
+          "pct_rows_moved": 0.0
+        }
+      },
+      "deflation": {
+        "n_configs": 4,
+        "n_folds": 11,
+        "pbo": 0.0,
+        "os_gap_pct": 0.3999,
+        "os_gap_p90_pct": 0.6403,
+        "contender_spread_pct": 1.439,
+        "full_spread_pct": 3.334,
+        "flips": [
+          {
+            "config": "T1_traj_ladder",
+            "IS_half_wins": 294,
+            "share": 0.636,
+            "mean_oos_mae": 0.03792,
+            "pct_vs_best": 0.0
+          },
+          {
+            "config": "T2_traj_raw",
+            "IS_half_wins": 168,
+            "share": 0.364,
+            "mean_oos_mae": 0.03795,
+            "pct_vs_best": 0.072
+          }
+        ],
+        "whole_field": {
+          "n_configs": 7,
+          "n_folds": 11,
+          "pbo": 0.0,
+          "os_gap_pct": 0.3999,
+          "os_gap_p90_pct": 0.6403,
+          "contender_spread_pct": 1.439,
+          "full_spread_pct": 13.749,
+          "flips": [
+            {
+              "config": "T1_traj_ladder",
+              "IS_half_wins": 294,
+              "share": 0.636,
+              "mean_oos_mae": 0.03792,
+              "pct_vs_best": 0.0
+            },
+            {
+              "config": "T2_traj_raw",
+              "IS_half_wins": 168,
+              "share": 0.364,
+              "mean_oos_mae": 0.03795,
+              "pct_vs_best": 0.072
+            }
+          ]
+        }
+      },
+      "dsr": {
+        "available": true,
+        "eligible": {
+          "arm": "T1_traj_ladder",
+          "n_trials": 3,
+          "dsr": 0.7587141084157905,
+          "observed_sr": 0.9097762539240862,
+          "sr0": 0.6168390946750348,
+          "passes": false
+        },
+        "whole_field": {
+          "arm": "T1_traj_ladder",
+          "n_trials": 6,
+          "dsr": 0.3475616814391222,
+          "observed_sr": 0.9097762539240862,
+          "sr0": 1.0732768004357245,
+          "passes": false
+        },
+        "binds": "eligible"
+      },
+      "anchors": {
+        "required_anchors_present": true,
+        "missing_anchors": [],
+        "best_arm": "T1_traj_ladder",
+        "foil": "L0_foil",
+        "A_degenerate_mean__vs_best": {
+          "available": true,
+          "challenger": "A_degenerate_mean",
+          "defender": "T1_traj_ladder",
+          "mean_gap": 0.005214364456808192,
+          "challenger_fold_wins": 1,
+          "n_folds": 11,
+          "p_challenger_better": 0.9998288714432584,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_degenerate_mean__mae": 0.043138423513522754,
+        "A_weight_identity__max_abs_gap": 0.0,
+        "A_weight_identity__is_a_noop": true,
+        "A_weight_identity__mae": 0.0384696832229506,
+        "A_traj_shuffled__vs_T1_traj_ladder": {
+          "available": true,
+          "challenger": "A_traj_shuffled",
+          "defender": "T1_traj_ladder",
+          "mean_gap": 0.0006430553556910621,
+          "challenger_fold_wins": 0,
+          "n_folds": 11,
+          "p_challenger_better": 0.9989397272714534,
+          "violated": false,
+          "alpha": 0.1
+        },
+        "A_traj_shuffled__mae": 0.038567114412405616,
+        "inert_anchors": [],
+        "refuted_arms": {},
+        "oracle_floor_ok": true,
+        "best_arm_mae": 0.03792405905671456,
+        "low_propensity_tercile_lift_pct": 1.410136032904173,
+        "low_propensity_tercile_lift_pct_all_rows": 1.410136032904173,
+        "between_vs_within_player_decomposition_pct": NaN,
+        "re_shuffled_minus_re_true_pct": NaN,
+        "ladder_contribution_to_trajectory_pct": 0.07130781579695133,
+        "ladder_identity_fallback_folds": []
+      },
+      "reasons": [
+        "\u26d4 DEFLATION \u2014 DSR over the eligible trial set is 0.759 < 0.95 (n_trials=3). State the shortfall in the unit that GROWS \u2014 folds and seasons, not p-decimals \u2014 before recording this as an absence (NF-D15 g\u2033)."
+      ]
+    }
+  }
+}
