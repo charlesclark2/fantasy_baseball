@@ -246,6 +246,45 @@ def list_leagues(user_id: str = Depends(require_fantasy_beta_access)):
     return out
 
 
+@router.get("/nfl/my-teams")
+def nfl_my_teams(
+    season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
+    user_id: str = Depends(require_fantasy_access),
+):
+    """NF-C6 — every saved NFL league's linked team, ready for CLIENT-SIDE league-scoring.
+
+    ⚠️ NO STAT IS SCORED HERE. The actual league-scoring math (`per_stat` weights × the projection's
+    raw stat line, the FG-bucket fold, the coverage report) stays entirely client-side against
+    `/fantasy/nfl/projections` — the SAME reusable `buildBoard`/`resolveScoring` path NF-C0b's board
+    already runs, because `fantasy_engine` (pandas/numpy) cannot be imported into this Lambda (see
+    `models/fantasy.py`'s module docstring). Re-deriving that math here in bare Python would be a
+    SECOND, driftable scorer — this endpoint only assembles the config + the linked roster snapshot
+    (`League.imported_roster`/`source_team_key`, set when the league was imported — see the field
+    docstrings) so the browser can call the one scorer that already exists.
+
+    A single narrow DynamoDB item read (E9.26b: never a wide/lakehouse query that can fail silently
+    inside this Lambda and come back `[]`), one row per league, malformed rows skipped individually.
+
+    🔒 BROADER gate than `/fantasy/leagues` (`require_fantasy_access`, not the beta-only editor
+    gate) on purpose: these are the user's OWN leagues, and the 2026 projection VALUES a subscriber
+    is entitled to are gated identically to every other NFL fantasy read in this router — the same
+    `require_fantasy_access` check `/fantasy/nfl/projections` and `/fantasy/nfl/board` already use.
+    A caller who is not yet entitled to IMPORT a league (still beta-only) simply sees an honest empty
+    list here, not a 403 — this stays correct without a second migration whenever NF-C0 opens wider.
+    """
+    out = []
+    for record in dynamo.list_fantasy_leagues(user_id):
+        if str(record.get("sport") or "nfl") != "nfl":
+            continue
+        try:
+            out.append(_league_response(record))
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "skipping unserializable stored league %s for my-teams", record.get("league_id")
+            )
+    return {"season": season, "leagues": out}
+
+
 @router.post("/leagues", status_code=201)
 def create_league(payload: LeagueSave, user_id: str = Depends(require_fantasy_beta_access)):
     """Save a new league config (the editor's 'start from a preset, then edit' output)."""
