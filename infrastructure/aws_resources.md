@@ -690,6 +690,61 @@ without needing S3's permanent prefix. S3 remains as secondary fallback during t
 | `sub_models/` | Sub-model artifacts |
 | `total_runs/` | Total-runs model artifacts |
 | `dbt_state/{env}/` | **E11.2** — dbt `manifest.json` + `sources.json` for `--state` incremental builds; keyed by `TARGET_ENV` (`prod`/`dev`) |
+| `baseball/milb/derived/prospect_board_coverage_gaps/user={user_id}/league={league_id}.json` | **E8.5** — one JSON object per (user, league): E8.2's roster-import "prospect our board does not carry" signal, egressed for `build_prospect_board.py` to read (`betting_ml/scripts/prospect_board/coverage_gap_report.py`). Written by the API Lambda — see the IAM grant below, this is the bucket's FIRST Lambda-side WRITE path (every prior Lambda grant on this bucket is read-only). |
+
+### IAM — Lambda execution role (E8.5 coverage-gap egress WRITE)
+
+⚠️ **New write path, not just a new read.** Every prior Lambda grant on this bucket (zone
+overlay, k-projection) is `s3:GetObject` only — the bucket has otherwise been written
+exclusively by the Dagster box's instance role. `app/backend/services/coverage_gap_egress.py`
+(E8.5) is the first thing the API Lambda itself writes here, via every MLB-league-mutating
+route in `fantasy_mlb_league.py` (save / per-team upload / patch / assign-pick / undo-pick /
+delete). **Without this grant the write fails silently** — `coverage_gap_egress.write()`
+catches everything and returns `False`, logging a warning nobody is paged on (E8.5 is
+advisory, not serving-critical, so it deliberately never HALTs) — so a league save still
+"succeeds" from the user's point of view while the coverage-gap egress quietly never lands.
+CI cannot catch this (it mocks all IO); only a live smoke after granting this + deploying
+proves it. Add this inline policy to `credence-prod-lambda-execution-role`:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::baseball-betting-ml-artifacts/baseball/milb/derived/prospect_board_coverage_gaps/*"
+    }
+  ]
+}
+```
+
+Add via CLI (run with default IAM-admin profile, not baseball-access-user):
+```bash
+aws iam put-role-policy \
+  --role-name credence-prod-lambda-execution-role \
+  --policy-name S3ArtifactsCoverageGapEgressWrite \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::baseball-betting-ml-artifacts/baseball/milb/derived/prospect_board_coverage_gaps/*"
+    }]
+  }' \
+  --region us-east-1
+```
+
+Verify after adding:
+```bash
+aws iam get-role-policy \
+  --role-name credence-prod-lambda-execution-role \
+  --policy-name S3ArtifactsCoverageGapEgressWrite
+```
+
+The board-build side needs NO new grant: `baseball-access-user` (used by
+`build_prospect_board.py` on the operator's laptop) already has broad read/write access to
+this whole bucket (see the dbt-state IAM note below).
 
 ### IAM — Lambda execution role (zone overlay reads)
 
