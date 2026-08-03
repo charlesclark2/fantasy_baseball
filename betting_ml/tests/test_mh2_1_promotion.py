@@ -1,21 +1,32 @@
-"""Guards for the MH2.1 champion promotion (total_runs / post_lineup, 2026-08-02).
+"""Guards for the MH2.1 champion promotion — PROMOTED AND ROLLED BACK 2026-08-02.
 
 Fast-gate safe: pure stdlib/numpy/sklearn, no Snowflake, no S3, no `pipeline` import.
 
+🔴 READ FIRST — `total_runs` / `post_lineup` serves the **v6 NGBoost**, not the MH2.1 challenger.
+The promotion was argued on conditional calibration; that evidence did not reproduce on the served
+population and reversed in every window measurable, so it was reverted the same day. The defect was
+an UNVALIDATED STRATIFIER — a conditional-calibration result is a property of its stratifier, and
+one that does not demonstrably separate realized dispersion measures nothing. Full record:
+`ablation_results/mh2_1_rollback.md`.
+
 WHAT THIS PROTECTS
 ------------------
-The promoted champion is a POINT learner served through an NGBoost-shaped API, replacing a
-heteroscedastic NGBoost. Three classes of silent breakage are possible and each is pinned here:
+1. **The rollback is COMPLETE** — a half-reverted registry (v6 artifact, 25-col sidecar, or a
+   dangling `serving_wrapper`/`sigma_served`) fails the serve-time width guard inside a HALT-tier
+   op and costs the slate. `TestPromotionScope` pins every serving key together.
+2. **The challenger is RETAINED, not deleted** — `HomoscedasticNormalRegressor`, the fit script,
+   the 25-col sidecar and the artifact stay addressable under the registry's `mh2_1_*` keys so a
+   re-promotion is a registry edit. The API-shape and contract guards therefore still point at the
+   CHALLENGER on purpose: a retained artifact whose guards were deleted is how a rollback rots into
+   unshippable dead code.
+3. **Framing** — the CRPS margin decomposes into two sub-floor components, only 3 of 8 folds test
+   the served contract, and the selection was on PRICING. Those claims survive the rollback and
+   must stay on the record; if they rot out, a future re-promotion starts reading as an edge result.
+4. **The kept improvements** — `daily_model_predictions.totals_model_version` (the bundle
+   `model_version` is home_win-only, so a totals swap was invisible in served rows) and the three
+   pre-existing `backfill_predictions.py` breaks this work fixed. Both are champion-independent.
 
-1. **API shape** — `predict_today` calls `model.pred_dist(X).params["loc"|"scale"]`. A wrapper that
-   loses that surface raises inside a HALT-tier op and costs the whole slate.
-2. **Scope** — the story promotes ONE (target, tier). A registry edit that also moved `pre_lineup`,
-   `home_win`, or `run_differential` would ship three unvalidated swaps.
-3. **Framing** — the margin decomposes into two sub-floor components, only 3 of 8 folds test the
-   served contract, and the selection is on PRICING. Those are the claims a future reader will
-   inherit; if they rot out of the record the promotion starts reading as an edge result.
-
-`best_alpha = 0` throughout — no edge, win-rate, or ROI claim.
+`best_alpha = 0` throughout — no edge, win-rate, or ROI claim was made, and none is retracted.
 """
 from __future__ import annotations
 
@@ -32,6 +43,14 @@ from betting_ml.utils.homoscedastic_regressor import FrozenNormal, Homoscedastic
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = yaml.safe_load((PROJECT_ROOT / "betting_ml/models/model_registry.yaml").read_text())
 TOTALS = REGISTRY["total_runs"]
+
+# MH2.1 was promoted and ROLLED BACK the same day (its deciding conditional-calibration evidence
+# was a stratifier artifact — see total_runs.mh2_1_promotion). So `feature_columns_path` is the v6
+# NGBoost's sidecar again, and the CHALLENGER's contract lives under the retained `mh2_1_*` keys.
+# The contract/serving-shape guards below still point at the challenger on purpose: the machinery
+# is deliberately retained so a re-promotion is a registry edit, and a retained artifact whose
+# guards were deleted is exactly how a rollback rots into unshippable dead code.
+MH2_1_SERVED_SIDECAR = TOTALS["mh2_1_feature_columns_path"]
 
 
 def _fitted_pipeline(n_features: int = 5, n_rows: int = 200):
@@ -175,25 +194,31 @@ class TestTheFitIsTheValidatedObject:
 # ── 3. the contract on disk matches the model that will load it ───────────────────────────────
 
 class TestContractIntegrity:
+    """Guards the RETAINED MH2.1 challenger contract (rolled back, not deleted)."""
+
     def test_served_sidecar_is_the_contract_plus_the_two_imputer_indicators(self):
-        contract = json.loads((PROJECT_ROOT / TOTALS["feature_columns_path"].replace(
+        contract = json.loads((PROJECT_ROOT / MH2_1_SERVED_SIDECAR.replace(
             "_served.json", ".json")).read_text())["feature_cols"]
         served = json.loads(
-            (PROJECT_ROOT / TOTALS["feature_columns_path"]).read_text())["feature_cols"]
+            (PROJECT_ROOT / MH2_1_SERVED_SIDECAR).read_text())["feature_cols"]
         assert set(served) - set(contract) == {"has_starter_platoon_data", "is_new_venue"}
         assert len(served) == len(contract) + 2
 
     def test_registry_feature_count_matches_the_sidecar(self):
         """The serve-time CONTRACT-GUARD compares the MODEL's width to the SIDECAR's length; if the
-        registry's advertised `features` disagrees with the file, the record lies about what ships."""
-        served = json.loads(
+        registry's advertised `features` disagrees with the file, the record lies about what ships.
+        Post-rollback the SERVED pair is v6/15; the challenger's own pair must still be coherent."""
+        served_now = json.loads(
             (PROJECT_ROOT / TOTALS["feature_columns_path"]).read_text())["feature_cols"]
-        assert int(TOTALS["features"]) == len(served) == 25
+        assert int(TOTALS["features"]) == len(served_now) == 15, "served = the v6 NGBoost"
+        challenger = json.loads(
+            (PROJECT_ROOT / MH2_1_SERVED_SIDECAR).read_text())["feature_cols"]
+        assert len(challenger) == 25, "the retained challenger contract must stay intact"
 
     def test_the_contract_carries_the_incumbent_base_plus_the_full_eb_block(self):
         from betting_ml.scripts.finalize_mh2_1_champion import PLUS_EB_COLS
 
-        contract = json.loads((PROJECT_ROOT / TOTALS["feature_columns_path"].replace(
+        contract = json.loads((PROJECT_ROOT / MH2_1_SERVED_SIDECAR.replace(
             "_served.json", ".json")).read_text())["feature_cols"]
         base = json.loads((
             PROJECT_ROOT
@@ -207,18 +232,35 @@ class TestContractIntegrity:
 # ── 4. SCOPE — one target, one tier ───────────────────────────────────────────────────────────
 
 class TestPromotionScope:
-    def test_post_lineup_points_at_the_mh2_1_champion(self):
-        assert TOTALS["artifact_path"].endswith("glm_elasticnet_plus_eb_mh2_1_post_lineup_2026.pkl")
+    def test_post_lineup_is_ROLLED_BACK_to_the_v6_ngboost(self):
+        """MH2.1's deciding evidence (conditional calibration) did not reproduce and reversed on the
+        served population, so the swap was reverted. Every serving key must name the v6 NGBoost —
+        a half-reverted registry (v6 artifact, 25-col sidecar) fails the serve-time width guard
+        inside a HALT-tier op and costs the slate."""
+        assert TOTALS["artifact_path"].endswith("ngboost_normal_deleaked_v6_post_lineup_2026.pkl")
         assert TOTALS["feature_columns_path"].endswith(
-            "feature_columns_mh2_1_total_runs_post_lineup_served.json")
-        assert TOTALS["model_version"] == "mh2_1"
-        assert TOTALS["model_class"] == "glm_elasticnet"
-        assert TOTALS["homoscedastic"] is True
+            "feature_columns_v6_total_runs_post_lineup_served.json")
+        assert TOTALS["model_version"] == "v6"
+        assert TOTALS["homoscedastic"] is False, "the v6 NGBoost's per-game sigma VARIES again"
         assert TOTALS["dist"] == "Normal", "p_over_line still reads this"
+        # the challenger's own architecture keys must be GONE, not left dangling on a v6 artifact
+        for orphan in ("serving_wrapper", "sigma_served", "model_class"):
+            assert orphan not in TOTALS, (
+                f"`{orphan}` is an MH2.1 key; left behind it would describe the wrong artifact"
+            )
+
+    def test_the_rolled_back_challenger_is_RETAINED_not_deleted(self):
+        """A re-promotion must be a registry edit, not a re-fit. The artifact + contract stay
+        addressable under mh2_1_* keys, and the fit script + wrapper stay on disk."""
+        assert TOTALS["mh2_1_artifact_path"].endswith(
+            "glm_elasticnet_plus_eb_mh2_1_post_lineup_2026.pkl")
+        assert (PROJECT_ROOT / MH2_1_SERVED_SIDECAR).exists()
+        assert (PROJECT_ROOT / "betting_ml/utils/homoscedastic_regressor.py").exists()
+        assert (PROJECT_ROOT / "betting_ml/scripts/finalize_mh2_1_champion.py").exists()
 
     def test_pre_lineup_is_UNTOUCHED(self):
-        """The story promotes post_lineup ONLY. The morning tier keeps the v6 NGBoost — MH2.1 never
-        scored a pre_lineup arm, so moving it would ship an unvalidated model."""
+        """The story promoted post_lineup ONLY, so the rollback has nothing to undo here. The
+        morning tier kept the v6 NGBoost throughout — MH2.1 never scored a pre_lineup arm."""
         assert TOTALS["pre_lineup"].endswith("ngboost_normal_deleaked_v6_pre_lineup_2026.pkl")
         assert TOTALS["pre_lineup_model_version"] == "v6"
 
@@ -228,31 +270,37 @@ class TestPromotionScope:
         assert "ngboost_normal_deleaked_v6" in REGISTRY["run_differential"]["artifact_path"]
 
     def test_rollback_targets_the_model_actually_being_replaced(self):
-        """`prev_artifact_path` is the rollback. It must name the v6 NGBoost this swap retires —
-        not the older v5 it replaced two promotions ago."""
-        assert TOTALS["prev_artifact_path"].endswith(
-            "ngboost_normal_deleaked_v6_post_lineup_2026.pkl")
+        """`prev_artifact_path` is the rollback target for whatever is CURRENTLY served. With v6
+        restored, that is the v5 seasonnorm again — leaving it pointing at v6 would make the
+        rollback of a rollback a no-op that looks like it worked."""
+        assert TOTALS["prev_artifact_path"].endswith("ngboost_tuned_seasonnorm_2026.pkl")
         assert TOTALS["prev_feature_columns_path"].endswith(
-            "feature_columns_v6_total_runs_post_lineup_served.json")
+            "feature_columns_ngboost_tuned_seasonnorm_2026.json")
+        assert TOTALS["prev_artifact_path"] != TOTALS["artifact_path"]
 
     def test_bets_stay_paused(self):
-        """best_alpha=0 and this is a pricing change. A promotion must not quietly un-pause betting."""
+        """best_alpha=0 on both sides of this. Neither the promotion nor its reversal touches bets."""
         assert TOTALS["bet_paused"] is True
         assert REGISTRY["total_runs"]["mh2_1_promotion"]["best_alpha"] == 0
 
 
 # ── 5. the E13.6b calibrator trigger actually fired ───────────────────────────────────────────
 
-def test_the_totals_calibrator_refit_trigger_is_recorded_as_fired():
+def test_the_totals_calibrator_refit_trigger_is_stood_down_with_the_rollback():
     """`total_runs_model_rebuild` is a pre-registered refit trigger on the E13.6b isotonic candidate.
-    This promotion IS that rebuild, and the candidate was fit on the RETIRED model's served P(over)
-    — which came from the very σ this promotion replaces. Wiring it as-is would bake the retired
-    model's miscalibration into the new one."""
+    The promotion FIRED it (the candidate was fit on the then-retired v6's served P(over)); the
+    rollback restores that same v6 as the served model, so the candidate's INPUT PREDICTIVE is
+    unchanged and it is not stale. Leaving a stale flag set against a model that is serving again
+    would hold a valid candidate forever for a reason that no longer exists."""
     cal = TOTALS["totals_serving_calibration"]
     fired = cal["refit_trigger_fired"]
-    assert fired["trigger"] == "total_runs_model_rebuild"
-    assert "STALE" in fired["status"]
-    assert cal["status"].startswith("CANDIDATE"), "it was never live, so holding regresses nothing"
+    assert fired["trigger"] == "total_runs_model_rebuild", "the trigger stays armed"
+    assert fired["status"].startswith("STOOD_DOWN")
+    assert "STALE" not in fired["status"]
+    assert fired["stood_down_at"] == fired["fired_at"], "fired and reverted the same day"
+    assert cal["status"].startswith("CANDIDATE"), "it was never live, so nothing regressed either way"
+    # premise: the candidate's input predictive is the model that is served again
+    assert TOTALS["model_version"] == "v6"
 
 
 # ── 5b. the CLV scorecard must NOT be re-pinned (the same coin as the invisible stamp) ────────
@@ -302,15 +350,22 @@ class TestFramingLocks:
         c = TOTALS["mh2_1_promotion"]["caveats"]["selection_basis"]
         assert "RE-SELECT" in c and "PRICING" in c
 
-    def test_the_sigma_collapse_is_disclosed_not_hidden(self):
-        assert "sigma_is_constant" in TOTALS["mh2_1_promotion"]["caveats"]
-        assert TOTALS["sigma_served"] == pytest.approx(4.4521, abs=1e-4)
+    def test_the_sigma_collapse_is_undone_by_the_rollback(self):
+        """The promotion made `pred_total_runs_scale` constant, which switched off the σ dimension of
+        Story 22.4's totals gate. The rollback restores a VARYING σ, so that caveat must no longer
+        be advertised as current — and `sigma_served` must be gone, not left describing an artifact
+        that is not being served."""
+        assert TOTALS["homoscedastic"] is False
+        assert "sigma_served" not in TOTALS
+        assert "sigma_is_constant" not in TOTALS["mh2_1_promotion"]["caveats"]
 
     def test_the_bullpen_v3_seam_is_disclosed(self):
-        """The champion trains on 2016+ while bullpen_v3 de-leak caches exist only for 2021+, so two
-        contract columns span two measurement conventions. Disclosed, not silently inherited."""
+        """The CHALLENGER trains on 2016+ while bullpen_v3 de-leak caches exist only for 2021+, so
+        two contract columns span two measurement conventions. That seam belongs to the retained
+        challenger and must stay on its record for a re-promotion; the SERVED v6 is 2021+ and does
+        not carry it."""
         assert "bullpen_v3_seam" in TOTALS["mh2_1_promotion"]["caveats"]
-        assert TOTALS["training_cutoff"] == "2016+"
+        assert TOTALS["training_cutoff"] == "2021+", "served = v6's narrow window again"
 
     def test_the_record_disclaims_edge_rather_than_claiming_it(self):
         """⚠️ A naive "the word 'roi' must not appear" check FAILS on the DISCLAIMER itself ("no
@@ -378,12 +433,21 @@ class TestInAppVisibility:
         assert "live_versions.get(target_key)" in fresh
 
     def test_the_totals_version_is_compared_verbatim_not_via_the_vN_regex(self):
-        """`mh2_1` contains no `vN`. A regex-normalised comparison would silently read it as 'no
-        live version' and fall back to the ledger, defeating the panel's whole purpose."""
+        """A totals champion need not be `vN` — MH2.1's was `mh2_1`, which the `v(\\d+)` normaliser
+        reads as 'no live version', silently falling back to the ledger and defeating the panel.
+        The rollback restores a vN value, so the CURRENT registry no longer exercises this; the
+        guard is on the CODE, which must stay verbatim for the next non-vN lineage."""
+        import inspect
         import re as _re
 
-        assert _re.search(r"v(\d+)", "mh2_1") is None
-        assert TOTALS["model_version"] == "mh2_1"
+        from app.backend.routers import admin
+
+        assert _re.search(r"v(\d+)", "mh2_1") is None, "the shape that would break a regex compare"
+        src = inspect.getsource(admin.model_freshness)
+        assert "live_versions.get(target_key)" in src
+        assert 'r"v(\\d+)"' not in src.split("live_versions.get(target_key)")[1][:400], (
+            "the totals comparison must stay verbatim — a vN normaliser drops a non-vN lineage"
+        )
 
     def test_the_backtest_backfill_cannot_collide_with_the_previous_champion(self):
         """⚠️ The backfill's idempotency key is (game_pk, model_version, retrain_tag). `model_version`
@@ -445,14 +509,16 @@ class TestBackfillSidecarUnwrap:
         assert 'raw["feature_cols"] if isinstance(raw, dict) else raw' in src, (
             "feat_cols must unwrap the modern {'feature_cols': [...], '_provenance': {...}} shape"
         )
-        # the two shapes, resolved by the same expression the script uses
-        modern = _json.loads(
-            (PROJECT_ROOT / TOTALS["feature_columns_path"]).read_text())
-        legacy = modern["feature_cols"]
-        for raw, expected_n in ((modern, 25), (legacy, 25)):
-            cols = raw["feature_cols"] if isinstance(raw, dict) else raw
-            assert len(cols) == expected_n
-            assert "_provenance" not in cols, "the provenance KEY must never become a feature"
+        # the two shapes, resolved by the same expression the script uses — checked on BOTH the
+        # served v6 sidecar and the retained MH2.1 one, since the unwrap is width-independent
+        for path, expected_n in ((TOTALS["feature_columns_path"], 15),
+                                 (MH2_1_SERVED_SIDECAR, 25)):
+            modern = _json.loads((PROJECT_ROOT / path).read_text())
+            legacy = modern["feature_cols"]
+            for raw in (modern, legacy):
+                cols = raw["feature_cols"] if isinstance(raw, dict) else raw
+                assert len(cols) == expected_n
+                assert "_provenance" not in cols, "the provenance KEY must never become a feature"
         assert b is not None
 
     def test_a_resolved_width_mismatch_fails_loudly_before_sklearn(self):
