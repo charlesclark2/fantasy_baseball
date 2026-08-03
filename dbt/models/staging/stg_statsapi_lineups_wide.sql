@@ -85,9 +85,35 @@ where slot_1_player_id is not null
 
 {% else %}
 
+{# E11.24 (2026-08-03) — VIEW, NOT TABLE. As a `table` this model compiled to
+       create or replace transient table baseball_data.betting.stg_statsapi_lineups_wide as (...)
+   which is real warehouse compute, and it is re-run on EVERY lineup-monitor tick
+   (sensor_ops.lineup_dbt_staging_rebuild) AND every intraday schedule-capture tick
+   (intraday_ops.intraday_lineup_rebuild). Measured over a 10-day window it was 49 provisioning
+   waits — the top waiting statement in the account — firing in BOTH the 14-23 tick band and the
+   00-03 overnight band, i.e. it woke a ZERO-GAME warehouse all night.
+
+   Its two sibling staging models (stg_statsapi_lineups, stg_statsapi_probable_pitchers) are
+   already views on the Snowflake target, and in that SAME census their CREATE_VIEW statements
+   recorded ZERO provisioning waits — `create or replace view` is metadata-only and never resumes
+   the warehouse. So a view removes the waker for EVERY caller at once, present or future,
+   WITHOUT touching a job graph. That matters: both callers sit on the serving lineup path
+   (lineup_monitor_job), so editing those graphs would have been a serving-path change needing
+   its own soak. This is not — same rows, same source, same freshness.
+
+   FRESHNESS IS DELIBERATELY UNCHANGED: the view keeps the SAME pivot over the SAME
+   `ref('stg_statsapi_lineups')` the CTAS read, so it returns exactly what the table held after
+   its last rebuild — and is never staler, being evaluated at read time. (Repointing at
+   lakehouse_ext.stg_statsapi_lineups_wide was REJECTED: that is a different external table on a
+   different REFRESH cadence, which would change the freshness contract, not just the
+   materialization.)
+
+   Read cost is a group-by over one slate's lineup rows, and Snowflake-executing readers are few:
+   the dbt feature models ref() this only in the duckdb branch, and the API reads it through
+   lakehouse_query (DuckDB/S3), never Snowflake. #}
 {{
     config(
-        materialized='table'
+        materialized='view'
     )
 }}
 
