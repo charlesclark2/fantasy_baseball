@@ -535,7 +535,7 @@ def ordering_is_structural(form: str, point, positions, adjusted, *,
 
 
 def family_ceiling_check(arms: list[dict], anchors: dict, *, metric: str = SELECTION_METRIC,
-                         tol: float = 1e-9) -> dict:
+                         tol: float = 1e-9, family_ceiling: dict | None = None) -> dict:
     """⭐ EVERY ARM AGAINST **ITS OWN** FORM'S PEEKING CEILING — the NF1.7 (b) / NF1.9 (f) rule
     (matched family AND matched resolution) turned into a runnable check over the whole field.
 
@@ -552,14 +552,23 @@ def family_ceiling_check(arms: list[dict], anchors: dict, *, metric: str = SELEC
     scored on. So an in-fold arm beating it IS a metric inversion, and this is the check that says so.
 
     A form with no registered ceiling, or a ceiling that failed to score, is a HARD FAILURE rather
-    than a skip — an absent anchor passes on nothing (NF1.7 lesson (a))."""
+    than a skip — an absent anchor passes on nothing (NF1.7 lesson (a)).
+
+    ⭐ `family_ceiling` (added by NF-D18) lets a LATER story reuse this check with its OWN form → anchor
+    map. It defaults to NF-D16's, so nothing here changes. The parameter exists because NF-D18's first
+    run reported a hard failure on two arms whose ceilings had in fact been computed and scored: the
+    check was reading NF-D16's dict, which does not contain NF-D18's forms, so every one of them
+    resolved to `None`. That the failure surfaced as a LOUD refusal rather than a silent skip is the
+    NF1.7 (a) rule working exactly as intended — but the correct cure is to let the check be told which
+    map to use, not to let a story quietly re-implement it."""
+    ceilings = FAMILY_CEILING if family_ceiling is None else dict(family_ceiling)
     per: list[dict] = []
     ok = True
     for r in arms:
         form = r.get("form")
         if not r.get("recalibrates") or form == "incumbent":
             continue
-        tag = FAMILY_CEILING.get(form)
+        tag = ceilings.get(form)
         ceiling = (anchors.get(tag) or {}).get(metric) if tag else None
         value = r.get(metric)
         if ceiling is None or value is None:
