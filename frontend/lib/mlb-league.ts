@@ -26,7 +26,26 @@ export type MatchConfidence =
   | "position_conflict" // a same-name prospect the roster SLOT contradicts (a batter slot vs a
   //                       pitching prospect). Usually a genuine different player.
   | "contested" // a second roster entry resolving to a board row another entry already claimed
+  | "missing_from_board" // the admin says this IS a prospect we don't carry — see coverage_gaps
   | "unresolved" // no board row at all — usually an established major-leaguer
+
+/** How a review row is dismissed. These are DIFFERENT STATEMENTS and collapsing them is what threw
+ *  away the signal: "not a prospect" is Salvador Perez; "missing from board" is a prospect somebody
+ *  is spending a dynasty roster spot on that we do not carry. */
+export type DismissReason = "not_a_prospect" | "missing_from_board"
+
+/** A player who looks like a prospect we should be tracking but is not on the board. */
+export interface CoverageGap {
+  key: string
+  name: string
+  team: string
+  slot: string
+  status: string | null
+  org: string | null
+  positions: string | null
+  /** "confirmed" = the admin said so · "suggested" = an unplaceable minors-slot stash. */
+  source: "confirmed" | "suggested"
+}
 
 export interface RosterEntry {
   team: string
@@ -83,6 +102,7 @@ export interface LeagueOverlay {
   rostered: Record<string, RosteredBy>
   picks: Record<string, string>
   review: ReviewRow[]
+  coverage_gaps: CoverageGap[]
   /** Written server-side so the honest framing travels with the computation (the NF3 convention). */
   framing: string
 }
@@ -138,7 +158,11 @@ export function saveMlbLeague(
 export function updateMlbLeague(
   token: string | null,
   leagueId: string,
-  patch: { name?: string; league_scope?: string; overrides?: Record<string, number | null> },
+  patch: {
+    name?: string
+    league_scope?: string
+    overrides?: Record<string, number | DismissReason | null>
+  },
 ): Promise<LeagueDetail> {
   return apiFetch(
     `/fantasy/mlb/leagues/${encodeURIComponent(leagueId)}`,
@@ -151,6 +175,23 @@ export function deleteMlbLeague(token: string | null, leagueId: string): Promise
   return apiFetch(
     `/fantasy/mlb/leagues/${encodeURIComponent(leagueId)}`,
     { method: "DELETE" },
+    token,
+  )
+}
+
+/** Replace ONE team's roster from a per-team export (CBS's "roster overview").
+ *
+ * ⚠️ The team NAME is required: that export does not contain it, and filing 33 players under ""
+ * would make a whole roster belong to nobody — every one of them reading as available. */
+export function uploadTeamRoster(
+  token: string | null,
+  leagueId: string,
+  team: string,
+  text: string,
+): Promise<LeagueDetail & { imported: number; replaced: number }> {
+  return apiFetch(
+    `/fantasy/mlb/leagues/${encodeURIComponent(leagueId)}/teams`,
+    { method: "PUT", body: JSON.stringify({ team, text }) },
     token,
   )
 }
@@ -206,6 +247,24 @@ export function matchSummary(counts: Record<string, number>): string {
     (counts.ambiguous ?? 0) + (counts.contested ?? 0) + (counts.minors_unresolved ?? 0)
   if (needs > 0) parts.push(`${needs} need${needs === 1 ? "s" : ""} a look`)
   return parts.join(" · ")
+}
+
+/** The coverage report as a CSV an operator can hand straight to the board build. */
+export function coverageGapsCsv(gaps: CoverageGap[]): string {
+  const rows = [
+    ["name", "position", "mlb_team", "roster_status", "fantasy_team", "confidence"],
+    ...gaps.map((g) => [
+      g.name,
+      g.positions ?? g.slot ?? "",
+      g.org ?? "",
+      g.status ?? "active",
+      g.team,
+      g.source,
+    ]),
+  ]
+  return rows
+    .map((r) => r.map((c) => (/[",\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(","))
+    .join("\n")
 }
 
 /** The persisted "which league am I drafting in" selection, shared by the setup page and the

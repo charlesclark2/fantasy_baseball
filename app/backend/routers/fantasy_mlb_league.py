@@ -84,12 +84,22 @@ class UpdateRequest(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=80)
     league_scope: str | None = None
-    #: `{entry_key: board_rank}` pins a manual fix; `{entry_key: null}` dismisses the row.
-    overrides: dict[str, int | None] | None = None
+    #: `{entry_key: board_rank}` pins a manual fix. `{entry_key: "not_a_prospect"}` dismisses it
+    #: silently; `{entry_key: "missing_from_board"}` dismisses it INTO the coverage report. `null`
+    #: is accepted as a synonym for "not_a_prospect".
+    overrides: dict[str, int | str | None] | None = None
 
 
 class PickRequest(BaseModel):
     team: str = Field(min_length=1, max_length=80)
+
+
+class TeamUploadRequest(BaseModel):
+    """One team's roster export. The team NAME is required because the per-team CBS export does not
+    contain it — see `upsert_team`."""
+
+    team: str = Field(min_length=1, max_length=80)
+    text: str = Field(min_length=1)
 
 
 def _scope(value: str | None) -> str:
@@ -132,6 +142,8 @@ def _entries(league: dict) -> list[RosterEntry]:
                 name=name,
                 status=(str(raw["status"]) if raw.get("status") else None),
                 status_code=(str(raw["status_code"]) if raw.get("status_code") else None),
+                org=(str(raw["org"]) if raw.get("org") else None),
+                positions=(str(raw["positions"]) if raw.get("positions") else None),
             )
         )
     return out
@@ -182,6 +194,7 @@ def _overlay(league: dict, entries: list[RosterEntry]) -> dict:
         "counts": counts,
         "rostered": rostered,
         "picks": {str(k): v for k, v in picks.items() if v},
+        "coverage_gaps": result.coverage_gaps,
         "review": [
             {
                 "key": m.entry.key,
@@ -295,6 +308,8 @@ def save_league(
                 "slot": e.slot,
                 "name": e.name,
                 **({"status": e.status} if e.status else {}),
+                **({"org": e.org} if e.org else {}),
+                **({"positions": e.positions} if e.positions else {}),
             }
             for e in parsed.entries
         ],
@@ -319,6 +334,58 @@ def save_league(
         "warnings": parsed.warnings,
         "upload_format": parsed.upload_format,
         **_overlay(stored, parsed.entries),
+    }
+
+
+@router.put("/leagues/{league_id}/teams")
+def upsert_team(
+    payload: TeamUploadRequest,
+    league_id: str = Path(min_length=1, max_length=64),
+    user_id: str = Depends(get_admin_user),
+):
+    """Replace ONE team's roster from a per-team export, leaving every other team untouched.
+
+    ⭐ WHY THIS EXISTS ALONGSIDE THE WHOLE-LEAGUE UPLOAD. CBS's per-team "roster overview" export
+    carries FULL NAMES and the MLB club, where the league-wide grid carries only `F Surname` — and
+    measured on the live AL board, the full name removes the ambiguity class outright (9 ambiguous
+    board keys → 0). So the grid is the fast path for the whole league and this is how a user fixes
+    the one team the grid could not resolve, without re-uploading everything.
+
+    ⚠️ The per-team export does NOT name its own team, so the caller must. Without it a whole roster
+    would be filed under "" and silently belong to nobody.
+    """
+    league = _require(user_id, league_id)
+    team = payload.team.strip()
+    try:
+        parsed = parse_roster_upload(payload.text, team=team)
+    except RosterUploadError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    if parsed.needs_team:  # defensive: `team` is required by the model, so this should be unreachable
+        raise HTTPException(status_code=422, detail="Which team is this roster for?")
+
+    record = {k: v for k, v in league.items() if k != "league_id"}
+    kept = [e for e in (record.get("entries") or []) if str(e.get("team") or "") != team]
+    record["entries"] = kept + [
+        {
+            "team": e.team,
+            "slot": e.slot,
+            "name": e.name,
+            **({"status": e.status} if e.status else {}),
+            **({"org": e.org} if e.org else {}),
+            **({"positions": e.positions} if e.positions else {}),
+        }
+        for e in parsed.entries
+    ]
+    record["teams"] = sorted({str(e.get("team") or "") for e in record["entries"] if e.get("team")})
+    stored = dynamo.put_mlb_league(user_id, league_id, record)
+    entries = _entries(stored)
+    return {
+        "league": _summary(stored),
+        "upload_format": parsed.upload_format,
+        "warnings": parsed.warnings,
+        "imported": len(parsed.entries),
+        "replaced": len((league.get("entries") or [])) - len(kept),
+        **_overlay(stored, entries),
     }
 
 

@@ -387,6 +387,195 @@ class TestTheMatch:
         assert result.matched[0].confidence == EXACT
 
 
+OVERVIEW_FIXTURE = (
+    Path(__file__).resolve().parents[2]
+    / "quant_sports_intel_models/baseball/edge_program/fixtures"
+    / "e8_2_cbs_roster_overview_example_20260803.csv"
+)
+
+
+class TestThePerTeamRosterOverview:
+    """The OTHER real CBS export (operator, 2026-08-03): one team, sectioned, and — the part that
+    matters — FULL NAMES with the MLB club."""
+
+    @pytest.fixture(scope="class")
+    def parsed(self):
+        return parse_roster_upload(OVERVIEW_FIXTURE.read_text(encoding="utf-8"),
+                                   team="Statcast and Chill")
+
+    def test_it_is_detected_without_being_told(self, parsed):
+        assert parsed.upload_format == "roster_overview"
+
+    def test_full_names_and_the_mlb_club_survive(self, parsed):
+        meidroth = next(e for e in parsed.entries if "Meidroth" in e.name)
+        assert meidroth.name == "Chase Meidroth"      # not `C Meidroth`
+        assert meidroth.org == "CHW"
+        assert meidroth.positions == "2B,SS"          # multi-position, comma inside a quoted cell
+
+    def test_the_section_headings_set_the_status(self, parsed):
+        by_status = {}
+        for e in parsed.entries:
+            by_status.setdefault(e.status, []).append(e.name)
+        assert len(by_status[None]) == 23             # active, across BOTH blocks
+        assert sorted(by_status["reserve"]) == [
+            "Dylan Beavers", "Grayson Rodriguez", "Lane Thomas", "Shane Bieber", "Tyler Tolbert",
+        ]
+        assert by_status["minors"] == ["Tyler Bremner"]
+        assert sorted(by_status["injured"]) == [
+            "Brendan Donovan", "Connelly Early", "Matt Brash", "Parker Meadows",
+        ]
+
+    def test_a_pitchers_heading_resets_the_status_to_active(self, parsed):
+        """`Minors` (empty) closes the batters block, then `Pitchers` begins — and Taj Bradley is
+        ACTIVE, not a minors stash. Without the reset the whole pitching staff inherits `minors`."""
+        assert next(e for e in parsed.entries if e.name == "Taj Bradley").status is None
+
+    def test_the_exports_own_totals_are_enforced_as_a_CHECKSUM(self):
+        """⭐ `Active: 23 Reserve: 5 Injured: 4 Minors: 1` is the file checking OUR work. A
+        disagreement means a player was dropped — and a dropped player reads as AVAILABLE, the one
+        failure that hides. So it refuses rather than importing a short roster."""
+        text = OVERVIEW_FIXTURE.read_text(encoding="utf-8")
+        with pytest.raises(RosterUploadError, match="missing players"):
+            parse_roster_upload(text.replace("Active: 23", "Active: 24"), team="T")
+
+    def test_a_missing_checksum_is_not_fatal(self):
+        """A checksum we HAVE must be honoured; one that is absent must not block an import."""
+        text = OVERVIEW_FIXTURE.read_text(encoding="utf-8")
+        trimmed = "\n".join(ln for ln in text.splitlines() if not ln.startswith("Active:"))
+        assert len(parse_roster_upload(trimmed, team="T").entries) == 33
+
+    def test_it_says_it_needs_a_team_name_rather_than_filing_a_roster_under_nothing(self):
+        """The per-team export does not name its own team. Silently filing 33 players under "" is
+        how a whole roster comes to belong to nobody and everyone on it reads as available."""
+        parsed = parse_roster_upload(OVERVIEW_FIXTURE.read_text(encoding="utf-8"))
+        assert parsed.needs_team is True
+        assert parsed.teams == []
+
+    def test_it_agrees_with_the_LEAGUE_GRID_about_the_same_team(self, parsed, grid_text):
+        """⭐ THE STRONGEST EVIDENCE EITHER PARSER IS RIGHT, and the check a single fixture cannot
+        give (the NF-C0 second-real-payload lesson). Two INDEPENDENTLY-PRODUCED CBS exports of the
+        same roster, read by two completely unrelated code paths — the no-delimiter concatenation
+        tokenizer, and the sectioned per-team reader — must name the same players.
+
+        They do: 33 each, with nobody on either side only."""
+        grid = [e for e in parse_roster_upload(grid_text).entries
+                if e.team == "Statcast and Chill"]
+        assert len(grid) == len(parsed.entries) == 33
+
+        def surname(name):
+            return name_key(name)[1]
+
+        assert {surname(e.name) for e in grid} == {surname(e.name) for e in parsed.entries}
+
+    def test_the_STICKY_statuses_agree_across_the_two_exports(self, parsed, grid_text):
+        """The exports are three days apart (7/31 grid, 8/03 overview), so ACTIVE↔RESERVE churn is
+        the owner shuffling his lineup — 8 players moved and that is real, not a parse defect.
+        MINORS and INJURED are sticky over three days, and those must agree exactly, because they
+        are the statuses this feature actually turns on."""
+        grid = {
+            name_key(e.name)[1]: e.status
+            for e in parse_roster_upload(grid_text).entries
+            if e.team == "Statcast and Chill"
+        }
+        sticky = {
+            name_key(e.name)[1]: e.status
+            for e in parsed.entries
+            if e.status in ("minors", "injured")
+        }
+        assert sticky, "no sticky statuses in the fixture — this assertion would be vacuous"
+        for surname, status in sticky.items():
+            assert grid[surname] == status, f"{surname}: grid {grid[surname]} vs overview {status}"
+
+
+class TestFullNamesRemoveTheAmbiguityClass:
+    BOARD = [
+        board_row(1, "Elmer Rodriguez", org="TBR", mlbam=801),
+        board_row(2, "Emmanuel Rodriguez", org="MIN", mlbam=802),
+        board_row(3, "Elorky Rodriguez", org="HOU", mlbam=803),
+    ]
+
+    def test_an_initial_is_ambiguous_but_a_full_name_is_not(self):
+        """⭐ The measured payoff of the per-team export. On the live AL board, initial+surname
+        leaves 9 ambiguous keys; the full name leaves ZERO."""
+        assert match_roster([entry("E Rodriguez")], self.BOARD, "AL").matched[0].confidence == (
+            AMBIGUOUS
+        )
+        result = match_roster([entry("Emmanuel Rodriguez")], self.BOARD, "AL")
+        assert result.matched[0].confidence == EXACT
+        assert result.matched[0].board_rank == 2
+
+    def test_the_mlb_club_breaks_a_tie_the_name_cannot(self):
+        board = [board_row(1, "Jose Rodriguez", org="LAD", mlbam=811),
+                 board_row(2, "Jose Rodriguez", org="MIL", mlbam=812)]
+        blind = match_roster([entry("Jose Rodriguez")], board, "AL")
+        assert blind.matched[0].confidence == AMBIGUOUS
+        with_org = match_roster(
+            [RosterEntry(team="T", slot="SS", name="Jose Rodriguez", org="MIL")], board, "AL"
+        )
+        assert with_org.matched[0].board_rank == 2
+
+    def test_an_org_MISMATCH_never_rejects_a_lone_candidate(self):
+        """⚠️ Asymmetric to the slot check on purpose. Batter-vs-pitcher does not change; a club
+        does — the board carries a PARENT org and trades move it constantly. So an org match is
+        strong evidence of the same player, but a mismatch is weak evidence of a different one."""
+        board = [board_row(1, "Chase DeLauter", org="CLE", mlbam=821)]
+        traded = RosterEntry(team="T", slot="OF", name="Chase DeLauter", org="NYY")
+        assert match_roster([traded], board, "AL").matched[0].board_rank == 1
+
+
+class TestBoardCoverageGaps:
+    """⭐ The signal that used to be thrown away (operator, 2026-08-03): a player in somebody's
+    MINORS slot who matches nothing is evidence of a prospect we should be carrying."""
+
+    BOARD = [board_row(1, "Samuel Basallo", org="BAL", mlbam=701)]
+
+    def test_an_unplaceable_minors_stash_is_reported_without_anyone_asking(self):
+        stash = RosterEntry(team="KCStat", slot="OF", name="Vance Honeycutt",
+                            status="minors", org="BAL", positions="OF")
+        result = match_roster([stash], self.BOARD, "AL")
+        assert result.counts["coverage_gaps"] == 1
+        gap = result.coverage_gaps[0]
+        assert gap["name"] == "Vance Honeycutt"
+        assert gap["org"] == "BAL"          # what makes it actionable for an operator
+        assert gap["source"] == "suggested"
+
+    def test_the_two_dismissals_are_different_statements(self):
+        """`S Perez` is an established major-leaguer; `V Honeycutt` is a prospect we are missing.
+        Collapsing both into one silent delete is what lost the signal."""
+        veteran = entry("Salvador Perez")
+        prospect = entry("Vance Honeycutt", status="minors")
+        result = match_roster(
+            [veteran, prospect], self.BOARD, "AL",
+            overrides={veteran.key: "not_a_prospect", prospect.key: "missing_from_board"},
+        )
+        assert [g["name"] for g in result.coverage_gaps] == ["Vance Honeycutt"]
+        assert result.coverage_gaps[0]["source"] == "confirmed"
+        assert result.counts["dismissed"] == 1
+
+    def test_a_confirmed_gap_leaves_the_review_queue_but_stays_reported(self):
+        """It must stop nagging without being forgotten — those are different things."""
+        prospect = entry("Vance Honeycutt", status="minors")
+        before = match_roster([prospect], self.BOARD, "AL")
+        assert before.review and before.counts["coverage_gaps"] == 1
+        after = match_roster([prospect], self.BOARD, "AL",
+                             overrides={prospect.key: "missing_from_board"})
+        assert not after.review
+        assert after.counts["coverage_gaps"] == 1
+
+    def test_neither_dismissal_ever_marks_a_board_row_rostered(self):
+        for reason in ("not_a_prospect", "missing_from_board", None):
+            e = entry("Whoever", status="minors")
+            result = match_roster([e], self.BOARD, "AL", overrides={e.key: reason})
+            assert not result.by_rank, f"{reason} claimed a board row"
+
+    def test_confirmed_gaps_sort_ahead_of_suggested_ones(self):
+        confirmed = entry("Aaron Confirmed", status="minors")
+        suggested = entry("Zeb Suggested", status="minors")
+        result = match_roster([suggested, confirmed], self.BOARD, "AL",
+                              overrides={confirmed.key: "missing_from_board"})
+        assert [g["source"] for g in result.coverage_gaps] == ["confirmed", "suggested"]
+
+
 class TestTheSlotHint:
     """⭐ The one signal the upload carries besides a name — and on the real export it is worth
     four corrections in 103 matches, every one a FALSE POSITIVE against a same-named pitcher."""
