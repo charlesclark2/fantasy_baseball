@@ -92,6 +92,7 @@ from betting_ml.scripts.prospect_board.build_consensus_assembly import (  # noqa
     fold_pipeline_into_e8_0_board,
 )
 from betting_ml.scripts.prospect_board.consensus import ConsensusError, format_consensus_report  # noqa: E402
+from betting_ml.scripts.prospect_board.coverage_gap_report import build_report as build_coverage_gap_report  # noqa: E402
 
 log = logging.getLogger("e8_0.board")
 
@@ -539,6 +540,24 @@ def main(argv=None) -> int:
         detail_path = out_dir / "e8_0_comp_detail.csv"
         comp_detail.to_csv(detail_path, index=False)
         written.append(detail_path)
+
+    # ── E8.5: the roster-import coverage-gap egress, read against THIS board ──────────────────────
+    # Advisory only — see coverage_gap_report.py. Never adds a row to `final`; a name flagged here is
+    # something for the operator to CONSIDER for the next build (a FanGraphs/Pipeline ingest fix, or
+    # a manual xref addition), never something this script adds on its own.
+    gap_report_line = "  E8.5 coverage-gap report: nothing flagged by any uploaded league."
+    gap_report = build_coverage_gap_report(final)
+    if not gap_report.empty:
+        gap_report_path = out_dir / "e8_0_coverage_gap_report.csv"
+        gap_report.to_csv(gap_report_path, index=False)
+        written.append(gap_report_path)
+        still_missing = int(gap_report["still_missing"].sum())
+        gap_report_line = (
+            f"  E8.5 coverage-gap report: {len(gap_report)} flagged name(s) from uploaded "
+            f"rosters, {still_missing} still not on this board — see {gap_report_path.name} "
+            "(board membership is unchanged; this is for the operator to review)."
+        )
+
     print(format_report(report, extra=[
         "", f"  board snapshot as-of : {report['board_as_of_date']} "
             f"(season {report['board_season']})",
@@ -547,6 +566,7 @@ def main(argv=None) -> int:
         "            display heuristic (E7.8: FV leads for ARMS, our MLE + age-rel-to-level "
         "leads for BATS).",
         "  🔒 best_alpha = 0 — no edge or win-rate claim. See the 'How to read this' tab.",
+        "", gap_report_line,
         "", "  WROTE:", *[f"    {w}" for w in written],
     ]))
     if consensus_rep is not None:
