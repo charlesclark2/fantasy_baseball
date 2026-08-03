@@ -9,6 +9,8 @@ revisions land. `--incremental` re-pulls those month partitions idempotently.
   • fangraphs_prospects_ingest_op → baseball/milb/the_board (FanGraphs THE BOARD)   (E7.7)
   • fangraphs_milb_leaderboards_ingest_op → baseball/milb/fg_leaderboards (all minors) (E7.7)
   • dim_player_xref_build_op     → baseball/milb/derived/dim_player_xref                 (E7.4)
+  • milb_coverage_sla_op         → coverage-by-level/season + freshness SLA report        (E7.6)
+  • milb_leakage_screen_op       → as-of leakage screen over mle_graduated_pairs[_pitchers] (E7.6)
 
 TIER = WARN-but-continue (E11.7 / CLAUDE.md op-tier map): MiLB data is NOT on any MLB
 serving/predict path — it is the research substrate for E7.3 (MLE) + E8 (Dynasty). A Stats-API
@@ -56,6 +58,18 @@ FANGRAPHS_MILB_LEADERBOARDS_TIMEOUT_SECONDS = int(
 # orchestrator path always carries a finite timeout).
 PLAYER_XREF_BUILD_TIMEOUT_SECONDS = int(
     os.environ.get("PLAYER_XREF_BUILD_TIMEOUT_SECONDS", "1800")
+)
+
+# E7.6 — the coverage/SLA report scans two seasons of schedule + game-log + statcast Delta tables
+# (DuckDB over S3, no vendor calls); generous ceiling for a slow httpfs read. INC-32 discipline.
+MILB_COVERAGE_SLA_TIMEOUT_SECONDS = int(
+    os.environ.get("MILB_COVERAGE_SLA_TIMEOUT_SECONDS", "600")
+)
+
+# E7.6 — the leakage screen reads mle_graduated_pairs[_pitchers] + the MLB rolling-stats marts
+# (DuckDB over S3, no vendor calls); generous ceiling. INC-32 discipline.
+MILB_LEAKAGE_SCREEN_TIMEOUT_SECONDS = int(
+    os.environ.get("MILB_LEAKAGE_SCREEN_TIMEOUT_SECONDS", "600")
 )
 
 
@@ -174,4 +188,62 @@ def dim_player_xref_build_op(context):
             f"is a DEAD-BRIDGE error the FanGraphs id fields changed shape — re-probe with "
             f"`ingest_fangraphs_milb_leaderboards_to_s3.py --probe` before trusting any prospect "
             f"join): {e}"
+        )
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def milb_coverage_sla_op(context):
+    """E7.6 — MiLB coverage-by-level/season + per-feed freshness SLA report.
+
+    Reads the CURRENT state of the four ingests above (schedule/player_game_logs/statcast_aaa/
+    the_board/fg_leaderboards) — a downstream fan-in for the same INC-25 "consumer must not race
+    the producer" reason `dim_player_xref_build_op` is. WARN-tier: this is a REPORT, not a gate —
+    a stale/degraded MiLB feed never affects anything MLB-serving, so a failure (including the
+    script's own --strict non-zero exit on a genuine DEGRADED/STALE finding) logs loud and never
+    HALTs the run. See `scripts/check_milb_coverage_sla.py`.
+    """
+    try:
+        _run_script(
+            context,
+            "check_milb_coverage_sla.py",
+            ["--strict"],
+            timeout=MILB_COVERAGE_SLA_TIMEOUT_SECONDS,
+        )
+    except Exception as e:  # noqa: BLE001 — WARN-tier: a report, never a gate; MiLB is off the MLB serving path
+        context.log.warning(
+            f"MiLB coverage/freshness SLA report flagged an issue or failed to run (non-fatal — "
+            f"WARN-tier, a REPORT not a gate; MiLB data is research-only, off the MLB serving "
+            f"path). Read the run log above for the [coverage]/[freshness] detail: {e}"
+        )
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def milb_leakage_screen_op(context):
+    """E7.6 — independent as-of leakage screen over `mle_graduated_pairs[_pitchers]`.
+
+    Re-derives each graduated player's pre-debut PA/TBF straight from `player_game_logs` + the MLB
+    rolling-stats marts and compares it to what actually landed in the served aggregate — proving
+    (or disproving) that no post-debut MiLB stat reached the rookie prior the served pregame row
+    eventually joins in. A downstream fan-in for the same reason `dim_player_xref_build_op` is (the
+    freshest game-log data should back the check). WARN-tier: MiLB is off the MLB serving path, so
+    a detected leak (the script's own non-zero exit) logs loud and never HALTs the run — but it IS
+    the signal an operator should act on before trusting the next `--s3` land of the rookie prior.
+    See `betting_ml/scripts/milb_mle/check_milb_leakage_screen.py`.
+    """
+    try:
+        _run_script(
+            context,
+            os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                "betting_ml", "scripts", "milb_mle", "check_milb_leakage_screen.py",
+            ),
+            [],
+            timeout=MILB_LEAKAGE_SCREEN_TIMEOUT_SECONDS,
+        )
+    except Exception as e:  # noqa: BLE001 — WARN-tier: MiLB is off the MLB serving path
+        context.log.warning(
+            f"MiLB leakage screen detected a violation or failed to run (non-fatal — WARN-tier, "
+            f"MiLB is off the MLB serving path; but a genuine LEAK_DETECTED verdict means the "
+            f"as-of guard in build_graduated_pairs[_pitchers].py regressed — investigate before "
+            f"trusting the next served rookie prior). Read the run log above for detail: {e}"
         )
