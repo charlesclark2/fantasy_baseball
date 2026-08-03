@@ -100,6 +100,11 @@ _DEFAULT_OUT = (_PROJECT_ROOT / "quant_sports_intel_models/baseball/edge_program
 
 MLE_BATTERS = f"{MILB}/derived/mle_projections"
 MLE_PITCHERS = f"{MILB}/derived/mle_projections_pitchers"
+# E8.3 — the stolen-base line. A SEPARATE table from the batter MLE because it carries its own
+# eligibility floor (a rate needs stolen-base OPPORTUNITIES, not just PA), so a player can have a
+# k_pct line and no SB line. A MISSING table is tolerated (the board falls back to the pre-E8.3
+# behaviour) but is LOGGED loudly — a silently absent SB line would quietly re-open the blind spot.
+MLE_SB = f"{MILB}/derived/sb_projections"
 XREF = f"{MILB}/derived/dim_player_xref"
 # E7.11's MLB Pipeline snapshot — the E8.0b second source. Owned here (not `build_consensus.py`) so
 # `build_prospect_board.py` never has to import the E7.11 RUNNER (only its pure `_assembly` module) —
@@ -168,10 +173,18 @@ HOW_TO_READ = [
      "This prospect is currently listed AT MLB (graduated, but still carries a Board grade). Most "
      "minor-league dynasty drafts do not make these players draftable - check your league's "
      "rules. The 'Minors only' tab is the board with them removed."),
+    ("mle_sb_rate",
+     "OUR MLB-EQUIVALENT STOLEN-BASE RATE (E8.3) - steals per time reaching first base (singles + "
+     "walks + HBP), translated from his minor-league record. Out-of-sample translation corr 0.70, "
+     "the STRONGEST line on this board. Read it with confidence, with two limits: it is a RATE, "
+     "not a projected SB total (a count needs a playing-time projection we do not make), and it "
+     "says how often he RUNS, not how often he is SAFE - success rate does not translate (0.23, "
+     "fails the deflation gate), so a 30-for-40 runner and a 30-for-32 runner look identical."),
     ("speed_flag",
-     "STOLEN BASES ARE INVISIBLE TO OUR MLE - every target is a per-PA rate and SB is not in the "
-     "substrate. Flagged from the scouts' own future-speed grade (60+). If your league scores SB, "
-     "our score UNDER-RATES these players and you should say so out loud at the table."),
+     "The scouts see plus speed (60+ future grade) and we have NO stolen-base line to check it "
+     "against - too few stolen-base opportunities on his record, or a level our translation does "
+     "not cover. Fall back to the scouting grade for these players ONLY. (Before E8.3 this flag "
+     "meant SB was invisible to us everywhere; that is no longer true.)"),
     ("ps_* columns",
      "PROSPECT SAVANT's numbers, not ours - their MiLB-Statcast expected stats, from an "
      "unofficial hobbyist API, captured as a one-time snapshot. A third orthogonal opinion. Never "
@@ -288,9 +301,16 @@ def load_inputs(conn, *, board_season: int | None = None) -> tuple[pd.DataFrame,
     ).df()
     mle_bat = conn.execute(f"select * from delta_scan('{MLE_BATTERS}')").df()
     mle_pit = conn.execute(f"select * from delta_scan('{MLE_PITCHERS}')").df()
-    log.info("loaded board=%d  xref=%d  mle_batters=%d  mle_pitchers=%d",
-             len(board), len(xref), len(mle_bat), len(mle_pit))
-    return board, xref, mle_bat, mle_pit
+    try:
+        mle_sb = conn.execute(f"select * from delta_scan('{MLE_SB}')").df()
+    except Exception as e:  # noqa: BLE001 - a missing SB table degrades, it must not fail the board
+        log.warning("E8.3 SB projections unavailable (%s) — the board will carry NO stolen-base "
+                    "line and `speed_flag` reverts to a scouts-only caveat. Re-run "
+                    "`run_e8_3_sb --emit --s3` to restore it.", e)
+        mle_sb = pd.DataFrame()
+    log.info("loaded board=%d  xref=%d  mle_batters=%d  mle_pitchers=%d  mle_sb=%d",
+             len(board), len(xref), len(mle_bat), len(mle_pit), len(mle_sb))
+    return board, xref, mle_bat, mle_pit, mle_sb
 
 
 def load_pipeline_ranks(conn, *, season: int | None = None,
@@ -431,7 +451,7 @@ def main(argv=None) -> int:
 
     out_dir = Path(args.out_dir)
     conn = _connect()
-    board, xref, mle_bat, mle_pit = load_inputs(conn, board_season=args.board_season)
+    board, xref, mle_bat, mle_pit, mle_sb = load_inputs(conn, board_season=args.board_season)
     if board.empty:
         raise ProspectBoardError(
             "the board snapshot is EMPTY — re-run the E7.7 ingest "
@@ -445,7 +465,7 @@ def main(argv=None) -> int:
                                    refresh=args.ps_refresh)
         log.info("prospect-savant snapshot: %d players", len(savant))
 
-    final, report = assemble_board(board, xref, mle_bat, mle_pit, savant,
+    final, report = assemble_board(board, xref, mle_bat, mle_pit, savant, mle_sb=mle_sb,
                                    min_pa=args.min_mle_pa,
                                    strict_league=not args.allow_unmapped_orgs)
     report["board_season"] = int(board["season"].max())

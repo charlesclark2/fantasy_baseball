@@ -213,9 +213,15 @@ def test_the_metric_weights_are_the_measured_translation_correlations():
     """Weights are proportional to each metric's OOS translation corr, and the NO-SIGNAL metrics
     are absent entirely — including wOBA at any weight would launder a measured null into a rank."""
     bat = MLE_METRIC_WEIGHTS["batter"]
-    assert set(bat) == {"mle_k_pct", "mle_bb_pct", "mle_iso"}
+    assert set(bat) == {"mle_k_pct", "mle_bb_pct", "mle_iso", "mle_sb_rate"}
     assert bat["mle_k_pct"][0] > bat["mle_bb_pct"][0] > bat["mle_iso"][0]   # 0.637 > 0.491 > 0.429
+    # E8.3: SB rate translates BEST of anything on this board (0.702), so it must carry the
+    # LARGEST batter weight. A weight below k_pct's would mean someone hand-tuned it down.
+    assert bat["mle_sb_rate"][0] > bat["mle_k_pct"][0]
+    assert bat["mle_sb_rate"] == (0.702, True)          # more steals = more fantasy value
     assert "mle_woba" not in bat                                            # 0.220 = no-signal
+    # the SUCCESS half is a measured null (0.230, fails PBO) and must never be carried
+    assert not any("succ" in k for k in bat)
     pit = MLE_METRIC_WEIGHTS["pitcher"]
     assert set(pit) == {"mle_p_gb_pct", "mle_p_bb_pct", "mle_p_k_pct"}
     assert max(pit.values(), key=lambda t: t[0]) == pit["mle_p_gb_pct"]     # 0.551 = the strong one
@@ -242,7 +248,7 @@ def test_a_missing_metric_is_renormalized_away_not_scored_as_bad():
         "player_type": ["batter", "batter"], "level": ["AA", "AA"], "age": [21.0, 21.0],
         "fv": [50.0, 50.0], "grade_spd": [40.0, 40.0],
         "mle_k_pct": [0.18, 0.18], "mle_bb_pct": [0.12, 0.12],
-        "mle_iso": [0.20, np.nan],
+        "mle_iso": [0.20, np.nan], "mle_sb_rate": [0.06, 0.06],
     })
     out = attach_scores(df)
     assert out["mle_coverage"].iloc[0] == 1.0

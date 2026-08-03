@@ -693,9 +693,10 @@ class TestNativeCompWiringMatchesTheAugmenter:
             return attach_comp_ranking(board), pd.DataFrame(), {"ranking": {"rows_moved": 0}}
 
         monkeypatch.setattr(runner, "_connect", lambda: object())
+        # 5-tuple since E8.3 added the stolen-base projections as a fifth input.
         monkeypatch.setattr(runner, "load_inputs", lambda conn, **kw: (
             pd.DataFrame({"season": [2026], "as_of_date": ["2026-07-27"]}),
-            pd.DataFrame(), pd.DataFrame(), pd.DataFrame()))
+            pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()))
         monkeypatch.setattr(runner, "assemble_board",
                             lambda *a, **kw: (self._board().assign(season=2026), {}))
         monkeypatch.setattr(runner, "write_exports", lambda *a, **kw: [])
