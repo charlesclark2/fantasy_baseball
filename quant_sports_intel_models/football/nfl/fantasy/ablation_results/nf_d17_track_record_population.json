@@ -1,0 +1,8455 @@
+{
+ "results": [
+  {
+   "population": "P0_shipped",
+   "population_label": "P0 shipped (per-source pairwise)",
+   "source": "adp",
+   "n_seasons": 6,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+   ],
+   "n_mean": 162.0,
+   "n_min": 140,
+   "n_max": 172,
+   "us_rho_pooled": 0.517,
+   "system_rho_pooled": 0.494,
+   "delta_rho_mean": 0.022,
+   "delta_rho_sd_across_seasons": 0.04,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 161,
+     "coverage_pct": 39.9,
+     "us_rho_pooled": 0.544,
+     "system_rho_pooled": 0.509,
+     "delta_rho_pooled": 0.035,
+     "delta_rho_by_pos": {
+      "QB": 0.081,
+      "RB": 0.006,
+      "WR": -0.011,
+      "TE": 0.066
+     },
+     "delta_rank_mae": -0.15
+    },
+    {
+     "season": 2020,
+     "n": 160,
+     "coverage_pct": 37.6,
+     "us_rho_pooled": 0.482,
+     "system_rho_pooled": 0.526,
+     "delta_rho_pooled": -0.044,
+     "delta_rho_by_pos": {
+      "QB": -0.07,
+      "RB": -0.125,
+      "WR": 0.077,
+      "TE": -0.059
+     },
+     "delta_rank_mae": 0.52
+    },
+    {
+     "season": 2021,
+     "n": 170,
+     "coverage_pct": 37.4,
+     "us_rho_pooled": 0.6,
+     "system_rho_pooled": 0.528,
+     "delta_rho_pooled": 0.072,
+     "delta_rho_by_pos": {
+      "QB": 0.084,
+      "RB": -0.028,
+      "WR": 0.075,
+      "TE": 0.156
+     },
+     "delta_rank_mae": -0.12
+    },
+    {
+     "season": 2022,
+     "n": 140,
+     "coverage_pct": 31.8,
+     "us_rho_pooled": 0.533,
+     "system_rho_pooled": 0.486,
+     "delta_rho_pooled": 0.047,
+     "delta_rho_by_pos": {
+      "QB": 0.02,
+      "RB": 0.01,
+      "WR": 0.105,
+      "TE": 0.054
+     },
+     "delta_rank_mae": -0.8
+    },
+    {
+     "season": 2023,
+     "n": 169,
+     "coverage_pct": 38.8,
+     "us_rho_pooled": 0.429,
+     "system_rho_pooled": 0.429,
+     "delta_rho_pooled": 0.0,
+     "delta_rho_by_pos": {
+      "QB": 0.017,
+      "RB": 0.062,
+      "WR": 0.003,
+      "TE": -0.082
+     },
+     "delta_rank_mae": -0.23
+    },
+    {
+     "season": 2024,
+     "n": 172,
+     "coverage_pct": 39.0,
+     "us_rho_pooled": 0.512,
+     "system_rho_pooled": 0.489,
+     "delta_rho_pooled": 0.023,
+     "delta_rho_by_pos": {
+      "QB": 0.054,
+      "RB": 0.073,
+      "WR": -0.029,
+      "TE": -0.008
+     },
+     "delta_rank_mae": -0.48
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.5055,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.473167,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.006,
+    "hi": 0.051,
+    "median": 0.021,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P0_shipped",
+   "population_label": "P0 shipped (per-source pairwise)",
+   "source": "mfl_adp",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 264.1,
+   "n_min": 251,
+   "n_max": 286,
+   "us_rho_pooled": 0.666,
+   "system_rho_pooled": 0.494,
+   "delta_rho_mean": 0.173,
+   "delta_rho_sd_across_seasons": 0.067,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 257,
+     "coverage_pct": 63.6,
+     "us_rho_pooled": 0.699,
+     "system_rho_pooled": 0.614,
+     "delta_rho_pooled": 0.085,
+     "delta_rho_by_pos": {
+      "QB": 0.155,
+      "RB": 0.063,
+      "WR": -0.001,
+      "TE": 0.126
+     },
+     "delta_rank_mae": -1.44
+    },
+    {
+     "season": 2020,
+     "n": 286,
+     "coverage_pct": 67.3,
+     "us_rho_pooled": 0.682,
+     "system_rho_pooled": 0.593,
+     "delta_rho_pooled": 0.089,
+     "delta_rho_by_pos": {
+      "QB": 0.069,
+      "RB": 0.037,
+      "WR": 0.111,
+      "TE": 0.142
+     },
+     "delta_rank_mae": -2.12
+    },
+    {
+     "season": 2021,
+     "n": 266,
+     "coverage_pct": 58.5,
+     "us_rho_pooled": 0.706,
+     "system_rho_pooled": 0.462,
+     "delta_rho_pooled": 0.244,
+     "delta_rho_by_pos": {
+      "QB": 0.085,
+      "RB": 0.077,
+      "WR": 0.321,
+      "TE": 0.494
+     },
+     "delta_rank_mae": -4.58
+    },
+    {
+     "season": 2022,
+     "n": 259,
+     "coverage_pct": 58.9,
+     "us_rho_pooled": 0.676,
+     "system_rho_pooled": 0.451,
+     "delta_rho_pooled": 0.225,
+     "delta_rho_by_pos": {
+      "QB": 0.192,
+      "RB": 0.152,
+      "WR": 0.196,
+      "TE": 0.361
+     },
+     "delta_rank_mae": -3.8
+    },
+    {
+     "season": 2023,
+     "n": 268,
+     "coverage_pct": 61.5,
+     "us_rho_pooled": 0.624,
+     "system_rho_pooled": 0.482,
+     "delta_rho_pooled": 0.142,
+     "delta_rho_by_pos": {
+      "QB": 0.136,
+      "RB": 0.151,
+      "WR": 0.011,
+      "TE": 0.27
+     },
+     "delta_rank_mae": -2.03
+    },
+    {
+     "season": 2024,
+     "n": 262,
+     "coverage_pct": 59.4,
+     "us_rho_pooled": 0.677,
+     "system_rho_pooled": 0.482,
+     "delta_rho_pooled": 0.195,
+     "delta_rho_by_pos": {
+      "QB": -0.014,
+      "RB": 0.142,
+      "WR": 0.224,
+      "TE": 0.429
+     },
+     "delta_rank_mae": -4.54
+    },
+    {
+     "season": 2025,
+     "n": 251,
+     "coverage_pct": 54.2,
+     "us_rho_pooled": 0.599,
+     "system_rho_pooled": 0.371,
+     "delta_rho_pooled": 0.228,
+     "delta_rho_by_pos": {
+      "QB": 0.224,
+      "RB": 0.167,
+      "WR": 0.312,
+      "TE": 0.207
+     },
+     "delta_rank_mae": -5.12
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.506429,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.507286,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": 0.14,
+    "hi": 0.207,
+    "median": 0.174,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P0_shipped",
+   "population_label": "P0 shipped (per-source pairwise)",
+   "source": "ecr",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 381.0,
+   "n_min": 340,
+   "n_max": 419,
+   "us_rho_pooled": 0.728,
+   "system_rho_pooled": 0.74,
+   "delta_rho_mean": -0.012,
+   "delta_rho_sd_across_seasons": 0.007,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 340,
+     "coverage_pct": 84.2,
+     "us_rho_pooled": 0.719,
+     "system_rho_pooled": 0.727,
+     "delta_rho_pooled": -0.008,
+     "delta_rho_by_pos": {
+      "QB": 0.007,
+      "RB": -0.026,
+      "WR": -0.046,
+      "TE": 0.033
+     },
+     "delta_rank_mae": 0.67
+    },
+    {
+     "season": 2020,
+     "n": 354,
+     "coverage_pct": 83.3,
+     "us_rho_pooled": 0.684,
+     "system_rho_pooled": 0.697,
+     "delta_rho_pooled": -0.013,
+     "delta_rho_by_pos": {
+      "QB": -0.034,
+      "RB": -0.023,
+      "WR": 0.01,
+      "TE": -0.004
+     },
+     "delta_rank_mae": 0.24
+    },
+    {
+     "season": 2021,
+     "n": 419,
+     "coverage_pct": 92.1,
+     "us_rho_pooled": 0.756,
+     "system_rho_pooled": 0.774,
+     "delta_rho_pooled": -0.018,
+     "delta_rho_by_pos": {
+      "QB": -0.053,
+      "RB": -0.011,
+      "WR": -0.014,
+      "TE": 0.008
+     },
+     "delta_rank_mae": 0.43
+    },
+    {
+     "season": 2022,
+     "n": 375,
+     "coverage_pct": 85.2,
+     "us_rho_pooled": 0.713,
+     "system_rho_pooled": 0.728,
+     "delta_rho_pooled": -0.015,
+     "delta_rho_by_pos": {
+      "QB": -0.007,
+      "RB": -0.033,
+      "WR": -0.003,
+      "TE": -0.015
+     },
+     "delta_rank_mae": 0.36
+    },
+    {
+     "season": 2023,
+     "n": 380,
+     "coverage_pct": 87.2,
+     "us_rho_pooled": 0.743,
+     "system_rho_pooled": 0.764,
+     "delta_rho_pooled": -0.021,
+     "delta_rho_by_pos": {
+      "QB": -0.004,
+      "RB": 0.002,
+      "WR": -0.07,
+      "TE": -0.012
+     },
+     "delta_rank_mae": 1.11
+    },
+    {
+     "season": 2024,
+     "n": 419,
+     "coverage_pct": 95.0,
+     "us_rho_pooled": 0.756,
+     "system_rho_pooled": 0.757,
+     "delta_rho_pooled": -0.001,
+     "delta_rho_by_pos": {
+      "QB": -0.008,
+      "RB": -0.005,
+      "WR": 0.008,
+      "TE": 0.001
+     },
+     "delta_rank_mae": -0.27
+    },
+    {
+     "season": 2025,
+     "n": 380,
+     "coverage_pct": 82.1,
+     "us_rho_pooled": 0.728,
+     "system_rho_pooled": 0.733,
+     "delta_rho_pooled": -0.005,
+     "delta_rho_by_pos": {
+      "QB": -0.003,
+      "RB": -0.013,
+      "WR": 0.0,
+      "TE": -0.004
+     },
+     "delta_rank_mae": 0.27
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.26,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.722571,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.019,
+    "hi": -0.004,
+    "median": -0.012,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P0_shipped",
+   "population_label": "P0 shipped (per-source pairwise)",
+   "source": "sleeper",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 408.7,
+   "n_min": 353,
+   "n_max": 435,
+   "us_rho_pooled": 0.731,
+   "system_rho_pooled": 0.841,
+   "delta_rho_mean": -0.11,
+   "delta_rho_sd_across_seasons": 0.093,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 353,
+     "coverage_pct": 87.4,
+     "us_rho_pooled": 0.717,
+     "system_rho_pooled": 0.943,
+     "delta_rho_pooled": -0.226,
+     "delta_rho_by_pos": {
+      "QB": -0.147,
+      "RB": -0.163,
+      "WR": -0.228,
+      "TE": -0.367
+     },
+     "delta_rank_mae": 9.9
+    },
+    {
+     "season": 2020,
+     "n": 393,
+     "coverage_pct": 92.5,
+     "us_rho_pooled": 0.706,
+     "system_rho_pooled": 0.96,
+     "delta_rho_pooled": -0.254,
+     "delta_rho_by_pos": {
+      "QB": -0.222,
+      "RB": -0.273,
+      "WR": -0.236,
+      "TE": -0.285
+     },
+     "delta_rank_mae": 12.54
+    },
+    {
+     "season": 2021,
+     "n": 435,
+     "coverage_pct": 95.6,
+     "us_rho_pooled": 0.744,
+     "system_rho_pooled": 0.789,
+     "delta_rho_pooled": -0.045,
+     "delta_rho_by_pos": {
+      "QB": -0.041,
+      "RB": -0.048,
+      "WR": -0.053,
+      "TE": -0.038
+     },
+     "delta_rank_mae": 2.5
+    },
+    {
+     "season": 2022,
+     "n": 429,
+     "coverage_pct": 97.5,
+     "us_rho_pooled": 0.729,
+     "system_rho_pooled": 0.839,
+     "delta_rho_pooled": -0.11,
+     "delta_rho_by_pos": {
+      "QB": -0.148,
+      "RB": -0.07,
+      "WR": -0.113,
+      "TE": -0.108
+     },
+     "delta_rank_mae": 5.0
+    },
+    {
+     "season": 2023,
+     "n": 418,
+     "coverage_pct": 95.9,
+     "us_rho_pooled": 0.745,
+     "system_rho_pooled": 0.8,
+     "delta_rho_pooled": -0.055,
+     "delta_rho_by_pos": {
+      "QB": -0.07,
+      "RB": -0.053,
+      "WR": -0.115,
+      "TE": 0.021
+     },
+     "delta_rank_mae": 3.37
+    },
+    {
+     "season": 2024,
+     "n": 414,
+     "coverage_pct": 93.9,
+     "us_rho_pooled": 0.742,
+     "system_rho_pooled": 0.8,
+     "delta_rho_pooled": -0.058,
+     "delta_rho_by_pos": {
+      "QB": -0.07,
+      "RB": -0.082,
+      "WR": -0.08,
+      "TE": 0.002
+     },
+     "delta_rank_mae": 2.73
+    },
+    {
+     "season": 2025,
+     "n": 419,
+     "coverage_pct": 90.5,
+     "us_rho_pooled": 0.734,
+     "system_rho_pooled": 0.759,
+     "delta_rho_pooled": -0.025,
+     "delta_rho_by_pos": {
+      "QB": -0.055,
+      "RB": -0.028,
+      "WR": 0.027,
+      "TE": -0.041
+     },
+     "delta_rank_mae": 0.24
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.158571,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.829,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.126,
+    "hi": -0.097,
+    "median": -0.111,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P0_shipped",
+   "population_label": "P0 shipped (per-source pairwise)",
+   "source": "espn",
+   "n_seasons": 3,
+   "seasons": [
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 445.7,
+   "n_min": 436,
+   "n_max": 463,
+   "us_rho_pooled": 0.75,
+   "system_rho_pooled": 0.788,
+   "delta_rho_mean": -0.038,
+   "delta_rho_sd_across_seasons": 0.036,
+   "per_season": [
+    {
+     "season": 2023,
+     "n": 436,
+     "coverage_pct": 100.0,
+     "us_rho_pooled": 0.75,
+     "system_rho_pooled": 0.829,
+     "delta_rho_pooled": -0.079,
+     "delta_rho_by_pos": {
+      "QB": -0.1,
+      "RB": -0.021,
+      "WR": -0.136,
+      "TE": -0.058
+     },
+     "delta_rank_mae": 5.27
+    },
+    {
+     "season": 2024,
+     "n": 438,
+     "coverage_pct": 99.3,
+     "us_rho_pooled": 0.758,
+     "system_rho_pooled": 0.781,
+     "delta_rho_pooled": -0.023,
+     "delta_rho_by_pos": {
+      "QB": 0.091,
+      "RB": -0.089,
+      "WR": -0.051,
+      "TE": -0.042
+     },
+     "delta_rank_mae": 2.42
+    },
+    {
+     "season": 2025,
+     "n": 463,
+     "coverage_pct": 100.0,
+     "us_rho_pooled": 0.741,
+     "system_rho_pooled": 0.753,
+     "delta_rho_pooled": -0.012,
+     "delta_rho_by_pos": {
+      "QB": -0.005,
+      "RB": -0.008,
+      "WR": 0.011,
+      "TE": -0.045
+     },
+     "delta_rank_mae": 0.31
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.212333,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.779,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.06,
+    "hi": -0.015,
+    "median": -0.037,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P1_cross_source_matched",
+   "population_label": "P1 cross-source matched \u00b7 require=adp+mfl_adp",
+   "source": "adp",
+   "n_seasons": 6,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+   ],
+   "n_mean": 161.3,
+   "n_min": 140,
+   "n_max": 172,
+   "us_rho_pooled": 0.519,
+   "system_rho_pooled": 0.497,
+   "delta_rho_mean": 0.022,
+   "delta_rho_sd_across_seasons": 0.041,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 159,
+     "coverage_pct": 39.4,
+     "us_rho_pooled": 0.551,
+     "system_rho_pooled": 0.516,
+     "delta_rho_pooled": 0.035,
+     "delta_rho_by_pos": {
+      "QB": 0.081,
+      "RB": 0.004,
+      "WR": -0.013,
+      "TE": 0.066
+     },
+     "delta_rank_mae": -0.08
+    },
+    {
+     "season": 2020,
+     "n": 159,
+     "coverage_pct": 37.4,
+     "us_rho_pooled": 0.487,
+     "system_rho_pooled": 0.534,
+     "delta_rho_pooled": -0.047,
+     "delta_rho_by_pos": {
+      "QB": -0.07,
+      "RB": -0.125,
+      "WR": 0.064,
+      "TE": -0.059
+     },
+     "delta_rank_mae": 0.51
+    },
+    {
+     "season": 2021,
+     "n": 169,
+     "coverage_pct": 37.1,
+     "us_rho_pooled": 0.601,
+     "system_rho_pooled": 0.53,
+     "delta_rho_pooled": 0.071,
+     "delta_rho_by_pos": {
+      "QB": 0.084,
+      "RB": -0.028,
+      "WR": 0.072,
+      "TE": 0.156
+     },
+     "delta_rank_mae": -0.1
+    },
+    {
+     "season": 2022,
+     "n": 140,
+     "coverage_pct": 31.8,
+     "us_rho_pooled": 0.533,
+     "system_rho_pooled": 0.486,
+     "delta_rho_pooled": 0.047,
+     "delta_rho_by_pos": {
+      "QB": 0.02,
+      "RB": 0.01,
+      "WR": 0.105,
+      "TE": 0.054
+     },
+     "delta_rank_mae": -0.8
+    },
+    {
+     "season": 2023,
+     "n": 169,
+     "coverage_pct": 38.8,
+     "us_rho_pooled": 0.429,
+     "system_rho_pooled": 0.429,
+     "delta_rho_pooled": 0.0,
+     "delta_rho_by_pos": {
+      "QB": 0.017,
+      "RB": 0.062,
+      "WR": 0.003,
+      "TE": -0.082
+     },
+     "delta_rank_mae": -0.23
+    },
+    {
+     "season": 2024,
+     "n": 172,
+     "coverage_pct": 39.0,
+     "us_rho_pooled": 0.512,
+     "system_rho_pooled": 0.489,
+     "delta_rho_pooled": 0.023,
+     "delta_rho_by_pos": {
+      "QB": 0.054,
+      "RB": 0.073,
+      "WR": -0.029,
+      "TE": -0.008
+     },
+     "delta_rank_mae": -0.48
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.502667,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.517833,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.008,
+    "hi": 0.048,
+    "median": 0.021,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P1_cross_source_matched",
+   "population_label": "P1 cross-source matched \u00b7 require=adp+mfl_adp",
+   "source": "mfl_adp",
+   "n_seasons": 6,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+   ],
+   "n_mean": 161.3,
+   "n_min": 140,
+   "n_max": 172,
+   "us_rho_pooled": 0.519,
+   "system_rho_pooled": 0.511,
+   "delta_rho_mean": 0.008,
+   "delta_rho_sd_across_seasons": 0.053,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 159,
+     "coverage_pct": 39.4,
+     "us_rho_pooled": 0.551,
+     "system_rho_pooled": 0.512,
+     "delta_rho_pooled": 0.039,
+     "delta_rho_by_pos": {
+      "QB": 0.037,
+      "RB": 0.015,
+      "WR": -0.005,
+      "TE": 0.108
+     },
+     "delta_rank_mae": -0.39
+    },
+    {
+     "season": 2020,
+     "n": 159,
+     "coverage_pct": 37.4,
+     "us_rho_pooled": 0.487,
+     "system_rho_pooled": 0.492,
+     "delta_rho_pooled": -0.005,
+     "delta_rho_by_pos": {
+      "QB": 0.02,
+      "RB": -0.08,
+      "WR": 0.058,
+      "TE": -0.02
+     },
+     "delta_rank_mae": -0.05
+    },
+    {
+     "season": 2021,
+     "n": 169,
+     "coverage_pct": 37.1,
+     "us_rho_pooled": 0.601,
+     "system_rho_pooled": 0.519,
+     "delta_rho_pooled": 0.082,
+     "delta_rho_by_pos": {
+      "QB": 0.161,
+      "RB": -0.013,
+      "WR": 0.078,
+      "TE": 0.101
+     },
+     "delta_rank_mae": -0.28
+    },
+    {
+     "season": 2022,
+     "n": 140,
+     "coverage_pct": 31.8,
+     "us_rho_pooled": 0.533,
+     "system_rho_pooled": 0.503,
+     "delta_rho_pooled": 0.03,
+     "delta_rho_by_pos": {
+      "QB": 0.043,
+      "RB": -0.013,
+      "WR": 0.091,
+      "TE": 0.0
+     },
+     "delta_rank_mae": -0.13
+    },
+    {
+     "season": 2023,
+     "n": 169,
+     "coverage_pct": 38.8,
+     "us_rho_pooled": 0.429,
+     "system_rho_pooled": 0.493,
+     "delta_rho_pooled": -0.064,
+     "delta_rho_by_pos": {
+      "QB": -0.05,
+      "RB": 0.021,
+      "WR": 0.021,
+      "TE": -0.247
+     },
+     "delta_rank_mae": -0.11
+    },
+    {
+     "season": 2024,
+     "n": 172,
+     "coverage_pct": 39.0,
+     "us_rho_pooled": 0.512,
+     "system_rho_pooled": 0.548,
+     "delta_rho_pooled": -0.036,
+     "delta_rho_by_pos": {
+      "QB": -0.104,
+      "RB": 0.109,
+      "WR": -0.018,
+      "TE": -0.131
+     },
+     "delta_rank_mae": -0.44
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.488833,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.531667,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.027,
+    "hi": 0.04,
+    "median": 0.009,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth100_by_source",
+   "population_label": "P2 depth curve \u00b7 top100[by_source]",
+   "source": "adp",
+   "n_seasons": 6,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+   ],
+   "n_mean": 100.0,
+   "n_min": 100,
+   "n_max": 100,
+   "us_rho_pooled": 0.458,
+   "system_rho_pooled": 0.401,
+   "delta_rho_mean": 0.058,
+   "delta_rho_sd_across_seasons": 0.032,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 100,
+     "coverage_pct": 24.8,
+     "us_rho_pooled": 0.409,
+     "system_rho_pooled": 0.313,
+     "delta_rho_pooled": 0.096,
+     "delta_rho_by_pos": {
+      "QB": 0.243,
+      "RB": 0.017,
+      "WR": 0.027
+     },
+     "delta_rank_mae": -0.46
+    },
+    {
+     "season": 2020,
+     "n": 100,
+     "coverage_pct": 23.5,
+     "us_rho_pooled": 0.259,
+     "system_rho_pooled": 0.237,
+     "delta_rho_pooled": 0.022,
+     "delta_rho_by_pos": {
+      "QB": 0.278,
+      "RB": -0.131,
+      "WR": 0.17,
+      "TE": -0.23
+     },
+     "delta_rank_mae": -0.05
+    },
+    {
+     "season": 2021,
+     "n": 100,
+     "coverage_pct": 22.0,
+     "us_rho_pooled": 0.383,
+     "system_rho_pooled": 0.354,
+     "delta_rho_pooled": 0.029,
+     "delta_rho_by_pos": {
+      "QB": -0.161,
+      "RB": 0.075,
+      "WR": 0.147,
+      "TE": 0.055
+     },
+     "delta_rank_mae": -0.7
+    },
+    {
+     "season": 2022,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.612,
+     "system_rho_pooled": 0.573,
+     "delta_rho_pooled": 0.039,
+     "delta_rho_by_pos": {
+      "QB": -0.063,
+      "RB": 0.046,
+      "WR": 0.133
+     },
+     "delta_rank_mae": -0.56
+    },
+    {
+     "season": 2023,
+     "n": 100,
+     "coverage_pct": 22.9,
+     "us_rho_pooled": 0.588,
+     "system_rho_pooled": 0.507,
+     "delta_rho_pooled": 0.081,
+     "delta_rho_by_pos": {
+      "QB": 0.118,
+      "RB": 0.1,
+      "WR": 0.025
+     },
+     "delta_rank_mae": -0.35
+    },
+    {
+     "season": 2024,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.5,
+     "system_rho_pooled": 0.419,
+     "delta_rho_pooled": 0.081,
+     "delta_rho_by_pos": {
+      "QB": 0.165,
+      "RB": 0.073,
+      "WR": 0.007
+     },
+     "delta_rank_mae": -0.48
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.5995,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.413167,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": 0.007,
+    "hi": 0.104,
+    "median": 0.055,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth100_by_source",
+   "population_label": "P2 depth curve \u00b7 top100[by_source]",
+   "source": "mfl_adp",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 100.0,
+   "n_min": 100,
+   "n_max": 100,
+   "us_rho_pooled": 0.612,
+   "system_rho_pooled": 0.533,
+   "delta_rho_mean": 0.079,
+   "delta_rho_sd_across_seasons": 0.073,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 100,
+     "coverage_pct": 24.8,
+     "us_rho_pooled": 0.647,
+     "system_rho_pooled": 0.564,
+     "delta_rho_pooled": 0.083,
+     "delta_rho_by_pos": {
+      "QB": 0.014,
+      "RB": 0.113,
+      "WR": 0.021,
+      "TE": 0.187
+     },
+     "delta_rank_mae": -0.85
+    },
+    {
+     "season": 2020,
+     "n": 100,
+     "coverage_pct": 23.5,
+     "us_rho_pooled": 0.377,
+     "system_rho_pooled": 0.38,
+     "delta_rho_pooled": -0.003,
+     "delta_rho_by_pos": {
+      "QB": 0.065,
+      "RB": 0.007,
+      "WR": 0.087,
+      "TE": -0.17
+     },
+     "delta_rank_mae": -0.31
+    },
+    {
+     "season": 2021,
+     "n": 100,
+     "coverage_pct": 22.0,
+     "us_rho_pooled": 0.637,
+     "system_rho_pooled": 0.567,
+     "delta_rho_pooled": 0.07,
+     "delta_rho_by_pos": {
+      "QB": 0.043,
+      "RB": 0.099,
+      "WR": 0.128,
+      "TE": 0.009
+     },
+     "delta_rank_mae": -0.78
+    },
+    {
+     "season": 2022,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.749,
+     "system_rho_pooled": 0.546,
+     "delta_rho_pooled": 0.203,
+     "delta_rho_by_pos": {
+      "QB": 0.231,
+      "RB": 0.024,
+      "WR": 0.119,
+      "TE": 0.435
+     },
+     "delta_rank_mae": -1.1
+    },
+    {
+     "season": 2023,
+     "n": 100,
+     "coverage_pct": 22.9,
+     "us_rho_pooled": 0.639,
+     "system_rho_pooled": 0.575,
+     "delta_rho_pooled": 0.064,
+     "delta_rho_by_pos": {
+      "QB": 0.115,
+      "RB": 0.084,
+      "WR": 0.067,
+      "TE": -0.011
+     },
+     "delta_rank_mae": -0.48
+    },
+    {
+     "season": 2024,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.654,
+     "system_rho_pooled": 0.653,
+     "delta_rho_pooled": 0.001,
+     "delta_rho_by_pos": {
+      "QB": 0.053,
+      "RB": 0.105,
+      "WR": -0.018,
+      "TE": -0.136
+     },
+     "delta_rank_mae": -0.46
+    },
+    {
+     "season": 2025,
+     "n": 100,
+     "coverage_pct": 21.6,
+     "us_rho_pooled": 0.579,
+     "system_rho_pooled": 0.443,
+     "delta_rho_pooled": 0.136,
+     "delta_rho_by_pos": {
+      "QB": 0.267,
+      "RB": 0.113,
+      "WR": 0.2,
+      "TE": -0.036
+     },
+     "delta_rank_mae": -1.28
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.467429,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.540429,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": 0.036,
+    "hi": 0.124,
+    "median": 0.078,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth100_by_source",
+   "population_label": "P2 depth curve \u00b7 top100[by_source]",
+   "source": "ecr",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 100.0,
+   "n_min": 100,
+   "n_max": 100,
+   "us_rho_pooled": 0.423,
+   "system_rho_pooled": 0.404,
+   "delta_rho_mean": 0.019,
+   "delta_rho_sd_across_seasons": 0.026,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 100,
+     "coverage_pct": 24.8,
+     "us_rho_pooled": 0.443,
+     "system_rho_pooled": 0.453,
+     "delta_rho_pooled": -0.01,
+     "delta_rho_by_pos": {
+      "QB": 0.0,
+      "RB": 0.0,
+      "WR": -0.028
+     },
+     "delta_rank_mae": 0.02
+    },
+    {
+     "season": 2020,
+     "n": 100,
+     "coverage_pct": 23.5,
+     "us_rho_pooled": 0.32,
+     "system_rho_pooled": 0.314,
+     "delta_rho_pooled": 0.006,
+     "delta_rho_by_pos": {
+      "QB": 0.0,
+      "RB": -0.048,
+      "WR": 0.135,
+      "TE": -0.061
+     },
+     "delta_rank_mae": -0.3
+    },
+    {
+     "season": 2021,
+     "n": 100,
+     "coverage_pct": 22.0,
+     "us_rho_pooled": 0.365,
+     "system_rho_pooled": 0.331,
+     "delta_rho_pooled": 0.034,
+     "delta_rho_by_pos": {
+      "QB": 0.0,
+      "RB": 0.055,
+      "WR": 0.046,
+      "TE": 0.037
+     },
+     "delta_rank_mae": -0.22
+    },
+    {
+     "season": 2022,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.495,
+     "system_rho_pooled": 0.459,
+     "delta_rho_pooled": 0.036,
+     "delta_rho_by_pos": {
+      "QB": 0.021,
+      "RB": 0.003,
+      "WR": 0.119,
+      "TE": 0.0
+     },
+     "delta_rank_mae": -0.72
+    },
+    {
+     "season": 2023,
+     "n": 100,
+     "coverage_pct": 22.9,
+     "us_rho_pooled": 0.594,
+     "system_rho_pooled": 0.57,
+     "delta_rho_pooled": 0.024,
+     "delta_rho_by_pos": {
+      "QB": 0.054,
+      "RB": 0.047,
+      "WR": -0.027
+     },
+     "delta_rank_mae": 0.16
+    },
+    {
+     "season": 2024,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.411,
+     "system_rho_pooled": 0.426,
+     "delta_rho_pooled": -0.015,
+     "delta_rho_by_pos": {
+      "QB": 0.021,
+      "RB": 0.045,
+      "WR": -0.016,
+      "TE": -0.112
+     },
+     "delta_rank_mae": -0.32
+    },
+    {
+     "season": 2025,
+     "n": 100,
+     "coverage_pct": 21.6,
+     "us_rho_pooled": 0.33,
+     "system_rho_pooled": 0.273,
+     "delta_rho_pooled": 0.057,
+     "delta_rho_by_pos": {
+      "QB": 0.105,
+      "RB": 0.007,
+      "WR": -0.068,
+      "TE": 0.182
+     },
+     "delta_rank_mae": 0.18
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.596286,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.372,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.017,
+    "hi": 0.048,
+    "median": 0.018,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth100_by_source",
+   "population_label": "P2 depth curve \u00b7 top100[by_source]",
+   "source": "sleeper",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 100.0,
+   "n_min": 100,
+   "n_max": 100,
+   "us_rho_pooled": 0.424,
+   "system_rho_pooled": 0.595,
+   "delta_rho_mean": -0.171,
+   "delta_rho_sd_across_seasons": 0.165,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 100,
+     "coverage_pct": 24.8,
+     "us_rho_pooled": 0.438,
+     "system_rho_pooled": 0.838,
+     "delta_rho_pooled": -0.4,
+     "delta_rho_by_pos": {
+      "QB": -0.215,
+      "RB": -0.451,
+      "WR": -0.533
+     },
+     "delta_rank_mae": 4.21
+    },
+    {
+     "season": 2020,
+     "n": 100,
+     "coverage_pct": 23.5,
+     "us_rho_pooled": 0.447,
+     "system_rho_pooled": 0.855,
+     "delta_rho_pooled": -0.408,
+     "delta_rho_by_pos": {
+      "QB": -0.373,
+      "RB": -0.386,
+      "WR": -0.464
+     },
+     "delta_rank_mae": 4.02
+    },
+    {
+     "season": 2021,
+     "n": 100,
+     "coverage_pct": 22.0,
+     "us_rho_pooled": 0.473,
+     "system_rho_pooled": 0.494,
+     "delta_rho_pooled": -0.021,
+     "delta_rho_by_pos": {
+      "QB": 0.027,
+      "RB": -0.084,
+      "WR": -0.005
+     },
+     "delta_rank_mae": 0.18
+    },
+    {
+     "season": 2022,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.482,
+     "system_rho_pooled": 0.642,
+     "delta_rho_pooled": -0.16,
+     "delta_rho_by_pos": {
+      "QB": -0.3,
+      "RB": -0.154,
+      "WR": -0.026
+     },
+     "delta_rank_mae": 1.28
+    },
+    {
+     "season": 2023,
+     "n": 100,
+     "coverage_pct": 22.9,
+     "us_rho_pooled": 0.321,
+     "system_rho_pooled": 0.382,
+     "delta_rho_pooled": -0.061,
+     "delta_rho_by_pos": {
+      "QB": -0.113,
+      "RB": 0.034,
+      "WR": -0.105
+     },
+     "delta_rank_mae": 0.43
+    },
+    {
+     "season": 2024,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.405,
+     "system_rho_pooled": 0.503,
+     "delta_rho_pooled": -0.098,
+     "delta_rho_by_pos": {
+      "QB": -0.232,
+      "RB": 0.06,
+      "WR": -0.121
+     },
+     "delta_rank_mae": 0.72
+    },
+    {
+     "season": 2025,
+     "n": 100,
+     "coverage_pct": 21.6,
+     "us_rho_pooled": 0.403,
+     "system_rho_pooled": 0.451,
+     "delta_rho_pooled": -0.048,
+     "delta_rho_by_pos": {
+      "QB": -0.108,
+      "RB": -0.007,
+      "WR": -0.029
+     },
+     "delta_rank_mae": 0.16
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.405,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.624571,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.215,
+    "hi": -0.124,
+    "median": -0.168,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth100_by_source",
+   "population_label": "P2 depth curve \u00b7 top100[by_source]",
+   "source": "espn",
+   "n_seasons": 3,
+   "seasons": [
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 100.0,
+   "n_min": 100,
+   "n_max": 100,
+   "us_rho_pooled": 0.329,
+   "system_rho_pooled": 0.425,
+   "delta_rho_mean": -0.096,
+   "delta_rho_sd_across_seasons": 0.217,
+   "per_season": [
+    {
+     "season": 2023,
+     "n": 100,
+     "coverage_pct": 22.9,
+     "us_rho_pooled": 0.26,
+     "system_rho_pooled": 0.605,
+     "delta_rho_pooled": -0.345,
+     "delta_rho_by_pos": {
+      "QB": -0.119,
+      "RB": -0.306,
+      "WR": -0.285,
+      "TE": -0.672
+     },
+     "delta_rank_mae": 2.39
+    },
+    {
+     "season": 2024,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.447,
+     "system_rho_pooled": 0.397,
+     "delta_rho_pooled": 0.05,
+     "delta_rho_by_pos": {
+      "QB": 0.145,
+      "RB": 0.058,
+      "WR": -0.06,
+      "TE": 0.054
+     },
+     "delta_rank_mae": -0.22
+    },
+    {
+     "season": 2025,
+     "n": 100,
+     "coverage_pct": 21.6,
+     "us_rho_pooled": 0.281,
+     "system_rho_pooled": 0.274,
+     "delta_rho_pooled": 0.007,
+     "delta_rho_by_pos": {
+      "QB": 0.063,
+      "RB": -0.02,
+      "WR": -0.023
+     },
+     "delta_rank_mae": 0.08
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.574667,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.461333,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.21,
+    "hi": 0.017,
+    "median": -0.093,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth150_by_source",
+   "population_label": "P2 depth curve \u00b7 top150[by_source]",
+   "source": "adp",
+   "n_seasons": 6,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+   ],
+   "n_mean": 148.3,
+   "n_min": 140,
+   "n_max": 150,
+   "us_rho_pooled": 0.505,
+   "system_rho_pooled": 0.486,
+   "delta_rho_mean": 0.019,
+   "delta_rho_sd_across_seasons": 0.036,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 150,
+     "coverage_pct": 37.1,
+     "us_rho_pooled": 0.496,
+     "system_rho_pooled": 0.45,
+     "delta_rho_pooled": 0.046,
+     "delta_rho_by_pos": {
+      "QB": 0.123,
+      "RB": -0.011,
+      "WR": 0.007,
+      "TE": 0.066
+     },
+     "delta_rank_mae": -0.12
+    },
+    {
+     "season": 2020,
+     "n": 150,
+     "coverage_pct": 35.3,
+     "us_rho_pooled": 0.451,
+     "system_rho_pooled": 0.495,
+     "delta_rho_pooled": -0.044,
+     "delta_rho_by_pos": {
+      "QB": -0.056,
+      "RB": -0.125,
+      "WR": 0.066,
+      "TE": -0.059
+     },
+     "delta_rank_mae": 0.4
+    },
+    {
+     "season": 2021,
+     "n": 150,
+     "coverage_pct": 33.0,
+     "us_rho_pooled": 0.6,
+     "system_rho_pooled": 0.555,
+     "delta_rho_pooled": 0.045,
+     "delta_rho_by_pos": {
+      "QB": -0.012,
+      "RB": 0.007,
+      "WR": 0.107,
+      "TE": 0.078
+     },
+     "delta_rank_mae": -0.41
+    },
+    {
+     "season": 2022,
+     "n": 140,
+     "coverage_pct": 31.8,
+     "us_rho_pooled": 0.533,
+     "system_rho_pooled": 0.486,
+     "delta_rho_pooled": 0.047,
+     "delta_rho_by_pos": {
+      "QB": 0.02,
+      "RB": 0.01,
+      "WR": 0.105,
+      "TE": 0.054
+     },
+     "delta_rank_mae": -0.8
+    },
+    {
+     "season": 2023,
+     "n": 150,
+     "coverage_pct": 34.4,
+     "us_rho_pooled": 0.431,
+     "system_rho_pooled": 0.424,
+     "delta_rho_pooled": 0.007,
+     "delta_rho_by_pos": {
+      "QB": 0.009,
+      "RB": 0.054,
+      "WR": 0.01,
+      "TE": -0.049
+     },
+     "delta_rank_mae": -0.33
+    },
+    {
+     "season": 2024,
+     "n": 150,
+     "coverage_pct": 34.0,
+     "us_rho_pooled": 0.519,
+     "system_rho_pooled": 0.507,
+     "delta_rho_pooled": 0.012,
+     "delta_rho_by_pos": {
+      "QB": -0.002,
+      "RB": 0.071,
+      "WR": -0.012,
+      "TE": -0.009
+     },
+     "delta_rank_mae": -0.47
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.513833,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.477667,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.015,
+    "hi": 0.049,
+    "median": 0.017,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth150_by_source",
+   "population_label": "P2 depth curve \u00b7 top150[by_source]",
+   "source": "mfl_adp",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 150.0,
+   "n_min": 150,
+   "n_max": 150,
+   "us_rho_pooled": 0.655,
+   "system_rho_pooled": 0.457,
+   "delta_rho_mean": 0.197,
+   "delta_rho_sd_across_seasons": 0.083,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 150,
+     "coverage_pct": 37.1,
+     "us_rho_pooled": 0.666,
+     "system_rho_pooled": 0.488,
+     "delta_rho_pooled": 0.178,
+     "delta_rho_by_pos": {
+      "QB": 0.291,
+      "RB": 0.052,
+      "WR": 0.075,
+      "TE": 0.293
+     },
+     "delta_rank_mae": -1.3
+    },
+    {
+     "season": 2020,
+     "n": 150,
+     "coverage_pct": 35.3,
+     "us_rho_pooled": 0.59,
+     "system_rho_pooled": 0.483,
+     "delta_rho_pooled": 0.107,
+     "delta_rho_by_pos": {
+      "QB": 0.135,
+      "RB": -0.061,
+      "WR": 0.115,
+      "TE": 0.237
+     },
+     "delta_rank_mae": -1.0
+    },
+    {
+     "season": 2021,
+     "n": 150,
+     "coverage_pct": 33.0,
+     "us_rho_pooled": 0.724,
+     "system_rho_pooled": 0.438,
+     "delta_rho_pooled": 0.286,
+     "delta_rho_by_pos": {
+      "QB": 0.225,
+      "RB": 0.166,
+      "WR": 0.251,
+      "TE": 0.506
+     },
+     "delta_rank_mae": -3.01
+    },
+    {
+     "season": 2022,
+     "n": 150,
+     "coverage_pct": 34.1,
+     "us_rho_pooled": 0.708,
+     "system_rho_pooled": 0.406,
+     "delta_rho_pooled": 0.302,
+     "delta_rho_by_pos": {
+      "QB": 0.238,
+      "RB": 0.138,
+      "WR": 0.205,
+      "TE": 0.626
+     },
+     "delta_rank_mae": -2.8
+    },
+    {
+     "season": 2023,
+     "n": 150,
+     "coverage_pct": 34.4,
+     "us_rho_pooled": 0.677,
+     "system_rho_pooled": 0.54,
+     "delta_rho_pooled": 0.137,
+     "delta_rho_by_pos": {
+      "QB": 0.076,
+      "RB": 0.105,
+      "WR": 0.054,
+      "TE": 0.314
+     },
+     "delta_rank_mae": -1.36
+    },
+    {
+     "season": 2024,
+     "n": 150,
+     "coverage_pct": 34.0,
+     "us_rho_pooled": 0.668,
+     "system_rho_pooled": 0.553,
+     "delta_rho_pooled": 0.115,
+     "delta_rho_by_pos": {
+      "QB": 0.095,
+      "RB": 0.167,
+      "WR": 0.14,
+      "TE": 0.056
+     },
+     "delta_rank_mae": -2.01
+    },
+    {
+     "season": 2025,
+     "n": 150,
+     "coverage_pct": 32.4,
+     "us_rho_pooled": 0.549,
+     "system_rho_pooled": 0.292,
+     "delta_rho_pooled": 0.257,
+     "delta_rho_by_pos": {
+      "QB": 0.413,
+      "RB": 0.25,
+      "WR": 0.334,
+      "TE": 0.031
+     },
+     "delta_rank_mae": -3.45
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.542857,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.510714,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": 0.148,
+    "hi": 0.239,
+    "median": 0.193,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth150_by_source",
+   "population_label": "P2 depth curve \u00b7 top150[by_source]",
+   "source": "ecr",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 150.0,
+   "n_min": 150,
+   "n_max": 150,
+   "us_rho_pooled": 0.505,
+   "system_rho_pooled": 0.486,
+   "delta_rho_mean": 0.019,
+   "delta_rho_sd_across_seasons": 0.034,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 150,
+     "coverage_pct": 37.1,
+     "us_rho_pooled": 0.591,
+     "system_rho_pooled": 0.562,
+     "delta_rho_pooled": 0.029,
+     "delta_rho_by_pos": {
+      "QB": 0.021,
+      "RB": -0.037,
+      "WR": -0.028,
+      "TE": 0.162
+     },
+     "delta_rank_mae": 0.01
+    },
+    {
+     "season": 2020,
+     "n": 150,
+     "coverage_pct": 35.3,
+     "us_rho_pooled": 0.484,
+     "system_rho_pooled": 0.524,
+     "delta_rho_pooled": -0.04,
+     "delta_rho_by_pos": {
+      "QB": -0.08,
+      "RB": -0.134,
+      "WR": 0.088,
+      "TE": -0.035
+     },
+     "delta_rank_mae": 0.3
+    },
+    {
+     "season": 2021,
+     "n": 150,
+     "coverage_pct": 33.0,
+     "us_rho_pooled": 0.618,
+     "system_rho_pooled": 0.568,
+     "delta_rho_pooled": 0.05,
+     "delta_rho_by_pos": {
+      "QB": -0.014,
+      "RB": 0.04,
+      "WR": 0.04,
+      "TE": 0.137
+     },
+     "delta_rank_mae": -0.34
+    },
+    {
+     "season": 2022,
+     "n": 150,
+     "coverage_pct": 34.1,
+     "us_rho_pooled": 0.53,
+     "system_rho_pooled": 0.473,
+     "delta_rho_pooled": 0.057,
+     "delta_rho_by_pos": {
+      "QB": 0.006,
+      "RB": -0.001,
+      "WR": 0.097,
+      "TE": 0.124
+     },
+     "delta_rank_mae": -0.88
+    },
+    {
+     "season": 2023,
+     "n": 150,
+     "coverage_pct": 34.4,
+     "us_rho_pooled": 0.492,
+     "system_rho_pooled": 0.477,
+     "delta_rho_pooled": 0.015,
+     "delta_rho_by_pos": {
+      "QB": 0.043,
+      "RB": 0.039,
+      "WR": -0.023,
+      "TE": 0.0
+     },
+     "delta_rank_mae": 0.08
+    },
+    {
+     "season": 2024,
+     "n": 150,
+     "coverage_pct": 34.0,
+     "us_rho_pooled": 0.479,
+     "system_rho_pooled": 0.485,
+     "delta_rho_pooled": -0.006,
+     "delta_rho_by_pos": {
+      "QB": 0.019,
+      "RB": 0.033,
+      "WR": -0.059,
+      "TE": -0.019
+     },
+     "delta_rank_mae": 0.11
+    },
+    {
+     "season": 2025,
+     "n": 150,
+     "coverage_pct": 32.4,
+     "us_rho_pooled": 0.341,
+     "system_rho_pooled": 0.31,
+     "delta_rho_pooled": 0.031,
+     "delta_rho_by_pos": {
+      "QB": 0.016,
+      "RB": -0.017,
+      "WR": -0.041,
+      "TE": 0.168
+     },
+     "delta_rank_mae": 0.17
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.514429,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.467857,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.007,
+    "hi": 0.043,
+    "median": 0.018,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth150_by_source",
+   "population_label": "P2 depth curve \u00b7 top150[by_source]",
+   "source": "sleeper",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 150.0,
+   "n_min": 150,
+   "n_max": 150,
+   "us_rho_pooled": 0.448,
+   "system_rho_pooled": 0.631,
+   "delta_rho_mean": -0.183,
+   "delta_rho_sd_across_seasons": 0.142,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 150,
+     "coverage_pct": 37.1,
+     "us_rho_pooled": 0.543,
+     "system_rho_pooled": 0.888,
+     "delta_rho_pooled": -0.345,
+     "delta_rho_by_pos": {
+      "QB": -0.194,
+      "RB": -0.367,
+      "WR": -0.462,
+      "TE": -0.357
+     },
+     "delta_rank_mae": 5.37
+    },
+    {
+     "season": 2020,
+     "n": 150,
+     "coverage_pct": 35.3,
+     "us_rho_pooled": 0.438,
+     "system_rho_pooled": 0.821,
+     "delta_rho_pooled": -0.383,
+     "delta_rho_by_pos": {
+      "QB": -0.244,
+      "RB": -0.338,
+      "WR": -0.307,
+      "TE": -0.643
+     },
+     "delta_rank_mae": 4.54
+    },
+    {
+     "season": 2021,
+     "n": 150,
+     "coverage_pct": 33.0,
+     "us_rho_pooled": 0.441,
+     "system_rho_pooled": 0.527,
+     "delta_rho_pooled": -0.086,
+     "delta_rho_by_pos": {
+      "QB": -0.013,
+      "RB": -0.081,
+      "WR": -0.003,
+      "TE": -0.247
+     },
+     "delta_rank_mae": 0.94
+    },
+    {
+     "season": 2022,
+     "n": 150,
+     "coverage_pct": 34.1,
+     "us_rho_pooled": 0.497,
+     "system_rho_pooled": 0.707,
+     "delta_rho_pooled": -0.21,
+     "delta_rho_by_pos": {
+      "QB": -0.299,
+      "RB": -0.087,
+      "WR": -0.072,
+      "TE": -0.382
+     },
+     "delta_rank_mae": 1.83
+    },
+    {
+     "season": 2023,
+     "n": 150,
+     "coverage_pct": 34.4,
+     "us_rho_pooled": 0.304,
+     "system_rho_pooled": 0.416,
+     "delta_rho_pooled": -0.112,
+     "delta_rho_by_pos": {
+      "QB": -0.108,
+      "RB": -0.106,
+      "WR": -0.13,
+      "TE": -0.105
+     },
+     "delta_rank_mae": 1.17
+    },
+    {
+     "season": 2024,
+     "n": 150,
+     "coverage_pct": 34.0,
+     "us_rho_pooled": 0.433,
+     "system_rho_pooled": 0.598,
+     "delta_rho_pooled": -0.165,
+     "delta_rho_by_pos": {
+      "QB": -0.169,
+      "RB": -0.048,
+      "WR": -0.17,
+      "TE": -0.273
+     },
+     "delta_rank_mae": 1.52
+    },
+    {
+     "season": 2025,
+     "n": 150,
+     "coverage_pct": 32.4,
+     "us_rho_pooled": 0.478,
+     "system_rho_pooled": 0.461,
+     "delta_rho_pooled": 0.017,
+     "delta_rho_by_pos": {
+      "QB": -0.081,
+      "RB": 0.043,
+      "WR": -0.013,
+      "TE": 0.121
+     },
+     "delta_rank_mae": 0.15
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.368857,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.602286,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.225,
+    "hi": -0.138,
+    "median": -0.181,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth150_by_source",
+   "population_label": "P2 depth curve \u00b7 top150[by_source]",
+   "source": "espn",
+   "n_seasons": 3,
+   "seasons": [
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 150.0,
+   "n_min": 150,
+   "n_max": 150,
+   "us_rho_pooled": 0.383,
+   "system_rho_pooled": 0.465,
+   "delta_rho_mean": -0.082,
+   "delta_rho_sd_across_seasons": 0.19,
+   "per_season": [
+    {
+     "season": 2023,
+     "n": 150,
+     "coverage_pct": 34.4,
+     "us_rho_pooled": 0.423,
+     "system_rho_pooled": 0.721,
+     "delta_rho_pooled": -0.298,
+     "delta_rho_by_pos": {
+      "QB": -0.145,
+      "RB": -0.232,
+      "WR": -0.196,
+      "TE": -0.621
+     },
+     "delta_rank_mae": 3.11
+    },
+    {
+     "season": 2024,
+     "n": 150,
+     "coverage_pct": 34.0,
+     "us_rho_pooled": 0.414,
+     "system_rho_pooled": 0.42,
+     "delta_rho_pooled": -0.006,
+     "delta_rho_by_pos": {
+      "QB": 0.072,
+      "RB": -0.104,
+      "WR": -0.113,
+      "TE": 0.123
+     },
+     "delta_rank_mae": 1.13
+    },
+    {
+     "season": 2025,
+     "n": 150,
+     "coverage_pct": 32.4,
+     "us_rho_pooled": 0.312,
+     "system_rho_pooled": 0.254,
+     "delta_rho_pooled": 0.058,
+     "delta_rho_by_pos": {
+      "QB": 0.084,
+      "RB": -0.005,
+      "WR": -0.029,
+      "TE": 0.184
+     },
+     "delta_rank_mae": 0.28
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.535,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.429333,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.16,
+    "hi": -0.007,
+    "median": -0.083,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth200_by_source",
+   "population_label": "P2 depth curve \u00b7 top200[by_source]",
+   "source": "adp",
+   "n_seasons": 6,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+   ],
+   "n_mean": 162.0,
+   "n_min": 140,
+   "n_max": 172,
+   "us_rho_pooled": 0.517,
+   "system_rho_pooled": 0.494,
+   "delta_rho_mean": 0.022,
+   "delta_rho_sd_across_seasons": 0.04,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 161,
+     "coverage_pct": 39.9,
+     "us_rho_pooled": 0.544,
+     "system_rho_pooled": 0.509,
+     "delta_rho_pooled": 0.035,
+     "delta_rho_by_pos": {
+      "QB": 0.081,
+      "RB": 0.006,
+      "WR": -0.011,
+      "TE": 0.066
+     },
+     "delta_rank_mae": -0.15
+    },
+    {
+     "season": 2020,
+     "n": 160,
+     "coverage_pct": 37.6,
+     "us_rho_pooled": 0.482,
+     "system_rho_pooled": 0.526,
+     "delta_rho_pooled": -0.044,
+     "delta_rho_by_pos": {
+      "QB": -0.07,
+      "RB": -0.125,
+      "WR": 0.077,
+      "TE": -0.059
+     },
+     "delta_rank_mae": 0.52
+    },
+    {
+     "season": 2021,
+     "n": 170,
+     "coverage_pct": 37.4,
+     "us_rho_pooled": 0.6,
+     "system_rho_pooled": 0.528,
+     "delta_rho_pooled": 0.072,
+     "delta_rho_by_pos": {
+      "QB": 0.084,
+      "RB": -0.028,
+      "WR": 0.075,
+      "TE": 0.156
+     },
+     "delta_rank_mae": -0.12
+    },
+    {
+     "season": 2022,
+     "n": 140,
+     "coverage_pct": 31.8,
+     "us_rho_pooled": 0.533,
+     "system_rho_pooled": 0.486,
+     "delta_rho_pooled": 0.047,
+     "delta_rho_by_pos": {
+      "QB": 0.02,
+      "RB": 0.01,
+      "WR": 0.105,
+      "TE": 0.054
+     },
+     "delta_rank_mae": -0.8
+    },
+    {
+     "season": 2023,
+     "n": 169,
+     "coverage_pct": 38.8,
+     "us_rho_pooled": 0.429,
+     "system_rho_pooled": 0.429,
+     "delta_rho_pooled": 0.0,
+     "delta_rho_by_pos": {
+      "QB": 0.017,
+      "RB": 0.062,
+      "WR": 0.003,
+      "TE": -0.082
+     },
+     "delta_rank_mae": -0.23
+    },
+    {
+     "season": 2024,
+     "n": 172,
+     "coverage_pct": 39.0,
+     "us_rho_pooled": 0.512,
+     "system_rho_pooled": 0.489,
+     "delta_rho_pooled": 0.023,
+     "delta_rho_by_pos": {
+      "QB": 0.054,
+      "RB": 0.073,
+      "WR": -0.029,
+      "TE": -0.008
+     },
+     "delta_rank_mae": -0.48
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.5055,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.502333,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.005,
+    "hi": 0.049,
+    "median": 0.02,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth200_by_source",
+   "population_label": "P2 depth curve \u00b7 top200[by_source]",
+   "source": "mfl_adp",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 200.0,
+   "n_min": 200,
+   "n_max": 200,
+   "us_rho_pooled": 0.658,
+   "system_rho_pooled": 0.44,
+   "delta_rho_mean": 0.218,
+   "delta_rho_sd_across_seasons": 0.082,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 200,
+     "coverage_pct": 49.5,
+     "us_rho_pooled": 0.646,
+     "system_rho_pooled": 0.517,
+     "delta_rho_pooled": 0.129,
+     "delta_rho_by_pos": {
+      "QB": 0.165,
+      "RB": 0.066,
+      "WR": 0.048,
+      "TE": 0.233
+     },
+     "delta_rank_mae": -1.61
+    },
+    {
+     "season": 2020,
+     "n": 200,
+     "coverage_pct": 47.1,
+     "us_rho_pooled": 0.657,
+     "system_rho_pooled": 0.561,
+     "delta_rho_pooled": 0.096,
+     "delta_rho_by_pos": {
+      "QB": 0.073,
+      "RB": -0.017,
+      "WR": 0.12,
+      "TE": 0.207
+     },
+     "delta_rank_mae": -1.75
+    },
+    {
+     "season": 2021,
+     "n": 200,
+     "coverage_pct": 44.0,
+     "us_rho_pooled": 0.747,
+     "system_rho_pooled": 0.431,
+     "delta_rho_pooled": 0.316,
+     "delta_rho_by_pos": {
+      "QB": 0.145,
+      "RB": 0.153,
+      "WR": 0.344,
+      "TE": 0.621
+     },
+     "delta_rank_mae": -4.63
+    },
+    {
+     "season": 2022,
+     "n": 200,
+     "coverage_pct": 45.5,
+     "us_rho_pooled": 0.684,
+     "system_rho_pooled": 0.398,
+     "delta_rho_pooled": 0.286,
+     "delta_rho_by_pos": {
+      "QB": 0.2,
+      "RB": 0.191,
+      "WR": 0.225,
+      "TE": 0.531
+     },
+     "delta_rank_mae": -4.02
+    },
+    {
+     "season": 2023,
+     "n": 200,
+     "coverage_pct": 45.9,
+     "us_rho_pooled": 0.64,
+     "system_rho_pooled": 0.435,
+     "delta_rho_pooled": 0.205,
+     "delta_rho_by_pos": {
+      "QB": 0.159,
+      "RB": 0.175,
+      "WR": 0.088,
+      "TE": 0.395
+     },
+     "delta_rank_mae": -2.72
+    },
+    {
+     "season": 2024,
+     "n": 200,
+     "coverage_pct": 45.4,
+     "us_rho_pooled": 0.654,
+     "system_rho_pooled": 0.434,
+     "delta_rho_pooled": 0.22,
+     "delta_rho_by_pos": {
+      "QB": -0.003,
+      "RB": 0.215,
+      "WR": 0.221,
+      "TE": 0.445
+     },
+     "delta_rank_mae": -3.82
+    },
+    {
+     "season": 2025,
+     "n": 200,
+     "coverage_pct": 43.2,
+     "us_rho_pooled": 0.576,
+     "system_rho_pooled": 0.301,
+     "delta_rho_pooled": 0.275,
+     "delta_rho_by_pos": {
+      "QB": 0.277,
+      "RB": 0.223,
+      "WR": 0.322,
+      "TE": 0.276
+     },
+     "delta_rank_mae": -4.53
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.560429,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.510143,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": 0.176,
+    "hi": 0.256,
+    "median": 0.215,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth200_by_source",
+   "population_label": "P2 depth curve \u00b7 top200[by_source]",
+   "source": "ecr",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 200.0,
+   "n_min": 200,
+   "n_max": 200,
+   "us_rho_pooled": 0.549,
+   "system_rho_pooled": 0.55,
+   "delta_rho_mean": -0.002,
+   "delta_rho_sd_across_seasons": 0.023,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 200,
+     "coverage_pct": 49.5,
+     "us_rho_pooled": 0.558,
+     "system_rho_pooled": 0.572,
+     "delta_rho_pooled": -0.014,
+     "delta_rho_by_pos": {
+      "QB": 0.011,
+      "RB": -0.033,
+      "WR": -0.052,
+      "TE": 0.021
+     },
+     "delta_rank_mae": 0.42
+    },
+    {
+     "season": 2020,
+     "n": 200,
+     "coverage_pct": 47.1,
+     "us_rho_pooled": 0.586,
+     "system_rho_pooled": 0.616,
+     "delta_rho_pooled": -0.03,
+     "delta_rho_by_pos": {
+      "QB": -0.069,
+      "RB": -0.085,
+      "WR": 0.041,
+      "TE": -0.006
+     },
+     "delta_rank_mae": 0.34
+    },
+    {
+     "season": 2021,
+     "n": 200,
+     "coverage_pct": 44.0,
+     "us_rho_pooled": 0.651,
+     "system_rho_pooled": 0.624,
+     "delta_rho_pooled": 0.027,
+     "delta_rho_by_pos": {
+      "QB": 0.022,
+      "RB": -0.011,
+      "WR": 0.024,
+      "TE": 0.074
+     },
+     "delta_rank_mae": -0.05
+    },
+    {
+     "season": 2022,
+     "n": 200,
+     "coverage_pct": 45.5,
+     "us_rho_pooled": 0.592,
+     "system_rho_pooled": 0.567,
+     "delta_rho_pooled": 0.025,
+     "delta_rho_by_pos": {
+      "QB": -0.018,
+      "RB": -0.036,
+      "WR": 0.044,
+      "TE": 0.111
+     },
+     "delta_rank_mae": -0.38
+    },
+    {
+     "season": 2023,
+     "n": 200,
+     "coverage_pct": 45.9,
+     "us_rho_pooled": 0.493,
+     "system_rho_pooled": 0.518,
+     "delta_rho_pooled": -0.025,
+     "delta_rho_by_pos": {
+      "QB": -0.005,
+      "RB": 0.015,
+      "WR": -0.027,
+      "TE": -0.087
+     },
+     "delta_rank_mae": 0.17
+    },
+    {
+     "season": 2024,
+     "n": 200,
+     "coverage_pct": 45.4,
+     "us_rho_pooled": 0.482,
+     "system_rho_pooled": 0.487,
+     "delta_rho_pooled": -0.005,
+     "delta_rho_by_pos": {
+      "QB": 0.016,
+      "RB": 0.022,
+      "WR": -0.054,
+      "TE": -0.003
+     },
+     "delta_rank_mae": -0.14
+    },
+    {
+     "season": 2025,
+     "n": 200,
+     "coverage_pct": 43.2,
+     "us_rho_pooled": 0.478,
+     "system_rho_pooled": 0.467,
+     "delta_rho_pooled": 0.011,
+     "delta_rho_by_pos": {
+      "QB": 0.01,
+      "RB": -0.027,
+      "WR": -0.02,
+      "TE": 0.081
+     },
+     "delta_rank_mae": 0.28
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.449857,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.520143,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.021,
+    "hi": 0.017,
+    "median": -0.002,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth200_by_source",
+   "population_label": "P2 depth curve \u00b7 top200[by_source]",
+   "source": "sleeper",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 200.0,
+   "n_min": 200,
+   "n_max": 200,
+   "us_rho_pooled": 0.532,
+   "system_rho_pooled": 0.704,
+   "delta_rho_mean": -0.172,
+   "delta_rho_sd_across_seasons": 0.144,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 200,
+     "coverage_pct": 49.5,
+     "us_rho_pooled": 0.593,
+     "system_rho_pooled": 0.886,
+     "delta_rho_pooled": -0.293,
+     "delta_rho_by_pos": {
+      "QB": -0.194,
+      "RB": -0.289,
+      "WR": -0.385,
+      "TE": -0.303
+     },
+     "delta_rank_mae": 6.57
+    },
+    {
+     "season": 2020,
+     "n": 200,
+     "coverage_pct": 47.1,
+     "us_rho_pooled": 0.479,
+     "system_rho_pooled": 0.901,
+     "delta_rho_pooled": -0.422,
+     "delta_rho_by_pos": {
+      "QB": -0.248,
+      "RB": -0.493,
+      "WR": -0.362,
+      "TE": -0.587
+     },
+     "delta_rank_mae": 7.28
+    },
+    {
+     "season": 2021,
+     "n": 200,
+     "coverage_pct": 44.0,
+     "us_rho_pooled": 0.561,
+     "system_rho_pooled": 0.639,
+     "delta_rho_pooled": -0.078,
+     "delta_rho_by_pos": {
+      "QB": -0.013,
+      "RB": -0.095,
+      "WR": -0.001,
+      "TE": -0.205
+     },
+     "delta_rank_mae": 0.81
+    },
+    {
+     "season": 2022,
+     "n": 200,
+     "coverage_pct": 45.5,
+     "us_rho_pooled": 0.539,
+     "system_rho_pooled": 0.697,
+     "delta_rho_pooled": -0.158,
+     "delta_rho_by_pos": {
+      "QB": -0.256,
+      "RB": -0.11,
+      "WR": -0.138,
+      "TE": -0.128
+     },
+     "delta_rank_mae": 3.3
+    },
+    {
+     "season": 2023,
+     "n": 200,
+     "coverage_pct": 45.9,
+     "us_rho_pooled": 0.483,
+     "system_rho_pooled": 0.643,
+     "delta_rho_pooled": -0.16,
+     "delta_rho_by_pos": {
+      "QB": -0.1,
+      "RB": -0.155,
+      "WR": -0.139,
+      "TE": -0.247
+     },
+     "delta_rank_mae": 2.02
+    },
+    {
+     "season": 2024,
+     "n": 200,
+     "coverage_pct": 45.4,
+     "us_rho_pooled": 0.516,
+     "system_rho_pooled": 0.622,
+     "delta_rho_pooled": -0.106,
+     "delta_rho_by_pos": {
+      "QB": -0.169,
+      "RB": -0.081,
+      "WR": -0.124,
+      "TE": -0.051
+     },
+     "delta_rank_mae": 1.95
+    },
+    {
+     "season": 2025,
+     "n": 200,
+     "coverage_pct": 43.2,
+     "us_rho_pooled": 0.551,
+     "system_rho_pooled": 0.539,
+     "delta_rho_pooled": 0.012,
+     "delta_rho_by_pos": {
+      "QB": -0.081,
+      "RB": 0.013,
+      "WR": 0.001,
+      "TE": 0.117
+     },
+     "delta_rank_mae": -0.17
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.296143,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.685,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.202,
+    "hi": -0.141,
+    "median": -0.17,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth200_by_source",
+   "population_label": "P2 depth curve \u00b7 top200[by_source]",
+   "source": "espn",
+   "n_seasons": 3,
+   "seasons": [
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 200.0,
+   "n_min": 200,
+   "n_max": 200,
+   "us_rho_pooled": 0.449,
+   "system_rho_pooled": 0.549,
+   "delta_rho_mean": -0.1,
+   "delta_rho_sd_across_seasons": 0.148,
+   "per_season": [
+    {
+     "season": 2023,
+     "n": 200,
+     "coverage_pct": 45.9,
+     "us_rho_pooled": 0.492,
+     "system_rho_pooled": 0.757,
+     "delta_rho_pooled": -0.265,
+     "delta_rho_by_pos": {
+      "QB": -0.207,
+      "RB": -0.18,
+      "WR": -0.205,
+      "TE": -0.466
+     },
+     "delta_rank_mae": 3.71
+    },
+    {
+     "season": 2024,
+     "n": 200,
+     "coverage_pct": 45.4,
+     "us_rho_pooled": 0.415,
+     "system_rho_pooled": 0.469,
+     "delta_rho_pooled": -0.054,
+     "delta_rho_by_pos": {
+      "QB": -0.01,
+      "RB": -0.11,
+      "WR": -0.106,
+      "TE": 0.009
+     },
+     "delta_rank_mae": 1.81
+    },
+    {
+     "season": 2025,
+     "n": 200,
+     "coverage_pct": 43.2,
+     "us_rho_pooled": 0.44,
+     "system_rho_pooled": 0.42,
+     "delta_rho_pooled": 0.02,
+     "delta_rho_by_pos": {
+      "QB": -0.005,
+      "RB": -0.013,
+      "WR": -0.012,
+      "TE": 0.108
+     },
+     "delta_rank_mae": 0.16
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.451333,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.531,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.158,
+    "hi": -0.036,
+    "median": -0.096,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth250_by_source",
+   "population_label": "P2 depth curve \u00b7 top250[by_source]",
+   "source": "adp",
+   "n_seasons": 6,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+   ],
+   "n_mean": 162.0,
+   "n_min": 140,
+   "n_max": 172,
+   "us_rho_pooled": 0.517,
+   "system_rho_pooled": 0.494,
+   "delta_rho_mean": 0.022,
+   "delta_rho_sd_across_seasons": 0.04,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 161,
+     "coverage_pct": 39.9,
+     "us_rho_pooled": 0.544,
+     "system_rho_pooled": 0.509,
+     "delta_rho_pooled": 0.035,
+     "delta_rho_by_pos": {
+      "QB": 0.081,
+      "RB": 0.006,
+      "WR": -0.011,
+      "TE": 0.066
+     },
+     "delta_rank_mae": -0.15
+    },
+    {
+     "season": 2020,
+     "n": 160,
+     "coverage_pct": 37.6,
+     "us_rho_pooled": 0.482,
+     "system_rho_pooled": 0.526,
+     "delta_rho_pooled": -0.044,
+     "delta_rho_by_pos": {
+      "QB": -0.07,
+      "RB": -0.125,
+      "WR": 0.077,
+      "TE": -0.059
+     },
+     "delta_rank_mae": 0.52
+    },
+    {
+     "season": 2021,
+     "n": 170,
+     "coverage_pct": 37.4,
+     "us_rho_pooled": 0.6,
+     "system_rho_pooled": 0.528,
+     "delta_rho_pooled": 0.072,
+     "delta_rho_by_pos": {
+      "QB": 0.084,
+      "RB": -0.028,
+      "WR": 0.075,
+      "TE": 0.156
+     },
+     "delta_rank_mae": -0.12
+    },
+    {
+     "season": 2022,
+     "n": 140,
+     "coverage_pct": 31.8,
+     "us_rho_pooled": 0.533,
+     "system_rho_pooled": 0.486,
+     "delta_rho_pooled": 0.047,
+     "delta_rho_by_pos": {
+      "QB": 0.02,
+      "RB": 0.01,
+      "WR": 0.105,
+      "TE": 0.054
+     },
+     "delta_rank_mae": -0.8
+    },
+    {
+     "season": 2023,
+     "n": 169,
+     "coverage_pct": 38.8,
+     "us_rho_pooled": 0.429,
+     "system_rho_pooled": 0.429,
+     "delta_rho_pooled": 0.0,
+     "delta_rho_by_pos": {
+      "QB": 0.017,
+      "RB": 0.062,
+      "WR": 0.003,
+      "TE": -0.082
+     },
+     "delta_rank_mae": -0.23
+    },
+    {
+     "season": 2024,
+     "n": 172,
+     "coverage_pct": 39.0,
+     "us_rho_pooled": 0.512,
+     "system_rho_pooled": 0.489,
+     "delta_rho_pooled": 0.023,
+     "delta_rho_by_pos": {
+      "QB": 0.054,
+      "RB": 0.073,
+      "WR": -0.029,
+      "TE": -0.008
+     },
+     "delta_rank_mae": -0.48
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.5055,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.502333,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.005,
+    "hi": 0.049,
+    "median": 0.02,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth250_by_source",
+   "population_label": "P2 depth curve \u00b7 top250[by_source]",
+   "source": "mfl_adp",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 250.0,
+   "n_min": 250,
+   "n_max": 250,
+   "us_rho_pooled": 0.658,
+   "system_rho_pooled": 0.464,
+   "delta_rho_mean": 0.193,
+   "delta_rho_sd_across_seasons": 0.067,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 250,
+     "coverage_pct": 61.9,
+     "us_rho_pooled": 0.687,
+     "system_rho_pooled": 0.595,
+     "delta_rho_pooled": 0.092,
+     "delta_rho_by_pos": {
+      "QB": 0.155,
+      "RB": 0.068,
+      "WR": -0.006,
+      "TE": 0.154
+     },
+     "delta_rank_mae": -1.54
+    },
+    {
+     "season": 2020,
+     "n": 250,
+     "coverage_pct": 58.8,
+     "us_rho_pooled": 0.663,
+     "system_rho_pooled": 0.533,
+     "delta_rho_pooled": 0.13,
+     "delta_rho_by_pos": {
+      "QB": 0.085,
+      "RB": 0.035,
+      "WR": 0.122,
+      "TE": 0.276
+     },
+     "delta_rank_mae": -2.54
+    },
+    {
+     "season": 2021,
+     "n": 250,
+     "coverage_pct": 54.9,
+     "us_rho_pooled": 0.711,
+     "system_rho_pooled": 0.442,
+     "delta_rho_pooled": 0.269,
+     "delta_rho_by_pos": {
+      "QB": 0.085,
+      "RB": 0.098,
+      "WR": 0.331,
+      "TE": 0.563
+     },
+     "delta_rank_mae": -4.42
+    },
+    {
+     "season": 2022,
+     "n": 250,
+     "coverage_pct": 56.8,
+     "us_rho_pooled": 0.681,
+     "system_rho_pooled": 0.423,
+     "delta_rho_pooled": 0.258,
+     "delta_rho_by_pos": {
+      "QB": 0.192,
+      "RB": 0.159,
+      "WR": 0.207,
+      "TE": 0.474
+     },
+     "delta_rank_mae": -3.88
+    },
+    {
+     "season": 2023,
+     "n": 250,
+     "coverage_pct": 57.3,
+     "us_rho_pooled": 0.602,
+     "system_rho_pooled": 0.441,
+     "delta_rho_pooled": 0.161,
+     "delta_rho_by_pos": {
+      "QB": 0.159,
+      "RB": 0.163,
+      "WR": 0.052,
+      "TE": 0.27
+     },
+     "delta_rank_mae": -2.47
+    },
+    {
+     "season": 2024,
+     "n": 250,
+     "coverage_pct": 56.7,
+     "us_rho_pooled": 0.662,
+     "system_rho_pooled": 0.447,
+     "delta_rho_pooled": 0.215,
+     "delta_rho_by_pos": {
+      "QB": -0.02,
+      "RB": 0.159,
+      "WR": 0.244,
+      "TE": 0.479
+     },
+     "delta_rank_mae": -4.69
+    },
+    {
+     "season": 2025,
+     "n": 250,
+     "coverage_pct": 54.0,
+     "us_rho_pooled": 0.599,
+     "system_rho_pooled": 0.37,
+     "delta_rho_pooled": 0.229,
+     "delta_rho_by_pos": {
+      "QB": 0.224,
+      "RB": 0.167,
+      "WR": 0.314,
+      "TE": 0.207
+     },
+     "delta_rank_mae": -5.03
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.535571,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.440571,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": 0.157,
+    "hi": 0.224,
+    "median": 0.189,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth250_by_source",
+   "population_label": "P2 depth curve \u00b7 top250[by_source]",
+   "source": "ecr",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 250.0,
+   "n_min": 250,
+   "n_max": 250,
+   "us_rho_pooled": 0.618,
+   "system_rho_pooled": 0.629,
+   "delta_rho_mean": -0.011,
+   "delta_rho_sd_across_seasons": 0.022,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 250,
+     "coverage_pct": 61.9,
+     "us_rho_pooled": 0.684,
+     "system_rho_pooled": 0.694,
+     "delta_rho_pooled": -0.01,
+     "delta_rho_by_pos": {
+      "QB": 0.01,
+      "RB": -0.024,
+      "WR": -0.053,
+      "TE": 0.027
+     },
+     "delta_rank_mae": 0.35
+    },
+    {
+     "season": 2020,
+     "n": 250,
+     "coverage_pct": 58.8,
+     "us_rho_pooled": 0.62,
+     "system_rho_pooled": 0.632,
+     "delta_rho_pooled": -0.012,
+     "delta_rho_by_pos": {
+      "QB": -0.041,
+      "RB": -0.049,
+      "WR": 0.027,
+      "TE": 0.013
+     },
+     "delta_rank_mae": 0.18
+    },
+    {
+     "season": 2021,
+     "n": 250,
+     "coverage_pct": 54.9,
+     "us_rho_pooled": 0.676,
+     "system_rho_pooled": 0.673,
+     "delta_rho_pooled": 0.003,
+     "delta_rho_by_pos": {
+      "QB": -0.005,
+      "RB": -0.04,
+      "WR": 0.003,
+      "TE": 0.051
+     },
+     "delta_rank_mae": 0.17
+    },
+    {
+     "season": 2022,
+     "n": 250,
+     "coverage_pct": 56.8,
+     "us_rho_pooled": 0.667,
+     "system_rho_pooled": 0.664,
+     "delta_rho_pooled": 0.003,
+     "delta_rho_by_pos": {
+      "QB": -0.012,
+      "RB": -0.06,
+      "WR": 0.016,
+      "TE": 0.067
+     },
+     "delta_rank_mae": -0.21
+    },
+    {
+     "season": 2023,
+     "n": 250,
+     "coverage_pct": 57.3,
+     "us_rho_pooled": 0.516,
+     "system_rho_pooled": 0.573,
+     "delta_rho_pooled": -0.057,
+     "delta_rho_by_pos": {
+      "QB": -0.009,
+      "RB": -0.003,
+      "WR": -0.071,
+      "TE": -0.144
+     },
+     "delta_rank_mae": 0.67
+    },
+    {
+     "season": 2024,
+     "n": 250,
+     "coverage_pct": 56.7,
+     "us_rho_pooled": 0.614,
+     "system_rho_pooled": 0.628,
+     "delta_rho_pooled": -0.014,
+     "delta_rho_by_pos": {
+      "QB": -0.013,
+      "RB": -0.013,
+      "WR": -0.03,
+      "TE": 0.001
+     },
+     "delta_rank_mae": -0.06
+    },
+    {
+     "season": 2025,
+     "n": 250,
+     "coverage_pct": 54.0,
+     "us_rho_pooled": 0.549,
+     "system_rho_pooled": 0.542,
+     "delta_rho_pooled": 0.007,
+     "delta_rho_by_pos": {
+      "QB": 0.002,
+      "RB": -0.02,
+      "WR": 0.01,
+      "TE": 0.035
+     },
+     "delta_rank_mae": 0.27
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.370571,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.611143,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.026,
+    "hi": 0.003,
+    "median": -0.011,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth250_by_source",
+   "population_label": "P2 depth curve \u00b7 top250[by_source]",
+   "source": "sleeper",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 250.0,
+   "n_min": 250,
+   "n_max": 250,
+   "us_rho_pooled": 0.597,
+   "system_rho_pooled": 0.753,
+   "delta_rho_mean": -0.156,
+   "delta_rho_sd_across_seasons": 0.122,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 250,
+     "coverage_pct": 61.9,
+     "us_rho_pooled": 0.669,
+     "system_rho_pooled": 0.929,
+     "delta_rho_pooled": -0.26,
+     "delta_rho_by_pos": {
+      "QB": -0.181,
+      "RB": -0.226,
+      "WR": -0.328,
+      "TE": -0.305
+     },
+     "delta_rank_mae": 8.0
+    },
+    {
+     "season": 2020,
+     "n": 250,
+     "coverage_pct": 58.8,
+     "us_rho_pooled": 0.563,
+     "system_rho_pooled": 0.927,
+     "delta_rho_pooled": -0.364,
+     "delta_rho_by_pos": {
+      "QB": -0.232,
+      "RB": -0.393,
+      "WR": -0.349,
+      "TE": -0.48
+     },
+     "delta_rank_mae": 8.84
+    },
+    {
+     "season": 2021,
+     "n": 250,
+     "coverage_pct": 54.9,
+     "us_rho_pooled": 0.634,
+     "system_rho_pooled": 0.688,
+     "delta_rho_pooled": -0.054,
+     "delta_rho_by_pos": {
+      "QB": -0.013,
+      "RB": -0.044,
+      "WR": -0.019,
+      "TE": -0.139
+     },
+     "delta_rank_mae": 1.0
+    },
+    {
+     "season": 2022,
+     "n": 250,
+     "coverage_pct": 56.8,
+     "us_rho_pooled": 0.617,
+     "system_rho_pooled": 0.762,
+     "delta_rho_pooled": -0.145,
+     "delta_rho_by_pos": {
+      "QB": -0.222,
+      "RB": -0.086,
+      "WR": -0.135,
+      "TE": -0.133
+     },
+     "delta_rank_mae": 3.73
+    },
+    {
+     "season": 2023,
+     "n": 250,
+     "coverage_pct": 57.3,
+     "us_rho_pooled": 0.534,
+     "system_rho_pooled": 0.684,
+     "delta_rho_pooled": -0.15,
+     "delta_rho_by_pos": {
+      "QB": -0.088,
+      "RB": -0.131,
+      "WR": -0.14,
+      "TE": -0.243
+     },
+     "delta_rank_mae": 2.45
+    },
+    {
+     "season": 2024,
+     "n": 250,
+     "coverage_pct": 56.7,
+     "us_rho_pooled": 0.603,
+     "system_rho_pooled": 0.719,
+     "delta_rho_pooled": -0.116,
+     "delta_rho_by_pos": {
+      "QB": -0.143,
+      "RB": -0.101,
+      "WR": -0.117,
+      "TE": -0.104
+     },
+     "delta_rank_mae": 2.62
+    },
+    {
+     "season": 2025,
+     "n": 250,
+     "coverage_pct": 54.0,
+     "us_rho_pooled": 0.557,
+     "system_rho_pooled": 0.562,
+     "delta_rho_pooled": -0.005,
+     "delta_rho_by_pos": {
+      "QB": -0.066,
+      "RB": -0.013,
+      "WR": 0.034,
+      "TE": 0.024
+     },
+     "delta_rank_mae": -0.34
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.247,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.735286,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.181,
+    "hi": -0.134,
+    "median": -0.156,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth250_by_source",
+   "population_label": "P2 depth curve \u00b7 top250[by_source]",
+   "source": "espn",
+   "n_seasons": 3,
+   "seasons": [
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 250.0,
+   "n_min": 250,
+   "n_max": 250,
+   "us_rho_pooled": 0.589,
+   "system_rho_pooled": 0.655,
+   "delta_rho_mean": -0.066,
+   "delta_rho_sd_across_seasons": 0.113,
+   "per_season": [
+    {
+     "season": 2023,
+     "n": 250,
+     "coverage_pct": 57.3,
+     "us_rho_pooled": 0.597,
+     "system_rho_pooled": 0.793,
+     "delta_rho_pooled": -0.196,
+     "delta_rho_by_pos": {
+      "QB": -0.129,
+      "RB": -0.095,
+      "WR": -0.193,
+      "TE": -0.367
+     },
+     "delta_rank_mae": 4.06
+    },
+    {
+     "season": 2024,
+     "n": 250,
+     "coverage_pct": 56.7,
+     "us_rho_pooled": 0.577,
+     "system_rho_pooled": 0.58,
+     "delta_rho_pooled": -0.003,
+     "delta_rho_by_pos": {
+      "QB": 0.078,
+      "RB": -0.11,
+      "WR": -0.086,
+      "TE": 0.107
+     },
+     "delta_rank_mae": 1.81
+    },
+    {
+     "season": 2025,
+     "n": 250,
+     "coverage_pct": 54.0,
+     "us_rho_pooled": 0.593,
+     "system_rho_pooled": 0.591,
+     "delta_rho_pooled": 0.002,
+     "delta_rho_by_pos": {
+      "QB": -0.005,
+      "RB": -0.032,
+      "WR": 0.001,
+      "TE": 0.042
+     },
+     "delta_rank_mae": 0.08
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.345333,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.624,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.11,
+    "hi": -0.023,
+    "median": -0.065,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth300_by_source",
+   "population_label": "P2 depth curve \u00b7 top300[by_source]",
+   "source": "adp",
+   "n_seasons": 6,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+   ],
+   "n_mean": 162.0,
+   "n_min": 140,
+   "n_max": 172,
+   "us_rho_pooled": 0.517,
+   "system_rho_pooled": 0.494,
+   "delta_rho_mean": 0.022,
+   "delta_rho_sd_across_seasons": 0.04,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 161,
+     "coverage_pct": 39.9,
+     "us_rho_pooled": 0.544,
+     "system_rho_pooled": 0.509,
+     "delta_rho_pooled": 0.035,
+     "delta_rho_by_pos": {
+      "QB": 0.081,
+      "RB": 0.006,
+      "WR": -0.011,
+      "TE": 0.066
+     },
+     "delta_rank_mae": -0.15
+    },
+    {
+     "season": 2020,
+     "n": 160,
+     "coverage_pct": 37.6,
+     "us_rho_pooled": 0.482,
+     "system_rho_pooled": 0.526,
+     "delta_rho_pooled": -0.044,
+     "delta_rho_by_pos": {
+      "QB": -0.07,
+      "RB": -0.125,
+      "WR": 0.077,
+      "TE": -0.059
+     },
+     "delta_rank_mae": 0.52
+    },
+    {
+     "season": 2021,
+     "n": 170,
+     "coverage_pct": 37.4,
+     "us_rho_pooled": 0.6,
+     "system_rho_pooled": 0.528,
+     "delta_rho_pooled": 0.072,
+     "delta_rho_by_pos": {
+      "QB": 0.084,
+      "RB": -0.028,
+      "WR": 0.075,
+      "TE": 0.156
+     },
+     "delta_rank_mae": -0.12
+    },
+    {
+     "season": 2022,
+     "n": 140,
+     "coverage_pct": 31.8,
+     "us_rho_pooled": 0.533,
+     "system_rho_pooled": 0.486,
+     "delta_rho_pooled": 0.047,
+     "delta_rho_by_pos": {
+      "QB": 0.02,
+      "RB": 0.01,
+      "WR": 0.105,
+      "TE": 0.054
+     },
+     "delta_rank_mae": -0.8
+    },
+    {
+     "season": 2023,
+     "n": 169,
+     "coverage_pct": 38.8,
+     "us_rho_pooled": 0.429,
+     "system_rho_pooled": 0.429,
+     "delta_rho_pooled": 0.0,
+     "delta_rho_by_pos": {
+      "QB": 0.017,
+      "RB": 0.062,
+      "WR": 0.003,
+      "TE": -0.082
+     },
+     "delta_rank_mae": -0.23
+    },
+    {
+     "season": 2024,
+     "n": 172,
+     "coverage_pct": 39.0,
+     "us_rho_pooled": 0.512,
+     "system_rho_pooled": 0.489,
+     "delta_rho_pooled": 0.023,
+     "delta_rho_by_pos": {
+      "QB": 0.054,
+      "RB": 0.073,
+      "WR": -0.029,
+      "TE": -0.008
+     },
+     "delta_rank_mae": -0.48
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.5055,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.502333,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.005,
+    "hi": 0.049,
+    "median": 0.02,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth300_by_source",
+   "population_label": "P2 depth curve \u00b7 top300[by_source]",
+   "source": "mfl_adp",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 264.1,
+   "n_min": 251,
+   "n_max": 286,
+   "us_rho_pooled": 0.666,
+   "system_rho_pooled": 0.494,
+   "delta_rho_mean": 0.173,
+   "delta_rho_sd_across_seasons": 0.067,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 257,
+     "coverage_pct": 63.6,
+     "us_rho_pooled": 0.699,
+     "system_rho_pooled": 0.614,
+     "delta_rho_pooled": 0.085,
+     "delta_rho_by_pos": {
+      "QB": 0.155,
+      "RB": 0.063,
+      "WR": -0.001,
+      "TE": 0.126
+     },
+     "delta_rank_mae": -1.44
+    },
+    {
+     "season": 2020,
+     "n": 286,
+     "coverage_pct": 67.3,
+     "us_rho_pooled": 0.682,
+     "system_rho_pooled": 0.593,
+     "delta_rho_pooled": 0.089,
+     "delta_rho_by_pos": {
+      "QB": 0.069,
+      "RB": 0.037,
+      "WR": 0.111,
+      "TE": 0.142
+     },
+     "delta_rank_mae": -2.12
+    },
+    {
+     "season": 2021,
+     "n": 266,
+     "coverage_pct": 58.5,
+     "us_rho_pooled": 0.706,
+     "system_rho_pooled": 0.462,
+     "delta_rho_pooled": 0.244,
+     "delta_rho_by_pos": {
+      "QB": 0.085,
+      "RB": 0.077,
+      "WR": 0.321,
+      "TE": 0.494
+     },
+     "delta_rank_mae": -4.58
+    },
+    {
+     "season": 2022,
+     "n": 259,
+     "coverage_pct": 58.9,
+     "us_rho_pooled": 0.676,
+     "system_rho_pooled": 0.451,
+     "delta_rho_pooled": 0.225,
+     "delta_rho_by_pos": {
+      "QB": 0.192,
+      "RB": 0.152,
+      "WR": 0.196,
+      "TE": 0.361
+     },
+     "delta_rank_mae": -3.8
+    },
+    {
+     "season": 2023,
+     "n": 268,
+     "coverage_pct": 61.5,
+     "us_rho_pooled": 0.624,
+     "system_rho_pooled": 0.482,
+     "delta_rho_pooled": 0.142,
+     "delta_rho_by_pos": {
+      "QB": 0.136,
+      "RB": 0.151,
+      "WR": 0.011,
+      "TE": 0.27
+     },
+     "delta_rank_mae": -2.03
+    },
+    {
+     "season": 2024,
+     "n": 262,
+     "coverage_pct": 59.4,
+     "us_rho_pooled": 0.677,
+     "system_rho_pooled": 0.482,
+     "delta_rho_pooled": 0.195,
+     "delta_rho_by_pos": {
+      "QB": -0.014,
+      "RB": 0.142,
+      "WR": 0.224,
+      "TE": 0.429
+     },
+     "delta_rank_mae": -4.54
+    },
+    {
+     "season": 2025,
+     "n": 251,
+     "coverage_pct": 54.2,
+     "us_rho_pooled": 0.599,
+     "system_rho_pooled": 0.371,
+     "delta_rho_pooled": 0.228,
+     "delta_rho_by_pos": {
+      "QB": 0.224,
+      "RB": 0.167,
+      "WR": 0.312,
+      "TE": 0.207
+     },
+     "delta_rank_mae": -5.12
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.506429,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.485143,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": 0.137,
+    "hi": 0.205,
+    "median": 0.171,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth300_by_source",
+   "population_label": "P2 depth curve \u00b7 top300[by_source]",
+   "source": "ecr",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 300.0,
+   "n_min": 300,
+   "n_max": 300,
+   "us_rho_pooled": 0.658,
+   "system_rho_pooled": 0.672,
+   "delta_rho_mean": -0.014,
+   "delta_rho_sd_across_seasons": 0.011,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 300,
+     "coverage_pct": 74.3,
+     "us_rho_pooled": 0.71,
+     "system_rho_pooled": 0.725,
+     "delta_rho_pooled": -0.015,
+     "delta_rho_by_pos": {
+      "QB": 0.008,
+      "RB": -0.033,
+      "WR": -0.059,
+      "TE": 0.026
+     },
+     "delta_rank_mae": 0.6
+    },
+    {
+     "season": 2020,
+     "n": 300,
+     "coverage_pct": 70.6,
+     "us_rho_pooled": 0.636,
+     "system_rho_pooled": 0.65,
+     "delta_rho_pooled": -0.014,
+     "delta_rho_by_pos": {
+      "QB": -0.034,
+      "RB": -0.032,
+      "WR": 0.028,
+      "TE": -0.018
+     },
+     "delta_rank_mae": 0.12
+    },
+    {
+     "season": 2021,
+     "n": 300,
+     "coverage_pct": 65.9,
+     "us_rho_pooled": 0.682,
+     "system_rho_pooled": 0.69,
+     "delta_rho_pooled": -0.008,
+     "delta_rho_by_pos": {
+      "QB": -0.035,
+      "RB": -0.013,
+      "WR": -0.009,
+      "TE": 0.025
+     },
+     "delta_rank_mae": 0.2
+    },
+    {
+     "season": 2022,
+     "n": 300,
+     "coverage_pct": 68.2,
+     "us_rho_pooled": 0.671,
+     "system_rho_pooled": 0.687,
+     "delta_rho_pooled": -0.016,
+     "delta_rho_by_pos": {
+      "QB": -0.009,
+      "RB": -0.043,
+      "WR": 0.012,
+      "TE": -0.022
+     },
+     "delta_rank_mae": 0.02
+    },
+    {
+     "season": 2023,
+     "n": 300,
+     "coverage_pct": 68.8,
+     "us_rho_pooled": 0.62,
+     "system_rho_pooled": 0.657,
+     "delta_rho_pooled": -0.037,
+     "delta_rho_by_pos": {
+      "QB": -0.01,
+      "RB": 0.0,
+      "WR": -0.091,
+      "TE": -0.047
+     },
+     "delta_rank_mae": 0.93
+    },
+    {
+     "season": 2024,
+     "n": 300,
+     "coverage_pct": 68.0,
+     "us_rho_pooled": 0.661,
+     "system_rho_pooled": 0.663,
+     "delta_rho_pooled": -0.002,
+     "delta_rho_by_pos": {
+      "QB": -0.008,
+      "RB": -0.011,
+      "WR": 0.01,
+      "TE": 0.0
+     },
+     "delta_rank_mae": -0.53
+    },
+    {
+     "season": 2025,
+     "n": 300,
+     "coverage_pct": 64.8,
+     "us_rho_pooled": 0.626,
+     "system_rho_pooled": 0.634,
+     "delta_rho_pooled": -0.008,
+     "delta_rho_by_pos": {
+      "QB": -0.008,
+      "RB": -0.022,
+      "WR": 0.0,
+      "TE": -0.001
+     },
+     "delta_rank_mae": 0.26
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.327714,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.653429,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.026,
+    "hi": -0.003,
+    "median": -0.014,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth300_by_source",
+   "population_label": "P2 depth curve \u00b7 top300[by_source]",
+   "source": "sleeper",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 300.0,
+   "n_min": 300,
+   "n_max": 300,
+   "us_rho_pooled": 0.665,
+   "system_rho_pooled": 0.806,
+   "delta_rho_mean": -0.14,
+   "delta_rho_sd_across_seasons": 0.105,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 300,
+     "coverage_pct": 74.3,
+     "us_rho_pooled": 0.684,
+     "system_rho_pooled": 0.94,
+     "delta_rho_pooled": -0.256,
+     "delta_rho_by_pos": {
+      "QB": -0.162,
+      "RB": -0.227,
+      "WR": -0.307,
+      "TE": -0.329
+     },
+     "delta_rank_mae": 9.54
+    },
+    {
+     "season": 2020,
+     "n": 300,
+     "coverage_pct": 70.6,
+     "us_rho_pooled": 0.639,
+     "system_rho_pooled": 0.944,
+     "delta_rho_pooled": -0.305,
+     "delta_rho_by_pos": {
+      "QB": -0.232,
+      "RB": -0.364,
+      "WR": -0.273,
+      "TE": -0.35
+     },
+     "delta_rank_mae": 10.15
+    },
+    {
+     "season": 2021,
+     "n": 300,
+     "coverage_pct": 65.9,
+     "us_rho_pooled": 0.697,
+     "system_rho_pooled": 0.738,
+     "delta_rho_pooled": -0.041,
+     "delta_rho_by_pos": {
+      "QB": -0.012,
+      "RB": -0.056,
+      "WR": -0.028,
+      "TE": -0.068
+     },
+     "delta_rank_mae": 1.12
+    },
+    {
+     "season": 2022,
+     "n": 300,
+     "coverage_pct": 68.2,
+     "us_rho_pooled": 0.67,
+     "system_rho_pooled": 0.812,
+     "delta_rho_pooled": -0.142,
+     "delta_rho_by_pos": {
+      "QB": -0.192,
+      "RB": -0.085,
+      "WR": -0.118,
+      "TE": -0.174
+     },
+     "delta_rank_mae": 3.9
+    },
+    {
+     "season": 2023,
+     "n": 300,
+     "coverage_pct": 68.8,
+     "us_rho_pooled": 0.652,
+     "system_rho_pooled": 0.755,
+     "delta_rho_pooled": -0.103,
+     "delta_rho_by_pos": {
+      "QB": -0.084,
+      "RB": -0.092,
+      "WR": -0.133,
+      "TE": -0.102
+     },
+     "delta_rank_mae": 2.65
+    },
+    {
+     "season": 2024,
+     "n": 300,
+     "coverage_pct": 68.0,
+     "us_rho_pooled": 0.668,
+     "system_rho_pooled": 0.778,
+     "delta_rho_pooled": -0.11,
+     "delta_rho_by_pos": {
+      "QB": -0.129,
+      "RB": -0.108,
+      "WR": -0.103,
+      "TE": -0.098
+     },
+     "delta_rank_mae": 2.74
+    },
+    {
+     "season": 2025,
+     "n": 300,
+     "coverage_pct": 64.8,
+     "us_rho_pooled": 0.647,
+     "system_rho_pooled": 0.672,
+     "delta_rho_pooled": -0.025,
+     "delta_rho_by_pos": {
+      "QB": -0.055,
+      "RB": -0.05,
+      "WR": 0.018,
+      "TE": -0.014
+     },
+     "delta_rank_mae": -0.24
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.194429,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.867857,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.16,
+    "hi": -0.121,
+    "median": -0.14,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth300_by_source",
+   "population_label": "P2 depth curve \u00b7 top300[by_source]",
+   "source": "espn",
+   "n_seasons": 3,
+   "seasons": [
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 300.0,
+   "n_min": 300,
+   "n_max": 300,
+   "us_rho_pooled": 0.68,
+   "system_rho_pooled": 0.737,
+   "delta_rho_mean": -0.056,
+   "delta_rho_sd_across_seasons": 0.057,
+   "per_season": [
+    {
+     "season": 2023,
+     "n": 300,
+     "coverage_pct": 68.8,
+     "us_rho_pooled": 0.709,
+     "system_rho_pooled": 0.83,
+     "delta_rho_pooled": -0.121,
+     "delta_rho_by_pos": {
+      "QB": -0.106,
+      "RB": -0.092,
+      "WR": -0.161,
+      "TE": -0.124
+     },
+     "delta_rank_mae": 3.83
+    },
+    {
+     "season": 2024,
+     "n": 300,
+     "coverage_pct": 68.0,
+     "us_rho_pooled": 0.664,
+     "system_rho_pooled": 0.697,
+     "delta_rho_pooled": -0.033,
+     "delta_rho_by_pos": {
+      "QB": 0.078,
+      "RB": -0.106,
+      "WR": -0.068,
+      "TE": -0.034
+     },
+     "delta_rank_mae": 1.77
+    },
+    {
+     "season": 2025,
+     "n": 300,
+     "coverage_pct": 64.8,
+     "us_rho_pooled": 0.668,
+     "system_rho_pooled": 0.683,
+     "delta_rho_pooled": -0.015,
+     "delta_rho_by_pos": {
+      "QB": -0.018,
+      "RB": -0.03,
+      "WR": 0.011,
+      "TE": -0.024
+     },
+     "delta_rank_mae": 0.08
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.263333,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.696333,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.088,
+    "hi": -0.025,
+    "median": -0.056,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth100_by_us",
+   "population_label": "P2 depth curve \u00b7 top100[by_us]",
+   "source": "adp",
+   "n_seasons": 6,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+   ],
+   "n_mean": 100.0,
+   "n_min": 100,
+   "n_max": 100,
+   "us_rho_pooled": 0.446,
+   "system_rho_pooled": 0.424,
+   "delta_rho_mean": 0.023,
+   "delta_rho_sd_across_seasons": 0.045,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 100,
+     "coverage_pct": 24.8,
+     "us_rho_pooled": 0.51,
+     "system_rho_pooled": 0.426,
+     "delta_rho_pooled": 0.084,
+     "delta_rho_by_pos": {
+      "QB": 0.081,
+      "RB": 0.137,
+      "WR": 0.033
+     },
+     "delta_rank_mae": -0.46
+    },
+    {
+     "season": 2020,
+     "n": 100,
+     "coverage_pct": 23.5,
+     "us_rho_pooled": 0.439,
+     "system_rho_pooled": 0.49,
+     "delta_rho_pooled": -0.051,
+     "delta_rho_by_pos": {
+      "QB": -0.07,
+      "RB": -0.035,
+      "WR": 0.02,
+      "TE": -0.118
+     },
+     "delta_rank_mae": -0.04
+    },
+    {
+     "season": 2021,
+     "n": 100,
+     "coverage_pct": 22.0,
+     "us_rho_pooled": 0.47,
+     "system_rho_pooled": 0.454,
+     "delta_rho_pooled": 0.016,
+     "delta_rho_by_pos": {
+      "QB": 0.044,
+      "RB": 0.051,
+      "WR": 0.082,
+      "TE": -0.112
+     },
+     "delta_rank_mae": -0.6
+    },
+    {
+     "season": 2022,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.421,
+     "system_rho_pooled": 0.372,
+     "delta_rho_pooled": 0.049,
+     "delta_rho_by_pos": {
+      "QB": 0.02,
+      "RB": 0.012,
+      "WR": 0.081,
+      "TE": 0.082
+     },
+     "delta_rank_mae": -0.48
+    },
+    {
+     "season": 2023,
+     "n": 100,
+     "coverage_pct": 22.9,
+     "us_rho_pooled": 0.331,
+     "system_rho_pooled": 0.324,
+     "delta_rho_pooled": 0.007,
+     "delta_rho_by_pos": {
+      "QB": 0.017,
+      "RB": 0.046,
+      "WR": 0.054,
+      "TE": -0.091
+     },
+     "delta_rank_mae": -0.07
+    },
+    {
+     "season": 2024,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.506,
+     "system_rho_pooled": 0.476,
+     "delta_rho_pooled": 0.03,
+     "delta_rho_by_pos": {
+      "QB": 0.046,
+      "RB": 0.031,
+      "WR": 0.012
+     },
+     "delta_rank_mae": -0.26
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.576333,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.527333,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.014,
+    "hi": 0.057,
+    "median": 0.023,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth100_by_us",
+   "population_label": "P2 depth curve \u00b7 top100[by_us]",
+   "source": "mfl_adp",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 100.0,
+   "n_min": 100,
+   "n_max": 100,
+   "us_rho_pooled": 0.457,
+   "system_rho_pooled": 0.423,
+   "delta_rho_mean": 0.034,
+   "delta_rho_sd_across_seasons": 0.033,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 100,
+     "coverage_pct": 24.8,
+     "us_rho_pooled": 0.539,
+     "system_rho_pooled": 0.473,
+     "delta_rho_pooled": 0.066,
+     "delta_rho_by_pos": {
+      "QB": 0.024,
+      "RB": 0.156,
+      "WR": 0.017
+     },
+     "delta_rank_mae": -0.45
+    },
+    {
+     "season": 2020,
+     "n": 100,
+     "coverage_pct": 23.5,
+     "us_rho_pooled": 0.491,
+     "system_rho_pooled": 0.475,
+     "delta_rho_pooled": 0.016,
+     "delta_rho_by_pos": {
+      "QB": 0.131,
+      "RB": 0.073,
+      "WR": 0.008,
+      "TE": -0.146
+     },
+     "delta_rank_mae": -0.54
+    },
+    {
+     "season": 2021,
+     "n": 100,
+     "coverage_pct": 22.0,
+     "us_rho_pooled": 0.514,
+     "system_rho_pooled": 0.439,
+     "delta_rho_pooled": 0.075,
+     "delta_rho_by_pos": {
+      "QB": 0.083,
+      "RB": 0.122,
+      "WR": 0.016,
+      "TE": 0.078
+     },
+     "delta_rank_mae": -0.44
+    },
+    {
+     "season": 2022,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.428,
+     "system_rho_pooled": 0.404,
+     "delta_rho_pooled": 0.024,
+     "delta_rho_by_pos": {
+      "QB": 0.034,
+      "RB": -0.017,
+      "WR": 0.063,
+      "TE": 0.014
+     },
+     "delta_rank_mae": -0.34
+    },
+    {
+     "season": 2023,
+     "n": 100,
+     "coverage_pct": 22.9,
+     "us_rho_pooled": 0.377,
+     "system_rho_pooled": 0.399,
+     "delta_rho_pooled": -0.022,
+     "delta_rho_by_pos": {
+      "QB": -0.064,
+      "RB": 0.051,
+      "WR": 0.018,
+      "TE": -0.091
+     },
+     "delta_rank_mae": 0.12
+    },
+    {
+     "season": 2024,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.516,
+     "system_rho_pooled": 0.468,
+     "delta_rho_pooled": 0.048,
+     "delta_rho_by_pos": {
+      "QB": 0.033,
+      "RB": 0.152,
+      "WR": -0.039
+     },
+     "delta_rank_mae": -0.22
+    },
+    {
+     "season": 2025,
+     "n": 100,
+     "coverage_pct": 21.6,
+     "us_rho_pooled": 0.332,
+     "system_rho_pooled": 0.3,
+     "delta_rho_pooled": 0.032,
+     "delta_rho_by_pos": {
+      "QB": 0.065,
+      "RB": 0.072,
+      "WR": -0.04
+     },
+     "delta_rank_mae": -0.14
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.577429,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.494571,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": 0.004,
+    "hi": 0.062,
+    "median": 0.034,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth100_by_us",
+   "population_label": "P2 depth curve \u00b7 top100[by_us]",
+   "source": "ecr",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 100.0,
+   "n_min": 100,
+   "n_max": 100,
+   "us_rho_pooled": 0.452,
+   "system_rho_pooled": 0.436,
+   "delta_rho_mean": 0.016,
+   "delta_rho_sd_across_seasons": 0.027,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 100,
+     "coverage_pct": 24.8,
+     "us_rho_pooled": 0.529,
+     "system_rho_pooled": 0.502,
+     "delta_rho_pooled": 0.027,
+     "delta_rho_by_pos": {
+      "QB": 0.011,
+      "RB": 0.104,
+      "WR": -0.034
+     },
+     "delta_rank_mae": -0.03
+    },
+    {
+     "season": 2020,
+     "n": 100,
+     "coverage_pct": 23.5,
+     "us_rho_pooled": 0.48,
+     "system_rho_pooled": 0.471,
+     "delta_rho_pooled": 0.009,
+     "delta_rho_by_pos": {
+      "QB": -0.059,
+      "RB": 0.09,
+      "WR": 0.019,
+      "TE": -0.012
+     },
+     "delta_rank_mae": 0.01
+    },
+    {
+     "season": 2021,
+     "n": 100,
+     "coverage_pct": 22.0,
+     "us_rho_pooled": 0.502,
+     "system_rho_pooled": 0.445,
+     "delta_rho_pooled": 0.057,
+     "delta_rho_by_pos": {
+      "QB": -0.035,
+      "RB": 0.057,
+      "WR": 0.088,
+      "TE": 0.119
+     },
+     "delta_rank_mae": -0.28
+    },
+    {
+     "season": 2022,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.428,
+     "system_rho_pooled": 0.428,
+     "delta_rho_pooled": 0.0,
+     "delta_rho_by_pos": {
+      "QB": -0.019,
+      "RB": -0.045,
+      "WR": 0.048,
+      "TE": 0.014
+     },
+     "delta_rank_mae": -0.44
+    },
+    {
+     "season": 2023,
+     "n": 100,
+     "coverage_pct": 22.9,
+     "us_rho_pooled": 0.377,
+     "system_rho_pooled": 0.362,
+     "delta_rho_pooled": 0.015,
+     "delta_rho_by_pos": {
+      "QB": 0.022,
+      "RB": 0.073,
+      "WR": 0.003,
+      "TE": -0.036
+     },
+     "delta_rank_mae": -0.04
+    },
+    {
+     "season": 2024,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.516,
+     "system_rho_pooled": 0.481,
+     "delta_rho_pooled": 0.035,
+     "delta_rho_by_pos": {
+      "QB": 0.046,
+      "RB": 0.079,
+      "WR": -0.018
+     },
+     "delta_rank_mae": -0.3
+    },
+    {
+     "season": 2025,
+     "n": 100,
+     "coverage_pct": 21.6,
+     "us_rho_pooled": 0.332,
+     "system_rho_pooled": 0.36,
+     "delta_rho_pooled": -0.028,
+     "delta_rho_by_pos": {
+      "QB": 0.01,
+      "RB": -0.001,
+      "WR": -0.093
+     },
+     "delta_rank_mae": 0.2
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.564429,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.527714,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.012,
+    "hi": 0.043,
+    "median": 0.016,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth100_by_us",
+   "population_label": "P2 depth curve \u00b7 top100[by_us]",
+   "source": "sleeper",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 100.0,
+   "n_min": 100,
+   "n_max": 100,
+   "us_rho_pooled": 0.455,
+   "system_rho_pooled": 0.622,
+   "delta_rho_mean": -0.168,
+   "delta_rho_sd_across_seasons": 0.175,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 100,
+     "coverage_pct": 24.8,
+     "us_rho_pooled": 0.546,
+     "system_rho_pooled": 0.843,
+     "delta_rho_pooled": -0.297,
+     "delta_rho_by_pos": {
+      "QB": -0.245,
+      "RB": -0.35,
+      "WR": -0.297
+     },
+     "delta_rank_mae": 3.24
+    },
+    {
+     "season": 2020,
+     "n": 100,
+     "coverage_pct": 23.5,
+     "us_rho_pooled": 0.501,
+     "system_rho_pooled": 0.946,
+     "delta_rho_pooled": -0.445,
+     "delta_rho_by_pos": {
+      "QB": -0.261,
+      "RB": -0.323,
+      "WR": -0.47,
+      "TE": -0.728
+     },
+     "delta_rank_mae": 3.72
+    },
+    {
+     "season": 2021,
+     "n": 100,
+     "coverage_pct": 22.0,
+     "us_rho_pooled": 0.482,
+     "system_rho_pooled": 0.487,
+     "delta_rho_pooled": -0.005,
+     "delta_rho_by_pos": {
+      "QB": -0.053,
+      "RB": -0.084,
+      "WR": 0.041,
+      "TE": 0.078
+     },
+     "delta_rank_mae": 0.14
+    },
+    {
+     "season": 2022,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.428,
+     "system_rho_pooled": 0.724,
+     "delta_rho_pooled": -0.296,
+     "delta_rho_by_pos": {
+      "QB": -0.237,
+      "RB": -0.409,
+      "WR": -0.256,
+      "TE": -0.286
+     },
+     "delta_rank_mae": 1.82
+    },
+    {
+     "season": 2023,
+     "n": 100,
+     "coverage_pct": 22.9,
+     "us_rho_pooled": 0.377,
+     "system_rho_pooled": 0.4,
+     "delta_rho_pooled": -0.023,
+     "delta_rho_by_pos": {
+      "QB": -0.072,
+      "RB": 0.058,
+      "WR": -0.024,
+      "TE": -0.054
+     },
+     "delta_rank_mae": 0.17
+    },
+    {
+     "season": 2024,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.516,
+     "system_rho_pooled": 0.579,
+     "delta_rho_pooled": -0.063,
+     "delta_rho_by_pos": {
+      "QB": -0.158,
+      "RB": 0.071,
+      "WR": -0.101
+     },
+     "delta_rank_mae": 0.5
+    },
+    {
+     "season": 2025,
+     "n": 100,
+     "coverage_pct": 21.6,
+     "us_rho_pooled": 0.332,
+     "system_rho_pooled": 0.376,
+     "delta_rho_pooled": -0.044,
+     "delta_rho_by_pos": {
+      "QB": -0.113,
+      "RB": 0.032,
+      "WR": -0.05
+     },
+     "delta_rank_mae": 0.14
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.377857,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.704286,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.215,
+    "hi": -0.115,
+    "median": -0.166,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth100_by_us",
+   "population_label": "P2 depth curve \u00b7 top100[by_us]",
+   "source": "espn",
+   "n_seasons": 3,
+   "seasons": [
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 100.0,
+   "n_min": 100,
+   "n_max": 100,
+   "us_rho_pooled": 0.406,
+   "system_rho_pooled": 0.531,
+   "delta_rho_mean": -0.125,
+   "delta_rho_sd_across_seasons": 0.184,
+   "per_season": [
+    {
+     "season": 2023,
+     "n": 100,
+     "coverage_pct": 22.9,
+     "us_rho_pooled": 0.371,
+     "system_rho_pooled": 0.708,
+     "delta_rho_pooled": -0.337,
+     "delta_rho_by_pos": {
+      "QB": -0.239,
+      "RB": -0.502,
+      "WR": -0.132,
+      "TE": -0.473
+     },
+     "delta_rank_mae": 1.84
+    },
+    {
+     "season": 2024,
+     "n": 100,
+     "coverage_pct": 22.7,
+     "us_rho_pooled": 0.516,
+     "system_rho_pooled": 0.525,
+     "delta_rho_pooled": -0.009,
+     "delta_rho_by_pos": {
+      "QB": 0.106,
+      "RB": -0.042,
+      "WR": -0.091
+     },
+     "delta_rank_mae": -0.16
+    },
+    {
+     "season": 2025,
+     "n": 100,
+     "coverage_pct": 21.6,
+     "us_rho_pooled": 0.332,
+     "system_rho_pooled": 0.361,
+     "delta_rho_pooled": -0.029,
+     "delta_rho_by_pos": {
+      "QB": -0.007,
+      "RB": -0.01,
+      "WR": -0.071
+     },
+     "delta_rank_mae": 0.14
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.468667,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.584,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.204,
+    "hi": -0.033,
+    "median": -0.12,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth150_by_us",
+   "population_label": "P2 depth curve \u00b7 top150[by_us]",
+   "source": "adp",
+   "n_seasons": 6,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+   ],
+   "n_mean": 148.3,
+   "n_min": 140,
+   "n_max": 150,
+   "us_rho_pooled": 0.527,
+   "system_rho_pooled": 0.501,
+   "delta_rho_mean": 0.026,
+   "delta_rho_sd_across_seasons": 0.038,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 150,
+     "coverage_pct": 37.1,
+     "us_rho_pooled": 0.589,
+     "system_rho_pooled": 0.548,
+     "delta_rho_pooled": 0.041,
+     "delta_rho_by_pos": {
+      "QB": 0.081,
+      "RB": -0.008,
+      "WR": 0.011,
+      "TE": 0.079
+     },
+     "delta_rank_mae": -0.18
+    },
+    {
+     "season": 2020,
+     "n": 150,
+     "coverage_pct": 35.3,
+     "us_rho_pooled": 0.477,
+     "system_rho_pooled": 0.513,
+     "delta_rho_pooled": -0.036,
+     "delta_rho_by_pos": {
+      "QB": -0.07,
+      "RB": -0.1,
+      "WR": 0.085,
+      "TE": -0.059
+     },
+     "delta_rank_mae": 0.22
+    },
+    {
+     "season": 2021,
+     "n": 150,
+     "coverage_pct": 33.0,
+     "us_rho_pooled": 0.595,
+     "system_rho_pooled": 0.519,
+     "delta_rho_pooled": 0.076,
+     "delta_rho_by_pos": {
+      "QB": 0.086,
+      "RB": -0.011,
+      "WR": 0.086,
+      "TE": 0.144
+     },
+     "delta_rank_mae": -0.43
+    },
+    {
+     "season": 2022,
+     "n": 140,
+     "coverage_pct": 31.8,
+     "us_rho_pooled": 0.533,
+     "system_rho_pooled": 0.486,
+     "delta_rho_pooled": 0.047,
+     "delta_rho_by_pos": {
+      "QB": 0.02,
+      "RB": 0.01,
+      "WR": 0.105,
+      "TE": 0.054
+     },
+     "delta_rank_mae": -0.8
+    },
+    {
+     "season": 2023,
+     "n": 150,
+     "coverage_pct": 34.4,
+     "us_rho_pooled": 0.494,
+     "system_rho_pooled": 0.485,
+     "delta_rho_pooled": 0.009,
+     "delta_rho_by_pos": {
+      "QB": 0.017,
+      "RB": 0.076,
+      "WR": 0.006,
+      "TE": -0.059
+     },
+     "delta_rank_mae": -0.33
+    },
+    {
+     "season": 2024,
+     "n": 150,
+     "coverage_pct": 34.0,
+     "us_rho_pooled": 0.472,
+     "system_rho_pooled": 0.454,
+     "delta_rho_pooled": 0.018,
+     "delta_rho_by_pos": {
+      "QB": 0.054,
+      "RB": 0.034,
+      "WR": -0.009,
+      "TE": -0.009
+     },
+     "delta_rank_mae": -0.3
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.499167,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.547333,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.003,
+    "hi": 0.055,
+    "median": 0.024,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth150_by_us",
+   "population_label": "P2 depth curve \u00b7 top150[by_us]",
+   "source": "mfl_adp",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 150.0,
+   "n_min": 150,
+   "n_max": 150,
+   "us_rho_pooled": 0.551,
+   "system_rho_pooled": 0.524,
+   "delta_rho_mean": 0.026,
+   "delta_rho_sd_across_seasons": 0.041,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 150,
+     "coverage_pct": 37.1,
+     "us_rho_pooled": 0.703,
+     "system_rho_pooled": 0.62,
+     "delta_rho_pooled": 0.083,
+     "delta_rho_by_pos": {
+      "QB": 0.06,
+      "RB": 0.032,
+      "WR": -0.012,
+      "TE": 0.254
+     },
+     "delta_rank_mae": -0.51
+    },
+    {
+     "season": 2020,
+     "n": 150,
+     "coverage_pct": 35.3,
+     "us_rho_pooled": 0.472,
+     "system_rho_pooled": 0.482,
+     "delta_rho_pooled": -0.01,
+     "delta_rho_by_pos": {
+      "QB": 0.033,
+      "RB": -0.107,
+      "WR": 0.076,
+      "TE": -0.044
+     },
+     "delta_rank_mae": -0.14
+    },
+    {
+     "season": 2021,
+     "n": 150,
+     "coverage_pct": 33.0,
+     "us_rho_pooled": 0.549,
+     "system_rho_pooled": 0.468,
+     "delta_rho_pooled": 0.081,
+     "delta_rho_by_pos": {
+      "QB": 0.132,
+      "RB": 0.005,
+      "WR": 0.078,
+      "TE": 0.109
+     },
+     "delta_rank_mae": -0.69
+    },
+    {
+     "season": 2022,
+     "n": 150,
+     "coverage_pct": 34.1,
+     "us_rho_pooled": 0.548,
+     "system_rho_pooled": 0.52,
+     "delta_rho_pooled": 0.028,
+     "delta_rho_by_pos": {
+      "QB": 0.06,
+      "RB": 0.005,
+      "WR": 0.066,
+      "TE": -0.02
+     },
+     "delta_rank_mae": -0.38
+    },
+    {
+     "season": 2023,
+     "n": 150,
+     "coverage_pct": 34.4,
+     "us_rho_pooled": 0.552,
+     "system_rho_pooled": 0.552,
+     "delta_rho_pooled": 0.0,
+     "delta_rho_by_pos": {
+      "QB": -0.066,
+      "RB": 0.031,
+      "WR": 0.013,
+      "TE": 0.025
+     },
+     "delta_rank_mae": -0.19
+    },
+    {
+     "season": 2024,
+     "n": 150,
+     "coverage_pct": 34.0,
+     "us_rho_pooled": 0.573,
+     "system_rho_pooled": 0.59,
+     "delta_rho_pooled": -0.017,
+     "delta_rho_by_pos": {
+      "QB": -0.021,
+      "RB": 0.077,
+      "WR": -0.017,
+      "TE": -0.107
+     },
+     "delta_rank_mae": -0.04
+    },
+    {
+     "season": 2025,
+     "n": 150,
+     "coverage_pct": 32.4,
+     "us_rho_pooled": 0.457,
+     "system_rho_pooled": 0.439,
+     "delta_rho_pooled": 0.018,
+     "delta_rho_by_pos": {
+      "QB": 0.049,
+      "RB": 0.051,
+      "WR": -0.027,
+      "TE": 0.0
+     },
+     "delta_rank_mae": -0.08
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.475571,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.514143,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.002,
+    "hi": 0.055,
+    "median": 0.026,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth150_by_us",
+   "population_label": "P2 depth curve \u00b7 top150[by_us]",
+   "source": "ecr",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 150.0,
+   "n_min": 150,
+   "n_max": 150,
+   "us_rho_pooled": 0.551,
+   "system_rho_pooled": 0.534,
+   "delta_rho_mean": 0.016,
+   "delta_rho_sd_across_seasons": 0.025,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 150,
+     "coverage_pct": 37.1,
+     "us_rho_pooled": 0.69,
+     "system_rho_pooled": 0.634,
+     "delta_rho_pooled": 0.056,
+     "delta_rho_by_pos": {
+      "QB": 0.01,
+      "RB": 0.033,
+      "WR": -0.023,
+      "TE": 0.201
+     },
+     "delta_rank_mae": -0.16
+    },
+    {
+     "season": 2020,
+     "n": 150,
+     "coverage_pct": 35.3,
+     "us_rho_pooled": 0.478,
+     "system_rho_pooled": 0.502,
+     "delta_rho_pooled": -0.024,
+     "delta_rho_by_pos": {
+      "QB": -0.054,
+      "RB": -0.066,
+      "WR": 0.073,
+      "TE": -0.05
+     },
+     "delta_rank_mae": 0.12
+    },
+    {
+     "season": 2021,
+     "n": 150,
+     "coverage_pct": 33.0,
+     "us_rho_pooled": 0.547,
+     "system_rho_pooled": 0.51,
+     "delta_rho_pooled": 0.037,
+     "delta_rho_by_pos": {
+      "QB": -0.031,
+      "RB": 0.033,
+      "WR": 0.028,
+      "TE": 0.12
+     },
+     "delta_rank_mae": -0.2
+    },
+    {
+     "season": 2022,
+     "n": 150,
+     "coverage_pct": 34.1,
+     "us_rho_pooled": 0.549,
+     "system_rho_pooled": 0.542,
+     "delta_rho_pooled": 0.007,
+     "delta_rho_by_pos": {
+      "QB": -0.022,
+      "RB": 0.02,
+      "WR": 0.056,
+      "TE": -0.027
+     },
+     "delta_rank_mae": -0.54
+    },
+    {
+     "season": 2023,
+     "n": 150,
+     "coverage_pct": 34.4,
+     "us_rho_pooled": 0.56,
+     "system_rho_pooled": 0.543,
+     "delta_rho_pooled": 0.017,
+     "delta_rho_by_pos": {
+      "QB": 0.022,
+      "RB": 0.035,
+      "WR": -0.005,
+      "TE": 0.018
+     },
+     "delta_rank_mae": -0.02
+    },
+    {
+     "season": 2024,
+     "n": 150,
+     "coverage_pct": 34.0,
+     "us_rho_pooled": 0.573,
+     "system_rho_pooled": 0.561,
+     "delta_rho_pooled": 0.012,
+     "delta_rho_by_pos": {
+      "QB": 0.025,
+      "RB": 0.037,
+      "WR": -0.001,
+      "TE": -0.017
+     },
+     "delta_rank_mae": -0.28
+    },
+    {
+     "season": 2025,
+     "n": 150,
+     "coverage_pct": 32.4,
+     "us_rho_pooled": 0.457,
+     "system_rho_pooled": 0.448,
+     "delta_rho_pooled": 0.009,
+     "delta_rho_by_pos": {
+      "QB": 0.01,
+      "RB": 0.008,
+      "WR": -0.055,
+      "TE": 0.074
+     },
+     "delta_rank_mae": 0.2
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.465714,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.530286,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.008,
+    "hi": 0.039,
+    "median": 0.016,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth150_by_us",
+   "population_label": "P2 depth curve \u00b7 top150[by_us]",
+   "source": "sleeper",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 150.0,
+   "n_min": 150,
+   "n_max": 150,
+   "us_rho_pooled": 0.547,
+   "system_rho_pooled": 0.704,
+   "delta_rho_mean": -0.157,
+   "delta_rho_sd_across_seasons": 0.151,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 150,
+     "coverage_pct": 37.1,
+     "us_rho_pooled": 0.649,
+     "system_rho_pooled": 0.902,
+     "delta_rho_pooled": -0.253,
+     "delta_rho_by_pos": {
+      "QB": -0.193,
+      "RB": -0.222,
+      "WR": -0.232,
+      "TE": -0.362
+     },
+     "delta_rank_mae": 4.17
+    },
+    {
+     "season": 2020,
+     "n": 150,
+     "coverage_pct": 35.3,
+     "us_rho_pooled": 0.494,
+     "system_rho_pooled": 0.934,
+     "delta_rho_pooled": -0.44,
+     "delta_rho_by_pos": {
+      "QB": -0.338,
+      "RB": -0.34,
+      "WR": -0.271,
+      "TE": -0.809
+     },
+     "delta_rank_mae": 5.32
+    },
+    {
+     "season": 2021,
+     "n": 150,
+     "coverage_pct": 33.0,
+     "us_rho_pooled": 0.551,
+     "system_rho_pooled": 0.622,
+     "delta_rho_pooled": -0.071,
+     "delta_rho_by_pos": {
+      "QB": -0.048,
+      "RB": -0.117,
+      "WR": -0.003,
+      "TE": -0.118
+     },
+     "delta_rank_mae": 0.8
+    },
+    {
+     "season": 2022,
+     "n": 150,
+     "coverage_pct": 34.1,
+     "us_rho_pooled": 0.554,
+     "system_rho_pooled": 0.746,
+     "delta_rho_pooled": -0.192,
+     "delta_rho_by_pos": {
+      "QB": -0.172,
+      "RB": -0.112,
+      "WR": -0.147,
+      "TE": -0.334
+     },
+     "delta_rank_mae": 2.26
+    },
+    {
+     "season": 2023,
+     "n": 150,
+     "coverage_pct": 34.4,
+     "us_rho_pooled": 0.554,
+     "system_rho_pooled": 0.62,
+     "delta_rho_pooled": -0.066,
+     "delta_rho_by_pos": {
+      "QB": -0.076,
+      "RB": -0.065,
+      "WR": -0.056,
+      "TE": -0.066
+     },
+     "delta_rank_mae": 0.52
+    },
+    {
+     "season": 2024,
+     "n": 150,
+     "coverage_pct": 34.0,
+     "us_rho_pooled": 0.573,
+     "system_rho_pooled": 0.644,
+     "delta_rho_pooled": -0.071,
+     "delta_rho_by_pos": {
+      "QB": -0.11,
+      "RB": 0.014,
+      "WR": -0.09,
+      "TE": -0.101
+     },
+     "delta_rank_mae": 0.86
+    },
+    {
+     "season": 2025,
+     "n": 150,
+     "coverage_pct": 32.4,
+     "us_rho_pooled": 0.457,
+     "system_rho_pooled": 0.461,
+     "delta_rho_pooled": -0.004,
+     "delta_rho_by_pos": {
+      "QB": -0.08,
+      "RB": 0.043,
+      "WR": -0.039,
+      "TE": 0.059
+     },
+     "delta_rank_mae": 0.24
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.295857,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.668,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.193,
+    "hi": -0.117,
+    "median": -0.154,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth150_by_us",
+   "population_label": "P2 depth curve \u00b7 top150[by_us]",
+   "source": "espn",
+   "n_seasons": 3,
+   "seasons": [
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 150.0,
+   "n_min": 150,
+   "n_max": 150,
+   "us_rho_pooled": 0.527,
+   "system_rho_pooled": 0.584,
+   "delta_rho_mean": -0.058,
+   "delta_rho_sd_across_seasons": 0.143,
+   "per_season": [
+    {
+     "season": 2023,
+     "n": 150,
+     "coverage_pct": 34.4,
+     "us_rho_pooled": 0.55,
+     "system_rho_pooled": 0.771,
+     "delta_rho_pooled": -0.221,
+     "delta_rho_by_pos": {
+      "QB": -0.194,
+      "RB": -0.343,
+      "WR": -0.176,
+      "TE": -0.17
+     },
+     "delta_rank_mae": 2.8
+    },
+    {
+     "season": 2024,
+     "n": 150,
+     "coverage_pct": 34.0,
+     "us_rho_pooled": 0.573,
+     "system_rho_pooled": 0.53,
+     "delta_rho_pooled": 0.043,
+     "delta_rho_by_pos": {
+      "QB": 0.105,
+      "RB": -0.054,
+      "WR": -0.073,
+      "TE": 0.193
+     },
+     "delta_rank_mae": 0.12
+    },
+    {
+     "season": 2025,
+     "n": 150,
+     "coverage_pct": 32.4,
+     "us_rho_pooled": 0.457,
+     "system_rho_pooled": 0.452,
+     "delta_rho_pooled": 0.005,
+     "delta_rho_by_pos": {
+      "QB": -0.004,
+      "RB": 0.032,
+      "WR": -0.055,
+      "TE": 0.046
+     },
+     "delta_rank_mae": 0.16
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.415667,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.578667,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.114,
+    "hi": -0.004,
+    "median": -0.058,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth200_by_us",
+   "population_label": "P2 depth curve \u00b7 top200[by_us]",
+   "source": "adp",
+   "n_seasons": 6,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+   ],
+   "n_mean": 162.0,
+   "n_min": 140,
+   "n_max": 172,
+   "us_rho_pooled": 0.517,
+   "system_rho_pooled": 0.494,
+   "delta_rho_mean": 0.022,
+   "delta_rho_sd_across_seasons": 0.04,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 161,
+     "coverage_pct": 39.9,
+     "us_rho_pooled": 0.544,
+     "system_rho_pooled": 0.509,
+     "delta_rho_pooled": 0.035,
+     "delta_rho_by_pos": {
+      "QB": 0.081,
+      "RB": 0.006,
+      "WR": -0.011,
+      "TE": 0.066
+     },
+     "delta_rank_mae": -0.15
+    },
+    {
+     "season": 2020,
+     "n": 160,
+     "coverage_pct": 37.6,
+     "us_rho_pooled": 0.482,
+     "system_rho_pooled": 0.526,
+     "delta_rho_pooled": -0.044,
+     "delta_rho_by_pos": {
+      "QB": -0.07,
+      "RB": -0.125,
+      "WR": 0.077,
+      "TE": -0.059
+     },
+     "delta_rank_mae": 0.52
+    },
+    {
+     "season": 2021,
+     "n": 170,
+     "coverage_pct": 37.4,
+     "us_rho_pooled": 0.6,
+     "system_rho_pooled": 0.528,
+     "delta_rho_pooled": 0.072,
+     "delta_rho_by_pos": {
+      "QB": 0.084,
+      "RB": -0.028,
+      "WR": 0.075,
+      "TE": 0.156
+     },
+     "delta_rank_mae": -0.12
+    },
+    {
+     "season": 2022,
+     "n": 140,
+     "coverage_pct": 31.8,
+     "us_rho_pooled": 0.533,
+     "system_rho_pooled": 0.486,
+     "delta_rho_pooled": 0.047,
+     "delta_rho_by_pos": {
+      "QB": 0.02,
+      "RB": 0.01,
+      "WR": 0.105,
+      "TE": 0.054
+     },
+     "delta_rank_mae": -0.8
+    },
+    {
+     "season": 2023,
+     "n": 169,
+     "coverage_pct": 38.8,
+     "us_rho_pooled": 0.429,
+     "system_rho_pooled": 0.429,
+     "delta_rho_pooled": 0.0,
+     "delta_rho_by_pos": {
+      "QB": 0.017,
+      "RB": 0.062,
+      "WR": 0.003,
+      "TE": -0.082
+     },
+     "delta_rank_mae": -0.23
+    },
+    {
+     "season": 2024,
+     "n": 172,
+     "coverage_pct": 39.0,
+     "us_rho_pooled": 0.512,
+     "system_rho_pooled": 0.489,
+     "delta_rho_pooled": 0.023,
+     "delta_rho_by_pos": {
+      "QB": 0.054,
+      "RB": 0.073,
+      "WR": -0.029,
+      "TE": -0.008
+     },
+     "delta_rank_mae": -0.48
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.5055,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.471167,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.006,
+    "hi": 0.051,
+    "median": 0.021,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth200_by_us",
+   "population_label": "P2 depth curve \u00b7 top200[by_us]",
+   "source": "mfl_adp",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 200.0,
+   "n_min": 200,
+   "n_max": 200,
+   "us_rho_pooled": 0.589,
+   "system_rho_pooled": 0.573,
+   "delta_rho_mean": 0.016,
+   "delta_rho_sd_across_seasons": 0.036,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 200,
+     "coverage_pct": 49.5,
+     "us_rho_pooled": 0.623,
+     "system_rho_pooled": 0.572,
+     "delta_rho_pooled": 0.051,
+     "delta_rho_by_pos": {
+      "QB": 0.16,
+      "RB": -0.053,
+      "WR": -0.008,
+      "TE": 0.102
+     },
+     "delta_rank_mae": 0.11
+    },
+    {
+     "season": 2020,
+     "n": 200,
+     "coverage_pct": 47.1,
+     "us_rho_pooled": 0.611,
+     "system_rho_pooled": 0.61,
+     "delta_rho_pooled": 0.001,
+     "delta_rho_by_pos": {
+      "QB": 0.027,
+      "RB": -0.056,
+      "WR": 0.029,
+      "TE": 0.007
+     },
+     "delta_rank_mae": -0.03
+    },
+    {
+     "season": 2021,
+     "n": 200,
+     "coverage_pct": 44.0,
+     "us_rho_pooled": 0.667,
+     "system_rho_pooled": 0.615,
+     "delta_rho_pooled": 0.052,
+     "delta_rho_by_pos": {
+      "QB": 0.094,
+      "RB": -0.017,
+      "WR": 0.065,
+      "TE": 0.066
+     },
+     "delta_rank_mae": -0.43
+    },
+    {
+     "season": 2022,
+     "n": 200,
+     "coverage_pct": 45.5,
+     "us_rho_pooled": 0.631,
+     "system_rho_pooled": 0.585,
+     "delta_rho_pooled": 0.046,
+     "delta_rho_by_pos": {
+      "QB": 0.03,
+      "RB": 0.004,
+      "WR": 0.052,
+      "TE": 0.101
+     },
+     "delta_rank_mae": -0.56
+    },
+    {
+     "season": 2023,
+     "n": 200,
+     "coverage_pct": 45.9,
+     "us_rho_pooled": 0.555,
+     "system_rho_pooled": 0.57,
+     "delta_rho_pooled": -0.015,
+     "delta_rho_by_pos": {
+      "QB": -0.097,
+      "RB": 0.022,
+      "WR": -0.004,
+      "TE": 0.019
+     },
+     "delta_rank_mae": -0.08
+    },
+    {
+     "season": 2024,
+     "n": 200,
+     "coverage_pct": 45.4,
+     "us_rho_pooled": 0.502,
+     "system_rho_pooled": 0.542,
+     "delta_rho_pooled": -0.04,
+     "delta_rho_by_pos": {
+      "QB": -0.106,
+      "RB": 0.049,
+      "WR": -0.045,
+      "TE": -0.059
+     },
+     "delta_rank_mae": 0.21
+    },
+    {
+     "season": 2025,
+     "n": 200,
+     "coverage_pct": 43.2,
+     "us_rho_pooled": 0.531,
+     "system_rho_pooled": 0.516,
+     "delta_rho_pooled": 0.015,
+     "delta_rho_by_pos": {
+      "QB": 0.008,
+      "RB": -0.017,
+      "WR": 0.04,
+      "TE": 0.028
+     },
+     "delta_rank_mae": -0.51
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.427143,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.566714,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.006,
+    "hi": 0.038,
+    "median": 0.017,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth200_by_us",
+   "population_label": "P2 depth curve \u00b7 top200[by_us]",
+   "source": "ecr",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 200.0,
+   "n_min": 200,
+   "n_max": 200,
+   "us_rho_pooled": 0.595,
+   "system_rho_pooled": 0.595,
+   "delta_rho_mean": -0.0,
+   "delta_rho_sd_across_seasons": 0.018,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 200,
+     "coverage_pct": 49.5,
+     "us_rho_pooled": 0.618,
+     "system_rho_pooled": 0.622,
+     "delta_rho_pooled": -0.004,
+     "delta_rho_by_pos": {
+      "QB": 0.01,
+      "RB": -0.065,
+      "WR": -0.022,
+      "TE": 0.059
+     },
+     "delta_rank_mae": 0.45
+    },
+    {
+     "season": 2020,
+     "n": 200,
+     "coverage_pct": 47.1,
+     "us_rho_pooled": 0.59,
+     "system_rho_pooled": 0.614,
+     "delta_rho_pooled": -0.024,
+     "delta_rho_by_pos": {
+      "QB": -0.037,
+      "RB": -0.059,
+      "WR": 0.013,
+      "TE": -0.015
+     },
+     "delta_rank_mae": 0.5
+    },
+    {
+     "season": 2021,
+     "n": 200,
+     "coverage_pct": 44.0,
+     "us_rho_pooled": 0.683,
+     "system_rho_pooled": 0.669,
+     "delta_rho_pooled": 0.014,
+     "delta_rho_by_pos": {
+      "QB": -0.034,
+      "RB": 0.005,
+      "WR": -0.003,
+      "TE": 0.089
+     },
+     "delta_rank_mae": 0.29
+    },
+    {
+     "season": 2022,
+     "n": 200,
+     "coverage_pct": 45.5,
+     "us_rho_pooled": 0.624,
+     "system_rho_pooled": 0.594,
+     "delta_rho_pooled": 0.03,
+     "delta_rho_by_pos": {
+      "QB": -0.021,
+      "RB": 0.003,
+      "WR": 0.019,
+      "TE": 0.12
+     },
+     "delta_rank_mae": -0.3
+    },
+    {
+     "season": 2023,
+     "n": 200,
+     "coverage_pct": 45.9,
+     "us_rho_pooled": 0.557,
+     "system_rho_pooled": 0.568,
+     "delta_rho_pooled": -0.011,
+     "delta_rho_by_pos": {
+      "QB": -0.009,
+      "RB": 0.029,
+      "WR": -0.011,
+      "TE": -0.051
+     },
+     "delta_rank_mae": 0.06
+    },
+    {
+     "season": 2024,
+     "n": 200,
+     "coverage_pct": 45.4,
+     "us_rho_pooled": 0.558,
+     "system_rho_pooled": 0.57,
+     "delta_rho_pooled": -0.012,
+     "delta_rho_by_pos": {
+      "QB": -0.013,
+      "RB": 0.019,
+      "WR": -0.062,
+      "TE": 0.008
+     },
+     "delta_rank_mae": 0.19
+    },
+    {
+     "season": 2025,
+     "n": 200,
+     "coverage_pct": 43.2,
+     "us_rho_pooled": 0.534,
+     "system_rho_pooled": 0.528,
+     "delta_rho_pooled": 0.006,
+     "delta_rho_by_pos": {
+      "QB": -0.005,
+      "RB": -0.029,
+      "WR": -0.022,
+      "TE": 0.076
+     },
+     "delta_rank_mae": 0.32
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.405,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.592429,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.017,
+    "hi": 0.017,
+    "median": 0.0,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth200_by_us",
+   "population_label": "P2 depth curve \u00b7 top200[by_us]",
+   "source": "sleeper",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 200.0,
+   "n_min": 200,
+   "n_max": 200,
+   "us_rho_pooled": 0.607,
+   "system_rho_pooled": 0.752,
+   "delta_rho_mean": -0.146,
+   "delta_rho_sd_across_seasons": 0.123,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 200,
+     "coverage_pct": 49.5,
+     "us_rho_pooled": 0.64,
+     "system_rho_pooled": 0.919,
+     "delta_rho_pooled": -0.279,
+     "delta_rho_by_pos": {
+      "QB": -0.162,
+      "RB": -0.245,
+      "WR": -0.238,
+      "TE": -0.471
+     },
+     "delta_rank_mae": 6.53
+    },
+    {
+     "season": 2020,
+     "n": 200,
+     "coverage_pct": 47.1,
+     "us_rho_pooled": 0.609,
+     "system_rho_pooled": 0.949,
+     "delta_rho_pooled": -0.34,
+     "delta_rho_by_pos": {
+      "QB": -0.266,
+      "RB": -0.355,
+      "WR": -0.354,
+      "TE": -0.382
+     },
+     "delta_rank_mae": 7.91
+    },
+    {
+     "season": 2021,
+     "n": 200,
+     "coverage_pct": 44.0,
+     "us_rho_pooled": 0.684,
+     "system_rho_pooled": 0.721,
+     "delta_rho_pooled": -0.037,
+     "delta_rho_by_pos": {
+      "QB": -0.016,
+      "RB": -0.056,
+      "WR": -0.02,
+      "TE": -0.055
+     },
+     "delta_rank_mae": 1.07
+    },
+    {
+     "season": 2022,
+     "n": 200,
+     "coverage_pct": 45.5,
+     "us_rho_pooled": 0.627,
+     "system_rho_pooled": 0.774,
+     "delta_rho_pooled": -0.147,
+     "delta_rho_by_pos": {
+      "QB": -0.254,
+      "RB": -0.095,
+      "WR": -0.105,
+      "TE": -0.133
+     },
+     "delta_rank_mae": 2.61
+    },
+    {
+     "season": 2023,
+     "n": 200,
+     "coverage_pct": 45.9,
+     "us_rho_pooled": 0.594,
+     "system_rho_pooled": 0.686,
+     "delta_rho_pooled": -0.092,
+     "delta_rho_by_pos": {
+      "QB": -0.093,
+      "RB": -0.131,
+      "WR": -0.036,
+      "TE": -0.111
+     },
+     "delta_rank_mae": 1.1
+    },
+    {
+     "season": 2024,
+     "n": 200,
+     "coverage_pct": 45.4,
+     "us_rho_pooled": 0.558,
+     "system_rho_pooled": 0.677,
+     "delta_rho_pooled": -0.119,
+     "delta_rho_by_pos": {
+      "QB": -0.147,
+      "RB": -0.065,
+      "WR": -0.148,
+      "TE": -0.117
+     },
+     "delta_rank_mae": 2.13
+    },
+    {
+     "season": 2025,
+     "n": 200,
+     "coverage_pct": 43.2,
+     "us_rho_pooled": 0.534,
+     "system_rho_pooled": 0.54,
+     "delta_rho_pooled": -0.006,
+     "delta_rho_by_pos": {
+      "QB": -0.075,
+      "RB": -0.036,
+      "WR": -0.021,
+      "TE": 0.104
+     },
+     "delta_rank_mae": 0.03
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.247714,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.762,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.173,
+    "hi": -0.118,
+    "median": -0.146,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth200_by_us",
+   "population_label": "P2 depth curve \u00b7 top200[by_us]",
+   "source": "espn",
+   "n_seasons": 3,
+   "seasons": [
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 200.0,
+   "n_min": 200,
+   "n_max": 200,
+   "us_rho_pooled": 0.568,
+   "system_rho_pooled": 0.652,
+   "delta_rho_mean": -0.085,
+   "delta_rho_sd_across_seasons": 0.11,
+   "per_season": [
+    {
+     "season": 2023,
+     "n": 200,
+     "coverage_pct": 45.9,
+     "us_rho_pooled": 0.611,
+     "system_rho_pooled": 0.82,
+     "delta_rho_pooled": -0.209,
+     "delta_rho_by_pos": {
+      "QB": -0.178,
+      "RB": -0.267,
+      "WR": -0.128,
+      "TE": -0.263
+     },
+     "delta_rank_mae": 3.53
+    },
+    {
+     "season": 2024,
+     "n": 200,
+     "coverage_pct": 45.4,
+     "us_rho_pooled": 0.558,
+     "system_rho_pooled": 0.603,
+     "delta_rho_pooled": -0.045,
+     "delta_rho_by_pos": {
+      "QB": 0.071,
+      "RB": -0.118,
+      "WR": -0.118,
+      "TE": -0.016
+     },
+     "delta_rank_mae": 1.26
+    },
+    {
+     "season": 2025,
+     "n": 200,
+     "coverage_pct": 43.2,
+     "us_rho_pooled": 0.534,
+     "system_rho_pooled": 0.534,
+     "delta_rho_pooled": 0.0,
+     "delta_rho_by_pos": {
+      "QB": -0.01,
+      "RB": -0.014,
+      "WR": -0.01,
+      "TE": 0.03
+     },
+     "delta_rank_mae": -0.09
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.347667,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.646333,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.13,
+    "hi": -0.04,
+    "median": -0.087,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth250_by_us",
+   "population_label": "P2 depth curve \u00b7 top250[by_us]",
+   "source": "adp",
+   "n_seasons": 6,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+   ],
+   "n_mean": 162.0,
+   "n_min": 140,
+   "n_max": 172,
+   "us_rho_pooled": 0.517,
+   "system_rho_pooled": 0.494,
+   "delta_rho_mean": 0.022,
+   "delta_rho_sd_across_seasons": 0.04,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 161,
+     "coverage_pct": 39.9,
+     "us_rho_pooled": 0.544,
+     "system_rho_pooled": 0.509,
+     "delta_rho_pooled": 0.035,
+     "delta_rho_by_pos": {
+      "QB": 0.081,
+      "RB": 0.006,
+      "WR": -0.011,
+      "TE": 0.066
+     },
+     "delta_rank_mae": -0.15
+    },
+    {
+     "season": 2020,
+     "n": 160,
+     "coverage_pct": 37.6,
+     "us_rho_pooled": 0.482,
+     "system_rho_pooled": 0.526,
+     "delta_rho_pooled": -0.044,
+     "delta_rho_by_pos": {
+      "QB": -0.07,
+      "RB": -0.125,
+      "WR": 0.077,
+      "TE": -0.059
+     },
+     "delta_rank_mae": 0.52
+    },
+    {
+     "season": 2021,
+     "n": 170,
+     "coverage_pct": 37.4,
+     "us_rho_pooled": 0.6,
+     "system_rho_pooled": 0.528,
+     "delta_rho_pooled": 0.072,
+     "delta_rho_by_pos": {
+      "QB": 0.084,
+      "RB": -0.028,
+      "WR": 0.075,
+      "TE": 0.156
+     },
+     "delta_rank_mae": -0.12
+    },
+    {
+     "season": 2022,
+     "n": 140,
+     "coverage_pct": 31.8,
+     "us_rho_pooled": 0.533,
+     "system_rho_pooled": 0.486,
+     "delta_rho_pooled": 0.047,
+     "delta_rho_by_pos": {
+      "QB": 0.02,
+      "RB": 0.01,
+      "WR": 0.105,
+      "TE": 0.054
+     },
+     "delta_rank_mae": -0.8
+    },
+    {
+     "season": 2023,
+     "n": 169,
+     "coverage_pct": 38.8,
+     "us_rho_pooled": 0.429,
+     "system_rho_pooled": 0.429,
+     "delta_rho_pooled": 0.0,
+     "delta_rho_by_pos": {
+      "QB": 0.017,
+      "RB": 0.062,
+      "WR": 0.003,
+      "TE": -0.082
+     },
+     "delta_rank_mae": -0.23
+    },
+    {
+     "season": 2024,
+     "n": 172,
+     "coverage_pct": 39.0,
+     "us_rho_pooled": 0.512,
+     "system_rho_pooled": 0.489,
+     "delta_rho_pooled": 0.023,
+     "delta_rho_by_pos": {
+      "QB": 0.054,
+      "RB": 0.073,
+      "WR": -0.029,
+      "TE": -0.008
+     },
+     "delta_rank_mae": -0.48
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.5055,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.471167,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.006,
+    "hi": 0.051,
+    "median": 0.021,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth250_by_us",
+   "population_label": "P2 depth curve \u00b7 top250[by_us]",
+   "source": "mfl_adp",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 250.0,
+   "n_min": 250,
+   "n_max": 250,
+   "us_rho_pooled": 0.639,
+   "system_rho_pooled": 0.534,
+   "delta_rho_mean": 0.105,
+   "delta_rho_sd_across_seasons": 0.07,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 250,
+     "coverage_pct": 61.9,
+     "us_rho_pooled": 0.693,
+     "system_rho_pooled": 0.611,
+     "delta_rho_pooled": 0.082,
+     "delta_rho_by_pos": {
+      "QB": 0.155,
+      "RB": 0.063,
+      "WR": -0.01,
+      "TE": 0.12
+     },
+     "delta_rank_mae": -1.47
+    },
+    {
+     "season": 2020,
+     "n": 250,
+     "coverage_pct": 58.8,
+     "us_rho_pooled": 0.627,
+     "system_rho_pooled": 0.62,
+     "delta_rho_pooled": 0.007,
+     "delta_rho_by_pos": {
+      "QB": 0.027,
+      "RB": -0.014,
+      "WR": -0.005,
+      "TE": 0.018
+     },
+     "delta_rank_mae": 0.1
+    },
+    {
+     "season": 2021,
+     "n": 250,
+     "coverage_pct": 54.9,
+     "us_rho_pooled": 0.644,
+     "system_rho_pooled": 0.572,
+     "delta_rho_pooled": 0.072,
+     "delta_rho_by_pos": {
+      "QB": 0.085,
+      "RB": -0.034,
+      "WR": 0.264,
+      "TE": -0.025
+     },
+     "delta_rank_mae": -2.18
+    },
+    {
+     "season": 2022,
+     "n": 250,
+     "coverage_pct": 56.8,
+     "us_rho_pooled": 0.676,
+     "system_rho_pooled": 0.496,
+     "delta_rho_pooled": 0.18,
+     "delta_rho_by_pos": {
+      "QB": 0.192,
+      "RB": 0.172,
+      "WR": 0.165,
+      "TE": 0.191
+     },
+     "delta_rank_mae": -3.22
+    },
+    {
+     "season": 2023,
+     "n": 250,
+     "coverage_pct": 57.3,
+     "us_rho_pooled": 0.601,
+     "system_rho_pooled": 0.527,
+     "delta_rho_pooled": 0.074,
+     "delta_rho_by_pos": {
+      "QB": 0.136,
+      "RB": 0.095,
+      "WR": -0.057,
+      "TE": 0.123
+     },
+     "delta_rank_mae": -0.7
+    },
+    {
+     "season": 2024,
+     "n": 250,
+     "coverage_pct": 56.7,
+     "us_rho_pooled": 0.643,
+     "system_rho_pooled": 0.535,
+     "delta_rho_pooled": 0.108,
+     "delta_rho_by_pos": {
+      "QB": -0.014,
+      "RB": 0.167,
+      "WR": 0.174,
+      "TE": 0.104
+     },
+     "delta_rank_mae": -3.42
+    },
+    {
+     "season": 2025,
+     "n": 250,
+     "coverage_pct": 54.0,
+     "us_rho_pooled": 0.591,
+     "system_rho_pooled": 0.377,
+     "delta_rho_pooled": 0.214,
+     "delta_rho_by_pos": {
+      "QB": 0.224,
+      "RB": 0.167,
+      "WR": 0.312,
+      "TE": 0.152
+     },
+     "delta_rank_mae": -5.04
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.466,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.516429,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": 0.074,
+    "hi": 0.136,
+    "median": 0.103,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth250_by_us",
+   "population_label": "P2 depth curve \u00b7 top250[by_us]",
+   "source": "ecr",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 250.0,
+   "n_min": 250,
+   "n_max": 250,
+   "us_rho_pooled": 0.65,
+   "system_rho_pooled": 0.661,
+   "delta_rho_mean": -0.011,
+   "delta_rho_sd_across_seasons": 0.021,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 250,
+     "coverage_pct": 61.9,
+     "us_rho_pooled": 0.714,
+     "system_rho_pooled": 0.727,
+     "delta_rho_pooled": -0.013,
+     "delta_rho_by_pos": {
+      "QB": 0.008,
+      "RB": -0.044,
+      "WR": -0.037,
+      "TE": 0.022
+     },
+     "delta_rank_mae": 0.4
+    },
+    {
+     "season": 2020,
+     "n": 250,
+     "coverage_pct": 58.8,
+     "us_rho_pooled": 0.601,
+     "system_rho_pooled": 0.642,
+     "delta_rho_pooled": -0.041,
+     "delta_rho_by_pos": {
+      "QB": -0.037,
+      "RB": -0.071,
+      "WR": -0.014,
+      "TE": -0.038
+     },
+     "delta_rank_mae": 0.84
+    },
+    {
+     "season": 2021,
+     "n": 250,
+     "coverage_pct": 54.9,
+     "us_rho_pooled": 0.705,
+     "system_rho_pooled": 0.701,
+     "delta_rho_pooled": 0.004,
+     "delta_rho_by_pos": {
+      "QB": -0.047,
+      "RB": -0.014,
+      "WR": 0.001,
+      "TE": 0.076
+     },
+     "delta_rank_mae": 0.19
+    },
+    {
+     "season": 2022,
+     "n": 250,
+     "coverage_pct": 56.8,
+     "us_rho_pooled": 0.678,
+     "system_rho_pooled": 0.674,
+     "delta_rho_pooled": 0.004,
+     "delta_rho_by_pos": {
+      "QB": -0.008,
+      "RB": -0.055,
+      "WR": 0.01,
+      "TE": 0.069
+     },
+     "delta_rank_mae": 0.03
+    },
+    {
+     "season": 2023,
+     "n": 250,
+     "coverage_pct": 57.3,
+     "us_rho_pooled": 0.567,
+     "system_rho_pooled": 0.606,
+     "delta_rho_pooled": -0.039,
+     "delta_rho_by_pos": {
+      "QB": -0.011,
+      "RB": 0.009,
+      "WR": -0.023,
+      "TE": -0.131
+     },
+     "delta_rank_mae": 0.31
+    },
+    {
+     "season": 2024,
+     "n": 250,
+     "coverage_pct": 56.7,
+     "us_rho_pooled": 0.644,
+     "system_rho_pooled": 0.647,
+     "delta_rho_pooled": -0.003,
+     "delta_rho_by_pos": {
+      "QB": -0.012,
+      "RB": 0.03,
+      "WR": -0.02,
+      "TE": -0.01
+     },
+     "delta_rank_mae": -0.15
+    },
+    {
+     "season": 2025,
+     "n": 250,
+     "coverage_pct": 54.0,
+     "us_rho_pooled": 0.638,
+     "system_rho_pooled": 0.63,
+     "delta_rho_pooled": 0.008,
+     "delta_rho_by_pos": {
+      "QB": -0.005,
+      "RB": 0.001,
+      "WR": 0.004,
+      "TE": 0.03
+     },
+     "delta_rank_mae": -0.01
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.339,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.659571,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.025,
+    "hi": 0.001,
+    "median": -0.012,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth250_by_us",
+   "population_label": "P2 depth curve \u00b7 top250[by_us]",
+   "source": "sleeper",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 250.0,
+   "n_min": 250,
+   "n_max": 250,
+   "us_rho_pooled": 0.671,
+   "system_rho_pooled": 0.797,
+   "delta_rho_mean": -0.126,
+   "delta_rho_sd_across_seasons": 0.103,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 250,
+     "coverage_pct": 61.9,
+     "us_rho_pooled": 0.76,
+     "system_rho_pooled": 0.943,
+     "delta_rho_pooled": -0.183,
+     "delta_rho_by_pos": {
+      "QB": -0.117,
+      "RB": -0.188,
+      "WR": -0.195,
+      "TE": -0.228
+     },
+     "delta_rank_mae": 6.51
+    },
+    {
+     "season": 2020,
+     "n": 250,
+     "coverage_pct": 58.8,
+     "us_rho_pooled": 0.633,
+     "system_rho_pooled": 0.954,
+     "delta_rho_pooled": -0.321,
+     "delta_rho_by_pos": {
+      "QB": -0.266,
+      "RB": -0.335,
+      "WR": -0.342,
+      "TE": -0.341
+     },
+     "delta_rank_mae": 9.67
+    },
+    {
+     "season": 2021,
+     "n": 250,
+     "coverage_pct": 54.9,
+     "us_rho_pooled": 0.704,
+     "system_rho_pooled": 0.747,
+     "delta_rho_pooled": -0.043,
+     "delta_rho_by_pos": {
+      "QB": -0.032,
+      "RB": -0.014,
+      "WR": -0.025,
+      "TE": -0.099
+     },
+     "delta_rank_mae": 1.19
+    },
+    {
+     "season": 2022,
+     "n": 250,
+     "coverage_pct": 56.8,
+     "us_rho_pooled": 0.712,
+     "system_rho_pooled": 0.824,
+     "delta_rho_pooled": -0.112,
+     "delta_rho_by_pos": {
+      "QB": -0.226,
+      "RB": -0.069,
+      "WR": -0.106,
+      "TE": -0.044
+     },
+     "delta_rank_mae": 3.22
+    },
+    {
+     "season": 2023,
+     "n": 250,
+     "coverage_pct": 57.3,
+     "us_rho_pooled": 0.598,
+     "system_rho_pooled": 0.716,
+     "delta_rho_pooled": -0.118,
+     "delta_rho_by_pos": {
+      "QB": -0.098,
+      "RB": -0.12,
+      "WR": -0.046,
+      "TE": -0.209
+     },
+     "delta_rank_mae": 1.78
+    },
+    {
+     "season": 2024,
+     "n": 250,
+     "coverage_pct": 56.7,
+     "us_rho_pooled": 0.655,
+     "system_rho_pooled": 0.751,
+     "delta_rho_pooled": -0.096,
+     "delta_rho_by_pos": {
+      "QB": -0.11,
+      "RB": -0.035,
+      "WR": -0.135,
+      "TE": -0.105
+     },
+     "delta_rank_mae": 2.64
+    },
+    {
+     "season": 2025,
+     "n": 250,
+     "coverage_pct": 54.0,
+     "us_rho_pooled": 0.638,
+     "system_rho_pooled": 0.645,
+     "delta_rho_pooled": -0.007,
+     "delta_rho_by_pos": {
+      "QB": -0.045,
+      "RB": -0.017,
+      "WR": 0.015,
+      "TE": 0.016
+     },
+     "delta_rank_mae": -0.4
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.202857,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.802286,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.15,
+    "hi": -0.105,
+    "median": -0.126,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth250_by_us",
+   "population_label": "P2 depth curve \u00b7 top250[by_us]",
+   "source": "espn",
+   "n_seasons": 3,
+   "seasons": [
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 250.0,
+   "n_min": 250,
+   "n_max": 250,
+   "us_rho_pooled": 0.627,
+   "system_rho_pooled": 0.717,
+   "delta_rho_mean": -0.09,
+   "delta_rho_sd_across_seasons": 0.123,
+   "per_season": [
+    {
+     "season": 2023,
+     "n": 250,
+     "coverage_pct": 57.3,
+     "us_rho_pooled": 0.589,
+     "system_rho_pooled": 0.818,
+     "delta_rho_pooled": -0.229,
+     "delta_rho_by_pos": {
+      "QB": -0.173,
+      "RB": -0.27,
+      "WR": -0.107,
+      "TE": -0.366
+     },
+     "delta_rank_mae": 4.7
+    },
+    {
+     "season": 2024,
+     "n": 250,
+     "coverage_pct": 56.7,
+     "us_rho_pooled": 0.655,
+     "system_rho_pooled": 0.698,
+     "delta_rho_pooled": -0.043,
+     "delta_rho_by_pos": {
+      "QB": 0.069,
+      "RB": -0.075,
+      "WR": -0.122,
+      "TE": -0.043
+     },
+     "delta_rank_mae": 2.21
+    },
+    {
+     "season": 2025,
+     "n": 250,
+     "coverage_pct": 54.0,
+     "us_rho_pooled": 0.638,
+     "system_rho_pooled": 0.635,
+     "delta_rho_pooled": 0.003,
+     "delta_rho_by_pos": {
+      "QB": -0.009,
+      "RB": -0.002,
+      "WR": 0.017,
+      "TE": 0.004
+     },
+     "delta_rank_mae": -0.38
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.283,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.710667,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.128,
+    "hi": -0.048,
+    "median": -0.089,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth300_by_us",
+   "population_label": "P2 depth curve \u00b7 top300[by_us]",
+   "source": "adp",
+   "n_seasons": 6,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+   ],
+   "n_mean": 162.0,
+   "n_min": 140,
+   "n_max": 172,
+   "us_rho_pooled": 0.517,
+   "system_rho_pooled": 0.494,
+   "delta_rho_mean": 0.022,
+   "delta_rho_sd_across_seasons": 0.04,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 161,
+     "coverage_pct": 39.9,
+     "us_rho_pooled": 0.544,
+     "system_rho_pooled": 0.509,
+     "delta_rho_pooled": 0.035,
+     "delta_rho_by_pos": {
+      "QB": 0.081,
+      "RB": 0.006,
+      "WR": -0.011,
+      "TE": 0.066
+     },
+     "delta_rank_mae": -0.15
+    },
+    {
+     "season": 2020,
+     "n": 160,
+     "coverage_pct": 37.6,
+     "us_rho_pooled": 0.482,
+     "system_rho_pooled": 0.526,
+     "delta_rho_pooled": -0.044,
+     "delta_rho_by_pos": {
+      "QB": -0.07,
+      "RB": -0.125,
+      "WR": 0.077,
+      "TE": -0.059
+     },
+     "delta_rank_mae": 0.52
+    },
+    {
+     "season": 2021,
+     "n": 170,
+     "coverage_pct": 37.4,
+     "us_rho_pooled": 0.6,
+     "system_rho_pooled": 0.528,
+     "delta_rho_pooled": 0.072,
+     "delta_rho_by_pos": {
+      "QB": 0.084,
+      "RB": -0.028,
+      "WR": 0.075,
+      "TE": 0.156
+     },
+     "delta_rank_mae": -0.12
+    },
+    {
+     "season": 2022,
+     "n": 140,
+     "coverage_pct": 31.8,
+     "us_rho_pooled": 0.533,
+     "system_rho_pooled": 0.486,
+     "delta_rho_pooled": 0.047,
+     "delta_rho_by_pos": {
+      "QB": 0.02,
+      "RB": 0.01,
+      "WR": 0.105,
+      "TE": 0.054
+     },
+     "delta_rank_mae": -0.8
+    },
+    {
+     "season": 2023,
+     "n": 169,
+     "coverage_pct": 38.8,
+     "us_rho_pooled": 0.429,
+     "system_rho_pooled": 0.429,
+     "delta_rho_pooled": 0.0,
+     "delta_rho_by_pos": {
+      "QB": 0.017,
+      "RB": 0.062,
+      "WR": 0.003,
+      "TE": -0.082
+     },
+     "delta_rank_mae": -0.23
+    },
+    {
+     "season": 2024,
+     "n": 172,
+     "coverage_pct": 39.0,
+     "us_rho_pooled": 0.512,
+     "system_rho_pooled": 0.489,
+     "delta_rho_pooled": 0.023,
+     "delta_rho_by_pos": {
+      "QB": 0.054,
+      "RB": 0.073,
+      "WR": -0.029,
+      "TE": -0.008
+     },
+     "delta_rank_mae": -0.48
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.5055,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.471167,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.006,
+    "hi": 0.051,
+    "median": 0.021,
+    "excludes_zero": false
+   }
+  },
+  {
+   "population": "P2_depth300_by_us",
+   "population_label": "P2 depth curve \u00b7 top300[by_us]",
+   "source": "mfl_adp",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 264.1,
+   "n_min": 251,
+   "n_max": 286,
+   "us_rho_pooled": 0.666,
+   "system_rho_pooled": 0.494,
+   "delta_rho_mean": 0.173,
+   "delta_rho_sd_across_seasons": 0.067,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 257,
+     "coverage_pct": 63.6,
+     "us_rho_pooled": 0.699,
+     "system_rho_pooled": 0.614,
+     "delta_rho_pooled": 0.085,
+     "delta_rho_by_pos": {
+      "QB": 0.155,
+      "RB": 0.063,
+      "WR": -0.001,
+      "TE": 0.126
+     },
+     "delta_rank_mae": -1.44
+    },
+    {
+     "season": 2020,
+     "n": 286,
+     "coverage_pct": 67.3,
+     "us_rho_pooled": 0.682,
+     "system_rho_pooled": 0.593,
+     "delta_rho_pooled": 0.089,
+     "delta_rho_by_pos": {
+      "QB": 0.069,
+      "RB": 0.037,
+      "WR": 0.111,
+      "TE": 0.142
+     },
+     "delta_rank_mae": -2.12
+    },
+    {
+     "season": 2021,
+     "n": 266,
+     "coverage_pct": 58.5,
+     "us_rho_pooled": 0.706,
+     "system_rho_pooled": 0.462,
+     "delta_rho_pooled": 0.244,
+     "delta_rho_by_pos": {
+      "QB": 0.085,
+      "RB": 0.077,
+      "WR": 0.321,
+      "TE": 0.494
+     },
+     "delta_rank_mae": -4.58
+    },
+    {
+     "season": 2022,
+     "n": 259,
+     "coverage_pct": 58.9,
+     "us_rho_pooled": 0.676,
+     "system_rho_pooled": 0.451,
+     "delta_rho_pooled": 0.225,
+     "delta_rho_by_pos": {
+      "QB": 0.192,
+      "RB": 0.152,
+      "WR": 0.196,
+      "TE": 0.361
+     },
+     "delta_rank_mae": -3.8
+    },
+    {
+     "season": 2023,
+     "n": 268,
+     "coverage_pct": 61.5,
+     "us_rho_pooled": 0.624,
+     "system_rho_pooled": 0.482,
+     "delta_rho_pooled": 0.142,
+     "delta_rho_by_pos": {
+      "QB": 0.136,
+      "RB": 0.151,
+      "WR": 0.011,
+      "TE": 0.27
+     },
+     "delta_rank_mae": -2.03
+    },
+    {
+     "season": 2024,
+     "n": 262,
+     "coverage_pct": 59.4,
+     "us_rho_pooled": 0.677,
+     "system_rho_pooled": 0.482,
+     "delta_rho_pooled": 0.195,
+     "delta_rho_by_pos": {
+      "QB": -0.014,
+      "RB": 0.142,
+      "WR": 0.224,
+      "TE": 0.429
+     },
+     "delta_rank_mae": -4.54
+    },
+    {
+     "season": 2025,
+     "n": 251,
+     "coverage_pct": 54.2,
+     "us_rho_pooled": 0.599,
+     "system_rho_pooled": 0.371,
+     "delta_rho_pooled": 0.228,
+     "delta_rho_by_pos": {
+      "QB": 0.224,
+      "RB": 0.167,
+      "WR": 0.312,
+      "TE": 0.207
+     },
+     "delta_rank_mae": -5.12
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.506429,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.507,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": 0.14,
+    "hi": 0.207,
+    "median": 0.174,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth300_by_us",
+   "population_label": "P2 depth curve \u00b7 top300[by_us]",
+   "source": "ecr",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 300.0,
+   "n_min": 300,
+   "n_max": 300,
+   "us_rho_pooled": 0.675,
+   "system_rho_pooled": 0.686,
+   "delta_rho_mean": -0.011,
+   "delta_rho_sd_across_seasons": 0.015,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 300,
+     "coverage_pct": 74.3,
+     "us_rho_pooled": 0.697,
+     "system_rho_pooled": 0.708,
+     "delta_rho_pooled": -0.011,
+     "delta_rho_by_pos": {
+      "QB": 0.007,
+      "RB": -0.031,
+      "WR": -0.051,
+      "TE": 0.03
+     },
+     "delta_rank_mae": 0.59
+    },
+    {
+     "season": 2020,
+     "n": 300,
+     "coverage_pct": 70.6,
+     "us_rho_pooled": 0.632,
+     "system_rho_pooled": 0.652,
+     "delta_rho_pooled": -0.02,
+     "delta_rho_by_pos": {
+      "QB": -0.036,
+      "RB": -0.036,
+      "WR": 0.01,
+      "TE": -0.018
+     },
+     "delta_rank_mae": 0.33
+    },
+    {
+     "season": 2021,
+     "n": 300,
+     "coverage_pct": 65.9,
+     "us_rho_pooled": 0.692,
+     "system_rho_pooled": 0.711,
+     "delta_rho_pooled": -0.019,
+     "delta_rho_by_pos": {
+      "QB": -0.04,
+      "RB": -0.035,
+      "WR": -0.026,
+      "TE": 0.025
+     },
+     "delta_rank_mae": 0.55
+    },
+    {
+     "season": 2022,
+     "n": 300,
+     "coverage_pct": 68.2,
+     "us_rho_pooled": 0.686,
+     "system_rho_pooled": 0.688,
+     "delta_rho_pooled": -0.002,
+     "delta_rho_by_pos": {
+      "QB": -0.007,
+      "RB": -0.035,
+      "WR": -0.006,
+      "TE": 0.039
+     },
+     "delta_rank_mae": 0.16
+    },
+    {
+     "season": 2023,
+     "n": 300,
+     "coverage_pct": 68.8,
+     "us_rho_pooled": 0.663,
+     "system_rho_pooled": 0.698,
+     "delta_rho_pooled": -0.035,
+     "delta_rho_by_pos": {
+      "QB": -0.007,
+      "RB": -0.006,
+      "WR": -0.059,
+      "TE": -0.066
+     },
+     "delta_rank_mae": 0.87
+    },
+    {
+     "season": 2024,
+     "n": 300,
+     "coverage_pct": 68.0,
+     "us_rho_pooled": 0.685,
+     "system_rho_pooled": 0.685,
+     "delta_rho_pooled": 0.0,
+     "delta_rho_by_pos": {
+      "QB": -0.012,
+      "RB": -0.001,
+      "WR": -0.004,
+      "TE": 0.019
+     },
+     "delta_rank_mae": -0.31
+    },
+    {
+     "season": 2025,
+     "n": 300,
+     "coverage_pct": 64.8,
+     "us_rho_pooled": 0.669,
+     "system_rho_pooled": 0.661,
+     "delta_rho_pooled": 0.008,
+     "delta_rho_by_pos": {
+      "QB": -0.005,
+      "RB": 0.013,
+      "WR": -0.004,
+      "TE": 0.027
+     },
+     "delta_rank_mae": 0.07
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.313857,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.675143,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.023,
+    "hi": -0.001,
+    "median": -0.012,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth300_by_us",
+   "population_label": "P2 depth curve \u00b7 top300[by_us]",
+   "source": "sleeper",
+   "n_seasons": 7,
+   "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 300.0,
+   "n_min": 300,
+   "n_max": 300,
+   "us_rho_pooled": 0.695,
+   "system_rho_pooled": 0.821,
+   "delta_rho_mean": -0.126,
+   "delta_rho_sd_across_seasons": 0.086,
+   "per_season": [
+    {
+     "season": 2019,
+     "n": 300,
+     "coverage_pct": 74.3,
+     "us_rho_pooled": 0.739,
+     "system_rho_pooled": 0.942,
+     "delta_rho_pooled": -0.203,
+     "delta_rho_by_pos": {
+      "QB": -0.147,
+      "RB": -0.196,
+      "WR": -0.226,
+      "TE": -0.245
+     },
+     "delta_rank_mae": 7.98
+    },
+    {
+     "season": 2020,
+     "n": 300,
+     "coverage_pct": 70.6,
+     "us_rho_pooled": 0.697,
+     "system_rho_pooled": 0.961,
+     "delta_rho_pooled": -0.264,
+     "delta_rho_by_pos": {
+      "QB": -0.234,
+      "RB": -0.342,
+      "WR": -0.259,
+      "TE": -0.22
+     },
+     "delta_rank_mae": 10.51
+    },
+    {
+     "season": 2021,
+     "n": 300,
+     "coverage_pct": 65.9,
+     "us_rho_pooled": 0.703,
+     "system_rho_pooled": 0.772,
+     "delta_rho_pooled": -0.069,
+     "delta_rho_by_pos": {
+      "QB": -0.025,
+      "RB": -0.108,
+      "WR": -0.043,
+      "TE": -0.102
+     },
+     "delta_rank_mae": 2.01
+    },
+    {
+     "season": 2022,
+     "n": 300,
+     "coverage_pct": 68.2,
+     "us_rho_pooled": 0.683,
+     "system_rho_pooled": 0.832,
+     "delta_rho_pooled": -0.149,
+     "delta_rho_by_pos": {
+      "QB": -0.212,
+      "RB": -0.08,
+      "WR": -0.116,
+      "TE": -0.188
+     },
+     "delta_rank_mae": 3.9
+    },
+    {
+     "season": 2023,
+     "n": 300,
+     "coverage_pct": 68.8,
+     "us_rho_pooled": 0.666,
+     "system_rho_pooled": 0.767,
+     "delta_rho_pooled": -0.101,
+     "delta_rho_by_pos": {
+      "QB": -0.086,
+      "RB": -0.107,
+      "WR": -0.107,
+      "TE": -0.102
+     },
+     "delta_rank_mae": 2.85
+    },
+    {
+     "season": 2024,
+     "n": 300,
+     "coverage_pct": 68.0,
+     "us_rho_pooled": 0.688,
+     "system_rho_pooled": 0.773,
+     "delta_rho_pooled": -0.085,
+     "delta_rho_by_pos": {
+      "QB": -0.104,
+      "RB": -0.066,
+      "WR": -0.1,
+      "TE": -0.071
+     },
+     "delta_rank_mae": 2.62
+    },
+    {
+     "season": 2025,
+     "n": 300,
+     "coverage_pct": 64.8,
+     "us_rho_pooled": 0.692,
+     "system_rho_pooled": 0.701,
+     "delta_rho_pooled": -0.009,
+     "delta_rho_by_pos": {
+      "QB": -0.063,
+      "RB": -0.007,
+      "WR": 0.016,
+      "TE": 0.015
+     },
+     "delta_rank_mae": -0.42
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.178857,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.801286,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.145,
+    "hi": -0.109,
+    "median": -0.126,
+    "excludes_zero": true
+   }
+  },
+  {
+   "population": "P2_depth300_by_us",
+   "population_label": "P2 depth curve \u00b7 top300[by_us]",
+   "source": "espn",
+   "n_seasons": 3,
+   "seasons": [
+    2023,
+    2024,
+    2025
+   ],
+   "n_mean": 300.0,
+   "n_min": 300,
+   "n_max": 300,
+   "us_rho_pooled": 0.68,
+   "system_rho_pooled": 0.753,
+   "delta_rho_mean": -0.073,
+   "delta_rho_sd_across_seasons": 0.087,
+   "per_season": [
+    {
+     "season": 2023,
+     "n": 300,
+     "coverage_pct": 68.8,
+     "us_rho_pooled": 0.655,
+     "system_rho_pooled": 0.824,
+     "delta_rho_pooled": -0.169,
+     "delta_rho_by_pos": {
+      "QB": -0.134,
+      "RB": -0.171,
+      "WR": -0.181,
+      "TE": -0.187
+     },
+     "delta_rank_mae": 5.59
+    },
+    {
+     "season": 2024,
+     "n": 300,
+     "coverage_pct": 68.0,
+     "us_rho_pooled": 0.692,
+     "system_rho_pooled": 0.743,
+     "delta_rho_pooled": -0.051,
+     "delta_rho_by_pos": {
+      "QB": 0.074,
+      "RB": -0.1,
+      "WR": -0.09,
+      "TE": -0.09
+     },
+     "delta_rank_mae": 2.33
+    },
+    {
+     "season": 2025,
+     "n": 300,
+     "coverage_pct": 64.8,
+     "us_rho_pooled": 0.693,
+     "system_rho_pooled": 0.693,
+     "delta_rho_pooled": 0.0,
+     "delta_rho_by_pos": {
+      "QB": -0.008,
+      "RB": 0.003,
+      "WR": 0.007,
+      "TE": -0.002
+     },
+     "delta_rank_mae": -0.3
+    }
+   ],
+   "anchors": {
+    "A1_identity": {
+     "delta": 0.0,
+     "evaluated": true,
+     "pass": true
+    },
+    "A2_oracle_floor": {
+     "delta": 0.246667,
+     "evaluated": true,
+     "pass": true
+    },
+    "A3_degenerate_random": {
+     "delta": -0.799667,
+     "evaluated": true,
+     "pass": true
+    },
+    "all_pass": true
+   },
+   "bootstrap": {
+    "evaluated": true,
+    "draws": 1000,
+    "level": 0.9,
+    "lo": -0.102,
+    "hi": -0.043,
+    "median": -0.074,
+    "excludes_zero": true
+   }
+  }
+ ],
+ "coverage": [
+  {
+   "season": 2019,
+   "source": "adp",
+   "n_base": 404,
+   "n_aligned": 161,
+   "coverage_pct": 39.9
+  },
+  {
+   "season": 2019,
+   "source": "ecr",
+   "n_base": 404,
+   "n_aligned": 340,
+   "coverage_pct": 84.2
+  },
+  {
+   "season": 2019,
+   "source": "sleeper",
+   "n_base": 404,
+   "n_aligned": 353,
+   "coverage_pct": 87.4
+  },
+  {
+   "season": 2019,
+   "source": "mfl_adp",
+   "n_base": 404,
+   "n_aligned": 257,
+   "coverage_pct": 63.6
+  },
+  {
+   "season": 2020,
+   "source": "adp",
+   "n_base": 425,
+   "n_aligned": 160,
+   "coverage_pct": 37.6
+  },
+  {
+   "season": 2020,
+   "source": "ecr",
+   "n_base": 425,
+   "n_aligned": 354,
+   "coverage_pct": 83.3
+  },
+  {
+   "season": 2020,
+   "source": "sleeper",
+   "n_base": 425,
+   "n_aligned": 393,
+   "coverage_pct": 92.5
+  },
+  {
+   "season": 2020,
+   "source": "mfl_adp",
+   "n_base": 425,
+   "n_aligned": 286,
+   "coverage_pct": 67.3
+  },
+  {
+   "season": 2021,
+   "source": "adp",
+   "n_base": 455,
+   "n_aligned": 170,
+   "coverage_pct": 37.4
+  },
+  {
+   "season": 2021,
+   "source": "ecr",
+   "n_base": 455,
+   "n_aligned": 419,
+   "coverage_pct": 92.1
+  },
+  {
+   "season": 2021,
+   "source": "sleeper",
+   "n_base": 455,
+   "n_aligned": 435,
+   "coverage_pct": 95.6
+  },
+  {
+   "season": 2021,
+   "source": "mfl_adp",
+   "n_base": 455,
+   "n_aligned": 266,
+   "coverage_pct": 58.5
+  },
+  {
+   "season": 2022,
+   "source": "adp",
+   "n_base": 440,
+   "n_aligned": 140,
+   "coverage_pct": 31.8
+  },
+  {
+   "season": 2022,
+   "source": "ecr",
+   "n_base": 440,
+   "n_aligned": 375,
+   "coverage_pct": 85.2
+  },
+  {
+   "season": 2022,
+   "source": "sleeper",
+   "n_base": 440,
+   "n_aligned": 429,
+   "coverage_pct": 97.5
+  },
+  {
+   "season": 2022,
+   "source": "mfl_adp",
+   "n_base": 440,
+   "n_aligned": 259,
+   "coverage_pct": 58.9
+  },
+  {
+   "season": 2023,
+   "source": "adp",
+   "n_base": 436,
+   "n_aligned": 169,
+   "coverage_pct": 38.8
+  },
+  {
+   "season": 2023,
+   "source": "ecr",
+   "n_base": 436,
+   "n_aligned": 380,
+   "coverage_pct": 87.2
+  },
+  {
+   "season": 2023,
+   "source": "sleeper",
+   "n_base": 436,
+   "n_aligned": 418,
+   "coverage_pct": 95.9
+  },
+  {
+   "season": 2023,
+   "source": "espn",
+   "n_base": 436,
+   "n_aligned": 436,
+   "coverage_pct": 100.0
+  },
+  {
+   "season": 2023,
+   "source": "mfl_adp",
+   "n_base": 436,
+   "n_aligned": 268,
+   "coverage_pct": 61.5
+  },
+  {
+   "season": 2024,
+   "source": "adp",
+   "n_base": 441,
+   "n_aligned": 172,
+   "coverage_pct": 39.0
+  },
+  {
+   "season": 2024,
+   "source": "ecr",
+   "n_base": 441,
+   "n_aligned": 419,
+   "coverage_pct": 95.0
+  },
+  {
+   "season": 2024,
+   "source": "sleeper",
+   "n_base": 441,
+   "n_aligned": 414,
+   "coverage_pct": 93.9
+  },
+  {
+   "season": 2024,
+   "source": "espn",
+   "n_base": 441,
+   "n_aligned": 438,
+   "coverage_pct": 99.3
+  },
+  {
+   "season": 2024,
+   "source": "mfl_adp",
+   "n_base": 441,
+   "n_aligned": 262,
+   "coverage_pct": 59.4
+  },
+  {
+   "season": 2025,
+   "source": "ecr",
+   "n_base": 463,
+   "n_aligned": 380,
+   "coverage_pct": 82.1
+  },
+  {
+   "season": 2025,
+   "source": "sleeper",
+   "n_base": 463,
+   "n_aligned": 419,
+   "coverage_pct": 90.5
+  },
+  {
+   "season": 2025,
+   "source": "espn",
+   "n_base": 463,
+   "n_aligned": 463,
+   "coverage_pct": 100.0
+  },
+  {
+   "season": 2025,
+   "source": "mfl_adp",
+   "n_base": 463,
+   "n_aligned": 251,
+   "coverage_pct": 54.2
+  },
+  {
+   "season": 2025,
+   "source": "espn_proj",
+   "n_base": 463,
+   "n_aligned": 463,
+   "coverage_pct": 100.0
+  }
+ ],
+ "base_sizes": {
+  "2019": 404,
+  "2020": 425,
+  "2021": 455,
+  "2022": 440,
+  "2023": 436,
+  "2024": 441,
+  "2025": 463
+ },
+ "posthoc_probe": {
+  "disclosure": "NOT pre-registered; added post-hoc; never headline-eligible",
+  "rows": [
+   {
+    "realized_filter": "g>=6 (pre-registered / shipped)",
+    "population": "P0_shipped",
+    "source": "adp",
+    "n_seasons": 6,
+    "n_mean": 162.0,
+    "delta_rho_mean": 0.022
+   },
+   {
+    "realized_filter": "g>=6 (pre-registered / shipped)",
+    "population": "P0_shipped",
+    "source": "mfl_adp",
+    "n_seasons": 7,
+    "n_mean": 264.1,
+    "delta_rho_mean": 0.173
+   },
+   {
+    "realized_filter": "g>=6 (pre-registered / shipped)",
+    "population": "P1_cross_source_matched",
+    "source": "adp",
+    "n_seasons": 6,
+    "n_mean": 161.3,
+    "delta_rho_mean": 0.022
+   },
+   {
+    "realized_filter": "g>=6 (pre-registered / shipped)",
+    "population": "P1_cross_source_matched",
+    "source": "mfl_adp",
+    "n_seasons": 6,
+    "n_mean": 161.3,
+    "delta_rho_mean": 0.008
+   },
+   {
+    "realized_filter": "g>0 (post-hoc probe)",
+    "population": "P0_shipped",
+    "source": "adp",
+    "n_seasons": 6,
+    "n_mean": 169.3,
+    "delta_rho_mean": 0.025
+   },
+   {
+    "realized_filter": "g>0 (post-hoc probe)",
+    "population": "P0_shipped",
+    "source": "mfl_adp",
+    "n_seasons": 7,
+    "n_mean": 287.9,
+    "delta_rho_mean": 0.21
+   },
+   {
+    "realized_filter": "g>0 (post-hoc probe)",
+    "population": "P1_cross_source_matched",
+    "source": "adp",
+    "n_seasons": 6,
+    "n_mean": 168.5,
+    "delta_rho_mean": 0.024
+   },
+   {
+    "realized_filter": "g>0 (post-hoc probe)",
+    "population": "P1_cross_source_matched",
+    "source": "mfl_adp",
+    "n_seasons": 6,
+    "n_mean": 168.5,
+    "delta_rho_mean": 0.009
+   }
+  ]
+ },
+ "seasons": [
+  2019,
+  2020,
+  2021,
+  2022,
+  2023,
+  2024,
+  2025
+ ],
+ "generated_at": "2026-08-03T04:46:44.242071+00:00",
+ "preregistration": {
+  "module": "quant_sports_intel_models/football/nfl/fantasy/track_record_population.py",
+  "populations": [
+   "P0_shipped",
+   "P1_cross_source_matched",
+   "P2_depth_curve"
+  ],
+  "depth_grid": [
+   100,
+   150,
+   200,
+   250,
+   300,
+   null
+  ],
+  "headline_eligible_sources": [
+   "adp",
+   "mfl_adp"
+  ],
+  "context_sources": [
+   "ecr",
+   "sleeper",
+   "espn"
+  ],
+  "bootstrap": {
+   "draws": 1000,
+   "seed": 20260803,
+   "level": 0.9
+  }
+ },
+ "reproduction": {
+  "adp": {
+   "expected": 0.022,
+   "got": 0.022,
+   "expected_n_seasons": 6,
+   "got_n_seasons": 6,
+   "pass": true
+  },
+  "mfl_adp": {
+   "expected": 0.173,
+   "got": 0.173,
+   "expected_n_seasons": 7,
+   "got_n_seasons": 7,
+   "pass": true
+  },
+  "all_pass": true
+ },
+ "forensic": {
+  "adp": {
+   "target": 0.144,
+   "within_tolerance": 0.02,
+   "closest_population": "P0_shipped",
+   "closest_delta": 0.022,
+   "gap": 0.122,
+   "reproduced": false,
+   "closest_inadmissible": {
+    "population": "P2_depth100_by_source",
+    "delta": 0.058,
+    "gap": 0.086,
+    "why_inadmissible": "one-sided depth truncation (\u00a73 P2) \u2014 range-restricts one side"
+   }
+  },
+  "mfl_adp": {
+   "target": 0.088,
+   "within_tolerance": 0.02,
+   "closest_population": "P1_cross_source_matched",
+   "closest_delta": 0.008,
+   "gap": 0.08,
+   "reproduced": false,
+   "closest_inadmissible": {
+    "population": "P2_depth100_by_source",
+    "delta": 0.079,
+    "gap": 0.009,
+    "why_inadmissible": "one-sided depth truncation (\u00a73 P2) \u2014 range-restricts one side"
+   }
+  }
+ },
+ "anchor_summary": {
+  "n_cells": 57,
+  "a1_pass": 57,
+  "a2_pass": 57,
+  "a3_pass": 57,
+  "failures": [],
+  "all_pass": true
+ },
+ "decision": {
+  "per_source": {
+   "adp": {
+    "eligible": false,
+    "p0_delta": 0.022,
+    "p1_delta": 0.022,
+    "p0_ci": [
+     -0.006,
+     0.051
+    ],
+    "p1_ci": [
+     -0.008,
+     0.048
+    ],
+    "p1_excludes_zero": false,
+    "p0_p1_materially_different": false
+   },
+   "mfl_adp": {
+    "eligible": false,
+    "p0_delta": 0.173,
+    "p1_delta": 0.008,
+    "p0_ci": [
+     0.14,
+     0.207
+    ],
+    "p1_ci": [
+     -0.027,
+     0.04
+    ],
+    "p1_excludes_zero": false,
+    "p0_p1_materially_different": true
+   }
+  },
+  "blocking_reasons": [],
+  "recommendation": "KEEP THE SHIPPED NUMBER \u2014 no pre-registered condition for a change was met (\u00a78.3)"
+ },
+ "coverage_table": [
+  {
+   "season": 2019,
+   "n_base": 404,
+   "ffc_n": 161,
+   "ffc_cov": 39.9,
+   "mfl_n": 257,
+   "mfl_cov": 63.6,
+   "both_n": 159
+  },
+  {
+   "season": 2020,
+   "n_base": 425,
+   "ffc_n": 160,
+   "ffc_cov": 37.6,
+   "mfl_n": 286,
+   "mfl_cov": 67.3,
+   "both_n": 159
+  },
+  {
+   "season": 2021,
+   "n_base": 455,
+   "ffc_n": 170,
+   "ffc_cov": 37.4,
+   "mfl_n": 266,
+   "mfl_cov": 58.5,
+   "both_n": 169
+  },
+  {
+   "season": 2022,
+   "n_base": 440,
+   "ffc_n": 140,
+   "ffc_cov": 31.8,
+   "mfl_n": 259,
+   "mfl_cov": 58.9,
+   "both_n": 140
+  },
+  {
+   "season": 2023,
+   "n_base": 436,
+   "ffc_n": 169,
+   "ffc_cov": 38.8,
+   "mfl_n": 268,
+   "mfl_cov": 61.5,
+   "both_n": 169
+  },
+  {
+   "season": 2024,
+   "n_base": 441,
+   "ffc_n": 172,
+   "ffc_cov": 39.0,
+   "mfl_n": 262,
+   "mfl_cov": 59.4,
+   "both_n": 172
+  },
+  {
+   "season": 2025,
+   "n_base": 463,
+   "ffc_n": null,
+   "ffc_cov": null,
+   "mfl_n": 251,
+   "mfl_cov": 54.2,
+   "both_n": null
+  }
+ ],
+ "executive_summary": "**The premise does not hold: on the matched population the shipped number does not move.** Vs **FFC** the shipped per-source population (P0) gives \u0394\u03c1 **+0.022** (~162 players/season) and the pre-registered cross-source MATCHED population (P1 = our universe \u2229 FFC \u2229 MFL) gives **+0.022** (~161/season) \u2014 identical to three decimals, intervals overlapping. The reason is structural and visible in \u00a72: **FFC's ranked players are very nearly a SUBSET of MFL's** (161 of 162 survive the intersection), so matching to MFL removes almost nobody from FFC's population and there is nothing for a population effect to act on. \u2b50 **What IS population-sensitive is the OTHER source:** MFL reads **+0.173** [+0.140, +0.207] on its own deeper ~264-player population but collapses to **+0.008** [-0.027, +0.040] once restricted to FFC's shallower one. So the FFC/MFL gap is a **DEPTH** effect, not a source-quality effect: hold the population fixed and the two real-draft ADP crowds agree to within 0.014. \u26a0\ufe0f **And the finding that matters most for a public claim points the other way from the story's hypothesis:** the shipped +0.022's own 90% paired bootstrap interval is [-0.006, +0.051], which **includes zero** \u2014 on FFC's top-~162 population our ordering is not distinguishable from the draft crowd's. Nothing here supports raising the public number; the pre-registered decision rule returns KEEP THE SHIPPED NUMBER.",
+ "forensic_note": "**Neither deferred figure is reproduced by ANY pre-registered population.** Per the \u00a77 pre-commitment this is reported as a finding rather than chased: reverse-engineering a population to hit a remembered number is the same inversion as reverse-engineering one to hit a flattering number, and is strictly worse because the target is already known.",
+ "closing": "`best_alpha = 0`. The shipped public claim is untouched by this run. Any change to it is a DISCLOSED product change (re-export via the guarded `--publish` + a changelog entry), decided by the operator from the fully-reported pre-registered set above \u2014 never a quiet edit, and never the best of several definitions tried.",
+ "implications": "### What this run does and does not license\n\n1. \u26d4 **It does not license raising the headline.** The pre-registered primary (P1) is +0.022 \u2014 the same number that already ships \u2014 and its interval includes zero. No population in the registered set makes the FFC claim bigger.\n\n2. \u2b50 **It strengthens the case that the shipped claim is honest rather than understated.** The public headline is a bare \u0394\u03c1 with an explicit \"multi-season average, not a promise for any single position or season\" caveat and no \"we beat\" language (enforced by `export_track_record_json._CLAIM_DENYLIST`). Given the interval [-0.006, +0.051], that phrasing is doing real work and should not be loosened.\n\n3. \ud83d\udfe1 **There IS a larger, interval-clean reading \u2014 and it is a DIFFERENT claim, not a better measurement of the same one.** Vs MFL over all 7 seasons (incl. 2025, which FFC has no archive for at all) \u0394\u03c1 is **+0.173** with a 90% interval [+0.140, +0.207] that excludes zero, on ~264 players/season. P1 shows WHY: it is not that MFL is a worse crowd \u2014 restricted to FFC's population MFL reads +0.008 \u2014 it is that **a draft-crowd ordering degrades faster than ours as you go deeper into the pool**, and MFL ranks ~102 more players per season than FFC. Quoting +0.173 without stating the depth would be the exact confound this story exists to prevent.\n\n   \u26a0\ufe0f **This session does NOT recommend that swap and the pre-registered rule does not permit it** (\u00a78.3 allows recommending only the pre-registered primary). Switching the headline source to the one that reads higher is the \u00a74 prohibition, and it would need to be justified on grounds fixed BEFORE the numbers were seen \u2014 MFL's genuinely wider coverage (~64% vs ~40% of our scored universe) and its 7-season span are such grounds, but they were not pre-registered as a selection criterion here. If the operator wants that framing, the honest form is to report **both**, each labelled with its population and depth, and to say plainly that the difference between them is depth and not disagreement between the two crowds.\n\n4. \ud83d\udccf **Two uncertainty readings, both reported, neither hidden.** The 90% intervals above are PAIRED player-level bootstraps holding the season set fixed \u2014 they answer \"given these seasons, is our ordering better?\". The across-season SD column answers the wider question (FFC: SD +0.040 over 6 seasons \u21d2 a season-level SE of ~0.016). Both are narrow enough to matter and neither rescues the FFC claim from straddling zero.",
+ "method_lessons": "- \u2b50 **A \"matched population\" fix does nothing when one population is already a SUBSET of the other \u2014 and you cannot know that without computing the intersection SIZE first.** The whole premise of this story was that matching would move the FFC number; \u00a72 shows FFC \u2229 MFL retains 159\u2013172 of FFC's 140\u2013172 rows, i.e. essentially all of them. The intersection COUNT is a design quantity available before any \u03c1 is computed, and reading it first would have predicted the null. **Report the population overlap before the metric, not after.**\n\n- \u2b50\u2b50 **A one-sided depth truncation can manufacture an arbitrary \u0394\u03c1, and this run measures how big the artifact is.** At top-200 vs MFL, truncating by the SOURCE's own ordering gives **+0.218** and truncating by OURS gives **+0.016** \u2014 a band of **0.20**, an order of magnitude wider than the effect under study, from nothing but which side you range-restricted. Any \"top-N\" benchmark comparison that does not state which side defined the N is uninterpretable. This is why \u00a73 pre-registered BOTH sides as mandatory rather than picking one.\n\n- \u2b50 **The forensic leg needed its own admissibility rule, and that rule fired.** The closest cell to the deferred +0.088 (MFL) across the whole run is `P2_depth100_by_source` = +0.079, a gap of 0.009 \u2014 inside the \u00b10.02 \"match\" tolerance. Had the pre-registration not already ruled one-sided depth readings inadmissible, that coincidence would have been reported as a REPRODUCTION of the deferred figure by a reading the same document calls meaningless. **A near-match found by a method you already disqualified is a coincidence, not a corroboration** \u2014 and the only defence is to have written the disqualification down first.\n\n- \u2b50 **The identity anchor (A1) is cheap and is the one that proves the population machinery cannot manufacture a gap.** Scoring a source against ITSELF must return exactly 0.0 on every population; it did, on all 57 cells. A population filter with a sign error, a mis-aligned merge or an asymmetric tie-break would break this before it broke anything a human would notice in a \u0394\u03c1 table.\n\n- \u2b50\u2b50 **A GUARD ON A MULTI-CLAUSE RULE IS VACUOUS UNLESS ITS FIXTURE SATISFIES EVERY *OTHER* CLAUSE \u2014 and this story's most important guard shipped that way in its first cut.** The decision rule refuses a change unless BOTH \"P1's interval excludes 0\" AND \"P0/P1 are materially different\". The test named for the first clause used this run's real shape (P1 +0.144, interval straddling 0, intervals overlapping) \u2014 but the OVERLAP clause already refused it, so **deleting `excludes_zero` from the source left the suite GREEN**. Found only by deliberately breaking the source, and fixed by constructing a fixture where every other clause is SATISFIED so the named clause is the only thing that can refuse (and a mirror fixture for the other clause). Both are now verified RED on their own defect. **Generalises to any AND-composed gate in this repo: a fixture that trips two clauses at once tests neither.** The NF1.7 (a) vacuous-anchor class, one level up \u2014 in the TEST rather than in the anchor."
+}
