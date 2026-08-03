@@ -1,9 +1,10 @@
 """Admin endpoints.
 
-POST /admin/cache/invalidate    — invalidate today's S3 cache
-GET  /admin/pipeline-runs       — last 14 Dagster run entries (two jobs)
-GET  /admin/model-freshness     — champion model freshness from model_registry
-GET  /admin/snowflake-credits   — month-by-month Snowflake credit usage (last 6 months)
+POST /admin/cache/invalidate           — invalidate today's S3 cache
+GET  /admin/pipeline-runs              — last 14 Dagster run entries (two jobs)
+GET  /admin/model-freshness            — champion model freshness from model_registry
+GET  /admin/snowflake-credits          — month-by-month Snowflake credit usage (last 6 months)
+GET  /admin/fantasy-import-telemetry   — captured scoring terms ranked by frequency × |weight| (NF-C0d)
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from pydantic import BaseModel
 from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
 
 from app.backend.dependencies import get_admin_user
-from app.backend.services import serving_cache
+from app.backend.services import fantasy_import_telemetry, serving_cache
 from app.backend.services.s3_cache import invalidate_game as s3_invalidate_game
 from app.backend.services.s3_cache import invalidate_permanent_picks as s3_invalidate_permanent_picks
 from app.backend.services.s3_cache import invalidate_today
@@ -68,6 +69,15 @@ class SnowflakeCredits(BaseModel):
     compute_credits: float        # raw warehouse compute credits (informational)
     cloud_service_credits: float  # raw cloud-services credits before the 10% adjustment
     billed_credits: float         # compute + DAILY-applied cloud-services excess (what Snowflake bills)
+
+
+class CapturedTermStat(BaseModel):
+    platform: str
+    key: str
+    occurrences: int      # how many imports carried this term as CAPTURED
+    avg_abs_weight: float  # average |point value| across those imports
+    score: float           # occurrences × avg_abs_weight — the ranking key
+    last_seen_at: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -413,3 +423,24 @@ def snowflake_credits(_: str = Depends(get_admin_user)) -> list[SnowflakeCredits
         ))
 
     return results
+
+
+# ---------------------------------------------------------------------------
+# Fantasy import coverage-gap telemetry (NF-C0d)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/fantasy-import-telemetry", response_model=list[CapturedTermStat])
+def fantasy_import_telemetry_ranking(_: str = Depends(get_admin_user)) -> list[CapturedTermStat]:
+    """Which league scoring settings our users score that we do NOT project, ranked by how much it
+    would matter to close each gap.
+
+    Reads the AGGREGATE rows `fantasy_import_telemetry` records on every successful platform import
+    (platform, the setting's key, its point value, verdict, season — never a user id, team name, or
+    roster; see that module's docstring). Ranked by `occurrences × avg(|weight|)` so a setting that
+    appears in many leagues at a meaningful point value sorts above one seen once at a trivial value
+    — this feeds NF-C0e's priority order directly. Non-raising: an S3 outage returns an empty list
+    rather than a 5xx, since this is a priority-ranking surface, not anything serving depends on.
+    """
+    rows = fantasy_import_telemetry.list_captured_term_rows()
+    return [CapturedTermStat(**stat) for stat in fantasy_import_telemetry.aggregate_captured_terms(rows)]
