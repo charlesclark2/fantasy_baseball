@@ -138,8 +138,18 @@ function RangeStrip({
     <div className="mt-6">
       <div
         className="relative h-12 cursor-help"
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
+        // A plain `onMouseEnter`/`onMouseLeave` never fires on a touch device — nothing here was
+        // reachable on a phone (2026-08-02 mobile audit, mirrors the InfoTip/Tooltip fix elsewhere).
+        // `onClick` toggles it for tap; the pointer handlers keep the desktop hover feel and are
+        // gated to `pointerType === "mouse"` so a touch tap's synthesized mouse events can't fight
+        // the toggle.
+        onClick={() => setHover((h) => !h)}
+        onPointerEnter={(e) => {
+          if (e.pointerType === "mouse") setHover(true)
+        }}
+        onPointerLeave={(e) => {
+          if (e.pointerType === "mouse") setHover(false)
+        }}
       >
         {/* full 5th–95th percentile band */}
         <div
@@ -203,7 +213,7 @@ function RangeStrip({
 
       <div className="flex justify-between text-[10px] text-gray-600">
         <span>{p05} K</span>
-        <span className="text-emerald-400/80">middle 50% shaded · median tick · hover for interval</span>
+        <span className="text-emerald-400/80">middle 50% shaded · median tick · hover/tap for interval</span>
         <span>{p95} K</span>
       </div>
     </div>
