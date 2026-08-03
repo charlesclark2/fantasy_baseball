@@ -148,3 +148,7 @@ quant_sports_intel_models/baseball/edge_program/ablation_results/**/*.xlsx
 
 quant_sports_intel_models/baseball/edge_program/ablation_results/e7_13_artifacts/*.csv
 
+
+# E8.7 — the complex-screen fetch CACHE (regenerable in ~2 min from the Stats API;
+# the screen RESULT, complex_screen.json, IS tracked).
+quant_sports_intel_models/baseball/edge_program/ablation_results/e8_7_artifacts/season_lines.parquet
