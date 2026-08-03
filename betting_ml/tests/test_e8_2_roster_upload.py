@@ -44,6 +44,8 @@ from app.backend.services.mlb_roster import (
 from app.backend.services.mlb_roster.board_match import (
     AMBIGUOUS,
     EXACT,
+    MANUAL,
+    MISSING_FROM_BOARD,
     UNRESOLVED,
     VARIANT,
     name_key,
@@ -574,6 +576,52 @@ class TestBoardCoverageGaps:
         result = match_roster([suggested, confirmed], self.BOARD, "AL",
                               overrides={confirmed.key: "missing_from_board"})
         assert [g["source"] for g in result.coverage_gaps] == ["confirmed", "suggested"]
+
+
+class TestTheGapSelfHeals:
+    """⭐ E8.5 — the deferred E8.2 defect. `missing_from_board` used to be applied BEFORE matching,
+    so once the board added the flagged player he stayed flagged (and out of the overlay) forever.
+    It must instead be re-evaluated against the CURRENT board on every call."""
+
+    BOARD_WITHOUT = [board_row(1, "Samuel Basallo", org="BAL", mlbam=701)]
+    BOARD_WITH = BOARD_WITHOUT + [board_row(2, "Vance Honeycutt", org="BAL", mlbam=702)]
+
+    def test_a_confirmed_gap_clears_itself_once_the_board_adds_the_player(self):
+        prospect = entry("Vance Honeycutt", status="minors")
+        overrides = {prospect.key: "missing_from_board"}
+
+        before = match_roster([prospect], self.BOARD_WITHOUT, "AL", overrides=overrides)
+        assert before.coverage_gaps and before.coverage_gaps[0]["source"] == "confirmed"
+        assert before.matched[0].board_rank is None
+
+        after = match_roster([prospect], self.BOARD_WITH, "AL", overrides=overrides)
+        assert after.coverage_gaps == [], "the gap must clear itself, not require a manual undo"
+        assert after.matched[0].confidence == EXACT
+        assert after.matched[0].board_rank == 2
+        assert after.by_rank[2].entry.name == "Vance Honeycutt"
+
+    def test_a_still_missing_confirmed_gap_survives_an_unrelated_board_change(self):
+        """The board changed (a rank shifted) but the flagged player is STILL not on it — the
+        confirmation must not be lost just because *something* about the board is different."""
+        prospect = entry("Vance Honeycutt", status="minors")
+        overrides = {prospect.key: "missing_from_board"}
+        reranked = [{**self.BOARD_WITHOUT[0], "rank": 5}]
+        result = match_roster([prospect], reranked, "AL", overrides=overrides)
+        assert result.coverage_gaps and result.coverage_gaps[0]["source"] == "confirmed"
+        assert result.matched[0].confidence == MISSING_FROM_BOARD
+
+    def test_not_a_prospect_never_self_heals(self):
+        """A `not_a_prospect` dismissal is a statement about the PERSON, not the board's contents —
+        it must stay dismissed even after the board changes, unlike `missing_from_board`."""
+        veteran = entry("Salvador Perez")
+        overrides = {veteran.key: "not_a_prospect"}
+        board_with_a_perez_prospect = self.BOARD_WITHOUT + [
+            board_row(9, "Salvador Perez", org="KC", mlbam=999)
+        ]
+        result = match_roster([veteran], board_with_a_perez_prospect, "AL", overrides=overrides)
+        assert result.matched[0].confidence == MANUAL
+        assert result.matched[0].board_rank is None
+        assert result.coverage_gaps == []
 
 
 class TestTheSlotHint:

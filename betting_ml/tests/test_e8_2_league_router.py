@@ -92,6 +92,28 @@ def board(monkeypatch):
     return holder
 
 
+class FakeEgress:
+    """Stands in for E8.5's `coverage_gap_egress` — records every write/delete call, no IO."""
+
+    def __init__(self):
+        self.writes: list[tuple] = []
+        self.deletes: list[tuple] = []
+
+    def write(self, user_id, league_id, league_meta, coverage_gaps):
+        self.writes.append((user_id, league_id, league_meta, list(coverage_gaps)))
+        return True
+
+    def delete(self, user_id, league_id):
+        self.deletes.append((user_id, league_id))
+
+
+@pytest.fixture(autouse=True)
+def egress(monkeypatch):
+    fake = FakeEgress()
+    monkeypatch.setattr(mod, "coverage_gap_egress", fake)
+    return fake
+
+
 def preview(text=GRID, scope="AL"):
     return mod.preview(mod.PreviewRequest(text=text, league_scope=scope), season=2026,
                        user_id=USER)
@@ -504,6 +526,153 @@ class TestBoardCoverageIsReported:
         assert after["coverage_gaps"] == []
         assert "Vance Honeycutt" not in [r["name"] for r in after["review"]]
 
+
+@pytest.mark.usefixtures("board")
+class TestALegacyStoredLeagueStillServesAndSelfHeals:
+    """⚠️ Runtime-gate discipline (E9.49/E8.6): CI mocks all IO and every OTHER fixture in this file
+    is a well-formed record this session's own code just wrote. A record stored by an EARLIER
+    version of this feature — missing fields E8.2b/E8.5 later added — must still read cleanly and
+    still self-heal, not 500 or silently drop the coverage-gap signal."""
+
+    def test_a_pre_org_positions_entry_still_overlays_and_reports_a_gap(self, store):
+        """The very first E8.2 shape stored only team/slot/name/status — `org` and `positions`
+        arrived later. `_entries()` must default them, not KeyError."""
+        legacy_league = {
+            "name": "Legacy League",
+            "league_scope": "AL",
+            "season": 2026,
+            "teams": ["Legacy Team"],
+            "entries": [
+                {"team": "Legacy Team", "slot": "OF", "name": "Vance Honeycutt", "status": "minors"}
+                # no "org", no "positions" — the pre-E8.2-second-export shape
+            ],
+            "overrides": {},
+            "picks": {},
+        }
+        store.leagues["legacy1"] = legacy_league
+        out = read("legacy1")
+        gaps = {g["name"]: g for g in out["coverage_gaps"]}
+        assert "Vance Honeycutt" in gaps
+        assert gaps["Vance Honeycutt"]["org"] is None, "a legacy row must default, not KeyError"
+        assert gaps["Vance Honeycutt"]["source"] == "suggested"
+
+    def test_a_confirmed_gap_from_a_legacy_override_shape_still_self_heals(self, store, board):
+        """A `missing_from_board` override recorded before the board carried the player must clear
+        itself once the board does — the legacy stored shape (bare team/slot/name/status, an
+        override keyed the old way) exercises the exact self-heal path E8.5 fixes."""
+        key = "Legacy Team␟OF␟Vance Honeycutt␟minors"
+        store.leagues["legacy2"] = {
+            "name": "Legacy League 2",
+            "league_scope": "AL",
+            "season": 2026,
+            "teams": ["Legacy Team"],
+            "entries": [
+                {"team": "Legacy Team", "slot": "OF", "name": "Vance Honeycutt", "status": "minors"}
+            ],
+            "overrides": {key: "missing_from_board"},
+            "picks": {},
+        }
+        before = read("legacy2")
+        assert [g["name"] for g in before["coverage_gaps"]] == ["Vance Honeycutt"]
+
+        board["data"] = {"players": [*BOARD["players"], {
+            "rank": 300, "name": "Vance Honeycutt", "league": "AL", "org": "BAL", "mlbamId": 555,
+        }]}
+        after = read("legacy2")
+        assert after["coverage_gaps"] == []
+        assert after["rostered"]["300"]["team"] == "Legacy Team"
+
+    def test_a_gap_entry_missing_optional_upload_fields_does_not_break_the_response(self, store):
+        """`positions`/`status_code` are newer fields still — a row missing them must serialize
+        cleanly rather than crashing the whole overlay response."""
+        store.leagues["legacy3"] = {
+            "name": "Legacy League 3", "league_scope": "AL", "season": 2026,
+            "teams": ["T"],
+            "entries": [{"team": "T", "slot": "OF", "name": "D Lesko", "status": "minors"}],
+            "overrides": {}, "picks": {},
+        }
+        out = read("legacy3")  # must not raise
+        assert any(g["name"] == "D Lesko" for g in out["coverage_gaps"])
+
+
+@pytest.mark.usefixtures("store", "board")
+class TestCoverageGapEgressWiring:
+    """E8.5 — the coverage-gap signal must reach the durable S3 egress from every route that can
+    change it, and must NEVER be persisted from `preview` (which stores nothing, by design)."""
+
+    def test_preview_never_writes_to_the_egress(self, egress):
+        preview()
+        assert egress.writes == []
+
+    def test_saving_a_league_writes_its_coverage_gaps(self, egress):
+        league_id = save()["league"]["league_id"]
+        assert egress.writes, "save_league must persist the coverage-gap egress"
+        user_id, written_league_id, meta, gaps = egress.writes[-1]
+        assert user_id == USER
+        assert written_league_id == league_id
+        assert meta["name"] == "Dynasty"
+
+    def test_reading_a_saved_league_also_refreshes_the_egress(self, egress):
+        """A GET recomputes the overlay fresh (E8.2's existing convention) — E8.5 persists on every
+        computation, not just on a write, so a board republish is reflected without the admin having
+        to touch the league again."""
+        league_id = save()["league"]["league_id"]
+        egress.writes.clear()
+        read(league_id)
+        assert egress.writes, "get_league must also refresh the durable egress"
+
+    def test_upserting_a_team_writes_the_egress(self, egress):
+        league_id = save()["league"]["league_id"]
+        egress.writes.clear()
+        mod.upsert_team(mod.TeamUploadRequest(team="Red Paps", text=OVERVIEW),
+                        league_id=league_id, user_id=USER)
+        assert egress.writes
+
+    def test_a_manual_gap_confirmation_reaches_the_egress(self, egress):
+        league_id = save()["league"]["league_id"]
+        out = mod.upsert_team(mod.TeamUploadRequest(team="Red Paps", text=OVERVIEW),
+                              league_id=league_id, user_id=USER)
+        key = next(g["key"] for g in out["coverage_gaps"] if g["name"] == "Vance Honeycutt")
+        egress.writes.clear()
+        mod.update_league(mod.UpdateRequest(overrides={key: "missing_from_board"}),
+                          league_id=league_id, user_id=USER)
+        _, _, _, gaps = egress.writes[-1]
+        assert [g["name"] for g in gaps] == ["Vance Honeycutt"]
+
+    def test_the_egress_self_heals_when_the_board_is_republished(self, egress, board):
+        """⭐ The end-to-end version of `TestTheGapSelfHeals` (board_match), through the router: once
+        the board carries the player, the NEXT read must write an EMPTY coverage-gap list to S3, not
+        leave the stale confirmed entry sitting there forever."""
+        league_id = save()["league"]["league_id"]
+        out = mod.upsert_team(mod.TeamUploadRequest(team="Red Paps", text=OVERVIEW),
+                              league_id=league_id, user_id=USER)
+        key = next(g["key"] for g in out["coverage_gaps"] if g["name"] == "Vance Honeycutt")
+        mod.update_league(mod.UpdateRequest(overrides={key: "missing_from_board"}),
+                          league_id=league_id, user_id=USER)
+        assert egress.writes[-1][3], "the confirmed gap should have been written"
+
+        board["data"] = {"players": [*BOARD["players"], {
+            "rank": 200, "name": "Vance Honeycutt", "league": "AL", "org": "BAL", "mlbamId": 999,
+        }]}
+        egress.writes.clear()
+        out = read(league_id)
+        assert out["coverage_gaps"] == []
+        assert egress.writes[-1][3] == [], "the self-healed empty list must reach the egress"
+
+    def test_assign_and_undo_pick_write_the_egress(self, egress):
+        league_id = save()["league"]["league_id"]
+        egress.writes.clear()
+        mod.assign_pick(mod.PickRequest(team="KCStat"), league_id=league_id, board_rank=7,
+                        user_id=USER)
+        assert egress.writes
+        egress.writes.clear()
+        mod.undo_pick(league_id=league_id, board_rank=7, user_id=USER)
+        assert egress.writes
+
+    def test_deleting_a_league_clears_its_egress_object(self, egress):
+        league_id = save()["league"]["league_id"]
+        mod.delete_league(league_id=league_id, user_id=USER)
+        assert egress.deletes == [(USER, league_id)]
 
 class TestTheGate:
     def test_every_route_is_admin_gated(self):

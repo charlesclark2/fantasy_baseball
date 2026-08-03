@@ -56,7 +56,8 @@ _SUFFIXES = frozenset({"jr", "sr", "ii", "iii", "iv", "v"})
 #: How an entry was resolved. Ordered worst → best for reporting.
 UNRESOLVED = "unresolved"
 #: The admin says this player IS a prospect we simply do not carry. Kept, and REPORTED — see
-#: `RosterMatch.coverage_gaps`.
+#: `RosterMatch.coverage_gaps`. E8.5 — SELF-HEALS: re-checked against the CURRENT board on every
+#: `match_roster` call, so once the board adds him a clean match wins and this label clears itself.
 MISSING_FROM_BOARD = "missing_from_board"
 NOT_A_PROSPECT = "not_a_prospect"
 POSITION_CONFLICT = "position_conflict"
@@ -308,21 +309,25 @@ def match_roster(
     # nothing. A manual pin is the strongest signal we have and must always win; an automatic match
     # that collides with one falls through to CONTESTED in pass 2, which is visible.
     resolved: dict[str, MatchedEntry] = {}
+    # E8.5 — SELF-HEAL. A `missing_from_board` override used to be pinned HERE, in pass 1, before any
+    # matching ran — so once the admin confirmed a gap it stayed reported forever, even after the
+    # very next board publish added the player (the deferred E8.2 defect this closes). These keys are
+    # instead carried into pass 2 and matched against the CURRENT board exactly like a fresh entry; a
+    # clean single match wins and the confirmation clears itself. Only when pass 2 finds truly
+    # nothing new does it fall back to re-reporting the confirmed gap (below).
+    confirmed_gaps: set[str] = set()
     for entry in entries:
         override = overrides.get(entry.key, "__absent__")
         if override == "__absent__":
             continue
         if override is None or override == NOT_A_PROSPECT:
-            # "This is an established major-leaguer." Resolved, silent, not a coverage gap.
+            # "This is an established major-leaguer." Resolved, silent, not a coverage gap. This one
+            # does NOT self-heal — it is a statement about the PERSON ("not a prospect"), not about
+            # the board's current contents, so a later board publish has nothing to re-evaluate.
             resolved[entry.key] = MatchedEntry(entry=entry, board_rank=None, confidence=MANUAL)
             counts["dismissed"] += 1
         elif override == MISSING_FROM_BOARD:
-            # "This IS a prospect — we just do not carry him." Leaves the review queue so it stops
-            # nagging, but is REPORTED as a coverage gap instead of being forgotten.
-            resolved[entry.key] = MatchedEntry(
-                entry=entry, board_rank=None, confidence=MISSING_FROM_BOARD
-            )
-            counts[MISSING_FROM_BOARD] += 1
+            confirmed_gaps.add(entry.key)
         elif str(override).lstrip("-").isdigit() and by_rank.get(int(override)) is not None:
             matched = MatchedEntry(entry=entry, board_rank=int(override), confidence=MANUAL)
             resolved[entry.key] = matched
@@ -339,10 +344,13 @@ def match_roster(
             result.matched.append(pinned)
             continue
 
+        is_confirmed_gap = entry.key in confirmed_gaps
         key = name_key(entry.name)
         if key is None:
-            result.matched.append(MatchedEntry(entry=entry, board_rank=None, confidence=UNRESOLVED))
-            counts[UNRESOLVED] += 1
+            # Nothing to match against at all — the admin's confirmation is the only signal we have.
+            confidence = MISSING_FROM_BOARD if is_confirmed_gap else UNRESOLVED
+            result.matched.append(MatchedEntry(entry=entry, board_rank=None, confidence=confidence))
+            counts[confidence] += 1
             continue
 
         # LEG 1 — the whole name, when the upload gives one. Unambiguous on the live board.
@@ -421,8 +429,12 @@ def match_roster(
             counts[AMBIGUOUS] += 1
             result.matched.append(matched)
         else:
-            result.matched.append(MatchedEntry(entry=entry, board_rank=None, confidence=UNRESOLVED))
-            counts[UNRESOLVED] += 1
+            # No candidate at all on the CURRENT board — the confirmed gap has not yet self-healed,
+            # so it is re-reported exactly as the admin left it rather than reverting to a bare
+            # UNRESOLVED (which would drop it out of `coverage_gaps` and silently un-confirm it).
+            confidence = MISSING_FROM_BOARD if is_confirmed_gap else UNRESOLVED
+            result.matched.append(MatchedEntry(entry=entry, board_rank=None, confidence=confidence))
+            counts[confidence] += 1
 
     # A gap is either CONFIRMED by the admin, or SUGGESTED because an unresolved player sits in a
     # minors slot — the tier where "we could not place him" most often means "we do not carry him".
