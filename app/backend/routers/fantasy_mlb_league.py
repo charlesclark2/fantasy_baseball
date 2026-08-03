@@ -33,7 +33,7 @@ from pydantic import BaseModel, Field
 
 from app.backend.dependencies import get_admin_user, require_fantasy_access
 from app.backend.routers.fantasy import _load_json
-from app.backend.services import dynamo
+from app.backend.services import coverage_gap_egress, dynamo
 from app.backend.services.mlb_roster import (
     RosterEntry,
     RosterUploadError,
@@ -156,12 +156,22 @@ def _entries(league: dict) -> list[RosterEntry]:
     return out
 
 
-def _overlay(league: dict, entries: list[RosterEntry]) -> dict:
-    """The league's roster + in-draft picks → what the board should show, by board rank."""
+def _overlay(league: dict, entries: list[RosterEntry], user_id: str) -> dict:
+    """The league's roster + in-draft picks → what the board should show, by board rank.
+
+    E8.5 — also persists `result.coverage_gaps` to the durable board-build egress
+    (`coverage_gap_egress`), keyed on `league["league_id"]`. `preview()` calls this with a bare dict
+    that carries no `league_id` (nothing is stored during a preview, by design — see its docstring),
+    so the write is skipped structurally rather than needing a separate flag.
+    """
     season = int(league.get("season") or _SEASON)
     scope = _scope(league.get("league_scope"))
     overrides = {str(k): v for k, v in (league.get("overrides") or {}).items()}
     result = match_roster(entries, _board(season), None if scope == "BOTH" else scope, overrides)
+
+    league_id = league.get("league_id")
+    if league_id:
+        coverage_gap_egress.write(user_id, str(league_id), league, result.coverage_gaps)
 
     rostered: dict[str, dict] = {}
     for rank, matched in result.by_rank.items():
@@ -272,7 +282,7 @@ def preview(
         raise HTTPException(status_code=422, detail=str(e)) from e
 
     league = {"season": season, "league_scope": scope, "teams": parsed.teams}
-    overlay = _overlay(league, parsed.entries)
+    overlay = _overlay(league, parsed.entries, user_id)
     return {
         "upload_format": parsed.upload_format,
         "warnings": parsed.warnings,
@@ -349,7 +359,7 @@ def save_league(
         "league": _summary(stored),
         "warnings": parsed.warnings,
         "upload_format": parsed.upload_format,
-        **_overlay(stored, parsed.entries),
+        **_overlay(stored, parsed.entries, user_id),
     }
 
 
@@ -401,7 +411,7 @@ def upsert_team(
         "warnings": parsed.warnings,
         "imported": len(parsed.entries),
         "replaced": len((league.get("entries") or [])) - len(kept),
-        **_overlay(stored, entries),
+        **_overlay(stored, entries, user_id),
     }
 
 
@@ -419,7 +429,7 @@ def get_league(
         "entries": [
             {"team": e.team, "slot": e.slot, "name": e.name, "status": e.status} for e in entries
         ],
-        **_overlay(league, entries),
+        **_overlay(league, entries, user_id),
     }
 
 
@@ -447,7 +457,7 @@ def update_league(
         record["my_team"] = payload.my_team.strip() or None
     stored = dynamo.put_mlb_league(user_id, league_id, record)
     entries = _entries(stored)
-    return {"league": _summary(stored), **_overlay(stored, entries)}
+    return {"league": _summary(stored), **_overlay(stored, entries, user_id)}
 
 
 @router.delete("/leagues/{league_id}", status_code=204)
@@ -455,11 +465,16 @@ def delete_league(
     league_id: str = Path(min_length=1, max_length=64),
     user_id: str = Depends(get_admin_user),
 ):
-    """Forget this league entirely — a real delete of the user's roster data, not a soft flag."""
+    """Forget this league entirely — a real delete of the user's roster data, not a soft flag.
+
+    E8.5 — also clears the league's coverage-gap egress object; a gap report for a league that no
+    longer exists is stale advisory data at best, and best-effort (never raises) at worst.
+    """
     try:
         dynamo.delete_mlb_league(user_id, league_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail="League not found") from e
+    coverage_gap_egress.delete(user_id, league_id)
     return None
 
 
@@ -489,7 +504,7 @@ def assign_pick(
     picks[str(board_rank)] = payload.team.strip()
     record["picks"] = picks
     stored = dynamo.put_mlb_league(user_id, league_id, record)
-    return {"league": _summary(stored), **_overlay(stored, _entries(stored))}
+    return {"league": _summary(stored), **_overlay(stored, _entries(stored), user_id)}
 
 
 @router.delete("/leagues/{league_id}/picks/{board_rank}")
@@ -505,4 +520,4 @@ def undo_pick(
     picks.pop(str(board_rank), None)
     record["picks"] = picks
     stored = dynamo.put_mlb_league(user_id, league_id, record)
-    return {"league": _summary(stored), **_overlay(stored, _entries(stored))}
+    return {"league": _summary(stored), **_overlay(stored, _entries(stored), user_id)}
