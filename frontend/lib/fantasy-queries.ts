@@ -18,13 +18,14 @@ import {
   getFantasyBoard,
   getFantasyManifest,
   getFantasyProjections,
+  getMyTeams as getMyTeamsPayload,
   listSavedLeagues,
   updateSavedLeague,
 } from "@/lib/fantasy"
-import type { LeagueSaveInput, ProjectionPayload, SavedLeague } from "@/lib/fantasy"
+import type { LeagueSaveInput, MyTeamsPayload, ProjectionPayload, SavedLeague } from "@/lib/fantasy"
 import type { LeagueConfig } from "@/lib/league-config"
-import { buildBoard } from "@/lib/league-scoring"
-import type { BuiltBoard } from "@/lib/league-scoring"
+import { buildBoard, matchRosterToBoard } from "@/lib/league-scoring"
+import type { BuiltBoard, RosterMatch } from "@/lib/league-scoring"
 import type { Manifest, Player } from "@/lib/draft-optimizer"
 import {
   PROSPECT_SEASON,
@@ -153,6 +154,56 @@ export function useCustomBoard(config: LeagueConfig | null): BuiltBoard | null {
     if (!config || !projections?.players?.length) return null
     return buildBoard(projections.players, config)
   }, [config, projections])
+}
+
+// ── NF-C6: My Teams (cross-league browse) ────────────────────────────────────────────────────────
+
+/** One saved league, scored in the browser, joined against its linked roster (if any). */
+export interface MyTeamEntry {
+  league: SavedLeague
+  /** `null` until the projections payload has loaded — callers should show a loading state, not an
+   *  empty one, while this is null (mirrors `useCustomBoard`'s own null-until-ready contract). */
+  board: BuiltBoard | null
+  /** Empty when the league has no linked team yet (`imported_roster` is null/empty) — a hand-entered
+   *  league, or an imported one the user has not picked a team for (see `source_team_key`). */
+  roster: RosterMatch[]
+}
+
+/**
+ * Every saved league this user has, each scored + joined to its linked roster.
+ *
+ * Reads `/fantasy/nfl/my-teams` (broader `require_fantasy_access` gate than `useSavedLeagues`'s
+ * beta-only `/fantasy/leagues` — see that endpoint's docstring) for the configs + roster snapshots,
+ * then scores each one CLIENT-SIDE with the SAME `buildBoard` every other fantasy surface uses — no
+ * second scorer, per the NF1.5b/NF3.3 reuse rule (`fantasy_engine` cannot be imported into the API
+ * Lambda; see `models/fantasy.py`).
+ */
+export function useMyTeams() {
+  const { accessToken, groups } = useAuth()
+  const entitled = canAccess("fantasy", groups)
+  const { data: projections } = useFantasyProjections()
+  const query = useQuery<MyTeamsPayload>({
+    queryKey: ["nfl-fantasy-my-teams"],
+    queryFn: () => getMyTeamsPayload(accessToken, FANTASY_SEASON),
+    enabled: entitled,
+    staleTime: 60_000,
+    retry: false,
+  })
+
+  const teams = useMemo<MyTeamEntry[] | null>(() => {
+    const leagues = query.data?.leagues
+    if (!leagues) return null
+    if (!projections?.players?.length) return null
+    return leagues.map((league) => {
+      const board = buildBoard(projections.players, league)
+      const roster = league.imported_roster?.length
+        ? matchRosterToBoard(league.imported_roster, board.players)
+        : []
+      return { league, board, roster }
+    })
+  }, [query.data, projections])
+
+  return { ...query, teams }
 }
 
 /** A saved league is selected as `custom:<league_id>` in the same control as the shipped presets. */

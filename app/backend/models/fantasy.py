@@ -26,6 +26,7 @@ MAX_ROSTER_SLOTS = 40
 MAX_SLOT_COUNT = 40
 MAX_STAT_TERMS = 200
 MAX_NAME_LEN = 80
+MAX_IMPORTED_ROSTER_PLAYERS = 60
 
 
 class RosterSlotModel(BaseModel):
@@ -74,6 +75,28 @@ class _LeagueFields(BaseModel):
     source_league_id: str | None = None
     imported_at: str | None = None
 
+    # ── NF-C6: WHICH imported team is the user's own, and its roster snapshot ────────────────
+    # A platform's roster payload is never joinable to our own player ids (`canonical.ImportedPlayer`
+    # docstring), and ESPN's response never identifies the requesting account at all (its adapter
+    # sets `is_owner=False` unconditionally, by design — "nobody is marked rather than guessing").
+    # Sleeper CAN in principle, but the common import path (paste a league ID) never resolves a
+    # Sleeper user id either. So there is no reliable AUTO-detection across platforms today: the
+    # import UI asks the user which of the previewed teams is theirs (pre-filled from `is_owner`
+    # when a platform did supply it, e.g. Yahoo's OAuth identity) and that choice — plus the chosen
+    # team's roster AT THAT MOMENT — is what gets saved here.
+    #
+    # ⚠️ A SNAPSHOT, NOT A LIVE READ, and deliberately so: unlike draft state (which the live/{id}
+    # endpoint re-fetches because a stale "who's drafted" is actively misleading), a roster snapshot
+    # persisted at (re-)import time is a bounded, cheap, uniform choice that works identically across
+    # all three platforms — including ESPN, which structurally CANNOT be re-fetched at all (the paste
+    # flow never lets this server call ESPN). `roster_synced_at` is shown so the age is never hidden;
+    # re-importing the league (the existing "update rather than duplicate" path) refreshes it.
+    source_team_key: str | None = None
+    source_team_name: str | None = None
+    # Each entry mirrors `canonical.ImportedPlayer.to_dict()`: player_key/name/position/team/starter.
+    imported_roster: list[dict] | None = None
+    roster_synced_at: str | None = None
+
 
 class LeagueSave(_LeagueFields):
     """Inbound payload for POST/PUT. Every validator here applies to SAVES only."""
@@ -107,6 +130,13 @@ class LeagueSave(_LeagueFields):
                 raise ValueError("every scoring key must be a non-empty string")
             if abs(float(weight)) > 1000:
                 raise ValueError(f"scoring weight for {key!r} is out of range")
+        return v
+
+    @field_validator("imported_roster")
+    @classmethod
+    def _roster_size_sane(cls, v: list[dict] | None) -> list[dict] | None:
+        if v is not None and len(v) > MAX_IMPORTED_ROSTER_PLAYERS:
+            raise ValueError(f"imported_roster has more than {MAX_IMPORTED_ROSTER_PLAYERS} players")
         return v
 
     @model_validator(mode="after")
