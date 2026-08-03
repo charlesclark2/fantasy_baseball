@@ -98,6 +98,10 @@ export interface LeagueOverlay {
   league_scope: string
   season: number
   teams: string[]
+  /** E8.6 — which of `teams` is the user's own, or null if never set. Free text, not validated
+   *  against `teams`: a re-upload can rename a team, and this should keep pointing at the name the
+   *  user picked rather than silently reject it. */
+  my_team: string | null
   counts: Record<string, number>
   rostered: Record<string, RosteredBy>
   picks: Record<string, string>
@@ -162,6 +166,8 @@ export function updateMlbLeague(
     name?: string
     league_scope?: string
     overrides?: Record<string, number | DismissReason | null>
+    /** E8.6 — `""` CLEARS the designation; omit the key entirely to leave it alone. */
+    my_team?: string
   },
 ): Promise<LeagueDetail> {
   return apiFetch(

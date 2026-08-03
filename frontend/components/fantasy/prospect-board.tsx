@@ -38,6 +38,7 @@ import {
   useActiveMlbLeague,
   useDraftPick,
   useMlbLeague,
+  useMlbLeagues,
   useProspectBoard,
   useProspectLeague,
   useProspectManifest,
@@ -356,19 +357,26 @@ function Row({
 
 /** Who holds a prospect, on his board row. Deliberately shows the TEAM, not just "rostered": in a
  *  dynasty league the useful question during a draft is not only whether he is gone but to whom. */
-function RosteredChip({ held }: { held: RosteredBy }) {
+function RosteredChip({ held, mine = false }: { held: RosteredBy; mine?: boolean }) {
   const label = held.source === "draft" ? "drafted" : "rostered"
   return (
     <span
-      className="rounded border border-rose-500/30 bg-rose-500/10 px-1 py-px text-[10px] text-rose-300"
+      className={`rounded border px-1 py-px text-[10px] ${
+        mine
+          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+          : "border-rose-500/30 bg-rose-500/10 text-rose-300"
+      }`}
       title={
-        held.confidence === "variant"
-          ? "Matched on a name-rendering variant — confirm it on the My League page."
-          : held.confidence === "manual"
-            ? "You matched this one by hand."
-            : undefined
+        mine
+          ? "Your team, as designated on the My League page."
+          : held.confidence === "variant"
+            ? "Matched on a name-rendering variant — confirm it on the My League page."
+            : held.confidence === "manual"
+              ? "You matched this one by hand."
+              : undefined
       }
     >
+      {mine && "★ "}
       {label} · {held.team}
       {held.status ? ` (${STATUS_LABEL[held.status] ?? held.status})` : ""}
       {held.confidence === "variant" ? " ?" : ""}
@@ -454,6 +462,7 @@ function DraftAssign({
   teams,
   held,
   compact = false,
+  mine = false,
 }: {
   rank: number
   name: string
@@ -461,6 +470,8 @@ function DraftAssign({
   teams: string[]
   held?: RosteredBy
   compact?: boolean
+  /** E8.6 — is `held.team` the user's own designated team? Purely a display flag. */
+  mine?: boolean
 }) {
   const pick = useDraftPick(leagueId)
   const [team, setTeam] = useState("")
@@ -479,10 +490,11 @@ function DraftAssign({
   }
 
   if (held?.source === "roster") {
-    if (compact) return <RosteredChip held={held} />
+    if (compact) return <RosteredChip held={held} mine={mine} />
     return (
       <div className="flex flex-wrap items-center gap-2 border-b border-[#1a1a1a] bg-[#0d0d0d] px-4 py-2 text-[11px]">
         <span className="text-gray-400">
+          {mine && <span className="text-emerald-400">★ </span>}
           Rostered by <span className="text-gray-200">{held.team}</span>
         </span>
         <span className="text-gray-600">
@@ -495,7 +507,8 @@ function DraftAssign({
   if (held?.source === "draft" && !reassigning) {
     const body = (
       <>
-        <span className={compact ? "text-rose-300" : "text-gray-400"}>
+        <span className={compact ? (mine ? "text-emerald-300" : "text-rose-300") : "text-gray-400"}>
+          {mine && "★ "}
           {compact ? "drafted · " : "Drafted by "}
           <span className={compact ? "" : "text-gray-200"}>{held.team}</span>
         </span>
@@ -523,7 +536,9 @@ function DraftAssign({
     return compact ? (
       <span
         onClick={stop}
-        className="inline-flex flex-wrap items-center gap-1.5 rounded border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 text-[10px]"
+        className={`inline-flex flex-wrap items-center gap-1.5 rounded border px-1.5 py-0.5 text-[10px] ${
+          mine ? "border-emerald-500/40 bg-emerald-500/10" : "border-rose-500/30 bg-rose-500/10"
+        }`}
       >
         {body}
       </span>
@@ -616,16 +631,23 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
   const leagueId = useId()
   const orgId = useId()
   const etaId = useId()
+  const myLeagueId = useId()
 
   // ⚠️ Defensive read (NF-C0): a payload missing `players` must fall through to a VISIBLE empty
   // state, never render nothing. A 200 with an unexpected shape is the failure mode that produced a
   // dead-looking page with no error anywhere.
   // ── E8.2: the availability overlay from the user's imported league ──
-  const [activeLeagueId] = useActiveMlbLeague()
+  const [activeLeagueId, setActiveLeagueId] = useActiveMlbLeague()
+  // E8.6 — every saved league (up to 5), so the board can switch WHICH ONE overlays it without
+  // leaving the page. Before this the only switcher lived on the My League setup page, so seeing
+  // a second league meant navigating away, switching there, and navigating back.
+  const savedLeaguesQ = useMlbLeagues()
+  const savedLeagues = savedLeaguesQ.data?.leagues ?? []
   const leagueQ = useMlbLeague(activeLeagueId)
   const overlay = leagueQ.data
   const rostered: Record<string, RosteredBy> = overlay?.rostered ?? {}
   const hasLeague = !!overlay
+  const myTeam = overlay?.my_team ?? null
 
   // ⚠️ THE ONE WAY THIS OVERLAY CAN LIE. The rosters were matched inside the league's OWN AL/NL
   // scope, so nothing outside that scope can ever be marked rostered. If the user then browses the
@@ -793,6 +815,38 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
               board to the one you actually draft in is the first thing a user does, and the choice
               is persisted so it survives a reload. ── */}
           <div className="mb-4 flex flex-wrap items-center gap-3">
+            {/* E8.6 — WHICH saved league overlays the board, switchable right here. Before this
+                the only place to pick among up to 5 saved leagues was the My League setup page,
+                so seeing a second league meant leaving this page entirely. */}
+            {savedLeagues.length > 0 && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <label htmlFor={myLeagueId} className="text-gray-500">
+                  My league
+                </label>
+                <Picker
+                  id={myLeagueId}
+                  value={activeLeagueId ?? ""}
+                  onValueChange={(v) => setActiveLeagueId(v || null)}
+                  placeholder="Choose a league"
+                  ariaLabel="Which of your saved leagues overlays this board"
+                  className="h-auto rounded border border-[#262626] bg-[#0f0f0f] px-2 py-1 text-base sm:text-xs text-gray-200 focus:border-[#10b981]"
+                  options={savedLeagues.map((l) => ({
+                    value: l.league_id,
+                    label: `${l.name} (${l.league_scope})`,
+                  }))}
+                />
+                {myTeam && (
+                  <span
+                    className="text-[10px] text-emerald-500/80"
+                    title="Your designated team — set on the My League page"
+                  >
+                    ★ {myTeam}
+                    {overlay?.counts?.on_my_team != null && ` · ${overlay.counts.on_my_team} rostered`}
+                  </span>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center gap-1.5 text-xs">
               <label htmlFor={leagueId} className="text-gray-500">
                 League
@@ -971,11 +1025,18 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
                 {paged.map((p) => {
                   const bat = isBatter(p)
                   const expanded = open === p.rank
+                  const heldRow = rostered[String(p.rank)]
+                  // E8.6 — is this row on the user's OWN designated team? Purely a display flag;
+                  // the match is exact-string against `overlay.my_team` (set on the My League
+                  // page), same as every team name on this board — no fuzzy matching.
+                  const mine = !!myTeam && heldRow?.team === myTeam
                   return (
                     <Fragment key={p.rank}>
                       <tr
                         onClick={() => setOpen(expanded ? null : p.rank)}
-                        className="cursor-pointer transition-colors hover:bg-[#0f0f0f]"
+                        className={`cursor-pointer transition-colors hover:bg-[#0f0f0f] ${
+                          mine ? "bg-emerald-500/[0.04]" : ""
+                        }`}
                       >
                         <td className="px-3 py-2 text-xs text-gray-500">
                           {p.rank}
@@ -998,16 +1059,15 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
                             {hasLeague && liveDraftMode ? (
                               <DraftAssign
                                 compact
+                                mine={mine}
                                 rank={p.rank}
                                 name={p.name}
                                 leagueId={activeLeagueId}
                                 teams={overlay.teams}
-                                held={rostered[String(p.rank)]}
+                                held={heldRow}
                               />
                             ) : (
-                              rostered[String(p.rank)] && (
-                                <RosteredChip held={rostered[String(p.rank)]} />
-                              )
+                              heldRow && <RosteredChip held={heldRow} mine={mine} />
                             )}
                             {p.inMajors && <Chip tone="amber">MLB — check eligibility</Chip>}
                             {p.speedFlag && <Chip tone="sky">SB blind spot</Chip>}
@@ -1098,7 +1158,8 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
                                 name={p.name}
                                 leagueId={activeLeagueId}
                                 teams={overlay.teams}
-                                held={rostered[String(p.rank)]}
+                                held={heldRow}
+                                mine={mine}
                               />
                             )}
                             <DetailPanel p={p} framing={framing} />

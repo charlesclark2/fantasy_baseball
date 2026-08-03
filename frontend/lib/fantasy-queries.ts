@@ -473,6 +473,18 @@ export function useResolveMlbRosterRow(leagueId: string | null) {
   })
 }
 
+/** E8.6 — set (or clear, with `""`) which of the league's teams is the user's own, for the
+ *  board's "my roster" highlight. */
+export function useSetMyTeam(leagueId: string | null) {
+  const { accessToken } = useAuth()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (myTeam: string) =>
+      updateMlbLeague(accessToken, leagueId as string, { my_team: myTeam }),
+    onSuccess: (data) => qc.setQueryData(["mlb-league", leagueId], data),
+  })
+}
+
 /** Replace one team's roster from a per-team export, leaving the other teams alone. */
 export function useUploadTeamRoster(leagueId: string | null) {
   const { accessToken } = useAuth()
