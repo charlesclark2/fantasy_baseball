@@ -104,6 +104,14 @@ export const SPORTS: SportNav[] = [
                 key: "mlb-disagreements",
                 restrict: "admin",
               },
+              // E8.2 — league roster import. Same admin restriction as the board it overlays; it
+              // opens up in the same single change (see the E8.1 comment above).
+              {
+                label: "My League",
+                href: "/fantasy/mlb/league",
+                key: "mlb-league",
+                restrict: "admin",
+              },
             ],
           },
         ],
@@ -149,6 +157,12 @@ export const SPORTS: SportNav[] = [
                 key: "fantasy-league-settings",
                 restrict: "fantasy_beta",
               },
+              // NF-C6 — cross-league browse: every saved league's roster, scored under its own
+              // format, in one place. Deliberately NOT `fantasy_beta`-restricted like Import/League
+              // Settings above it: the endpoint reads at the standard fantasy gate (any subscriber),
+              // so this stays correct without a second nav edit whenever NF-C0's write side opens
+              // wider — today it just means an honest empty state for anyone without a saved league.
+              { label: "My Teams", href: "/fantasy/my-teams", key: "fantasy-my-teams" },
               // NF3.2 — the past-season "receipts" proof asset. `public: true`: it stays reachable
               // even for a caller not entitled to Fantasy, since none of its data is the paid
               // current-season projection (see nav-model.ts's `NavItem.public` doc).

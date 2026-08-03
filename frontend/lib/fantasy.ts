@@ -271,6 +271,7 @@ export function getFantasyProjections(
 // which is why a hand-built league feeds the board / VOR / draft tools identically to an imported one.
 
 import type { LeagueConfig } from "@/lib/league-config"
+import type { ImportedPlayer } from "@/lib/fantasy-import"
 
 /** NF-C0 import provenance — where a league CAME FROM.
  *
@@ -283,6 +284,15 @@ export interface LeagueProvenance {
   source_platform?: string | null
   source_league_id?: string | null
   imported_at?: string | null
+  // ── NF-C6: which previewed team is the user's own, and its roster AT IMPORT TIME ──────────────
+  // A SNAPSHOT, not a live read: unlike draft state this works uniformly across all three
+  // platforms, including ESPN, whose paste flow structurally can never be re-fetched by the server.
+  // `roster_synced_at` keeps the age honest; re-importing (already an "update, not duplicate" save)
+  // refreshes it. See the Python field docstrings in app/backend/models/fantasy.py.
+  source_team_key?: string | null
+  source_team_name?: string | null
+  imported_roster?: ImportedPlayer[] | null
+  roster_synced_at?: string | null
 }
 
 /** What a save accepts: the shared config, optionally stamped with where it was imported from. */
@@ -325,4 +335,18 @@ export function deleteSavedLeague(token: string | null, leagueId: string): Promi
     { method: "DELETE" },
     token,
   )
+}
+
+// ── NF-C6: My Teams (cross-league browse) ────────────────────────────────────────────────────────
+// `/fantasy/nfl/my-teams` reads at the BROADER `require_fantasy_access` gate (not the beta-only
+// `/fantasy/leagues`) — see the endpoint's own docstring. It returns the same `SavedLeague` shape;
+// this surface just reads it under a different entitlement and scores it client-side (`buildBoard`).
+
+export interface MyTeamsPayload {
+  season: number
+  leagues: SavedLeague[]
+}
+
+export function getMyTeams(token: string | null, season: number): Promise<MyTeamsPayload> {
+  return apiFetch(`/fantasy/nfl/my-teams?season=${season}`, {}, token)
 }

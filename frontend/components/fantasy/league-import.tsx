@@ -99,6 +99,11 @@ export function LeagueImport() {
   // 12-team league can carry 300+ roster spots, so showing every name up front would bury the
   // settings review this page exists for.
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set())
+  // NF-C6 — which previewed team is the user's OWN, so "My Teams" knows what to score. Pre-filled
+  // from `is_owner` when the platform told us (Yahoo's OAuth identity); Sleeper and ESPN cannot
+  // auto-detect this (see the `source_team_key` field docstring), so the user picks it here. `null`
+  // is a legitimate, saveable choice — a league without a linked team just shows "not linked yet".
+  const [selectedTeamKey, setSelectedTeamKey] = useState<string | null>(null)
 
   // ESPN: the league id the user reads off their own URL, the link we build for them to open, and
   // the response body they bring back. `espnPaste` holds a credential-free settings blob — it is
@@ -196,7 +201,7 @@ export function LeagueImport() {
       espnPreview(accessToken, espnPaste, SEASON),
     )
     if (res) {
-      setPreview(res)
+      applyPreview(res)
       // Drop the pasted blob as soon as it has been parsed. It holds no credential by construction,
       // but there is no reason to keep a user's league dump sitting in component state either.
       setEspnPaste("")
@@ -214,16 +219,22 @@ export function LeagueImport() {
     if (res) setLeagues(res.leagues)
   }
 
+  /** Adopt a freshly-loaded preview, pre-selecting "my team" whenever the platform told us
+   *  (Yahoo's `is_owner`, from real OAuth identity). Sleeper/ESPN leave it unselected — see the
+   *  `selectedTeamKey` state doc — so the reviewer picks their own team from the list below. */
+  function applyPreview(res: ImportPreview) {
+    setPreview(res)
+    setSaved(null)
+    setSelectedTeamKey(res.teams.find((t) => t.is_owner)?.team_key ?? null)
+  }
+
   async function loadPreview(leagueId: string) {
     const res = await run("preview", () =>
       platformId === "yahoo"
         ? yahooPreview(accessToken, leagueId)
         : sleeperPreview(accessToken, leagueId),
     )
-    if (res) {
-      setPreview(res)
-      setSaved(null)
-    }
+    if (res) applyPreview(res)
   }
 
   async function saveImported() {
@@ -235,11 +246,18 @@ export function LeagueImport() {
         l.source_platform === preview.platform &&
         l.source_league_id === preview.source_league_id,
     )
+    // NF-C6 — the team the reviewer picked below, if any. `null` is honest and saveable: the league
+    // settings are still useful (rankings/board/draft) even before a roster is linked to it.
+    const myTeam = preview.teams.find((t) => t.team_key === selectedTeamKey) ?? null
     const payload: LeagueSaveInput = {
       ...preview.config,
       source_platform: preview.platform,
       source_league_id: preview.source_league_id,
       imported_at: new Date().toISOString(),
+      source_team_key: myTeam?.team_key ?? null,
+      source_team_name: myTeam?.name ?? null,
+      imported_roster: myTeam?.players ?? null,
+      roster_synced_at: myTeam ? new Date().toISOString() : null,
     }
     const res = await run("save", () =>
       saveLeague.mutateAsync({ leagueId: already?.league_id ?? null, config: payload }),
@@ -680,6 +698,9 @@ export function LeagueImport() {
               <p className="mt-3 text-xs text-emerald-400">
                 League {saved}. It now appears everywhere you pick a format — rankings, the board and
                 the draft optimizer.
+                {selectedTeamKey
+                  ? " Your team is linked, so it will show up on My Teams too."
+                  : " No team linked yet — pick yours above and save again to see it on My Teams."}
               </p>
             )}
 
@@ -808,30 +829,52 @@ export function LeagueImport() {
                 Teams · {preview.teams.length}
               </div>
               <p className="mt-1 text-[11px] text-gray-600">
-                Click a team to see its roster.
+                Click a team to see its roster.{" "}
+                {preview.teams.some((t) => t.is_owner)
+                  ? "We've marked which one is yours below — change it if we got it wrong."
+                  : "This platform does not tell us which team is yours, so pick it below — that " +
+                    "is what lets My Teams show your roster's projection."}
               </p>
               <div className="mt-2 space-y-1.5">
                 {preview.teams.map((t) => {
                   const isOpen = expandedTeams.has(t.team_key)
+                  const isMine = selectedTeamKey === t.team_key
                   return (
-                    <div key={t.team_key} className="rounded border border-white/10">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setExpandedTeams((prev) => {
-                            const next = new Set(prev)
-                            if (next.has(t.team_key)) next.delete(t.team_key)
-                            else next.add(t.team_key)
-                            return next
-                          })
-                        }
-                        className="flex w-full items-center justify-between px-2 py-1 text-left text-[11px] text-gray-400 hover:bg-white/[0.03]"
-                      >
-                        <span>
-                          {t.name}
-                          {t.owner ? ` · ${t.owner}` : ""} ({t.players.length})
-                        </span>
-                      </button>
+                    <div
+                      key={t.team_key}
+                      className={`rounded border ${isMine ? "border-emerald-500/40" : "border-white/10"}`}
+                    >
+                      <div className="flex w-full items-center gap-2 px-2 py-1">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTeamKey(isMine ? null : t.team_key)}
+                          title={isMine ? "Unmark as your team" : "This is my team"}
+                          className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                            isMine
+                              ? "bg-emerald-500/15 text-emerald-300"
+                              : "bg-white/[0.03] text-gray-500 hover:text-gray-300"
+                          }`}
+                        >
+                          {isMine ? "✓ Mine" : "Mine?"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedTeams((prev) => {
+                              const next = new Set(prev)
+                              if (next.has(t.team_key)) next.delete(t.team_key)
+                              else next.add(t.team_key)
+                              return next
+                            })
+                          }
+                          className="flex flex-1 items-center justify-between text-left text-[11px] text-gray-400 hover:bg-white/[0.03]"
+                        >
+                          <span>
+                            {t.name}
+                            {t.owner ? ` · ${t.owner}` : ""} ({t.players.length})
+                          </span>
+                        </button>
+                      </div>
                       {isOpen && (
                         <div className="flex flex-wrap gap-1 border-t border-white/5 p-2">
                           {t.players.length === 0 && (

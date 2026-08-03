@@ -18,13 +18,14 @@ import {
   getFantasyBoard,
   getFantasyManifest,
   getFantasyProjections,
+  getMyTeams as getMyTeamsPayload,
   listSavedLeagues,
   updateSavedLeague,
 } from "@/lib/fantasy"
-import type { LeagueSaveInput, ProjectionPayload, SavedLeague } from "@/lib/fantasy"
+import type { LeagueSaveInput, MyTeamsPayload, ProjectionPayload, SavedLeague } from "@/lib/fantasy"
 import type { LeagueConfig } from "@/lib/league-config"
-import { buildBoard } from "@/lib/league-scoring"
-import type { BuiltBoard } from "@/lib/league-scoring"
+import { buildBoard, matchRosterToBoard } from "@/lib/league-scoring"
+import type { BuiltBoard, RosterMatch } from "@/lib/league-scoring"
 import type { Manifest, Player } from "@/lib/draft-optimizer"
 import {
   PROSPECT_SEASON,
@@ -32,6 +33,22 @@ import {
   getProspectManifest,
 } from "@/lib/mlb-prospects"
 import type { ProspectBoardPayload, ProspectManifest } from "@/lib/mlb-prospects"
+import {
+  ACTIVE_LEAGUE_STORAGE_KEY,
+  assignDraftPick,
+  deleteMlbLeague,
+  getMlbLeague,
+  listMlbLeagues,
+  saveMlbLeague,
+  undoDraftPick,
+  updateMlbLeague,
+  uploadTeamRoster,
+} from "@/lib/mlb-league"
+import type {
+  DismissReason,
+  LeagueDetail as MlbLeagueDetail,
+  LeagueSummary as MlbLeagueSummary,
+} from "@/lib/mlb-league"
 
 /** The NFL fantasy season every surface reads. */
 export const FANTASY_SEASON = 2026
@@ -153,6 +170,56 @@ export function useCustomBoard(config: LeagueConfig | null): BuiltBoard | null {
     if (!config || !projections?.players?.length) return null
     return buildBoard(projections.players, config)
   }, [config, projections])
+}
+
+// ── NF-C6: My Teams (cross-league browse) ────────────────────────────────────────────────────────
+
+/** One saved league, scored in the browser, joined against its linked roster (if any). */
+export interface MyTeamEntry {
+  league: SavedLeague
+  /** `null` until the projections payload has loaded — callers should show a loading state, not an
+   *  empty one, while this is null (mirrors `useCustomBoard`'s own null-until-ready contract). */
+  board: BuiltBoard | null
+  /** Empty when the league has no linked team yet (`imported_roster` is null/empty) — a hand-entered
+   *  league, or an imported one the user has not picked a team for (see `source_team_key`). */
+  roster: RosterMatch[]
+}
+
+/**
+ * Every saved league this user has, each scored + joined to its linked roster.
+ *
+ * Reads `/fantasy/nfl/my-teams` (broader `require_fantasy_access` gate than `useSavedLeagues`'s
+ * beta-only `/fantasy/leagues` — see that endpoint's docstring) for the configs + roster snapshots,
+ * then scores each one CLIENT-SIDE with the SAME `buildBoard` every other fantasy surface uses — no
+ * second scorer, per the NF1.5b/NF3.3 reuse rule (`fantasy_engine` cannot be imported into the API
+ * Lambda; see `models/fantasy.py`).
+ */
+export function useMyTeams() {
+  const { accessToken, groups } = useAuth()
+  const entitled = canAccess("fantasy", groups)
+  const { data: projections } = useFantasyProjections()
+  const query = useQuery<MyTeamsPayload>({
+    queryKey: ["nfl-fantasy-my-teams"],
+    queryFn: () => getMyTeamsPayload(accessToken, FANTASY_SEASON),
+    enabled: entitled,
+    staleTime: 60_000,
+    retry: false,
+  })
+
+  const teams = useMemo<MyTeamEntry[] | null>(() => {
+    const leagues = query.data?.leagues
+    if (!leagues) return null
+    if (!projections?.players?.length) return null
+    return leagues.map((league) => {
+      const board = buildBoard(projections.players, league)
+      const roster = league.imported_roster?.length
+        ? matchRosterToBoard(league.imported_roster, board.players)
+        : []
+      return { league, board, roster }
+    })
+  }, [query.data, projections])
+
+  return { ...query, teams }
 }
 
 /** A saved league is selected as `custom:<league_id>` in the same control as the shipped presets. */
@@ -325,6 +392,132 @@ export function useProspectLeague(): [string, (v: string) => void] {
       setLeague(v)
       try {
         localStorage.setItem(PROSPECT_LEAGUE_STORAGE_KEY, v)
+      } catch {
+        /* storage unavailable — selection still works for this session */
+      }
+    },
+  ]
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// E8.2 — the user's MLB dynasty league + the board availability overlay
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// 🔒 `enabled: isAdmin`, exactly like the prospect-board hooks above: this surface is admin-only
+// dogfood until 2027 and the routes enforce `get_admin_user`, so gating on the wider fantasy
+// predicate would have every subscriber firing a request that 403s.
+//
+// ⭐ CACHE POLICY IS THE OPPOSITE OF THE BOARD'S. The board is `staleTime: Infinity` because it
+// only changes when an operator re-publishes. The overlay changes on every draft pick, so it is
+// NOT cached across mounts — a board showing a prospect as available when he went three picks ago
+// looks exactly like a correct board (NF-C0's live-draft lesson).
+
+export function useMlbLeagues() {
+  const { accessToken, isAdmin } = useAuth()
+  return useQuery<{ leagues: MlbLeagueSummary[] }>({
+    queryKey: ["mlb-leagues"],
+    queryFn: () => listMlbLeagues(accessToken),
+    enabled: isAdmin,
+    staleTime: 60_000,
+  })
+}
+
+/** One league's rosters + availability overlay. `leagueId` null → the query simply does not run,
+ *  which is the "no league set up yet" state, not an error. */
+export function useMlbLeague(leagueId: string | null) {
+  const { accessToken, isAdmin } = useAuth()
+  return useQuery<MlbLeagueDetail>({
+    queryKey: ["mlb-league", leagueId],
+    queryFn: () => getMlbLeague(accessToken, leagueId as string),
+    enabled: isAdmin && !!leagueId,
+    staleTime: 0,
+  })
+}
+
+export function useSaveMlbLeague() {
+  const { accessToken } = useAuth()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { name: string; text: string; leagueScope: string; leagueId?: string }) =>
+      saveMlbLeague(accessToken, input),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["mlb-leagues"] })
+      qc.invalidateQueries({ queryKey: ["mlb-league", data.league?.league_id] })
+    },
+  })
+}
+
+export function useDeleteMlbLeague() {
+  const { accessToken } = useAuth()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (leagueId: string) => deleteMlbLeague(accessToken, leagueId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["mlb-leagues"] })
+      qc.invalidateQueries({ queryKey: ["mlb-league"] })
+    },
+  })
+}
+
+/** Record a manual name fix (`{key: rank}`) or a dismissal (`{key: "not_a_prospect"}` /
+ *  `{key: "missing_from_board"}` — see `DismissReason`; the two are different statements). */
+export function useResolveMlbRosterRow(leagueId: string | null) {
+  const { accessToken } = useAuth()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (overrides: Record<string, number | DismissReason | null>) =>
+      updateMlbLeague(accessToken, leagueId as string, { overrides }),
+    // The PATCH response IS the recomputed league, so seed the cache with it rather than
+    // invalidating and re-fetching — during a review pass that round trip is the whole latency.
+    onSuccess: (data) => qc.setQueryData(["mlb-league", leagueId], data),
+  })
+}
+
+/** Replace one team's roster from a per-team export, leaving the other teams alone. */
+export function useUploadTeamRoster(leagueId: string | null) {
+  const { accessToken } = useAuth()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ team, text }: { team: string; text: string }) =>
+      uploadTeamRoster(accessToken, leagueId as string, team, text),
+    onSuccess: (data) => qc.setQueryData(["mlb-league", leagueId], data),
+  })
+}
+
+/** Live draft: mark a prospect taken, or undo. */
+export function useDraftPick(leagueId: string | null) {
+  const { accessToken } = useAuth()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ rank, team }: { rank: number; team: string | null }) =>
+      team
+        ? assignDraftPick(accessToken, leagueId as string, rank, team)
+        : undoDraftPick(accessToken, leagueId as string, rank),
+    onSuccess: (data) => qc.setQueryData(["mlb-league", leagueId], data),
+  })
+}
+
+/** The active league id, persisted so the board stays scoped between visits.
+ *
+ * ⚠️ Only the ID is stored. The league itself is always re-read from the server, so a deleted or
+ * unreadable league degrades to "no overlay" — never to a stale overlay, which on this surface
+ * would be indistinguishable from a correct one. */
+export function useActiveMlbLeague(): [string | null, (v: string | null) => void] {
+  const [leagueId, setLeagueId] = useState<string | null>(null)
+  useEffect(() => {
+    try {
+      setLeagueId(localStorage.getItem(ACTIVE_LEAGUE_STORAGE_KEY))
+    } catch {
+      /* storage unavailable (private mode) — the session default is fine */
+    }
+  }, [])
+  return [
+    leagueId,
+    (v: string | null) => {
+      setLeagueId(v)
+      try {
+        if (v) localStorage.setItem(ACTIVE_LEAGUE_STORAGE_KEY, v)
+        else localStorage.removeItem(ACTIVE_LEAGUE_STORAGE_KEY)
       } catch {
         /* storage unavailable — selection still works for this session */
       }

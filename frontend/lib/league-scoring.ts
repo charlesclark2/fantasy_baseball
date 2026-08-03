@@ -18,6 +18,7 @@ import type { LeagueConfig, ScoringRules } from "@/lib/league-config"
 import { STAT_FIELD, resolveScoring } from "@/lib/league-config"
 import type { Player } from "@/lib/draft-optimizer"
 import type { ProjectedPlayer } from "@/lib/fantasy"
+import type { ImportedPlayer } from "@/lib/fantasy-import"
 
 // 80% two-sided normal quantile — matches the projection's interval convention (scoring.py `_Z80`).
 const Z80 = 1.2815515594
@@ -255,4 +256,45 @@ export function buildBoard(projected: ProjectedPlayer[], cfg: LeagueConfig): Bui
 
 function round1(v: number): number {
   return Math.round(v * 10) / 10
+}
+
+// ── NF-C6: match an IMPORTED roster (platform names) onto a scored board (our player ids) ────────
+//
+// `ImportedPlayer.player_key` is the PLATFORM's own id and is deliberately NOT joinable to our
+// projection ids (`canonical.ImportedPlayer`'s own docstring) — Sleeper's id and ours are unrelated
+// namespaces. Name + position is the only join key common to both sides, so this normalizes each
+// the same way (ASCII-fold, drop generational suffixes/punctuation, collapse whitespace) and matches
+// on that pair. A miss is a REAL, expected outcome (a name spelling divergence, a DST rendered as a
+// team abbreviation instead of a name, or a Sleeper id the NF-C0c name cache never resolved to a
+// name at all) — it is surfaced, never hidden, matching NF-C0c's own "matched N of M" convention.
+function normalizePlayerName(name: string): string {
+  return name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "") // strip diacritics (combining marks left by NFKD)
+    .toLowerCase()
+    .replace(/\b(jr|sr|ii|iii|iv|v)\b\.?/g, "")
+    .replace(/[^a-z ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+export interface RosterMatch {
+  roster: ImportedPlayer
+  /** The scored board row for this roster player, or `null` when no name+position match was found
+   *  in the current projection universe (an honest miss — see the module note above). */
+  board: Player | null
+}
+
+/** Join one imported roster onto an already-`buildBoard`'d array, by normalized name + position. */
+export function matchRosterToBoard(roster: ImportedPlayer[], board: Player[]): RosterMatch[] {
+  const byKey = new Map<string, Player>()
+  for (const p of board) {
+    const key = `${normalizePlayerName(p.name)}|${normalizePosition(p.pos)}`
+    if (!byKey.has(key)) byKey.set(key, p) // first (highest-VOR, since board is VOR-sorted) wins
+  }
+  return roster.map((r) => {
+    if (!r.name) return { roster: r, board: null }
+    const key = `${normalizePlayerName(r.name)}|${normalizePosition(r.position ?? "")}`
+    return { roster: r, board: byKey.get(key) ?? null }
+  })
 }
