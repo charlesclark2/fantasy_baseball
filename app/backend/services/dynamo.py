@@ -834,3 +834,112 @@ def stripe_customer_for_user(user_id: str) -> str | None:
     resp = _users_table().get_item(Key={"user_id": user_id})
     cid = resp.get("Item", {}).get("stripe_customer_id")
     return str(cid) if cid else None
+
+
+# ── MLB dynasty league rosters (E8.2) ────────────────────────────────────────
+# A user's fantasy-BASEBALL league: its name, its AL/NL scope, the current roster
+# snapshot, the manual name fixes, and the in-draft picks. Stored as an
+# `mlb_leagues` map {league_id: league} on the user item — the same "ride the
+# existing users table, zero new infrastructure" pattern as the NFL league configs
+# above, and for the same reason (this repo has already documented a table that was
+# never actually created; a schema that needs no provisioning step cannot repeat it).
+#
+# 🔒 PRIVACY: WHAT IS AND IS NOT STORED. This is the USER'S league data, so it holds
+# the minimum the availability overlay needs — team names, and per rostered player a
+# name, slot and status. It NEVER stores the raw uploaded file, and there is no
+# credential of any kind to store: E8.2a found no compliant CBS read, so nothing here
+# ever talks to a platform. `delete_mlb_league` is a real delete, not a soft flag.
+#
+# ⚖️ SIZE. The operator's real 12-team export is 442 players ≈ 30 KB stored, well
+# inside DynamoDB's 400 KB item limit but not free — hence the low per-user cap and
+# the entry cap enforced by the parser.
+MAX_MLB_LEAGUES_PER_USER = 5
+
+
+def list_mlb_leagues(user_id: str) -> list[dict]:
+    """Every MLB league the user has saved, newest-updated first.
+
+    Non-raising, and each league is converted INDEPENDENTLY so one malformed record can
+    never blank the whole collection (E9.49 — a single un-representable row took down an
+    entire list endpoint once already).
+    """
+    try:
+        resp = _users_table().get_item(Key={"user_id": user_id})
+        raw = resp.get("Item", {}).get("mlb_leagues") or {}
+    except Exception:
+        logger.warning("dynamo.list_mlb_leagues failed for user=%s", user_id)
+        return []
+
+    out: list[dict] = []
+    for league_id, cfg in raw.items():
+        try:
+            item = _deep_from_dynamo(cfg)
+            if not isinstance(item, dict):
+                continue
+            item["league_id"] = league_id
+            out.append(item)
+        except Exception:
+            logger.warning(
+                "dynamo.list_mlb_leagues: skipping malformed league %s for user=%s",
+                league_id, user_id,
+            )
+    out.sort(key=lambda c: str(c.get("updated_at") or ""), reverse=True)
+    return out
+
+
+def get_mlb_league(user_id: str, league_id: str) -> dict | None:
+    for league in list_mlb_leagues(user_id):
+        if league.get("league_id") == league_id:
+            return league
+    return None
+
+
+def put_mlb_league(user_id: str, league_id: str | None, league: dict) -> dict:
+    """Create or overwrite one MLB league. Returns the stored record.
+
+    Writes a SINGLE map entry so two tabs (or a draft-pick write racing a roster
+    re-upload) cannot clobber each other's league.
+    """
+    is_new = not league_id
+    league_id = league_id or str(uuid4())
+    now = _now_iso()
+
+    existing = None if is_new else get_mlb_league(user_id, league_id)
+    if is_new and len(list_mlb_leagues(user_id)) >= MAX_MLB_LEAGUES_PER_USER:
+        raise ValueError("too_many_leagues")
+
+    record = dict(league)
+    record.pop("league_id", None)
+    record["created_at"] = (existing or {}).get("created_at") or now
+    record["updated_at"] = now
+
+    table = _users_table()
+    try:
+        table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET #ml = :empty",
+            ExpressionAttributeNames={"#ml": "mlb_leagues"},
+            ExpressionAttributeValues={":empty": {}},
+            ConditionExpression="attribute_not_exists(#ml)",
+        )
+    except Exception:
+        pass  # already present — the normal path
+
+    table.update_item(
+        Key={"user_id": user_id},
+        UpdateExpression="SET #ml.#id = :cfg",
+        ExpressionAttributeNames={"#ml": "mlb_leagues", "#id": league_id},
+        ExpressionAttributeValues={":cfg": _to_ddb(record)},
+    )
+    return {**record, "league_id": league_id}
+
+
+def delete_mlb_league(user_id: str, league_id: str) -> None:
+    """Remove one MLB league. Raises ValueError('not_found') when the user does not own it."""
+    if get_mlb_league(user_id, league_id) is None:
+        raise ValueError("not_found")
+    _users_table().update_item(
+        Key={"user_id": user_id},
+        UpdateExpression="REMOVE #ml.#id",
+        ExpressionAttributeNames={"#ml": "mlb_leagues", "#id": league_id},
+    )
