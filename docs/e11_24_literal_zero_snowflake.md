@@ -1070,3 +1070,109 @@ only the box can prove the *ops*.
 `warehouse_events_history` shows near-zero `RESUME_WAREHOUSE` on a **zero-game window**, the warehouse
 stays suspended, and August metering trends to ~$0. The Bedrock narrative path is unaffected (SF
 Cortex is already retired).
+
+---
+
+# Wake attribution memo — 2026-08-03 (analysis-only session, no fix applied)
+
+Instrument added this session: **Table 4b, the PER-DAY × FAMILY cut** in
+`scripts/report_e11_24_wake_census.py` (executions AND waits per UTC day per family).
+Read-only, MONITOR_WH, finite statement timeout. **No COMPUTE_WH query was run this session**,
+so the operator's 08-04 after-measurement baseline is clean.
+
+## Why the instrument was needed
+
+The aggregate family table (Table 4) sums a family over the whole window, so a lever flipped
+mid-window still shows a large total. It cannot separate three different states, and it
+misled the story in **both** directions:
+
+| reading | executions | waits | meaning |
+|---|---|---|---|
+| gate fired | **hold** | → 0 | lever already dead; remaining total is PRE-FLIP RESIDUE |
+| repoint fired | → 0 | → 0 | the query left this warehouse entirely — also a win |
+| caller stopped | → 0 | → 0 | a dead job / outage — **NOT** a lever, take no credit (the 1b lesson) |
+| still firing | hold | hold | a real waker |
+
+⚠️ The middle two are **the same signature**. Distinguish them by whether the work still
+happens elsewhere (a repoint) or stopped altogether (an outage) — the census cannot tell you;
+the flag/PR history can.
+
+## Target verdicts (Task 2)
+
+**TARGET 2 (weather-venue) — ✅ ALREADY DEAD. No work.**
+Per-day execs/waits: `12/2 103/13 114/7 108/1 103/5 79/2` (07-24…07-29) → `5/0 · · 5/0 ·`
+(07-30 onward). Both collapse at **07-30** = the `E11_24_WEATHER_SF_FREE` repoint. All 30 waits
+in the aggregate are pre-flip residue.
+
+**TARGET 3 (CREDENCE_API metering) — ✅ ALREADY DEAD. No work.**
+The `CREDITS_USED_COMPUTE` statement under user `CREDENCE_API` on COMPUTE_WH, per day:
+`07-25 22/9 · 07-26 6/4 · 07-27 16/7 · 07-29 2/2` — and **nothing at all from 07-30 onward**.
+The `SNOWFLAKE_MONITOR_WAREHOUSE` repoint worked.
+⚠️ The `3 metering/audit` family still shows ~12 execs/day post-flip. Those are **NOT** target 3:
+they are `CCL1196` (the Snowsight cost UI — a human opening the cost dashboard resumes the
+warehouse) plus `DBT_RW` audit queries from *previous E11.24 sessions*. Neither is an automated
+waker to fix.
+
+🪤 **A process finding worth keeping: I initially read target 3 as STILL FIRING off a
+band-aggregated table, and the per-day cut overturned it.** The very landmine this session was
+created to close bit the session itself while it was still using the old instrument.
+
+## The 'other' mass (Task 3)
+
+Statement-level attribution moved three real families out of `other`, taking it from
+**254 → 199 waits**. All three are now named in `FAMILY_CASE`:
+
+| new family | waits | executions | state |
+|---|---|---|---|
+| `8 model-health/pred_log` | 19 | 100–180/day, holding | **STILL FIRING** — `compute_model_health.py`, `backfill_prediction_log.py` |
+| `4b scd2 signal writers` (widened) | 25 | 72–135/day, **rising** | **STILL FIRING** — per-row `INSERT INTO tmp_*_incoming VALUES (…)`, incl. overnight |
+| `CI on the prod WH` | 12 | bursty | **STILL FIRING** — `ci_betting*` builds resuming the PROD warehouse (4 overnight) |
+
+⚠️ **Instrument bug found and fixed while doing this:** an ad-hoc attribution truncated
+`query_text` to 110 chars *before* classifying, which dumped all 30 weather waits into `other`
+because `ref_venues` sits past char 110 — inventing a phantom `other` waker and hiding a real
+family. **Always classify over the same 400-char window `FAMILY_CASE` uses**, and cross-check
+that the two `other` totals agree. Now documented in the script.
+
+Remaining top `other` wakers, owner attributed by **grepping the repo, not the DAG** (INC-27):
+
+| waits | band | statement | owner |
+|---|---|---|---|
+| 10 | 08-13 | `COUNT(DISTINCT game_pk) AS expected_games` | `scripts/check_prediction_coverage.py` |
+| 9 | 08-13 | `SELECT * FROM …feature_pregame_market_features` | `scripts/backfill_market_features_scd2.py` |
+| 9 | 08-13 | `with spine as (… mart_game_spine …)` | `scripts/check_odds_coverage.py` |
+| 7 | 08-13 | `SELECT * FROM …daily_model_predictions` | `scripts/parity_check_w7b.py` |
+| 5 | 14-23 | `select lower(column_name) … information_schema.columns` | `scripts/check_feature_block_coverage.py` |
+| ~18 | all | Snowsight cost UI (`COST_INSIGHTS`, `ACCOUNT_ROOT_BUDGET`, `POLICY_REFERENCES`) | human browsing — **not fixable in code** |
+| 3 each | mixed | integrity / intraday-fallback / odds-raw date scans | `check_served_prediction_integrity.py`, `check_intraday_fallback.py` |
+
+⭐ **The dominant coherent cluster in `other` is the daily job's own `check_*` guard ops.**
+Collectively they are a top waker. Most are already S3-capable in sibling code; each is an
+INC-27-class **straggler repoint**, off the predict path, individually cheap.
+
+## Recommended next-target order for the FIX session
+
+1. **`6 lineup/starter CTAS` — 66 waits, the single best lever left.**
+   `feature_pregame_lineup_features` / `feature_pregame_starter_features` are materialized as
+   **tables** on Snowflake whose entire body is `select * from baseball_data.lakehouse_ext.<model>`
+   — pure copies of an external table, rebuilt on every tick. A **view** over that ext table is
+   semantically identical and metadata-only: *structurally the same flip as the shipped item-1
+   win, with the proof already in hand.* ⚠️ **These are on the serving/predict path → target-6
+   session, its own soak.** Do not stack.
+2. **`lineup_monitor audit INSERT` — 64 waits, the highest wake-efficiency on the board.**
+   Executions ≈ waits (e.g. `10/10`, `9/8`, `8/7`): *almost every execution is the statement that
+   resumes the warehouse.* Repoint the audit write off SF — but only after proving it has no
+   serving reader (else defer to target 6).
+3. **The `check_*` straggler cluster** (~35+ waits combined) — repoint each to S3/DuckDB.
+   Cheapest, off the predict path, no soak; good filler between serving flips.
+4. **`4b scd2 signal writers` — 25 waits and rising.** Per-row `INSERT … VALUES` is both a waker
+   and an inefficiency; batch it or move the SCD-2 write off SF (`scd2_upsert` is one shared
+   function behind all 8 generators — port once).
+5. **`CI on the prod WH` — 12 waits.** CI should not resume the production warehouse at all;
+   point CI at its own warehouse. Config change, no serving risk.
+6. `8 model-health/pred_log` — 19 waits, straggler repoint.
+7. ⛔ `6a umpire chain` (147 waits) remains the dominant waker overall — target 6a, already owned.
+
+⛔ Not fixable in code: the Snowsight cost-UI waits. Opening the Snowflake cost dashboard on
+COMPUTE_WH resumes it. If the account defaults a UI session to COMPUTE_WH, switching that
+default to MONITOR_WH removes them — an operator/console setting, not a repo change.
