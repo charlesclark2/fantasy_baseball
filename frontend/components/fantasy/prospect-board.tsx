@@ -35,10 +35,15 @@ import {
 } from "@/components/fantasy/shared"
 import { Picker } from "@/components/ui/picker"
 import {
+  useActiveMlbLeague,
+  useDraftPick,
+  useMlbLeague,
   useProspectBoard,
   useProspectLeague,
   useProspectManifest,
 } from "@/lib/fantasy-queries"
+import { STATUS_LABEL } from "@/lib/mlb-league"
+import type { RosteredBy } from "@/lib/mlb-league"
 import {
   PROSPECT_SEASON,
   dec3,
@@ -50,6 +55,8 @@ import {
 import type { Prospect, ProspectFraming } from "@/lib/mlb-prospects"
 
 type View = "board" | "disagreements"
+/** E8.2 — which slice of the board to show once a league's rosters are imported. */
+type Availability = "available" | "rostered" | "all"
 type TypeTab = "all" | "batter" | "pitcher"
 type SortKey = "rank" | "fv" | "mleScore" | "modelScore" | "age" | "eta" | "disagreement" | "compFpMedian"
 
@@ -336,6 +343,150 @@ function Row({
   )
 }
 
+// ── E8.2: the league-availability overlay ─────────────────────────────────────────────────────
+
+/** Who holds a prospect, on his board row. Deliberately shows the TEAM, not just "rostered": in a
+ *  dynasty league the useful question during a draft is not only whether he is gone but to whom. */
+function RosteredChip({ held }: { held: RosteredBy }) {
+  const label = held.source === "draft" ? "drafted" : "rostered"
+  return (
+    <span
+      className="rounded border border-rose-500/30 bg-rose-500/10 px-1 py-px text-[10px] text-rose-300"
+      title={
+        held.confidence === "variant"
+          ? "Matched on a name-rendering variant — confirm it on the My League page."
+          : held.confidence === "manual"
+            ? "You matched this one by hand."
+            : undefined
+      }
+    >
+      {label} · {held.team}
+      {held.status ? ` (${STATUS_LABEL[held.status] ?? held.status})` : ""}
+      {held.confidence === "variant" ? " ?" : ""}
+    </span>
+  )
+}
+
+/** Available / rostered / all.
+ *
+ *  ⚠️ It DISABLES itself rather than lying. The overlay only knows about the league's own AL/NL
+ *  scope, so outside that scope "available" would be true of every row — a wrong answer wearing a
+ *  right answer's clothes. Disabled-with-a-reason is the honest state. */
+function AvailabilityFilter({
+  value,
+  onChange,
+  disabled,
+  counts,
+  scope,
+  mismatch,
+}: {
+  value: Availability
+  onChange: (v: Availability) => void
+  disabled: boolean
+  counts: Record<string, number>
+  scope: string
+  mismatch: boolean
+}) {
+  const options: { value: Availability; label: string }[] = [
+    { value: "available", label: "Available" },
+    { value: "rostered", label: "Rostered" },
+    { value: "all", label: "All" },
+  ]
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="inline-flex overflow-hidden rounded border border-[#262626]">
+        {options.map((o) => (
+          <button
+            key={o.value}
+            onClick={() => onChange(o.value)}
+            disabled={disabled}
+            className={`px-2.5 py-1 text-xs transition-colors disabled:opacity-40 ${
+              !disabled && value === o.value
+                ? "bg-[#1a1a1a] text-gray-100"
+                : "text-gray-500 hover:text-gray-300"
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+      {mismatch ? (
+        <span className="text-[10px] leading-tight text-amber-500/90">
+          Your league is {scope}-only — switch the League filter back to {scope} to use this.
+        </span>
+      ) : (
+        <span className="text-[10px] text-gray-600">
+          {counts.rostered_board_rows ?? 0} of {counts.board_rows_in_scope ?? 0} taken
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** Mark a prospect as taken, live, as the draft happens — or undo a mis-click.
+ *
+ *  This is the half of the story an upload cannot cover: a roster export is a point-in-time file,
+ *  and during a minor-league draft it is stale within minutes. */
+function DraftControl({
+  rank,
+  name,
+  leagueId,
+  teams,
+  held,
+}: {
+  rank: number
+  name: string
+  leagueId: string | null
+  teams: string[]
+  held?: RosteredBy
+}) {
+  const pick = useDraftPick(leagueId)
+  const [team, setTeam] = useState("")
+
+  if (held) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 border-b border-[#1a1a1a] bg-[#0d0d0d] px-4 py-2 text-[11px]">
+        <span className="text-gray-400">
+          {held.source === "draft" ? "Drafted by" : "Rostered by"}{" "}
+          <span className="text-gray-200">{held.team}</span>
+        </span>
+        {held.source === "draft" && (
+          <button
+            onClick={() => pick.mutate({ rank, team: null })}
+            disabled={pick.isPending}
+            className="text-gray-500 underline hover:text-gray-300 disabled:opacity-40"
+          >
+            undo
+          </button>
+        )}
+        {held.source === "roster" && (
+          <span className="text-gray-600">
+            from your uploaded rosters — re-upload on My League to change it
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-[#1a1a1a] bg-[#0d0d0d] px-4 py-2 text-[11px]">
+      <span className="text-gray-500">Just drafted?</span>
+      <Picker
+        value={team}
+        onValueChange={(v) => {
+          setTeam(v)
+          if (v) pick.mutate({ rank, team: v })
+        }}
+        placeholder="Mark taken by…"
+        ariaLabel={`Mark ${name} drafted`}
+        className="h-auto rounded border border-[#262626] bg-[#0f0f0f] px-2 py-1 text-base sm:text-[11px] text-gray-200"
+        options={teams.map((t) => ({ value: t, label: t }))}
+      />
+      {pick.isPending && <span className="text-gray-600">saving…</span>}
+    </div>
+  )
+}
+
 // ── the surface ───────────────────────────────────────────────────────────────────────────────
 
 export function ProspectBoard({ view = "board" }: { view?: View }) {
@@ -350,6 +501,10 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
   const [levels, setLevels] = useState<string[]>([])
   const [eta, setEta] = useState("ALL")
   const [minorsOnly, setMinorsOnly] = useState(false)
+  // ⭐ E8.2 — defaults to AVAILABLE ONLY, because that is the draft-relevant pool and the reason
+  // the import exists. It degrades to showing everything when no league is set up, so the board is
+  // never mysteriously short of rows.
+  const [avail, setAvail] = useState<Availability>("available")
   const [q, setQ] = useState("")
   const [sort, setSort] = useState<SortKey>(view === "disagreements" ? "disagreement" : "rank")
   const [desc, setDesc] = useState(true)
@@ -363,6 +518,24 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
   // ⚠️ Defensive read (NF-C0): a payload missing `players` must fall through to a VISIBLE empty
   // state, never render nothing. A 200 with an unexpected shape is the failure mode that produced a
   // dead-looking page with no error anywhere.
+  // ── E8.2: the availability overlay from the user's imported league ──
+  const [activeLeagueId] = useActiveMlbLeague()
+  const leagueQ = useMlbLeague(activeLeagueId)
+  const overlay = leagueQ.data
+  const rostered: Record<string, RosteredBy> = overlay?.rostered ?? {}
+  const hasLeague = !!overlay
+
+  // ⚠️ THE ONE WAY THIS OVERLAY CAN LIE. The rosters were matched inside the league's OWN AL/NL
+  // scope, so nothing outside that scope can ever be marked rostered. If the user then browses the
+  // other league, every row would read "available" — which is not a filter returning few results,
+  // it is a WRONG answer that looks exactly like a right one. So when the board's league filter
+  // leaves the league's scope we disable the availability filter and say why, rather than quietly
+  // showing an all-available board.
+  const scopeMismatch =
+    hasLeague && overlay.league_scope !== "BOTH" && league !== overlay.league_scope
+  const availActive = hasLeague && !scopeMismatch
+  const effectiveAvail: Availability = availActive ? avail : "all"
+
   const players: Prospect[] = boardQ.data?.players ?? []
   const manifest = manifestQ.data
   const framing = manifest?.framing
@@ -378,6 +551,11 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
       if (levels.length && !levels.includes(p.level ?? "")) return false
       if (eta !== "ALL" && String(p.eta ?? "") !== eta) return false
       if (minorsOnly && p.inMajors) return false
+      if (effectiveAvail !== "all") {
+        const taken = !!rostered[String(p.rank)]
+        if (effectiveAvail === "available" && taken) return false
+        if (effectiveAvail === "rostered" && !taken) return false
+      }
       if (needle && !p.name.toLowerCase().includes(needle)) return false
       return true
     })
@@ -416,14 +594,17 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
       if (bv == null) return -1
       return (desc ? 1 : -1) * flip * (bv - av)
     })
-  }, [players, league, tab, org, levels, eta, minorsOnly, q, view, sort, desc])
+  }, [players, league, tab, org, levels, eta, minorsOnly, effectiveAvail, rostered, q, view, sort, desc])
 
   const paged = useMemo(
     () => (pageSize === ALL_ROWS ? rows : rows.slice(page * pageSize, page * pageSize + pageSize)),
     [rows, page, pageSize],
   )
 
-  useEffect(() => setPage(0), [league, tab, org, levels, eta, minorsOnly, q, sort, desc])
+  useEffect(
+    () => setPage(0),
+    [league, tab, org, levels, eta, minorsOnly, effectiveAvail, q, sort, desc],
+  )
 
   const lead = leadWith(tab)
   // #, Player, Age, ETA, FV, Our line, Our score, Disagree, Comps, chevron (+ Level unless FV leads)
@@ -526,6 +707,17 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
                 ]}
               />
             </div>
+
+            {hasLeague && (
+              <AvailabilityFilter
+                value={avail}
+                onChange={setAvail}
+                disabled={!availActive}
+                counts={overlay.counts}
+                scope={overlay.league_scope}
+                mismatch={scopeMismatch}
+              />
+            )}
 
             <div className="inline-flex overflow-hidden rounded border border-[#262626]">
               {TYPE_TABS.map((t) => (
@@ -681,6 +873,9 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
                             <span>{p.org ?? "—"}</span>
                             <span className="text-gray-700">·</span>
                             <span>{p.pos ?? "—"}</span>
+                            {rostered[String(p.rank)] && (
+                              <RosteredChip held={rostered[String(p.rank)]} />
+                            )}
                             {p.inMajors && <Chip tone="amber">MLB — check eligibility</Chip>}
                             {p.speedFlag && <Chip tone="sky">SB blind spot</Chip>}
                             {p.onFgBoard === false && <Chip tone="gray">Pipeline only</Chip>}
@@ -764,6 +959,15 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
                               our line leads (E7.8's asymmetry), so a hard-coded count silently
                               mis-spans the detail row on the Pitchers tab. */}
                           <td colSpan={colCount} className="p-0">
+                            {hasLeague && (
+                              <DraftControl
+                                rank={p.rank}
+                                name={p.name}
+                                leagueId={activeLeagueId}
+                                teams={overlay.teams}
+                                held={rostered[String(p.rank)]}
+                              />
+                            )}
                             <DetailPanel p={p} framing={framing} />
                           </td>
                         </tr>
