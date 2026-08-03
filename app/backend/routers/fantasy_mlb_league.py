@@ -33,7 +33,7 @@ from pydantic import BaseModel, Field
 
 from app.backend.dependencies import get_admin_user, require_fantasy_access
 from app.backend.routers.fantasy import _load_json
-from app.backend.services import dynamo
+from app.backend.services import coverage_gap_egress, dynamo
 from app.backend.services.mlb_roster import (
     RosterEntry,
     RosterUploadError,
