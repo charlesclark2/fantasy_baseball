@@ -56,8 +56,30 @@ BAND_CASE = """
 # Classify a waker by the table it READS, never by the job it belongs to (the 7/29 lesson:
 # compute_elo's waker is its READ of mart_game_results, and the weather slate query never
 # contains the string "weather" — it joins ref_venues).
+#
+# ⚠️ CLASSIFY OVER THE SAME 400-CHAR WINDOW EVERYWHERE. Every caller must apply this CASE to
+# `left(regexp_replace(query_text,'\s+',' '), 400)`. Truncating shorter before classifying
+# silently dumps statements into 'other': an ad-hoc 110-char attribution on 2026-08-03 put all
+# 30 weather-slate waits into 'other' because `ref_venues` sits past char 110 — i.e. the
+# instrument invented a phantom 'other' waker and hid a real family. (Caught by cross-checking
+# the two totals; they must agree.)
+#
+# 2026-08-03 — three families added after a statement-level attribution of the 'other' mass:
+#   · 'CI on the prod WH'  — FIRST on purpose. `ci_betting*` builds are CI hitting the PROD
+#     warehouse (4 overnight waits on `ci_betting_features.feature_pregame_injury_status`).
+#     Matched first so a CI build of a prod-named model is never counted as a prod waker —
+#     conflating them would send a fix session at the wrong caller.
+#   · '8 model-health/pred_log' — compute_model_health.py + backfill_prediction_log.py.
+#   · '4b scd2 signal writers' now also matches `tmp_%incoming%`: scd2_writer's default temp
+#     table is `tmp_scd2_incoming`, but the signal generators pass CUSTOM names
+#     (`tmp_starter_ip_signals_incoming`), so the old literal pattern missed per-row INSERTs
+#     that were waking the warehouse OVERNIGHT.
+# These shift Table 4/4b family totals vs earlier runs — deliberately, they are corrections.
 FAMILY_CASE = """
       case
+        when q ilike '%ci_betting%'                          then 'CI on the prod WH'
+        when q ilike '%prediction_log%'                       then '8 model-health/pred_log'
+        when q ilike '%tmp_%incoming%'                        then '4b scd2 signal writers'
         when q ilike '%umpire%'                              then '6a umpire chain'
         when q ilike '%int_bullpen_ali%'                     then '1b int_bullpen_ali'
         when q ilike '%mart_game_results%'                   then '1b/1 compute_elo read'
@@ -77,6 +99,40 @@ FAMILY_CASE = """
         else 'other'
       end
 """
+
+
+def pivot_family_by_day(rows):
+    """PURE. [(family, utc_day, execs, waits)] → (families, days, {(fam, day): 'execs/waits'}).
+
+    Split out from the renderer so the shaping is unit-testable without a warehouse.
+    """
+    families = sorted({r[0] for r in rows})
+    days = sorted({r[1] for r in rows})
+    cells = {(r[0], r[1]): f"{r[2]}/{r[3]}" for r in rows}
+    return families, days, cells
+
+
+def run_pivot(cur, title, sql, note=None, label_width=30):
+    """Render a (family, utc_day, execs, waits) result as a family × day MATRIX.
+
+    A matrix rather than the generic long format because the whole point of this cut is reading
+    a TREND across days per family — precisely what the aggregate structurally cannot show.
+    """
+    print(f"\n{'=' * 100}\n{title}\n{'=' * 100}")
+    if note:
+        print(f"  {note}\n")
+    cur.execute(sql)
+    rows = cur.fetchall()
+    if not rows:
+        print("(no rows)")
+        return rows
+    families, days, cells = pivot_family_by_day(rows)
+    colw = max(11, max(len(str(d)) for d in days) - 4)
+    print("family".ljust(label_width) + "".join(str(d)[5:].rjust(colw) for d in days))
+    for fam in families:
+        print(fam[:label_width - 1].ljust(label_width)
+              + "".join(cells.get((fam, d), "·").rjust(colw) for d in days))
+    return rows
 
 
 def run(cur, title, sql, note=None):
@@ -114,6 +170,11 @@ def main() -> int:
     # cut ~7h off the first day (the LTZ boundary-day landmine). Two defences: the session is
     # pinned to UTC, and every filter is a `dateadd` on a timestamp, never a date string.
     cur.execute("alter session set timezone='UTC'")
+    # INC-32 — a finite bound on every statement. This is read-only reporting, but an unbounded
+    # census query holds a MONITOR_WH session open indefinitely if account_usage is slow, and the
+    # per-day cut below scans query_history UNFILTERED by wait (it needs the executions
+    # denominator), which is the heaviest read here. Fail loudly rather than hang.
+    cur.execute("alter session set STATEMENT_TIMEOUT_IN_SECONDS=600")
 
     run(cur, f"1. RESUMES/day — {wh} (the BURSTY-lever signal; 6a should land here)", f"""
         select to_char(timestamp::timestamp_ntz, 'YYYY-MM-DD') as utc_day,
@@ -159,6 +220,30 @@ def main() -> int:
         select band, {FAMILY_CASE} as family, count(*) as waits
         from h group by 1, 2 having count(*) > 0 order by 1, 3 desc""",
         note="Classified by the table READ, not the owning job.")
+
+    run_pivot(cur, f"4b. PER-DAY × FAMILY — {wh}  ⬅ THE LEVER-VERDICT CUT (execs/waits)", f"""
+        with h as (
+          select to_char(start_time::timestamp_ntz, 'YYYY-MM-DD') as utc_day,
+                 iff(queued_provisioning_time > 0, 1, 0) as is_wait,
+                 left(regexp_replace(query_text, '\\\\s+', ' '), 400) as q
+          from snowflake.account_usage.query_history
+          where warehouse_name = '{wh}'
+            and start_time >= dateadd(day, -{d}, current_timestamp())
+        ),
+        f as (select utc_day, {FAMILY_CASE} as family, is_wait from h)
+        select family, utc_day, count(*) as execs, sum(is_wait) as waits
+        from f group by 1, 2 order by 1, 2""",
+        note=("Each cell is EXECUTIONS/WAITS for that family on that UTC day.\n"
+              "  ⭐ HOW TO READ A LEVER (this is the cut Table 4 structurally cannot give you):\n"
+              "     · executions HOLD while waits → 0 after a date  = THE GATE FIRED. The lever is\n"
+              "       already dead; any waits still in Table 4's total are PRE-FLIP RESIDUE, not work.\n"
+              "     · executions AND waits BOTH collapse              = the CALLER STOPPED (a dead job\n"
+              "       or an outage), NOT a lever — do not take credit for it (the 1b lesson).\n"
+              "     · executions hold AND waits hold                  = STILL FIRING. A real waker.\n"
+              "  ⚠️ Table 4 sums a family over the WHOLE window, so a lever flipped mid-window still\n"
+              "  shows a big total. That is exactly how the tick CTAS was mislabelled 'dead 7/25'\n"
+              "  while being the top waking statement in the account — read THIS table, not that one."),
+        label_width=30)
 
     run(cur, "5. LEVER 1b VERIFICATION — the two 08-13 shapes, waits AND executions", f"""
         select to_char(start_time::timestamp_ntz, 'YYYY-MM-DD') as utc_day,
