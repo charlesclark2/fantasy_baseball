@@ -8,6 +8,7 @@ import { TrendingUp, TrendingDown, Minus } from "lucide-react"
 import { Nav } from "@/components/nav"
 import { AuthGuard } from "@/components/auth-guard"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useAuth } from "@/lib/auth-context"
 import { apiFetch } from "@/lib/api"
 
@@ -173,13 +174,37 @@ function PlayerLink({
 // ---------------------------------------------------------------------------
 
 function Tip({ text, children }: { text: string; children: React.ReactNode }) {
+  // Built on Popover (click/tap-driven), not a plain `group-hover` span — a `:hover`-only tooltip
+  // on a non-focusable `<span>` is entirely unreachable on a touch device. Mirrors the fantasy
+  // `InfoTip` fix (NF3.4/NF3.7): Popover for tap-to-open, pointerType-gated hover handlers so a
+  // touch tap's synthesized mouseleave can't immediately re-close it.
+  const [open, setOpen] = useState(false)
   return (
-    <span className="group relative inline-block cursor-help">
-      {children}
-      <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-max max-w-[220px] -translate-x-1/2 rounded bg-white px-2 py-1.5 text-center text-xs text-black shadow-lg group-hover:block normal-case tracking-normal font-normal">
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="What this means"
+          onPointerEnter={(e) => {
+            if (e.pointerType === "mouse") setOpen(true)
+          }}
+          onPointerLeave={(e) => {
+            if (e.pointerType === "mouse") setOpen(false)
+          }}
+          className="inline-block cursor-help border-0 bg-transparent p-0 text-inherit"
+        >
+          {children}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="center"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        className="w-max max-w-[220px] border-none bg-white px-2 py-1.5 text-center text-xs normal-case font-normal tracking-normal text-black shadow-lg"
+      >
         {text}
-      </span>
-    </span>
+      </PopoverContent>
+    </Popover>
   )
 }
 
