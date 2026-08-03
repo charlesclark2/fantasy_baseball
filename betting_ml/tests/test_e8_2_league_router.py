@@ -336,6 +336,68 @@ class TestLiveDraftAssignment:
         assert out["rostered"]["7"]["team"] == "phantoms"
 
 
+@pytest.mark.usefixtures("store", "board")
+class TestMyTeamDesignation:
+    """E8.6 — which team is the user's OWN, for the board's 'my roster' highlight."""
+
+    def test_setting_it_persists_and_surfaces_in_the_overlay(self):
+        league_id = save()["league"]["league_id"]
+        out = mod.update_league(
+            mod.UpdateRequest(my_team="Antonio Picante"), league_id=league_id, user_id=USER
+        )
+        assert out["my_team"] == "Antonio Picante"
+        assert read(league_id)["my_team"] == "Antonio Picante"
+
+    def test_an_omitted_field_leaves_it_alone(self):
+        league_id = save()["league"]["league_id"]
+        mod.update_league(mod.UpdateRequest(my_team="Antonio Picante"), league_id=league_id,
+                          user_id=USER)
+        out = mod.update_league(mod.UpdateRequest(name="Renamed"), league_id=league_id,
+                                user_id=USER)
+        assert out["my_team"] == "Antonio Picante"
+
+    def test_an_explicit_empty_string_clears_it(self):
+        league_id = save()["league"]["league_id"]
+        mod.update_league(mod.UpdateRequest(my_team="Antonio Picante"), league_id=league_id,
+                          user_id=USER)
+        out = mod.update_league(mod.UpdateRequest(my_team=""), league_id=league_id, user_id=USER)
+        assert out["my_team"] is None
+        assert read(league_id)["my_team"] is None
+
+    def test_a_league_with_no_designation_reads_none_not_an_error(self):
+        league_id = save()["league"]["league_id"]
+        assert read(league_id)["my_team"] is None
+        assert read(league_id)["counts"]["on_my_team"] == 0
+
+    def test_on_my_team_counts_rostered_AND_drafted_rows_under_that_team(self):
+        league_id = save()["league"]["league_id"]
+        mod.update_league(mod.UpdateRequest(my_team="Antonio Picante"), league_id=league_id,
+                          user_id=USER)
+        baseline = read(league_id)["counts"]["on_my_team"]  # ranks 1/2/5/6 already on this roster
+
+        # #7 (Jesus Made) is unrostered in the fixture upload — a live-draft pick to the SAME team
+        # as `my_team` must add to the count, exactly like an uploaded roster match does.
+        out = mod.assign_pick(mod.PickRequest(team="Antonio Picante"), league_id=league_id,
+                              board_rank=7, user_id=USER)
+        assert out["counts"]["on_my_team"] == baseline + 1
+        assert out["rostered"]["7"]["team"] == "Antonio Picante"
+
+        # #8 (Jackson Chourio) is also unrostered — a pick to a DIFFERENT team must not inflate it.
+        out = mod.assign_pick(mod.PickRequest(team="Red Paps"), league_id=league_id,
+                              board_rank=8, user_id=USER)
+        assert out["counts"]["on_my_team"] == baseline + 1
+
+    def test_it_is_free_text_not_constrained_to_the_uploaded_teams(self):
+        """A re-upload can rename a team; rejecting an unrecognised name here would make that
+        rename silently break the designation instead of just failing to highlight anything."""
+        league_id = save()["league"]["league_id"]
+        out = mod.update_league(
+            mod.UpdateRequest(my_team="A Team Not In This Upload"), league_id=league_id,
+            user_id=USER,
+        )
+        assert out["my_team"] == "A Team Not In This Upload"
+
+
 OVERVIEW = """Batters
 ,,,Schedule,,Rankings,,Trends,,Contracts,,Stats,,,,,
 ,Pos,Players, 8/3, 8/4- 8/11,Proj,Actual,Rost,Start,salary,contract,BA,R,HR,RBI,SB,

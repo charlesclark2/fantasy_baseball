@@ -25,6 +25,7 @@ import {
   useMlbLeagues,
   useResolveMlbRosterRow,
   useSaveMlbLeague,
+  useSetMyTeam,
   useUploadTeamRoster,
 } from "@/lib/fantasy-queries"
 import { useProspectBoard } from "@/lib/fantasy-queries"
@@ -522,10 +523,19 @@ function TeamRosters({ league }: { league: LeagueDetail }) {
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {teams.map(([team, entries]) => {
         const prospects = prospectsByTeam.get(team) ?? []
+        const mine = !!league.my_team && team === league.my_team
         return (
-          <div key={team} className="rounded-lg border border-[#262626] bg-[#0f0f0f] p-3">
+          <div
+            key={team}
+            className={`rounded-lg border p-3 ${
+              mine ? "border-emerald-500/40 bg-emerald-500/5" : "border-[#262626] bg-[#0f0f0f]"
+            }`}
+          >
             <div className="flex items-baseline justify-between">
-              <h3 className="truncate text-sm font-medium text-gray-200">{team}</h3>
+              <h3 className="truncate text-sm font-medium text-gray-200">
+                {mine && <span className="text-emerald-400">★ </span>}
+                {team}
+              </h3>
               <span className="text-[11px] text-gray-600">
                 {entries.length} rostered · {prospects.length} on the board
               </span>
@@ -558,6 +568,69 @@ function TeamRosters({ league }: { league: LeagueDetail }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// A Radix `Select` cannot carry an empty-string item value (it reserves "" for "nothing
+// selected" — see the Picker's own doc comment), so "not set" needs a real sentinel here.
+const NOT_SET = "__not_set__"
+
+/** E8.6 — which of the league's teams is the user's own, so the prospect board can highlight it. */
+function MyTeamPicker({ league }: { league: LeagueDetail }) {
+  const setMyTeam = useSetMyTeam(league.league.league_id)
+  // A league can have draft picks seating a team the upload never carried (E8.2's own design —
+  // "a draft can seat a team whose roster was not in the upload") — offer those too, so a
+  // brand-new draft-only league still has something to pick from.
+  const options = [...new Set([...league.teams, ...Object.values(league.picks)])].sort()
+  const [justSaved, setJustSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // ⭐ The selection itself is instant (Radix updates the trigger the moment you pick), so without
+  // an explicit confirmation the user has no way to tell "saved" from "about to revert on the next
+  // read" — which is exactly the silent-failure shape a deploy-lag bug (the API dropping an unknown
+  // field) produced once already. "Saving…" while in flight, "✓ Saved" for a couple of seconds
+  // after, and the actual error message on failure — never just quietly re-rendering "Not set".
+  const choose = (v: string) => {
+    setError(null)
+    setJustSaved(false)
+    setMyTeam.mutate(v === NOT_SET ? "" : v, {
+      onSuccess: () => {
+        setJustSaved(true)
+        setTimeout(() => setJustSaved(false), 2500)
+      },
+      onError: (e) => setError(e instanceof Error ? e.message : "That could not be saved."),
+    })
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[#262626] bg-[#0f0f0f] p-3">
+      <span className="text-xs text-gray-400">Which team is yours?</span>
+      <Picker
+        value={league.my_team ?? NOT_SET}
+        onValueChange={choose}
+        ariaLabel="Which team is yours"
+        disabled={setMyTeam.isPending}
+        options={[
+          { value: NOT_SET, label: "Not set" },
+          ...options.map((t) => ({ value: t, label: t })),
+        ]}
+      />
+      {setMyTeam.isPending && <span className="text-[11px] text-gray-500">Saving…</span>}
+      {!setMyTeam.isPending && justSaved && (
+        <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400">
+          <Check className="h-3 w-3" /> Saved
+        </span>
+      )}
+      {!setMyTeam.isPending && error && (
+        <span className="inline-flex items-center gap-1 text-[11px] text-rose-400">
+          <AlertTriangle className="h-3 w-3" /> {error}
+        </span>
+      )}
+      <span className="text-[11px] leading-relaxed text-gray-600">
+        Highlights your own roster on the prospect board.
+        {options.length === 0 && " Upload a roster or make a draft pick first."}
+      </span>
     </div>
   )
 }
@@ -693,6 +766,8 @@ export function MlbLeagueSetup() {
                   {league.framing}
                 </p>
               </div>
+
+              <MyTeamPicker league={league} />
 
               <DraftPicks league={league} />
 
