@@ -88,6 +88,13 @@ class UpdateRequest(BaseModel):
     #: silently; `{entry_key: "missing_from_board"}` dismisses it INTO the coverage report. `null`
     #: is accepted as a synonym for "not_a_prospect".
     overrides: dict[str, int | str | None] | None = None
+    #: E8.6 — which of the league's teams is the user's OWN, for the board's "my roster" highlight.
+    #: Accepted as free text, exactly like `PickRequest.team` — not constrained to the parsed
+    #: roster's team list, because a re-upload can rename a team and rejecting the designation would
+    #: silently un-highlight a user's own roster. An explicit `""` CLEARS it (the same
+    #: null-is-a-real-signal convention `overrides` already uses for `not_a_prospect`); an OMITTED
+    #: field leaves it alone, matching `name`/`league_scope`.
+    my_team: str | None = Field(default=None, max_length=80)
 
 
 class PickRequest(BaseModel):
@@ -183,14 +190,23 @@ def _overlay(league: dict, entries: list[RosterEntry]) -> dict:
         }
         drafted += 1
 
+    # E8.6 — which team is the user's own, so the board can highlight it. Computed here (not just
+    # passed through) because "how many of MY rostered/drafted prospects" is exactly the kind of
+    # number this function already derives for everything else, and it depends on `rostered`,
+    # which does not exist until the roster + draft-pick merge above has happened.
+    my_team = league.get("my_team")
     counts = dict(result.counts)
     counts["drafted_in_session"] = drafted
     counts["rostered_board_rows"] = len(rostered)
+    counts["on_my_team"] = (
+        sum(1 for v in rostered.values() if v["team"] == my_team) if my_team else 0
+    )
 
     return {
         "league_scope": scope,
         "season": season,
         "teams": sorted({e.team for e in entries}) or list(league.get("teams") or []),
+        "my_team": my_team,
         "counts": counts,
         "rostered": rostered,
         "picks": {str(k): v for k, v in picks.items() if v},
@@ -413,7 +429,8 @@ def update_league(
     league_id: str = Path(min_length=1, max_length=64),
     user_id: str = Depends(get_admin_user),
 ):
-    """Rename, re-scope, or record manual name fixes — without re-uploading the roster."""
+    """Rename, re-scope, record manual name fixes, or set which team is the user's own —
+    without re-uploading the roster."""
     league = _require(user_id, league_id)
     record = {k: v for k, v in league.items() if k != "league_id"}
     if payload.name is not None:
@@ -424,6 +441,10 @@ def update_league(
         merged = dict(record.get("overrides") or {})
         merged.update({str(k): v for k, v in payload.overrides.items()})
         record["overrides"] = merged
+    if payload.my_team is not None:
+        # An explicit "" clears the designation (`.strip() or None`); omitting the field entirely
+        # is the "leave alone" case handled by the `is not None` guard above.
+        record["my_team"] = payload.my_team.strip() or None
     stored = dynamo.put_mlb_league(user_id, league_id, record)
     entries = _entries(stored)
     return {"league": _summary(stored), **_overlay(stored, entries)}
