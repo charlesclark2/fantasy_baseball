@@ -11,9 +11,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { RotateCcw, Undo2, Info, Search } from "lucide-react"
+import { RotateCcw, Undo2, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Picker } from "@/components/ui/picker"
+import { InfoTip } from "@/components/fantasy/shared"
 import {
   recommend,
   rosterRequirements,
@@ -485,7 +486,7 @@ export function DraftOptimizer() {
                 <h2 className="text-sm font-semibold text-white">
                   {myTurn ? "Recommended picks — your turn" : "Best available for your team"}
                 </h2>
-                <InfoTip>
+                <InfoTip label={null}>
                   Picks are ranked by <strong>VOR</strong> (Value Over Replacement — projected fantasy
                   points above the last startable player at the position), then adjusted for{" "}
                   <strong>your roster needs</strong> and <strong>positional tier cliffs</strong> (how
@@ -667,21 +668,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">{label}</span>
       {children}
     </label>
-  )
-}
-
-// A hover/tap tooltip — the Info affordance next to the recommendations header. Uses group-hover +
-// focus so it works on desktop hover AND keyboard/tap (a plain title attr was the prior no-op).
-function InfoTip({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="group relative inline-flex">
-      <button type="button" className="text-gray-500 hover:text-gray-300" aria-label="How recommendations work">
-        <Info className="h-3.5 w-3.5" />
-      </button>
-      <span className="pointer-events-none absolute left-0 top-6 z-50 hidden w-72 rounded-md border border-[#262626] bg-[#0f0f0f] p-3 text-xs leading-relaxed text-gray-400 shadow-xl group-hover:block group-focus-within:block">
-        {children}
-      </span>
-    </span>
   )
 }
 

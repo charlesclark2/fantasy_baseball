@@ -24,6 +24,7 @@ import {
 } from "recharts"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   Table,
   TableBody,
@@ -130,18 +131,42 @@ function pnlColor(val: number | null | undefined) {
 }
 
 // ---------------------------------------------------------------------------
-// Info tooltip — white bg, black text, appears above on hover
+// Info tooltip — white bg, black text, appears above on hover (mouse) or tap (touch)
 // ---------------------------------------------------------------------------
 
 function InfoTooltip({ text }: { text: string }) {
+  // Built on Popover (click/tap-driven), not a plain `group-hover` span — a `:hover`-only tooltip
+  // is entirely unreachable on a touch device (no mouse, and a bare `<span>` isn't focusable), so
+  // this "ⓘ" affordance was invisible on mobile with no fallback at all. Mirrors the fantasy `InfoTip`
+  // fix (NF3.4/NF3.7): Popover for tap-to-open, plus pointerType-gated hover handlers so a touch tap's
+  // synthesized mouseleave can't immediately re-close it.
+  const [open, setOpen] = useState(false)
   return (
-    <span className="group relative inline-block">
-      <span className="ml-1 cursor-help select-none text-gray-600 text-xs hover:text-gray-400">ⓘ</span>
-      <span className="pointer-events-none invisible group-hover:visible absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md bg-white px-3 py-2 text-xs text-black shadow-xl leading-relaxed">
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="More info"
+          onPointerEnter={(e) => {
+            if (e.pointerType === "mouse") setOpen(true)
+          }}
+          onPointerLeave={(e) => {
+            if (e.pointerType === "mouse") setOpen(false)
+          }}
+          className="ml-1 inline-flex cursor-help select-none text-gray-600 text-xs hover:text-gray-400"
+        >
+          ⓘ
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="center"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        className="w-56 border-none bg-white px-3 py-2 text-xs leading-relaxed text-black shadow-xl"
+      >
         {text}
-        <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-white" />
-      </span>
-    </span>
+      </PopoverContent>
+    </Popover>
   )
 }
 

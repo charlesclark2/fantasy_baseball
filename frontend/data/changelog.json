@@ -3,6 +3,10 @@
     "week": "2026-07-27",
     "items": [
       {
+        "tag": "fixed",
+        "text": "Fixed several info tooltips across the site that couldn't be opened by tapping on a phone. These little “ⓘ” icons — next to stats on the Performance page, team pages, and elsewhere — were built to appear on mouse hover, which doesn't exist on a touchscreen; tapping one did nothing. They now open on tap as well as hover, matching how the fantasy pages' info icons already worked. We also checked every other icon that only reveals information on hover and fixed the ones that had the same problem, and re-verified nothing on the site still needs a mouse to be readable."
+      },
+      {
         "tag": "new",
         "text": "There's a new My Teams page under NFL → Fantasy that shows every league you've imported in one place, with each roster scored under that exact league's own scoring format — not a generic PPR guess. Import a league from Sleeper, Yahoo or ESPN, tell us which team is yours (Yahoo does this automatically; Sleeper and ESPN don't hand us that, so you pick it), and your starters and bench show up here with their season projection and 80% range. The number shown is the rest-of-season projection, which before kickoff is effectively the same as the full-season number — we label it that way rather than inventing a fake per-game figure. Any rostered player we couldn't match to a projection is shown honestly rather than silently dropped. Per-game splits, in-season roster updates and waiver-wire suggestions are coming once our weekly model ships — this first version is season-level only."
       },
