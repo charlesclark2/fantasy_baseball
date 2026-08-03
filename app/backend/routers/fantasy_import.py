@@ -40,7 +40,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from app.backend.dependencies import require_fantasy_beta_access
-from app.backend.services import dynamo
+from app.backend.services import dynamo, fantasy_import_telemetry
 from app.backend.services.platform_import import PLATFORMS, espn, sleeper, yahoo, yahoo_oauth
 from app.backend.services.platform_import.http import PlatformHTTPError
 
@@ -70,6 +70,25 @@ class SleeperUserRequest(BaseModel):
 class PreviewRequest(BaseModel):
     league_id: str = Field(min_length=1, max_length=64)
     include_draft: bool = True
+
+
+class CapturedTermTelemetry(BaseModel):
+    """One scoring term the league scores that our board could not apply.
+
+    Deliberately narrow: a key + its point value + its verdict. There is no field here for a user
+    id, a team name, or anything roster-shaped — see the module docstring on
+    `fantasy_import_telemetry` for why that is a property of the SCHEMA, not just of intent.
+    """
+
+    key: str = Field(min_length=1, max_length=120)
+    weight: float = 0.0
+    verdict: str = "captured"
+
+
+class ImportTelemetryRequest(BaseModel):
+    platform: str = Field(min_length=1, max_length=32)
+    season: str | None = None
+    terms: list[CapturedTermTelemetry] = Field(default_factory=list, max_length=200)
 
 
 def _handle_platform_error(e: Exception) -> HTTPException:
@@ -345,6 +364,33 @@ def yahoo_disconnect(user_id: str = Depends(require_fantasy_beta_access)):
     """
     dynamo.delete_platform_token(user_id, yahoo.PLATFORM)
     return None
+
+
+# ── coverage-gap telemetry (NF-C0d) ─────────────────────────────────────────────────────────────
+
+
+@router.post("/telemetry", status_code=202)
+def record_import_telemetry(
+    payload: ImportTelemetryRequest, user_id: str = Depends(require_fantasy_beta_access)
+) -> dict:
+    """Record which of this JUST-SAVED league's scoring terms we could not apply.
+
+    Called by the import UI right after a successful save, carrying exactly the CAPTURED rows the
+    coverage panel already showed the user (see `resolveScoring`/`TermCoverage` on the frontend —
+    this endpoint does not and cannot recompute that classification; the Lambda has no
+    `fantasy_engine`/pandas, per `canonical.py`'s docstring). The write is AGGREGATE ONLY — see
+    `fantasy_import_telemetry`'s module docstring — and BEST-EFFORT: `record_captured_terms` never
+    raises, so this endpoint cannot turn a telemetry hiccup into a user-visible failure, and it
+    always returns 202 whether or not the write actually landed.
+    """
+    if payload.platform not in PLATFORMS:
+        raise HTTPException(status_code=422, detail="Unknown platform")
+    fantasy_import_telemetry.record_captured_terms(
+        payload.platform,
+        payload.season,
+        [t.model_dump() for t in payload.terms],
+    )
+    return {"status": "recorded"}
 
 
 # ── live state for an ALREADY-SAVED imported league ──────────────────────────────────────────────

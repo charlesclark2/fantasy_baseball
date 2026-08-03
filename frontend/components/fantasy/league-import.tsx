@@ -35,6 +35,7 @@ import {
   espnPreview,
   espnReadUrl,
   listImportPlatforms,
+  recordCapturedTermTelemetry,
   sleeperLeagues,
   sleeperPreview,
   yahooAuthorizeUrl,
@@ -262,7 +263,21 @@ export function LeagueImport() {
     const res = await run("save", () =>
       saveLeague.mutateAsync({ leagueId: already?.league_id ?? null, config: payload }),
     )
-    if (res) setSaved(already ? "updated" : "saved")
+    if (res) {
+      setSaved(already ? "updated" : "saved")
+      // NF-C0d — coverage-gap telemetry: which settings this league scores that we could not
+      // apply (the rule + its point value only, never anything about the user or their roster —
+      // see recordCapturedTermTelemetry's docstring). Fire-and-forget: the import already
+      // succeeded, so a telemetry failure here must stay invisible to the user.
+      const capturedTerms = byVerdict("captured").map((t) => ({
+        key: t.key,
+        weight: t.weight,
+        verdict: t.verdict,
+      }))
+      recordCapturedTermTelemetry(accessToken, preview.platform, preview.season, capturedTerms).catch(
+        () => {},
+      )
+    }
   }
 
   if (!platforms) return <LoadingBlock label="Loading import options…" />
@@ -751,37 +766,46 @@ export function LeagueImport() {
 
           {/* ── honest coverage, the same machinery the manual editor uses ──────────────── */}
           {coverage && (
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              {(["applied", "derived", "captured"] as const).map((verdict) => {
-                const terms = byVerdict(verdict)
-                return (
-                  <div
-                    key={verdict}
-                    className={`rounded-lg border p-3 ${VERDICT_STYLE[verdict]}`}
-                  >
-                    <div className="text-xs font-semibold capitalize">
-                      {verdict} · {terms.length}
-                    </div>
-                    <p className="mt-1 text-[11px] opacity-80">{VERDICT_COPY[verdict]}</p>
-                    {terms.length > 0 && (
-                      <div className="mt-2 max-h-40 overflow-y-auto text-[11px] opacity-90">
-                        {terms.map((t) => (
-                          <div key={t.key} className="flex justify-between gap-2 py-0.5">
-                            {/* ESPN numbers its scoring rules, so a captured key renders as
-                                "129@dst" unless the server sends a label. `?? t.key` keeps a
-                                missing label a cosmetic fallback rather than a blank row. */}
-                            <span className="truncate" title={t.key}>
-                              {preview.unmapped_labels?.[t.key] ?? t.key}
-                            </span>
-                            <span className="shrink-0 tabular-nums">{num(t.weight, 2)}</span>
-                          </div>
-                        ))}
+            <>
+              {/* NF-C0d — the aggregate coverage-gap disclosure. Says WHAT we record (a setting
+                  and its point value) and WHY (to know which gaps to close), never buried in a
+                  policy page — see recordCapturedTermTelemetry for what actually gets sent. */}
+              <p className="mt-4 text-[11px] text-gray-500">
+                We record which settings we could not apply — the rule and its point value only,
+                never your name, team or roster — so we know which gaps to close next.
+              </p>
+              <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                {(["applied", "derived", "captured"] as const).map((verdict) => {
+                  const terms = byVerdict(verdict)
+                  return (
+                    <div
+                      key={verdict}
+                      className={`rounded-lg border p-3 ${VERDICT_STYLE[verdict]}`}
+                    >
+                      <div className="text-xs font-semibold capitalize">
+                        {verdict} · {terms.length}
                       </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+                      <p className="mt-1 text-[11px] opacity-80">{VERDICT_COPY[verdict]}</p>
+                      {terms.length > 0 && (
+                        <div className="mt-2 max-h-40 overflow-y-auto text-[11px] opacity-90">
+                          {terms.map((t) => (
+                            <div key={t.key} className="flex justify-between gap-2 py-0.5">
+                              {/* ESPN numbers its scoring rules, so a captured key renders as
+                                  "129@dst" unless the server sends a label. `?? t.key` keeps a
+                                  missing label a cosmetic fallback rather than a blank row. */}
+                              <span className="truncate" title={t.key}>
+                                {preview.unmapped_labels?.[t.key] ?? t.key}
+                              </span>
+                              <span className="shrink-0 tabular-nums">{num(t.weight, 2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </>
           )}
 
           {/* ── live draft state ────────────────────────────────────────────────────────── */}

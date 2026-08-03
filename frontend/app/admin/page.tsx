@@ -86,6 +86,15 @@ interface DataQualityReport {
   resolved_at?: string
 }
 
+interface CapturedTermStat {
+  platform: string
+  key: string
+  occurrences: number
+  avg_abs_weight: number
+  score: number
+  last_seen_at: string | null
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -209,6 +218,16 @@ export default function AdminPage() {
     queryKey: ["admin-data-quality-reports", accessToken],
     queryFn: () => apiFetch("/admin/data-quality-reports", {}, accessToken),
     staleTime: 60_000,
+    enabled: !!accessToken && isAdmin,
+  })
+
+  // NF-C0d — captured scoring terms are aggregate telemetry that only changes on a new import, so
+  // a long staleTime (matching the SF-cost panels' reasoning above) avoids polling this on every
+  // admin-tab focus for data that moves at import cadence, not request cadence.
+  const { data: capturedTerms, isLoading: capturedTermsLoading } = useQuery<CapturedTermStat[]>({
+    queryKey: ["fantasy-import-telemetry", accessToken],
+    queryFn: () => apiFetch("/admin/fantasy-import-telemetry", {}, accessToken),
+    staleTime: 300_000,
     enabled: !!accessToken && isAdmin,
   })
 
@@ -741,6 +760,67 @@ export default function AdminPage() {
               </div>
             )
           })()}
+        </section>
+
+        {/* Fantasy Import — Captured Scoring Terms (NF-C0d) */}
+        <section className="rounded-lg border border-[#262626] bg-[#141414] p-6">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-base font-semibold text-white">Captured Scoring Terms</h2>
+          </div>
+          <p className="mb-5 text-xs text-gray-500">
+            Scoring settings our users&apos; leagues have that our board does not project, ranked by
+            how much closing the gap would matter — occurrences across imports × the average point
+            value the setting carries. Aggregate only: no user, team, or roster is recorded, just the
+            rule and its weight. Feeds NF-C0e&apos;s priority order.
+          </p>
+          {capturedTermsLoading ? (
+            <div className="space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-10 rounded bg-[#1a1a1a] animate-pulse" />
+              ))}
+            </div>
+          ) : !capturedTerms || capturedTerms.length === 0 ? (
+            <p className="text-sm text-gray-500">No captured-term telemetry recorded yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#262626] text-left text-[11px] font-semibold uppercase tracking-widest text-gray-500">
+                    <th className="pb-3 pr-4">Platform</th>
+                    <th className="pb-3 pr-4">Setting</th>
+                    <th className="pb-3 pr-4 text-right">Seen in</th>
+                    <th className="pb-3 pr-4 text-right">Avg weight</th>
+                    <th className="pb-3 pr-4 text-right">Score</th>
+                    <th className="pb-3">Last seen</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1e1e1e]">
+                  {capturedTerms.map((t) => (
+                    <tr key={`${t.platform}:${t.key}`} className="text-gray-300">
+                      <td className="py-3 pr-4 text-xs capitalize whitespace-nowrap">{t.platform}</td>
+                      <td className="py-3 pr-4 text-xs font-mono">{t.key}</td>
+                      <td className="py-3 pr-4 text-right text-xs tabular-nums">
+                        {t.occurrences} import{t.occurrences === 1 ? "" : "s"}
+                      </td>
+                      <td className="py-3 pr-4 text-right text-xs tabular-nums">
+                        {t.avg_abs_weight.toFixed(2)}
+                      </td>
+                      <td className="py-3 pr-4 text-right text-xs font-semibold tabular-nums text-white">
+                        {t.score.toFixed(2)}
+                      </td>
+                      <td className="py-3 whitespace-nowrap text-xs text-gray-500">
+                        {t.last_seen_at
+                          ? new Date(t.last_seen_at).toLocaleDateString("en-US", {
+                              month: "short", day: "numeric", year: "numeric",
+                            })
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
       </main>

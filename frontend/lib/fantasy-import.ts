@@ -230,3 +230,33 @@ export function liveLeagueState(
 ): Promise<{ platform: string; source_league_id: string; draft: DraftStatePayload }> {
   return apiFetch(`/fantasy/import/live/${encodeURIComponent(leagueId)}`, {}, token)
 }
+
+// ── coverage-gap telemetry (NF-C0d) ─────────────────────────────────────────────────────────────
+//
+// AGGREGATE ONLY: a scoring rule's key + point value + verdict, never a user id, team name, or
+// roster — see `app/backend/services/fantasy_import_telemetry.py`'s module docstring for the full
+// reasoning. This is how we find out whether a captured term (a rule the league scores that our
+// board ignores) is common across our users or a long-tail curiosity, so we know what to build next.
+
+export interface CapturedTermTelemetry {
+  key: string
+  weight: number
+  verdict: string
+}
+
+/** Fire-and-forget: record this JUST-SAVED league's captured terms. Callers must swallow the
+ *  returned promise's rejection — a telemetry hiccup must never surface as an import failure, since
+ *  the import itself has already succeeded by the time this is called. */
+export function recordCapturedTermTelemetry(
+  token: string | null,
+  platform: string,
+  season: string | null,
+  terms: CapturedTermTelemetry[],
+): Promise<void> {
+  if (terms.length === 0) return Promise.resolve()
+  return apiFetch(
+    `/fantasy/import/telemetry`,
+    { method: "POST", body: JSON.stringify({ platform, season, terms }) },
+    token,
+  )
+}
