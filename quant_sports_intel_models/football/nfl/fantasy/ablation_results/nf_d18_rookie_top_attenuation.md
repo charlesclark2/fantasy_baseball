@@ -1,6 +1,6 @@
 # NF-D18 — ATTENUATE-AT-THE-TOP rookie-point recalibration (RB/TE/WR) — §0.5 bake-off
 
-**Generated:** 2026-08-03T01:53:44.664955+00:00 · **held-out draft classes:** 2019–2025 (7) · **arms:** 6 candidates + 4 matched foils · **held-out rookie-seasons (RB/TE/WR):** 472 · **framing:** PRE-REGISTERED `pooled` · **DSR reading:** PRE-REGISTERED `whole_field`
+**Generated:** 2026-08-03T02:02:04.012896+00:00 · **held-out draft classes:** 2019–2025 (7) · **arms:** 6 candidates + 4 matched foils · **held-out rookie-seasons (RB/TE/WR):** 472 · **framing:** PRE-REGISTERED `pooled` · **DSR reading:** PRE-REGISTERED `whole_field`
 
 ## ⭐ VERDICT — 🟡 RECORDED NULL — not one pre-registered top-attenuating SHAPE clears both constraints, and three of four place the top rookie WORSE than the un-attenuated reference; the binding problem is the SHAPE, not the constraint
 
