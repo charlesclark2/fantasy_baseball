@@ -15,7 +15,9 @@ from pipeline.ops.milb_ops import (
     dim_player_xref_build_op,
     fangraphs_milb_leaderboards_ingest_op,
     fangraphs_prospects_ingest_op,
+    milb_coverage_sla_op,
     milb_incremental_ingest_op,
+    milb_leakage_screen_op,
     statcast_aaa_incremental_ingest_op,
 )
 
@@ -36,3 +38,11 @@ def milb_ingest_job():
     # "consumer parquet lags the stores" class). The ingests are WARN-tier and always succeed, so
     # this edge orders the work without letting an ingest hiccup skip the rebuild.
     dim_player_xref_build_op(start=[logs, statcast, board, leaderboards])
+
+    # E7.6 — the coverage/SLA report + leakage screen are ALSO downstream fan-ins of the four
+    # ingests (same INC-25 ordering reason: reading the FRESHEST game-log/statcast/board data,
+    # not the previous cycle's). Both run in parallel with dim_player_xref_build_op — neither
+    # depends on the identity spine. Both are pure READERS (no writes), so they carry no ordering
+    # relationship to each other either.
+    milb_coverage_sla_op(start=[logs, statcast, board, leaderboards])
+    milb_leakage_screen_op(start=[logs, statcast, board, leaderboards])
