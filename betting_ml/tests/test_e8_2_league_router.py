@@ -311,6 +311,30 @@ class TestLiveDraftAssignment:
                         user_id=USER)
         assert read(league_id)["picks"] == {"7": "KCStat"}
 
+    def test_a_pick_can_be_reassigned_to_a_different_team_without_undoing_first(self):
+        """E8.6: a mis-click during a live draft is corrected by picking the RIGHT team directly —
+        `assign_pick` overwrites unconditionally, keyed on the board's immutable rank, so there is
+        no intermediate 'unassigned' state a stray read could ever show as available."""
+        league_id = save()["league"]["league_id"]
+        mod.assign_pick(mod.PickRequest(team="Wrong Team"), league_id=league_id, board_rank=7,
+                        user_id=USER)
+        out = mod.assign_pick(mod.PickRequest(team="Right Team"), league_id=league_id,
+                              board_rank=7, user_id=USER)
+        assert out["rostered"]["7"]["team"] == "Right Team"
+        assert out["picks"] == {"7": "Right Team"}
+        assert read(league_id)["rostered"]["7"]["team"] == "Right Team"
+
+    def test_reassigning_one_pick_leaves_other_picks_alone(self):
+        league_id = save()["league"]["league_id"]
+        mod.assign_pick(mod.PickRequest(team="Sea Monkeys"), league_id=league_id, board_rank=1,
+                        user_id=USER)
+        mod.assign_pick(mod.PickRequest(team="KCStat"), league_id=league_id, board_rank=7,
+                        user_id=USER)
+        out = mod.assign_pick(mod.PickRequest(team="phantoms"), league_id=league_id,
+                              board_rank=7, user_id=USER)
+        assert out["rostered"]["1"]["team"] == "Sea Monkeys"
+        assert out["rostered"]["7"]["team"] == "phantoms"
+
 
 OVERVIEW = """Batters
 ,,,Schedule,,Rankings,,Trends,,Contracts,,Stats,,,,,
