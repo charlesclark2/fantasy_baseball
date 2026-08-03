@@ -104,6 +104,14 @@ export const SPORTS: SportNav[] = [
                 key: "mlb-disagreements",
                 restrict: "admin",
               },
+              // E8.2 — league roster import. Same admin restriction as the board it overlays; it
+              // opens up in the same single change (see the E8.1 comment above).
+              {
+                label: "My League",
+                href: "/fantasy/mlb/league",
+                key: "mlb-league",
+                restrict: "admin",
+              },
             ],
           },
         ],
