@@ -80,6 +80,13 @@ export interface Prospect {
   mleBbSd?: number
   mleIso?: number
   mleIsoSd?: number
+  /** E8.3 — MLB-equivalent stolen-base RATE (SB per time reaching first). Translation corr 0.70.
+   *  A rate, NOT a projected SB total, and it measures how often he RUNS, not how often he is safe
+   *  (success rate is a measured null at 0.23). `mleSbLevel` can differ from `mleLevel`: the SB
+   *  line has its own opportunity floor, so it may be drawn from a different level. */
+  mleSbRate?: number
+  mleSbRateSd?: number
+  mleSbLevel?: string
 
   // ── our line: pitchers (E7.3p) ──
   mlePLevel?: string
@@ -133,9 +140,12 @@ export interface ProspectFraming {
   /** Payload key → "strong" | "weak". Which of our metrics may be read with confidence (E7.3). */
   metricConfidence?: Record<string, string>
   metricNotes?: Record<string, string>
-  /** Things deliberately ABSENT because they were measured and found null (wOBA), or structurally
-   *  invisible to us (stolen bases). Rendered as prose — never quietly dropped. */
+  /** Things deliberately ABSENT because they were measured and found null — wOBA, and (since E8.3)
+   *  stolen-base SUCCESS rate. Rendered as prose — never quietly dropped. */
   absences?: string[]
+  /** What the board GAINED, stated as plainly as what it lacks (E8.3). A surface that only ever
+   *  lists its gaps trains its reader to discount it. */
+  capabilities?: string[]
   uncertainty?: string
   scoresAreWithinType?: string
   disagreement?: string

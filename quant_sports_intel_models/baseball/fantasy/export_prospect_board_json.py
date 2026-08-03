@@ -139,6 +139,12 @@ _COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("mle_k_pct", "mleK", "n"), ("mle_k_pct_sd", "mleKSd", "n"),
     ("mle_bb_pct", "mleBb", "n"), ("mle_bb_pct_sd", "mleBbSd", "n"),
     ("mle_iso", "mleIso", "n"), ("mle_iso_sd", "mleIsoSd", "n"),
+    # ── our line — the stolen-base read (E8.3) ──
+    # `mleSbLevel` is carried beside the rate because the SB line has its OWN eligibility floor
+    # (it needs stolen-base OPPORTUNITIES, not just PA), so it can be drawn from a different level
+    # than the K%/BB%/ISO line. Surfacing it keeps that visible instead of implicit.
+    ("mle_sb_rate", "mleSbRate", "n"), ("mle_sb_rate_sd", "mleSbRateSd", "n"),
+    ("mle_sb_level", "mleSbLevel", "s"),
     # ── our line — pitchers (E7.3p) ──
     ("mle_p_level", "mlePLevel", "s"),
     ("mle_p_tbf", "mlePTbf", "i"),
@@ -245,12 +251,19 @@ FRAMING = {
                   "batter stage cleared the deflated gates). Read FV as confirmation.",
     },
     "metricConfidence": {
-        "mleK": "strong", "mleBb": "strong", "mleIso": "weak",
+        "mleK": "strong", "mleBb": "strong", "mleIso": "weak", "mleSbRate": "strong",
         "mlePGb": "strong", "mlePK": "weak", "mlePBb": "weak",
     },
     "metricNotes": {
+        "mleSbRate": "MLB-equivalent STOLEN-BASE RATE — steals per time reaching first base "
+                     "(singles + walks + hit-by-pitch). Out-of-sample translation corr 0.70, the "
+                     "strongest thing we translate (E8.3). ⚠️ It is a RATE, not a projected SB "
+                     "total: turning it into a season count needs a playing-time projection this "
+                     "board does not make. And it measures how often he RUNS, not how often he is "
+                     "SAFE — success rate does not translate (corr 0.23, fails our deflation gate), "
+                     "so we cannot tell a 30-for-40 runner from a 30-for-32 one.",
         "mleK": "MLB-equivalent strikeout rate. Out-of-sample translation corr 0.64 — the "
-                "strongest thing we translate. Read it with confidence.",
+                "strongest RATE-of-contact signal we translate. Read it with confidence.",
         "mleBb": "MLB-equivalent walk rate. Translation corr 0.49. Read it with confidence.",
         "mleIso": "MLB-equivalent isolated power. Translation corr 0.43 — WEAK BUT REAL, and "
                   "park- and pitching-quality dependent. Read it as a direction, not a number.",
@@ -261,14 +274,29 @@ FRAMING = {
         "mlePBb": "MLB-equivalent walk rate for a pitcher. Translation corr 0.37 — weak but real.",
     },
     # Absences that are FINDINGS, and must not be quietly re-added by a future surface.
+    #
+    # ⚠️ The second entry used to read "STOLEN BASES ARE INVISIBLE TO US". E8.3 made that FALSE, and
+    # a caveat that under-sells a shipped capability is its own defect — so it was REPLACED, not
+    # softened. What remains an absence is the SUCCESS half, which is a measured null in its own
+    # right and must not be quietly re-added either.
     "absences": [
         "wOBA is deliberately absent from our hitter line: it carries no translatable signal "
         "(corr 0.22, no better than knowing the player's level). It is a measured null, not an "
         "oversight.",
-        "STOLEN BASES ARE INVISIBLE TO US. Every metric we translate is a per-PA or per-TBF rate "
-        "and SB is not in the substrate, so a speed-first prospect is systematically under-served "
-        "by our score. Rows carrying a plus future-speed grade are flagged — if your league scores "
-        "SB, we are under-rating them.",
+        "STOLEN-BASE SUCCESS RATE is absent, and that is a measured null: whether a runner is safe "
+        "translates at corr 0.23 and fails our deflation gate, so we cannot tell a 30-for-40 runner "
+        "from a 30-for-32 one. How OFTEN a prospect runs does translate (corr 0.70) and is in the "
+        "score as mleSbRate — it is the efficiency half we decline to guess at.",
+    ],
+    # What the board GAINED, stated as plainly as what it lacks. A surface that only ever lists its
+    # gaps trains its reader to discount it.
+    "capabilities": [
+        "STOLEN BASES ARE NOW IN OUR SCORE (E8.3, 2026-08-02). We translate stolen-base rate from a "
+        "prospect's minor-league record the same way we translate K% and BB%, at an out-of-sample "
+        "correlation of 0.70 — the strongest of any metric on this board. Until now every metric we "
+        "translated was a per-PA rate and running was invisible to us, so speed-first prospects "
+        "were systematically under-rated and roughly a fifth of roto offensive value was being "
+        "deferred to the scouts' speed grade. That gap is closed.",
     ],
     "uncertainty": "The *Sd columns are PARAMETER uncertainty on our projection. They rank "
                    "confidence correctly but are TOO TIGHT to read as a calibrated interval. Treat "

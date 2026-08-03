@@ -126,6 +126,14 @@ quant_sports_intel_models/football/nfl/fantasy/artifacts/draft_board_json/
 # is the S3 object `app/backend/routers/fantasy_public.py` reads, nothing reads these locally at
 # runtime or in tests, and every season is re-emitted wholesale on each export.
 quant_sports_intel_models/football/nfl/fantasy/artifacts/track_record_json/
+# E8.1 MLB prospect-board STAGING output — the MLB twin of draft_board_json/ above, and it was
+# simply never added when E8.1 shipped the exporter. `export_prospect_board_json.py` writes this dir
+# (`DEFAULT_OUT`) purely as the local staging area before `--publish` uploads to the prod api-cache;
+# the SERVED copy is the S3 object `app/backend/routers/` reads. Nothing reads these files at runtime
+# and no test uses them as a fixture. Every board is re-emitted wholesale on each export, so a tracked
+# copy is ~2.2 MB of unreviewable churn per run (the board.json is one line of minified JSON).
+# ⚠️ If a board is ever needed for review, publish it or diff the S3 object — do NOT re-track these.
+quant_sports_intel_models/baseball/fantasy/artifacts/prospect_board/
 ablation_results/**/*.parquet
 
 # E7.x ablation artifacts live in *_artifacts/ SUBDIRS; line 66 only globs one level.

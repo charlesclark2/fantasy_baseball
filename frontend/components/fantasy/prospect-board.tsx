@@ -260,6 +260,7 @@ function DetailPanel({ p, framing }: { p: Prospect; framing?: ProspectFraming })
             <Row label="K%" value={pct(p.mleK)} sd={p.mleKSd} fmt={pct} note="strong" />
             <Row label="BB%" value={pct(p.mleBb)} sd={p.mleBbSd} fmt={pct} note="strong" />
             <Row label="ISO" value={dec3(p.mleIso)} sd={p.mleIsoSd} fmt={dec3} note="weak" />
+            <Row label="SB rate" value={pct(p.mleSbRate)} sd={p.mleSbRateSd} fmt={pct} note="strong" />
             <Row label="Sample" value={p.mlePa != null ? `${p.mlePa} PA @ ${p.mleLevel ?? "—"}` : "—"} />
           </dl>
         ) : (
@@ -271,10 +272,18 @@ function DetailPanel({ p, framing }: { p: Prospect; framing?: ProspectFraming })
           </dl>
         )}
         {p.mleK == null && p.mlePK == null && <NoLineNote p={p} framing={framing} />}
+        {p.mleSbRate != null && (
+          <p className="text-[11px] leading-relaxed text-gray-500">
+            SB rate is steals per time reaching first base, translated to an MLB equivalent
+            (out-of-sample corr 0.70 — the strongest line we carry). It is a rate, not a projected
+            SB total, and it says how often he <em>runs</em>, not how often he is safe.
+          </p>
+        )}
         {p.speedFlag && (
           <p className="text-[11px] leading-relaxed text-amber-500/80">
-            Plus speed — and stolen bases are invisible to us. Every metric we translate is a
-            per-PA/per-TBF rate, so if your league scores SB we are under-rating him.
+            The scouts see plus speed, but we have no stolen-base line for him — too few
+            opportunities on his record to translate, or a level we do not model. Fall back to the
+            scouting grade here.
           </p>
         )}
       </div>
@@ -1027,6 +1036,11 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
             </p>
             {framing?.uncertainty && <p>{framing.uncertainty}</p>}
             {framing?.scoresAreWithinType && <p>{framing.scoresAreWithinType}</p>}
+            {(framing?.capabilities ?? []).map((c) => (
+              <p key={c} className="text-emerald-500/80">
+                {c}
+              </p>
+            ))}
             {(framing?.absences ?? []).map((a) => (
               <p key={a}>{a}</p>
             ))}
