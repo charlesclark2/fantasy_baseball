@@ -100,9 +100,10 @@ function LeagueCard({ entry }: { entry: MyTeamEntry }) {
 
       {linked && !hasPlayers && (
         <p className="mt-3 text-xs text-gray-500">
-          {league.source_team_name ? `${league.source_team_name} is` : "Your team is"} linked, but
-          the platform reported no rostered players for it — the usual reason is your league
-          hasn&rsquo;t drafted yet. Re-import after your draft and the roster will show up here.
+          {league.source_team_name ? `${league.source_team_name} is` : "Your team is"}{" "}
+          linked, but the platform reported no rostered players for it — the usual reason is your
+          league hasn&rsquo;t drafted yet. Re-import after your draft and the roster will show up
+          here.
         </p>
       )}
 
