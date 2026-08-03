@@ -240,8 +240,22 @@ def _ladder_for_fold(pairs: pd.DataFrame, metric: str, holdout_players: frozense
 
 def run_h3(pairs: pd.DataFrame, park: pd.DataFrame | None, metric: str, side: SideConfig,
            arms: tuple[H3Arm, ...] = ARMS, *, propensity_cache: dict | None = None,
-           max_folds: int | None = None) -> H3Result:
-    """Score every arm under the E7.3 fold structure, learner held fixed at the shipped configuration."""
+           max_folds: int | None = None, anchors: tuple[Anchor, ...] = H3_ANCHORS,
+           calibrated_fold_clause: bool = False) -> H3Result:
+    """Score every arm under the E7.3 fold structure, learner held fixed at the shipped configuration.
+
+    ⭐ **`anchors` AND `calibrated_fold_clause` EXIST FOR MH2.2 AND DEFAULT TO H3's EXACT BEHAVIOUR.**
+    MH2.2 re-runs a DECLARED SUB-FAMILY of this field (the trajectory arms only), and a sub-family
+    needs its own anchor set: `A_re_shuffled` is a matched foil for `P3_player_re`, so in a field that
+    does not contain the random intercept it has **no defender** and would be a vacuous anchor
+    (NF1.7 (a)) mis-scoped to an unrelated mechanism (NF-D16 g‴). Passing the anchor tuple in makes
+    that a declared design choice rather than a silent one.
+
+    `calibrated_fold_clause=True` activates MH2/H8's `fold_consistency_clause` in `numeric_gate`. It is
+    weakly STRICTER than the legacy `≥60%` rate at every fold count, so it can only prevent a false
+    ADD — but it is opt-in so that H3's own recorded verdicts cannot be retroactively re-decided by a
+    parameter added for a later story.
+    """
     shipped = SHIPPED_CONTEXT[side.player_type].get(metric, ContextSpec())
     scale = side.prior_scales.get(metric, 2.0)
     cfg = side.mle_config(metric)
@@ -371,8 +385,8 @@ def run_h3(pairs: pd.DataFrame, park: pd.DataFrame | None, metric: str, side: Si
     reasons: list[str] = list(notes)
     sel = leaderboard[leaderboard["selectable"] & leaderboard["active"]]
     best = str(sel.iloc[0]["arm"]) if not sel.empty else "L0_foil"
-    anchors, anchor_verdict, anchor_reason = evaluate_anchors(
-        mae, H3_ANCHORS, best, "L0_foil", coverage=coverage)
+    anchor_report, anchor_verdict, anchor_reason = evaluate_anchors(
+        mae, anchors, best, "L0_foil", coverage=coverage)
 
     # ⭐ A MATCHED FOIL REFUTES ITS OWN MECHANISM, NOT THE WHOLE FIELD (NF-D16 g‴, one instrument over).
     # `A_re_shuffled` foils the random intercept and `A_traj_shuffled` foils the trajectory; neither says
@@ -380,21 +394,21 @@ def run_h3(pairs: pd.DataFrame, park: pd.DataFrame | None, metric: str, side: Si
     # reject a legitimately-better arm for an unrelated mechanism's sin — exactly the failure a single
     # field-wide peeking ceiling produced in NF-D16. So a scoped refutation disqualifies ONLY its
     # defender, loudly, and selection re-runs over what survives.
-    refuted = dict(anchors.get("refuted_arms") or {})
+    refuted = dict(anchor_report.get("refuted_arms") or {})
     if refuted:
         for arm_label, why in refuted.items():
             reasons.append(f"⛔ MECHANISM REFUTED (scoped to `{arm_label}`) — {why} That arm is "
                            f"disqualified from selection; other mechanisms on this metric are untouched.")
         sel = sel[~sel["arm"].isin(refuted)]
         best = str(sel.iloc[0]["arm"]) if not sel.empty else "L0_foil"
-    anchors["oracle_floor_ok"] = oracle_ok
-    anchors["best_arm_mae"] = float(leaderboard.loc[leaderboard["arm"] == best, "oos_mae"].iloc[0]) \
+    anchor_report["oracle_floor_ok"] = oracle_ok
+    anchor_report["best_arm_mae"] = float(leaderboard.loc[leaderboard["arm"] == best, "oos_mae"].iloc[0]) \
         if best in set(leaderboard["arm"]) else np.nan
     stratified = stratified_lift(rows_df)
     stratified_moved = stratified_lift(rows_df, moved_only=True)
     low, low_all = low_tercile_read(stratified, stratified_moved, best)
-    anchors["low_propensity_tercile_lift_pct"] = low
-    anchors["low_propensity_tercile_lift_pct_all_rows"] = low_all
+    anchor_report["low_propensity_tercile_lift_pct"] = low
+    anchor_report["low_propensity_tercile_lift_pct_all_rows"] = low_all
 
     # ⭐ THE DECOMPOSITION READING — recorded whatever the verdict, because P3/P4 were pre-registered to
     # lose and their MARGIN is the measurement of where the incumbent's skill lives.
@@ -402,10 +416,10 @@ def run_h3(pairs: pd.DataFrame, park: pd.DataFrame | None, metric: str, side: Si
         r = leaderboard.loc[leaderboard["arm"] == label, "pct_lift_vs_foil"]
         return float(r.iloc[0]) if len(r) else float("nan")
 
-    anchors["between_vs_within_player_decomposition_pct"] = _lift("P3_player_re")
-    anchors["re_shuffled_minus_re_true_pct"] = _lift("A_re_shuffled") - _lift("P3_player_re")
-    anchors["ladder_contribution_to_trajectory_pct"] = _lift("T1_traj_ladder") - _lift("T2_traj_raw")
-    anchors["ladder_identity_fallback_folds"] = ladder_fallback_folds
+    anchor_report["between_vs_within_player_decomposition_pct"] = _lift("P3_player_re")
+    anchor_report["re_shuffled_minus_re_true_pct"] = _lift("A_re_shuffled") - _lift("P3_player_re")
+    anchor_report["ladder_contribution_to_trajectory_pct"] = _lift("T1_traj_ladder") - _lift("T2_traj_raw")
+    anchor_report["ladder_identity_fallback_folds"] = ladder_fallback_folds
     if ladder_fallback_folds and len(ladder_fallback_folds) >= len(fold_cohorts):
         reasons.append(
             f"⚠️ THE LADDER FELL BACK TO IDENTITY IN EVERY FOLD ({ladder_fallback_folds}) — "
@@ -446,7 +460,7 @@ def run_h3(pairs: pd.DataFrame, park: pd.DataFrame | None, metric: str, side: Si
     return H3Result(
         metric=metric, prior_scale=scale, shipped_spec=shipped, leaderboard=leaderboard,
         mae_by_fold=mae, fold_cohorts=fold_cohorts, census=census, coverage=coverage,
-        deflation=defl, dsr=dsr, anchors=anchors, stratified=stratified,
+        deflation=defl, dsr=dsr, anchors=anchor_report, stratified=stratified,
         stratified_moved=stratified_moved, composition=propensity_composition(rows_df),
         verdict=verdict, winner=winner, reasons=reasons, oracle_floor_ok=oracle_ok)
 
