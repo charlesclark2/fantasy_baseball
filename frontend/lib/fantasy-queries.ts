@@ -42,8 +42,10 @@ import {
   saveMlbLeague,
   undoDraftPick,
   updateMlbLeague,
+  uploadTeamRoster,
 } from "@/lib/mlb-league"
 import type {
+  DismissReason,
   LeagueDetail as MlbLeagueDetail,
   LeagueSummary as MlbLeagueSummary,
 } from "@/lib/mlb-league"
@@ -457,15 +459,27 @@ export function useDeleteMlbLeague() {
   })
 }
 
-/** Record a manual name fix (`{entryKey: rank}`) or a dismissal (`{entryKey: null}`). */
+/** Record a manual name fix (`{key: rank}`) or a dismissal (`{key: "not_a_prospect"}` /
+ *  `{key: "missing_from_board"}` — see `DismissReason`; the two are different statements). */
 export function useResolveMlbRosterRow(leagueId: string | null) {
   const { accessToken } = useAuth()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (overrides: Record<string, number | null>) =>
+    mutationFn: (overrides: Record<string, number | DismissReason | null>) =>
       updateMlbLeague(accessToken, leagueId as string, { overrides }),
     // The PATCH response IS the recomputed league, so seed the cache with it rather than
     // invalidating and re-fetching — during a review pass that round trip is the whole latency.
+    onSuccess: (data) => qc.setQueryData(["mlb-league", leagueId], data),
+  })
+}
+
+/** Replace one team's roster from a per-team export, leaving the other teams alone. */
+export function useUploadTeamRoster(leagueId: string | null) {
+  const { accessToken } = useAuth()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ team, text }: { team: string; text: string }) =>
+      uploadTeamRoster(accessToken, leagueId as string, team, text),
     onSuccess: (data) => qc.setQueryData(["mlb-league", leagueId], data),
   })
 }

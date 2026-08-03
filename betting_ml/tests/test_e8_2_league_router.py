@@ -312,6 +312,113 @@ class TestLiveDraftAssignment:
         assert read(league_id)["picks"] == {"7": "KCStat"}
 
 
+OVERVIEW = """Batters
+,,,Schedule,,Rankings,,Trends,,Contracts,,Stats,,,,,
+,Pos,Players, 8/3, 8/4- 8/11,Proj,Actual,Rost,Start,salary,contract,BA,R,HR,RBI,SB,
+,OF,Chase DeLauter OF | CLE ,No Game,x,108,55,91%,77%,1,,0.276,40,12,52,6
+,DH,Samuel Basallo C | BAL ,No Game,x,1,1,99%,90%,9,,0.280,50,20,60,1
+Reserves
+, OF,Max Clark OF | DET ,No Game,x,2,2,90%,50%,5,,0.270,40,10,40,10
+Injured
+Minors
+, OF,Vance Honeycutt OF | BAL ,No Game,x,N/A,N/A,10%,0%,,M,0.000,0,0,0,0
+Pitchers
+,,,Schedule,,Rankings,,Trends,,Contracts,,Stats,,,,,
+,Pos,Players, 8/3, 8/4- 8/11,Proj,Actual,Rost,Start,salary,contract,ERA,WHIP,W,K,S,
+,P,Kumar Rocker P | TEX ,No Game,x,41,12,98%,84%,27,,2.41,1.08,7,174,0
+Reserves
+Injured
+Minors
+Active: 3 Reserve: 1 Injured: 0 Minors: 1 Active salary: 226.00 Total salary: 291.00
+"""
+
+
+@pytest.mark.usefixtures("store", "board")
+class TestThePerTeamUpload:
+    def test_it_replaces_only_that_team(self):
+        league_id = save()["league"]["league_id"]
+        before = read(league_id)
+        assert set(before["teams"]) == {"Antonio Picante", "Red Paps"}
+
+        out = mod.upsert_team(
+            mod.TeamUploadRequest(team="Red Paps", text=OVERVIEW),
+            league_id=league_id, user_id=USER,
+        )
+        assert out["upload_format"] == "roster_overview"
+        assert out["imported"] == 5
+        assert out["replaced"] == 6, "the old Red Paps roster should have been swapped out"
+
+        after = read(league_id)
+        # Antonio Picante is untouched…
+        assert {e["name"] for e in after["entries"] if e["team"] == "Antonio Picante"} == {
+            e["name"] for e in before["entries"] if e["team"] == "Antonio Picante"
+        }
+        # …and Red Paps now carries the full names from the per-team export.
+        assert {e["name"] for e in after["entries"] if e["team"] == "Red Paps"} == {
+            "Chase DeLauter", "Samuel Basallo", "Max Clark", "Vance Honeycutt", "Kumar Rocker",
+        }
+
+    def test_the_mlb_club_is_stored_and_survives_a_read(self):
+        league_id = save()["league"]["league_id"]
+        mod.upsert_team(mod.TeamUploadRequest(team="Red Paps", text=OVERVIEW),
+                        league_id=league_id, user_id=USER)
+        delauter = next(e for e in read(league_id)["entries"] if e["name"] == "Chase DeLauter")
+        assert delauter["team"] == "Red Paps"
+
+    def test_a_bad_export_is_a_422_not_a_partial_import(self):
+        league_id = save()["league"]["league_id"]
+        with pytest.raises(HTTPException) as exc:
+            mod.upsert_team(
+                mod.TeamUploadRequest(team="Red Paps", text=OVERVIEW.replace("Active: 3", "Active: 9")),
+                league_id=league_id, user_id=USER,
+            )
+        assert exc.value.status_code == 422
+        assert "missing players" in exc.value.detail
+        # and nothing was written
+        assert {e["name"] for e in read(league_id)["entries"] if e["team"] == "Red Paps"} != set()
+
+
+@pytest.mark.usefixtures("store", "board")
+class TestBoardCoverageIsReported:
+    def test_an_unplaceable_minors_stash_reaches_the_payload(self):
+        league_id = save()["league"]["league_id"]
+        out = mod.upsert_team(mod.TeamUploadRequest(team="Red Paps", text=OVERVIEW),
+                              league_id=league_id, user_id=USER)
+        gaps = {g["name"]: g for g in out["coverage_gaps"]}
+        assert "Vance Honeycutt" in gaps, "a minors stash we cannot place must be reported"
+        assert gaps["Vance Honeycutt"]["org"] == "BAL"      # what makes it actionable
+        assert gaps["Vance Honeycutt"]["source"] == "suggested"
+
+    def test_flagging_missing_keeps_it_reported_while_clearing_the_queue(self):
+        league_id = save()["league"]["league_id"]
+        out = mod.upsert_team(mod.TeamUploadRequest(team="Red Paps", text=OVERVIEW),
+                              league_id=league_id, user_id=USER)
+        key = next(g["key"] for g in out["coverage_gaps"] if g["name"] == "Vance Honeycutt")
+
+        after = mod.update_league(
+            mod.UpdateRequest(overrides={key: "missing_from_board"}),
+            league_id=league_id, user_id=USER,
+        )
+        assert [g["source"] for g in after["coverage_gaps"] if g["name"] == "Vance Honeycutt"] == [
+            "confirmed"
+        ]
+        assert "Vance Honeycutt" not in [r["name"] for r in after["review"]]
+        assert read(league_id)["coverage_gaps"], "the flag must survive a round trip"
+
+    def test_not_a_prospect_does_NOT_land_in_the_coverage_report(self):
+        """The whole point of splitting the dismissal: an established major-leaguer is not a gap."""
+        league_id = save()["league"]["league_id"]
+        out = mod.upsert_team(mod.TeamUploadRequest(team="Red Paps", text=OVERVIEW),
+                              league_id=league_id, user_id=USER)
+        key = next(g["key"] for g in out["coverage_gaps"] if g["name"] == "Vance Honeycutt")
+        after = mod.update_league(
+            mod.UpdateRequest(overrides={key: "not_a_prospect"}),
+            league_id=league_id, user_id=USER,
+        )
+        assert after["coverage_gaps"] == []
+        assert "Vance Honeycutt" not in [r["name"] for r in after["review"]]
+
+
 class TestTheGate:
     def test_every_route_is_admin_gated(self):
         """⚠️ The MLB board is admin-only dogfood until 2027. `require_fantasy_access` alone would

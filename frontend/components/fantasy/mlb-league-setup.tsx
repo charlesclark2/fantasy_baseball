@@ -14,7 +14,7 @@
 // contradicts the board, and a minors-slot stash we could not place.
 
 import { useMemo, useRef, useState } from "react"
-import { AlertTriangle, Check, Trash2, Upload, X } from "lucide-react"
+import { AlertTriangle, Check, Copy, Flag, Trash2, Upload, X } from "lucide-react"
 import { EmptyBlock, LoadingBlock, SurfaceHeader } from "@/components/fantasy/shared"
 import { Picker } from "@/components/ui/picker"
 import {
@@ -25,9 +25,10 @@ import {
   useMlbLeagues,
   useResolveMlbRosterRow,
   useSaveMlbLeague,
+  useUploadTeamRoster,
 } from "@/lib/fantasy-queries"
 import { useProspectBoard } from "@/lib/fantasy-queries"
-import { STATUS_LABEL, matchSummary } from "@/lib/mlb-league"
+import { STATUS_LABEL, coverageGapsCsv, matchSummary } from "@/lib/mlb-league"
 import type { LeagueDetail, ReviewRow, RosterEntry } from "@/lib/mlb-league"
 
 const SCOPES = [
@@ -284,16 +285,195 @@ function ReviewQueue({ league, rows }: { league: LeagueDetail; rows: ReviewRow[]
                 {c.pos ? ` · ${c.pos}` : ""}
               </button>
             ))}
+            {/* ⭐ TWO dismissals, not one. "Not a prospect" is Salvador Perez; "missing from our
+                board" is a prospect somebody is spending a dynasty roster spot on that we do not
+                carry — which is a coverage signal worth keeping, not a row to delete. */}
             <button
-              onClick={() => resolve.mutate({ [row.key]: null })}
+              onClick={() => resolve.mutate({ [row.key]: "missing_from_board" })}
+              disabled={resolve.isPending}
+              className="inline-flex items-center gap-1 rounded border border-amber-500/40 px-2 py-1 text-[11px] text-amber-400 hover:bg-amber-500/10 disabled:opacity-40"
+            >
+              <Flag className="h-3 w-3" /> Missing from our board
+            </button>
+            <button
+              onClick={() => resolve.mutate({ [row.key]: "not_a_prospect" })}
               disabled={resolve.isPending}
               className="inline-flex items-center gap-1 rounded border border-[#333] px-2 py-1 text-[11px] text-gray-500 hover:text-gray-300 disabled:opacity-40"
             >
-              <X className="h-3 w-3" /> Not a board prospect
+              <X className="h-3 w-3" /> Not a prospect
             </button>
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+/** Replace ONE team from a per-team CBS "roster overview" export.
+ *
+ *  ⭐ Why offer this alongside the whole-league grid: the per-team export carries FULL NAMES and the
+ *  MLB club, and on the live AL board the full name removes the ambiguity class outright (9
+ *  ambiguous board keys → 0). The grid stays the fast path for the whole league; this is how you
+ *  fix the one team the grid could not resolve, without re-uploading everything. */
+function TeamUploadPanel({ league }: { league: LeagueDetail }) {
+  const upload = useUploadTeamRoster(league.league.league_id)
+  const [team, setTeam] = useState("")
+  const [text, setText] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState<string | null>(null)
+
+  const submit = async () => {
+    setError(null)
+    setDone(null)
+    try {
+      const res = await upload.mutateAsync({ team: team.trim(), text })
+      setDone(`Imported ${res.imported} players for ${team.trim()} (replaced ${res.replaced}).`)
+      setText("")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "That roster could not be read.")
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-[#262626] bg-[#0f0f0f] p-4">
+      <div>
+        <h3 className="text-sm font-medium text-gray-200">Upload one team&apos;s roster</h3>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-gray-500">
+          A per-team CBS export carries full names and each player&apos;s MLB club, where the
+          league-wide grid gives only an initial and a surname. That removes the “this name matches
+          two prospects” problem entirely, so it is the way to fix a team the grid left unresolved —
+          and it makes the coverage report below actionable.
+        </p>
+      </div>
+      <label className="block">
+        <span className="mb-1 block text-[11px] uppercase tracking-wide text-gray-500">
+          Which team is this? (the export doesn&apos;t say)
+        </span>
+        <input
+          value={team}
+          onChange={(e) => setTeam(e.target.value)}
+          list="mlb-league-teams"
+          maxLength={80}
+          placeholder="e.g. Statcast and Chill"
+          className="w-full rounded border border-[#262626] bg-[#0a0a0a] px-2 py-1.5 text-base sm:text-sm text-gray-200"
+        />
+        <datalist id="mlb-league-teams">
+          {league.teams.map((t) => (
+            <option key={t} value={t} />
+          ))}
+        </datalist>
+      </label>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={6}
+        spellCheck={false}
+        placeholder={"Batters\n,Pos,Players, 8/3, …\n,C,Dillon Dingler C | DET ,…"}
+        className="w-full rounded border border-[#262626] bg-[#0a0a0a] p-2 font-mono text-base sm:text-[11px] text-gray-300"
+      />
+      {error && (
+        <p className="flex items-start gap-2 rounded border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-300">
+          <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+          {error}
+        </p>
+      )}
+      {done && <p className="text-xs text-emerald-400">{done}</p>}
+      <button
+        onClick={submit}
+        disabled={!team.trim() || !text.trim() || upload.isPending}
+        className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+      >
+        {upload.isPending ? "Reading…" : "Replace this team"}
+      </button>
+    </div>
+  )
+}
+
+// ── board coverage ───────────────────────────────────────────────────────────────────────────
+
+/** ⭐ Prospects the league is rostering that our board does not carry.
+ *
+ *  This panel exists because the signal was previously thrown away. A player in somebody's MINORS
+ *  slot who matches no board row is not noise — a competitive dynasty owner is spending a roster
+ *  spot on him, which is independent evidence he is worth tracking. It is deliberately EXPORTABLE:
+ *  the point is to get these players onto the board, so the output has to leave this screen. */
+function CoverageGaps({ league }: { league: LeagueDetail }) {
+  const [copied, setCopied] = useState(false)
+  const gaps = league.coverage_gaps ?? []
+  if (!gaps.length) {
+    return (
+      <p className="rounded border border-[#262626] bg-[#0f0f0f] p-3 text-xs text-gray-500">
+        No coverage gaps — every minors-slot stash in this league resolved to a board row.
+      </p>
+    )
+  }
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(coverageGapsCsv(gaps))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      /* clipboard unavailable — the table below is still readable and selectable */
+    }
+  }
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <p className="text-xs leading-relaxed text-gray-400">
+          {gaps.length} rostered {gaps.length === 1 ? "player" : "players"} look like prospects the
+          board does not carry. Somebody is spending a dynasty roster spot on them, which is a
+          reason to consider tracking them.
+        </p>
+        <button
+          onClick={copy}
+          className="ml-auto inline-flex items-center gap-1 rounded border border-[#262626] px-2 py-1 text-[11px] text-gray-400 hover:text-gray-200"
+        >
+          <Copy className="h-3 w-3" /> {copied ? "Copied" : "Copy as CSV"}
+        </button>
+      </div>
+      <div className="overflow-x-auto rounded-lg border border-[#262626]">
+        <table className="w-full text-left text-[11px]">
+          <thead className="bg-[#0f0f0f] text-[10px] uppercase tracking-wide text-gray-500">
+            <tr>
+              <th className="px-3 py-1.5">Player</th>
+              <th className="px-3 py-1.5">Pos</th>
+              <th className="px-3 py-1.5">MLB</th>
+              <th className="px-3 py-1.5">Roster spot</th>
+              <th className="px-3 py-1.5">Rostered by</th>
+              <th className="px-3 py-1.5">Flagged</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#1a1a1a]">
+            {gaps.map((g) => (
+              <tr key={g.key}>
+                <td className="px-3 py-1.5 font-medium text-gray-200">{g.name}</td>
+                <td className="px-3 py-1.5 text-gray-400">{g.positions ?? g.slot}</td>
+                <td className="px-3 py-1.5 text-gray-400">{g.org ?? "—"}</td>
+                <td className="px-3 py-1.5 text-gray-400">
+                  {g.status ? (STATUS_LABEL[g.status] ?? g.status) : "active"}
+                </td>
+                <td className="px-3 py-1.5 text-gray-500">{g.team}</td>
+                <td className="px-3 py-1.5">
+                  <span
+                    className={
+                      g.source === "confirmed"
+                        ? "text-amber-400"
+                        : "text-gray-600"
+                    }
+                  >
+                    {g.source === "confirmed" ? "by you" : "auto"}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[10px] leading-relaxed text-gray-600">
+        “auto” = an unplaceable minors-slot stash. “by you” = you marked it missing in Review. An MLB
+        club is shown when the upload carried one — a per-team export does, the league-wide grid does
+        not, which is the main reason to use one.
+      </p>
     </div>
   )
 }
@@ -427,7 +607,7 @@ export function MlbLeagueSetup() {
   const leagueQ = useMlbLeague(selectedId)
   const del = useDeleteMlbLeague()
   const [replacing, setReplacing] = useState(false)
-  const [tab, setTab] = useState<"review" | "rosters">("review")
+  const [tab, setTab] = useState<"review" | "coverage" | "rosters">("review")
 
   const league = leagueQ.data
 
@@ -517,7 +697,7 @@ export function MlbLeagueSetup() {
               <DraftPicks league={league} />
 
               <div className="flex gap-1 border-b border-[#262626]">
-                {(["review", "rosters"] as const).map((t) => (
+                {(["review", "coverage", "rosters"] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setTab(t)}
@@ -529,15 +709,22 @@ export function MlbLeagueSetup() {
                   >
                     {t === "review"
                       ? `Review${league.review.length ? ` (${league.review.length})` : ""}`
-                      : `Rosters (${league.teams.length})`}
+                      : t === "coverage"
+                        ? `Board coverage${
+                            league.coverage_gaps?.length ? ` (${league.coverage_gaps.length})` : ""
+                          }`
+                        : `Rosters (${league.teams.length})`}
                   </button>
                 ))}
               </div>
 
-              {tab === "review" ? (
-                <ReviewQueue league={league} rows={league.review} />
-              ) : (
-                <TeamRosters league={league} />
+              {tab === "review" && <ReviewQueue league={league} rows={league.review} />}
+              {tab === "coverage" && <CoverageGaps league={league} />}
+              {tab === "rosters" && (
+                <div className="space-y-4">
+                  <TeamRosters league={league} />
+                  <TeamUploadPanel league={league} />
+                </div>
               )}
             </>
           )}

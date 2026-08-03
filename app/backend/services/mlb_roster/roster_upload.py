@@ -1,14 +1,26 @@
 """E8.2 — the league-roster UPLOAD parser (Path A, the guaranteed floor).
 
-Two accepted shapes, auto-detected:
+Three accepted shapes, auto-detected:
 
-  * **CBS "roster grid"** — one row per fantasy TEAM, columns are POSITION SLOTS
-    (`Team,C,1B,2B,3B,SS,MI,CI,OF,DH,P`), and every player a team holds at that position is
-    CONCATENATED into the one cell.
+  * **CBS "roster grid"** — the whole league in ONE file: one row per fantasy TEAM, columns are
+    POSITION SLOTS (`Team,C,1B,2B,3B,SS,MI,CI,OF,DH,P`), and every player a team holds at that
+    position is CONCATENATED into the one cell. The fast path, and the hard one to read.
+  * **CBS "roster overview"** — ONE team, sectioned `Batters`/`Reserves`/`Injured`/`Minors`/
+    `Pitchers`, one player per row, carrying FULL NAMES and the MLB club (`Chase Meidroth 2B,SS |
+    CHW`). Costs one upload per team, and buys the ambiguity class outright: on the live AL board,
+    initial+surname leaves 9 ambiguous keys and the full name leaves ZERO. It also brings the MLB
+    club, which is what makes a board-coverage report actionable.
   * **long form** — the documented generic schema, one row per rostered player, with a
     team/owner column and a player column (+ optional position and status). This is what makes
     the feature platform-independent: a Yahoo/ESPN/Fantrax user can always reshape their export
     into three columns and get the same product.
+
+⚖️ THE TWO CBS EXPORTS ARE CROSS-CHECKED AGAINST EACH OTHER in the test suite, and they agree
+exactly on WHO is rostered (33 players, nobody on either side only) despite being read by two
+completely unrelated code paths. That is the second-real-payload validation a single fixture
+structurally cannot give (the NF-C0 lesson). They disagree on 8 ACTIVE↔RESERVE statuses, which is
+three days of ordinary lineup churn between the exports, not a parse defect — the sticky statuses
+(minors, injured) agree exactly.
 
 ════════════════════════════════════════════════════════════════════════════════════════════════
 ⚠️  THE CRUX: A GRID CELL HAS NO DELIMITER, AND `[a-z][A-Z]` IS THE WRONG SPLIT
@@ -100,6 +112,14 @@ class RosterEntry:
     status: str | None = None
     #: A status code we do not have a legend for. Kept, reported, never silently dropped.
     status_code: str | None = None
+    #: MLB club, when the upload carries one (the per-team "roster overview" export does; the
+    #: league-wide grid does not). Used to disambiguate same-name candidates and — more importantly —
+    #: to make a board-coverage report actionable: "Vance Honeycutt, OF, BAL" is something an
+    #: operator can act on, "V Honeycutt" is not.
+    org: str | None = None
+    #: The player's listed position(s) as the platform gives them ("2B,SS"). Richer than `slot`,
+    #: which is the LINEUP spot they happen to occupy.
+    positions: str | None = None
 
     @property
     def key(self) -> str:
@@ -124,10 +144,45 @@ class RosterEntry:
 class ParsedRoster:
     entries: list[RosterEntry] = field(default_factory=list)
     teams: list[str] = field(default_factory=list)
-    #: "cbs_grid" | "long"
+    #: "cbs_grid" | "roster_overview" | "long"
     upload_format: str = "cbs_grid"
     #: Non-fatal observations for the user (unknown status code, a row we could not attribute).
     warnings: list[str] = field(default_factory=list)
+    #: True for a ONE-TEAM export that does not name its own team (the roster overview). The caller
+    #: must supply the team name; without it we would file a whole roster under "".
+    needs_team: bool = False
+
+
+# ── the per-team "roster overview" export ────────────────────────────────────────────────────────
+# A completely different shape from the grid: ONE team, sectioned `Batters` / `Reserves` / `Injured`
+# / `Minors` / `Pitchers`, one player per row, and — the part that matters — FULL NAMES with the
+# MLB club: `Chase Meidroth 2B,SS | CHW`.
+#
+# ⭐ WHY THIS FORMAT IS WORTH SUPPORTING even though the grid already covers the whole league in one
+# file. Measured on the live AL board: keyed on INITIAL + surname, 9 board keys are ambiguous
+# (three `E Rodriguez`es, two `J Sanchez`es …); keyed on the FULL name, **zero** are. So a per-team
+# export removes the entire ambiguity class rather than reducing it — and it makes a board-coverage
+# report actionable, because "Vance Honeycutt, OF, BAL" can be looked up and "V Honeycutt" cannot.
+# It costs one upload per team, which is why the grid stays the primary path and this is the way to
+# fix a team the grid could not resolve.
+
+#: `Dillon Dingler C | DET` · `Chase Meidroth 2B,SS | CHW` · `Isaac Paredes 1B,3B | HOU`
+_OVERVIEW_PLAYER = re.compile(
+    r"^(?P<name>.+?)\s+(?P<pos>[A-Z0-9]{1,3}(?:\s*,\s*[A-Z0-9]{1,3})*)\s*\|\s*(?P<org>[A-Z]{2,3})\s*$"
+)
+
+#: The section headings. `Batters`/`Pitchers` open a block and RESET the status to active; the other
+#: three set the status for the rows beneath them.
+_OVERVIEW_BLOCKS = frozenset({"batters", "pitchers", "hitters"})
+_OVERVIEW_SECTIONS = {"reserves": "reserve", "reserve": "reserve", "injured": "injured",
+                      "injury": "injured", "minors": "minors", "minor league": "minors"}
+
+#: `Active: 23 Reserve: 5 Injured: 4 Minors: 1 …` — the export's own totals.
+_OVERVIEW_FOOTER = re.compile(
+    r"active:\s*(?P<active>\d+).*?reserve:\s*(?P<reserve>\d+).*?injured:\s*(?P<injured>\d+)"
+    r".*?minors:\s*(?P<minors>\d+)",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 # ── the tokenizer ────────────────────────────────────────────────────────────────────────────────
@@ -329,7 +384,81 @@ def _parse_long(rows: list[list[str]]) -> ParsedRoster:
     return out
 
 
-def parse_roster_upload(text: str) -> ParsedRoster:
+def _looks_like_overview(rows: list[list[str]]) -> bool:
+    """A one-team roster overview announces itself with a `Batters`/`Pitchers` heading on its own
+    row, and carries `Name POS | ORG` player cells."""
+    headings = sum(
+        1
+        for row in rows[:60]
+        if row and row[0].strip().lower() in _OVERVIEW_BLOCKS and not any(c.strip() for c in row[1:])
+    )
+    players = sum(1 for row in rows for cell in row if _OVERVIEW_PLAYER.match(cell.strip()))
+    return headings >= 1 and players >= 3
+
+
+def _parse_overview(rows: list[list[str]], team: str) -> ParsedRoster:
+    out = ParsedRoster(upload_format="roster_overview", needs_team=not team)
+    if team:
+        out.teams.append(team)
+    status: str | None = None
+    counts = {"active": 0, "reserve": 0, "injured": 0, "minors": 0}
+    footer: re.Match[str] | None = None
+
+    for row in rows:
+        cells = [(c or "").strip() for c in row]
+        heading = cells[0].lower() if cells else ""
+        if heading and not any(cells[1:]):
+            # A lone cell: a block heading, a section heading, or the totals footer.
+            if heading in _OVERVIEW_BLOCKS:
+                status = None  # a new block starts in the ACTIVE section
+                continue
+            if heading in _OVERVIEW_SECTIONS:
+                status = _OVERVIEW_SECTIONS[heading]
+                continue
+            match = _OVERVIEW_FOOTER.search(cells[0])
+            if match:
+                footer = match
+            continue
+
+        # A data row. The player cell is whichever one parses — the export pads with blank leading
+        # columns and the exact index is not worth depending on.
+        slot = cells[1] if len(cells) > 1 else ""
+        player = next((c for c in cells[1:] if _OVERVIEW_PLAYER.match(c)), None)
+        if not player:
+            continue
+        match = _OVERVIEW_PLAYER.match(player)
+        assert match is not None
+        name = match.group("name").strip()
+        out.entries.append(
+            RosterEntry(
+                team=team,
+                slot=slot or match.group("pos").split(",")[0].strip(),
+                name=name,
+                status=status,
+                org=match.group("org").strip(),
+                positions=re.sub(r"\s*,\s*", ",", match.group("pos").strip()),
+            )
+        )
+        counts[status or "active"] += 1
+
+    # ⭐ THE EXPORT CHECKS OUR WORK. `Active: 23 Reserve: 5 Injured: 4 Minors: 1` is the file's own
+    # tally, so a disagreement means we dropped or invented a player — and a dropped player reads on
+    # the board as AVAILABLE, which is the one failure that hides. A checksum we HAVE must be
+    # honoured; one that is absent is not fatal.
+    if footer:
+        expected = {k: int(footer.group(k)) for k in counts}
+        if expected != counts:
+            got = ", ".join(f"{k} {counts[k]}" for k in ("active", "reserve", "injured", "minors"))
+            want = ", ".join(f"{k} {expected[k]}" for k in ("active", "reserve", "injured", "minors"))
+            raise RosterUploadError(
+                f"That export says it holds {want}, but {got} could be read out of it. Rather than "
+                "import a roster that is missing players — which would show them as available — "
+                "nothing was imported. Please send the file as-is so the reader can be fixed."
+            )
+    return out
+
+
+def parse_roster_upload(text: str, team: str = "") -> ParsedRoster:
     """A pasted/uploaded league roster → its entries. Raises `RosterUploadError` with user-facing
     copy; never returns a partially-read roster silently.
 
@@ -351,7 +480,12 @@ def parse_roster_upload(text: str) -> ParsedRoster:
             "That upload has no data rows. Paste the whole roster grid, including its header row."
         )
 
-    parsed = _parse_long(rows) if _looks_long_form(rows[0]) else _parse_grid(rows)
+    if _looks_like_overview(rows):
+        parsed = _parse_overview(rows, team.strip())
+    elif _looks_long_form(rows[0]):
+        parsed = _parse_long(rows)
+    else:
+        parsed = _parse_grid(rows)
 
     if not parsed.entries:
         raise RosterUploadError(

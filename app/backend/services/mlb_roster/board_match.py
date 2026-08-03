@@ -32,6 +32,12 @@ the 3 that did not (C.J. Kayfus, V Honeycutt, D Lesko) are absent from the board
 is no board row for them to wrongly mark available. That is why `unresolved` is reported plainly
 instead of as a failure — but minors stashes are surfaced FIRST, because they are the only tier
 where an unresolved row is likely to be a prospect.
+
+⭐ AND THAT TIER IS ALSO A PRODUCT SIGNAL, NOT JUST A CAVEAT (operator, 2026-08-03). A player in
+somebody's MINORS slot who matches no board row is evidence the board is INCOMPLETE: a competitive
+dynasty owner is spending a roster spot on him. `RosterMatch.coverage_gaps` reports those rather
+than letting a dismissal delete them — see the field's own note for why "not a prospect" and
+"missing from our board" had to become two different statements.
 """
 
 from __future__ import annotations
@@ -49,6 +55,10 @@ _SUFFIXES = frozenset({"jr", "sr", "ii", "iii", "iv", "v"})
 
 #: How an entry was resolved. Ordered worst → best for reporting.
 UNRESOLVED = "unresolved"
+#: The admin says this player IS a prospect we simply do not carry. Kept, and REPORTED — see
+#: `RosterMatch.coverage_gaps`.
+MISSING_FROM_BOARD = "missing_from_board"
+NOT_A_PROSPECT = "not_a_prospect"
 POSITION_CONFLICT = "position_conflict"
 CONTESTED = "contested"
 AMBIGUOUS = "ambiguous"
@@ -114,6 +124,15 @@ class RosterMatch:
     by_rank: dict[int, MatchedEntry] = field(default_factory=dict)
     counts: dict[str, int] = field(default_factory=dict)
     scope_rows: int = 0
+    #: ⭐ BOARD-COVERAGE GAPS — rostered players who look like prospects we do not carry.
+    #:
+    #: This is the signal that would otherwise be thrown away. A player sitting in somebody's
+    #: MINORS slot who matches no board row is not noise: a competitive dynasty owner is spending a
+    #: roster spot on him, which is independent evidence he is worth tracking. The old "not a board
+    #: prospect" dismissal collapsed two very different statements — "this is Salvador Perez, an
+    #: established major-leaguer" and "this is a real prospect you are missing" — into one silent
+    #: delete. They are now separate, and the second is REPORTED.
+    coverage_gaps: list[dict] = field(default_factory=list)
 
     @property
     def review(self) -> list[MatchedEntry]:
@@ -173,6 +192,33 @@ def name_key(name: str) -> tuple[str, str, str] | None:
     if not words:
         return None
     return initial, "".join(words), words[-1]
+
+
+def full_name_key(name: str) -> str | None:
+    """`"Chase DeLauter"` → `"chasedelauter"`; `"J.P. Crawford"` → `"jpcrawford"`.
+
+    ⭐ THE HIGHEST-VALUE KEY WE HAVE, when the upload carries full names. Measured on the live AL
+    board: keyed on INITIAL + surname, **9 board keys are ambiguous** (three `E Rodriguez`es, two
+    `J Sanchez`es, …); keyed on the full name, **zero** are. So a per-team "roster overview" export
+    does not merely reduce the ambiguity class, it removes it.
+
+    Returns None for a name that is only an initial + surname (`C DeLauter`), so a league-wide grid
+    simply does not use this leg and falls through to the initial key — rather than matching
+    `cdelauter` against `chasedelauter` and finding nothing.
+    """
+    tokens = [t for t in re.split(r"\s+", _deaccent(name).strip()) if t]
+    if len(tokens) < 2:
+        return None
+    first = re.sub(r"[^A-Za-z]", "", tokens[0])
+    if len(first) < 2:
+        return None  # an initial, not a given name — this leg does not apply
+    words = [first]
+    for token in tokens[1:]:
+        bare = re.sub(r"[^A-Za-z]", "", token)
+        if not bare or bare.lower() in _SUFFIXES or len(bare) == 1:
+            continue
+        words.append(bare)
+    return "".join(words).lower() if len(words) > 1 else None
 
 
 def _board_key(row: Mapping[str, Any]) -> int | None:
@@ -238,9 +284,13 @@ def match_roster(
         rows = [r for r in rows if str(r.get("league") or "").upper() == scope]
 
     by_rank = {_board_key(r): r for r in rows}
+    name_index: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     full_index: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
     last_index: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
     for row in rows:
+        whole = full_name_key(str(row.get("name") or ""))
+        if whole:
+            name_index[whole].append(row)
         key = name_key(str(row.get("name") or ""))
         if not key:
             continue
@@ -262,11 +312,18 @@ def match_roster(
         override = overrides.get(entry.key, "__absent__")
         if override == "__absent__":
             continue
-        if override is None:
-            # Explicitly dismissed by the user — resolved, but not a board prospect.
+        if override is None or override == NOT_A_PROSPECT:
+            # "This is an established major-leaguer." Resolved, silent, not a coverage gap.
             resolved[entry.key] = MatchedEntry(entry=entry, board_rank=None, confidence=MANUAL)
             counts["dismissed"] += 1
-        elif by_rank.get(int(override)) is not None:
+        elif override == MISSING_FROM_BOARD:
+            # "This IS a prospect — we just do not carry him." Leaves the review queue so it stops
+            # nagging, but is REPORTED as a coverage gap instead of being forgotten.
+            resolved[entry.key] = MatchedEntry(
+                entry=entry, board_rank=None, confidence=MISSING_FROM_BOARD
+            )
+            counts[MISSING_FROM_BOARD] += 1
+        elif str(override).lstrip("-").isdigit() and by_rank.get(int(override)) is not None:
             matched = MatchedEntry(entry=entry, board_rank=int(override), confidence=MANUAL)
             resolved[entry.key] = matched
             counts[MANUAL] += 1
@@ -288,8 +345,14 @@ def match_roster(
             counts[UNRESOLVED] += 1
             continue
 
-        candidates = _dedupe_same_player(full_index.get((key[0], key[1]), []))
+        # LEG 1 — the whole name, when the upload gives one. Unambiguous on the live board.
+        whole = full_name_key(entry.name)
+        candidates = _dedupe_same_player(name_index.get(whole, [])) if whole else []
         confidence = EXACT
+        # LEG 2 — initial + surname, which is all a league-wide grid carries.
+        if not candidates:
+            candidates = _dedupe_same_player(full_index.get((key[0], key[1]), []))
+        # LEG 3 — initial + the LAST word of the surname (`H Yu Lee` → `Hao-Yu Lee`).
         if not candidates:
             candidates = _dedupe_same_player(last_index.get((key[0], key[2]), []))
             confidence = VARIANT
@@ -312,6 +375,19 @@ def match_roster(
                 counts[POSITION_CONFLICT] += 1
                 continue
             candidates = allowed
+
+        # The MLB club narrows a remaining tie. ⚠️ Used ONLY to choose between same-name
+        # candidates, never to reject a lone one: a player's club changes constantly (the board
+        # carries his PARENT org, and a trade moves it), so an org mismatch is weak evidence of a
+        # different player while an org MATCH is strong evidence of the same one. Contrast the slot
+        # check above, which may reject — batter-vs-pitcher does not change.
+        if len(candidates) > 1 and entry.org:
+            same_org = [
+                c for c in candidates
+                if str(c.get("org") or "").upper() == entry.org.strip().upper()
+            ]
+            if len(same_org) == 1:
+                candidates = same_org
 
         if len(candidates) == 1:
             rank = _board_key(candidates[0])
@@ -348,6 +424,29 @@ def match_roster(
             result.matched.append(MatchedEntry(entry=entry, board_rank=None, confidence=UNRESOLVED))
             counts[UNRESOLVED] += 1
 
+    # A gap is either CONFIRMED by the admin, or SUGGESTED because an unresolved player sits in a
+    # minors slot — the tier where "we could not place him" most often means "we do not carry him".
+    for m in result.matched:
+        if m.confidence == MISSING_FROM_BOARD:
+            source = "confirmed"
+        elif m.confidence == UNRESOLVED and m.entry.status == "minors":
+            source = "suggested"
+        else:
+            continue
+        result.coverage_gaps.append(
+            {
+                "key": m.entry.key,
+                "name": m.entry.name,
+                "team": m.entry.team,
+                "slot": m.entry.slot,
+                "status": m.entry.status,
+                "org": m.entry.org,
+                "positions": m.entry.positions,
+                "source": source,
+            }
+        )
+    result.coverage_gaps.sort(key=lambda g: (g["source"] != "confirmed", g["name"]))
+
     result.by_rank = claimed
     result.counts = {
         "players": len(entries),
@@ -357,10 +456,12 @@ def match_roster(
         AMBIGUOUS: counts[AMBIGUOUS],
         POSITION_CONFLICT: counts[POSITION_CONFLICT],
         CONTESTED: counts[CONTESTED],
+        MISSING_FROM_BOARD: counts[MISSING_FROM_BOARD],
         UNRESOLVED: counts[UNRESOLVED],
         "dismissed": counts["dismissed"],
         "rostered_board_rows": len(claimed),
         "board_rows_in_scope": len(rows),
+        "coverage_gaps": len(result.coverage_gaps),
         "minors_unresolved": sum(
             1 for m in result.matched
             if m.confidence == UNRESOLVED and m.entry.status == "minors"
