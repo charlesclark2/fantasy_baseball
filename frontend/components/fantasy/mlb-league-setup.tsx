@@ -583,13 +583,32 @@ function MyTeamPicker({ league }: { league: LeagueDetail }) {
   // "a draft can seat a team whose roster was not in the upload") — offer those too, so a
   // brand-new draft-only league still has something to pick from.
   const options = [...new Set([...league.teams, ...Object.values(league.picks)])].sort()
+  const [justSaved, setJustSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // ⭐ The selection itself is instant (Radix updates the trigger the moment you pick), so without
+  // an explicit confirmation the user has no way to tell "saved" from "about to revert on the next
+  // read" — which is exactly the silent-failure shape a deploy-lag bug (the API dropping an unknown
+  // field) produced once already. "Saving…" while in flight, "✓ Saved" for a couple of seconds
+  // after, and the actual error message on failure — never just quietly re-rendering "Not set".
+  const choose = (v: string) => {
+    setError(null)
+    setJustSaved(false)
+    setMyTeam.mutate(v === NOT_SET ? "" : v, {
+      onSuccess: () => {
+        setJustSaved(true)
+        setTimeout(() => setJustSaved(false), 2500)
+      },
+      onError: (e) => setError(e instanceof Error ? e.message : "That could not be saved."),
+    })
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[#262626] bg-[#0f0f0f] p-3">
       <span className="text-xs text-gray-400">Which team is yours?</span>
       <Picker
         value={league.my_team ?? NOT_SET}
-        onValueChange={(v) => setMyTeam.mutate(v === NOT_SET ? "" : v)}
+        onValueChange={choose}
         ariaLabel="Which team is yours"
         disabled={setMyTeam.isPending}
         options={[
@@ -597,6 +616,17 @@ function MyTeamPicker({ league }: { league: LeagueDetail }) {
           ...options.map((t) => ({ value: t, label: t })),
         ]}
       />
+      {setMyTeam.isPending && <span className="text-[11px] text-gray-500">Saving…</span>}
+      {!setMyTeam.isPending && justSaved && (
+        <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400">
+          <Check className="h-3 w-3" /> Saved
+        </span>
+      )}
+      {!setMyTeam.isPending && error && (
+        <span className="inline-flex items-center gap-1 text-[11px] text-rose-400">
+          <AlertTriangle className="h-3 w-3" /> {error}
+        </span>
+      )}
       <span className="text-[11px] leading-relaxed text-gray-600">
         Highlights your own roster on the prospect board.
         {options.length === 0 && " Upload a roster or make a draft pick first."}
