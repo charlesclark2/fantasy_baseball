@@ -141,13 +141,11 @@ def daily_ingestion_job():
     # for the current slate while spine + outcomes are both fresh — before the prediction path.
     # ALERT-continue by default; HALTs here only when ODDS_COVERAGE_STRICT=1 (see the op docstring).
     s5e = check_odds_coverage_op(start=s5d)
-    # Durable served-feature-block coverage guard (F2 / F2-recurrence — umpire block collapsed
-    # 2026-07-02 AND 2026-07-03). Detects a whole feature block silently zeroing in
-    # feature_pregame_game_features (ext VALUE:-case mismatch / precursor not wired) before predict.
-    # ALERT-continue by default; HALTs only when FEATURE_COVERAGE_STRICT=1 (see the op docstring).
-    s5f = check_feature_block_coverage_op(start=s5e)
+    # ⏬ check_feature_block_coverage_op USED TO SIT HERE (as s5f). It was MOVED to just before
+    # predict (see s18f below) because it was positioned UPSTREAM OF ITS OWN PRODUCER — see the
+    # comment there for the full reasoning. Do NOT move it back.
     # INC-37 — ingest_statsapi_schedule moved UP to s6 (before lk1); the ingest chain continues here.
-    s7 = ingest_weather(start=s5f)
+    s7 = ingest_weather(start=s5e)
     s8 = ingest_umpires_early(start=s7)
     s9 = ingest_fangraphs_stuff_plus(start=s8)
     s10 = ingest_fangraphs_catcher_framing(start=s9)
@@ -250,7 +248,31 @@ def daily_ingestion_job():
     # the features that ref() them. Lineup confirmations after this point are still
     # handled authoritatively by the lineup_monitor sensor.
     s18 = dbt_umpire_feature_rebuild(start=p_archetype)
-    s19 = predict_today_morning(start=s18)
+    # Durable served-feature-block coverage guard (F2 / F2-recurrence — umpire block collapsed
+    # 2026-07-02 AND 2026-07-03). Detects a whole feature block silently zeroing in
+    # feature_pregame_game_features (ext VALUE:-case mismatch / precursor not wired) before predict.
+    # ALERT-continue by default; HALTs only when FEATURE_COVERAGE_STRICT=1 (see the op docstring).
+    #
+    # ⭐ POSITION IS LOAD-BEARING — IT MUST RUN AFTER dbt_umpire_feature_rebuild (2026-08-03).
+    # It used to sit at s5f, ~13 ops EARLIER, immediately after check_odds_coverage_op. But the op
+    # directly above is the one that BUILDS two of the blocks this guard asserts on: its selector
+    # rebuilds mart_bullpen_effectiveness → feature_pregame_team_features →
+    # feature_pregame_game_features{,_raw}, i.e. it is what populates
+    # {home,away}_bp_eb_xwoba (the `bullpen_eb` block) and ump_accuracy_zscore (`umpire`).
+    # So at s5f the guard read a store that was one FOLD behind, and flagged as a "WHOLE-SLATE
+    # OUTAGE" a date that this very run heals a few ops later:
+    #     08-01 run flagged 07-30 (0%);  08-03 run flagged 08-01 (0%)
+    # and BOTH of those dates read 100% once the same run finished. That is a recurring
+    # near-daily false CRITICAL page on the one guard that exists to catch silent zeroing —
+    # precisely the alarm-fatigue failure mode the _DATE_OUTAGE_SKIP_NEWEST comment warns about,
+    # and it would make FEATURE_COVERAGE_STRICT=1 a guaranteed daily HALT.
+    # Raising the newest-date exemption to 2 would have hidden the symptom while ALSO blinding
+    # the guard for an extra day; measuring AFTER the producer is the honest fix and keeps the
+    # exemption at its designed meaning ("today's games have not been played yet").
+    # Still UPSTREAM of predict, so FEATURE_COVERAGE_STRICT=1 retains its power to stop a bad
+    # slate being scored. Do NOT hoist this back into the early ingest chain.
+    s18f = check_feature_block_coverage_op(start=s18)
+    s19 = predict_today_morning(start=s18f)
     # E9.13 — generate plain-English pick narratives (Snowflake Cortex) BEFORE the
     # serving writes so Railway PG picks up pick_narrative alongside pick_explanation.
     # Soft-fail, so a Cortex outage never blocks write_serving_store_op.

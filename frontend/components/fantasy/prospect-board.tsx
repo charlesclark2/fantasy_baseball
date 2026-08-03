@@ -432,66 +432,154 @@ function AvailabilityFilter({
   )
 }
 
-/** Mark a prospect as taken, live, as the draft happens — or undo a mis-click.
+/** E8.6 — assign a prospect to a specific team AS HE'S DRAFTED, live, and correct a mis-click
+ *  either by REASSIGNING to a different team directly or by UNDOING outright.
  *
  *  This is the half of the story an upload cannot cover: a roster export is a point-in-time file,
- *  and during a minor-league draft it is stale within minutes. */
-function DraftControl({
+ *  and during a minor-league draft it is stale within minutes. Two renderings of the same control:
+ *  `compact` sits inline in every row (Live Draft Mode — no expand needed, because a live draft
+ *  moves faster than a click-to-expand-per-pick workflow allows) and the full-width one lives in
+ *  the row's detail panel for a slower, deliberate review pass. Both write through the SAME E8.2
+ *  endpoint (`PUT .../picks/{board_rank}`), keyed on the board's immutable `rank` — never an
+ *  ordinal position that could shift under a re-sort or a filter change — so a pick recorded here
+ *  is exactly the pick E8.2's availability overlay already knows how to show as rostered.
+ *
+ *  ⚠️ Reassigning is a plain overwrite, not undo-then-repick: `assign_pick` sets `picks[rank]`
+ *  unconditionally, so selecting a new team for an already-drafted prospect just replaces who holds
+ *  him — there is no intermediate "unassigned" state a stray render could read as available. */
+function DraftAssign({
   rank,
   name,
   leagueId,
   teams,
   held,
+  compact = false,
 }: {
   rank: number
   name: string
   leagueId: string | null
   teams: string[]
   held?: RosteredBy
+  compact?: boolean
 }) {
   const pick = useDraftPick(leagueId)
   const [team, setTeam] = useState("")
+  const [reassigning, setReassigning] = useState(false)
 
-  if (held) {
+  // Inline (compact) controls live INSIDE a table row that toggles expand on click — every
+  // interactive element here must stop that click from bubbling, or picking a team also
+  // collapses/expands the row out from under the user.
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation()
+  const assign = (v: string) => {
+    setTeam(v)
+    if (v) {
+      pick.mutate({ rank, team: v })
+      setReassigning(false)
+    }
+  }
+
+  if (held?.source === "roster") {
+    if (compact) return <RosteredChip held={held} />
     return (
       <div className="flex flex-wrap items-center gap-2 border-b border-[#1a1a1a] bg-[#0d0d0d] px-4 py-2 text-[11px]">
         <span className="text-gray-400">
-          {held.source === "draft" ? "Drafted by" : "Rostered by"}{" "}
-          <span className="text-gray-200">{held.team}</span>
+          Rostered by <span className="text-gray-200">{held.team}</span>
         </span>
-        {held.source === "draft" && (
-          <button
-            onClick={() => pick.mutate({ rank, team: null })}
-            disabled={pick.isPending}
-            className="text-gray-500 underline hover:text-gray-300 disabled:opacity-40"
-          >
-            undo
-          </button>
-        )}
-        {held.source === "roster" && (
-          <span className="text-gray-600">
-            from your uploaded rosters — re-upload on My League to change it
-          </span>
-        )}
+        <span className="text-gray-600">
+          from your uploaded rosters — re-upload on My League to change it
+        </span>
       </div>
     )
   }
 
-  return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-[#1a1a1a] bg-[#0d0d0d] px-4 py-2 text-[11px]">
-      <span className="text-gray-500">Just drafted?</span>
-      <Picker
-        value={team}
-        onValueChange={(v) => {
-          setTeam(v)
-          if (v) pick.mutate({ rank, team: v })
-        }}
-        placeholder="Mark taken by…"
-        ariaLabel={`Mark ${name} drafted`}
-        className="h-auto rounded border border-[#262626] bg-[#0f0f0f] px-2 py-1 text-base sm:text-[11px] text-gray-200"
-        options={teams.map((t) => ({ value: t, label: t }))}
-      />
+  if (held?.source === "draft" && !reassigning) {
+    const body = (
+      <>
+        <span className={compact ? "text-rose-300" : "text-gray-400"}>
+          {compact ? "drafted · " : "Drafted by "}
+          <span className={compact ? "" : "text-gray-200"}>{held.team}</span>
+        </span>
+        <button
+          onClick={(e) => {
+            stop(e)
+            setReassigning(true)
+          }}
+          className="text-gray-500 underline hover:text-gray-300"
+        >
+          reassign
+        </button>
+        <button
+          onClick={(e) => {
+            stop(e)
+            pick.mutate({ rank, team: null })
+          }}
+          disabled={pick.isPending}
+          className="text-gray-500 underline hover:text-gray-300 disabled:opacity-40"
+        >
+          undo
+        </button>
+      </>
+    )
+    return compact ? (
+      <span
+        onClick={stop}
+        className="inline-flex flex-wrap items-center gap-1.5 rounded border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 text-[10px]"
+      >
+        {body}
+      </span>
+    ) : (
+      <div
+        onClick={stop}
+        className="flex flex-wrap items-center gap-2 border-b border-[#1a1a1a] bg-[#0d0d0d] px-4 py-2 text-[11px]"
+      >
+        {body}
+      </div>
+    )
+  }
+
+  const picker = (
+    <Picker
+      value={team}
+      onValueChange={assign}
+      placeholder={reassigning ? `Reassign from ${held?.team}…` : "Mark taken by…"}
+      ariaLabel={`Mark ${name} drafted`}
+      className={
+        compact
+          ? "h-auto rounded border border-[#262626] bg-[#0f0f0f] px-1.5 py-0.5 text-[10px] text-gray-200"
+          : "h-auto rounded border border-[#262626] bg-[#0f0f0f] px-2 py-1 text-base sm:text-[11px] text-gray-200"
+      }
+      options={teams.map((t) => ({ value: t, label: t }))}
+    />
+  )
+  const body = (
+    <>
+      <span className="text-gray-500">{reassigning ? "Reassign?" : "Just drafted?"}</span>
+      {picker}
+      {reassigning && (
+        <button
+          onClick={(e) => {
+            stop(e)
+            setReassigning(false)
+          }}
+          className="text-gray-500 underline hover:text-gray-300"
+        >
+          cancel
+        </button>
+      )}
       {pick.isPending && <span className="text-gray-600">saving…</span>}
+    </>
+  )
+
+  return compact ? (
+    <span onClick={stop} className="inline-flex flex-wrap items-center gap-1.5">
+      {body}
+    </span>
+  ) : (
+    <div
+      onClick={stop}
+      className="flex flex-wrap items-center gap-2 border-b border-[#1a1a1a] bg-[#0d0d0d] px-4 py-2 text-[11px]"
+    >
+      {body}
     </div>
   )
 }
@@ -514,6 +602,11 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
   // the import exists. It degrades to showing everything when no league is set up, so the board is
   // never mysteriously short of rows.
   const [avail, setAvail] = useState<Availability>("available")
+  // ⭐ E8.6 — the live-draft companion to the availability filter above: puts a quick team-assign
+  // control on EVERY visible row instead of requiring an expand-per-pick, because a live minor-
+  // league draft moves faster than that workflow allows. Off by default so the board's normal
+  // browsing view is unchanged; a session flips it on only while actually sitting in a draft room.
+  const [liveDraftMode, setLiveDraftMode] = useState(false)
   const [q, setQ] = useState("")
   const [sort, setSort] = useState<SortKey>(view === "disagreements" ? "disagreement" : "rank")
   const [desc, setDesc] = useState(true)
@@ -728,6 +821,26 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
               />
             )}
 
+            {hasLeague && (
+              <button
+                onClick={() => {
+                  setLiveDraftMode((v) => !v)
+                  // Flipping it on jumps straight to the draftable pool — the whole reason to turn
+                  // it on is to work the board DURING the draft, and "all" or "rostered" would bury
+                  // that pool under everyone already gone.
+                  if (!liveDraftMode) setAvail("available")
+                }}
+                title="Put a quick team-assign control on every row, so you can mark picks as they happen during a live draft."
+                className={`rounded border px-2.5 py-1 text-xs transition-colors ${
+                  liveDraftMode
+                    ? "border-rose-500/40 bg-rose-500/10 text-rose-300"
+                    : "border-[#262626] text-gray-500 hover:text-gray-300"
+                }`}
+              >
+                {liveDraftMode ? "Live Draft: ON" : "Live Draft Mode"}
+              </button>
+            )}
+
             <div className="inline-flex overflow-hidden rounded border border-[#262626]">
               {TYPE_TABS.map((t) => (
                 <button
@@ -882,8 +995,19 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
                             <span>{p.org ?? "—"}</span>
                             <span className="text-gray-700">·</span>
                             <span>{p.pos ?? "—"}</span>
-                            {rostered[String(p.rank)] && (
-                              <RosteredChip held={rostered[String(p.rank)]} />
+                            {hasLeague && liveDraftMode ? (
+                              <DraftAssign
+                                compact
+                                rank={p.rank}
+                                name={p.name}
+                                leagueId={activeLeagueId}
+                                teams={overlay.teams}
+                                held={rostered[String(p.rank)]}
+                              />
+                            ) : (
+                              rostered[String(p.rank)] && (
+                                <RosteredChip held={rostered[String(p.rank)]} />
+                              )
                             )}
                             {p.inMajors && <Chip tone="amber">MLB — check eligibility</Chip>}
                             {p.speedFlag && <Chip tone="sky">SB blind spot</Chip>}
@@ -969,7 +1093,7 @@ export function ProspectBoard({ view = "board" }: { view?: View }) {
                               mis-spans the detail row on the Pitchers tab. */}
                           <td colSpan={colCount} className="p-0">
                             {hasLeague && (
-                              <DraftControl
+                              <DraftAssign
                                 rank={p.rank}
                                 name={p.name}
                                 leagueId={activeLeagueId}
