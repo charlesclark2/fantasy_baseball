@@ -28,7 +28,7 @@ if _SENTRY_DSN:
         traces_sample_rate=0.1,
     )
 
-from app.backend.routers import admin, alerts, auth, bankroll, bets, blog, fantasy, fantasy_import, fantasy_public, feedback, finances, parlay, picks, performance, pipeline, players, portfolio, stripe, teams, users
+from app.backend.routers import admin, alerts, auth, bankroll, bets, blog, fantasy, fantasy_import, fantasy_mlb_league, fantasy_public, feedback, finances, parlay, picks, performance, pipeline, players, portfolio, stripe, teams, users
 from app.backend.routers.auth import require_subscriber_mfa
 
 logging.basicConfig(level=logging.INFO)
@@ -108,6 +108,11 @@ app.include_router(fantasy.router, dependencies=_paid)
 # It is mounted separately so that exemption stays one visible route rather than a hole in the gate.
 app.include_router(fantasy_import.router, dependencies=_paid)
 app.include_router(fantasy_import.public_router)
+# E8.2 — MLB dynasty league rosters + the board availability overlay. Same gate as the E8.1 board
+# it overlays: require_fantasy_access at the router, `get_admin_user` per route (admin-only dogfood
+# until 2027). Authenticated throughout, so it needs NO API-Gateway route change — it inherits the
+# Cognito authorizer, and adding an explicit route would UN-gate it (NF3.2, in reverse).
+app.include_router(fantasy_mlb_league.router, dependencies=_paid)
 # NF3.2 — the past-season track-record ("receipts") surface, deliberately PUBLIC (no
 # require_fantasy_access, no _paid). See fantasy_public.py's module docstring: the public/paid split
 # is enforced by what the export writer will ever emit, not by a runtime check on this router.

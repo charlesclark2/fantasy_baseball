@@ -426,8 +426,13 @@ class TestNavWiring:
         would also show the items to `fantasy_comp` accounts. Cosmetic (the API is the real gate),
         but a nav item pointing at a route that 403s is its own bug."""
         mlb_block = _mlb_nav_block()
-        assert mlb_block.count('restrict: "admin"') == 2, (
-            "both MLB fantasy items must be admin-restricted while the surface is in development"
+        # ⚠️ Asserted as "EVERY item", not as a magic count. A hard-coded 2 made this fail for the
+        # WRONG reason the moment E8.2 added a third (correctly restricted) item — a guard that
+        # goes red on a compliant change trains people to edit the guard instead of the code.
+        items = mlb_block.count('href: "/fantasy/mlb')
+        assert items >= 2, "the MLB fantasy nav items disappeared — this assertion would be vacuous"
+        assert mlb_block.count('restrict: "admin"') == items, (
+            "every MLB fantasy nav item must be admin-restricted while the surface is in development"
         )
         assert 'restrict: "fantasy_beta"' not in mlb_block
 
@@ -447,8 +452,19 @@ class TestNavWiring:
         than the fantasy one or every subscriber fires a request that 403s."""
         src = (_FRONTEND / "lib/fantasy-queries.ts").read_text(encoding="utf-8")
         mlb = src[src.index("E8.1 — MLB dynasty PROSPECT BOARD"):]
-        assert mlb.count("enabled: isAdmin") == 2
-        assert 'enabled: canAccess("fantasy", groups)' not in mlb
+        # ⚠️ COMMENTS STRIPPED, for the same reason `_mlb_nav_block` strips them: E8.2's explanatory
+        # comment contains the literal `enabled: isAdmin`, which inflated this count from 2 to 5
+        # while every hook was in fact correct. A source-inspection guard must match CODE, never the
+        # prose about it (INC-38). And asserted as "EVERY query", not a magic number, so a new gated
+        # hook cannot fail this for the wrong reason.
+        code = "\n".join(ln for ln in mlb.splitlines() if not ln.lstrip().startswith("//"))
+        queries = code.count("useQuery<")
+        assert queries >= 2, "no MLB queries found — this assertion would be vacuous"
+        assert code.count("enabled: isAdmin") == queries, (
+            "every MLB fantasy query hook must gate on isAdmin, so an unentitled caller never "
+            "issues a request that would 403"
+        )
+        assert 'enabled: canAccess("fantasy", groups)' not in code
 
     def test_a_surface_whose_items_are_all_hidden_does_not_render(self):
         """🐛 The bug this pairs with: for an entitled NON-admin the MLB→Fantasy surface is not
