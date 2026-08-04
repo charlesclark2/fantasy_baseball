@@ -98,6 +98,13 @@ _COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("board_rank", "rank", "i"),
     ("player_name", "name", "s"),
     ("org", "org", "s"),
+    # ⭐ Set ONLY on a player whose org was corrected off MLB Pipeline because FanGraphs' editorial
+    # `org` had not moved for his trade (`apply_roster_org_correction`). Null — and therefore ABSENT
+    # from the payload — for everyone else, so this costs bytes only on the handful who moved.
+    # `orgPrior` is the org FanGraphs still lists him under; its presence IS the "he was traded"
+    # signal, and it is what lets the UI explain an org that disagrees with the scouting source.
+    ("org_prior", "orgPrior", "s"),
+    ("org_source", "orgSource", "s"),
     ("mlb_league", "league", "s"),          # ⭐ AL/NL — a REQUIRED filter, not a nicety
     ("position", "pos", "s"),
     ("player_type", "type", "s"),
