@@ -1,0 +1,50 @@
+{
+  "asof_rule": "strictly_prior_season",
+  "proj_rows": 13892,
+  "pairs_rows": 23949,
+  "highest_level_rows": 7474,
+  "with_debut_cohort": 1606,
+  "season_ceiling": 2025,
+  "strict_label_window": false,
+  "dropped_open_label_window": 99,
+  "board_first_season": 2018,
+  "first_gradable_debut_cohort": 2019,
+  "labelled_starters_in_gradable_cohorts": 358,
+  "fv_coverage_of_gradable_labelled_starters": 0.7458,
+  "fv_coverage_pooled_incl_pre_board_cohorts": 0.4935,
+  "study_rows": 1507,
+  "labelled_rows": 803,
+  "labelled_starters": 541,
+  "labelled_with_fv": 324,
+  "labelled_starters_with_fv": 267,
+  "fv_coverage_of_labelled_starters": 0.4935,
+  "fv_coverage_by_cohort": {
+    "2016": 0.0,
+    "2017": 0.0,
+    "2018": 0.0,
+    "2019": 0.68,
+    "2020": 0.6923,
+    "2021": 0.7818,
+    "2022": 0.6154,
+    "2023": 0.8214,
+    "2024": 0.898,
+    "2025": 0.7273
+  },
+  "labelled_starters_by_cohort": {
+    "2016": 67,
+    "2017": 56,
+    "2018": 60,
+    "2019": 50,
+    "2020": 52,
+    "2021": 55,
+    "2022": 52,
+    "2023": 56,
+    "2024": 49,
+    "2025": 44
+  },
+  "metric_label_coverage": {
+    "gb_pct": 803,
+    "k_pct": 803,
+    "bb_pct": 803
+  }
+}
