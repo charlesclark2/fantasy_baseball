@@ -4,3 +4,7 @@
 *.parquet
 *.csv
 *_summary.json
+
+# Per-season backfill summaries. The *_summary.json rule above does not match the backfill
+# naming (..._summary_<year>.json), which is how these escaped it.
+*_summary_*.json
