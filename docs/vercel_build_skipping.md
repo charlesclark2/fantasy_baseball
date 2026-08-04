@@ -126,6 +126,30 @@ report a bug:
 This is the pattern Vercel's own docs use; a base-branch diff would be more precise but is fragile
 against the `--depth=10` shallow clone.
 
+### 🔑 A REDEPLOY after an ENV VAR change will be SKIPPED — uncheck the box
+
+**This is the trap most likely to bite, because it looks like the env var simply didn't work.**
+
+Changing a Vercel environment variable does not change git. So a plain **Redeploy** re-runs
+`git diff HEAD^ HEAD -- frontend/` against *the same commit* — and if that commit was a non-frontend
+one (which, on `main`, it usually is now), the ignore step exits `0`, the redeploy is **skipped**,
+and the new env var **never takes effect**. No error; the site just keeps serving the old build.
+
+This project sets a lot of these in the Vercel dashboard — `NEXT_PUBLIC_API_URL`, the Cognito pool
+and app-client ids, `NEXT_PUBLIC_ADMIN_EMAILS`, PostHog, Sentry — so this will come up.
+
+**The fix is built into Vercel.** On the deployment's **Redeploy** dialog, untick **"Use project's
+Ignore Build Step."** Per Vercel's [monorepo doc](https://vercel.com/docs/monorepos):
+
+> If you have created a script to ignore the build step, you can skip the script when redeploying or
+> promoting your app to production. This can be done through the dashboard when you click on the
+> **Redeploy** button, and unchecking the **Use project's Ignore Build Step** checkbox.
+
+Same applies to promoting a deployment to production, and to any other "rebuild without a code
+change" reason (rotating a secret, clearing build cache, picking up a changed Vercel project
+setting). Rule of thumb: **if you want a build and the commit did not touch `frontend/`, untick the
+box** — or push a real frontend commit.
+
 ## ⚠️ What this does and does not fix
 
 **It does NOT reduce the deployment count.** Vercel creates the deployment first, then runs the
@@ -171,15 +195,28 @@ URLs. Recorded here only so a future session does not re-derive it.
 Two-sided verification of the **exit-code direction and cwd-robustness** was done locally against
 real commits in this repo (table above) — that is the half most likely to be silently inverted.
 
-1. ✅ **Root Directory confirmed `frontend`** (dashboard, 2026-08-04) — so Vercel does read
+**✅ Live two-sided verification COMPLETE (2026-08-04).** All three checks passed against real
+deployments:
+
+1. ✅ **Root Directory confirmed `frontend`** (dashboard) — so Vercel does read
    `frontend/vercel.json`. Had it read the repo root, the file would have been inert and the config
    would have done nothing.
-2. ⏳ **A non-frontend commit must show `Canceled`**, with the ignore-step log ending in something
-   like `The Ignored Build Step exited with 0, deployment canceled`.
-3. ⏳ **A frontend commit must build and deploy normally.** Do not accept check 2 alone — a config
-   that skips *everything* produces an identical-looking `Canceled`, which is the exact failure mode
-   described above. The PR #580 merge commit (`85cd01bc`, which changed `frontend/vercel.json`) is a
-   free instance of this check.
+2. ✅ **A non-frontend commit skipped.** PR #581 (docs + `CLAUDE.md` only) produced no build.
+3. ✅ **A frontend commit built and shipped.** The `dev → main` merge `2fac1e27` carried
+   `frontend/vercel.json`, `frontend/data/changelog.json` and `frontend/lib/league-config.ts`;
+   predicted exit 1, and it ran a production deploy whose **content is visibly live** — the NF-C0e
+   ESPN-yardage changelog entry renders on the site.
+
+Check 3 was deliberately confirmed by **reading the site, not the build log**. A config that skips
+*everything* produces a `Canceled` indistinguishable from a correct skip, so check 2 alone proves
+nothing; shipped user-visible content is the strongest available evidence that the build actually
+ran and deployed.
+
+Residual, low-stakes: check 2 was confirmed by *outcome* (no build) rather than by *attribution*
+(reading the ignore-step log line). Both candidate mechanisms — this `ignoreCommand` and Vercel's
+native monorepo skip — agree on that outcome, so behavior is correct either way and nothing depends
+on which fired. If you ever want the attribution, the deployment's build log will show the command
+and its exit code.
 
 Note that `frontend/vercel.json` reached `dev` before `main`, so production kept building
 unfiltered until the following `dev → main` merge.
