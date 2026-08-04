@@ -4,6 +4,146 @@ Status: **stage 1 COMPLETE AND VERIFIED — 1b measured live on its first post-f
 (2026-08-01)**. Target 6 is code-complete with both levers still OFF, awaiting a quiet-window
 flip. Stages 2–4 scoped below.
 
+## 2026-08-04 — FU-1 (8/2) + FU-2 (8/3) post-flip wake census — ⛔ 6a SOAK **NOT CLOSED**, FU-3 **NOT CLEAR**
+
+Read from the laptop at 04:35–04:55 UTC 8/4 via `scripts/report_e11_24_wake_census.py --days 10`
+(MONITOR_WH) plus a MONITOR_WH serving read and two SF-free `check_w11_tail_coverage.py` runs.
+`account_usage` lag at read time: query_history **27 min**, warehouse_events **143 min** ⇒ both
+target days' 14–23 bands are fully settled. Nothing in this session connected on COMPUTE_WH.
+
+### The headline number — and why it does NOT close the soak
+
+| 14–23 band (6a's window) | 7/28 ref | 7/30 ref | 8/1 | **8/2** | **8/3** |
+|---|---|---|---|---|---|
+| umpire-chain **executions / waits** | 49 / **11** | 49 / **13** | 80 / **13** | 49 / **9** | 36 / **9** |
+| `lineup_monitor` audit-INSERT fires (invocation proxy) | 7 | 7 | 10 | 7 | **4** |
+| waits per monitor fire | 1.57 | 1.86 | 1.30 | 1.29 | **2.25** |
+| whole-day resumes / active-min / executions | 44 / 167 / 3518 | 43 / 141 / 4172 | 55 / 159 / 2565 | 44 / 145 / 3629 | **34 / 109 / 1536** |
+
+Both post-flip days land on **9 waits** — a **−25.0%** cut against the clean reference mean of 12.0
+(−30.8% vs 7/30 alone, −18.2% vs 7/28 alone), i.e. squarely inside the pre-registered **~7–9** band
+and nowhere near the **>~40%** figure that would have meant the writer model needs re-deriving.
+**On the number alone this reads as the predicted ~30% pass. It must not be recorded as one**,
+because on neither day is the number attributable to the gate:
+
+- **8/2 — the gate was provably OFF for the entire band.** Per the FU-1 verification record, the
+  persistent `dagster-codeloc` container `DefaultRunLauncher` executes job subprocesses in was
+  created **20:52:24 UTC 8/2**, ~15h after the 05:29 flip, while all **7** of that day's
+  confirmed-lineup `lineup_monitor_job` rebuilds ran **14:42–19:44 UTC** — before it. Both
+  bracketing runs' Postgres event logs carry **0 `umpire-gate` lines**, so `umpire_gate_on()` was
+  False in the container that actually ran them, and the job has not fired since 19:44. ⇒ **8/2 is a
+  PRE-flip day.** Its value is calibration, and it is the single most important line here:
+  **9 waits is reachable with the gate OFF.** The gate-off band ranges 8–14 across the census
+  (7/27=8, 7/28=11, 7/30=13, 8/1=13, 8/2=9), so a lone 9 is not outside pre-flip noise.
+- **8/3 — the gate was armed, but the day cannot carry the measurement.** It is the only day with
+  the flag durably live (container recreated 20:52 UTC 8/2, redeployed again 01:11 UTC 8/3), and it
+  is structurally unrepresentative: an **8-game** slate (vs 15) whose first pitches are **22:40,
+  23:05, 23:40, 00:05, 00:05, 00:10, 00:40 and 01:40 UTC** — six of eight *after* 00:00 UTC. Whole-day
+  executions 1536 vs 3629, active-min 109 vs 145, resumes 34 vs 44. **`lineup_monitor` fired 4×
+  vs 7× on each reference day (−43%), a larger drop than the −31% in umpire waits it is supposed to
+  explain.** Normalised per monitor fire, 8/3 is the **highest** reading in the whole window (2.25 vs
+  1.57/1.86 pre-flip) — the opposite of a 30% cut.
+
+⭐ **THE MEASUREMENT PROBLEM, STATED PLAINLY: on 8/3 the gate firing and the slate collapsing
+predict the SAME signature.** A skipped rebuild removes its CTAS *execution* along with its wait, so
+"the gate skipped one fire in three" and "the slate was half-size and started ~8h late" both yield
+executions↓, waits↓, wait-rate flat (25.0% on 8/3 vs 22.4%/26.5% on the references). The instrument
+cannot separate them on this day, and the story's own sizing was deliberately done in
+**INVOCATIONS** for exactly this reason (the lever-1b lesson: an outage fakes every volume metric —
+here a *late, small slate* does). ⇒ **the 8/3 read is UNINTERPRETABLE as a lever measurement: it
+neither confirms the ~30% prediction nor triggers the >40% re-derive.**
+
+**⇒ VERDICT — the soak has produced ZERO valid post-flip observations.** One day was gate-off, the
+other was structurally unusable. This is a *measurement gap, not a gate defect*: nothing here
+suggests the gate logic is wrong, and no rollback is warranted.
+
+### Per-day verdicts (the required two lines)
+
+- **8/2 (FU-1)** — (a) umpire band **9 waits, −25.0%** vs the 12.0 reference mean, inside the ~7–9
+  prediction — but supports **NEITHER** reading: the gate was off all band, so this is a pre-flip
+  data point proving 9 is attainable ungated. (b) serving no-regression: **YES**.
+- **8/3 (FU-2)** — (a) umpire band **9 waits, −25.0%**, inside ~7–9 with the gate armed — but
+  **NOT MEASURED**: the drop is fully absorbed by a 43% fall in monitor invocations and per-fire
+  waits *rose* to the window high. Neither the ~30% pass nor the >40% re-derive is supported.
+  (b) serving no-regression: **YES** on the discriminating signals; W11-tail caveat below.
+
+### Serving no-regression — YES on both days
+
+Deduped to the currently-serving row per (tier, game_pk) — aggregating raw rows fakes an
+`intraday_fallback` collapse. Read on MONITOR_WH against `baseball_data.betting_ml`.
+
+| signal | 7/31 | 8/1 | **8/2** | **8/3** |
+|---|---|---|---|---|
+| post_lineup `h2h_edge is not null` | 13/15 | 13/15 | **14/15** | **7/7** |
+| morning `h2h_edge is not null` | 0/15 | 3/15 | 0/15 | 0/8 |
+| post_lineup avg `feature_coverage_score` | 0.944 | 0.989 | 0.978 | 0.952 |
+| morning avg `feature_coverage_score` | 0.800 | 0.889 | 0.822 | 0.771 |
+| `data_source='feature_store'` | 15/15 | 15/15 | 15/15 | 8/8 |
+| `intraday_fallback` | 0 | 0 | **0** | **0** |
+
+`abstain_reason` MIX carries **no new category** on either day: 8/2 post_lineup is 14×
+`edge_to_sigma=0.000<threshold=0.25` + 1× `ci_width_unavailable` (vs 13+2 pre-flip — one *more*
+game with a computable edge), 8/3 post_lineup is 7× `edge_to_sigma` + 0× `ci_width_unavailable`.
+Morning is 100% `ci_width_unavailable` on both, as pre-flip. Zero intraday fallback on every tier
+every day. Per the pre-registered traps, `sigma_tier='abstain'` (saturated at 100% under
+`best_alpha=0`) and the chronic `total_runs` FLAT finding were **not** used as signals.
+
+Two sub-reference readings, both checked and neither attributable to 6a: morning coverage 0.771 on
+8/3 is the window low but umpire/weather are **not** members of `_FEATURE_STORE_COVERAGE_BLOCKS`, so
+the W11-tail gap cannot be its cause; and 8/3 has 7 post_lineup rows against 8 morning rows because
+game **825095** (first pitch **01:40 UTC 8/4**) was still `Live / In Progress` at read time — 6a
+gates a Snowflake CTAS inside the rebuild and cannot suppress a scoring row.
+
+### W11 tail — 8/2 better than reference; 8/3 pending the next nightly, and NOT 6a
+
+```
+8/2   umpire 15/15 OK    weather 14/15 OK   public_betting 15/15 OK     (ref 8/1: umpire 5/15 PARTIAL)
+8/3   umpire  0/8  BUILD_GAP  weather 0/8 BUILD_GAP   public_betting 8/8 OK
+```
+
+**8/2 is no worse — it is better** than the 8/1 pre-flip reference, which is the direct evidence
+that the pipeline heals umpire to full coverage one build cycle later *with the flag present*.
+
+**8/3's BUILD_GAP is not 6a, on two independent grounds.** (1) **`public_betting` is 8/8**, so the
+~12:40 build's game universe was *not* stale — the INC-37 fingerprint would have zeroed all three
+blocks; what is left is the documented feed-cadence lag, and umpire/weather are precisely the two
+blocks whose feeds land *after* that build (and later still for a slate first-pitching 22:40–01:40).
+The 8/4 nightly had not run at read time. (2) **6a is umpire-only and gates only a Snowflake CTAS;
+it cannot touch weather.** Weather co-moving with umpire proves a shared cause upstream of 6a.
+⏭️ Operator: re-run `check_w11_tail_coverage.py --date 2026-08-03` after the 8/4 nightly to confirm
+it heals to OK as 8/2 did.
+
+### Incidental — a provisioning stall on 8/3 worth an operator glance (not 6a)
+
+The 8/3 14–23 band shows `avg_wait_s` **474.7** against ~0.2–1.0 on every other day. It is **11
+outliers, not a systemic stall**: median wait 0.2s, max **2402.8s (40 min)**, 11 of 33 over 600s.
+The long waiters are monitoring/guard statements — a failures-count guard (6× @ 1184.8s avg), an
+`information_schema.columns` read (3× @ 2172.0s), a `feature_pregame_ga…` count and an `ump_ac`
+query — **not** the umpire CTAS, so the primary metric is unaffected. Flagged only because a
+40-minute provisioning queue is not normal for an X-Small.
+
+### Corrections to the pre-flip reference table
+
+8/1's umpire row was recorded as **38/5** from a read truncated at 20:09 UTC; the now-complete day
+is **80/13**. Use 80/13. This does not change the 7/28 + 7/30 reference choice.
+
+### ⛔ FU-3 is NOT clear to deploy
+
+FU-3 (the writer-idempotency fix) **moves this same skip rate**, and the whole reason FU-1/FU-2 run
+first is to bank a valid pre-FU-3 post-flip baseline. No such baseline exists yet. Deploying FU-3
+now would permanently confound 6a's effect with FU-3's — neither could be attributed afterwards.
+
+**What unblocks it: ONE valid gate-armed observation day.** The gate has been durably live since
+20:52 UTC 8/2, so no flip or redeploy is needed — this needs a *normal* slate (≈13–15 games with
+first pitches back inside the 14–23 UTC band, giving ~7+ `lineup_monitor` fires), then re-run this
+same census and compare in-band umpire waits against 7/28 (11) and 7/30 (13) at matched invocation
+count. ⭐ **Report the per-fire figure alongside the raw count** — this session's whole finding is
+that the raw count alone cannot tell the gate from the slate. Also worth pulling once, since it
+settles attribution directly rather than statistically: the next `lineup_monitor_job` run's
+`umpire-gate` REBUILDING/SKIPPING lines from the Postgres event log
+(`DagsterInstance.all_logs(run_id)` inside the container — survives container recreation, unlike
+`docker compose logs`), which is an operator step (`ssm:*` is denied to the laptop role).
+
 ## 2026-08-01 — lever 1b VERIFIED (the first lever to move RESUMES), and 6a's pre-flip baseline
 
 Session scope was deliberately narrow: it was **15:11 CDT with a live 15-game slate** and the box
