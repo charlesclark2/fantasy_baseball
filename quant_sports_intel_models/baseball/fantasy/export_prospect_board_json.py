@@ -428,20 +428,71 @@ def check_response_size(size_bytes: int) -> None:
 
 
 def resolve_board(explicit: str | None) -> Path:
-    """Pick the board CSV: an explicit path, else the comps board, else the plain E8.0 board."""
+    """Pick the board CSV: an explicit path, else the freshest candidate that carries comps.
+
+    🚨 THE BUG THIS CLOSES (2026-08-03, published a TWO-DAY-OLD board to prod). This used to take
+    the FIRST candidate that existed on disk, `BOARD_WITH_COMPS` first — a fixed preference with no
+    regard for age. `build_prospect_board.py` writes `BOARD_PLAIN`, and since E8.1 it attaches the
+    E7.13 comps NATIVELY, so `BOARD_WITH_COMPS` is the LEGACY second-export path. Any checkout that
+    ever ran that legacy export keeps its stale CSV forever, and every subsequent publish silently
+    preferred it — so a correct, just-completed build was written to disk and then IGNORED.
+
+    It is invisible in the ordinary output: the run logs a full, healthy build report, the publish
+    reports a plausible player count, and nothing anywhere says the two came from different files.
+    Live consequence: a rebuild carrying 43 trade-corrected orgs published an Aug-2 board instead,
+    moving prod BACKWARDS an hour after a good publish. It reproduced only on a checkout that had
+    the legacy artifact — a fresh worktree resolves to `BOARD_PLAIN` and works by accident, which is
+    exactly how it got shipped.
+
+    ⭐ THE RULE: prefer a candidate that carries comps, and among those take the NEWEST by mtime —
+    never a fixed order. A stale file must not outrank a fresh one just for being listed first.
+    """
     if explicit:
         path = Path(explicit)
         if not path.is_file():
             raise SystemExit(f"--board {path} does not exist")
         return path
-    for candidate in (BOARD_WITH_COMPS, BOARD_PLAIN):
-        if candidate.is_file():
-            return candidate
-    raise SystemExit(
-        "no prospect board found. Build one first:\n"
-        "  AWS_DEFAULT_REGION=us-east-2 uv run --with openpyxl python -m "
-        "betting_ml.scripts.prospect_board.build_prospect_board --prospect-savant"
-    )
+
+    present = [c for c in (BOARD_WITH_COMPS, BOARD_PLAIN) if c.is_file()]
+    if not present:
+        raise SystemExit(
+            "no prospect board found. Build one first:\n"
+            "  AWS_DEFAULT_REGION=us-east-2 uv run --with openpyxl python -m "
+            "betting_ml.scripts.prospect_board.build_prospect_board --prospect-savant"
+        )
+
+    # A board without comp columns is a real downgrade (the pre-comp ordering E8.1 exists to
+    # prevent), so comps win over freshness; freshness decides among equals.
+    with_comps = [c for c in present if _has_comps(c)]
+    pool = with_comps or present
+    chosen = max(pool, key=lambda p: p.stat().st_mtime)
+
+    for other in present:
+        if other == chosen:
+            continue
+        if other.stat().st_mtime > chosen.stat().st_mtime:
+            # Only reachable when the newer file LACKS comps — say so rather than silently
+            # publishing the older one, since "why is my rebuild not live?" is unanswerable
+            # from the ordinary output.
+            log.warning(
+                "⚠️ %s is NEWER than the board being published (%s) but carries no comp columns "
+                "— publishing the older comps board. Re-run build_prospect_board.py if you "
+                "expected the newer one.", other.name, chosen.name)
+
+    log.info("board source: %s (modified %s)", chosen,
+             datetime.fromtimestamp(chosen.stat().st_mtime).isoformat(timespec="seconds"))
+    return chosen
+
+
+def _has_comps(path: Path) -> bool:
+    """Does this CSV carry E7.13's comp columns? Read the HEADER only — these files are ~2 MB."""
+    try:
+        with path.open() as fh:
+            header = fh.readline()
+    except OSError:
+        return False
+    cols = {c.strip() for c in header.split(",")}
+    return "comp_score" in cols and "comp_names" in cols
 
 
 def export(board_path: Path, out_dir: Path, *, season: int | None = None) -> dict:
