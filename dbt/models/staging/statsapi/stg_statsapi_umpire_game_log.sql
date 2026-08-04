@@ -70,7 +70,13 @@ where rn = 1
 
 {% else %}
 
-{{ config(materialized='table') }}
+-- E11.24 target 6 (2026-08-03) — materialized='table' → 'view'. Pure `select *` of an external
+-- table, rebuilt as a CTAS on every ~10-min lineup-monitor tick; it was 57 of the umpire chain's
+-- 111 provisioning waits / 8 days. `create or replace view` is metadata-only and never resumes
+-- COMPUTE_WH. Equivalence is provable (a CTAS already replaces the whole table each run, so its
+-- population is already "whatever the ext table holds now" = what a view returns). See
+-- feature_pregame_umpire_features for why this supersedes the 6a idempotency gate.
+{{ config(materialized='view') }}
 
 select * from baseball_data.lakehouse_ext.stg_statsapi_umpire_game_log
 

@@ -137,7 +137,22 @@ select * from final
 
 {% else %}
 
-{{ config(materialized='table') }}
+-- E11.24 target 6 (2026-08-03) — materialized='table' → 'view'; same rationale as
+-- feature_pregame_lineup_features (a pure `select *` of an external table; CTAS resumes
+-- COMPUTE_WH, `create or replace view` is metadata-only).
+--
+-- ⭐ THIS SUPERSEDES THE 6a IDEMPOTENCY GATE FOR THIS MODEL, AND IS STRICTLY BETTER. The umpire
+-- chain (this model + stg_statsapi_umpire_game_log) was the largest single target-6 sub-family
+-- (111–147 provisioning waits / 8 days). 6a (E11_24_UMPIRE_REBUILD_GATE) attacked it by SKIPPING
+-- the rebuild when the HP assignment had not advanced, which the 2026-08-02 re-measurement sized
+-- at only ~30–35% (the "written once per slate" premise was false — the box's
+-- W11_RAW_WRITE_MODE=s3 makes ingest_umpires' --skip-if-exists guard unreachable, so every tick
+-- re-stamps the watermark). A view removes 100% of the cost WITHOUT skipping anything, so it also
+-- cannot entrench the late-assignment lateness the 6a design had to work around. The 6a gate
+-- becomes INERT rather than wrong: skipping a metadata-only DDL saves and costs nothing, and a
+-- view is always current with the ext table, so a skipped "rebuild" can no longer serve stale
+-- umpire rows. Leave the flag as-is; it needs no flip and no removal in this change.
+{{ config(materialized='view') }}
 
 select * from baseball_data.lakehouse_ext.feature_pregame_umpire_features
 

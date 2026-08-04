@@ -867,7 +867,28 @@ select * from final
 
 {% else %}
 
-{{ config(materialized='table') }}
+-- E11.24 target 6 (2026-08-03) — materialized='table' → 'view'. This branch's ENTIRE body is
+-- `select *` of an external table, so the table form was a CTAS that copied lakehouse_ext into
+-- Snowflake on every intraday lineup-monitor tick (~10 min through the slate). A CTAS needs a
+-- running warehouse; `create or replace view` is metadata-only (cloud-services layer) and never
+-- resumes COMPUTE_WH. Measured: feature_pregame_lineup_features + _starter_features were 66
+-- provisioning waits / 8 days, the single largest remaining lever in the target-6 census.
+--
+-- ⭐ WHY THIS IS PROVABLY EQUIVALENT, unlike the sibling incrementals: a
+-- `create or replace table AS select *` REPLACES the whole table each run, so the table's row
+-- population is already exactly "whatever the ext table holds right now" — which is what a view
+-- returns. (`feature_pregame_game_features_raw` / `_game_features` ACCUMULATE via delete+insert,
+-- so a view is NOT provably equivalent there and needs a row-population parity check first —
+-- deliberately left for the next flip, see docs/e11_24_literal_zero_snowflake.md.)
+--
+-- Freshness IMPROVES: a copy is only as fresh as its last CTAS; a view always reflects the
+-- current ext table. Every reader is preserved — nothing reads this on the SERVING path (predict_-
+-- today / write_serving_store run --s3, and the API's lakehouse_query strips the
+-- baseball_data.<schema>. prefix and resolves against DuckDB/S3), and the only dbt ref()s to this
+-- model (feature_pregame_game_features_raw, feature_pregame_bullpen_state_features) live inside
+-- their DuckDB branches, so no Snowflake-executing model reads it.
+-- ⚠️ A view RE-EVALUATES on read: watch ACTIVE-MINUTES as well as resumes after the flip.
+{{ config(materialized='view') }}
 
 select * from baseball_data.lakehouse_ext.feature_pregame_lineup_features
 

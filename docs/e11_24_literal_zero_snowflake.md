@@ -1176,3 +1176,166 @@ INC-27-class **straggler repoint**, off the predict path, individually cheap.
 ⛔ Not fixable in code: the Snowsight cost-UI waits. Opening the Snowflake cost dashboard on
 COMPUTE_WH resumes it. If the account defaults a UI session to COMPUTE_WH, switching that
 default to MONITOR_WH removes them — an operator/console setting, not a repo change.
+
+---
+
+# TARGET 6 — FLIP 1 of 2: the pure ext-table passthroughs become VIEWS (2026-08-03)
+
+Branch `e11.24-target6-serving`. Implements the 08-03 memo's **recommended item 1**, and then
+some: the same one-line mechanism also retires the umpire chain, which that memo still listed as
+"the dominant waker overall".
+
+## What changed
+
+Four dbt models' **Snowflake branch** flipped `materialized='table'` → `materialized='view'`:
+
+| model | census sub-family | waits / 8d |
+|---|---|---|
+| `feature_pregame_lineup_features` | lineup/starter CTAS | \ |
+| `feature_pregame_starter_features` | (memo's item 1) | 66 |
+| `stg_statsapi_umpire_game_log` | umpire chain | \ |
+| `feature_pregame_umpire_features` | (6a's target) | 111–147 |
+
+Each model's **entire** Snowflake body is `select * from baseball_data.lakehouse_ext.<model>` — a
+pure copy of an external table over the S3 parquet the DuckDB branch builds. As a `table` that is
+a **CTAS**, which requires a running warehouse; the intraday lineup-monitor tick re-ran it every
+~10 minutes through the slate, re-copying byte-identical rows. As a `view` the same statement is
+`create or replace view` — metadata-only, cloud-services layer, **never resumes COMPUTE_WH**.
+
+## ⭐ Why the swap is provably equivalent HERE and not for the siblings
+
+This is the scope boundary, and it is structural rather than empirical:
+
+> `create or replace table AS select *` **already replaces the whole table on every run**, so the
+> table's row population is already exactly "whatever the external table holds right now" — which
+> is precisely what a view returns.
+
+That argument does **not** extend to `feature_pregame_game_features_raw` / `_game_features`, which
+are `incremental` + `delete+insert` over a 7-day lookback: they **accumulate** history, so a view
+would silently change the row population if the S3 parquet is not full-history. They are
+deliberately excluded and are flip 2 (below). `eb_starter_posteriors` / `eb_batter_posteriors_raw`
+are excluded for the same reason.
+
+Freshness **improves**: a copy is only as fresh as its last CTAS; a view always reflects the
+current ext table.
+
+## The reader audit (INC-27 rule — grep the surface, not the DAG)
+
+Nothing reads these on the **serving** path:
+
+- `predict_today.py` and `write_serving_store.py` both route through `--s3`, live on the box via
+  `W7B_LAKEHOUSE_S3=1` (morning) and `W7B_INTRADAY_S3` (post_lineup).
+- The **API Lambda does not read Snowflake at all** here: `app/backend/routers/picks.py` uses
+  `lakehouse_query`, which *strips* the `baseball_data.<schema>.` prefix
+  (`lakehouse_read.py` `_STRIP_PREFIXES`) and resolves against the DuckDB/S3 registered views. The
+  literal `FROM baseball_data.betting_features.feature_pregame_game_features` in that file is a
+  Snowflake-shaped string executed against the lakehouse, not a Snowflake read.
+- **No Snowflake-executing dbt model reads them.** Every `ref()` to `feature_pregame_lineup_-
+  features` / `_starter_features` (`feature_pregame_game_features_raw`,
+  `feature_pregame_bullpen_state_features`) sits **inside those models' DuckDB branch**; the
+  Snowflake branch of `_raw` reads `lakehouse_ext.feature_pregame_game_features_raw` directly.
+- `app/pages/5_Game_Insights.py` is the **deprecated Streamlit UI** (not deployed).
+
+The remaining Snowflake readers are hand-run backfills (`backfill_prediction_snapshots.py`),
+monitors (`check_data_freshness.py`), and the non-`--s3` rollback path. **A view serves all of
+them correctly and more freshly than a copy** — which is why this is preferable to gating the op
+off, the other obvious lever.
+
+## ⭐ This SUPERSEDES 6a for the umpire chain, and is strictly better
+
+6a (`E11_24_UMPIRE_REBUILD_GATE`, flipped 2026-08-02) attacked the same 111–147 waits by
+**skipping** the rebuild when the HP assignment had not advanced. The 08-02 re-measurement sized
+that at only **~30–35%** — the "written once per slate" premise is false, because the box's
+`W11_RAW_WRITE_MODE=s3` makes `ingest_umpires.py --skip-if-exists` unreachable (`and do_sf`), so
+every tick re-stamps the watermark.
+
+A view removes **100%** of the cost without skipping anything. Three consequences:
+
+1. It cannot entrench the late-assignment lateness that 6a's watermark key was designed to avoid.
+2. **6a becomes INERT, not wrong** — skipping a metadata-only DDL saves and costs nothing, and a
+   view is always current with the ext table, so a skipped "rebuild" can no longer serve stale
+   umpire rows. **Leave the flag as-is; it needs no flip and no removal.**
+3. FU-3 (PR #493, per-game `--skip-if-exists`) is likewise no longer needed *for the wake case*.
+   It remains worth merging on its own correctness merits (it stops the raw-mirror re-write
+   churn), but it is no longer on target 6's critical path.
+
+## 🚨 Operational hazard: dbt DROPS the table before creating the view
+
+A materialization change is not in-place. dbt sees an existing relation of the wrong type and
+issues **`DROP TABLE` then `CREATE VIEW`** — so there is a brief window where the object does not
+exist, and if the CREATE fails the object is *gone*. This is the same shape as the
+`--reset`-deletes-before-validating defect recorded above.
+
+It is safe here **only because nothing reads these on the serving path** (audit above). It is
+still the reason the first `dbt run` after merge must land in a **quiet window, not mid-slate**
+(and never during an in-flight deploy — INC-36). Rollback is `git revert` + one `dbt run`.
+
+## ⚠️ How to read the measurement honestly
+
+**This will not by itself collapse the target-6 band to zero, and reporting it as if it should is
+the mistake to avoid.** The intraday tick still runs four **incrementals**
+(`eb_starter_posteriors`, `eb_batter_posteriors_raw`, `feature_pregame_game_features_raw`,
+`feature_pregame_game_features`) that genuinely require a warehouse. So:
+
+- **Provisioning waits attributed to the four flipped statements should go to ~0** — that is the
+  direct, statement-level prediction, and it is what the per-day × family cut (Table 4b) reads.
+- **Resumes may fall much less than the wait count implies**, because the tick still resumes the
+  warehouse for the incrementals moments later. This is the same "removes vs *shifts*" caveat the
+  `pipeline_run_log` entry carries — do not book a resume saving that is really a shift.
+- **Watch ACTIVE-MINUTES in both directions.** A view re-evaluates on read, so any Snowflake
+  reader that scans these (notably the daily `dbt test` suite's `unique` /
+  `unique_combination_of_columns` on all four) now scans the ext table instead of a local table.
+  Serving readers filter by key/date and are unaffected; the test suite does not.
+
+Use the per-day × family cut, in-band (14–23 UTC), **7/30 as the pre-flip reference** (7/31 and
+8/1 are contaminated — see above). ⛔ Per the E11.20 lesson, wake↓ still does not imply credit↓.
+
+## FLIP 2 (next session) — the accumulating incrementals
+
+Fully scoped here so it is not re-derived:
+
+1. **Prove the row population first.** The blocker is whether the `--w8b` S3 parquet is genuinely
+   full-history. If it is, a view is equivalent and the incrementals can flip the same way; if it
+   is not, a view would silently truncate history. Compare `count(*)` / `min(game_date)` between
+   `baseball_data.betting_features.feature_pregame_game_features` and
+   `lakehouse_ext.feature_pregame_game_features` before touching anything.
+2. `feature_pregame_game_features_raw` is the **5× INC-19 type-drift victim** and carries the
+   TYPE-PIN block + `dbt/type_contracts/`. A view has no stored types, so the whole INC-19 class
+   evaporates for it — but check `scripts/gen_type_contract.py`'s `CONTRACTS` list and
+   `test_type_contract_guard.py` before assuming the guard still means what it did.
+3. Only after flip 2 can the tick stop resuming COMPUTE_WH, which is what the exit criterion
+   (warehouse suspends on a zero-game window) actually requires.
+
+## What was deliberately NOT done, and the measurement behind it
+
+- **The `scd2_upsert` Delta port + dbt-reader repoint (the story's item 2).** Re-measured at
+  **5 waits (0.8%)** for the writers plus 7 for their consumer on the 662-wait window, and 25 on
+  the 08-03 statement-level cut. Against that it demands a cutover on
+  `feature_pregame_game_features_raw` + the `eb_posteriors/*` family — the highest-regression-risk
+  surface in the program — and this repo's guardrail is **one serving-flip per soak**, which this
+  change spends. The prior session declined it on the same measurement; nothing since has moved
+  the number. (Note `feature_pregame_sub_model_signals` *is* a pure passthrough and could join
+  flip 1 mechanically, but it is not in the intraday selector, so it is out of this session's
+  band.)
+- **Targets 4 / 4b / 7**, per the 6 → 4 → 4b → 7 ordering — they unblock after this soaks.
+- **No ext table dropped, no warehouse suspended** (target 7).
+
+## Gates
+
+- Fast gate: **5,244 passed**, 28 skipped (`-m "not slow" -n 4`).
+- Slow gate: **26 passed** (`-m "slow and not research" -n auto`) — run with
+  `dbt/target/manifest.json` symlinked from the main checkout (the NF-D18 worktree artifact).
+- New guard `betting_ml/tests/test_e11_24_target6_passthrough_views.py` (16 tests), **verified RED
+  on four deliberate breaks**, one per clause: reverting a model to `table`; dropping a model from
+  the intraday selector; disabling comment-stripping; and removing an incremental's
+  `is_incremental()` window. The model list is **computed from the selector in `sensor_ops.py`**,
+  not hand-listed, so a model added to the tick is covered automatically (INC-38's
+  registry-completeness lesson).
+- ⛔ **The two dbt CI jobs were deliberately NOT run from the laptop.** Every target in
+  `dbt/profiles.yml` — including `ci` — uses **COMPUTE_WH**, so a local `dbt compile` would resume
+  the very warehouse this story measures and dirty the operator's clean pre-flip baseline (the
+  08-03 session preserved it explicitly). CI runs both jobs on clean runners. Locally the change
+  was validated by rendering **both branches of all four models offline through Jinja** and
+  asserting the Snowflake branch emits `materialized='view'` over the expected `lakehouse_ext`
+  body. ⭐ Incidental confirmation of the 08-03 memo's item 5: the `ci` profile target really does
+  point at `COMPUTE_WH`.

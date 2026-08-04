@@ -983,7 +983,13 @@ select * from final
 
 {% else %}
 
-{{ config(materialized='table') }}
+-- E11.24 target 6 (2026-08-03) — materialized='table' → 'view'; see the identical rationale on
+-- feature_pregame_lineup_features. This branch is a pure `select *` of an external table, so the
+-- table form was a CTAS re-copying unchanged rows on every ~10-min lineup-monitor tick. A CTAS
+-- resumes COMPUTE_WH; `create or replace view` is metadata-only and does not. Equivalence is
+-- provable here (a CTAS already replaces the whole table each run ⇒ same population as a view);
+-- it is NOT provable for the accumulating incrementals, which are a separate flip.
+{{ config(materialized='view') }}
 
 select * from baseball_data.lakehouse_ext.feature_pregame_starter_features
 
