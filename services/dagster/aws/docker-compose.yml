@@ -225,10 +225,16 @@ services:
   # ⚠️ It mounts the Docker socket READ-ONLY — necessary (restarting a container IS a socket operation)
   # and the reason this is a deliberate, reviewable addition rather than a silent one. :ro does not
   # meaningfully sandbox the Docker API, so the real control is the container-label scope above.
-  # ⚠️ PIN: version tag, not :latest (this file's own pinning discipline). Digest-pin it after the first
-  # box pull:  docker inspect --format='{{index .RepoDigests 0}}' willfarrell/autoheal:1.2.0
+  # ⚠️ PIN: pinned to a DIGEST, matching the byparr image above — a VERSION TAG IS NOT IMMUTABLE (a
+  # maintainer can re-push 1.2.0 under us, and an `up -d` after a prune would then float the watchdog
+  # to different code with no rollback). Digest resolved ON THE BOX 2026-08-04 from the
+  # willfarrell/autoheal:1.2.0 that deployed and came up healthy. To upgrade, re-inspect on the box
+  # AFTER verifying the new image still restarts a labelled unhealthy container:
+  #   docker inspect --format='{{index .RepoDigests 0}}' willfarrell/autoheal:<new tag>
+  # ⚠️ 1.2.0 publishes linux/arm64 — REQUIRED, the box is Graviton (r6g.large, aarch64). Tags 1.0.0
+  # and v0.7.0 are amd64-ONLY, so "roll back to an older tag" is NOT a safe recovery here.
   autoheal:
-    image: willfarrell/autoheal:1.2.0
+    image: willfarrell/autoheal@sha256:31f580ef0279eaced5b38d631b08c474d70d8403c1c2fdd6ddcf2e879d5f3f7c
     environment:
       AUTOHEAL_CONTAINER_LABEL: autoheal
       AUTOHEAL_INTERVAL: 60            # poll health every 60s
