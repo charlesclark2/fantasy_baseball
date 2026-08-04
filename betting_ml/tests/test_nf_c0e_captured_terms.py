@@ -402,6 +402,90 @@ def test_an_unfitted_yards_family_emits_NO_columns_rather_than_zeros():
         assert col in out.columns
 
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 7. ONE application point — every projection loader must route through it
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# ⚠️ This section exists because the first cut of NF-C0e SHIPPED THE MODULE WITHOUT CALLING IT.
+# `captured_terms.py` was written, graduated and tested, and nothing in the pipeline invoked it, so
+# the four player-side terms would have exported as null and still read CAPTURED. The gap surfaced
+# only when the operator ran the handoff commands. These guards make the wiring mechanical.
+_FANTASY = REPO / "quant_sports_intel_models" / "football" / "nfl" / "fantasy"
+
+
+def _function_body(path: Path, name: str) -> str:
+    src = path.read_text()
+    start = src.index(f"def {name}(")
+    nxt = src.find("\ndef ", start + 1)
+    return src[start: nxt if nxt != -1 else len(src)]
+
+
+@pytest.mark.parametrize("module,func", CT.CONSUMER_CALLERS)
+def test_every_projection_loader_applies_the_graduated_terms(module, func):
+    """⭐ ONE LOGICAL THING, MANY EXECUTION OWNERS — the repo's recurring shape (INC-30 crontab,
+    INC-36 deploy, INC-38's per-caller flag), here in the fantasy read path.
+
+    FOUR loaders read the season projection. `two_pt` carries weight 2.0 in EVERY preset, so a
+    loader that skips the derived-column step produces a board scored a few points BELOW one that
+    does not — silently, for the same player, from the same artifact. The exporter already refuses
+    to publish when its projection SOURCE disagrees with the boards'; this is that same invariant
+    one level down, and it cannot be left to whoever writes the fifth loader remembering.
+    """
+    body = _function_body(_FANTASY / module, func)
+    assert "captured_terms.apply_to_projection" in body, (
+        f"{module}::{func} reads the season projection without applying the NF-C0e graduated "
+        f"terms. It will score `two_pt` as ZERO while the other loaders score it, so the board "
+        f"and the exported payload will disagree for the same player.")
+
+
+def test_the_caller_registry_is_still_exhaustive():
+    """A per-caller rule fails exactly where its registry is incomplete (INC-38).
+
+    Any function whose body reads the projection parquet/Delta must be IN `CONSUMER_CALLERS`.
+    """
+    found = set()
+    for module in ("run_league_board.py", "export_draft_board_json.py"):
+        src = (_FANTASY / module).read_text()
+        for name in re.findall(r"\ndef (load_projections?_(?:local|lake))\(", src):
+            found.add((module, name))
+    assert found == set(CT.CONSUMER_CALLERS), (
+        f"projection loaders not in CONSUMER_CALLERS: {sorted(found - set(CT.CONSUMER_CALLERS))}; "
+        f"registered but missing from source: {sorted(set(CT.CONSUMER_CALLERS) - found)}")
+
+
+def test_absent_rates_emit_NO_columns_rather_than_fabricated_ones(tmp_path):
+    """A season nobody has measured degrades to the pre-NF-C0e behaviour: no columns, so the terms
+    report CAPTURED. It must NOT fall back to the pinned offline constants, which would make every
+    rate look measured when none were (NF1.7 (a))."""
+    proj = pd.DataFrame({"player_id": ["x"], "position": ["QB"], "proj_pass_td": [30.0],
+                         "proj_rush_td": [2.0], "proj_rec_td": [0.0]})
+    assert CT.load_rates(tmp_path, 2026) is None
+    out = CT.apply_to_projection(proj, tmp_path, 2026)
+    for col in CT.GRADUATED_COLS:
+        assert col not in out.columns
+    assert out.equals(proj)
+
+
+def test_a_malformed_rates_artifact_is_treated_as_ABSENT_not_as_zero(tmp_path):
+    """Half a rates file is not "rates of zero" — scoring every long-TD bonus at 0 would be an
+    APPLIED lie. It must read as absent."""
+    CT.rates_path(tmp_path, 2026).write_text('{"two_pt_rate": 0.04}')      # no long_td_share
+    assert CT.load_rates(tmp_path, 2026) is None
+    CT.rates_path(tmp_path, 2026).write_text("not json at all")
+    assert CT.load_rates(tmp_path, 2026) is None
+
+
+def test_the_shipped_2026_rates_artifact_exists_and_was_fitted_before_the_season(tmp_path):
+    """The artifact is what makes these terms APPLIED rather than captured, and it must be fitted
+    on history STRICTLY BEFORE the season it serves — a rate fitted on 2026's own outcomes could
+    not be reproduced at serve time."""
+    rates = CT.load_rates(_FANTASY / "artifacts", 2026)
+    assert rates is not None, "run `run_nf_c0e_captured_terms.py --emit-rates 2026`"
+    assert rates.fitted_through == 2025
+    assert 0.05 < rates.long_td_share["pass"] < 0.25
+    assert 0.01 < rates.long_td_share["rush"] < 0.15
+    assert 0.01 < rates.two_pt_rate < 0.10
+
+
 def test_a_component_absent_from_the_loaded_history_is_skipped_not_zero_filled():
     """The same rule one level down. A zero-filled component would be fitted, projected and scored
     as APPLIED against data that was never loaded."""

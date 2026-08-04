@@ -169,9 +169,79 @@ def verdict(d: pd.DataFrame, arm: str = "projection",
     }
 
 
+_LAKE = "s3://credence-sports-lakehouse/nfl/raw"
+_ARTIFACTS = Path(__file__).resolve().parent / "artifacts"
+
+_PLAYER_TERM_SQL = f"""
+with pw as (
+    select season::int as season,
+           sum(coalesce(passing_2pt_conversions,0) + coalesce(rushing_2pt_conversions,0)
+             + coalesce(receiving_2pt_conversions,0))::double as two_pt,
+           sum(coalesce(passing_tds,0))::double   as pass_td,
+           sum(coalesce(rushing_tds,0))::double   as rush_td,
+           sum(coalesce(receiving_tds,0))::double as rec_td
+    from delta_scan('{_LAKE}/stats_player_week')
+    where season_type='REG' and season between {{lo}} and {{hi}}
+    group by 1
+), td as (
+    select season::int as season,
+           sum(case when coalesce(pass_touchdown,0)=1 and yards_gained>=40 then 1.0 else 0.0 end)
+               as pass_td_40p,
+           sum(case when coalesce(rush_touchdown,0)=1 and yards_gained>=40 then 1.0 else 0.0 end)
+               as rush_td_40p
+    from delta_scan('{_LAKE}/pbp')
+    where season_type='REG' and season between {{lo}} and {{hi}} and coalesce(touchdown,0)=1
+    group by 1
+)
+select pw.season, two_pt, pass_td, rush_td, rec_td,
+       coalesce(pass_td_40p,0) as pass_td_40p, coalesce(rush_td_40p,0) as rush_td_40p
+from pw left join td using (season)
+"""
+
+
+def emit_rates(season: int, *, lo: int, out_dir: Path) -> Path:
+    """Measure the serving league rates from history STRICTLY BEFORE `season` and cache them.
+
+    ⭐ WHY THIS IS AN ARTIFACT RATHER THAN AN INLINE READ. `apply_to_projection` runs on the READ
+    path of four projection loaders, some of which run offline. Doing a lake read there would put a
+    network dependency on every board build; pinning the constants in code would let them rot
+    silently (the 40+ share moved 0.149 → 0.090 between 2010 and 2025). A small measured artifact,
+    stamped with the season it was fitted THROUGH, is the honest middle: a consumer either has
+    measured rates for its season or emits no columns at all.
+    """
+    import duckdb
+
+    con = duckdb.connect()
+    for stmt in ("install delta", "load delta", "install httpfs", "load httpfs",
+                 "create secret (type s3, provider credential_chain, region 'us-east-2')"):
+        try:
+            con.sql(stmt)
+        except Exception:  # noqa: BLE001 — already loaded / secret exists
+            pass
+    hist = con.sql(_PLAYER_TERM_SQL.format(lo=int(lo), hi=int(season) - 1)).df()
+    from quant_sports_intel_models.football.nfl.fantasy import captured_terms as CT
+
+    rates = CT.fit_captured_term_rates(hist, base_season=int(season) - 1)
+    blob = rates.to_dict()
+    blob["fitted_through"] = int(season) - 1
+    blob["projection_season"] = int(season)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = CT.rates_path(out_dir, season)
+    path.write_text(json.dumps(blob, indent=2))
+    log.info("wrote %s: %s", path.name, blob)
+    return path
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--emit-rates", type=int, metavar="SEASON", default=None,
+                    help="measure the serving league rates for SEASON (from seasons strictly "
+                         "before it) and write the artifact the projection loaders read. This is "
+                         "what makes two_pt / the long-TD bonuses APPLIED rather than captured.")
+    ap.add_argument("--rates-from", type=int, default=2010,
+                    help="first season of history for --emit-rates")
+    ap.add_argument("--artifacts", default=str(_ARTIFACTS))
     ap.add_argument("--duckdb", default="quant_sports_intel_models/sports_dbt/sports.duckdb")
     ap.add_argument("--from-season", type=int, default=1999)
     ap.add_argument("--first-eval", type=int, default=2010)
@@ -179,6 +249,10 @@ def main() -> int:
     ap.add_argument("--out", default="ablation_results")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+
+    if args.emit_rates:
+        emit_rates(args.emit_rates, lo=args.rates_from, out_dir=Path(args.artifacts))
+        return 0
 
     if not Path(args.duckdb).exists():
         ap.error(f"DuckDB not found at {args.duckdb} — build the NFL marts first")
