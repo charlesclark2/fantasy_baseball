@@ -325,6 +325,45 @@ the catalog, and the export map. It is applied when something computes it.* The 
 is mechanical about the column EXISTING and says nothing about who fills it — so a story that
 graduates a term must verify the value end-to-end through a real loader, not the declarations.
 
+## 6c. ⚠️ …and then a STALE CACHE published one graduated term as all-NULL (found in prod)
+
+The republish after §6b succeeded and `two_pt` / the three long-TD bonuses landed correctly — but a
+read of the published artifact showed **`proj_def_forced_fumble` at 0 of 32 non-null**, while every
+sibling D/ST component was fully populated. §2b's graduation was real; the value never reached the
+board.
+
+**Cause.** `load_team_defense_seasons` cached to `team_defense_{lo}_{hi}.parquet` — keyed on the
+season range **alone**, with nothing about the query in the key. NF-C0e added `def_fumbles_forced`
+to `_TEAM_DEF_SQL`; the on-disk cache in the operator's checkout was written 2026-07-30, four days
+earlier, so the loader returned the pre-NF-C0e column set. From there every step behaved correctly:
+`build_dst_training_panel` skipped the absent component, `fit_dst_component_model` never fitted it,
+`project_dst` emitted nothing, and the coverage machinery reported the truth about a column that
+did not exist.
+
+**Why no warning would have helped, and why the fix is the cache KEY.** That silence is the
+*correct* behaviour: a component the history genuinely lacks must be skipped, never zero-filled — a
+zero-filled component gets fitted, projected and scored as APPLIED against fabricated data (§2's
+whole discipline). The honest fallback is exactly what converts "my cache is stale" into "this
+feature isn't available," with nothing anywhere to notice. So a stale cache has to be impossible to
+*read*, not merely noisy: the cache key now carries a fingerprint of the query text.
+
+**⭐ Why the §6b end-to-end verification did not catch it.** That check ran in a fresh worktree,
+which has no `artifacts/` directory — so it rebuilt from the lake and passed, while the operator's
+working checkout with a four-day-old parquet failed. This is the on-disk **artifact-precedence**
+landmine in CLAUDE.md (the board-export stale-source case), in the direction that ships: *a clean
+checkout cannot reproduce a bug whose trigger is a file a clean checkout lacks.* The fix was
+re-validated by copying the real stale parquet **into** the worktree first — reproducing the
+failure environment before claiming the fix.
+
+**Scope.** Exactly one column. `_KICKER_SQL` was untouched by NF-C0e, so its cache was never stale,
+and `load_team_yards` — the yards-allowed family — does not cache at all, which is precisely why
+that family shipped correctly while forced fumbles did not.
+
+**The two lessons together.** §6b: a term is applied when something *computes* it. §6c: and when
+that computation reads *this* checkout's data, not a snapshot of an older schema. Both are the same
+failure with different surfaces — a declaration that outran its production — and neither is visible
+to a test suite, because both mechanisms were behaving exactly as designed.
+
 ## 7. Guards
 
 `betting_ml/tests/test_nf_c0e_captured_terms.py` (46 tests, fast gate). Five were RED-proven
@@ -338,3 +377,12 @@ against deliberately broken source before being trusted:
 
 The rejection registry lives *in the test file* keyed by its evidence, so graduating one of those
 terms later means producing a better number rather than deleting a line.
+
+`betting_ml/tests/test_kdst_cache_invalidation.py` (7 tests, fast gate) covers §6c. Three go RED
+when the query fingerprint is reverted, verified before being trusted. The set is deliberately
+two-sided: a stale cache must not be served, **and** an unchanged query must still hit the cache —
+without the second, "always miss" would satisfy every other assertion while turning an instant
+re-run into a full lake scan. One test reconstructs the pre-fix reader and asserts it *does* return
+the stale column set, so a future revert cannot leave the suite green on a fixture some other
+clause happens to reject (NF-D17). A registry test pins that every cached reader routes through the
+shared helper, since the original defect was a per-reader implementation detail.
