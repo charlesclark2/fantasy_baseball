@@ -60,25 +60,70 @@ _PROD-STATE-1e · written 2026-08-04 · grounded in `betting_ml/sub_model_regist
 
 Market-blind throughout (no odds column exists anywhere in the family). All features are strictly **pre-debut** (the as-of guard `l.official_date::date < d.debut_date` in the substrate builders — the single WHERE clause the E7.6 leakage screen independently re-audits daily).
 
-**MLE translation inputs (per metric; from `build_graduated_pairs[_pitchers].py`):**
+**Per-column data dictionary — MLE translation input frame** (one row per (player, level); built by `build_graduated_pairs[_pitchers].py` from `baseball/milb/player_game_logs` (E7.1 Delta) restricted to regular-season rows at the four `LEVEL_ORDER` rungs, **strictly pre-debut** (`official_date < debut_date`)):
 
-| column | source | definition |
+| column | who | definition |
 |---|---|---|
-| `minor_<m>` (the rate) | `baseball/milb/player_game_logs` (E7.1 Delta), regular-season rows at the four `LEVEL_ORDER` rungs, strictly pre-debut | Batter: wOBA (fixed weights `0.69·uBB+0.72·HBP+0.89·1B+1.27·2B+1.62·3B+2.10·HR / (AB+BB−IBB+SF+HBP)`), K%=SO/PA, BB%=BB/PA, ISO=(TB−H)/AB. Pitcher: K%=SO/TBF, BB%=BB/TBF, HR/TBF, GB%=GO/(GO+AO) (ground-OUT share — cross-definition vs the Statcast GB/BIP label, learned rescale), `minor_start_share`=GS/G (GBM aux only) |
-| `minor_pa` | same | PA (batter) / TBF (pitcher); eligibility floor 150 |
-| `age` | same | PA-weighted age at the level |
-| `level`, `league` | same | hierarchy levels (league one-hots require count ≥ 5 in the GBM; `min_cell_support=12` for factor cells) |
-| `sc_*` AAA-Statcast aux (GBM-only, impute-flagged) | `baseball/milb/statcast_aaa` (E7.2), Triple-A rows only | batter: xwOBA, barrels/PA, hard-hit%, EV, bat speed; pitcher: xwOBA-against, whiff%, velo, spin, extension, hard-hit-against |
-| labels | `mart_batter_rolling_stats` / `mart_pitcher_rolling_stats` (+ `stg_batter_pitches` for pitcher GB%) | realized MLB season-to-date `_std` line at last game of season, PA/TBF-weighted over the first `label_window=2` MLB seasons; label floors `min_mlb_pa/tbf=150` |
+| `minor_woba` | batter | Fixed-weight wOBA over the aggregated pre-debut line at the level: `(0.69·uBB + 0.72·HBP + 0.89·1B + 1.27·2B + 1.62·3B + 2.10·HR) / (AB + BB − IBB + SF + HBP)` — era-generic single weight set, deliberately (a season-specific set would leak era information across the debut boundary) |
+| `minor_k_pct` | both | Batter: SO/PA. Pitcher: SO/TBF |
+| `minor_bb_pct` | both | Batter: BB/PA. Pitcher: BB/TBF |
+| `minor_iso` | batter | `(TB − H)/AB` — isolated power |
+| `minor_hr_rate` | pitcher | HR allowed / TBF |
+| `minor_gb_pct` | pitcher | `GO/(GO+AO)` — ground-**OUT** share, all the MiLB box offers. ⚠️ Cross-definition vs the MLB label (Statcast GB/BIP) — the regression *learns the rescale*; stated in the E7.3p report |
+| `minor_pa` | both | Total pre-debut PA (batter) / TBF (pitcher) at the level. Eligibility floor **150**; also the reliability weight |
+| `minor_start_share` | pitcher | GS/G — role indicator (starter vs reliever K%-inflation confounder). GBM-only impute-flagged aux channel, **not** a hierarchy level |
+| `age` | both | PA-weighted age during the level stint (fixed unpenalized main effect in the partial-pool design) |
+| `level` | both | One of `Triple-A / Double-A / High-A / Single-A` — the hierarchy's random-intercept + random-slope grouping |
+| `league` | both | `mode(league)` at the level — its own random-intercept block (a (level,league) cell needs `min_cell_support=12` to earn a factor; GBM league one-hots need count ≥ 5) |
+| `sc_xwoba` | batter aux | AAA-Statcast expected wOBA (quality-of-contact model). **Triple-A rows only** (the E7.2 join is AAA-only), GBM-only, imputed-with-missing-flag |
+| `sc_barrels_per_pa_percent` | batter aux | Barrels per PA % — optimal EV×LA contact rate |
+| `sc_hardhit_percent` | batter aux | Share of batted balls ≥ 95 mph exit velocity |
+| `sc_avg_exit_velocity_mph` | batter aux | Mean exit velocity |
+| `sc_avg_bat_speed_mph` | batter aux | Mean bat speed (bat-tracking) |
+| `sc_xwoba_against` | pitcher aux | Expected wOBA allowed |
+| `sc_swing_miss_percent` | pitcher aux | Whiff rate (swings-and-misses / swings) |
+| `sc_avg_pitch_velocity_mph` | pitcher aux | Mean pitch velocity |
+| `sc_avg_spin_rate_rpm` | pitcher aux | Mean spin rate |
+| `sc_avg_release_extension_ft` | pitcher aux | Mean release extension |
+| `sc_hardhit_percent_against` | pitcher aux | Hard-hit rate allowed |
+| `mlb_<m>` (label) | both | Realized MLB rate: season-to-date `_std` line at the **last game of each MLB season** (`mart_batter_rolling_stats` / `mart_pitcher_rolling_stats`), PA/TBF-weighted over the first `label_window=2` MLB seasons; floors `min_mlb_pa/tbf=150`. Pitcher GB% label from `stg_batter_pitches` (Statcast GB/BIP), gate `mlb_bip ≥ 50` |
+| v2_parkctx adds (E7.12-s1) | both | Park-factor + level×season **run-environment** context features (the run environment carried the lift, not the park — see §10); shipped in the `milb_mle_v2_parkctx` emission |
 
-**E8.3 SB inputs:** `minor_sb_rate = SB / (singles+BB+HBP)` from `player_game_logs`; label `mlb_sb_rate` from the E8.3-built `baseball/mlb/season_hitting`; eligibility `min_minor_pa=150, min_minor_sbo=50, min_mlb_pa=150, min_mlb_sbo=50`; four pre-registered target forms (`sb_rate` primary, `att_rate`, `succ_rate`, `sb_per_pa`).
+**Per-column — E8.3 SB frame** (`build_sb_pairs.py`; eligibility `min_minor_pa=150, min_minor_sbo=50, min_mlb_pa=150, min_mlb_sbo=50`):
 
-**Served prior parquet contracts (the exact columns the dbt branch reads — live-verified 2026-08-04):**
+| column | definition |
+|---|---|
+| `minor_sbo` / `mlb_sbo` | Stolen-base **opportunities** = times reaching first = singles + BB + HBP |
+| `minor_sb_rate` (feature) / `mlb_sb_rate` (label, primary) | SB / SBO — how often he RUNS (and succeeds) per time on first |
+| `minor_att_rate` / `mlb_att_rate` | (SB+CS) / SBO — attempt propensity (shipped-eligible, corr 0.707) |
+| `minor_succ_rate` / `mlb_succ_rate` | SB / (SB+CS) — efficiency. **Measured null (corr 0.230, NO-SHIP)** — the board cannot claim it |
+| `minor_sb_per_pa` / `mlb_sb_per_pa` | SB / PA — the denominator-free form (passes, not switched to) |
+| label source | `baseball/mlb/season_hitting` — built BY E8.3 (`ingest_mlb_season_hitting_to_s3.py`); the rolling-stats mart is Statcast-derived and has no SB |
 
-- `baseball/lakehouse/milb_mle_prior/data.parquet` (6,376 rows): `batter_id, mle_level, is_prospect, mle_k_pct, k_pct_prior_kappa, mle_bb_pct, bb_pct_prior_kappa, mle_iso, iso_prior_sd, k_pct_source, bb_pct_source, iso_source` (the `*_source` provenance columns are inert to the dbt consumer).
-- `baseball/lakehouse/milb_mle_pitcher_prior/data.parquet` (7,474 rows): `pitcher_id, mle_level, is_prospect, mle_gb_pct, gb_pct_prior_kappa, mle_k_pct, k_pct_prior_kappa, mle_bb_pct, bb_pct_prior_kappa`.
+**Per-column — served prior parquet contracts (the exact columns the dbt branch reads; live-verified 2026-08-04):**
 
-**What reaches the betting feature store (served columns, all `::double` type-pinned):** `home_/away_avg_eb_{k_pct,bb_pct,iso}` (lineup-aggregated batter side) and `home_/away_starter_eb_{k_pct,bb_pct}` + `home_/away_starter_eb_gb_pct` on `feature_pregame_game_features_raw`.
+`baseball/lakehouse/milb_mle_prior/data.parquet` (batter, 6,376 rows):
+
+| column | definition |
+|---|---|
+| `batter_id` | MLBAM id (join key into `eb_batter_posteriors_raw`; plain `ON batter_id` — no date predicate, which is why the E7.6 leakage screen exists) |
+| `mle_level` | The **highest** MiLB level the player reached — the (player, level) row selected to serve |
+| `is_prospect` | True = has a qualifying minor line but **no MLB debut yet** (label UNKNOWN, never 0) |
+| `mle_k_pct` / `mle_bb_pct` | The MLB-equivalent translated rate = the **Beta prior MEAN** for the rookie's K%/BB% |
+| `k_pct_prior_kappa` / `bb_pct_prior_kappa` | The Beta prior **strength** in equivalent PA: `κ = m(1−m)/σ_resid² − 1`, clipped [20, 400] — i.e. "trust this MLE like κ observed PA." The dbt branch forms `α = mle·κ`, `β = (1−mle)·κ` and lets the rookie's own MLB PA shrink from there |
+| `mle_iso` | MLB-equivalent ISO = the prior mean (ISO is not a binomial rate, so no κ column) |
+| `iso_prior_sd` | The recalibrated (E13.6, held-out σ_resid) predictive sd of the ISO prior; the dbt SQL converts it to a pseudo-count as `κ_iso = 0.25/iso_prior_sd²` (0.25 = per-PA variance bound of extra-bases-per-AB) — the regularized path that replaced the blown-up Normal-Normal (the "E7.5 ISO lesson") |
+| `k_pct_source` / `bb_pct_source` / `iso_source` | E7.5b per-row provenance (`milb_mle_v1_served` vs `milb_mle_v2_parkctx`) — inert to the dbt consumer, load-bearing for audits (it is how §7's mixed provenance was verified) |
+
+`baseball/lakehouse/milb_mle_pitcher_prior/data.parquet` (pitcher, 7,474 rows): `pitcher_id, mle_level, is_prospect` as above, plus `mle_gb_pct / gb_pct_prior_kappa`, `mle_k_pct / k_pct_prior_kappa`, `mle_bb_pct / bb_pct_prior_kappa` — same mean+κ semantics, but the **evidence unit differs per metric** (κ counts binomial trials): GB% shrinks against **balls in play**, K%/BB% against **batters faced**. Applied only when `is_cold_start` (n_prior_seasons = 0); an established starter keeps the band prior. Median served κ: gb 68 / k 81 / bb 146.
+
+**Per-column — what reaches the betting feature store** (`feature_pregame_game_features_raw`, all `::double` type-pinned; per E7.9 only run_diff/pre_lineup's contract carries any of these today):
+
+| column (×home/away) | definition |
+|---|---|
+| `avg_eb_k_pct` / `avg_eb_bb_pct` / `avg_eb_iso` | Mean of the EB **posterior** rate across the side's confirmed lineup batters — each batter's posterior = his own MLB line shrunk toward his prior, where a cold-start batter's prior is the MLE row above (else ZiPS, else population). Live slate values ~0.224 / 0.086 / 0.161 |
+| `starter_eb_k_pct` / `starter_eb_bb_pct` | The probable starter's EB posterior K%/BB% from `eb_starter_posteriors` — κ-blend `(mle·κ + obs·BF)/(κ + BF)`, collapsing to the MLE mean exactly at BF=0 |
+| `starter_eb_gb_pct` | The E7.5p-new column: `coalesce(MLE GB%, league anchor)` shrunk toward the pitcher's own prior-season GB% by BIP; populated for **every** starter (observed range 0.261–0.716, 48,629 rows). Served + schema-tested; in **no** model contract (E7.9 clean null) |
 
 **Served vs tried, and whether ADDITIONS were explored (the 1d lesson-5 question):**
 
