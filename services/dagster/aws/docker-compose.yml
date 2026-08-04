@@ -240,6 +240,22 @@ services:
       AUTOHEAL_INTERVAL: 60            # poll health every 60s
       AUTOHEAL_START_PERIOD: 300       # ignore health for 5 min after a (re)start
       AUTOHEAL_DEFAULT_STOP_TIMEOUT: 30
+      # ⚠️ MUST EXCEED AUTOHEAL_DEFAULT_STOP_TIMEOUT (verified live on the box 2026-08-04).
+      # autoheal's own /docker-entrypoint runs every Docker API call as
+      #   curl --max-time "${CURL_TIMEOUT}" ... -f -X POST .../restart?t=${STOP_TIMEOUT}
+      # and the image DEFAULTS CURL_TIMEOUT to 30 — equal to our stop timeout. A restart whose
+      # container ignores SIGTERM takes the FULL stop timeout before the daemon SIGKILLs it, so
+      # the POST cannot return before curl's own deadline: curl aborts, `-f` returns non-zero, and
+      # autoheal logs "Restarting container <id> failed" — WHILE THE DAEMON COMPLETES THE RESTART
+      # ANYWAY. Measured with a deliberately-unhealthy canary: every attempt logged "failed" yet
+      # .State.StartedAt advanced (01:56:56 -> 02:00:05), and attempts landed a telltale 90s apart
+      # (= INTERVAL 60 + the 30s timeout). ⭐ The danger is not the wasted wait, it is that a
+      # SUCCESS and a genuine FAILURE become indistinguishable in the log — the same
+      # non-discriminating-output class as the `curl -f`/301 healthcheck bug this whole service
+      # was added to fix. 60s gives 2x headroom over the graceful-stop window.
+      # (Note SIGTERM-ignoring is normal, not exotic: a container's PID 1 gets NO default signal
+      #  handling, so any entrypoint without an explicit handler waits out the full timeout.)
+      CURL_TIMEOUT: 60
       TZ: America/New_York
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
