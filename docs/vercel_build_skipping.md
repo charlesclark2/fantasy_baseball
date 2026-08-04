@@ -126,6 +126,30 @@ report a bug:
 This is the pattern Vercel's own docs use; a base-branch diff would be more precise but is fragile
 against the `--depth=10` shallow clone.
 
+### 🔑 A REDEPLOY after an ENV VAR change will be SKIPPED — uncheck the box
+
+**This is the trap most likely to bite, because it looks like the env var simply didn't work.**
+
+Changing a Vercel environment variable does not change git. So a plain **Redeploy** re-runs
+`git diff HEAD^ HEAD -- frontend/` against *the same commit* — and if that commit was a non-frontend
+one (which, on `main`, it usually is now), the ignore step exits `0`, the redeploy is **skipped**,
+and the new env var **never takes effect**. No error; the site just keeps serving the old build.
+
+This project sets a lot of these in the Vercel dashboard — `NEXT_PUBLIC_API_URL`, the Cognito pool
+and app-client ids, `NEXT_PUBLIC_ADMIN_EMAILS`, PostHog, Sentry — so this will come up.
+
+**The fix is built into Vercel.** On the deployment's **Redeploy** dialog, untick **"Use project's
+Ignore Build Step."** Per Vercel's [monorepo doc](https://vercel.com/docs/monorepos):
+
+> If you have created a script to ignore the build step, you can skip the script when redeploying or
+> promoting your app to production. This can be done through the dashboard when you click on the
+> **Redeploy** button, and unchecking the **Use project's Ignore Build Step** checkbox.
+
+Same applies to promoting a deployment to production, and to any other "rebuild without a code
+change" reason (rotating a secret, clearing build cache, picking up a changed Vercel project
+setting). Rule of thumb: **if you want a build and the commit did not touch `frontend/`, untick the
+box** — or push a real frontend commit.
+
 ## ⚠️ What this does and does not fix
 
 **It does NOT reduce the deployment count.** Vercel creates the deployment first, then runs the
