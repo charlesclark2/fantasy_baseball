@@ -125,11 +125,36 @@ PA_BUCKET_LABELS = ("0", "1_6", "7_13", "14_17", "18_20", "21_27", "28_34", "35_
 PA_BUCKET_EDGES = (0, 1, 7, 14, 18, 21, 28, 35, 46)
 PA_BUCKET_COLS = tuple(f"proj_dst_pa_g_{b}" for b in PA_BUCKET_LABELS)
 
+# ── NF-C0e: the YARDS-ALLOWED tier family, the structural TWIN of the points-allowed one ─────
+# Same mechanism, same reason: yards-allowed D/ST scoring is a per-game TIER table, so the season
+# projection must emit `E[games in bucket]` for a linear scorer to express any table EXACTLY.
+#
+# ⭐ WHY THESE NINE EDGES ARE NOT A GUESS. Unlike the points-allowed ladder — where ESPN splits at
+# 18-21/22-27 and we split at 18-20/21-27, so exactly one boundary is disclosed as approximate —
+# the yards ladder is IDENTICAL on both platforms and both name it for us:
+#   * Sleeper's keys are SELF-DESCRIBING: `yds_allow_0_100` / `_100_199` / `_200_299` / `_300_349` /
+#     `_350_399` / `_400_449` / `_450_499` / `_500_549` / `_550p` — nine rungs, cut points stated.
+#   * ESPN numbers its nine rungs 128..136, and `espn.py`'s identity evidence fixes their ORDER
+#     (129..136 sum to 17.000 games) but NOT their cut points. The Sleeper keys supply exactly the
+#     missing half, and nine-rungs-monotone matches nine-rungs-monotone.
+# So the two independent payloads AGREE, which is what makes these edges evidence rather than the
+# "it looked right in a table" guess `espn.py`'s header forbids.
+#
+# ⚠️ ONE DISCLOSED BOUNDARY. Sleeper's top rung is spelled `0_100` while ESPN's 128 is "under 100",
+# so a game allowing EXACTLY 100 yards is ambiguous between the two. We resolve it as `< 100`
+# (ESPN's reading). Measured cost: 1 team-game in 13,912 since 1999 sits exactly on 100.
+YA_BUCKET_LABELS = ("0_99", "100_199", "200_299", "300_349", "350_399",
+                    "400_449", "450_499", "500_549", "550p")
+YA_BUCKET_EDGES = (0, 100, 200, 300, 350, 400, 450, 500, 550)
+YA_BUCKET_COLS = tuple(f"proj_dst_ya_g_{b}" for b in YA_BUCKET_LABELS)
+
 DST_RAW_COLS = (
     "proj_def_sacks", "proj_def_int", "proj_def_fumble_rec", "proj_def_td", "proj_st_td",
-    "proj_def_safety", "proj_def_blocked_kick",
+    "proj_def_safety", "proj_def_blocked_kick", "proj_def_forced_fumble",
     "proj_dst_points_allowed", "proj_dst_pa_per_game", "proj_dst_pa_per_game_sd",
     *PA_BUCKET_COLS,
+    "proj_dst_yards_allowed", "proj_dst_ya_per_game", "proj_dst_ya_per_game_sd",
+    *YA_BUCKET_COLS,
 )
 K_RAW_COLS = (
     "proj_fg_att", "proj_fg_made", "proj_fg_made_0_39", "proj_fg_made_40_49",
@@ -151,6 +176,12 @@ DST_CONVENIENCE_SCORING = {
     "proj_def_sacks": 1.0, "proj_def_int": 2.0, "proj_def_fumble_rec": 2.0,
     "proj_def_td": 6.0, "proj_st_td": 6.0, "proj_def_safety": 2.0,
     "proj_def_blocked_kick": 2.0,
+    # ⚠️ `proj_def_forced_fumble` and the NF-C0e YARDS-ALLOWED tier columns are deliberately ABSENT
+    #    from the convenience scheme even though both are now projected and both are APPLIED for a
+    #    league that scores them. The convenience total's job is to RANK under the MODAL default,
+    #    and neither is in ESPN's or Yahoo's default D/ST scheme — they are per-league opt-ins (the
+    #    operator's league 998005 scores no yards tiers at all). Folding an opt-in rule into the
+    #    default ranking would silently re-rank every league that does NOT have it.
 }
 # tier points per points-allowed bucket. ⚠️ 18_20 and 21_27 both sit inside ESPN's 18-27 tier (0
 # points) — the finer split exists so Yahoo's 14-20 / 21-27 edges are also expressible.
@@ -166,10 +197,16 @@ DST_PA_TIER_POINTS = {
 # stored value is documentation + the offline-fallback shrink; `fit_dst_component_model` re-fits
 # the shrink IN-FOLD from history strictly before the projection season and is what actually ships.
 DST_COMPONENTS = ("def_sacks", "def_int", "def_fumble_rec", "def_td", "st_td",
-                  "def_safety", "def_blocked_kick")
+                  "def_safety", "def_blocked_kick", "def_forced_fumble")
 DST_COMPONENT_YOY = {
     "def_sacks": 0.252, "def_int": 0.259, "def_fumble_rec": 0.223, "st_td": 0.166,
     "def_td": 0.094, "def_blocked_kick": 0.019, "def_safety": -0.018,
+    # NF-C0e — `def_fumbles_forced` was in `stg_nfl_team_week` the whole time and simply never
+    # loaded, so a league paying for a forced fumble (the operator's own Sleeper league does, at
+    # +1) had that rule CAPTURED. It carries a fitted forward slope of 0.29, and on the held-out
+    # walk-forward it beats the league-mean degenerate on BOTH losses in 16/16 seasons — a WIDER
+    # margin than `def_sacks`, which the program already ships as applied.
+    "def_forced_fumble": 0.273,
 }
 # Components whose measured reliability is statistically indistinguishable from zero → projected at
 # the league mean, and SAID to be. Keeping them as columns (rather than dropping them) is what lets
@@ -306,7 +343,8 @@ def fit_linear_shrink(prior_rate, realized_rate, *, force_mean: bool = False) ->
 
 def build_dst_training_panel(team_def: pd.DataFrame, team_points: pd.DataFrame,
                              sos: pd.DataFrame | None, target_seasons: list[int], *,
-                             window: int = PRIOR_WINDOW_YEARS) -> pd.DataFrame:
+                             window: int = PRIOR_WINDOW_YEARS,
+                             team_yards: pd.DataFrame | None = None) -> pd.DataFrame:
     """One row per (target season, team): each DST component's recency-weighted PRIOR per-game rate
     (from seasons ≤ target−1) beside its REALIZED per-game rate in the target season.
 
@@ -328,6 +366,12 @@ def build_dst_training_panel(team_def: pd.DataFrame, team_points: pd.DataFrame,
         rec = cur[["season", "team", "games", "team_games"]].copy()
         rec["target_season"] = y
         for c in DST_COMPONENTS:
+            if c not in cur.columns or c not in def_by.columns:
+                # The loaded history does not carry this component. Build NO columns for it rather
+                # than zero-filling: `fit_dst_component_model` then skips it, `project_dst` emits
+                # nothing, and the term is reported CAPTURED — the truth. A zero-filled component
+                # would instead be fitted, projected and scored as APPLIED against fabricated data.
+                continue
             rec[f"real_{c}"] = _num(cur[c]) / np.clip(_num(cur["games"]), 1e-9, None)
             pr = weighted_prior_rate(def_by, y - 1, "team", c, window=window)
             rec = rec.merge(pr.rename(columns={"prior_rate": f"prior_{c}",
@@ -340,6 +384,25 @@ def build_dst_training_panel(team_def: pd.DataFrame, team_points: pd.DataFrame,
         rec = rec.merge(pa_prior.rename(columns={"prior_rate": "prior_pa_pg",
                                                  "prior_games": "prior_pa_games"}),
                         on="team", how="left")
+        # ── NF-C0e: the yards-allowed pair, built the SAME leakage-safe way ──────────────────
+        # Absent `team_yards` leaves the columns out entirely rather than filling zeros: a zero
+        # yards-allowed rate would read as "this defense allows no yardage", and `fit_dst_
+        # component_model` then simply does not fit the family (its mix stays None and
+        # `project_dst` emits no yards columns), which the coverage machinery reports honestly
+        # as CAPTURED. A silently-zeroed family would instead score as an APPLIED lie.
+        if team_yards is not None and not team_yards.empty:
+            cur_y = team_yards[_num(team_yards["season"]) == y]
+            if not cur_y.empty:
+                rec = rec.merge(cur_y[["team", "yards_against_pg"]]
+                                .rename(columns={"yards_against_pg": "real_ya_pg"}),
+                                on="team", how="left")
+                ya_prior = weighted_prior_rate(
+                    team_yards.assign(ya_tot=_num(team_yards["yards_against"]),
+                                      games=_num(team_yards["team_games"])),
+                    y - 1, "team", "ya_tot", window=window)
+                rec = rec.merge(ya_prior.rename(columns={"prior_rate": "prior_ya_pg",
+                                                         "prior_games": "prior_ya_games"}),
+                                on="team", how="left")
         if sos is not None and not sos.empty:
             s = sos[_num(sos["season"]) == y]
             if not s.empty:
@@ -367,7 +430,19 @@ class DstModel:
     pa_resid_sd: float = 0.0
     pa_n: int = 0
     pa_r: float = 0.0
-    pa_mix: "PointsAllowedMix | None" = None
+    pa_mix: "ConditionalBucketMix | None" = None
+    # ── NF-C0e: the YARDS-allowed twin. Same regression shape, its own fitted coefficients. ──
+    # Measured: yards allowed per game is MORE persistent season to season than points allowed
+    # (lag-1 ρ = 0.401 vs 0.316 on the same 829 team-season pairs), which is the substantive
+    # reason this family graduates rather than a modelling preference.
+    ya_slope: float = 0.0
+    ya_intercept: float = 0.0
+    ya_sos_coef: float = 0.0
+    ya_league_mean: float = 0.0
+    ya_resid_sd: float = 0.0
+    ya_n: int = 0
+    ya_r: float = 0.0
+    ya_mix: "ConditionalBucketMix | None" = None
 
     def to_dict(self) -> dict:
         return {
@@ -379,6 +454,13 @@ class DstModel:
                                "resid_sd_pg": round(self.pa_resid_sd, 3),
                                "n": int(self.pa_n), "r": round(self.pa_r, 4)},
             "pa_mix": None if self.pa_mix is None else self.pa_mix.to_dict(),
+            "yards_allowed": {"slope": round(self.ya_slope, 4),
+                              "intercept": round(self.ya_intercept, 3),
+                              "sos_coef": round(self.ya_sos_coef, 4),
+                              "league_mean_pg": round(self.ya_league_mean, 3),
+                              "resid_sd_pg": round(self.ya_resid_sd, 3),
+                              "n": int(self.ya_n), "r": round(self.ya_r, 4)},
+            "ya_mix": None if self.ya_mix is None else self.ya_mix.to_dict(),
         }
 
 
@@ -392,41 +474,68 @@ def fit_dst_component_model(panel: pd.DataFrame, *,
                          "vacuous-anchor failure wearing a model's hat)")
     comps: dict[str, LinearShrink] = {}
     for c in DST_COMPONENTS:
+        if f"real_{c}" not in panel.columns:
+            continue          # a component the loaded history does not carry stays UNPROJECTED
         comps[c] = fit_linear_shrink(panel.get(f"prior_{c}"), panel.get(f"real_{c}"),
                                      force_mean=c in noise_components)
-    # points allowed: realized PA/g ~ prior PA/g + SOS(z of opponents' offensive strength)
-    p = _num(panel["prior_pa_pg"])
-    s = np.nan_to_num(_num(panel["sos_off_z"]), nan=0.0)
-    y = _num(panel["real_pa_pg"])
-    ok = np.isfinite(p) & np.isfinite(y)
-    league = float(np.mean(y[ok])) if ok.any() else 0.0
-    if ok.sum() >= 30 and np.std(p[ok]) > 1e-12:
-        X = np.column_stack([np.ones(ok.sum()), p[ok], s[ok]])
-        coef, *_ = np.linalg.lstsq(X, y[ok], rcond=None)
-        intercept, slope, sos_coef = (float(coef[0]), float(coef[1]), float(coef[2]))
-        resid = y[ok] - X @ coef
-        r = float(np.corrcoef(X @ coef, y[ok])[0, 1])
-    else:
-        intercept, slope, sos_coef = league, 0.0, 0.0
-        resid = y[ok] - league if ok.any() else np.array([0.0])
-        r = 0.0
-    return DstModel(components=comps, pa_slope=slope, pa_intercept=intercept,
-                    pa_sos_coef=sos_coef, pa_league_mean=league,
-                    pa_resid_sd=float(np.std(resid)) if len(resid) else 0.0,
-                    pa_n=int(ok.sum()), pa_r=r)
+
+    def _rate_regression(prior_col: str, real_col: str):
+        """realized per-game rate ~ prior per-game rate + SOS(z of opponents' offensive strength).
+
+        Shared verbatim by the points- and yards-allowed families so the two are the SAME model
+        with different inputs — there is no second implementation to drift."""
+        if prior_col not in panel.columns or real_col not in panel.columns:
+            return None
+        p = _num(panel[prior_col])
+        s = np.nan_to_num(_num(panel["sos_off_z"]), nan=0.0)
+        y = _num(panel[real_col])
+        ok = np.isfinite(p) & np.isfinite(y)
+        league = float(np.mean(y[ok])) if ok.any() else 0.0
+        if ok.sum() >= 30 and np.std(p[ok]) > 1e-12:
+            X = np.column_stack([np.ones(ok.sum()), p[ok], s[ok]])
+            coef, *_ = np.linalg.lstsq(X, y[ok], rcond=None)
+            intercept, slope, sos_coef = (float(coef[0]), float(coef[1]), float(coef[2]))
+            resid = y[ok] - X @ coef
+            r = float(np.corrcoef(X @ coef, y[ok])[0, 1])
+        else:
+            intercept, slope, sos_coef = league, 0.0, 0.0
+            resid = y[ok] - league if ok.any() else np.array([0.0])
+            r = 0.0
+        return dict(slope=slope, intercept=intercept, sos_coef=sos_coef, league_mean=league,
+                    resid_sd=float(np.std(resid)) if len(resid) else 0.0,
+                    n=int(ok.sum()), r=r)
+
+    pa = _rate_regression("prior_pa_pg", "real_pa_pg") or {}
+    ya = _rate_regression("prior_ya_pg", "real_ya_pg") or {}
+    return DstModel(components=comps,
+                    pa_slope=pa.get("slope", 0.0), pa_intercept=pa.get("intercept", 0.0),
+                    pa_sos_coef=pa.get("sos_coef", 0.0), pa_league_mean=pa.get("league_mean", 0.0),
+                    pa_resid_sd=pa.get("resid_sd", 0.0), pa_n=pa.get("n", 0), pa_r=pa.get("r", 0.0),
+                    ya_slope=ya.get("slope", 0.0), ya_intercept=ya.get("intercept", 0.0),
+                    ya_sos_coef=ya.get("sos_coef", 0.0), ya_league_mean=ya.get("league_mean", 0.0),
+                    ya_resid_sd=ya.get("resid_sd", 0.0), ya_n=ya.get("n", 0), ya_r=ya.get("r", 0.0))
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # The EMPIRICAL per-game points-allowed distribution
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+def bucket_index(value, edges: tuple) -> np.ndarray:
+    """Map a per-game value → the index of its bucket under `edges` (inclusive lower bounds)."""
+    return np.digitize(_num(value), np.asarray(edges[1:], dtype=float), right=False)
+
+
 def pa_bucket_index(points_allowed) -> np.ndarray:
     """Map per-game points allowed → the index of its `PA_BUCKET_LABELS` bucket."""
-    pa = _num(points_allowed)
-    return np.digitize(pa, np.asarray(PA_BUCKET_EDGES[1:], dtype=float), right=False)
+    return bucket_index(points_allowed, PA_BUCKET_EDGES)
+
+
+def ya_bucket_index(yards_allowed) -> np.ndarray:
+    """Map per-game yards allowed → the index of its `YA_BUCKET_LABELS` bucket."""
+    return bucket_index(yards_allowed, YA_BUCKET_EDGES)
 
 
 @dataclass
-class PointsAllowedMix:
+class ConditionalBucketMix:
     """The empirical per-game points-allowed bucket mix, CONDITIONAL on a team's points-allowed
     rate — a monotone quantile-bin lookup with linear interpolation between bin centres.
 
@@ -436,10 +545,11 @@ class PointsAllowedMix:
     also reproduces the observed monotonicity (best-quintile defenses are shut-out-capable 2.4% of
     games, worst-quintile 0.0%)."""
 
-    anchors: np.ndarray                    # bin-centre PA/g values, ascending
+    anchors: np.ndarray                    # bin-centre per-game RATE values, ascending
     mix: np.ndarray                        # (n_bins, 9) row-normalised bucket probabilities
     labels: tuple = PA_BUCKET_LABELS
     n_games: int = 0
+    edges: tuple = PA_BUCKET_EDGES
 
     def probabilities(self, pa_per_game) -> np.ndarray:
         """(n, 9) bucket probabilities for each requested points-allowed rate."""
@@ -458,44 +568,77 @@ class PointsAllowedMix:
                 "labels": list(self.labels)}
 
 
-def fit_points_allowed_mix(team_game_points: pd.DataFrame, team_points: pd.DataFrame, *,
-                           n_bins: int = 5) -> PointsAllowedMix:
-    """Fit `PointsAllowedMix` from per-team-GAME points allowed, binned by the team-season's own
-    points-allowed rate. `n_bins=5` (quintiles) keeps ≥600 team-games per cell at the historical
-    panel size — fine enough to show the monotone structure, coarse enough that the 1% shutout
-    atom is estimated off hundreds of games rather than dozens."""
-    g = team_game_points.merge(team_points[["season", "team", "points_against_pg"]],
-                               on=["season", "team"], how="inner")
+# NF1.6 named this class for the one family it had. NF-C0e added a second (yards allowed) that
+# differs ONLY in its bucket edges, so the class is now general and the old name is kept as an
+# alias — an import or a construction written against NF1.6 keeps working byte-identically.
+PointsAllowedMix = ConditionalBucketMix
+
+
+def fit_conditional_bucket_mix(team_games: pd.DataFrame, team_seasons: pd.DataFrame, *,
+                               value_col: str, rate_col: str, edges: tuple, labels: tuple,
+                               n_bins: int = 5) -> ConditionalBucketMix:
+    """Fit the empirical per-game bucket mix CONDITIONAL on a team-season's own per-game rate.
+
+    `n_bins=5` (quintiles) keeps ≥600 team-games per cell at the historical panel size — fine
+    enough to show the monotone structure, coarse enough that a ~1% tail atom (the shutout, on the
+    points family) is estimated off hundreds of games rather than dozens."""
+    g = team_games.merge(team_seasons[["season", "team", rate_col]],
+                         on=["season", "team"], how="inner")
     if g.empty:
-        raise ValueError("fit_points_allowed_mix: no team-game rows to fit on")
-    g = g.assign(_b=pa_bucket_index(g["points_against"]))
+        raise ValueError(f"fit_conditional_bucket_mix({value_col}): no team-game rows to fit on")
+    g = g.assign(_b=bucket_index(g[value_col], edges))
     # quantile bins on the team-season rate; `duplicates='drop'` guards a degenerate slice
     try:
-        g["_bin"] = pd.qcut(_num(g["points_against_pg"]), n_bins, labels=False, duplicates="drop")
+        g["_bin"] = pd.qcut(_num(g[rate_col]), n_bins, labels=False, duplicates="drop")
     except ValueError:
         g["_bin"] = 0
     anchors, rows = [], []
-    for b, d in g.groupby("_bin"):
-        counts = np.bincount(_num(d["_b"]).astype(int), minlength=len(PA_BUCKET_LABELS)).astype(float)
+    for _b, d in g.groupby("_bin"):
+        counts = np.bincount(_num(d["_b"]).astype(int), minlength=len(labels)).astype(float)
         tot = counts.sum()
         if tot <= 0:
             continue
-        anchors.append(float(np.mean(_num(d["points_against_pg"]))))
+        anchors.append(float(np.mean(_num(d[rate_col]))))
         rows.append(counts / tot)
     if not rows:
-        raise ValueError("fit_points_allowed_mix: every bin was empty")
+        raise ValueError(f"fit_conditional_bucket_mix({value_col}): every bin was empty")
     order = np.argsort(anchors)
-    return PointsAllowedMix(anchors=np.asarray(anchors, dtype=float)[order],
-                            mix=np.vstack(rows)[order], n_games=int(len(g)))
+    return ConditionalBucketMix(anchors=np.asarray(anchors, dtype=float)[order],
+                                mix=np.vstack(rows)[order], labels=labels, edges=edges,
+                                n_games=int(len(g)))
 
 
-def expected_pa_bucket_games(pa_per_game, games, mix: PointsAllowedMix) -> np.ndarray:
-    """(n, 9) EXPECTED NUMBER OF GAMES in each points-allowed bucket = games × P(bucket).
+def fit_points_allowed_mix(team_game_points: pd.DataFrame, team_points: pd.DataFrame, *,
+                           n_bins: int = 5) -> ConditionalBucketMix:
+    """Fit the per-game POINTS-allowed bucket mix (NF1.6's original; now a thin instantiation)."""
+    return fit_conditional_bucket_mix(
+        team_game_points, team_points, value_col="points_against",
+        rate_col="points_against_pg", edges=PA_BUCKET_EDGES, labels=PA_BUCKET_LABELS,
+        n_bins=n_bins)
 
-    This is the linear-scoreable form: a per-game tier table scores a season as
-    `Σ_bucket tier_points × expected_games`, so any tier scheme is exact in these columns."""
-    p = mix.probabilities(pa_per_game)
-    return p * _num(games).reshape(-1, 1)
+
+def fit_yards_allowed_mix(team_game_yards: pd.DataFrame, team_yards: pd.DataFrame, *,
+                          n_bins: int = 5) -> ConditionalBucketMix:
+    """Fit the per-game YARDS-allowed bucket mix (NF-C0e). Identical machinery, new edges."""
+    return fit_conditional_bucket_mix(
+        team_game_yards, team_yards, value_col="yards_against",
+        rate_col="yards_against_pg", edges=YA_BUCKET_EDGES, labels=YA_BUCKET_LABELS,
+        n_bins=n_bins)
+
+
+def expected_bucket_games(per_game_rate, games, mix: ConditionalBucketMix) -> np.ndarray:
+    """(n, 9) EXPECTED NUMBER OF GAMES in each bucket = games × P(bucket).
+
+    ⭐ This is the linear-scoreable form, and it is the whole reason a tier table needs no engine
+    change: a per-game tier table scores a season as `Σ_bucket tier_points × expected_games`, which
+    is LINEAR in these columns, so the existing sport-agnostic scorer expresses ANY tier scheme
+    EXACTLY rather than approximating it."""
+    return mix.probabilities(per_game_rate) * _num(games).reshape(-1, 1)
+
+
+def expected_pa_bucket_games(pa_per_game, games, mix: ConditionalBucketMix) -> np.ndarray:
+    """NF1.6's points-allowed name for `expected_bucket_games`, kept for existing callers."""
+    return expected_bucket_games(pa_per_game, games, mix)
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -527,7 +670,8 @@ def schedule_offense_strength(sched: pd.DataFrame, team_points: pd.DataFrame,
 
 def project_dst(universe: pd.DataFrame, team_def_hist: pd.DataFrame, team_points_hist: pd.DataFrame,
                 model: DstModel, sos: pd.DataFrame, projection_season: int, *,
-                window: int = PRIOR_WINDOW_YEARS) -> pd.DataFrame:
+                window: int = PRIOR_WINDOW_YEARS,
+                team_yards_hist: pd.DataFrame | None = None) -> pd.DataFrame:
     """Project every team defense in `universe` for `projection_season`.
 
     Each counting component = its fitted `LinearShrink` applied to the team's recency-weighted
@@ -541,6 +685,8 @@ def project_dst(universe: pd.DataFrame, team_def_hist: pd.DataFrame, team_points
     out = universe.copy()
     out["proj_games"] = _num(out["scheduled_games"])
     for c in DST_COMPONENTS:
+        if c not in model.components or c not in team_def_hist.columns:
+            continue          # unfitted / unloaded component ⇒ NO column ⇒ honestly CAPTURED
         pr = weighted_prior_rate(team_def_hist, base, "team", c, window=window)
         out = out.merge(pr.rename(columns={"prior_rate": f"_pr_{c}",
                                           "prior_games": f"_pg_{c}"}), on="team", how="left")
@@ -561,9 +707,33 @@ def project_dst(universe: pd.DataFrame, team_def_hist: pd.DataFrame, team_points
     out["proj_dst_pa_per_game"] = np.clip(pa_pg, 0.0, None)
     out["proj_dst_pa_per_game_sd"] = float(model.pa_resid_sd)
     out["proj_dst_points_allowed"] = out["proj_dst_pa_per_game"] * _num(out["proj_games"])
-    buckets = expected_pa_bucket_games(out["proj_dst_pa_per_game"], out["proj_games"], model.pa_mix)
+    buckets = expected_bucket_games(out["proj_dst_pa_per_game"], out["proj_games"], model.pa_mix)
     for j, col in enumerate(PA_BUCKET_COLS):
         out[col] = buckets[:, j]
+
+    # ── NF-C0e: the YARDS-allowed family, emitted only when it was actually fitted ────────────
+    # No `ya_mix` ⇒ no columns at all. That is deliberate: `resolve_scoring` classifies a term
+    # against the columns the frame REALLY has, so an unfitted family reports CAPTURED (the truth)
+    # instead of scoring a fabricated zero behind an "applied" label.
+    if model.ya_mix is not None and team_yards_hist is not None and not team_yards_hist.empty:
+        ya_prior = weighted_prior_rate(
+            team_yards_hist.assign(ya_tot=_num(team_yards_hist["yards_against"]),
+                                   games=_num(team_yards_hist["team_games"])),
+            base, "team", "ya_tot", window=window)
+        out = out.merge(ya_prior.rename(columns={"prior_rate": "_pr_ya"}), on="team", how="left")
+        pr_ya = _num(out["_pr_ya"])
+        ya_pg = np.where(np.isfinite(pr_ya),
+                         model.ya_intercept + model.ya_slope * pr_ya
+                         + model.ya_sos_coef * _num(out["sos_off_z"]),
+                         model.ya_league_mean)
+        out["proj_dst_ya_per_game"] = np.clip(ya_pg, 0.0, None)
+        out["proj_dst_ya_per_game_sd"] = float(model.ya_resid_sd)
+        out["proj_dst_yards_allowed"] = out["proj_dst_ya_per_game"] * _num(out["proj_games"])
+        ya_buckets = expected_bucket_games(out["proj_dst_ya_per_game"], out["proj_games"],
+                                           model.ya_mix)
+        for j, col in enumerate(YA_BUCKET_COLS):
+            out[col] = ya_buckets[:, j]
+
     out["position"] = "DST"
     out["player_id"] = "DST-" + out["team"].astype(str)
     out["player_name"] = out["team"].astype(str) + " D/ST"
@@ -831,6 +1001,15 @@ def project_kickers(universe: pd.DataFrame, kicker_hist: pd.DataFrame, model: Ki
     pat_rate = _shrink_to_prior(out["own_pat_att"] * model.pat_make, out["own_pat_att"],
                                 model.pat_make, model.make_shrink_attempts)
     out["proj_pat_made"] = out["proj_pat_att"] * pat_rate
+    # ⛔ NF-C0e DELIBERATELY DOES NOT EMIT `proj_pat_missed`, THOUGH IT IS ONE SUBTRACTION AWAY.
+    #    `pat_att - pat_made` is right there, and a league that scores a missed PAT (the operator's
+    #    Sleeper league does, at -1) has that rule CAPTURED. It stays captured because it FAILED
+    #    its held-out gate, not because it was hard: against a league-mean degenerate over 16
+    #    seasons of kickers it wins MAE in 8/16 folds (+0.21%) where the calibrated clause requires
+    #    11/16. The reason is the same one NF1.6 already measured — make rate is near-random
+    #    (ρ=0.085) — so the projection reduces to `volume × a league constant` and 44% of
+    #    kicker-seasons record ZERO misses. Emitting it would move every board on noise while
+    #    wearing the "applied" label, which is strictly worse than an honest "captured".
 
     out["position"] = "K"
     out["team_id"] = out["team"]

@@ -60,13 +60,21 @@ class TestCoverageIsMechanical:
 
         Without this the term scores 0 behind an 'applied' label — a number that looks like it
         honoured the user's league and does not.
+
+        NF-C0e swapped this test's UNPROJECTED EXAMPLE, which is worth saying out loud: it used to
+        use `def_forced_fumble`, and that term now has a real column (it cleared a held-out
+        degenerate-baseline gate in 16/16 seasons), so it is legitimately APPLIED. The examples
+        below are the terms NF-C0e tested and DELIBERATELY LEFT CAPTURED — `pat_missed` failed its
+        gate (8/16 folds, +0.21%) and `st_player_td` has no per-player predictor at all, so the only
+        arm constructible for it IS the degenerate. Using a still-unprojected example keeps this
+        guard about the MECHANISM rather than about one term's status.
         """
-        scoring = lc.ScoringRules(per_stat={"rec": 1.0, "def_forced_fumble": 1.0, "fumble_rec_td": 6.0})
+        scoring = lc.ScoringRules(per_stat={"rec": 1.0, "pat_missed": -1.0, "st_player_td": 6.0})
         _, report = settings.resolve_scoring(scoring, presets.NFL_PROFILE)
         verdicts = {t.key: t.verdict for t in report.terms}
         assert verdicts["rec"] == APPLIED
-        assert verdicts["def_forced_fumble"] == CAPTURED
-        assert verdicts["fumble_rec_td"] == CAPTURED
+        assert verdicts["pat_missed"] == CAPTURED
+        assert verdicts["st_player_td"] == CAPTURED
 
     def test_a_column_missing_from_the_data_downgrades_to_captured(self):
         """Coverage reads the REAL columns, not the profile's intent.

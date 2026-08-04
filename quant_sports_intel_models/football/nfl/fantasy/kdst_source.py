@@ -98,7 +98,12 @@ select
     sum(coalesce(special_teams_tds, 0))::double             as st_td,
     sum(coalesce(def_safeties, 0))::double                  as def_safety,
     sum(coalesce(fg_blocked, 0) + coalesce(pat_blocked, 0)
-        + coalesce(pt_blocked, 0))::double                  as def_blocked_kick
+        + coalesce(pt_blocked, 0))::double                  as def_blocked_kick,
+    -- NF-C0e: `def_fumbles_forced` was in this table all along and simply never selected, so a
+    -- league scoring a forced fumble had that rule CAPTURED. Distinct from `fumble_recovery_opp`
+    -- (`def_fumble_rec`): a defense can force a fumble the OFFENSE recovers, and many leagues pay
+    -- for both events separately.
+    sum(coalesce(def_fumbles_forced, 0))::double            as def_forced_fumble
 from {team_week}
 where season_type = 'REG'
   and season between {lo} and {hi}
@@ -166,6 +171,56 @@ def load_team_points(con, lo: int, hi: int, *, staging: str = STAGING_SCHEMA) ->
                  points_against=("points_against", "sum")))
     ts["points_for_pg"] = ts["points_for"] / ts["team_games"]
     ts["points_against_pg"] = ts["points_against"] / ts["team_games"]
+    return ts
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 2b. Team YARDS ALLOWED — NF-C0e's tier family (the points-allowed twin)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# A team's yards ALLOWED in a game is its OPPONENT's total offense, so the frame is built by
+# joining `stg_nfl_team_week` to itself through `opponent_team`.
+#
+# ⭐⭐ THE ONE THING THAT IS EASY TO GET WRONG HERE: `total_yards` IS **GROSS**, AND THE FANTASY
+# PLATFORMS SCORE **NET**. nflverse's team `passing_yards` is gross passing yards and
+# `total_yards` is exactly `passing_yards + rushing_yards` (verified: the identity holds on all
+# 13,912 team-games). The NFL's official "total net yards" — which is the number in the box score
+# that ESPN and Sleeper grade a D/ST on — SUBTRACTS sack yardage. Using the gross column would
+# overstate every defense by ~15 yards/game and push the whole league up roughly one tier rung.
+# Validated against published league averages: NET gives 331.6 yards/g in 2023 against the NFL's
+# published 331.1, while GROSS gives 349.0. `sack_yards_lost` is stored NEGATIVE, hence the ADD.
+_TEAM_GAME_YARDS_SQL = """
+with tw as (
+    select season, week, team, opponent_team,
+           coalesce(passing_yards, 0)::double   as pass_yds,
+           coalesce(rushing_yards, 0)::double   as rush_yds,
+           coalesce(sack_yards_lost, 0)::double as sack_yds
+    from {staging}.stg_nfl_team_week
+    where season_type = 'REG' and team is not null and opponent_team is not null
+      and season between {lo} and {hi}
+)
+select season, week,
+       opponent_team                          as team,      -- the DEFENSE
+       (pass_yds + rush_yds + sack_yds)       as yards_against
+from tw
+"""
+
+
+def load_team_game_yards(con, lo: int, hi: int, *, staging: str = STAGING_SCHEMA) -> pd.DataFrame:
+    """One row per REG (season, week, team) with that team's NET yards ALLOWED.
+
+    The per-GAME grain is required for the same reason points allowed needs it: yards-allowed
+    scoring is a per-game TIER table, so the season projection needs a DISTRIBUTION, not a mean."""
+    df = con.sql(_TEAM_GAME_YARDS_SQL.format(staging=staging, lo=int(lo), hi=int(hi))).df()
+    df["team"] = df["team"].map(norm_team)
+    return df.dropna(subset=["team"]).reset_index(drop=True)
+
+
+def load_team_yards(con, lo: int, hi: int, *, staging: str = STAGING_SCHEMA) -> pd.DataFrame:
+    """Team-season aggregate of `load_team_game_yards`: games, yards_against + the per-game rate."""
+    g = load_team_game_yards(con, lo, hi, staging=staging)
+    ts = (g.groupby(["season", "team"], as_index=False)
+            .agg(team_games=("yards_against", "size"), yards_against=("yards_against", "sum")))
+    ts["yards_against_pg"] = ts["yards_against"] / ts["team_games"]
     return ts
 
 

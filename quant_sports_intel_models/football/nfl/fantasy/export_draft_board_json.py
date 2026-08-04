@@ -336,6 +336,11 @@ _STAT_KEYS = (
     ("proj_rush_att", "rushAtt"), ("proj_rush_yds", "rushYds"), ("proj_rush_td", "rushTd"),
     ("proj_targets", "tgt"), ("proj_rec", "rec"), ("proj_rec_yds", "recYds"), ("proj_rec_td", "recTd"),
     ("proj_fumbles_lost", "fum"), ("proj_two_pt", "twoPt"),
+    # NF-C0e — the graduated long-touchdown bonus terms. `twoPt` above was ALWAYS listed here but
+    # carried NaN for every player (MVP-1 declared the column and never filled it), so the field
+    # was dropped on export and `two_pt` reported CAPTURED. It now carries a measured value.
+    ("proj_pass_td_40p", "passTd40p"), ("proj_rush_td_40p", "rushTd40p"),
+    ("proj_rec_td_40p", "recTd40p"),
 )
 
 # NF1.6 — the K/DST raw components the browse table renders. Kept in the SAME `_STAT_KEYS` idiom so a
@@ -353,6 +358,9 @@ _KDST_STAT_KEYS = (
     ("proj_def_fumble_rec", "fumRec"), ("proj_def_td", "defTd"), ("proj_st_td", "stTd"),
     ("proj_def_safety", "safety"), ("proj_def_blocked_kick", "blocked"),
     ("proj_dst_points_allowed", "paTot"), ("proj_dst_pa_per_game", "paPerG"),
+    # NF-C0e — forced fumbles + the yards-allowed season total / per-game rate.
+    ("proj_def_forced_fumble", "ff"),
+    ("proj_dst_yards_allowed", "yaTot"), ("proj_dst_ya_per_game", "yaPerG"),
 )
 
 # ── NF-C0b: the nine POINTS-ALLOWED TIER columns ─────────────────────────────────────────────────
@@ -364,6 +372,18 @@ _KDST_STAT_KEYS = (
 _DST_PA_BUCKET_KEYS = tuple(
     (f"proj_dst_pa_g_{b}", f"paG{b}")
     for b in ("0", "1_6", "7_13", "14_17", "18_20", "21_27", "28_34", "35_45", "46p")
+)
+
+# ── NF-C0e: the nine YARDS-ALLOWED TIER columns ──────────────────────────────────────────────────
+# Same contract, same reason as the points block above: each is the EXPECTED NUMBER OF GAMES in that
+# yards-allowed bucket, so the client scorer multiplies the user's own nine weights by these nine
+# numbers and reproduces the league's tier table EXACTLY. Not rendered anywhere — they exist purely
+# so a league that scores yards allowed (Sleeper +6..-6, ESPN +5..-7) is scorable in the browser
+# instead of being told, correctly but uselessly, that we saved the rule and ignored it.
+_DST_YA_BUCKET_KEYS = tuple(
+    (f"proj_dst_ya_g_{b}", f"yaG{b}")
+    for b in ("0_99", "100_199", "200_299", "300_349", "350_399",
+              "400_449", "450_499", "500_549", "550p")
 )
 
 
@@ -455,7 +475,8 @@ def projection_records(
             rec["college"] = b.get("college")
             rec["yearsExp"] = b.get("yearsExp")
             rec["headshot"] = b.get("headshot")
-        for src, key in (*_STAT_KEYS, *_KDST_STAT_KEYS, *_DST_PA_BUCKET_KEYS):
+        for src, key in (*_STAT_KEYS, *_KDST_STAT_KEYS, *_DST_PA_BUCKET_KEYS,
+                         *_DST_YA_BUCKET_KEYS):
             rec[key] = _fnum(r.get(src))
         recs.append(rec)
     return recs

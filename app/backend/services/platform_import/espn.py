@@ -267,15 +267,23 @@ def flatten_scoring_items(items: object) -> tuple[dict[str, float], list[str]]:
 # human-readable ESPN settings page. "It looked right in a table" is how a league gets mispriced.
 SCORING_KEY_MAP: dict[str, tuple[str, ...]] = {
     # ── offence ────────────────────────────────────────────────────────────────────────────────
-    "3": ("pass_yd",),
+    # ⚠️ THE TARGET IS THE CANONICAL CATALOG KEY, NOT THE OTHER PLATFORM'S KEY. NF-C0e found these
+    # four pointing at `pass_yd` / `rush_yd` / `rec_yd` / `fum_lost` — which are SLEEPER's PLATFORM
+    # keys, not our canonical `pass_yds` / `rush_yds` / `rec_yds` / `fumbles_lost`. Nothing errored:
+    # an unrecognised key is passed through verbatim and reported CAPTURED by design, so every
+    # ESPN-imported league silently scored ZERO for passing, rushing and receiving YARDAGE — the
+    # bulk of fantasy points — behind a panel that said so and that nobody read. A key that is one
+    # character off is indistinguishable from a genuinely unprojected term. `test_nf_c0e_*` now
+    # asserts EVERY adapter target resolves to a real catalog/profile key, so it cannot recur.
+    "3": ("pass_yds",),
     "4": ("pass_td",),
     "20": ("pass_int",),
-    "24": ("rush_yd",),
+    "24": ("rush_yds",),
     "25": ("rush_td",),
-    "42": ("rec_yd",),
+    "42": ("rec_yds",),
     "43": ("rec_td",),
     "53": ("rec",),                      # receptions — see the yards-per-reception identity above
-    "72": ("fum_lost",),
+    "72": ("fumbles_lost",),
     # ── kicking ────────────────────────────────────────────────────────────────────────────────
     # ESPN's "under 40" is COARSER than our three sub-40 buckets, so it fans out across all three.
     # Writing one weight to each is an EXACT restatement of the league's rule (every sub-40 kick
@@ -319,6 +327,25 @@ SCORING_KEY_MAP: dict[str, tuple[str, ...]] = {
     "123@dst": ("dst_pa_g_28_34",),
     "124@dst": ("dst_pa_g_35_45",),
     "125@dst": ("dst_pa_g_46p",),
+    # ── team defence, YARDS allowed (NF-C0e) ──────────────────────────────────────────────────
+    # 🔬 HOW THE CUT POINTS WERE ESTABLISHED — the missing half of this map's own evidence.
+    # `_YARDS_ALLOWED_KEYS` below records that the identity test (129..136 summing to 17.000000
+    # games) fixes this ladder's ORDER but NOT its extent, and that naming a boundary we had not
+    # verified would be the "it looked right in a table" guess this header forbids. NF-C0e closed
+    # that gap from a SECOND, INDEPENDENT platform rather than from a blog post: Sleeper's keys are
+    # self-describing (`yds_allow_0_100` / `_100_199` / ... / `_550p`) and give nine rungs with
+    # stated cut points, matching nine monotone rungs here. Two independent payloads agreeing is
+    # evidence; one payload plus a guess is not. ⭐ And unlike the POINTS ladder immediately above,
+    # this one needs NO boundary disclosure — the two platforms' rungs are identical.
+    "128@dst": ("dst_ya_g_0_99",),
+    "129@dst": ("dst_ya_g_100_199",),
+    "130@dst": ("dst_ya_g_200_299",),
+    "131@dst": ("dst_ya_g_300_349",),
+    "132@dst": ("dst_ya_g_350_399",),
+    "133@dst": ("dst_ya_g_400_449",),
+    "134@dst": ("dst_ya_g_450_499",),
+    "135@dst": ("dst_ya_g_500_549",),
+    "136@dst": ("dst_ya_g_550p",),
 }
 
 # Several ESPN ids land on ONE canonical key. Collapsing is lossless only when they AGREE, so each
@@ -344,9 +371,23 @@ for _target, _keys, _ in _COLLAPSE_GROUPS:
     for _key in _keys:
         SCORING_KEY_MAP.setdefault(_key, (_target,))
 
-# Long-touchdown bonuses (15/16 pass, 35/36 rush, 45/46 receiving) are deliberately ABSENT: the
-# projection catalog has no 40+/50+ touchdown column, so there is nothing to apply them to. They
-# flow through as CAPTURED, which is the honest answer, and NF-C0e is where they would be earned.
+# Long-touchdown bonuses (15/16 pass, 35/36 rush, 45/46 receiving) remain deliberately ABSENT —
+# and NF-C0e, the story that was supposed to earn them, is the reason they STAY absent.
+#
+# NF-C0e did build the column (`pass_td_40p` / `rush_td_40p` / `rec_td_40p` are projected and
+# graduated against a held-out degenerate baseline), so "there is nothing to apply them to" is no
+# longer true. What is still true is that EACH PAIR IS A 40+ AND A 50+ BONUS AND WE CANNOT TELL
+# WHICH IS WHICH. Every id in this map earned its place by an identity a wrong map fails, and there
+# is no such identity here: no payload we hold sets 15 and 16 to different values, and the
+# projection export sums them identically. Guessing would not be a harmless mislabel — mapping a
+# 50+ bonus onto the 40+ column pays the bonus on ~13% of touchdown passes where the league pays it
+# on ~6%, i.e. it MISPRICES the league by roughly double, which is exactly the failure mode this
+# map's header exists to prevent and is strictly worse than an honest CAPTURED.
+#
+# So the graduation is asymmetric ON PURPOSE: SLEEPER's long-TD terms are applied because its keys
+# STATE the threshold (`pass_td_40p`), and ESPN's stay captured until one payload sets a pair
+# apart or the human-readable settings page is read. No league we have seen is affected today —
+# league 642070 sets none of these six ids.
 
 # ── CAPTURED-key labels ───────────────────────────────────────────────────────────────────────
 #
@@ -354,17 +395,17 @@ for _target, _keys, _ in _COLLAPSE_GROUPS:
 # their rules in words; ESPN numbers them, so an unlabelled coverage panel reports "129@dst · 3.00"
 # — which discloses nothing. These labels exist purely for display and never affect scoring.
 #
-# ⚠️ DELIBERATELY NO YARD/DISTANCE THRESHOLDS IN THESE LABELS. The identity evidence above fixes
-# the yards-allowed ladder's ORDER (monotone, nine rungs) but NOT its cut points, and a label is a
-# claim shown to a user. Naming a boundary I have not verified would be the same "it looked right
-# in a table" guess this map's header forbids — one rung over, in the display layer.
+# ⚠️ STILL DELIBERATELY NO DISTANCE THRESHOLD IN A LONG-TD LABEL. The yards-ALLOWED ladder no
+# longer needs this caution — NF-C0e resolved its cut points against Sleeper's self-describing keys
+# and those nine ids are now APPLIED, so they have left this table. The long-TD pairs have NOT been
+# resolved (see the block above), so their labels still name no yard threshold: a label is a claim
+# shown to a user, and naming a boundary we have not verified is the same "it looked right in a
+# table" guess this map's header forbids, one rung over in the display layer.
 _YARDS_ALLOWED_KEYS: tuple[str, ...] = tuple(f"{i}@dst" for i in range(128, 137))
 
 CAPTURED_LABELS: dict[str, str] = {
-    # The yards-allowed ladder. Present in league 642070 across nine rungs (+5 down to −7); absent
-    # entirely from league 998005 — which is exactly why one payload could not have found it.
-    **{key: "Yards allowed tier (D/ST)" for key in _YARDS_ALLOWED_KEYS},
-    # Long-touchdown bonuses — no 40+/50+ touchdown column exists to apply them to.
+    # Long-touchdown bonuses — the 40+ column now exists, but which id is 40+ and which is 50+ does
+    # not, so these stay captured rather than being mapped on a guess.
     "15": "Long passing touchdown bonus",
     "16": "Long passing touchdown bonus",
     "35": "Long rushing touchdown bonus",
@@ -376,12 +417,6 @@ CAPTURED_LABELS: dict[str, str] = {
     "93": "Blocked-kick return touchdown by an individual defender",
     "103": "Interception returned for touchdown by an individual defender",
 }
-
-_YARDS_ALLOWED_NOTE = (
-    "Your league scores your defence on total yards allowed. We don't project yards allowed, so "
-    "those tiers are saved with your league but don't affect its D/ST rankings — a defence that "
-    "wins by suppressing yardage will be under-rated on your board."
-)
 
 _PA_BOUNDARY_NOTE = (
     "ESPN scores a game where your defence allows exactly 21 points in its 18-21 tier; we resolve "
@@ -442,11 +477,12 @@ def translate_scoring(flat: dict[str, float]) -> tuple[ScoringTranslation, list[
     if t18 is not None and t22 is not None and t18 != t22:
         warnings.append(_PA_BOUNDARY_NOTE)
 
-    # Same conditional-disclosure rule for the yards-allowed ladder: say it only when the league
-    # actually scores it. A league that leaves those tiers unset loses nothing and should not be
-    # handed a caveat about a rule it does not have.
-    if any(flat.get(key) for key in _YARDS_ALLOWED_KEYS):
-        warnings.append(_YARDS_ALLOWED_NOTE)
+    # ⛔ NF-C0e REMOVED the yards-allowed warning that used to fire here. It read "We don't project
+    #    yards allowed, so those tiers are saved with your league but don't affect its D/ST
+    #    rankings" — which is now FALSE: the nine rungs map to real projected columns above. A
+    #    caveat that has stopped being true is not harmlessly stale; it tells the user their board
+    #    ignores a rule it in fact applies, which is the same class of wrong as claiming to apply
+    #    one we ignore. The honest disclosure is deleted, not reworded.
 
     translation = canonical.apply_scoring_map(flat, SCORING_KEY_MAP, ignore=IGNORE_KEYS)
     return translation, warnings
