@@ -18,7 +18,7 @@ same game_pk must still produce a fresh narrative before write_serving_store.
 import json
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -216,47 +216,49 @@ class TestUmpireSkipIfExists:
             "ingest_umpires.py must add --skip-if-exists to argparse (E11.11)"
         )
 
-    def test_skip_if_exists_guard_on_existing_rows(self):
-        """When Snowflake returns count > 0 and --skip-if-exists is set,
-        main() must return early without calling fetch_hp_umpires."""
+    def test_skip_if_exists_guard_writes_nothing_for_an_unchanged_slate(self):
+        """--skip-if-exists must make a repeat tick a genuine no-op: no rows written.
+
+        ⚠️ THIS TEST REPLACES A VACUOUS ONE (FU-3, 2026-08-02). The original
+        `test_skip_if_exists_guard_on_existing_rows` stubbed a Snowflake cursor, then
+        `main()` was NEVER CALLED — it re-implemented the branch inline and asserted
+        `not called_fetch`, which is trivially true when nothing runs. Proven vacuous by
+        deleting the entire guard from `ingest_umpires.py`: the test still passed. That is
+        the NF1.7 (a) class (a check that cannot fail is not a check), and it is why the
+        `and do_sf` conjunct — which disabled the guard for the whole S3 era — shipped and
+        survived unnoticed.
+
+        This version drives the REAL `main()` on the REAL S3 write leg. Depth (wave
+        announcements, reassignment, fail-open, the live DuckDB read) lives in
+        `test_ingest_umpires_per_game_skip.py`.
+        """
+        import argparse
         import importlib.util
+
         spec = importlib.util.spec_from_file_location(
-            "ingest_umpires", _REPO / "scripts" / "ingest_umpires.py"
+            "ingest_umpires_e1111", _REPO / "scripts" / "ingest_umpires.py"
         )
         mod = importlib.util.module_from_spec(spec)
-        # Stub heavy imports
-        for name in ["snowflake.connector", "cryptography.hazmat.backends",
-                      "cryptography.hazmat.primitives.serialization",
-                      "cryptography.hazmat.primitives"]:
-            sys.modules.setdefault(name, MagicMock())
         spec.loader.exec_module(mod)
 
-        # Patch: Snowflake returns 3 existing rows; fetch_hp_umpires would fail if called
-        mock_conn = MagicMock()
-        mock_conn.__enter__ = lambda s: s
-        mock_conn.__exit__ = MagicMock(return_value=False)
-        mock_cursor = MagicMock()
-        mock_cursor.__enter__ = lambda s: s
-        mock_cursor.__exit__ = MagicMock(return_value=False)
-        mock_cursor.fetchone.return_value = (3,)
-        mock_conn.cursor.return_value = mock_cursor
+        fetched = [{"game_pk": 101, "game_date": "2026-06-23", "season": 2026,
+                    "umpire_name": "Ump One", "umpire_id": "111"}]
+        args = argparse.Namespace(date="2026-06-23", dry_run=False, skip_if_exists=True)
+        written = []
 
-        called_fetch = []
+        with patch.object(mod, "w11_write_mode", return_value="s3"), \
+             patch.object(mod, "fetch_hp_umpires", return_value=fetched), \
+             patch.object(mod, "existing_statsapi_assignments",
+                          return_value={101: ("111", "Ump One")}), \
+             patch.object(mod, "write_raw_rows_s3",
+                          side_effect=lambda _s, rows, **kw: written.append(rows)), \
+             patch.object(mod.argparse.ArgumentParser, "parse_args", return_value=args):
+            mod.main()
 
-        with patch.object(mod, "get_snowflake_conn", return_value=mock_conn), \
-             patch.object(mod, "fetch_hp_umpires", side_effect=lambda _: called_fetch.append(1) or []):
-            import argparse
-            args = argparse.Namespace(date="2026-06-23", dry_run=False, skip_if_exists=True)
-            with patch("sys.argv", ["ingest_umpires.py", "--date", "2026-06-23", "--skip-if-exists"]):
-                mod.main.__globals__["sys"] = MagicMock(argv=["ingest_umpires.py", "--date", "2026-06-23", "--skip-if-exists"])
-                # Call main directly using args namespace bypass
-                if hasattr(mod, "get_snowflake_conn"):
-                    # Simulate the skip branch directly
-                    existing = mock_cursor.fetchone.return_value[0]
-                    if existing > 0:
-                        assert not called_fetch, "fetch_hp_umpires must NOT be called when rows exist"
-
-        assert not called_fetch, "fetch_hp_umpires must not be called when --skip-if-exists and rows exist"
+        assert written == [], (
+            "an unchanged slate must write NOTHING — every write re-stamps loaded_at and "
+            "bumps the E11.24-6a umpire-rebuild watermark"
+        )
 
 
 # ── narrative op wires --pick-delta-guard ─────────────────────────────────────
