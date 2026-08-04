@@ -14,6 +14,42 @@ build slot.
 The Ignored Build Step path-filters on `frontend/`, so only a commit that actually changes the
 Next.js app runs a build.
 
+> **Plan update (2026-08-04): the account is now on Pro.** That removes the quota problem outright —
+> deployments/day 100 → **6000**, per-hour 100 → **450**, concurrent builds 1 → **up to 500**. This
+> config is therefore no longer a *quota* lever; it is a **cost** lever. Pro bills Build CPU Minutes
+> (from $0.0035/CPU-minute against the monthly credit), so every skipped `npm install` + `next build`
+> on a pipeline/dbt/model commit is money not spent. Worth keeping — it is a recurring saving rather
+> than a one-off ceiling.
+
+## Why Vercel's native "Skip deployments" toggle does NOT cover this repo
+
+Settings → General → Root Directory has a toggle: *"Skip deployments when there are no changes to the
+root directory or its dependencies."* It is **Enabled**, and it does **nothing here** — this is why
+the deploy flood happened despite the toggle looking like it should have prevented it.
+
+Vercel's [monorepo requirements](https://vercel.com/docs/monorepos) for that feature:
+
+> The monorepo must be using npm, yarn, pnpm, or Bun workspaces, following JavaScript ecosystem
+> conventions. Packages in the workspace must be included in the workspace definition (`workspaces`
+> key in `package.json` for npm and yarn or `pnpm-workspace.yaml` for pnpm).
+>
+> - **Changes that are not a part of the workspace definition will be considered global changes and
+>   deploy all applications in the repository.**
+
+This repo has **no root `package.json` at all** — it is a Python repo with a single Next.js
+subdirectory, so there is no workspace definition and nothing to detect a dependency graph from.
+Every commit is therefore "not part of the workspace definition" → treated as a **global change** →
+deploys. The toggle is structurally inert here.
+
+Vercel's own next sentence names the remedy, which is exactly what this repo does:
+
+> If your project does not meet these requirements, you can use the Ignored Build Step.
+
+**Leave the toggle Enabled.** It is a no-op for this repo, and its failure mode errs toward
+*deploying*, never toward skipping — so it can never cause a missed deploy. It would start working on
+its own if the repo ever grew a real JS workspace. Likewise leave *"Include files outside the root
+directory in the Build Step"* Enabled; it does not affect skip detection.
+
 ## What is configured
 
 ```json
@@ -73,61 +109,77 @@ cwd=repo root:  CHANGED -> 1 (build) | UNCHANGED -> 0 (skip)   ✅
 cwd=frontend/:  CHANGED -> 1 (build) | UNCHANGED -> 0 (skip)   ✅
 ```
 
+### 🪟 `HEAD^ HEAD` is a single-commit window
+
+The diff looks at **one commit**, not the whole branch. Two consequences worth knowing before you
+report a bug:
+
+- **Merge commits are correct.** `git diff HEAD^ HEAD` on a merge compares against the *first
+  parent* — the branch as it was before the merge — so a `dev` or `main` merge commit sees the
+  entire PR's diff. This is the case that matters for production.
+- **Branch previews are per-push.** On a story branch whose frontend change landed in commit 1, a
+  later backend-only push will skip, so the preview URL stops updating. That is benign — the
+  preview built from commit 1 still exists, and the eventual merge diffs correctly — but it looks
+  like "my preview didn't update." Push a frontend-touching commit (or redeploy without *Use
+  project's Ignore Build Step*) if you need a fresh preview.
+
+This is the pattern Vercel's own docs use; a base-branch diff would be more precise but is fragile
+against the `--depth=10` shallow clone.
+
 ## ⚠️ What this does and does not fix
 
-**It does NOT reduce the deployment count**, which is what `api-deployments-free-per-day` limits.
+**It does NOT reduce the deployment count.** Vercel creates the deployment first, then runs the
+ignore command and marks it `Canceled`. The deployment still exists and still counts. Vercel's
+[monorepo doc](https://vercel.com/docs/monorepos) states it outright:
 
-Vercel creates the deployment first, then runs the ignore command and marks the deployment
-`Canceled`. The deployment still exists and still counts. Vercel's own
-[Builds doc](https://vercel.com/docs/builds) says so explicitly, contrasting the two mechanisms:
+> Canceled builds initiated using the Ignored Build Step **count towards your deployment and
+> concurrent build limits** and so skipping unaffected projects may be a better option for monorepos
+> with many projects.
 
-> **Skipping unaffected projects**: Vercel automatically detects whether a project's files (or its
-> dependencies) have changed and skips deploying projects that are unaffected. This feature reduces
-> unnecessary builds and **doesn't occupy concurrent build slots**.
->
-> **Ignored build step**: You can also write a script that cancels the build for a project if no
-> relevant changes are detected. **This approach still counts toward your concurrent build limits**,
-> but may be useful in certain scenarios.
+(…and "skipping unaffected projects" is unavailable here — see the workspace-requirements section
+above.)
 
-So what this config actually buys:
+So what this config buys:
 
-- ✅ no `npm install` + `next build` on non-frontend commits — build minutes, and the Hobby
-  concurrent-build slot frees almost immediately
-- ✅ non-frontend pushes stop queueing behind each other
+- ✅ no `npm install` + `next build` on non-frontend commits — **build CPU minutes**, which is
+  billable on Pro
+- ✅ the concurrent-build slot frees almost immediately, so non-frontend pushes stop queueing
 - ❌ **does not lower the deployments-per-day count** — a canceled deployment is still a deployment
 
-### The lever that does cut the deployment count
+**On Pro this is fine.** The limit that motivated the story (`api-deployments-free-per-day`, 100/day)
+no longer applies: Pro is 6000/day, 450/hour, 500 concurrent. The remaining benefit is cost, not
+quota.
+
+### `git.deploymentEnabled` — considered, and now moot
 
 `git.deploymentEnabled` in `vercel.json` prevents a deployment from being *created at all* for
 matching branches ([Git Configuration](https://vercel.com/docs/project-configuration/git-configuration)).
 It is branch-pattern based (minimatch), not path based, so it cannot express "only when `frontend/`
-changed" — it can only stop whole branches from deploying. Example, if preview URLs for story
-branches are judged not worth the quota:
+changed" — it can only stop whole branches deploying:
 
 ```json
 { "git": { "deploymentEnabled": { "*": false, "dev": true, "main": true } } }
 ```
 
-**This is deliberately NOT configured** — it removes per-PR preview URLs, which is a workflow
-decision for the operator, not a session's to make. Same class as "upgrade to Pro": an operator
-call.
+It was the only lever that would have cut the deployment *count* on Hobby, and was deliberately left
+unset because it removes per-PR preview URLs — a workflow call for the operator. **With the Pro
+upgrade it is unnecessary**: the quota ceiling is gone, so there is no reason to trade away preview
+URLs. Recorded here only so a future session does not re-derive it.
 
 ## Verification
 
 Two-sided verification of the **exit-code direction and cwd-robustness** was done locally against
 real commits in this repo (table above) — that is the half most likely to be silently inverted.
 
-**Live Vercel verification is still open** (this session had no Vercel dashboard, CLI, or connector
-access). To close it, after this merges to `dev`:
+1. ✅ **Root Directory confirmed `frontend`** (dashboard, 2026-08-04) — so Vercel does read
+   `frontend/vercel.json`. Had it read the repo root, the file would have been inert and the config
+   would have done nothing.
+2. ⏳ **A non-frontend commit must show `Canceled`**, with the ignore-step log ending in something
+   like `The Ignored Build Step exited with 0, deployment canceled`.
+3. ⏳ **A frontend commit must build and deploy normally.** Do not accept check 2 alone — a config
+   that skips *everything* produces an identical-looking `Canceled`, which is the exact failure mode
+   described above. The PR #580 merge commit (`85cd01bc`, which changed `frontend/vercel.json`) is a
+   free instance of this check.
 
-1. Confirm Settings → General → **Root Directory** reads `frontend`. If it reads the repo root
-   instead, move `frontend/vercel.json` to the repo root — Vercel only reads `vercel.json` from the
-   Root Directory, so in that case this config is inert and nothing changes.
-2. Push a **non-frontend** commit → that deployment should show **Canceled**, with the ignore-step
-   log ending in something like `The Ignored Build Step exited with 0, deployment canceled`.
-3. Push a **frontend** commit → it must **build and deploy normally**. Do not accept step 2 alone;
-   a config that skips everything produces an identical-looking "Canceled" and is the exact failure
-   mode described above.
-
-Merging this PR is itself a frontend change (`frontend/vercel.json`), so it will run one build —
-that is expected and is also a free instance of check 3.
+Note that `frontend/vercel.json` reached `dev` before `main`, so production kept building
+unfiltered until the following `dev → main` merge.
