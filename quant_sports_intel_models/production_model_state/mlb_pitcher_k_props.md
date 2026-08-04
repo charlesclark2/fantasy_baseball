@@ -15,14 +15,28 @@ _PROD-STATE-1d · written 2026-08-04 · grounded in the served S3/DynamoDB artif
 
 ## (2) Architecture — champion + why it won
 
-- **Champion: `poisson_glm_k`** — a scikit-learn `PoissonRegressor` GLM (bundle = regressor + scaler + imputer + feature list + λ) on the market-blind recency feature set, with a coverage recalibration **λ = 0.85** applied to the spread; the predictive distribution is realized by **10,000-draw Monte-Carlo** at serve time. Source: `betting_ml/scripts/prop_pricing/fit_prop_pricing.py` (+ `betting_ml/utils/prop_pricing.py`).
+- **Champion: `poisson_glm_k`** — a scikit-learn **`PoissonRegressor(alpha=1.0, max_iter=400)`** on `StandardScaler`-transformed, median-imputed features, with a coverage recalibration **λ = 0.85** applied to the spread; the predictive distribution is realized by **10,000-draw Monte-Carlo** at serve time. Source: `betting_ml/scripts/prop_pricing/fit_prop_pricing.py` (+ `betting_ml/utils/prop_pricing.py`, `bakeoff_strikeouts.py`).
+- **Exact served pipeline (the bundle's own `serve` string, `fit_prop_pricing.py:612-617`):** `mu = clip(glm.predict(scaler.transform(impute(X[features]))), 0.3, None)` → `K ~ Poisson(mu)` → `scale_spread(K, λ)` → quantile grid + p_over. Bundle keys: `model` (the fitted GLM), `scaler`, `impute` (per-feature training medians), `features`, `spread_scale` (λ), `n_draws=10_000`, `version="strikeout_glm_v1"`.
+- **λ fit:** one robust scalar, fit on the TRAIN predictive only (≤3,000-row subsample cap) with `target="coverage"` — minimises |coverage@80 − 0.80| (the served calib_80 objective; the bake-off's comparison λ used `target="pit"`). Fitted value 0.85 < 1 ⇒ the raw Poisson predictive was slightly over-wide and is tightened.
+- **Fixed constants (pre-registered, not tuned per fit):** MC seed 42 at fit / 7 at serve; framing γ = 0.04; EB pseudo-counts career→league 400, season→career 250; recency effective-PA 45 (7d) / 140 (30d), shrink strength 130; default reach rate 0.31.
 - **Bake-off (E5.2, 2026-06-25, `bakeoff_strikeouts.py` → `ablation_results/e5_2_strikeout_bakeoff.md`):** 9 pre-registered configs = 7 hand-built **compound Beta-Binomial** variants (K = K-rate × batters-faced; rate-construction × framing × lineup-log5 ablations) + **LightGBM-Poisson** + **Poisson GLM**, scored under E1.1 purged walk-forward CV on CRPS + coverage@80 + PIT-KS + at-the-line ECE, **one PBO over the full grid = 0.0** (overfit risk low).
 - **Why the GLM won:** selection rule = min-CRPS **among well-calibrated**. LGBM had the best raw CRPS (1.2265 vs the GLM's 1.2358) but worse PIT-KS (0.1042 vs 0.0813); the GLM had the best PIT-KS + near-best CRPS + near-zero bias (+0.087) and is interpretable. Both learned classes beat every hand-built compound variant (best compound CRPS 1.2703).
 - **Fallback:** the compound Beta-Binomial (`--model compound`, analytic params JSON) is retained as the interpretable fallback; it is **not** what serves.
 
 ## (3) Feature contract (served)
 
-Market-blind by contract (`assert_market_blind`; the K line enters only at the ECE/transparency comparison, never the model). Every predictor is strictly-prior / pregame:
+Market-blind by contract (`assert_market_blind`; the K line enters only at the ECE/transparency comparison, never the model). Every predictor is strictly-prior / pregame.
+
+**The exact 17-column served feature list** (`bakeoff_strikeouts._LEARNED_FEATURES` — also stored in the bundle's `features` key, so the served artifact carries its own contract):
+
+```
+eb_pitcher_k, league_k_rate, opp_lineup_k_pct, framing_z, reach_rate_trailing,
+starter_ip_mu, starter_ip_dispersion, k_career, bf_career, k_season, bf_season,
+k_pct_7d, k_pct_30d, whiff_rate_30d, csw_pct_3start, velo_delta_3start,
+fastball_velo_trend
+```
+
+By family:
 
 - **Trailing K-rate components** (leak-clean `ROWS … 1 PRECEDING` windows): career + season strikeouts / batters-faced / outs; EB-shrunk season→career→league (pseudo-counts 250/400).
 - **Recency (the E5.2 "in-season stuff change" fix, the winning feature family):** `k_pct_7d` / `k_pct_30d` trailing-window rates (effective-PA shrink 45/140 toward the career posterior), CSW last-3-starts, velocity trend — fed **raw** to the GLM (the bake-off showed recency helps only when a model weights it).
