@@ -118,6 +118,29 @@ SCORING_KEY_MAP: dict[str, tuple[str, ...]] = {
     "pts_allow_21_27": ("dst_pa_g_21_27",),
     "pts_allow_28_34": ("dst_pa_g_28_34",),
     "pts_allow_35p": ("dst_pa_g_35_45", "dst_pa_g_46p"),
+    # ── NF-C0e: team defence — YARDS allowed ──────────────────────────────────────────────────
+    # These keys are SELF-DESCRIBING, which is what let NF-C0e fix the yards ladder's cut points:
+    # `espn.py`'s identity evidence pinned the ORDER of ESPN's 128..136 but explicitly NOT their
+    # extent, and these nine names supply exactly the missing half. Nine rungs, same edges, both
+    # platforms — so unlike the points table above there is NO boundary to disclose here.
+    # ⚠️ ONE naming quirk: Sleeper spells the top rung `0_100` while ESPN calls it "under 100". We
+    # resolve as `< 100`; measured cost is 1 team-game in 13,912 since 1999 sitting exactly on 100.
+    "yds_allow_0_100": ("dst_ya_g_0_99",),
+    "yds_allow_100_199": ("dst_ya_g_100_199",),
+    "yds_allow_200_299": ("dst_ya_g_200_299",),
+    "yds_allow_300_349": ("dst_ya_g_300_349",),
+    "yds_allow_350_399": ("dst_ya_g_350_399",),
+    "yds_allow_400_449": ("dst_ya_g_400_449",),
+    "yds_allow_450_499": ("dst_ya_g_450_499",),
+    "yds_allow_500_549": ("dst_ya_g_500_549",),
+    "yds_allow_550p": ("dst_ya_g_550p",),
+    # ── NF-C0e: long-touchdown bonuses ────────────────────────────────────────────────────────
+    # Mapped EXPLICITLY even though Sleeper's key happens to equal our canonical key. Relying on
+    # `apply_scoring_map`'s pass-through to land them would make a real mapping look like an
+    # accident and would break the moment either name moved.
+    "pass_td_40p": ("pass_td_40p",),
+    "rush_td_40p": ("rush_td_40p",),
+    "rec_td_40p": ("rec_td_40p",),
 }
 
 # Per-position reception premiums → `position_bonuses` (see the module docstring, point 1).

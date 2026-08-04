@@ -1,6 +1,6 @@
 # NF1.6 — BASE 2026 K + DST season projections (position-universe extension)
 
-**Model:** `nfl_fantasy_kdst_base_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-07-31T19:08:08.445222+00:00
+**Model:** `nfl_fantasy_kdst_base_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-08-04T04:49:04.857112+00:00
 
 > ⚖️ **A PROJECTION PRODUCT, edge-independent** — no `best_alpha`/PBO/DSR/CLV gate (that is the betting posture). The gate is FACE-VALIDITY + COVERAGE + honest uncertainty.
 
@@ -10,15 +10,16 @@
 
 Lag-1 autocorrelation of the PER-GAME rate, re-measured from this run's own training panel (640 team-season rows, targets 2006–2025):
 
-| component        |   n |   lag1_r | declared_noise   |
-|:-----------------|----:|---------:|:-----------------|
-| def_sacks        | 640 |    0.270 | False            |
-| def_int          | 640 |    0.268 | False            |
-| def_fumble_rec   | 640 |    0.230 | False            |
-| def_td           | 640 |    0.130 | True             |
-| st_td            | 640 |    0.230 | False            |
-| def_safety       | 640 |    0.011 | True             |
-| def_blocked_kick | 640 |    0.061 | True             |
+| component         |   n |   lag1_r | declared_noise   |
+|:------------------|----:|---------:|:-----------------|
+| def_sacks         | 640 |    0.270 | False            |
+| def_int           | 640 |    0.268 | False            |
+| def_fumble_rec    | 640 |    0.230 | False            |
+| def_td            | 640 |    0.130 | True             |
+| st_td             | 640 |    0.230 | False            |
+| def_safety        | 640 |    0.011 | True             |
+| def_blocked_kick  | 640 |    0.061 | True             |
+| def_forced_fumble | 640 |    0.262 | False            |
 
 Three findings drive the whole design:
 
@@ -286,6 +287,14 @@ These numbers are **not** a gate. A projection product whose stated value is com
         "n": 640,
         "r": 0.0,
         "forced_mean": true
+      },
+      "def_forced_fumble": {
+        "slope": 0.3662,
+        "intercept": 0.5421,
+        "league_mean": 0.8713,
+        "n": 640,
+        "r": 0.2624,
+        "forced_mean": false
       }
     },
     "points_allowed": {
@@ -373,6 +382,93 @@ These numbers are **not** a gate. A projection product whose stated value is com
         "28_34",
         "35_45",
         "46p"
+      ]
+    },
+    "yards_allowed": {
+      "slope": 0.4786,
+      "intercept": 178.044,
+      "sos_coef": 2.6152,
+      "league_mean_pg": 340.593,
+      "resid_sd_pg": 28.97,
+      "n": 640,
+      "r": 0.3843
+    },
+    "ya_mix": {
+      "n_games": 13912,
+      "anchors": [
+        289.65,
+        319.83,
+        336.24,
+        352.44,
+        381.82
+      ],
+      "mix": [
+        [
+          0.0057,
+          0.1316,
+          0.4181,
+          0.2173,
+          0.1388,
+          0.0592,
+          0.0219,
+          0.0068,
+          0.0007
+        ],
+        [
+          0.0014,
+          0.0591,
+          0.3443,
+          0.235,
+          0.2092,
+          0.1057,
+          0.0337,
+          0.0097,
+          0.0018
+        ],
+        [
+          0.0,
+          0.0404,
+          0.2812,
+          0.243,
+          0.2325,
+          0.1278,
+          0.0552,
+          0.0159,
+          0.004
+        ],
+        [
+          0.0004,
+          0.0258,
+          0.2213,
+          0.2407,
+          0.2353,
+          0.1714,
+          0.0753,
+          0.0222,
+          0.0075
+        ],
+        [
+          0.0004,
+          0.0087,
+          0.1532,
+          0.1824,
+          0.2383,
+          0.2257,
+          0.1139,
+          0.0537,
+          0.0238
+        ]
+      ],
+      "labels": [
+        "0_99",
+        "100_199",
+        "200_299",
+        "300_349",
+        "350_399",
+        "400_449",
+        "450_499",
+        "500_549",
+        "550p"
       ]
     }
   },

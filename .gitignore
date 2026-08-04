@@ -152,3 +152,8 @@ quant_sports_intel_models/baseball/edge_program/ablation_results/e7_13_artifacts
 # E8.7 — the complex-screen fetch CACHE (regenerable in ~2 min from the Stats API;
 # the screen RESULT, complex_screen.json, IS tracked).
 quant_sports_intel_models/baseball/edge_program/ablation_results/e8_7_artifacts/season_lines.parquet
+
+# NF-C0e follow-up 3 — per-season K/DST backfill reports (regenerable; the projections live
+# in the S3 lake at nfl/fantasy/derived/kdst_projections). The canonical forward-season report is
+# deliberately NOT matched by the 4-digit class and stays tracked.
+quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf1_6_kdst_base_projection_[0-9][0-9][0-9][0-9].md

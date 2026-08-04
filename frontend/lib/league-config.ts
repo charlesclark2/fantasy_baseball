@@ -58,15 +58,18 @@ export const SCORING_CATALOG: StatTerm[] = [
   { key: "pass_int", label: "Interception thrown", group: "passing", default: -2 },
   { key: "pass_cmp", label: "Completion", group: "passing", default: 0, help: "Some leagues add a per-completion bonus." },
   { key: "pass_att", label: "Pass attempt", group: "passing", default: 0 },
+  { key: "pass_td_40p", label: "40+ yard passing TD bonus", group: "passing", default: 0, help: "Extra points for a touchdown pass of 40+ yards, on top of the passing-TD value." },
 
   { key: "rush_yds", label: "Rushing yards", group: "rushing", default: 0.1, help: "Points per rushing yard (0.1 = 1 per 10)." },
   { key: "rush_td", label: "Rushing TD", group: "rushing", default: 6 },
   { key: "rush_att", label: "Rush attempt", group: "rushing", default: 0 },
+  { key: "rush_td_40p", label: "40+ yard rushing TD bonus", group: "rushing", default: 0, help: "Extra points for a rushing touchdown of 40+ yards, on top of the rushing-TD value." },
 
   { key: "rec", label: "Reception (PPR)", group: "receiving", default: 1, help: "1.0 full PPR, 0.5 half, 0 standard." },
   { key: "rec_yds", label: "Receiving yards", group: "receiving", default: 0.1 },
   { key: "rec_td", label: "Receiving TD", group: "receiving", default: 6 },
   { key: "targets", label: "Target", group: "receiving", default: 0 },
+  { key: "rec_td_40p", label: "40+ yard receiving TD bonus", group: "receiving", default: 0, help: "Extra points for a receiving touchdown of 40+ yards, on top of the receiving-TD value." },
 
   { key: "two_pt", label: "2-point conversion", group: "misc", default: 2 },
   { key: "fumbles_lost", label: "Fumble lost", group: "misc", default: -2 },
@@ -101,6 +104,18 @@ export const SCORING_CATALOG: StatTerm[] = [
   { key: "dst_pa_g_28_34", label: "Points allowed 28-34", group: "dst_points_allowed", default: -1 },
   { key: "dst_pa_g_35_45", label: "Points allowed 35-45", group: "dst_points_allowed", default: -3, mergeGroup: "pa_35p" },
   { key: "dst_pa_g_46p", label: "Points allowed 46+", group: "dst_points_allowed", default: -5, mergeGroup: "pa_35p" },
+
+  // NF-C0e — D/ST YARDS allowed. Defaults are 0 because a yards table is an opt-in a minority of
+  // leagues set; seeding it non-zero would invent a rule for every league that does not have one.
+  { key: "dst_ya_g_0_99", label: "Yards allowed under 100", group: "dst_yards_allowed", default: 0 },
+  { key: "dst_ya_g_100_199", label: "Yards allowed 100-199", group: "dst_yards_allowed", default: 0 },
+  { key: "dst_ya_g_200_299", label: "Yards allowed 200-299", group: "dst_yards_allowed", default: 0 },
+  { key: "dst_ya_g_300_349", label: "Yards allowed 300-349", group: "dst_yards_allowed", default: 0 },
+  { key: "dst_ya_g_350_399", label: "Yards allowed 350-399", group: "dst_yards_allowed", default: 0 },
+  { key: "dst_ya_g_400_449", label: "Yards allowed 400-449", group: "dst_yards_allowed", default: 0 },
+  { key: "dst_ya_g_450_499", label: "Yards allowed 450-499", group: "dst_yards_allowed", default: 0 },
+  { key: "dst_ya_g_500_549", label: "Yards allowed 500-549", group: "dst_yards_allowed", default: 0 },
+  { key: "dst_ya_g_550p", label: "Yards allowed 550+", group: "dst_yards_allowed", default: 0 },
 ]
 
 export const SCORING_GROUPS: { id: string; label: string }[] = [
@@ -111,6 +126,7 @@ export const SCORING_GROUPS: { id: string; label: string }[] = [
   { id: "kicking", label: "Kicking (K)" },
   { id: "defense", label: "Team defense (D/ST)" },
   { id: "dst_points_allowed", label: "D/ST points allowed" },
+  { id: "dst_yards_allowed", label: "D/ST yards allowed" },
 ]
 
 /** Rules a real league has that do NOT move a per-player projection or replacement level. Stored in
@@ -156,6 +172,15 @@ export const STAT_FIELD: Record<string, string> = {
   dst_pa_g_0: "paG0", dst_pa_g_1_6: "paG1_6", dst_pa_g_7_13: "paG7_13", dst_pa_g_14_17: "paG14_17",
   dst_pa_g_18_20: "paG18_20", dst_pa_g_21_27: "paG21_27", dst_pa_g_28_34: "paG28_34",
   dst_pa_g_35_45: "paG35_45", dst_pa_g_46p: "paG46p",
+  // NF-C0e — graduated terms. Each cleared a held-out degenerate-baseline gate before earning a
+  // field here; a term that failed it (pat_missed, fum, st_player_td, fumble_rec_td) is
+  // deliberately ABSENT, which is what keeps it reported as captured rather than scored on noise.
+  pass_td_40p: "passTd40p", rush_td_40p: "rushTd40p", rec_td_40p: "recTd40p",
+  def_forced_fumble: "ff",
+  dst_yards_allowed: "yaTot",
+  dst_ya_g_0_99: "yaG0_99", dst_ya_g_100_199: "yaG100_199", dst_ya_g_200_299: "yaG200_299",
+  dst_ya_g_300_349: "yaG300_349", dst_ya_g_350_399: "yaG350_399", dst_ya_g_400_449: "yaG400_449",
+  dst_ya_g_450_499: "yaG450_499", dst_ya_g_500_549: "yaG500_549", dst_ya_g_550p: "yaG550p",
 }
 
 // ── FIELD GOALS: the league's six buckets fold onto the projection's three ────────────────────────

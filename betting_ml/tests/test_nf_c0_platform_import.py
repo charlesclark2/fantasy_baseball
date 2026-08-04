@@ -1094,18 +1094,51 @@ class TestEspnImport:
         assert C.detect_superflex(league.config["roster"]) is False
 
     def test_core_scoring_is_applied(self, espn_payload):
+        """🚨 THIS TEST IS WHY THE BUG IT NOW GUARDS SURVIVED TO PRODUCTION (NF-C0e).
+
+        It is named `..._is_applied` but for its whole life it only asserted that a WEIGHT could be
+        read back under WHATEVER KEY THE ADAPTER HAPPENED TO WRITE — `per_stat["pass_yd"]`. That is
+        a restatement of the code, not a test of it: a mapping table pointing at a key that does not
+        exist anywhere in the catalog satisfies it just as happily as a correct one.
+
+        And it was pointing at a key that does not exist. ESPN's ids 3/24/42/72 mapped to `pass_yd`
+        / `rush_yd` / `rec_yd` / `fum_lost` — SLEEPER's platform keys — instead of the canonical
+        `pass_yds` / `rush_yds` / `rec_yds` / `fumbles_lost` that Sleeper's and Yahoo's adapters both
+        map to. Nothing errored, because NF-C0's contract is that an unrecognised key passes through
+        verbatim and is reported CAPTURED. So every ESPN-imported league scored ZERO for passing,
+        rushing and receiving YARDAGE — the bulk of fantasy points — behind a coverage panel that
+        said so and that nobody read.
+
+        The test now asserts the property its NAME claims: the canonical key, and the APPLIED
+        VERDICT from the real engine. A wrong key cannot satisfy that, because a key with no
+        projection column behind it resolves CAPTURED by construction.
+        """
         from app.backend.services.platform_import import espn
+        from quant_sports_intel_models.fantasy_engine.league_config import LeagueConfig
 
         per_stat = espn.parse_settings_payload(espn_payload).config["scoring"]["per_stat"]
-        assert per_stat["pass_yd"] == 0.04
+        assert per_stat["pass_yds"] == 0.04
         assert per_stat["pass_td"] == 4.0
         assert per_stat["pass_int"] == -1.0
-        assert per_stat["rush_yd"] == 0.1
+        assert per_stat["rush_yds"] == 0.1
         assert per_stat["rush_td"] == 6.0
         assert per_stat["rec"] == 1.0          # the league's own playerRankType reads "PPR"
-        assert per_stat["rec_yd"] == 0.1
+        assert per_stat["rec_yds"] == 0.1
         assert per_stat["rec_td"] == 6.0
-        assert per_stat["fum_lost"] == -1.0
+        assert per_stat["fumbles_lost"] == -1.0
+        # …and none of them are the near-miss spellings that produced the outage.
+        for wrong in ("pass_yd", "rush_yd", "rec_yd", "fum_lost"):
+            assert wrong not in per_stat, (
+                f"{wrong!r} is a PLATFORM key, not a canonical one — it has no projection column, "
+                f"so this league's yardage would score ZERO and be reported CAPTURED")
+
+        cfg = LeagueConfig.from_dict(espn.parse_settings_payload(espn_payload).config)
+        _, report = presets.resolve_config(cfg)
+        verdicts = {t.key: t.verdict for t in report.terms}
+        for key in ("pass_yds", "rush_yds", "rec_yds", "rec", "fumbles_lost"):
+            assert verdicts[key] == "applied", (
+                f"{key} resolved {verdicts[key]!r}; an ESPN league's core yardage must move the "
+                f"board, not be stored and ignored")
 
     def test_unmapped_ids_are_CAPTURED_not_dropped(self, espn_payload):
         """ESPN publishes no stat-id dictionary, so the map is deliberately partial. The contract is
@@ -1435,40 +1468,53 @@ class TestEspnSecondRealLeague:
         assert per_stat["fg_made_0_19"] == per_stat["fg_made_20_29"] == 3.0
         assert per_stat["fg_made_30_39"] == 3.0
 
-    def test_yards_allowed_is_captured_and_never_silently_applied(self, espn_payload_2):
-        """We project no yards-allowed column, so the honest verdict is CAPTURED.
+    def test_yards_allowed_is_now_APPLIED_on_the_right_rungs(self, espn_payload_2):
+        """⭐ NF-C0e INVERTED THIS TEST ON PURPOSE — it used to assert the ladder was CAPTURED.
 
-        The failure this guards is the opposite one: mapping the ladder onto a canonical key with no
-        projection behind it would report it APPLIED at weight 5.0 and contribute nothing — the
-        silent-zero shape, one layer up from the `pointsOverrides` trap.
+        That was the honest verdict while no yards-allowed column existed. NF-C0e projects the nine
+        `proj_dst_ya_g_*` expected-games columns, so the same nine ids now resolve to real canonical
+        keys and the league's own tier table is applied exactly.
+
+        The failure being guarded is unchanged in SPIRIT and is now the more dangerous direction: a
+        mapped ladder must land on the CORRECT RUNG. Reporting APPLIED while paying the "under 100
+        yards" bonus for a 550-yard game would be far worse than the old honest CAPTURED, so this
+        pins the two ENDPOINTS (which fix the ladder's direction) rather than merely its membership.
         """
         from app.backend.services.platform_import import espn
 
         league = espn.parse_settings_payload(espn_payload_2)
-        captured = set(league.unmapped_scoring_keys)
-        assert {f"{i}@dst" for i in (128, 129, 130, 132, 133, 134, 135, 136)} <= captured
-        # Stored faithfully under the platform's own key, so nothing is lost…
         per_stat = league.config["scoring"]["per_stat"]
-        assert per_stat["128@dst"] == 5.0 and per_stat["136@dst"] == -7.0
-        # …and NOT masquerading as one of our canonical D/ST terms.
-        assert not any(k.startswith("dst_ya") for k in per_stat)
+        # the nine rungs are gone from the raw-key namespace…
+        assert not any(k.endswith("@dst") and k[:3].isdigit() and 128 <= int(k[:3]) <= 136
+                       for k in per_stat)
+        assert not any(f"{i}@dst" in league.unmapped_scoring_keys for i in range(128, 137))
+        # …and land on the canonical keys, with the ladder the RIGHT WAY UP.
+        assert per_stat["dst_ya_g_0_99"] == 5.0        # ESPN 128, the BEST rung
+        assert per_stat["dst_ya_g_550p"] == -7.0       # ESPN 136, the WORST rung
+        assert per_stat["dst_ya_g_100_199"] == 3.0
+        assert per_stat["dst_ya_g_450_499"] == -5.0
+        # The ladder is monotone non-increasing, which a shuffled map could not satisfy. Read only
+        # the rungs the league actually SETS: 642070 omits the 300-349 rung entirely (it scores 0
+        # there), and demanding every rung be present would fail on a real league's real settings.
+        order = ("0_99", "100_199", "200_299", "300_349", "350_399",
+                 "400_449", "450_499", "500_549", "550p")
+        rungs = [per_stat[f"dst_ya_g_{b}"] for b in order if f"dst_ya_g_{b}" in per_stat]
+        assert len(rungs) >= 8, f"expected ESPN's nine-rung ladder, got {len(rungs)}"
+        assert rungs == sorted(rungs, reverse=True), rungs
 
-    def test_the_yards_allowed_gap_is_stated_in_plain_language(self, espn_payload_2):
+    def test_the_stale_yards_allowed_caveat_is_GONE_not_reworded(self, espn_payload_2):
+        """The old warning told the user "We don't project yards allowed … a defence that wins by
+        suppressing yardage will be under-rated on your board." That is now FALSE.
+
+        A caveat that has stopped being true is not harmlessly stale — it tells the user their board
+        ignores a rule it actually applies, which is the same class of wrong as claiming to apply
+        one we ignore. So it must be DELETED, and this asserts its absence rather than its wording.
+        """
         from app.backend.services.platform_import import espn
 
         warnings = espn.parse_settings_payload(espn_payload_2).warnings
-        note = [w for w in warnings if "yards allowed" in w.lower()]
-        assert len(note) == 1, warnings
-        # It has to say what it COSTS the user, not merely that a field was skipped.
-        assert "under-rated" in note[0]
-
-    def test_the_yards_allowed_warning_stays_silent_for_a_league_without_it(self, espn_payload):
-        """Conditional disclosure: league 1 sets no yards-allowed tier, so warning it about one
-        would be noise. A caveat that always fires is a caveat nobody reads."""
-        from app.backend.services.platform_import import espn
-
-        warnings = espn.parse_settings_payload(espn_payload).warnings
-        assert not [w for w in warnings if "yards allowed" in w.lower()]
+        assert not [w for w in warnings if "yards allowed" in w.lower()], warnings
+        assert not [w for w in warnings if "under-rated" in w.lower()], warnings
 
     def test_the_points_allowed_boundary_note_is_likewise_conditional(self, espn_payload_2):
         """League 2 scores neither the 18-21 nor the 22-27 tier, so the 21-point misplacement
@@ -1508,15 +1554,29 @@ class TestEspnCapturedKeysAreLegible:
     def test_labels_do_not_invent_a_boundary_we_never_verified(self):
         """⭐ The display-layer form of this map's "verified, not trusted" rule.
 
-        The identity evidence fixes the yards-allowed ladder's ORDER but not its cut points, so a
-        label reading "Yards allowed 100-199" would be a guess shown to a user as fact — the same
-        mistake as a guessed stat id, one layer over. Numbers in these labels are the smell.
+        NF-C0e moved which keys this applies to, and the move is the interesting part. The
+        YARDS-ALLOWED ladder used to be the motivating case: its order was verified and its cut
+        points were not, so its labels named no numbers. Sleeper's self-describing keys then
+        supplied the missing half from a second independent payload, the nine ids became APPLIED,
+        and they left `CAPTURED_LABELS` entirely.
+
+        The LONG-TD pairs did NOT get that second source: 15/16 (and 35/36, 45/46) are a 40+ and a
+        50+ bonus and no payload we hold distinguishes them. So the rule now guards them instead —
+        and it must, because the 40+ column exists now, which makes guessing tempting in a way it
+        was not before. A label reading "50+ yard TD bonus" would be a guess shown to a user as
+        fact; a digit in one of these labels is the smell.
         """
         from app.backend.services.platform_import import espn
 
-        for key in espn._YARDS_ALLOWED_KEYS:
+        long_td_keys = ("15", "16", "35", "36", "45", "46")
+        for key in long_td_keys:
             label = espn.CAPTURED_LABELS[key]
             assert not re.search(r"\d", label), f"{key} label asserts a boundary: {label!r}"
+        # The yards ids must have LEFT the captured-label table — a label for an APPLIED term is a
+        # stale claim that the term is not applied.
+        for key in espn._YARDS_ALLOWED_KEYS:
+            assert key not in espn.CAPTURED_LABELS, (
+                f"{key} is APPLIED now; a 'captured' label for it tells the user the opposite")
 
     def test_the_label_field_is_additive_so_an_older_client_still_renders(self):
         """NF-C0's deploy-skew rule: the API and the frontend ship independently. A client that

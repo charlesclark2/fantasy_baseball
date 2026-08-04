@@ -16,22 +16,58 @@ metrics (k_pct, bb_pct, etc.) remain NULL. The dbt feature model computes
 trailing z-scores from UmpScorecards historical rows; this script just stamps
 the umpire_name so today's game_pk can join via umpire_name.
 
+FU-3 / E11.24-6a-PRE (2026-08-02) — ``--skip-if-exists`` IS NOW PER-GAME AND WORKS ON
+THE S3 LEG. Two defects were fixed together:
+
+  1. IT NEVER RAN IN PRODUCTION. The guard was gated
+     ``if args.skip_if_exists and not args.dry_run and do_sf`` — SF-leg-only — while the
+     box runs ``W11_RAW_WRITE_MODE=s3`` ⇒ ``do_sf=False`` ⇒ the conjunct silently
+     disabled it. So every ~30-min lineup_monitor tick re-fetched the Stats API and
+     re-wrote the WHOLE slate, re-stamping ``loaded_at`` on unchanged rows (measured over
+     lakehouse_raw/umpire_game_log/, 14 slates 07-20..08-02: median 8 distinct same-day
+     ``loaded_at`` instants, range 6-20). That is the documented-but-never-set landmine
+     class (cf. ``W7B_LAKEHOUSE_S3``): a conjunct nobody re-read after an S3 cutover.
+  2. IT WAS AN ANY-ROW CHECK. ``COUNT(*) > 0`` for the date ⇒ once the FIRST game's
+     umpire landed it would have skipped the rest of the slate forever. MLB announces HP
+     umpires in WAVES across the afternoon (7/31: 1→5→7→9→10→11→13→15 games over 7h), so
+     the any-row form would have SWALLOWED every later-announced assignment. Fixing (1)
+     without (2) would have shipped that swallow into production.
+
+The guard is therefore PER-GAME **and CONTENT-AWARE**: it reads the latest
+``data_source='statsapi'`` row per game_pk from the append-only S3 raw mirror and writes
+only the games whose (umpire_id, umpire_name) is absent or CHANGED. Content-awareness is
+free (the Stats API returns the whole slate in one call either way) and buys two things an
+existence-only per-game check does not: a mid-slate UMPIRE REASSIGNMENT is still ingested,
+and the write is skipped only when it provably could not change any output.
+
+⚠️ THE ACHIEVABLE FLOOR IS THE NUMBER OF ANNOUNCEMENT WAVES, NOT ~1 (measured, do not
+   re-litigate). Replaying all 14 slates through this exact filter: 126 write-instants →
+   91 (−28%), median 8 → 6. EVERY surviving write carries at least one genuinely NEW game
+   assignment, so the residual is IRREDUCIBLE — driving it lower necessarily means
+   swallowing a late-announced assignment, which is the regression this change exists to
+   prevent. Two slates (07-28, 08-02) cut to ZERO because every tick on them brought a new
+   game. A one-sided "fewer instants" reading of this lever is therefore WRONG.
+
+FAIL-OPEN on every path (the block has an INC-31/F2 history of silently zeroing): an
+unreadable mirror, a missing glob, or a Snowflake-only write mode resolves to "write
+everything", never to "skip". A guard that could not run is never scored as a pass.
+
 Usage:
     # Dry-run: print extracted assignments without writing
     uv run python scripts/ingest_umpires.py --date 2026-05-01 --dry-run
 
     # Live upsert for today
     uv run python scripts/ingest_umpires.py --date $(date +%Y-%m-%d)
+
+    # Intraday tick: write only games whose assignment is new or changed
+    uv run python scripts/ingest_umpires.py --date $(date +%Y-%m-%d) --skip-if-exists
 """
 
 import argparse
 import logging
 import os
 import sys
-from datetime import date as date_type
-
 import requests
-import snowflake.connector
 from dotenv import load_dotenv
 
 # E11.1-W11 Tier-B: leg-gated dual-write (W11_RAW_WRITE_MODE). SF INSERT on 'snowflake'/'both';
@@ -145,6 +181,111 @@ def fetch_hp_umpires(game_date: str) -> list[dict]:
     return results
 
 
+# ── FU-3: the per-game, content-aware skip guard ──────────────────────────────────────────
+
+def _norm(value) -> str | None:
+    """Normalize an umpire_id / umpire_name for comparison against the S3 mirror.
+
+    The mirror UNIONs rows from four writers plus the one-time Snowflake bridge, so the same
+    logical id can arrive as ``'664983'``, ``664983`` or — the nullable-int→DOUBLE poisoning
+    class — ``664983.0``. Collapse all three to one string. Empty/None collapse to None so a
+    missing id never compares equal to a present one.
+
+    A normalization MISS costs exactly one redundant write (the row is re-stamped), never a
+    swallowed assignment — the failure direction is deliberately the safe one.
+    """
+    if value is None:
+        return None
+    if isinstance(value, float) and value == int(value):
+        value = int(value)
+    text = str(value).strip()
+    if text.endswith(".0") and text[:-2].isdigit():
+        text = text[:-2]
+    return text or None
+
+
+def _key(row: dict) -> tuple[str | None, str | None]:
+    """The comparison key for one assignment: (umpire_id, umpire_name)."""
+    return (_norm(row.get("umpire_id")), _norm(row.get("umpire_name")))
+
+
+def existing_statsapi_assignments(game_date: str, *, conn_factory=None) -> dict | None:
+    """{game_pk: (umpire_id, umpire_name)} already recorded for `game_date`, from the S3 mirror.
+
+    Reads the APPEND-ONLY raw mirror (``lakehouse_raw/umpire_game_log/``) via DuckDB, taking the
+    latest ``loaded_at`` row per game_pk — the same dedup ``stg_statsapi_umpire_game_log`` applies,
+    so this sees exactly what the feature build will see. Scoped to ``data_source='statsapi'``,
+    matching the DELETE scope of insert_rows(), so an ``umpscorecards`` tendency row for a settled
+    game never masks a missing assignment.
+
+    Returns None when the answer could NOT be established (no mirror yet, read error, DuckDB
+    absent). The caller treats None as "write everything" — a check that did not run is not a pass
+    (NF1.7 (a)); the block has an incident history (INC-31, F2) of zeroing unnoticed.
+
+    ⚠️ NEVER hardcode the parquet glob here — ``lh_raw()`` is the shared helper. A hardcoded
+    lakehouse path is the 2026-07-20 phase-1.5 P0 (a deleted key took the whole daily job down).
+    """
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _root not in sys.path:
+        sys.path.insert(0, _root)
+    try:
+        from betting_ml.utils.lakehouse_monitor import duck, is_missing_glob, lh_raw
+    except Exception as exc:  # noqa: BLE001 — no duckdb/betting_ml ⇒ unevaluable, not a pass
+        log.warning("[FU-3] skip-guard unavailable (%s) — writing every assignment.", exc)
+        return None
+
+    conn = None
+    try:
+        conn = duck()
+        # QUALIFY over the RAW rows — deliberately no GROUP BY. A trailing QUALIFY on a grouped
+        # query selects row 1 of 1 and is a silent no-op (the E9.52 mixed-snapshot defect).
+        # try_cast at every use-site: game_date/loaded_at are ISO VARCHAR for live-writer rows and
+        # real DATE/TIMESTAMP for the SF-bridged ones, which union_by_name reconciles to VARCHAR
+        # (the INC-23 landmine).
+        rows = conn.execute(
+            f"""
+            SELECT try_cast(game_pk AS BIGINT) AS game_pk, umpire_id, umpire_name
+            FROM read_parquet('{lh_raw(_LAKEHOUSE_SOURCE)}', union_by_name=true)
+            WHERE try_cast(game_date AS DATE) = try_cast(? AS DATE)
+              AND data_source = 'statsapi'
+              AND try_cast(game_pk AS BIGINT) IS NOT NULL
+            QUALIFY row_number() OVER (
+                PARTITION BY try_cast(game_pk AS BIGINT)
+                ORDER BY try_cast(loaded_at AS TIMESTAMP) DESC NULLS LAST
+            ) = 1
+            """,
+            [game_date],
+        ).fetchall()
+    except Exception as exc:  # noqa: BLE001
+        try:
+            missing = is_missing_glob(exc)
+        except Exception:  # noqa: BLE001
+            missing = False
+        if missing:
+            return {}  # mirror exists but holds nothing for this source yet — nothing to skip
+        log.warning("[FU-3] skip-guard read failed (%s) — writing every assignment.", exc)
+        return None
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+    return {int(gp): (_norm(uid), _norm(uname)) for gp, uid, uname in rows}
+
+
+def filter_new_assignments(assignments: list[dict], existing: dict | None) -> list[dict]:
+    """The games worth writing: those absent from `existing` or whose umpire CHANGED.
+
+    PURE (no IO) so the decision is unit-testable offline. `existing` None ⇒ fail OPEN (every
+    assignment is written), which is what an unevaluable guard must resolve to.
+    """
+    if existing is None:
+        return list(assignments)
+    return [a for a in assignments if existing.get(int(a["game_pk"])) != _key(a)]
+
+
 def insert_rows(conn, rows: list[dict]) -> int:
     # Idempotent: replace any existing statsapi assignment rows for these game_pks
     # before inserting. The append-only INSERT used to bloat the table when the
@@ -173,35 +314,41 @@ def main():
                         help="Print extracted assignments without writing to Snowflake")
     parser.add_argument("--skip-if-exists", action="store_true",
                         help=(
-                            "E11.11: skip ingest if today's statsapi umpire assignments "
-                            "are already in the table. MLB posts assignments once (afternoon); "
-                            "subsequent lineup_monitor fires are no-ops."
+                            "FU-3 (was E11.11): write only the games whose HP-umpire assignment "
+                            "is NEW or CHANGED versus the S3 raw mirror, so a repeated "
+                            "lineup_monitor tick stops re-stamping loaded_at on unchanged rows. "
+                            "PER-GAME and content-aware — a later-announced assignment still "
+                            "lands on the next tick. Fails OPEN (writes everything) whenever the "
+                            "mirror cannot be read."
                         ))
     args = parser.parse_args()
 
     # E11.1-W11 Tier-B: which legs run (SF INSERT and/or S3 mirror) per W11_RAW_WRITE_MODE.
     do_sf, do_s3 = lakehouse_write_legs(w11_write_mode())
 
-    # E11.11 — once-captured guard: skip the MLB API call if today's data is already present.
-    # The delete-then-insert is idempotent, but hitting the API and re-writing on every
-    # lineup_monitor fire (~every 10 min) is wasteful after the first successful ingest.
-    # SF-leg-only optimization (there's no Snowflake to check in s3-only mode).
-    if args.skip_if_exists and not args.dry_run and do_sf:
-        conn = get_snowflake_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    f"SELECT COUNT(*) FROM {TABLE_FQN} "
-                    f"WHERE game_date = %(d)s AND data_source = 'statsapi'",
-                    {"d": args.date},
-                )
-                existing = cur.fetchone()[0]
-        finally:
-            conn.close()
-        if existing > 0:
-            log.info("[E11.11] %d umpire assignment(s) already ingested for %s, skipping.",
-                     existing, args.date)
-            return
+    # FU-3: read what is ALREADY recorded for this slate BEFORE hitting the Stats API, so the
+    # filter below is decided against pre-fetch state. This replaces the E11.11 any-row COUNT(*)
+    # over Snowflake — deleting a per-tick Snowflake CONNECT from the guard path (see the module
+    # docstring: on the box it was already unreachable behind `and do_sf`, so this removes a
+    # LATENT waker that would fire the moment W11_RAW_WRITE_MODE went back to snowflake|both,
+    # not a live one).
+    #
+    # The Stats API returns the WHOLE slate in one request, so there is nothing to gain by
+    # short-circuiting the fetch — and a short-circuit would need to know the slate size, which is
+    # exactly the assumption that made the any-row form swallow late announcements. Fetch, then
+    # filter.
+    existing = None
+    if args.skip_if_exists and not args.dry_run:
+        if do_s3:
+            existing = existing_statsapi_assignments(args.date)
+        else:
+            # Snowflake-only write mode writes no S3 mirror, so there is nothing to compare
+            # against. Stay OPEN and say so — a silently-inert guard is the landmine this
+            # story exists to remove, not one to re-introduce facing the other way.
+            log.warning(
+                "[FU-3] --skip-if-exists is a no-op under W11_RAW_WRITE_MODE=%s (no S3 mirror "
+                "to compare against) — writing every assignment.", w11_write_mode(),
+            )
 
     assignments = fetch_hp_umpires(args.date)
 
@@ -215,6 +362,21 @@ def main():
     if not assignments:
         log.warning("No HP umpire assignments found for %s — nothing to write.", args.date)
         return
+
+    if args.skip_if_exists and not args.dry_run:
+        fetched = len(assignments)
+        assignments = filter_new_assignments(assignments, existing)
+        skipped = fetched - len(assignments)
+        if not assignments:
+            log.info(
+                "[FU-3] all %d assignment(s) for %s are unchanged since the last write — "
+                "skipping (no loaded_at re-stamp).", fetched, args.date,
+            )
+            return
+        log.info(
+            "[FU-3] %d of %d assignment(s) for %s are new or changed (%d unchanged, skipped).",
+            len(assignments), fetched, args.date, skipped,
+        )
 
     if do_sf:
         log.info("Connecting to Snowflake...")

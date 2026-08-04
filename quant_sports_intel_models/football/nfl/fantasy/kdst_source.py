@@ -33,6 +33,7 @@ parquet so a re-run (or an offline one) is instant.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
 
@@ -67,6 +68,63 @@ def norm_team(t) -> str | None:
     return _TEAM_ALIASES.get(s, s)
 
 
+def _sql_fingerprint(sql: str) -> str:
+    """A short, stable digest of the QUERY TEXT, used as part of a cache filename.
+
+    🚨 WHY THIS EXISTS (NF-C0e, 2026-08-03 — this shipped a graduated term as all-NULL to prod).
+    These caches were keyed on `(lo, hi)` ALONE, so a cache file stayed valid forever no matter how
+    the query changed. NF-C0e added `def_fumbles_forced` to `_TEAM_DEF_SQL`; the on-disk
+    `team_defense_1999_2026.parquet` predated that edit, so the loader returned the OLD column set,
+    `build_dst_training_panel` honestly SKIPPED the absent component, and `proj_def_forced_fumble`
+    published 0/32 non-null — a term the story had graduated on held-out evidence, silently not
+    applied.
+
+    ⚠️ THE FAILURE IS INVISIBLE BY DESIGN, WHICH IS WHY THE KEY (NOT A WARNING) IS THE CURE. The
+    absent-component path is deliberately quiet: skipping a component the history does not carry is
+    the HONEST behaviour (a zero-fill would fabricate data and score as APPLIED). That correct
+    fallback turns "my cache is stale" into "this league feature simply isn't available" — the same
+    shape as a column that is declared everywhere and computed nowhere. A stale cache must therefore
+    be impossible to READ, not merely noisy.
+
+    ⭐ AND IT CANNOT BE CAUGHT IN A FRESH CHECKOUT: a new worktree has no `artifacts/` cache at all,
+    so it rebuilds from the lake and PASSES, while a working checkout with a months-old parquet
+    fails. Same class as the board-export stale-source landmine in CLAUDE.md — an on-disk artifact
+    precedence bug cannot be validated where the artifact is absent.
+
+    Digest of the SQL only: the season range stays in the filename so the cache remains readable at
+    a glance, and a superseded fingerprint (including the legacy un-fingerprinted file) is pruned
+    when the new one is written, so the directory cannot accumulate one parquet per historical
+    edit."""
+    return hashlib.sha256(" ".join(sql.split()).encode()).hexdigest()[:10]
+
+
+def _read_cached_lake_query(con, sql: str, cache: Path, *, use_cache: bool, refresh: bool,
+                            post) -> pd.DataFrame:
+    """Run `sql` against the lake, caching to `cache` — the shared body of every cached lake read.
+
+    One implementation so a new cached reader cannot re-introduce the stale-schema bug by copying
+    the old hand-rolled read/write pair (`test_kdst_cache_invalidation.py` pins that every cached
+    reader routes through here)."""
+    if use_cache and not refresh and cache.exists():
+        return pd.read_parquet(cache)
+    _ensure_s3(con)
+    df = post(con.sql(sql).df())
+    if use_cache:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(cache, index=False)
+        # Drop every superseded sibling for this (reader, season-range): the legacy
+        # un-fingerprinted parquet and any older fingerprint. Best-effort — a cache we failed to
+        # delete is stale-but-unread, which is the safe direction.
+        prefix = cache.stem.rsplit("_", 1)[0]
+        for old in cache.parent.glob(f"{prefix}*.parquet"):
+            if old != cache:
+                try:
+                    old.unlink()
+                except OSError:  # noqa: PERF203 — a locked/removed file must not fail the read
+                    log.warning("could not prune superseded cache file %s", old)
+    return df
+
+
 def _ensure_s3(con) -> None:
     """Make a plain DuckDB connection able to `delta_scan` the S3 lake (idempotent, best-effort —
     a connection that already has the extension/secret, or has no network, just proceeds).
@@ -98,7 +156,12 @@ select
     sum(coalesce(special_teams_tds, 0))::double             as st_td,
     sum(coalesce(def_safeties, 0))::double                  as def_safety,
     sum(coalesce(fg_blocked, 0) + coalesce(pat_blocked, 0)
-        + coalesce(pt_blocked, 0))::double                  as def_blocked_kick
+        + coalesce(pt_blocked, 0))::double                  as def_blocked_kick,
+    -- NF-C0e: `def_fumbles_forced` was in this table all along and simply never selected, so a
+    -- league scoring a forced fumble had that rule CAPTURED. Distinct from `fumble_recovery_opp`
+    -- (`def_fumble_rec`): a defense can force a fumble the OFFENSE recovers, and many leagues pay
+    -- for both events separately.
+    sum(coalesce(def_fumbles_forced, 0))::double            as def_forced_fumble
 from {team_week}
 where season_type = 'REG'
   and season between {lo} and {hi}
@@ -112,16 +175,14 @@ def load_team_defense_seasons(con, lo: int, hi: int, *,
                               cache_dir: Path = _TEAM_DEF_CACHE,
                               use_cache: bool = True, refresh: bool = False) -> pd.DataFrame:
     """Team-season DST raw components for seasons `lo..hi` (REG only), one row per (season, team)."""
-    cache = cache_dir / f"team_defense_{lo}_{hi}.parquet"
-    if use_cache and not refresh and cache.exists():
-        return pd.read_parquet(cache)
-    _ensure_s3(con)
-    df = con.sql(_TEAM_DEF_SQL.format(team_week=relation, lo=int(lo), hi=int(hi))).df()
-    df["team"] = df["team"].map(norm_team)
-    df = df.dropna(subset=["team"]).reset_index(drop=True)
-    if use_cache:
-        cache.parent.mkdir(parents=True, exist_ok=True)
-        df.to_parquet(cache, index=False)
+    sql = _TEAM_DEF_SQL.format(team_week=relation, lo=int(lo), hi=int(hi))
+    cache = cache_dir / f"team_defense_{lo}_{hi}_{_sql_fingerprint(sql)}.parquet"
+
+    def _post(df: pd.DataFrame) -> pd.DataFrame:
+        df["team"] = df["team"].map(norm_team)
+        return df.dropna(subset=["team"]).reset_index(drop=True)
+
+    df = _read_cached_lake_query(con, sql, cache, use_cache=use_cache, refresh=refresh, post=_post)
     log.info("team defense seasons %d–%d: %d team-seasons", lo, hi, len(df))
     return df
 
@@ -170,6 +231,56 @@ def load_team_points(con, lo: int, hi: int, *, staging: str = STAGING_SCHEMA) ->
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+# 2b. Team YARDS ALLOWED — NF-C0e's tier family (the points-allowed twin)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# A team's yards ALLOWED in a game is its OPPONENT's total offense, so the frame is built by
+# joining `stg_nfl_team_week` to itself through `opponent_team`.
+#
+# ⭐⭐ THE ONE THING THAT IS EASY TO GET WRONG HERE: `total_yards` IS **GROSS**, AND THE FANTASY
+# PLATFORMS SCORE **NET**. nflverse's team `passing_yards` is gross passing yards and
+# `total_yards` is exactly `passing_yards + rushing_yards` (verified: the identity holds on all
+# 13,912 team-games). The NFL's official "total net yards" — which is the number in the box score
+# that ESPN and Sleeper grade a D/ST on — SUBTRACTS sack yardage. Using the gross column would
+# overstate every defense by ~15 yards/game and push the whole league up roughly one tier rung.
+# Validated against published league averages: NET gives 331.6 yards/g in 2023 against the NFL's
+# published 331.1, while GROSS gives 349.0. `sack_yards_lost` is stored NEGATIVE, hence the ADD.
+_TEAM_GAME_YARDS_SQL = """
+with tw as (
+    select season, week, team, opponent_team,
+           coalesce(passing_yards, 0)::double   as pass_yds,
+           coalesce(rushing_yards, 0)::double   as rush_yds,
+           coalesce(sack_yards_lost, 0)::double as sack_yds
+    from {staging}.stg_nfl_team_week
+    where season_type = 'REG' and team is not null and opponent_team is not null
+      and season between {lo} and {hi}
+)
+select season, week,
+       opponent_team                          as team,      -- the DEFENSE
+       (pass_yds + rush_yds + sack_yds)       as yards_against
+from tw
+"""
+
+
+def load_team_game_yards(con, lo: int, hi: int, *, staging: str = STAGING_SCHEMA) -> pd.DataFrame:
+    """One row per REG (season, week, team) with that team's NET yards ALLOWED.
+
+    The per-GAME grain is required for the same reason points allowed needs it: yards-allowed
+    scoring is a per-game TIER table, so the season projection needs a DISTRIBUTION, not a mean."""
+    df = con.sql(_TEAM_GAME_YARDS_SQL.format(staging=staging, lo=int(lo), hi=int(hi))).df()
+    df["team"] = df["team"].map(norm_team)
+    return df.dropna(subset=["team"]).reset_index(drop=True)
+
+
+def load_team_yards(con, lo: int, hi: int, *, staging: str = STAGING_SCHEMA) -> pd.DataFrame:
+    """Team-season aggregate of `load_team_game_yards`: games, yards_against + the per-game rate."""
+    g = load_team_game_yards(con, lo, hi, staging=staging)
+    ts = (g.groupby(["season", "team"], as_index=False)
+            .agg(team_games=("yards_against", "size"), yards_against=("yards_against", "sum")))
+    ts["yards_against_pg"] = ts["yards_against"] / ts["team_games"]
+    return ts
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
 # 3. KICKER stat lines (FG by distance bucket + PAT)
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # ⚠️ The kicking block lives in the raw `stats_player_week` Delta (145 cols) — NOT in
@@ -211,15 +322,14 @@ def load_kicker_seasons(con, lo: int, hi: int, *,
                         cache_dir: Path = _KICKER_CACHE,
                         use_cache: bool = True, refresh: bool = False) -> pd.DataFrame:
     """Kicker-season FG (by distance bucket) + PAT lines for seasons `lo..hi` (REG only)."""
-    cache = cache_dir / f"kicker_seasons_{lo}_{hi}.parquet"
-    if use_cache and not refresh and cache.exists():
-        return pd.read_parquet(cache)
-    _ensure_s3(con)
-    df = con.sql(_KICKER_SQL.format(player_week=relation, lo=int(lo), hi=int(hi))).df()
-    df["team"] = df["team"].map(norm_team)
-    if use_cache:
-        cache.parent.mkdir(parents=True, exist_ok=True)
-        df.to_parquet(cache, index=False)
+    sql = _KICKER_SQL.format(player_week=relation, lo=int(lo), hi=int(hi))
+    cache = cache_dir / f"kicker_seasons_{lo}_{hi}_{_sql_fingerprint(sql)}.parquet"
+
+    def _post(df: pd.DataFrame) -> pd.DataFrame:
+        df["team"] = df["team"].map(norm_team)
+        return df
+
+    df = _read_cached_lake_query(con, sql, cache, use_cache=use_cache, refresh=refresh, post=_post)
     log.info("kicker seasons %d–%d: %d kicker-seasons", lo, hi, len(df))
     return df
 

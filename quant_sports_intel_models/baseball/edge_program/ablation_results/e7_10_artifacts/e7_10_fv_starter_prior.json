@@ -1,0 +1,1650 @@
+{
+  "study_version": "e7.10-v1",
+  "generated_at": "2026-08-04T03:58:27.793752+00:00",
+  "population": "starter",
+  "cohort_parquet": "/Users/charlesclark/Documents/machine_learning/baseball_betting/e7.10-fv-rookie-starter-prior/quant_sports_intel_models/baseball/edge_program/ablation_results/e7_10_artifacts/fv_starter_cohort__strictly_prior_season.parquet",
+  "best_alpha": 0,
+  "gates": {
+    "pbo_max": 0.2,
+    "dsr_min": 0.95,
+    "fdr_q": 0.1,
+    "fold_consistency_alpha": 0.2
+  },
+  "coverage": {
+    "asof_rule": "strictly_prior_season",
+    "proj_rows": 13892,
+    "pairs_rows": 23949,
+    "highest_level_rows": 7474,
+    "with_debut_cohort": 1606,
+    "season_ceiling": 2025,
+    "strict_label_window": false,
+    "dropped_open_label_window": 99,
+    "board_first_season": 2018,
+    "first_gradable_debut_cohort": 2019,
+    "labelled_starters_in_gradable_cohorts": 358,
+    "fv_coverage_of_gradable_labelled_starters": 0.7458,
+    "fv_coverage_pooled_incl_pre_board_cohorts": 0.4935,
+    "study_rows": 1507,
+    "labelled_rows": 803,
+    "labelled_starters": 541,
+    "labelled_with_fv": 324,
+    "labelled_starters_with_fv": 267,
+    "fv_coverage_of_labelled_starters": 0.4935,
+    "fv_coverage_by_cohort": {
+      "2016": 0.0,
+      "2017": 0.0,
+      "2018": 0.0,
+      "2019": 0.68,
+      "2020": 0.6923,
+      "2021": 0.7818,
+      "2022": 0.6154,
+      "2023": 0.8214,
+      "2024": 0.898,
+      "2025": 0.7273
+    },
+    "labelled_starters_by_cohort": {
+      "2016": 67,
+      "2017": 56,
+      "2018": 60,
+      "2019": 50,
+      "2020": 52,
+      "2021": 55,
+      "2022": 52,
+      "2023": 56,
+      "2024": 49,
+      "2025": 44
+    },
+    "metric_label_coverage": {
+      "gb_pct": 803,
+      "k_pct": 803,
+      "bb_pct": 803
+    }
+  },
+  "verdicts": {
+    "bh_fdr_alpha": 0.1,
+    "p_one_sided": {
+      "gb_pct": 0.7366834511750033,
+      "k_pct": 0.5731314602281802,
+      "bb_pct": 0.8857982623679878
+    },
+    "bh_survives": {
+      "k_pct": false,
+      "gb_pct": false,
+      "bb_pct": false
+    },
+    "per_metric": {
+      "gb_pct": {
+        "metric": "gb_pct",
+        "n_folds": 6,
+        "n_scored": 233,
+        "eval_cohorts": [
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "crps_mechanism": 0.03174454761920376,
+        "crps_matched_foil": 0.031582214332643875,
+        "crps_served_reference": 0.031084652902994583,
+        "rel_gain_vs_matched_foil": -0.00514,
+        "fold_win_rate": 0.16666666666666666,
+        "fold_wins": 1,
+        "fold_wins_required": 5,
+        "p_one_sided": 0.7366834511750033,
+        "bh_survives": false,
+        "pbo_eligible": 0.4,
+        "dsr_eligible": 0.12716091139758984,
+        "oracle_floor_holds": {
+          "A1_mle_fv": true,
+          "C0_mle_recal": true,
+          "L0_mle_served": true
+        },
+        "anchors": {
+          "required_anchors_present": true,
+          "missing_anchors": [],
+          "best_arm": "A1_mle_fv",
+          "foil": "C0_mle_recal",
+          "Z_fv_permuted__vs_A1_mle_fv": {
+            "available": true,
+            "challenger": "Z_fv_permuted",
+            "defender": "A1_mle_fv",
+            "mean_gap": -0.0001944372783936974,
+            "challenger_fold_wins": 4,
+            "n_folds": 6,
+            "p_challenger_better": 0.26937981106694747,
+            "violated": false,
+            "alpha": 0.1
+          },
+          "Z_fv_permuted__mae": 0.03155011034081007,
+          "Z_cohort_mean__vs_best": {
+            "available": true,
+            "challenger": "Z_cohort_mean",
+            "defender": "A1_mle_fv",
+            "mean_gap": 0.009374715865631657,
+            "challenger_fold_wins": 0,
+            "n_folds": 6,
+            "p_challenger_better": 0.998136115616599,
+            "violated": false,
+            "alpha": 0.1
+          },
+          "Z_cohort_mean__mae": 0.04111926348483542,
+          "Z_sigma_sharp__vs_best": {
+            "available": true,
+            "challenger": "Z_sigma_sharp",
+            "defender": "A1_mle_fv",
+            "mean_gap": 0.009986006635555024,
+            "challenger_fold_wins": 0,
+            "n_folds": 6,
+            "p_challenger_better": 0.9997525432571075,
+            "violated": false,
+            "alpha": 0.1
+          },
+          "Z_sigma_sharp__mae": 0.04173055425475878,
+          "Z_sigma_wide__vs_best": {
+            "available": true,
+            "challenger": "Z_sigma_wide",
+            "defender": "A1_mle_fv",
+            "mean_gap": 0.10143217410215773,
+            "challenger_fold_wins": 0,
+            "n_folds": 6,
+            "p_challenger_better": 0.9999998572366818,
+            "violated": false,
+            "alpha": 0.1
+          },
+          "Z_sigma_wide__mae": 0.1331767217213615,
+          "inert_anchors": [],
+          "refuted_arms": {}
+        },
+        "anchor_moves": {
+          "Z_fv_permuted": {
+            "pct_rows_moved": 100.0
+          },
+          "Z_sigma_sharp": {
+            "pct_rows_moved": 100.0
+          },
+          "Z_sigma_wide": {
+            "pct_rows_moved": 100.0
+          },
+          "Z_cohort_mean": {
+            "pct_rows_moved": 100.0
+          }
+        },
+        "verdict": "DROP",
+        "ships": false,
+        "reason": "\ud83d\udfe1 no arm clears: best eligible `A1_mle_fv` MAE 0.03174 vs foil 0.03158 (-0.51%, fold win rate 17%; the pre-registered bar is a strict OOS improvement in \u226560% of folds; calibrated clause needs 5/6 at \u03b1=0.2 (got 1; the legacy \u226560% bar would fire 34.4% of the time on a NULL)). DROPPED."
+      },
+      "k_pct": {
+        "metric": "k_pct",
+        "n_folds": 6,
+        "n_scored": 233,
+        "eval_cohorts": [
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "crps_mechanism": 0.023700607525277945,
+        "crps_matched_foil": 0.02365299447009926,
+        "crps_served_reference": 0.02366653210446057,
+        "rel_gain_vs_matched_foil": -0.00201,
+        "fold_win_rate": 0.5,
+        "fold_wins": 3,
+        "fold_wins_required": 5,
+        "p_one_sided": 0.5731314602281802,
+        "bh_survives": false,
+        "pbo_eligible": 0.7,
+        "dsr_eligible": 0.2670450365290905,
+        "oracle_floor_holds": {
+          "A1_mle_fv": true,
+          "C0_mle_recal": true,
+          "L0_mle_served": true
+        },
+        "anchors": {
+          "required_anchors_present": true,
+          "missing_anchors": [],
+          "best_arm": "A1_mle_fv",
+          "foil": "C0_mle_recal",
+          "Z_fv_permuted__vs_A1_mle_fv": {
+            "available": true,
+            "challenger": "Z_fv_permuted",
+            "defender": "A1_mle_fv",
+            "mean_gap": 0.0003029840173884065,
+            "challenger_fold_wins": 3,
+            "n_folds": 6,
+            "p_challenger_better": 0.7518935574073745,
+            "violated": false,
+            "alpha": 0.1
+          },
+          "Z_fv_permuted__mae": 0.024003591542666347,
+          "Z_cohort_mean__vs_best": {
+            "available": true,
+            "challenger": "Z_cohort_mean",
+            "defender": "A1_mle_fv",
+            "mean_gap": 0.0008577841172922618,
+            "challenger_fold_wins": 1,
+            "n_folds": 6,
+            "p_challenger_better": 0.9343040871700831,
+            "violated": false,
+            "alpha": 0.1
+          },
+          "Z_cohort_mean__mae": 0.024558391642570204,
+          "Z_sigma_sharp__vs_best": {
+            "available": true,
+            "challenger": "Z_sigma_sharp",
+            "defender": "A1_mle_fv",
+            "mean_gap": 0.007267355424640681,
+            "challenger_fold_wins": 0,
+            "n_folds": 6,
+            "p_challenger_better": 0.9997865964158374,
+            "violated": false,
+            "alpha": 0.1
+          },
+          "Z_sigma_sharp__mae": 0.03096796294991862,
+          "Z_sigma_wide__vs_best": {
+            "available": true,
+            "challenger": "Z_sigma_wide",
+            "defender": "A1_mle_fv",
+            "mean_gap": 0.07042780356928656,
+            "challenger_fold_wins": 0,
+            "n_folds": 6,
+            "p_challenger_better": 0.9999998754788726,
+            "violated": false,
+            "alpha": 0.1
+          },
+          "Z_sigma_wide__mae": 0.0941284110945645,
+          "inert_anchors": [],
+          "refuted_arms": {}
+        },
+        "anchor_moves": {
+          "Z_fv_permuted": {
+            "pct_rows_moved": 100.0
+          },
+          "Z_sigma_sharp": {
+            "pct_rows_moved": 100.0
+          },
+          "Z_sigma_wide": {
+            "pct_rows_moved": 100.0
+          },
+          "Z_cohort_mean": {
+            "pct_rows_moved": 100.0
+          }
+        },
+        "verdict": "DROP",
+        "ships": false,
+        "reason": "\ud83d\udfe1 no arm clears: best eligible `A1_mle_fv` MAE 0.02370 vs foil 0.02365 (-0.20%, fold win rate 50%; the pre-registered bar is a strict OOS improvement in \u226560% of folds; calibrated clause needs 5/6 at \u03b1=0.2 (got 3; the legacy \u226560% bar would fire 34.4% of the time on a NULL)). DROPPED."
+      },
+      "bb_pct": {
+        "metric": "bb_pct",
+        "n_folds": 6,
+        "n_scored": 233,
+        "eval_cohorts": [
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "crps_mechanism": 0.013033512502288467,
+        "crps_matched_foil": 0.013002627315431253,
+        "crps_served_reference": 0.013004672507685522,
+        "rel_gain_vs_matched_foil": -0.00238,
+        "fold_win_rate": 0.3333333333333333,
+        "fold_wins": 2,
+        "fold_wins_required": 5,
+        "p_one_sided": 0.8857982623679878,
+        "bh_survives": false,
+        "pbo_eligible": 0.6,
+        "dsr_eligible": 0.3479593224446911,
+        "oracle_floor_holds": {
+          "A1_mle_fv": true,
+          "C0_mle_recal": true,
+          "L0_mle_served": true
+        },
+        "anchors": {
+          "required_anchors_present": true,
+          "missing_anchors": [],
+          "best_arm": "A1_mle_fv",
+          "foil": "C0_mle_recal",
+          "Z_fv_permuted__vs_A1_mle_fv": {
+            "available": true,
+            "challenger": "Z_fv_permuted",
+            "defender": "A1_mle_fv",
+            "mean_gap": 0.00034586266548845113,
+            "challenger_fold_wins": 2,
+            "n_folds": 6,
+            "p_challenger_better": 0.8675056591439176,
+            "violated": false,
+            "alpha": 0.1
+          },
+          "Z_fv_permuted__mae": 0.013379375167776916,
+          "Z_cohort_mean__vs_best": {
+            "available": true,
+            "challenger": "Z_cohort_mean",
+            "defender": "A1_mle_fv",
+            "mean_gap": 0.001141410749603821,
+            "challenger_fold_wins": 1,
+            "n_folds": 6,
+            "p_challenger_better": 0.903405779977226,
+            "violated": false,
+            "alpha": 0.1
+          },
+          "Z_cohort_mean__mae": 0.014174923251892286,
+          "Z_sigma_sharp__vs_best": {
+            "available": true,
+            "challenger": "Z_sigma_sharp",
+            "defender": "A1_mle_fv",
+            "mean_gap": 0.003909613933086103,
+            "challenger_fold_wins": 0,
+            "n_folds": 6,
+            "p_challenger_better": 0.9999898799520391,
+            "violated": false,
+            "alpha": 0.1
+          },
+          "Z_sigma_sharp__mae": 0.01694312643537457,
+          "Z_sigma_wide__vs_best": {
+            "available": true,
+            "challenger": "Z_sigma_wide",
+            "defender": "A1_mle_fv",
+            "mean_gap": 0.0394226302967175,
+            "challenger_fold_wins": 0,
+            "n_folds": 6,
+            "p_challenger_better": 0.9999999160056752,
+            "violated": false,
+            "alpha": 0.1
+          },
+          "Z_sigma_wide__mae": 0.052456142799005956,
+          "inert_anchors": [],
+          "refuted_arms": {}
+        },
+        "anchor_moves": {
+          "Z_fv_permuted": {
+            "pct_rows_moved": 100.0
+          },
+          "Z_sigma_sharp": {
+            "pct_rows_moved": 100.0
+          },
+          "Z_sigma_wide": {
+            "pct_rows_moved": 100.0
+          },
+          "Z_cohort_mean": {
+            "pct_rows_moved": 100.0
+          }
+        },
+        "verdict": "DROP",
+        "ships": false,
+        "reason": "\ud83d\udfe1 no arm clears: best eligible `A1_mle_fv` MAE 0.01303 vs foil 0.01300 (-0.24%, fold win rate 33%; the pre-registered bar is a strict OOS improvement in \u226560% of folds; calibrated clause needs 5/6 at \u03b1=0.2 (got 2; the legacy \u226560% bar would fire 34.4% of the time on a NULL)). DROPPED."
+      }
+    }
+  },
+  "power": {
+    "family_size": 3,
+    "strictest_bh_cutoff": 0.0333,
+    "meaningful_rel_crps_gain": 0.03,
+    "per_metric": {
+      "gb_pct": {
+        "state": "GENUINE_ABSENCE",
+        "reason": "`gb_pct`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
+        "retest_trigger": null,
+        "folds_have": 6,
+        "folds_needed": null,
+        "extra_cohorts_needed": null,
+        "max_field_size": null,
+        "observed_sr": -0.2777,
+        "var_trials_sr": 0.060995,
+        "mde_sd_units": 1.35,
+        "mde_as_rel_crps_gain": 0.02499,
+        "detail": {
+          "n_folds": 6,
+          "n_arms": 3
+        }
+      },
+      "k_pct": {
+        "state": "GENUINE_ABSENCE",
+        "reason": "`k_pct`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
+        "retest_trigger": null,
+        "folds_have": 6,
+        "folds_needed": null,
+        "extra_cohorts_needed": null,
+        "max_field_size": null,
+        "observed_sr": -0.0792,
+        "var_trials_sr": 0.050043,
+        "mde_sd_units": 1.35,
+        "mde_as_rel_crps_gain": 0.03429,
+        "detail": {
+          "n_folds": 6,
+          "n_arms": 3
+        }
+      },
+      "bb_pct": {
+        "state": "GENUINE_ABSENCE",
+        "reason": "`bb_pct`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
+        "retest_trigger": null,
+        "folds_have": 6,
+        "folds_needed": null,
+        "extra_cohorts_needed": null,
+        "max_field_size": null,
+        "observed_sr": -0.5601,
+        "var_trials_sr": 0.159113,
+        "mde_sd_units": 1.35,
+        "mde_as_rel_crps_gain": 0.00572,
+        "detail": {
+          "n_folds": 6,
+          "n_arms": 3
+        }
+      }
+    },
+    "design": {
+      "n_folds": 6,
+      "fold_wins_required": 5,
+      "fold_clause_attainable": true,
+      "legacy_60pct_false_fire_rate": 0.3438,
+      "one_sided_sign_floor": 0.01562,
+      "sign_floor_below_bh_cutoff": true,
+      "max_attainable_dsr_at_this_fold_count": 0.9992
+    }
+  },
+  "sensitivity": {
+    "rows": [
+      {
+        "sensitivity": "all_pitchers",
+        "metric": "gb_pct",
+        "n_folds": 6,
+        "n_scored": 290,
+        "rel gain vs foil": "-0.55%",
+        "fold wins": "2/6",
+        "p": 0.768
+      },
+      {
+        "sensitivity": "all_pitchers",
+        "metric": "k_pct",
+        "n_folds": 6,
+        "n_scored": 290,
+        "rel gain vs foil": "-0.46%",
+        "fold wins": "2/6",
+        "p": 0.7864
+      },
+      {
+        "sensitivity": "all_pitchers",
+        "metric": "bb_pct",
+        "n_folds": 6,
+        "n_scored": 290,
+        "rel gain vs foil": "-0.20%",
+        "fold wins": "2/6",
+        "p": 0.8513
+      },
+      {
+        "sensitivity": "same_season_allowed",
+        "metric": "gb_pct",
+        "n_folds": 7,
+        "n_scored": 314,
+        "rel gain vs foil": "-0.94%",
+        "fold wins": "4/7",
+        "p": 0.8131
+      },
+      {
+        "sensitivity": "same_season_allowed",
+        "metric": "k_pct",
+        "n_folds": 7,
+        "n_scored": 314,
+        "rel gain vs foil": "+0.02%",
+        "fold wins": "4/7",
+        "p": 0.4912
+      },
+      {
+        "sensitivity": "same_season_allowed",
+        "metric": "bb_pct",
+        "n_folds": 7,
+        "n_scored": 314,
+        "rel gain vs foil": "-0.27%",
+        "fold wins": "4/7",
+        "p": 0.7437
+      }
+    ]
+  },
+  "leaderboards": {
+    "gb_pct": [
+      {
+        "arm": "L0_mle_served",
+        "uses_fv": false,
+        "oos_mae": 0.031084652902994583,
+        "oos_crps": 0.031084652902994583,
+        "oos_pointscore_mae": 0.043893041911404085,
+        "fold_win_rate": 0.6666666666666666,
+        "pct_lift_vs_foil": 1.575448207679995,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "Z_fv_permuted",
+        "uses_fv": true,
+        "oos_mae": 0.03155011034081007,
+        "oos_crps": 0.03155011034081007,
+        "oos_pointscore_mae": 0.04426012757376171,
+        "fold_win_rate": 0.5,
+        "pct_lift_vs_foil": 0.10165212450168493,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "C0_mle_recal",
+        "uses_fv": false,
+        "oos_mae": 0.031582214332643875,
+        "oos_crps": 0.031582214332643875,
+        "oos_pointscore_mae": 0.044553100961039316,
+        "fold_win_rate": 0.0,
+        "pct_lift_vs_foil": 0.0,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "A1_mle_fv",
+        "uses_fv": true,
+        "oos_mae": 0.03174454761920376,
+        "oos_crps": 0.03174454761920376,
+        "oos_pointscore_mae": 0.044673813904404634,
+        "fold_win_rate": 0.16666666666666666,
+        "pct_lift_vs_foil": -0.5140022319210762,
+        "selectable": true,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "A2_mle_fv_bucket",
+        "uses_fv": true,
+        "oos_mae": 0.032224238947745294,
+        "oos_crps": 0.032224238947745294,
+        "oos_pointscore_mae": 0.044937664339637105,
+        "fold_win_rate": 0.16666666666666666,
+        "pct_lift_vs_foil": -2.03286763980261,
+        "selectable": true,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "A3_mle_fv_eta_risk",
+        "uses_fv": true,
+        "oos_mae": 0.040279263098749914,
+        "oos_crps": 0.040279263098749914,
+        "oos_pointscore_mae": 0.054645081292429315,
+        "fold_win_rate": 0.16666666666666666,
+        "pct_lift_vs_foil": -27.537805533529777,
+        "selectable": true,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "Z_cohort_mean",
+        "uses_fv": false,
+        "oos_mae": 0.04111926348483542,
+        "oos_crps": 0.04111926348483542,
+        "oos_pointscore_mae": 0.05792133780722674,
+        "fold_win_rate": 0.0,
+        "pct_lift_vs_foil": -30.19753159718728,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "D_fv_over_generic",
+        "uses_fv": true,
+        "oos_mae": 0.04120660767663112,
+        "oos_crps": 0.04120660767663112,
+        "oos_pointscore_mae": 0.057991357891124556,
+        "fold_win_rate": 0.0,
+        "pct_lift_vs_foil": -30.474092926534663,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "Z_sigma_sharp",
+        "uses_fv": true,
+        "oos_mae": 0.04173055425475878,
+        "oos_crps": 0.04173055425475878,
+        "oos_pointscore_mae": 0.044673813904404634,
+        "fold_win_rate": 0.0,
+        "pct_lift_vs_foil": -32.133085461412435,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "Z_sigma_wide",
+        "uses_fv": true,
+        "oos_mae": 0.1331767217213615,
+        "oos_crps": 0.1331767217213615,
+        "oos_pointscore_mae": 0.044673813904404634,
+        "fold_win_rate": 0.0,
+        "pct_lift_vs_foil": -321.68266074905307,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      }
+    ],
+    "k_pct": [
+      {
+        "arm": "C0_mle_recal",
+        "uses_fv": false,
+        "oos_mae": 0.02365299447009926,
+        "oos_crps": 0.02365299447009926,
+        "oos_pointscore_mae": 0.032937236041521455,
+        "fold_win_rate": 0.0,
+        "pct_lift_vs_foil": 0.0,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "L0_mle_served",
+        "uses_fv": false,
+        "oos_mae": 0.02366653210446057,
+        "oos_crps": 0.02366653210446057,
+        "oos_pointscore_mae": 0.03304444967694276,
+        "fold_win_rate": 0.6666666666666666,
+        "pct_lift_vs_foil": -0.05723433613625959,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "A1_mle_fv",
+        "uses_fv": true,
+        "oos_mae": 0.023700607525277945,
+        "oos_crps": 0.023700607525277945,
+        "oos_pointscore_mae": 0.03303927764869465,
+        "fold_win_rate": 0.5,
+        "pct_lift_vs_foil": -0.20129821295511918,
+        "selectable": true,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "A2_mle_fv_bucket",
+        "uses_fv": true,
+        "oos_mae": 0.02396543128623053,
+        "oos_crps": 0.02396543128623053,
+        "oos_pointscore_mae": 0.03353479549046537,
+        "fold_win_rate": 0.3333333333333333,
+        "pct_lift_vs_foil": -1.3209186537722906,
+        "selectable": true,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "Z_fv_permuted",
+        "uses_fv": true,
+        "oos_mae": 0.024003591542666347,
+        "oos_crps": 0.024003591542666347,
+        "oos_pointscore_mae": 0.033469436258825425,
+        "fold_win_rate": 0.5,
+        "pct_lift_vs_foil": -1.4822523761644208,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "D_fv_over_generic",
+        "uses_fv": true,
+        "oos_mae": 0.02433019829865266,
+        "oos_crps": 0.02433019829865266,
+        "oos_pointscore_mae": 0.033735730354662846,
+        "fold_win_rate": 0.3333333333333333,
+        "pct_lift_vs_foil": -2.8630786237635952,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "Z_cohort_mean",
+        "uses_fv": false,
+        "oos_mae": 0.024558391642570204,
+        "oos_crps": 0.024558391642570204,
+        "oos_pointscore_mae": 0.0341254908776586,
+        "fold_win_rate": 0.16666666666666666,
+        "pct_lift_vs_foil": -3.827833188797693,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "A3_mle_fv_eta_risk",
+        "uses_fv": true,
+        "oos_mae": 0.024676689507696664,
+        "oos_crps": 0.024676689507696664,
+        "oos_pointscore_mae": 0.03468477609466259,
+        "fold_win_rate": 0.3333333333333333,
+        "pct_lift_vs_foil": -4.3279722526951,
+        "selectable": true,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "Z_sigma_sharp",
+        "uses_fv": true,
+        "oos_mae": 0.03096796294991862,
+        "oos_crps": 0.03096796294991862,
+        "oos_pointscore_mae": 0.03303927764869465,
+        "fold_win_rate": 0.0,
+        "pct_lift_vs_foil": -30.926183528544414,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "Z_sigma_wide",
+        "uses_fv": true,
+        "oos_mae": 0.0941284110945645,
+        "oos_crps": 0.0941284110945645,
+        "oos_pointscore_mae": 0.03303927764869465,
+        "fold_win_rate": 0.0,
+        "pct_lift_vs_foil": -297.9555790010274,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      }
+    ],
+    "bb_pct": [
+      {
+        "arm": "A2_mle_fv_bucket",
+        "uses_fv": true,
+        "oos_mae": 0.012912236401300252,
+        "oos_crps": 0.012912236401300252,
+        "oos_pointscore_mae": 0.01775160651704788,
+        "fold_win_rate": 0.5,
+        "pct_lift_vs_foil": 0.6951742285478484,
+        "selectable": true,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "C0_mle_recal",
+        "uses_fv": false,
+        "oos_mae": 0.013002627315431253,
+        "oos_crps": 0.013002627315431253,
+        "oos_pointscore_mae": 0.018087974934557324,
+        "fold_win_rate": 0.0,
+        "pct_lift_vs_foil": 0.0,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "L0_mle_served",
+        "uses_fv": false,
+        "oos_mae": 0.013004672507685522,
+        "oos_crps": 0.013004672507685522,
+        "oos_pointscore_mae": 0.018267508580920522,
+        "fold_win_rate": 0.5,
+        "pct_lift_vs_foil": -0.015729069246195607,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "A1_mle_fv",
+        "uses_fv": true,
+        "oos_mae": 0.013033512502288467,
+        "oos_crps": 0.013033512502288467,
+        "oos_pointscore_mae": 0.01807332922099732,
+        "fold_win_rate": 0.3333333333333333,
+        "pct_lift_vs_foil": -0.2375303552733486,
+        "selectable": true,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "Z_fv_permuted",
+        "uses_fv": true,
+        "oos_mae": 0.013379375167776916,
+        "oos_crps": 0.013379375167776916,
+        "oos_pointscore_mae": 0.018564546219724,
+        "fold_win_rate": 0.16666666666666666,
+        "pct_lift_vs_foil": -2.8974748195585542,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "Z_cohort_mean",
+        "uses_fv": false,
+        "oos_mae": 0.014174923251892286,
+        "oos_crps": 0.014174923251892286,
+        "oos_pointscore_mae": 0.020086027909886405,
+        "fold_win_rate": 0.16666666666666666,
+        "pct_lift_vs_foil": -9.015838937948912,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "D_fv_over_generic",
+        "uses_fv": true,
+        "oos_mae": 0.014214314249405634,
+        "oos_crps": 0.014214314249405634,
+        "oos_pointscore_mae": 0.020135365589619602,
+        "fold_win_rate": 0.16666666666666666,
+        "pct_lift_vs_foil": -9.318785385291903,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "A3_mle_fv_eta_risk",
+        "uses_fv": true,
+        "oos_mae": 0.015154757989658055,
+        "oos_crps": 0.015154757989658055,
+        "oos_pointscore_mae": 0.021009900384602476,
+        "fold_win_rate": 0.16666666666666666,
+        "pct_lift_vs_foil": -16.551506261143828,
+        "selectable": true,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "Z_sigma_sharp",
+        "uses_fv": true,
+        "oos_mae": 0.01694312643537457,
+        "oos_crps": 0.01694312643537457,
+        "oos_pointscore_mae": 0.01807332922099732,
+        "fold_win_rate": 0.0,
+        "pct_lift_vs_foil": -30.30540693315736,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      },
+      {
+        "arm": "Z_sigma_wide",
+        "uses_fv": true,
+        "oos_mae": 0.052456142799005956,
+        "oos_crps": 0.052456142799005956,
+        "oos_pointscore_mae": 0.01807332922099732,
+        "fold_win_rate": 0.0,
+        "pct_lift_vs_foil": -303.4272576339404,
+        "selectable": false,
+        "active": true,
+        "note": ""
+      }
+    ]
+  },
+  "score_by_fold_crps": {
+    "gb_pct": {
+      "L0_mle_served": {
+        "2020": 0.030365742770912214,
+        "2021": 0.035175282236291475,
+        "2022": 0.03388912642498879,
+        "2023": 0.030425542478392832,
+        "2024": 0.026227346989264298,
+        "2025": 0.0304248765181179
+      },
+      "C0_mle_recal": {
+        "2020": 0.03234975905093978,
+        "2021": 0.03556653661758923,
+        "2022": 0.034560722408361104,
+        "2023": 0.030407643395388328,
+        "2024": 0.026144224838896703,
+        "2025": 0.0304643996846881
+      },
+      "A1_mle_fv": {
+        "2020": 0.031678962525217805,
+        "2021": 0.03672159438886858,
+        "2022": 0.03475167382152349,
+        "2023": 0.030612918585905622,
+        "2024": 0.02618507879784065,
+        "2025": 0.030517057595866422
+      },
+      "A2_mle_fv_bucket": {
+        "2020": 0.0339961007894614,
+        "2021": 0.03709080004101634,
+        "2022": 0.034654554079190526,
+        "2023": 0.030028194064380436,
+        "2024": 0.02624827013018455,
+        "2025": 0.031327514582238536
+      },
+      "A3_mle_fv_eta_risk": {
+        "2020": 0.07632373177020267,
+        "2021": 0.040894323296658944,
+        "2022": 0.03724815390882725,
+        "2023": 0.03143437210580394,
+        "2024": 0.02530729079503643,
+        "2025": 0.030467706715970273
+      },
+      "Z_fv_permuted": {
+        "2020": 0.03220469450056149,
+        "2021": 0.03613125883236589,
+        "2022": 0.034198450578306186,
+        "2023": 0.03129646733419637,
+        "2024": 0.026150844488546578,
+        "2025": 0.029318946310883873
+      },
+      "Z_cohort_mean": {
+        "2020": 0.039132457609322796,
+        "2021": 0.04368904786830432,
+        "2022": 0.05307739683467914,
+        "2023": 0.03720520266582692,
+        "2024": 0.03369243698231319,
+        "2025": 0.03991903894856616
+      },
+      "Z_sigma_sharp": {
+        "2020": 0.04210021593412092,
+        "2021": 0.05002102153713695,
+        "2022": 0.04579211149828799,
+        "2023": 0.0377638132147454,
+        "2024": 0.03168205102281466,
+        "2025": 0.04302411232144679
+      },
+      "Z_sigma_wide": {
+        "2020": 0.12864524025631982,
+        "2021": 0.12820142293065412,
+        "2022": 0.13591470291816754,
+        "2023": 0.13832522490170196,
+        "2024": 0.1360746098451915,
+        "2025": 0.13189912947613397
+      },
+      "D_fv_over_generic": {
+        "2020": 0.03914699787965173,
+        "2021": 0.04410979342201383,
+        "2022": 0.05304589320696175,
+        "2023": 0.03726514665294855,
+        "2024": 0.03373620312396747,
+        "2025": 0.03993561177424337
+      }
+    },
+    "k_pct": {
+      "L0_mle_served": {
+        "2020": 0.019695621858673643,
+        "2021": 0.024713528657022903,
+        "2022": 0.028979845393450547,
+        "2023": 0.022173846821406332,
+        "2024": 0.024138112026665968,
+        "2025": 0.022298237869544033
+      },
+      "C0_mle_recal": {
+        "2020": 0.019796916182319435,
+        "2021": 0.025435236709601426,
+        "2022": 0.02775616872177614,
+        "2023": 0.021432129416790464,
+        "2024": 0.0243859234298188,
+        "2025": 0.023111592360289306
+      },
+      "A1_mle_fv": {
+        "2020": 0.019894185301553756,
+        "2021": 0.025579204132394676,
+        "2022": 0.027469595659847516,
+        "2023": 0.020743494849112958,
+        "2024": 0.024298916264430096,
+        "2025": 0.024218248944328644
+      },
+      "A2_mle_fv_bucket": {
+        "2020": 0.020478004210526833,
+        "2021": 0.02583635268144657,
+        "2022": 0.026619512592367056,
+        "2023": 0.02205749475029851,
+        "2024": 0.024170121463363007,
+        "2025": 0.024631102019381203
+      },
+      "A3_mle_fv_eta_risk": {
+        "2020": 0.024183301622686306,
+        "2021": 0.024734826874501084,
+        "2022": 0.0295281338213983,
+        "2023": 0.020427048361813825,
+        "2024": 0.025437872067277965,
+        "2025": 0.0237489542985025
+      },
+      "Z_fv_permuted": {
+        "2020": 0.021728340841780745,
+        "2021": 0.025414128971464455,
+        "2022": 0.027742094686778324,
+        "2023": 0.021742760806117513,
+        "2024": 0.024273911217439836,
+        "2025": 0.023120312732417214
+      },
+      "Z_cohort_mean": {
+        "2020": 0.020951635601468205,
+        "2021": 0.024339043713453433,
+        "2022": 0.027928566970551228,
+        "2023": 0.022649984643228552,
+        "2024": 0.026179190095190406,
+        "2025": 0.025301928831529395
+      },
+      "Z_sigma_sharp": {
+        "2020": 0.023759072769293652,
+        "2021": 0.03491735849103605,
+        "2022": 0.03692481955348639,
+        "2023": 0.026665242561247585,
+        "2024": 0.03240362293435927,
+        "2025": 0.031137661390088788
+      },
+      "Z_sigma_wide": {
+        "2020": 0.09300148443814334,
+        "2021": 0.08933331843511012,
+        "2022": 0.094096813273728,
+        "2023": 0.09716627100259412,
+        "2024": 0.09483329393523535,
+        "2025": 0.09633928548257613
+      },
+      "D_fv_over_generic": {
+        "2020": 0.02159770178141934,
+        "2021": 0.024164562224816756,
+        "2022": 0.026602812092448174,
+        "2023": 0.021665879523804398,
+        "2024": 0.025637922951452764,
+        "2025": 0.026312311217974532
+      }
+    },
+    "bb_pct": {
+      "L0_mle_served": {
+        "2020": 0.0123407230660431,
+        "2021": 0.0115885305784904,
+        "2022": 0.01157710020173178,
+        "2023": 0.01552618298213971,
+        "2024": 0.015148095157915799,
+        "2025": 0.011847403059792344
+      },
+      "C0_mle_recal": {
+        "2020": 0.012113973283144062,
+        "2021": 0.01185409936410895,
+        "2022": 0.01227268226339458,
+        "2023": 0.015256364722919387,
+        "2024": 0.014301304569440012,
+        "2025": 0.012217339689580522
+      },
+      "A1_mle_fv": {
+        "2020": 0.012130787941262326,
+        "2021": 0.011985251150936934,
+        "2022": 0.012254432091780405,
+        "2023": 0.015265220607240792,
+        "2024": 0.014293550865078,
+        "2025": 0.01227183235743234
+      },
+      "A2_mle_fv_bucket": {
+        "2020": 0.012279679602879005,
+        "2021": 0.01106506603286903,
+        "2022": 0.012890996635954622,
+        "2023": 0.015015192530792481,
+        "2024": 0.013706035693735614,
+        "2025": 0.012516447911570758
+      },
+      "A3_mle_fv_eta_risk": {
+        "2020": 0.023322062925044858,
+        "2021": 0.01210680145783291,
+        "2022": 0.012195138009535377,
+        "2023": 0.015812656426000115,
+        "2024": 0.014373139342257583,
+        "2025": 0.013118749777277476
+      },
+      "Z_fv_permuted": {
+        "2020": 0.013820046526357047,
+        "2021": 0.011886100090950114,
+        "2022": 0.012464210094415404,
+        "2023": 0.015449984647142905,
+        "2024": 0.014498538888157437,
+        "2025": 0.012157370759638596
+      },
+      "Z_cohort_mean": {
+        "2020": 0.016294321552876478,
+        "2021": 0.014445936028297256,
+        "2022": 0.011256968844396052,
+        "2023": 0.015460892922901892,
+        "2024": 0.015099654473306218,
+        "2025": 0.012491765689575825
+      },
+      "Z_sigma_sharp": {
+        "2020": 0.015559218496469511,
+        "2021": 0.015413037896300217,
+        "2022": 0.015667611282041766,
+        "2023": 0.020140735186541657,
+        "2024": 0.018183949260419455,
+        "2025": 0.01669420649047481
+      },
+      "Z_sigma_wide": {
+        "2020": 0.05044117595117825,
+        "2021": 0.05189825944499951,
+        "2022": 0.050910622349505996,
+        "2023": 0.051546943033034226,
+        "2024": 0.054263093509849175,
+        "2025": 0.055676762505468616
+      },
+      "D_fv_over_generic": {
+        "2020": 0.01627751372957365,
+        "2021": 0.01458667999124872,
+        "2022": 0.011263331824884468,
+        "2023": 0.01544080199926114,
+        "2024": 0.015220795051671355,
+        "2025": 0.012496762899794473
+      }
+    }
+  },
+  "score_by_fold_mae": {
+    "gb_pct": {
+      "L0_mle_served": {
+        "2020": 0.043773294710744856,
+        "2021": 0.05092802505432923,
+        "2022": 0.04767569411459957,
+        "2023": 0.04131374830679309,
+        "2024": 0.034182277595121706,
+        "2025": 0.04548521168683605
+      },
+      "C0_mle_recal": {
+        "2020": 0.04561569185452325,
+        "2021": 0.051505369064314986,
+        "2022": 0.04894385415458076,
+        "2023": 0.04090837079961239,
+        "2024": 0.03440795763436189,
+        "2025": 0.04593736225884262
+      },
+      "A1_mle_fv": {
+        "2020": 0.0449951901536741,
+        "2021": 0.052948722188775964,
+        "2022": 0.04882201777268179,
+        "2023": 0.040711606139935616,
+        "2024": 0.03448842751219971,
+        "2025": 0.04607691965916059
+      },
+      "A2_mle_fv_bucket": {
+        "2020": 0.046936478192939106,
+        "2021": 0.052983540455060575,
+        "2022": 0.04851884355714777,
+        "2023": 0.040363665494415904,
+        "2024": 0.03522756539921423,
+        "2025": 0.04559589293904504
+      },
+      "A3_mle_fv_eta_risk": {
+        "2020": 0.09803899722837381,
+        "2021": 0.05714980611934042,
+        "2022": 0.05279489915942538,
+        "2023": 0.04282428427433869,
+        "2024": 0.03132107518900217,
+        "2025": 0.045741425784095416
+      },
+      "Z_fv_permuted": {
+        "2020": 0.04468599613539286,
+        "2021": 0.05236474621950827,
+        "2022": 0.047550379404548336,
+        "2023": 0.04208929293191872,
+        "2024": 0.03472118659825093,
+        "2025": 0.04414916415295107
+      },
+      "Z_cohort_mean": {
+        "2020": 0.055278308704423636,
+        "2021": 0.06048445505583398,
+        "2022": 0.07445992477842969,
+        "2023": 0.050858753169630164,
+        "2024": 0.04871456801690733,
+        "2025": 0.05773201711813565
+      },
+      "Z_sigma_sharp": {
+        "2020": 0.0449951901536741,
+        "2021": 0.052948722188775964,
+        "2022": 0.04882201777268179,
+        "2023": 0.040711606139935616,
+        "2024": 0.03448842751219971,
+        "2025": 0.04607691965916059
+      },
+      "Z_sigma_wide": {
+        "2020": 0.0449951901536741,
+        "2021": 0.052948722188775964,
+        "2022": 0.04882201777268179,
+        "2023": 0.040711606139935616,
+        "2024": 0.03448842751219971,
+        "2025": 0.04607691965916059
+      },
+      "D_fv_over_generic": {
+        "2020": 0.05542240011854452,
+        "2021": 0.06075381800161198,
+        "2022": 0.07437072149629477,
+        "2023": 0.05080430512739489,
+        "2024": 0.048830034353321936,
+        "2025": 0.05776686824957927
+      }
+    },
+    "k_pct": {
+      "L0_mle_served": {
+        "2020": 0.026091891346090287,
+        "2021": 0.0359487967266648,
+        "2022": 0.04011787964115071,
+        "2023": 0.03162638386579902,
+        "2024": 0.033946889158430985,
+        "2025": 0.030534857323520796
+      },
+      "C0_mle_recal": {
+        "2020": 0.025385966068628293,
+        "2021": 0.03665204579144446,
+        "2022": 0.03950437307399594,
+        "2023": 0.029591370787894974,
+        "2024": 0.03463998623095999,
+        "2025": 0.03184967429620508
+      },
+      "A1_mle_fv": {
+        "2020": 0.025707605905668448,
+        "2021": 0.03689980917395157,
+        "2022": 0.03910149794079537,
+        "2023": 0.028700817902323494,
+        "2024": 0.0345685072864418,
+        "2025": 0.03325742768298726
+      },
+      "A2_mle_fv_bucket": {
+        "2020": 0.026725235152358598,
+        "2021": 0.037011111391017294,
+        "2022": 0.037859361210551584,
+        "2023": 0.03144304296137233,
+        "2024": 0.034379080786423835,
+        "2025": 0.0337909414410686
+      },
+      "A3_mle_fv_eta_risk": {
+        "2020": 0.03392199062457902,
+        "2021": 0.036059406164518915,
+        "2022": 0.0414732976029929,
+        "2023": 0.028916313254154065,
+        "2024": 0.035588761816486986,
+        "2025": 0.03214888710524367
+      },
+      "Z_fv_permuted": {
+        "2020": 0.0292634908400174,
+        "2021": 0.0367378123164415,
+        "2022": 0.03921278071041395,
+        "2023": 0.029376957638564242,
+        "2024": 0.03430621490551126,
+        "2025": 0.031919361142004186
+      },
+      "Z_cohort_mean": {
+        "2020": 0.02607806201319542,
+        "2021": 0.03558079857742356,
+        "2022": 0.03957386420845521,
+        "2023": 0.03216257401840702,
+        "2024": 0.03760513979157806,
+        "2025": 0.03375250665689232
+      },
+      "Z_sigma_sharp": {
+        "2020": 0.025707605905668448,
+        "2021": 0.03689980917395157,
+        "2022": 0.03910149794079537,
+        "2023": 0.028700817902323494,
+        "2024": 0.0345685072864418,
+        "2025": 0.03325742768298726
+      },
+      "Z_sigma_wide": {
+        "2020": 0.025707605905668448,
+        "2021": 0.03689980917395157,
+        "2022": 0.03910149794079537,
+        "2023": 0.028700817902323494,
+        "2024": 0.0345685072864418,
+        "2025": 0.03325742768298726
+      },
+      "D_fv_over_generic": {
+        "2020": 0.02668652492990594,
+        "2021": 0.03517722473262536,
+        "2022": 0.037337497908669456,
+        "2023": 0.030959096294736498,
+        "2024": 0.03678801104433748,
+        "2025": 0.03546602721770234
+      }
+    },
+    "bb_pct": {
+      "L0_mle_served": {
+        "2020": 0.017101379000291406,
+        "2021": 0.015865433800196557,
+        "2022": 0.015873146166054397,
+        "2023": 0.021801998001840062,
+        "2024": 0.021410333428645057,
+        "2025": 0.017552761088495655
+      },
+      "C0_mle_recal": {
+        "2020": 0.016909891492263067,
+        "2021": 0.0164800039134234,
+        "2022": 0.016830873893420382,
+        "2023": 0.02125332117867837,
+        "2024": 0.01927882404713831,
+        "2025": 0.01777493508242041
+      },
+      "A1_mle_fv": {
+        "2020": 0.01670736350095035,
+        "2021": 0.016539595725526157,
+        "2022": 0.016771613380807016,
+        "2023": 0.021289041868151802,
+        "2024": 0.019260595272961617,
+        "2025": 0.017871765577586993
+      },
+      "A2_mle_fv_bucket": {
+        "2020": 0.016055226482160005,
+        "2021": 0.015554359367019502,
+        "2022": 0.01792994799491754,
+        "2023": 0.020480583063372183,
+        "2024": 0.018186735062118143,
+        "2025": 0.018302787132699908
+      },
+      "A3_mle_fv_eta_risk": {
+        "2020": 0.03213567287633493,
+        "2021": 0.016763115234732482,
+        "2022": 0.016553029993165512,
+        "2023": 0.02214151559022279,
+        "2024": 0.019223124596085214,
+        "2025": 0.019242944017073924
+      },
+      "Z_fv_permuted": {
+        "2020": 0.019079734201587827,
+        "2021": 0.01643981550169187,
+        "2022": 0.017027186621516727,
+        "2023": 0.02149118257030307,
+        "2024": 0.019544623431359077,
+        "2025": 0.017804734991885424
+      },
+      "Z_cohort_mean": {
+        "2020": 0.023310711774655428,
+        "2021": 0.02010292463245124,
+        "2022": 0.014924135639724048,
+        "2023": 0.021603650426756004,
+        "2024": 0.0216945818837715,
+        "2025": 0.018880163101960206
+      },
+      "Z_sigma_sharp": {
+        "2020": 0.01670736350095035,
+        "2021": 0.016539595725526157,
+        "2022": 0.016771613380807016,
+        "2023": 0.021289041868151802,
+        "2024": 0.019260595272961617,
+        "2025": 0.017871765577586993
+      },
+      "Z_sigma_wide": {
+        "2020": 0.01670736350095035,
+        "2021": 0.016539595725526157,
+        "2022": 0.016771613380807016,
+        "2023": 0.021289041868151802,
+        "2024": 0.019260595272961617,
+        "2025": 0.017871765577586993
+      },
+      "D_fv_over_generic": {
+        "2020": 0.02334667940952488,
+        "2021": 0.0202616699141408,
+        "2022": 0.014916095778841853,
+        "2023": 0.021512820388317762,
+        "2024": 0.0218905422388014,
+        "2025": 0.0188843858080909
+      }
+    }
+  },
+  "deflation": {
+    "gb_pct": {
+      "n_configs": 3,
+      "n_folds": 6,
+      "pbo": 0.4,
+      "os_gap_pct": 0.0,
+      "os_gap_p90_pct": 3.5426,
+      "contender_spread_pct": 26.886,
+      "full_spread_pct": 26.886,
+      "flips": [
+        {
+          "config": "A1_mle_fv",
+          "IS_half_wins": 16,
+          "share": 0.8,
+          "mean_oos_mae": 0.03174,
+          "pct_vs_best": 0.0
+        },
+        {
+          "config": "A2_mle_fv_bucket",
+          "IS_half_wins": 3,
+          "share": 0.15,
+          "mean_oos_mae": 0.03222,
+          "pct_vs_best": 1.511
+        },
+        {
+          "config": "A3_mle_fv_eta_risk",
+          "IS_half_wins": 1,
+          "share": 0.05,
+          "mean_oos_mae": 0.04028,
+          "pct_vs_best": 26.886
+        }
+      ],
+      "whole_field": {
+        "n_configs": 10,
+        "n_folds": 6,
+        "pbo": 0.0,
+        "os_gap_pct": 0.0,
+        "os_gap_p90_pct": 3.1287,
+        "contender_spread_pct": 1.601,
+        "full_spread_pct": 328.432,
+        "flips": [
+          {
+            "config": "L0_mle_served",
+            "IS_half_wins": 17,
+            "share": 0.85,
+            "mean_oos_mae": 0.03108,
+            "pct_vs_best": 0.0
+          },
+          {
+            "config": "Z_fv_permuted",
+            "IS_half_wins": 3,
+            "share": 0.15,
+            "mean_oos_mae": 0.03155,
+            "pct_vs_best": 1.497
+          }
+        ]
+      }
+    },
+    "k_pct": {
+      "n_configs": 3,
+      "n_folds": 6,
+      "pbo": 0.7,
+      "os_gap_pct": 0.4934,
+      "os_gap_p90_pct": 8.2764,
+      "contender_spread_pct": 4.118,
+      "full_spread_pct": 4.118,
+      "flips": [
+        {
+          "config": "A1_mle_fv",
+          "IS_half_wins": 12,
+          "share": 0.6,
+          "mean_oos_mae": 0.0237,
+          "pct_vs_best": 0.0
+        },
+        {
+          "config": "A2_mle_fv_bucket",
+          "IS_half_wins": 5,
+          "share": 0.25,
+          "mean_oos_mae": 0.02397,
+          "pct_vs_best": 1.117
+        },
+        {
+          "config": "A3_mle_fv_eta_risk",
+          "IS_half_wins": 3,
+          "share": 0.15,
+          "mean_oos_mae": 0.02468,
+          "pct_vs_best": 4.118
+        }
+      ],
+      "whole_field": {
+        "n_configs": 10,
+        "n_folds": 6,
+        "pbo": 0.6,
+        "os_gap_pct": 4.0279,
+        "os_gap_p90_pct": 9.7611,
+        "contender_spread_pct": 0.201,
+        "full_spread_pct": 297.956,
+        "flips": [
+          {
+            "config": "L0_mle_served",
+            "IS_half_wins": 7,
+            "share": 0.35,
+            "mean_oos_mae": 0.02367,
+            "pct_vs_best": 0.057
+          },
+          {
+            "config": "A1_mle_fv",
+            "IS_half_wins": 4,
+            "share": 0.2,
+            "mean_oos_mae": 0.0237,
+            "pct_vs_best": 0.201
+          },
+          {
+            "config": "D_fv_over_generic",
+            "IS_half_wins": 3,
+            "share": 0.15,
+            "mean_oos_mae": 0.02433,
+            "pct_vs_best": 2.863
+          },
+          {
+            "config": "C0_mle_recal",
+            "IS_half_wins": 2,
+            "share": 0.1,
+            "mean_oos_mae": 0.02365,
+            "pct_vs_best": 0.0
+          },
+          {
+            "config": "A3_mle_fv_eta_risk",
+            "IS_half_wins": 2,
+            "share": 0.1,
+            "mean_oos_mae": 0.02468,
+            "pct_vs_best": 4.328
+          },
+          {
+            "config": "A2_mle_fv_bucket",
+            "IS_half_wins": 1,
+            "share": 0.05,
+            "mean_oos_mae": 0.02397,
+            "pct_vs_best": 1.321
+          },
+          {
+            "config": "Z_fv_permuted",
+            "IS_half_wins": 1,
+            "share": 0.05,
+            "mean_oos_mae": 0.024,
+            "pct_vs_best": 1.482
+          }
+        ]
+      }
+    },
+    "bb_pct": {
+      "n_configs": 3,
+      "n_folds": 6,
+      "pbo": 0.6,
+      "os_gap_pct": 0.6341,
+      "os_gap_p90_pct": 3.4154,
+      "contender_spread_pct": 17.367,
+      "full_spread_pct": 17.367,
+      "flips": [
+        {
+          "config": "A2_mle_fv_bucket",
+          "IS_half_wins": 14,
+          "share": 0.7,
+          "mean_oos_mae": 0.01291,
+          "pct_vs_best": 0.0
+        },
+        {
+          "config": "A1_mle_fv",
+          "IS_half_wins": 6,
+          "share": 0.3,
+          "mean_oos_mae": 0.01303,
+          "pct_vs_best": 0.939
+        }
+      ],
+      "whole_field": {
+        "n_configs": 10,
+        "n_folds": 6,
+        "pbo": 0.15,
+        "os_gap_pct": 2.2822,
+        "os_gap_p90_pct": 5.3833,
+        "contender_spread_pct": 0.716,
+        "full_spread_pct": 306.251,
+        "flips": [
+          {
+            "config": "A2_mle_fv_bucket",
+            "IS_half_wins": 10,
+            "share": 0.5,
+            "mean_oos_mae": 0.01291,
+            "pct_vs_best": 0.0
+          },
+          {
+            "config": "L0_mle_served",
+            "IS_half_wins": 8,
+            "share": 0.4,
+            "mean_oos_mae": 0.013,
+            "pct_vs_best": 0.716
+          },
+          {
+            "config": "A1_mle_fv",
+            "IS_half_wins": 1,
+            "share": 0.05,
+            "mean_oos_mae": 0.01303,
+            "pct_vs_best": 0.939
+          },
+          {
+            "config": "C0_mle_recal",
+            "IS_half_wins": 1,
+            "share": 0.05,
+            "mean_oos_mae": 0.013,
+            "pct_vs_best": 0.7
+          }
+        ]
+      }
+    }
+  },
+  "dsr": {
+    "gb_pct": {
+      "available": true,
+      "eligible": {
+        "arm": "A1_mle_fv",
+        "n_trials": 3,
+        "dsr": 0.12716091139758984,
+        "observed_sr": -0.2776607058802895,
+        "sr0": 0.2106181041454762,
+        "passes": false
+      },
+      "whole_field": {
+        "arm": "L0_mle_served",
+        "n_trials": 9,
+        "dsr": 5.504136617690036e-131,
+        "observed_sr": 0.6356227462406576,
+        "sr0": 7.504957481253518,
+        "passes": false
+      },
+      "binds": "eligible"
+    },
+    "k_pct": {
+      "available": true,
+      "eligible": {
+        "arm": "A1_mle_fv",
+        "n_trials": 3,
+        "dsr": 0.2670450365290905,
+        "observed_sr": -0.07924100954535858,
+        "sr0": 0.1907745637307068,
+        "passes": false
+      },
+      "whole_field": {
+        "arm": "L0_mle_served",
+        "n_trials": 9,
+        "dsr": 1.0884905481844337e-66,
+        "observed_sr": -0.016662391579556627,
+        "sr0": 7.649888970378306,
+        "passes": false
+      },
+      "binds": "eligible"
+    },
+    "bb_pct": {
+      "available": true,
+      "eligible": {
+        "arm": "A2_mle_fv_bucket",
+        "n_trials": 3,
+        "dsr": 0.3479593224446911,
+        "observed_sr": 0.16584531110511413,
+        "sr0": 0.34017445470106045,
+        "passes": false
+      },
+      "whole_field": {
+        "arm": "A2_mle_fv_bucket",
+        "n_trials": 9,
+        "dsr": 7.755579120518639e-76,
+        "observed_sr": 0.16584531110511413,
+        "sr0": 8.368999971676605,
+        "passes": false
+      },
+      "binds": "eligible"
+    }
+  }
+}
