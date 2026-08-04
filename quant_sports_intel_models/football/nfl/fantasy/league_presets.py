@@ -42,6 +42,15 @@ NFL_PROFILE = SportProfile(
         "rec_td": "proj_rec_td",
         "fumbles_lost": "proj_fumbles_lost",
         "two_pt": "proj_two_pt",
+        # ── NF-C0e: the LONG-TOUCHDOWN bonus terms. Projected as `proj_<x>_td x the in-fold
+        #    league 40+ share` — so the claim is "your bonus is applied in proportion to the
+        #    touchdowns we project", NOT "we predict who scores long touchdowns". See
+        #    `captured_terms.py`. Graduated on a held-out degenerate-baseline test (7/7 seasons,
+        #    both losses); `pat_missed`, `fum` (total), `st_player_td` and `fumble_rec_td` were
+        #    tested the same way, FAILED, and are deliberately absent so they stay CAPTURED.
+        "pass_td_40p": "proj_pass_td_40p",
+        "rush_td_40p": "proj_rush_td_40p",
+        "rec_td_40p": "proj_rec_td_40p",
         # ── NF1.6: KICKER raw components (distance-bucketed, so a league's own 3/4/5 — or any
         #    other per-distance schedule — is expressed exactly rather than approximated) ───────
         "fg_att": "proj_fg_att",
@@ -56,6 +65,10 @@ NFL_PROFILE = SportProfile(
         "def_sacks": "proj_def_sacks",
         "def_int": "proj_def_int",
         "def_fumble_rec": "proj_def_fumble_rec",
+        # NF-C0e — the column was in `stg_nfl_team_week` all along and simply never loaded. It
+        # beats the league-mean degenerate on both losses in 16/16 held-out seasons, a WIDER
+        # margin than `def_sacks` (which was already applied).
+        "def_forced_fumble": "proj_def_forced_fumble",
         "def_td": "proj_def_td",
         "st_td": "proj_st_td",
         "def_safety": "proj_def_safety",
@@ -77,6 +90,24 @@ NFL_PROFILE = SportProfile(
         "dst_pa_g_28_34": "proj_dst_pa_g_28_34",
         "dst_pa_g_35_45": "proj_dst_pa_g_35_45",
         "dst_pa_g_46p": "proj_dst_pa_g_46p",
+        # ⭐ NF-C0e — the YARDS-ALLOWED TIER terms, the structural twin of the block above and the
+        #    single highest-|weight| family the import machinery was forced to call CAPTURED
+        #    (Sleeper prices it +6 to -6, ESPN +5 to -7). Same construction: each column is the
+        #    EXPECTED NUMBER OF GAMES landing in that yards-allowed bucket, so a per-game tier
+        #    table scores a season as `sum_bucket tier_points x expected_games` — LINEAR in these
+        #    columns, hence the league's own table applied EXACTLY rather than approximated, with
+        #    no engine change. Unlike the points ladder (where ESPN's 18-21/22-27 split forces one
+        #    disclosed boundary), the nine yards rungs are IDENTICAL on Sleeper and ESPN.
+        "dst_ya_g_0_99": "proj_dst_ya_g_0_99",
+        "dst_ya_g_100_199": "proj_dst_ya_g_100_199",
+        "dst_ya_g_200_299": "proj_dst_ya_g_200_299",
+        "dst_ya_g_300_349": "proj_dst_ya_g_300_349",
+        "dst_ya_g_350_399": "proj_dst_ya_g_350_399",
+        "dst_ya_g_400_449": "proj_dst_ya_g_400_449",
+        "dst_ya_g_450_499": "proj_dst_ya_g_450_499",
+        "dst_ya_g_500_549": "proj_dst_ya_g_500_549",
+        "dst_ya_g_550p": "proj_dst_ya_g_550p",
+        "dst_yards_allowed": "proj_dst_yards_allowed",
     },
     positions=("QB", "RB", "WR", "TE", "K", "DST"),
     position_column="position",
@@ -331,6 +362,14 @@ SCORING_CATALOG: tuple[StatTerm, ...] = (
              "Offensive player recovering a fumble in the end zone."),
     StatTerm("st_player_td", "Return TD (player)", "misc", 6.0,
              "A kick/punt return TD credited to a skill player."),
+    # NF-C0e — the long-touchdown bonuses. Applied in proportion to PROJECTED touchdowns using the
+    # measured league 40+ share; we do not claim to know WHO scores long ones (see captured_terms).
+    StatTerm("pass_td_40p", "40+ yard passing TD bonus", "passing", 0.0,
+             "Extra points for a touchdown pass of 40+ yards, on top of the passing-TD value."),
+    StatTerm("rush_td_40p", "40+ yard rushing TD bonus", "rushing", 0.0,
+             "Extra points for a rushing touchdown of 40+ yards, on top of the rushing-TD value."),
+    StatTerm("rec_td_40p", "40+ yard receiving TD bonus", "receiving", 0.0,
+             "Extra points for a receiving touchdown of 40+ yards, on top of the receiving-TD value."),
     # kicking — the SIX league buckets; three of them fold (see FG_DERIVED_BUCKETS)
     StatTerm("fg_made_0_19", "FG made 0-19", "kicking", 3.0),
     StatTerm("fg_made_20_29", "FG made 20-29", "kicking", 3.0),
@@ -361,6 +400,19 @@ SCORING_CATALOG: tuple[StatTerm, ...] = (
     StatTerm("dst_pa_g_28_34", "Points allowed 28-34", "dst_points_allowed", -1.0),
     StatTerm("dst_pa_g_35_45", "Points allowed 35-45", "dst_points_allowed", -3.0, merge_group="pa_35p"),
     StatTerm("dst_pa_g_46p", "Points allowed 46+", "dst_points_allowed", -5.0, merge_group="pa_35p"),
+    # ── NF-C0e: team defence — YARDS-allowed tiers ────────────────────────────────────────────
+    # Defaults are 0: unlike the points ladder, a yards-allowed table is an OPT-IN a minority of
+    # leagues set, so seeding non-zero values would invent a rule for every league that lacks one.
+    # The nine rungs are exactly Sleeper's self-describing keys and exactly ESPN's 128..136.
+    StatTerm("dst_ya_g_0_99", "Yards allowed under 100", "dst_yards_allowed", 0.0),
+    StatTerm("dst_ya_g_100_199", "Yards allowed 100-199", "dst_yards_allowed", 0.0),
+    StatTerm("dst_ya_g_200_299", "Yards allowed 200-299", "dst_yards_allowed", 0.0),
+    StatTerm("dst_ya_g_300_349", "Yards allowed 300-349", "dst_yards_allowed", 0.0),
+    StatTerm("dst_ya_g_350_399", "Yards allowed 350-399", "dst_yards_allowed", 0.0),
+    StatTerm("dst_ya_g_400_449", "Yards allowed 400-449", "dst_yards_allowed", 0.0),
+    StatTerm("dst_ya_g_450_499", "Yards allowed 450-499", "dst_yards_allowed", 0.0),
+    StatTerm("dst_ya_g_500_549", "Yards allowed 500-549", "dst_yards_allowed", 0.0),
+    StatTerm("dst_ya_g_550p", "Yards allowed 550+", "dst_yards_allowed", 0.0),
 )
 
 # Groups the editor renders, in order, with the honest header each one needs.
@@ -372,6 +424,7 @@ SCORING_GROUPS: tuple[tuple[str, str], ...] = (
     ("kicking", "Kicking (K)"),
     ("defense", "Team defense (D/ST)"),
     ("dst_points_allowed", "D/ST points allowed"),
+    ("dst_yards_allowed", "D/ST yards allowed"),
 )
 
 # Rules a league genuinely has that DO NOT move a per-player projection or value-over-replacement.

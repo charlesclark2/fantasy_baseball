@@ -62,7 +62,34 @@ def _team_def_hist(seasons=(2023, 2024, 2025), teams=("AAA", "BBB", "CCC")) -> p
             rows.append({"season": y, "team": t, "games": 17.0,
                          "def_sacks": 30.0 + 8 * i, "def_int": 10.0 + 3 * i,
                          "def_fumble_rec": 8.0 + i, "def_td": 1.0 + i, "st_td": 1.0,
-                         "def_safety": 0.0, "def_blocked_kick": 1.0})
+                         "def_safety": 0.0, "def_blocked_kick": 1.0,
+                         # NF-C0e — varies with `i` so the retained-component guard actually
+                         # exercises it (a constant column would fit slope 0 and pass vacuously).
+                         "def_forced_fumble": 12.0 + 4 * i})
+    return pd.DataFrame(rows)
+
+
+def _team_yards_hist(seasons=(2023, 2024, 2025), teams=("AAA", "BBB", "CCC")) -> pd.DataFrame:
+    """NF-C0e — the team-season yards-allowed frame (`kdst_source.load_team_yards`'s shape)."""
+    rows = []
+    for i, t in enumerate(teams):
+        for y in seasons:
+            pg = 300.0 + 40.0 * i
+            rows.append({"season": y, "team": t, "team_games": 17.0,
+                         "yards_against": pg * 17.0, "yards_against_pg": pg})
+    return pd.DataFrame(rows)
+
+
+def _team_game_yards_hist(seasons=(2023, 2024, 2025), teams=("AAA", "BBB", "CCC")) -> pd.DataFrame:
+    """NF-C0e — the per-team-GAME yards-allowed frame the bucket mix is fitted on."""
+    rng = np.random.default_rng(7)
+    rows = []
+    for i, t in enumerate(teams):
+        for y in seasons:
+            for w in range(1, 18):
+                rows.append({"season": y, "team": t, "week": w,
+                             "yards_against": float(max(0.0, 300.0 + 40.0 * i
+                                                        + rng.normal(0.0, 70.0)))})
     return pd.DataFrame(rows)
 
 
@@ -175,7 +202,12 @@ def test_every_emitted_raw_column_is_reachable_through_the_sport_profile():
     scoreable emitted column must therefore be mapped."""
     mapped = set(NFL_PROFILE.stat_columns.values())
     # descriptive/provenance columns are deliberately unmapped — they are not scoreable quantities
-    not_scoreable = {"proj_games", "proj_dst_pa_per_game", "proj_dst_pa_per_game_sd"}
+    not_scoreable = {"proj_games", "proj_dst_pa_per_game", "proj_dst_pa_per_game_sd",
+                     # NF-C0e: the yards-allowed rate/sd are the same DESCRIPTIVE pair as the
+                     # points ones above — a per-game rate is not a season quantity a league
+                     # scores. The nine `proj_dst_ya_g_*` expected-games columns are what scores,
+                     # and they ARE mapped (that is the whole point of the tier construction).
+                     "proj_dst_ya_per_game", "proj_dst_ya_per_game_sd"}
     for col in KD.RAW_STAT_COLS:
         if col in not_scoreable:
             continue
@@ -194,13 +226,27 @@ def test_every_kdst_stat_key_has_a_default_scoring_weight():
       * `dst_points_allowed` — the SEASON TOTAL cannot be scored under a per-game tier table at all
         (that is the whole reason the `dst_pa_g_*` expected-games columns exist). Weighting it would
         silently add a linear term no real league has.
+
+    NF-C0e adds a fifth reason, covering eleven more keys:
+
+      * the nine `dst_ya_g_*` YARDS-allowed tiers, `dst_yards_allowed` and `def_forced_fumble` — all
+        are now PROJECTED and all are APPLIED for a league that scores them, but none belongs in the
+        SHIPPED PRESETS' default weights, because none is in ESPN's or Yahoo's default D/ST scheme.
+        A yards-allowed table is a per-league OPT-IN (the operator's Sleeper league 998005 sets no
+        yards tiers at all), so giving it a non-zero preset default would invent a rule for every
+        league that does not have one and silently re-rank their defenses. "Projected" and
+        "in the default scoring table" are different questions; this test asks only the second.
     """
     cfg = get_preset("full_ppr")
     kdst_keys = [k for k, v in NFL_PROFILE.stat_columns.items()
                  if v in set(KD.K_RAW_COLS) | set(KD.DST_RAW_COLS)]
     assert kdst_keys, "no K/DST stat keys are mapped at all"
     missing = set(k for k in kdst_keys if k not in cfg.scoring.per_stat)
-    intentionally_unweighted = {"fg_att", "fg_made", "fg_missed", "pat_att", "dst_points_allowed"}
+    intentionally_unweighted = {
+        "fg_att", "fg_made", "fg_missed", "pat_att", "dst_points_allowed",
+        "def_forced_fumble", "dst_yards_allowed",
+        *(f"dst_ya_g_{b}" for b in KD.YA_BUCKET_LABELS),
+    }
     assert missing == intentionally_unweighted, (
         f"the unweighted K/DST key set changed: unexpectedly unweighted "
         f"{sorted(missing - intentionally_unweighted)}, unexpectedly weighted "

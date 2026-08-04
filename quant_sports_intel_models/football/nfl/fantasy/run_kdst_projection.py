@@ -107,6 +107,9 @@ class Inputs:
         self.team_def = KS.load_team_defense_seasons(con, lo, hi, refresh=refresh)
         self.team_game_points = KS.load_team_game_points(con, lo, hi, staging=staging)
         self.team_points = KS.load_team_points(con, lo, hi, staging=staging)
+        # NF-C0e — the yards-allowed twin of the two frames above.
+        self.team_game_yards = KS.load_team_game_yards(con, lo, hi, staging=staging)
+        self.team_yards = KS.load_team_yards(con, lo, hi, staging=staging)
         self.kickers = KS.load_kicker_seasons(con, lo, hi, refresh=refresh)
         self._implied: dict[int, pd.DataFrame] = {}
         self._sched: dict[int, pd.DataFrame] = {}
@@ -249,13 +252,21 @@ def fit_models(inp: Inputs, con, projection_season: int) -> tuple[KD.DstModel, K
         sos_frames.append(KD.schedule_offense_strength(sched, inp.team_points, y))
     sos_hist = pd.concat(sos_frames, ignore_index=True) if sos_frames else pd.DataFrame()
 
-    dst_panel = KD.build_dst_training_panel(inp.team_def, inp.team_points, sos_hist, targets)
+    dst_panel = KD.build_dst_training_panel(inp.team_def, inp.team_points, sos_hist, targets,
+                                            team_yards=inp.team_yards)
     dst_model = KD.fit_dst_component_model(dst_panel)
     train_games = inp.team_game_points[
         pd.to_numeric(inp.team_game_points["season"], errors="coerce") < int(projection_season)]
     train_ts = inp.team_points[
         pd.to_numeric(inp.team_points["season"], errors="coerce") < int(projection_season)]
     dst_model.pa_mix = KD.fit_points_allowed_mix(train_games, train_ts)
+    # NF-C0e — the yards-allowed mix, fitted on the SAME strictly-prior window (leakage-safe).
+    train_gy = inp.team_game_yards[
+        pd.to_numeric(inp.team_game_yards["season"], errors="coerce") < int(projection_season)]
+    train_ty = inp.team_yards[
+        pd.to_numeric(inp.team_yards["season"], errors="coerce") < int(projection_season)]
+    if not train_gy.empty and not train_ty.empty:
+        dst_model.ya_mix = KD.fit_yards_allowed_mix(train_gy, train_ty)
 
     tk = team_kick_panel(inp, con, targets)
     hist_k = inp.kickers[pd.to_numeric(inp.kickers["season"], errors="coerce") < int(projection_season)]
@@ -280,7 +291,9 @@ def build_projection(inp: Inputs, con, projection_season: int,
     dst_uni = inp.dst_universe(y)
     hist_def = inp.team_def[pd.to_numeric(inp.team_def["season"], errors="coerce") < y]
     hist_pts = inp.team_points[pd.to_numeric(inp.team_points["season"], errors="coerce") < y]
-    dst = KD.project_dst(dst_uni, hist_def, hist_pts, dst_model, sos, y)
+    hist_yds = inp.team_yards[pd.to_numeric(inp.team_yards["season"], errors="coerce") < y]
+    dst = KD.project_dst(dst_uni, hist_def, hist_pts, dst_model, sos, y,
+                         team_yards_hist=hist_yds)
     dst = dst.merge(env[["team", "team_points_est_pg"]], on="team", how="left")
 
     k_uni = inp.kicker_universe(y)
@@ -964,7 +977,7 @@ def main(argv: list[str] | None = None) -> int:
 
         dst_panel_for_rel = KD.build_dst_training_panel(
             inp.team_def, inp.team_points, None,
-            list(range(args.panel_from, projection_season)))
+            list(range(args.panel_from, projection_season)), team_yards=inp.team_yards)
         rel = component_reliability_table(dst_panel_for_rel)
 
         summary = {"model_version": KD.MODEL_VERSION, "projection_season": projection_season,

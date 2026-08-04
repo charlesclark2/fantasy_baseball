@@ -144,6 +144,16 @@ _PROJECTION_KEYS = {
     # silently downgrade a custom D/ST scheme to "captured, not applied".
     "paG0", "paG1_6", "paG7_13", "paG14_17", "paG18_20", "paG21_27", "paG28_34", "paG35_45",
     "paG46p",
+    # NF-C0e — the terms that GRADUATED from captured to applied. Same contract logic as the
+    # points-allowed block above, and the same failure mode if one goes missing: the nine
+    # `yaG*` expected-games buckets are what make a league's YARDS-allowed tier table exact,
+    # so dropping one silently downgrades that league's D/ST scheme back to "captured".
+    # `ff` (forced fumbles) and the three long-TD bonuses are per-term graduations, each of
+    # which cleared a held-out degenerate-baseline gate before earning a field here.
+    "yaTot", "yaPerG",
+    "yaG0_99", "yaG100_199", "yaG200_299", "yaG300_349", "yaG350_399", "yaG400_449",
+    "yaG450_499", "yaG500_549", "yaG550p",
+    "ff", "passTd40p", "rushTd40p", "recTd40p",
     # NF1.5b — how MARKET-LEANING this row's ordering is. Declared on every record (null on the
     # market-blind board) so a player page can carry the "this position incorporates consensus"
     # caveat for the one player it renders, without the client re-deriving it from the manifest.
