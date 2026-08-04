@@ -128,9 +128,26 @@ def test_autoheal_service_is_scoped_by_label_not_global(compose):
     assert "/var/run/docker.sock:/var/run/docker.sock:ro" in ah["volumes"]
 
 
-def test_autoheal_image_is_pinned_not_latest(compose):
-    # This file's own pinning discipline — an unpinned :latest floats the watchdog under us.
-    assert ":latest" not in compose["services"]["autoheal"]["image"]
+def test_autoheal_image_is_digest_pinned(compose):
+    """Tightened 2026-08-04 from "not :latest" to "digest-pinned", matching byparr.
+
+    `not :latest` was too weak: a VERSION TAG is not immutable either — a maintainer can re-push
+    1.2.0, and an `up -d` after a prune would silently float the watchdog to different code with
+    no rollback. That is the same hazard the byparr digest pin exists to prevent.
+    """
+    image = compose["services"]["autoheal"]["image"]
+    assert "@sha256:" in image, (
+        f"autoheal must be digest-pinned, got {image!r} — a version tag can be re-pushed under us."
+    )
+    assert ":latest" not in image
+
+
+def test_both_third_party_box_images_are_digest_pinned(compose):
+    # byparr + autoheal are the images pulled from a third-party registry (the rest are built from
+    # this repo or are first-party bases). Neither may float — byparr because a floating Cloudflare
+    # solver can break FanGraphs with no rollback, autoheal because it is the watchdog.
+    for svc in ("flaresolverr", "autoheal"):
+        assert "@sha256:" in compose["services"][svc]["image"], f"{svc} is not digest-pinned"
 
 
 # ── fangraphs_client: pin the solver-vs-origin 5xx discrimination ───────────────────────
