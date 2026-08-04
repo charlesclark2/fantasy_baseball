@@ -683,7 +683,9 @@ def main() -> None:
                     help="Season(s): '2024', '2005,2006', or a range '2005-2026'. "
                          f"Backfill floor is {EARLIEST_SEASON} (API returns nothing earlier).")
     ap.add_argument("--sport-ids", default=None,
-                    help="Comma list of minor sportIds (default all: 11,12,13,14).")
+                    help="Comma list of minor sportIds (default all: 11,12,13,14,16). "
+                         "16 = the Rookie/complex tier (DSL + ACL/FCL); its rung is derived "
+                         "per-team from the league, not from the sportId.")
     ap.add_argument("--start-month", default=None, metavar="YYYY-MM",
                     help="First month (default: March of each season).")
     ap.add_argument("--end-month", default=None, metavar="YYYY-MM",

@@ -316,3 +316,18 @@ def test_player_rows_inherit_THEIR_OWN_SIDE_rung_not_the_games():
     # E8.7's whole point: the SB inputs the board needs are present on a complex line.
     assert by_id[9002]["bat_stolen_bases"] == 2 and by_id[9002]["bat_caught_stealing"] == 1
     assert by_id[9002]["bat_plate_appearances"] == 3
+
+
+def test_the_sport_id_help_string_matches_the_ACTUAL_default_set():
+    """A stale --help default is what an operator copy-pastes from. Pin it to the real set.
+
+    (E8.7 shipped this string reading '11,12,13,14' after 16 was already in the default.)
+    """
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--sport-ids")
+    src = _SCRIPT.read_text()
+    expected = ",".join(str(s) for s in milb.INGESTIBLE_SPORT_IDS)
+    assert f"default all: {expected}" in src, (
+        f"--sport-ids help does not name the real default set ({expected})"
+    )
