@@ -36,13 +36,32 @@ k_pct_7d, k_pct_30d, whiff_rate_30d, csw_pct_3start, velo_delta_3start,
 fastball_velo_trend
 ```
 
-By family:
+**Per-column data dictionary** (source = where the value comes from; SQL columns are from `fit_prop_pricing._FRAME_QUERY`, derived columns are computed in `build_predictors` at assembly time from the SQL columns):
 
-- **Trailing K-rate components** (leak-clean `ROWS … 1 PRECEDING` windows): career + season strikeouts / batters-faced / outs; EB-shrunk season→career→league (pseudo-counts 250/400).
-- **Recency (the E5.2 "in-season stuff change" fix, the winning feature family):** `k_pct_7d` / `k_pct_30d` trailing-window rates (effective-PA shrink 45/140 toward the career posterior), CSW last-3-starts, velocity trend — fed **raw** to the GLM (the bake-off showed recency helps only when a model weights it).
-- **Workload / BF denominator:** `starter_ip_v1` outs μ + dispersion (the pre-game sub-model signal) + trailing reach rate.
-- **Matchup / context (carried but proven weak):** opposing-lineup `avg_k_pct_30d` (log5; COALESCE→league), catcher framing-runs z (tempered γ = 0.04, pre-registered).
-- **Serve-time frame:** `scripts/write_pitcher_k_projections.py::_TODAY_FRAME_QUERY` mirrors the fit-time `_FRAME_QUERY` as-of today (DuckDB over the S3 lakehouse), concatenated with the cached historical frame so `build_predictors` derives league/EB/log5/framing exactly as at fit time.
+| column | source | definition |
+|---|---|---|
+| `k_career`, `bf_career` | SQL window over `mart_starting_pitcher_game_log` | Cumulative strikeouts / batters faced across the pitcher's **prior** starts (`ROWS UNBOUNDED PRECEDING → 1 PRECEDING` — the start's own outcome is never included) |
+| `k_season`, `bf_season` | SQL window, same mart | Same cumulative counts partitioned by (pitcher, season) — season-to-date entering the start |
+| `starter_ip_mu`, `starter_ip_dispersion` | `betting_features.starter_ip_signals` (`model_version='starter_ip_v1'`) | The pre-game **starter_ip_v1** NegBin workload signal: expected outs recorded (μ) + its dispersion — the batters-faced denominator driver |
+| `opp_lineup_k_pct` | `feature_pregame_lineup_features` (side flipped: the **opposing** lineup) | Opposing lineup's average trailing-30d strikeout rate (`avg_k_pct_30d`); NULL → league rate |
+| `k_pct_7d`, `k_pct_30d` | `feature_pregame_starter_features` | Pitcher's trailing 7-day / 30-day rolling K% (leak-clean strict-`<` windows in the mart) — the in-season-form signals |
+| `whiff_rate_30d` | same mart | Trailing 30-day swinging-strike (whiff) rate |
+| `csw_pct_3start` | same mart | Called-strikes-plus-whiffs % over the last 3 completed starts (strict `<` on game_date; most recent prior start selected) |
+| `velo_delta_3start` | same mart | Avg fastball velo over last 3 starts **minus** season-to-date avg (start-count based — robust to IL returns / skipped starts; NULL if no prior velo data) |
+| `fastball_velo_trend` | same mart | `avg_fastball_velo_7d − avg_fastball_velo_30d` (positive = velocity trending up) |
+| `eb_pitcher_k` | **derived** (`build_predictors`, `rate_mode=season_career`) | EB-shrunk per-PA pitcher K rate: season K/BF shrunk toward career (pseudo-count 250), career shrunk toward league (400); missing counts ⇒ falls back to the prior (the cold-start behaviour) |
+| `league_k_rate` | **derived** | The **prior completed season's** league ΣK/ΣBF (shift-one = leak-safe; pooled fallback for the earliest season) |
+| `framing_z` | **derived** from `catcher_framing_runs` (`feature_pregame_game_features`, home/away picked by the pitcher's side) | Per-season z-score of the starter's catcher's framing runs; NULL → 0 |
+| `reach_rate_trailing` | **derived** | On-base-against rate = `1 − outs_season/bf_season` season-to-date when `bf_season > 30`, else the 0.31 default; clipped to [0.18, 0.45] |
+
+**What else the training frame carried (used in training, not all in the served GLM's 17):**
+
+- **Actuals / targets:** `strikeouts` (the label), `batters_faced`, `outs_recorded` — plus `outs_career` / `outs_season` (consumed only through the derived `reach_rate_trailing`).
+- **The compound (fallback) arm's matrix** (`_FEATURE_COLS`) additionally uses the **raw** `catcher_framing_runs` and the fully-derived per-PA rate `p_k` = `effective_k_rate(eb_pitcher_k, opp_lineup_k, league_k_rate, framing_z·γ)` — a log5 composition the GLM deliberately does *not* use (it takes the raw components and weights them itself).
+- **Ablation axes swept in the bake-off** (features *tried* but not in the served config): the four alternative `rate_mode` constructions (`career_only`, `recency_30d`, `recency_7d`, `recency_blend` — hand-rolled recency rates, all **lost**; see ledger), and the `no_framing` / `no_lineup` toggles.
+- Feature additions beyond this pre-registered set were explicitly out of scope (§0.5: `incremental_lift_eval.py` is the sanctioned ADD path; never run for this model).
+
+**Serve-time frame:** `scripts/write_pitcher_k_projections.py::_TODAY_FRAME_QUERY` mirrors the fit-time `_FRAME_QUERY` as-of today (DuckDB over the S3 lakehouse; the lakehouse variant is derived from the Snowflake SQL by name-rewrite so the two can never drift), concatenated with the cached historical frame so `build_predictors` derives league/EB/log5/framing exactly as at fit time.
 
 ## (4) Training data
 
