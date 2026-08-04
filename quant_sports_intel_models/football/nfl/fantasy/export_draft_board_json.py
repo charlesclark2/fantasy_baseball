@@ -47,6 +47,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from quant_sports_intel_models.football.nfl.fantasy import captured_terms  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy.league_presets import (  # noqa: E402
     NFL_PROFILE,
     PRESETS,
@@ -278,7 +279,11 @@ def load_projections_local(season: int, source: str = DEFAULT_PROJECTION_SOURCE)
         raise FileNotFoundError(
             f"no {source} season projection at {path}. Run {script} first, or use --from-lake."
         )
-    return pd.read_parquet(path)
+    # NF-C0e: the graduated captured terms are derived columns applied on the READ path. EVERY
+    # projection loader routes through this one function (`captured_terms.CONSUMER_CALLERS`) —
+    # `two_pt` carries weight 2.0 in every preset, so a loader that skipped it would export a
+    # payload scored a few points apart from the board CSVs for the same player.
+    return captured_terms.apply_to_projection(pd.read_parquet(path), _ARTIFACTS, season)
 
 
 def load_projections_lake(season: int, source: str = DEFAULT_PROJECTION_SOURCE) -> pd.DataFrame:
@@ -288,11 +293,14 @@ def load_projections_lake(season: int, source: str = DEFAULT_PROJECTION_SOURCE) 
     uri = s3io.table_uri("nfl", _PROJECTION_LAKE_SOURCE[source], tier="fantasy/derived")
     con = _lake_connection()
     try:
-        return con.sql(
+        df = con.sql(
             f"select * from delta_scan('{uri}') where projection_season = {season}"
         ).df()
     finally:
         con.close()
+    # NF-C0e — see `load_projections_local`. The rates artifact is local even on the lake path: it
+    # is a handful of measured league constants, not projection data.
+    return captured_terms.apply_to_projection(df, _ARTIFACTS, season)
 
 
 def market_lean_by_position(df: pd.DataFrame) -> dict[str, str]:

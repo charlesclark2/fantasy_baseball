@@ -44,6 +44,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from quant_sports_intel_models.fantasy_engine import score_players  # noqa: E402
+from quant_sports_intel_models.football.nfl.fantasy import captured_terms  # noqa: E402
 from quant_sports_intel_models.fantasy_engine.vor import (  # noqa: E402
     build_board,
     compute_replacement_levels,
@@ -104,7 +105,11 @@ def load_projection_local(artifacts_dir: Path, season: int,
             f"{source} projection artifact not found: {p}. Run {script} first, "
             f"or use --from-lake to read the S3 Delta, or pass --projections-parquet."
         )
-    return pd.read_parquet(p)
+    # NF-C0e: the graduated captured terms are derived columns applied on the READ path, and EVERY
+    # projection loader must route through the one function (`captured_terms.CONSUMER_CALLERS`) —
+    # `two_pt` carries weight 2.0 in every preset, so a loader that skips it scores this board a
+    # few points below the exporter's for the same player.
+    return captured_terms.apply_to_projection(pd.read_parquet(p), artifacts_dir, season)
 
 
 def load_kdst_local(artifacts_dir: Path, season: int) -> pd.DataFrame:
@@ -197,11 +202,14 @@ def load_projection_lake(season: int, source: str = DEFAULT_PROJECTION_SOURCE) -
             con.execute(f"set s3_secret_access_key='{opts['AWS_SECRET_ACCESS_KEY']}';")
             if opts.get("AWS_SESSION_TOKEN"):
                 con.execute(f"set s3_session_token='{opts['AWS_SESSION_TOKEN']}';")
-        return con.sql(
+        df = con.sql(
             f"select * from delta_scan('{uri}') where projection_season = {season}"
         ).df()
     finally:
         con.close()
+    # NF-C0e — see `load_projection_local`. The rates artifact is local even on the lake path:
+    # it is a handful of measured league constants, not projection data.
+    return captured_terms.apply_to_projection(df, _DEFAULT_OUT, season)
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════

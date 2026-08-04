@@ -289,14 +289,52 @@ the same class of wrong as claiming to apply one we ignore.
 
 ---
 
+## 6b. ⚠️ The module shipped without being CALLED (found post-merge, fixed in a follow-up)
+
+The first cut of this story wrote `captured_terms.py`, graduated its four terms against the gate,
+wired them into `NFL_PROFILE`, the editor catalog, both frontend mirrors and the exporter's key
+list — and **nothing in the pipeline ever invoked `project_captured_terms`**. The columns would have
+exported as `null`, been dropped by `availableFields`, and the four terms would have gone on
+reporting CAPTURED. Everything looked complete because every *declaration* was in place; only the
+*production* was missing. It surfaced when the operator ran the handoff commands.
+
+The fix is a derived-column step on the **read** path rather than in the model build (these terms
+are `already-projected volume × a measured league rate`, so rebuilding NF1.5 to re-measure a rate
+would be absurd) — but that immediately reproduces the repo's most-repeated failure shape: **one
+logical thing with many execution owners** (INC-30's crontab under two users, INC-36's deploy,
+INC-38's per-caller flag). **Four** loaders read this projection, and `two_pt` carries weight **2.0
+in every preset**, so a loader that skipped the step would produce a board scored a few points
+*below* the exported payload — silently, for the same player, from the same artifact. The exporter
+already refuses to publish when its projection *source* disagrees with the boards'; this is that
+invariant one level down.
+
+So: one `apply_to_projection`, a `CONSUMER_CALLERS` registry, a guard asserting **every** listed
+loader calls it, and a second guard asserting the registry is still **exhaustive** against the
+source (INC-38's lesson that a per-caller rule fails exactly where its registry is incomplete).
+
+The league rates live in a small committed artifact
+(`artifacts/nf_c0e_captured_term_rates_<season>.json`, built by `--emit-rates`) stamped with the
+season it was fitted **through**. Pinning the constants in code would let them rot silently — the
+40+ pass share moved 0.149 → 0.090 between 2010 and 2025 — and doing a lake read inside a loader
+would put a network dependency on every offline board build. A missing or malformed artifact reads
+as **absent**, which emits no columns and reports CAPTURED; it never falls back to the pinned
+constants, because that would make every rate look measured when none were (NF1.7 (a)).
+
+**The generalisable lesson:** *a term is not applied because a column name appears in the profile,
+the catalog, and the export map. It is applied when something computes it.* The coverage machinery
+is mechanical about the column EXISTING and says nothing about who fills it — so a story that
+graduates a term must verify the value end-to-end through a real loader, not the declarations.
+
 ## 7. Guards
 
-`betting_ml/tests/test_nf_c0e_captured_terms.py` (38 tests, fast gate). Three were RED-proven
+`betting_ml/tests/test_nf_c0e_captured_terms.py` (46 tests, fast gate). Five were RED-proven
 against deliberately broken source before being trusted:
 
 * reverting the ESPN canonical key → 2 RED
 * dropping the net-yards sack correction → 1 RED
 * silently graduating `pat_missed` with no evidence → 2 RED
+* a projection loader skipping `apply_to_projection` → 1 RED
+* hiding the measured rates artifact → 1 RED
 
 The rejection registry lives *in the test file* keyed by its evidence, so graduating one of those
 terms later means producing a better number rather than deleting a line.

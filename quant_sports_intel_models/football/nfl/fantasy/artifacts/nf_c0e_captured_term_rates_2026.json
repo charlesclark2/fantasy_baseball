@@ -1,0 +1,10 @@
+{
+  "long_td_share": {
+    "pass": 0.13098,
+    "rush": 0.06256
+  },
+  "two_pt_rate": 0.0399,
+  "n_seasons": 16,
+  "fitted_through": 2025,
+  "projection_season": 2026
+}

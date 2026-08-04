@@ -183,6 +183,81 @@ def project_captured_terms(projections: pd.DataFrame, rates: CapturedTermRates) 
     return out
 
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Serving: ONE application point, called by EVERY projection consumer
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# ⚠️ WHY THIS IS A DERIVED-COLUMN STEP ON THE READ PATH AND NOT PART OF THE MODEL BUILD.
+# These four terms are `an already-projected volume x a measured league rate`. Baking them into
+# `run_nf1_5.py --mode build` would mean a full model rebuild (which needs `--mode market` first)
+# every time the rate is re-measured, for a transform that is deterministic and costs microseconds.
+#
+# ⭐ BUT THAT CHOICE CREATES THE REPO'S RECURRING HAZARD — ONE LOGICAL THING WITH MANY EXECUTION
+# OWNERS (INC-30's crontab, INC-36's deploy, INC-38's per-caller flag). FOUR loaders read this
+# projection (local + lake, in `run_league_board.py` and `export_draft_board_json.py`), and
+# `two_pt` carries weight 2.0 in EVERY preset — so a loader that skips this step produces a board
+# scored a few points BELOW one that does not, silently, for the same player. The exporter already
+# refuses on a projection-SOURCE mismatch for exactly this class of reason; this is the same
+# invariant one level down. Hence: one function, and `CONSUMER_CALLERS` below is pinned exhaustive
+# by `test_nf_c0e_captured_terms.py` so a fifth loader cannot ship without calling it.
+RATES_ARTIFACT = "nf_c0e_captured_term_rates_{season}.json"
+
+# Every projection loader that MUST route through `apply_to_projection`. Pinned by a guard test —
+# a new loader added without a line here fails the suite rather than silently under-scoring a board.
+CONSUMER_CALLERS: tuple[tuple[str, str], ...] = (
+    ("run_league_board.py", "load_projection_local"),
+    ("run_league_board.py", "load_projection_lake"),
+    ("export_draft_board_json.py", "load_projections_local"),
+    ("export_draft_board_json.py", "load_projections_lake"),
+)
+
+
+def rates_path(artifacts_dir, season: int):
+    from pathlib import Path
+    return Path(artifacts_dir) / RATES_ARTIFACT.format(season=int(season))
+
+
+def load_rates(artifacts_dir, season: int) -> CapturedTermRates | None:
+    """The measured league rates for `season`, or None when the artifact has not been built.
+
+    ⚠️ RETURNS None RATHER THAN THE PINNED FALLBACK CONSTANTS. Falling back would make every rate
+    look measured when none were, and — worse — would make the terms score as APPLIED off numbers
+    nobody measured for this season. None propagates to "emit no columns", which `resolve_scoring`
+    reports as CAPTURED: the truth (NF1.7 (a)).
+    """
+    import json
+
+    path = rates_path(artifacts_dir, season)
+    if not path.is_file():
+        return None
+    try:
+        blob = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+    share = blob.get("long_td_share") or {}
+    if not share or blob.get("two_pt_rate") is None:
+        return None
+    return CapturedTermRates(
+        long_td_share={str(k): float(v) for k, v in share.items()},
+        two_pt_rate=float(blob["two_pt_rate"]),
+        n_seasons=int(blob.get("n_seasons", 0)),
+        fitted_through=blob.get("fitted_through"),
+    )
+
+
+def apply_to_projection(df: pd.DataFrame, artifacts_dir, season: int) -> pd.DataFrame:
+    """THE single serving entry point. Adds the graduated columns when rates exist, else no-ops.
+
+    A missing rates artifact is a legitimate state (a season nobody has measured yet, an offline
+    run), and it degrades honestly: no columns → the terms report CAPTURED, exactly as they did
+    before NF-C0e. What it must never do is fabricate a value, which is why `load_rates` refuses
+    to fall back to the pinned constants.
+    """
+    rates = load_rates(artifacts_dir, season)
+    if rates is None:
+        return df
+    return project_captured_terms(df, rates)
+
+
 def degenerate_baseline(realized_history: pd.DataFrame, positions, column: str) -> np.ndarray:
     """The DEGENERATE arm every graduated term had to beat: each player gets his POSITION's
     in-fold league-mean count.
@@ -203,7 +278,12 @@ def degenerate_baseline(realized_history: pd.DataFrame, positions, column: str) 
 
 
 __all__ = [
+    "CONSUMER_CALLERS",
     "GRADUATED_COLS",
+    "RATES_ARTIFACT",
+    "apply_to_projection",
+    "load_rates",
+    "rates_path",
     "LEAGUE_LONG_TD_SHARE",
     "LEAGUE_TWO_PT_RATE",
     "LONG_TD_TERMS",
