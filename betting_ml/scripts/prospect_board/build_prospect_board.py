@@ -494,6 +494,7 @@ def main(argv=None) -> int:
         final, fold_report = fold_pipeline_into_e8_0_board(
             final, pipeline, strict_league=not args.allow_unmapped_orgs)
         report["pipeline_join"] = fold_report["pipeline"]
+        report["org_correction"] = fold_report["org"]
         consensus_rep = fold_report["consensus"]
         report["pipeline_as_of_date"] = (str(pipeline["as_of_date"].max())
                                          if "as_of_date" in pipeline.columns else None)
@@ -570,10 +571,27 @@ def main(argv=None) -> int:
         "", "  WROTE:", *[f"    {w}" for w in written],
     ]))
     if consensus_rep is not None:
-        print(format_consensus_report(consensus_rep, extra=[
+        org_rep = report.get("org_correction") or {}
+        org_lines = [
             "", f"  pipeline snapshot as-of : {report.get('pipeline_as_of_date')}",
             "  ⭐ E8.0b: MLB Pipeline players FanGraphs' board omits are on the 'Pipeline-only' tab.",
-        ]))
+            "", "  ⭐ ORG CORRECTION (FanGraphs' org is editorial and does NOT move for a trade)",
+            f"    board players checked ....... {org_rep.get('board_players_checked')}",
+            f"    org corrected from Pipeline . {org_rep.get('org_corrected')}"
+            "   ⭐ these would otherwise sit under their FORMER org",
+            f"    of those, AL/NL sheet moved . {org_rep.get('league_changed')}"
+            "   ⭐ the draft-affecting ones",
+        ]
+        if org_rep.get("org_conflicts"):
+            org_lines += [
+                f"    ⛔ UNRESOLVED CONFLICTS ...... {org_rep['org_conflicts']}  "
+                "(both Pipeline signals moved and DISAGREED — kept the FanGraphs org, "
+                "did NOT guess; verify these by hand)",
+                *[f"       {c['player_name']}: FanGraphs={c['fangraphs_org']} "
+                  f"list={c['slug_org']} roster={c['roster_org']}"
+                  for c in org_rep.get("conflicts", [])],
+            ]
+        print(format_consensus_report(consensus_rep, extra=org_lines))
     return 0
 
 

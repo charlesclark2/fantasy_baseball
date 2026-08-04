@@ -33,6 +33,7 @@ from betting_ml.scripts.prospect_board.mlb_pipeline import PIPELINE_SOURCE
 
 __all__ = [
     "HOW_TO_READ",
+    "apply_roster_org_correction",
     "build_sources",
     "consensus_column_order",
     "consensus_sheets",
@@ -54,8 +55,13 @@ _PIPELINE_IDENTITY = {
     "position": "pipeline_position",
     "age_current": "pipeline_age",
     "eta": "pipeline_eta",
+    # ⭐ The two org signals kept SEPARATE (not just their coalesce) — `apply_roster_org_correction`
+    # needs to know WHICH of them moved. See that function for why the coalesce alone is not enough.
+    "org": "pipeline_org_slug",
+    "org_current": "pipeline_org_roster",
 }
-_PIPELINE_ATTR_SOURCES = ("player_name", "org_resolved", "position", "age_current", "eta")
+_PIPELINE_ATTR_SOURCES = ("player_name", "org_resolved", "position", "age_current", "eta",
+                          "org", "org_current")
 
 
 def merge_pipeline_ranks(board: pd.DataFrame,
@@ -147,6 +153,132 @@ def merge_pipeline_ranks(board: pd.DataFrame,
         raise ValueError("the consensus universe has duplicate mlbam_id values — a player would "
                          "appear twice on the draft board.")
     return merged, report
+
+
+def apply_roster_org_correction(universe: pd.DataFrame, *,
+                                strict_league: bool = True) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Correct a board player's `org` when MLB Pipeline shows he has CHANGED ORGANISATIONS.
+
+    ⭐ WHY THIS EXISTS. FanGraphs THE BOARD's `org` is EDITORIAL and does not move for a trade:
+    measured across the 2026-07-27 → 2026-08-03 snapshots, 47 board rows changed on level/rank
+    (so the pull is live) and **ZERO changed org**, straight through a trade deadline. Left
+    uncorrected that is not a cosmetic label bug — `org` drives `mlb_league` via `ORG_TO_LEAGUE`,
+    and `mlb_league` is THE filter a single-league dynasty draft runs on. On the 8/3 board it put
+    22 players on the wrong AL/NL sheet: 13 shown as draftable who had moved to the other league,
+    and 9 — including River Ryan (FV 55, overall #18, LAD→DET) — INVISIBLE on the sheet they
+    actually belonged to.
+
+    🚨 WHY THE COALESCED `pipeline_org` IS NOT ENOUGH (the whole reason this is a function and not
+    a one-line `fillna`). Pipeline carries TWO independent org signals and **BOTH of them lag, in
+    OPPOSITE directions**, so neither can be trusted as "the fresh one":
+
+      * `pipeline_org_slug`   — which org's Top-30 LIST he appears on. MLB re-cuts these for the
+                                deadline, but a player can sit on his new org's list while his
+                                roster record still points at the old affiliate.
+      * `pipeline_org_roster` — `activeRoster → team → parentOrgName`, i.e. factual roster state.
+                                It moves when he is ASSIGNED to an affiliate, which for a traded
+                                minor-leaguer can trail the trade by days.
+
+    Measured on the 2026-08-03 snapshot, both directions occur: Tyler Uberstine was on the BRAVES
+    list with a Worcester (BOS) roster, while Juan Brito was still on the GUARDIANS list with a
+    Cincinnati roster. `merge_pipeline_ranks` coalesces slug-first into `pipeline_org`, which is
+    right for Uberstine and WRONG for Brito — preferring either signal unconditionally corrects one
+    class and silently misses the other (6 roster-only movers were invisible to a `pipeline_org`
+    read on 8/3).
+
+    ⭐ THE RULE, and why it is safe: FanGraphs' org is the OLDEST of the three reads, so it is the
+    BASELINE. Neither Pipeline signal ever invents a move — each only ever lags — so **whichever
+    signal differs from the baseline is the one that has caught up**, and a signal that agrees with
+    the baseline is merely uninformative rather than contradictory. Measured on 8/3: 683 no-move,
+    35 where both moved AND AGREED, 2 slug-only, 6 roster-only, and **0 where both moved and
+    disagreed**. That last bucket is the only one the rule cannot resolve.
+
+    ⛔ AND WHEN IT CANNOT: if both signals moved and name DIFFERENT destinations, this REFUSES to
+    guess — it keeps the FanGraphs org, sets `org_source='conflict'`, and reports the player so the
+    conflict is visible. Picking one arbitrarily would move a player to a league he may not be in,
+    which is precisely the failure this function exists to prevent. Never silently resolve it.
+
+    ⚠️ `org_rank` IS NULLED FOR A MOVED PLAYER. FanGraphs' org rank is a rank WITHIN THE PRIOR ORG
+    ("3rd best prospect in BOS"); carrying it onto the new org would assert a standing FanGraphs
+    never published. The value is preserved in `org_rank_prior_org` beside `org_prior`, and this
+    runs BEFORE `attach_consensus` so the org-scope consensus is computed on the corrected frame
+    rather than on a rank that belongs to a different organisation.
+
+    Only `on_fangraphs_board` rows are touched — a Pipeline-only row already carries Pipeline's org.
+    """
+    df = universe.copy()
+    for col in ("pipeline_org_slug", "pipeline_org_roster"):
+        if col not in df.columns:
+            df[col] = pd.NA
+
+    def _norm(v: Any) -> str | None:
+        if v is None or (isinstance(v, float) and pd.isna(v)) or pd.isna(v):
+            return None
+        s = str(v).strip().upper()
+        return s or None
+
+    on_board = df.get("on_fangraphs_board", pd.Series(True, index=df.index)).fillna(False).astype(bool)
+
+    org_source: list[str] = []
+    org_prior: list[Any] = []
+    new_org: list[Any] = []
+    conflicts: list[dict[str, Any]] = []
+
+    for idx, row in df.iterrows():
+        base = _norm(row.get("org"))
+        if not on_board.loc[idx] or base is None:
+            org_source.append("fangraphs" if base else "unknown")
+            org_prior.append(pd.NA)
+            new_org.append(row.get("org"))
+            continue
+        moved = {v for v in (_norm(row.get("pipeline_org_slug")),
+                             _norm(row.get("pipeline_org_roster"))) if v is not None and v != base}
+        if not moved:
+            org_source.append("fangraphs")
+            org_prior.append(pd.NA)
+            new_org.append(row.get("org"))
+        elif len(moved) == 1:
+            org_source.append("mlb_pipeline")
+            org_prior.append(row.get("org"))
+            new_org.append(moved.pop())
+        else:
+            # Both signals moved and disagree — unresolvable. Keep the baseline, surface it.
+            conflicts.append({"player_name": row.get("player_name"), "fangraphs_org": base,
+                              "slug_org": _norm(row.get("pipeline_org_slug")),
+                              "roster_org": _norm(row.get("pipeline_org_roster"))})
+            org_source.append("conflict")
+            org_prior.append(pd.NA)
+            new_org.append(row.get("org"))
+
+    df["org_source"] = org_source
+    df["org_prior"] = org_prior
+    df["org"] = new_org
+
+    changed = df["org_source"].eq("mlb_pipeline")
+    if "org_rank" in df.columns:
+        df["org_rank_prior_org"] = df["org_rank"].where(changed)
+        df.loc[changed, "org_rank"] = np.nan
+
+    df["mlb_league"] = df["org"].map(assign_league)
+    unmapped = sorted({str(o) for o in
+                       df.loc[changed & df["mlb_league"].isna(), "org"].dropna().unique()})
+    if unmapped and strict_league:
+        raise ProspectBoardError(
+            f"roster-corrected org(s) {unmapped} have no AL/NL mapping. `mlb_league` is a REQUIRED "
+            "filter for a single-league dynasty draft — an unmapped org silently drops those "
+            "players from the only view the operator uses. Add them to ORG_TO_LEAGUE (or "
+            "ORG_ALIASES) and re-run."
+        )
+
+    report = {
+        "board_players_checked": int(on_board.sum()),
+        "org_corrected": int(changed.sum()),
+        "org_conflicts": len(conflicts),
+        "conflicts": conflicts,
+        "league_changed": int((changed & (df["mlb_league"] != universe["mlb_league"])).sum())
+        if "mlb_league" in universe.columns else None,
+    }
+    return df, report
 
 
 def build_sources(df: pd.DataFrame, manual_names: list[str]) -> list[RankSource]:
@@ -241,6 +373,11 @@ def fold_pipeline_into_e8_0_board(e80_board: pd.DataFrame, pipeline: pd.DataFram
 
     universe, pipeline_report = merge_pipeline_ranks(base, pipeline)
 
+    # ⭐ Correct a board player's org when Pipeline shows he has CHANGED ORGS (FanGraphs' org is
+    # editorial and does not move for a trade). MUST run BEFORE `attach_consensus`: it nulls the
+    # prior org's `org_rank`, and the org-scope consensus must be computed on the corrected frame.
+    universe, org_report = apply_roster_org_correction(universe, strict_league=strict_league)
+
     # `merge_pipeline_ranks` derives `mlb_league` for the new rows but does not enforce the E8.0
     # hard-error — do that here so a Pipeline-only player from an unmapped org can never silently
     # vanish from the single-league draft sheet, exactly the rule `assemble_board` enforces for the
@@ -276,7 +413,7 @@ def fold_pipeline_into_e8_0_board(e80_board: pd.DataFrame, pipeline: pd.DataFram
     universe["board_rank"] = np.arange(1, len(universe) + 1)
 
     universe = universe[e8_0_column_order_with_consensus(universe)]
-    return universe, {"pipeline": pipeline_report, "consensus": consensus_rep}
+    return universe, {"pipeline": pipeline_report, "consensus": consensus_rep, "org": org_report}
 
 
 def e8_0_column_order_with_consensus(df: pd.DataFrame) -> list[str]:
@@ -319,7 +456,8 @@ def e8_0_column_order_with_consensus(df: pd.DataFrame) -> list[str]:
 def consensus_column_order(df: pd.DataFrame) -> list[str]:
     """WHO → the consensus → each source's own rank → where they disagree → us → the detail."""
     order = [
-        "consensus_board_rank", "player_name", "org", "mlb_league", "position", "player_type",
+        "consensus_board_rank", "player_name", "org", "org_prior", "org_source", "mlb_league",
+        "position", "player_type",
         "level", "age", "age_vs_level", "eta", "on_fangraphs_board",
         # the consensus
         "consensus_rank", "consensus_tier", "consensus_rank_mean", "consensus_n_sources",

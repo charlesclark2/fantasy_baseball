@@ -1,5 +1,14 @@
 [
   {
+    "week": "2026-08-03",
+    "items": [
+      {
+        "tag": "fixed",
+        "text": "The MLB prospect board now shows a traded prospect's CURRENT organization, and puts him on the right AL/NL sheet. FanGraphs' board — where the board's org column came from — is an editorial publication, and it does not repoint a player's org when he is traded: across the week of the trade deadline, 47 players on it changed level or rank while exactly zero changed organization. That is not just a wrong label. The org drives the AL/NL filter, which is the filter a single-league dynasty draft actually runs on, so a prospect who changed leagues was either shown as draftable when he was no longer eligible, or missing entirely from the sheet he belonged on. On the current board that was 43 prospects with a stale org and 25 on the wrong league sheet — including River Ryan, the 18th-ranked prospect on the board, who had moved from the Dodgers to the Tigers and so was absent from the AL sheet he should have led. Orgs are now taken from MLB's own data, which tracks two separate signals: which organization's top-30 list a player appears on, and his actual roster assignment. Both of them lag a trade, but in opposite directions and never at the same time — one player sat on his new club's prospect list while his roster still showed the old affiliate, another was still on his old club's list while his roster had already moved — so the board takes whichever of the two has caught up, and treats FanGraphs' org as the older baseline they are compared against. In the rare case where the two disagree with each other about where a player went, the board does NOT guess: it keeps the original org and flags the conflict for review, because moving a player into a league he may not be in is the exact failure this is meant to prevent. A corrected player also loses his FanGraphs organizational rank rather than carrying it across — being \"3rd best in the system\" refers to the system he left, and asserting it about his new one would be inventing a ranking FanGraphs never published. His prior org and prior org rank are both kept alongside, so you can see what changed and what it used to say."
+      }
+    ]
+  },
+  {
     "week": "2026-07-27",
     "items": [
       {
