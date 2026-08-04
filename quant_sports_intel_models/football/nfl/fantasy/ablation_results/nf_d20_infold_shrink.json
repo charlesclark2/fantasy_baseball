@@ -1,0 +1,3790 @@
+{
+  "story": "NF-D20",
+  "generated_at": "2026-08-04T07:16:14.267795+00:00",
+  "cohorts": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "board_seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025,
+    2026
+  ],
+  "serving_season": 2026,
+  "n_scaled_rows": 472,
+  "n_candidate_arms": 4,
+  "preregistration": {
+    "framing": "pooled",
+    "framing_reason": "INHERITED FROM NF-D16 THROUGH NF-D18 VERBATIM, and inheriting rather than re-deciding is itself the point: this is the FOURTH pre-registered change asked of ONE product, and a framing re-chosen per story is a framing chosen for its answer. The ship UNIT is one change to `project_rookies` that applies at RB/TE/WR together or not at all, so the hypothesis is ONE claim and gets ONE test. The per-position reading is computed as a DISCLOSURE and does not gate.",
+    "eligibility_reason": "The PER-FOLD placement constraint acts on ELIGIBILITY and is evaluated OUT-OF-SAMPLE: an arm is eligible only if the \u03bb its rule chose from data strictly BEFORE each held-out fold also satisfies C2 on that fold's OWN board \u2014 the board the rule never saw. As a post-hoc veto the story would be vacuous (the least-shrunk arm wins the tier metric by construction and is precisely the arm the cap refuses), and as an IN-SAMPLE filter it would be circular. Only the held-out reading asks the question that decides a publish: does an in-fold-selected shrink still clear the cap on the NEXT board?",
+    "lambda_provenance": "\u03bb is NEVER a knob in this story. Every candidate is a deterministic RULE whose \u03bb is computed from held-out draft classes and prior-season merged boards alone; the grid itself is NF-D16's own pre-registered SHRINK_GRID, imported. \u26d4 NF-D18's frontier value (read off the 2026 board with the answer in view) is not referenced, defaulted to, or reachable by any rule here, and no arm is fitted, filtered or selected on the 2026 board.",
+    "dsr_reading": "whole_field",
+    "dsr_min": 0.95,
+    "alpha": 0.1,
+    "pbo_max": 0.2,
+    "metric": "tier_mae",
+    "lambda_grid": [
+      0.0,
+      0.25,
+      0.5,
+      0.75,
+      1.0
+    ],
+    "rules": [
+      "infold_all_boards",
+      "infold_last_board",
+      "unconstrained"
+    ],
+    "empty_evidence_lambda": 0.0,
+    "strictest_cap": 11.5
+  },
+  "preregistration_table": [
+    {
+      "decision": "family",
+      "value": "global \u03bb-shrink of NF-D16's ratified per-position affine",
+      "why (written BEFORE the run)": "NF-D18 measured that the binding problem is the SHAPE, not the constraint \u2014 a plain global shrink of the ratified affine is the mechanism its null named. The field is SELECTION RULES rather than \u03bb values, so no human chooses a number."
+    },
+    {
+      "decision": "\u03bb grid",
+      "value": "[0.0, 0.25, 0.5, 0.75, 1.0]",
+      "why (written BEFORE the run)": "NF-D16's OWN pre-registered `SHRINK_GRID`, imported, plus \u03bb = 0 (which reproduces the incumbent exactly). Inheriting it is what stops the grid from becoming a place to hide a choice."
+    },
+    {
+      "decision": "arms",
+      "value": "incumbent (NULL), infold_all_boards, infold_last_board, unconstrained (\u03bb=1), blind_half (\u03bb=0.5)",
+      "why (written BEFORE the run)": "the incumbent NULL + two in-fold rules differing only in how they aggregate board evidence + NF-D16's ratified affine at full strength as the REFERENCE (shippable, so the constraint has something to REFUSE) + a non-shippable blind constant as the MATCHED FOIL."
+    },
+    {
+      "decision": "constraint C1",
+      "value": "do-no-ordering-harm \u2264 0.02",
+      "why (written BEFORE the run)": "NF1.4's own constant, inherited verbatim, checked PER POSITION and never as a pooled mean."
+    },
+    {
+      "decision": "constraint C2",
+      "value": "rank_\u03bb \u2265 min(NF-D17 threshold-invariant cap, rank_incumbent), PER FOLD, evaluated OUT-OF-SAMPLE",
+      "why (written BEFORE the run)": "the validated clause imported rather than re-derived; the incumbent term exists because the shipped product itself breaches on some boards and a constraint that refuses the NULL has examined nothing. Held-out because an in-sample constraint check is circular."
+    },
+    {
+      "decision": "constraints bind on",
+      "value": "ELIGIBILITY (not a post-hoc veto)",
+      "why (written BEFORE the run)": "The PER-FOLD placement constraint acts on ELIGIBILITY and is evaluated OUT-OF-SAMPLE: an arm is eligible only if the \u03bb its rule chose from data strictly BEFORE each held-out fold also satisfies C2 on that fold's OWN board \u2014 the board the rule never saw. As a post-hoc veto the story would be vacuous (the least-shrunk arm wins the tier metric by construction and is precisely the arm the cap refuses), and as an IN-SAMPLE filter it would be circular. Only the held-out reading asks the question that decides a publish: does an in-fold-selected shrink still clear the cap on the NEXT board?"
+    },
+    {
+      "decision": "framing",
+      "value": "pooled",
+      "why (written BEFORE the run)": "INHERITED FROM NF-D16 THROUGH NF-D18 VERBATIM, and inheriting rather than re-deciding is itself the point: this is the FOURTH pre-registered change asked of ONE product, and a framing re-chosen per story is a framing chosen for its answer. The ship UNIT is one change to `project_rookies` that applies at RB/TE/WR together or not at all, so the hypothesis is ONE claim and gets ONE test. The per-position reading is computed as a DISCLOSURE and does not gate."
+    },
+    {
+      "decision": "DSR reading that BINDS",
+      "value": "whole_field",
+      "why (written BEFORE the run)": "Inherited from NF-D16 through NF-D18. Naming which reading binds in advance is what stops it becoming a choice made after seeing which is kinder."
+    },
+    {
+      "decision": "DSR level / PBO / \u03b1",
+      "value": "0.95 / 0.2 / 0.1",
+      "why (written BEFORE the run)": "All three INHERITED FROM NF-D16 BY IMPORT, so the bar cannot drift between the story that ratified the correction and the story trying to publish it."
+    },
+    {
+      "decision": "selection metric",
+      "value": "tier_mae",
+      "why (written BEFORE the run)": "NF1.4's draftable-tier MAE, INHERITED. Grading the fourth change to ONE product on a new metric is metric-shopping."
+    },
+    {
+      "decision": "empty-evidence default",
+      "value": "\u03bb = 0",
+      "why (written BEFORE the run)": "the boards begin at 2019, so the first held-out class has no prior board. With nothing to verify against, a rule applies NO correction \u2014 a check that did not run is not a check that passed (NF1.7 (a))."
+    }
+  ],
+  "incumbent": {
+    "label": "incumbent (NULL)",
+    "per_cohort": {
+      "2019": {
+        "n": 80,
+        "tier_mae": 0.9067,
+        "tier_bias": -0.6306,
+        "tier_mae_by_pos": {
+          "QB": 76.15,
+          "RB": 89.43,
+          "TE": 19.53,
+          "WR": 74.81
+        },
+        "tier_bias_by_pos": {
+          "QB": -76.15,
+          "RB": -56.02,
+          "TE": 2.7,
+          "WR": -60.88
+        },
+        "mae": 45.76,
+        "rmse": 65.178,
+        "bias": -18.725,
+        "slope": 1.38,
+        "rho": 0.5575,
+        "rho_by_pos": {
+          "QB": 0.8246,
+          "RB": 0.5816,
+          "WR": 0.3436,
+          "TE": 0.4804
+        },
+        "bias_by_pos": {
+          "QB": -24.28,
+          "RB": -5.68,
+          "TE": 3.76,
+          "WR": -41.04
+        }
+      },
+      "2020": {
+        "n": 77,
+        "tier_mae": 1.0422,
+        "tier_bias": -0.8416,
+        "tier_mae_by_pos": {
+          "QB": 112.02,
+          "RB": 84.15,
+          "TE": 23.66,
+          "WR": 85.72
+        },
+        "tier_bias_by_pos": {
+          "QB": -70.18,
+          "RB": -75.72,
+          "TE": -13.71,
+          "WR": -85.5
+        },
+        "mae": 44.906,
+        "rmse": 67.283,
+        "bias": -24.94,
+        "slope": 1.556,
+        "rho": 0.6686,
+        "rho_by_pos": {
+          "QB": 0.5656,
+          "RB": 0.7506,
+          "WR": 0.7103,
+          "TE": 0.6479
+        },
+        "bias_by_pos": {
+          "QB": -6.67,
+          "RB": -32.73,
+          "TE": 4.58,
+          "WR": -37.32
+        }
+      },
+      "2021": {
+        "n": 75,
+        "tier_mae": 1.084,
+        "tier_bias": -0.4711,
+        "tier_mae_by_pos": {
+          "QB": 59.85,
+          "RB": 102.66,
+          "TE": 69.68,
+          "WR": 50.5
+        },
+        "tier_bias_by_pos": {
+          "QB": 59.85,
+          "RB": -51.4,
+          "TE": -53.62,
+          "WR": -41.7
+        },
+        "mae": 43.798,
+        "rmse": 61.869,
+        "bias": -14.42,
+        "slope": 1.053,
+        "rho": 0.5797,
+        "rho_by_pos": {
+          "QB": 0.4788,
+          "RB": 0.625,
+          "WR": 0.7,
+          "TE": 0.5152
+        },
+        "bias_by_pos": {
+          "QB": -3.22,
+          "RB": -28.3,
+          "TE": -26.28,
+          "WR": -6.3
+        }
+      },
+      "2022": {
+        "n": 79,
+        "tier_mae": 0.7517,
+        "tier_bias": -0.5409,
+        "tier_mae_by_pos": {
+          "QB": 45.88,
+          "RB": 72.32,
+          "TE": 44.12,
+          "WR": 43.7
+        },
+        "tier_bias_by_pos": {
+          "QB": -25.11,
+          "RB": -70.53,
+          "TE": -44.12,
+          "WR": -2.87
+        },
+        "mae": 34.997,
+        "rmse": 49.073,
+        "bias": -13.176,
+        "slope": 0.957,
+        "rho": 0.5498,
+        "rho_by_pos": {
+          "QB": 0.5188,
+          "RB": 0.5494,
+          "WR": 0.6479,
+          "TE": 0.4833
+        },
+        "bias_by_pos": {
+          "QB": -13.61,
+          "RB": -15.26,
+          "TE": -22.45,
+          "WR": -5.03
+        }
+      },
+      "2023": {
+        "n": 80,
+        "tier_mae": 1.2094,
+        "tier_bias": -1.0087,
+        "tier_mae_by_pos": {
+          "QB": 57.45,
+          "RB": 61.0,
+          "TE": 84.41,
+          "WR": 99.72
+        },
+        "tier_bias_by_pos": {
+          "QB": 9.05,
+          "RB": -57.51,
+          "TE": -84.41,
+          "WR": -99.72
+        },
+        "mae": 44.621,
+        "rmse": 66.504,
+        "bias": -26.774,
+        "slope": 1.147,
+        "rho": 0.7473,
+        "rho_by_pos": {
+          "QB": 0.6946,
+          "RB": 0.8449,
+          "WR": 0.7471,
+          "TE": 0.7025
+        },
+        "bias_by_pos": {
+          "QB": 6.73,
+          "RB": -14.2,
+          "TE": -19.12,
+          "WR": -51.33
+        }
+      },
+      "2024": {
+        "n": 77,
+        "tier_mae": 1.0935,
+        "tier_bias": -0.7605,
+        "tier_mae_by_pos": {
+          "QB": 76.64,
+          "RB": 72.28,
+          "TE": 75.04,
+          "WR": 68.95
+        },
+        "tier_bias_by_pos": {
+          "QB": -76.64,
+          "RB": -22.04,
+          "TE": -57.0,
+          "WR": -46.42
+        },
+        "mae": 44.895,
+        "rmse": 67.884,
+        "bias": -17.861,
+        "slope": 1.299,
+        "rho": 0.5719,
+        "rho_by_pos": {
+          "QB": 0.7304,
+          "RB": 0.2642,
+          "WR": 0.7057,
+          "TE": 0.5874
+        },
+        "bias_by_pos": {
+          "QB": -29.1,
+          "RB": -14.34,
+          "TE": -20.36,
+          "WR": -15.38
+        }
+      },
+      "2025": {
+        "n": 85,
+        "tier_mae": 1.0218,
+        "tier_bias": -0.6746,
+        "tier_mae_by_pos": {
+          "QB": 95.29,
+          "RB": 81.17,
+          "TE": 60.99,
+          "WR": 58.45
+        },
+        "tier_bias_by_pos": {
+          "QB": -47.68,
+          "RB": -70.58,
+          "TE": -60.99,
+          "WR": -4.6
+        },
+        "mae": 43.73,
+        "rmse": 60.722,
+        "bias": -19.483,
+        "slope": 0.844,
+        "rho": 0.6178,
+        "rho_by_pos": {
+          "QB": 0.6314,
+          "RB": 0.5127,
+          "WR": 0.491,
+          "TE": 0.8359
+        },
+        "bias_by_pos": {
+          "QB": -9.71,
+          "RB": -29.49,
+          "TE": -30.98,
+          "WR": -9.57
+        }
+      }
+    },
+    "per_cohort_pooled": {
+      "2019": 0.9051,
+      "2020": 0.97,
+      "2021": 1.2268,
+      "2022": 0.8342,
+      "2023": 1.3939,
+      "2024": 1.1631,
+      "2025": 1.0233
+    },
+    "pooled_tier_mae": 1.0738,
+    "tier_mae": 1.0738,
+    "universe_mae": 42.054,
+    "universe_bias": -20.869,
+    "key": "incumbent@null",
+    "form": "incumbent",
+    "rule": null,
+    "recalibrates": false,
+    "shippable": true,
+    "constrained": false,
+    "is_foil": false,
+    "lam_by_fold": {
+      "2019": 0.0,
+      "2020": 0.0,
+      "2021": 0.0,
+      "2022": 0.0,
+      "2023": 0.0,
+      "2024": 0.0,
+      "2025": 0.0
+    },
+    "universe_mae_QB": 50.15,
+    "tier_mae_QB": 74.754,
+    "tier_bias_QB": -32.409,
+    "rho_QB": 0.6349,
+    "universe_mae_RB": 46.4,
+    "tier_mae_RB": 80.43,
+    "tier_bias_RB": -57.686,
+    "rho_RB": 0.5898,
+    "universe_mae_TE": 31.24,
+    "tier_mae_TE": 53.919,
+    "tier_bias_TE": -44.45,
+    "rho_TE": 0.6075,
+    "universe_mae_WR": 44.01,
+    "tier_mae_WR": 68.836,
+    "tier_bias_WR": -48.813,
+    "rho_WR": 0.6208
+  },
+  "arms": [
+    {
+      "label": "incumbent (NULL)",
+      "per_cohort_pooled": {
+        "2019": 0.9051,
+        "2020": 0.97,
+        "2021": 1.2268,
+        "2022": 0.8342,
+        "2023": 1.3939,
+        "2024": 1.1631,
+        "2025": 1.0233
+      },
+      "pooled_tier_mae": 1.0738,
+      "tier_mae": 1.0738,
+      "universe_mae": 42.054,
+      "universe_bias": -20.869,
+      "key": "incumbent@null",
+      "form": "incumbent",
+      "rule": null,
+      "recalibrates": false,
+      "shippable": true,
+      "constrained": false,
+      "is_foil": false,
+      "lam_by_fold": {
+        "2019": 0.0,
+        "2020": 0.0,
+        "2021": 0.0,
+        "2022": 0.0,
+        "2023": 0.0,
+        "2024": 0.0,
+        "2025": 0.0
+      },
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 46.4,
+      "tier_mae_RB": 80.43,
+      "tier_bias_RB": -57.686,
+      "rho_RB": 0.5898,
+      "universe_mae_TE": 31.24,
+      "tier_mae_TE": 53.919,
+      "tier_bias_TE": -44.45,
+      "rho_TE": 0.6075,
+      "universe_mae_WR": 44.01,
+      "tier_mae_WR": 68.836,
+      "tier_bias_WR": -48.813,
+      "rho_WR": 0.6208
+    },
+    {
+      "label": "infold_all_boards",
+      "per_cohort_pooled": {
+        "2019": 0.9051,
+        "2020": 0.8268,
+        "2021": 1.1216,
+        "2022": 0.6988,
+        "2023": 1.2354,
+        "2024": 1.1311,
+        "2025": 0.847
+      },
+      "pooled_tier_mae": 0.9665,
+      "tier_mae": 0.9665,
+      "universe_mae": 42.503,
+      "universe_bias": -9.627,
+      "key": "ols_slope@infold_all_boards",
+      "form": "ols_slope",
+      "rule": "infold_all_boards",
+      "recalibrates": true,
+      "shippable": true,
+      "constrained": true,
+      "is_foil": false,
+      "lam_by_fold": {
+        "2019": 0.0,
+        "2020": 1.0,
+        "2021": 1.0,
+        "2022": 1.0,
+        "2023": 1.0,
+        "2024": 0.5,
+        "2025": 0.5
+      },
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 46.19,
+      "tier_mae_RB": 72.574,
+      "tier_bias_RB": -33.013,
+      "rho_RB": 0.5898,
+      "universe_mae_TE": 29.81,
+      "tier_mae_TE": 45.721,
+      "tier_bias_TE": -31.254,
+      "rho_TE": 0.6075,
+      "universe_mae_WR": 45.74,
+      "tier_mae_WR": 65.707,
+      "tier_bias_WR": -41.594,
+      "rho_WR": 0.6208
+    },
+    {
+      "label": "infold_last_board",
+      "per_cohort_pooled": {
+        "2019": 0.9051,
+        "2020": 0.8268,
+        "2021": 1.1216,
+        "2022": 0.6988,
+        "2023": 1.2354,
+        "2024": 1.1311,
+        "2025": 0.7245
+      },
+      "pooled_tier_mae": 0.949,
+      "tier_mae": 0.949,
+      "universe_mae": 42.575,
+      "universe_bias": -8.256,
+      "key": "ols_slope@infold_last_board",
+      "form": "ols_slope",
+      "rule": "infold_last_board",
+      "recalibrates": true,
+      "shippable": true,
+      "constrained": true,
+      "is_foil": false,
+      "lam_by_fold": {
+        "2019": 0.0,
+        "2020": 1.0,
+        "2021": 1.0,
+        "2022": 1.0,
+        "2023": 1.0,
+        "2024": 0.5,
+        "2025": 1.0
+      },
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 46.42,
+      "tier_mae_RB": 72.879,
+      "tier_bias_RB": -29.884,
+      "rho_RB": 0.5898,
+      "universe_mae_TE": 29.32,
+      "tier_mae_TE": 42.98,
+      "tier_bias_TE": -28.513,
+      "rho_TE": 0.6075,
+      "universe_mae_WR": 45.95,
+      "tier_mae_WR": 65.649,
+      "tier_bias_WR": -40.516,
+      "rho_WR": 0.6208
+    },
+    {
+      "label": "unconstrained (\u03bb=1)",
+      "per_cohort_pooled": {
+        "2019": 0.9051,
+        "2020": 0.8268,
+        "2021": 1.1216,
+        "2022": 0.6988,
+        "2023": 1.2354,
+        "2024": 1.0991,
+        "2025": 0.7245
+      },
+      "pooled_tier_mae": 0.9445,
+      "tier_mae": 0.9445,
+      "universe_mae": 42.866,
+      "universe_bias": -7.174,
+      "key": "ols_slope@unconstrained",
+      "form": "ols_slope",
+      "rule": "unconstrained",
+      "recalibrates": true,
+      "shippable": true,
+      "constrained": false,
+      "is_foil": false,
+      "lam_by_fold": {
+        "2019": 0.0,
+        "2020": 1.0,
+        "2021": 1.0,
+        "2022": 1.0,
+        "2023": 1.0,
+        "2024": 1.0,
+        "2025": 1.0
+      },
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 46.79,
+      "tier_mae_RB": 73.633,
+      "tier_bias_RB": -28.336,
+      "rho_RB": 0.5898,
+      "universe_mae_TE": 29.16,
+      "tier_mae_TE": 42.129,
+      "tier_bias_TE": -26.921,
+      "rho_TE": 0.6075,
+      "universe_mae_WR": 46.39,
+      "tier_mae_WR": 65.31,
+      "tier_bias_WR": -39.659,
+      "rho_WR": 0.6208
+    },
+    {
+      "label": "blind_half (\u03bb=0.5)",
+      "per_cohort_pooled": {
+        "2019": 0.8919,
+        "2020": 0.8984,
+        "2021": 1.1714,
+        "2022": 0.7655,
+        "2023": 1.2589,
+        "2024": 1.1311,
+        "2025": 0.847
+      },
+      "pooled_tier_mae": 0.9949,
+      "tier_mae": 0.9949,
+      "universe_mae": 41.956,
+      "universe_bias": -13.137,
+      "key": "ols_slope@null",
+      "form": "ols_slope",
+      "rule": null,
+      "recalibrates": true,
+      "shippable": false,
+      "constrained": false,
+      "is_foil": true,
+      "lam_by_fold": {
+        "2019": 0.5,
+        "2020": 0.5,
+        "2021": 0.5,
+        "2022": 0.5,
+        "2023": 0.5,
+        "2024": 0.5,
+        "2025": 0.5
+      },
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 45.88,
+      "tier_mae_RB": 73.876,
+      "tier_bias_RB": -41.45,
+      "rho_RB": 0.5898,
+      "universe_mae_TE": 30.2,
+      "tier_mae_TE": 48.1,
+      "tier_bias_TE": -35.324,
+      "rho_TE": 0.6075,
+      "universe_mae_WR": 44.61,
+      "tier_mae_WR": 66.676,
+      "tier_bias_WR": -43.254,
+      "rho_WR": 0.6208
+    }
+  ],
+  "anchors": {
+    "oracle_perplayer": {
+      "label": "oracle_perplayer",
+      "per_cohort_pooled": {
+        "2019": 0.0,
+        "2020": 0.0,
+        "2021": 0.0,
+        "2022": 0.0,
+        "2023": 0.0,
+        "2024": 0.0,
+        "2025": 0.0
+      },
+      "pooled_tier_mae": 0.0,
+      "tier_mae": 0.0,
+      "universe_mae": 0.004,
+      "universe_bias": 0.004,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 0.01,
+      "tier_mae_RB": 0.0,
+      "tier_bias_RB": 0.0,
+      "rho_RB": 0.9998,
+      "universe_mae_TE": 0.0,
+      "tier_mae_TE": 0.0,
+      "tier_bias_TE": 0.0,
+      "rho_TE": 1.0,
+      "universe_mae_WR": 0.0,
+      "tier_mae_WR": 0.0,
+      "tier_bias_WR": 0.0,
+      "rho_WR": 1.0
+    },
+    "oracle_ols": {
+      "label": "oracle_ols",
+      "per_cohort_pooled": {
+        "2019": 0.8162,
+        "2020": 0.5748,
+        "2021": 0.9702,
+        "2022": 0.6433,
+        "2023": 1.0389,
+        "2024": 0.8081,
+        "2025": 0.5976
+      },
+      "pooled_tier_mae": 0.7784,
+      "tier_mae": 0.7784,
+      "universe_mae": 38.996,
+      "universe_bias": 0.039,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 42.43,
+      "tier_mae_RB": 59.469,
+      "tier_bias_RB": -21.394,
+      "rho_RB": 0.5143,
+      "universe_mae_TE": 26.39,
+      "tier_mae_TE": 32.269,
+      "tier_bias_TE": -5.043,
+      "rho_TE": 0.6082,
+      "universe_mae_WR": 42.36,
+      "tier_mae_WR": 58.204,
+      "tier_bias_WR": -8.841,
+      "rho_WR": 0.6208
+    },
+    "permuted_across": {
+      "label": "permuted_across",
+      "per_cohort_pooled": {
+        "2019": 0.9131,
+        "2020": 1.0959,
+        "2021": 1.6701,
+        "2022": 0.8991,
+        "2023": 1.659,
+        "2024": 1.5418,
+        "2025": 1.5726
+      },
+      "pooled_tier_mae": 1.3359,
+      "tier_mae": 1.3359,
+      "universe_mae": 56.749,
+      "universe_bias": -4.296,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 59.65,
+      "tier_mae_RB": 100.119,
+      "tier_bias_RB": -81.4,
+      "rho_RB": -0.1213,
+      "universe_mae_TE": 46.81,
+      "tier_mae_TE": 62.11,
+      "tier_bias_TE": -44.273,
+      "rho_TE": -0.2695,
+      "universe_mae_WR": 59.27,
+      "tier_mae_WR": 94.191,
+      "tier_bias_WR": -86.4,
+      "rho_WR": -0.4208
+    },
+    "permuted_within": {
+      "label": "permuted_within",
+      "per_cohort_pooled": {
+        "2019": 1.3291,
+        "2020": 1.1821,
+        "2021": 1.7052,
+        "2022": 0.8994,
+        "2023": 1.8584,
+        "2024": 1.5104,
+        "2025": 1.4913
+      },
+      "pooled_tier_mae": 1.4251,
+      "tier_mae": 1.4251,
+      "universe_mae": 55.986,
+      "universe_bias": -6.525,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 63.48,
+      "tier_mae_RB": 95.527,
+      "tier_bias_RB": -73.779,
+      "rho_RB": 0.1339,
+      "universe_mae_TE": 41.08,
+      "tier_mae_TE": 77.224,
+      "tier_bias_TE": -69.033,
+      "rho_TE": -0.1215,
+      "universe_mae_WR": 57.69,
+      "tier_mae_WR": 93.007,
+      "tier_bias_WR": -82.379,
+      "rho_WR": 0.0057
+    },
+    "zero_scale": {
+      "label": "zero_scale",
+      "per_cohort_pooled": {
+        "2019": 1.7191,
+        "2020": 1.7976,
+        "2021": 2.1909,
+        "2022": 1.7476,
+        "2023": 2.6948,
+        "2024": 1.9291,
+        "2025": 2.2547
+      },
+      "pooled_tier_mae": 2.0477,
+      "tier_mae": 2.0477,
+      "universe_mae": 62.29,
+      "universe_bias": -62.282,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 66.21,
+      "tier_mae_RB": 139.7,
+      "tier_bias_RB": -139.7,
+      "rho_RB": 0.0,
+      "universe_mae_TE": 44.88,
+      "tier_mae_TE": 105.314,
+      "tier_bias_TE": -105.314,
+      "rho_TE": 0.0,
+      "universe_mae_WR": 67.47,
+      "tier_mae_WR": 140.361,
+      "tier_bias_WR": -140.361,
+      "rho_WR": 0.0
+    },
+    "pos_median": {
+      "label": "pos_median",
+      "per_cohort_pooled": {
+        "2019": 1.3358,
+        "2020": 1.4214,
+        "2021": 1.9049,
+        "2022": 1.3321,
+        "2023": 2.2554,
+        "2024": 1.592,
+        "2025": 1.8423
+      },
+      "pooled_tier_mae": 1.6691,
+      "tier_mae": 1.6691,
+      "universe_mae": 54.039,
+      "universe_bias": -32.67,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 57.53,
+      "tier_mae_RB": 110.856,
+      "tier_bias_RB": -102.257,
+      "rho_RB": 0.0,
+      "universe_mae_TE": 39.75,
+      "tier_mae_TE": 86.593,
+      "tier_bias_TE": -83.707,
+      "rho_TE": 0.0,
+      "universe_mae_WR": 58.11,
+      "tier_mae_WR": 115.281,
+      "tier_bias_WR": -112.926,
+      "rho_WR": 0.0
+    },
+    "over_scale": {
+      "label": "over_scale",
+      "per_cohort_pooled": {
+        "2019": 0.8524,
+        "2020": 0.7031,
+        "2021": 1.0219,
+        "2022": 0.6226,
+        "2023": 1.2431,
+        "2024": 1.0403,
+        "2025": 0.7191
+      },
+      "pooled_tier_mae": 0.8861,
+      "tier_mae": 0.8861,
+      "universe_mae": 47.074,
+      "universe_bias": 10.059,
+      "universe_mae_QB": 50.15,
+      "tier_mae_QB": 74.754,
+      "tier_bias_QB": -32.409,
+      "rho_QB": 0.6349,
+      "universe_mae_RB": 50.87,
+      "tier_mae_RB": 71.701,
+      "tier_bias_RB": 7.25,
+      "rho_RB": 0.5898,
+      "universe_mae_TE": 30.07,
+      "tier_mae_TE": 36.214,
+      "tier_bias_TE": -7.947,
+      "rho_TE": 0.6075,
+      "universe_mae_WR": 52.15,
+      "tier_mae_WR": 63.734,
+      "tier_bias_WR": -26.577,
+      "rho_WR": 0.6208
+    }
+  },
+  "boards": {
+    "2019": {
+      "provenance": {
+        "season": 2019,
+        "base_season": 2018,
+        "n_rows": 716,
+        "n_rookies": 80,
+        "walk_forward": true,
+        "has_rookies": true,
+        "ok": true,
+        "path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-d20-infold-shrink/quant_sports_intel_models/football/nfl/fantasy/artifacts/nfl_fantasy_season_projections_2019.parquet",
+        "mtime_utc": "2026-08-04T06:53:23.559144+00:00"
+      },
+      "incumbent_rank": 22,
+      "rank_by_lambda": {
+        "0.0": 22,
+        "0.25": 22,
+        "0.5": 22,
+        "0.75": 22,
+        "1.0": 22
+      },
+      "admissible": [
+        0.0,
+        0.25,
+        0.5,
+        0.75,
+        1.0
+      ],
+      "admissible_strict": [
+        0.0,
+        0.25,
+        0.5,
+        0.75,
+        1.0
+      ]
+    },
+    "2020": {
+      "provenance": {
+        "season": 2020,
+        "base_season": 2019,
+        "n_rows": 745,
+        "n_rookies": 77,
+        "walk_forward": true,
+        "has_rookies": true,
+        "ok": true,
+        "path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-d20-infold-shrink/quant_sports_intel_models/football/nfl/fantasy/artifacts/nfl_fantasy_season_projections_2020.parquet",
+        "mtime_utc": "2026-08-04T06:53:23.559599+00:00"
+      },
+      "incumbent_rank": 15,
+      "rank_by_lambda": {
+        "0.0": 15,
+        "0.25": 15,
+        "0.5": 15,
+        "0.75": 15,
+        "1.0": 15
+      },
+      "admissible": [
+        0.0,
+        0.25,
+        0.5,
+        0.75,
+        1.0
+      ],
+      "admissible_strict": [
+        0.0,
+        0.25,
+        0.5,
+        0.75,
+        1.0
+      ]
+    },
+    "2021": {
+      "provenance": {
+        "season": 2021,
+        "base_season": 2020,
+        "n_rows": 758,
+        "n_rookies": 75,
+        "walk_forward": true,
+        "has_rookies": true,
+        "ok": true,
+        "path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-d20-infold-shrink/quant_sports_intel_models/football/nfl/fantasy/artifacts/nfl_fantasy_season_projections_2021.parquet",
+        "mtime_utc": "2026-08-04T06:53:23.560058+00:00"
+      },
+      "incumbent_rank": 10,
+      "rank_by_lambda": {
+        "0.0": 10,
+        "0.25": 10,
+        "0.5": 10,
+        "0.75": 10,
+        "1.0": 10
+      },
+      "admissible": [
+        0.0,
+        0.25,
+        0.5,
+        0.75,
+        1.0
+      ],
+      "admissible_strict": []
+    },
+    "2022": {
+      "provenance": {
+        "season": 2022,
+        "base_season": 2021,
+        "n_rows": 783,
+        "n_rookies": 79,
+        "walk_forward": true,
+        "has_rookies": true,
+        "ok": true,
+        "path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-d20-infold-shrink/quant_sports_intel_models/football/nfl/fantasy/artifacts/nfl_fantasy_season_projections_2022.parquet",
+        "mtime_utc": "2026-08-04T06:53:23.560515+00:00"
+      },
+      "incumbent_rank": 31,
+      "rank_by_lambda": {
+        "0.0": 31,
+        "0.25": 28,
+        "0.5": 28,
+        "0.75": 25,
+        "1.0": 25
+      },
+      "admissible": [
+        0.0,
+        0.25,
+        0.5,
+        0.75,
+        1.0
+      ],
+      "admissible_strict": [
+        0.0,
+        0.25,
+        0.5,
+        0.75,
+        1.0
+      ]
+    },
+    "2023": {
+      "provenance": {
+        "season": 2023,
+        "base_season": 2022,
+        "n_rows": 764,
+        "n_rookies": 80,
+        "walk_forward": true,
+        "has_rookies": true,
+        "ok": true,
+        "path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-d20-infold-shrink/quant_sports_intel_models/football/nfl/fantasy/artifacts/nfl_fantasy_season_projections_2023.parquet",
+        "mtime_utc": "2026-08-04T06:53:23.561365+00:00"
+      },
+      "incumbent_rank": 19,
+      "rank_by_lambda": {
+        "0.0": 19,
+        "0.25": 19,
+        "0.5": 14,
+        "0.75": 8,
+        "1.0": 6
+      },
+      "admissible": [
+        0.0,
+        0.25,
+        0.5
+      ],
+      "admissible_strict": [
+        0.0,
+        0.25,
+        0.5
+      ]
+    },
+    "2024": {
+      "provenance": {
+        "season": 2024,
+        "base_season": 2023,
+        "n_rows": 734,
+        "n_rookies": 77,
+        "walk_forward": true,
+        "has_rookies": true,
+        "ok": true,
+        "path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-d20-infold-shrink/quant_sports_intel_models/football/nfl/fantasy/artifacts/nfl_fantasy_season_projections_2024.parquet",
+        "mtime_utc": "2026-08-04T06:53:23.562005+00:00"
+      },
+      "incumbent_rank": 17,
+      "rank_by_lambda": {
+        "0.0": 17,
+        "0.25": 17,
+        "0.5": 17,
+        "0.75": 17,
+        "1.0": 17
+      },
+      "admissible": [
+        0.0,
+        0.25,
+        0.5,
+        0.75,
+        1.0
+      ],
+      "admissible_strict": [
+        0.0,
+        0.25,
+        0.5,
+        0.75,
+        1.0
+      ]
+    },
+    "2025": {
+      "provenance": {
+        "season": 2025,
+        "base_season": 2024,
+        "n_rows": 786,
+        "n_rookies": 85,
+        "walk_forward": true,
+        "has_rookies": true,
+        "ok": true,
+        "path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-d20-infold-shrink/quant_sports_intel_models/football/nfl/fantasy/artifacts/nfl_fantasy_season_projections_2025.parquet",
+        "mtime_utc": "2026-08-04T06:53:23.562602+00:00"
+      },
+      "incumbent_rank": 14,
+      "rank_by_lambda": {
+        "0.0": 14,
+        "0.25": 14,
+        "0.5": 14,
+        "0.75": 11,
+        "1.0": 7
+      },
+      "admissible": [
+        0.0,
+        0.25,
+        0.5
+      ],
+      "admissible_strict": [
+        0.0,
+        0.25,
+        0.5
+      ]
+    },
+    "2026": {
+      "provenance": {
+        "season": 2026,
+        "base_season": 2025,
+        "n_rows": 784,
+        "n_rookies": 81,
+        "walk_forward": true,
+        "has_rookies": true,
+        "ok": true,
+        "path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-d20-infold-shrink/quant_sports_intel_models/football/nfl/fantasy/artifacts/nfl_fantasy_season_projections_2026.parquet",
+        "mtime_utc": "2026-08-04T06:53:23.563269+00:00"
+      },
+      "incumbent_rank": 12,
+      "rank_by_lambda": {
+        "0.0": 12,
+        "0.25": 12,
+        "0.5": 12,
+        "0.75": 12,
+        "1.0": 6
+      },
+      "admissible": [
+        0.0,
+        0.25,
+        0.5,
+        0.75
+      ],
+      "admissible_strict": [
+        0.0,
+        0.25,
+        0.5,
+        0.75
+      ]
+    }
+  },
+  "lambda_grid_scores": {
+    "0.0": {
+      "pooled_tier_mae": 1.0738,
+      "per_cohort_pooled": {
+        "2019": 0.9051,
+        "2020": 0.97,
+        "2021": 1.2268,
+        "2022": 0.8342,
+        "2023": 1.3939,
+        "2024": 1.1631,
+        "2025": 1.0233
+      },
+      "universe_bias": -20.869
+    },
+    "0.25": {
+      "pooled_tier_mae": 1.0321,
+      "per_cohort_pooled": {
+        "2019": 0.8985,
+        "2020": 0.9342,
+        "2021": 1.199,
+        "2022": 0.7998,
+        "2023": 1.3208,
+        "2024": 1.1471,
+        "2025": 0.9251
+      },
+      "universe_bias": -17.003
+    },
+    "0.5": {
+      "pooled_tier_mae": 0.9949,
+      "per_cohort_pooled": {
+        "2019": 0.8919,
+        "2020": 0.8984,
+        "2021": 1.1714,
+        "2022": 0.7655,
+        "2023": 1.2589,
+        "2024": 1.1311,
+        "2025": 0.847
+      },
+      "universe_bias": -13.137
+    },
+    "0.75": {
+      "pooled_tier_mae": 0.9653,
+      "per_cohort_pooled": {
+        "2019": 0.8853,
+        "2020": 0.8626,
+        "2021": 1.1465,
+        "2022": 0.7311,
+        "2023": 1.2335,
+        "2024": 1.1151,
+        "2025": 0.7828
+      },
+      "universe_bias": -9.271
+    },
+    "1.0": {
+      "pooled_tier_mae": 0.9407,
+      "per_cohort_pooled": {
+        "2019": 0.8787,
+        "2020": 0.8268,
+        "2021": 1.1216,
+        "2022": 0.6988,
+        "2023": 1.2354,
+        "2024": 1.0991,
+        "2025": 0.7245
+      },
+      "universe_bias": -5.405
+    }
+  },
+  "monotonicity": {
+    "metric_monotone_decreasing": true,
+    "metric_argmin_lambda": 1.0,
+    "metric_by_lambda": {
+      "0.0": 1.0738,
+      "0.25": 1.0321,
+      "0.5": 0.9949,
+      "0.75": 0.9653,
+      "1.0": 0.9407
+    },
+    "rank_monotone_nonincreasing": true,
+    "rank_by_lambda": {
+      "0.0": 12.0,
+      "0.25": 12.0,
+      "0.5": 12.0,
+      "0.75": 12.0,
+      "1.0": 6.0
+    }
+  },
+  "rules": {
+    "incumbent (NULL)": {
+      "2019": {
+        "lam": 0.0,
+        "metric": null,
+        "boards_seen": [],
+        "evidence_mode": "n/a",
+        "allowed": [
+          0.0
+        ]
+      },
+      "2020": {
+        "lam": 0.0,
+        "metric": null,
+        "boards_seen": [],
+        "evidence_mode": "n/a",
+        "allowed": [
+          0.0
+        ]
+      },
+      "2021": {
+        "lam": 0.0,
+        "metric": null,
+        "boards_seen": [],
+        "evidence_mode": "n/a",
+        "allowed": [
+          0.0
+        ]
+      },
+      "2022": {
+        "lam": 0.0,
+        "metric": null,
+        "boards_seen": [],
+        "evidence_mode": "n/a",
+        "allowed": [
+          0.0
+        ]
+      },
+      "2023": {
+        "lam": 0.0,
+        "metric": null,
+        "boards_seen": [],
+        "evidence_mode": "n/a",
+        "allowed": [
+          0.0
+        ]
+      },
+      "2024": {
+        "lam": 0.0,
+        "metric": null,
+        "boards_seen": [],
+        "evidence_mode": "n/a",
+        "allowed": [
+          0.0
+        ]
+      },
+      "2025": {
+        "lam": 0.0,
+        "metric": null,
+        "boards_seen": [],
+        "evidence_mode": "n/a",
+        "allowed": [
+          0.0
+        ]
+      }
+    },
+    "infold_all_boards": {
+      "2019": {
+        "lam": 0.0,
+        "metric": null,
+        "n_allowed": 1,
+        "note": "no scorable in-fold metric over the allowed set \u2014 falls back to the incumbent rather than to an unverified correction",
+        "boards_seen": [],
+        "evidence_mode": "all"
+      },
+      "2020": {
+        "lam": 1.0,
+        "metric": 0.8787,
+        "n_allowed": 5,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "boards_seen": [
+          2019
+        ],
+        "evidence_mode": "all"
+      },
+      "2021": {
+        "lam": 1.0,
+        "metric": 0.8528,
+        "n_allowed": 5,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "boards_seen": [
+          2019,
+          2020
+        ],
+        "evidence_mode": "all"
+      },
+      "2022": {
+        "lam": 1.0,
+        "metric": 0.9424,
+        "n_allowed": 5,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "boards_seen": [
+          2019,
+          2020,
+          2021
+        ],
+        "evidence_mode": "all"
+      },
+      "2023": {
+        "lam": 1.0,
+        "metric": 0.8815,
+        "n_allowed": 5,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "boards_seen": [
+          2019,
+          2020,
+          2021,
+          2022
+        ],
+        "evidence_mode": "all"
+      },
+      "2024": {
+        "lam": 0.5,
+        "metric": 0.9972,
+        "n_allowed": 3,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5
+        ],
+        "boards_seen": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "evidence_mode": "all"
+      },
+      "2025": {
+        "lam": 0.5,
+        "metric": 1.0195,
+        "n_allowed": 3,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5
+        ],
+        "boards_seen": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024
+        ],
+        "evidence_mode": "all"
+      }
+    },
+    "infold_last_board": {
+      "2019": {
+        "lam": 0.0,
+        "metric": null,
+        "n_allowed": 1,
+        "note": "no scorable in-fold metric over the allowed set \u2014 falls back to the incumbent rather than to an unverified correction",
+        "boards_seen": [],
+        "evidence_mode": "last"
+      },
+      "2020": {
+        "lam": 1.0,
+        "metric": 0.8787,
+        "n_allowed": 5,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "boards_seen": [
+          2019
+        ],
+        "evidence_mode": "last"
+      },
+      "2021": {
+        "lam": 1.0,
+        "metric": 0.8528,
+        "n_allowed": 5,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "boards_seen": [
+          2019,
+          2020
+        ],
+        "evidence_mode": "last"
+      },
+      "2022": {
+        "lam": 1.0,
+        "metric": 0.9424,
+        "n_allowed": 5,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "boards_seen": [
+          2019,
+          2020,
+          2021
+        ],
+        "evidence_mode": "last"
+      },
+      "2023": {
+        "lam": 1.0,
+        "metric": 0.8815,
+        "n_allowed": 5,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "boards_seen": [
+          2019,
+          2020,
+          2021,
+          2022
+        ],
+        "evidence_mode": "last"
+      },
+      "2024": {
+        "lam": 0.5,
+        "metric": 0.9972,
+        "n_allowed": 3,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5
+        ],
+        "boards_seen": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "evidence_mode": "last"
+      },
+      "2025": {
+        "lam": 1.0,
+        "metric": 0.9767,
+        "n_allowed": 5,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "boards_seen": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024
+        ],
+        "evidence_mode": "last"
+      }
+    },
+    "unconstrained (\u03bb=1)": {
+      "2019": {
+        "lam": 0.0,
+        "metric": null,
+        "n_allowed": 5,
+        "note": "no scorable in-fold metric over the allowed set \u2014 falls back to the incumbent rather than to an unverified correction",
+        "boards_seen": [],
+        "evidence_mode": "none"
+      },
+      "2020": {
+        "lam": 1.0,
+        "metric": 0.8787,
+        "n_allowed": 5,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "boards_seen": [
+          2019
+        ],
+        "evidence_mode": "none"
+      },
+      "2021": {
+        "lam": 1.0,
+        "metric": 0.8528,
+        "n_allowed": 5,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "boards_seen": [
+          2019,
+          2020
+        ],
+        "evidence_mode": "none"
+      },
+      "2022": {
+        "lam": 1.0,
+        "metric": 0.9424,
+        "n_allowed": 5,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "boards_seen": [
+          2019,
+          2020,
+          2021
+        ],
+        "evidence_mode": "none"
+      },
+      "2023": {
+        "lam": 1.0,
+        "metric": 0.8815,
+        "n_allowed": 5,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "boards_seen": [
+          2019,
+          2020,
+          2021,
+          2022
+        ],
+        "evidence_mode": "none"
+      },
+      "2024": {
+        "lam": 1.0,
+        "metric": 0.9523,
+        "n_allowed": 5,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "boards_seen": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023
+        ],
+        "evidence_mode": "none"
+      },
+      "2025": {
+        "lam": 1.0,
+        "metric": 0.9767,
+        "n_allowed": 5,
+        "allowed": [
+          0.0,
+          0.25,
+          0.5,
+          0.75,
+          1.0
+        ],
+        "boards_seen": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024
+        ],
+        "evidence_mode": "none"
+      }
+    },
+    "blind_half (\u03bb=0.5)": {
+      "2019": {
+        "lam": 0.5,
+        "metric": null,
+        "boards_seen": [],
+        "evidence_mode": "none (blind)",
+        "allowed": [
+          0.5
+        ]
+      },
+      "2020": {
+        "lam": 0.5,
+        "metric": null,
+        "boards_seen": [],
+        "evidence_mode": "none (blind)",
+        "allowed": [
+          0.5
+        ]
+      },
+      "2021": {
+        "lam": 0.5,
+        "metric": null,
+        "boards_seen": [],
+        "evidence_mode": "none (blind)",
+        "allowed": [
+          0.5
+        ]
+      },
+      "2022": {
+        "lam": 0.5,
+        "metric": null,
+        "boards_seen": [],
+        "evidence_mode": "none (blind)",
+        "allowed": [
+          0.5
+        ]
+      },
+      "2023": {
+        "lam": 0.5,
+        "metric": null,
+        "boards_seen": [],
+        "evidence_mode": "none (blind)",
+        "allowed": [
+          0.5
+        ]
+      },
+      "2024": {
+        "lam": 0.5,
+        "metric": null,
+        "boards_seen": [],
+        "evidence_mode": "none (blind)",
+        "allowed": [
+          0.5
+        ]
+      },
+      "2025": {
+        "lam": 0.5,
+        "metric": null,
+        "boards_seen": [],
+        "evidence_mode": "none (blind)",
+        "allowed": [
+          0.5
+        ]
+      }
+    }
+  },
+  "strict_c2_rules": {
+    "infold_all_boards": {
+      "2019": 0.0,
+      "2020": 1.0,
+      "2021": 1.0,
+      "2022": 0.0,
+      "2023": 0.0,
+      "2024": 0.0,
+      "2025": 0.0
+    },
+    "infold_last_board": {
+      "2019": 0.0,
+      "2020": 1.0,
+      "2021": 1.0,
+      "2022": 0.0,
+      "2023": 1.0,
+      "2024": 0.5,
+      "2025": 1.0
+    },
+    "unconstrained (\u03bb=1)": {
+      "2019": 0.0,
+      "2020": 1.0,
+      "2021": 1.0,
+      "2022": 1.0,
+      "2023": 1.0,
+      "2024": 1.0,
+      "2025": 1.0
+    }
+  },
+  "placements": {
+    "incumbent (NULL)": {
+      "holds_out": true,
+      "per_fold": {
+        "2019": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 22.0,
+          "incumbent_rank": 22.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.0,
+          "clears_cap_outright": true
+        },
+        "2020": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 15.0,
+          "incumbent_rank": 15.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.0,
+          "clears_cap_outright": true
+        },
+        "2021": {
+          "admits": true,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 10.0,
+          "incumbent_rank": 10.0,
+          "binding_threshold": 10.0,
+          "incumbent_itself_breaches": true,
+          "lam": 0.0,
+          "clears_cap_outright": false
+        },
+        "2022": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 31.0,
+          "incumbent_rank": 31.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.0,
+          "clears_cap_outright": true
+        },
+        "2023": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 19.0,
+          "incumbent_rank": 19.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.0,
+          "clears_cap_outright": true
+        },
+        "2024": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 17.0,
+          "incumbent_rank": 17.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.0,
+          "clears_cap_outright": true
+        },
+        "2025": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 14.0,
+          "incumbent_rank": 14.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.0,
+          "clears_cap_outright": true
+        }
+      },
+      "n_folds_evaluated": 7,
+      "clears_cap_outright_every_fold": false
+    },
+    "infold_all_boards": {
+      "holds_out": false,
+      "per_fold": {
+        "2019": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 22.0,
+          "incumbent_rank": 22.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.0,
+          "clears_cap_outright": true
+        },
+        "2020": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 15.0,
+          "incumbent_rank": 15.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 1.0,
+          "clears_cap_outright": true
+        },
+        "2021": {
+          "admits": true,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 10.0,
+          "incumbent_rank": 10.0,
+          "binding_threshold": 10.0,
+          "incumbent_itself_breaches": true,
+          "lam": 1.0,
+          "clears_cap_outright": false
+        },
+        "2022": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 25.0,
+          "incumbent_rank": 31.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 1.0,
+          "clears_cap_outright": true
+        },
+        "2023": {
+          "admits": false,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 6.0,
+          "incumbent_rank": 19.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 1.0,
+          "clears_cap_outright": false
+        },
+        "2024": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 17.0,
+          "incumbent_rank": 17.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.5,
+          "clears_cap_outright": true
+        },
+        "2025": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 14.0,
+          "incumbent_rank": 14.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.5,
+          "clears_cap_outright": true
+        }
+      },
+      "n_folds_evaluated": 7,
+      "clears_cap_outright_every_fold": false
+    },
+    "infold_last_board": {
+      "holds_out": false,
+      "per_fold": {
+        "2019": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 22.0,
+          "incumbent_rank": 22.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.0,
+          "clears_cap_outright": true
+        },
+        "2020": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 15.0,
+          "incumbent_rank": 15.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 1.0,
+          "clears_cap_outright": true
+        },
+        "2021": {
+          "admits": true,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 10.0,
+          "incumbent_rank": 10.0,
+          "binding_threshold": 10.0,
+          "incumbent_itself_breaches": true,
+          "lam": 1.0,
+          "clears_cap_outright": false
+        },
+        "2022": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 25.0,
+          "incumbent_rank": 31.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 1.0,
+          "clears_cap_outright": true
+        },
+        "2023": {
+          "admits": false,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 6.0,
+          "incumbent_rank": 19.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 1.0,
+          "clears_cap_outright": false
+        },
+        "2024": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 17.0,
+          "incumbent_rank": 17.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.5,
+          "clears_cap_outright": true
+        },
+        "2025": {
+          "admits": false,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 7.0,
+          "incumbent_rank": 14.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 1.0,
+          "clears_cap_outright": false
+        }
+      },
+      "n_folds_evaluated": 7,
+      "clears_cap_outright_every_fold": false
+    },
+    "unconstrained (\u03bb=1)": {
+      "holds_out": false,
+      "per_fold": {
+        "2019": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 22.0,
+          "incumbent_rank": 22.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.0,
+          "clears_cap_outright": true
+        },
+        "2020": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 15.0,
+          "incumbent_rank": 15.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 1.0,
+          "clears_cap_outright": true
+        },
+        "2021": {
+          "admits": true,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 10.0,
+          "incumbent_rank": 10.0,
+          "binding_threshold": 10.0,
+          "incumbent_itself_breaches": true,
+          "lam": 1.0,
+          "clears_cap_outright": false
+        },
+        "2022": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 25.0,
+          "incumbent_rank": 31.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 1.0,
+          "clears_cap_outright": true
+        },
+        "2023": {
+          "admits": false,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 6.0,
+          "incumbent_rank": 19.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 1.0,
+          "clears_cap_outright": false
+        },
+        "2024": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 17.0,
+          "incumbent_rank": 17.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 1.0,
+          "clears_cap_outright": true
+        },
+        "2025": {
+          "admits": false,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 7.0,
+          "incumbent_rank": 14.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 1.0,
+          "clears_cap_outright": false
+        }
+      },
+      "n_folds_evaluated": 7,
+      "clears_cap_outright_every_fold": false
+    },
+    "blind_half (\u03bb=0.5)": {
+      "holds_out": true,
+      "per_fold": {
+        "2019": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 22.0,
+          "incumbent_rank": 22.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.5,
+          "clears_cap_outright": true
+        },
+        "2020": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 15.0,
+          "incumbent_rank": 15.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.5,
+          "clears_cap_outright": true
+        },
+        "2021": {
+          "admits": true,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 10.0,
+          "incumbent_rank": 10.0,
+          "binding_threshold": 10.0,
+          "incumbent_itself_breaches": true,
+          "lam": 0.5,
+          "clears_cap_outright": false
+        },
+        "2022": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 28.0,
+          "incumbent_rank": 31.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.5,
+          "clears_cap_outright": true
+        },
+        "2023": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 14.0,
+          "incumbent_rank": 19.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.5,
+          "clears_cap_outright": true
+        },
+        "2024": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 17.0,
+          "incumbent_rank": 17.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.5,
+          "clears_cap_outright": true
+        },
+        "2025": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 14.0,
+          "incumbent_rank": 14.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.5,
+          "clears_cap_outright": true
+        }
+      },
+      "n_folds_evaluated": 7,
+      "clears_cap_outright_every_fold": false
+    }
+  },
+  "degenerate_placement": {
+    "zero_scale": {
+      "per_board": {
+        "2019": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 22,
+          "incumbent_rank": 22.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false
+        },
+        "2020": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 15,
+          "incumbent_rank": 15.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false
+        },
+        "2021": {
+          "admits": true,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 10,
+          "incumbent_rank": 10.0,
+          "binding_threshold": 10.0,
+          "incumbent_itself_breaches": true
+        },
+        "2022": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 272,
+          "incumbent_rank": 31.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false
+        },
+        "2023": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 19,
+          "incumbent_rank": 19.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false
+        },
+        "2024": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 17,
+          "incumbent_rank": 17.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false
+        },
+        "2025": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 14,
+          "incumbent_rank": 14.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false
+        }
+      },
+      "satisfies_every_board": true,
+      "breaches_some_board": false
+    },
+    "over_scale": {
+      "per_board": {
+        "2019": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 22,
+          "incumbent_rank": 22.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false
+        },
+        "2020": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 15,
+          "incumbent_rank": 15.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false
+        },
+        "2021": {
+          "admits": true,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 10,
+          "incumbent_rank": 10.0,
+          "binding_threshold": 10.0,
+          "incumbent_itself_breaches": true
+        },
+        "2022": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 20,
+          "incumbent_rank": 31.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false
+        },
+        "2023": {
+          "admits": false,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 1,
+          "incumbent_rank": 19.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false
+        },
+        "2024": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 17,
+          "incumbent_rank": 17.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false
+        },
+        "2025": {
+          "admits": false,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 1,
+          "incumbent_rank": 14.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false
+        }
+      },
+      "satisfies_every_board": false,
+      "breaches_some_board": true
+    }
+  },
+  "family_ceiling_check": {
+    "ok": true,
+    "n_checked": 3,
+    "violations": [],
+    "per_arm": [
+      {
+        "arm": "infold_all_boards",
+        "form": "ols_slope",
+        "ceiling_anchor": "oracle_ols",
+        "ceiling": 0.7784,
+        "arm_metric": 0.9665,
+        "margin": 0.1881,
+        "ok": true
+      },
+      {
+        "arm": "infold_last_board",
+        "form": "ols_slope",
+        "ceiling_anchor": "oracle_ols",
+        "ceiling": 0.7784,
+        "arm_metric": 0.949,
+        "margin": 0.1706,
+        "ok": true
+      },
+      {
+        "arm": "unconstrained (\u03bb=1)",
+        "form": "ols_slope",
+        "ceiling_anchor": "oracle_ols",
+        "ceiling": 0.7784,
+        "arm_metric": 0.9445,
+        "margin": 0.1661,
+        "ok": true
+      }
+    ]
+  },
+  "checks": {
+    "degenerates_lose": false,
+    "permutation_across_beaten": true,
+    "permutation_within_beaten": true,
+    "oracle_respected": true,
+    "family_ceiling_respected": true,
+    "over_scale_breaches": true,
+    "degenerate_satisfies_constraint": true,
+    "boards_walk_forward": true,
+    "qb_untouched": true
+  },
+  "selection": {
+    "framing": "pooled",
+    "placement_binds": true,
+    "n_candidates": 4,
+    "n_eligible": 1,
+    "incumbent_metric": 1.0738,
+    "incumbent_rho": {
+      "RB": 0.5898,
+      "TE": 0.6075,
+      "WR": 0.6208
+    },
+    "winner": {
+      "label": "incumbent (NULL)",
+      "key": "incumbent@null",
+      "form": "incumbent",
+      "rule": null,
+      "recalibrates": false,
+      "shippable": true,
+      "constrained": false,
+      "lam_by_fold": {
+        "2019": 0.0,
+        "2020": 0.0,
+        "2021": 0.0,
+        "2022": 0.0,
+        "2023": 0.0,
+        "2024": 0.0,
+        "2025": 0.0
+      },
+      "metric": 1.0738,
+      "rho": {
+        "RB": 0.5898,
+        "TE": 0.6075,
+        "WR": 0.6208
+      }
+    },
+    "best_any": {
+      "label": "unconstrained (\u03bb=1)",
+      "metric": 0.9445,
+      "eligible": false
+    },
+    "ordering": {
+      "ok": true,
+      "strict_ok": true,
+      "per_position": {
+        "RB": {
+          "incumbent": 0.5898,
+          "candidate": 0.5898,
+          "delta": 0.0,
+          "ok": true
+        },
+        "TE": {
+          "incumbent": 0.6075,
+          "candidate": 0.6075,
+          "delta": 0.0,
+          "ok": true
+        },
+        "WR": {
+          "incumbent": 0.6208,
+          "candidate": 0.6208,
+          "delta": 0.0,
+          "ok": true
+        }
+      },
+      "worst_delta": 0.0,
+      "tol": 0.02
+    },
+    "placement": {
+      "holds_out": true,
+      "per_fold": {
+        "2019": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 22.0,
+          "incumbent_rank": 22.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.0,
+          "clears_cap_outright": true
+        },
+        "2020": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 15.0,
+          "incumbent_rank": 15.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.0,
+          "clears_cap_outright": true
+        },
+        "2021": {
+          "admits": true,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 10.0,
+          "incumbent_rank": 10.0,
+          "binding_threshold": 10.0,
+          "incumbent_itself_breaches": true,
+          "lam": 0.0,
+          "clears_cap_outright": false
+        },
+        "2022": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 31.0,
+          "incumbent_rank": 31.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.0,
+          "clears_cap_outright": true
+        },
+        "2023": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 19.0,
+          "incumbent_rank": 19.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.0,
+          "clears_cap_outright": true
+        },
+        "2024": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 17.0,
+          "incumbent_rank": 17.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.0,
+          "clears_cap_outright": true
+        },
+        "2025": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 14.0,
+          "incumbent_rank": 14.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.0,
+          "clears_cap_outright": true
+        }
+      },
+      "n_folds_evaluated": 7,
+      "clears_cap_outright_every_fold": false
+    },
+    "deflation": {
+      "pbo": null,
+      "n_splits": 0,
+      "note": "too few classes/configs for CSCV",
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "n_configs": 1,
+      "dsr": null,
+      "dsr_contenders": null
+    },
+    "pvalue": 1.0,
+    "per_cohort_delta": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "eligible_labels": [
+      "incumbent (NULL)"
+    ],
+    "ineligible": [
+      {
+        "label": "infold_all_boards",
+        "ordering_ok": true,
+        "placement_holds_out": false,
+        "failing_folds": [
+          2023
+        ]
+      },
+      {
+        "label": "infold_last_board",
+        "ordering_ok": true,
+        "placement_holds_out": false,
+        "failing_folds": [
+          2023,
+          2025
+        ]
+      },
+      {
+        "label": "unconstrained (\u03bb=1)",
+        "ordering_ok": true,
+        "placement_holds_out": false,
+        "failing_folds": [
+          2023,
+          2025
+        ]
+      }
+    ]
+  },
+  "ordering_only": {
+    "framing": "pooled",
+    "placement_binds": false,
+    "n_candidates": 4,
+    "n_eligible": 4,
+    "incumbent_metric": 1.0738,
+    "incumbent_rho": {
+      "RB": 0.5898,
+      "TE": 0.6075,
+      "WR": 0.6208
+    },
+    "winner": {
+      "label": "unconstrained (\u03bb=1)",
+      "key": "ols_slope@unconstrained",
+      "form": "ols_slope",
+      "rule": "unconstrained",
+      "recalibrates": true,
+      "shippable": true,
+      "constrained": false,
+      "lam_by_fold": {
+        "2019": 0.0,
+        "2020": 1.0,
+        "2021": 1.0,
+        "2022": 1.0,
+        "2023": 1.0,
+        "2024": 1.0,
+        "2025": 1.0
+      },
+      "metric": 0.9445,
+      "rho": {
+        "RB": 0.5898,
+        "TE": 0.6075,
+        "WR": 0.6208
+      }
+    },
+    "best_any": {
+      "label": "unconstrained (\u03bb=1)",
+      "metric": 0.9445,
+      "eligible": true
+    },
+    "ordering": {
+      "ok": true,
+      "strict_ok": true,
+      "per_position": {
+        "RB": {
+          "incumbent": 0.5898,
+          "candidate": 0.5898,
+          "delta": 0.0,
+          "ok": true
+        },
+        "TE": {
+          "incumbent": 0.6075,
+          "candidate": 0.6075,
+          "delta": 0.0,
+          "ok": true
+        },
+        "WR": {
+          "incumbent": 0.6208,
+          "candidate": 0.6208,
+          "delta": 0.0,
+          "ok": true
+        }
+      },
+      "worst_delta": 0.0,
+      "tol": 0.02
+    },
+    "placement": {
+      "holds_out": false,
+      "per_fold": {
+        "2019": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 22.0,
+          "incumbent_rank": 22.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 0.0,
+          "clears_cap_outright": true
+        },
+        "2020": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 15.0,
+          "incumbent_rank": 15.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 1.0,
+          "clears_cap_outright": true
+        },
+        "2021": {
+          "admits": true,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 10.0,
+          "incumbent_rank": 10.0,
+          "binding_threshold": 10.0,
+          "incumbent_itself_breaches": true,
+          "lam": 1.0,
+          "clears_cap_outright": false
+        },
+        "2022": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 25.0,
+          "incumbent_rank": 31.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 1.0,
+          "clears_cap_outright": true
+        },
+        "2023": {
+          "admits": false,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 6.0,
+          "incumbent_rank": 19.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 1.0,
+          "clears_cap_outright": false
+        },
+        "2024": {
+          "admits": true,
+          "admits_strict": true,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 17.0,
+          "incumbent_rank": 17.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 1.0,
+          "clears_cap_outright": true
+        },
+        "2025": {
+          "admits": false,
+          "admits_strict": false,
+          "evaluable": true,
+          "cap": 11.5,
+          "rank": 7.0,
+          "incumbent_rank": 14.0,
+          "binding_threshold": 11.5,
+          "incumbent_itself_breaches": false,
+          "lam": 1.0,
+          "clears_cap_outright": false
+        }
+      },
+      "n_folds_evaluated": 7,
+      "clears_cap_outright_every_fold": false
+    },
+    "deflation": {
+      "pbo": 0.2857,
+      "n_splits": 35,
+      "median_logit": 0.0,
+      "os_gap_pct": 0.77,
+      "os_gap_p90_pct": 4.188,
+      "contender_spread_pct": 13.69,
+      "flips": [
+        {
+          "config": "unconstrained (\u03bb=1)",
+          "IS-half wins": 15,
+          "share": 0.429,
+          "full-sample IS80": 0.944,
+          "\u0394 vs best %": 0.0
+        },
+        {
+          "config": "infold_all_boards",
+          "IS-half wins": 10,
+          "share": 0.286,
+          "full-sample IS80": 0.967,
+          "\u0394 vs best %": 2.34
+        },
+        {
+          "config": "infold_last_board",
+          "IS-half wins": 10,
+          "share": 0.286,
+          "full-sample IS80": 0.949,
+          "\u0394 vs best %": 0.48
+        }
+      ],
+      "n_configs": 4,
+      "dsr": 0.9976,
+      "dsr_contenders": 0.9976
+    },
+    "pvalue": 0.0051,
+    "per_cohort_delta": [
+      0.0,
+      0.143,
+      0.105,
+      0.135,
+      0.158,
+      0.064,
+      0.299
+    ],
+    "eligible_labels": [
+      "incumbent (NULL)",
+      "infold_all_boards",
+      "infold_last_board",
+      "unconstrained (\u03bb=1)"
+    ],
+    "ineligible": []
+  },
+  "ship_gate": {
+    "ship": false,
+    "framing": "pooled",
+    "has_eligible_winner": true,
+    "recalibrates": false,
+    "beats_incumbent": false,
+    "ordering_ok_every_position": true,
+    "per_fold_placement_holds_out": true,
+    "serving_placement_ok": true,
+    "pbo_ok": false,
+    "dsr_ok": false,
+    "significant": false
+  },
+  "verdict": {
+    "ship": false,
+    "pooled_gate_passes": false,
+    "degenerates_lose": false,
+    "permutation_across_beaten": true,
+    "permutation_within_beaten": true,
+    "oracle_respected": true,
+    "family_ceiling_respected": true,
+    "over_scale_breaches_the_constraint": true,
+    "degenerate_satisfies_the_constraint": true,
+    "boards_are_walk_forward": true,
+    "qb_untouched": true
+  },
+  "attribution": {
+    "rows": [
+      {
+        "arm": "infold_all_boards",
+        "foil": "blind_half (\u03bb=0.5)",
+        "arm_tier_mae": 0.9665,
+        "foil_tier_mae": 0.9949,
+        "paired_delta": -0.0283,
+        "arm_holds_out": false,
+        "foil_holds_out": true,
+        "evidence_earns_clearance": false,
+        "any_shrink_would_do": false
+      },
+      {
+        "arm": "infold_last_board",
+        "foil": "blind_half (\u03bb=0.5)",
+        "arm_tier_mae": 0.949,
+        "foil_tier_mae": 0.9949,
+        "paired_delta": -0.0458,
+        "arm_holds_out": false,
+        "foil_holds_out": true,
+        "evidence_earns_clearance": false,
+        "any_shrink_would_do": false
+      },
+      {
+        "arm": "unconstrained (\u03bb=1)",
+        "foil": "blind_half (\u03bb=0.5)",
+        "arm_tier_mae": 0.9445,
+        "foil_tier_mae": 0.9949,
+        "paired_delta": -0.0504,
+        "arm_holds_out": false,
+        "foil_holds_out": true,
+        "evidence_earns_clearance": false,
+        "any_shrink_would_do": false
+      }
+    ],
+    "n_pairs": 3,
+    "evidence_earns_a_clearance": false,
+    "a_blind_constant_would_also_clear": false,
+    "blind_constant_survives_where_selection_does_not": true,
+    "reading": "blind_only"
+  },
+  "null_state": {
+    "state": "CONSTRAINT_REFUSED",
+    "taxonomy_would_say": "POWER_LIMITED",
+    "taxonomy_fits": false,
+    "why": "the seven states classify STATISTICAL nulls; every recalibrating arm here BEAT the incumbent on the metric and was removed by a DETERMINISTIC constraint (a board rank against a fixed cap) with no sampling error to accumulate, so 'POWER_LIMITED' would emit a re-test trigger that more draft classes cannot satisfy",
+    "best_recalibrating_arm": "unconstrained (\u03bb=1)",
+    "best_recalibrating_metric": 0.9445,
+    "incumbent_metric": 1.0738,
+    "beats_incumbent_on_accuracy": true,
+    "fold_wins": 6,
+    "n_folds": 7,
+    "observed_sr": 1.3973,
+    "arms_that_beat_the_incumbent": [
+      "infold_all_boards",
+      "infold_last_board",
+      "unconstrained (\u03bb=1)"
+    ],
+    "arms_refused_by_the_constraint": [
+      "infold_all_boards",
+      "infold_last_board",
+      "unconstrained (\u03bb=1)"
+    ],
+    "remedy": "a different MECHANISM, or a PM decision to revisit the constraint \u2014 never more draft classes, which cannot move a board rank"
+  },
+  "serving_pick": {
+    "lam": 0.0,
+    "note": "the winner is the incumbent \u2014 nothing to serve"
+  },
+  "serving_check": {
+    "clears": true,
+    "evaluable": true,
+    "threshold_invariant": true,
+    "strictest_cap": 11.5,
+    "best_rookie_overall_rank": 12.0,
+    "cap": 8.8,
+    "q": 0.1,
+    "breach": false,
+    "caps_over_q_band": {
+      "Q05": 7.9,
+      "Q10": 8.8,
+      "Q15": 9.7,
+      "Q20": 10.6,
+      "Q25": 11.5
+    },
+    "observed_minimum": 7.0,
+    "breaches_even_the_observed_minimum": false,
+    "verdict_is_threshold_invariant": true,
+    "reality_breach_rate_top10": 0.286,
+    "lam": 0.0,
+    "rank": 12
+  },
+  "per_position": {
+    "per_position": [
+      {
+        "position": "RB",
+        "incumbent_metric": 80.43,
+        "winner": "incumbent (NULL)",
+        "metric": 80.43,
+        "delta": 0.0,
+        "pbo": null,
+        "dsr": null,
+        "pvalue": 1.0
+      },
+      {
+        "position": "TE",
+        "incumbent_metric": 53.9186,
+        "winner": "incumbent (NULL)",
+        "metric": 53.9186,
+        "delta": 0.0,
+        "pbo": null,
+        "dsr": null,
+        "pvalue": 1.0
+      },
+      {
+        "position": "WR",
+        "incumbent_metric": 68.8357,
+        "winner": "incumbent (NULL)",
+        "metric": 68.8357,
+        "delta": 0.0,
+        "pbo": null,
+        "dsr": null,
+        "pvalue": 1.0
+      }
+    ],
+    "fdr": {
+      "RB": false,
+      "TE": false,
+      "WR": false
+    },
+    "bh_cutoff_unconditional": 0.0333
+  },
+  "ordering": [
+    {
+      "\u03bb": 0.0,
+      "max_rank_move_by_pos": {
+        "RB": 0.0,
+        "TE": 0.0,
+        "WR": 0.0
+      },
+      "worst_rank_move": 0.0,
+      "min_effective_slope": 1.0,
+      "all_effective_slopes_positive": true
+    },
+    {
+      "\u03bb": 0.25,
+      "max_rank_move_by_pos": {
+        "RB": 0.0,
+        "TE": 0.0,
+        "WR": 0.0
+      },
+      "worst_rank_move": 0.0,
+      "min_effective_slope": 0.9166,
+      "all_effective_slopes_positive": true
+    },
+    {
+      "\u03bb": 0.5,
+      "max_rank_move_by_pos": {
+        "RB": 0.0,
+        "TE": 0.0,
+        "WR": 0.0
+      },
+      "worst_rank_move": 0.0,
+      "min_effective_slope": 0.8331,
+      "all_effective_slopes_positive": true
+    },
+    {
+      "\u03bb": 0.75,
+      "max_rank_move_by_pos": {
+        "RB": 0.0,
+        "TE": 0.0,
+        "WR": 0.0
+      },
+      "worst_rank_move": 0.0,
+      "min_effective_slope": 0.7497,
+      "all_effective_slopes_positive": true
+    },
+    {
+      "\u03bb": 1.0,
+      "max_rank_move_by_pos": {
+        "RB": 0.0,
+        "TE": 0.0,
+        "WR": 0.0
+      },
+      "worst_rank_move": 0.0,
+      "min_effective_slope": 0.6663,
+      "all_effective_slopes_positive": true
+    }
+  ],
+  "fitted": {
+    "rows": [
+      {
+        "class": 2019,
+        "position": "RB",
+        "a": -5.344,
+        "b": 1.3928
+      },
+      {
+        "class": 2019,
+        "position": "TE",
+        "a": 7.178,
+        "b": 0.9773
+      },
+      {
+        "class": 2019,
+        "position": "WR",
+        "a": 18.435,
+        "b": 0.889
+      },
+      {
+        "class": 2020,
+        "position": "RB",
+        "a": -1.019,
+        "b": 1.4183
+      },
+      {
+        "class": 2020,
+        "position": "TE",
+        "a": 2.884,
+        "b": 1.2052
+      },
+      {
+        "class": 2020,
+        "position": "WR",
+        "a": 27.964,
+        "b": 0.6663
+      },
+      {
+        "class": 2021,
+        "position": "RB",
+        "a": -2.722,
+        "b": 1.4585
+      },
+      {
+        "class": 2021,
+        "position": "TE",
+        "a": 5.938,
+        "b": 1.1404
+      },
+      {
+        "class": 2021,
+        "position": "WR",
+        "a": 23.761,
+        "b": 0.8266
+      },
+      {
+        "class": 2022,
+        "position": "RB",
+        "a": -0.713,
+        "b": 1.3864
+      },
+      {
+        "class": 2022,
+        "position": "TE",
+        "a": 2.03,
+        "b": 1.3584
+      },
+      {
+        "class": 2022,
+        "position": "WR",
+        "a": 18.946,
+        "b": 0.9575
+      },
+      {
+        "class": 2023,
+        "position": "RB",
+        "a": 0.0,
+        "b": 1.4251
+      },
+      {
+        "class": 2023,
+        "position": "TE",
+        "a": 2.352,
+        "b": 1.3432
+      },
+      {
+        "class": 2023,
+        "position": "WR",
+        "a": 18.205,
+        "b": 0.9482
+      },
+      {
+        "class": 2024,
+        "position": "RB",
+        "a": 3.299,
+        "b": 1.3458
+      },
+      {
+        "class": 2024,
+        "position": "TE",
+        "a": 0.829,
+        "b": 1.3599
+      },
+      {
+        "class": 2024,
+        "position": "WR",
+        "a": 19.748,
+        "b": 0.9349
+      },
+      {
+        "class": 2025,
+        "position": "RB",
+        "a": 4.772,
+        "b": 1.3509
+      },
+      {
+        "class": 2025,
+        "position": "TE",
+        "a": -1.421,
+        "b": 1.46
+      },
+      {
+        "class": 2025,
+        "position": "WR",
+        "a": 18.798,
+        "b": 0.9639
+      }
+    ],
+    "n_slopes": 21,
+    "all_slopes_positive": true,
+    "min_slope": 0.6663,
+    "max_slope": 1.46
+  },
+  "flips": [],
+  "anchor_table": [
+    {
+      "anchor": "oracle_perplayer",
+      "what it is": "ORACLE FLOOR, full resolution (peeks per player). Nothing may beat it.",
+      "pooled tier MAE": 0.0,
+      "tier MAE RB": 0.0,
+      "tier MAE TE": 0.0,
+      "tier MAE WR": 0.0,
+      "universe MAE": 0.004
+    },
+    {
+      "anchor": "oracle_ols",
+      "what it is": "PEEKING CEILING at MATCHED FAMILY \u2014 the per-position affine fitted on the HELD-OUT class. No arm may beat it.",
+      "pooled tier MAE": 0.7784,
+      "tier MAE RB": 59.469,
+      "tier MAE TE": 32.269,
+      "tier MAE WR": 58.204,
+      "universe MAE": 38.996
+    },
+    {
+      "anchor": "permuted_across",
+      "what it is": "reference fitted on outcomes shuffled ACROSS positions. Must LOSE.",
+      "pooled tier MAE": 1.3359,
+      "tier MAE RB": 100.119,
+      "tier MAE TE": 62.11,
+      "tier MAE WR": 94.191,
+      "universe MAE": 56.749
+    },
+    {
+      "anchor": "permuted_within",
+      "what it is": "shuffled WITHIN position \u2014 the marginal preserved, the projection\u2194outcome relationship destroyed. \u2b50 PRE-REGISTERED TO BE BEATEN.",
+      "pooled tier MAE": 1.4251,
+      "tier MAE RB": 95.527,
+      "tier MAE TE": 77.224,
+      "tier MAE WR": 93.007,
+      "universe MAE": 55.986
+    },
+    {
+      "anchor": "zero_scale",
+      "what it is": "DEGENERATE \u2014 project nothing. Must LOSE the metric; SATISFIES C2 (see \u00a72a).",
+      "pooled tier MAE": 2.0477,
+      "tier MAE RB": 139.7,
+      "tier MAE TE": 105.314,
+      "tier MAE WR": 140.361,
+      "universe MAE": 62.29
+    },
+    {
+      "anchor": "pos_median",
+      "what it is": "DEGENERATE \u2014 NF1.4's MAE-collapse tell. Wins an INVERTED metric; must LOSE.",
+      "pooled tier MAE": 1.6691,
+      "tier MAE RB": 110.856,
+      "tier MAE TE": 86.593,
+      "tier MAE WR": 115.281,
+      "universe MAE": 54.039
+    },
+    {
+      "anchor": "over_scale",
+      "what it is": "DEGENERATE on the OTHER side \u2014 \u03bb = 2, twice the ratified correction. Must LOSE the metric AND BREACH C2.",
+      "pooled tier MAE": 0.8861,
+      "tier MAE RB": 71.701,
+      "tier MAE TE": 36.214,
+      "tier MAE WR": 63.734,
+      "universe MAE": 47.074
+    },
+    {
+      "anchor": "\u2192 INCUMBENT (NULL)",
+      "what it is": "the rookie point as SERVED TODAY",
+      "pooled tier MAE": 1.0738,
+      "tier MAE RB": 80.43,
+      "tier MAE TE": 53.919,
+      "tier MAE WR": 68.836,
+      "universe MAE": 42.054
+    }
+  ],
+  "anchor_prose": [
+    "- \u274c **the pre-registered `degenerates_lose` gate** (all three of `zero_scale`, `pos_median`, `over_scale` must lose the metric) \u2014 \u00a71a decomposes it rather than leaving one flag to stand for three different claims",
+    "- \u2705 \u2026of which the two TRUE degenerates (`zero_scale` 2.0477, `pos_median` 1.6691) lose to the best real arm (0.9445) \u2014 the metric is not paying for pessimism",
+    "- \u274c \u2026and `over_scale` (\u03bb = 2) DOES NOT \u2014 it scores 0.8861, BEATING every real arm. \u2b50 A PRE-REGISTERED EXPECTATION REFUTED BY MEASUREMENT, decomposed in \u00a71a",
+    "- \u2705 the truth beats the ACROSS-position permutation",
+    "- \u2705 \u2b50 the truth beats the WITHIN-position permutation \u2014 the affine's SLOPE is real information, and this is the anchor that was provably VACUOUS in NF-D16 (a level is a marginal statistic) and BIT in NF-D18",
+    "- \u2705 the full-resolution oracle floor holds",
+    "- \u2705 every arm respects the matched-family peeking ceiling",
+    "- \u2705 \u2b50 `zero_scale` SATISFIES C2 on every board while losing the metric \u2014 the proof the placement clause is a CONSTRAINT and was not quietly promoted into a selection CRITERION (NF1.8)",
+    "- \u2705 \u2b50 `over_scale` (\u03bb = 2) BREACHES C2 \u2014 the constraint is measured having TEETH rather than described as strict",
+    "- \u2705 QB is untouched on real emitted projections, not merely by assertion",
+    "- \u2705 every merged board read is WALK-FORWARD (`base_season == season \u2212 1`, rookie leg present) \u2014 checked, not assumed"
+  ],
+  "over_scale_prose": "\u26a0\ufe0f\u2b50\u2b50 **A PRE-REGISTERED ANCHOR FAILED, AND IT IS REPORTED AS A FAILURE RATHER THAN RE-LABELLED INTO A PASS.** `over_scale` (\u03bb = 2, twice the ratified correction) was registered as a degenerate that MUST lose the metric. It scored **0.8861** and BEAT every real arm in the field, including NF-D16's ratified correction at \u03bb = 1 (0.9407). The pre-registered `degenerates_lose` gate therefore reads **False**, and it is left reading False: moving a gate after seeing which way it fell is the E2.1-r inversion, and this one costs nothing to leave standing because the verdict is a NULL either way \u2014 a failed anchor can only ever block a ship, never manufacture one.\n\n\u2b50 **WHAT IT ACTUALLY MEANS, AND WHY IT STRENGTHENS THE NULL RATHER THAN UNDERMINING IT.** This is NOT the metric-inversion signature the anchor exists to catch: an inverted metric is one a DO-NOTHING arm wins, and both do-nothing degenerates lose here by a mile (2.0477 and 1.6691 against 0.9445). What \u03bb = 2 wins is MORE OF THE VERY THING THE CORRECTION DOES, which says the in-fold affine UNDER-corrects out of sample \u2014 the pooled tier MAE is still falling as \u03bb leaves the registered interval (1.0738 \u2192 1.0321 \u2192 0.9949 \u2192 0.9653 \u2192 0.9407 \u2192 0.8861 at \u03bb = 2). So the metric's optimum lies BEYOND the correction the constraint already refuses, while the constraint's admissible ceiling sits at or below the middle of the interval. **The two objectives are opposed along the magnitude axis with no interior optimum**, which is a considerably stronger statement of this null than NF-D18's frontier could make \u2014 and it is a statement the run only got to make because the anchor was scored and READ rather than reasoned about in advance (NF-D14 (g\u2032)).\n\n\u26a0\ufe0f The honest cost of leaving the gate as written: `degenerates_lose` now bundles a genuine metric-sanity check with a refuted magnitude hypothesis, so a future reader must not treat a False here as evidence the measurement is untrustworthy. That is precisely why it is decomposed into three lines above instead of surfacing as one flag.",
+  "constraint_activity": [
+    {
+      "season": 2019,
+      "top rookie (\u03bb=0)": "Kyler Murray",
+      "pos": "QB",
+      "rank at \u03bb=0": 22,
+      "rank at \u03bb=1": 22,
+      "rank moves with \u03bb": false,
+      "constraint can act": false
+    },
+    {
+      "season": 2020,
+      "top rookie (\u03bb=0)": "Joe Burrow",
+      "pos": "QB",
+      "rank at \u03bb=0": 15,
+      "rank at \u03bb=1": 15,
+      "rank moves with \u03bb": false,
+      "constraint can act": false
+    },
+    {
+      "season": 2021,
+      "top rookie (\u03bb=0)": "Trevor Lawrence",
+      "pos": "QB",
+      "rank at \u03bb=0": 10,
+      "rank at \u03bb=1": 10,
+      "rank moves with \u03bb": false,
+      "constraint can act": false
+    },
+    {
+      "season": 2022,
+      "top rookie (\u03bb=0)": "Drake London",
+      "pos": "WR",
+      "rank at \u03bb=0": 31,
+      "rank at \u03bb=1": 25,
+      "rank moves with \u03bb": true,
+      "constraint can act": true
+    },
+    {
+      "season": 2023,
+      "top rookie (\u03bb=0)": "Bryce Young",
+      "pos": "QB",
+      "rank at \u03bb=0": 19,
+      "rank at \u03bb=1": 6,
+      "rank moves with \u03bb": true,
+      "constraint can act": true
+    },
+    {
+      "season": 2024,
+      "top rookie (\u03bb=0)": "Caleb Williams",
+      "pos": "QB",
+      "rank at \u03bb=0": 17,
+      "rank at \u03bb=1": 17,
+      "rank moves with \u03bb": false,
+      "constraint can act": false
+    },
+    {
+      "season": 2025,
+      "top rookie (\u03bb=0)": "Cam Ward",
+      "pos": "QB",
+      "rank at \u03bb=0": 14,
+      "rank at \u03bb=1": 7,
+      "rank moves with \u03bb": true,
+      "constraint can act": true
+    },
+    {
+      "season": 2026,
+      "top rookie (\u03bb=0)": "Fernando Mendoza",
+      "pos": "QB",
+      "rank at \u03bb=0": 12,
+      "rank at \u03bb=1": 6,
+      "rank moves with \u03bb": true,
+      "constraint can act": true
+    }
+  ],
+  "counterfactual_prose": "\u26a0\ufe0f\u2b50\u2b50 **THE REGISTRATION CHOICE \u2014 FOIL RATHER THAN CANDIDATE \u2014 DECIDED THIS VERDICT, AND SAYING SO IS NOT OPTIONAL.** Had the blind constant been registered SHIPPABLE it would have been selected and it would have SHIPPED: \u0394 -0.0789 pooled tier MAE, PBO 0.0, whole-field DSR 0.9999, p 0.0055, C2 satisfied out of sample on every held-out board, and overall rank 12 on the 2026 board. This programme's rule is that a null must prove it does not rest on the author's own design choice (MH2 (g\u2033)) \u2014 and here it DOES rest on one. What it does NOT rest on is a gate LEVEL: \u00a75b shows nothing ships even with the DSR removed entirely.\n\n\u26d4 **AND THE CHOICE WAS STILL THE RIGHT ONE, WHICH IS WHY IT IS NOT BEING REVISITED.** The brief this story answers asks whether an IN-FOLD-SELECTED shrink can be published; a fixed constant is not one, and it was registered as the attribution control for exactly that reason, in writing, before the run. Re-classifying it now that its result is known would be the E2.1-r inversion in the most literal form available.\n\n\u2b50 **WHAT A LEGITIMATE SUCCESSOR WOULD HAVE TO LOOK LIKE (and what it may NOT be).** \u26d4 It may not pre-register \u03bb = 0.5, for the same reason NF-D18 could not pre-register its own frontier value \u2014 the number is now known and was read off these results. The honest options are: **(i) a PM DECISION** to publish a fixed conservative shrink, accepting openly that the constant was chosen by judgement rather than by any held-out criterion (this story's numbers are then the evidence base, not the selection); **(ii) a SHRINK ESTIMATOR that contains no board information at all** \u2014 e.g. empirical-Bayes shrinkage of the fitted per-position slopes toward 1 with its strength set by the fold-to-fold VARIANCE of those slopes \u2014 which is legitimately pre-registrable because it is an ESTIMATOR rather than a number, and which must be registered with its own gates before it is run; or **(iii) accept this null and close NF-D16 unpublished.** \u26a0\ufe0f Option (ii) is a real path and it is also the one most at risk of becoming a search for an estimator that lands near a number we now know, so it should be registered with that hazard named.",
+  "fine_grid": {
+    "n_lambda": 21,
+    "rows": [
+      {
+        "arm": "infold_all_boards",
+        "\u03bb chosen (fine grid)": "[0.0, 0.6, 1.0]",
+        "C2 holds out on every fold": false,
+        "pooled tier MAE": 0.9619,
+        "beats incumbent": true
+      },
+      {
+        "arm": "infold_last_board",
+        "\u03bb chosen (fine grid)": "[0.0, 0.6, 1.0]",
+        "C2 holds out on every fold": false,
+        "pooled tier MAE": 0.9481,
+        "beats incumbent": true
+      },
+      {
+        "arm": "unconstrained (\u03bb=1)",
+        "\u03bb chosen (fine grid)": "[0.0, 1.0]",
+        "C2 holds out on every fold": false,
+        "pooled tier MAE": 0.9445,
+        "beats incumbent": true
+      }
+    ],
+    "fine_metric_by_lambda": {
+      "0.0": 1.0738,
+      "0.05": 1.0654,
+      "0.1": 1.057,
+      "0.15": 1.0487,
+      "0.2": 1.0404,
+      "0.25": 1.0321,
+      "0.3": 1.0237,
+      "0.35": 1.0155,
+      "0.4": 1.0081,
+      "0.45": 1.0012,
+      "0.5": 0.9949,
+      "0.55": 0.9886,
+      "0.6": 0.9823,
+      "0.65": 0.9761,
+      "0.7": 0.9704,
+      "0.75": 0.9653,
+      "0.8": 0.9602,
+      "0.85": 0.9552,
+      "0.9": 0.9503,
+      "0.95": 0.9455,
+      "1.0": 0.9407
+    }
+  },
+  "counterfactual": {
+    "selected": "blind_half (\u03bb=0.5)",
+    "serving \u03bb": 0.5,
+    "2026 rank at that \u03bb": 12,
+    "clears the 2026 cap": true,
+    "metric": 0.9949,
+    "incumbent_metric": 1.0738,
+    "delta": -0.0789,
+    "pbo": 0.0,
+    "dsr": 0.9999,
+    "pvalue": 0.0055,
+    "would_have_shipped": true,
+    "blocking": []
+  },
+  "board_table": [
+    {
+      "season": 2019,
+      "base_season": 2018,
+      "walk-forward": true,
+      "rows": 716,
+      "rookies": 80,
+      "incumbent best-rookie rank": 22,
+      "incumbent clears the cap": true,
+      "admits \u03bb (pre-registered C2)": "[0.0, 0.25, 0.5, 0.75, 1.0]",
+      "admits \u03bb (STRICT cap \u2014 sensitivity)": "[0.0, 0.25, 0.5, 0.75, 1.0]",
+      "role": "held-out evidence"
+    },
+    {
+      "season": 2020,
+      "base_season": 2019,
+      "walk-forward": true,
+      "rows": 745,
+      "rookies": 77,
+      "incumbent best-rookie rank": 15,
+      "incumbent clears the cap": true,
+      "admits \u03bb (pre-registered C2)": "[0.0, 0.25, 0.5, 0.75, 1.0]",
+      "admits \u03bb (STRICT cap \u2014 sensitivity)": "[0.0, 0.25, 0.5, 0.75, 1.0]",
+      "role": "held-out evidence"
+    },
+    {
+      "season": 2021,
+      "base_season": 2020,
+      "walk-forward": true,
+      "rows": 758,
+      "rookies": 75,
+      "incumbent best-rookie rank": 10,
+      "incumbent clears the cap": false,
+      "admits \u03bb (pre-registered C2)": "[0.0, 0.25, 0.5, 0.75, 1.0]",
+      "admits \u03bb (STRICT cap \u2014 sensitivity)": "[]",
+      "role": "held-out evidence"
+    },
+    {
+      "season": 2022,
+      "base_season": 2021,
+      "walk-forward": true,
+      "rows": 783,
+      "rookies": 79,
+      "incumbent best-rookie rank": 31,
+      "incumbent clears the cap": true,
+      "admits \u03bb (pre-registered C2)": "[0.0, 0.25, 0.5, 0.75, 1.0]",
+      "admits \u03bb (STRICT cap \u2014 sensitivity)": "[0.0, 0.25, 0.5, 0.75, 1.0]",
+      "role": "held-out evidence"
+    },
+    {
+      "season": 2023,
+      "base_season": 2022,
+      "walk-forward": true,
+      "rows": 764,
+      "rookies": 80,
+      "incumbent best-rookie rank": 19,
+      "incumbent clears the cap": true,
+      "admits \u03bb (pre-registered C2)": "[0.0, 0.25, 0.5]",
+      "admits \u03bb (STRICT cap \u2014 sensitivity)": "[0.0, 0.25, 0.5]",
+      "role": "held-out evidence"
+    },
+    {
+      "season": 2024,
+      "base_season": 2023,
+      "walk-forward": true,
+      "rows": 734,
+      "rookies": 77,
+      "incumbent best-rookie rank": 17,
+      "incumbent clears the cap": true,
+      "admits \u03bb (pre-registered C2)": "[0.0, 0.25, 0.5, 0.75, 1.0]",
+      "admits \u03bb (STRICT cap \u2014 sensitivity)": "[0.0, 0.25, 0.5, 0.75, 1.0]",
+      "role": "held-out evidence"
+    },
+    {
+      "season": 2025,
+      "base_season": 2024,
+      "walk-forward": true,
+      "rows": 786,
+      "rookies": 85,
+      "incumbent best-rookie rank": 14,
+      "incumbent clears the cap": true,
+      "admits \u03bb (pre-registered C2)": "[0.0, 0.25, 0.5]",
+      "admits \u03bb (STRICT cap \u2014 sensitivity)": "[0.0, 0.25, 0.5]",
+      "role": "held-out evidence"
+    },
+    {
+      "season": 2026,
+      "base_season": 2025,
+      "walk-forward": true,
+      "rows": 784,
+      "rookies": 81,
+      "incumbent best-rookie rank": 12,
+      "incumbent clears the cap": true,
+      "admits \u03bb (pre-registered C2)": "[0.0, 0.25, 0.5, 0.75]",
+      "admits \u03bb (STRICT cap \u2014 sensitivity)": "[0.0, 0.25, 0.5, 0.75]",
+      "role": "SERVING (read once, \u00a78)"
+    }
+  ],
+  "board_prose": "\u26a0\ufe0f\u2b50 **THE SHIPPED PRODUCT ITSELF BREACHES THE CAP ON 1 OF 7 HELD-OUT BOARDS ([2021]), AND THAT IS WHY C2 IS WRITTEN AS A NO-DEGRADATION CLAUSE.** It was measured before any candidate in this field was scored and is disclosed rather than worked around: on such a board a bare-cap constraint would refuse EVERY \u03bb including \u03bb = 0 \u2014 i.e. it would refuse the NULL \u2014 and a constraint that refuses everything has examined nothing (NF1.7 (a)). The pre-registered clause `rank_\u03bb \u2265 min(cap, rank_incumbent)` reduces to the plain NF-D17 cap on every board the incumbent already clears and forbids making a pre-existing breach worse. The STRICT column is the bare-cap sensitivity; it is reported, never selected on.",
+  "rank_grid": [
+    {
+      "season": 2019,
+      "\u03bb=0": 22,
+      "\u03bb=0.25": 22,
+      "\u03bb=0.5": 22,
+      "\u03bb=0.75": 22,
+      "\u03bb=1": 22
+    },
+    {
+      "season": 2020,
+      "\u03bb=0": 15,
+      "\u03bb=0.25": 15,
+      "\u03bb=0.5": 15,
+      "\u03bb=0.75": 15,
+      "\u03bb=1": 15
+    },
+    {
+      "season": 2021,
+      "\u03bb=0": 10,
+      "\u03bb=0.25": 10,
+      "\u03bb=0.5": 10,
+      "\u03bb=0.75": 10,
+      "\u03bb=1": 10
+    },
+    {
+      "season": 2022,
+      "\u03bb=0": 31,
+      "\u03bb=0.25": 28,
+      "\u03bb=0.5": 28,
+      "\u03bb=0.75": 25,
+      "\u03bb=1": 25
+    },
+    {
+      "season": 2023,
+      "\u03bb=0": 19,
+      "\u03bb=0.25": 19,
+      "\u03bb=0.5": 14,
+      "\u03bb=0.75": 8,
+      "\u03bb=1": 6
+    },
+    {
+      "season": 2024,
+      "\u03bb=0": 17,
+      "\u03bb=0.25": 17,
+      "\u03bb=0.5": 17,
+      "\u03bb=0.75": 17,
+      "\u03bb=1": 17
+    },
+    {
+      "season": 2025,
+      "\u03bb=0": 14,
+      "\u03bb=0.25": 14,
+      "\u03bb=0.5": 14,
+      "\u03bb=0.75": 11,
+      "\u03bb=1": 7
+    },
+    {
+      "season": 2026,
+      "\u03bb=0": 12,
+      "\u03bb=0.25": 12,
+      "\u03bb=0.5": 12,
+      "\u03bb=0.75": 12,
+      "\u03bb=1": 6
+    }
+  ],
+  "constraint_prose": "The validated NF-D17 cap band: `{'Q05': 7.9, 'Q10': 8.8, 'Q15': 9.7, 'Q20': 10.6, 'Q25': 11.5}`, observed minimum realized rank **7.0** \u21d2 a THRESHOLD-INVARIANT clearance requires overall rank \u2265 **11.5**, i.e. rank 12 or worse. There is no threshold left for anybody to pick, which is what makes a clearance as un-reverse-engineerable as NF-D17's veto was.\n\n\u2b50 **MONOTONICITY, MEASURED RATHER THAN ASSUMED.** The pooled tier MAE is MONOTONE DECREASING in \u03bb (argmin at \u03bb = 1.0), and the served board's best-rookie rank is MONOTONE non-increasing in \u03bb. Where the metric is monotone the rule's `argmin over the admissible set` coincides with 'the largest admissible \u03bb' and has a one-line description; the argmin is registered anyway because correctness must not depend on a property that is a measurement (NF-D16 method lock 2).",
+  "rule_table": [
+    {
+      "arm": "incumbent (NULL)",
+      "shippable": true,
+      "\u03bb(2019)": 0.0,
+      "\u03bb(2020)": 0.0,
+      "\u03bb(2021)": 0.0,
+      "\u03bb(2022)": 0.0,
+      "\u03bb(2023)": 0.0,
+      "\u03bb(2024)": 0.0,
+      "\u03bb(2025)": 0.0,
+      "C2 holds out on every fold": true,
+      "pooled tier MAE": 1.0738
+    },
+    {
+      "arm": "infold_all_boards",
+      "shippable": true,
+      "\u03bb(2019)": 0.0,
+      "\u03bb(2020)": 1.0,
+      "\u03bb(2021)": 1.0,
+      "\u03bb(2022)": 1.0,
+      "\u03bb(2023)": 1.0,
+      "\u03bb(2024)": 0.5,
+      "\u03bb(2025)": 0.5,
+      "C2 holds out on every fold": false,
+      "pooled tier MAE": 0.9665
+    },
+    {
+      "arm": "infold_last_board",
+      "shippable": true,
+      "\u03bb(2019)": 0.0,
+      "\u03bb(2020)": 1.0,
+      "\u03bb(2021)": 1.0,
+      "\u03bb(2022)": 1.0,
+      "\u03bb(2023)": 1.0,
+      "\u03bb(2024)": 0.5,
+      "\u03bb(2025)": 1.0,
+      "C2 holds out on every fold": false,
+      "pooled tier MAE": 0.949
+    },
+    {
+      "arm": "unconstrained (\u03bb=1)",
+      "shippable": true,
+      "\u03bb(2019)": 0.0,
+      "\u03bb(2020)": 1.0,
+      "\u03bb(2021)": 1.0,
+      "\u03bb(2022)": 1.0,
+      "\u03bb(2023)": 1.0,
+      "\u03bb(2024)": 1.0,
+      "\u03bb(2025)": 1.0,
+      "C2 holds out on every fold": false,
+      "pooled tier MAE": 0.9445
+    },
+    {
+      "arm": "blind_half (\u03bb=0.5)",
+      "shippable": false,
+      "\u03bb(2019)": 0.5,
+      "\u03bb(2020)": 0.5,
+      "\u03bb(2021)": 0.5,
+      "\u03bb(2022)": 0.5,
+      "\u03bb(2023)": 0.5,
+      "\u03bb(2024)": 0.5,
+      "\u03bb(2025)": 0.5,
+      "C2 holds out on every fold": true,
+      "pooled tier MAE": 0.9949
+    }
+  ],
+  "rule_prose": "\u2b50 **EVERY \u03bb ABOVE IS A COMPUTED VALUE, NOT A CHOSEN ONE.** `infold_all_boards` selected \u03bb \u2208 [0.0, 0.5, 1.0] across the seven held-out classes (evidence mode `all`); `infold_last_board` selected \u03bb \u2208 [0.0, 0.5, 1.0] across the seven held-out classes (evidence mode `last`); `unconstrained (\u03bb=1)` selected \u03bb \u2208 [0.0, 1.0] across the seven held-out classes (evidence mode `none`).\n\n\u2b50 **AND THE STRICT-C2 SENSITIVITY (bare cap, no incumbent term \u2014 reported, never selected on):** `infold_all_boards` \u2192 \u03bb \u2208 [0.0, 1.0]; `infold_last_board` \u2192 \u03bb \u2208 [0.0, 0.5, 1.0]; `unconstrained (\u03bb=1)` \u2192 \u03bb \u2208 [0.0, 1.0].",
+  "field_table": [
+    {
+      "arm": "unconstrained (\u03bb=1)",
+      "kind": "REFERENCE (NF-D16 @ \u03bb=1)",
+      "pooled tier MAE": 0.9445,
+      "tier MAE RB": 73.633,
+      "tier MAE TE": 42.129,
+      "tier MAE WR": 65.31,
+      "universe MAE": 42.866,
+      "universe bias": -7.174,
+      "C2 holds out": false
+    },
+    {
+      "arm": "infold_last_board",
+      "kind": "in-fold rule",
+      "pooled tier MAE": 0.949,
+      "tier MAE RB": 72.879,
+      "tier MAE TE": 42.98,
+      "tier MAE WR": 65.649,
+      "universe MAE": 42.575,
+      "universe bias": -8.256,
+      "C2 holds out": false
+    },
+    {
+      "arm": "infold_all_boards",
+      "kind": "in-fold rule",
+      "pooled tier MAE": 0.9665,
+      "tier MAE RB": 72.574,
+      "tier MAE TE": 45.721,
+      "tier MAE WR": 65.707,
+      "universe MAE": 42.503,
+      "universe bias": -9.627,
+      "C2 holds out": false
+    },
+    {
+      "arm": "blind_half (\u03bb=0.5)",
+      "kind": "MATCHED FOIL (\u26d4 not shippable)",
+      "pooled tier MAE": 0.9949,
+      "tier MAE RB": 73.876,
+      "tier MAE TE": 48.1,
+      "tier MAE WR": 66.676,
+      "universe MAE": 41.956,
+      "universe bias": -13.137,
+      "C2 holds out": true
+    },
+    {
+      "arm": "incumbent (NULL)",
+      "kind": "NULL",
+      "pooled tier MAE": 1.0738,
+      "tier MAE RB": 80.43,
+      "tier MAE TE": 53.919,
+      "tier MAE WR": 68.836,
+      "universe MAE": 42.054,
+      "universe bias": -20.869,
+      "C2 holds out": true
+    }
+  ],
+  "selection_table": {
+    "incumbent pooled tier MAE": 1.0738,
+    "selected arm": "incumbent (NULL)",
+    "pooled tier MAE": 1.0738,
+    "\u0394 vs incumbent": 0.0,
+    "PBO": null,
+    "Bailey degradation %": null,
+    "contender spread %": null,
+    "DSR (whole-field, THE GATE)": null,
+    "DSR (contender, reported)": null,
+    "one-sided paired p (1 test)": 1.0,
+    "\u03b1 (pre-registered)": 0.1
+  },
+  "eligibility_disclosure": [
+    {
+      "eligibility rule": "PRE-REGISTERED (ordering + per-fold C2 out-of-sample)",
+      "n eligible": 1,
+      "selected arm": "incumbent (NULL)",
+      "pooled tier MAE": 1.0738
+    },
+    {
+      "eligibility rule": "ordering ONLY (NF-D16's convention)",
+      "n eligible": 4,
+      "selected arm": "unconstrained (\u03bb=1)",
+      "pooled tier MAE": 0.9445
+    }
+  ],
+  "sensitivity": {
+    "DSR whole-field (THE GATE)": null,
+    "DSR contender-set (reported)": null,
+    "ships at pre-registered DSR \u2265 0.95": false,
+    "ships at NF1.4's DSR \u2265 0.0": false,
+    "ships with the DSR dropped entirely": false,
+    "ships on the CONTENDER DSR reading": false
+  },
+  "sensitivity_prose": "\u2b50 **THE ANSWER DOES NOT TURN ON THE DISPUTABLE GATE, AND THAT IS THE POINT OF COMPUTING IT.** Nothing ships even with the DSR removed ENTIRELY and even on the kinder contender-set reading, because `['recalibrates', 'beats_incumbent', 'pbo_ok', 'significant']` blocks independently. So the verdict is not an artefact of inheriting NF-D16's stricter DSR bar nor of naming the whole-field reading as binding.",
+  "framing_agreement_prose": "\u26a0\ufe0f **THE TWO READINGS DISAGREE, AND THE DISAGREEMENT IS THE CONSTRAINT DOING ITS JOB.** The ordering-only rule selects `unconstrained (\u03bb=1)`; the pre-registered rule filters on the out-of-sample per-fold placement constraint first and selects `incumbent (NULL)`. The pre-registered rule GOVERNS. Reporting both is what makes 'the eligibility choice is disclosed, not hidden' a number.",
+  "attribution_prose": "\u26a0\ufe0f\u2b50\u2b50 **THE MATCHED FOIL REFUTES THIS STORY'S MECHANISM IN THE SHARPEST WAY AVAILABLE \u2014 AND THIS IS THE MOST IMPORTANT LINE IN THE REPORT.** The BLIND constant shrink \u2014 a \u03bb fixed at the midpoint of the registered interval with NO board information whatsoever \u2014 satisfies the per-fold placement constraint OUT OF SAMPLE on **every** held-out board, while **not one** of the in-fold selection rules does. So the in-fold machinery this story was built to test is not merely failing to help: it is actively WORSE at respecting the constraint than knowing nothing, because reading prior boards licenses it to raise \u03bb on the seasons where the constraint happens to be inactive and it is then caught by the next season that is not. \u26d4 **AND THAT IS NOT A LICENCE TO SHIP THE BLIND CONSTANT.** The foil is NON-SHIPPABLE by pre-registration precisely so this reading cannot become a back door: '\u03bb = 0.5 works' is a statement one can only make with the constraint results already in view, which is the same laundering NF-D18 refused for its own frontier value. The counterfactual is computed in \u00a76a and selected on by nothing.",
+  "serving_prose": "\u2b50 **\u03bb FOR SERVING WAS FIXED BEFORE THIS BOARD WAS READ.** The winning rule (`incumbent (NULL)`) applied to ALL seven held-out boards selects **\u03bb = 0.0**; only then is the 2026 board read, and only to run NF1.4's ordinary serving-time face-validity check on that already-fixed arm. This clause can only REFUSE a publish \u2014 it can never choose between arms \u2014 which is the one role in which reading the served board cannot contaminate a selection.",
+  "serving_table": [
+    {
+      "\u03bb": 0.0,
+      "best rookie": "Fernando Mendoza",
+      "pos": "QB",
+      "proj PPR": 268.33,
+      "overall rank": 12,
+      "rookies in top 10": 0,
+      "clears the cap (threshold-invariant)": true,
+      "SELECTED": true,
+      "pooled tier MAE (held-out)": 1.0738
+    },
+    {
+      "\u03bb": 0.25,
+      "best rookie": "Fernando Mendoza",
+      "pos": "QB",
+      "proj PPR": 268.33,
+      "overall rank": 12,
+      "rookies in top 10": 0,
+      "clears the cap (threshold-invariant)": true,
+      "SELECTED": false,
+      "pooled tier MAE (held-out)": 1.0321
+    },
+    {
+      "\u03bb": 0.5,
+      "best rookie": "Fernando Mendoza",
+      "pos": "QB",
+      "proj PPR": 268.33,
+      "overall rank": 12,
+      "rookies in top 10": 0,
+      "clears the cap (threshold-invariant)": true,
+      "SELECTED": false,
+      "pooled tier MAE (held-out)": 0.9949
+    },
+    {
+      "\u03bb": 0.75,
+      "best rookie": "Jeremiyah Love",
+      "pos": "RB",
+      "proj PPR": 270.83,
+      "overall rank": 12,
+      "rookies in top 10": 0,
+      "clears the cap (threshold-invariant)": true,
+      "SELECTED": false,
+      "pooled tier MAE (held-out)": 0.9653
+    },
+    {
+      "\u03bb": 1.0,
+      "best rookie": "Jeremiyah Love",
+      "pos": "RB",
+      "proj PPR": 291.63,
+      "overall rank": 6,
+      "rookies in top 10": 1,
+      "clears the cap (threshold-invariant)": false,
+      "SELECTED": false,
+      "pooled tier MAE (held-out)": 0.9407
+    }
+  ],
+  "qb_max_drift": 0.0,
+  "headline": "\ud83d\udfe1 RECORDED NULL \u2014 no in-fold-selected shrink clears every pre-registered gate; NF-D16 stays ratified-but-unpublished",
+  "verdict_prose": "**The pre-registered pooled test selects `incumbent (NULL)`**, moving the pooled draftable-tier MAE **1.0738 \u2192 1.0738** (\u0394 0.0) over 7 held-out draft classes, with PBO None, whole-field DSR None (the pre-registered gate, \u2265 0.95) and a one-sided paired p of 1.0 against \u03b1 = 0.1. **The BINDING failures are `['recalibrates', 'beats_incumbent']`** \u2014 `['pbo_ok', 'dsr_ok', 'significant']` are reported as failed only because they are **UNDEFINED**: with the incumbent the single eligible arm there is no search to deflate and no non-zero delta to score, and a statistic that was not COMPUTABLE must never be read as a mechanism that lost (MH2's UNDEFINED-vs-failed rule).\n\n\u2b50 **AND THE REASON THE INCUMBENT IS THE ONLY ELIGIBLE ARM IS THE WHOLE RESULT.** Every recalibrating arm BEATS the incumbent on the selection metric \u2014 the in-fold rules by 0.1293 pooled tier MAE at best \u2014 and every one of them is removed by the PER-FOLD placement constraint evaluated OUT OF SAMPLE. Nothing here lost on accuracy; the arms were refused by a deterministic board rank (\u00a79).\n\n\u26a0\ufe0f\u2b50\u2b50 **THE MATCHED FOIL REFUTES THIS STORY'S MECHANISM IN THE SHARPEST WAY AVAILABLE \u2014 AND THIS IS THE MOST IMPORTANT LINE IN THE REPORT.** The BLIND constant shrink \u2014 a \u03bb fixed at the midpoint of the registered interval with NO board information whatsoever \u2014 satisfies the per-fold placement constraint OUT OF SAMPLE on **every** held-out board, while **not one** of the in-fold selection rules does. So the in-fold machinery this story was built to test is not merely failing to help: it is actively WORSE at respecting the constraint than knowing nothing, because reading prior boards licenses it to raise \u03bb on the seasons where the constraint happens to be inactive and it is then caught by the next season that is not. \u26d4 **AND THAT IS NOT A LICENCE TO SHIP THE BLIND CONSTANT.** The foil is NON-SHIPPABLE by pre-registration precisely so this reading cannot become a back door: '\u03bb = 0.5 works' is a statement one can only make with the constraint results already in view, which is the same laundering NF-D18 refused for its own frontier value. The counterfactual is computed in \u00a76a and selected on by nothing.\n\n\u21d2 **RECORDED NULL ON THE PRE-REGISTERED QUESTION, AND IT CLOSES THE *IN-FOLD SELECTION* PATH RATHER THAN NF-D16 ITSELF.** The harness NF-D18 named as the only legitimate remaining publish route has now been built \u2014 the merged veteran+rookie board rebuilt per held-out season, the constraint enforced OUT OF SAMPLE \u2014 and it does not produce a shippable shrink under the gates NF-D16 itself pre-registered. NF-D16 stays RATIFIED-BUT-UNPUBLISHED, the shipped rookie point STANDS, the interval is untouched, and the QB exclusion was never re-opened. \u26a0\ufe0f **What this null does NOT say is 'nothing could ever work', and \u00a76a is where a reader must go before treating it that way:** a shrink that never consults a board survives every constraint this story could throw at it, so what failed is the SELECTION MACHINERY, not the shrink family \u2014 and the reason it failed is diagnosable (\u00a72b: the constraint's activity is a draft-class accident, so prior boards cannot teach a rule what the next one will refuse). The remaining routes are a PM decision or a board-free shrink ESTIMATOR, both spelled out in \u00a76a; neither is 'more draft classes'.",
+  "null_prose": "\u26a0\ufe0f\u2b50 **RECORDED AS `CONSTRAINT_REFUSED`.** `cv_power.classify_null` returns **`POWER_LIMITED`**. the seven states classify STATISTICAL nulls; every recalibrating arm here BEAT the incumbent on the metric and was removed by a DETERMINISTIC constraint (a board rank against a fixed cap) with no sampling error to accumulate, so 'POWER_LIMITED' would emit a re-test trigger that more draft classes cannot satisfy\n\n\u21d2 **remedy: a different MECHANISM, or a PM decision to revisit the constraint \u2014 never more draft classes, which cannot move a board rank**.",
+  "limitations": [
+    "\u26a0\ufe0f\u2b50 **THE VERDICT RESTS ON A REGISTRATION CHOICE OF THIS STORY'S OWN \u2014 DISCLOSED IN \u00a76a, NOT BURIED.** The blind constant shrink was registered as a NON-SHIPPABLE matched foil before the run, and had it been registered as a candidate it would have been selected and would have shipped. The choice was faithful to the brief (a fixed constant is not an IN-FOLD-SELECTED shrink) and re-classifying it now would be the E2.1-r inversion \u2014 but a reader is entitled to know that the eligibility of one arm, and not a gate LEVEL, is what separates this null from a ship. \u00a75b shows the gate levels decide nothing.",
+    "\u26a0\ufe0f\u2b50 **THE CONSTRAINT IS INACTIVE ON MOST BOARDS, WHICH BOUNDS WHAT 'C2 HELD OUT' MEANS EITHER WAY.** On 4 of the 8 boards read here the best rookie is a QB \u2014 the one position the recalibration may not touch \u2014 so no \u03bb can move the rank and C2 admits everything vacuously (\u00a72b). An arm's constraint record is therefore built from far fewer genuinely informative boards than the fold count suggests, in BOTH directions: the blind constant's clean sheet is as thin as the rules' failures are.",
+    "\u26a0\ufe0f **A PRE-REGISTERED ANCHOR (`over_scale`) FAILED AND THE GATE IS LEFT READING FALSE** (\u00a71a). It is not the metric-inversion signature the anchor exists to catch \u2014 both do-nothing degenerates lose comfortably \u2014 but the bundled `degenerates_lose` flag now mixes a metric-sanity check with a refuted magnitude hypothesis, and a future reader must not read its False as 'the measurement is untrustworthy'.",
+    "\u26a0\ufe0f **THE PLACEMENT CAP'S REFERENCE DISTRIBUTION IS NOT WALK-FORWARD, AND IT IS INHERITED RATHER THAN RE-DERIVED.** NF-D17's `REALIZED_BEST_ROOKIE_OVERALL_RANK` spans 2019\u20132025, so the cap applied to the 2019 board was estimated partly from seasons after it. Re-deriving a per-fold cap would mean re-specifying the very validated clause this story must clear \u2014 the E2.1-r inversion facing the other way \u2014 so the clause is imported verbatim. The bound on the cost: the cap is a CONSTANT, identical for every arm and every fold, so it cannot favour one arm over another; it can only shift the whole field's admissible set together.",
+    "\u26a0\ufe0f **THE FIRST HELD-OUT CLASS HAS NO BOARD EVIDENCE AT ALL.** The merged boards begin at 2019, so every rule falls back to the registered empty-evidence default (\u03bb = 0) on that class and contributes a delta of exactly 0. That is a real power cost of one fold in seven, registered in advance rather than discovered. It is reachable \u2014 earlier boards can be emitted with `--backtest-from` further back \u2014 but it is a DATA-availability limit on the metric, and it is stated separately from the constraint result so the two are never confused.",
+    "\u26a0\ufe0f **THE PER-FOLD CONSTRAINT IS EVALUATED ON ONE BOARD PER FOLD.** A board is a serving-time artifact, not a held-out statistical criterion, so C2 contributes no power \u2014 it can only remove arms. What bounds that: no arm's PARAMETERS are ever tuned to any board (the affine is fitted in-fold on rookie outcomes, and only the discrete \u03bb is chosen), the clearance is required to be THRESHOLD-INVARIANT so no cutoff was picked, C2 is enforced OUT-OF-SAMPLE, and the ordering-only reading is reported beside it (\u00a75c).",
+    "\u26a0\ufe0f **THE `min(cap, rank_incumbent)` TERM IS A REAL LOOSENING ON THE BOARDS WHERE IT BINDS, AND IT IS DISCLOSED RATHER THAN BURIED.** It was written into the pre-registration because the shipped product breaches the cap on some historical boards and a constraint that refuses the NULL has examined nothing \u2014 but on those boards it does admit \u03bb values a bare cap would not. Both readings are computed (\u00a72, \u00a73) and the pre-registered one governs.",
+    "**`tier_mae` grades the DRAFTABLE TIER \u2014 ~6 RB / 8 WR / 3 TE per class.** A claim here is a claim about a few dozen rookie-seasons across seven draft classes; the paired per-class deltas are reported so a reader sees the spread rather than only the mean.",
+    "**The in-fold affine is estimated against IN-SAMPLE point projections** (the training rows' points come from the fold's own slot curve). NF-D16 measured the resulting optimism at \u22120.05 in constant space and the direction is CONSERVATIVE \u2014 it biases a correction toward the identity \u2014 but it is not zero, and it applies to every \u03bb here.",
+    "\u26d4 **QB is out of scope by pre-registration, not by result** \u2014 inherited by import through NF-D16 from NF-D15/NF-D14, and proven untouched on both the held-out classes and every board rather than asserted.",
+    "**No edge claim.** A projection-quality product: `best_alpha = 0`, no CLV/ROI statement."
+  ]
+}

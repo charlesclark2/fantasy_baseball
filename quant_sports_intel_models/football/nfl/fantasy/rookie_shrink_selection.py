@@ -298,6 +298,7 @@ __all__ = [
     "apply_position_adjustment", "blend_toward_incumbent", "ordering_check", "scaled_positions_only",
     "family_ceiling_check", "fit_ols", "board_placement", "placement_clearance",
     "strictest_placement_cap", "board_admits", "admissible_lambdas", "aggregate_admissible",
+    "held_out_evidence",
     "select_lambda", "monotonicity", "require_anchors", "candidate_configs", "config_key",
     "board_is_walk_forward", "pooled_ship", "shrink_verdict",
 ]
@@ -386,6 +387,18 @@ def aggregate_admissible(per_board: dict, evidence: str, *, grid: tuple = LAMBDA
     # constraint on recalibration, and a rule with an empty choice set would have no defined answer.
     allowed.add(float(EMPTY_EVIDENCE_LAMBDA))
     return tuple(sorted(float(x) for x in allowed))
+
+
+def held_out_evidence(evidence_all: dict, serving_season: int) -> dict:
+    """⛔ THE SERVING BOARD IS NOT EVIDENCE — the single structural invariant this whole story rests
+    on, expressed as a function so it can be TESTED rather than trusted to a comprehension in a
+    runner.
+
+    Every aggregation in this story iterates the result of this call, so the board whose placement
+    decides the publish is unreachable to every rule by construction. Written as one owner because
+    "no arm is selected on the 2026 board" is the claim NF-D18 refused to take on trust, and a claim
+    that important must be a function with a guard on it."""
+    return {s: v for s, v in evidence_all.items() if int(s) != int(serving_season)}
 
 
 def select_lambda(allowed: tuple, inner_metric: dict) -> dict:
