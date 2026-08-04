@@ -37,7 +37,9 @@ if [ -f "$DEPLOY_LOCK" ]; then
   exit 0
 fi
 
-CORE_SERVICES=(dagster-postgres dagster-codeloc dagster-daemon dagster-webserver dbt-runner flaresolverr caddy)
+# `autoheal` is in the core set on purpose: it is the actor that restarts an `unhealthy` byparr, and a
+# watchdog nobody watches reproduces the very outage it exists to prevent.
+CORE_SERVICES=(dagster-postgres dagster-codeloc dagster-daemon dagster-webserver dbt-runner flaresolverr caddy autoheal)
 fails=()
 
 # 1) every core service must be in the running set
@@ -56,8 +58,38 @@ $COMPOSE exec -T dagster-codeloc curl -fsS --max-time 10 http://dbt-runner:8080/
 # FastAPI app), so that content-string assertion FALSE-PAGED CRITICAL every run while Byparr was Up
 # (healthy) and pulling rows. Probe /health for a 2xx (Byparr's own Docker HEALTHCHECK uses it), falling
 # back to / for a classic FlareSolverr — reachability only, NO response-body string match.
-$COMPOSE exec -T dagster-codeloc sh -c 'curl -fsS -o /dev/null --max-time 10 http://flaresolverr:8191/health || curl -fsS -o /dev/null --max-time 10 http://flaresolverr:8191/' 2>/dev/null \
-  || fails+=("flaresolverr unreachable on :8191")
+#
+# ⚠️ 2026-08-03 (7-DAY SILENT FANGRAPHS OUTAGE): the probe below said "2xx" in its comment but did not
+# ASSERT one. `curl -f` only fails on >= 400, so a REDIRECT passes it — and Byparr's GET / answers
+# `301 Moved Permanently`. So when /health began returning 500 (its Camoufox browser could no longer
+# launch: "BrowserType.launch: Connection closed while reading from the driver"), the `||` fell through
+# to / , collected the 301, exited 0, and this check reported GREEN for SEVEN DAYS while every FanGraphs
+# ingest failed. The `||` fallback — added so a classic FlareSolverr without /health still passes —
+# silently converted a real health failure into a pass. CURE: compare the ACTUAL status code and require
+# 2xx on one of the two endpoints; a 3xx/4xx/5xx from BOTH is now a failure. Timeout is 20s (not 10s)
+# because /health may launch a browser; the 3-consecutive-failure debounce absorbs transient slowness.
+$COMPOSE exec -T dagster-codeloc sh -c '
+  for u in http://flaresolverr:8191/health http://flaresolverr:8191/; do
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$u" 2>/dev/null)
+    case "$code" in 2??) exit 0 ;; esac
+  done
+  exit 1
+' 2>/dev/null \
+  || fails+=("flaresolverr: no 2xx from /health or / on :8191 (solver likely up but browser dead)")
+
+# 3) container HEALTH — a container can sit `running` yet `unhealthy` INDEFINITELY.
+# ⚠️ 2026-08-03: Byparr ran `Up 3 weeks (unhealthy)` with `restarts=0` — its own Docker HEALTHCHECK was
+# red the whole time, but check (1) above only asks whether the container is in the RUNNING set (an
+# unhealthy container still is), and `restart: unless-stopped` only reacts to a process EXIT, which never
+# happened. So Docker knew, and nothing asked it. This reads the health status Docker already tracks.
+# `starting` is NOT a failure (transient post-restart); a service with no HEALTHCHECK declared reports
+# `none` and is skipped rather than scored healthy (NF1.7(a) — an unevaluable check is not a pass).
+for svc in "${CORE_SERVICES[@]}"; do
+  cid="$($COMPOSE ps -q "$svc" 2>/dev/null | head -1)"
+  [ -n "$cid" ] || continue   # already reported by check (1) if genuinely down
+  hs="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo none)"
+  [ "$hs" = "unhealthy" ] && fails+=("container unhealthy: ${svc}")
+done
 
 if [ "${#fails[@]}" -eq 0 ]; then
   echo "[healthcheck $(date -u +%H:%M:%S)] OK — all core services up"

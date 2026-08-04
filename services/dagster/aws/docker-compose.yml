@@ -202,6 +202,41 @@ services:
     environment:
       LOG_LEVEL: info
       TZ: America/New_York
+    # 2026-08-03 — opt this container in to autoheal (see the autoheal service below). Byparr degrades
+    # into a browser-cannot-launch state after ~2-3 weeks of uptime; Docker's own HEALTHCHECK detects it
+    # correctly, but nothing acted on that until now.
+    labels:
+      autoheal: "true"
+    <<: *restart
+
+  # --- autoheal: restart containers Docker has marked `unhealthy` ----------------
+  # ⚠️ WHY THIS EXISTS (2026-08-03, 7-day silent FanGraphs outage): `restart: unless-stopped` reacts to a
+  # process EXIT, NOT to an `unhealthy` health status. Byparr's Camoufox browser stopped launching
+  # ("BrowserType.launch: Connection closed while reading from the driver") while its FastAPI server kept
+  # answering, so the process never exited — the container sat `Up 3 weeks (unhealthy)` with
+  # `restarts=0`, every FanGraphs ingest 500'd, and a `docker restart` cured it instantly once found.
+  # Docker KNEW the whole time; there was simply no actor. This is that actor.
+  #
+  # Scope is deliberately narrow: it only touches containers LABELLED `autoheal=true` (today: byparr
+  # alone), so it can never restart Dagster/Postgres/Caddy out from under a running job.
+  # START_PERIOD=300 gives a restarted Byparr time to warm before it is eligible again, which (with
+  # INTERVAL=60) bounds any pathological restart loop to ~1 restart / 6 min.
+  #
+  # ⚠️ It mounts the Docker socket READ-ONLY — necessary (restarting a container IS a socket operation)
+  # and the reason this is a deliberate, reviewable addition rather than a silent one. :ro does not
+  # meaningfully sandbox the Docker API, so the real control is the container-label scope above.
+  # ⚠️ PIN: version tag, not :latest (this file's own pinning discipline). Digest-pin it after the first
+  # box pull:  docker inspect --format='{{index .RepoDigests 0}}' willfarrell/autoheal:1.2.0
+  autoheal:
+    image: willfarrell/autoheal:1.2.0
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: 60            # poll health every 60s
+      AUTOHEAL_START_PERIOD: 300       # ignore health for 5 min after a (re)start
+      AUTOHEAL_DEFAULT_STOP_TIMEOUT: 30
+      TZ: America/New_York
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     <<: *restart
 
   # --- Caddy: HTTPS reverse proxy + basic-auth for dagit (INC-16-P4) ------------
