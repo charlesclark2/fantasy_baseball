@@ -128,6 +128,33 @@ def test_autoheal_service_is_scoped_by_label_not_global(compose):
     assert "/var/run/docker.sock:/var/run/docker.sock:ro" in ah["volumes"]
 
 
+def test_autoheal_curl_timeout_outlives_its_own_stop_timeout(compose):
+    """CURL_TIMEOUT must EXCEED AUTOHEAL_DEFAULT_STOP_TIMEOUT, or every slow restart self-reports
+    as a failure.
+
+    Verified live on the box 2026-08-04. autoheal issues every API call as
+    `curl --max-time $CURL_TIMEOUT ... -f -X POST .../restart?t=$STOP_TIMEOUT`, and the image
+    defaults CURL_TIMEOUT to 30 — EQUAL to our stop timeout. A container that ignores SIGTERM
+    (normal: PID 1 gets no default signal handling) burns the whole stop timeout before SIGKILL,
+    so the POST cannot return inside curl's deadline. curl aborts, `-f` returns non-zero, autoheal
+    logs "Restarting container <id> failed" — and the daemon restarts it anyway. Measured:
+    `.State.StartedAt` advanced 01:56:56 -> 02:00:05 across attempts that ALL logged "failed",
+    with attempts a telltale 90s apart (INTERVAL 60 + the 30s timeout).
+
+    The bug worth guarding is not the wasted wait — it is that a SUCCESS and a genuine FAILURE
+    become indistinguishable in the log, which is the same non-discriminating-output class as the
+    `curl -f`/301 healthcheck bug that motivated this whole service.
+    """
+    env = compose["services"]["autoheal"]["environment"]
+    curl_timeout = int(env["CURL_TIMEOUT"])
+    stop_timeout = int(env["AUTOHEAL_DEFAULT_STOP_TIMEOUT"])
+    assert curl_timeout > stop_timeout, (
+        f"CURL_TIMEOUT={curl_timeout} must exceed AUTOHEAL_DEFAULT_STOP_TIMEOUT={stop_timeout}; "
+        "at or below it, a successful-but-slow restart logs as 'failed' and a real failure becomes "
+        "unrecognisable."
+    )
+
+
 def test_autoheal_image_is_digest_pinned(compose):
     """Tightened 2026-08-04 from "not :latest" to "digest-pinned", matching byparr.
 
