@@ -89,3 +89,79 @@ def test_statcast_sla_is_generous_for_its_monthly_cadence():
     # the AAA-Statcast incremental is a MONTHLY pull (2 Savant requests) by design — its floor
     # must not be tighter than the daily-cadence feeds or it would false-alarm mid-month.
     assert cs.FRESHNESS_SLA_DAYS["statcast_aaa"] > cs.FRESHNESS_SLA_DAYS["player_game_logs"]
+
+
+# ── _lag_days partition pruning + the load-bearing unpruned fallback ──────────────────
+#
+# 2026-08-03 perf change: probes prune to `season >= now.year - 1` (all four tables are Delta-
+# partitioned with season FIRST) — measured 28.4s → 14.9s wall / 13.7s → 5.8s CPU end-to-end.
+# The FALLBACK is what these pin: a feed dead LONGER than the pruned window yields an empty
+# window, and reporting that as "no rows to measure" (UNEVALUABLE) instead of a real STALE lag
+# would hide the exact condition the check exists to find — and hide it worse the more broken
+# the feed is. So an empty pruned window MUST re-run unpruned.
+
+
+class _FakeConn:
+    """Records the SQL it is asked to run and replays canned max-date answers in order."""
+
+    def __init__(self, answers):
+        self._answers = list(answers)
+        self.queries = []
+
+    def execute(self, sql):
+        self.queries.append(sql)
+        self._last = self._answers.pop(0)
+        return self
+
+    def fetchone(self):
+        return (self._last,)
+
+
+def test_the_pruned_query_carries_the_season_predicate():
+    from datetime import date
+
+    conn = _FakeConn([date(2026, 8, 1)])
+    lag = cs._lag_days(conn, "s3://x/player_game_logs", "official_date",
+                       date(2026, 8, 3), season_floor=2025)
+    assert lag == 2
+    assert len(conn.queries) == 1, "a healthy feed must cost ONE query, not two"
+    assert "season >= 2025" in conn.queries[0]
+
+
+def test_an_empty_pruned_window_falls_back_to_an_unpruned_scan():
+    from datetime import date
+
+    # pruned window empty (None) → must retry WITHOUT the predicate and still return a real lag.
+    conn = _FakeConn([None, date(2019, 5, 1)])
+    lag = cs._lag_days(conn, "s3://x/the_board", "as_of_date",
+                       date(2026, 8, 3), season_floor=2025)
+    assert lag == (date(2026, 8, 3) - date(2019, 5, 1)).days
+    assert len(conn.queries) == 2
+    assert "season >=" in conn.queries[0] and "season >=" not in conn.queries[1]
+
+
+def test_a_long_dead_feed_reports_STALE_not_UNEVALUABLE():
+    """The regression this fallback exists to prevent, stated end-to-end."""
+    from datetime import date
+
+    conn = _FakeConn([None, date(2024, 1, 1)])          # dead ~2.5 years, far outside the window
+    lag = cs._lag_days(conn, "s3://x/fg_leaderboards", "as_of_date",
+                       date(2026, 8, 3), season_floor=2025)
+    state, _ = cs.classify_freshness(lag, sla_days=3)
+    assert state == "STALE", "a feed dead beyond the pruned window must still read STALE"
+
+
+def test_a_genuinely_empty_table_is_still_unevaluable():
+    from datetime import date
+
+    conn = _FakeConn([None, None])
+    assert cs._lag_days(conn, "s3://x/empty", "as_of_date",
+                        date(2026, 8, 3), season_floor=2025) is None
+
+
+def test_no_season_floor_means_a_single_unpruned_query():
+    from datetime import date
+
+    conn = _FakeConn([date(2026, 8, 3)])
+    assert cs._lag_days(conn, "s3://x/t", "as_of_date", date(2026, 8, 3)) == 0
+    assert "season >=" not in conn.queries[0]

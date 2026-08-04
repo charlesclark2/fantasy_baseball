@@ -168,32 +168,67 @@ def fetch_statcast_coverage_rows(conn, seasons: list[int]) -> list[dict]:
     return [dict(zip(cols, r)) for r in cur.fetchall()]
 
 
-def _lag_days(conn, table_uri: str, date_col: str, now: date, *, board: bool = False) -> float | None:
+def _max_date(conn, relation: str, date_col: str, where: str = "") -> date | None:
+    row = conn.execute(f"select max({date_col}::date) from {relation} {where}").fetchone()
+    newest = row[0] if row else None
+    if isinstance(newest, datetime):
+        newest = newest.date()
+    return newest
+
+
+def _lag_days(conn, table_uri: str, date_col: str, now: date, *, board: bool = False,
+              season_floor: int | None = None) -> float | None:
+    """Days between a feed's newest row and `now`. None = no rows to measure.
+
+    PERF (2026-08-03): all four MiLB tables are Delta-partitioned with `season` FIRST, so a
+    `where season >= <floor>` predicate prunes to the recent partitions instead of scanning all
+    history to learn ONE date. Measured end-to-end on live S3, 3 runs each: 28.4s → 14.9s wall
+    (~1.9x), 13.7s → 5.8s CPU (~2.4x); the isolated player_game_logs probe went 15.1s → 3.1s.
+    `season` is BIGINT in the Delta schema (verified, not assumed — a VARCHAR partition column
+    would have needed the INC-23 use-site cast, and a bare integer compare would silently
+    mis-compare against it).
+
+    ⚠️ THE UNPRUNED FALLBACK IS LOAD-BEARING, NOT BELT-AND-BRACES. If the pruned window is EMPTY —
+    exactly what a feed dead LONGER than the window looks like — `max()` returns NULL, and
+    returning None there would report the feed as UNEVALUABLE instead of STALE. That would hide
+    the precise condition this check exists to detect, and hide it *worse the more broken the feed
+    is*. So an empty pruned window re-runs UNPRUNED and still yields a real (large) lag. The
+    optimisation may cost a second scan in the rare bad case; it must never cost a verdict.
+    (NF1.7(a): an unevaluable check is never the same as a passed one — nor as a failed one.)
+    """
     if board:
         # THE BOARD's void-typed mlbam_id column breaks delta_scan — read via the Delta ACID file
         # list, the same landmine dodge player_xref.register_board uses.
         from betting_ml.scripts.milb_xref.player_xref import register_board
 
         register_board(conn, uri=table_uri, view="_freshness_board")
-        row = conn.execute(f"select max({date_col}::date) from _freshness_board").fetchone()
+        relation = "_freshness_board"
     else:
-        row = conn.execute(
-            f"select max({date_col}::date) from delta_scan('{table_uri}')"
-        ).fetchone()
-    newest = row[0] if row else None
+        relation = f"delta_scan('{table_uri}')"
+
+    newest = None
+    if season_floor is not None:
+        newest = _max_date(conn, relation, date_col, f"where season >= {int(season_floor)}")
+    if newest is None:                       # empty/absent recent partitions → real full scan
+        newest = _max_date(conn, relation, date_col)
     if newest is None:
         return None
-    if isinstance(newest, datetime):
-        newest = newest.date()
     return (now - newest).days
 
 
 def fetch_freshness(conn, now: date) -> dict[str, float | None]:
+    # Prior season + current: wide enough that a healthy feed always hits the pruned path, and an
+    # off-season gap (e.g. the MiLB winter) never forces the fallback scan.
+    floor = now.year - 1
     return {
-        "player_game_logs": _lag_days(conn, f"{MILB}/player_game_logs", "official_date", now),
-        "statcast_aaa": _lag_days(conn, f"{MILB}/statcast_aaa", "game_date", now),
-        "the_board": _lag_days(conn, f"{MILB}/the_board", "as_of_date", now, board=True),
-        "fg_leaderboards": _lag_days(conn, f"{MILB}/fg_leaderboards", "as_of_date", now),
+        "player_game_logs": _lag_days(conn, f"{MILB}/player_game_logs", "official_date", now,
+                                      season_floor=floor),
+        "statcast_aaa": _lag_days(conn, f"{MILB}/statcast_aaa", "game_date", now,
+                                  season_floor=floor),
+        "the_board": _lag_days(conn, f"{MILB}/the_board", "as_of_date", now, board=True,
+                               season_floor=floor),
+        "fg_leaderboards": _lag_days(conn, f"{MILB}/fg_leaderboards", "as_of_date", now,
+                                     season_floor=floor),
     }
 
 
