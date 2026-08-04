@@ -27,6 +27,19 @@ Outputs:
   * <out-dir>/nfl_fantasy_kdst_band_panel.parquet              — the walk-forward band/coverage panel
   * s3://credence-sports-lakehouse/nfl/fantasy/derived/kdst_projections/season=<year>/  (--s3)
   * quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf1_6_kdst_base_projection.md
+    (the FORWARD season only; a historical season writes `..._<year>.md` beside it, so a backfill
+    can never overwrite the report describing the season we actually serve)
+
+HISTORICAL BACKFILL (NF-C0e follow-up 3) — project past seasons into their own lake partitions:
+
+  uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_kdst_projection \
+      --backfill-from 2019 --backfill-to 2025 \
+      --duckdb quant_sports_intel_models/sports_dbt/sports.duckdb --s3
+
+Every season is fitted STRICTLY IN-FOLD (the band and every training frame are filtered to seasons
+before it), so a backfill is a genuine historical projection, not a hindsight fit. One `Inputs` and
+one band panel serve the whole range. ⚠️ The coverage/rank numbers are panel-WIDE and therefore
+identical for every season in the range — they are not seven independent validations.
 
 ⚖️ THE GATE (edge-independent — no `best_alpha`/PBO/DSR; that is the betting posture):
   1. FACE VALIDITY — do the top projected DSTs sit on defenses projected to allow fewer points, and
@@ -66,6 +79,32 @@ _REPORT_PATH = (
     / "quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf1_6_kdst_base_projection.md"
 )
 _PANEL_CACHE = _DEFAULT_OUT / "nfl_fantasy_kdst_band_panel.parquet"
+
+# Minimum training targets before a season can be projected — mirrors the `fit_models` refusal, so
+# a bad `--backfill-from` fails on the ARGUMENTS instead of part-way through a multi-season run.
+MIN_TRAIN_TARGETS = 5
+
+
+def report_path_for(projection_season: int, forward_season: int) -> Path:
+    """Where a run's markdown report goes.
+
+    ⚠️ The FORWARD season keeps the canonical filename; every other season gets its own.
+    `_REPORT_PATH` is a fixed path, so before this a historical run OVERWROTE the committed report
+    describing the season we actually serve — a 7-season backfill would have left it describing
+    2019. The canonical name is referenced by name from `nfl_fantasy_story_prompts.md`, so renaming
+    it unconditionally is not an option either; the split keeps the served season's report where
+    every reader expects it and still records each backfilled season."""
+    if int(projection_season) == int(forward_season):
+        return _REPORT_PATH
+    return _REPORT_PATH.with_name(f"{_REPORT_PATH.stem}_{int(projection_season)}.md")
+
+
+def summary_path_for(out_dir: Path, projection_season: int, forward_season: int) -> Path:
+    """Same rule as `report_path_for`, for the JSON summary — it was fixed-path for the same reason
+    and would have been overwritten the same way."""
+    if int(projection_season) == int(forward_season):
+        return out_dir / "nfl_fantasy_kdst_summary.json"
+    return out_dir / f"nfl_fantasy_kdst_summary_{int(projection_season)}.json"
 
 # The first season the walk-forward panel can produce a target for. The kicker universe comes from
 # `weekly_rosters`, whose usable week-1 coverage starts in the mid-2000s, and every target needs a
@@ -879,6 +918,80 @@ def write_report(path: Path, *, projection_season: int, proj: pd.DataFrame, cov:
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # Main
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+def project_one_season(inp: Inputs, con, projection_season: int, *, panel: pd.DataFrame,
+                       out_dir: Path, widen: float, panel_from: int,
+                       s3: bool, lake_root: str | None) -> dict:
+    """Fit + project ONE season and write its per-season artifacts.
+
+    Split out of `main` so a multi-season backfill reuses a single `Inputs` and a single band panel
+    — the expensive parts — instead of paying a full lake + marts read per season.
+
+    ⚠️ LEAKAGE: every season is fitted strictly in-fold. The band is refitted from the panel rows
+    STRICTLY BEFORE this season (not the full panel), and `fit_models` filters every training frame
+    the same way, so projecting 2019 sees nothing from 2019 or later. This is what makes a backfill
+    a legitimate historical projection rather than a hindsight fit."""
+    band = KD.fit_ratio_band(panel[panel["target_season"] < projection_season], widen=widen)
+    dst_model, k_model, diag = fit_models(inp, con, projection_season)
+    proj = build_projection(inp, con, projection_season, dst_model, k_model, band)
+    log.info("%d projection: %d rows (%d DST, %d K)", projection_season, len(proj),
+             int((proj["position"] == "DST").sum()), int((proj["position"] == "K").sum()))
+
+    face = KD.face_validity(proj)
+    if not face["pass"]:
+        log.warning("[ALERT] %d NF1.6 face-validity gate TRIPPED: %s", projection_season,
+                    [c for c in face["checks"] if not c["pass"]])
+    else:
+        log.info("%d NF1.6 face validity: pass", projection_season)
+
+    proj.to_parquet(out_dir / f"nfl_fantasy_kdst_projections_{projection_season}.parquet",
+                    index=False)
+    ranked = proj.copy()
+    ranked.insert(0, "pos_rank", ranked.groupby("position").cumcount() + 1)
+    ranked.to_csv(out_dir / f"nfl_fantasy_kdst_projections_{projection_season}_ranked.csv",
+                  index=False)
+    if s3 or lake_root:
+        from quant_sports_intel_models.football.nfl.ingest import s3io
+        n = s3io.write_dataframe(proj.assign(season=int(projection_season)), sport="nfl",
+                                 source="kdst_projections", season=int(projection_season),
+                                 tier="fantasy/derived", local_root=lake_root)
+        log.info("landed %d rows → nfl/fantasy/derived/kdst_projections season=%d", n,
+                 projection_season)
+
+    dst_panel_for_rel = KD.build_dst_training_panel(
+        inp.team_def, inp.team_points, None,
+        list(range(panel_from, projection_season)), team_yards=inp.team_yards)
+    rel = component_reliability_table(dst_panel_for_rel)
+    return {"proj": proj, "face": face, "band": band, "diag": diag, "rel": rel,
+            "dst_model": dst_model, "k_model": k_model}
+
+
+def resolve_seasons(projection_season: int | None, backfill_from: int | None,
+                    backfill_to: int | None, *, forward_season: int, panel_from: int) -> list[int]:
+    """The list of seasons to project, validated UP FRONT.
+
+    Every refusal happens here, before any fitting, so a bad range fails on the arguments in under a
+    second rather than part-way through a multi-season run with some seasons already landed."""
+    if backfill_from is None and backfill_to is None:
+        return [int(projection_season) if projection_season else int(forward_season)]
+    if projection_season is not None:
+        raise ValueError("--projection-season and --backfill-from/--backfill-to are mutually "
+                         "exclusive: pass a single season or a range, not both")
+    if backfill_from is None or backfill_to is None:
+        raise ValueError("--backfill-from and --backfill-to must be given together")
+    lo, hi = int(backfill_from), int(backfill_to)
+    if lo > hi:
+        raise ValueError(f"--backfill-from {lo} is after --backfill-to {hi}")
+    earliest = int(panel_from) + MIN_TRAIN_TARGETS
+    if lo < earliest:
+        raise ValueError(
+            f"--backfill-from {lo} is before the earliest projectable season {earliest}: the panel "
+            f"starts at {panel_from} and a fit needs {MIN_TRAIN_TARGETS} training targets behind it")
+    if hi > forward_season:
+        raise ValueError(f"--backfill-to {hi} is beyond the forward season {forward_season} — "
+                         f"there is no history to fit a later season on")
+    return list(range(lo, hi + 1))
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="NF1.6 — BASE K + DST season projections")
     ap.add_argument("--duckdb", default="quant_sports_intel_models/sports_dbt/sports.duckdb")
@@ -886,6 +999,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--staging", default=STAGING_SCHEMA)
     ap.add_argument("--projection-season", type=int, default=None,
                     help="the season to project (default: last completed season + 1)")
+    ap.add_argument("--backfill-from", type=int, default=None,
+                    help="first season of a HISTORICAL backfill (inclusive). Each season is fitted "
+                         "strictly in-fold on seasons before it. Mutually exclusive with "
+                         "--projection-season")
+    ap.add_argument("--backfill-to", type=int, default=None,
+                    help="last season of a historical backfill (inclusive)")
     ap.add_argument("--history-from", type=int, default=HISTORY_FIRST_SEASON)
     ap.add_argument("--panel-from", type=int, default=PANEL_FIRST_TARGET,
                     help="first target season of the walk-forward band/coverage panel")
@@ -917,10 +1036,19 @@ def main(argv: list[str] | None = None) -> int:
         last_completed = int(con.sql(
             f"select max(season) from {args.staging}.stg_nfl_schedules "
             f"where is_regular_season and home_score is not null").fetchone()[0])
-        projection_season = args.projection_season or (last_completed + 1)
-        log.info("last completed season %d → projecting %d", last_completed, projection_season)
+        forward_season = last_completed + 1
+        try:
+            seasons = resolve_seasons(args.projection_season, args.backfill_from, args.backfill_to,
+                                      forward_season=forward_season, panel_from=args.panel_from)
+        except ValueError as exc:
+            ap.error(str(exc))
+        if len(seasons) == 1:
+            log.info("last completed season %d → projecting %d", last_completed, seasons[0])
+        else:
+            log.info("last completed season %d → BACKFILL of %d seasons: %d–%d", last_completed,
+                     len(seasons), seasons[0], seasons[-1])
 
-        inp = Inputs(con, args.history_from, max(last_completed, projection_season),
+        inp = Inputs(con, args.history_from, max(last_completed, *seasons),
                      schema=args.schema, staging=args.staging)
 
         # ── the walk-forward band/coverage panel ────────────────────────────────────────────
@@ -945,68 +1073,52 @@ def main(argv: list[str] | None = None) -> int:
         if not cov["beats_degenerates"]:
             log.warning("[ALERT] the base band does NOT beat both degenerate anchors — do not ship")
 
-        # ── the forward projection ──────────────────────────────────────────────────────────
-        band = KD.fit_ratio_band(panel[panel["target_season"] < projection_season],
-                                 widen=args.widen)
-        dst_model, k_model, diag = fit_models(inp, con, projection_season)
-        proj = build_projection(inp, con, projection_season, dst_model, k_model, band)
-        log.info("%d projection: %d rows (%d DST, %d K)", projection_season, len(proj),
-                 int((proj["position"] == "DST").sum()), int((proj["position"] == "K").sum()))
-
-        face = KD.face_validity(proj)
-        if not face["pass"]:
-            log.warning("[ALERT] NF1.6 face-validity gate TRIPPED: %s",
-                        [c for c in face["checks"] if not c["pass"]])
-        else:
-            log.info("NF1.6 face validity: pass")
-
-        # ── artifacts ───────────────────────────────────────────────────────────────────────
-        proj.to_parquet(out_dir / f"nfl_fantasy_kdst_projections_{projection_season}.parquet",
-                        index=False)
-        ranked = proj.copy()
-        ranked.insert(0, "pos_rank", ranked.groupby("position").cumcount() + 1)
-        ranked.to_csv(out_dir / f"nfl_fantasy_kdst_projections_{projection_season}_ranked.csv",
-                      index=False)
-        if args.s3 or args.lake_root:
-            from quant_sports_intel_models.football.nfl.ingest import s3io
-            n = s3io.write_dataframe(proj.assign(season=int(projection_season)), sport="nfl",
-                                     source="kdst_projections", season=int(projection_season),
-                                     tier="fantasy/derived", local_root=args.lake_root)
-            log.info("landed %d rows → nfl/fantasy/derived/kdst_projections season=%d", n,
-                     projection_season)
-
-        dst_panel_for_rel = KD.build_dst_training_panel(
-            inp.team_def, inp.team_points, None,
-            list(range(args.panel_from, projection_season)), team_yards=inp.team_yards)
-        rel = component_reliability_table(dst_panel_for_rel)
-
-        summary = {"model_version": KD.MODEL_VERSION, "projection_season": projection_season,
-                   "n_rows": int(len(proj)),
-                   "n_by_position": proj.groupby("position").size().to_dict(),
-                   "coverage": cov, "rank_signal": signal, "face_validity": face,
-                   "band": band.to_dict(), "diagnostics": diag,
-                   "generated_at": datetime.now(timezone.utc).isoformat()}
-        (out_dir / "nfl_fantasy_kdst_summary.json").write_text(
-            json.dumps(summary, indent=2, default=float))
-
-        if not args.no_report:
-            write_report(_REPORT_PATH, projection_season=projection_season, proj=proj, cov=cov,
-                         signal=signal, face=face, dst_model=dst_model, k_model=k_model,
-                         rel=rel, band=band, diag=diag, panel=panel)
+        # ── project each requested season ───────────────────────────────────────────────────
+        # One `Inputs` and one band panel serve the whole range: a 7-season backfill re-reads
+        # neither the lake nor the marts. A season that RAISES aborts the run rather than being
+        # logged and skipped — a backfill that reports success with a hole in it is the silent-
+        # partial class, and the seasons already landed are individually valid (own partition).
+        results = []
+        for season in seasons:
+            r = project_one_season(inp, con, season, panel=panel, out_dir=out_dir,
+                                   widen=args.widen, panel_from=args.panel_from,
+                                   s3=args.s3, lake_root=args.lake_root)
+            summary = {"model_version": KD.MODEL_VERSION, "projection_season": season,
+                       "n_rows": int(len(r["proj"])),
+                       "n_by_position": r["proj"].groupby("position").size().to_dict(),
+                       "coverage": cov, "rank_signal": signal, "face_validity": r["face"],
+                       "band": r["band"].to_dict(), "diagnostics": r["diag"],
+                       "generated_at": datetime.now(timezone.utc).isoformat()}
+            summary_path_for(out_dir, season, forward_season).write_text(
+                json.dumps(summary, indent=2, default=float))
+            if not args.no_report:
+                write_report(report_path_for(season, forward_season),
+                             projection_season=season, proj=r["proj"], cov=cov,
+                             signal=signal, face=r["face"], dst_model=r["dst_model"],
+                             k_model=r["k_model"], rel=r["rel"], band=r["band"],
+                             diag=r["diag"], panel=panel)
+            results.append((season, r["proj"], r["face"]))
     finally:
         con.close()
 
     print("\n=== NF1.6 K/DST base projection ===")
-    print(f"  {projection_season}: {len(proj)} rows "
-          f"({int((proj['position'] == 'DST').sum())} DST, {int((proj['position'] == 'K').sum())} K)")
-    print(f"  walk-forward coverage: pooled {cov['coverage_80']} (nominal {cov['nominal']}) · "
-          f"K {cov.get('cov_K')} · DST {cov.get('cov_DST')} · IS80 {cov['interval_score']}")
+    for season, proj, face in results:
+        print(f"  {season}: {len(proj)} rows "
+              f"({int((proj['position'] == 'DST').sum())} DST, "
+              f"{int((proj['position'] == 'K').sum())} K) · "
+              f"face validity {'PASS' if face['pass'] else 'TRIPPED'}")
+    # ⚠️ These are panel-WIDE diagnostics, identical for every season in a backfill: the coverage
+    #    and rank signal are computed once over the whole walk-forward panel, NOT per projected
+    #    season. Printed once, below the per-season lines, so a 7-season run cannot read as seven
+    #    independent validations of the same number.
+    print(f"  walk-forward coverage (panel-wide): pooled {cov['coverage_80']} "
+          f"(nominal {cov['nominal']}) · K {cov.get('cov_K')} · DST {cov.get('cov_DST')} · "
+          f"IS80 {cov['interval_score']}")
     print(f"  beats both degenerate anchors: {cov['beats_degenerates']}")
-    print(f"  held-out rank signal: " + " · ".join(
+    print(f"  held-out rank signal (panel-wide): " + " · ".join(
         f"{k} ρ={v.get('spearman')}" for k, v in signal.items()))
-    print(f"  face validity: {'PASS' if face['pass'] else 'TRIPPED'}")
     # ⭐ the coverage floor is the gate; a breach exits NON-ZERO so it cannot be a log line nobody
-    #    reads. Face validity is advisory (a projection product), and is reported either way.
+    #    reads. Face validity is advisory (a projection product), and is reported per season above.
     return 0 if cov["pass"] and cov["beats_degenerates"] else 1
 
 
