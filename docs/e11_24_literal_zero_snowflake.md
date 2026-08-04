@@ -1357,3 +1357,256 @@ INC-27-class **straggler repoint**, off the predict path, individually cheap.
 ⛔ Not fixable in code: the Snowsight cost-UI waits. Opening the Snowflake cost dashboard on
 COMPUTE_WH resumes it. If the account defaults a UI session to COMPUTE_WH, switching that
 default to MONITOR_WH removes them — an operator/console setting, not a repo change.
+
+---
+
+# FU-3 VERIFICATION — the combined 6a+FU-3 read (2026-08-04)
+
+**VERDICT: 6a NOT CLOSED · FU-3 NOT CLOSED · target-6 STILL BLOCKED.** Two independent
+blockers, neither of which a re-run of the measurement can clear. What the session *did*
+settle is a **correction to 6a's own sizing** that changes how the combined read should be
+interpreted, and a **CI fix that was blocking the FU-3 deploy itself**.
+
+## Blocker 1 — FU-3 IS NOT DEPLOYED (the story's premise is false)
+
+The story opens "FU-3 (PR #493) is deployed to main and live on the box." It is not. After a
+fresh `git fetch` (INC-39: never assert deploy state off a possibly-stale ref):
+
+| check | result |
+|---|---|
+| `git merge-base --is-ancestor c181e1fa origin/main` | **FU3 NOT ON MAIN** |
+| `origin/main` tip | `7f05656a`, 2026-08-03 21:49 CDT |
+| PR #493 merge commit | `c181e1fa`, 2026-08-04 00:03 CDT — **into `dev`** |
+| `git show origin/main:scripts/ingest_umpires.py` | still the pre-FU-3 `if args.skip_if_exists and not args.dry_run and do_sf:` — the SF-leg-only guard that never executes under `W11_RAW_WRITE_MODE=s3` |
+
+Per **FINDING #5** (recorded in `story_prompts.md`), **merging to `dev` is deploy-inert; the
+deploy IS the `dev`→`main` promotion** (`orchestration_cd.yml` fires on push to `main` for
+`scripts/**` + `betting_ml/**`). FU-3 merged to `dev` and stopped there. ⇒ every slate to date,
+including 08-03, ran the **pre-FU-3** ingest, so no measurement taken so far can contain a
+FU-3 effect. This is the *documented-state ≠ actual-state* class (cf. `W7B_LAKEHOUSE_S3`)
+arriving one layer up: not a flag that was never set, but a **merge that was never promoted**.
+
+## Blocker 1b — and the promotion was RED (fixed here)
+
+The `dev`→`main` PR was failing `Unit Tests (fast gate) / serving-ops`, i.e. the deploy could
+not have proceeded even once noticed. Two tests in `test_ingest_umpires_per_game_skip.py::TestTheActualLakehouseRead`:
+
+```
+[FU-3] skip-guard read failed (Secret Validation Failure: during `create` using the
+following: Credential Chain: 'config') — writing every assignment.
+assert None == {101: ('999', 'New Ump'), 102: ('222', 'Ump Two')}
+```
+
+**Root cause — an accidentally credential-dependent test.** `duck()` builds the S3 secret
+unconditionally (`CREATE OR REPLACE SECRET … PROVIDER credential_chain`) and DuckDB
+**validates the chain at create time**, raising when it resolves to nothing.
+`existing_statsapi_assignments` then correctly **fails OPEN** and returns `None`, so both
+assertions fail. It passed on a laptop for a reason that has nothing to do with the code under
+test: `scripts/ingest_umpires.py:82` calls `load_dotenv(.env)` at import, and the repo `.env`
+carries `AWS_ACCESS_KEY_ID` — **the test was reading the developer's real credentials.** CI has
+no `.env`, so it went red there and only there.
+
+Reproduced locally by stripping every credential source (`env -u AWS_* AWS_SHARED_CREDENTIALS_FILE=/dev/null
+AWS_CONFIG_FILE=/dev/null HOME=…`) → identical failure. **Fix:** an autouse fixture pins dummy
+`AWS_*` values for that class only. The read under test is a LOCAL parquet, so no credential is
+ever used; production `duck()` semantics are untouched (a monitoring read that silently loses
+its S3 creds must still fail loudly). Post-fix, credential-less: **25 passed** in the file,
+**974 passed / 7 skipped** in the whole `serving-ops` shard (CI had 972 passed + 2 failed).
+
+⭐ **The durable lesson: `load_dotenv()` at import turns any test that touches a credentialed
+helper into a test of the developer's machine.** It is green locally *because* it is reading
+real secrets, and red on a clean runner — the inverse of the usual flake, and it points the
+blame at the feature rather than at the fixture.
+
+## Blocker 2 — 08-03 FAILS GATE 0, exactly as the FU-2 lesson predicts
+
+GATE 0 requires ~13–15 games, first pitches in 14–23 UTC, ~7+ monitor fires. Measured from
+`stg_statsapi_games`:
+
+| slate | games | earliest first pitch (UTC) | 6a armed? | GATE 0 |
+|---|---|---|---|---|
+| 2026-07-28 | 15 | 17:40 | no (reference) | ✅ |
+| 2026-07-30 | 10 | 16:10 | no (reference) | ⚠️ small |
+| 2026-08-02 | 15 | 17:35 | **only from 20:52**, after the slate's last pre-game | ❌ no opportunity |
+| **2026-08-03** | **8** | **22:40** | yes | ❌ **short AND late** |
+| 2026-08-04 | 15 | 22:35 | yes | (had not run — 05:14 UTC at read time) |
+
+08-03 is the degenerate case GATE 0 exists to refuse. It is worse than "small": the umpire
+assignment's **first write of the day was 20:38 UTC**, so nearly every monitor invocation
+landed in the gate's *fail-open* "no umpire row yet" path, and the few that followed each had a
+genuinely fresh watermark. **0 skips on 08-03 is therefore consistent with a perfectly correct
+gate and proves nothing about it** — the measurement is uninformative, not negative.
+
+## ⭐ THE CORRECTION THAT MATTERS — 6a's fires-per-bump ratio is ~1.0, NOT ~1.5
+
+Re-derived on fresh data, and the re-derivation **changes 6a's expected saving**.
+
+**The original instrument over-counted.** The ~1.5 ratio counted "fires" as *distinct 5-minute
+windows in the 14–23 band containing an umpire CTAS*. A rebuild that spans a window boundary is
+counted **more than once**, and because the umpire models run early in the selector the later
+windows hold a lineup CTAS with **no** umpire CTAS — manufacturing phantom "gate skips". On
+08-02 that method reported **10 skips on a day the gate was provably not armed** (FU-1: the
+executing container was not recreated until 20:52 UTC).
+
+**A second, subtler over-count:** matching `%stg_statsapi_umpire_game_log%` also matches the
+trailing `GRANT SELECT ON TABLE …` statement dbt emits, doubling that model's count.
+
+The clean, duration-independent instrument is **executions of `feature_pregame_umpire_features`**
+(built exactly once per un-gated invocation). It validates against an independent record: it
+gives **7 for 08-02**, matching FU-1's separately-recorded "all 7 of the 08-02 rebuilds".
+
+Invocations vs same-day watermark bumps (write-instants), 14–23 UTC band, **07-25 onward** —
+07-21..07-24 sit before a tick-chain change on 07-25 (`6 tick CTAS (dead 7/25)`) and are not
+comparable:
+
+| day | invocations | bumps | ratio |
+|---|---|---|---|
+| 07-25 | 8 | 8 | 1.00 |
+| 07-26 | 16 | 11 | 1.45 |
+| 07-27 | 7 | 7 | 1.00 |
+| 07-28 | 7 | 7 | 1.00 |
+| 07-29 | 9 | 9 | 1.00 |
+| 07-30 | 7 | 7 | 1.00 |
+| 07-31 | 9 | 9 | 1.00 |
+| 08-01 | 11 | 10 | 1.10 |
+| 08-02 | 7 | 7 | 1.00 |
+| | | | **median 1.00** |
+
+⇒ **essentially every umpire rebuild is preceded by a fresh watermark bump, so 6a alone has
+~ZERO headroom** — not the ~30–35% the 1.5 ratio implied. And the mechanism is exactly the one
+FU-3 exists to remove: with the pre-FU-3 ingest, *every* tick re-writes the mirror and bumps the
+watermark, so the gate's key ("assignment newer than the last rebuild") is *always* satisfied.
+
+**This is a stronger statement than "6a-alone is a crippled measurement": 6a-alone is ~INERT,
+and 6a's entire saving is contingent on FU-3.** The ship-forward decision to measure them
+together was right; the reason is firmer than when it was taken.
+
+### Direct skip count (available today, and it agrees)
+
+Because the gate drops **both** models (`UMPIRE_MODELS = ("stg_statsapi_umpire_game_log",
+"feature_pregame_umpire_features")`), a skip removes the umpire CTAS while the never-gated
+lineup/starter CTAS remains. Comparing the two, **umpire builds equal invocations on every day
+including armed 08-03 ⇒ ZERO gate skips have been observed to date.** Consistent with the
+ratio above and with 08-03's degenerate shape; not evidence of a defect.
+
+### Census cross-check, normalized (waits-per-fire)
+
+`report_e11_24_wake_census.py --days 10`, umpire chain, **14–23 band** (MONITOR_WH):
+
+| day | waits | executions | invocations | **waits/fire** |
+|---|---|---|---|---|
+| 07-28 (ref) | 11 | 49 | 7 | 1.57 |
+| 07-30 (ref) | 13 | 49 | 7 | 1.86 |
+| 08-02 | 9 | 49 | 7 | 1.29 |
+| **08-03 (armed)** | **9** | 36 | 5 | **1.80** |
+
+08-03's raw count (9 vs 11/13) looks like a cut and **is not one** — normalized per fire it sits
+on top of the 07-30 reference. This is precisely the confound GATE 0 warns about, and it is why
+the raw count alone must never be reported.
+
+## Wave-floor + late-assignment legs — BASELINE established, acceptance unchanged
+
+Fresh replay of the real mirror through FU-3's exact per-game content-aware filter, all 15
+slates 07-20..08-03 (`existing_statsapi_assignments` semantics: latest `loaded_at` per game,
+`data_source='statsapi'`):
+
+* **write-instants 131 → 95 (−27%), median 8 → 6** — reproducing the pre-merge estimate
+  (126→91, −28%, median 8→6) on data that now includes two further slates.
+* **the floor is the announcement-wave count**: per-slate distinct *first-seen* instants have
+  median 6 (range 3–11), and the replayed survivors sit at or one above that count on every
+  slate — i.e. every surviving write carries a genuinely new assignment. Driving below it would
+  mean **swallowing a late announcement**.
+* **leg 2 is satisfiable**: every slate in the window has **≥3 distinct first-seen instants**
+  (min 3, on the 8-game 08-03), so the "≥2 distinct `first_seen`" late-assignment requirement is
+  a live test on any normal slate, not a formality.
+
+⇒ **Acceptance is unchanged and both legs remain required.** On the post-deploy slate expect
+write-instants ≈ that slate's wave count (~6 on a normal 15-game slate), **not ~1–2**; below the
+wave floor is a REGRESSION, not a better result.
+
+## Serving no-regression — CLEAN on the armed slate
+
+SF-free (DuckDB over S3; deliberately **not** `check_served_prediction_integrity.py`, which
+connects on COMPUTE_WH and would put the audit inside its own measurement). Deduped to the
+currently-serving row per `(prediction_type, game_pk)`:
+
+| slate | tier | games | h2h_edge not null | mean coverage | intraday_fallback | feature_store |
+|---|---|---|---|---|---|---|
+| 07-31 | post_lineup | 15 | 13 | 0.944 | 0 | 15 |
+| 08-01 | post_lineup | 15 | 13 | 0.989 | 0 | 15 |
+| 08-02 | post_lineup | 15 | 14 | 0.978 | 0 | 15 |
+| **08-03** | **post_lineup** | **7** | **7 (100%)** | **0.952** | **0** | **7** |
+| 08-03 | morning | 8 | 0 | 0.771 | 0 | 8 |
+
+No regression: `intraday_fallback` 0 everywhere, every served row `data_source='feature_store'`,
+coverage in band. Per the stated traps, `sigma_tier='abstain'` (saturated) and a flat
+`total_runs` (chronic) are not read as gate effects. `best_alpha=0`, so nothing rode on this.
+
+⚠️ **`check_w11_tail_coverage.py --date 2026-08-03` returned umpire 0/8 and weather 0/8
+BUILD_GAP — DO NOT read this as a 6a regression, and re-check it after the 08-04 nightly.** Two
+reasons: (i) it was run at ~05:30 UTC on 08-04, *before* the ~12:40 UTC W11 nightly that
+populates the prior slate's umpire/weather — the documented one-cycle lag (those two feeds land
+*after* the build that consumes them); (ii) 6a gates only the **intraday copy**, while the
+served umpire parquet comes from the nightly `--w11b`, which 6a does not touch.
+
+## WHAT IS STILL NEEDED (in order)
+
+1. **Land the CI fix**, then **promote `dev`→`main`** — that push *is* the FU-3 deploy.
+2. **Wait for a GATE-0-clean slate** (~13–15 games, first pitches 14–23 UTC, ≥7 invocations)
+   that runs **entirely after** the deploy recreated `dagster-codeloc`. A same-day flip does not
+   retroactively arm already-run jobs (FU-1).
+3. **Direct event-log verification** (below) — the primary, fact-settling leg.
+4. Re-run the three measurements above on that slate: write-instants vs its wave count + ≥2
+   distinct `first_seen`; waits-per-fire vs 1.57 (07-28) / 1.86 (07-30); serving no-regression.
+
+### The box command for the direct verification
+
+`_run_script` forwards the subprocess's stdout to `context.log.info` and stderr to
+`context.log.warning`, and `ingest_umpires.py` logs via `logging` (→ stderr). So **both**
+markers persist in **Postgres**, and one command verifies FU-3 *and* 6a. This survives
+container recreation; `docker compose logs` does not (`LocalComputeLogManager` is wiped).
+
+```bash
+# ON THE EC2 BOX — read-only. Set DAY to the GATE-0-clean, post-deploy slate.
+docker compose -f services/dagster/aws/docker-compose.yml exec -T dagster-codeloc python - <<'PY'
+import datetime as dt
+from dagster import DagsterInstance
+from dagster._core.storage.dagster_run import RunsFilter
+
+DAY = "2026-08-05"          # <-- the slate under audit (UTC date)
+
+inst = DagsterInstance.get()
+recs = inst.get_run_records(filters=RunsFilter(job_name="lineup_monitor_job"), limit=300)
+sel = [r for r in recs
+       if r.create_timestamp.astimezone(dt.timezone.utc).date().isoformat() == DAY]
+print(f"{len(sel)} lineup_monitor_job runs on {DAY}\n")
+
+reb = skip = 0
+for r in sorted(sel, key=lambda x: x.create_timestamp):
+    rid = r.dagster_run.run_id
+    when = r.create_timestamp.astimezone(dt.timezone.utc).strftime("%H:%M:%S")
+    for e in inst.all_logs(rid):
+        m = (e.user_message or "")
+        for marker in ("[E11.24 umpire-gate]", "[FU-3]"):
+            if marker in m:
+                for line in m.splitlines():
+                    if marker in line:
+                        print(f"{when}  {rid[:8]}  {line.strip()[:220]}")
+                if marker == "[E11.24 umpire-gate]":
+                    if "REBUILDING" in m:
+                        reb += 1
+                    else:
+                        skip += 1
+print(f"\nGATE: REBUILDING={reb}  SKIPPING={skip}  over {len(sel)} runs")
+PY
+```
+
+**PASS** = the gate SKIPS invocations whose assignment is unchanged and REBUILDS only those
+with a new/changed assignment, **and** `[FU-3] … unchanged since the last write — skipping`
+appears on the ticks between announcement waves while `[FU-3] N of M … new or changed` appears
+on the waves themselves. A run showing `REBUILDING: … failing OPEN` is a gate error, not a skip.
+
+## Files
+
+* `betting_ml/tests/test_ingest_umpires_per_game_skip.py` — hermetic-AWS-env fixture (CI fix).
+* `docs/e11_24_literal_zero_snowflake.md` — this section.

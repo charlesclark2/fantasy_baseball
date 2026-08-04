@@ -168,6 +168,26 @@ class TestTheActualLakehouseRead:
     """Drives `existing_statsapi_assignments` through real DuckDB against a real parquet
     laid out exactly like the append-only S3 mirror. Only `lh_raw()` is redirected."""
 
+    @pytest.fixture(autouse=True)
+    def _hermetic_aws_env(self, monkeypatch):
+        """Dummy AWS creds so `duck()`'s `CREATE SECRET (PROVIDER credential_chain)` resolves.
+
+        The read under test is a LOCAL parquet, so no real credential is ever used — but
+        `duck()` builds the S3 secret unconditionally and DuckDB VALIDATES the chain at
+        create time, raising `Secret Validation Failure ... Credential Chain: 'config'`
+        when it resolves to nothing. `existing_statsapi_assignments` then correctly fails
+        OPEN and returns None, so both tests below fail on any credential-less runner.
+
+        This passed on a laptop for the accidental reason that `ingest_umpires.py` calls
+        `load_dotenv(.env)` at import and the repo `.env` carries `AWS_ACCESS_KEY_ID` —
+        i.e. the test was reading the developer's real credentials. CI has no `.env`,
+        so it went red there and only there (the "green locally, red on a clean runner"
+        environment-dependence class). Pinning dummy values makes the test hermetic in
+        BOTH places and keeps the assertion about the SQL, not about the runner.
+        """
+        for var in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"):
+            monkeypatch.setenv(var, "testing")
+
     @staticmethod
     def _write_mirror(tmp_path: Path) -> str:
         pa = pytest.importorskip("pyarrow")
