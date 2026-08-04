@@ -63,29 +63,56 @@ Two corroborations worth recording for the umbrella index:
 
 **Post-lineup served columns (21) — per-column dictionary** (naming conventions: `_std` = **season-to-date** cumulative within team-season — *not* "standardized"; `_7d/_14d/_30d` = trailing calendar windows; `_30g` = trailing 30 games; all windows leak-safe strict-`<` per E1.8):
 
+| column | block | definition (per `dbt/models/feature/schema.yml` + mart SQL) |
+|---|---|---|
+| `elo_diff` | team strength | Home ELO − away ELO (~1500 = league average); positive favors home. The #1 served driver post-de-leak |
+| `pythagorean_win_exp_diff` | team strength | Home − away Pythagorean expected win % (season runs scored/allowed to date); positive favors home |
+| `home_avg_xwoba_30d` | **lineup** offense | Home **lineup** (the 9 posted batters) average xwOBA, trailing 30d |
+| `home_avg_xwoba_std` | **lineup** offense | Home lineup average xwOBA, season-to-date |
+| `away_avg_barrel_pct_std` | **lineup** offense | Away lineup average barrel rate, season-to-date (all PA before game_date) |
+| `away_lineup_avg_attack_angle` | lineup (Statcast bat-tracking) | Away lineup average bat attack angle (degrees), averaged across all 9 confirmed batters |
+| `home_woba_with_risp_30d` | team situational offense | Home team offense wOBA with runners in scoring position, trailing 30d |
+| `away_off_k_pct_std` | team rolling offense | Away team offense strikeout rate, season-to-date |
+| `home_starter_k_pct_30d` | starter rolling | Home starter 30d rolling K% (K/BF), strictly before game_date; NULL for debuts/insufficient history |
+| `home_starter_appearances_30d` | starter workload | Home starter's number of starts in the trailing 30d (freshness/rest) |
+| `home_starter_trailing_ra9_30g` | starter rolling | Home starter runs allowed per 9 IP over the last 30 games started |
+| `home_starter_whiff_rate_vs_lhb` | starter platoon | Home starter swing-and-miss rate vs LHB — **prior-season** platoon split |
+| `home_bp_eb_xwoba` | bullpen EB (de-leaked E1.7) | Home bullpen Empirical-Bayes posterior xwOBA-against, shrunk toward league prior; equal-weight trailing-30d **pre-game** pool (`appearance_date < game_date`) |
+| `home_bp_hard_hit_pct_14d` | bullpen rolling | Home bullpen hard-hit rate allowed, trailing 14d |
+| `away_bp_xwoba_against_14d` | bullpen rolling | Away bullpen xwOBA allowed, trailing 14d |
+| `home_bp_eb_coverage_pct`, `away_bp_eb_coverage_pct` | bullpen EB meta | Fraction of bullpen innings covered by pitchers with enough data for a reliable EB estimate — a data-depth signal that rose to MDA #1/#2 once the leak was removed |
+| `home_team_sequential_bullpen_xwoba` | Epic-16 sequential | Home bullpen sequential-Bayes xwOBA-against belief (`prior_mu` = entering-the-game, strict `<` — as-of-safe); may lag NULL on the newest games |
+| `elevation_ft` | park | Park elevation (ft above sea level), from the Stats API venue record |
+| `has_starter_platoon_data` | imputation indicator | True when BOTH starters have prior-season platoon splits (vs LHB and RHB); False for debut/first-season starters |
+| `is_new_venue` | imputation indicator | 1 when the venue opened this season (no prior-season park-factor history) |
+
+**Pre-lineup served columns (38) — per-column dictionary.** 8 columns are shared with the post table above (`elo_diff`, `pythagorean_win_exp_diff`, `away_off_k_pct_std`, `home_bp_eb_xwoba`, `home_team_sequential_bullpen_xwoba`, `away_bp_eb_coverage_pct`, `has_starter_platoon_data`, `is_new_venue`) — definitions identical. The 30 pre-only columns (note the tier's design constraint: **zero lineup-gated features** — team-level and starter-level only, guard-enforced):
+
 | column | block | definition |
 |---|---|---|
-| `elo_diff` | team strength | home ELO − away ELO (the #1 served driver post-de-leak) |
-| `pythagorean_win_exp_diff` | team strength | home − away pythagorean win expectancy |
-| `home_avg_xwoba_30d`, `home_avg_xwoba_std` | team rolling offense | home team trailing-30d / season-to-date average xwOBA |
-| `home_woba_with_risp_30d` | team rolling offense | home wOBA with runners in scoring position, trailing 30d |
-| `away_avg_barrel_pct_std` | team rolling offense | away season-to-date barrel % |
-| `away_off_k_pct_std` | team rolling offense | away offense season-to-date strikeout % |
-| `away_lineup_avg_attack_angle` | lineup (Statcast bat-tracking) | posted away lineup's average attack angle |
-| `home_starter_k_pct_30d` | starter rolling | home starter trailing-30d K% |
-| `home_starter_appearances_30d` | starter rolling | home starter appearances in last 30d (workload/freshness) |
-| `home_starter_trailing_ra9_30g` | starter rolling | home starter runs-allowed/9 over trailing 30 games |
-| `home_starter_whiff_rate_vs_lhb` | starter platoon | home starter whiff rate vs left-handed batters |
-| `home_bp_eb_xwoba` | bullpen EB (de-leaked E1.7) | home bullpen equal-weight EB xwOBA posterior, trailing-30d **pre-game** pool (`appearance_date < game_date`) |
-| `home_bp_hard_hit_pct_14d` | bullpen rolling | home bullpen hard-hit % allowed, trailing 14d |
-| `away_bp_xwoba_against_14d` | bullpen rolling | away bullpen xwOBA against, trailing 14d |
-| `home_bp_eb_coverage_pct`, `away_bp_eb_coverage_pct` | bullpen EB meta | share of the pen with real (non-prior) EB posteriors — a data-depth signal that rose to MDA #1/#2 once the leak was removed |
-| `home_team_sequential_bullpen_xwoba` | Epic-16 sequential | home bullpen sequential-Bayes posterior (consumer reads `prior_mu`, strict `<` — as-of-safe) |
-| `elevation_ft` | park | venue elevation |
-| `has_starter_platoon_data` | imputation indicator | 1 if starter platoon splits were present pre-imputation |
-| `is_new_venue` | imputation indicator | 1 if the venue lacks history (park factors imputed) |
-
-**Pre-lineup served columns (38):** same blocks minus everything lineup-gated, plus morning-safe additions — full ELO levels (`home_elo`, `away_elo`), both pythagorean levels, `home_games_back` (standings), team rolling offense/pitching aggregates (`away_off_runs_per_game_std`, `home_off_runs_per_game_14d`, `home_off_hard_hit_pct_7d`, `away_pit_k_pct_7d`, `home_pit_k_pct_7d`, `home_pit_k_pct_std`, `away_pit_bb_pct_7d`, `away_pit_woba_against_30d/_std`, `home_pit_woba_against_std`), starter form/workload (`home_starter_bb_pct_14d/_30d/_std`, `home_starter_trailing_fip_30g`, `home_starter_avg_ip_season`, `away_starter_avg_ip_last_3`), platoon/situational splits (`away_vs_lhp_xwoba_std`, `away_woba_with_risp_30d`, `away_xwoba_with_runners_on_30d`), sequential win-prob posteriors (`home/away_team_sequential_win_prob`, `home_team_sequential_bullpen_xwoba`), home-vs-away percent-diff composites (`home_away_bp_xwoba_against_30d_pct_diff`, `home_away_off_woba_30d_pct_diff`, `home_away_starter_k_pct_std_pct_diff`), park (`left_center_ft`), and the same 2 imputation indicators.
+| `home_elo`, `away_elo` | team strength | Each team's ELO rating entering the game (~1500 = league average) |
+| `home_pythagorean_win_exp`, `away_pythagorean_win_exp` | team strength | Each team's Pythagorean expected win % from season runs scored/allowed to date |
+| `home_games_back` | standings | Home team's games behind the division leader, as of the day before game_date |
+| `home_team_sequential_win_prob`, `away_team_sequential_win_prob` | Epic-16 sequential | Beta-Binomial win-probability posterior entering the game (`prior_mu`; cold-start Beta(4,4) = 0.500 on the season opener; 2021+) |
+| `away_off_runs_per_game_std` | team rolling offense | Away team runs scored per game, season-to-date |
+| `home_off_runs_per_game_14d` | team rolling offense | Home team runs scored per game, trailing 14d |
+| `home_off_hard_hit_pct_7d` | team rolling offense | Home team offense hard-hit rate, trailing 7d |
+| `away_woba_with_risp_30d` | team situational offense | Away team offense wOBA with runners in scoring position, trailing 30d |
+| `away_xwoba_with_runners_on_30d` | team situational offense | Away team offense xwOBA with runners on base, trailing 30d |
+| `away_vs_lhp_xwoba_std` | team platoon offense | Away lineup xwOBA vs left-handed pitchers, season-to-date (team-level platoon aggregate — morning-safe, not confirmed-lineup-gated) |
+| `home_pit_k_pct_7d`, `away_pit_k_pct_7d` | team pitching staff | Each team's whole-staff strikeout rate, trailing 7d |
+| `home_pit_k_pct_std` | team pitching staff | Home staff strikeout rate, season-to-date |
+| `away_pit_bb_pct_7d` | team pitching staff | Away staff walk rate, trailing 7d |
+| `away_pit_woba_against_30d`, `away_pit_woba_against_std` | team pitching staff | Away staff wOBA allowed, trailing 30d / season-to-date |
+| `home_pit_woba_against_std` | team pitching staff | Home staff wOBA allowed, season-to-date |
+| `home_starter_bb_pct_14d`, `home_starter_bb_pct_30d`, `home_starter_bb_pct_std` | starter rolling | Home starter walk rate — trailing 14d / 30d / season-to-date |
+| `home_starter_trailing_fip_30g` | starter rolling | Home starter FIP over the last 30 games started |
+| `home_starter_avg_ip_season` | starter workload | Home starter's season-to-date average decimal IP per start (prior starts only); NULL without same-season history |
+| `away_starter_avg_ip_last_3` | starter workload | Away starter's average decimal IP over the 3 most recent prior starts; NULL without IP history |
+| `home_away_off_woba_30d_pct_diff` | matchup composite | `(home − away) / ABS(away) × 100` on 30d offense wOBA; positive = home advantage (formula per the SQL in `feature_pregame_game_features_raw.sql:1288`; the schema.yml prose says "/mean(home,away)" — the code is authoritative, a minor doc drift) |
+| `home_away_bp_xwoba_against_30d_pct_diff` | matchup composite | Same pct-diff form on 30d bullpen xwOBA-against (positive = home pen allowing more contact quality) |
+| `home_away_starter_k_pct_std_pct_diff` | matchup composite | Same pct-diff form on season-to-date starter K% |
+| `left_center_ft` | park | Left-center-field fence distance (ft), from the Stats API venue `fieldInfo` (`stg_statsapi_venues.sql:86`; no schema.yml description) |
 
 **Served vs tried — the feature space WAS explored, by removal (lesson 5):** the contract trajectory is 369/376 raw → E1.3 clustered prune 31 → E1.7 interim 21 (near-total turnover: 26 dropped / 16 added once the bullpen leak was removed; `elo_diff` + `pythagorean_win_exp_diff` *entered* here) → E1.8 FINAL 19 (8 dropped / 6 added — re-derivation vindicated vs trusting the stale prune). Instrument: `derive_clustered_contract.py` — keeps every member of every cluster whose season-stratified paired-bootstrap 95 % CI excludes 0; **158/174 clusters (~92 % of dimensionality) were noise** on the de-leaked MDA. It refuses to derive from a leaky ranking (`bullpen_version=v3` + `stuff_plus_version=deleaked` required) — the codified fix for the E1.8 **stale-ranking bug** (prior contracts had been hand-derived off importance JSONs that each still contained one of the two leaks). Feature **additions** were separately explored and exhausted at the sub-model/signal level — see ledger entries E13.2b/E13.4/E13.10/E1.11 phase-3, all recorded H2H nulls; `incremental_lift_eval.py` is the sanctioned ADD path.
 
