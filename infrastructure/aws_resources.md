@@ -40,7 +40,8 @@ JWT issuer URL: `https://cognito-idp.us-east-1.amazonaws.com/us-east-1_gG9zMbwQt
 
 | Resource | Value |
 |---|---|
-| Function name | `credence-prod-lambda-execution-role` |
+| Function name | `credence-prod-lambda-api` |
+| Execution role | `credence-prod-lambda-execution-role` |
 | Runtime | `python3.12` |
 | Handler | `app.backend.main.handler` |
 | Architecture | `x86_64` |
