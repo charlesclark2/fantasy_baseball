@@ -19,7 +19,7 @@ import { useLocalStorage } from "@/hooks/use-local-storage"
 import { apiFetch } from "@/lib/api"
 import { NotificationsSettings } from "@/components/notifications-settings"
 import { MfaSettings } from "@/components/mfa-settings"
-import { openBillingPortal } from "@/lib/subscription"
+import { openBillingPortal, getSubscriptionStatus } from "@/lib/subscription"
 
 // ---------------------------------------------------------------------------
 // Curated sportsbooks — same set as Book Comparison
@@ -776,6 +776,31 @@ export default function SettingsPage() {
   const [savedVisible, setSavedVisible] = useState(false)
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Cancel-at-period-end visibility (E9.57 finding): `groups` alone can't distinguish
+  // "active subscriber" from "canceled, access lapses at period end" — both are
+  // `subscriber` until Stripe's period actually ends. Best-effort; a fetch failure just
+  // leaves the generic tier copy in place (below), never blocks the page.
+  const [periodEnd, setPeriodEnd] = useState<{ cancelAtPeriodEnd: boolean; date: string } | null>(null)
+  useEffect(() => {
+    if (!groups.includes("subscriber") || !accessToken) return
+    getSubscriptionStatus(accessToken)
+      .then((s) => {
+        if (s.cancel_at_period_end && s.current_period_end) {
+          setPeriodEnd({
+            cancelAtPeriodEnd: true,
+            date: new Date(s.current_period_end * 1000).toLocaleDateString(undefined, {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            }),
+          })
+        }
+      })
+      .catch(() => {
+        /* best-effort — generic tier copy stands in on failure */
+      })
+  }, [groups, accessToken])
+
   function markSaved() {
     if (savedTimer.current) clearTimeout(savedTimer.current)
     setSavedVisible(true)
@@ -840,7 +865,9 @@ export default function SettingsPage() {
               </div>
               <p className="text-xs text-gray-500">
                 {groups.includes("subscriber")
-                  ? "Active subscription."
+                  ? periodEnd?.cancelAtPeriodEnd
+                    ? `Canceled — access continues through ${periodEnd.date}, then your plan won't renew.`
+                    : "Active subscription."
                   : groups.includes("churned")
                   ? "Subscription ended."
                   : "Full access during beta period. No billing required."}

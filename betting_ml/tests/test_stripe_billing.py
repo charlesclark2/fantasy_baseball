@@ -245,12 +245,66 @@ def test_status_tier_mapping(store, cog):
     cog.groups["s"] = {"subscriber"}
     st = billing.subscription_status(user_id="s")
     assert st.tier == "subscriber" and st.has_access is True and st.is_beta is False
+    # No Stripe customer linked → the period fields default off, never break the call.
+    assert st.cancel_at_period_end is False and st.current_period_end is None
 
     cog.groups["b"] = {"beta_tester"}
     assert billing.subscription_status(user_id="b").is_beta is True
 
     cog.groups["f"] = set()
     assert billing.subscription_status(user_id="f").has_access is False
+
+
+# ── E9.57 finding: Stripe's Customer Portal cancels at period end, not immediately ──
+# The webhook only demotes on `customer.subscription.deleted`, which Stripe fires once the
+# paid period actually ends — so a canceled subscriber correctly stays `tier=subscriber`
+# until then. These fields let Settings say so honestly instead of looking unchanged.
+
+
+class _FakeSubList:
+    def __init__(self, data):
+        self.data = data
+
+
+def test_status_reports_scheduled_cancellation(monkeypatch, store, cog):
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_x")
+    cog.groups["s"] = {"subscriber"}
+    store.link_stripe_customer("s", "cus_s")
+    monkeypatch.setattr(
+        billing.stripe.Subscription,
+        "list",
+        lambda **kw: _FakeSubList([{"cancel_at_period_end": True, "current_period_end": 1999999999}]),
+    )
+    st = billing.subscription_status(user_id="s")
+    assert st.tier == "subscriber" and st.has_access is True  # access continues
+    assert st.cancel_at_period_end is True
+    assert st.current_period_end == 1999999999
+
+
+def test_status_active_subscription_has_no_scheduled_cancellation(monkeypatch, store, cog):
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_x")
+    cog.groups["s"] = {"subscriber"}
+    store.link_stripe_customer("s", "cus_s")
+    monkeypatch.setattr(
+        billing.stripe.Subscription,
+        "list",
+        lambda **kw: _FakeSubList([{"cancel_at_period_end": False, "current_period_end": 1999999999}]),
+    )
+    st = billing.subscription_status(user_id="s")
+    assert st.cancel_at_period_end is False
+
+
+def test_status_period_read_failure_is_best_effort(monkeypatch, store, cog):
+    cog.groups["s"] = {"subscriber"}
+    store.link_stripe_customer("s", "cus_s")
+
+    def _boom(**kw):
+        raise RuntimeError("Stripe is down")
+
+    monkeypatch.setattr(billing.stripe.Subscription, "list", _boom)
+    st = billing.subscription_status(user_id="s")
+    assert st.tier == "subscriber" and st.has_access is True
+    assert st.cancel_at_period_end is False and st.current_period_end is None
 
 
 # ── Server-side subscriber-MFA guard ─────────────────────────────────────────

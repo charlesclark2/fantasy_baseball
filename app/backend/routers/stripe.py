@@ -92,6 +92,15 @@ class SubscriptionStatus(BaseModel):
     has_access: bool   # admin | subscriber | beta_tester
     is_beta: bool
     has_billing: bool  # a Stripe customer exists → can open the billing portal
+    # Cancel-at-period-end visibility (E9.57 finding): Stripe's Customer Portal default
+    # cancel action does NOT delete the subscription immediately — it flips
+    # `cancel_at_period_end` and only fires `customer.subscription.deleted` (our demote
+    # trigger) once the paid period actually ends. So a canceled `subscriber` correctly
+    # keeps `tier="subscriber"`/`has_access=True` for the rest of what they paid for; these
+    # two fields are what let the UI say so honestly instead of looking unchanged. Best-effort
+    # (None if there's no billing, or if the read fails) — never blocks subscription/status.
+    cancel_at_period_end: bool = False
+    current_period_end: int | None = None  # unix seconds, when set
 
 
 class SubscriptionPricing(BaseModel):
@@ -101,6 +110,24 @@ class SubscriptionPricing(BaseModel):
     founding_slots_used: int
     founding_cap: int
     founding_available: bool
+
+
+def _active_subscription_period(customer_id: str) -> tuple[bool, int | None]:
+    """(cancel_at_period_end, current_period_end) for the customer's subscription.
+
+    Best-effort — a Stripe hiccup or a customer with no subscription object (e.g. a
+    pre-conversion row) must never break GET /subscription/status, so any failure
+    just returns the "nothing scheduled" defaults."""
+    try:
+        _configure_stripe()
+        subs = stripe.Subscription.list(customer=customer_id, status="all", limit=1)
+        if not subs.data:
+            return False, None
+        sub = subs.data[0]
+        return bool(sub.get("cancel_at_period_end")), sub.get("current_period_end")
+    except Exception:  # noqa: BLE001
+        logger.exception("Could not read subscription period for customer=%s", customer_id)
+        return False, None
 
 
 def _tier(groups: list[str]) -> str:
@@ -189,11 +216,17 @@ def subscription_status(user_id: str = Depends(get_user_id)) -> SubscriptionStat
     refresh reflects the group change in the JWT claims)."""
     groups = cognito.groups_for_user(user_id)
     tier = _tier(groups)
+    customer_id = dynamo.stripe_customer_for_user(user_id)
+    cancel_at_period_end, current_period_end = (
+        _active_subscription_period(customer_id) if (tier == "subscriber" and customer_id) else (False, None)
+    )
     return SubscriptionStatus(
         tier=tier,
         has_access=tier in {"admin", "subscriber", "beta_tester"},
         is_beta=tier == "beta_tester",
-        has_billing=dynamo.stripe_customer_for_user(user_id) is not None,
+        has_billing=customer_id is not None,
+        cancel_at_period_end=cancel_at_period_end,
+        current_period_end=current_period_end,
     )
 
 
