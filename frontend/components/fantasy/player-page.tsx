@@ -612,6 +612,20 @@ function PublicPlayerView({ playerId }: { playerId: string }) {
         Track Record
       </Link>
 
+      {/* 🚨 E9.56e — THE LOADING BLOCK AND THE PAGE USED TO RENDER AT THE SAME TIME, and the
+          visible overlay was the LESSER half of that bug.
+          `useAllTrackRecordSeasons` runs one query PER SEASON (seven of them) and reports
+          `isLoading` while ANY is still in flight, while `rows` flat-maps whatever has already
+          landed. So `identity` — read off `playerRows[0]` — went truthy the moment the FIRST
+          season carrying this player resolved, and the old `{identity && (…)}` rendered the full
+          page underneath a "Loading player…" box that was still legitimately up.
+          ⭐ The serious half: the table underneath was a PARTIAL track record that looked complete.
+          The operator's screenshot shows Jalen Hurts with 2025, 2024 and 2021 — three of the seven
+          published seasons — with nothing distinguishing that from his whole career. On the one
+          page whose entire purpose is "the full picture, wins and losses both", a silently
+          truncated record is a correctness defect, and it is biased in OUR favour exactly when a
+          slow-loading season is one we called badly.
+          ⇒ gate the CONTENT on `!loading`, not just the spinner. One state at a time. */}
       {loading && <LoadingBlock label="Loading player…" />}
 
       {!loading && !identity && (
@@ -621,7 +635,7 @@ function PublicPlayerView({ playerId }: { playerId: string }) {
         />
       )}
 
-      {identity && (
+      {!loading && identity && (
         <>
           <div className="mb-6 flex items-center gap-4">
             <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[#262626] bg-[#1a1a1a] text-lg font-bold text-gray-500">
