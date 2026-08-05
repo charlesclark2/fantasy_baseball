@@ -59,6 +59,38 @@ export function FantasyGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// ── E9.56b: the FREE-TIER (locked-view) surfaces ─────────────────────────────────────────────────
+//
+// Renders its children for EVERYONE — logged out, free, subscriber alike — because on these two
+// surfaces the SERVER decides what is visible, per point. E9.56 made `/fantasy/nfl/{manifest,
+// projections,board}` dual-mode: an entitled caller gets the real numbers, everyone else gets the
+// same rows with every model value REMOVED and `locked: true` in its place, re-ordered onto market
+// ADP so the array index cannot reconstruct our ranking. Proven in production 2026-08-05:
+// 858/858 rows locked, 100% ADP-ascending, identical under a forged `subscriber` token.
+//
+// ⇒ bouncing a free user to /login here would defeat the whole point. The operator's rule is that a
+// locked 2026 point renders a "subscribe to unlock" CTA rather than being blank or absent — and a
+// redirect IS absent.
+//
+// ⚠️ WHY THIS IS A NAMED COMPONENT RATHER THAN JUST OMITTING THE GUARD (which is what NF3.2's
+// player page does, and the reason that route has a long explanatory docstring instead):
+// `grep -rl FantasyPublicGuard frontend/app` ENUMERATES the public set in one command. Guard
+// OMISSION is not greppable — you would have to search for the ABSENCE of a wrapper, which no tool
+// does well and no reviewer does reliably. Since the risk on this story is entirely "a page that
+// should be gated quietly becomes public", the set has to be something a test can assert on; see
+// `frontend/lib/__tests__/public-surface.test.ts`. (Same reasoning as E9.56's separate
+// `board_router` on the backend: an exemption is a NAMED object, never a flag inside the gated
+// thing. The NF3.1 player route predates this and could migrate onto it later — deliberately NOT
+// done here, to keep this story's blast radius to the two surfaces it is about.)
+//
+// ⛔ DO NOT wrap a surface in this unless the server returns a LOCKED-BUT-USEFUL payload for it.
+// A page whose endpoints 403 a free caller (My Teams, League Settings, Import, saved leagues) would
+// render permanently broken, and one that computes over model values (the draft optimizer) would
+// produce NaN — see the `enabled`-gate note in `lib/fantasy-queries.ts`.
+export function FantasyPublicGuard({ children }: { children: React.ReactNode }) {
+  return <>{children}</>
+}
+
 // NF-C0b — the manual league-settings editor: `admin` + `fantasy_comp` ONLY, which is
 // NARROWER than the fantasy surface itself (a paying subscriber does not get it yet).
 //

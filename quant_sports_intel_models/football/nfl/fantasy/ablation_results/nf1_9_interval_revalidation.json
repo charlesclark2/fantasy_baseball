@@ -5,6 +5,8 @@
       "population": "rookies",
       "config": "SHIPPED rookie band",
       "form": "qreg_sqrt",
+      "rookie_point_shrink_lambda": 0.0,
+      "rookie_selection_status": "incumbent",
       "cohorts": [
         2019,
         2020,
@@ -24,7 +26,7 @@
       "coverage": {
         "QB": 0.8148,
         "RB": 0.8041,
-        "TE": 0.92,
+        "TE": 0.9,
         "WR": 0.8348
       },
       "n_by_position": {
@@ -36,21 +38,21 @@
       "slack_rows": {
         "QB": 1,
         "RB": 0,
-        "TE": 12,
+        "TE": 10,
         "WR": 7
       },
       "unconstrained": [],
       "misses": [],
       "pass": true,
-      "pooled_coverage": 0.8391,
-      "interval_score": 184.048,
+      "pooled_coverage": 0.8354,
+      "interval_score": 183.407,
       "newest_cohort": {
         "cohort": 2025,
         "n": 85,
-        "pooled_coverage": 0.8118,
+        "pooled_coverage": 0.8235,
         "coverage": {
           "QB": 0.7857,
-          "RB": 0.72,
+          "RB": 0.76,
           "TE": 0.875,
           "WR": 0.8667
         },
@@ -182,5 +184,5 @@
       }
     }
   ],
-  "generated_at": "2026-08-01T04:19:22.175847+00:00"
+  "generated_at": "2026-08-05T01:46:11.957109+00:00"
 }

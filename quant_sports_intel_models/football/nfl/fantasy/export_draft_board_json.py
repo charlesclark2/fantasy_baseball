@@ -740,6 +740,47 @@ def load_player_contributions() -> dict | None:
         return None
 
 
+#: The board columns `run_season_projection` stamps the rookie policy into → the payload keys the
+#: governance readback reconciles. Kept as an explicit MAP so a renamed column fails a guard test
+#: rather than silently publishing a policy block with a missing field.
+_ROOKIE_POLICY_COLUMNS: dict[str, str] = {
+    "rookie_selection_status": "selection_status",
+    "rookie_shrink_lambda": "shrink_lambda",
+    "rookie_statistically_selected": "statistically_selected",
+    "rookie_source_model": "source_model",
+    "rookie_decision_story": "decision_story",
+}
+
+
+def rookie_policy_stamp(pdf: pd.DataFrame) -> dict | None:
+    """The rookie-policy block for the published payload, READ OFF THE BOARD's own stamp columns.
+
+    Returns None for a board built before NF-D21 (no stamp columns) — an honest absence, so a
+    consumer can tell "this board predates the policy" apart from "this board asserts a policy".
+    ⛔ It must never fall back to the policy module's values: a stamp that describes the CODE rather
+    than the ARTIFACT would keep reading correct while the served board drifted, which is the
+    NF-C0e "declaration outruns its production" class.
+
+    ⚠️ A board carrying MORE THAN ONE distinct policy is a hard error, not a majority vote: it means
+    two builds were concatenated, and picking one of them would publish a stamp true of half a
+    board."""
+    present = [c for c in _ROOKIE_POLICY_COLUMNS if c in pdf.columns]
+    if not present:
+        return None
+    stamp: dict = {}
+    for col in present:
+        vals = pdf[col].dropna().unique()
+        if len(vals) > 1:
+            raise ValueError(
+                f"board carries {len(vals)} distinct values for {col} ({list(vals)[:4]}) — two "
+                f"builds appear to have been concatenated; refusing to stamp one of them")
+        v = vals[0] if len(vals) else None
+        if hasattr(v, "item"):          # numpy scalar → JSON-able python scalar
+            v = v.item()
+        stamp[_ROOKIE_POLICY_COLUMNS[col]] = v
+    return stamp or None
+
+
 def player_bio_map() -> dict[str, dict]:
     """`{player_id -> bio dict}` for the NF3.1 player page — birth date, height, weight, college,
     years of NFL experience and an official headshot URL, all PASSED THROUGH from `nflverse_players`
@@ -1173,6 +1214,13 @@ def main(argv: list[str] | None = None) -> int:
                 int(pdf["base_season"].dropna().iloc[0]) if "base_season" in pdf.columns
                 and pdf["base_season"].notna().any() else None
             ),
+            # ── NF-G0/NF-D21 — the ROOKIE-POLICY STAMP, READ OFF THE BUILT BOARD ──────────────────
+            # ⛔ NOT read from `rookie_publish_policy` here, and the difference is the whole point:
+            # importing the policy would publish what the policy SAYS, which is exactly how a payload
+            # comes to describe a board it was not built from. Reading the artifact's own columns
+            # means the payload can only ever claim the policy the board was ACTUALLY built at — and
+            # the governance `model_stamp_consistency` gate then reconciles that against the registry.
+            "rookie_policy": rookie_policy_stamp(pdf),
         }
         payload = {
             "season": args.season,
