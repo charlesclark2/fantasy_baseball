@@ -115,16 +115,40 @@ class SubscriptionPricing(BaseModel):
 def _active_subscription_period(customer_id: str) -> tuple[bool, int | None]:
     """(cancel_at_period_end, current_period_end) for the customer's subscription.
 
+    ⚠️ `stripe.Subscription.list(...)` returns real `StripeObject` instances, NOT plain
+    dicts — they support `in` / `[...]` (via `__contains__`/`__getitem__`) but do NOT
+    define a `.get()` method, so `sub.get(...)` raises `AttributeError: get` (confirmed
+    live in prod, 2026-08-05 — the exact class of bug already documented for the
+    webhook's `construct_event` result, hitting a different Stripe SDK call this time).
+    The broad except below SWALLOWED that error and silently returned the "nothing
+    scheduled" defaults, which is indistinguishable from a genuinely uncanceled
+    subscription — caught only by checking the Stripe dashboard directly against a
+    subscription confirmed scheduled to cancel. Use `in`/`[...]`, never `.get()`, on a
+    Stripe SDK object. `current_period_end` also moved OFF the top-level Subscription
+    object onto each subscription item as of Stripe API version 2025-03-31 (Stripe's
+    multi-item-billing migration) — read the first item's value as a fallback so this
+    works regardless of which API version this Stripe account defaults to.
+
     Best-effort — a Stripe hiccup or a customer with no subscription object (e.g. a
     pre-conversion row) must never break GET /subscription/status, so any failure
-    just returns the "nothing scheduled" defaults."""
+    still just returns the "nothing scheduled" defaults."""
     try:
         _configure_stripe()
         subs = stripe.Subscription.list(customer=customer_id, status="all", limit=1)
         if not subs.data:
             return False, None
         sub = subs.data[0]
-        return bool(sub.get("cancel_at_period_end")), sub.get("current_period_end")
+        cancel_at_period_end = bool(sub["cancel_at_period_end"]) if "cancel_at_period_end" in sub else False
+        if "current_period_end" in sub:
+            current_period_end = sub["current_period_end"]
+        else:
+            items = sub["items"]["data"] if "items" in sub and sub["items"] else []
+            current_period_end = (
+                items[0]["current_period_end"]
+                if items and "current_period_end" in items[0]
+                else None
+            )
+        return cancel_at_period_end, current_period_end
     except Exception:  # noqa: BLE001
         logger.exception("Could not read subscription period for customer=%s", customer_id)
         return False, None
