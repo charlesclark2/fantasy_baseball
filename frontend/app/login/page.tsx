@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { getCognitoUser, AuthenticationDetails, startGoogleSignIn, isHostedUiConfigured, setSessionAuthMethod } from "@/lib/cognito"
 import { useAuth } from "@/lib/auth-context"
+import { REQUEST_ACCESS_MAILTO } from "@/lib/access"
 import { apiFetch } from "@/lib/api"
 import { Nav } from "@/components/nav"
 import type { CognitoUser } from "amazon-cognito-identity-js"
@@ -183,8 +184,12 @@ function LoginInner() {
                 <h1 className="text-2xl font-semibold tracking-tight text-foreground">
                   Welcome back
                 </h1>
+                {/* E9.56c — was "Sign in to your account to view today's picks". That was written
+                    when MLB picks were the whole product; a visitor now arrives here from an NFL
+                    fantasy paywall as often as from the dashboard, and being told the site is about
+                    "today's picks" reads as though they followed the wrong link. */}
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Sign in to your account to view today&apos;s picks
+                  Sign in to your account
                 </p>
               </>
             ) : step === "mfa" ? (
@@ -427,9 +432,27 @@ function LoginInner() {
 
               <Separator className="my-6" />
 
+              {/* 🚨 E9.56c — was `<Link href="/request-access">`, a route that does not exist:
+                  the only "I don't have an account" affordance on the page 404'd. Points at the
+                  same mailto the nav and home page have always used. */}
               <Button variant="outline" className="w-full" asChild>
-                <Link href="/request-access">Request Beta Access</Link>
+                <a href={REQUEST_ACCESS_MAILTO}>Request Beta Access</a>
               </Button>
+
+              {/* E9.56b/c — the way OUT for a visitor who hit this page from a locked 2026
+                  projection, has no account, and would otherwise be stuck at a sign-in wall with
+                  nothing to do. Past seasons and the track record are genuinely free and need no
+                  account, so say so here rather than letting the login page be a dead end. */}
+              <p className="mt-4 text-center text-xs text-muted-foreground leading-relaxed">
+                No account yet? Every past season is free to browse — see the{" "}
+                <Link
+                  href="/fantasy/track-record"
+                  className="underline underline-offset-4 hover:text-foreground transition-colors"
+                >
+                  fantasy track record
+                </Link>{" "}
+                without signing in.
+              </p>
 
               <p className="mt-4 text-center text-xs text-muted-foreground leading-relaxed">
                 By signing in you agree to our{" "}
