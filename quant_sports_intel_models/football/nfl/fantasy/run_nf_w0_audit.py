@@ -60,6 +60,18 @@ def load_sources(seasons: list[int], season_type: str = "REG") -> dict[str, pd.D
         from {delta('weekly_rosters')}
         where season {yrs} and game_type = '{season_type}' and gsis_id is not null
     """)
+    # NF-W0b: the identity universe the snap ladder resolves INTO. Read season-UNSCOPED on purpose
+    # — a vendor id is a stable property of a player, so a season whose roster row omits `pfr_id`
+    # is still resolvable from another season's row. That single widening is what recovers the
+    # high-value cohort (see `entity/__init__.py`).
+    identity = q(f"""
+        select season, week, team, position, gsis_id,
+               coalesce(full_name, concat(first_name, ' ', last_name)) as full_name,
+               espn_id, sportradar_id, yahoo_id, rotowire_id, pff_id, pfr_id,
+               fantasy_data_id, sleeper_id, esb_id, gsis_it_id, smart_id
+        from {delta('weekly_rosters')}
+        where gsis_id is not null
+    """)
     schedule = q(f"""
         select season, week, home_team, away_team, gameday, roof, surface, div_game
         from {delta('schedules')}
@@ -71,15 +83,59 @@ def load_sources(seasons: list[int], season_type: str = "REG") -> dict[str, pd.D
         from {delta('stats_player_week')}
         where season {yrs} and season_type = '{season_type}'
     """)
-    snaps = q(f"""
-        select s.season, s.week, r.gsis_id, s.offense_snaps, s.offense_pct
-        from {delta('snap_counts')} s
-        join (select distinct season, pfr_id, gsis_id from {delta('weekly_rosters')}
-              where season {yrs} and pfr_id is not null and gsis_id is not null) r
-          on s.season = r.season and s.pfr_player_id = r.pfr_id
-        where s.season {yrs} and s.game_type = '{season_type}'
+    # 🐛 NF-W0b (v3 §12A): this read used to be an INNER join from `snap_counts` to a per-SEASON
+    # (pfr_id, gsis_id) bridge — which silently DROPPED 19–46% of snap rows per season, because
+    # `weekly_rosters.pfr_id` is 25–53% NULL in any given season. A dropped snap row is invisible:
+    # the frame simply has fewer rows and every coverage number still reads healthy. The SQL now
+    # reads snaps RAW and hands identity resolution to the entity service, which runs the full
+    # §12A ladder rather than the one sparse vendor column (19.2% unresolved → ~1%).
+    snaps_raw = q(f"""
+        select season, week, team, position, player, pfr_player_id, offense_snaps, offense_pct
+        from {delta('snap_counts')}
+        where season {yrs} and game_type = '{season_type}'
     """)
+    snaps = _resolve_snap_identities(snaps_raw, identity)
     return {"rosters": rosters, "schedule": schedule, "stats": stats, "snaps": snaps}
+
+
+def _resolve_snap_identities(snaps_raw: pd.DataFrame, identity: pd.DataFrame) -> pd.DataFrame:
+    """Attach `gsis_id` to every snap row via the NF-W0b ladder — dropping NOTHING.
+
+    Returns the snap frame with a `gsis_id` column that is NULL where the identity is unresolved.
+    Downstream feature assembly groups by `gsis_id`, so an unattributed row contributes to no
+    feature (correct — we do not know whose snaps they are) while remaining COUNTED and visible,
+    which is the difference between a measured residual and a silent drop.
+    """
+    from datetime import datetime, timezone
+
+    from quant_sports_intel_models.football.nfl.entity.crosswalk import build_crosswalk
+    from quant_sports_intel_models.football.nfl.entity.snap_bridge import resolve_snap_counts
+
+    if snaps_raw.empty:
+        return snaps_raw.assign(gsis_id=pd.NA)
+
+    crosswalk = build_crosswalk(
+        identity, last_verified_timestamp=datetime.now(timezone.utc).isoformat(timespec="seconds")
+    )
+    targets = identity.rename(
+        columns={"gsis_id": "canonical_player_id", "full_name": "player_name"}
+    )[["canonical_player_id", "player_name", "team", "position", "season", "week"]]
+
+    resolved, report = resolve_snap_counts(snaps_raw, targets=targets, crosswalk=crosswalk)
+    if report.silent_drop_count:  # pragma: no cover — the resolver asserts row preservation
+        raise AssertionError(f"snap resolution dropped {report.silent_drop_count} rows")
+    if report.unmatched_rate:
+        # ALERT-tier: every row is retained, so this degrades coverage rather than the run — but a
+        # silent skip here is exactly the class NF-W0b exists to remove, so it is never quiet.
+        log.warning(
+            "ALERT [nfl/fantasy/nf_w0] %d of %d snap rows (%.2f%%) have no canonical identity — "
+            "RETAINED with a NULL gsis_id (never dropped, never zeroed; v3 §12A silent_drop=0); "
+            "%d of them are high-value (skill starters). Run "
+            "`entity.run_entity_resolution --report` for the ladder + QA queue.",
+            report.n_output_rows - report.n_matched, report.n_output_rows,
+            100.0 * report.unmatched_rate, report.high_value_unmatched_count,
+        )
+    return resolved.rename(columns={"canonical_player_id": "gsis_id"})
 
 
 # ── Feature assembly (the parity subject) ────────────────────────────────────────────────────────

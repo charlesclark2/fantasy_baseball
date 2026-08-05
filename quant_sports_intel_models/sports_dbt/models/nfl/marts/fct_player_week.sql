@@ -34,6 +34,29 @@ snap_counts as (
         st_pct                     as special_teams_pct
     from {{ ref('stg_nfl_snap_counts') }}
 ),
+-- NF-W0b: the CROSS-SEASON pfr bridge. `weekly_rosters.pfr_id` is 25–53% NULL in any GIVEN season
+-- (measured 2022–2025), but a pfr id is a stable property of a PLAYER — so a player whose 2024 row
+-- omits it usually carries it in another season. Keying the bridge on the id ALONE recovers the
+-- entire high-value cohort at the strongest rung (`high_value_unmatched_count` 0 for every season):
+-- e.g. Michael Woods II, whose 100%-snap CLE week-15 2024 line the per-season key could not attach.
+-- `having count(distinct player_id) = 1` is load-bearing: an id claimed by two gsis ids is an
+-- ambiguity and resolves to NOTHING rather than to an arbitrary pick.
+pfr_bridge as (
+    select upper(trim(pfr_id)) as pfr_id, min(player_id) as player_id
+    from {{ ref('stg_nfl_weekly_rosters') }}
+    where pfr_id is not null and trim(pfr_id) <> '' and player_id is not null
+    group by 1
+    having count(distinct player_id) = 1
+),
+snap_counts_bridged as (
+    -- Resolve each snap row to our gsis player_id. LEFT join + a retained NULL: a snap row we
+    -- cannot attribute must stay VISIBLE (v3 §12A silent_drop_count = 0), never be inner-joined away.
+    select coalesce(b.player_id, s.player_id) as player_id, s.season, s.week,
+           s.offense_snaps, s.offense_pct, s.special_teams_snaps, s.special_teams_pct,
+           (b.player_id is not null)          as is_bridged
+    from snap_counts s
+    left join pfr_bridge b on b.pfr_id = s.player_id
+),
 dim_player as (
     select * from {{ ref('dim_player') }}
 ),
@@ -121,10 +144,21 @@ player_week as (
         tt.team_pass_attempts,
         tt.team_rush_attempts,
         tt.team_targets,
-        coalesce(sc.offense_snaps, 0)                 as offense_snaps,
-        coalesce(sc.offense_pct, 0.0)                 as offense_pct,
-        coalesce(sc.special_teams_snaps, 0)           as special_teams_snaps,
-        coalesce(sc.special_teams_pct, 0.0)           as special_teams_pct,
+        -- 🐛 NF-W0b SILENT-ZERO FIX (v3 §12A). These were `coalesce(sc.*, 0)`, which turned an
+        -- unresolved IDENTITY into an observed 0.0 snap share. A snap share is a rate in [0, 1]
+        -- where 0.0 is a legal observation ("dressed, played no offensive snaps"), so the
+        -- fabricated zero was INDISTINGUISHABLE from a real one — no error, no NULL, invisible to
+        -- every coverage check, and trained on as fact. The absence is now VISIBLE as NULL, and
+        -- `snap_source_tier` says which kind of absence it is.
+        sc.offense_snaps                              as offense_snaps,
+        sc.offense_pct                                as offense_pct,
+        sc.special_teams_snaps                        as special_teams_snaps,
+        sc.special_teams_pct                          as special_teams_pct,
+        case
+            when sc.season is not null then 'observed'      -- a real snap row; 0.0 here is REAL
+            when s.is_bye                then 'bye'         -- no game, so no snaps to have
+            else 'no_snap_row'                              -- inactive / feed lag / unresolved id
+        end                                           as snap_source_tier,
         coalesce(w.completions, 0)                    as pass_completions,
         coalesce(w.attempts, 0)                       as pass_attempts,
         coalesce(w.passing_yards, 0)                  as passing_yards,
@@ -179,16 +213,25 @@ player_week as (
             + (coalesce(w.receiving_fumbles_lost, 0) * -2.0) + (coalesce(w.rushing_fumbles_lost, 0) * -2.0), 2),
             0.0
         )                                             as the_league_fantasy_points,
-        -- played = took a snap OR recorded a box-score line (robust when snap_counts lags a rookie)
-        ((coalesce(sc.offense_snaps, 0) + coalesce(sc.special_teams_snaps, 0)) > 0
+        -- played = took a snap OR recorded a box-score line (robust when snap_counts lags a rookie).
+        -- Written with `is true` rather than `coalesce(sc.<snap col>, 0)` on purpose: this is a
+        -- boolean about whether we SAW the player play, so an unknown correctly contributes
+        -- nothing — but reaching for a coalesce on a snap VALUE, even in a boolean, is the habit
+        -- that produced the silent zero, and the NF-W0b guard bans it outright rather than relying
+        -- on a reader to judge which uses are benign. Semantics are identical (NULL is not true).
+        ((sc.offense_snaps > 0) is true
+         or (sc.special_teams_snaps > 0) is true
          or w.season is not null) as played_flag
     from spine s
     left join dim_player d
         on s.player_id = d.player_id
     left join weekly_stats w
         on w.season = s.season and w.week = s.week and w.player_id = s.player_id
-    left join snap_counts sc
-        on sc.season = s.season and sc.week = s.week and d.pfr_id = sc.player_id
+    -- NF-W0b: joined on the CANONICAL player id (the bridge already resolved pfr → gsis), not on
+    -- `dim_player.pfr_id` — that per-player pfr column is exactly the sparse key whose misses used
+    -- to become silent zeros.
+    left join snap_counts_bridged sc
+        on sc.season = s.season and sc.week = s.week and sc.player_id = s.player_id
     left join team_totals tt
         on tt.season = s.season and tt.week = s.week and tt.team_id = s.team_id
 )
