@@ -1,6 +1,6 @@
 # Interval-band re-validation — the standing annual check on both per-position coverage floors
 
-**Generated:** 2026-08-01T04:19:22.175847+00:00 · **verdict: ✅ ALL FLOORS MET**
+**Generated:** 2026-08-05T01:46:11.957109+00:00 · **verdict: ✅ ALL FLOORS MET**
 
 ⚠️ **A per-position coverage floor is invisible at serving time** — coverage needs realized outcomes, so no board build, export guard or API check can see it break. That is how the veteran band went five stories at 0.55 coverage of its nominal 0.80. This check is the owner of both floors; a breach is a **RE-SELECTION TRIGGER** (re-run that population's bake-off), never a reason to move the floor.
 
@@ -10,7 +10,7 @@
 |:-------------|:-----------|---------------:|-----------:|:---------------------------------------------------|---------------:|:----------|
 | rookies      | QB         |             81 |      0.815 | 0.8                                                |          1.000 | ✅ met    |
 | rookies      | RB         |            148 |      0.804 | 0.8                                                |          0.000 | ✅ met    |
-| rookies      | TE         |            100 |      0.920 | 0.8                                                |         12.000 | ✅ met    |
+| rookies      | TE         |            100 |      0.900 | 0.8                                                |         10.000 | ✅ met    |
 | rookies      | WR         |            224 |      0.835 | 0.8                                                |          7.000 | ✅ met    |
 | veterans     | FB         |            299 |      0.860 | unconstrained (n below the pre-registered minimum) |        nan     | —         |
 | veterans     | QB         |           1116 |      0.858 | 0.8                                                |         64.000 | ✅ met    |
@@ -26,7 +26,7 @@ One draft class (~80 rookie-seasons) or one target season (~600 veteran-seasons,
 
 | population   |   cohort |   n |   pooled coverage |   cov QB |   cov RB |   cov TE |   cov WR |   cov FB |   cov DST |   cov K |
 |:-------------|---------:|----:|------------------:|---------:|---------:|---------:|---------:|---------:|----------:|--------:|
-| rookies      |     2025 |  85 |             0.812 |    0.786 |    0.720 |    0.875 |    0.867 |  nan     |   nan     | nan     |
+| rookies      |     2025 |  85 |             0.824 |    0.786 |    0.760 |    0.875 |    0.867 |  nan     |   nan     | nan     |
 | veterans     |     2025 | 701 |             0.903 |    0.913 |    0.883 |    0.927 |    0.904 |    0.769 |   nan     | nan     |
 | kdst         |     2025 |  76 |             0.868 |  nan     |  nan     |  nan     |  nan     |  nan     |     0.938 |   0.818 |
 
