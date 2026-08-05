@@ -1656,12 +1656,18 @@ on the waves themselves. A run showing `REBUILDING: … failing OPEN` is a gate 
 
 ---
 
-# THE 08-04 ARMED-SLATE READ (2026-08-05) — ✅ FU-3 CONFIRMED · ⛔ 6a IS INERT, ROOT CAUSE LOCATED
+# THE 08-04 ARMED-SLATE READ (2026-08-05) — ✅ FU-3 CONFIRMED · ⛔ 6a NEVER EXECUTED (cause OPEN)
 
-**VERDICT: FU-3 PASSES · 6a does NOT close · target-6's *measurement* blocker is CLEARED.**
-08-04 is the first slate that satisfies GATE 0 while armed, and it is **informative** — unlike
-08-03 it gave the gate three clean opportunities to fire. It took **none of them**, and the
-cause is a single missing S3 object, not a measurement artifact.
+**VERDICT: FU-3 PASSES (all four legs) · 6a does NOT close · target-6's *measurement* blocker is
+CLEARED.** 08-04 is the first slate that satisfies GATE 0 while armed, and it is **informative**
+— unlike 08-03 it gave the gate three clean opportunities to fire. It took **none of them**, and
+leg (a) settles *what*: **the gate never executed at all** — zero gate log lines over 9 runs, so
+6a's logic has still never run once in production. **Why** is OPEN: the three obvious causes (IAM,
+flag off, code not on `main`) are each refuted by measurement — see the root-cause block below.
+
+⚠️ **The slate was NOT "6a armed".** Every prior entry describing 08-02/08-03/08-04 as armed is
+describing an intent, not a state. The only thing 08-04 actually tested is **FU-3** — which it
+passed decisively.
 
 ## GATE 0 — PASSED (this read counts)
 
@@ -1739,22 +1745,54 @@ Corroborated by the **never-gated control**: a skip drops the umpire CTAS while 
 remains, so `umpire_builds < lineup_builds` is the skip signature. On 08-04 they are **equal
 (9 = 9)** — the same test that read zero on every prior day.
 
-**ROOT CAUSE — the gate's marker is never persisted:**
+**ESTABLISHED FACT — THE GATE NEVER EXECUTED. Root cause ⛔ STILL OPEN (three hypotheses
+refuted).**
 
-```
-s3://baseball-betting-ml-artifacts/baseball/lakehouse_state/umpire_rebuild_watermark.json
-  → 404 Not Found   (and the whole `baseball/lakehouse_state/` prefix does not exist)
-```
+The event log for all 9 runs contains **zero `[E11.24 umpire-gate]` lines**. The gate block at
+`sensor_ops.py:386` logs on *both* branches, so its total silence means the block was never
+entered — no decision, no marker read, no marker write. That much is certain and is what the
+verdict rests on.
 
-Verified rigorously: the 404 is a genuine absence, not a permission artifact (the same
-credentials list `baseball/` fine, and a recursive scan of the bucket finds **no** watermark
-object anywhere); deployed `origin/main` carries the **same** `_BUCKET`/`_MARKER_KEY`; and
-`grep` shows the gate is the **only writer of that prefix in the repo** — nothing has ever
-created it. `_today()` resolves correctly (LA game-day = 2026-08-04 at 19:14 UTC).
+⚠️ **The absent marker is a CONSEQUENCE, not the cause.** Three successive hypotheses have now
+been **refuted by measurement**, each of which looked strong before it was tested:
 
-With the object absent, `read_rebuild_marker` raises `NoSuchKey` on **every** invocation →
-`umpire_rebuild_decision` returns `(True, current, "marker read failed (…) — failing OPEN")` →
-rebuild, forever. **The gate cannot skip until the first marker is written.**
+| # | hypothesis | refuted by |
+|---|---|---|
+| 1 | `write_rebuild_marker` denied — first-ever write to `baseball/lakehouse_state/`, the **E8.5 IAM class** | in-container `put_object` → **`PUT OK`** |
+| 2 | the flag was **OFF** in the executing container | `.Config.Env`, `/proc/1/environ` and the box `.env` **all read `=1`** |
+| 3 | the gate code sits on `dev` but was **never promoted to `main`** (FU-3's own Blocker-1 shape) | `git show origin/main:pipeline/ops/sensor_ops.py` **carries the full gate block**; the module is on `main` too |
+
+And the image is demonstrably current: **FU-3's markers came from the same op graph in the same
+runs**, so this is not a stale-deploy question.
+
+**What remains** (⇒ FU-4's first task, not a guess to be recorded here):
+
+* **(A) `lineup_dbt_feature_rebuild` never executed in those runs** — the run failed or
+  short-circuited at an earlier step (`lineup_dbt_staging_rebuild` / the mirror-tier
+  `lineup_intraday_s3_feature_rebuild`), so the gated op was skipped while the umpire CTAS
+  arrived from a *different* selector upstream. This would explain silence and CTAS together,
+  and is the leading candidate on shape alone.
+* **(B) the container was recreated after the slate**, so today's `=1` describes a different
+  process than the one that ran at 19:14–23:15Z. Settled by one `.State.StartedAt` read against
+  the prior session's recorded `06:04:38Z`.
+
+⭐ **THE DURABLE LESSON, and it survives whichever way (A)/(B) lands: A ZERO-EFFECT LEVER MUST BE
+PROVEN TO HAVE *EXECUTED* BEFORE ITS FAILURE IS DIAGNOSED.** Every laptop instrument
+(write-instants, waits-per-fire, the never-gated lineup-CTAS control) correctly measured 6a at
+zero, and *none* of them could distinguish "the gate ran and decided wrongly" from "the gate
+never ran" — a distinction that moves the fix from an S3/IAM investigation to somewhere else
+entirely. Three plausible root causes were refuted in sequence precisely because each was tested
+rather than reasoned about. This is MH2's `INACTIVE` state and NF1.7 (a)'s "a check that did not
+run is not a pass", applied to a **lever** instead of a guard.
+
+⭐ **Corollary worth keeping — an op that carries BOTH a code-change and a flag-change is
+self-diagnosing.** FU-3 (code, no flag) logged; 6a (flag-gated) did not. Their divergence inside
+one op instantly eliminated the whole image/digest/deploy family, which is what made hypotheses
+1–3 cheap to test and refute. ⭐ And a **presence-only `env.required` entry is not a state
+guarantee** — it proves the key exists, never its value. That did not bite here (the value is
+`1`), but `BOX_OPERATIONS.md §10` still carries the intended state as *"both `0` today; flip to
+`1` in a QUIET WINDOW"* while the same row appends "✅ verified `=1`" — a live
+documented-≠-actual contradiction that FU-4 must reconcile regardless of the root cause.
 
 ⭐ **Why this finding needed FU-3 to become visible.** Pre-FU-3, fires-per-bump was ~1.00 —
 every tick re-stamped the mirror, so *no* invocation had an unchanged watermark and a healthy
@@ -1764,30 +1802,29 @@ gate and a broken gate were **observationally identical**. FU-3 lifted 08-04 to
 until FU-3 landed, exactly as this doc predicted, and the first measurable slate says it is
 broken.
 
-### Three candidate causes — leg (a) names which (all three yield the same verdict)
+### The three candidate causes, and how they resolved
 
-The marker write at `sensor_ops.py:441` *should* have run on tick 1 (`watermark` is non-None on
-the marker-read-failed path). It did not persist. Candidates:
+| # | candidate | verdict |
+|---|---|---|
+| 1 | `write_rebuild_marker` raises — an IAM denial on the first-ever write to that prefix (E8.5 class) | ⛔ **REFUTED** — in-container `put_object` → `PUT OK` |
+| 2 | the flag is OFF in the executing container | ⛔ **REFUTED** — `.Config.Env` / `/proc/1/environ` / box `.env` all `=1` |
+| 3 | the gate code never reached `main` (FU-3's own Blocker-1 shape) | ⛔ **REFUTED** — `origin/main` carries the full block |
+| A | `lineup_dbt_feature_rebuild` never ran (earlier step failed/short-circuited) | ⏳ **OPEN — leading** |
+| B | the container was recreated after the slate, so today's `=1` is a different process | ⏳ **OPEN** — one `.State.StartedAt` read |
 
-1. **`write_rebuild_marker` raises** — most likely, and the leading hypothesis: this is the
-   **first-ever write to that bucket prefix**, i.e. the **E8.5 IAM class** (a role whose prior
-   grants on a bucket are read-only or prefix-scoped). Logged as
-   `[E11.24 umpire-gate] marker write FAILED (<exc>)`, which names it.
-2. **The gate is OFF in the executing container** — then there are **no** `[E11.24 umpire-gate]`
-   lines at all. (FU-1's check read `=1` in the persistent container at 06:04, so this is
-   unlikely, but it is not excluded by anything measurable from the laptop.)
-3. **The op raises inside `_run_dbt` before line 441** — argues against itself, since leg (d)
-   shows the post-lineup path healthy, but the event log settles it.
+⇒ **6a does not close.** Its logic has never executed once in production, so nothing about its
+*correctness* has been tested; the next slate on which it actually runs is its first real trial.
 
-**The verdict does not depend on which:** all three produce zero skips, so **6a does not close.**
+### 🪤 A counter bug in the verification snippet — fixed before leg (a) was run
 
-### 🪤 A counter bug in the verification snippet — fix before running leg (a)
-
-The published loop counts `if "REBUILDING" in m: reb += 1 else: skip += 1`. The
+The published loop counted `if "REBUILDING" in m: reb += 1 else: skip += 1`. The
 `marker write FAILED` line **also** carries the `[E11.24 umpire-gate]` marker and does **not**
-contain `REBUILDING`, so it is tallied as a **SKIP** — the script would report phantom skips in
-exactly the failure mode we are in. Same vacuous-counter class as INC-38/INC-39. The corrected
-command below classifies on explicit markers and counts `marker write FAILED` separately.
+contain `REBUILDING`, so it would be tallied as a **SKIP** — phantom skips in exactly the failure
+mode that was suspected. Same vacuous-counter class as INC-38/INC-39. The corrected command below
+classifies on explicit markers, counts `marker write FAILED` separately, **and — the part that
+actually mattered — reports when there are NO gate lines at all.** The original had no such
+branch, so a gate that never ran would have printed `REBUILDING=0 SKIPPING=0` and been read as an
+ambiguous null. The zero-lines branch is what named the real cause on the first run.
 
 ## Leg (d) — ✅ serving CLEAN, no regression
 
@@ -1811,17 +1848,45 @@ chronic pattern (07-31 0.800 / 08-02 0.822), not a gate effect. Per the stated t
 
 | item | verdict |
 |---|---|
-| **FU-3** | ✅ **PASS on leg (b)** — mechanism confirmed independently (write-instants at the wave floor, −27%, no swallowed assignment). Leg (a) is corroboration, not the basis. |
-| **6a** | ⛔ **DOES NOT CLOSE.** Not "unmeasurable" (08-03) and not "inert by design" (the old ~1.00-ratio reading) — a **located defect**: the marker is never persisted, so the gate fails OPEN on every tick. Fix = one S3 object + whatever prevents its write. |
-| **target-6** | ⭐ **The measurement blocker is CLEARED — recommend UNBLOCK.** target-6 was held only so 6a/FU-3 attribution would not be confounded. That attribution is now settled and unambiguous: **FU-3 = −27% write-instants; 6a = exactly 0**. There is nothing further to soak. Under the operator's 2026-08-03 SHIP-FORWARD reframe (per-lever measurement is no longer a gate; the end state is the proof), target-6 should proceed in its own fresh session. **This is a PM call, flagged not taken.** |
-| **FU-4 (new)** | The 6a marker fix. Small and independent of target-6. |
+| **FU-3** | ✅ **CLOSES — all four legs.** Leg (b) put write-instants on the wave floor (−27%, nothing swallowed) and leg (a) then showed the mechanism directly: 9 runs, 9 `[FU-3]` lines, **6 writes and 3 full skips**, matching leg (b) tick-for-tick. |
+| **6a** | ⛔ **DOES NOT CLOSE, and has never executed.** Not "unmeasurable" (08-03), not "inert by design" (the old ~1.00-ratio reading), and **not** the marker/IAM defect this section first recorded. Root cause **OPEN** — IAM, flag-off and code-not-on-`main` are all refuted by measurement. Correctness remains **entirely untested in production**. |
+| **target-6** | ⭐ **The measurement blocker is CLEARED — recommend UNBLOCK.** target-6 was held only so 6a/FU-3 attribution would not be confounded. That attribution is now settled and unambiguous: **FU-3 = −27% write-instants; 6a = exactly 0, because it never ran**. There is nothing further to soak. Under the operator's 2026-08-03 SHIP-FORWARD reframe (per-lever measurement is no longer a gate; the end state is the proof), target-6 should proceed in its own fresh session. **PM call, flagged not taken.** |
+| **FU-4 (new)** | Find why the gate block never ran, given flag `=1`, code on `main`, and a current image. Start with the per-run STEP outcomes for the 9 runs (did `lineup_dbt_feature_rebuild` execute?) plus `.State.StartedAt` — candidates (A)/(B) above. Then re-run leg (a) on the next GATE-0-clean slate; with FU-3 proven, a working gate should show `SKIPPING≈3` / `REBUILDING≈6` on a 15-game slate. ⚠️ Also **reconcile `BOX_OPERATIONS.md §10`**, whose intended-state column and its own appended "verified `=1`" note contradict each other. |
 
-⚠️ 6a is **correct-but-inert**, never incorrect: fail-open means the umpire block has always
-rebuilt, so there is **no serving debt** to unwind — leg (d) is clean. The only cost is the
-saving not being realised, which is what the op's own warning text predicted verbatim
-("Persistent failures mean the saving is not being realised").
+⚠️ 6a is **correct-but-inert**, never incorrect: with the gate off, the umpire block has always
+rebuilt, so there is **no serving debt** to unwind — leg (d) is clean, and `best_alpha=0` means
+nothing rode on any of it.
 
-## ⏭️ Leg (a) — the OPERATOR command (SSM; `baseball-access-user` cannot `SendCommand`)
+⭐ See the root-cause block above for the durable lesson: **a zero-effect lever must be proven to
+have EXECUTED before its failure is diagnosed** — three plausible root causes were refuted in
+sequence here, each only because it was tested rather than reasoned about.
+
+## ✅ Leg (a) — RUN 2026-08-05 (BOX, operator; `baseball-access-user` cannot `SendCommand`)
+
+**Result — 9 `lineup_monitor_job` runs over both UTC dates, 9 `[FU-3]` lines, 0 gate lines:**
+
+```
+19:11:45  [FU-3] 5 of 5   assignment(s) for 2026-08-04 are new or changed (0 unchanged, skipped).
+19:41:53  [FU-3] 3 of 8   ... (5 unchanged, skipped).
+20:12:00  [FU-3] 2 of 10  ... (8 unchanged, skipped).
+20:42:16  [FU-3] 4 of 12  ... (8 unchanged, skipped).
+21:12:12  [FU-3] all 12 assignment(s) are unchanged since the last write — skipping (no loaded_at re-stamp).
+21:42:20  [FU-3] 2 of 14  ... (12 unchanged, skipped).
+22:12:24  [FU-3] all 14 ... — skipping (no loaded_at re-stamp).
+22:42:25  [FU-3] 1 of 15  ... (14 unchanged, skipped).
+23:12:36  [FU-3] all 15 ... — skipping (no loaded_at re-stamp).
+
+GATE over 9 runs: REBUILDING=0 (failing-OPEN=0)  SKIPPING=0  marker-write-FAILED=0
+⚠️ NO [E11.24 umpire-gate] lines at all ⇒ the gate was OFF in the executing container.
+```
+
+**FU-3 confirmed directly: 6 writes, 3 full skips**, and the three skip instants (21:12, 22:12,
+23:12) sit ~3 min ahead of the three rebuilds leg (b) had independently flagged (21:15, 22:15,
+23:15) — the two instruments agree tick-for-tick. The growing denominator (5→8→10→12→14→15) is
+assignments trickling in across the evening, with only the genuinely new ones written.
+
+The companion in-container S3 probe returned `GET NoSuchKey` / **`PUT OK`** / `DEL OK`,
+refuting the IAM hypothesis.
 
 **WHERE: the EC2 BOX.** Read-only. Runs BOTH UTC dates and separates the three causes above.
 
