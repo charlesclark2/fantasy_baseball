@@ -103,6 +103,31 @@ typo cannot silently widen it.
 ⇒ **when a break is triaged and accepted, add the pair here in the same change.** Leaving it
 paging is not conservatism; it spends the alert channel the irreversible legs depend on.
 
+### …and the same split one level up, for the ASSET
+
+⏰ `current_season()` is right about which season we are **in** and wrong as a proxy for which
+season nflverse has **files** for. It rolls over in March; nflverse publishes season-scoped assets
+as data appears. Measured 2026-08-05: `depth_charts_2026.parquet` existed (created 08-04, training
+camp) while `injuries_2026`, `play_by_play_2026`, `snap_counts_2026` and ten others **did not
+exist at all**. So for roughly six months a year a season URL 404s *by design* — and unhandled,
+that pages ERROR on every Tue/Fri fire through the pre-season, including both fires before the
+opener, plus a hard failure of the injuries leg.
+
+`classify_unreadable` splits them, and the discriminator is the **snapshot store, not a calendar
+guess**: an asset we described successfully before and cannot describe now is a REGRESSION and
+escalates immediately; one we have never seen for this season is simply not published yet. That
+quiet branch is bounded by `schedule.data_expected_from` (week 2's first kickoff, since week 1's
+data lands days earlier) so it can never become a permanent blindfold — past the bar, a
+still-absent asset escalates. Only an unambiguous 404 qualifies; any other read failure keeps its
+escalation, because a network blip must never be laundered into "not published yet".
+
+Two related honesty rules the same finding forced:
+
+- an **UNREADABLE** asset reports `watched_missing = []`. It has no columns, so a naive
+  computation announces every watched column as deleted — they are **unknown**, not missing.
+  That is NF1.7 (a) inverted, and it double-reports one condition as two.
+- an unresolvable bar (`expected_from is None`) never licenses silence.
+
 ## ⭐ Two point-in-time defects found by this story
 
 Both are in `venues.py`, both silently corrupt a naive capture, and neither was in NF-W0.

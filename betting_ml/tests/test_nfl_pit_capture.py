@@ -20,6 +20,7 @@ import pytest
 from quant_sports_intel_models.football.nfl.pit import (
     injury_capture,
     market_capture,
+    schedule as pit_schedule,
     schema_snapshot,
     store,
     timestamps,
@@ -590,7 +591,7 @@ class TestSchemaDriftDetection:
     def test_an_unreadable_asset_escalates_rather_than_being_skipped(self):
         """NF1.7 (a): a check that did not run is not a pass."""
         m = schema_snapshot.run_schema_snapshot(
-            2026, now=NOW, dry_run=True, previous={},
+            2026, now=NOW, dry_run=True, previous={}, expected_from=NOW - timedelta(days=1),
             rows=[{"asset": "injuries", "status": "UNREADABLE", "watched_missing": [],
                    "watched_all_null": [], "payload": {"columns": [], "null_rates": {}},
                    "schema_fingerprint": "x"}],
@@ -708,6 +709,190 @@ class TestTheAcceptedBaselineSilencesOnlyTheTriagedBreaks:
             2026, now=NOW, dry_run=True, previous={},
             rows=[_schema_row("injuries", ["date_modified"])],
         )
+        assert m["escalate"] is True
+
+
+# ── pre-season absence: a season file nflverse has not published yet ─────────────────────
+_404 = "HTTP Error: HTTP GET error on 'https://…/injuries_2026.parquet' (HTTP 404 Not Found)"
+PRESEASON = datetime(2026, 8, 5, 7, 26, tzinfo=timezone.utc)   # the live box run
+BAR = datetime(2026, 9, 17, 0, 20, tzinfo=timezone.utc)        # week 2's first kickoff
+
+
+def _unreadable(asset, error=_404):
+    return {"asset": asset, "status": "UNREADABLE", "error": error, "watched_missing": [],
+            "watched_all_null": [], "payload": {"columns": [], "null_rates": {}},
+            "schema_fingerprint": "x"}
+
+
+class TestAnUnreadableAssetIsNotReportedAsDeletedColumns:
+    """⭐ FOUND LIVE 2026-08-05. `injuries_2026.parquet` did not exist, so `columns=[]`, so all
+    five watched columns computed as "missing" and four were announced as newly deleted. They
+    were not missing — they were UNKNOWN. NF1.7 (a) inverted: an unevaluable check reported as a
+    definite negative finding, double-reporting one condition as two."""
+
+    def test_watched_missing_is_empty_for_an_unreadable_asset(self, monkeypatch):
+        monkeypatch.setattr(
+            schema_snapshot, "describe_asset",
+            lambda url, con=None: (_ for _ in ()).throw(RuntimeError(_404)),
+        )
+        rows = schema_snapshot.snapshot_schemas(
+            2026, urls={"injuries": "https://x/injuries_2026.parquet"}, now=NOW, con=object(),
+        )
+        assert rows[0]["status"] == "UNREADABLE"
+        assert rows[0]["watched_missing"] == [], "unknown is not missing"
+
+    def test_a_readable_asset_still_reports_its_missing_columns(self, monkeypatch):
+        """The other side of the same clause — muting UNKNOWN must not mute KNOWN-MISSING."""
+        monkeypatch.setattr(
+            schema_snapshot, "describe_asset", lambda url, con=None: [("gsis_id", "VARCHAR")],
+        )
+        rows = schema_snapshot.snapshot_schemas(
+            2026, urls={"injuries": "https://x/i.parquet"}, now=NOW, con=object(),
+            probe_nulls=False,
+        )
+        assert "date_modified" in rows[0]["watched_missing"]
+
+    def test_an_unreadable_asset_escalates_exactly_once_via_unreadable(self):
+        m = schema_snapshot.run_schema_snapshot(
+            2026, now=BAR + timedelta(days=1), dry_run=True, previous={}, expected_from=BAR,
+            rows=[_unreadable("injuries")],
+        )
+        assert m["escalate"] is True and m["unreadable"] == ["injuries"]
+        assert m["watched_missing_new"] == {}, "the asset read failed; no column verdict is owed"
+
+
+class TestASeasonFileNflverseHasNotPublishedYetIsExpectedAbsent:
+    """⏰ `current_season()` is right about which season we are IN and wrong as a proxy for which
+    season nflverse has FILES for. It rolls over in March; nflverse publishes season-scoped assets
+    as data appears. Measured 2026-08-05: `depth_charts_2026` existed (created 08-04),
+    `injuries_2026` / `play_by_play_2026` / `snap_counts_2026` + ten others did not exist at all.
+    Left unhandled, the metadata job pages ERROR every Tue/Fri through the whole pre-season —
+    including both fires before the opener."""
+
+    def test_a_never_seen_asset_before_the_bar_is_quiet(self):
+        m = schema_snapshot.run_schema_snapshot(
+            2026, now=PRESEASON, dry_run=True, previous={}, expected_from=BAR,
+            rows=[_unreadable("injuries"), _unreadable("pbp")],
+        )
+        assert m["escalate"] is False
+        assert m["unreadable_expected_absent"] == ["injuries", "pbp"]
+        assert m["unreadable"] == ["injuries", "pbp"], "still recorded in full"
+
+    def test_an_asset_we_HAVE_seen_readable_escalates_immediately(self):
+        """The regression signature — and it must not wait for the bar."""
+        m = schema_snapshot.run_schema_snapshot(
+            2026, now=PRESEASON, dry_run=True, expected_from=BAR,
+            previous={"injuries": {"asset": "injuries", "status": "OK",
+                                   "payload": {"columns": [{"name": "gsis_id", "type": ""}]}}},
+            rows=[_unreadable("injuries")],
+        )
+        assert m["escalate"] is True and m["unreadable_unexpected"] == ["injuries"]
+
+    def test_a_prior_snapshot_that_was_ITSELF_unreadable_does_not_count_as_seen(self):
+        m = schema_snapshot.run_schema_snapshot(
+            2026, now=PRESEASON, dry_run=True, expected_from=BAR,
+            previous={"pbp": {"asset": "pbp", "status": "UNREADABLE",
+                              "payload": {"columns": []}}},
+            rows=[_unreadable("pbp")],
+        )
+        assert m["escalate"] is False and m["unreadable_expected_absent"] == ["pbp"]
+
+    def test_after_the_bar_a_still_absent_asset_escalates(self):
+        """The quiet branch is BOUNDED — otherwise an asset nflverse never publishes stays silent
+        all season, which is the silent-death class this leg exists to prevent."""
+        m = schema_snapshot.run_schema_snapshot(
+            2026, now=BAR + timedelta(days=1), dry_run=True, previous={}, expected_from=BAR,
+            rows=[_unreadable("pbp")],
+        )
+        assert m["escalate"] is True and m["unreadable_unexpected"] == ["pbp"]
+
+    def test_a_NON_404_failure_is_never_expected_absent(self):
+        """A network blip must not be laundered into "not published yet". Default = escalate."""
+        m = schema_snapshot.run_schema_snapshot(
+            2026, now=PRESEASON, dry_run=True, previous={}, expected_from=BAR,
+            rows=[_unreadable("pbp", error="Could not establish connection: timed out")],
+        )
+        assert m["escalate"] is True and m["unreadable_expected_absent"] == []
+
+    def test_the_expected_absent_branch_is_not_vacuous(self, monkeypatch):
+        """RED-proof: make the 404 matcher blind and the quiet case must page again."""
+        monkeypatch.setattr(schema_snapshot, "looks_like_missing_asset", lambda e: False)
+        m = schema_snapshot.run_schema_snapshot(
+            2026, now=PRESEASON, dry_run=True, previous={}, expected_from=BAR,
+            rows=[_unreadable("injuries")],
+        )
+        assert m["escalate"] is True
+
+
+class TestTheDataExpectedBar:
+    def _games(self, weeks):
+        return [ScheduledGame(f"g{w}_{i}", 2026, w, "REG",
+                              datetime(2026, 9, 3 + 7 * w, 0, 20, tzinfo=timezone.utc) + timedelta(hours=i),
+                              "GB", "CHI", "Home", "outdoors", "Lambeau Field")
+                for w in weeks for i in range(2)]
+
+    def test_the_bar_is_week_2s_FIRST_kickoff(self):
+        games = self._games([1, 2, 3])
+        bar = pit_schedule.data_expected_from(2026, games=games)
+        assert bar == min(g.kickoff_utc for g in games if g.week == 2)
+        assert bar > max(g.kickoff_utc for g in games if g.week == 1), "week 1 data must exist by then"
+
+    def test_a_schedule_without_week_2_falls_back_to_a_LATE_fixed_date(self):
+        """The fallback can only DELAY a page, never suppress one."""
+        bar = pit_schedule.data_expected_from(2026, games=self._games([1]))
+        assert bar == datetime(2026, 10, 1, tzinfo=timezone.utc)
+
+    def test_an_unreadable_schedule_falls_back_rather_than_raising(self, monkeypatch):
+        def boom(season, **k):
+            raise pit_schedule.ScheduleReadError("no schedule")
+
+        monkeypatch.setattr(pit_schedule, "read_schedule", boom)
+        assert pit_schedule.data_expected_from(2026) == datetime(2026, 10, 1, tzinfo=timezone.utc)
+
+    @pytest.mark.parametrize("err,expected", [
+        (_404, True),
+        ("HTTP Error: 404 Not Found", True),
+        ("Could not establish connection", False),
+        ("AuthorizationHeaderMalformed", False),
+        ("", False),
+        (None, False),
+    ])
+    def test_only_an_unambiguous_not_found_counts_as_a_missing_asset(self, err, expected):
+        assert pit_schedule.looks_like_missing_asset(err) is expected
+
+
+class TestTheInjuryLegHonoursTheSameBar:
+    """Both pre-opener fires (Sept 1 and Sept 4) land before `injuries_2026` exists."""
+
+    def _raise(self, monkeypatch, err):
+        def boom(season, **k):
+            raise RuntimeError(err)
+
+        monkeypatch.setattr(injury_capture, "read_injuries", boom)
+
+    def test_a_404_before_the_bar_does_not_escalate(self, monkeypatch):
+        self._raise(monkeypatch, _404)
+        m = injury_capture.run_injury_capture(2026, now=PRESEASON, expected_from=BAR, dry_run=True)
+        assert m["escalate"] is False and m["expected_absent"] is True
+        assert m["errors"], "the absence is still RECORDED, just not paged"
+
+    def test_a_404_after_the_bar_escalates(self, monkeypatch):
+        self._raise(monkeypatch, _404)
+        m = injury_capture.run_injury_capture(
+            2026, now=BAR + timedelta(days=1), expected_from=BAR, dry_run=True,
+        )
+        assert m["escalate"] is True and m["expected_absent"] is False
+
+    def test_a_NON_404_failure_escalates_even_before_the_bar(self, monkeypatch):
+        self._raise(monkeypatch, "Could not establish connection: timed out")
+        m = injury_capture.run_injury_capture(2026, now=PRESEASON, expected_from=BAR, dry_run=True)
+        assert m["escalate"] is True and m["expected_absent"] is False
+
+    def test_the_quiet_branch_is_not_vacuous(self, monkeypatch):
+        """RED-proof: blind the matcher and the pre-season 404 pages again."""
+        self._raise(monkeypatch, _404)
+        monkeypatch.setattr(injury_capture, "looks_like_missing_asset", lambda e: False)
+        m = injury_capture.run_injury_capture(2026, now=PRESEASON, expected_from=BAR, dry_run=True)
         assert m["escalate"] is True
 
 

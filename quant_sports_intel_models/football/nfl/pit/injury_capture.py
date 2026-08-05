@@ -31,7 +31,12 @@ import logging
 from datetime import datetime
 
 from . import store
-from .schedule import NFLVERSE_RELEASE, current_season
+from .schedule import (
+    NFLVERSE_RELEASE,
+    current_season,
+    data_expected_from,
+    looks_like_missing_asset,
+)
 from .timestamps import CaptureStamps, now_utc
 
 log = logging.getLogger(__name__)
@@ -87,6 +92,7 @@ def run_injury_capture(
     bucket: str | None = None,
     local_root: str | None = None,
     dry_run: bool = False,
+    expected_from: datetime | None = None,
 ) -> dict:
     """Capture one snapshot of the season's injury reports, stamped with OUR capture time."""
     now = now or now_utc()
@@ -97,7 +103,7 @@ def run_injury_capture(
         "season": season, "cadence_label": cadence_label, "now": now.isoformat(),
         "rows_read": 0, "captured": 0, "written": 0, "skipped_duplicate": 0,
         "skipped_recapture": 0, "revisions": [], "vendor_asof_present": None,
-        "errors": [], "escalate": False,
+        "errors": [], "expected_absent": False, "escalate": False,
     }
 
     if rows is None:
@@ -105,6 +111,23 @@ def run_injury_capture(
             rows, vendor_asof_present = read_injuries(season)
         except Exception as exc:  # noqa: BLE001 — WARN tier
             manifest["errors"].append(str(exc))
+            # ⏰ NOT-YET-PUBLISHED ≠ BROKEN. `current_season()` rolls to the new season in March,
+            # but nflverse publishes `injuries_<season>.parquet` only once injury reports exist
+            # (measured 2026-08-05: no 2026 asset at all, newest was 2025). Without this split the
+            # leg pages ERROR on every Tue/Fri fire through the whole pre-season — including both
+            # fires before the opener — about a file that is absent by design. Only an
+            # unambiguous 404 before the bar is quiet; every other failure still escalates.
+            if expected_from is None:
+                expected_from = data_expected_from(season)
+            if looks_like_missing_asset(str(exc)) and now < expected_from:
+                manifest["expected_absent"] = True
+                log.info(
+                    "[nfl/pit/injuries] injuries_%s.parquet is not published yet (EXPECTED, NOT "
+                    "paged — nflverse publishes it once injury reports exist; absence after %s "
+                    "escalates): %s",
+                    season, expected_from.date().isoformat(), exc,
+                )
+                return manifest
             manifest["escalate"] = True
             log.warning("ALERT [nfl/pit/injuries] read FAILED for season=%s: %s", season, exc)
             return manifest
