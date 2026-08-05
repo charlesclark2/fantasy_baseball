@@ -245,12 +245,128 @@ def test_status_tier_mapping(store, cog):
     cog.groups["s"] = {"subscriber"}
     st = billing.subscription_status(user_id="s")
     assert st.tier == "subscriber" and st.has_access is True and st.is_beta is False
+    # No Stripe customer linked → the period fields default off, never break the call.
+    assert st.cancel_at_period_end is False and st.current_period_end is None
 
     cog.groups["b"] = {"beta_tester"}
     assert billing.subscription_status(user_id="b").is_beta is True
 
     cog.groups["f"] = set()
     assert billing.subscription_status(user_id="f").has_access is False
+
+
+# ── E9.57 finding: Stripe's Customer Portal cancels at period end, not immediately ──
+# The webhook only demotes on `customer.subscription.deleted`, which Stripe fires once the
+# paid period actually ends — so a canceled subscriber correctly stays `tier=subscriber`
+# until then. These fields let Settings say so honestly instead of looking unchanged.
+#
+# ⚠️ CONFIRMED LIVE IN PROD (2026-08-05): the first cut of these fakes was plain dicts,
+# which support `.get()` — so they passed even though the real handler code called
+# `sub.get(...)` on a genuine Stripe SDK `StripeObject`, which does NOT define `.get()`
+# and raised `AttributeError: get` in prod, silently swallowed by the handler's broad
+# except into the exact same "nothing scheduled" default a real uncanceled subscription
+# would produce. `_FakeStripeSub` below mimics the REAL SDK object's interface (`in` /
+# `[...]` via `__contains__`/`__getitem__`, no `.get()`) so a regression back to `.get()`
+# fails these tests with the same AttributeError it produced live, instead of silently
+# passing. Sibling of the already-documented `construct_event()` StripeObject trap.
+
+
+class _FakeStripeSub:
+    def __init__(self, data):
+        self._data = data
+
+    def __contains__(self, k):
+        return k in self._data
+
+    def __getitem__(self, k):
+        return self._data[k]
+
+    def __getattr__(self, k):
+        if k in self._data:
+            return self._data[k]
+        raise AttributeError(k)  # real StripeObject behavior for e.g. `.get`
+
+
+class _FakeSubList:
+    def __init__(self, data):
+        self.data = [_FakeStripeSub(d) for d in data]
+
+
+def test_fake_stripe_sub_does_not_support_dict_get():
+    """Fidelity check: prove the fake matches the real SDK object's `.get()` gap —
+    a fixture that instead used a plain dict would pass even after a regression."""
+    sub = _FakeStripeSub({"cancel_at_period_end": True})
+    with pytest.raises(AttributeError):
+        sub.get("cancel_at_period_end")
+    assert sub["cancel_at_period_end"] is True
+    assert "cancel_at_period_end" in sub
+
+
+def test_status_reports_scheduled_cancellation(monkeypatch, store, cog):
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_x")
+    cog.groups["s"] = {"subscriber"}
+    store.link_stripe_customer("s", "cus_s")
+    monkeypatch.setattr(
+        billing.stripe.Subscription,
+        "list",
+        lambda **kw: _FakeSubList([{"cancel_at_period_end": True, "current_period_end": 1999999999}]),
+    )
+    st = billing.subscription_status(user_id="s")
+    assert st.tier == "subscriber" and st.has_access is True  # access continues
+    assert st.cancel_at_period_end is True
+    assert st.current_period_end == 1999999999
+
+
+def test_status_active_subscription_has_no_scheduled_cancellation(monkeypatch, store, cog):
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_x")
+    cog.groups["s"] = {"subscriber"}
+    store.link_stripe_customer("s", "cus_s")
+    monkeypatch.setattr(
+        billing.stripe.Subscription,
+        "list",
+        lambda **kw: _FakeSubList([{"cancel_at_period_end": False, "current_period_end": 1999999999}]),
+    )
+    st = billing.subscription_status(user_id="s")
+    assert st.cancel_at_period_end is False
+
+
+def test_status_falls_back_to_the_subscription_item_when_top_level_period_end_is_absent(
+    monkeypatch, store, cog
+):
+    """Stripe moved `current_period_end` off the top-level Subscription object onto each
+    subscription item as of API version 2025-03-31 — confirm the fallback read works when
+    the top-level field is genuinely absent (not just falsy)."""
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_x")
+    cog.groups["s"] = {"subscriber"}
+    store.link_stripe_customer("s", "cus_s")
+    monkeypatch.setattr(
+        billing.stripe.Subscription,
+        "list",
+        lambda **kw: _FakeSubList(
+            [
+                {
+                    "cancel_at_period_end": True,
+                    "items": _FakeStripeSub({"data": [_FakeStripeSub({"current_period_end": 1999999999})]}),
+                }
+            ]
+        ),
+    )
+    st = billing.subscription_status(user_id="s")
+    assert st.cancel_at_period_end is True
+    assert st.current_period_end == 1999999999
+
+
+def test_status_period_read_failure_is_best_effort(monkeypatch, store, cog):
+    cog.groups["s"] = {"subscriber"}
+    store.link_stripe_customer("s", "cus_s")
+
+    def _boom(**kw):
+        raise RuntimeError("Stripe is down")
+
+    monkeypatch.setattr(billing.stripe.Subscription, "list", _boom)
+    st = billing.subscription_status(user_id="s")
+    assert st.tier == "subscriber" and st.has_access is True
+    assert st.cancel_at_period_end is False and st.current_period_end is None
 
 
 # ── Server-side subscriber-MFA guard ─────────────────────────────────────────
