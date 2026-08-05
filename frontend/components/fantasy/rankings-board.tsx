@@ -22,6 +22,7 @@ import {
   useSavedLeagues,
 } from "@/lib/fantasy-queries"
 import { assignTiers, type Player } from "@/lib/draft-optimizer"
+import { rowsAreLocked, trimLockedTail } from "@/lib/fantasy"
 import {
   ADP_DELTA_LABEL,
   ALL_ROWS,
@@ -75,15 +76,29 @@ export function RankingsBoard() {
   // The `pts != null` test is what still excludes a genuinely unprojected row — a gap-fill K/DST
   // placeholder for a team the projection missed — so an absent projection is shown as absent
   // rather than as a zero.
+  // E9.56b — a LOCKED board carries no `pts`/`vor`/`ovrRank`/`posRank` at all, and 632 of its 858
+  // rows carry no ADP either; trim that tail and report the count rather than dropping it silently.
+  const boardLocked = rowsAreLocked(board ?? [])
+  const { rows: boardRows, hiddenCount } = useMemo(() => trimLockedTail(board ?? []), [board])
+
   const ranked = useMemo(() => {
-    const projected = (board ?? []).filter(
-      (p) => p.pts != null && (ALL_POSITIONS as readonly string[]).includes(p.pos),
+    // 🚨 E9.56b — `p.pts != null` EMPTIES A LOCKED BOARD ENTIRELY. On a locked row `pts` is ABSENT
+    // (the server removes every model value), so this filter — which exists to hide a genuinely
+    // unprojected gap-fill K/DST, showing an absent projection as absent rather than as a zero —
+    // would drop all 858 rows and render a BLANK PAGE for every free visitor. Skip it when locked:
+    // there, "no pts" is the entitlement state, not a missing projection.
+    const projected = boardRows.filter(
+      (p) => (boardLocked || p.pts != null) && (ALL_POSITIONS as readonly string[]).includes(p.pos),
     )
     const scoped = projected.filter((p) => (pos === "Overall" ? true : p.pos === pos))
+    // ⚠️ And do NOT sort a locked board by rank — `ovrRank`/`posRank` are absent, so the comparator
+    // is `undefined - undefined` = NaN. The server already ordered locked rows onto market ADP so
+    // the array index cannot reconstruct our ranking (E9.56); keep that order EXPLICITLY.
+    if (boardLocked) return scoped
     return pos === "Overall"
       ? scoped.slice().sort((a, b) => a.ovrRank - b.ovrRank)
       : scoped.slice().sort((a, b) => a.posRank - b.posRank)
-  }, [board, pos])
+  }, [boardRows, boardLocked, pos])
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -217,8 +232,8 @@ export function RankingsBoard() {
       {/* E9.56 — page-level lock state rides on the MANIFEST: the board endpoint returns a bare
           array, and wrapping it would be the NF-C0 response-shape break. Per-cell chips come from
           each row's own `locked` marker. */}
-      {manifest?.locked && (
-        <UpgradeBanner season={manifest.season} upgrade={manifest.upgrade} />
+      {(manifest?.locked || boardLocked) && (
+        <UpgradeBanner season={manifest?.season} upgrade={manifest?.upgrade} />
       )}
 
       {manifestLoading && <LoadingBlock label="Loading league formats…" />}
@@ -420,6 +435,18 @@ export function RankingsBoard() {
                   onPageSize={setPageSize}
                 />
               </div>
+
+              {/* E9.56b — say what was trimmed (see the identical note in projections-table). */}
+              {hiddenCount > 0 && (
+                <p className="mt-3 text-center text-xs text-gray-500">
+                  {hiddenCount.toLocaleString()} more players — those undrafted in the market sample
+                  — are ranked and included with a{" "}
+                  <a href="/pricing" className="text-amber-400 hover:text-amber-300 hover:underline">
+                    subscription
+                  </a>
+                  .
+                </p>
+              )}
             </>
           )}
 
