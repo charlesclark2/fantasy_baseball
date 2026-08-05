@@ -69,11 +69,11 @@ def _et_zone():
 
 
 def _duck():
-    import duckdb
+    """The box-aware connection — NEVER a bare `duckdb.connect()` (see pit/duck.py: a
+    default memory_limit is ~80% of RAM, which is how INC-22 #4 OOM-killed the host)."""
+    from .duck import connect
 
-    con = duckdb.connect()
-    con.execute("INSTALL httpfs; LOAD httpfs")
-    return con
+    return connect()
 
 
 def read_schedule(season: int, *, con=None, url: str = SCHEDULES_URL) -> list[ScheduledGame]:

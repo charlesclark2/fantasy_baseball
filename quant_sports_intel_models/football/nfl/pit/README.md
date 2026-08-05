@@ -39,7 +39,25 @@ pit/
 ```
 
 Storage: `s3://credence-sports-lakehouse/nfl/pit/<leg>/capture_date=YYYY-MM-DD/` (Delta,
-append-only) and `nfl/pit_raw/<leg>/capture_date=…/<capture_id>.json` (write-once raw payloads).
+append-only) and `nfl/pit_raw/<leg>/capture_date=…/batch_<id>.json` (write-once raw payloads,
+**one object per capture batch**, keyed by `capture_id` inside; each row stores its
+`raw_payload_key`).
+
+⚠️ **Raw retention is BATCHED, and that was a measured fix.** The first cut wrote one object per
+capture row with a HEAD before each PUT: a 6,068-row injury capture took **14 minutes** on the box
+(~12,000 sequential S3 calls), which at the Tue/Fri cadence is ~267,000 objects and ~10 hours of
+box time per season. Batching makes it 1 PUT + 1 HEAD — **267,000 objects → 44**, 14 min → ~2s.
+The §13 guarantee is unchanged: immutability is a property of the *object* (a batch object is
+still never replaced), and dedup keys off `capture_id` in the Delta table, independent of the raw
+layout. The batch key is content-addressed (sha over its sorted `capture_id`s) so an identical
+re-fire is idempotent while a *different* same-day batch cannot collide — a `capture_date`-only
+key would have had the write-once refusal silently drop the second batch's payloads.
+
+**DuckDB is clamped to the box.** Every connection goes through `pit/duck.py` (60% of RAM, floored
+2 GB / capped 11 GB, `threads=2`). A bare `duckdb.connect()` inherits ~80% of RAM — ~12.8 GB on the
+16 GB box — which is INC-22 #4 verbatim: DuckDB never spills, blows past physical memory, and the
+kernel OOM-kills the *host*, taking Dagster with it. A guard forbids a direct `duckdb.connect()`
+anywhere in `pit/`.
 
 ## ⭐ The one structural divergence from `ingest/s3io.py`
 

@@ -46,11 +46,10 @@ VENDOR_ASOF_COLUMN = "date_modified"
 
 
 def _duck():
-    import duckdb
+    """Box-aware (pit/duck.py) — never a bare `duckdb.connect()`."""
+    from .duck import connect
 
-    con = duckdb.connect()
-    con.execute("INSTALL httpfs; LOAD httpfs")
-    return con
+    return connect()
 
 
 def read_injuries(season: int, *, con=None, url: str | None = None) -> tuple[list[dict], bool]:
