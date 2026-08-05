@@ -20,17 +20,23 @@ back with a DIFFERENT payload, that is a vendor REVISION, and the store keeps th
 declines the revision (the revision is still recorded in the `revisions` manifest so the fact of
 it is visible — a silently-dropped revision would be its own silent death).
 
-RAW PAYLOADS ARE RETAINED IMMUTABLY (§13): every capture's raw payload is written WRITE-ONCE as
-a JSON object under `<sport>/pit_raw/<source>/capture_date=…/<capture_id>.json`. The writer HEADs
-before it PUTs and refuses to replace an existing object. That is the physical guarantee behind
-the "revised vendor data replaced the original" rejection — the guard can only be trusted if the
-original is genuinely still on disk.
+RAW PAYLOADS ARE RETAINED IMMUTABLY (§13), IN BATCHES: one WRITE-ONCE JSON object per
+(source, capture_date, batch) at `<sport>/pit_raw/<source>/capture_date=…/batch_<id>.json`, with
+the payloads keyed by `capture_id` inside it. The writer HEADs before it PUTs and refuses to
+replace an existing object — that refusal is the physical guarantee behind the "revised vendor
+data replaced the original" rejection, which can only be trusted if the original is genuinely
+still on disk.
+⚠️ The FIRST cut wrote one object PER ROW; measured on the box, a 6,068-row injury capture took
+**14 minutes** (~12,000 sequential S3 calls) and would have created ~267,000 objects a season.
+Batching is a LAYOUT change only — immutability is a property of the object, and dedup keys off
+`capture_id` in the Delta table, independent of how the bytes are grouped. See `retain_raw_batch`.
 
 TIMESTAMP STORAGE: every stamp is an ISO-8601 UTC VARCHAR (INC-23 / the W8a binary-parquet-
 timestamp landmine). `capture_date` is a plain `YYYY-MM-DD` string partition value.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -56,6 +62,14 @@ class ImmutableStoreError(RuntimeError):
     """A write would have destroyed or replaced an existing immutable capture."""
 
 
+def _duck():
+    """Box-aware DuckDB (pit/duck.py). `httpfs=False` — these read a Delta table through
+    pyarrow, which delta-rs has already authenticated; no HTTPS reads happen here."""
+    from .duck import connect
+
+    return connect(httpfs=False)
+
+
 def capture_date_of(capture_timestamp) -> str:
     """The `YYYY-MM-DD` UTC partition value for a capture stamp (fail-closed on a naive stamp)."""
     return parse_utc(capture_timestamp, field="capture_timestamp").date().isoformat()
@@ -67,35 +81,85 @@ def table_uri(source: str, *, bucket: str | None = None, local_root: str | None 
     return s3io.table_uri(SPORT, source, bucket=bucket or s3io.DEFAULT_BUCKET, tier=PIT_TIER)
 
 
-def _raw_key(source: str, capture_date: str, capture_id: str) -> str:
-    return f"{SPORT}/{PIT_RAW_TIER}/{source}/capture_date={capture_date}/{capture_id}.json"
+#: The raw-payload layout version, stamped on every row so a reader never has to GUESS how to
+#: find a payload. `batch_v1` = one object per (source, capture_date, batch), payloads keyed by
+#: `capture_id` inside it. The retired `row_v0` wrote one object PER CAPTURE ROW.
+RAW_LAYOUT = "batch_v1"
 
 
-# ── write-once raw payload retention ────────────────────────────────────────────────────
-def retain_raw_payload(
+def _batch_id(capture_ids) -> str:
+    """A CONTENT-ADDRESSED id for one batch of captures: sha256 over its sorted capture_ids.
+
+    Deterministic on purpose, and that is what makes write-once still work after batching:
+      • re-running the IDENTICAL batch produces the SAME key → the existing object is found and
+        left untouched (idempotent re-fire, not an error);
+      • a DIFFERENT set of captures produces a DIFFERENT key → a second batch on the same day
+        cannot collide with, and therefore cannot be refused by, the first.
+    A key of `capture_date` alone would have had exactly that collision, silently dropping the
+    second batch's payloads — the write-once refusal turning into data loss.
+    """
+    joined = "|".join(sorted(capture_ids))
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:32]
+
+
+def _raw_batch_key(source: str, capture_date: str, batch_id: str) -> str:
+    return f"{SPORT}/{PIT_RAW_TIER}/{source}/capture_date={capture_date}/batch_{batch_id}.json"
+
+
+# ── write-once raw payload retention (BATCHED) ──────────────────────────────────────────
+def retain_raw_batch(
+    payloads: dict,
     *,
     source: str,
-    capture_id: str,
     capture_date: str,
-    payload,
     bucket: str | None = None,
     local_root: str | None = None,
     overwrite_ok: bool = False,
 ) -> str:
-    """Persist ONE capture's raw payload write-once. Returns the object key/path.
+    """Persist a WHOLE BATCH of raw payloads as ONE write-once object. Returns its key/path.
 
-    Refuses to replace an existing object unless `overwrite_ok` (which no caller in this package
-    sets — it exists so a test can prove the refusal fires rather than being unreachable).
-    Returns the existing location unchanged when the payload is already retained, so a re-fired
-    cron is idempotent rather than an error.
+    ⭐ WHY BATCHED (measured on the box 2026-08-05, and this is a cost fix with real numbers).
+    The first cut wrote one object PER CAPTURE ROW, with a HEAD before each PUT. One injury
+    capture is 6,068 rows ⇒ ~12,000 sequential S3 calls ⇒ **14 minutes** of wall clock at ~130ms
+    a row, and at the Tue/Fri cadence that is ~267,000 objects and ~10 hours of box time per
+    season for a job whose useful output is a few megabytes. Batching makes it 1 PUT + 1 HEAD:
+    **267,000 objects → 44**, 14 minutes → seconds.
+
+    ⛔ THE §13 GUARANTEE IS UNCHANGED, and that is the point — this is a layout change, not a
+    weakening. Immutability is a property of the OBJECT: a batch object is still written exactly
+    once and never replaced, so the ORIGINAL captured payload is still on disk to compare a later
+    vendor revision against. Deduplication keys off `capture_id` in the Delta table and is
+    completely independent of how the raw bytes are grouped. Per-row objects only ever bought
+    single-record lookup, which no consumer performs (payloads are read for audit/replay, both of
+    which want the batch anyway).
+
+    Returns the existing location unchanged when the batch is already retained, so a re-fired
+    cron is idempotent. `overwrite_ok` exists only so a test can prove the refusal is reachable;
+    no caller in this package sets it.
     """
-    key = _raw_key(source, capture_date, capture_id)
-    blob = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+    if not payloads:
+        raise ValueError("retain_raw_batch called with no payloads — a batch is never empty")
+
+    batch_id = _batch_id(payloads.keys())
+    key = _raw_batch_key(source, capture_date, batch_id)
+    blob = json.dumps(
+        {
+            "source": source,
+            "capture_date": capture_date,
+            "batch_id": batch_id,
+            "raw_layout": RAW_LAYOUT,
+            "capture_count": len(payloads),
+            # keyed by capture_id so a consumer resolves one record without scanning
+            "payloads": payloads,
+        },
+        sort_keys=True,
+        default=str,
+    ).encode("utf-8")
 
     if local_root:
         path = os.path.join(local_root, key)
         if os.path.exists(path) and not overwrite_ok:
-            log.debug("raw payload already retained (write-once) — %s", path)
+            log.debug("raw batch already retained (write-once) — %s", path)
             return path
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as fh:
@@ -105,10 +169,24 @@ def retain_raw_payload(
     client = _s3_client()
     target = bucket or s3io.DEFAULT_BUCKET
     if not overwrite_ok and _object_exists(client, target, key):
-        log.debug("raw payload already retained (write-once) — s3://%s/%s", target, key)
+        log.debug("raw batch already retained (write-once) — s3://%s/%s", target, key)
         return key
     client.put_object(Bucket=target, Key=key, Body=blob, ContentType="application/json")
+    log.info(
+        "  [nfl/pit/%s] retained %d raw payload(s) in ONE object → s3://%s/%s",
+        source, len(payloads), target, key,
+    )
     return key
+
+
+def read_raw_batch(key: str, *, bucket: str | None = None, local_root: str | None = None) -> dict:
+    """Read a retained batch back. The counterpart to `retain_raw_batch` — a stored
+    `raw_payload_key` is only useful if resolving it is a one-liner."""
+    if local_root:
+        with open(os.path.join(local_root, key), "rb") as fh:
+            return json.loads(fh.read())
+    body = _s3_client().get_object(Bucket=bucket or s3io.DEFAULT_BUCKET, Key=key)["Body"].read()
+    return json.loads(body)
 
 
 def _s3_client():
@@ -160,7 +238,7 @@ def existing_capture_ids(
     except TableNotFoundError:
         return {}
 
-    rows = _query_ids(duckdb.connect(), dt, capture_date)
+    rows = _query_ids(_duck(), dt, capture_date)
     return {r[0]: r[1] for r in rows}
 
 
@@ -293,14 +371,28 @@ def append_captures(
             "revisions": revisions, "capture_dates": dates, "uri": uri,
         }
 
-    payloads = [(r["capture_id"], r[PARTITION_COL], r.pop("payload", None)) for r in fresh]
-    if retain_raw:
-        for cid, cdate, payload in payloads:
-            if payload is not None:
-                retain_raw_payload(
-                    source=source, capture_id=cid, capture_date=cdate, payload=payload,
-                    bucket=bucket, local_root=local_root,
-                )
+    # Pop the payloads off the tabular rows and group them by capture_date — ONE retained object
+    # per (capture_date, batch) instead of one per row. See `retain_raw_batch` for the measured
+    # cost this replaces (267,000 objects/season → 44).
+    by_date: dict[str, dict] = {}
+    for row in fresh:
+        payload = row.pop("payload", None)
+        if payload is not None:
+            by_date.setdefault(row[PARTITION_COL], {})[row["capture_id"]] = payload
+
+    if retain_raw and by_date:
+        keys = {
+            cdate: retain_raw_batch(
+                payloads, source=source, capture_date=cdate, bucket=bucket, local_root=local_root,
+            )
+            for cdate, payloads in by_date.items()
+        }
+        # Stamp WHERE the payload lives onto every row. Without this a consumer would have to
+        # reconstruct the batch id to find its own raw bytes — i.e. the retained payload would be
+        # present but unreachable, which is retention in name only.
+        for row in fresh:
+            row["raw_payload_key"] = keys.get(row[PARTITION_COL])
+            row["raw_layout"] = RAW_LAYOUT
 
     _append_delta(fresh, uri)
     log.info(
@@ -360,7 +452,7 @@ def build_store_index(
     except TableNotFoundError:
         return {}
 
-    con = duckdb.connect()
+    con = _duck()
     con.register("pit_captures", dt.to_pyarrow_dataset())
     try:
         dates = list(capture_dates)

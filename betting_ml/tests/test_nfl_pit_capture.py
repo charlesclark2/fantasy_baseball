@@ -251,12 +251,14 @@ class TestTheStoreIsAppendOnly:
         store.append_captures([_row(payload={"v": 1})], source="weather", local_root=str(tmp_path))
         blobs = list((tmp_path / "nfl/pit_raw/weather").rglob("*.json"))
         assert len(blobs) == 1
-        assert json.loads(blobs[0].read_text()) == {"v": 1}
-        store.retain_raw_payload(source="weather", capture_id="cid1",
-                                 capture_date=NOW.date().isoformat(), payload={"v": 999},
-                                 local_root=str(tmp_path))
-        assert json.loads(blobs[0].read_text()) == {"v": 1}, "an existing raw payload was REPLACED"
+        assert json.loads(blobs[0].read_text())["payloads"]["cid1"] == {"v": 1}
 
+        store.retain_raw_batch({"cid1": {"v": 999}}, source="weather",
+                               capture_date=NOW.date().isoformat(), local_root=str(tmp_path))
+        assert json.loads(blobs[0].read_text())["payloads"]["cid1"] == {"v": 1}, (
+            "an existing raw payload was REPLACED — the immutability guarantee behind the §13 "
+            "revised-vendor-record rejection is gone"
+        )
     def test_two_distinct_captures_both_land(self, tmp_path):
         store.append_captures([_row(capture_id="a", subject="s1")], source="weather",
                               local_root=str(tmp_path))
@@ -273,6 +275,137 @@ class TestTheStoreIsAppendOnly:
 
 
 # ── the timestamp contract ───────────────────────────────────────────────────────────────
+
+
+class TestRawPayloadsAreBatched:
+    """⭐ THE COST FIX, made a testable property rather than a habit.
+
+    The first cut wrote one S3 object PER CAPTURE ROW with a HEAD before each PUT. Measured on
+    the box 2026-08-05: one 6,068-row injury capture took **14 minutes** (~130ms/row, ~12,000
+    sequential S3 calls) — ≈267,000 objects and ~10 hours of box time per season. These tests pin
+    the batched layout so a future edit cannot quietly reintroduce per-row writes.
+    """
+
+    @staticmethod
+    def _objects(tmp_path, source="injuries"):
+        return list((tmp_path / f"nfl/pit_raw/{source}").rglob("*.json"))
+
+    def test_many_rows_produce_exactly_ONE_object(self, tmp_path):
+        rows = [_row(capture_id=f"c{i}", subject=f"s{i}", sha=f"h{i}", payload={"i": i})
+                for i in range(200)]
+        store.append_captures(rows, source="injuries", local_root=str(tmp_path))
+        objs = self._objects(tmp_path)
+        assert len(objs) == 1, (
+            f"200 rows produced {len(objs)} objects — the per-row write is back, and at injury "
+            f"scale that is ~12,000 S3 calls and 14 minutes per capture"
+        )
+
+    def test_the_batch_object_contains_every_payload_keyed_by_capture_id(self, tmp_path):
+        rows = [_row(capture_id=f"c{i}", subject=f"s{i}", sha=f"h{i}", payload={"i": i})
+                for i in range(200)]
+        store.append_captures(rows, source="injuries", local_root=str(tmp_path))
+        body = json.loads(self._objects(tmp_path)[0].read_text())
+        assert body["capture_count"] == 200
+        assert body["raw_layout"] == store.RAW_LAYOUT
+        assert {f"c{i}" for i in range(200)} == set(body["payloads"])
+        assert body["payloads"]["c7"] == {"i": 7}
+
+    def test_every_row_records_WHERE_its_payload_lives(self, tmp_path):
+        """A retained payload nobody can locate is retention in name only."""
+        import duckdb
+        from deltalake import DeltaTable
+
+        store.append_captures([_row(payload={"v": 1})], source="injuries", local_root=str(tmp_path))
+        con = duckdb.connect()
+        con.register("t", DeltaTable(str(tmp_path / "nfl/pit/injuries")).to_pyarrow_dataset())
+        key, layout = con.execute("select raw_payload_key, raw_layout from t").fetchone()
+        assert layout == store.RAW_LAYOUT
+        assert (tmp_path / key).exists(), f"raw_payload_key {key!r} points at nothing"
+        assert store.read_raw_batch(key, local_root=str(tmp_path))["payloads"]["cid1"] == {"v": 1}
+
+    def test_a_re_fire_does_not_create_a_second_object(self, tmp_path):
+        store.append_captures([_row(payload={"v": 1})], source="injuries", local_root=str(tmp_path))
+        store.append_captures([_row(payload={"v": 1})], source="injuries", local_root=str(tmp_path))
+        assert len(self._objects(tmp_path)) == 1
+
+    def test_a_DIFFERENT_batch_the_same_day_does_not_collide(self, tmp_path):
+        """⭐ The trap a `capture_date`-only key would have walked into: the second batch's key
+        would already exist, write-once would refuse it, and those payloads would be silently
+        LOST — the immutability guarantee turned into data loss. Content-addressing avoids it."""
+        store.append_captures([_row(capture_id="a", subject="sa", payload={"v": 1})],
+                              source="injuries", local_root=str(tmp_path))
+        store.append_captures([_row(capture_id="b", subject="sb", payload={"v": 2})],
+                              source="injuries", local_root=str(tmp_path))
+        objs = self._objects(tmp_path)
+        assert len(objs) == 2, "the second same-day batch was refused — its payloads are lost"
+        stored = {}
+        for o in objs:
+            stored.update(json.loads(o.read_text())["payloads"])
+        assert stored == {"a": {"v": 1}, "b": {"v": 2}}
+
+    def test_the_batch_id_is_content_addressed_and_order_independent(self, tmp_path):
+        assert store._batch_id(["a", "b"]) == store._batch_id(["b", "a"])
+        assert store._batch_id(["a", "b"]) != store._batch_id(["a", "c"])
+
+    def test_an_empty_batch_is_refused_rather_than_writing_an_empty_object(self):
+        with pytest.raises(ValueError, match="never empty"):
+            store.retain_raw_batch({}, source="injuries", capture_date="2026-08-05")
+
+
+class TestDuckDBIsClampedToTheBox:
+    """⛔ INC-22 #4: a `memory_limit` above what the box can spare told DuckDB it never needed to
+    spill, it blew past physical memory, and the kernel OOM-killed the EC2 HOST — taking Dagster
+    with it. A bare `duckdb.connect()` inherits ~80% of RAM (~12.8 GB on the 16 GB box), so the
+    failure mode of an NFL capture leg would be an MLB serving outage."""
+
+    def test_no_module_in_pit_calls_duckdb_connect_directly(self):
+        """Comments/docstrings are stripped so the WARNING PROSE in duck.py (which names the
+        forbidden call) cannot satisfy — or trip — this guard (INC-38)."""
+        import ast
+
+        pit_dir = _REPO / "quant_sports_intel_models/football/nfl/pit"
+        offenders = []
+        for path in sorted(pit_dir.glob("*.py")):
+            if path.name == "duck.py":
+                continue  # the ONE sanctioned connect site
+            tree = ast.parse(path.read_text())
+            for node in ast.walk(tree):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                        and node.func.attr == "connect"
+                        and isinstance(node.func.value, ast.Name)
+                        and node.func.value.id == "duckdb"):
+                    offenders.append(f"{path.name}:{node.lineno}")
+        assert not offenders, f"unclamped duckdb.connect() — route via pit/duck.py: {offenders}"
+
+    def test_the_limit_stays_below_physical_ram(self):
+        from quant_sports_intel_models.football.nfl.pit import duck
+
+        ram = duck._physical_ram_gb()
+        if ram is None:
+            pytest.skip("physical RAM undetectable here")
+        assert duck.safe_memory_limit_gb() < ram, "the limit exceeds RAM — the INC-22 #4 shape"
+
+    def test_the_limit_is_floored_capped_and_conservative_when_ram_is_unknown(self, monkeypatch):
+        from quant_sports_intel_models.football.nfl.pit import duck
+
+        monkeypatch.setattr(duck, "_physical_ram_gb", lambda: 0.5)
+        assert duck.safe_memory_limit_gb() == 2      # floor
+        monkeypatch.setattr(duck, "_physical_ram_gb", lambda: 512)
+        assert duck.safe_memory_limit_gb() == 11     # cap
+        monkeypatch.setattr(duck, "_physical_ram_gb", lambda: None)
+        assert duck.safe_memory_limit_gb() == 6      # undetectable → conservative, not unbounded
+
+    def test_the_settings_are_actually_applied_to_the_connection(self):
+        """A clamp computed but never SET is the 'wired ≠ invoked' defect (NF-C0e)."""
+        from quant_sports_intel_models.football.nfl.pit import duck
+
+        con = duck.connect(httpfs=False)
+        limit, threads = con.execute(
+            "select current_setting('memory_limit'), current_setting('threads')"
+        ).fetchone()
+        assert int(threads) == 2
+        assert limit and limit != "0 bytes", f"memory_limit was not applied: {limit!r}"
+
 class TestTheTimestampContract:
     def test_a_naive_datetime_is_REFUSED_not_assumed_utc(self):
         with pytest.raises(timestamps.TimestampContractError, match="NAIVE"):

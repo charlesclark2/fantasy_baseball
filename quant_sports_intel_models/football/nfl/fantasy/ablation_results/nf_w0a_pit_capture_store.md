@@ -127,6 +127,51 @@ enabling the market schedule early also captures pre-season line movement, at no
 
 ---
 
+## The box runtime gate — PASSED, and it found a cost defect
+
+Run on the box 2026-08-05: `Found credentials from IAM Role: credence-dagster-ec2-role` (the
+instance-role path the AKID landmine kills), schema 30 assets with both 2025 breaks detected,
+injuries **6,068 rows written, 0 revisions, `vendor_asof_present: false`**.
+
+⚠️ **It also took 14 minutes**, and that was a real defect the laptop could not have surfaced —
+the local-filesystem smoke wrote 6,068 files in under a second, so the per-row write only became
+visible against real S3 latency (~130ms/row over ~12,000 sequential calls). At the Tue/Fri cadence
+that is **~267,000 objects and ~10 hours of box time per season** for a job whose useful output is
+2.7 MB.
+
+**FIXED — raw payloads are now retained one object per BATCH** (`retain_raw_batch`), payloads keyed
+by `capture_id` inside, with each row storing its `raw_payload_key`:
+
+| | before | after |
+|---|---|---|
+| S3 calls per injury capture | ~12,136 | **2** |
+| objects per season | ~267,000 | **44** |
+| wall clock (6,068 rows) | 14 min | **~2 s** (1.6s measured locally) |
+| box time per season | ~10 h | seconds |
+
+The §13 guarantee is unchanged, and that is the point: immutability is a property of the OBJECT (a
+batch object is still written once and never replaced), and dedup keys off `capture_id` in the
+Delta table, independent of how the bytes are grouped. Per-row objects only ever bought
+single-record lookup, which no consumer performs.
+
+⭐ **The batch key is CONTENT-ADDRESSED** (sha over its sorted `capture_id`s) rather than keyed on
+`capture_date`. A date-only key would have made a second same-day batch collide with the first, and
+the write-once refusal would then have **silently dropped its payloads** — the immutability
+guarantee inverted into data loss. Pinned by
+`test_a_DIFFERENT_batch_the_same_day_does_not_collide`.
+
+**Also fixed (found while investigating the memory profile): DuckDB was unclamped.** All six
+connections in `pit/` used a bare `duckdb.connect()`, which inherits ~80% of physical RAM — ~12.8 GB
+on the 16 GB box. That is INC-22 #4 verbatim: DuckDB believes it never needs to spill, blows past
+physical memory, and the kernel OOM-kills the *host*, taking Dagster with it. So the failure mode of
+an NFL research capture was an MLB serving outage. All connections now route through `pit/duck.py`
+(60% of RAM, floored 2 GB / capped 11 GB, `threads=2`, mirroring
+`run_w1_lakehouse._safe_memory_limit_gb`), with a guard forbidding a direct `duckdb.connect()`
+anywhere in the package.
+
+Both fixes RED-proven: reintroducing per-row writes fails 2 tests; reintroducing a bare
+`duckdb.connect()` fails the clamp guard.
+
 ## The store: append-only, and why that is the whole design
 
 `ingest/s3io.write_season_partition` writes `mode="overwrite"` with `replaceWhere season = N`.

@@ -55,11 +55,11 @@ WATCHED_COLUMNS: dict[str, tuple[str, ...]] = {
 
 
 def _duck():
-    import duckdb
+    """Box-aware (pit/duck.py) — this leg reads 30 remote parquet files, so an unbounded
+    memory_limit here is exactly the INC-22 #4 host-OOM shape."""
+    from .duck import connect
 
-    con = duckdb.connect()
-    con.execute("INSTALL httpfs; LOAD httpfs")
-    return con
+    return connect()
 
 
 def schema_fingerprint(columns: list[tuple[str, str]]) -> str:
@@ -287,11 +287,11 @@ def run_schema_snapshot(
 def _latest_by_asset(season: int, *, bucket=None, local_root=None) -> dict:
     """The most recent stored snapshot per asset (best-effort — a missing store is a first run)."""
     try:
-        import duckdb
         from deltalake import DeltaTable
         from deltalake.exceptions import TableNotFoundError
 
         from ..ingest import s3io
+        from .duck import connect
     except ImportError:  # pragma: no cover
         return {}
 
@@ -302,7 +302,7 @@ def _latest_by_asset(season: int, *, bucket=None, local_root=None) -> dict:
     except TableNotFoundError:
         return {}
 
-    con = duckdb.connect()
+    con = connect(httpfs=False)  # box-aware; a Delta/pyarrow read needs no httpfs
     con.register("snaps", dt.to_pyarrow_dataset())
     try:
         rows = con.execute(
