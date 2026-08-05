@@ -33,6 +33,15 @@ from pipeline.schedules.sports_rollforward_schedules import (
 from pipeline.schedules.sports_odds_capture_schedules import sports_ncaaf_odds_capture_schedule
 # E7.1 — daily MiLB incremental ingest. default_status=RUNNING (self-start; continuous capture of
 # the live 2026 season). Isolated single-op job; WARN-tier; free Stats API; Snowflake-free.
+# NF-W0a: NFL point-in-time forward capture. weather + metadata ship RUNNING (FREE, and a missed
+# checkpoint is PERMANENT data loss — a STOPPED schedule here would be found out in January);
+# ⛔ the MARKET schedule ships STOPPED (PAID Odds-API credits) and MUST be enabled before the
+# 2026-09-09 opener or no Tue/Fri market feature is ever backtestable.
+from pipeline.schedules.sports_nfl_pit_capture_schedules import (
+    sports_nfl_pit_market_schedule,
+    sports_nfl_pit_metadata_schedule,
+    sports_nfl_pit_weather_schedule,
+)
 from pipeline.schedules.milb_ingest_schedule import milb_ingest_schedule
 
 # E11.1-W1d: w1_parity_schedule was a one-shot gate (fired 2026-06-25) for the
@@ -52,5 +61,8 @@ all_schedules = [
     sports_nfl_roll_forward_schedule,
     sports_nfl_sleeper_injuries_schedule,
     sports_ncaaf_odds_capture_schedule,
+    sports_nfl_pit_weather_schedule,
+    sports_nfl_pit_metadata_schedule,
+    sports_nfl_pit_market_schedule,
     milb_ingest_schedule,
 ] + all_intraday_schedules

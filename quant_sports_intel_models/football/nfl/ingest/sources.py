@@ -234,6 +234,10 @@ def _nflverse_seasonal(tag: str, file_prefix: str, *, has_season_col: bool = Tru
         return df
 
     fetch.__name__ = f"_nflverse_seasonal_{file_prefix}"
+    # NF-W0a: expose the release URL so the PIT schema-snapshot leg can DESCRIBE the asset
+    # without re-deriving the URL. Keeping this file the SINGLE owner of URL construction is the
+    # cure for the repo's recurring "one logical thing, two owners" drift (INC-30 / INC-38).
+    fetch.nflverse_url = lambda year: f"{NFLVERSE_RELEASE}/{tag}/{file_prefix}_{int(year)}.parquet"
     return fetch
 
 
@@ -253,6 +257,8 @@ def _nflverse_single(tag: str, asset: str, season_col: str | None, *,
         return con.execute(f"SELECT {proj} FROM read_parquet(?)", [url]).df()
 
     fetch.__name__ = f"_nflverse_single_{asset}"
+    # NF-W0a: see the note in `_nflverse_seasonal` — one owner for URL construction.
+    fetch.nflverse_url = lambda year: f"{NFLVERSE_RELEASE}/{tag}/{asset}.parquet"
     return fetch
 
 

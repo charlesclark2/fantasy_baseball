@@ -28,6 +28,14 @@ from pipeline.jobs.sports_nfl_rollforward_job import sports_nfl_roll_forward_job
 from pipeline.jobs.sports_nfl_sleeper_injuries_job import sports_nfl_sleeper_injuries_job
 # NCAAF-P0.6b: the recurring IN-SEASON closing-line catch-up (bridges the P0.6 one-time backfill).
 from pipeline.jobs.sports_ncaaf_odds_capture_job import sports_ncaaf_odds_capture_job
+# NF-W0a: the NFL point-in-time FORWARD CAPTURE jobs (weather ladder / injuries+schema / market).
+# TIME-CRITICAL — a checkpoint not captured cannot be backfilled (the Open-Meteo archive returns
+# observations, and the odds history holds only closing lines).
+from pipeline.jobs.sports_nfl_pit_capture_job import (
+    sports_nfl_pit_market_job,
+    sports_nfl_pit_metadata_job,
+    sports_nfl_pit_weather_job,
+)
 from pipeline.jobs.milb_ingest_job import milb_ingest_job  # E7.1 — isolated daily MiLB ingest
 
 all_jobs = [
@@ -53,5 +61,8 @@ all_jobs = [
     sports_nfl_roll_forward_job,
     sports_nfl_sleeper_injuries_job,
     sports_ncaaf_odds_capture_job,
+    sports_nfl_pit_weather_job,
+    sports_nfl_pit_metadata_job,
+    sports_nfl_pit_market_job,
     milb_ingest_job,
 ]
