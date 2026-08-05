@@ -20,9 +20,19 @@ what this script writes and NOTHING ELSE). The export is structurally incapable 
 `LOCKED_SEASON` or later — `_parse_seasons` refuses such a range outright, so a public payload can never
 carry the paid product regardless of how this script is invoked.
 
-RUN (LAPTOP, SF-free sports lake):
+RUN (LAPTOP, SF-free sports lake) — STAGE LOCALLY, uploads nothing:
     uv run python -m quant_sports_intel_models.football.nfl.fantasy.export_track_record_json \
       --duckdb quant_sports_intel_models/sports_dbt/sports.duckdb --seasons 2019-2025
+
+PUBLISH TO PROD (LAPTOP) — ⚠️ `--publish` ALONE IS NOT ENOUGH; NAME THE BUCKET:
+    uv run python -m quant_sports_intel_models.football.nfl.fantasy.export_track_record_json \
+      --duckdb quant_sports_intel_models/sports_dbt/sports.duckdb --seasons 2019-2025 \
+      --s3-bucket credence-prod-s3-api-cache --publish
+
+`--s3-bucket` defaults to `$CACHE_BUCKET`, which is NOT set in a normal laptop shell — so
+`--publish` on its own resolves no bucket and the run refuses (loudly, by design: it would
+otherwise look successful while uploading nothing). This has bitten the operator repeatedly,
+which is why the full publish invocation is written out above rather than described. Copy it.
 
 Same NF-D12 dry-run/`--publish` guard as `export_draft_board_json.py`: a resolved `--s3-bucket` /
 `$CACHE_BUCKET` alone never uploads — pass `--publish` to actually reach the live prod api-cache.
@@ -33,6 +43,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -71,6 +82,59 @@ _CLAIM_DENYLIST = (
     "our edge", "guaranteed", "more accurate",
 )
 
+# ── E9.56c: display casing ───────────────────────────────────────────────────────────────────────
+# The projection frame carries VETERAN names in SHOUTING CAPS ("JOSH ALLEN") while ROOKIES arrive
+# properly cased from the draft-class pipeline ("Ashton Jeanty") — 388 of 563 distinct names across
+# 2019–2025 are all-caps. On the public Track Record board that renders as a page where the rookies
+# look like the anomaly, which is what the operator reported: the right symptom, on the wrong side —
+# it is the veterans that are wrong.
+#
+# ⚠️ CASING IS NOT RECOVERABLE FROM AN UPPERCASE STRING BY RULE, and this dataset proves it:
+# "DEVONTA FREEMAN" is correctly "Devonta Freeman" while "DEVONTA SMITH" is correctly "DeVonta
+# Smith" — identical input, two different right answers. So there is a rule pass for the patterns
+# that ARE decidable, plus an explicit map keyed on the WHOLE name for the ones that are not.
+#
+# The map was DERIVED from the live export, not guessed: every all-caps name across all seven
+# published seasons was scanned for an internal capital. Nine entries, needing an addition roughly
+# once per draft class — and `test_track_record_export.py` asserts no name is ever emitted in
+# all-caps, so a miss shows up as a visibly SHOUTING name rather than a silently wrong one.
+#
+# ⛔ Do NOT "fix" this by joining names from the current draft board: that board renders "Aj Barner"
+# and "Dj Moore" (measured against the live API), i.e. it is WORSE than these rules, and it cannot
+# cover retired players at all. The real fix is upstream — the projection frame should carry
+# nflverse's `player_display_name` — which is a data-pipeline change, not a display fix.
+_KNOWN_CASINGS = {
+    "CEEDEE LAMB": "CeeDee Lamb",
+    "DEANDRE HOPKINS": "DeAndre Hopkins",
+    "DEVANTE PARKER": "DeVante Parker",
+    "DEVON ACHANE": "De'Von Achane",  # the source dropped the apostrophe entirely
+    "DEVONTA SMITH": "DeVonta Smith",
+    "DK METCALF": "DK Metcalf",
+    "JUJU SMITH-SCHUSTER": "JuJu Smith-Schuster",
+    "LESEAN MCCOY": "LeSean McCoy",
+    "SAM LAPORTA": "Sam LaPorta",
+}
+
+
+def display_name(raw) -> str:
+    """An all-caps source name rendered for display. Anything already cased is returned UNTOUCHED.
+
+    `str.title()` alone already handles apostrophes, hyphens, periods and "St." ("JA'MARR CHASE" ->
+    "Ja'Marr Chase", "AMON-RA ST. BROWN" -> "Amon-Ra St. Brown", "A.J. BROWN" -> "A.J. Brown") but
+    lowercases the second capital in "MCCAFFREY" — 12 Mc/Mac names here — so that gets its own rule.
+    Roman-numeral suffixes are handled defensively: none appear in the current data, but they do in
+    the sibling board's names, so a future source change cannot reintroduce "Iii".
+    """
+    name = str(raw).strip()
+    if not name.isupper():  # rookies — and any future clean source — are already right
+        return name
+    if name in _KNOWN_CASINGS:
+        return _KNOWN_CASINGS[name]
+    out = name.title()
+    out = re.sub(r"\bMc([a-z])", lambda m: "Mc" + m.group(1).upper(), out)
+    out = re.sub(r"\b(Ii|Iii|Iv)\b", lambda m: m.group(1).upper(), out)
+    return out
+
 
 def _nf1_5_projection(con, season, schema):
     """The NF1.5 refined-board projection for `season` — the SAME served board NF1.5b shipped, read
@@ -98,7 +162,7 @@ def season_records(df: pd.DataFrame) -> list[dict]:
         recs.append({
             "season": int(r["season"]),
             "playerId": str(r["player_id"]),
-            "playerName": str(r["player_name"]),
+            "playerName": display_name(r["player_name"]),
             "position": str(r["position"]),
             "ourPoints": _fnum(r["our_points"]),
             "ourRank": int(r["our_rank"]),
@@ -148,19 +212,59 @@ def build_headline(scorecard: dict) -> str:
         row["season"] for row in (scorecard.get("per_season") or []) if "adp" in (row.get("systems") or {})
     )
     span = f"{adp_seasons[0]}–{adp_seasons[-1]}" if adp_seasons else "the scored seasons"
+
+    # E9.56c — REWRITTEN FOR A CASUAL FAN. The previous text opened "our within-position ordering
+    # correlation vs realized outcomes is 0.517, against ADP's 0.494 (Δρ +0.022)", which is precise
+    # and unreadable: it assumes the reader knows what a rank correlation is, what ρ is, and what
+    # counts as a good value for one. This is the first thing a logged-out visitor sees, it is quoted
+    # on the locked Rankings/Projections banner, and it is the stated reason those pages are indexed
+    # for search — so a reader who cannot parse it is the whole audience.
+    #
+    # ⚠️ WHAT DID NOT CHANGE, and must not: every number is still read from the scorecard's own
+    # aggregate, nothing is hand-authored, and the denylist still runs over the result. Simplifying
+    # the PROSE is safe; substituting a friendlier NUMBER would not be.
+    #
+    # ⭐ THE COMPARISON IS SIGN-AWARE. The old wording ("is X, against ADP's Y") stayed technically
+    # true if we ever trailed, because it asserted no direction — but the plain-English rewrite reads
+    # as a claim, so a negative delta MUST change the sentence rather than quietly contradict it.
+    # The size adjective is likewise derived from the measured gap, never asserted: at +0.022 today
+    # "narrow" is the honest word, and it stops being applied on its own if the gap ever grows.
+    us, them = agg["us_rho_pooled"], agg["system_rho_pooled"]
+    gap = agg["delta_rho_pooled"]
+    scale = (
+        "on a scale where 1.000 would be a perfect ranking and 0.000 would be a random one"
+    )
+    if gap > 0:
+        size = "narrow" if gap < 0.05 else "clear" if gap < 0.15 else "wide"
+        verdict = (
+            f"our order came out at {us:.3f} and the market's preseason ADP at {them:.3f} — {scale}. "
+            f"So we finished ahead, by a {size} margin."
+        )
+    elif gap < 0:
+        verdict = (
+            f"our order came out at {us:.3f} and the market's preseason ADP at {them:.3f} — {scale}. "
+            f"So the market's order held up better than ours over this stretch."
+        )
+    else:
+        verdict = (
+            f"our order and the market's preseason ADP both came out at {us:.3f} — {scale}. "
+            f"So the two were level over this stretch."
+        )
+
     parts = [
-        f"On average across {agg['n_seasons']} past seasons ({span}), our within-position ordering "
-        f"correlation vs realized outcomes is {agg['us_rho_pooled']:.3f}, against ADP's "
-        f"{agg['system_rho_pooled']:.3f} (Δρ {agg['delta_rho_pooled']:+.3f})."
+        f"Before each of the last {agg['n_seasons']} seasons ({span}) we ranked every player against "
+        f"the others at his position. Judged on how those seasons actually finished, "
+        f"{verdict}"
     ]
     if agg.get("disagreement_us") is not None and agg.get("disagreement_system") is not None:
         parts.append(
-            f"The margin is strongest in our highest-conviction disagreements with ADP: "
-            f"{agg['disagreement_us']:.3f} vs ADP's {agg['disagreement_system']:.3f} on those players."
+            f"The difference is largest on the players we disagreed with the market about most: "
+            f"there our order came out at {agg['disagreement_us']:.3f} against ADP's "
+            f"{agg['disagreement_system']:.3f}."
         )
     parts.append(
-        "This is a multi-season average, not a promise for any single position or season — see "
-        "the per-season, per-position detail below."
+        "These are averages across several seasons, not a promise about any single season or "
+        "position — the year-by-year and position-by-position detail is below."
     )
     headline = " ".join(parts)
     lowered = headline.lower()
