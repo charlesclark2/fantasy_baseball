@@ -216,12 +216,33 @@ Apply this authorizer to all routes except:
 - `GET /fantasy/nfl/track-record/manifest` (NF3.2 public receipts manifest — added 2026-08-02)
 - `GET /fantasy/nfl/track-record/{season}` (NF3.2 public receipts per-season data — added 2026-08-02)
 
-⚠️ **This authorizer is applied per explicit ROUTE, not globally on a catch-all** — `GET /health`
-itself has no explicit route in API Gateway (`aws apigatewayv2 get-routes` returns `[]` for it), so
-its exemption works some other way (likely a `$default`/proxy+ catch-all with `AuthorizationType:
-NONE`, with authorization instead enforced per-route for protected paths — or vice versa; never
-fully confirmed, since the `baseball-access-user` CLI profile lacks `apigateway:GET`). What IS
-confirmed: HTTP API route matching is most-specific-wins, so adding an **explicit route for a
+✅ **ROUTE INVENTORY — CONFIRMED 2026-08-05** (`aws apigatewayv2 get-routes`, run with the
+`AdministratorAccess-769392325318` SSO profile; the everyday `baseball-access-user` profile is denied
+`apigateway:*`, which is why this went unverified for so long). The nine routes that exist:
+
+```
+ANY  /{proxy+}                            ← the catch-all: everything not listed below
+OPTIONS /{proxy+}                         ← CORS preflight (must stay unauthenticated —
+                                             a browser preflight cannot carry a bearer token)
+ANY  /health
+GET  /picks/featured
+GET  /blog/posts
+GET  /blog/posts/{id}
+POST /stripe/webhook
+GET  /fantasy/nfl/track-record/manifest
+GET  /fantasy/nfl/track-record/{season}
+```
+
+⇒ **the model is: the catch-all carries the authorizer, and an explicit route EXEMPTS a path from
+it.** Every explicit route above is a deliberate public surface. This CORRECTS the paragraph that
+previously stood here, which claimed `GET /health` had no explicit route and called the mechanism
+"never fully confirmed" — `ANY /health` does exist, and the inference was backwards.
+
+⚠️ Re-read the AuthorizationType per route before relying on this
+(`--query 'Items[].{Route:RouteKey,Auth:AuthorizationType}'`); the route LIST is confirmed, and a
+route's auth type is the thing that actually gates it.
+
+What was already confirmed, and still holds: HTTP API route matching is most-specific-wins, so adding an **explicit route for a
 specific path with `--authorization-type NONE`** reliably exempts that exact path regardless of
 whatever the catch-all does. That's the mechanism used for the two track-record routes above —
 mirror it (`aws apigatewayv2 create-route --route-key "GET /your/new/public/path" --target
@@ -261,6 +282,30 @@ gets **no upstream token validation**, so the Bearer token becomes attacker-cont
 route returns 401. `app/backend/services/jwt_verify.py` is what makes entitlement on such a route
 trustworthy (real RS256 JWKS verification, fails closed); the unverified
 `dependencies._decode_jwt_payload` path is valid ONLY behind the authorizer.
+
+⚠️ **THE FLIP ALSO MOVES WHERE A *LEGITIMATE* SUBSCRIBER IS AUTHENTICATED**, which is easy to miss
+because nothing about it is visible in the FastAPI source. Today the gateway validates a subscriber's
+token and Mangum hands the Lambda a populated `requestContext.authorizer`. On a NONE route that
+context is ABSENT, so `resolve_entitlement` falls through to verifying the token itself — i.e. after
+the flip, **every paying subscriber's access to these three endpoints depends on the Lambda reaching
+the Cognito JWKS endpoint**. Two preconditions to confirm before flipping:
+
+```bash
+# 1. The Lambda must have public egress (NOT VPC-attached) to reach cognito-idp.
+#    Expect empty SubnetIds/SecurityGroupIds.
+aws lambda get-function-configuration --function-name credence-prod-lambda-api \
+  --region us-east-1 --query 'VpcConfig'
+
+# 2. OPTIONS preflight must stay reachable. `OPTIONS /{proxy+}` already covers the new paths and
+#    must remain --authorization-type NONE — a browser preflight cannot carry a bearer token, so a
+#    JWT-gated OPTIONS breaks every cross-origin call with an opaque CORS error, not a 401.
+```
+
+It fails CLOSED: if JWKS is unreachable, a real subscriber degrades to the LOCKED view rather than
+erroring. That is the safe direction and it is visible (they get the CTA, not a blank page), but it
+means a JWKS outage presents as "my subscription stopped working." JWKS is cached per warm container
+(1h TTL, plus a refetch on an unknown `kid` so a key rotation self-heals), so the cost is one HTTPS
+fetch per cold start with a 3s timeout.
 
 ### 🚦 E9.56 — API Gateway throttling (rate limiting / anti-bulk-scrape) — NOT YET APPLIED
 
