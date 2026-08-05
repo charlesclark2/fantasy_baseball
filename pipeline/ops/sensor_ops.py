@@ -366,45 +366,29 @@ def lineup_dbt_feature_rebuild(context: OpExecutionContext) -> None:
     preceding lineup_intraday_s3_feature_rebuild op regenerates that parquet so this copy
     picks up an intraday lineup change (else the post_lineup re-score is daily-frozen).
 
-    E11.24 target 6 (2026-07-31) — the two UMPIRE models are dropped from the selector when the
-    HP-umpire assignment has not changed since the last rebuild. They were the single largest
-    remaining COMPUTE_WH waker (111 provisioning waits / 8 days, ~14/day) while the assignment is
-    written exactly ONCE per slate, so nearly every intraday rebuild re-copied a byte-identical
-    external table. Gated default-OFF (E11_24_UMPIRE_REBUILD_GATE) and FAIL-OPEN — see
-    betting_ml/monitoring/umpire_rebuild_gate.py for why the key is "assignment newer than the
-    last rebuild" and not "already rebuilt today" (the latter would entrench the separate
-    late-assignment defect). Nothing else in the selector is ever gated."""
-    from betting_ml.monitoring.umpire_rebuild_gate import (
-        UMPIRE_MODELS,
-        umpire_gate_on,
-        umpire_rebuild_decision,
-        write_rebuild_marker,
-    )
+    E11.24 target 6 (2026-08-05) — the four ext-table-COPY models in this selector
+    (stg_statsapi_umpire_game_log, feature_pregame_umpire_features,
+    feature_pregame_starter_features, feature_pregame_lineup_features) are now
+    `materialized='view'` on the Snowflake target, so this `dbt run` issues
+    `create or replace view` for them — metadata-only DDL that NEVER resumes COMPUTE_WH.
+    That is what removes the umpire/lineup/starter chain's provisioning waits (the largest
+    single band in the E11.24 census), for every caller at once.
 
-    umpire_models = list(UMPIRE_MODELS)
-    watermark = None
-    if umpire_gate_on():
-        from datetime import date as _date
-
-        day = _date.fromisoformat(_today())
-        try:
-            should, watermark, reason = umpire_rebuild_decision(day)
-        except Exception as exc:  # noqa: BLE001 — the gate must never break the re-score
-            should, watermark, reason = True, None, f"gate raised ({exc}) — failing OPEN"
-        if should:
-            context.log.info(f"[E11.24 umpire-gate] REBUILDING: {reason}")
-        else:
-            umpire_models = []
-            watermark = None  # nothing was rebuilt ⇒ do not advance the marker
-            context.log.info(f"[E11.24 umpire-gate] {reason}")
-
+    ⛔ It also SUPERSEDES and REMOVES the E11.24-6a conditional-skip gate
+    (`E11_24_UMPIRE_REBUILD_GATE` + betting_ml/monitoring/umpire_rebuild_gate.py). 6a dropped the
+    two umpire models from this selector when the HP-umpire assignment had not changed. It was
+    verified INERT on the 2026-08-04 armed slate — it fired 0 of 3 real opportunities because its
+    S3 marker object had never existed, so every tick took the fail-OPEN path. Rather than repair
+    the marker, the view flip makes the skip pointless: skipping a metadata-only DDL saves nothing,
+    and the gate's flag/marker/S3 state/soak all disappear with it. Nothing here is gated now."""
     _run_dbt(context, [
         "run",
         "--select",
         # Story 30.5 — recompute the ump z-scores from the just-ingested HP
         # assignment (lineup_ingest_umpires) so feature_pregame_game_features
         # picks up today's umpire. dbt resolves order via refs.
-        *umpire_models,
+        "stg_statsapi_umpire_game_log",
+        "feature_pregame_umpire_features",
         # Story 30.6 LEVER 2 (2026-06-14) — rebuild starter_features on the
         # post-lineup path too, NOT just in the morning daily job. The prior
         # lineup_dbt_staging_rebuild step just refreshed stg_statsapi_probable_-
@@ -433,22 +417,6 @@ def lineup_dbt_feature_rebuild(context: OpExecutionContext) -> None:
         "feature_pregame_game_features",
         "--target", "baseball_betting_and_fantasy",
     ])
-
-    # Advance the marker only AFTER the rebuild succeeded, and only to the watermark that was read
-    # BEFORE it ran — an assignment landing mid-rebuild then still triggers one more rebuild rather
-    # than being swallowed. ALERT-loud-but-continue: a marker-write failure just means the next tick
-    # rebuilds again (the pre-gate behaviour), so it must never fail an op that already succeeded.
-    if umpire_models and watermark is not None:
-        try:
-            from datetime import date as _date
-
-            write_rebuild_marker(_date.fromisoformat(_today()), watermark)
-        except Exception as exc:  # noqa: BLE001
-            context.log.warning(
-                f"[E11.24 umpire-gate] marker write FAILED ({exc}) — the gate stays inert and the "
-                f"next tick will rebuild the umpire models again (pre-gate behaviour, not a "
-                f"correctness problem). Persistent failures mean the saving is not being realised."
-            )
 
 
 @op(
