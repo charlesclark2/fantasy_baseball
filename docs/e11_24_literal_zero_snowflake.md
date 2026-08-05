@@ -1656,14 +1656,14 @@ on the waves themselves. A run showing `REBUILDING: … failing OPEN` is a gate 
 
 ---
 
-# THE 08-04 ARMED-SLATE READ (2026-08-05) — ✅ FU-3 CONFIRMED · ⛔ 6a NEVER EXECUTED (cause OPEN)
+# THE 08-04 SLATE READ (2026-08-05) — ✅ FU-3 CLOSES · ⛔ 6a WAS NEVER ARMED (FU-1, third recurrence)
 
 **VERDICT: FU-3 PASSES (all four legs) · 6a does NOT close · target-6's *measurement* blocker is
 CLEARED.** 08-04 is the first slate that satisfies GATE 0 while armed, and it is **informative**
 — unlike 08-03 it gave the gate three clean opportunities to fire. It took **none of them**, and
-leg (a) settles *what*: **the gate never executed at all** — zero gate log lines over 9 runs, so
-6a's logic has still never run once in production. **Why** is OPEN: the three obvious causes (IAM,
-flag off, code not on `main`) are each refuted by measurement — see the root-cause block below.
+leg (a) settles it: **6a was never armed on 08-04.** The gated op ran and succeeded on all 9
+runs, but with the gate flag falsy — so 6a's logic has still never executed once in production,
+and 08-04 tested **FU-3 only**, which it passed decisively.
 
 ⚠️ **The slate was NOT "6a armed".** Every prior entry describing 08-02/08-03/08-04 as armed is
 describing an intent, not a state. The only thing 08-04 actually tested is **FU-3** — which it
@@ -1745,72 +1745,69 @@ Corroborated by the **never-gated control**: a skip drops the umpire CTAS while 
 remains, so `umpire_builds < lineup_builds` is the skip signature. On 08-04 they are **equal
 (9 = 9)** — the same test that read zero on every prior day.
 
-**ESTABLISHED FACT — THE GATE NEVER EXECUTED. Root cause ⛔ STILL OPEN (three hypotheses
-refuted).**
+**ROOT CAUSE (SETTLED 2026-08-05) — THE FLAG WAS FALSY IN THE CONTAINER THAT RAN THE SLATE. This
+is the FU-1 trap for the THIRD time.**
 
-The event log for all 9 runs contains **zero `[E11.24 umpire-gate]` lines**. The gate block at
-`sensor_ops.py:386` logs on *both* branches, so its total silence means the block was never
-entered — no decision, no marker read, no marker write. That much is certain and is what the
-verdict rests on.
+Three converging facts, none of which is inferential:
 
-⚠️ **The absent marker is a CONSEQUENCE, not the cause.** Three successive hypotheses have now
-been **refuted by measurement**, each of which looked strong before it was tested:
+1. **The gated op ran and SUCCEEDED on all 9 runs** (`lineup_dbt_feature_rebuild =
+   StepEventStatus.SUCCESS`, 9 steps, run status SUCCESS).
+2. **The umpire models were still in its dbt selector** — the step log reads
+   `[dbt-runner] started run … dbtf run --select stg_statsapi_umpire_game_log …`. An ARMED gate
+   removes them; they are present, so nothing was dropped.
+3. **Zero `[E11.24 umpire-gate]` lines**, and the block logs on *both* branches ⇒
+   `umpire_gate_on()` returned False.
+
+⇒ op ran, models not dropped, no gate line: the flag was **not `1`** in that process.
+
+**And today's `=1` readings are not evidence against this — they describe a different process.**
+`docker inspect .State.StartedAt` on `dagster-codeloc` returns **`2026-08-05T14:21:11Z`**: the
+container was recreated *today*, hours after the slate finished at 23:15Z on 08-04. So
+`.Config.Env`, `/proc/1/environ` and `exec printenv` all correctly report `1` **for the container
+running now**, and say nothing whatsoever about the one that ran 08-04. The flag became
+*effective* at that 14:21:11Z recreation, not before.
+
+⭐ **THE DURABLE LESSON — FU-1, third recurrence, and each time in a new costume.** FU-1: a flag
+flip does nothing until the executing container is **recreated**. This adds the corollary that
+caught two sessions in a row: **no `exec`-based read can establish what a PAST job saw.**
+`docker compose exec` re-resolves the service's `environment`/`env_file` from the CURRENT config,
+so a fresh exec can report a value PID 1 never had — and even `/proc/1/environ` only describes
+the container *currently* running, which may not be the one under audit. **The only
+restart-proof evidence of what a past run saw is the Postgres EVENT LOG** — which is exactly what
+settled this, and exactly what BOX_OPERATIONS already says for the same reason. ⇒ **an
+"is the flag armed?" claim must be dated against `.State.StartedAt` and the run's own timestamp,
+or it is unfalsifiable.**
+
+⚠️ **Three hypotheses were refuted by measurement before this one landed**, each of which looked
+strong beforehand. Recorded because the sequence is the transferable part:
 
 | # | hypothesis | refuted by |
 |---|---|---|
 | 1 | `write_rebuild_marker` denied — first-ever write to `baseball/lakehouse_state/`, the **E8.5 IAM class** | in-container `put_object` → **`PUT OK`** |
-| 2 | the flag was **OFF** in the executing container | `.Config.Env`, `/proc/1/environ` and the box `.env` **all read `=1`** |
-| 3 | the gate code sits on `dev` but was **never promoted to `main`** (FU-3's own Blocker-1 shape) | `git show origin/main:pipeline/ops/sensor_ops.py` **carries the full gate block**; the module is on `main` too |
+| 2 | the flag was never set at all | box `.env` line 131 reads `=1` |
+| 3 | the gate code sits on `dev`, never promoted to `main` (FU-3's own Blocker-1 shape) | `origin/main` carries the full gate block **and** the module |
 
-And the image is demonstrably current: **FU-3's markers came from the same op graph in the same
-runs**, so this is not a stale-deploy question.
+The absent marker is a **consequence** of the gate never running, not a cause. And the image was
+never in question: **FU-3's markers came from the same op graph in the same runs**, which
+eliminated the entire image/digest/deploy family in one read.
 
-**What remains** (⇒ FU-4's first task, not a guess to be recorded here):
-
-* **(A) `lineup_dbt_feature_rebuild` never executed in those runs** — the run failed or
-  short-circuited at an earlier step (`lineup_dbt_staging_rebuild` / the mirror-tier
-  `lineup_intraday_s3_feature_rebuild`), so the gated op was skipped while the umpire CTAS
-  arrived from a *different* selector upstream. This would explain silence and CTAS together,
-  and is the leading candidate on shape alone.
-* **(B) the container was recreated after the slate**, so today's `=1` describes a different
-  process than the one that ran at 19:14–23:15Z. Settled by one `.State.StartedAt` read against
-  the prior session's recorded `06:04:38Z`.
-
-⭐ **THE DURABLE LESSON, and it survives whichever way (A)/(B) lands: A ZERO-EFFECT LEVER MUST BE
-PROVEN TO HAVE *EXECUTED* BEFORE ITS FAILURE IS DIAGNOSED.** Every laptop instrument
-(write-instants, waits-per-fire, the never-gated lineup-CTAS control) correctly measured 6a at
-zero, and *none* of them could distinguish "the gate ran and decided wrongly" from "the gate
-never ran" — a distinction that moves the fix from an S3/IAM investigation to somewhere else
-entirely. Three plausible root causes were refuted in sequence precisely because each was tested
-rather than reasoned about. This is MH2's `INACTIVE` state and NF1.7 (a)'s "a check that did not
-run is not a pass", applied to a **lever** instead of a guard.
-
-⭐ **Corollary worth keeping — an op that carries BOTH a code-change and a flag-change is
-self-diagnosing.** FU-3 (code, no flag) logged; 6a (flag-gated) did not. Their divergence inside
-one op instantly eliminated the whole image/digest/deploy family, which is what made hypotheses
-1–3 cheap to test and refute. ⭐ And a **presence-only `env.required` entry is not a state
-guarantee** — it proves the key exists, never its value. That did not bite here (the value is
-`1`), but `BOX_OPERATIONS.md §10` still carries the intended state as *"both `0` today; flip to
-`1` in a QUIET WINDOW"* while the same row appends "✅ verified `=1`" — a live
-documented-≠-actual contradiction that FU-4 must reconcile regardless of the root cause.
-
-⭐ **Why this finding needed FU-3 to become visible.** Pre-FU-3, fires-per-bump was ~1.00 —
-every tick re-stamped the mirror, so *no* invocation had an unchanged watermark and a healthy
-gate and a broken gate were **observationally identical**. FU-3 lifted 08-04 to
-**9/6 = 1.50**, creating the first real headroom — and the gate took none of it. That is the
-"a mechanism that cannot act is a finding" rule applied to a **gate**: 6a was never measurable
-until FU-3 landed, exactly as this doc predicted, and the first measurable slate says it is
-broken.
+⭐ **Corollary worth keeping — an op carrying BOTH a code-change and a flag-change is
+self-diagnosing.** FU-3 (code, no flag) logged; 6a (flag-gated) did not. Their divergence
+*inside one op* localised the fault to the flag alone and made hypotheses 1–3 cheap to kill.
+⭐ And: **a presence-only `env.required` entry is not a state guarantee** — it proves the key
+exists, never that it was effective. `BOX_OPERATIONS.md §10` still carries the intended state as
+*"both `0` today; flip to `1` in a QUIET WINDOW"* while the same row appends "✅ verified `=1`";
+that contradiction is what let an unarmed slate be reported as armed, and FU-4 must reconcile it.
 
 ### The three candidate causes, and how they resolved
 
 | # | candidate | verdict |
 |---|---|---|
 | 1 | `write_rebuild_marker` raises — an IAM denial on the first-ever write to that prefix (E8.5 class) | ⛔ **REFUTED** — in-container `put_object` → `PUT OK` |
-| 2 | the flag is OFF in the executing container | ⛔ **REFUTED** — `.Config.Env` / `/proc/1/environ` / box `.env` all `=1` |
+| 2 | the flag was never set at all | ⛔ **REFUTED** — box `.env` reads `=1` |
 | 3 | the gate code never reached `main` (FU-3's own Blocker-1 shape) | ⛔ **REFUTED** — `origin/main` carries the full block |
-| A | `lineup_dbt_feature_rebuild` never ran (earlier step failed/short-circuited) | ⏳ **OPEN — leading** |
-| B | the container was recreated after the slate, so today's `=1` is a different process | ⏳ **OPEN** — one `.State.StartedAt` read |
+| A | `lineup_dbt_feature_rebuild` never ran (earlier step failed/short-circuited) | ⛔ **REFUTED** — SUCCESS on all 9 runs, umpire models present in its selector |
+| **B** | **the container was recreated after the slate, so today's `=1` is a different process** | ✅ **CONFIRMED** — `.State.StartedAt = 2026-08-05T14:21:11Z` |
 
 ⇒ **6a does not close.** Its logic has never executed once in production, so nothing about its
 *correctness* has been tested; the next slate on which it actually runs is its first real trial.
@@ -1849,17 +1846,29 @@ chronic pattern (07-31 0.800 / 08-02 0.822), not a gate effect. Per the stated t
 | item | verdict |
 |---|---|
 | **FU-3** | ✅ **CLOSES — all four legs.** Leg (b) put write-instants on the wave floor (−27%, nothing swallowed) and leg (a) then showed the mechanism directly: 9 runs, 9 `[FU-3]` lines, **6 writes and 3 full skips**, matching leg (b) tick-for-tick. |
-| **6a** | ⛔ **DOES NOT CLOSE, and has never executed.** Not "unmeasurable" (08-03), not "inert by design" (the old ~1.00-ratio reading), and **not** the marker/IAM defect this section first recorded. Root cause **OPEN** — IAM, flag-off and code-not-on-`main` are all refuted by measurement. Correctness remains **entirely untested in production**. |
+| **6a** | ⛔ **DOES NOT CLOSE — it was never armed.** Not "unmeasurable" (08-03), not "inert by design" (the old ~1.00-ratio reading), and **not** the marker/IAM defect first recorded here. The flag was falsy in the container that ran 08-04; it became effective only at the **2026-08-05T14:21:11Z** recreation. Correctness remains **entirely untested in production** — no code fix is owed, only a valid read. |
 | **target-6** | ⭐ **The measurement blocker is CLEARED — recommend UNBLOCK.** target-6 was held only so 6a/FU-3 attribution would not be confounded. That attribution is now settled and unambiguous: **FU-3 = −27% write-instants; 6a = exactly 0, because it never ran**. There is nothing further to soak. Under the operator's 2026-08-03 SHIP-FORWARD reframe (per-lever measurement is no longer a gate; the end state is the proof), target-6 should proceed in its own fresh session. **PM call, flagged not taken.** |
-| **FU-4 (new)** | Find why the gate block never ran, given flag `=1`, code on `main`, and a current image. Start with the per-run STEP outcomes for the 9 runs (did `lineup_dbt_feature_rebuild` execute?) plus `.State.StartedAt` — candidates (A)/(B) above. Then re-run leg (a) on the next GATE-0-clean slate; with FU-3 proven, a working gate should show `SKIPPING≈3` / `REBUILDING≈6` on a 15-game slate. ⚠️ Also **reconcile `BOX_OPERATIONS.md §10`**, whose intended-state column and its own appended "verified `=1`" note contradict each other. |
+| **FU-4 (new)** | **Re-run leg (a) only — no code change is owed.** The gate has been genuinely armed since `2026-08-05T14:21:11Z`. ⚠️ Restrict the read to runs created AFTER that instant (FU-1: a recreation does not retroactively arm already-run jobs). With FU-3 proven, a working gate should show `SKIPPING≈3` / `REBUILDING≈6` on a 15-game slate, and the **marker object should appear in S3 for the first time** — a laptop-only positive signal needing no box access. ⚠️ Also **reconcile `BOX_OPERATIONS.md §10`**, whose intended-state column and its own appended "verified `=1`" note contradict each other. |
 
 ⚠️ 6a is **correct-but-inert**, never incorrect: with the gate off, the umpire block has always
 rebuilt, so there is **no serving debt** to unwind — leg (d) is clean, and `best_alpha=0` means
 nothing rode on any of it.
 
-⭐ See the root-cause block above for the durable lesson: **a zero-effect lever must be proven to
-have EXECUTED before its failure is diagnosed** — three plausible root causes were refuted in
-sequence here, each only because it was tested rather than reasoned about.
+⭐ See the root-cause block above for the durable lesson (FU-1's third recurrence: no `exec`-based
+read can establish what a PAST run saw — only the Postgres event log can). Its companion:
+**a zero-effect lever must be proven to have EXECUTED before its failure is diagnosed.** Every
+laptop instrument correctly measured 6a at zero and not one could tell "ran and decided wrongly"
+from "never ran" — four successive root causes were proposed and three refuted, each only because
+it was tested rather than reasoned about.
+
+### ⏭️ The next read — 2026-08-05 is GATE-0 clean AND genuinely armed
+
+Measured from `stg_statsapi_games`: **15 games, earliest first pitch 18:10 UTC** (four in
+18:10–19:10, nine in 22:35–23:40, two at 01:40Z on 08-06) — first pitches back inside the 14–23
+band, precisely the slate shape this story said to wait for, and a far better window than 08-04's
+uniformly-late 22:35. The 14:21:11Z recreation precedes the day's first umpire assignment (19:11Z
+on 08-04), so the whole measurable window runs armed. ⚠️ Still restrict the read to runs created
+after 14:21:11Z and mark earlier ticks UNARMED.
 
 ## ✅ Leg (a) — RUN 2026-08-05 (BOX, operator; `baseball-access-user` cannot `SendCommand`)
 
