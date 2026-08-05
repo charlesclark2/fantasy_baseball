@@ -16,6 +16,7 @@ import { Picker } from "@/components/ui/picker"
 import type { LeagueConfigMeta, Manifest } from "@/lib/draft-optimizer"
 import { marketLeaningPositions } from "@/lib/fantasy"
 import type { ProjectedPlayer } from "@/lib/fantasy"
+import { useTrackRecordManifest } from "@/lib/fantasy-track-record"
 
 export const POS_COLORS: Record<string, string> = {
   QB: "text-rose-400 bg-rose-500/10 border-rose-500/30",
@@ -170,26 +171,63 @@ export function UpgradeBanner({
   season?: number | null
   upgrade?: { reason?: string; message?: string; ctaHref?: string } | null
 }) {
+  // E9.56b — LEAD WITH THE RECEIPTS, not with the ask.
+  //
+  // The locked view is, by necessity, the MARKET's board with our numbers removed: E9.56's
+  // anti-scrape rule re-orders locked rows onto ADP precisely so the array index cannot reconstruct
+  // our ranking. So the page a free visitor lands on cannot argue for itself — on its own it reads
+  // as an ADP clone with padlocks, which is a weak thing to ask money for.
+  //
+  // What CAN argue for it is already public and already measured: the NF3.2 track record (six
+  // seasons of our projection vs that season's preseason ADP vs the realized outcome). Rendering
+  // its headline VERBATIM keeps this honest — the claim is computed by
+  // `export_track_record_json.build_headline` from the scorecard's own numbers, so it cannot drift
+  // into marketing copy, and it respects the NF-D3 claim-scope rule at the top of this file (this
+  // is a projection product; it never asserts a win rate or an edge).
+  //
+  // Degrades cleanly: the manifest is a public endpoint, but if it is slow or fails we simply show
+  // the ask without the evidence rather than blocking the CTA.
+  const { data: receipts } = useTrackRecordManifest()
+  const seasonCount = receipts?.seasons?.length ?? 0
+
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/[0.07] px-4 py-3">
-      <div className="flex items-start gap-2.5">
-        <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-          <rect x="4" y="11" width="16" height="9" rx="2" />
-          <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-        </svg>
-        <p className="text-sm text-amber-200/90">
-          {upgrade?.message ?? `Subscribe to unlock the ${season ?? ""} projections.`}{" "}
-          <span className="text-amber-200/60">
-            Past seasons stay free — see the track record for how these projections have actually done.
-          </span>
-        </p>
+    <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/[0.07] px-4 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-2.5">
+          <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+            <rect x="4" y="11" width="16" height="9" rx="2" />
+            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+          </svg>
+          <p className="text-sm text-amber-200/90">
+            {upgrade?.message ?? `Subscribe to unlock the ${season ?? ""} projections.`}{" "}
+            <span className="text-amber-200/60">
+              {seasonCount > 0
+                ? `Every past season stays free — including how these projections actually did across ${seasonCount} of them.`
+                : "Past seasons stay free, including how these projections have actually done."}
+            </span>
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <a
+            href="/fantasy/track-record"
+            className="rounded-md border border-amber-500/40 px-3 py-1.5 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-500/10"
+          >
+            See the track record
+          </a>
+          <a
+            href={upgrade?.ctaHref ?? "/pricing"}
+            className="rounded-md bg-amber-500 px-3 py-1.5 text-sm font-semibold text-black transition-colors hover:bg-amber-400"
+          >
+            Subscribe to unlock
+          </a>
+        </div>
       </div>
-      <a
-        href={upgrade?.ctaHref ?? "/pricing"}
-        className="shrink-0 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-semibold text-black transition-colors hover:bg-amber-400"
-      >
-        Subscribe to unlock
-      </a>
+
+      {receipts?.headline && (
+        <p className="mt-2.5 border-t border-amber-500/20 pt-2.5 text-[12px] leading-relaxed text-amber-200/70">
+          {receipts.headline}
+        </p>
+      )}
     </div>
   )
 }

@@ -12,6 +12,7 @@ import { useId, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { Search } from "lucide-react"
 import { useFantasyProjections, FANTASY_SEASON } from "@/lib/fantasy-queries"
+import { trimLockedTail } from "@/lib/fantasy"
 import {
   ALL_ROWS,
   ConfidenceBadge,
@@ -58,18 +59,31 @@ export function ProjectionsTable() {
   const [pageSize, setPageSize] = useState<number>(50)
   const scoringSelectId = useId()
 
-  const players = data?.players ?? []
+  const locked = data?.locked === true
+  // E9.56b — on a LOCKED view, drop the undrafted tail: 632 of 858 rows carry no ADP and no value,
+  // so they would render as a long alphabetical list of names and padlocks. The hidden count is
+  // surfaced below the table, never silently swallowed.
+  const { rows: players, hiddenCount } = useMemo(
+    () => trimLockedTail(data?.players ?? []),
+    [data],
+  )
 
   // Rank is assigned on the position-filtered, scoring-sorted board and then CARRIED, so searching
   // (or filtering to rookies) narrows the rows WITHOUT renumbering them. A search that renumbers
   // hides the one thing you searched for — where the player actually sits on the board.
   const ranked = useMemo(() => {
-    return players
-      .filter((p) => (pos === "All" ? true : p.pos === pos))
-      .slice()
-      .sort((a, b) => (b[scoring] ?? -Infinity) - (a[scoring] ?? -Infinity))
-      .map((p, i) => ({ player: p, rank: i + 1 }))
-  }, [players, pos, scoring])
+    const scoped = players.filter((p) => (pos === "All" ? true : p.pos === pos))
+    // ⚠️ E9.56b — DO NOT sort a locked view by a scoring column. On a locked row `fpPpr`/`fpHalf`/
+    // `fpStd` are ABSENT, so the comparator below evaluates `-Infinity - -Infinity` = **NaN** on
+    // every pair. `Array.sort` happens to treat a NaN comparator as 0 and leaves the order intact,
+    // so this looks harmless — but it is undefined-behaviour-by-luck, and the order it accidentally
+    // preserves is the one that matters: the server sorted locked rows onto market ADP precisely so
+    // the array index cannot reconstruct our ranking (E9.56). Keep the server's order EXPLICITLY.
+    const ordered = locked
+      ? scoped
+      : scoped.slice().sort((a, b) => (b[scoring] ?? -Infinity) - (a[scoring] ?? -Infinity))
+    return ordered.map((p, i) => ({ player: p, rank: i + 1 }))
+  }, [players, pos, scoring, locked])
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -304,6 +318,20 @@ export function ProjectionsTable() {
               onPageSize={setPageSize}
             />
           </div>
+
+          {/* E9.56b — say what was trimmed. `trimLockedTail` hides locked rows with no market ADP
+              (~74% of the payload: names with a padlock and nothing else). Stating the count keeps
+              the truncation honest AND makes it a reason to subscribe rather than a silent gap. */}
+          {hiddenCount > 0 && (
+            <p className="mt-3 text-center text-xs text-gray-500">
+              {hiddenCount.toLocaleString()} more players — those undrafted in the market sample —
+              are projected and included with a{" "}
+              <a href="/pricing" className="text-amber-400 hover:text-amber-300 hover:underline">
+                subscription
+              </a>
+              .
+            </p>
+          )}
 
           <div className="mt-6">
             <UncertaintyNote>

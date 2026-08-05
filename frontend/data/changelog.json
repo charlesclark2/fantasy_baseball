@@ -21,6 +21,10 @@
       {
         "tag": "improved",
         "text": "Past-season fantasy results stay free, and the current season is now locked at the DATA layer rather than only in the interface. If you aren't subscribed, a 2026 projection, rank or range no longer just disappears \u2014 the player row is still there, with a lock on each withheld number and a link to subscribe, so you can see exactly what a subscription adds. The important half is invisible: the server never sends a 2026 number it hasn't verified you're entitled to, so those values aren't sitting in the page for anyone who reads the network traffic. Subscribers see no change at all."
+      },
+      {
+        "tag": "new",
+        "text": "The 2026 fantasy Rankings and Projections are now open to everyone, without an account. You'll see every drafted player, his team, bye and market ADP, with our projection, ranking and range shown as locked \u2014 each one a link to subscribe rather than a blank cell, so you can see exactly what a subscription adds before paying for it. Past seasons remain fully free, including the track record of how these projections have actually done against preseason ADP over six seasons, which is now linked from the top of both pages. Two things worth being straight about: the free view is ordered by market ADP, not by our ranking \u2014 our order is part of what you'd be subscribing for, so it isn't published \u2014 and players who went undrafted in the market sample are left off the free page rather than listed with nothing beside them; the count is shown so you know what's missing. Subscribers see no change."
       }
     ]
   },

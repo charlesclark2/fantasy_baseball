@@ -155,8 +155,42 @@ def _rows(body):
     return []
 
 
+# Manifest keys that exist ONLY to label the entitled feature-attribution panel. With `contrib`
+# locked there is nothing for them to describe, so a locked manifest must not ship them (E9.56
+# payload minimization — don't send what isn't rendered).
+_MANIFEST_ENTITLED_ONLY = ["featureLegend", "featureContributionsMeta"]
+
+
+def _assert_locked_manifest(path: str, body) -> None:
+    """E9.56b — the manifest carries no player ROWS, so the row scan below reported "nothing to
+    check" for it and its redaction went unverified by this script (it was only ever confirmed by
+    hand, 2026-08-05). A check that cannot fail is not a check — assert on it directly."""
+    if not isinstance(body, dict):
+        record(False, f"{path} — manifest is not an object", type(body).__name__)
+        return
+    record(
+        body.get("locked") is True and body.get("entitled") is False,
+        f"{path} — manifest declares itself LOCKED",
+        f"locked={body.get('locked')} entitled={body.get('entitled')}",
+    )
+    leaked = [k for k in _MANIFEST_ENTITLED_ONLY if k in body]
+    record(
+        not leaked,
+        f"{path} — entitled-only metadata is stripped",
+        f"leaked: {leaked}" if leaked else "featureLegend + featureContributionsMeta absent",
+    )
+    record(
+        bool(body.get("upgrade")) and bool(body.get("positions")),
+        f"{path} — still carries the page shell + the upgrade CTA",
+        "a locked manifest must let the free page render its frame and its CTA",
+    )
+
+
 def _assert_locked_payload(path: str, body) -> None:
     """The core no-leak assertions for a publicly-reachable gated-season payload."""
+    if "/manifest" in path:
+        _assert_locked_manifest(path, body)
+        return
     rows = _rows(body)
     if not rows:
         record(None, f"{path} — publicly reachable but carries no player rows", "nothing to check")
