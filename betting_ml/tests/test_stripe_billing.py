@@ -269,6 +269,13 @@ def test_status_tier_mapping(store, cog):
 # `[...]` via `__contains__`/`__getitem__`, no `.get()`) so a regression back to `.get()`
 # fails these tests with the same AttributeError it produced live, instead of silently
 # passing. Sibling of the already-documented `construct_event()` StripeObject trap.
+#
+# ⚠️ SECOND LIVE-PROD TRAP, SAME DAY, RIGHT AFTER THE FIRST FIX SHIPPED: a real canceled
+# subscription (Flexible billing mode) came back with `cancel_at_period_end=False` while
+# `cancel_at` (a separate nullable timestamp field) held the real scheduled-cancellation
+# date — confirmed against the Stripe TEST dashboard showing "Active — Cancels <date>"
+# for a subscription the (then-)fixed code still reported as not-scheduled-to-cancel.
+# `test_status_reports_scheduled_cancellation_via_cancel_at` below is the regression guard.
 
 
 class _FakeStripeSub:
@@ -328,6 +335,26 @@ def test_status_active_subscription_has_no_scheduled_cancellation(monkeypatch, s
     )
     st = billing.subscription_status(user_id="s")
     assert st.cancel_at_period_end is False
+
+
+def test_status_reports_scheduled_cancellation_via_cancel_at(monkeypatch, store, cog):
+    """Flexible-billing-mode reality, confirmed live: a subscription can be scheduled to
+    cancel via `cancel_at` alone, with `cancel_at_period_end` genuinely False. The status
+    must still report it as scheduled-to-cancel, and use `cancel_at` as the access-ends-at
+    date (not `current_period_end`, which may differ)."""
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_x")
+    cog.groups["s"] = {"subscriber"}
+    store.link_stripe_customer("s", "cus_s")
+    monkeypatch.setattr(
+        billing.stripe.Subscription,
+        "list",
+        lambda **kw: _FakeSubList(
+            [{"cancel_at_period_end": False, "cancel_at": 1788573034, "current_period_end": 1999999999}]
+        ),
+    )
+    st = billing.subscription_status(user_id="s")
+    assert st.cancel_at_period_end is True
+    assert st.current_period_end == 1788573034  # cancel_at wins over current_period_end
 
 
 def test_status_falls_back_to_the_subscription_item_when_top_level_period_end_is_absent(
