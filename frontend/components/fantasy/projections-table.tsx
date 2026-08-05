@@ -30,6 +30,7 @@ import {
   ProvenanceLine,
   RookieBadge,
   STAT_COLS,
+  SUBSCRIBE_HREF,
   SurfaceHeader,
   UNCERTAINTY_HELP,
   UNCERTAINTY_LABEL,
@@ -294,14 +295,31 @@ export function ProjectionsTable() {
                         {p.adp != null ? num(p.adp) : "—"}
                       </td>
                     )}
+                    {/* 🚨 E9.56c — Confidence and Range basis are MODEL OUTPUT and are stripped from
+                        a locked row, so both fell through to their own honest-absence renderings:
+                        ConfidenceBadge's "—" and the ternary's "—". That silently converts a
+                        WITHHELD value into "we have nothing for this player" — the exact inversion
+                        the `numOrLock` note above this file's lock helpers exists to prevent, just
+                        in the two cells that don't route through it. Every withheld point must
+                        carry a chip (the story's rule), so branch on the row's own marker. */}
                     <td className="px-3 py-2">
-                      <ConfidenceBadge conf={p.conf} />
+                      {p.locked ? (
+                        <LockChip title="Subscribe to unlock the model's confidence tier" />
+                      ) : (
+                        <ConfidenceBadge conf={p.conf} />
+                      )}
                     </td>
                     <td
                       className="px-3 py-2 text-gray-500"
-                      title={p.uncType ? UNCERTAINTY_HELP[p.uncType] : undefined}
+                      title={!p.locked && p.uncType ? UNCERTAINTY_HELP[p.uncType] : undefined}
                     >
-                      {p.uncType ? UNCERTAINTY_LABEL[p.uncType] ?? p.uncType : "—"}
+                      {p.locked ? (
+                        <LockChip title="Subscribe to unlock how this player's range was built" />
+                      ) : p.uncType ? (
+                        UNCERTAINTY_LABEL[p.uncType] ?? p.uncType
+                      ) : (
+                        "—"
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -326,7 +344,7 @@ export function ProjectionsTable() {
             <p className="mt-3 text-center text-xs text-gray-500">
               {hiddenCount.toLocaleString()} more players — those undrafted in the market sample —
               are projected and included with a{" "}
-              <a href="/pricing" className="text-amber-400 hover:text-amber-300 hover:underline">
+              <a href={SUBSCRIBE_HREF} className="text-amber-400 hover:text-amber-300 hover:underline">
                 subscription
               </a>
               .

@@ -46,6 +46,14 @@ const nextConfig = {
       },
     ]
   },
+  // E9.56c — `/pricing` is the URL E9.56's locked CTAs shipped with and the one the deployed API
+  // still returns as `upgrade.ctaHref` until the next `deploy.sh`. The page itself lives at
+  // `/subscribe`. Every in-repo link now points there directly, so this is a BACKSTOP, not the
+  // fix — it covers the API deploy-skew window and any link already handed out. Permanent, because
+  // `/pricing` is also just the URL people will type.
+  async redirects() {
+    return [{ source: "/pricing", destination: "/subscribe", permanent: true }]
+  },
   async rewrites() {
     return [
       {

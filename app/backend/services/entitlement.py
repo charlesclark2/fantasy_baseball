@@ -309,7 +309,15 @@ def entitlement_envelope(locked: bool, locked_fields: list[str] | None = None) -
         out["upgrade"] = {
             "reason": "subscription_required",
             "message": f"Subscribe to unlock the {LOCKED_SEASON} projections.",
-            "ctaHref": "/pricing",
+            # 🚨 E9.56c — WAS "/pricing", A ROUTE THAT HAS NEVER EXISTED. This value is rendered
+            # directly as the primary CTA's href on every locked surface, so the whole conversion
+            # path off the free view was a 404 (verified live). The frontend now maps this through
+            # an allowlist of routes it can actually reach (`resolveUpgradeHref` in
+            # components/fantasy/shared.tsx) rather than trusting it verbatim — a server-controlled
+            # link target is a server-controlled outage otherwise.
+            # ⚠️ The Lambda ships only via a manual `deploy.sh`, so until that runs the deployed API
+            # keeps sending "/pricing"; the frontend allowlist is what makes that window harmless.
+            "ctaHref": "/subscribe",
         }
     return out
 

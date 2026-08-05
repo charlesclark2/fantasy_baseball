@@ -128,12 +128,38 @@ export const int = (v: number | null | undefined) => (v == null ? "—" : Math.r
 // `lowPred`, missing bio, no ADP). Getting it backwards either sells a value that doesn't exist or
 // silently hides one the user could buy.
 
+// 🚨 E9.56c — THE SUBSCRIBE ROUTE IS `/subscribe`. IT HAS NEVER BEEN `/pricing`.
+//
+// E9.56/E9.56b shipped every locked CTA pointing at `/pricing` — the LockChip on every withheld
+// cell (hundreds per page), both "Subscribe to unlock" buttons, and the two footer links. That
+// route DOES NOT EXIST in `frontend/app/`, so the entire conversion path off the locked view was a
+// 404, verified live. Nothing caught it: `next build` only resolves `<Link>` targets it can see
+// statically, these are plain `<a href>`, and there is no route-existence check anywhere in CI.
+// A dead CTA is invisible to every test that does not actually follow the link.
+//
+// ⇒ Route strings are now a CONSTANT here rather than a literal at each call site, and
+// `test_e9_56c_cta_routes.py` asserts a real `frontend/app/<route>/page.tsx` exists for it. A future
+// rename of the route directory then goes RED instead of silently 404ing in production.
+export const SUBSCRIBE_HREF = "/subscribe"
+
+/** Routes the server's `upgrade.ctaHref` is allowed to send us to.
+ *
+ *  NF-C0's deploy-skew rule, applied to a LINK TARGET rather than a payload key: the API Lambda
+ *  ships only via a manual `deploy.sh`, so a frontend deployed today can be talking to a backend
+ *  that still sends the old `/pricing`. Trusting that value verbatim is what put a 404 behind the
+ *  primary CTA in the first place. An unrecognized target falls back to the route we KNOW exists,
+ *  so the skew window degrades to "slightly wrong copy" instead of "dead button". */
+const KNOWN_CTA_ROUTES = new Set([SUBSCRIBE_HREF])
+export function resolveUpgradeHref(href?: string | null): string {
+  return href && KNOWN_CTA_ROUTES.has(href) ? href : SUBSCRIBE_HREF
+}
+
 /** The lock chip that stands in for a withheld value. Deliberately small and inline — it replaces a
  *  single table cell, so it must not change row height or column width. */
 export function LockChip({ title }: { title?: string }) {
   return (
     <a
-      href="/pricing"
+      href={SUBSCRIBE_HREF}
       title={title ?? "Subscribe to unlock this projection"}
       className="inline-flex items-center gap-0.5 rounded px-1 text-[10px] font-medium text-amber-400/90 hover:text-amber-300 hover:bg-amber-400/10 transition-colors"
       aria-label="Locked — subscribe to unlock"
@@ -215,7 +241,7 @@ export function UpgradeBanner({
             See the track record
           </a>
           <a
-            href={upgrade?.ctaHref ?? "/pricing"}
+            href={resolveUpgradeHref(upgrade?.ctaHref)}
             className="rounded-md bg-amber-500 px-3 py-1.5 text-sm font-semibold text-black transition-colors hover:bg-amber-400"
           >
             Subscribe to unlock
@@ -223,8 +249,10 @@ export function UpgradeBanner({
         </div>
       </div>
 
+      {/* E9.56c — this is option (a)'s whole point ("lead with the track record"), so it cannot be
+          the smallest, dimmest text in its own box. Nudged up from 12px/70% opacity. */}
       {receipts?.headline && (
-        <p className="mt-2.5 border-t border-amber-500/20 pt-2.5 text-[12px] leading-relaxed text-amber-200/70">
+        <p className="mt-2.5 border-t border-amber-500/20 pt-2.5 text-[13px] leading-relaxed text-amber-200/85">
           {receipts.headline}
         </p>
       )}
