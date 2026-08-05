@@ -542,9 +542,12 @@ class TestInjuryCaptureStampsOurOwnAsOf:
 
 
 # ── the schema-snapshot leg ──────────────────────────────────────────────────────────────
-def _snap(asset, columns, nulls=None, fp="fp") -> dict:
+def _snap(asset, columns, nulls=None, fp=None) -> dict:
+    # The fingerprint is DERIVED, not a constant: a fixture that hardcodes the same string on both
+    # sides makes "identical schema" and "different schema" indistinguishable, which is exactly
+    # the cross-check that catches a bad prior-snapshot reconstruction.
     return {
-        "asset": asset, "schema_fingerprint": fp,
+        "asset": asset, "schema_fingerprint": fp or schema_snapshot.schema_fingerprint(columns),
         "payload": {"columns": [{"name": n, "type": t} for n, t in columns],
                     "null_rates": nulls or {}},
     }
@@ -710,6 +713,90 @@ class TestTheAcceptedBaselineSilencesOnlyTheTriagedBreaks:
             rows=[_schema_row("injuries", ["date_modified"])],
         )
         assert m["escalate"] is True
+
+
+class TestAPriorSnapshotWithUNKNOWNTypesIsNotAWholesaleRetype:
+    """⭐ FOUND LIVE 2026-08-05, and it fired on the highest-signal thing this leg reports.
+
+    A stored snapshot kept `column_names` but not types, so the reconstructed prior carried
+    `type=""` for every column and `"" != "VARCHAR"` read as a RETYPE on every column of every
+    readable asset — 17 assets, including a `schedules` WATCHED drift naming
+    roof/temp/wind/gameday, i.e. precisely the PIT fields this story exists for. The tell was in
+    the same payload: `fingerprint_changed: false`. An identical fingerprint is an identical
+    (name, type) sequence, so nothing had changed at all.
+    """
+
+    def test_an_unknown_prior_type_is_not_reported_as_a_retype(self):
+        cur = _snap("schedules", [("roof", "VARCHAR"), ("temp", "BIGINT")])
+        prior = _snap("schedules", [("roof", ""), ("temp", "")], fp=cur["schema_fingerprint"])
+        d = schema_snapshot.diff_snapshots(prior, cur)
+        assert d["columns_retyped"] == [] and d["watched_affected"] == []
+        assert d["drifted"] is False
+
+    def test_a_GENUINE_retype_is_still_caught_when_both_types_are_known(self):
+        """The other side of the clause — muting UNKNOWN must not mute a real retype."""
+        d = schema_snapshot.diff_snapshots(
+            _snap("schedules", [("roof", "VARCHAR")]), _snap("schedules", [("roof", "BIGINT")]),
+        )
+        assert d["columns_retyped"] == ["roof"] and d["watched_affected"] == ["roof"]
+
+    def test_a_deletion_is_still_caught_against_a_typeless_prior(self):
+        """Degrading to a name-set diff must keep the signal the leg exists for."""
+        d = schema_snapshot.diff_snapshots(
+            _snap("injuries", [("gsis_id", ""), ("date_modified", "")]),
+            _snap("injuries", [("gsis_id", "VARCHAR")]),
+        )
+        assert d["columns_removed"] == ["date_modified"] and d["drifted"]
+
+    @pytest.mark.parametrize("prior_cols,cur_cols", [
+        ([("a", "VARCHAR")], [("a", "VARCHAR")]),                       # identical
+        ([("a", "VARCHAR")], [("a", "BIGINT")]),                        # retype
+        ([("a", "VARCHAR"), ("b", "INT")], [("a", "VARCHAR")]),         # deletion
+        ([("a", "VARCHAR")], [("a", "VARCHAR"), ("b", "INT")]),         # addition
+    ])
+    def test_schema_drift_and_the_fingerprint_always_agree(self, prior_cols, cur_cols):
+        """The invariant that catches this whole class: an unchanged fingerprint CANNOT coexist
+        with a removal/addition/retype. Live, it did — that contradiction was the bug."""
+        d = schema_snapshot.diff_snapshots(_snap("x", prior_cols), _snap("x", cur_cols))
+        schema_drift = bool(d["columns_removed"] or d["columns_added"] or d["columns_retyped"])
+        assert schema_drift == d["fingerprint_changed"]
+
+    @pytest.mark.parametrize("legacy", [True, False])
+    def test_the_prior_read_survives_a_store_written_before_column_types_existed(self, legacy):
+        """The read happens BEFORE this run's write, so on the deploy that adds a column the store
+        still lacks it — a plain SELECT raises a binder error and fails the leg exactly once, on
+        the run that introduces the fix. Runs the PRODUCTION query against both store shapes."""
+        import duckdb
+
+        con = duckdb.connect()
+        extra = "" if legacy else ", ['VARCHAR'] AS column_types"
+        con.execute(
+            "CREATE TABLE snaps AS SELECT 'injuries' AS asset, 'fp' AS schema_fingerprint, "
+            "['roof'] AS column_names, 'ts' AS capture_timestamp, 'OK' AS status, "
+            f"2026 AS season{extra}"
+        )
+        have = {str(r[0]).lower() for r in con.execute("DESCRIBE snaps").fetchall()}
+        rows = con.execute(schema_snapshot.prior_snapshot_sql(have), [2026]).fetchall()
+        assert rows[0][5] == (None if legacy else ["VARCHAR"])
+
+    def test_the_legacy_projection_is_actually_exercised(self):
+        """Guard the guard: if the fallback never emits NULL the case above is vacuous."""
+        sql = schema_snapshot.prior_snapshot_sql({"asset", "column_names"})
+        assert "NULL AS column_types" in sql and "NULL AS status" in sql
+        assert "NULL AS asset" not in sql
+
+    def test_the_snapshot_row_carries_the_types_the_diff_needs(self, monkeypatch):
+        """The durable fix: without `column_types` on the row, every reconstruction is typeless."""
+        monkeypatch.setattr(
+            schema_snapshot, "describe_asset",
+            lambda url, con=None: [("roof", "VARCHAR"), ("temp", "BIGINT")],
+        )
+        row = schema_snapshot.snapshot_schemas(
+            2026, urls={"schedules": "https://x/s.parquet"}, now=NOW, con=object(),
+            probe_nulls=False,
+        )[0]
+        assert row["column_types"] == ["VARCHAR", "BIGINT"]
+        assert len(row["column_types"]) == len(row["column_names"])
 
 
 # ── pre-season absence: a season file nflverse has not published yet ─────────────────────
