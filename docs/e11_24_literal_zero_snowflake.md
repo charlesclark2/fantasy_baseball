@@ -1653,3 +1653,234 @@ on the waves themselves. A run showing `REBUILDING: … failing OPEN` is a gate 
 
 * `betting_ml/tests/test_ingest_umpires_per_game_skip.py` — hermetic-AWS-env fixture (CI fix).
 * `docs/e11_24_literal_zero_snowflake.md` — this section.
+
+---
+
+# THE 08-04 ARMED-SLATE READ (2026-08-05) — ✅ FU-3 CONFIRMED · ⛔ 6a IS INERT, ROOT CAUSE LOCATED
+
+**VERDICT: FU-3 PASSES · 6a does NOT close · target-6's *measurement* blocker is CLEARED.**
+08-04 is the first slate that satisfies GATE 0 while armed, and it is **informative** — unlike
+08-03 it gave the gate three clean opportunities to fire. It took **none of them**, and the
+cause is a single missing S3 object, not a measurement artifact.
+
+## GATE 0 — PASSED (this read counts)
+
+| criterion | required | 08-04 | |
+|---|---|---|---|
+| games | ~13–15 | **15** | ✅ |
+| invocations (`feature_pregame_umpire_features` CTAS, 14–23) | ≥7 | **9** | ✅ |
+| first assignment written | with slate left to run | **19:11:45 UTC**, 3.4 h before the 22:35 first pitch, **6 invocations still to come** | ✅ |
+| ran entirely post-deploy | yes | deploy recreated `dagster-codeloc` 06:04:38Z; slate ran 19:14→23:15Z | ✅ |
+
+This is precisely what 08-03 lacked. The 3 post-assignment invocations with an *unchanged*
+watermark are real, countable skip opportunities.
+
+**The midnight straddle did NOT undercount.** Both censuses were run for `2026-08-04` *and*
+`2026-08-05` and combined. Every umpire write for the slate landed 19:11:45–22:42:25 UTC on
+08-04, and all 9 invocations landed 19:14–23:15 UTC on 08-04 — **zero in 08-05's 00–07 band.**
+The straddle was a real risk and it is measured, not assumed.
+
+## Leg (b) — ✅ PASS, both legs. FU-3 works exactly as designed.
+
+Read from the LIVE mirror with FU-3's own semantics (`data_source='statsapi'`, latest
+`loaded_at` per `game_pk`, `try_cast` at every use-site):
+
+| slate | games | write-instants | wave floor | ratio |
+|---|---|---|---|---|
+| 07-28 (ref) | 15 | 7 | 7 | 1.00 |
+| 07-31 (ref) | 15 | 9 | 8 | 1.12 |
+| 08-01 (ref) | 15 | 10 | 5 | 2.00 |
+| 08-02 (ref) | 15 | 7 | 7 | 1.00 |
+| **08-04 (armed)** | **15** | **6** | **6** | **1.00** |
+
+* **(i) write-instants = 6 = the wave floor exactly.** Median over the pre-FU-3 window is 8, so
+  this is the predicted **8 → 6 (−27%)**, landing *on* the floor and **not below it** — every
+  surviving write carries a genuinely new assignment; nothing was swallowed. ✅
+* **(ii) 6 distinct `first_seen` instants** (19:11, 19:41, 20:12, 20:42, 21:42, 22:42) against a
+  requirement of ≥2 — late assignments still land within one tick. ✅
+
+## Leg (c) — no cut, and that is the *expected* reading given 6a is inert
+
+Denominator = executions of `feature_pregame_umpire_features`. ⚠️ **Instrument correction worth
+keeping:** `ilike '%create or replace%feature_pregame_umpire_features%'` **also matches
+`create or replace temporary table …feature_pregame_game_features_raw__dbt_tmp`** — a *downstream
+consumer* whose body names the umpire table — an exact **2× over-count**. Anchor on the CTAS
+*target* (`ilike 'create or replace transient table …feature_pregame_umpire_features as%'`). So
+corrected, the instrument **reproduces this doc's own references exactly** (07-28 → 7 invocations
+/ 11 waits / 1.57; 07-30 → 7 / 13 / 1.86), which is what makes 08-04 comparable.
+
+| day | invocations | chain waits | **waits/fire** |
+|---|---|---|---|
+| 07-28 (ref) | 7 | 11 | 1.57 |
+| 07-30 (ref) | 7 | 13 | 1.86 |
+| 08-02 | 7 | 9 | 1.29 |
+| 08-03 (armed, GATE-0 fail) | 5 | 7 | 1.40 |
+| **08-04 (armed, GATE-0 pass)** | **9** | **15** | **1.67** |
+
+1.67 sits **between** the two references ⇒ **no cut**. Consistent with zero skips.
+
+## ⛔ THE FINDING — 6a fired 0 of 3, and the marker object has NEVER EXISTED
+
+Invocations vs mirror writes, aligned (each rebuild trails its write by ~3 min):
+
+| tick | mirror write | rebuild | fresh watermark? | gate should | gate did |
+|---|---|---|---|---|---|
+| 1 | 19:11:45 | 19:14:41 | yes | rebuild | rebuild ✅ |
+| 2 | 19:41:53 | 19:44:43 | yes | rebuild | rebuild ✅ |
+| 3 | 20:12:00 | 20:14:54 | yes | rebuild | rebuild ✅ |
+| 4 | 20:42:16 | 20:45:06 | yes | rebuild | rebuild ✅ |
+| 5 | — | **21:15:01** | **no** | **SKIP** | **rebuilt** ⛔ |
+| 6 | 21:42:20 | 21:45:18 | yes | rebuild | rebuild ✅ |
+| 7 | — | **22:15:26** | **no** | **SKIP** | **rebuilt** ⛔ |
+| 8 | 22:42:25 | 22:45:03 | yes | rebuild | rebuild ✅ |
+| 9 | — | **23:15:38** | **no** | **SKIP** | **rebuilt** ⛔ |
+
+Corroborated by the **never-gated control**: a skip drops the umpire CTAS while the lineup CTAS
+remains, so `umpire_builds < lineup_builds` is the skip signature. On 08-04 they are **equal
+(9 = 9)** — the same test that read zero on every prior day.
+
+**ROOT CAUSE — the gate's marker is never persisted:**
+
+```
+s3://baseball-betting-ml-artifacts/baseball/lakehouse_state/umpire_rebuild_watermark.json
+  → 404 Not Found   (and the whole `baseball/lakehouse_state/` prefix does not exist)
+```
+
+Verified rigorously: the 404 is a genuine absence, not a permission artifact (the same
+credentials list `baseball/` fine, and a recursive scan of the bucket finds **no** watermark
+object anywhere); deployed `origin/main` carries the **same** `_BUCKET`/`_MARKER_KEY`; and
+`grep` shows the gate is the **only writer of that prefix in the repo** — nothing has ever
+created it. `_today()` resolves correctly (LA game-day = 2026-08-04 at 19:14 UTC).
+
+With the object absent, `read_rebuild_marker` raises `NoSuchKey` on **every** invocation →
+`umpire_rebuild_decision` returns `(True, current, "marker read failed (…) — failing OPEN")` →
+rebuild, forever. **The gate cannot skip until the first marker is written.**
+
+⭐ **Why this finding needed FU-3 to become visible.** Pre-FU-3, fires-per-bump was ~1.00 —
+every tick re-stamped the mirror, so *no* invocation had an unchanged watermark and a healthy
+gate and a broken gate were **observationally identical**. FU-3 lifted 08-04 to
+**9/6 = 1.50**, creating the first real headroom — and the gate took none of it. That is the
+"a mechanism that cannot act is a finding" rule applied to a **gate**: 6a was never measurable
+until FU-3 landed, exactly as this doc predicted, and the first measurable slate says it is
+broken.
+
+### Three candidate causes — leg (a) names which (all three yield the same verdict)
+
+The marker write at `sensor_ops.py:441` *should* have run on tick 1 (`watermark` is non-None on
+the marker-read-failed path). It did not persist. Candidates:
+
+1. **`write_rebuild_marker` raises** — most likely, and the leading hypothesis: this is the
+   **first-ever write to that bucket prefix**, i.e. the **E8.5 IAM class** (a role whose prior
+   grants on a bucket are read-only or prefix-scoped). Logged as
+   `[E11.24 umpire-gate] marker write FAILED (<exc>)`, which names it.
+2. **The gate is OFF in the executing container** — then there are **no** `[E11.24 umpire-gate]`
+   lines at all. (FU-1's check read `=1` in the persistent container at 06:04, so this is
+   unlikely, but it is not excluded by anything measurable from the laptop.)
+3. **The op raises inside `_run_dbt` before line 441** — argues against itself, since leg (d)
+   shows the post-lineup path healthy, but the event log settles it.
+
+**The verdict does not depend on which:** all three produce zero skips, so **6a does not close.**
+
+### 🪤 A counter bug in the verification snippet — fix before running leg (a)
+
+The published loop counts `if "REBUILDING" in m: reb += 1 else: skip += 1`. The
+`marker write FAILED` line **also** carries the `[E11.24 umpire-gate]` marker and does **not**
+contain `REBUILDING`, so it is tallied as a **SKIP** — the script would report phantom skips in
+exactly the failure mode we are in. Same vacuous-counter class as INC-38/INC-39. The corrected
+command below classifies on explicit markers and counts `marker write FAILED` separately.
+
+## Leg (d) — ✅ serving CLEAN, no regression
+
+SF-free (DuckDB over S3), deduped to the currently-serving row per `(prediction_type, game_pk)`:
+
+| slate | tier | games | h2h_edge not null | mean coverage | intraday_fallback | feature_store |
+|---|---|---|---|---|---|---|
+| 08-01 | post_lineup | 15 | 13 | 0.989 | 0 | 15 |
+| 08-02 | post_lineup | 15 | 14 | 0.978 | 0 | 15 |
+| 08-03 | post_lineup | 7 | 7 | 0.952 | 0 | 7 |
+| **08-04** | **post_lineup** | **15** | **15 (100%)** | **0.967** | **0** | **15** |
+| 08-04 | morning | 15 | 0 | 0.811 | 0 | 15 |
+
+`check_w11_tail_coverage.py --date 2026-08-04` → **umpire 15/15, weather 15/15,
+public_betting 15/15, all OK** (`w11_tail_problem_count=0`) — no BUILD_GAP, so the 08-03
+one-cycle-lag caveat does not recur. Morning-tier `h2h_edge=0` and coverage 0.811 match the
+chronic pattern (07-31 0.800 / 08-02 0.822), not a gate effect. Per the stated traps, saturated
+`sigma_tier='abstain'` and flat `total_runs` are not read as gate effects. `best_alpha=0`.
+
+## Where this leaves the program
+
+| item | verdict |
+|---|---|
+| **FU-3** | ✅ **PASS on leg (b)** — mechanism confirmed independently (write-instants at the wave floor, −27%, no swallowed assignment). Leg (a) is corroboration, not the basis. |
+| **6a** | ⛔ **DOES NOT CLOSE.** Not "unmeasurable" (08-03) and not "inert by design" (the old ~1.00-ratio reading) — a **located defect**: the marker is never persisted, so the gate fails OPEN on every tick. Fix = one S3 object + whatever prevents its write. |
+| **target-6** | ⭐ **The measurement blocker is CLEARED — recommend UNBLOCK.** target-6 was held only so 6a/FU-3 attribution would not be confounded. That attribution is now settled and unambiguous: **FU-3 = −27% write-instants; 6a = exactly 0**. There is nothing further to soak. Under the operator's 2026-08-03 SHIP-FORWARD reframe (per-lever measurement is no longer a gate; the end state is the proof), target-6 should proceed in its own fresh session. **This is a PM call, flagged not taken.** |
+| **FU-4 (new)** | The 6a marker fix. Small and independent of target-6. |
+
+⚠️ 6a is **correct-but-inert**, never incorrect: fail-open means the umpire block has always
+rebuilt, so there is **no serving debt** to unwind — leg (d) is clean. The only cost is the
+saving not being realised, which is what the op's own warning text predicted verbatim
+("Persistent failures mean the saving is not being realised").
+
+## ⏭️ Leg (a) — the OPERATOR command (SSM; `baseball-access-user` cannot `SendCommand`)
+
+**WHERE: the EC2 BOX.** Read-only. Runs BOTH UTC dates and separates the three causes above.
+
+```bash
+docker compose -f services/dagster/aws/docker-compose.yml exec -T dagster-codeloc python - <<'PY'
+import datetime as dt
+from dagster import DagsterInstance
+from dagster._core.storage.dagster_run import RunsFilter
+
+DAYS = ("2026-08-04", "2026-08-05")   # the slate straddles midnight UTC — read BOTH
+
+inst = DagsterInstance.get()
+recs = inst.get_run_records(filters=RunsFilter(job_name="lineup_monitor_job"), limit=400)
+sel = [r for r in recs
+       if r.create_timestamp.astimezone(dt.timezone.utc).date().isoformat() in DAYS]
+print(f"{len(sel)} lineup_monitor_job runs over {DAYS}\n")
+
+reb = skip = openfail = markerfail = 0
+gate_lines = 0
+for r in sorted(sel, key=lambda x: x.create_timestamp):
+    rid = r.dagster_run.run_id
+    when = r.create_timestamp.astimezone(dt.timezone.utc).strftime("%m-%d %H:%M:%S")
+    for e in inst.all_logs(rid):
+        m = (e.user_message or "")
+        for marker in ("[E11.24 umpire-gate]", "[FU-3]"):
+            if marker not in m:
+                continue
+            for line in m.splitlines():
+                if marker in line:
+                    print(f"{when}  {rid[:8]}  {line.strip()[:240]}")
+            if marker == "[E11.24 umpire-gate]":
+                gate_lines += 1
+                # classify on EXPLICIT markers — "marker write FAILED" is neither a
+                # rebuild nor a skip, and the old `else: skip += 1` counted it as one.
+                if "marker write FAILED" in m:
+                    markerfail += 1
+                elif "REBUILDING" in m:
+                    reb += 1
+                    if "failing OPEN" in m:
+                        openfail += 1
+                elif "SKIPPING" in m:
+                    skip += 1
+
+print(f"\nGATE over {len(sel)} runs: REBUILDING={reb} (of which failing-OPEN={openfail})  "
+      f"SKIPPING={skip}  marker-write-FAILED={markerfail}")
+if gate_lines == 0:
+    print("⚠️ NO [E11.24 umpire-gate] lines at all ⇒ the gate was OFF in the executing "
+          "container (cause 2), not merely failing open.")
+PY
+```
+
+**How to read it**
+* `SKIPPING=0` with `REBUILDING=9` and `failing-OPEN=9` ⇒ confirms the marker-absent diagnosis.
+* `marker-write-FAILED>0` ⇒ **cause 1**; the exception text names it (expect an S3
+  `AccessDenied`/`PutObject` ⇒ the E8.5 IAM grant).
+* `gate_lines == 0` ⇒ **cause 2** (flag off in the executing container).
+* Neither, and no gate lines after the dbt step ⇒ **cause 3**.
+
+## Files
+
+* `docs/e11_24_literal_zero_snowflake.md` — this section. No code changed; this is a
+  verification record.
