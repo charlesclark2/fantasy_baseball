@@ -122,6 +122,33 @@ column is backfilled with NULLs and still reads as present. The vendor's release
 amnesia. The leg also probes null RATES for the small high-value assets, because "present but
 100 % NULL" is the second silent-death signature a pure schema check would miss.
 
+**⚠️ …AND REPRODUCING THEM EVERY RUN IS EXACTLY WHY THE FIRST CUT WOULD HAVE PAGED FOREVER.**
+Both breaks are **permanent, already-triaged states**, not events — so `escalate` was `True` on
+every fire, and the box run's tail said so plainly: `ALERT — legs needing attention: ['schema']`.
+Once `sports_nfl_pit_metadata_job` starts firing that is an ERROR page every Tuesday and Friday,
+≈44 identical unactionable pages a season. Note `drifts` was `[]` in both box runs: **nothing had
+changed** — the escalation conflated "a known bad state" with "a new event".
+
+The harm is not the noise. It is that a muted `NFL PIT capture:` subject line also swallows the
+weather leg's CRITICAL *"this slate's forecast is being lost permanently"* — the one page in this
+story that is genuinely unrecoverable. It is also the judgement E11.30 already made for
+`check_injury_status_health_op`, which deliberately stays log-only on the known off-season ingest
+hole rather than paging daily for four months.
+
+**Fix:** `ACCEPTED_MISSING` — a baseline of named `(asset, column)` pairs. Missing-ness is still
+reported in full every run (`watched_missing`); only the paging decision reads
+`watched_missing_new`. Four properties make the mute safe rather than a blindfold:
+
+| property | why |
+|---|---|
+| mutes **named pairs**, never an asset | a *third* watched injuries column still pages the day it disappears |
+| a **watched DRIFT** of an accepted column still escalates | muting "is missing" must not mute "it just changed" — the disappearance is an event |
+| a restored column is reported (`accepted_missing_resolved`) | a stale mute is how the *next* deletion of that column goes unnoticed |
+| every pair is validated against `WATCHED_COLUMNS` by a guard | a typo'd entry is **inert** — it mutes nothing while reading as coverage |
+
+RED-proven both ways: emptying `ACCEPTED_MISSING` makes the live box condition page again, and
+reverting the escalation to the un-baselined `watched_missing` turns the baseline test red.
+
 **The market board is already fully priced 35 days pre-opener** (272 events × 10 books) — so
 enabling the market schedule early also captures pre-season line movement, at no extra cost.
 

@@ -600,7 +600,7 @@ class TestSchemaDriftDetection:
     def test_a_missing_watched_column_escalates(self):
         m = schema_snapshot.run_schema_snapshot(
             2026, now=NOW, dry_run=True, previous={},
-            rows=[{"asset": "injuries", "status": "OK", "watched_missing": ["date_modified"],
+            rows=[{"asset": "injuries", "status": "OK", "watched_missing": ["report_status"],
                    "watched_all_null": [], "payload": {"columns": [], "null_rates": {}},
                    "schema_fingerprint": "x"}],
         )
@@ -614,6 +614,101 @@ class TestSchemaDriftDetection:
         assert all(u.startswith("https://") and u.endswith(".parquet") for u in urls.values())
         for asset in ("injuries", "depth_charts", "schedules"):
             assert asset in urls
+
+
+def _schema_row(asset, missing, status="OK"):
+    return {"asset": asset, "status": status, "watched_missing": list(missing),
+            "watched_all_null": [], "payload": {"columns": [], "null_rates": {}},
+            "schema_fingerprint": "x"}
+
+
+class TestTheAcceptedBaselineSilencesOnlyTheTriagedBreaks:
+    """A PERMANENT known-bad state must not page every run.
+
+    `injuries.date_modified` (deleted 2025) and the `depth_charts` schema replacement are missing
+    on every fire, forever. Escalating on them meant ~44 identical unactionable pages a season —
+    and a muted `NFL PIT capture:` subject also swallows the weather leg's CRITICAL "this slate's
+    forecast is being lost permanently". Same judgement E11.30 applies to the known off-season
+    injury-ingest hole.
+    """
+
+    def test_the_2025_breaks_alone_do_not_escalate(self):
+        """The live box condition, verbatim: this is what fired ERROR every Tue/Fri."""
+        m = schema_snapshot.run_schema_snapshot(
+            2026, now=NOW, dry_run=True, previous={},
+            rows=[_schema_row("injuries", ["date_modified"]),
+                  _schema_row("depth_charts", ["week", "depth_team", "position"])],
+        )
+        assert m["escalate"] is False
+        # …but the state is still REPORTED in full — accepting a condition never shrinks the record.
+        assert m["watched_missing"] == {"injuries": ["date_modified"],
+                                        "depth_charts": ["week", "depth_team", "position"]}
+        assert m["watched_missing_new"] == {}
+
+    def test_a_THIRD_watched_column_still_escalates_immediately(self):
+        """The baseline mutes named pairs, not an asset — otherwise it would be a blindfold."""
+        m = schema_snapshot.run_schema_snapshot(
+            2026, now=NOW, dry_run=True, previous={},
+            rows=[_schema_row("injuries", ["date_modified", "report_status"])],
+        )
+        assert m["escalate"] is True
+        assert m["watched_missing_new"] == {"injuries": ["report_status"]}
+        assert m["watched_missing_accepted"] == {"injuries": ["date_modified"]}
+
+    def test_an_unaccepted_asset_is_not_muted_by_another_assets_baseline(self):
+        m = schema_snapshot.run_schema_snapshot(
+            2026, now=NOW, dry_run=True, previous={},
+            rows=[_schema_row("schedules", ["roof"])],
+        )
+        assert m["escalate"] is True and m["watched_missing_new"] == {"schedules": ["roof"]}
+
+    def test_an_accepted_column_that_is_BACK_is_reported_so_the_mute_can_be_dropped(self):
+        """A stale mute is how a FUTURE deletion of the same column goes unnoticed."""
+        m = schema_snapshot.run_schema_snapshot(
+            2026, now=NOW, dry_run=True, previous={},
+            rows=[_schema_row("injuries", [])],
+        )
+        assert m["accepted_missing_resolved"] == {"injuries": ["date_modified"]}
+        assert m["escalate"] is False  # a restored column is good news, not an incident
+
+    def test_an_unreadable_asset_is_never_reported_as_resolved(self):
+        """NF1.7 (a) facing the cheerful direction — UNKNOWN is not 'it came back'."""
+        m = schema_snapshot.run_schema_snapshot(
+            2026, now=NOW, dry_run=True, previous={},
+            rows=[_schema_row("injuries", [], status="UNREADABLE")],
+        )
+        assert m["accepted_missing_resolved"] == {} and m["escalate"] is True
+
+    def test_the_baseline_still_escalates_on_a_WATCHED_DRIFT_of_an_accepted_column(self):
+        """Muting `missing` must not mute `it changed`. A column that disappears BETWEEN two
+        snapshots is an event, and events are exactly what this leg exists to date."""
+        prev = _snap("injuries", [("date_modified", "VARCHAR"), ("gsis_id", "VARCHAR")])
+        cur = _snap("injuries", [("gsis_id", "VARCHAR")])
+        cur.update(_schema_row("injuries", ["date_modified"]))
+        m = schema_snapshot.run_schema_snapshot(
+            2026, now=NOW, dry_run=True, previous={"injuries": prev}, rows=[cur],
+        )
+        assert m["escalate"] is True
+
+    def test_every_accepted_pair_is_actually_a_WATCHED_column(self):
+        """A typo'd baseline entry is INERT — it mutes nothing and reads as coverage. Pinning the
+        pairs against WATCHED_COLUMNS is what stops the mute drifting away from the thing muted."""
+        for asset, cols in schema_snapshot.ACCEPTED_MISSING.items():
+            watched = set(schema_snapshot.WATCHED_COLUMNS.get(asset, ()))
+            assert watched, f"ACCEPTED_MISSING names {asset!r}, which is not a watched asset"
+            assert cols <= watched, (
+                f"ACCEPTED_MISSING[{asset!r}] accepts {sorted(cols - watched)}, "
+                "which are not watched columns — the entry would be inert"
+            )
+
+    def test_the_baseline_is_not_vacuous(self, monkeypatch):
+        """RED-proof: empty the baseline and the live box condition must page again."""
+        monkeypatch.setattr(schema_snapshot, "ACCEPTED_MISSING", {})
+        m = schema_snapshot.run_schema_snapshot(
+            2026, now=NOW, dry_run=True, previous={},
+            rows=[_schema_row("injuries", ["date_modified"])],
+        )
+        assert m["escalate"] is True
 
 
 # ── the leg runner ───────────────────────────────────────────────────────────────────────

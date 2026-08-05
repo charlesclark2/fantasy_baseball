@@ -84,6 +84,25 @@ revision (Open-Meteo stamps a server-timing field on each response) — a 100 %-
 channel, i.e. the monitor that gets muted. The volatile field is excluded from the content hash,
 and the excluded set is stored on each row (`hash_excluded_keys`) so the exclusion is auditable.
 
+## Paging discipline: the schema leg's accepted baseline
+
+The schema leg reproduces both of NF-W0's 2025 breaks on **every** run — `injuries.date_modified`
+is deleted and `depth_charts` was schema-replaced, permanently. Escalating on those meant an ERROR
+page every Tue/Fri forever (≈44 a season) about two conditions nobody can act on, which is the
+monitor-gets-muted failure mode — and a muted `NFL PIT capture:` subject would also swallow the
+weather leg's CRITICAL *"this slate's forecast is being lost permanently"*.
+
+So `schema_snapshot.ACCEPTED_MISSING` names the already-triaged `(asset, column)` pairs. The full
+state is still reported every run (`watched_missing`); only the paging decision reads
+`watched_missing_new`. The mute is deliberately narrow: it covers **named pairs, not assets**
+(a third watched column still pages), a watched **drift** of an accepted column still escalates
+(muting "is missing" must not mute "it just changed"), a **restored** column is reported so the
+stale mute gets dropped, and every pair is validated against `WATCHED_COLUMNS` by a guard so a
+typo cannot silently widen it.
+
+⇒ **when a break is triaged and accepted, add the pair here in the same change.** Leaving it
+paging is not conservatism; it spends the alert channel the irreversible legs depend on.
+
 ## ⭐ Two point-in-time defects found by this story
 
 Both are in `venues.py`, both silently corrupt a naive capture, and neither was in NF-W0.
