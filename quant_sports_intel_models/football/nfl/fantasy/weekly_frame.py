@@ -199,14 +199,19 @@ DEFERRED_FEATURE_CONTRACT: tuple[FeatureSpec, ...] = (
         "API/product rights (v3 A.1).",
     ),
     FeatureSpec(
-        "weather_forecast", "NOT INGESTED (Open-Meteo recommended)", 0, "free (Open-Meteo, no key)",
+        "weather_forecast", "NOT INGESTED (reuse MLB's scripts/ingest_weather.py mechanism)", 0,
+        "free (Open-Meteo, no key)",
         "forecast available 7-15 days ahead — but we capture NONE of it today", "none",
         PIT_NOT_VALIDATED, False,
         "roof/surface only (those ARE known pre-season and are in game_context)",
         "🚨 THE TRAP: `schedules.temp`/`.wind` LOOK like weather and are REALIZED game-book "
         "conditions — measured 0 of 177 unplayed 2026 games carry a temp vs 173 of 178 played 2024 "
-        "games. Using them is a hard leak. No NFL weather ingest exists; MLB's Open-Meteo pattern "
-        "(scripts/ingest_weather.py, free/no key) is directly reusable but must be captured FORWARD.",
+        "games. Using them is a hard leak. CURE = the MLB mechanism, which already has exactly the "
+        "two legs NFL needs: `forecast_pregame` (the weekly-build feature) + `forecast_intraday` at "
+        "fixed hours-to-kickoff checkpoints (the right-before-kickoff feature). Stadium coordinates "
+        "are ALREADY BUILT (`stg_nfl_team_geo`, 32 teams, from N1.0's travel feature). ⚠️ A forecast "
+        "CANNOT be backfilled — only forward capture makes this PIT-safe, so every uncaptured week "
+        "is permanently lost.",
     ),
     FeatureSpec(
         "market_context", "The Odds API (landed 2020-2024 only)", 1, "existing paid sub",

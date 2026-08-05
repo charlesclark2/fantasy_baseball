@@ -141,6 +141,39 @@ them in a backtest injects the realized outcome. **There is no NFL weather inges
 honest V1 position is roof/surface only (known at schedule release). `temp`/`wind` are in
 `LEAKY_COLUMNS` and `assert_no_leakage` rejects any frame carrying them.
 
+**⭐ CURE — reuse the MLB weather mechanism; it already has both legs NFL needs.**
+`scripts/ingest_weather.py` (Open-Meteo primary, no API key; OpenWeatherMap fallback) captures three
+observation types, and two of them map straight onto the weekly product:
+
+| MLB observation type | MLB behaviour | NFL use |
+|---|---|---|
+| `forecast_pregame` | forecast fetched hours before first pitch | **the weekly-build feature** (Tue/Fri projection timestamps) |
+| `forecast_intraday` | rolling snapshots at fixed hours-to-first-pitch checkpoints (`[24, 6, 3, 1]`, ±20 min) | **the right-before-kickoff feature** (Sunday-morning model, late swap) |
+| `observed_at_first_pitch` | archive endpoint, post-game | realized conditions for evaluation only — **still a leak as a feature** |
+
+**Three adaptations NFL needs (this is a reuse, not a copy):**
+
+1. ⭐ **The checkpoint ladder must extend much further out.** MLB's longest checkpoint is **T-24h**,
+   because a baseball slate is set a day ahead. An NFL **Tuesday** build sits ~**5 days** before a
+   Sunday kickoff, and Open-Meteo forecasts 7–15 days ahead. ⇒ NFL needs roughly
+   **`[120, 72, 48, 24, 3, 1]`** hours-to-kickoff so that **every projection timestamp the weekly
+   product actually serves has a forecast captured at that timestamp**. Capturing only at T-24h
+   would leave the Tuesday and Friday builds with no honest weather feature at all.
+2. **Write S3-native, not Snowflake.** The MLB script's writer targets `statsapi.weather_raw`;
+   Snowflake is being decommissioned and the NFL lake is Delta-on-S3. Reuse the **fetch + checkpoint
+   + retention logic**, land it at `nfl/raw/weather/` via the existing `ingest/s3io.py` writer.
+3. **Stadium coordinates are ALREADY BUILT** — `stg_nfl_team_geo` carries lat/long for all 32 teams
+   (N1.0 built it for the travel-distance feature), with relocations already resolved. ⚠️ Use the
+   **per-game `roof`** to decide whether a game needs weather at all, not the team's `is_dome_home` —
+   that column is explicitly informational, and a dome team can play a neutral-site/international
+   game outdoors.
+
+⏳ **This is time-critical and cannot be recovered later.** A forecast is only PIT-honest if it was
+captured *at the time*; the Open-Meteo **archive returns observations, not the forecast that was
+current on a historical Tuesday**. The 2026 season opens **2026-09-10** — every week that passes
+without capture is permanently absent from the training frame. Standing this up before week 1 is the
+difference between weather being a V1 feature in 2026 and a V2 feature in 2027.
+
 ### Defect 2 — the injury feed's only as-of timestamp was deleted upstream in 2025
 
 `injuries.date_modified` is a genuine `TIMESTAMP WITH TIME ZONE` (e.g. `2024-10-02 10:37:50-05:00`) —
@@ -194,7 +227,7 @@ man/zone, box counts, pressure**) · PFR advanced (2018+) · NGS qualifying over
 TPRR, YPRR · first-read target share · individual OL pass-block/run-block grades and
 pressures-allowed-per-lineman.
 
-**Blocked for non-charting reasons (not a vendor problem):** weather forecast (not captured) ·
+**Blocked for non-charting reasons (not a vendor problem):** weather forecast (not captured — cure is a free reuse of the MLB Open-Meteo mechanism, §1.5 Defect 1) ·
 market/props at the projection timestamp (only closing snapshots landed, and none for 2025) ·
 depth-chart rank (era comparability).
 
@@ -413,10 +446,17 @@ general principle:
    2025 (§1.5 Defect 2). Without this, current-season injury features cannot be PIT-certified.
 2. Capture a **Tuesday/Friday market snapshot** — only closing lines exist, so no Tuesday market
    feature can ever be backtested (§1.8). Forward capture is the only route.
-3. Capture **weather forecasts** (Open-Meteo, free, no key; `scripts/ingest_weather.py` is the proven
-   in-repo pattern) — the archive returns observations, not the forecast current on a historical
-   Tuesday. Also **measure the nflverse release lag**, especially for MNF, which is currently unknown.
-4. Snapshot **nflverse schemas per ingest** — the 2025 `date_modified` deletion turned into an
+3. ⏳ **Capture weather forecasts — the most time-critical item in this audit, and the cheapest.**
+   Reuse MLB's `scripts/ingest_weather.py` mechanism wholesale: `forecast_pregame` for the weekly
+   build + `forecast_intraday` at hours-to-kickoff checkpoints for the right-before-kickoff surface
+   (§1.5 Defect 1). Open-Meteo is free and needs no key; **stadium coordinates already exist**
+   (`stg_nfl_team_geo`). Three adaptations: extend the checkpoint ladder to ~`[120, 72, 48, 24, 3, 1]`
+   hours (an NFL Tuesday build is ~5 days out vs MLB's 24h max — otherwise the Tue/Fri builds get no
+   weather at all), write S3-native to `nfl/raw/weather/` rather than Snowflake, and gate on the
+   per-game `roof` rather than the team's informational `is_dome_home`. **A forecast cannot be
+   backfilled** — the 2026 opener is **2026-09-10**, so every uncaptured week is permanently lost.
+4. Also **measure the nflverse release lag**, especially for MNF, which is currently unknown.
+5. Snapshot **nflverse schemas per ingest** — the 2025 `date_modified` deletion turned into an
    all-NULL column via `schema_mode='merge'`, i.e. a silent degradation that looked like a live field.
 
 **→ NF-W0b (entity resolution)** — the lake already carries a strong crosswalk (`rosters`/`players`
