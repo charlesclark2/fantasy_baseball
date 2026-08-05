@@ -9,6 +9,11 @@ export type SubscriptionStatus = {
   has_access: boolean
   is_beta: boolean
   has_billing: boolean
+  // Stripe's Customer Portal cancel action schedules the cancellation rather than
+  // revoking immediately — the account stays `subscriber` (access continues) until
+  // `current_period_end`. (E9.57 finding: Settings must say so, not look unchanged.)
+  cancel_at_period_end: boolean
+  current_period_end: number | null // unix seconds
 }
 
 export type SubscriptionPricing = {
