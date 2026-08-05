@@ -118,6 +118,82 @@ export const num = (v: number | null | undefined, nd = 1) =>
 
 export const int = (v: number | null | undefined) => (v == null ? "—" : Math.round(v).toLocaleString())
 
+// ── E9.56: locked (paid) values ──────────────────────────────────────────────────────────────────
+// The server never sends a gated season's numbers to a non-entitled caller — it sends the row with
+// its public identity plus `locked: true` and NO value fields. So "locked" and "genuinely has no
+// value" arrive as the SAME absent field, and only the row's marker can tell them apart. That
+// distinction is the whole product decision: a locked point must read "subscribe to unlock", while
+// a real null must keep reading "—" (an honest absence we already communicate carefully — K/DST
+// `lowPred`, missing bio, no ADP). Getting it backwards either sells a value that doesn't exist or
+// silently hides one the user could buy.
+
+/** The lock chip that stands in for a withheld value. Deliberately small and inline — it replaces a
+ *  single table cell, so it must not change row height or column width. */
+export function LockChip({ title }: { title?: string }) {
+  return (
+    <a
+      href="/pricing"
+      title={title ?? "Subscribe to unlock this projection"}
+      className="inline-flex items-center gap-0.5 rounded px-1 text-[10px] font-medium text-amber-400/90 hover:text-amber-300 hover:bg-amber-400/10 transition-colors"
+      aria-label="Locked — subscribe to unlock"
+    >
+      <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+        <rect x="4" y="11" width="16" height="9" rx="2" />
+        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      </svg>
+    </a>
+  )
+}
+
+/** `num`, but a LOCKED row renders the chip instead of an em-dash.
+ *  `locked` is read from the row's own marker, so an entitled payload (no marker) is untouched. */
+export const numOrLock = (
+  v: number | null | undefined,
+  locked: boolean | undefined,
+  nd = 1,
+): React.ReactNode => (v == null && locked ? <LockChip /> : num(v, nd))
+
+export const intOrLock = (
+  v: number | null | undefined,
+  locked: boolean | undefined,
+): React.ReactNode => (v == null && locked ? <LockChip /> : int(v))
+
+/** The page-level "this season is paid" banner, rendered above a locked surface.
+ *
+ *  Takes its copy from the server's `upgrade` envelope so the reason and the CTA target live with
+ *  the gate that produced them; the defaults exist only for the deploy-skew window where a NEW
+ *  frontend is talking to an OLD backend that sends no envelope at all. */
+export function UpgradeBanner({
+  season,
+  upgrade,
+}: {
+  season?: number | null
+  upgrade?: { reason?: string; message?: string; ctaHref?: string } | null
+}) {
+  return (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/[0.07] px-4 py-3">
+      <div className="flex items-start gap-2.5">
+        <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+          <rect x="4" y="11" width="16" height="9" rx="2" />
+          <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+        </svg>
+        <p className="text-sm text-amber-200/90">
+          {upgrade?.message ?? `Subscribe to unlock the ${season ?? ""} projections.`}{" "}
+          <span className="text-amber-200/60">
+            Past seasons stay free — see the track record for how these projections have actually done.
+          </span>
+        </p>
+      </div>
+      <a
+        href={upgrade?.ctaHref ?? "/pricing"}
+        className="shrink-0 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-semibold text-black transition-colors hover:bg-amber-400"
+      >
+        Subscribe to unlock
+      </a>
+    </div>
+  )
+}
+
 export function PosBadge({ pos }: { pos: string }) {
   return (
     <span

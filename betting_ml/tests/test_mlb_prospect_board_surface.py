@@ -293,11 +293,15 @@ class TestServingPath:
         """The inverse. `get_admin_user` was added PER ROUTE precisely so the shipped NFL board
         endpoints stay open to subscribers — pinning that keeps a future 'tidy-up' from hoisting it
         to the router and silently locking paying users out of a product they bought."""
-        by_path = {r.path: r for r in fantasy.router.routes}
+        # E9.56 moved these three onto `board_router` (entitlement-aware: a locked payload instead
+        # of a 403), so look there — the guard's intent is unchanged and still worth pinning.
+        by_path = {r.path: r for r in fantasy.board_router.routes}
         for path in ("/fantasy/nfl/board", "/fantasy/nfl/projections", "/fantasy/nfl/manifest"):
+            assert path in by_path, f"{path} is not registered on board_router"
             route_deps = [d.call for d in by_path[path].dependant.dependencies]
             assert deps.get_admin_user not in route_deps, f"{path} became admin-only"
         assert deps.get_admin_user not in [d.dependency for d in fantasy.router.dependencies]
+        assert deps.get_admin_user not in [d.dependency for d in fantasy.board_router.dependencies]
 
     def test_the_reads_hit_the_mlb_key_space_not_nfl(self, monkeypatch):
         """A shared bucket makes a wrong prefix a data-mixing bug that still returns 200. Pin that

@@ -111,9 +111,25 @@ def _groups_from_request(request: Request) -> list[str]:
     unreliable (this is exactly why get_admin_user keeps a bearer-decode fallback). The
     Bearer payload carries the claim as a clean JSON array. Unioning both, and parsing the
     context for either bracket/space or comma delimiters, is robust to both formats. The
-    token is already signature-validated by the authorizer before Lambda invokes."""
+    token is already signature-validated by the authorizer before Lambda invokes.
+
+    🔒 E9.56 — THE UNION IS CONDITIONAL ON THE AUTHORIZER HAVING RUN. The sentence above ("already
+    signature-validated by the authorizer") is the ENTIRE basis for trusting an unverified bearer
+    decode, and it is true only while this route carries the API Gateway JWT authorizer. On a route
+    whose authorization-type is `NONE` there is no upstream validation, and a forged
+    `{"cognito:groups":["subscriber","admin"]}` reaches the Lambda intact (measured — see
+    `services/jwt_verify.py`). So when the authorizer context is ABSENT, groups come only from a
+    SIGNATURE-VERIFIED token. That keeps this helper safe for any future public route rather than
+    relying on nobody ever mounting a gated dependency on one, and it is also correct in local
+    uvicorn dev, where a real Cognito token verifies normally."""
+    claims = _claims_from_event(request)
+    if not claims:
+        from app.backend.services import jwt_verify
+
+        return jwt_verify.verified_groups(request.headers.get("Authorization"))
+
     groups: set[str] = set(_groups_from_bearer(request.headers.get("Authorization")))
-    raw = _claims_from_event(request).get("cognito:groups")
+    raw = claims.get("cognito:groups")
     if isinstance(raw, list):
         groups.update(str(g).strip() for g in raw if str(g).strip())
     elif isinstance(raw, str) and raw.strip():

@@ -32,6 +32,7 @@ import {
   GLOSSARY,
   InfoTip,
   IntervalBar,
+  LockChip,
   LoadingBlock,
   Pagination,
   PosBadge,
@@ -44,8 +45,10 @@ import {
   SurfaceHeader,
   MarketLeanNote,
   UncertaintyNote,
+  UpgradeBanner,
   downloadCsv,
   num,
+  numOrLock,
   int,
   teamLabel,
 } from "@/components/fantasy/shared"
@@ -211,6 +214,13 @@ export function RankingsBoard() {
         </div>
       </SurfaceHeader>
 
+      {/* E9.56 — page-level lock state rides on the MANIFEST: the board endpoint returns a bare
+          array, and wrapping it would be the NF-C0 response-shape break. Per-cell chips come from
+          each row's own `locked` marker. */}
+      {manifest?.locked && (
+        <UpgradeBanner season={manifest.season} upgrade={manifest.upgrade} />
+      )}
+
       {manifestLoading && <LoadingBlock label="Loading league formats…" />}
 
       {!manifestLoading && (manifestError || !manifest) && (
@@ -349,10 +359,12 @@ export function RankingsBoard() {
                           </td>
                           <td className="px-3 py-2 text-gray-400">{teamLabel(p)}</td>
                           <td className="px-3 py-2 text-right text-gray-500">{p.bye ?? "—"}</td>
-                          <td className="px-3 py-2 text-right text-gray-400">{num(p.g)}</td>
-                          <td className="px-3 py-2 text-right font-semibold text-gray-100">{num(p.pts)}</td>
+                          <td className="px-3 py-2 text-right text-gray-400">{numOrLock(p.g, p.locked)}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-gray-100">{numOrLock(p.pts, p.locked)}</td>
                           <td className="w-40 px-3 py-2">
-                            {p.ptsP10 != null && p.ptsP90 != null && domain ? (
+                            {p.locked ? (
+                              <LockChip title="Subscribe to unlock the projected range" />
+                            ) : p.ptsP10 != null && p.ptsP90 != null && domain ? (
                               <>
                                 {/* every rookie's band is class-level (shared across his draft
                                     tier), so it is demoted rather than shown as his own range */}
@@ -370,7 +382,7 @@ export function RankingsBoard() {
                               <span className="text-[11px] text-gray-600">—</span>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-right text-gray-300">{num(p.vor)}</td>
+                          <td className="px-3 py-2 text-right text-gray-300">{numOrLock(p.vor, p.locked)}</td>
                           {hasAdp && (
                             <>
                               <td className="px-3 py-2 text-right text-gray-400">
