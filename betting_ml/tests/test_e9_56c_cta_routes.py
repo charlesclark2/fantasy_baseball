@@ -224,3 +224,27 @@ def test_no_csv_export_on_a_locked_board():
     board = _code(_FRONTEND / "components/fantasy/rankings-board.tsx")
     assert "{!boardLocked && (" in board
     assert board.index("{!boardLocked && (") < board.index("Export CSV")
+
+
+# ── E9.56e: one loading state at a time, and never a partial track record ────────────────────────
+
+
+def test_public_player_view_does_not_render_content_while_still_loading():
+    """`useAllTrackRecordSeasons` is one query PER SEASON and reports `isLoading` until ALL land,
+    while `rows` flat-maps whatever has arrived. Gating content on `identity` alone therefore
+    rendered the page UNDER a live "Loading player…" box — and, worse, showed a partial track record
+    (3 of 7 seasons in the reported case) with nothing marking it as incomplete.
+    """
+    page = _code(_FRONTEND / "components/fantasy/player-page.tsx")
+    assert "{!loading && identity && (" in page, (
+        "the public player view must gate its CONTENT on !loading, not only the spinner — "
+        "otherwise it can publish a silently truncated track record"
+    )
+    assert "{identity && (\n" not in page, "an ungated identity branch is back"
+
+
+def test_the_per_season_loader_still_reports_loading_until_every_season_lands():
+    """Grounds the test above: if this ever became per-season-progressive, the fix would need
+    revisiting rather than silently becoming a no-op."""
+    lib = _code(_FRONTEND / "lib/fantasy-track-record.ts")
+    assert "results.some((r) => r.isLoading)" in lib

@@ -20,9 +20,19 @@ what this script writes and NOTHING ELSE). The export is structurally incapable 
 `LOCKED_SEASON` or later — `_parse_seasons` refuses such a range outright, so a public payload can never
 carry the paid product regardless of how this script is invoked.
 
-RUN (LAPTOP, SF-free sports lake):
+RUN (LAPTOP, SF-free sports lake) — STAGE LOCALLY, uploads nothing:
     uv run python -m quant_sports_intel_models.football.nfl.fantasy.export_track_record_json \
       --duckdb quant_sports_intel_models/sports_dbt/sports.duckdb --seasons 2019-2025
+
+PUBLISH TO PROD (LAPTOP) — ⚠️ `--publish` ALONE IS NOT ENOUGH; NAME THE BUCKET:
+    uv run python -m quant_sports_intel_models.football.nfl.fantasy.export_track_record_json \
+      --duckdb quant_sports_intel_models/sports_dbt/sports.duckdb --seasons 2019-2025 \
+      --s3-bucket credence-prod-s3-api-cache --publish
+
+`--s3-bucket` defaults to `$CACHE_BUCKET`, which is NOT set in a normal laptop shell — so
+`--publish` on its own resolves no bucket and the run refuses (loudly, by design: it would
+otherwise look successful while uploading nothing). This has bitten the operator repeatedly,
+which is why the full publish invocation is written out above rather than described. Copy it.
 
 Same NF-D12 dry-run/`--publish` guard as `export_draft_board_json.py`: a resolved `--s3-bucket` /
 `$CACHE_BUCKET` alone never uploads — pass `--publish` to actually reach the live prod api-cache.

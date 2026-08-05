@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "fixed",
+        "text": "A player's page could show an incomplete career while telling you it was still loading. Opening a player from the Track Record put a \u201cLoading player\u2026\u201d box across the top of the page with his history already drawn underneath it \u2014 which looked bad, but the real problem was the history itself. Each past season is fetched separately, so the page was drawing whichever seasons had arrived so far: Jalen Hurts showed three of his seven, with nothing to say the rest were still coming. On the one page whose whole point is the full picture, wins and losses both, a quietly shortened record is worse than a slow one \u2014 and it would tend to flatter us, since a season we called badly is just as likely to be one of the slow ones. The page now waits until every season is in before drawing anything."
+      },
+      {
+        "tag": "fixed",
         "text": "Player names on the Track Record board were SHOUTING. Veterans came through as \u201cJOSH ALLEN\u201d and \u201cCHRISTIAN MCCAFFREY\u201d while rookies like Ashton Jeanty were spelled normally \u2014 388 of the 563 names across the seven published seasons were in full caps, because veteran and rookie names reach that page from two different sources. They're now spelled the way you'd write them. Two details worth knowing, since perfect casing isn't actually recoverable from a name stored in capitals: \u201cDEVONTA FREEMAN\u201d and \u201cDEVONTA SMITH\u201d are the same word in caps but are correctly Devonta and DeVonta, so names with an unusual capital inside them (CeeDee Lamb, DK Metcalf, JuJu Smith-Schuster) are handled by name; and if we miss a new one, it will show up as a slightly-off capital rather than going back to shouting."
       },
       {
