@@ -23,7 +23,7 @@ from pathlib import Path
 
 import boto3
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.backend.dependencies import (
     get_admin_user,
@@ -31,7 +31,7 @@ from app.backend.dependencies import (
     require_fantasy_beta_access,
 )
 from app.backend.models.fantasy import League, LeagueSave
-from app.backend.services import dynamo
+from app.backend.services import dynamo, entitlement
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,30 @@ router = APIRouter(
     tags=["fantasy"],
     dependencies=[Depends(require_fantasy_access)],
 )
+
+# ══════════════════════════════════════════════════════════════════════════════
+# E9.56 — the ENTITLEMENT-AWARE (dual-mode) NFL board reads
+# ══════════════════════════════════════════════════════════════════════════════
+# A SECOND router object with NO `require_fantasy_access`, mirroring `fantasy_public.router` and
+# `fantasy_import.public_router`: this codebase's rule is that an exemption lives as a separate
+# router object, never as a flag inside the gated one. `router` above keeps its blanket 403 for
+# everything else (`/leagues`, `/nfl/my-teams`, the admin-only MLB board), so the safe default is
+# unchanged and nothing can accidentally fall out of the gate by being added to the wrong function.
+#
+# These three routes do not 403 a non-entitled caller. They serve the SAME endpoint two ways —
+# the real numbers to an entitled caller, and a LOCKED payload (public identity + market ADP,
+# re-ordered, `locked: true`) to everyone else — because the operator's rule is that a locked 2026
+# point must render a "subscribe to unlock" CTA rather than be blank or absent. The redaction policy
+# is entirely in `services/entitlement.py`; these handlers only choose which transform to apply.
+#
+# ⚠️ GATEWAY. These routes are still behind the API Gateway Cognito authorizer today, so an
+# UNAUTHENTICATED caller gets 401 before Lambda runs and the change is only visible to logged-in
+# non-entitled users (403 → locked payload + CTA). Opening them to logged-out visitors at launch is
+# a deliberate, separate operator step: `aws apigatewayv2 create-route … --authorization-type NONE`
+# per route (see `infrastructure/aws_resources.md`). That step is what makes
+# `services/jwt_verify.py` load-bearing — the moment the authorizer comes off, the Bearer token is
+# attacker-controlled and only its verified signature may be trusted.
+board_router = APIRouter(prefix="/fantasy", tags=["fantasy"])
 
 _DEFAULT_SEASON = int(os.getenv("NFL_FANTASY_SEASON", "2026"))
 _CACHE_BUCKET = os.getenv("CACHE_BUCKET")
@@ -85,39 +109,72 @@ def _load_json(rel_key: str, sport: str = "nfl") -> dict | list | None:
         raise HTTPException(status_code=502, detail="Could not read fantasy data") from e
 
 
-@router.get("/nfl/manifest")
-def nfl_manifest(season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100)):
-    """The NFL fantasy draft-board manifest (available configs + sizes + roster shapes)."""
+def _may_see_values(request: Request, season: int) -> bool:
+    """True iff this caller may receive the REAL numbers for `season`.
+
+    Two independent ways to qualify: the season is already free (strictly before
+    `LOCKED_SEASON` — the NF3.2 receipts rule), or the caller holds fantasy entitlement. Anything
+    else — including an unverifiable or forged token — is locked.
+    """
+    if not entitlement.is_locked_season(season):
+        return True
+    return entitlement.resolve_entitlement(request).fantasy
+
+
+@board_router.get("/nfl/manifest")
+def nfl_manifest(request: Request, season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100)):
+    """The NFL fantasy draft-board manifest (available configs + sizes + roster shapes).
+
+    Locked form keeps the page shell so a non-entitled visitor sees a real board frame to put the
+    CTA on; it drops the feature legend/attribution metadata, which exists only to label the
+    entitled `contrib` panel (payload minimization — don't ship what isn't rendered)."""
     data = _load_json(f"{season}/manifest.json")
     if data is None:
         raise HTTPException(status_code=404, detail="Fantasy manifest not found")
-    return data
+    if _may_see_values(request, season):
+        return entitlement.open_manifest_payload(data)
+    return entitlement.lock_manifest_payload(data)
 
 
-@router.get("/nfl/projections")
-def nfl_projections(season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100)):
+@board_router.get("/nfl/projections")
+def nfl_projections(
+    request: Request, season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100)
+):
     """NF3 — the format-INDEPENDENT NFL season projection (raw stat line + the 80% PPR
     interval + uncertainty type / confidence). The browse Projections surface reads this;
-    the format-SCORED numbers come from /nfl/board."""
+    the format-SCORED numbers come from /nfl/board.
+
+    Locked form carries each player's public identity + market ADP with `locked: true` and NO
+    model output, RE-SORTED onto a public key — the stored array is ordered by our projection, so
+    keeping the order would hand over the ranking even with every number stripped."""
     data = _load_json(f"{season}/projections.json")
     if data is None:
         raise HTTPException(status_code=404, detail="Fantasy projections not found")
-    return data
+    if _may_see_values(request, season):
+        return entitlement.open_projections_payload(data)
+    return entitlement.lock_projections_payload(data)
 
 
-@router.get("/nfl/board")
+@board_router.get("/nfl/board")
 def nfl_board(
+    request: Request,
     config: str = Query(..., description="league preset name, e.g. full_ppr_3wr"),
     size: int = Query(..., ge=2, le=32, description="team count"),
     season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
 ):
-    """A single (config, size) NFL fantasy draft board."""
+    """A single (config, size) NFL fantasy draft board.
+
+    Returns a LIST in both modes (never an envelope object — the deployed client indexes it
+    directly; see `entitlement.lock_board_payload`). A board is entirely model output, so the
+    locked form is the player universe with every number removed and the order rebuilt."""
     if not _CONFIG_RE.match(config):
         raise HTTPException(status_code=422, detail="Invalid config name")
     data = _load_json(f"{season}/board_{config}_{size}.json")
     if data is None:
         raise HTTPException(status_code=404, detail="Fantasy board not found")
-    return data
+    if _may_see_values(request, season):
+        return data
+    return entitlement.lock_board_payload(data if isinstance(data, list) else [])
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -19,6 +19,7 @@ import {
   GLOSSARY,
   InfoTip,
   IntervalBar,
+  LockChip,
   LoadingBlock,
   MarketLeanNote,
   Pagination,
@@ -32,7 +33,9 @@ import {
   UNCERTAINTY_HELP,
   UNCERTAINTY_LABEL,
   UncertaintyNote,
+  UpgradeBanner,
   num,
+  numOrLock,
   int,
   teamLabel,
 } from "@/components/fantasy/shared"
@@ -110,6 +113,10 @@ export function ProjectionsTable() {
           />
         </div>
       </SurfaceHeader>
+
+      {/* E9.56 — the server withheld this season's values from this caller. Rows still render with
+          their public identity, each locked cell carrying its own chip; this is the page-level ask. */}
+      {data?.locked && <UpgradeBanner season={data.season ?? FANTASY_SEASON} upgrade={data.upgrade} />}
 
       {isLoading && <LoadingBlock label="Loading projections…" />}
 
@@ -240,25 +247,33 @@ export function ProjectionsTable() {
                     </td>
                     <td className="px-3 py-2 text-gray-400">{teamLabel(p)}</td>
                     <td className="px-3 py-2 text-right text-gray-500">{p.bye ?? "—"}</td>
-                    <td className="px-3 py-2 text-right text-gray-400">{num(p.g)}</td>
+                    <td className="px-3 py-2 text-right text-gray-400">{numOrLock(p.g, p.locked)}</td>
                     {statCols.map((c) => (
                       <td key={String(c.key)} className="px-3 py-2 text-right text-gray-400">
-                        {num(p[c.key] as number | null, c.nd ?? 1)}
+                        {numOrLock(p[c.key] as number | null, p.locked, c.nd ?? 1)}
                       </td>
                     ))}
                     <td className="px-3 py-2 text-right font-semibold text-gray-100">
-                      {num(p[scoring])}
+                      {numOrLock(p[scoring], p.locked)}
                     </td>
+                    {/* E9.56 — the interval is model output too. A locked row has no p10/p90, so
+                        render the chip rather than an empty bar that reads as "no uncertainty". */}
                     <td className="w-40 px-3 py-2">
-                      <RangeCell p10={p.fpP10} p90={p.fpP90} classLevel={p.uncType === "calibrated"} />
-                      <IntervalBar
-                        p10={p.fpP10}
-                        point={p.fpPpr}
-                        p90={p.fpP90}
-                        min={domain.min}
-                        max={domain.max}
-                        classLevel={p.uncType === "calibrated"}
-                      />
+                      {p.locked ? (
+                        <LockChip title="Subscribe to unlock the projected range" />
+                      ) : (
+                        <>
+                          <RangeCell p10={p.fpP10} p90={p.fpP90} classLevel={p.uncType === "calibrated"} />
+                          <IntervalBar
+                            p10={p.fpP10}
+                            point={p.fpPpr}
+                            p90={p.fpP90}
+                            min={domain.min}
+                            max={domain.max}
+                            classLevel={p.uncType === "calibrated"}
+                          />
+                        </>
+                      )}
                     </td>
                     {hasAdp && (
                       <td className="px-3 py-2 text-right text-gray-400">

@@ -231,6 +231,75 @@ authorizer sits in front of the Lambda entirely and rejects an unauthenticated r
 Mangum/FastAPI ever sees it (see NF3.2: `fantasy_public.router` shipped correct at the app layer
 but still 401'd until this API Gateway route was added).
 
+### 🔒 E9.56 — the public-launch route flip (NOT YET APPLIED)
+
+The freemium split (past seasons free, 2026 locked behind a per-point marker) is enforced
+**server-side** in `app/backend/services/entitlement.py`. Until these routes exist, the three 2026
+surfaces stay behind the authorizer and a logged-out visitor gets 401 — which is the correct
+PRE-launch state. Apply these **only** when the public launch is wanted, and **only after**
+`./infrastructure/lambda/deploy.sh` has shipped the enforcement:
+
+```bash
+# ⛔ RUN deploy.sh FIRST. On a public route WITHOUT the deployed enforcement, these serve the FULL
+#    2026 payload to anonymous callers — the exact leak E9.56 exists to prevent.
+for RK in "GET /fantasy/nfl/manifest" "GET /fantasy/nfl/projections" "GET /fantasy/nfl/board"; do
+  aws apigatewayv2 create-route \
+    --api-id 8dhmehjak7 --region us-east-1 \
+    --route-key "$RK" \
+    --target "integrations/p093jnh" \
+    --authorization-type NONE
+done
+
+# Then PROVE it from outside — this is the only real verification (CI mocks all IO):
+uv run python scripts/check_api_entitlement.py --strict
+```
+
+⭐ **Why the flip is safe only with the enforcement deployed:** an `--authorization-type NONE` route
+gets **no upstream token validation**, so the Bearer token becomes attacker-controlled. Measured
+2026-08-04 — a forged unsigned JWT claiming `{"cognito:groups":["subscriber","admin"]}` returns
+**200** on the existing NONE route (`/fantasy/nfl/track-record/manifest`) while every JWT-authorized
+route returns 401. `app/backend/services/jwt_verify.py` is what makes entitlement on such a route
+trustworthy (real RS256 JWKS verification, fails closed); the unverified
+`dependencies._decode_jwt_payload` path is valid ONLY behind the authorizer.
+
+### 🚦 E9.56 — API Gateway throttling (rate limiting / anti-bulk-scrape) — NOT YET APPLIED
+
+⚠️ **AWS WAF does not support API Gateway HTTP APIs** (it covers REST APIs, CloudFront, ALB, AppSync
+and others). This API is an HTTP API, so WAF is not an option here — **stage/route throttling is the
+lever**. If real bot protection is needed later, the path is to front the API with CloudFront and
+attach WAF there.
+
+Throttling cannot stop one user reading one payload (nothing can — the browser must receive what it
+renders). It stops bulk extraction: a competitor pulling the entire board in one pass, or polling
+`/picks/featured` daily to accumulate our featured-pick history.
+
+```bash
+# Conservative stage-wide default. Raise if legitimate traffic trips it — check
+# ApiGateway 4XX/ThrottleCount in CloudWatch before/after.
+aws apigatewayv2 update-stage \
+  --api-id 8dhmehjak7 --region us-east-1 --stage-name '$default' \
+  --default-route-settings 'ThrottlingBurstLimit=100,ThrottlingRateLimit=50'
+
+# Tighter caps on the public, un-authenticated, bulk-attractive routes.
+aws apigatewayv2 update-stage \
+  --api-id 8dhmehjak7 --region us-east-1 --stage-name '$default' \
+  --route-settings '{
+    "GET /picks/featured":                   {"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5},
+    "GET /fantasy/nfl/track-record/{season}":{"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5},
+    "GET /fantasy/nfl/projections":          {"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5},
+    "GET /fantasy/nfl/board":                {"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5}
+  }'
+```
+
+⚠️ **Throttling is per-API, not per-caller** — API Gateway HTTP API throttling has no per-client
+dimension without usage plans (REST-API-only). So a limit low enough to stop a scraper can also
+degrade a burst of genuine traffic; start at the values above and watch, rather than tightening
+blind. Per-caller limiting would need CloudFront+WAF (rate-based rules) in front.
+
+⚠️ Neither block above has been applied or verified from a session — the `baseball-access-user` CLI
+profile has **no `apigateway:*` permission** (`aws apigatewayv2 get-routes` is denied), which is also
+why this file's route inventory has always been maintained by hand.
+
 ### Lambda Integration
 
 | Setting | Value |

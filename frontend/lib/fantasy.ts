@@ -102,6 +102,12 @@ export interface ProjectedPlayer {
    *  resolve. */
   headshot?: string | null
 
+  /** E9.56 — set by the server when this caller is not entitled to the season's model output. The
+   *  row keeps its public identity (name/pos/team/ADP) so a "subscribe to unlock" CTA has something
+   *  to render; every projected value is ABSENT, not null-with-a-secret. Optional: an entitled
+   *  response omits it entirely. */
+  locked?: boolean
+
   // ── NF1.6: KICKER + TEAM DEFENSE (DST) ────────────────────────────────────────────────────
   /** True for the positions whose projection must NOT be read as a confident rank (K/DST). Set on
    *  every row by the exporter (false for skill positions), so the UI never has to know which
@@ -225,6 +231,27 @@ export interface ProjectionPayload {
    *  and cannot drift out of sync with which positions actually use the market. */
   market_lean_note?: string | null
   players: ProjectedPlayer[]
+
+  // ── E9.56: the server-side entitlement envelope ────────────────────────────────────────────
+  // ALL OPTIONAL, and every consumer must tolerate their ABSENCE: the API Lambda ships only via a
+  // manual `deploy.sh` while this frontend auto-deploys on merge, so there is always a window where
+  // a NEW client is talking to the OLD backend (NF-C0, both directions). Absent ⇒ read as ENTITLED,
+  // which is the shape the old backend has always returned to a caller it let through at all.
+  /** True when the server withheld this season's model output from this caller. */
+  locked?: boolean
+  /** Stated explicitly rather than inferred from `!locked`, so a dropped field can never read as
+   *  entitled (the E9.41 silently-dropped-Pydantic-field class). */
+  entitled?: boolean
+  lockedSeason?: number
+  /** Exactly which field names the server removed — computed server-side from the real payload, so
+   *  a newly-added projection field shows up as a locked point (and a CTA) automatically. */
+  lockedFields?: string[]
+  upgrade?: { reason: string; message: string; ctaHref: string }
+}
+
+/** True iff the server locked this payload/row. Absent marker ⇒ NOT locked (see above). */
+export function isLocked(x: { locked?: boolean } | null | undefined): boolean {
+  return x?.locked === true
 }
 
 /** NF1.5b — the positions whose ordering INCORPORATES market consensus, from a `market_lean` map.

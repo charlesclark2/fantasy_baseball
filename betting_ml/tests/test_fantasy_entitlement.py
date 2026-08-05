@@ -172,31 +172,42 @@ def board_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
+# E9.56 — these three handlers became ENTITLEMENT-AWARE and now take the `Request` (they serve a
+# locked payload rather than 403-ing a non-entitled caller), so each call passes an ENTITLED request:
+# what these tests have always asserted is that a caller who IS entitled gets the real blob, and that
+# is exactly the assertion to preserve. The locked branch, the redaction and the forged-token path
+# are covered in `test_e9_56_entitlement.py`.
+_ENTITLED = lambda: _request(ctx_groups=["subscriber"])  # noqa: E731
+
+
 def test_manifest_endpoint_serves_local(board_dir):
-    out = fantasy.nfl_manifest(season=2026)
+    out = fantasy.nfl_manifest(_ENTITLED(), season=2026)
     assert out["season"] == 2026
+    assert out["locked"] is False  # E9.56: additive envelope, entitled caller
 
 
 def test_board_endpoint_serves_local(board_dir):
-    out = fantasy.nfl_board(config="full_ppr", size=12, season=2026)
+    out = fantasy.nfl_board(_ENTITLED(), config="full_ppr", size=12, season=2026)
+    # Unchanged for an entitled caller — still the raw list, byte-for-byte (NF-C0: the container
+    # type and contents must not move for anyone who could already read it).
     assert out == [{"id": "1", "pos": "RB"}]
 
 
 def test_board_endpoint_404_on_missing(board_dir):
     with pytest.raises(HTTPException) as exc:
-        fantasy.nfl_board(config="superflex", size=10, season=2026)
+        fantasy.nfl_board(_ENTITLED(), config="superflex", size=10, season=2026)
     assert exc.value.status_code == 404
 
 
 def test_board_endpoint_rejects_path_traversal(board_dir):
     with pytest.raises(HTTPException) as exc:
-        fantasy.nfl_board(config="../../etc/passwd", size=12, season=2026)
+        fantasy.nfl_board(_ENTITLED(), config="../../etc/passwd", size=12, season=2026)
     assert exc.value.status_code == 422
 
 
 def test_projections_endpoint_serves_local(board_dir):
     # NF3 — the browse Projections surface reads this blob.
-    out = fantasy.nfl_projections(season=2026)
+    out = fantasy.nfl_projections(_ENTITLED(), season=2026)
     assert out["season"] == 2026
     assert out["players"] == [{"id": "1", "pos": "RB"}]
 
@@ -204,15 +215,48 @@ def test_projections_endpoint_serves_local(board_dir):
 def test_projections_endpoint_404_on_missing(board_dir):
     # The blob is exported separately from the boards, so a season with boards but no projections
     # must 404 (the UI shows an honest empty state) rather than 500.
+    #
+    # ⚠️ E9.56: 2025 is a FREE season, so this also pins that a missing PAST-season blob 404s rather
+    # than falling into the locked branch — "not published" and "paid" must stay distinguishable.
     with pytest.raises(HTTPException) as exc:
-        fantasy.nfl_projections(season=2025)
+        fantasy.nfl_projections(_ENTITLED(), season=2025)
     assert exc.value.status_code == 404
+
+
+def test_a_non_entitled_caller_is_not_403d_but_locked(board_dir):
+    """E9.56 — the behaviour change, pinned here beside the endpoints it changed.
+
+    These three reads used to 403 a non-entitled caller. They now return 200 with the values
+    removed, because the operator's rule is that a locked 2026 point renders a "subscribe to
+    unlock" CTA rather than being blank or absent."""
+    out = fantasy.nfl_projections(_request(ctx_groups=["beta_tester"]), season=2026)
+    assert out["locked"] is True
+    assert all("fpPpr" not in p for p in out["players"])
 
 
 def test_router_declares_the_fantasy_gate():
     # Every route in the router must sit behind require_fantasy_access.
     dep_calls = [d.dependency for d in fantasy.router.dependencies]
     assert deps.require_fantasy_access in dep_calls
+
+
+def test_exactly_three_routes_live_outside_the_fantasy_gate():
+    """E9.56 — the exemption must stay an ENUMERATED list, not an open door.
+
+    The dual-mode reads live on a second router with no `require_fantasy_access` (this codebase's
+    idiom: an exemption is a separate router object, never a flag inside the gated one). The failure
+    mode that idiom exists to prevent is a fourth route quietly joining the un-gated router — a
+    write endpoint, or `/nfl/my-teams` (a user's OWN leagues), would then be readable by anyone.
+    Pinning the exact set makes that a failing test rather than a silent leak."""
+    assert {r.path for r in fantasy.board_router.routes} == {
+        "/fantasy/nfl/manifest",
+        "/fantasy/nfl/projections",
+        "/fantasy/nfl/board",
+    }
+    assert deps.require_fantasy_access not in [d.dependency for d in fantasy.board_router.dependencies]
+    # ...and every one of them is a READ. A write outside the gate would be far worse than a read.
+    for route in fantasy.board_router.routes:
+        assert set(route.methods) == {"GET"}, f"{route.path} is not read-only outside the gate"
 
 
 # ── NF-C0b: the league-settings editor is gated NARROWER than the surface ────────────
