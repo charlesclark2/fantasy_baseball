@@ -1109,8 +1109,13 @@ def main(argv: list[str] | None = None) -> int:            # noqa: C901 — orch
     suffix = "_smoke" if args.smoke else ""
 
     pool = NF17.load_pool(Path(args.pool))
+    # ⚠️ `recal_lambda=1.0` is PINNED, not inherited from the served policy (NF-D21 made the
+    #    `build_folds` default track serving). `--recalibrated-incumbent` is NF-D16's post-ship
+    #    headroom re-read: it asks "how much level effect is left once the FULL correction is
+    #    applied", and re-running it at the served λ=0.5 would answer a different question while
+    #    reproducing this story's published table. A historical result is scored at ITS OWN λ.
     folds = NF17.build_folds(pool, list(range(args.from_year, args.to_year + 1)),
-                             recalibrate=bool(args.recalibrated_incumbent))
+                             recalibrate=bool(args.recalibrated_incumbent), recal_lambda=1.0)
     suffix += "_post_ship" if args.recalibrated_incumbent else ""
     if len(folds) < 4:
         raise SystemExit(f"only {len(folds)} usable draft classes — CSCV needs ≥4")

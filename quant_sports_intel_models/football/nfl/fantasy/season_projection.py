@@ -1036,6 +1036,10 @@ class RookieSlotCurve:
     # incumbent, byte-identical). Fitted only when `fit_rookie_slot_curves` is given `recal_hist`, so
     # no existing caller changes behaviour by accident. QB is EXCLUDED by pre-registration.
     fp_recal: dict = field(default_factory=dict)
+    # NF-D21: the GLOBAL SHRINK λ the parameters above are already folded at (see
+    # `fit_rookie_slot_curves`). Carried for PROVENANCE only — nothing reads it to compute a
+    # projection, because a λ applied twice would be a silent double-shrink. 0.0 ⇒ no recalibration.
+    fp_recal_lambda: float = 0.0
 
     def recalibrate_fp(self, positions, fp) -> np.ndarray:
         """Apply the NF-D16 per-position level recalibration to a scored rookie fp projection.
@@ -1107,7 +1111,8 @@ def fit_rookie_slot_curves(hist: pd.DataFrame, band_hist: pd.DataFrame | None = 
                            band_cqr_scale: str | None = None,
                            band_cqr_k: int | None = None,
                            per_player_band: bool = True,
-                           recal_hist: pd.DataFrame | None = None) -> RookieSlotCurve:
+                           recal_hist: pd.DataFrame | None = None,
+                           recal_lambda: float = 1.0) -> RookieSlotCurve:
     """Fit the composite rookie model from prior classes.
 
     hist: one row per historical drafted rookie (skill positions) with `position_group`,
@@ -1168,14 +1173,25 @@ def fit_rookie_slot_curves(hist: pd.DataFrame, band_hist: pd.DataFrame | None = 
     # ⚠️ OPT-IN BY `recal_hist`, never inferred from `band_hist`: inferring it would silently change the
     #    point for every existing caller — including NF1.4's pinned "the band does not move the point"
     #    test, which compares a band-fitted curve against a point-only one.
+    # ⭐ NF-D21 — `recal_lambda` is the GLOBAL SHRINK the correction is served at, folded into the
+    #    fitted affine ONCE here (`shrink_affine_params`: (a, b) → (λa, 1−λ+λb), exactly equivalent
+    #    to blending in output space). Folding it at fit time rather than at predict time means the
+    #    served curve carries the shrink INSIDE its parameters, so `recalibrate_fp` — and therefore
+    #    every consumer of the curve, including the band fit two lines below — cannot be built at a
+    #    different λ than the one that was staged. λ = 0 yields the identity (0, 1) per position and
+    #    reproduces the pre-NF-D16 point byte-for-byte.
     if recal_hist is not None and not recal_hist.empty:
         from quant_sports_intel_models.football.nfl.fantasy import (  # local: avoids an import cycle
             rookie_point_recalibration as _RC,
         )
         _pts = rookie_point_projection(recal_hist, curve)
-        curve.fp_recal = _RC.fit_ols(
-            _pts, pd.to_numeric(recal_hist["rookie_fp_ppr"], errors="coerce").to_numpy(dtype=float),
-            recal_hist["position_group"].to_numpy())
+        curve.fp_recal = _RC.shrink_affine_params(
+            _RC.fit_ols(
+                _pts,
+                pd.to_numeric(recal_hist["rookie_fp_ppr"], errors="coerce").to_numpy(dtype=float),
+                recal_hist["position_group"].to_numpy()),
+            recal_lambda)
+        curve.fp_recal_lambda = float(recal_lambda)
 
     if band_hist is not None and not band_hist.empty:
         _fit_rookie_bands(curve, band_hist)
