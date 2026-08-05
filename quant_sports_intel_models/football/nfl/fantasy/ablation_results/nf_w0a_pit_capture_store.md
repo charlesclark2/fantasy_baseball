@@ -149,6 +149,55 @@ reported in full every run (`watched_missing`); only the paging decision reads
 RED-proven both ways: emptying `ACCEPTED_MISSING` makes the live box condition page again, and
 reverting the escalation to the un-baselined `watched_missing` turns the baseline test red.
 
+**⭐ …AND THE VERIFICATION RUN FOUND THE SAME SHAPE ONE LEVEL UP — AT THE ASSET.** The box run
+that confirmed the column baseline escalated anyway, for a *different* reason: **13 of 30 assets
+were UNREADABLE (HTTP 404)**. Not a break — those files did not exist. `current_season()` is right
+about which season we are IN and wrong as a proxy for which season nflverse has FILES for: it
+rolls over in March, but nflverse publishes season-scoped assets as data appears. Measured against
+the GitHub release API, 2026-08-05:
+
+```
+depth_charts_2026.parquet   created 2026-08-04T09:36:42Z   ← training camp, one day earlier
+injuries_2026.parquet       does not exist (newest = injuries_2025)
+play_by_play_2026.parquet   does not exist (newest = play_by_play_2025)
+```
+
+⇒ unhandled, the metadata job pages ERROR **every Tue/Fri through the whole pre-season** —
+including both fires before the opener — and the **injuries leg fails outright**, since
+`injuries_2026` will not exist on Sept 1 or Sept 4. That is the identical
+"a structurally expected calendar condition spends the alert channel" defect the column baseline
+had just fixed, sitting one level up and invisible until a run used the default season. (It hid
+because the earlier smoke commands carried `--season 2025`, where every file exists — a reminder
+that a smoke on a different season than the schedules will run is not the same test.)
+
+**Fix:** `classify_unreadable`, and the discriminator is the **snapshot store, not a calendar
+guess** — an asset described successfully before and unreadable now is a REGRESSION and escalates
+immediately; one never seen this season is not published yet. The quiet branch is bounded by
+`schedule.data_expected_from` (week 2's first kickoff — week 1's data lands days earlier) so it
+cannot become a permanent blindfold. Only an unambiguous 404 qualifies; every other failure keeps
+its escalation, because a network blip must never be laundered into "not published yet". The
+injuries leg honours the same bar.
+
+Two honesty rules the same finding forced:
+
+- an **UNREADABLE asset reports no missing columns**. With `columns=[]` a naive computation
+  announced four injuries columns as newly deleted that nobody had looked at — NF1.7 (a)
+  inverted (an unevaluable check reported as a definite negative), double-reporting one condition
+  as two.
+- an unresolvable bar never licenses silence.
+
+Verified live on the laptop, both legs, against real nflverse state:
+
+```
+schema    unreadable_unexpected=[]  expected_absent=[13 assets]  escalate=false
+          data_expected_from=2026-09-18T00:15Z   ← week 2 kickoff, from the real schedule
+          watched_missing_new={}  (the four phantom deletions are gone)
+injuries  expected_absent=true  escalate=false  (error still RECORDED)
+```
+
+RED-proven: reverting the unreadable-column clause, the escalation source, or the injuries 404
+branch each turns its own test(s) red (1 / 2 / 1).
+
 **The market board is already fully priced 35 days pre-opener** (272 events × 10 books) — so
 enabling the market schedule early also captures pre-season line movement, at no extra cost.
 

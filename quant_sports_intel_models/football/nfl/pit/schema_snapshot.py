@@ -32,7 +32,7 @@ import logging
 from datetime import datetime
 
 from . import store
-from .schedule import current_season
+from .schedule import current_season, data_expected_from, looks_like_missing_asset
 from .timestamps import CaptureStamps, now_utc
 
 log = logging.getLogger(__name__)
@@ -195,7 +195,14 @@ def snapshot_schemas(
                 "column_count": len(columns),
                 "column_names": names,
                 "schema_fingerprint": schema_fingerprint(columns),
-                "watched_missing": [c for c in watched if c not in names],
+                # ⚠️ ONLY MEANINGFUL FOR A READABLE ASSET. An UNREADABLE asset has `columns=[]`, so
+                # a naive computation reports EVERY watched column as "missing" — which is false:
+                # they are UNKNOWN, not absent. That is NF1.7 (a) inverted (an unevaluable check
+                # reported as a definite negative finding), and it double-reports one condition
+                # (the asset could not be read) as two. `unreadable` already carries that signal,
+                # once. Measured 2026-08-05: an absent `injuries_2026.parquet` had the leg
+                # announcing four columns as newly deleted that nobody had looked at.
+                "watched_missing": [c for c in watched if c not in names] if status == "OK" else [],
                 "watched_all_null": sorted(
                     c for c in watched if nulls.get(c) is not None and nulls[c] >= 1.0
                 ),
@@ -279,6 +286,39 @@ def resolved_accepted_missing(rows: list[dict]) -> dict:
     return out
 
 
+def classify_unreadable(
+    rows: list[dict], previous: dict, *, now: datetime, expected_from: datetime | None
+) -> tuple[list[str], list[str]]:
+    """Split unreadable assets into `(unexpected, expected_absent)`.
+
+    ⭐ THE DISCRIMINATOR IS THE SNAPSHOT STORE, NOT A CALENDAR GUESS. An asset we successfully
+    described before and cannot describe now is a REGRESSION and escalates unconditionally —
+    that is the silent-death signature this leg exists to date. An asset we have NEVER seen for
+    this season is simply not published yet, and nflverse publishes season-scoped assets
+    progressively as data appears (measured 2026-08-05: `depth_charts_2026` existed, `injuries_2026`
+    and twelve others did not). Same "a known state is not an event" split the ACCEPTED_MISSING
+    baseline draws for columns, one level up — applied to the asset instead of the column.
+
+    The never-seen branch is BOUNDED by `expected_from` so it cannot become a permanent blindfold:
+    past that instant every season-scoped asset should exist, and a still-absent one escalates.
+    """
+    unexpected, expected_absent = [], []
+    for row in rows or []:
+        if row.get("status") == "OK":
+            continue
+        asset = row.get("asset")
+        prior = (previous or {}).get(asset) or {}
+        seen_readable = prior.get("status") == "OK"
+        missing_asset = looks_like_missing_asset(str(row.get("error") or ""))
+        # An UNKNOWN bar cannot license silence — NF1.7 (a): a check that did not run is not a pass.
+        before_bar = expected_from is not None and now < expected_from
+        if not seen_readable and missing_asset and before_bar:
+            expected_absent.append(asset)
+        else:
+            unexpected.append(asset)
+    return sorted(unexpected), sorted(expected_absent)
+
+
 def run_schema_snapshot(
     season: int | None = None,
     *,
@@ -290,6 +330,7 @@ def run_schema_snapshot(
     local_root: str | None = None,
     dry_run: bool = False,
     probe_nulls: bool = True,
+    expected_from: datetime | None = None,
 ) -> dict:
     """Snapshot every nflverse asset schema and report drift vs the previous snapshot.
 
@@ -314,10 +355,22 @@ def run_schema_snapshot(
         if d["drifted"]:
             drifts.append(d)
 
+    # Resolved LAZILY: the bar costs a schedule read, and on a healthy run there is nothing to
+    # classify. (It also keeps the fast gate free of network IO on every all-OK case.)
+    if expected_from is None and any(r.get("status") != "OK" for r in rows or []):
+        expected_from = data_expected_from(season)
+    unexpected, expected_absent = classify_unreadable(
+        rows, previous, now=now, expected_from=expected_from
+    )
+
     watched_missing = {r["asset"]: r["watched_missing"] for r in rows if r["watched_missing"]}
     manifest = {
         "season": season, "now": now.isoformat(), "assets": len(rows),
+        # The FULL list stays the record; only the ESCALATING subset drives the page.
         "unreadable": sorted(r["asset"] for r in rows if r["status"] != "OK"),
+        "unreadable_unexpected": unexpected,
+        "unreadable_expected_absent": expected_absent,
+        "data_expected_from": expected_from.isoformat() if expected_from else None,
         # The FULL state, reported every run regardless of paging — the record must not shrink
         # just because a condition is accepted.
         "watched_missing": watched_missing,
@@ -332,18 +385,25 @@ def run_schema_snapshot(
     }
 
     watched_drift = [d for d in drifts if d["watched_affected"]]
-    if watched_drift or manifest["watched_missing_new"] or manifest["unreadable"]:
+    if watched_drift or manifest["watched_missing_new"] or manifest["unreadable_unexpected"]:
         manifest["escalate"] = True
         log.warning(
             "ALERT [nfl/pit/schema] WATCHED nflverse columns changed/missing — "
             "drift=%s newly_missing=%s unreadable=%s. This is the 2025 silent-deletion class; "
             "any consumer of these columns must be re-verified before the next build.",
             [(d["asset"], d["watched_affected"]) for d in watched_drift],
-            manifest["watched_missing_new"], manifest["unreadable"],
+            manifest["watched_missing_new"], manifest["unreadable_unexpected"],
         )
     elif drifts:
         log.info("[nfl/pit/schema] non-watched schema drift on %s", [d["asset"] for d in drifts])
 
+    if expected_absent:
+        log.info(
+            "[nfl/pit/schema] %d asset(s) not published for season %s yet (EXPECTED, NOT paged; "
+            "season-scoped nflverse assets appear as data does — anything still absent after %s "
+            "escalates): %s",
+            len(expected_absent), season, expected_from.date().isoformat(), expected_absent,
+        )
     # Visible in every run log, but never a page: these are the already-triaged 2025 breaks.
     if manifest["watched_missing_accepted"]:
         log.info(
@@ -394,8 +454,11 @@ def _latest_by_asset(season: int, *, bucket=None, local_root=None) -> dict:
     con = connect(httpfs=False)  # box-aware; a Delta/pyarrow read needs no httpfs
     con.register("snaps", dt.to_pyarrow_dataset())
     try:
+        # `status` is what separates "we saw this asset and it was fine" from "we have never had
+        # a readable snapshot of it" — the whole basis of `classify_unreadable`. Selecting only
+        # the column list would force that judgement onto an empty-list proxy.
         rows = con.execute(
-            "SELECT asset, schema_fingerprint, column_names, capture_timestamp FROM snaps "
+            "SELECT asset, schema_fingerprint, column_names, capture_timestamp, status FROM snaps "
             "WHERE season = ? QUALIFY row_number() OVER "
             "(PARTITION BY asset ORDER BY capture_timestamp DESC) = 1",
             [int(season)],
@@ -409,6 +472,7 @@ def _latest_by_asset(season: int, *, bucket=None, local_root=None) -> dict:
         r[0]: {
             "asset": r[0],
             "schema_fingerprint": r[1],
+            "status": r[4],
             "payload": {"columns": [{"name": n, "type": ""} for n in (r[2] or [])], "null_rates": {}},
         }
         for r in rows
