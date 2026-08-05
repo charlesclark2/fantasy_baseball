@@ -216,12 +216,33 @@ Apply this authorizer to all routes except:
 - `GET /fantasy/nfl/track-record/manifest` (NF3.2 public receipts manifest — added 2026-08-02)
 - `GET /fantasy/nfl/track-record/{season}` (NF3.2 public receipts per-season data — added 2026-08-02)
 
-⚠️ **This authorizer is applied per explicit ROUTE, not globally on a catch-all** — `GET /health`
-itself has no explicit route in API Gateway (`aws apigatewayv2 get-routes` returns `[]` for it), so
-its exemption works some other way (likely a `$default`/proxy+ catch-all with `AuthorizationType:
-NONE`, with authorization instead enforced per-route for protected paths — or vice versa; never
-fully confirmed, since the `baseball-access-user` CLI profile lacks `apigateway:GET`). What IS
-confirmed: HTTP API route matching is most-specific-wins, so adding an **explicit route for a
+✅ **ROUTE INVENTORY — CONFIRMED 2026-08-05** (`aws apigatewayv2 get-routes`, run with the
+`AdministratorAccess-769392325318` SSO profile; the everyday `baseball-access-user` profile is denied
+`apigateway:*`, which is why this went unverified for so long). The nine routes that exist:
+
+```
+ANY  /{proxy+}                            ← the catch-all: everything not listed below
+OPTIONS /{proxy+}                         ← CORS preflight (must stay unauthenticated —
+                                             a browser preflight cannot carry a bearer token)
+ANY  /health
+GET  /picks/featured
+GET  /blog/posts
+GET  /blog/posts/{id}
+POST /stripe/webhook
+GET  /fantasy/nfl/track-record/manifest
+GET  /fantasy/nfl/track-record/{season}
+```
+
+⇒ **the model is: the catch-all carries the authorizer, and an explicit route EXEMPTS a path from
+it.** Every explicit route above is a deliberate public surface. This CORRECTS the paragraph that
+previously stood here, which claimed `GET /health` had no explicit route and called the mechanism
+"never fully confirmed" — `ANY /health` does exist, and the inference was backwards.
+
+⚠️ Re-read the AuthorizationType per route before relying on this
+(`--query 'Items[].{Route:RouteKey,Auth:AuthorizationType}'`); the route LIST is confirmed, and a
+route's auth type is the thing that actually gates it.
+
+What was already confirmed, and still holds: HTTP API route matching is most-specific-wins, so adding an **explicit route for a
 specific path with `--authorization-type NONE`** reliably exempts that exact path regardless of
 whatever the catch-all does. That's the mechanism used for the two track-record routes above —
 mirror it (`aws apigatewayv2 create-route --route-key "GET /your/new/public/path" --target
@@ -262,6 +283,30 @@ route returns 401. `app/backend/services/jwt_verify.py` is what makes entitlemen
 trustworthy (real RS256 JWKS verification, fails closed); the unverified
 `dependencies._decode_jwt_payload` path is valid ONLY behind the authorizer.
 
+⚠️ **THE FLIP ALSO MOVES WHERE A *LEGITIMATE* SUBSCRIBER IS AUTHENTICATED**, which is easy to miss
+because nothing about it is visible in the FastAPI source. Today the gateway validates a subscriber's
+token and Mangum hands the Lambda a populated `requestContext.authorizer`. On a NONE route that
+context is ABSENT, so `resolve_entitlement` falls through to verifying the token itself — i.e. after
+the flip, **every paying subscriber's access to these three endpoints depends on the Lambda reaching
+the Cognito JWKS endpoint**. Two preconditions to confirm before flipping:
+
+```bash
+# 1. The Lambda must have public egress (NOT VPC-attached) to reach cognito-idp.
+#    Expect empty SubnetIds/SecurityGroupIds.
+aws lambda get-function-configuration --function-name credence-prod-lambda-api \
+  --region us-east-1 --query 'VpcConfig'
+
+# 2. OPTIONS preflight must stay reachable. `OPTIONS /{proxy+}` already covers the new paths and
+#    must remain --authorization-type NONE — a browser preflight cannot carry a bearer token, so a
+#    JWT-gated OPTIONS breaks every cross-origin call with an opaque CORS error, not a 401.
+```
+
+It fails CLOSED: if JWKS is unreachable, a real subscriber degrades to the LOCKED view rather than
+erroring. That is the safe direction and it is visible (they get the CTA, not a blank page), but it
+means a JWKS outage presents as "my subscription stopped working." JWKS is cached per warm container
+(1h TTL, plus a refetch on an unknown `kid` so a key rotation self-heals), so the cost is one HTTPS
+fetch per cold start with a 3s timeout.
+
 ### 🚦 E9.56 — API Gateway throttling (rate limiting / anti-bulk-scrape) — NOT YET APPLIED
 
 ⚠️ **AWS WAF does not support API Gateway HTTP APIs** (it covers REST APIs, CloudFront, ALB, AppSync
@@ -273,23 +318,55 @@ Throttling cannot stop one user reading one payload (nothing can — the browser
 renders). It stops bulk extraction: a competitor pulling the entire board in one pass, or polling
 `/picks/featured` daily to accumulate our featured-pick history.
 
+⚠️⚠️ **`--route-settings` KEYS MUST BE ROUTES THAT ALREADY EXIST.** This API authorizes per explicit
+route on top of a catch-all, so **most paths have no explicit route object** — `GET /health` famously
+does not (see the authorizer note above). A `--route-settings` entry for a non-existent route key is
+not an error you can rely on seeing; it simply governs nothing, which reads exactly like a limit that
+is in place. ⇒ **list the routes first and only set per-route caps on keys that come back.** The 2026
+routes in particular do not exist until the launch flip above creates them, so their per-route caps
+are a POST-flip step, not part of this one.
+
+⚠️ **`update-stage --route-settings` REPLACES the whole map** (it is not a merge). Read the current
+settings first and re-send everything you want to keep, in one call.
+
 ```bash
-# Conservative stage-wide default. Raise if legitimate traffic trips it — check
-# ApiGateway 4XX/ThrottleCount in CloudWatch before/after.
+# ── 0. Permissions. `baseball-access-user` is DENIED apigateway:* — use an admin profile.
+export AWS_PROFILE=<your-admin-profile>          # or run these in the API Gateway console
+API=8dhmehjak7; REGION=us-east-1
+
+# ── 1. What exists today (and what throttling is already set — do not clobber it).
+aws apigatewayv2 get-routes --api-id $API --region $REGION \
+  --query 'Items[].RouteKey' --output table
+aws apigatewayv2 get-stage --api-id $API --region $REGION --stage-name '$default' \
+  --query '{default:DefaultRouteSettings,perRoute:RouteSettings}'
+
+# ── 2. Stage-wide default. Conservative; this is the one that actually bounds a bulk pull.
 aws apigatewayv2 update-stage \
-  --api-id 8dhmehjak7 --region us-east-1 --stage-name '$default' \
+  --api-id $API --region $REGION --stage-name '$default' \
   --default-route-settings 'ThrottlingBurstLimit=100,ThrottlingRateLimit=50'
 
-# Tighter caps on the public, un-authenticated, bulk-attractive routes.
+# ── 3. Tighter caps on the public, un-authenticated, bulk-attractive routes.
+#      ONLY include keys that step 1 actually listed.
 aws apigatewayv2 update-stage \
-  --api-id 8dhmehjak7 --region us-east-1 --stage-name '$default' \
+  --api-id $API --region $REGION --stage-name '$default' \
   --route-settings '{
-    "GET /picks/featured":                   {"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5},
-    "GET /fantasy/nfl/track-record/{season}":{"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5},
-    "GET /fantasy/nfl/projections":          {"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5},
-    "GET /fantasy/nfl/board":                {"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5}
+    "GET /picks/featured":                    {"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5},
+    "GET /fantasy/nfl/track-record/{season}": {"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5},
+    "GET /fantasy/nfl/track-record/manifest": {"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5}
   }'
+
+# ── 4. Confirm it took, and that the app still works.
+aws apigatewayv2 get-stage --api-id $API --region $REGION --stage-name '$default' \
+  --query '{default:DefaultRouteSettings,perRoute:RouteSettings}'
+uv run python scripts/check_api_entitlement.py     # expect 42 pass / 0 fail, unchanged
 ```
+
+📉 **Watch for over-throttling for ~24h.** A throttled request returns **429**, and the landing page
+fetches `/picks/featured` server-side per render — so a limit set too low degrades the marketing page
+first and silently (the fetch is wrapped in `.catch(() => ({game_pk:null}))`, i.e. it fails to an
+empty state rather than an error). CloudWatch → `AWS/ApiGateway` → `ThrottleCount` and `4xx` for
+`ApiId=8dhmehjak7`. Raise the caps if legitimate traffic is tripping them; the burst limit is the one
+that bites a page doing several calls at once.
 
 ⚠️ **Throttling is per-API, not per-caller** — API Gateway HTTP API throttling has no per-client
 dimension without usage plans (REST-API-only). So a limit low enough to stop a scraper can also

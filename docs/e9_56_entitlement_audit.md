@@ -168,6 +168,17 @@ matters: a competitor bulk-pulling the whole board in one pass, and daily pollin
 `/picks/featured` (the one-free-pick teaser, which ships full model detail for that pick by
 deliberate product design — the most attractive scrape target on the betting half).
 
+⚠️ **Two mechanics that decide whether the caps do anything** (corrected 2026-08-04, after the
+backend deploy): **(a)** per-route settings govern only routes that EXIST, and this API authorizes
+per explicit route on top of a catch-all — most paths have no route object at all. An entry for a
+non-existent key governs nothing while looking exactly like a limit that is in place, so the route
+list must be read first; the 2026 routes do not exist until the launch flip creates them, making
+their per-route caps a POST-flip step. **(b)** `update-stage --route-settings` REPLACES the whole map
+rather than merging, so the current settings must be read and re-sent in one call. **(c)** Throttling
+is per-API, not per-caller — HTTP APIs have no per-client dimension (usage plans are REST-only), so a
+cap low enough to stop a scraper can also degrade a burst of genuine traffic. Per-caller limiting
+would need CloudFront + WAF in front.
+
 ---
 
 ## 3. Verification

@@ -254,6 +254,33 @@ export function isLocked(x: { locked?: boolean } | null | undefined): boolean {
   return x?.locked === true
 }
 
+/** True iff the server locked THIS SET of rows (any row carrying the marker locks the view). */
+export function rowsAreLocked(rows: { locked?: boolean }[] | null | undefined): boolean {
+  return !!rows?.some((r) => r.locked === true)
+}
+
+/** E9.56b — trim the undrafted tail from a LOCKED view, and report how many were hidden.
+ *
+ *  WHY. A locked row keeps only public identity + market ADP. Measured against the live payload
+ *  (2026-08-05): of 858 rows, **226 have an ADP and 632 do not** — so ~74% of the free page would be
+ *  players with a name, a lock icon and nothing else, sorted alphabetically at the bottom. That is
+ *  not a conversion surface, it is dead weight, and it is the bulk of what a crawler would index.
+ *
+ *  The hidden count is RETURNED rather than swallowed so the UI can state it honestly ("N more
+ *  players are included with a subscription") — which turns the truncation into a reason to
+ *  subscribe rather than a silent omission. Never drop rows without saying so.
+ *
+ *  ⚠️ AN ENTITLED VIEW IS UNTOUCHED — an unlocked payload returns unchanged, tail and all. A
+ *  subscriber has a real projection for every one of those players and must still see them.
+ */
+export function trimLockedTail<T extends { adp?: number | null; locked?: boolean }>(
+  rows: T[],
+): { rows: T[]; hiddenCount: number } {
+  if (!rowsAreLocked(rows)) return { rows, hiddenCount: 0 }
+  const kept = rows.filter((r) => typeof r.adp === "number" && Number.isFinite(r.adp))
+  return { rows: kept, hiddenCount: rows.length - kept.length }
+}
+
 /** NF1.5b — the positions whose ordering INCORPORATES market consensus, from a `market_lean` map.
  *  Anything that is not explicitly independent counts, so a new lean label added upstream is treated
  *  as market-leaning (the conservative direction) rather than silently dropping the caveat. */
