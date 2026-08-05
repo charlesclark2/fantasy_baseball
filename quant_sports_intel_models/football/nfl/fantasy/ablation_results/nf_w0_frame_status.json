@@ -1,0 +1,94 @@
+{
+  "generated_at": "2026-08-05T04:19:17+00:00",
+  "seasons": [
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "season_type": "REG",
+  "n_frame_rows": 89954,
+  "n_zero_rows": 41479,
+  "leakage_guard": "PASS",
+  "parity": {
+    "train_serve_parity": "PASS",
+    "failures": [],
+    "n_train_rows": 1588,
+    "n_serve_rows": 1588,
+    "n_key_only_train": 0,
+    "n_key_only_serve": 0,
+    "projection_season": 2024,
+    "projection_week": 10,
+    "parity_canary": "DETECTED",
+    "parity_canary_detail": [
+      "key sets differ: 25 train-only, 0 serve-only",
+      "value mismatches: ['prior_week_box(285 rows)', 'snap_share(326 rows)']"
+    ]
+  },
+  "weekly_training_frame_status": "CERTIFIED",
+  "weekly_serving_frame_status": "CERTIFIED_TIER0_LAGGED",
+  "point_in_time_safe": {
+    "game_context": true,
+    "prior_week_box": true,
+    "snap_share": true,
+    "participation_proxies": true,
+    "team_environment": true,
+    "opponent_matchup": true,
+    "pfr_advanced": true,
+    "ngs_qualifying": true,
+    "injury_report": true,
+    "prior_season_priors": true,
+    "route_participation": false,
+    "first_read_share": false,
+    "individual_ol_grades": false,
+    "weather_forecast": false,
+    "market_context": false,
+    "player_props": false,
+    "depth_chart_rank": false,
+    "gameday_inactive_status": false
+  },
+  "train_serve_parity": "PASS",
+  "known_missingness": {
+    "injury_date_modified_dropped_upstream_from": 2025,
+    "ngs_weekly_is_qualifying_players_only": true,
+    "depth_charts_schema_replaced_at": 2025,
+    "weather_forecast_not_ingested": true,
+    "market_snapshots_landed_seasons": "2020-2024 (closing only)",
+    "label_mix": {
+      "played": 63755,
+      "dressed_no_stat": 13127,
+      "inactive": 7671,
+      "bye": 5401
+    },
+    "label_conflicts_ina_with_stats": 0,
+    "zero_share_overall": 0.4611
+  },
+  "allowed_feature_contract": [
+    "game_context",
+    "prior_week_box",
+    "snap_share",
+    "participation_proxies",
+    "team_environment",
+    "opponent_matchup",
+    "pfr_advanced",
+    "ngs_qualifying",
+    "injury_report",
+    "prior_season_priors"
+  ],
+  "deferred_feature_contract": [
+    "route_participation",
+    "first_read_share",
+    "individual_ol_grades",
+    "weather_forecast",
+    "market_context",
+    "player_props",
+    "depth_chart_rank",
+    "gameday_inactive_status"
+  ]
+}
