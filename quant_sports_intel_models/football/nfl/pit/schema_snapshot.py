@@ -194,6 +194,10 @@ def snapshot_schemas(
                 "asset": asset, "season": season, "url": url, "status": status, "error": error,
                 "column_count": len(columns),
                 "column_names": names,
+                # Stored ALONGSIDE the names (positionally aligned) because the retype check needs
+                # them. Keeping only names meant a reconstructed prior carried `type=""` for every
+                # column, and `"" != "VARCHAR"` read as a RETYPE on every column of every asset.
+                "column_types": [t for _, t in columns],
                 "schema_fingerprint": schema_fingerprint(columns),
                 # ⚠️ ONLY MEANINGFUL FOR A READABLE ASSET. An UNREADABLE asset has `columns=[]`, so
                 # a naive computation reports EVERY watched column as "missing" — which is false:
@@ -223,8 +227,16 @@ def diff_snapshots(previous: dict, current: dict) -> dict:
 
     removed = sorted(set(prev_cols) - set(cur_cols))
     added = sorted(set(cur_cols) - set(prev_cols))
+    # ⚠️ AN UNKNOWN TYPE IS NOT A CHANGED TYPE (NF1.7 (a) again). A snapshot stored before
+    # `column_types` existed reconstructs with `type=""`, and comparing that verbatim declares a
+    # RETYPE on every column of every asset — measured live 2026-08-05: 17 assets, including a
+    # `schedules` "watched drift" naming roof/temp/wind/gameday, with the schema fingerprint
+    # IDENTICAL on both sides. Comparing only where both types are known degrades gracefully to a
+    # name-set diff (still catching deletions and additions, which is what the leg is for) and
+    # self-heals as soon as one snapshot carries types.
     retyped = sorted(
-        {c for c in set(prev_cols) & set(cur_cols) if prev_cols[c] != cur_cols[c]}
+        c for c in set(prev_cols) & set(cur_cols)
+        if prev_cols[c] and cur_cols[c] and prev_cols[c] != cur_cols[c]
     )
     # SILENTLY DEAD: was populated, is now entirely NULL. Only computable where BOTH snapshots
     # probed nulls — otherwise it is UNKNOWN, which is not the same as clean.
@@ -284,6 +296,30 @@ def resolved_accepted_missing(rows: list[dict]) -> dict:
         if back:
             out[asset] = back
     return out
+
+
+#: Columns the prior-snapshot read wants, and whether the read still works without each. A column
+#: added by a later story is ABSENT from every row written before it, so it must be projected
+#: conditionally (see `prior_snapshot_sql`).
+_PRIOR_OPTIONAL_COLUMNS = ("status", "column_types")
+
+
+def prior_snapshot_sql(available: set[str], *, relation: str = "snaps") -> str:
+    """The latest-snapshot-per-asset query, projecting only columns the store actually has.
+
+    ⚠️ A NEW COLUMN CANNOT BE SELECTED FROM A STORE WRITTEN BEFORE IT EXISTED. The prior snapshot
+    is read BEFORE this run writes, so on the first run after any column is added the Delta schema
+    still lacks it and a plain `SELECT` raises `Binder Error: Referenced column … not found` —
+    failing the whole leg exactly once, on the deploy that introduced the fix. Projecting `NULL`
+    for an absent column makes the read forward- and backward-compatible, and the value then flows
+    through the same "unknown" handling the diff already has.
+    """
+    cols = ["asset", "schema_fingerprint", "column_names", "capture_timestamp"]
+    cols += [c if c in available else f"NULL AS {c}" for c in _PRIOR_OPTIONAL_COLUMNS]
+    return (
+        f"SELECT {', '.join(cols)} FROM {relation} WHERE season = ? "
+        "QUALIFY row_number() OVER (PARTITION BY asset ORDER BY capture_timestamp DESC) = 1"
+    )
 
 
 def classify_unreadable(
@@ -457,23 +493,27 @@ def _latest_by_asset(season: int, *, bucket=None, local_root=None) -> dict:
         # `status` is what separates "we saw this asset and it was fine" from "we have never had
         # a readable snapshot of it" — the whole basis of `classify_unreadable`. Selecting only
         # the column list would force that judgement onto an empty-list proxy.
-        rows = con.execute(
-            "SELECT asset, schema_fingerprint, column_names, capture_timestamp, status FROM snaps "
-            "WHERE season = ? QUALIFY row_number() OVER "
-            "(PARTITION BY asset ORDER BY capture_timestamp DESC) = 1",
-            [int(season)],
-        ).fetchall()
+        have = {str(r[0]).lower() for r in con.execute("DESCRIBE snaps").fetchall()}
+        rows = con.execute(prior_snapshot_sql(have), [int(season)]).fetchall()
     finally:
         con.unregister("snaps")
 
-    # The stored row keeps the column list but not the nested payload columns, so the diff falls
-    # back to name-set comparison — enough to catch a deletion/addition, which is the point.
+    # The stored row keeps the column list + types (not the nested payload), so the diff sees a
+    # faithful schema. A row written before `column_types` existed yields `""` per column, which
+    # `diff_snapshots` treats as UNKNOWN — degrading to a name-set diff rather than declaring
+    # every column retyped.
+    def _cols(names, types):
+        names = list(names or [])
+        types = list(types or [])
+        types += [""] * (len(names) - len(types))
+        return [{"name": n, "type": t or ""} for n, t in zip(names, types)]
+
     return {
         r[0]: {
             "asset": r[0],
             "schema_fingerprint": r[1],
             "status": r[4],
-            "payload": {"columns": [{"name": n, "type": ""} for n in (r[2] or [])], "null_rates": {}},
+            "payload": {"columns": _cols(r[2], r[5]), "null_rates": {}},
         }
         for r in rows
     }

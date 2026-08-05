@@ -198,6 +198,43 @@ injuries  expected_absent=true  escalate=false  (error still RECORDED)
 RED-proven: reverting the unreadable-column clause, the escalation source, or the injuries 404
 branch each turns its own test(s) red (1 / 2 / 1).
 
+**⭐⭐ AND *THAT* VERIFICATION RUN EXPOSED A THIRD ONE — A FALSE *WATCHED DRIFT*, WHICH IS THE
+WORST THING THIS LEG CAN GET WRONG.** Both fixes above landed correctly, and the run escalated
+anyway on a `drifts` entry claiming `schedules` had RETYPED `roof, temp, wind, gameday, gametime,
+location, stadium, surface` — the precise PIT fields this story exists for. It was false, and the
+refutation was in the same payload:
+
+```
+"columns_retyped": [ …every column… ],
+"fingerprint_changed": false
+```
+
+An identical fingerprint is an identical `(name, type)` sequence ⇒ nothing changed. Cause: the
+stored row kept `column_names` but not types, so `_latest_by_asset` reconstructed every prior
+column as `type=""`, and `"" != "VARCHAR"` scored a retype on **every column of every readable
+asset** (17 of them). Pre-existing since the original NF-W0a ship; it needed a same-season prior
+snapshot to surface, and this was the first run that had one.
+
+**Fix, three parts:** the row now stores `column_types`; `diff_snapshots` compares types only
+where BOTH are known (a typeless prior degrades to a name-set diff — still catching the deletions
+and additions the leg is for — and self-heals); and the contradiction itself became a test
+invariant, `schema_drift == fingerprint_changed`, which is what catches this whole class cheaply.
+
+**⚠️ And fixing it nearly broke the next run.** The prior snapshot is read BEFORE this run writes,
+so on the deploy that adds `column_types` the store does not have it yet and `SELECT column_types`
+raises `Binder Error: Referenced column … not found` — failing the leg exactly once, on the run
+that ships the fix. Caught by asking the question before shipping rather than after; cure is
+`prior_snapshot_sql`, which projects `NULL` for any absent optional column and is exercised
+against both store shapes.
+
+⭐ **The pattern across all three defects is one thing: every escalation this leg produced was
+structurally expected and none was a break** — an accepted 2025 column deletion, an unpublished
+season file, a typeless prior. A monitor's first live season is where it learns which of its
+alarms mean anything, and the cost of skipping that is a channel nobody reads by week three.
+
+RED-proven: reverting the type-comparison guard, the stored `column_types`, or the conditional
+projection turns 1 / 1 / 2 tests red.
+
 **The market board is already fully priced 35 days pre-opener** (272 events × 10 books) — so
 enabling the market schedule early also captures pre-season line movement, at no extra cost.
 

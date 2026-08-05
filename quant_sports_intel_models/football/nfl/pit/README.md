@@ -128,6 +128,27 @@ Two related honesty rules the same finding forced:
   That is NF1.7 (a) inverted, and it double-reports one condition as two.
 - an unresolvable bar (`expected_from is None`) never licenses silence.
 
+### An UNKNOWN type is not a CHANGED type
+
+The stored snapshot row carries `column_names` **and `column_types`**, because the prior-snapshot
+reconstruction feeds the retype check. Keeping only names gave every prior column `type=""`, and
+`"" != "VARCHAR"` read as a retype on every column of every readable asset — measured live
+2026-08-05: 17 assets, including a `schedules` **watched drift** naming roof/temp/wind/gameday,
+i.e. exactly the PIT fields this story exists for. The tell sat in the same payload:
+`fingerprint_changed: false`. An identical fingerprint is an identical `(name, type)` sequence, so
+nothing had changed at all — and that contradiction is now a test invariant (schema drift and
+`fingerprint_changed` must always agree).
+
+`diff_snapshots` compares types only where **both** are known, so a typeless prior degrades to a
+name-set diff — still catching the deletions and additions the leg exists for — and self-heals
+once one snapshot carries types.
+
+⚠️ **Adding a column to the snapshot row is a two-sided change.** The prior snapshot is read
+*before* this run writes, so on the deploy that introduces a column the store does not have it yet
+and a plain `SELECT` raises a binder error, failing the leg exactly once — on the very run that
+ships the fix. `prior_snapshot_sql` projects `NULL` for anything absent; add new optional columns
+to `_PRIOR_OPTIONAL_COLUMNS`.
+
 ## ⭐ Two point-in-time defects found by this story
 
 Both are in `venues.py`, both silently corrupt a naive capture, and neither was in NF-W0.
