@@ -93,12 +93,16 @@ class SubscriptionStatus(BaseModel):
     is_beta: bool
     has_billing: bool  # a Stripe customer exists → can open the billing portal
     # Cancel-at-period-end visibility (E9.57 finding): Stripe's Customer Portal default
-    # cancel action does NOT delete the subscription immediately — it flips
-    # `cancel_at_period_end` and only fires `customer.subscription.deleted` (our demote
-    # trigger) once the paid period actually ends. So a canceled `subscriber` correctly
-    # keeps `tier="subscriber"`/`has_access=True` for the rest of what they paid for; these
-    # two fields are what let the UI say so honestly instead of looking unchanged. Best-effort
-    # (None if there's no billing, or if the read fails) — never blocks subscription/status.
+    # cancel action does NOT delete the subscription immediately — it schedules a future
+    # cancellation (via `cancel_at_period_end` OR the separate `cancel_at` timestamp field,
+    # depending on billing mode — see `_active_subscription_period`) and only fires
+    # `customer.subscription.deleted` (our demote trigger) once that date actually arrives.
+    # So a canceled `subscriber` correctly keeps `tier="subscriber"`/`has_access=True` for the
+    # rest of what they paid for; these two fields are what let the UI say so honestly instead
+    # of looking unchanged. `cancel_at_period_end` here means "is a cancellation scheduled" (by
+    # either mechanism); `current_period_end` here means "access ends at" (may be `cancel_at`,
+    # not necessarily the literal period boundary). Best-effort (False/None if there's no
+    # billing, nothing scheduled, or the read fails) — never blocks subscription/status.
     cancel_at_period_end: bool = False
     current_period_end: int | None = None  # unix seconds, when set
 
@@ -113,7 +117,7 @@ class SubscriptionPricing(BaseModel):
 
 
 def _active_subscription_period(customer_id: str) -> tuple[bool, int | None]:
-    """(cancel_at_period_end, current_period_end) for the customer's subscription.
+    """(is_scheduled_to_cancel, access_ends_at) for the customer's subscription.
 
     ⚠️ `stripe.Subscription.list(...)` returns real `StripeObject` instances, NOT plain
     dicts — they support `in` / `[...]` (via `__contains__`/`__getitem__`) but do NOT
@@ -122,12 +126,25 @@ def _active_subscription_period(customer_id: str) -> tuple[bool, int | None]:
     webhook's `construct_event` result, hitting a different Stripe SDK call this time).
     The broad except below SWALLOWED that error and silently returned the "nothing
     scheduled" defaults, which is indistinguishable from a genuinely uncanceled
-    subscription — caught only by checking the Stripe dashboard directly against a
-    subscription confirmed scheduled to cancel. Use `in`/`[...]`, never `.get()`, on a
-    Stripe SDK object. `current_period_end` also moved OFF the top-level Subscription
-    object onto each subscription item as of Stripe API version 2025-03-31 (Stripe's
-    multi-item-billing migration) — read the first item's value as a fallback so this
-    works regardless of which API version this Stripe account defaults to.
+    subscription. Use `in`/`[...]`, never `.get()`, on a Stripe SDK object.
+
+    ⚠️ A SECOND live-prod trap, found the same day right after the first fix shipped:
+    `cancel_at_period_end` (bool) is NOT the only way Stripe represents "will cancel at
+    the end of this paid period" — `cancel_at` (nullable int, "a date in the future at
+    which the subscription will automatically get canceled") is a genuinely separate
+    field, and a subscription on **Flexible billing mode** (Stripe's 2025-03-31 API
+    migration) canceled via the Customer Portal came back with `cancel_at_period_end=
+    False` while `cancel_at` held the real scheduled-cancellation timestamp — confirmed
+    against the Stripe dashboard showing "Active — Cancels <date>" for a subscription
+    our fixed code STILL reported as not-scheduled-to-cancel. So both fields must be
+    checked; `cancel_at`, when present, is also the more precise "access ends at" value
+    to show (it need not coincide with `current_period_end` in general — Stripe allows
+    scheduling a cancellation for any future date, not only the period boundary).
+    `current_period_end` also moved OFF the top-level Subscription object onto each
+    subscription item as of API version 2025-03-31 — read the first item's value as a
+    fallback so this works regardless of which API version this Stripe account defaults
+    to, used only when neither `cancel_at` nor a scheduled `cancel_at_period_end` cancel
+    date is what's needed (i.e. never reached once `cancel_at` is present).
 
     Best-effort — a Stripe hiccup or a customer with no subscription object (e.g. a
     pre-conversion row) must never break GET /subscription/status, so any failure
@@ -138,17 +155,21 @@ def _active_subscription_period(customer_id: str) -> tuple[bool, int | None]:
         if not subs.data:
             return False, None
         sub = subs.data[0]
-        cancel_at_period_end = bool(sub["cancel_at_period_end"]) if "cancel_at_period_end" in sub else False
+        cancel_at_period_end_flag = bool(sub["cancel_at_period_end"]) if "cancel_at_period_end" in sub else False
+        cancel_at = sub["cancel_at"] if ("cancel_at" in sub and sub["cancel_at"] is not None) else None
+        if not (cancel_at_period_end_flag or cancel_at is not None):
+            return False, None
+        if cancel_at is not None:
+            return True, cancel_at
         if "current_period_end" in sub:
-            current_period_end = sub["current_period_end"]
-        else:
-            items = sub["items"]["data"] if "items" in sub and sub["items"] else []
-            current_period_end = (
-                items[0]["current_period_end"]
-                if items and "current_period_end" in items[0]
-                else None
-            )
-        return cancel_at_period_end, current_period_end
+            return True, sub["current_period_end"]
+        items = sub["items"]["data"] if "items" in sub and sub["items"] else []
+        current_period_end = (
+            items[0]["current_period_end"]
+            if items and "current_period_end" in items[0]
+            else None
+        )
+        return True, current_period_end
     except Exception:  # noqa: BLE001
         logger.exception("Could not read subscription period for customer=%s", customer_id)
         return False, None
