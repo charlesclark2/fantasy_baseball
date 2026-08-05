@@ -123,7 +123,7 @@ Store-wide the signal is healthy (26,524 of 27,677 rows carry a μ; `_available=
 
 ## (3) Feature contract (served)
 
-**Market-blind by contract.** `_assert_market_blind` (`_MARKET_STEMS`) + identifier hygiene are re-asserted at fit time in `finalize_v6_champion.py`. Market data enters only downstream (the market comparison and the α-blend, both outside the model). Certified leak-clean by the E1.8 sweep after the **Stuff+ de-leak** — which mattered *specifically* for totals: `home_starter_stuff_plus` and `away_starter_avg_fastball_velo` were season-to-date-leaky and **dropped to noise once de-leaked**, taking the contract from 21 → **13 FINAL** (`derive_clustered_contract.py`, which refuses to derive from a leaky ranking).
+**Market-blind by contract.** `_assert_market_blind` (`_MARKET_STEMS`) + identifier hygiene are re-asserted at fit time in `finalize_v6_champion.py`. Market data enters only downstream (the market comparison and the α-blend, both outside the model). Certified leak-clean by the E1.8 sweep after the **Stuff+ de-leak** — which mattered *specifically* for totals: `home_starter_stuff_plus` and `away_starter_avg_fastball_velo` were season-to-date-leaky and **dropped to noise once de-leaked**, taking the contract to **13 FINAL** (`derive_clustered_contract.py`, which refuses to derive from a leaky ranking; the on-disk pre-de-leak clustered contract has 14 columns — the roadmap's "21→13" counts from the E1.7 interim; see the tested-but-not-served enumeration below).
 
 ### Post-lineup served columns (15 = 13 contract + 2 indicators) — per-column dictionary
 
@@ -166,8 +166,35 @@ Shared with the post table: `away_bp_eb_coverage_pct`, `away_bp_eb_uncertainty`,
 🚩 **A totals-specific serving-blindness, documented in the dbt source itself** (`feature_pregame_game_features.sql:63-78`, from E9.53): the `_seasonnorm` `coalesce(..., 0)` cannot distinguish a missing *baseline* (z=0 is correct) from a missing *raw feature* (z=0 is a fabrication), so **a `_seasonnorm` column reads 100% NOT-NULL straight through a total outage of its own block.** The source names this contract by name: `feature_columns_v6_total_runs_pre_lineup_served.json` carries `away_bp_eb_xwoba_seasonnorm` + `away_team_sequential_bullpen_xwoba_seasonnorm` + `home_bp_eb_xwoba_seasonnorm` = **3 of its 7 core discriminative features**, and a never-NULL column can never be flagged imputed ⇒ **a total `bullpen_eb` / `team_sequential` outage is invisible to `discriminative_coverage` / `is_degraded` on the morning totals model.** The store-level per-DATE `check_feature_block_coverage.py` (which asserts on the RAW twins and *refuses* to be configured with a `_seasonnorm` column) is the detector until E1.12.
 
 **Served vs tried-and-dropped — the feature space WAS explored, by removal AND by addition (umbrella lesson 5).**
-- **By removal:** 374 raw → E1.3/E1.7 clustered prune 21 → **E1.8 re-derivation 13 FINAL** on the both-de-leak matrix; morning 87 (unpruned, PBO 0.543) → **14 re-pruned** (PBO 0.054). Instrument: `derive_clustered_contract.py` (season-stratified paired-bootstrap 95% CI excluding 0, per cluster).
-- **By addition:** yes, and repeatedly — every attempt is a recorded null. E7.9 tested `plus_gb` / `plus_eb` / `plus_both` (MiLB-MLE-corrected block + `eb_gb_pct`) across 7 learners; MH2.1 re-tested `plus_eb` on 8 folds; E13.4 tested TTO / bullpen-fatigue×short-leash / FanGraphs wRC+. **No feature addition has ever cleared the deflated gate for the served totals champion.** See ledger (10). `incremental_lift_eval.py` is the sanctioned ADD path.
+- **By removal:** 374 raw → clustered prune → **E1.8 re-derivation 13 FINAL** on the both-de-leak matrix; morning 87 unpruned (`feature_columns_pre_lineup_total_runs.json`, PBO 0.543) → **14 re-pruned** (PBO 0.054). Instrument: `derive_clustered_contract.py` (season-stratified paired-bootstrap 95% CI excluding 0, per cluster). ⚠️ Minor provenance drift, artifact-authoritative: the roadmap prose says "total_runs 21→13"; the on-disk pre-de-leak clustered contract (`feature_columns_ngboost_pruned_clustered_2026.json`) has **14** columns, and the measured re-derivation diff is **7 dropped / 6 added** (enumerated below). The "21" is the E1.7-era interim count in prose; no 21-column totals artifact exists on disk.
+- **By addition:** yes, and repeatedly — every attempt is a recorded null. E7.9 tested `plus_gb` / `plus_eb` / `plus_both` (columns enumerated below) across 7 learners; MH2.1 re-tested `plus_eb` on 8 folds; E13.4 tested TTO / bullpen-fatigue×short-leash / FanGraphs wRC+ (signal-level candidates, not mart columns). **No feature addition has ever cleared the deflated gate for the served totals champion.** See ledger (10). `incremental_lift_eval.py` is the sanctioned ADD path.
+
+### Tested-but-not-served columns — full enumeration with definitions
+
+**(a) The E1.8 de-leak re-derivation: 7 DROPPED from the pre-de-leak clustered contract** (each was in the model until 2026-06-19; dropped because the clustered-MDA on the *both-de-leak* matrix ranked its cluster noise — except the Stuff+ pair, dropped because their signal WAS the leak):
+
+| column (dropped) | definition (`feature_pregame_game_features` schema) | why dropped |
+|---|---|---|
+| `home_starter_stuff_plus` | Home starter overall Stuff+ across all pitch types (100 = league avg) | 🟥 was **season-to-date LEAKY** (embedded game-G-and-later pitches); dropped to noise once de-leaked to prior-season — the leak *was* the signal |
+| `home_bp_eb_xwoba` | Home bullpen EB posterior xwOBA-against, shrunk toward league prior | noise-ranked on the clean matrix (its E1.7-de-leaked form; the meta columns `*_bp_eb_coverage_pct`/`_uncertainty` survived instead) |
+| `away_bp_eb_xwoba` | Away equivalent | same |
+| `home_off_xwoba_30d` | Home team offense xwOBA, trailing 30d | noise-ranked clean (its `_seasonnorm` twin survives in the PRE contract) |
+| `away_starter_xwoba_vs_lhb` | Away starter xwOBA allowed vs LHB (prior-season platoon split) | noise-ranked clean |
+| `home_team_sequential_win_prob` | Beta-Binomial win-prob posterior entering the game (`prior_mu`; cold-start Beta(4,4)) | noise-ranked clean for *totals* (still served in the H2H pre contract) |
+| `home_team_sequential_woba` | Sequential offensive `off_xwoba` posterior entering the game | noise-ranked clean for the POST tier (it survives in the PRE contract) |
+
+The 6 ADDED at the same re-derivation are all in the served table above (`away_lineup_bat_speed_vs_starter_velo`, `home_pit_woba_against_{14d,30d,std}`, `home_starter_avg_ip_season`, `home_starter_proj_fip`). Related dropped-by-de-leak, pre-clustering: `away_starter_avg_fastball_velo` (trailing-Statcast fastball velocity, mph) — the second Stuff+-block leak E1.8 named.
+
+**(b) The pre-registered ADD blocks (E7.9 → MH2.1) — every column, all recorded nulls (ledger B):**
+
+| block | columns (exact, from `e7_9_train_serve_consistency.py:120-127`) | definition |
+|---|---|---|
+| `plus_gb` (2) | `home_starter_eb_gb_pct`, `away_starter_eb_gb_pct` | Starter EB posterior **ground-ball rate**, shrunk toward league prior — the E7.9 join itself, a NEW column in no incumbent contract by construction. ⚠️ No schema.yml description exists (defined in the E7.9 join, not the mart contract) |
+| `plus_eb` batter side (6) | `{home,away}_avg_eb_{k_pct,bb_pct,iso}` | Lineup EB posterior strikeout rate / walk rate / ISO, shrunk toward league prior — the columns whose EB priors the E7.5 MiLB-MLE correction re-derived. (`*_avg_eb_k_pct` lacks a schema.yml entry; meaning by family symmetry with `*_avg_eb_bb_pct`) |
+| `plus_eb` starter side (4) | `{home,away}_starter_eb_{k_pct,bb_pct}` | Starter EB posterior strikeout / walk rate, shrunk toward league prior (E7.5p-corrected) |
+| `plus_both` (12) | union of the two | — |
+
+**(c) The MH2.1 rollback-retained contract** (`feature_columns_mh2_1_total_runs_post_lineup_served.json`, 25 served cols) = **the v6 post 13 + the 10 `plus_eb` columns + the 2 imputation indicators** — i.e. no column in it is undocumented once (a)+(b) and the served table are read together. It is retained machinery, **not served**.
 
 ## (4) Training data — source, window, CV
 
@@ -303,7 +330,7 @@ The stored edge and Kelly fraction are **machine epsilon** — presence flags, n
 | 12 | **No scheduled retrain cadence** for the totals champion | open, uncarded for totals | Same gap as H2H's E1.10. 42 days since fit at time of writing |
 | 13 | **TD3** — champion-promotion safety audit | 🟢 READY | `mart_clv_labeled_games` is hardcoded `model_version='v6'`; a totals-only promotion is exactly the case the bundle stamp cannot express (MH2.1 named three such bundle-assuming consumers) |
 
-**✅ SETTLED (do not re-open without new evidence):** E2.2 (copula unnecessary, ρ≈0) · E2.3 (dispersion is the lever; gate NOT MET recorded honestly) · E2.3-d (the served path is NGBoost-Normal; `totals_distribution_v1.json` is **orphaned** w.r.t. totals serving) · E2.6 (derivative edge = clean null, placebo-validated) · MH2.1 (rolled back, with a binding re-promotion bar) · E13.8 (main-line efficiency) · E1.8 (Stuff+ de-leak → contract re-derived 21→13) · MH2.3 (bake-off design blocks made machine-readable).
+**✅ SETTLED (do not re-open without new evidence):** E2.2 (copula unnecessary, ρ≈0) · E2.3 (dispersion is the lever; gate NOT MET recorded honestly) · E2.3-d (the served path is NGBoost-Normal; `totals_distribution_v1.json` is **orphaned** w.r.t. totals serving) · E2.6 (derivative edge = clean null, placebo-validated) · MH2.1 (rolled back, with a binding re-promotion bar) · E13.8 (main-line efficiency) · E1.8 (Stuff+ de-leak → contract re-derived to 13 FINAL) · MH2.3 (bake-off design blocks made machine-readable).
 
 **⚠️ There is no automated drift/calibration monitor for the totals model.** ECE has been measured by story (E9.26 → E13.6b Part A → E2.3-d), never on a cadence. Nothing pages if the served `P(over)` calibration degrades. (K-props found the same gap — PROD-STATE-1d, KP-V2.0.)
 
@@ -331,7 +358,7 @@ The stored edge and Kelly fraction are **machine epsilon** — presence flags, n
 
 | when | candidate | result | null state | source |
 |---|---|---|---|---|
-| 2026-06-18/19 | **E1.8 Stuff+ de-leak → contract re-derivation** | `home_starter_stuff_plus` + `away_starter_avg_fastball_velo` **dropped to noise once de-leaked** (confirming the season-to-date peek); contract **21 → 13 FINAL** | a shipped correction | `feature_leakage_audit.md`; `derive_clustered_contract.py` |
+| 2026-06-18/19 | **E1.8 Stuff+ de-leak → contract re-derivation** | `home_starter_stuff_plus` + `away_starter_avg_fastball_velo` **dropped to noise once de-leaked** (confirming the season-to-date peek); contract re-derived to **13 FINAL** (measured on-disk diff vs the prior clustered contract: 7 dropped / 6 added — enumerated in (3)) | a shipped correction | `feature_leakage_audit.md`; `derive_clustered_contract.py` |
 | 2026-07-29 | **E7.9 `plus_gb`** (`eb_gb_pct`) — feature effect at fixed learner | **+0.0000 to +0.0073 CRPS** across 7 learners; negative for one. Well inside noise | genuine absence | `e7_9_retrain_total_runs_post_lineup.md` |
 | 2026-07-29 | **E7.9 `plus_eb`** (MiLB-MLE-corrected block) at fixed learner | +0.0053 (glm) … +0.0373 (xgboost); **−0.0095 for lightgbm**. Under the *served* learner (ngboost_normal) **+0.0107 — under the 0.02 floor** | power-limited at 3 folds; **re-tested by MH2.1** | same |
 | 2026-08-02 | **MH2.1 `plus_eb`, 8 folds** — the properly-powered re-test | **+0.0122 alone — still under the 0.02 floor.** Only `learner swap (+0.0175) + block (+0.0122)` together clear it | **the block alone is a null**; the bundle shipped then rolled back | `mh2_1_retrain_…_w2016.md` §Margin attribution |
