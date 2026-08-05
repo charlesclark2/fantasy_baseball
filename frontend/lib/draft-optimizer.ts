@@ -43,6 +43,11 @@ export interface Player {
   /** The honest caveat to render beside a `lowPred` row. Supplied by the exporter so the wording
    *  lives with the model that earned it, not scattered across components. */
   predNote?: string | null
+  /** E9.56 — the server withheld this season's model output from this caller. The row keeps its
+   *  public identity (name/pos/team/bye/ADP) and carries NO `pts`/`vor`/`posRank`/`ovrRank`, so a
+   *  "subscribe to unlock" chip renders in each value cell. Optional: absent on an entitled
+   *  response, which is byte-identical to what this surface has always received. */
+  locked?: boolean
 }
 
 export interface RosterSlotDef {
@@ -99,9 +104,20 @@ export interface Manifest {
     market_lean?: Record<string, string> | null
     market_lean_note?: string | null
   } | null
+  // ── E9.56: the server-side entitlement envelope ────────────────────────────────────────────
+  // The board endpoint returns a bare ARRAY (no room for an envelope without the NF-C0 shape
+  // break), so the PAGE-level lock state travels on the manifest — which every board surface
+  // already loads. All optional: absent ⇒ entitled, the shape the pre-E9.56 backend always sent.
+  /** True when the server withheld this season's model output from this caller. */
+  locked?: boolean
+  /** Stated explicitly so a dropped field can never read as entitled (E9.41). */
+  entitled?: boolean
+  lockedSeason?: number
+  upgrade?: { reason: string; message: string; ctaHref: string }
   /** NF3.4 — `{feature key -> label/description}` for every feature a player's `contrib.drivers` can
    *  reference. Optional: absent on a manifest exported before this shipped, or if the underlying
-   *  artifact hadn't been (re-)built at export time. */
+   *  artifact hadn't been (re-)built at export time. Also absent on a LOCKED manifest — it exists
+   *  only to label the entitled attribution panel (E9.56 payload minimization). */
   featureLegend?: Record<string, FeatureLegendEntry> | null
   /** NF3.4 — provenance for the contributions data (which model, which season, when built) — kept
    *  separate from the per-player payload so the page can show/hide the panel without waiting on

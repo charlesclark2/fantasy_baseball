@@ -54,6 +54,9 @@ from quant_sports_intel_models.football.nfl.fantasy.season_projection import (  
     role_volume_prior,
 )
 from quant_sports_intel_models.football.nfl.fantasy import season_projection as _SP  # noqa: E402
+from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
+    rookie_publish_policy as _ROOKIE_POLICY,
+)
 from quant_sports_intel_models.football.nfl.fantasy import win_total_source  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import xfp_source  # noqa: E402
 
@@ -82,6 +85,15 @@ OUTPUT_COLS = [
     "proj_fp_std", "proj_fp_half", "proj_fp_ppr",
     "fp_ppr_sd", "fp_ppr_p10", "fp_ppr_p90", "uncertainty_type",
     "model_version", "generated_at",
+    # ── NF-G0/NF-D21: the ROOKIE-POLICY ARTIFACT STAMP, embedded in the built board itself ────────
+    # The governance registry is the named AUTHORITY for what is served, but an authority with
+    # nothing to reconcile against is the KP-V2.0 hole (a model whose version-of-record lives only
+    # in code + an S3 path can never be caught drifting). These columns are the third party: the
+    # `model_stamp_consistency` gate reads them back and FAILS on any disagreement with the registry.
+    # ⭐ `rookie_statistically_selected` is the honesty field — λ=0.5 is a PM JUDGMENT, and a board
+    #    that travels without saying so can be re-read later as an optimised selection.
+    "rookie_selection_status", "rookie_shrink_lambda", "rookie_statistically_selected",
+    "rookie_source_model", "rookie_decision_story",
 ]
 
 # ── The per-player base-season raw line. Realized season totals ÷ played games → per-game counting
@@ -876,26 +888,39 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     # NF1.4: the point curve fits the survivor-filtered history (unchanged); `band_hist` is
     # the FULL drafted population (zero-game rookies included) and calibrates the 80% rookie
     # interval, which the legacy `fp × cv` width missed badly (0.678 coverage, 0.444 at QB).
-    # ⏸️ NF-D16 IS RATIFIED BUT ITS SERVING FLIP IS **HELD** (PM ruling, 2026-08-01 — option C).
-    # The recalibration cleared every gate it pre-registered (pooled tier MAE 1.0738 → 0.9407, 7/7
-    # classes, PBO 0.029, DSR 0.996, p 0.0033; interval floors held and improved) — but on the 2026
-    # board it trips NF1.4's ADVISORY `rookie_board_face_validity` PLACEMENT clause: a rookie RB lands
-    # at overall rank 6 against a clause that admits no rookie inside the overall top 10.
+    # ▶️ NF-D21 (2026-08-04): NF-D16's serving flip is ON, at the board-blind global shrink
+    #    λ = 0.5 — a RECORDED PM JUDGMENT CALL, not a selection. The full rationale, the
+    #    prohibition on NF-D18's board-fitted λ = 0.75, and the artifact stamp all live in ONE
+    #    place, `rookie_publish_policy`, which is read here rather than restated.
     #
-    # The ruling is neither "respect the veto" nor "override it" but **validate it before letting it
-    # decide**: that clause is the UNVALIDATED half of a gate whose LEVEL half was already proven
-    # mis-specified (NF1.4's first cut fired 7/7 and carried zero information until it was re-anchored
-    # on the per-class best-rookie distribution). So publish is HELD — gated on re-specifying the
-    # PLACEMENT clause under its own pre-registration (NF-D17), not on this board passing an
-    # unvalidated one.
+    #    HISTORY, because the hold was substantive and a future reader needs it: NF-D16 cleared
+    #    every gate it pre-registered (pooled tier MAE 1.0738 → 0.9407, 7/7 classes, PBO 0.029,
+    #    DSR 0.996, p 0.0033) but at λ = 1 lifts a rookie RB to overall rank 6, breaching NF1.4's
+    #    placement clause — which NF-D17 then VALIDATED as a genuine threshold-invariant veto. NF-D18
+    #    showed the shapes, not the constraint, were the problem; NF-D20 ran the legitimate in-fold
+    #    selection and returned `CONSTRAINT_REFUSED`. The operator took NF-D20's Route 1.
     #
-    # ⭐ TO RE-ENABLE, PASS `recal_hist=_rookie_full` BELOW — one line, and nothing else changes. The
-    #    recalibration is OPT-IN by construction, so leaving it off restores the pre-NF-D16 point
-    #    byte-for-byte (pinned by `test_a_curve_without_recal_hist_emits_a_byte_identical_point`).
+    # ⭐ THE FLIP IS ONE READ OF `serving_lambda()`, AND THAT IS DELIBERATE. Setting
+    #    `SERVING_ENABLED = False` in the policy returns λ = 0.0, which folds to the identity affine
+    #    and restores the pre-NF-D16 point BYTE-FOR-BYTE — so the rollback is the same code path,
+    #    not a second one (pinned by `test_a_curve_without_recal_hist_emits_a_byte_identical_point`
+    #    and by NF-D21's own byte-identity proof).
     _rookie_full = load_rookie_training(con, base_season, schema, include_zero_game=True)
+    _recal_lambda = _ROOKIE_POLICY.serving_lambda()
+    if _recal_lambda:
+        log.info("NF-D21: rookie-point recalibration ON at λ=%.3f (%s, statistically_selected=%s) "
+                 "for %s; %s untouched", _recal_lambda, _ROOKIE_POLICY.SELECTION_STATUS,
+                 _ROOKIE_POLICY.STATISTICALLY_SELECTED,
+                 "/".join(_ROOKIE_POLICY.recalibrated_positions()),
+                 "/".join(_ROOKIE_POLICY.excluded_positions()))
+    else:
+        log.warning("[ALERT] NF-D21: rookie-point recalibration is OFF (λ=0) — the board serves the "
+                    "pre-NF-D16 incumbent rookie point. This is the rollback state.")
     curve = fit_rookie_slot_curves(
         load_rookie_training(con, base_season, schema),
-        band_hist=_rookie_full)
+        band_hist=_rookie_full,
+        recal_hist=_rookie_full if _recal_lambda else None,
+        recal_lambda=_recal_lambda)
     rks = project_rookies(incoming, curve, projection_season) if not incoming.empty else pd.DataFrame()
 
     proj = pd.concat([vets, rks], ignore_index=True, sort=False)
@@ -903,6 +928,22 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     proj["base_season"] = int(base_season)
     proj["model_version"] = MODEL_VERSION
     proj["generated_at"] = datetime.now(timezone.utc).isoformat()
+    # ── the rookie-policy stamp, on EVERY row (see OUTPUT_COLS) ───────────────────────────────────
+    # Board-wide rather than rookies-only on purpose: the stamp describes how THIS BOARD was built,
+    # and a veteran row carrying it is what lets a reader confirm the policy from any row of the
+    # artifact rather than having to find a rookie first. λ is read through `serving_lambda()`, so
+    # the stamp can never claim a shrink the curve was not actually built at.
+    proj["rookie_selection_status"] = (_ROOKIE_POLICY.SELECTION_STATUS if _recal_lambda
+                                       else "incumbent")
+    proj["rookie_shrink_lambda"] = float(_recal_lambda)
+    proj["rookie_statistically_selected"] = bool(
+        _ROOKIE_POLICY.STATISTICALLY_SELECTED) if _recal_lambda else False
+    # ⚠️ EMPTY STRING, not None, when no correction is applied. An all-None object column lands in
+    #    the Delta table as a NULL-typed column and PINS that type for every later write (the
+    #    documented all-NaN-column-pins-the-Delta-type landmine); `""` types cleanly as a string and
+    #    reads unambiguously as "no source model — this board carries no correction".
+    proj["rookie_source_model"] = _ROOKIE_POLICY.SOURCE_MODEL if _recal_lambda else ""
+    proj["rookie_decision_story"] = _ROOKIE_POLICY.DECISION_STORY if _recal_lambda else ""
     # keep only draft-relevant offensive positions (drop K/DEF/defensive rows with no fantasy line)
     proj = proj[proj["position"].isin(("QB", "RB", "WR", "TE", "FB"))].copy()
     for c in OUTPUT_COLS:

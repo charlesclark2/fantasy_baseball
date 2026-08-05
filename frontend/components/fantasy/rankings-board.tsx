@@ -22,6 +22,7 @@ import {
   useSavedLeagues,
 } from "@/lib/fantasy-queries"
 import { assignTiers, type Player } from "@/lib/draft-optimizer"
+import { rowsAreLocked, trimLockedTail } from "@/lib/fantasy"
 import {
   ADP_DELTA_LABEL,
   ALL_ROWS,
@@ -32,6 +33,7 @@ import {
   GLOSSARY,
   InfoTip,
   IntervalBar,
+  LockChip,
   LoadingBlock,
   Pagination,
   PosBadge,
@@ -41,11 +43,14 @@ import {
   RookieBadge,
   ALL_POSITIONS,
   LOW_PREDICTABILITY_POSITIONS,
+  SUBSCRIBE_HREF,
   SurfaceHeader,
   MarketLeanNote,
   UncertaintyNote,
+  UpgradeBanner,
   downloadCsv,
   num,
+  numOrLock,
   int,
   teamLabel,
 } from "@/components/fantasy/shared"
@@ -72,15 +77,29 @@ export function RankingsBoard() {
   // The `pts != null` test is what still excludes a genuinely unprojected row — a gap-fill K/DST
   // placeholder for a team the projection missed — so an absent projection is shown as absent
   // rather than as a zero.
+  // E9.56b — a LOCKED board carries no `pts`/`vor`/`ovrRank`/`posRank` at all, and 632 of its 858
+  // rows carry no ADP either; trim that tail and report the count rather than dropping it silently.
+  const boardLocked = rowsAreLocked(board ?? [])
+  const { rows: boardRows, hiddenCount } = useMemo(() => trimLockedTail(board ?? []), [board])
+
   const ranked = useMemo(() => {
-    const projected = (board ?? []).filter(
-      (p) => p.pts != null && (ALL_POSITIONS as readonly string[]).includes(p.pos),
+    // 🚨 E9.56b — `p.pts != null` EMPTIES A LOCKED BOARD ENTIRELY. On a locked row `pts` is ABSENT
+    // (the server removes every model value), so this filter — which exists to hide a genuinely
+    // unprojected gap-fill K/DST, showing an absent projection as absent rather than as a zero —
+    // would drop all 858 rows and render a BLANK PAGE for every free visitor. Skip it when locked:
+    // there, "no pts" is the entitlement state, not a missing projection.
+    const projected = boardRows.filter(
+      (p) => (boardLocked || p.pts != null) && (ALL_POSITIONS as readonly string[]).includes(p.pos),
     )
     const scoped = projected.filter((p) => (pos === "Overall" ? true : p.pos === pos))
+    // ⚠️ And do NOT sort a locked board by rank — `ovrRank`/`posRank` are absent, so the comparator
+    // is `undefined - undefined` = NaN. The server already ordered locked rows onto market ADP so
+    // the array index cannot reconstruct our ranking (E9.56); keep that order EXPLICITLY.
+    if (boardLocked) return scoped
     return pos === "Overall"
       ? scoped.slice().sort((a, b) => a.ovrRank - b.ovrRank)
       : scoped.slice().sort((a, b) => a.posRank - b.posRank)
-  }, [board, pos])
+  }, [boardRows, boardLocked, pos])
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -211,6 +230,13 @@ export function RankingsBoard() {
         </div>
       </SurfaceHeader>
 
+      {/* E9.56 — page-level lock state rides on the MANIFEST: the board endpoint returns a bare
+          array, and wrapping it would be the NF-C0 response-shape break. Per-cell chips come from
+          each row's own `locked` marker. */}
+      {(manifest?.locked || boardLocked) && (
+        <UpgradeBanner season={manifest?.season} upgrade={manifest?.upgrade} />
+      )}
+
       {manifestLoading && <LoadingBlock label="Loading league formats…" />}
 
       {!manifestLoading && (manifestError || !manifest) && (
@@ -244,14 +270,22 @@ export function RankingsBoard() {
                 className="w-48 rounded border border-[#262626] bg-[#0f0f0f] py-1.5 pl-7 pr-2 text-base sm:text-xs text-gray-200 placeholder:text-gray-600 focus:border-[#10b981] focus:outline-none"
               />
             </div>
-            <button
-              onClick={exportCsv}
-              disabled={rows.length === 0}
-              className="ml-auto flex items-center gap-1.5 rounded border border-[#262626] bg-[#0f0f0f] px-2.5 py-1.5 text-xs text-gray-400 transition-colors hover:text-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Export CSV
-            </button>
+            {/* E9.56c — no CSV button on a LOCKED board. Every column worth exporting (rank, tier,
+                proj pts, VOR, vs ADP) is withheld, so the file would be names + the market's own
+                ADP — with `NaN` in the vs_adp column and blanks everywhere else. That is not a
+                degraded export, it is a broken one, and it hands back a tidy machine-readable copy
+                of the market data we pay for. The chips and the banner are the locked view's CTA;
+                a download button that yields nothing is just a dead control. */}
+            {!boardLocked && (
+              <button
+                onClick={exportCsv}
+                disabled={rows.length === 0}
+                className="ml-auto flex items-center gap-1.5 rounded border border-[#262626] bg-[#0f0f0f] px-2.5 py-1.5 text-xs text-gray-400 transition-colors hover:text-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export CSV
+              </button>
+            )}
           </div>
 
           {boardLoading && <LoadingBlock label="Scoring the board…" />}
@@ -323,9 +357,19 @@ export function RankingsBoard() {
                             startsTier && i > 0 ? "border-t-2 border-t-[#10b981]/30" : ""
                           }`}
                         >
-                          <td className="px-3 py-2 font-medium text-gray-500">{rank}</td>
+                          {/* 🚨 E9.56c — OUR RANK AND OUR TIER *ARE* THE PAID PRODUCT on this page,
+                              and both are derived from values the server strips, so a locked row
+                              rendered them as an EMPTY cell and a gray "—" respectively. Empty reads
+                              as a rendering fault; "—" reads as "this player has no tier" (an honest
+                              absence we deliberately show for K/DST). Neither says "subscribe",
+                              which is the one thing a withheld value must say. */}
+                          <td className="px-3 py-2 font-medium text-gray-500">
+                            {p.locked ? <LockChip title="Subscribe to unlock our rank" /> : rank}
+                          </td>
                           <td className="px-3 py-2 text-center">
-                            {tier == null ? (
+                            {p.locked ? (
+                              <LockChip title="Subscribe to unlock tiers" />
+                            ) : tier == null ? (
                               <span className="text-[10px] text-gray-700">—</span>
                             ) : startsTier ? (
                               <span className="rounded border border-[#10b981]/40 bg-[#10b981]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#10b981]">
@@ -349,10 +393,12 @@ export function RankingsBoard() {
                           </td>
                           <td className="px-3 py-2 text-gray-400">{teamLabel(p)}</td>
                           <td className="px-3 py-2 text-right text-gray-500">{p.bye ?? "—"}</td>
-                          <td className="px-3 py-2 text-right text-gray-400">{num(p.g)}</td>
-                          <td className="px-3 py-2 text-right font-semibold text-gray-100">{num(p.pts)}</td>
+                          <td className="px-3 py-2 text-right text-gray-400">{numOrLock(p.g, p.locked)}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-gray-100">{numOrLock(p.pts, p.locked)}</td>
                           <td className="w-40 px-3 py-2">
-                            {p.ptsP10 != null && p.ptsP90 != null && domain ? (
+                            {p.locked ? (
+                              <LockChip title="Subscribe to unlock the projected range" />
+                            ) : p.ptsP10 != null && p.ptsP90 != null && domain ? (
                               <>
                                 {/* every rookie's band is class-level (shared across his draft
                                     tier), so it is demoted rather than shown as his own range */}
@@ -370,26 +416,49 @@ export function RankingsBoard() {
                               <span className="text-[11px] text-gray-600">—</span>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-right text-gray-300">{num(p.vor)}</td>
+                          <td className="px-3 py-2 text-right text-gray-300">{numOrLock(p.vor, p.locked)}</td>
                           {hasAdp && (
                             <>
                               <td className="px-3 py-2 text-right text-gray-400">
                                 {p.adp != null ? num(p.adp) : "—"}
                               </td>
+                              {/* 🚨 E9.56c — THE VISIBLE `NaN` IN THE OPERATOR'S SCREENSHOT.
+                                  `vs ADP` is `theRoomsRank - ourRank`, and `ourRank` is ABSENT on a
+                                  locked row, so this evaluated `number - undefined` = NaN and
+                                  rendered the literal string "NaN" in every row of the free view.
+                                  TypeScript cannot see it: `rankOf` returns `p.ovrRank`, typed
+                                  `number`, and the locked payload simply omits the key — a missing
+                                  field type-checks as its declared type at runtime.
+                                  It is also a column that CANNOT exist while locked, by definition:
+                                  it is the distance between our ranking and the market's, so
+                                  rendering any value would leak the ranking E9.56 withholds. */}
                               <td className="px-3 py-2 text-right">
-                                <AdpDelta
-                                  delta={(() => {
-                                    const ref = adpRefOf(p)
-                                    return ref != null ? ref - rank : null
-                                  })()}
-                                />
+                                {p.locked ? (
+                                  <LockChip title="Subscribe to see where we disagree with ADP" />
+                                ) : (
+                                  <AdpDelta
+                                    delta={(() => {
+                                      const ref = adpRefOf(p)
+                                      return ref != null && Number.isFinite(rank) ? ref - rank : null
+                                    })()}
+                                  />
+                                )}
                               </td>
                             </>
                           )}
+                          {/* E9.56c — `posRank` is stripped too, so this rendered the bare position
+                              ("RB", "WR") with no number, reading as a malformed cell rather than a
+                              withheld one. */}
                           {pos === "Overall" && (
                             <td className="px-3 py-2 text-right text-gray-500">
-                              {p.pos}
-                              {p.posRank}
+                              {p.locked ? (
+                                <LockChip title="Subscribe to unlock positional rank" />
+                              ) : (
+                                <>
+                                  {p.pos}
+                                  {p.posRank}
+                                </>
+                              )}
                             </td>
                           )}
                         </tr>
@@ -408,6 +477,18 @@ export function RankingsBoard() {
                   onPageSize={setPageSize}
                 />
               </div>
+
+              {/* E9.56b — say what was trimmed (see the identical note in projections-table). */}
+              {hiddenCount > 0 && (
+                <p className="mt-3 text-center text-xs text-gray-500">
+                  {hiddenCount.toLocaleString()} more players — those undrafted in the market sample
+                  — are ranked and included with a{" "}
+                  <a href={SUBSCRIBE_HREF} className="text-amber-400 hover:text-amber-300 hover:underline">
+                    subscription
+                  </a>
+                  .
+                </p>
+              )}
             </>
           )}
 

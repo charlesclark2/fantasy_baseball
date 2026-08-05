@@ -102,6 +102,12 @@ export interface ProjectedPlayer {
    *  resolve. */
   headshot?: string | null
 
+  /** E9.56 — set by the server when this caller is not entitled to the season's model output. The
+   *  row keeps its public identity (name/pos/team/ADP) so a "subscribe to unlock" CTA has something
+   *  to render; every projected value is ABSENT, not null-with-a-secret. Optional: an entitled
+   *  response omits it entirely. */
+  locked?: boolean
+
   // ── NF1.6: KICKER + TEAM DEFENSE (DST) ────────────────────────────────────────────────────
   /** True for the positions whose projection must NOT be read as a confident rank (K/DST). Set on
    *  every row by the exporter (false for skill positions), so the UI never has to know which
@@ -225,6 +231,54 @@ export interface ProjectionPayload {
    *  and cannot drift out of sync with which positions actually use the market. */
   market_lean_note?: string | null
   players: ProjectedPlayer[]
+
+  // ── E9.56: the server-side entitlement envelope ────────────────────────────────────────────
+  // ALL OPTIONAL, and every consumer must tolerate their ABSENCE: the API Lambda ships only via a
+  // manual `deploy.sh` while this frontend auto-deploys on merge, so there is always a window where
+  // a NEW client is talking to the OLD backend (NF-C0, both directions). Absent ⇒ read as ENTITLED,
+  // which is the shape the old backend has always returned to a caller it let through at all.
+  /** True when the server withheld this season's model output from this caller. */
+  locked?: boolean
+  /** Stated explicitly rather than inferred from `!locked`, so a dropped field can never read as
+   *  entitled (the E9.41 silently-dropped-Pydantic-field class). */
+  entitled?: boolean
+  lockedSeason?: number
+  /** Exactly which field names the server removed — computed server-side from the real payload, so
+   *  a newly-added projection field shows up as a locked point (and a CTA) automatically. */
+  lockedFields?: string[]
+  upgrade?: { reason: string; message: string; ctaHref: string }
+}
+
+/** True iff the server locked this payload/row. Absent marker ⇒ NOT locked (see above). */
+export function isLocked(x: { locked?: boolean } | null | undefined): boolean {
+  return x?.locked === true
+}
+
+/** True iff the server locked THIS SET of rows (any row carrying the marker locks the view). */
+export function rowsAreLocked(rows: { locked?: boolean }[] | null | undefined): boolean {
+  return !!rows?.some((r) => r.locked === true)
+}
+
+/** E9.56b — trim the undrafted tail from a LOCKED view, and report how many were hidden.
+ *
+ *  WHY. A locked row keeps only public identity + market ADP. Measured against the live payload
+ *  (2026-08-05): of 858 rows, **226 have an ADP and 632 do not** — so ~74% of the free page would be
+ *  players with a name, a lock icon and nothing else, sorted alphabetically at the bottom. That is
+ *  not a conversion surface, it is dead weight, and it is the bulk of what a crawler would index.
+ *
+ *  The hidden count is RETURNED rather than swallowed so the UI can state it honestly ("N more
+ *  players are included with a subscription") — which turns the truncation into a reason to
+ *  subscribe rather than a silent omission. Never drop rows without saying so.
+ *
+ *  ⚠️ AN ENTITLED VIEW IS UNTOUCHED — an unlocked payload returns unchanged, tail and all. A
+ *  subscriber has a real projection for every one of those players and must still see them.
+ */
+export function trimLockedTail<T extends { adp?: number | null; locked?: boolean }>(
+  rows: T[],
+): { rows: T[]; hiddenCount: number } {
+  if (!rowsAreLocked(rows)) return { rows, hiddenCount: 0 }
+  const kept = rows.filter((r) => typeof r.adp === "number" && Number.isFinite(r.adp))
+  return { rows: kept, hiddenCount: rows.length - kept.length }
 }
 
 /** NF1.5b — the positions whose ordering INCORPORATES market consensus, from a `market_lean` map.

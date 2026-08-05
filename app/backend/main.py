@@ -101,6 +101,13 @@ app.include_router(stripe.router)
 # subscriber/admin/fantasy_comp → else 403). `_paid` adds the subscriber-MFA guard
 # for consistency with the other paid content (a no-op unless ENFORCE_SUBSCRIBER_MFA=1).
 app.include_router(fantasy.router, dependencies=_paid)
+# E9.56 — the entitlement-AWARE NFL board reads (manifest / projections / board). Mounted from a
+# SEPARATE router object that carries no `require_fantasy_access`: instead of 403-ing a non-entitled
+# caller, these serve a LOCKED payload (public identity + market ADP, re-ordered, `locked: true`,
+# every model value removed) so the "subscribe to unlock" CTA can render. `_paid` still applies —
+# `require_subscriber_mfa` resolves identity OPTIONALLY, so an anonymous caller passes through it
+# untouched while a subscriber still gets the MFA backstop.
+app.include_router(fantasy.board_router, dependencies=_paid)
 # NF-C0 platform league import. The authenticated half gates on require_fantasy_beta_access
 # (per-route, like NF-C0b's editor). The `public_router` carries EXACTLY ONE route — Yahoo's OAuth
 # callback — which the user's BROWSER enters on a redirect back from Yahoo and so cannot present a

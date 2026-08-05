@@ -9,8 +9,10 @@ from uuid import uuid4
 
 import boto3
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
+from app.backend.dependencies import get_admin_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["feedback"])
@@ -32,8 +34,19 @@ class DataQualityReportRequest(BaseModel):
     description: str
 
 
+# 🔒 E9.56 — these two `/admin/*` routes had NO server-side authorization check at all. They live in
+# this router (which has no router-level dependency) rather than in `admin.py` (whose every route
+# carries `get_admin_user`), so their only protection was the API Gateway JWT authorizer — and that
+# authorizer proves the caller is LOGGED IN, never that they are an ADMIN. Measured consequence
+# before this fix: any authenticated account, including a free `beta_tester` or a `churned` user,
+# could list every submitted report — each of which carries the reporter's `user_email` (PII) and
+# free-text description — and could mark any report resolved.
+#
+# This is exactly the class the story exists to close, on the BETTING half rather than the fantasy
+# half: a surface whose gating was assumed to be handled somewhere else. `get_admin_user` is the
+# same gate `admin.py` uses; nothing about the endpoints' behaviour changes for an actual admin.
 @router.get("/admin/data-quality-reports")
-def list_data_quality_reports(limit: int = 50) -> list[dict]:
+def list_data_quality_reports(limit: int = 50, _admin: str = Depends(get_admin_user)) -> list[dict]:
     try:
         response = _reports_table().scan(Limit=limit)
         items = response.get("Items", [])
@@ -52,7 +65,7 @@ def list_data_quality_reports(limit: int = 50) -> list[dict]:
 
 
 @router.patch("/admin/data-quality-reports/{report_id}/resolve", status_code=200)
-def resolve_data_quality_report(report_id: str) -> dict:
+def resolve_data_quality_report(report_id: str, _admin: str = Depends(get_admin_user)) -> dict:
     try:
         _reports_table().update_item(
             Key={"report_id": report_id},

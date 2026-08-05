@@ -16,6 +16,7 @@ import { Picker } from "@/components/ui/picker"
 import type { LeagueConfigMeta, Manifest } from "@/lib/draft-optimizer"
 import { marketLeaningPositions } from "@/lib/fantasy"
 import type { ProjectedPlayer } from "@/lib/fantasy"
+import { useTrackRecordManifest } from "@/lib/fantasy-track-record"
 
 export const POS_COLORS: Record<string, string> = {
   QB: "text-rose-400 bg-rose-500/10 border-rose-500/30",
@@ -117,6 +118,147 @@ export const num = (v: number | null | undefined, nd = 1) =>
   v == null ? "—" : v.toLocaleString(undefined, { minimumFractionDigits: nd, maximumFractionDigits: nd })
 
 export const int = (v: number | null | undefined) => (v == null ? "—" : Math.round(v).toLocaleString())
+
+// ── E9.56: locked (paid) values ──────────────────────────────────────────────────────────────────
+// The server never sends a gated season's numbers to a non-entitled caller — it sends the row with
+// its public identity plus `locked: true` and NO value fields. So "locked" and "genuinely has no
+// value" arrive as the SAME absent field, and only the row's marker can tell them apart. That
+// distinction is the whole product decision: a locked point must read "subscribe to unlock", while
+// a real null must keep reading "—" (an honest absence we already communicate carefully — K/DST
+// `lowPred`, missing bio, no ADP). Getting it backwards either sells a value that doesn't exist or
+// silently hides one the user could buy.
+
+// 🚨 E9.56c — THE SUBSCRIBE ROUTE IS `/subscribe`. IT HAS NEVER BEEN `/pricing`.
+//
+// E9.56/E9.56b shipped every locked CTA pointing at `/pricing` — the LockChip on every withheld
+// cell (hundreds per page), both "Subscribe to unlock" buttons, and the two footer links. That
+// route DOES NOT EXIST in `frontend/app/`, so the entire conversion path off the locked view was a
+// 404, verified live. Nothing caught it: `next build` only resolves `<Link>` targets it can see
+// statically, these are plain `<a href>`, and there is no route-existence check anywhere in CI.
+// A dead CTA is invisible to every test that does not actually follow the link.
+//
+// ⇒ Route strings are now a CONSTANT here rather than a literal at each call site, and
+// `test_e9_56c_cta_routes.py` asserts a real `frontend/app/<route>/page.tsx` exists for it. A future
+// rename of the route directory then goes RED instead of silently 404ing in production.
+export const SUBSCRIBE_HREF = "/subscribe"
+
+/** Routes the server's `upgrade.ctaHref` is allowed to send us to.
+ *
+ *  NF-C0's deploy-skew rule, applied to a LINK TARGET rather than a payload key: the API Lambda
+ *  ships only via a manual `deploy.sh`, so a frontend deployed today can be talking to a backend
+ *  that still sends the old `/pricing`. Trusting that value verbatim is what put a 404 behind the
+ *  primary CTA in the first place. An unrecognized target falls back to the route we KNOW exists,
+ *  so the skew window degrades to "slightly wrong copy" instead of "dead button". */
+const KNOWN_CTA_ROUTES = new Set([SUBSCRIBE_HREF])
+export function resolveUpgradeHref(href?: string | null): string {
+  return href && KNOWN_CTA_ROUTES.has(href) ? href : SUBSCRIBE_HREF
+}
+
+/** The lock chip that stands in for a withheld value. Deliberately small and inline — it replaces a
+ *  single table cell, so it must not change row height or column width. */
+export function LockChip({ title }: { title?: string }) {
+  return (
+    <a
+      href={SUBSCRIBE_HREF}
+      title={title ?? "Subscribe to unlock this projection"}
+      className="inline-flex items-center gap-0.5 rounded px-1 text-[10px] font-medium text-amber-400/90 hover:text-amber-300 hover:bg-amber-400/10 transition-colors"
+      aria-label="Locked — subscribe to unlock"
+    >
+      <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+        <rect x="4" y="11" width="16" height="9" rx="2" />
+        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      </svg>
+    </a>
+  )
+}
+
+/** `num`, but a LOCKED row renders the chip instead of an em-dash.
+ *  `locked` is read from the row's own marker, so an entitled payload (no marker) is untouched. */
+export const numOrLock = (
+  v: number | null | undefined,
+  locked: boolean | undefined,
+  nd = 1,
+): React.ReactNode => (v == null && locked ? <LockChip /> : num(v, nd))
+
+export const intOrLock = (
+  v: number | null | undefined,
+  locked: boolean | undefined,
+): React.ReactNode => (v == null && locked ? <LockChip /> : int(v))
+
+/** The page-level "this season is paid" banner, rendered above a locked surface.
+ *
+ *  Takes its copy from the server's `upgrade` envelope so the reason and the CTA target live with
+ *  the gate that produced them; the defaults exist only for the deploy-skew window where a NEW
+ *  frontend is talking to an OLD backend that sends no envelope at all. */
+export function UpgradeBanner({
+  season,
+  upgrade,
+}: {
+  season?: number | null
+  upgrade?: { reason?: string; message?: string; ctaHref?: string } | null
+}) {
+  // E9.56b — LEAD WITH THE RECEIPTS, not with the ask.
+  //
+  // The locked view is, by necessity, the MARKET's board with our numbers removed: E9.56's
+  // anti-scrape rule re-orders locked rows onto ADP precisely so the array index cannot reconstruct
+  // our ranking. So the page a free visitor lands on cannot argue for itself — on its own it reads
+  // as an ADP clone with padlocks, which is a weak thing to ask money for.
+  //
+  // What CAN argue for it is already public and already measured: the NF3.2 track record (six
+  // seasons of our projection vs that season's preseason ADP vs the realized outcome). Rendering
+  // its headline VERBATIM keeps this honest — the claim is computed by
+  // `export_track_record_json.build_headline` from the scorecard's own numbers, so it cannot drift
+  // into marketing copy, and it respects the NF-D3 claim-scope rule at the top of this file (this
+  // is a projection product; it never asserts a win rate or an edge).
+  //
+  // Degrades cleanly: the manifest is a public endpoint, but if it is slow or fails we simply show
+  // the ask without the evidence rather than blocking the CTA.
+  const { data: receipts } = useTrackRecordManifest()
+  const seasonCount = receipts?.seasons?.length ?? 0
+
+  return (
+    <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/[0.07] px-4 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-2.5">
+          <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+            <rect x="4" y="11" width="16" height="9" rx="2" />
+            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+          </svg>
+          <p className="text-sm text-amber-200/90">
+            {upgrade?.message ?? `Subscribe to unlock the ${season ?? ""} projections.`}{" "}
+            <span className="text-amber-200/60">
+              {seasonCount > 0
+                ? `Every past season stays free — including how these projections actually did across ${seasonCount} of them.`
+                : "Past seasons stay free, including how these projections have actually done."}
+            </span>
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <a
+            href="/fantasy/track-record"
+            className="rounded-md border border-amber-500/40 px-3 py-1.5 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-500/10"
+          >
+            See the track record
+          </a>
+          <a
+            href={resolveUpgradeHref(upgrade?.ctaHref)}
+            className="rounded-md bg-amber-500 px-3 py-1.5 text-sm font-semibold text-black transition-colors hover:bg-amber-400"
+          >
+            Subscribe to unlock
+          </a>
+        </div>
+      </div>
+
+      {/* E9.56c — this is option (a)'s whole point ("lead with the track record"), so it cannot be
+          the smallest, dimmest text in its own box. Nudged up from 12px/70% opacity. */}
+      {receipts?.headline && (
+        <p className="mt-2.5 border-t border-amber-500/20 pt-2.5 text-[13px] leading-relaxed text-amber-200/85">
+          {receipts.headline}
+        </p>
+      )}
+    </div>
+  )
+}
 
 export function PosBadge({ pos }: { pos: string }) {
   return (

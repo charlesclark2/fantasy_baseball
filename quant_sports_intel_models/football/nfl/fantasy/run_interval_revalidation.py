@@ -84,6 +84,9 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from quant_sports_intel_models.football.nfl.fantasy import season_projection as SP  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
+    rookie_publish_policy as _ROOKIE_POLICY,
+)
+from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
     run_rookie_interval_ablation as NF17,
     run_rookie_perposition_ablation as NF18,
     run_veteran_interval_ablation as NF19,
@@ -146,6 +149,12 @@ def _floor_block(rec: dict, positions: list[str], floor_kwargs: dict) -> dict:
 def revalidate_rookies(pool_path: Path, from_year: int, to_year: int) -> dict:
     """Re-score NF1.8's shipped rookie band on every available held-out draft class."""
     pool = NF17.load_pool(pool_path)
+    # ⭐ NF-D21: `build_folds` resolves its λ from the SERVED rookie policy, so this standing check
+    #    re-scores the band against the point the product ACTUALLY serves. That was not true before
+    #    NF-D21 — the folds recalibrated at λ=1 while serving ran the correction OFF, so the floors
+    #    were being confirmed on a point nobody was shown. λ is RECORDED in the report below, because
+    #    "the floors held" means nothing without saying which point they held around.
+    served_lambda = _ROOKIE_POLICY.serving_lambda()
     folds = NF17.build_folds(pool, list(range(from_year, to_year + 1)))
     if len(folds) < 2:
         return {"population": "rookies", "error": f"only {len(folds)} usable draft classes"}
@@ -155,6 +164,9 @@ def revalidate_rookies(pool_path: Path, from_year: int, to_year: int) -> dict:
         return {"population": "rookies", "error": "the shipped rookie band did not score"}
     POS = sorted({k[4:] for k in rec if k.startswith("cov_")})
     out = {"population": "rookies", "config": cfg["label"], "form": cfg.get("form"),
+           "rookie_point_shrink_lambda": served_lambda,
+           "rookie_selection_status": (_ROOKIE_POLICY.SELECTION_STATUS if served_lambda
+                                       else "incumbent"),
            "cohorts": [f.year for f in folds], "n": rec["n"],
            **_floor_block(rec, POS, {"min_n": NF18._POS_FLOOR_MIN_N,
                                      "tier2_positions": NF18._TIER2_POSITIONS,

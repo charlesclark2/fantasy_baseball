@@ -12,6 +12,7 @@ import { useId, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { Search } from "lucide-react"
 import { useFantasyProjections, FANTASY_SEASON } from "@/lib/fantasy-queries"
+import { trimLockedTail } from "@/lib/fantasy"
 import {
   ALL_ROWS,
   ConfidenceBadge,
@@ -19,6 +20,7 @@ import {
   GLOSSARY,
   InfoTip,
   IntervalBar,
+  LockChip,
   LoadingBlock,
   MarketLeanNote,
   Pagination,
@@ -28,11 +30,14 @@ import {
   ProvenanceLine,
   RookieBadge,
   STAT_COLS,
+  SUBSCRIBE_HREF,
   SurfaceHeader,
   UNCERTAINTY_HELP,
   UNCERTAINTY_LABEL,
   UncertaintyNote,
+  UpgradeBanner,
   num,
+  numOrLock,
   int,
   teamLabel,
 } from "@/components/fantasy/shared"
@@ -55,18 +60,31 @@ export function ProjectionsTable() {
   const [pageSize, setPageSize] = useState<number>(50)
   const scoringSelectId = useId()
 
-  const players = data?.players ?? []
+  const locked = data?.locked === true
+  // E9.56b — on a LOCKED view, drop the undrafted tail: 632 of 858 rows carry no ADP and no value,
+  // so they would render as a long alphabetical list of names and padlocks. The hidden count is
+  // surfaced below the table, never silently swallowed.
+  const { rows: players, hiddenCount } = useMemo(
+    () => trimLockedTail(data?.players ?? []),
+    [data],
+  )
 
   // Rank is assigned on the position-filtered, scoring-sorted board and then CARRIED, so searching
   // (or filtering to rookies) narrows the rows WITHOUT renumbering them. A search that renumbers
   // hides the one thing you searched for — where the player actually sits on the board.
   const ranked = useMemo(() => {
-    return players
-      .filter((p) => (pos === "All" ? true : p.pos === pos))
-      .slice()
-      .sort((a, b) => (b[scoring] ?? -Infinity) - (a[scoring] ?? -Infinity))
-      .map((p, i) => ({ player: p, rank: i + 1 }))
-  }, [players, pos, scoring])
+    const scoped = players.filter((p) => (pos === "All" ? true : p.pos === pos))
+    // ⚠️ E9.56b — DO NOT sort a locked view by a scoring column. On a locked row `fpPpr`/`fpHalf`/
+    // `fpStd` are ABSENT, so the comparator below evaluates `-Infinity - -Infinity` = **NaN** on
+    // every pair. `Array.sort` happens to treat a NaN comparator as 0 and leaves the order intact,
+    // so this looks harmless — but it is undefined-behaviour-by-luck, and the order it accidentally
+    // preserves is the one that matters: the server sorted locked rows onto market ADP precisely so
+    // the array index cannot reconstruct our ranking (E9.56). Keep the server's order EXPLICITLY.
+    const ordered = locked
+      ? scoped
+      : scoped.slice().sort((a, b) => (b[scoring] ?? -Infinity) - (a[scoring] ?? -Infinity))
+    return ordered.map((p, i) => ({ player: p, rank: i + 1 }))
+  }, [players, pos, scoring, locked])
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -110,6 +128,10 @@ export function ProjectionsTable() {
           />
         </div>
       </SurfaceHeader>
+
+      {/* E9.56 — the server withheld this season's values from this caller. Rows still render with
+          their public identity, each locked cell carrying its own chip; this is the page-level ask. */}
+      {data?.locked && <UpgradeBanner season={data.season ?? FANTASY_SEASON} upgrade={data.upgrade} />}
 
       {isLoading && <LoadingBlock label="Loading projections…" />}
 
@@ -240,39 +262,64 @@ export function ProjectionsTable() {
                     </td>
                     <td className="px-3 py-2 text-gray-400">{teamLabel(p)}</td>
                     <td className="px-3 py-2 text-right text-gray-500">{p.bye ?? "—"}</td>
-                    <td className="px-3 py-2 text-right text-gray-400">{num(p.g)}</td>
+                    <td className="px-3 py-2 text-right text-gray-400">{numOrLock(p.g, p.locked)}</td>
                     {statCols.map((c) => (
                       <td key={String(c.key)} className="px-3 py-2 text-right text-gray-400">
-                        {num(p[c.key] as number | null, c.nd ?? 1)}
+                        {numOrLock(p[c.key] as number | null, p.locked, c.nd ?? 1)}
                       </td>
                     ))}
                     <td className="px-3 py-2 text-right font-semibold text-gray-100">
-                      {num(p[scoring])}
+                      {numOrLock(p[scoring], p.locked)}
                     </td>
+                    {/* E9.56 — the interval is model output too. A locked row has no p10/p90, so
+                        render the chip rather than an empty bar that reads as "no uncertainty". */}
                     <td className="w-40 px-3 py-2">
-                      <RangeCell p10={p.fpP10} p90={p.fpP90} classLevel={p.uncType === "calibrated"} />
-                      <IntervalBar
-                        p10={p.fpP10}
-                        point={p.fpPpr}
-                        p90={p.fpP90}
-                        min={domain.min}
-                        max={domain.max}
-                        classLevel={p.uncType === "calibrated"}
-                      />
+                      {p.locked ? (
+                        <LockChip title="Subscribe to unlock the projected range" />
+                      ) : (
+                        <>
+                          <RangeCell p10={p.fpP10} p90={p.fpP90} classLevel={p.uncType === "calibrated"} />
+                          <IntervalBar
+                            p10={p.fpP10}
+                            point={p.fpPpr}
+                            p90={p.fpP90}
+                            min={domain.min}
+                            max={domain.max}
+                            classLevel={p.uncType === "calibrated"}
+                          />
+                        </>
+                      )}
                     </td>
                     {hasAdp && (
                       <td className="px-3 py-2 text-right text-gray-400">
                         {p.adp != null ? num(p.adp) : "—"}
                       </td>
                     )}
+                    {/* 🚨 E9.56c — Confidence and Range basis are MODEL OUTPUT and are stripped from
+                        a locked row, so both fell through to their own honest-absence renderings:
+                        ConfidenceBadge's "—" and the ternary's "—". That silently converts a
+                        WITHHELD value into "we have nothing for this player" — the exact inversion
+                        the `numOrLock` note above this file's lock helpers exists to prevent, just
+                        in the two cells that don't route through it. Every withheld point must
+                        carry a chip (the story's rule), so branch on the row's own marker. */}
                     <td className="px-3 py-2">
-                      <ConfidenceBadge conf={p.conf} />
+                      {p.locked ? (
+                        <LockChip title="Subscribe to unlock the model's confidence tier" />
+                      ) : (
+                        <ConfidenceBadge conf={p.conf} />
+                      )}
                     </td>
                     <td
                       className="px-3 py-2 text-gray-500"
-                      title={p.uncType ? UNCERTAINTY_HELP[p.uncType] : undefined}
+                      title={!p.locked && p.uncType ? UNCERTAINTY_HELP[p.uncType] : undefined}
                     >
-                      {p.uncType ? UNCERTAINTY_LABEL[p.uncType] ?? p.uncType : "—"}
+                      {p.locked ? (
+                        <LockChip title="Subscribe to unlock how this player's range was built" />
+                      ) : p.uncType ? (
+                        UNCERTAINTY_LABEL[p.uncType] ?? p.uncType
+                      ) : (
+                        "—"
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -289,6 +336,20 @@ export function ProjectionsTable() {
               onPageSize={setPageSize}
             />
           </div>
+
+          {/* E9.56b — say what was trimmed. `trimLockedTail` hides locked rows with no market ADP
+              (~74% of the payload: names with a padlock and nothing else). Stating the count keeps
+              the truncation honest AND makes it a reason to subscribe rather than a silent gap. */}
+          {hiddenCount > 0 && (
+            <p className="mt-3 text-center text-xs text-gray-500">
+              {hiddenCount.toLocaleString()} more players — those undrafted in the market sample —
+              are projected and included with a{" "}
+              <a href={SUBSCRIBE_HREF} className="text-amber-400 hover:text-amber-300 hover:underline">
+                subscription
+              </a>
+              .
+            </p>
+          )}
 
           <div className="mt-6">
             <UncertaintyNote>

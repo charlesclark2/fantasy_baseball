@@ -53,19 +53,56 @@ import type {
 /** The NFL fantasy season every surface reads. */
 export const FANTASY_SEASON = 2026
 
-// NF3.2 — every hook below now GATES on fantasy entitlement (mirroring `useSavedLeagues`'s existing
-// `enabled: entitled` pattern), not just on its own query-specific conditions. Every EXISTING caller
-// of these hooks lives on a page already wrapped in `FantasyGuard` (so `entitled` is already true by
-// the time it mounts) — this is a no-op for them. The reason it moved here rather than staying only a
-// per-page concern: NF3.1's player page is now reachable WITHOUT `FantasyGuard` (past-season track
-// record is public, the current-season projection is locked), so the hook itself must refuse to ever
-// ISSUE the gated request for a non-entitled caller — never merely hide its result in the render.
+// ── E9.56b: the `enabled: canAccess("fantasy", …)` gate is REMOVED from the three board hooks ────
+//
+// 🚨 READ THIS BEFORE PUTTING IT BACK. NF3.2 added that gate with sound reasoning FOR ITS TIME:
+// "the hook itself must refuse to ever ISSUE the gated request for a non-entitled caller — never
+// merely hide its result in the render." That was correct while these endpoints returned 403 to a
+// non-entitled caller, so issuing the request could only ever produce an error.
+//
+// E9.56 changed what is on the other end. `/fantasy/nfl/{manifest,projections,board}` are now
+// DUAL-MODE: an entitled caller gets the real numbers; everyone else gets the same rows with every
+// model value REMOVED and `locked: true` in its place, re-ordered onto market ADP so the array index
+// cannot reconstruct our ranking (proven in prod 2026-08-05 — 858/858 rows locked, 100%
+// ADP-ascending, identical under a forged `subscriber` token). So this is no longer "the gated
+// request" — it is the request whose RESPONSE is gated, server-side, per point.
+//
+// ⇒ keeping the gate here would mean a free user's fetch never fires, `data === undefined`, and the
+// surface renders its "not available yet" EMPTY STATE — which reads as "we haven't published this",
+// not "subscribe to unlock". That is the failure this story exists to fix, and it is SILENT: nothing
+// errors, nothing logs, and it presents as a content problem rather than a gating one.
+//
+// ⚠️ HOOK REUSE — WHY THIS DOES NOT FIRE UNINTENDED ANONYMOUS FETCHES ELSEWHERE. These hooks are
+// also consumed by STILL-GATED surfaces: `draft-optimizer`, `league-board`, `league-import`,
+// `league-settings-editor`, `player-search`, and `player-page`'s EntitledPlayerView. None starts
+// fetching for an anonymous caller, and the reason is structural rather than lucky: `FantasyGuard`
+// returns `null` BEFORE rendering its children, so those components never MOUNT for a non-entitled
+// user and their hooks therefore never run. `player-page` is the one that does not rely on a guard —
+// it dispatches to `PublicPlayerView`, which genuinely never invokes these hooks at all (see its
+// module docstring). It would be SAFE either way (the server returns locked-or-403), so this is a
+// correctness/efficiency property, not a security one — but if `FantasyGuard` is ever changed to
+// render children while redirecting, re-check that list.
+//
+// The server remains the actual gate. Nothing removed here hides anything the API would not send.
+//
+// 🚨🚨 THE ENTITLEMENT MUST BE IN THE QUERY KEY, AND THIS IS NOT OPTIONAL. These queries are
+// `staleTime: Infinity`, and `queryClient.clear()` runs on SIGN-OUT ONLY — `onLoginSuccess` does NOT
+// clear it (see `lib/auth-context.tsx`). So without the key discriminator: a logged-out visitor
+// caches the LOCKED payload → they subscribe and log in → the cache is never invalidated → a PAYING
+// SUBSCRIBER keeps seeing the locked view indefinitely. It presents as "the paywall is broken" and
+// there is no error anywhere.
+//
+// This could not happen before E9.56b, because `enabled: false` meant nothing was ever cached in the
+// un-entitled state — i.e. REMOVING the gate is what introduces it. Keying on entitlement makes
+// login a natural cache-miss and refetch. (Clearing the cache on login would also work but changes
+// auth behaviour for every surface; this stays scoped to the three hooks that are actually
+// dual-mode.) Guarded by `public-surface.test.ts::the entitlement is part of every dual-mode key`.
 export function useFantasyManifest(season: number = FANTASY_SEASON) {
   const { accessToken, groups } = useAuth()
+  const entitled = canAccess("fantasy", groups)
   return useQuery<Manifest>({
-    queryKey: ["nfl-fantasy-manifest", season],
+    queryKey: ["nfl-fantasy-manifest", season, entitled],
     queryFn: () => getFantasyManifest(accessToken, season),
-    enabled: canAccess("fantasy", groups),
     staleTime: Infinity,
   })
 }
@@ -76,9 +113,12 @@ export function useFantasyBoard(
   season: number = FANTASY_SEASON,
 ) {
   const { accessToken, groups } = useAuth()
+  const entitled = canAccess("fantasy", groups)
   return useQuery<Player[]>({
-    queryKey: ["nfl-fantasy-board", season, configName, size],
-    enabled: canAccess("fantasy", groups) && !!configName && !!size,
+    // `entitled` in the key — see the block above; omitting it strands a new subscriber on the
+    // cached locked board.
+    queryKey: ["nfl-fantasy-board", season, configName, size, entitled],
+    enabled: !!configName && !!size,
     queryFn: async () => {
       const rows = await getFantasyBoard(accessToken, season, configName as string, size as number)
       // dedupe by id (defensive — a duplicate player_id would collide React keys and corrupt rendering)
@@ -91,10 +131,12 @@ export function useFantasyBoard(
 
 export function useFantasyProjections(season: number = FANTASY_SEASON) {
   const { accessToken, groups } = useAuth()
+  const entitled = canAccess("fantasy", groups)
   return useQuery<ProjectionPayload>({
-    queryKey: ["nfl-fantasy-projections", season],
+    // `entitled` in the key — see the block above; omitting it strands a new subscriber on the
+    // cached locked projections.
+    queryKey: ["nfl-fantasy-projections", season, entitled],
     queryFn: () => getFantasyProjections(accessToken, season),
-    enabled: canAccess("fantasy", groups),
     staleTime: Infinity,
     // The projections blob 404s until the operator's first NF3 export — surface that as an
     // honest empty state immediately instead of burning retries on a known-missing object.

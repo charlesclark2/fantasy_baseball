@@ -315,3 +315,95 @@ def test_adp_source_for_season_reads_the_uniform_per_row_value():
     ])
     assert ex.adp_source_for_season(df) == "mfl"
     assert ex.adp_source_for_season(pd.DataFrame(columns=["adp_source"])) is None
+
+
+# ── E9.56c: display casing + a headline a casual fan can read ────────────────────────────────────
+
+
+def test_display_name_leaves_an_already_cased_name_completely_alone():
+    """Rookies arrive properly cased from the draft-class pipeline. Re-casing them is how you turn
+    "TreVeyon Henderson" into "Treveyon Henderson" — a NEW bug introduced by the fix."""
+    for name in ("Ashton Jeanty", "TreVeyon Henderson", "Ja'Marr Chase", "J.K. Dobbins"):
+        assert ex.display_name(name) == name
+
+
+def test_display_name_fixes_the_shouting_veterans():
+    assert ex.display_name("JOSH ALLEN") == "Josh Allen"
+    assert ex.display_name("JA'MARR CHASE") == "Ja'Marr Chase"
+    assert ex.display_name("AMON-RA ST. BROWN") == "Amon-Ra St. Brown"
+    assert ex.display_name("A.J. BROWN") == "A.J. Brown"
+
+
+def test_display_name_handles_mc_names_that_plain_title_case_breaks():
+    """`"CHRISTIAN MCCAFFREY".title()` is "Christian Mccaffrey" — wrong, and on the most recognisable
+    name on the board. 12 Mc/Mac names in the live data."""
+    assert "MCCAFFREY".title() == "Mccaffrey"  # the behaviour being corrected
+    assert ex.display_name("CHRISTIAN MCCAFFREY") == "Christian McCaffrey"
+    assert ex.display_name("TREY MCBRIDE") == "Trey McBride"
+    assert ex.display_name("LADD MCCONKEY") == "Ladd McConkey"
+
+
+def test_display_name_internal_capitals_are_a_lookup_because_they_are_undecidable():
+    """The case that PROVES a rule alone cannot work: same uppercase input, two right answers.
+
+    "DEVONTA FREEMAN" -> "Devonta Freeman" but "DEVONTA SMITH" -> "DeVonta Smith". Any future
+    refactor that replaces the map with a token rule breaks exactly here.
+    """
+    assert ex.display_name("DEVONTA FREEMAN") == "Devonta Freeman"
+    assert ex.display_name("DEVONTA SMITH") == "DeVonta Smith"
+    assert ex.display_name("CEEDEE LAMB") == "CeeDee Lamb"
+    assert ex.display_name("DK METCALF") == "DK Metcalf"
+
+
+def test_no_published_name_is_ever_all_caps():
+    """The structural guard: a name missing from `_KNOWN_CASINGS` still renders readably, so the
+    failure mode of an un-mapped new player is a slightly-wrong internal capital, never SHOUTING."""
+    df = pd.DataFrame([
+        {"season": 2024, "player_id": f"P{i}", "player_name": n, "position": "WR",
+         "our_points": 1.0, "our_rank": i + 1, "adp": 1.0, "adp_rank": i + 1,
+         "actual_points": 1.0, "actual_rank": i + 1, "is_fade": False, "fade_result": None,
+         "adp_source": "ffc"}
+        for i, n in enumerate(["JOSH ALLEN", "Ashton Jeanty", "SOME BRANDNEW ROOKIE"])
+    ])
+    for rec in ex.season_records(df):
+        assert not rec["playerName"].isupper(), f"published a SHOUTING name: {rec['playerName']!r}"
+
+
+def test_headline_carries_no_statistics_jargon():
+    """The whole point of the rewrite: this is read by casual fans, not by us."""
+    headline = ex.build_headline(_fake_scorecard())
+    lowered = headline.lower()
+    for jargon in ("correlation", "Δρ", "rho", "within-position ordering", "pooled"):
+        assert jargon.lower() not in lowered, f"headline still says {jargon!r}"
+    assert "perfect ranking" in lowered and "random" in lowered, "the scale must be explained"
+
+
+def test_headline_still_quotes_the_scorecards_own_numbers():
+    """Simplifying the PROSE is safe; substituting a friendlier NUMBER would not be."""
+    headline = ex.build_headline(_fake_scorecard())
+    assert "0.517" in headline and "0.494" in headline
+    assert "2019" in headline and "2024" in headline
+    for banned in ex._CLAIM_DENYLIST:
+        assert banned not in headline.lower()
+
+
+def test_headline_direction_follows_the_measured_sign():
+    """The plain-English rewrite reads as a CLAIM, so a negative delta must change the sentence.
+
+    The old wording ("is X, against ADP's Y") asserted no direction and so stayed true either way;
+    "we finished ahead" does not. A future season where ADP wins must not print a false claim.
+    """
+    sc = _fake_scorecard()
+    agg = sc["aggregate"]["adp"]
+    agg.update(us_rho_pooled=0.470, system_rho_pooled=0.510, delta_rho_pooled=-0.040)
+    behind = ex.build_headline(sc).lower()
+    assert "ahead" not in behind
+    assert "held up better than ours" in behind
+
+
+def test_headline_margin_adjective_is_derived_not_asserted():
+    """"narrow" is true at +0.022; it must stop being applied on its own if the gap ever grows."""
+    sc = _fake_scorecard()
+    assert "narrow margin" in ex.build_headline(sc)
+    sc["aggregate"]["adp"]["delta_rho_pooled"] = 0.20
+    assert "wide margin" in ex.build_headline(sc)

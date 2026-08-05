@@ -254,7 +254,7 @@ __all__ = [
     "ORDERING_BINDING_FORMS", "LEARNED_FOIL", "FAMILY_CEILING",
     "MULT_CLIP", "OFFSET_CLIP", "MIN_POINT", "MIN_CELL", "NON_SHIPPABLE",
     "SELECTION_METRIC", "ORDERING_DO_NO_HARM", "TIER_K", "SCALED_TIER_K",
-    "apply_position_adjustment", "blend_toward_incumbent", "slot_tier",
+    "apply_position_adjustment", "blend_toward_incumbent", "shrink_affine_params", "slot_tier",
     "fit_mult_const", "fit_add_offset", "fit_mult_tier", "fit_ols",
     "predict_form", "candidate_configs", "config_key", "require_anchors",
     "ordering_check", "ordering_is_structural", "scaled_positions_only",
@@ -305,6 +305,33 @@ def blend_toward_incumbent(point, adjusted, lam: float) -> np.ndarray:
     if lam == 0.0:
         return p.copy()
     return p + lam * (np.where(np.isfinite(a), a, p) - p)
+
+
+def shrink_affine_params(params: dict, lam: float) -> dict:
+    """NF-D21 — the λ-shrunk AFFINE, in PARAMETER space: `(a, b) → (λ·a, 1 − λ + λ·b)`.
+
+    ⭐ WHY THIS IS EXACT AND NOT AN APPROXIMATION. `blend_toward_incumbent` shrinks in OUTPUT space,
+    `p + λ·(adjusted − p)`. For an AFFINE correction `adjusted = a + b·p` that expands to
+    `λ·a + (1 − λ + λ·b)·p`, which is itself an affine — so the shrink can be folded into the
+    parameters ONCE at fit time instead of applied at every prediction. NF-D20 relied on the same
+    algebra when it noted that a λ-blend of an affine with the identity is an affine.
+
+    This matters operationally rather than aesthetically: `RookieSlotCurve.recalibrate_fp` already
+    applies `a + b·fp` and clips at zero, and serving stores only `(a, b)`. Folding λ into the
+    parameters means the served path needs NO new code, NO second knob, and cannot be built at a
+    different λ than the one that was staged — there is only one place λ can live.
+
+    ⚠️ The equivalence is not asserted, it is TESTED: `test_nf_d21_rookie_publish.py` scores this
+    against `blend_toward_incumbent` over the real 2026 rookie board and requires exact agreement,
+    so a future edit that breaks the algebra fails rather than silently serving a different shrink.
+
+    λ = 0 returns the IDENTITY `(0, 1)` for every position — the incumbent, byte-for-byte."""
+    lam = float(lam)
+    out: dict = {}
+    for pos, ab in params.items():
+        a, b = float(ab[0]), float(ab[1])
+        out[pos] = (lam * a, 1.0 - lam + lam * b)
+    return out
 
 
 def slot_tier(overall) -> np.ndarray:
