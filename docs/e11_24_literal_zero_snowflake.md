@@ -1549,12 +1549,55 @@ populates the prior slate's umpire/weather — the documented one-cycle lag (tho
 *after* the build that consumes them); (ii) 6a gates only the **intraday copy**, while the
 served umpire parquet comes from the nightly `--w11b`, which 6a does not touch.
 
+## FU-3 DEPLOYED + VERIFIED IN THE EXECUTING CONTAINER (2026-08-04 06:04 UTC)
+
+Blocker 1 and 1b are CLEARED. PR #579 merged to `dev` (06:00 UTC), `dev`→`main` promoted, and
+`orchestration_cd.yml` deployed the box at **06:04 UTC** (`✅ Box deploy Success`).
+
+Verified the FU-1 way — in the **persistent `dagster-codeloc` container that `DefaultRunLauncher`
+actually runs job subprocesses in**, not a throwaway exec:
+
+| check | result |
+|---|---|
+| `grep "args.skip_if_exists and not args.dry_run" /app/scripts/ingest_umpires.py` | lines 341 + 366, **neither carrying `and do_sf`** ⇒ FU-3's per-game form is live (line 23 is the docstring quoting the OLD form — expected prose, not code) |
+| `docker inspect .State.StartedAt` | **2026-08-04T06:04:38Z** — recreated BY this deploy, not merely restarted |
+| `docker inspect .Image` | `sha256:11daaaf0a231…` — **byte-identical** to the digest the deploy log wrote (`writing image sha256:11daaaf0a231…`) |
+| `printenv E11_24_UMPIRE_REBUILD_GATE` | `1` |
+
+⇒ **6a and FU-3 are both live and armed in the container that will run the 08-04 slate.**
+
+### ⚠️ REFINEMENT TO THE INC-36 `COPY . .` TELL (a false alarm this session raised)
+
+The deploy log showed `#69 [dagster-codeloc 14/15] COPY . . → CACHED` on a build whose context
+**did** include a changed `scripts/ingest_umpires.py` (48-file diff from the previously-deployed
+`7f05656a`; `.dockerignore` excludes only `*.duckdb`). Read against INC-36's signature —
+*"`COPY . . → CACHED` on a commit that changed 10 files — impossible on a first build"* — that
+looks like a concurrent-build race, and it was flagged as one. **It was not.**
+
+The compose stack builds **several services from the SAME image** (`dagster-codeloc`, the daemon,
+the webserver). The first service performs the real `COPY . .`; its siblings legitimately report
+`CACHED` **within the same invocation**. ⇒ **`COPY . . → CACHED` is the INC-36 tell only for the
+FIRST service built from a given context; a sibling sharing the image is expected to be cached.**
+
+**The discriminating check is not the cache line at all — it is whether the RUNNING container's
+image digest equals the digest the deploy log wrote** (plus `.State.StartedAt` ≥ the deploy).
+That is a two-command, read-only test that converts the suspicion into a fact in either
+direction, and it is what should be run before trusting *any* deploy that a soak depends on.
+Cheap insurance against re-running the FU-1 failure (measuring a gate that cannot fire).
+
 ## WHAT IS STILL NEEDED (in order)
 
-1. **Land the CI fix**, then **promote `dev`→`main`** — that push *is* the FU-3 deploy.
+1. ~~**Land the CI fix**, then **promote `dev`→`main`**~~ — ✅ DONE 2026-08-04 06:04 UTC (above).
 2. **Wait for a GATE-0-clean slate** (~13–15 games, first pitches 14–23 UTC, ≥7 invocations)
    that runs **entirely after** the deploy recreated `dagster-codeloc`. A same-day flip does not
    retroactively arm already-run jobs (FU-1).
+   · **08-04 is the first eligible slate** — 15 games, deploy at 06:04 UTC, monitor starts
+     ~17:35 UTC ⇒ the whole slate runs armed. ⚠️ But it is **uniformly late**: every first pitch
+     falls 22:35–01:40 UTC, so the gate's measurable window only opens once the day's FIRST
+     umpire assignment is written (on 08-03 that was 20:38 UTC). **Confirm the invocation count
+     reaches ~7 and that assignments landed with slate left to run** before accepting it as the
+     clean read — a late-assignment slate can leave too few post-assignment invocations for the
+     gate to have any opportunity, which is the 08-03 failure in a milder form.
 3. **Direct event-log verification** (below) — the primary, fact-settling leg.
 4. Re-run the three measurements above on that slate: write-instants vs its wave count + ≥2
    distinct `first_seen`; waits-per-fire vs 1.57 (07-28) / 1.86 (07-30); serving no-regression.
