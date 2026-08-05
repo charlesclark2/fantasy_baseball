@@ -8,7 +8,7 @@ import { Loader2 } from "lucide-react"
 import posthog from "posthog-js"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { completeGoogleSignIn } from "@/lib/cognito"
+import { completeGoogleSignIn, consumePostSignInRedirect } from "@/lib/cognito"
 import { useAuth } from "@/lib/auth-context"
 import { apiFetch } from "@/lib/api"
 
@@ -44,7 +44,14 @@ function CallbackInner() {
         posthog.capture("user_signed_in", { method: "google" })
         // Parity with password login: verify the federated user's email server-side.
         apiFetch("/auth/verify-email", { method: "POST" }, accessToken).catch(() => {})
-        router.replace("/dashboard")
+        // E9.58 — record ToS acceptance for the Google path. Google is now the ONLY self-serve
+        // signup route, so without this a public account could be created having accepted nothing;
+        // the password path already did it at the set-password step. Same existing endpoint,
+        // fire-and-forget, and `if_not_exists` server-side so a repeat sign-in is a no-op.
+        apiFetch("/auth/accept-terms", { method: "POST" }, accessToken).catch(() => {})
+        // E9.58 — return the visitor to whatever they were trying to reach (e.g. /subscribe),
+        // not unconditionally to /dashboard, which silently dropped their buying intent.
+        router.replace(consumePostSignInRedirect() ?? "/dashboard")
       })
       .catch((err) => {
         setError(err?.message ?? "Google sign-in failed. Please try again.")

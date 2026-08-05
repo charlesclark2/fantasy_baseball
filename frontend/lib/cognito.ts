@@ -93,6 +93,32 @@ function redirectUri(): string {
 const PKCE_VERIFIER_KEY = "cognito_pkce_verifier"
 const OAUTH_STATE_KEY = "cognito_oauth_state"
 
+// E9.58 — where to land AFTER the round-trip. The Cognito app client's callback URL is a
+// fixed allowlist entry (`<origin>/callback`), so the destination cannot ride in redirect_uri;
+// it is stashed beside the PKCE verifier for the same reason (localStorage survives the
+// cross-origin navigation, sessionStorage does not reliably).
+// This is what makes the funnel close: a stranger who clicks Subscribe on a locked projection
+// signs up and comes back to /subscribe, rather than being dropped on /dashboard having
+// silently lost the thing they were trying to buy.
+const POST_SIGNIN_REDIRECT_KEY = "cognito_post_signin_redirect"
+
+// Only a same-origin ABSOLUTE PATH is ever accepted. This value is read from a query string
+// (`/signup?next=…`), i.e. it is attacker-controlled: anything that could leave the origin is an
+// open redirect on the auth callback, which is the worst place in the app to have one.
+// Rejects "//evil.com" (protocol-relative), "https://…", "javascript:…", and any non-"/" start.
+export function sanitizeInternalPath(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  if (!raw.startsWith("/")) return null
+  // Protocol-relative ("/" + "/" + host) leaves the origin entirely. Written as an index check
+  // rather than a two-slash string literal on purpose: the repo's source-inspection guards strip
+  // `//` line comments before asserting, and a literal double slash inside a string is eaten by
+  // that stripper — so the clause would be invisible to the very test that pins it.
+  if (raw[1] === "/") return null
+  // A backslash is normalised to "/" by some browsers, so "/\evil.com" can escape the origin.
+  if (raw.includes("\\")) return null
+  return raw
+}
+
 function base64UrlEncode(bytes: Uint8Array): string {
   let str = ""
   for (const b of bytes) str += String.fromCharCode(b)
@@ -116,13 +142,18 @@ async function pkceChallenge(verifier: string): Promise<string> {
 // Kick off "Continue with Google": mint a PKCE verifier + CSRF state (stashed in
 // localStorage so it survives the cross-origin redirect round-trip), then redirect
 // the browser to the Cognito Hosted-UI authorize endpoint forced to the Google IdP.
-export async function startGoogleSignIn(): Promise<void> {
+// `next` is where to send the user once the callback completes (default /dashboard).
+export async function startGoogleSignIn(next?: string | null): Promise<void> {
   const verifier = randomToken(64)
   const state = randomToken(16)
   const challenge = await pkceChallenge(verifier)
 
   window.localStorage.setItem(PKCE_VERIFIER_KEY, verifier)
   window.localStorage.setItem(OAUTH_STATE_KEY, state)
+
+  const dest = sanitizeInternalPath(next)
+  if (dest) window.localStorage.setItem(POST_SIGNIN_REDIRECT_KEY, dest)
+  else window.localStorage.removeItem(POST_SIGNIN_REDIRECT_KEY)
 
   const params = new URLSearchParams({
     identity_provider: "Google",
@@ -135,6 +166,15 @@ export async function startGoogleSignIn(): Promise<void> {
     code_challenge_method: "S256",
   })
   window.location.href = `https://${hostedUiDomain()}/oauth2/authorize?${params.toString()}`
+}
+
+// Read-and-clear the stashed destination. Single-use: a stale entry must never hijack a later,
+// unrelated sign-in. Re-sanitised on the way out — the value has been through localStorage, where
+// anything on the page could have written to it.
+export function consumePostSignInRedirect(): string | null {
+  const raw = window.localStorage.getItem(POST_SIGNIN_REDIRECT_KEY)
+  window.localStorage.removeItem(POST_SIGNIN_REDIRECT_KEY)
+  return sanitizeInternalPath(raw)
 }
 
 type OAuthTokens = {

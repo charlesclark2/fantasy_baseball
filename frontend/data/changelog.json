@@ -3,6 +3,10 @@
     "week": "2026-08-03",
     "items": [
       {
+        "tag": "new",
+        "text": "You can now create an account yourself. Until today every “get an account” button on the site — in the top bar, on the home page, on the About page, on the sign-in page and on the membership page — opened an email to Charlie asking for access. That was fine when Credence was invite-only, and it stopped being fine the moment the 2026 Rankings and Projections went out to everyone with a Subscribe button on every withheld number: the path from “I'd like to buy this” to buying it ended in an email and a wait. There's now a Sign Up page, and it takes one click with a Google account. Two smaller things went with it. You come back to where you were: if you started from the membership page, you land back on the membership page ready to subscribe, rather than being dropped on the dashboard having lost what you were trying to do — the same is true of any page that asks you to sign in first. And you'll be shown the Terms and Privacy Policy before you continue, not after. Signing up is free; you subscribe when you want to."
+      },
+      {
         "tag": "fixed",
         "text": "A player's page could show an incomplete career while telling you it was still loading. Opening a player from the Track Record put a \u201cLoading player\u2026\u201d box across the top of the page with his history already drawn underneath it \u2014 which looked bad, but the real problem was the history itself. Each past season is fetched separately, so the page was drawing whichever seasons had arrived so far: Jalen Hurts showed three of his seven, with nothing to say the rest were still coming. On the one page whose whole point is the full picture, wins and losses both, a quietly shortened record is worse than a slow one \u2014 and it would tend to flatter us, since a season we called badly is just as likely to be one of the slow ones. The page now waits until every season is in before drawing anything."
       },
