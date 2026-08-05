@@ -1,0 +1,609 @@
+{
+  "story": "NF-G0+D21",
+  "generated_at": "2026-08-05T01:45:46.930989+00:00",
+  "best_alpha": 0,
+  "verdict": "PUBLISH BLOCKED BY THE INTERVAL-FLOOR GATE",
+  "verdict_prose": "Phase A is complete and proven. Phase B was BUILT, STAMPED and ROUTED through the pipeline, and **the pipeline refused it** \u2014 the `interval_floors` gate fails because the rookie RB 80% coverage floor falls 2 covered rows short at \u03bb = 0.5 (n = 148). Nothing is published; `SERVING_ENABLED` stays `False`, so the served board is the incumbent, byte-for-byte, and users see exactly the projection they had. \u03bb was NOT moved and the floor was NOT moved \u2014 both are prohibited (see \u00a74). \u2b50 The first real artifact through the governance pipeline being REFUSED by a gate is a stronger validation of Phase A than a clean pass would have been.",
+  "policy": {
+    "selection_status": "PM_JUDGMENT",
+    "shrink_lambda": 0.5,
+    "statistically_selected": false,
+    "source_model": "NF-D16",
+    "decision_story": "NF-D21",
+    "policy_version": "nf_d21_rookie_pm_judgment_v1",
+    "decided_on": "2026-08-04",
+    "recalibrated_positions": [
+      "RB",
+      "TE",
+      "WR"
+    ],
+    "excluded_positions": [
+      "QB"
+    ],
+    "framing": "A board-blind, conservative rookie-point recalibration chosen by JUDGMENT \u2014 evidenced accurate and placement-respecting out-of-sample on every held-out draft class, but NOT an optimised in-fold selection, and not a market or edge claim."
+  },
+  "serving_enabled": false,
+  "serving_lambda": 0.0,
+  "fitted_affine_lambda_1": {
+    "RB": [
+      4.851599,
+      1.375811
+    ],
+    "TE": [
+      3.023192,
+      1.275949
+    ],
+    "WR": [
+      18.440186,
+      1.002053
+    ]
+  },
+  "shrunk_affine": {
+    "RB": [
+      2.4258,
+      1.187905
+    ],
+    "TE": [
+      1.511596,
+      1.137974
+    ],
+    "WR": [
+      9.220093,
+      1.001026
+    ]
+  },
+  "boards": [
+    {
+      "board": "served (NF1.5 ordering)",
+      "n_players": 784,
+      "n_rookies": 81,
+      "best_rookie_overall_rank_incumbent": 12,
+      "best_rookie_overall_rank": 12,
+      "best_rookie_name": "Fernando Mendoza",
+      "best_rookie_position": "QB",
+      "placement_constraint_active": false,
+      "qb_max_abs_point_delta": 0.0,
+      "veteran_max_abs_point_delta": 0.0,
+      "rookie_mean_lift_ppr": 7.385867877573267,
+      "rookie_max_lift_ppr": 41.59316038796078,
+      "per_position": {
+        "FB": {
+          "n": 17,
+          "n_rookies": 1,
+          "within_position_rank_moves": 0,
+          "overall_rank_moves": 6,
+          "max_abs_point_delta": 0.0
+        },
+        "QB": {
+          "n": 105,
+          "n_rookies": 10,
+          "within_position_rank_moves": 0,
+          "overall_rank_moves": 78,
+          "max_abs_point_delta": 0.0
+        },
+        "RB": {
+          "n": 177,
+          "n_rookies": 12,
+          "within_position_rank_moves": 64,
+          "overall_rank_moves": 130,
+          "max_abs_point_delta": 41.59316038796078
+        },
+        "TE": {
+          "n": 169,
+          "n_rookies": 22,
+          "within_position_rank_moves": 75,
+          "overall_rank_moves": 96,
+          "max_abs_point_delta": 20.96036864541341
+        },
+        "WR": {
+          "n": 316,
+          "n_rookies": 36,
+          "within_position_rank_moves": 150,
+          "overall_rank_moves": 217,
+          "max_abs_point_delta": 9.416558357762227
+        }
+      },
+      "free_preview": {
+        "top10_overall_before": [
+          "JOSH ALLEN",
+          "LAMAR JACKSON",
+          "DRAKE MAYE",
+          "JOE BURROW",
+          "JAYDEN DANIELS",
+          "JALEN HURTS",
+          "CALEB WILLIAMS",
+          "JUSTIN HERBERT",
+          "BIJAN ROBINSON",
+          "TREVOR LAWRENCE"
+        ],
+        "top10_overall_after": [
+          "JOSH ALLEN",
+          "LAMAR JACKSON",
+          "DRAKE MAYE",
+          "JOE BURROW",
+          "JAYDEN DANIELS",
+          "JALEN HURTS",
+          "CALEB WILLIAMS",
+          "JUSTIN HERBERT",
+          "BIJAN ROBINSON",
+          "TREVOR LAWRENCE"
+        ],
+        "top10_overall_unchanged": true,
+        "top3_by_position": {
+          "QB": {
+            "before": [
+              "JOSH ALLEN",
+              "LAMAR JACKSON",
+              "DRAKE MAYE"
+            ],
+            "after": [
+              "JOSH ALLEN",
+              "LAMAR JACKSON",
+              "DRAKE MAYE"
+            ],
+            "unchanged": true
+          },
+          "RB": {
+            "before": [
+              "BIJAN ROBINSON",
+              "CHRISTIAN MCCAFFREY",
+              "JAHMYR GIBBS"
+            ],
+            "after": [
+              "BIJAN ROBINSON",
+              "CHRISTIAN MCCAFFREY",
+              "Jeremiyah Love"
+            ],
+            "unchanged": false
+          },
+          "WR": {
+            "before": [
+              "JA'MARR CHASE",
+              "PUKA NACUA",
+              "AMON-RA ST. BROWN"
+            ],
+            "after": [
+              "JA'MARR CHASE",
+              "PUKA NACUA",
+              "AMON-RA ST. BROWN"
+            ],
+            "unchanged": true
+          },
+          "TE": {
+            "before": [
+              "TREY MCBRIDE",
+              "BROCK BOWERS",
+              "TYLER WARREN"
+            ],
+            "after": [
+              "TREY MCBRIDE",
+              "BROCK BOWERS",
+              "TYLER WARREN"
+            ],
+            "unchanged": true
+          }
+        },
+        "well_formed": true
+      }
+    },
+    {
+      "board": "level (MVP-1)",
+      "n_players": 784,
+      "n_rookies": 81,
+      "best_rookie_overall_rank_incumbent": 12,
+      "best_rookie_overall_rank": 12,
+      "best_rookie_name": "Fernando Mendoza",
+      "best_rookie_position": "QB",
+      "placement_constraint_active": false,
+      "qb_max_abs_point_delta": 0.0,
+      "veteran_max_abs_point_delta": 0.0,
+      "rookie_mean_lift_ppr": 7.385867877573267,
+      "rookie_max_lift_ppr": 41.59316038796078,
+      "per_position": {
+        "FB": {
+          "n": 17,
+          "n_rookies": 1,
+          "within_position_rank_moves": 0,
+          "overall_rank_moves": 6,
+          "max_abs_point_delta": 0.0
+        },
+        "QB": {
+          "n": 105,
+          "n_rookies": 10,
+          "within_position_rank_moves": 0,
+          "overall_rank_moves": 78,
+          "max_abs_point_delta": 0.0
+        },
+        "RB": {
+          "n": 177,
+          "n_rookies": 12,
+          "within_position_rank_moves": 63,
+          "overall_rank_moves": 128,
+          "max_abs_point_delta": 41.59316038796078
+        },
+        "TE": {
+          "n": 169,
+          "n_rookies": 22,
+          "within_position_rank_moves": 75,
+          "overall_rank_moves": 96,
+          "max_abs_point_delta": 20.960368645413467
+        },
+        "WR": {
+          "n": 316,
+          "n_rookies": 36,
+          "within_position_rank_moves": 152,
+          "overall_rank_moves": 219,
+          "max_abs_point_delta": 9.416558357762227
+        }
+      },
+      "free_preview": {
+        "top10_overall_before": [
+          "JOSH ALLEN",
+          "JALEN HURTS",
+          "JARED GOFF",
+          "LAMAR JACKSON",
+          "DAK PRESCOTT",
+          "JUSTIN HERBERT",
+          "MATTHEW STAFFORD",
+          "TREVOR LAWRENCE",
+          "CHRISTIAN MCCAFFREY",
+          "BAKER MAYFIELD"
+        ],
+        "top10_overall_after": [
+          "JOSH ALLEN",
+          "JALEN HURTS",
+          "JARED GOFF",
+          "LAMAR JACKSON",
+          "DAK PRESCOTT",
+          "JUSTIN HERBERT",
+          "MATTHEW STAFFORD",
+          "TREVOR LAWRENCE",
+          "CHRISTIAN MCCAFFREY",
+          "BAKER MAYFIELD"
+        ],
+        "top10_overall_unchanged": true,
+        "top3_by_position": {
+          "QB": {
+            "before": [
+              "JOSH ALLEN",
+              "JALEN HURTS",
+              "JARED GOFF"
+            ],
+            "after": [
+              "JOSH ALLEN",
+              "JALEN HURTS",
+              "JARED GOFF"
+            ],
+            "unchanged": true
+          },
+          "RB": {
+            "before": [
+              "CHRISTIAN MCCAFFREY",
+              "BIJAN ROBINSON",
+              "JONATHAN TAYLOR"
+            ],
+            "after": [
+              "CHRISTIAN MCCAFFREY",
+              "BIJAN ROBINSON",
+              "Jeremiyah Love"
+            ],
+            "unchanged": false
+          },
+          "WR": {
+            "before": [
+              "JA'MARR CHASE",
+              "AMON-RA ST. BROWN",
+              "PUKA NACUA"
+            ],
+            "after": [
+              "JA'MARR CHASE",
+              "AMON-RA ST. BROWN",
+              "PUKA NACUA"
+            ],
+            "unchanged": true
+          },
+          "TE": {
+            "before": [
+              "TREY MCBRIDE",
+              "BROCK BOWERS",
+              "TRAVIS KELCE"
+            ],
+            "after": [
+              "TREY MCBRIDE",
+              "BROCK BOWERS",
+              "TRAVIS KELCE"
+            ],
+            "unchanged": true
+          }
+        },
+        "well_formed": true
+      }
+    }
+  ],
+  "scoring_parity": {
+    "max_abs_diff": 0.0,
+    "n_compared": 81,
+    "target_quantisation_ppr": 0.021765192009059575,
+    "target_quantisation_note": "max |emitted point \u2212 affine target| \u2014 the pre-existing 2-dp fumble rounding, NOT a parity defect (NF-D16 measured the same effect at 0.032 PPR at \u03bb=1)"
+  },
+  "floor_sweep": {
+    "cohorts": [
+      2019,
+      2025
+    ],
+    "config": "SHIPPED rookie band",
+    "rows": [
+      {
+        "lambda": 0.0,
+        "pooled_coverage": 0.8354,
+        "interval_score": 183.407,
+        "coverage": {
+          "QB": 0.8148,
+          "RB": 0.8041,
+          "TE": 0.9,
+          "WR": 0.8348
+        },
+        "n_by_position": {
+          "QB": 81,
+          "RB": 148,
+          "TE": 100,
+          "WR": 224
+        },
+        "slack_rows": {
+          "QB": 1,
+          "RB": 0,
+          "TE": 10,
+          "WR": 7
+        },
+        "misses": [],
+        "pass": true
+      },
+      {
+        "lambda": 0.25,
+        "pooled_coverage": 0.8336,
+        "interval_score": 183.911,
+        "coverage": {
+          "QB": 0.8025,
+          "RB": 0.8041,
+          "TE": 0.9,
+          "WR": 0.8348
+        },
+        "n_by_position": {
+          "QB": 81,
+          "RB": 148,
+          "TE": 100,
+          "WR": 224
+        },
+        "slack_rows": {
+          "QB": 0,
+          "RB": 0,
+          "TE": 10,
+          "WR": 7
+        },
+        "misses": [],
+        "pass": true
+      },
+      {
+        "lambda": 0.5,
+        "pooled_coverage": 0.83,
+        "interval_score": 184.534,
+        "coverage": {
+          "QB": 0.8025,
+          "RB": 0.7905,
+          "TE": 0.9,
+          "WR": 0.8348
+        },
+        "n_by_position": {
+          "QB": 81,
+          "RB": 148,
+          "TE": 100,
+          "WR": 224
+        },
+        "slack_rows": {
+          "QB": 0,
+          "RB": -2,
+          "TE": 10,
+          "WR": 7
+        },
+        "misses": [
+          "RB 0.7905<0.800"
+        ],
+        "pass": false
+      },
+      {
+        "lambda": 0.75,
+        "pooled_coverage": 0.8354,
+        "interval_score": 184.119,
+        "coverage": {
+          "QB": 0.8148,
+          "RB": 0.8041,
+          "TE": 0.9,
+          "WR": 0.8348
+        },
+        "n_by_position": {
+          "QB": 81,
+          "RB": 148,
+          "TE": 100,
+          "WR": 224
+        },
+        "slack_rows": {
+          "QB": 1,
+          "RB": 0,
+          "TE": 10,
+          "WR": 7
+        },
+        "misses": [],
+        "pass": true
+      },
+      {
+        "lambda": 1.0,
+        "pooled_coverage": 0.8391,
+        "interval_score": 184.048,
+        "coverage": {
+          "QB": 0.8148,
+          "RB": 0.8041,
+          "TE": 0.92,
+          "WR": 0.8348
+        },
+        "n_by_position": {
+          "QB": 81,
+          "RB": 148,
+          "TE": 100,
+          "WR": 224
+        },
+        "slack_rows": {
+          "QB": 1,
+          "RB": 0,
+          "TE": 12,
+          "WR": 7
+        },
+        "misses": [],
+        "pass": true
+      }
+    ]
+  },
+  "rb_floor_power": {
+    "n": 148,
+    "covered_rows_required": 119,
+    "floor": 0.8,
+    "p_reject_given_nominal": 0.5
+  },
+  "governance": {
+    "staged_key": "nfl_fantasy__season_projection__nfl_fantasy_nf1_5_v1_nf_d21_lambda05",
+    "validation": {
+      "n": 10,
+      "passed": 7,
+      "failed": 1,
+      "unevaluable": 2,
+      "gates": [
+        {
+          "gate": "model_stamp_consistency",
+          "status": "PASS",
+          "detail": "artifact stamp agrees with the registry on 6 lineage field(s)",
+          "data": {
+            "checked": [
+              "served_version",
+              "level_model_version",
+              "ordering_model_version",
+              "rookie_model_version",
+              "rookie_selection_status",
+              "scoring_contract_version"
+            ]
+          }
+        },
+        {
+          "gate": "projection_source_consistency",
+          "status": "PASS",
+          "detail": "payload lineage agrees with the registry (model_version='nfl_fantasy_nf1_5_v1', projection_source='nf1_5')"
+        },
+        {
+          "gate": "universe_count",
+          "status": "PASS",
+          "detail": "universe 784 \u2192 784 (0.00% drift, within 2%)",
+          "data": {
+            "n_staged": 784,
+            "n_previous": 784
+          }
+        },
+        {
+          "gate": "rookie_coverage",
+          "status": "PASS",
+          "detail": "81 rookie(s), unchanged",
+          "data": {
+            "n_rookies": 81
+          }
+        },
+        {
+          "gate": "interval_floors",
+          "status": "FAIL",
+          "detail": "coverage floor BREACH \u2014 re-run that population's bake-off, do NOT move the floor. Breaches: ['rookies:RB 0.7905<0.800']",
+          "data": {
+            "misses": [
+              "rookies:RB 0.7905<0.800"
+            ]
+          }
+        },
+        {
+          "gate": "scoring_parity",
+          "status": "PASS",
+          "detail": "scored line reproduces the displayed point (max |\u0394| 0 over 81 row(s))",
+          "data": {
+            "max_abs_diff": 0.0
+          }
+        },
+        {
+          "gate": "track_record_copy_compatible",
+          "status": "PASS",
+          "detail": "copy carries no forbidden market/edge claim"
+        },
+        {
+          "gate": "rollback_artifact_exists",
+          "status": "PASS",
+          "detail": "rollback artifact present at s3://credence-prod-s3-api-cache/fantasy/nfl/2026/",
+          "data": {
+            "uri": "s3://credence-prod-s3-api-cache/fantasy/nfl/2026/"
+          }
+        },
+        {
+          "gate": "live_payload_matches_staged",
+          "status": "UNEVALUABLE",
+          "detail": "one side has no digest (pre-publish, or the live read failed) \u2014 cannot claim the live payload matches what was reviewed"
+        },
+        {
+          "gate": "clients_agree_on_version",
+          "status": "UNEVALUABLE",
+          "detail": "neither client version could be read"
+        }
+      ],
+      "ready_to_promote": false,
+      "evaluated_at": "2026-08-05T01:45:46.906053+00:00"
+    }
+  },
+  "rollback": {
+    "artifact_digest_incumbent": "8b807b21a8f0cd7667ce70847a297853e3be6035b7056ee8e5914ee2a71aa1da",
+    "artifact_digest_after_publish": "10bced358e99c3a6c40236069fba7dfaae1e1cbb2abe86c8bd4dd156126cb588",
+    "artifact_digest_after_rollback": "8b807b21a8f0cd7667ce70847a297853e3be6035b7056ee8e5914ee2a71aa1da",
+    "byte_for_byte": true,
+    "identity_affine_at_lambda_zero": {
+      "RB": [
+        0.0,
+        1.0
+      ],
+      "TE": [
+        0.0,
+        1.0
+      ],
+      "WR": [
+        0.0,
+        1.0
+      ]
+    },
+    "rookie_points_max_abs_delta_at_lambda_zero": 0.0,
+    "registry_served_after_rollback": "nfl_fantasy_nf1_5_v1"
+  },
+  "lineage": {
+    "model_family": "nfl_fantasy",
+    "target": "season_projection",
+    "served_version": "nfl_fantasy_nf1_5_v1_nf_d21_lambda05",
+    "level_model_version": "nfl_fantasy_fastpath_v1",
+    "ordering_model_version": "nfl_fantasy_nf1_5_v1",
+    "rookie_model_version": "rookie_slot_curve_v1",
+    "rookie_selection_status": "PM_JUDGMENT",
+    "rookie_shrink_lambda": 0.5,
+    "rookie_statistically_selected": false,
+    "rookie_source_model": "NF-D16",
+    "rookie_decision_story": "NF-D21",
+    "interval_model_version": {
+      "rookie": "nf1_8",
+      "veteran": "nf1_9",
+      "kdst": "nf1_6"
+    },
+    "scoring_contract_version": "nf_c0e",
+    "projection_source": "nf1_5",
+    "projection_season": 2026
+  },
+  "wiring": {
+    "param_shrink_equals_output_blend[served (NF1.5 ordering)]": "2.84e-14",
+    "param_shrink_equals_output_blend[level (MVP-1)]": "2.84e-14"
+  }
+}

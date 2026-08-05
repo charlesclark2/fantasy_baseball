@@ -91,8 +91,8 @@ The ADP comparison is secondary and caveated.
 | Seq | Story | Delivery Class | Model Tier | Primary Dependency |
 |---:|---|---|---|---|
 | 1 | E9.56 + E9.8-P2 + E9.57 Entitlement Enforcement Triad | LAUNCH-GATING | T0 | Existing Stripe and fantasy API |
-| 2 | NF-G0 Shared Model and Publish Governance | LAUNCH-GATING | T0 | Existing baseball registry pattern |
-| 3 | NF-D21 Rookie Recalibration Publish | LAUNCH-GATING | T1 | NF-G0 staging/promotion path |
+| 2 | NF-G0 Shared Model and Publish Governance | ✅ DONE 2026-08-04 | T0 | Existing baseball registry pattern |
+| 3 | NF-D21 Rookie Recalibration Publish | 🚨 BUILT, REFUSED BY THE INTERVAL-FLOOR GATE — PM decision open | T1 | NF-G0 staging/promotion path |
 | 4 | NF-TR1 Track-Record and Claim Hardening | LAUNCH-GATING | T0 | Settled PM wording |
 | 5 | NF-W0 Weekly Data and Label Audit | DEADLINE-CRITICAL | T2 | Lakehouse and weekly feature marts |
 | 6 | NF-W1 Weekly Projection Champion | DEADLINE-CRITICAL | T2 | NF-W0 |

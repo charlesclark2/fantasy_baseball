@@ -26,16 +26,17 @@ from typing import Any
 
 import yaml
 
+from betting_ml.governance.registry import PROMOTION_STATES as _VALID_STATUSES
+from betting_ml.governance.registry import VALID_TRANSITIONS as _VALID_TRANSITIONS
+
 _REGISTRY_PATH = Path(__file__).parent.parent / "sub_model_registry.yaml"
 
-_VALID_STATUSES = {"pending", "challenger", "champion", "deprecated"}
-
-_VALID_TRANSITIONS: dict[str, set[str]] = {
-    "pending":    {"challenger", "deprecated"},
-    "challenger": {"champion", "deprecated"},
-    "champion":   {"deprecated"},
-    "deprecated": set(),
-}
+# ⭐ NF-G0: the promotion state machine above is IMPORTED from `betting_ml.governance.registry`,
+# not re-declared here. That is the whole mechanism behind "the fantasy and baseball model families
+# share ONE governance shape" — the shared module is the definition and this registry is one user
+# of it, so the two cannot drift into two vocabularies. The values are byte-identical to what this
+# file declared before (pending/challenger/champion/deprecated + the same transitions), so nothing
+# about this registry's behaviour changes; `test_model_governance.py` asserts the identity holds.
 
 
 # ---------------------------------------------------------------------------

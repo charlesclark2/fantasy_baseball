@@ -223,7 +223,7 @@ def _curve_inputs(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def build_folds(pool: pd.DataFrame, cohorts: list[int], *,
-                recalibrate: bool = True) -> list[Fold]:
+                recalibrate: bool = True, recal_lambda: float | None = None) -> list[Fold]:
     """Walk-forward folds by draft class.
 
     ⭐ `recalibrate` (NF-D16) MUST reach BOTH curves or the harness silently contradicts itself. The
@@ -232,19 +232,32 @@ def build_folds(pool: pd.DataFrame, cohorts: list[int], *,
     one would fit a band around a point the harness does not use — NF1.7's class-level defect in a new
     disguise. Both get `recal_hist=band` (the FULL drafted population, matching what serving passes).
 
-    `recalibrate=False` reproduces the PRE-NF-D16 incumbent exactly, and NF-D16's own bake-off runs
-    that way: a study of whether to add the recalibration cannot use the recalibrated point as its own
-    null."""
+    ⭐⭐ NF-D21 FIXED A DRIFT THIS DOCSTRING USED TO ASSERT AWAY. It said the folds match "what serving
+    passes" — and they did not. `recalibrate=True` applied the correction at λ = 1 while the serving
+    path passed no `recal_hist` at all (NF-D16's flip was HELD), so every standing re-validation was
+    scoring a band centred on a point the product did not serve. `recal_lambda=None` now RESOLVES to
+    the served λ (`rookie_publish_policy.serving_lambda()`), which makes the claim true by
+    construction instead of by comment, and keeps it true the next time λ moves.
+
+    Pass `recal_lambda` explicitly only to study a λ the product does NOT serve.
+
+    `recalibrate=False` reproduces the PRE-NF-D16 incumbent exactly, and NF-D16's / NF-D20's bake-offs
+    run that way: a study of whether to add the recalibration cannot use the recalibrated point as its
+    own null."""
+    if recal_lambda is None:
+        from quant_sports_intel_models.football.nfl.fantasy import rookie_publish_policy as _RP
+        recal_lambda = _RP.serving_lambda()
     folds: list[Fold] = []
     for y in cohorts:
         tr, te = pool[pool["draft_year"] < y], pool[pool["draft_year"] == y]
         if len(tr) < _MIN_TRAIN_ROWS or len(te) < _MIN_TEST_ROWS:
             continue
         hist, band = _curve_inputs(tr)
-        rc = band if recalibrate else None
-        curve = SP.fit_rookie_slot_curves(hist, recal_hist=rc)        # point model only
+        rc = band if (recalibrate and recal_lambda) else None
+        curve = SP.fit_rookie_slot_curves(hist, recal_hist=rc,
+                                          recal_lambda=recal_lambda)   # point model only
         tercile = SP.fit_rookie_slot_curves(hist, band_hist=band, per_player_band=False,
-                                            recal_hist=rc)
+                                            recal_hist=rc, recal_lambda=recal_lambda)
         folds.append(Fold(
             year=int(y), train=band, test=te.copy(), curve=curve,
             train_pred=SP.rookie_point_projection(band, curve),
