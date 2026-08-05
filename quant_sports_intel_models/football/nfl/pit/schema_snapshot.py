@@ -53,6 +53,29 @@ WATCHED_COLUMNS: dict[str, tuple[str, ...]] = {
     "weekly_rosters": ("status", "gsis_id", "position", "week"),
 }
 
+#: ⭐ WATCHED COLUMNS ALREADY MISSING AND ALREADY TRIAGED — the 2025 breaks NF-W0 recorded.
+#:
+#: These are PERMANENT states, not events. Escalating on them would page every Tue/Fri fire
+#: forever (~44 identical unactionable pages a season) about two conditions nobody can act on —
+#: the monitor-gets-muted failure mode this repo names repeatedly, and the same judgement E11.30
+#: already applies to `check_injury_status_health_op` (log-only on the known off-season ingest
+#: hole rather than paging daily for four months). The harm is not the noise: it is that a muted
+#: `NFL PIT capture:` subject line also swallows the weather leg's CRITICAL "this slate's forecast
+#: is being lost permanently".
+#:
+#: ⚠️ THE BASELINE MUTES A NAMED (asset, column) PAIR AND NOTHING ELSE. A THIRD watched column
+#: going missing still escalates immediately, and the pairs are validated against
+#: `WATCHED_COLUMNS` by a guard test so a typo cannot silently widen the mute. Missing-ness is
+#: still REPORTED in full every run (`watched_missing`); only the paging decision reads
+#: `watched_missing_new`.
+ACCEPTED_MISSING: dict[str, frozenset[str]] = {
+    # nflverse DELETED the vendor as-of stamp in 2025. This is precisely why the injury leg
+    # stamps our own `capture_timestamp` — the condition is handled, not outstanding.
+    "injuries": frozenset({"date_modified"}),
+    # `depth_charts` was schema-replaced wholesale in 2025; NF-W1 reads the new column set.
+    "depth_charts": frozenset({"week", "depth_team", "position"}),
+}
+
 
 def _duck():
     """Box-aware (pit/duck.py) — this leg reads 30 remote parquet files, so an unbounded
@@ -214,6 +237,48 @@ def diff_snapshots(previous: dict, current: dict) -> dict:
     }
 
 
+def new_watched_missing(watched_missing: dict) -> dict:
+    """The missing watched columns the accepted baseline does NOT cover — the paging driver.
+
+    Set-subtraction per asset, so accepting `injuries.date_modified` mutes exactly that pair and
+    leaves every other watched injuries column paging on the day it disappears.
+    """
+    out = {}
+    for asset, cols in (watched_missing or {}).items():
+        fresh = sorted(set(cols) - ACCEPTED_MISSING.get(asset, frozenset()))
+        if fresh:
+            out[asset] = fresh
+    return out
+
+
+def accepted_watched_missing(watched_missing: dict) -> dict:
+    """The complement of `new_watched_missing` — reported, logged, never paged."""
+    out = {}
+    for asset, cols in (watched_missing or {}).items():
+        known = sorted(set(cols) & ACCEPTED_MISSING.get(asset, frozenset()))
+        if known:
+            out[asset] = known
+    return out
+
+
+def resolved_accepted_missing(rows: list[dict]) -> dict:
+    """Baseline entries whose column is PRESENT again, i.e. the mute has gone stale.
+
+    Only decidable for a readable asset — an UNREADABLE row is UNKNOWN, and reporting it as
+    "resolved" would be the vacuous-pass class (NF1.7 (a)) facing the cheerful direction.
+    """
+    out = {}
+    for row in rows or []:
+        asset = row.get("asset")
+        accepted = ACCEPTED_MISSING.get(asset or "")
+        if not accepted or row.get("status") != "OK":
+            continue
+        back = sorted(accepted - set(row.get("watched_missing") or ()))
+        if back:
+            out[asset] = back
+    return out
+
+
 def run_schema_snapshot(
     season: int | None = None,
     *,
@@ -249,27 +314,51 @@ def run_schema_snapshot(
         if d["drifted"]:
             drifts.append(d)
 
+    watched_missing = {r["asset"]: r["watched_missing"] for r in rows if r["watched_missing"]}
     manifest = {
         "season": season, "now": now.isoformat(), "assets": len(rows),
         "unreadable": sorted(r["asset"] for r in rows if r["status"] != "OK"),
-        "watched_missing": {r["asset"]: r["watched_missing"] for r in rows if r["watched_missing"]},
+        # The FULL state, reported every run regardless of paging — the record must not shrink
+        # just because a condition is accepted.
+        "watched_missing": watched_missing,
+        # The paging driver: only what the accepted baseline does NOT already cover.
+        "watched_missing_new": new_watched_missing(watched_missing),
+        "watched_missing_accepted": accepted_watched_missing(watched_missing),
+        # A baseline entry that is PRESENT again — the mute is now stale and should be dropped.
+        "accepted_missing_resolved": resolved_accepted_missing(rows),
         "watched_all_null": {r["asset"]: r["watched_all_null"] for r in rows if r["watched_all_null"]},
         "drifts": drifts, "written": 0, "skipped_duplicate": 0, "skipped_recapture": 0,
         "revisions": [], "escalate": False,
     }
 
     watched_drift = [d for d in drifts if d["watched_affected"]]
-    if watched_drift or manifest["watched_missing"] or manifest["unreadable"]:
+    if watched_drift or manifest["watched_missing_new"] or manifest["unreadable"]:
         manifest["escalate"] = True
         log.warning(
             "ALERT [nfl/pit/schema] WATCHED nflverse columns changed/missing — "
-            "drift=%s missing=%s unreadable=%s. This is the 2025 silent-deletion class; "
+            "drift=%s newly_missing=%s unreadable=%s. This is the 2025 silent-deletion class; "
             "any consumer of these columns must be re-verified before the next build.",
             [(d["asset"], d["watched_affected"]) for d in watched_drift],
-            manifest["watched_missing"], manifest["unreadable"],
+            manifest["watched_missing_new"], manifest["unreadable"],
         )
     elif drifts:
         log.info("[nfl/pit/schema] non-watched schema drift on %s", [d["asset"] for d in drifts])
+
+    # Visible in every run log, but never a page: these are the already-triaged 2025 breaks.
+    if manifest["watched_missing_accepted"]:
+        log.info(
+            "[nfl/pit/schema] accepted-baseline columns still missing (known, NOT paged): %s",
+            manifest["watched_missing_accepted"],
+        )
+    # A restored column is good news, not an incident — but the baseline is now stale, and a stale
+    # mute is exactly how a NEW deletion of the same column would later go unnoticed.
+    if manifest["accepted_missing_resolved"]:
+        log.warning(
+            "[nfl/pit/schema] accepted-baseline columns are BACK: %s — drop them from "
+            "ACCEPTED_MISSING so a future deletion pages again, and re-check whether the vendor "
+            "as-of stamp can now be used.",
+            manifest["accepted_missing_resolved"],
+        )
 
     if rows and not dry_run:
         # REVISION semantics: an asset schema is expected to be STABLE, so a changed payload is
