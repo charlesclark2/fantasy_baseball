@@ -273,23 +273,55 @@ Throttling cannot stop one user reading one payload (nothing can — the browser
 renders). It stops bulk extraction: a competitor pulling the entire board in one pass, or polling
 `/picks/featured` daily to accumulate our featured-pick history.
 
+⚠️⚠️ **`--route-settings` KEYS MUST BE ROUTES THAT ALREADY EXIST.** This API authorizes per explicit
+route on top of a catch-all, so **most paths have no explicit route object** — `GET /health` famously
+does not (see the authorizer note above). A `--route-settings` entry for a non-existent route key is
+not an error you can rely on seeing; it simply governs nothing, which reads exactly like a limit that
+is in place. ⇒ **list the routes first and only set per-route caps on keys that come back.** The 2026
+routes in particular do not exist until the launch flip above creates them, so their per-route caps
+are a POST-flip step, not part of this one.
+
+⚠️ **`update-stage --route-settings` REPLACES the whole map** (it is not a merge). Read the current
+settings first and re-send everything you want to keep, in one call.
+
 ```bash
-# Conservative stage-wide default. Raise if legitimate traffic trips it — check
-# ApiGateway 4XX/ThrottleCount in CloudWatch before/after.
+# ── 0. Permissions. `baseball-access-user` is DENIED apigateway:* — use an admin profile.
+export AWS_PROFILE=<your-admin-profile>          # or run these in the API Gateway console
+API=8dhmehjak7; REGION=us-east-1
+
+# ── 1. What exists today (and what throttling is already set — do not clobber it).
+aws apigatewayv2 get-routes --api-id $API --region $REGION \
+  --query 'Items[].RouteKey' --output table
+aws apigatewayv2 get-stage --api-id $API --region $REGION --stage-name '$default' \
+  --query '{default:DefaultRouteSettings,perRoute:RouteSettings}'
+
+# ── 2. Stage-wide default. Conservative; this is the one that actually bounds a bulk pull.
 aws apigatewayv2 update-stage \
-  --api-id 8dhmehjak7 --region us-east-1 --stage-name '$default' \
+  --api-id $API --region $REGION --stage-name '$default' \
   --default-route-settings 'ThrottlingBurstLimit=100,ThrottlingRateLimit=50'
 
-# Tighter caps on the public, un-authenticated, bulk-attractive routes.
+# ── 3. Tighter caps on the public, un-authenticated, bulk-attractive routes.
+#      ONLY include keys that step 1 actually listed.
 aws apigatewayv2 update-stage \
-  --api-id 8dhmehjak7 --region us-east-1 --stage-name '$default' \
+  --api-id $API --region $REGION --stage-name '$default' \
   --route-settings '{
-    "GET /picks/featured":                   {"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5},
-    "GET /fantasy/nfl/track-record/{season}":{"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5},
-    "GET /fantasy/nfl/projections":          {"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5},
-    "GET /fantasy/nfl/board":                {"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5}
+    "GET /picks/featured":                    {"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5},
+    "GET /fantasy/nfl/track-record/{season}": {"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5},
+    "GET /fantasy/nfl/track-record/manifest": {"ThrottlingBurstLimit":20,"ThrottlingRateLimit":5}
   }'
+
+# ── 4. Confirm it took, and that the app still works.
+aws apigatewayv2 get-stage --api-id $API --region $REGION --stage-name '$default' \
+  --query '{default:DefaultRouteSettings,perRoute:RouteSettings}'
+uv run python scripts/check_api_entitlement.py     # expect 42 pass / 0 fail, unchanged
 ```
+
+📉 **Watch for over-throttling for ~24h.** A throttled request returns **429**, and the landing page
+fetches `/picks/featured` server-side per render — so a limit set too low degrades the marketing page
+first and silently (the fetch is wrapped in `.catch(() => ({game_pk:null}))`, i.e. it fails to an
+empty state rather than an error). CloudWatch → `AWS/ApiGateway` → `ThrottleCount` and `4xx` for
+`ApiId=8dhmehjak7`. Raise the caps if legitimate traffic is tripping them; the burst limit is the one
+that bites a page doing several calls at once.
 
 ⚠️ **Throttling is per-API, not per-caller** — API Gateway HTTP API throttling has no per-client
 dimension without usage plans (REST-API-only). So a limit low enough to stop a scraper can also
