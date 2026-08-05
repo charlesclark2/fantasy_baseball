@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { LogOut, Settings, Menu, X, ChevronDown, Lock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
+import { SIGNUP_HREF } from "@/lib/access"
 import { canAccess, canAccessFantasyBeta } from "@/lib/entitlements"
 import { SPORTS, surfaceItems, publicNavItems, type NavItem, type SportNav, type SurfaceGroup } from "@/lib/nav-model"
 import changelog from "@/data/changelog.json"
@@ -173,12 +174,19 @@ export function Nav({
               <Link href="/dashboard">Dashboard</Link>
             </Button>
           ) : (
-            <div className="hidden sm:flex items-center gap-3">
+            // E9.58 — this whole block used to be `hidden sm:flex`, and the hamburger beside it
+            // only renders for a SIGNED-IN user, so a logged-out visitor on a phone had no way to
+            // sign in or sign up anywhere in the nav. That was survivable while accounts were
+            // invite-only; it is not, now that the inbound path is an indexed locked projection
+            // opened on a phone. Sign Up is always visible; Sign In folds away under `sm` so the
+            // bar cannot overflow on a small screen (the signup page carries its own "already
+            // have an account?" link, so nothing is lost).
+            <div className="flex items-center gap-2 sm:gap-3">
               <Button
                 variant="ghost"
                 size="sm"
                 asChild
-                className="text-gray-400 hover:text-white hover:bg-[#141414]"
+                className="hidden sm:inline-flex text-gray-400 hover:text-white hover:bg-[#141414]"
               >
                 <Link href="/login">Sign In</Link>
               </Button>
@@ -187,9 +195,8 @@ export function Nav({
                 asChild
                 className="bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669]"
               >
-                <a href="mailto:charlie@credencesports.com?subject=Beta%20Access%20Request">
-                  Request Access
-                </a>
+                {/* was a `mailto:` "Request Access" — signup is self-serve now */}
+                <Link href={SIGNUP_HREF}>Sign Up</Link>
               </Button>
             </div>
           )}

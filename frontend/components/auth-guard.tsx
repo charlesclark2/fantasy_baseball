@@ -1,10 +1,19 @@
 "use client"
 
 import React, { useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { canAccess, canAccessFantasyBeta } from "@/lib/entitlements"
 import { getMfaStatus, getSessionAuthMethod, subscriberMfaRequired } from "@/lib/cognito"
+
+// E9.58 — carry the page the visitor was actually trying to reach through the sign-in wall.
+// Every one of these bounces used to be a bare `/login`, so a stranger who followed a link to a
+// walled surface, created an account and came back was deposited on /dashboard with no trace of
+// where they had been heading. /login and /signup both honour `?next=` (sanitised to a
+// same-origin path — see `sanitizeInternalPath`).
+function loginHref(pathname: string | null): string {
+  return pathname && pathname !== "/login" ? `/login?next=${encodeURIComponent(pathname)}` : "/login"
+}
 
 // Subscriber MFA enforcement (E9.19) — the SINGLE in-app gate that gates E9.8 go-live.
 // No-op in beta (NEXT_PUBLIC_ENFORCE_SUBSCRIBER_MFA unset). When flipped on at Stripe
@@ -14,10 +23,11 @@ import { getMfaStatus, getSessionAuthMethod, subscriberMfaRequired } from "@/lib
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { accessToken, groups, loading } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
 
   useEffect(() => {
-    if (!loading && accessToken === null) router.push("/login")
-  }, [loading, accessToken])
+    if (!loading && accessToken === null) router.push(loginHref(pathname))
+  }, [loading, accessToken, pathname])
 
   useEffect(() => {
     if (loading || accessToken === null) return
@@ -34,6 +44,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true
     }
+    // deliberately NOT keyed on pathname — this effect issues a network read, and re-firing it on
+    // every in-app navigation would turn one MFA check into one per route change.
   }, [loading, accessToken, groups, router])
 
   if (loading || accessToken === null) return null
@@ -48,12 +60,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 export function FantasyGuard({ children }: { children: React.ReactNode }) {
   const { accessToken, groups, loading } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
 
   useEffect(() => {
     if (loading) return
-    if (accessToken === null) { router.push("/login"); return }
+    if (accessToken === null) { router.push(loginHref(pathname)); return }
     if (!canAccess("fantasy", groups)) { router.push("/subscribe"); return }
-  }, [loading, accessToken, groups, router])
+  }, [loading, accessToken, groups, router, pathname])
 
   if (loading || accessToken === null || !canAccess("fantasy", groups)) return null
   return <>{children}</>
@@ -102,13 +115,14 @@ export function FantasyPublicGuard({ children }: { children: React.ReactNode }) 
 export function FantasyBetaGuard({ children }: { children: React.ReactNode }) {
   const { accessToken, groups, loading } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
 
   useEffect(() => {
     if (loading) return
-    if (accessToken === null) { router.push("/login"); return }
+    if (accessToken === null) { router.push(loginHref(pathname)); return }
     if (!canAccess("fantasy", groups)) { router.push("/subscribe"); return }
     if (!canAccessFantasyBeta(groups)) { router.push("/fantasy/league-board"); return }
-  }, [loading, accessToken, groups, router])
+  }, [loading, accessToken, groups, router, pathname])
 
   if (loading || accessToken === null || !canAccessFantasyBeta(groups)) return null
   return <>{children}</>
@@ -117,12 +131,13 @@ export function FantasyBetaGuard({ children }: { children: React.ReactNode }) {
 export function AdminGuard({ children }: { children: React.ReactNode }) {
   const { accessToken, isAdmin, loading } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
 
   useEffect(() => {
     if (loading) return
-    if (accessToken === null) { router.push("/login"); return }
+    if (accessToken === null) { router.push(loginHref(pathname)); return }
     if (!isAdmin) { router.push("/dashboard"); return }
-  }, [loading, accessToken, isAdmin])
+  }, [loading, accessToken, isAdmin, pathname])
 
   if (loading || accessToken === null || !isAdmin) return null
   return <>{children}</>
