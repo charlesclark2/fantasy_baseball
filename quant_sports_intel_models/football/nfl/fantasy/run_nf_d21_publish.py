@@ -457,6 +457,28 @@ def write_report(out: dict, md_path: Path, json_path: Path) -> None:
     p("")
     p(out["verdict_prose"])
     p("")
+    # ── §0 is sourced from `rookie_publish_policy`, never typed into this template ──────────────
+    # The disposition is a PM decision that outlives any single run of this harness, so it must be
+    # read from the decision record rather than restated here — otherwise a re-run silently emits a
+    # report whose verdict section has drifted from what the policy actually says.
+    p("## 0. PM DECISION — the answer to the refusal below")
+    p("")
+    p(f"**{RP.DISPOSITION}** · decided {RP.DISPOSITION_DECIDED_ON} · {RP.DISPOSITION_REVIEWED_BY}")
+    p("")
+    p(f"> {RP.DISPOSITION_RATIONALE}")
+    p("")
+    p(f"NF-D21 is **CLOSED, not parked** (`DISPOSITION_IS_NOT_PENDING = "
+      f"{RP.DISPOSITION_IS_NOT_PENDING}`). The PM named the reason and it is load-bearing: a story "
+      f"left open pending a floor fix is exactly the pressure that would bias that floor toward "
+      f"clearing λ=0.5. ⛔ The rejected remedy — {RP.REJECTED_REMEDY} — is a LAST RESORT only if "
+      f"`{RP.FOLLOW_ON_STORY}` lands and a breach still stands; never a now-choice.")
+    p("")
+    p(f"Follow-on `{RP.FOLLOW_ON_STORY}` (a power-derived fallback floor for structurally-thin "
+      "groups) is a SEPARATE, POST-LAUNCH story. ⛔ It must be derived from **n and a pre-stated "
+      "false-reject target ONLY — zero reference to the 0.7905 measured in §4** — applied to ALL "
+      "thin groups, with NF-D21 explicitly out of scope. Re-gating NF-D21 against whatever floor "
+      "it produces is a downstream consequence, never that story's motivation.")
+    p("")
     p("## 1. The decision being recorded")
     p("")
     p(f"- λ = **{out['policy']['shrink_lambda']}**, `selection_status = "
@@ -651,6 +673,16 @@ def main(argv: list[str] | None = None) -> int:
         "best_alpha": 0,
         "verdict": verdict,
         "verdict_prose": prose,
+        # The PM's answer to the refusal, read from the decision record (never restated here).
+        "disposition": {
+            "disposition": RP.DISPOSITION,
+            "decided_on": RP.DISPOSITION_DECIDED_ON,
+            "reviewed_by": RP.DISPOSITION_REVIEWED_BY,
+            "rationale": RP.DISPOSITION_RATIONALE,
+            "is_not_pending": RP.DISPOSITION_IS_NOT_PENDING,
+            "follow_on_story": RP.FOLLOW_ON_STORY,
+            "rejected_remedy": RP.REJECTED_REMEDY,
+        },
         "policy": RP.stamp(),
         "serving_enabled": RP.SERVING_ENABLED,
         "serving_lambda": RP.serving_lambda(),

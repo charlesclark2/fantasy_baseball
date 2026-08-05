@@ -301,3 +301,68 @@ def test_nf_d16s_own_post_ship_harness_still_pins_its_historical_lambda():
     served λ would answer a different question while reproducing its published table."""
     src = (Path(SP.__file__).with_name("run_nf_d16_point_recalibration.py")).read_text()
     assert "recal_lambda=1.0" in src
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# The PM DISPOSITION (2026-08-05) — NF-D21 CLOSED as CONSTRAINT_REFUSED
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def test_the_disposition_is_recorded_as_a_closure_not_a_pending_decision():
+    """⭐ "Closed" and "open pending a fix" are DIFFERENT STATES with different pressures, and the
+    difference IS the decision: a story left open pending the floor work is exactly the pressure
+    that would bias that floor toward clearing λ=0.5. A record that loses the distinction loses the
+    reason, so both halves are asserted."""
+    assert RP.DISPOSITION == "CONSTRAINT_REFUSED"
+    assert RP.DISPOSITION_IS_NOT_PENDING is True
+    assert RP.DISPOSITION_REVIEWED_BY.strip(), "a disposition with no named reviewer is unowned"
+    assert RP.DISPOSITION_DECIDED_ON >= RP.DECIDED_ON, (
+        "the disposition cannot predate the decision it disposes of")
+
+
+def test_the_registry_carries_the_pm_rationale_VERBATIM():
+    """⭐ The registry is the NAMED AUTHORITY for why the served board is what it is. If the reason
+    lives only in a story doc, the artifact and its justification can drift apart silently — the
+    NF-C0e "declaration outruns its production" class. Asserting VERBATIM (not "mentions the
+    floor") is what makes a paraphrase-away impossible."""
+    import yaml
+    reg = yaml.safe_load(Path(
+        "betting_ml/models/model_family_registry.yaml").read_text())
+    entry = reg["nfl_fantasy__season_projection__nfl_fantasy_nf1_5_v1"]
+    assert RP.DISPOSITION_RATIONALE in entry["validation_report"], (
+        "the registry's validation_report must carry the PM rationale verbatim")
+    assert entry["promotion_status"] == "champion", "no challenger was promoted"
+    assert entry["rookie_selection_status"] == "incumbent"
+    assert entry["rookie_shrink_lambda"] == 0.0, "the served λ is 0 — the incumbent"
+
+
+def test_serving_on_a_constraint_refused_disposition_is_REFUSED_at_import(monkeypatch):
+    """Two-sided, because a one-sided version would be VACUOUS today: `SERVING_ENABLED` is False, so
+    the incoherent branch is never reached in the live module and a "the live state is fine" assert
+    would pass with the rule deleted. The realistic future failure is a session flipping the flip
+    because NF-D22 landed, WITHOUT re-gating or re-deciding — producing a served artifact whose own
+    provenance record contradicts it."""
+    RP.assert_coherent()  # (a) the live state is coherent
+
+    # (b) the rule actually FIRES — `assert_coherent` reads module globals, so substituting them
+    #     exercises the real function rather than a re-implementation of it.
+    monkeypatch.setattr(RP, "SERVING_ENABLED", True)
+    with pytest.raises(ValueError, match="INCOHERENT"):
+        RP.assert_coherent()
+
+    # (c) and it is the DISPOSITION that holds it, not merely the flip — a genuine future publish
+    #     (re-gated + re-decided) must be ALLOWED through, or the guard becomes a permanent block.
+    monkeypatch.setattr(RP, "DISPOSITION", "PUBLISHED")
+    RP.assert_coherent()
+
+
+def test_the_follow_on_is_carded_separately_with_its_prohibitions_recorded():
+    """The follow-on floor story is only admissible if it is derived from n and a PRE-STATED
+    false-reject target — with ZERO reference to the breach measured here. That prohibition has to
+    live beside the flip, because reading this file is the exact moment someone is tempted to
+    "just fix the floor so NF-D21 can ship"."""
+    assert RP.FOLLOW_ON_STORY, "the follow-on must be NAMED, so it can be tracked as its own story"
+    assert RP.REJECTED_REMEDY, "the rejected remedy must be recorded, not silently dropped"
+    src = inspect.getsource(RP)
+    low = src.lower()
+    assert "post-launch" in low, "the follow-on must be recorded as temporally separated"
+    assert "out of scope" in low, "NF-D21 must be explicitly out of the follow-on's scope"
+    assert "zero reference" in low, "the no-reference-to-the-measured-breach rule must be recorded"

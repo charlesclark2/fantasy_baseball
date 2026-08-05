@@ -50,10 +50,18 @@ nfl_fantasy__season_projection__nfl_fantasy_nf1_5_v1:
   artifact_uri: s3://credence-prod-s3-api-cache/fantasy/nfl/2026/
   fallback_artifact_uri: s3://credence-prod-s3-api-cache/fantasy/nfl/2026/
   previous_served_version: nfl_fantasy_nf1_5_v1
-  validation_report: quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf1_9_interval_revalidation.md
+  validation_report: 'Held at incumbent: the rookie-RB interval-floor breach is a
+    coin-flip at n=148 (a perfectly calibrated band fails this floor 50% of the time),
+    so the honest remedy is a power-derived floor for structurally-thin groups — carded
+    independently — not moving λ or the floor. NF-D16''s lift is deferred, not abandoned.
+    [PM decision, NF-D21, 2026-08-05, Charlie (operator/PM); disposition=CONSTRAINT_REFUSED.
+    Supporting measurements: ablation_results/nf_g0_d21_governance_publish.md section
+    4 (the refusal) and ablation_results/nf1_9_interval_revalidation.md (the standing
+    floors at the served lambda=0).]'
   promotion_status: champion
   promoted_at: '2026-08-01'
-  reviewed_by: operator (PM) — NF1.5b re-land
+  reviewed_by: 'Charlie (operator/PM) — NF-D21 disposition 2026-08-05 (genesis promotion:
+    operator (PM), NF1.5b re-land)'
   notes: 'GENESIS entry (NF-G0, 2026-08-04): the state NFL fantasy was ALREADY serving
     when this registry was created. It has no true predecessor, so `fallback_artifact_uri`
     points at ITSELF and `previous_served_version` repeats its own version — rolling
@@ -62,6 +70,13 @@ nfl_fantasy__season_projection__nfl_fantasy_nf1_5_v1:
     predecessor values at stage time. ⚠️ `rookie_selection_status: incumbent` is the
     CURRENT truth and NOT a claim about NF-D21: NF-D16''s recalibration is ratified
     but its serving flip is held OFF (`rookie_publish_policy.SERVING_ENABLED = False`)
-    because the interval-floor gate refused it at lambda=0.5 — see ablation_results/nf_g0_d21_governance_publish.md.'
+    because the interval-floor gate refused it at lambda=0.5 — see ablation_results/nf_g0_d21_governance_publish.md.
+    RESOLVED 2026-08-05: the PM ACCEPTED THE NULL. NF-D21 is CLOSED as CONSTRAINT_REFUSED
+    — not parked, because a story left open pending a floor fix is exactly the pressure
+    that would bias that floor toward clearing lambda=0.5 — so `rookie_selection_status:
+    incumbent` is now the SETTLED state rather than a pending one. This entry stays
+    the champion and no challenger was ever promoted: the first real artifact routed
+    through this registry was REFUSED by its own gate, which is stronger evidence
+    the governance layer works than a clean pass would have been.'
   model_family: nfl_fantasy
   target: season_projection

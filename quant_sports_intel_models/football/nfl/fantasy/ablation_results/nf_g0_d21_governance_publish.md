@@ -6,6 +6,16 @@ _generated 2026-08-05T01:45:46.930989+00:00_ · `best_alpha = 0`
 
 Phase A is complete and proven. Phase B was BUILT, STAMPED and ROUTED through the pipeline, and **the pipeline refused it** — the `interval_floors` gate fails because the rookie RB 80% coverage floor falls 2 covered rows short at λ = 0.5 (n = 148). Nothing is published; `SERVING_ENABLED` stays `False`, so the served board is the incumbent, byte-for-byte, and users see exactly the projection they had. λ was NOT moved and the floor was NOT moved — both are prohibited (see §4). ⭐ The first real artifact through the governance pipeline being REFUSED by a gate is a stronger validation of Phase A than a clean pass would have been.
 
+## 0. PM DECISION — the answer to the refusal below
+
+**CONSTRAINT_REFUSED** · decided 2026-08-05 · Charlie (operator/PM)
+
+> Held at incumbent: the rookie-RB interval-floor breach is a coin-flip at n=148 (a perfectly calibrated band fails this floor 50% of the time), so the honest remedy is a power-derived floor for structurally-thin groups — carded independently — not moving λ or the floor. NF-D16's lift is deferred, not abandoned.
+
+NF-D21 is **CLOSED, not parked** (`DISPOSITION_IS_NOT_PENDING = True`). The PM named the reason and it is load-bearing: a story left open pending a floor fix is exactly the pressure that would bias that floor toward clearing λ=0.5. ⛔ The rejected remedy — re-select the rookie band at the λ=0.5 centre (NF1.8-style §0.5 bake-off) — is a LAST RESORT only if `NF-D22` lands and a breach still stands; never a now-choice.
+
+Follow-on `NF-D22` (a power-derived fallback floor for structurally-thin groups) is a SEPARATE, POST-LAUNCH story. ⛔ It must be derived from **n and a pre-stated false-reject target ONLY — zero reference to the 0.7905 measured in §4** — applied to ALL thin groups, with NF-D21 explicitly out of scope. Re-gating NF-D21 against whatever floor it produces is a downstream consequence, never that story's motivation.
+
 ## 1. The decision being recorded
 
 - λ = **0.5**, `selection_status = PM_JUDGMENT`, `statistically_selected = False`

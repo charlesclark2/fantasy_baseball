@@ -605,5 +605,14 @@
   "wiring": {
     "param_shrink_equals_output_blend[served (NF1.5 ordering)]": "2.84e-14",
     "param_shrink_equals_output_blend[level (MVP-1)]": "2.84e-14"
+  },
+  "disposition": {
+    "disposition": "CONSTRAINT_REFUSED",
+    "decided_on": "2026-08-05",
+    "reviewed_by": "Charlie (operator/PM)",
+    "rationale": "Held at incumbent: the rookie-RB interval-floor breach is a coin-flip at n=148 (a perfectly calibrated band fails this floor 50% of the time), so the honest remedy is a power-derived floor for structurally-thin groups \u2014 carded independently \u2014 not moving \u03bb or the floor. NF-D16's lift is deferred, not abandoned.",
+    "is_not_pending": true,
+    "follow_on_story": "NF-D22",
+    "rejected_remedy": "re-select the rookie band at the \u03bb=0.5 centre (NF1.8-style \u00a70.5 bake-off)"
   }
 }
